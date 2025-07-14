@@ -2,10 +2,10 @@
   <div class="form-container">
     <div class="form-item" v-for="field in Fields" :class="layout">
       <div :style="{ flex: labelCol }" class="form-item-label">
-        <span v-if="layout === 'horizontal'">*</span>
+        <span v-if="layout === 'horizontal' && field.required">*</span>
         {{ field.label }}
         <span v-if="layout === 'horizontal'">:</span>
-        <span v-if="layout === 'vertical'">*</span>
+        <span v-if="layout === 'vertical' && field.required">*</span>
       </div>
       <div :style="{ flex: wrapperCol }" class="form-item-content">
         <component
@@ -82,7 +82,7 @@
   function inputFocusout(field: BaseFormItem) {
     if (field.required) {
       // 主要用于校验输入框内容发生变化后的校验，只有为''和[]时触发，初始化时数据默认undefined不触发
-      field.showRequire = props.formData[field.name]?.length === 0;
+      field.showRequire = props.formData[field.name]?.length === 0 || !props.formData[field.name];
     }
   }
 
