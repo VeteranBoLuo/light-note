@@ -6,14 +6,14 @@
     @ok="submit"
   >
     <div class="password-cfg-container">
-      <b-form ref="passCfgRef" form-id="userEditForm" :form-data="formData" :fields="formFields" :label-col="6" />
+      <b-form ref="passCfgRef" form-id="userEditForm" :form-data="formData" :fields="formFields" layout="vertical" />
     </div>
   </b-modal>
 </template>
 
 <script lang="ts" setup>
   import { useUserStore } from '@/store';
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
@@ -112,6 +112,15 @@
       });
     }
   }
+
+  watch(
+    () => visible.value,
+    (val) => {
+      if (!val) {
+        formData.value = { confirmPassword: '', password: '' };
+      }
+    },
+  );
 </script>
 
 <style lang="less" scoped>

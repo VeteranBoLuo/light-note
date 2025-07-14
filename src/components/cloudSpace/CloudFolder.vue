@@ -150,7 +150,6 @@
 
   async function onDragEnd() {
     try {
-      const userId = localStorage?.getItem('userId');
       const sortedTags =
         cloud.folderList?.map((folder: any, index: number) => ({
           name: folder.name,

@@ -6,7 +6,10 @@
 </template>
 
 <script setup lang="ts">
-  import { cloudSpaceStore } from '@/store';
+
+
+  import {cloudSpaceStore} from "@/store";
+
   const cloud = cloudSpaceStore();
 </script>
 
