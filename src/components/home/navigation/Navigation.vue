@@ -17,7 +17,7 @@
           @click="foldClick"
         />
         <div class="navigation-title-link" @click="handleToIndex">
-          <img src="../../../assets/icons/bookmark.svg" title="首页" width="25" height="25" alt="" />
+          <img src="/favicon.svg" title="首页" width="25" height="25" alt="" />
           <span style="font-size: 18px">轻笺</span>
         </div>
       </div>
@@ -86,7 +86,9 @@
   const navigationFucVisible = computed(() => {
     return (
       !bookmark.isMobile &&
-      ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs'].some((item) => route.path.includes(item))
+      ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs'].some((item) =>
+        route.path.includes(item),
+      )
     );
   });
 
@@ -131,7 +133,7 @@
       if (event.key === '/') {
         const deskInput = document.getElementById('bookmark-input');
         // 没有聚焦在输入框上时，聚焦到输入框
-        if (!isFocused(deskInput)) {
+        if (deskInput && !isFocused(deskInput)) {
           event.preventDefault();
           deskInput.focus();
         }

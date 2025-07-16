@@ -46,7 +46,12 @@
               >
                 <span
                   v-if="!item.isRename"
-                  :style="{ cursor: !bookmark.isMobile && item.fileType.includes('image') ? 'pointer' : 'unset' }"
+                  :style="{
+                    cursor:
+                      !bookmark.isMobile && ['image', 'pdf', 'video'].some((type) => item.fileType.includes(type))
+                        ? 'pointer'
+                        : 'unset',
+                  }"
                   class="file-label text-hidden"
                   @click="previewFile(item)"
                   >{{ item.fileName }}</span
@@ -106,6 +111,25 @@
       </div>
     </div>
     <MoveFile v-model:visible="moveCfg.moveFileVisible" :file="moveCfg.file" />
+    <div
+      v-if="viewVisible"
+      class="both-center"
+      style="padding-top: 20px; border: 1px solid var(--bl-input-border-h-color); border-radius: 6px"
+    >
+      <svg-icon
+        :src="icon.common.close"
+        size="20"
+        class="dom-hover"
+        style="position: absolute; right: 0; top: 0"
+        @click="viewVisible = false"
+      />
+      <iframe
+        v-if="viewObj.fileType.includes('pdf')"
+        :src="viewObj.fileUrl"
+        style="height: 90vh; width: 90vw; border: none"
+      />
+      <VideoPreview v-else-if="viewObj.fileType.includes('video')" :video-url="viewObj.fileUrl" />
+    </div>
   </CommonContainer>
 </template>
 
@@ -125,6 +149,8 @@
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import { cloneDeep } from 'lodash-es';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import VideoPreview from '@/components/base/VideoPreview.vue';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
@@ -196,7 +222,14 @@
     moveCfg.moveFileVisible = true;
     moveCfg.file = file;
   }
+  const viewVisible = ref(false);
+  const viewObj = ref();
   function previewFile(file: any) {
+    viewObj.value = file;
+    const allowView = ['pdf', 'video'];
+    if (allowView.some((type) => file.fileType.includes(type))) {
+      viewVisible.value = true;
+    }
     if (file.fileType.includes('image')) {
       // 如果图片是被覆盖的，需要手动加上时间戳更新图片缓存
       bookmark.refreshViewer(

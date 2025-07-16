@@ -215,5 +215,6 @@ export function closeOpenWindow(className: string, flag: Ref<boolean>, remove?: 
 }
 
 export function openPage(url, newPage: boolean = true) {
-    window.open(url, newPage ? '_blank' : '_self');
+  console.log('url', url);
+  window.open(url, newPage ? '_blank' : '_self');
 }

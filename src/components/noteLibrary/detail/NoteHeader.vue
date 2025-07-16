@@ -39,13 +39,8 @@
           <SvgIcon :src="icon.noteDetail.delete" />
         </div>
       </a-tooltip>
-      <a-tooltip title="保存">
-        <div
-          v-if="!bookmark.isMobile"
-          class="note-header-title-icon"
-          @click="$emit('save')"
-          v-click-log="OPERATION_LOG_MAP.note.saveNote"
-        >
+      <a-tooltip title="保存" v-if="!bookmark.isMobile">
+        <div class="note-header-title-icon" @click="$emit('save')" v-click-log="OPERATION_LOG_MAP.note.saveNote">
           <SvgIcon :src="icon.noteDetail.save" />
         </div>
       </a-tooltip>
