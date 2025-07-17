@@ -80,7 +80,6 @@
           'insertColumnRight',
           'deleteTableCol',
           'deleteTable',
-          'selectAll',
         ],
       },
     },

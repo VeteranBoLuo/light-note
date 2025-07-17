@@ -2,52 +2,6 @@ import { IDomEditor, DomEditor, SlateEditor } from '@wangeditor/editor';
 import { Transforms } from 'slate';
 import icon from '@/config/icon.ts';
 import type { IButtonMenu } from '@wangeditor/core';
-export const selectAllBtn = {
-  key: 'selectAll',
-  factory() {
-    return new (class wangEditorTableSelectAllHoverMenu implements IButtonMenu {
-      readonly tag = 'button';
-      readonly title = '全选';
-      readonly iconSvg =
-        '<svg t="1715422038657" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1472" width="200" height="200"><path d="M736 96h192v192h-192v-192zM416 736h192v192h-192v-192zM608 96h-192v192h192v-192zM96 736h192v192h-192v-192zM288 96h-192v192h192v-192zM736 736h192v192h-192v-192zM288 416h-192v192h192v-192zM608 416h-192v192h192v-192zM736 416h192v192h-192v-192z" fill="#000000" p-id="1473"></path></svg>';
-
-      // 获取菜单执行时的 value ，用不到则返回空 字符串或 false
-      getValue(editor: IDomEditor): string | boolean {
-        return 'selectAll';
-      }
-
-      // 菜单是否需要激活（如选中加粗文本，“加粗”菜单会激活），用不到则返回 false
-      isActive(editor: IDomEditor): boolean {
-        return false;
-      }
-
-      // 菜单是否需要禁用（如选中 H1 ，“引用”菜单被禁用），用不到则返回 false
-      isDisabled(editor: IDomEditor): boolean {
-        return false;
-      }
-
-      // 点击菜单时触发的函数
-      exec(editor: IDomEditor, value: string | boolean) {
-        if (this.isDisabled(editor)) return;
-
-        // 代码参考
-        const [cellEntry] = SlateEditor.nodes(editor, {
-          match: (n) => DomEditor.checkNodeType(n, 'table-cell'),
-          universal: true,
-        });
-        const [selectedCellNode, selectedCellPath] = cellEntry;
-
-        const rowNode = DomEditor.getParentNode(editor, selectedCellNode);
-        if (rowNode == null) return;
-        const tableNode = DomEditor.getParentNode(editor, rowNode);
-        if (tableNode == null) return;
-
-        const selectedTablePath = DomEditor.findPath(editor, tableNode);
-        editor.select(selectedTablePath);
-      }
-    })();
-  },
-};
 
 export const insertRowAboveBtn = {
   key: 'insertRowAbove',

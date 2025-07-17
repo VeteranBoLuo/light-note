@@ -7,14 +7,16 @@
         <div class="tag-selector-container">
           <b-button @click="tagSelectorVisible = !tagSelectorVisible">选择已有标签</b-button>
           <div class="tag-selector" v-if="tagSelectorVisible">
-            <div v-for="item in allTags" class="filter-item" @click="setTag(item)"><span style="color: #8f91a8">#</span> {{ item }}</div>
+            <div v-for="item in allTags" class="filter-item" @click="setTag(item)"
+              ><span style="color: #8f91a8">#</span> {{ item }}</div
+            >
           </div>
         </div>
       </div>
       <VueDraggable v-model="tagList" class="note-tag-list" :animation="150">
         <div :title="tag" class="note-tag" v-for="tag in tagList" @click="tagUpdate(tag)" :key="tag">
           <div class="text-hidden" style="width: 100%">{{ tag }}</div>
-          <svg-icon  :src="icon.common.close" class="dom-hover-click" @click.stop="delTag(tag)" />
+          <svg-icon :src="icon.common.close" class="dom-hover-click" @click.stop="delTag(tag)" />
         </div>
       </VueDraggable>
       <div style="font-size: 12px; color: var(--desc-color); margin-top: 10px">点击标签文本即可重新编辑选中标签</div>
@@ -205,6 +207,7 @@
     cursor: pointer;
     @media (min-width: 600px) {
       &:hover {
+        transition: all 0.1s;
         background: #eeedff;
         color: #605ce5;
       }

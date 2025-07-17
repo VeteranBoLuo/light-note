@@ -5,7 +5,6 @@ import {
   insertColumnRightBtn,
   insertRowAboveBtn,
   insertRowBelowBtn,
-  selectAllBtn,
 } from '@/config/wangEditor/menu/tableMenu.ts';
 
 export default function TableMenuPlugin() {
@@ -13,5 +12,4 @@ export default function TableMenuPlugin() {
   Boot.registerMenu(insertRowBelowBtn);
   Boot.registerMenu(insertColumnLeftBtn);
   Boot.registerMenu(insertColumnRightBtn);
-  Boot.registerMenu(selectAllBtn);
 }

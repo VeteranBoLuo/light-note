@@ -270,6 +270,7 @@
     color: #f54e4e;
   }
   .search-icon {
+    overflow: hidden;// 防止因为padding变化导致动画开始时的错位问题
     height: 32px;
     width: 32px;
     border-radius: 16px;

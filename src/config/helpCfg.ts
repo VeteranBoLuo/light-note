@@ -44,8 +44,6 @@ export const listOptions = ref([
          <p style="font-size: 12px">
         <i>书签标签关系图</i>
     </p>
-
-       
       </div>
     </div>`,
   },
@@ -147,6 +145,17 @@ export const listOptions = ref([
       <p style="text-align: left;font-size: 14px">2、引入用户配额管理机制，每位用户暂时默认可使用最大 100MB 存储空间，并提供空间使用状态展示组件</p>
       <p style="text-align: left;font-size: 14px">3、支持按文件类型和文件夹两个维度管理文件</p>
       <p style="text-align: left;font-size: 14px">4、支持文件的上传、下载、预览、删除、重命名、搜索和分享功能</p>
+    </div>
+  </div>`,
+  },
+  {
+    id: 'github快捷登录',
+    title: 'github快捷登录',
+    content: `<div class="flex-justify-center">
+    <div style="width: 80%; height: 100%">
+      <p style="text-align: left;font-size: 14px">已经注册过轻笺账号的情况下，如果github快捷登录想要和已注册的轻笺账户关联，则github的绑定邮箱需要和轻笺的注册邮箱一致</p>
+            <p style="text-align: left;font-size: 14px">注意：需要轻笺账号比github快捷登录方式先注册才能绑定上</p>
+
     </div>
   </div>`,
   },
