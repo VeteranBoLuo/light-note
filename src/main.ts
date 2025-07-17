@@ -12,7 +12,6 @@ const app = createApp(App);
 const pinia = createPinia();
 TableMenuPlugin(); // 全局注册一次
 
-// connect();
 app.use(pinia);
 app.use(router);
 app.component('Icon', Icon);
