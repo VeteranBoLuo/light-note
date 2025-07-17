@@ -61,7 +61,6 @@
   import { message } from 'ant-design-vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { TagInterface } from '@/config/bookmarkCfg.ts';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
