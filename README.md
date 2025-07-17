@@ -1,9 +1,9 @@
 # 轻笺 🌊 
 
-![top-language](https://img.shields.io/github/languages/top/VeteranBoLuo/BMS_Front)
+![top-language](https://img.shields.io/github/languages/top/VeteranBoLuo/light-note)
 [![Website](https://img.shields.io/website?up_message=online&url=https%3A%2F%2Fboluo66.top)](https://boluo66.top) 
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/VeteranBoLuo/BMS_Front)
-![GitHub last commit](https://img.shields.io/github/last-commit/VeteranBoLuo/BMS_Front)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/VeteranBoLuo/light-note)
+![GitHub last commit](https://img.shields.io/github/last-commit/VeteranBoLuo/light-note)
 
 > **云端书签的智能管理革命**  
 轻笺是专为效率控设计的云端书签管理神器，以智能标签为核心，帮你瞬间归档网页、笔记与灵感碎片。通过动态关联的标签网络，实现书签/笔记的跨设备秒搜、多维分类与智能推荐，让知识管理像刷社交动态一样轻松有趣
@@ -71,7 +71,7 @@
 项目已经配置好了后端环境，想要快速体验只需下载前端仓库即可
 ```bash
 # 克隆前端仓库
-git clone https://github.com/VeteranBoLuo/BMS_Front
+git clone https://github.com/VeteranBoLuo/light-note
 
 # 安装依赖
 npm install
@@ -118,4 +118,4 @@ node app.js
 
 非常感谢各位好心人留下的星星。非常感谢你们的支持！
 
-[![Stargazers for BMS_Front](https://reporoster.com/stars/VeteranBoLuo/BMS_Front)](https://github.com/VeteranBoLuo/BMS_Front/stargazers)
+[![Stargazers for light-note](https://reporoster.com/stars/VeteranBoLuo/light-note)](https://github.com/VeteranBoLuo/light-note/stargazers)

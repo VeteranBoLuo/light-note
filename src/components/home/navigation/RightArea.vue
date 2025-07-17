@@ -152,7 +152,7 @@
   }
 
   function githubClick() {
-    window.open('https://github.com/VeteranBoLuo/BMS_Front');
+    window.open('https://github.com/VeteranBoLuo/light-note');
   }
 
   function handleToPhoneUserCenter() {
