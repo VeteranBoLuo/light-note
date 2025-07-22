@@ -27,24 +27,24 @@
   const bookmark = bookmarkStore();
 
   const formData = ref({
-    userName: '',
+    email: '',
     password: '',
   });
 
   function registerSuccess(params: any) {
-    formData.value.userName = params.userName;
+    formData.value.email = params.email;
     formData.value.password = params.password;
   }
 
   onMounted(() => {
     document.addEventListener('keydown', clickEvent);
-    document.addEventListener('click', clickHandler);
+    document.addEventListener('click', clickHandler, true);
     localStorage.setItem('userId', '');
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', clickEvent);
-    document.removeEventListener('click', clickHandler);
+    document.removeEventListener('click', clickHandler, true);
   });
 
   const login = ref();

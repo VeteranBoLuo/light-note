@@ -62,8 +62,8 @@
         ellipsis: true,
       },
       {
-        title: '账号',
-        dataIndex: 'userName',
+        title: '邮箱',
+        dataIndex: 'email',
         ellipsis: true,
       },
       {

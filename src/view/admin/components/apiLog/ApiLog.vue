@@ -67,8 +67,13 @@
   const logColumns = computed(() => {
     return [
       {
-        title: '用户名',
-        dataIndex: 'userName',
+        title: '昵称',
+        dataIndex: 'alias',
+        ellipsis: true,
+      },
+      {
+        title: '邮箱',
+        dataIndex: 'email',
         ellipsis: true,
       },
       {
@@ -192,5 +197,4 @@
   :deep(.ant-pagination-item-ellipsis) {
     color: var(--icon-color) !important;
   }
-
 </style>

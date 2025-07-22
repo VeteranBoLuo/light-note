@@ -7,9 +7,9 @@
     v-if="viewPhoneVisible"
   />
   <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
-<!--    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(&#45;&#45;primary-text)">-->
-<!--      游客体验-->
-<!--    </a>-->
+    <!--    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(&#45;&#45;primary-text)">-->
+    <!--      游客体验-->
+    <!--    </a>-->
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: #161824">登录</b>
       <span
@@ -32,10 +32,10 @@
         ref="formDataRef"
         :model="formData"
       >
-        <a-form-item label="" name="userName">
-          <b-input theme="al-day" height="40px" v-model:value="formData.userName" placeholder="账号">
+        <a-form-item label="" name="email">
+          <b-input theme="al-day" height="40px" v-model:value="formData.email" placeholder="邮箱">
             <template #prefix>
-              <svg-icon :src="icon.navigation.user" size="16" />
+              <svg-icon :src="icon.login.email" size="16" />
             </template>
           </b-input>
         </a-form-item>
@@ -99,20 +99,19 @@
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import userApi from '@/api/userApi.ts';
   import router from '@/router';
   import { message } from 'ant-design-vue';
   import { computed, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { cloneDeep } from 'lodash-es';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import request, { apiBasePost } from '@/http/request.ts';
+  import { apiBasePost } from '@/http/request.ts';
 
   const title = defineModel('title');
   const formData: any = defineModel('formData');
   const isCheck = ref(true);
   const disable = computed(() => {
-    return !formData.value.userName || !formData.value.password;
+    return !formData.value.email || !formData.value.password;
   });
   const formDataRef = ref();
   const bookmark = bookmarkStore();
@@ -281,6 +280,11 @@
   }
 
   .forget-text {
+    width: max-content;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
     font-size: 12px;
     color: var(--primary-color) !important;
   }

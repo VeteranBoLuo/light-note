@@ -72,8 +72,8 @@
     if (bookmark.isMobile) {
       return [
         {
-          title: '用户名',
-          dataIndex: 'userName',
+          title: '邮箱',
+          dataIndex: 'email',
           ellipsis: true,
         },
         {

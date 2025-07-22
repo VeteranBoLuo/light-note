@@ -14,27 +14,18 @@
       >
         <a-form-item
           label=""
-          name="userName"
+          name="email"
+          @blur="validateFun('email')"
           :rules="[
             {
-              max: 16,
-              message: '账号长度不能超过16个字符',
-            },
-            {
-              min: 6,
-              message: '账号长度不能少于6个字符',
+              type: 'email',
+              message: '请输入正确的邮箱格式',
             },
           ]"
         >
-          <b-input
-            height="40px"
-            theme="al-day"
-            v-model:value="formData.userName"
-            placeholder="账号"
-            @blur="validateFun('userName')"
-          >
+          <b-input height="40px" theme="al-day" v-model:value="formData.email" placeholder="邮箱" @blur="validateFun">
             <template #prefix>
-              <svg-icon :src="icon.navigation.user" size="16" />
+              <svg-icon :src="icon.login.email" size="16" />
             </template>
           </b-input>
         </a-form-item>
@@ -71,20 +62,33 @@
         </a-form-item>
         <a-form-item
           label=""
-          name="email"
-          @blur="validateFun('email')"
+          name="rPassword"
           :rules="[
             {
-              type: 'email',
-              message: '请输入正确的邮箱格式',
+              max: 16,
+              message: '密码长度不能超过16个字符',
+            },
+            {
+              min: 6,
+              message: '密码长度不能少于6个字符',
             },
           ]"
         >
-          <b-input height="40px" theme="al-day" v-model:value="formData.email" placeholder="邮箱" @blur="validateFun">
-            <template #prefix>
-              <svg-icon :src="icon.login.email" size="16" />
-            </template>
-          </b-input>
+          <span class="flex-center">
+            <b-input
+              theme="al-day"
+              height="40px"
+              maxlength="20"
+              type="password"
+              placeholder="确认密码"
+              @blur="validateFun('rPassword')"
+              v-model:value="formData.rPassword"
+            >
+              <template #prefix>
+                <svg-icon :src="icon.login.password" size="16" />
+              </template>
+            </b-input>
+          </span>
         </a-form-item>
         <a-form-item>
           <b-button
@@ -115,17 +119,19 @@
   import { bookmarkStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
+  import { checkEndCondition } from '@/utils/validator.ts';
+  import { cloneDeep } from 'lodash-es';
   const title = defineModel('title');
   const formData = reactive({
-    userName: '',
     password: '',
+    rPassword: '',
     email: '',
     role: 'admin',
     theme: 'day',
   });
   const bookmark = bookmarkStore();
   const disable = computed(() => {
-    return !formData.userName || !formData.password || !formData.email;
+    return !formData.rPassword || !formData.password || !formData.email;
   });
   async function validateFun(names?: any) {
     await registerRef.value.validate(names);
@@ -133,12 +139,28 @@
   const registerRef = ref();
   const emit = defineEmits(['update:success']);
   async function handleRegister() {
-    if (disable.value) {
+    const condition = [
+      {
+        endCondition: formData.rPassword !== formData.password,
+        message: '两次密码输入不一致',
+      },
+      {
+        endCondition: formData.password.length > 16,
+        message: '密码长度不能大于16位',
+      },
+      {
+        endCondition: formData.password.length < 6,
+        message: '密码长度不能小于6位',
+      },
+    ];
+    if (checkEndCondition(condition) || disable.value) {
       return;
     }
     await validateFun();
     formData.role = 'admin';
-    apiBasePost('/api/user/registerUser', formData).then((res: any) => {
+    const params = cloneDeep(formData);
+    delete params.rPassword;
+    apiBasePost('/api/user/registerUser', params).then((res: any) => {
       if (res.status === 200) {
         message.success('注册成功');
         title.value = '登录';

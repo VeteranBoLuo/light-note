@@ -19,7 +19,8 @@
       >
         <template #expandedRowRender="{ record }">
           <div style="overflow: auto; height: 300px; color: var(--text-color)">
-            <div>操作人员：{{ record.userName }}</div>
+            <div>昵称：{{ record.alias }}</div>
+            <div>邮箱：{{ record.email }}</div>
             <div>模块：{{ record.module }}</div>
             <div>操作：{{ record.operation }}</div>
             <div>时间：{{ record.createTime }}</div>
@@ -63,8 +64,8 @@
   const logColumns = computed(() => {
     return [
       {
-        title: '操作人员',
-        dataIndex: 'userName',
+        title: '邮箱',
+        dataIndex: 'email',
         ellipsis: true,
       },
       {

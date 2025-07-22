@@ -78,8 +78,8 @@
   const logColumns = computed(() => {
     return [
       {
-        title: '用户名',
-        dataIndex: 'userName',
+        title: '邮箱',
+        dataIndex: 'email',
         ellipsis: true,
       },
       {
