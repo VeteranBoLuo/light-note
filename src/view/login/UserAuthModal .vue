@@ -38,13 +38,11 @@
 
   onMounted(() => {
     document.addEventListener('keydown', clickEvent);
-    document.addEventListener('click', clickHandler, true);
     localStorage.setItem('userId', '');
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', clickEvent);
-    document.removeEventListener('click', clickHandler, true);
   });
 
   const login = ref();
@@ -68,11 +66,6 @@
     }
   }
 
-  function clickHandler(e) {
-    if (!e.target.matches('.index-view *')) {
-      bookmark.isShowLogin = false;
-    }
-  }
 </script>
 
 <style scoped>

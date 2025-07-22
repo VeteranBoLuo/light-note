@@ -7,9 +7,9 @@
     v-if="viewPhoneVisible"
   />
   <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
-    <!--    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(&#45;&#45;primary-text)">-->
-    <!--      游客体验-->
-    <!--    </a>-->
+    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(--primary-text)">
+      游客体验
+    </a>
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: #161824">登录</b>
       <span
