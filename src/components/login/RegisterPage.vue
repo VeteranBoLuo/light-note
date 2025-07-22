@@ -17,8 +17,8 @@
           name="userName"
           :rules="[
             {
-              max: 12,
-              message: '账号长度不能超过12个字符',
+              max: 16,
+              message: '账号长度不能超过16个字符',
             },
             {
               min: 6,
@@ -43,8 +43,8 @@
           name="password"
           :rules="[
             {
-              max: 15,
-              message: '密码长度不能超过15个字符',
+              max: 16,
+              message: '密码长度不能超过16个字符',
             },
             {
               min: 6,

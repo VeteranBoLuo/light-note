@@ -89,8 +89,8 @@
             message: '两次密码输入不一致',
           },
           {
-            endCondition: formData.value.password.length > 12,
-            message: '新密码长度不能大于12位',
+            endCondition: formData.value.password.length > 16,
+            message: '新密码长度不能大于16位',
           },
           {
             endCondition: formData.value.password.length < 6,
