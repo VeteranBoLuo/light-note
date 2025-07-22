@@ -111,6 +111,7 @@
   import { computed, reactive, ref } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
+  import { checkEndCondition } from '@/utils/validator.ts';
 
   const title = defineModel('title');
   const formData = reactive({
@@ -147,12 +148,26 @@
   }
 
   function verifyCode() {
-    apiBasePost('/api/user/verifyCode', {
-      code: formData.code,
-      email: formData.email,
-    }).then((res) => {
+    const condition = [
+      {
+        endCondition: formData.password !== formData.rPassword,
+        message: '两次密码输入不一致',
+      },
+      {
+        endCondition: formData.password.length > 12,
+        message: '密码长度不能大于12位',
+      },
+      {
+        endCondition: formData.password.length < 6,
+        message: '密码长度不能小于6位',
+      },
+    ];
+    if (checkEndCondition(condition)) {
+      return;
+    }
+    apiBasePost('/api/user/verifyCode', formData).then((res) => {
       if (res.status === 200) {
-        message.success('验证通过');
+        message.success('验证通过,密码重置成功');
       }
     });
   }
