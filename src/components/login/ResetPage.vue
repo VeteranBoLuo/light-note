@@ -97,7 +97,7 @@
           </span>
         </a-form-item>
         <a-form-item>
-          <b-button class="handle-btn" type="primary" @click="resetPassword">提交</b-button>
+          <b-button class="handle-btn" type="primary" @click="verifyCode">提交</b-button>
         </a-form-item>
       </a-form>
     </div>
@@ -146,8 +146,15 @@
     });
   }
 
-  function resetPassword() {
-    apiBasePost('/api/user/sendEmail');
+  function verifyCode() {
+    apiBasePost('/api/user/verifyCode', {
+      code: formData.code,
+      email: formData.email,
+    }).then((res) => {
+      if (res.status === 200) {
+        message.success('验证通过');
+      }
+    });
   }
 
   defineExpose({
