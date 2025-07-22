@@ -91,13 +91,20 @@
                 <svg-icon :src="icon.login.code" size="16" />
               </template>
               <template #suffix>
-                <span style="color: var(--primary-text)" class="dom-hover" @click="sendEmail">获取验证码</span>
+                <span
+                  style="color: var(--primary-text)"
+                  class="dom-hover"
+                  @click="sendEmail"
+                  >{{ codeTime == 0 ? '获取验证码' : codeTime + 's' }}</span
+                >
               </template>
             </b-input>
           </span>
         </a-form-item>
         <a-form-item>
-          <b-button class="handle-btn" type="primary" @click="verifyCode">提交</b-button>
+          <b-button class="handle-btn" type="primary" @click="verifyCode" :class="{ 'disable-btn': disable }"
+            >提交</b-button
+          >
         </a-form-item>
       </a-form>
     </div>
@@ -120,9 +127,10 @@
     rPassword: '',
     code: '',
   });
+
   const bookmark = bookmarkStore();
   const disable = computed(() => {
-    return !formData.password || !formData.rPassword || !formData.email;
+    return !formData.password || !formData.rPassword || !formData.email || !formData.code;
   });
   const resetRef = ref();
   async function validateFun(names: any) {
@@ -135,7 +143,11 @@
     }
   }
 
+  const codeTime = ref(0);
   function sendEmail() {
+    if (codeTime.value !== 0) {
+      return;
+    }
     if (!formData.email) {
       message.warning('请填写邮箱');
       return;
@@ -143,9 +155,17 @@
     apiBasePost('/api/user/sendEmail', { email: formData.email }).then((res) => {
       if (res.status === 200) {
         message.success('验证码发送成功！');
+        codeTime.value = 60;
+        const timer = setInterval(() => {
+          codeTime.value--;
+          if (codeTime.value === 0) {
+            clearInterval(timer);
+          }
+        }, 1000);
       }
     });
   }
+  const emit = defineEmits(['update:success']);
 
   function verifyCode() {
     const condition = [
@@ -167,7 +187,9 @@
     }
     apiBasePost('/api/user/verifyCode', formData).then((res) => {
       if (res.status === 200) {
+        title.value = '登录';
         message.success('验证通过,密码重置成功');
+        emit('update:success', formData);
       }
     });
   }

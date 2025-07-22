@@ -6,7 +6,7 @@
         <!------------注册------------->
         <RegisterPage ref="register" v-model:title="title" @update:success="registerSuccess" />
         <!------------重置------------->
-        <ResetPage ref="reset" v-model:title="title" />
+        <ResetPage ref="reset" v-model:title="title" @update:success="registerSuccess"/>
       </div>
     </div>
   </teleport>
