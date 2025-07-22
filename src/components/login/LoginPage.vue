@@ -7,9 +7,9 @@
     v-if="viewPhoneVisible"
   />
   <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
-    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(--primary-text)">
-      游客体验
-    </a>
+<!--    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(&#45;&#45;primary-text)">-->
+<!--      游客体验-->
+<!--    </a>-->
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: #161824">登录</b>
       <span
@@ -53,13 +53,15 @@
               <template #prefix>
                 <svg-icon :src="icon.login.password" size="16" />
               </template>
+              <template #suffix>
+                <span class="dom-hover forget-text" @click="title = '重置'">Forget Password?</span>
+              </template>
             </b-input>
           </span>
         </a-form-item>
         <a-form-item>
           <div class="login-tips-text">
             <span class="remember-text"><b-checkbox type="circle" v-model:isCheck="isCheck" />Remember Me</span>
-<!--            <span class="dom-hover forget-text" @click="title = '重置'">Forget Password?</span>-->
             <a class="dom-hover-click" @click="loginWithGitHub">GitHub快捷登录</a>
           </div>
         </a-form-item>

@@ -91,13 +91,13 @@
                 <svg-icon :src="icon.login.code" size="16" />
               </template>
               <template #suffix>
-                <span style="color: var(--primary-text)" class="dom-hover">获取验证码</span>
+                <span style="color: var(--primary-text)" class="dom-hover" @click="sendEmail">获取验证码</span>
               </template>
             </b-input>
           </span>
         </a-form-item>
         <a-form-item>
-          <b-button class="handle-btn" :class="{ 'disable-btn': true }" type="primary">功能暂时关闭</b-button>
+          <b-button class="handle-btn" type="primary" @click="resetPassword">提交</b-button>
         </a-form-item>
       </a-form>
     </div>
@@ -109,6 +109,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import { computed, reactive, ref } from 'vue';
+  import { apiBasePost } from '@/http/request.ts';
+  import { message } from 'ant-design-vue';
 
   const title = defineModel('title');
   const formData = reactive({
@@ -130,6 +132,22 @@
     if (disable.value) {
       return;
     }
+  }
+
+  function sendEmail() {
+    if (!formData.email) {
+      message.warning('请填写邮箱');
+      return;
+    }
+    apiBasePost('/api/user/sendEmail', { email: formData.email }).then((res) => {
+      if (res.status === 200) {
+        message.success('验证码发送成功！');
+      }
+    });
+  }
+
+  function resetPassword() {
+    apiBasePost('/api/user/sendEmail');
   }
 
   defineExpose({

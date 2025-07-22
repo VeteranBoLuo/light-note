@@ -38,11 +38,13 @@
 
   onMounted(() => {
     document.addEventListener('keydown', clickEvent);
+    document.addEventListener('click', clickHandler);
     localStorage.setItem('userId', '');
   });
 
   onUnmounted(() => {
-    document.addEventListener('keydown', clickEvent);
+    document.removeEventListener('keydown', clickEvent);
+    document.removeEventListener('click', clickHandler);
   });
 
   const login = ref();
@@ -63,6 +65,12 @@
       if (handler?.ref.value && handler?.method) {
         handler.ref.value[handler.method]();
       }
+    }
+  }
+
+  function clickHandler(e) {
+    if (!e.target.matches('.index-view *')) {
+      bookmark.isShowLogin = false;
     }
   }
 </script>
@@ -123,6 +131,7 @@
     position: absolute;
     right: 20px;
     bottom: 20px;
+    color: black;
   }
   :deep(.handle-btn) {
     width: 80% !important;
