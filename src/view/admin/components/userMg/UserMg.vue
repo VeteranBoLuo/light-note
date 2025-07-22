@@ -121,8 +121,8 @@
       name: 'alias',
     },
     {
-      label: '账号',
-      name: 'userName',
+      label: '邮箱',
+      name: 'email',
     },
     {
       label: '密码',

@@ -9,10 +9,6 @@
       <div class="home-user-body">
         <div class="flex-align-center" style="gap: 20px">
           <div class="flex-justify-center" style="gap: 20px">
-            <span class="user-item-label">账号</span>
-            <span style="color: #8f9096">{{ user.userName }}</span>
-          </div>
-          <div class="flex-justify-center" style="gap: 20px">
             <span class="user-item-label">角色</span>
             <span style="color: #8f9096">{{ getRoleName() }}</span>
           </div>

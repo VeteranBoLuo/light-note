@@ -46,7 +46,7 @@
         </div>
         <div style="margin-top: 10px">
           <div style="font-size: 14px">联系方式</div>
-          <b-input v-model:value="opinionData.phone" style="margin-top: 10px" placeholder="请输入电话便于联系" />
+          <b-input v-model:value="opinionData.phone" style="margin-top: 10px" placeholder="请输入邮箱/微信以便于答谢" />
         </div>
       </div>
       <div v-else style="height: 330px; overflow-y: auto; position: relative">
