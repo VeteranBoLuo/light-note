@@ -119,6 +119,7 @@
   }
   function addFolder() {
     if (cloud.folderList.find((i) => !i.id || i.isRename)) {
+      message.warning('请先完成当前编辑中的文件夹！');
       return;
     }
     cloud.folderList.push({ name: '', isRename: true });

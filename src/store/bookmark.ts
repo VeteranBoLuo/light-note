@@ -9,6 +9,7 @@ export default defineStore('bookmark', {
         tagData?: TagInterface;
         tagList?: TagInterface[]; // 标签列表
         bookmarkList?: []; // 书签列表
+        noteList?: []; // 笔记列表
         imgList?: any; // 网站图标列表
         refreshKey?: boolean;
         refreshTagKey?: boolean;
@@ -34,6 +35,7 @@ export default defineStore('bookmark', {
       },
       tagList: [], // 标签列表
       bookmarkList: [], // 书签列表
+      noteList: [],
       imgList: [],
       refreshKey: false,
       refreshTagKey: false,

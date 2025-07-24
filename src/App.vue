@@ -50,6 +50,7 @@
     mq.addEventListener('change', (e) => {
       bookmark.theme = e.matches ? 'night' : 'day';
     });
+    handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
   }
   async function getUserInfo() {
     try {
@@ -125,6 +126,8 @@
         '/admin/userOpinion': '/userOpinion',
         '/admin/operationLog': '/operationLog',
         '/admin/imageMg': '/imageMg',
+        '/workbenches': '/home',
+        '/': '/home',
       };
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);

@@ -11,6 +11,7 @@ import phoneRouter from '@/router/modules/phone';
 import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
+import workbenchesRouter from '@/router/modules/workbenches.ts';
 export interface AppRouteRecordRaw {
   name?: string;
   meta?: RouteMeta;
@@ -28,10 +29,11 @@ const routes: Array<RouteRecordRaw | any> = [
     },
     path: '/',
     name: '/',
-    redirect: '/home',
+    redirect: '/workbenches',
     component: () => import('@/view/index.vue'),
     // 放入此处的有顶部导航栏
     children: [
+      workbenchesRouter,
       mainPageRouter,
       ...commonRouter,
       ...adminRouter,

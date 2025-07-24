@@ -43,11 +43,11 @@
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
             @click="router.push('/cloudSpace')"
             >云空间
-            <div
-              class="flex-align-center"
-              style="font-size: 10px; background-color: #ff4d4f; color: white; border-radius: 12px; padding: 0 4px"
-              >Beta</div
-            >
+<!--            <div-->
+<!--              class="flex-align-center"-->
+<!--              style="font-size: 10px; background-color: #ff4d4f; color: white; border-radius: 12px; padding: 0 4px"-->
+<!--              >Beta</div-->
+<!--            >-->
           </div>
         </template>
       </div>
@@ -86,7 +86,7 @@
   const navigationFucVisible = computed(() => {
     return (
       !bookmark.isMobile &&
-      ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs'].some((item) =>
+      ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs', 'workbenches'].some((item) =>
         route.path.includes(item),
       )
     );
