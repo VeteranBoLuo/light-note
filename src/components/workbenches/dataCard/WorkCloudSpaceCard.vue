@@ -9,7 +9,7 @@
         >已存储<b>{{ cloud.usedSpace }}</b
         >MB</div
       >
-      <div>最近更新 {{ cloud.fileList?.[0]?.uploadTime ?? '无' }}</div>
+      <div style="min-width: 170px">最近更新 {{ cloud.fileList?.[0]?.uploadTime ?? '无' }}</div>
     </div>
   </div>
 </template>

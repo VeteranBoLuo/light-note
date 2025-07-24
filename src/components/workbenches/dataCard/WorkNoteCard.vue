@@ -9,7 +9,7 @@
         >总计<b>{{ user.noteTotal }}</b
         >篇</div
       >
-      <div>最近更新 {{ bookmark.noteList?.[0]?.updateTime ?? '无' }}</div>
+      <div style="min-width: 170px">最近更新 {{ bookmark.noteList?.[0]?.updateTime ?? '无' }}</div>
     </div>
   </div>
 </template>

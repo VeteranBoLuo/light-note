@@ -9,7 +9,7 @@
         >总计<b>{{ user.bookmarkTotal }}</b
         >个</div
       >
-      <div>最近更新 {{ bookmark.bookmarkList?.[0]?.createTime ?? '无' }}</div>
+      <div style="min-width: 170px">最近更新 {{ bookmark.bookmarkList?.[0]?.createTime ?? '无' }}</div>
     </div>
   </div>
 </template>
