@@ -25,10 +25,7 @@
   .icon-container {
     padding: 15px;
     background-color: white;
-    box-shadow:
-      0 0 5px 0 rgba(0, 0, 0, 0.02),
-      0 2px 10px 0 rgba(0, 0, 0, 0.06),
-      0 0 1px 0 rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 0 6px rgb(0 0 0 / 15%);
     border-radius: 12px;
     cursor: pointer;
   }
