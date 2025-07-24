@@ -8,9 +8,6 @@ dependencies:
   '@antv/g2plot':
     specifier: ^2.4.31
     version: 2.4.31
-  '@tinymce/tinymce-vue':
-    specifier: ^6.1.0
-    version: 6.1.0(vue@3.4.15)
   '@wangeditor/editor-for-vue':
     specifier: ^5.1.12
     version: 5.1.12(@wangeditor/editor@5.1.23)(vue@3.4.15)
@@ -1105,18 +1102,6 @@ packages:
     dependencies:
       core-js: 3.35.1
       nanopop: 2.4.2
-    dev: false
-
-  /@tinymce/tinymce-vue@6.1.0(vue@3.4.15):
-    resolution: {integrity: sha512-7JdaKMOaohuFWpjKwRmaZJbT/eNVUUYHG93R7+lUf7SUN+hSqd2spbuqZcki+tG9kaSAGd2ZmvJIsmzWDNAzpw==}
-    peerDependencies:
-      tinymce: ^7.0.0 || ^6.0.0 || ^5.5.1
-      vue: ^3.0.0
-    peerDependenciesMeta:
-      tinymce:
-        optional: true
-    dependencies:
-      vue: 3.4.15(typescript@5.7.2)
     dev: false
 
   /@transloadit/prettier-bytes@0.0.7:
@@ -3056,7 +3041,7 @@ packages:
   /i18next@20.6.1:
     resolution: {integrity: sha512-yCMYTMEJ9ihCwEQQ3phLo7I/Pwycf8uAx+sRHwwk5U9Aui/IZYgQRyMqXafQOw5QQ7DM1Z+WyEXWIqSuJHhG2A==}
     dependencies:
-      '@babel/runtime': 7.23.9
+      '@babel/runtime': 7.27.3
     dev: false
 
   /i@0.3.7:

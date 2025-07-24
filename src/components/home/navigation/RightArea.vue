@@ -32,7 +32,6 @@
       >
         <b-input
           id="bookmark-input"
-
           :placeholder="placeholder"
           @input="handleSearch"
           @focus="placeholder = '可根据网站名称、描述和标签搜索'"
@@ -79,7 +78,7 @@
     >
       <svg-icon size="26" :src="getThemeIcon()" hover
     /></b-menu>
-    <b-menu placement="bottomRight" :menu-options="[{ label: '项目地址', function: () => githubClick }]">
+    <b-menu placement="bottom" :menu-options="[{ label: '项目地址', function: () => githubClick() }]">
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
     </b-menu>
     <!--移动端个人中心       -->
@@ -152,6 +151,7 @@
   }
 
   function githubClick() {
+    console.log('yes')
     window.open('https://github.com/VeteranBoLuo/light-note');
   }
 

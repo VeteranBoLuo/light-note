@@ -176,13 +176,17 @@
           // 刷新游客书签和标签
           bookmark.type = 'all';
           bookmark.refreshTag();
-          router.push('/home');
           // 获取游客信息
-          userApi.getUserInfoById({ id: localStorage.getItem('userId') }).then((res: any) => {
+          userApi.getUserInfoById({ id: '' }).then((res: any) => {
             if (res.status === 'visitor') {
               user.setUserInfo(res.data);
               bookmark.theme = res.data.theme;
               localStorage.setItem('theme', res.data.theme);
+              if (bookmark.isMobile) {
+                router.push('/home');
+              } else {
+                router.push('/');
+              }
             }
           });
         },

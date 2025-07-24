@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@antv/g2plot": "^2.4.31",
-    "@tinymce/tinymce-vue": "^6.1.0",
     "@wangeditor/editor-for-vue": "^5.1.12",
     "ant": "^0.2.0",
     "ant-design-vue": "^4.0.8",
