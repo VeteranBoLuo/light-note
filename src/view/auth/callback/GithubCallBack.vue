@@ -29,7 +29,7 @@
   const status = ref(200);
   const time = ref(3);
   function toHome() {
-    router.push('/home');
+    router.push('/');
   }
   onMounted(async () => {
     try {
