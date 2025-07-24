@@ -22,7 +22,7 @@
       <BookmarkDistribution :isReady="readyObj.tagReady" style="flex: 1" />
       <NoteDistribution :isReady="readyObj.noteReady" style="flex: 1" />
     </div>
-    <UpdateLogList style="height: 324px" />
+    <UpdateLogList style="height: 324px;width: calc(50% - 5px)" />
     <div style="flex: 1" class="card-container flex-center"> 敬请期待... </div>
   </div>
 </template>
