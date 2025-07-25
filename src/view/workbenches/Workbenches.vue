@@ -15,7 +15,7 @@
 <!--        <CommonFunctions />-->
 <!--      </div>-->
       <div class="card-container" style="flex: 1">
-        <create-book-mark-card />
+        <BeginnerGuide />
       </div>
     </div>
     <div class="flex-align-center-gap" style="height: 305px; flex-shrink: 0">
@@ -38,9 +38,9 @@
   import WorkCloudSpaceCard from '@/components/workbenches/dataCard/WorkCloudSpaceCard.vue';
   import useUser from '@/store/useUser.ts';
   import UpdateLogList from '@/components/workbenches/UpdateLogList.vue';
-  import CreateBookMarkCard from '@/components/workbenches/CreateBookMarkCard.vue';
+  import BeginnerGuide from '@/components/workbenches/BeginnerGuide.vue';
   import NoteDistribution from '@/components/workbenches/NoteDistribution.vue';
-  import CommonFunctions from '@/components/workbenches/CommonFunctions.vue';
+
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const user = useUser();

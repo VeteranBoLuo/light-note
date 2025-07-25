@@ -154,8 +154,6 @@ export const listOptions = ref([
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
       <p style="text-align: left;font-size: 14px">已经注册过轻笺账号的情况下，如果github快捷登录想要和已注册的轻笺账户关联，则github的绑定邮箱需要和轻笺的注册邮箱一致</p>
-            <p style="text-align: left;font-size: 14px">注意：需要轻笺账号比github快捷登录方式先注册才能绑定上</p>
-
     </div>
   </div>`,
   },
