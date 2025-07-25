@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { message } from 'ant-design-vue';
 import { cloudSpaceStore } from '@/store';
+import { apiBasePost } from '@/http/request.ts';
 const cloud = cloudSpaceStore();
 export async function downloadField(id: number | string) {
   try {
@@ -57,11 +58,6 @@ export async function downloadField(id: number | string) {
 
 // 删除文件
 export async function deleteField(id: number | string) {
-  try {
-    await axios.post('/api/file/deleteFileById', { id });
-    message.success('删除成功');
-  } catch (error) {
-    console.error('删除失败:', error);
-    message.error('删除失败，请重试');
-  }
+  await apiBasePost('/api/file/deleteFileById', { id });
+  message.success('删除成功');
 }

@@ -11,9 +11,9 @@
           <WorkCloudSpaceCard />
         </div>
       </div>
-<!--      <div class="flex-align-center-gap card-container" style="flex: 1">-->
-<!--        <CommonFunctions />-->
-<!--      </div>-->
+      <!--      <div class="flex-align-center-gap card-container" style="flex: 1">-->
+      <!--        <CommonFunctions />-->
+      <!--      </div>-->
       <div class="card-container" style="flex: 1">
         <BeginnerGuide />
       </div>
@@ -22,7 +22,12 @@
       <BookmarkDistribution :isReady="readyObj.tagReady" style="flex: 1" />
       <NoteDistribution :isReady="readyObj.noteReady" style="flex: 1" />
     </div>
-    <UpdateLogList style="height: 324px;width: calc(50% - 5px)" />
+    <div class="flex-align-center-gap">
+      <UpdateLogList style="height: 324px; flex: 1" />
+      <div style="flex: 1; height: 100%; font-size: 12px" class="card-container flex-center">
+        <WorkbechesDeveloping />
+      </div>
+    </div>
     <div style="flex: 1" class="card-container flex-center"> 敬请期待... </div>
   </div>
 </template>
@@ -40,6 +45,7 @@
   import UpdateLogList from '@/components/workbenches/UpdateLogList.vue';
   import BeginnerGuide from '@/components/workbenches/BeginnerGuide.vue';
   import NoteDistribution from '@/components/workbenches/NoteDistribution.vue';
+  import WorkbechesDeveloping from '@/components/workbenches/WorkbechesDeveloping.vue';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
