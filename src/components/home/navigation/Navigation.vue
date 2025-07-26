@@ -27,7 +27,7 @@
             :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"
-            @click="router.push('/home')"
+            @click="handleToBookmark"
             >书签</div
           >
           <div
@@ -41,13 +41,13 @@
             :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
-            @click="router.push('/cloudSpace')"
+            @click="handleToCloudSpace"
             >云空间
-<!--            <div-->
-<!--              class="flex-align-center"-->
-<!--              style="font-size: 10px; background-color: #ff4d4f; color: white; border-radius: 12px; padding: 0 4px"-->
-<!--              >Beta</div-->
-<!--            >-->
+            <!--            <div-->
+            <!--              class="flex-align-center"-->
+            <!--              style="font-size: 10px; background-color: #ff4d4f; color: white; border-radius: 12px; padding: 0 4px"-->
+            <!--              >Beta</div-->
+            <!--            >-->
           </div>
         </template>
       </div>
@@ -59,7 +59,7 @@
 <script lang="ts" setup>
   import { computed, onMounted, ref, watch } from 'vue';
   import router from '@/router';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useRoute } from 'vue-router';
@@ -99,6 +99,16 @@
     bookmark.refreshData();
     await router.push({ path: `/` });
     bookmark.isFold = true;
+  }
+
+  function handleToBookmark() {
+    router.push('/home');
+    bookmark.type = 'all';
+    bookmark.refreshData();
+  }
+  const cloud = cloudSpaceStore();
+  function handleToCloudSpace() {
+    router.push('/cloudSpace');
   }
 
   function foldClick() {
