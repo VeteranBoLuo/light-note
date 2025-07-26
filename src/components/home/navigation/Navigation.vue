@@ -106,7 +106,6 @@
     bookmark.type = 'all';
     bookmark.refreshData();
   }
-  const cloud = cloudSpaceStore();
   function handleToCloudSpace() {
     router.push('/cloudSpace');
   }
