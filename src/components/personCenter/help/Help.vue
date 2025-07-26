@@ -20,7 +20,10 @@
         >帮助中心</div
       >
       <div v-if="!bookmark.isMobile" :style="{ width: '180px' }">
-        <div class="help-title" @click="checkId = ''" v-click-log="{ module: '帮助中心', operation: `导览` }"
+        <div
+          class="help-title"
+          @click="(checkId = ''), (node = helpInfo)"
+          v-click-log="{ module: '帮助中心', operation: `导览` }"
           >帮助中心</div
         >
         <BList style="font-size: 12px" :listOptions="viewOptions" @nodeClick="logItem" :check-id="checkId">
@@ -45,6 +48,7 @@
       </div>
       <div
         id="view-body"
+        class="help-editor"
         :style="{ width: bookmark.isMobile ? 'calc(100% - 40px)' : 'calc(100% - 180px)' }"
         style="
           height: 100%;
@@ -52,11 +56,17 @@
           border-radius: 8px;
           padding: 20px;
           overflow: auto;
+          box-sizing: border-box;
           line-height: 2rem;
           flex-grow: 1;
         "
-        ><component v-if="node?.['type'] === 'vue'" :is="node.content" /> <div v-else v-html="node.content"></div
-      ></div>
+        v-html="node.content"
+        contenteditable="true"
+      >
+      </div>
+      <b-button v-if="node.id" style="position: absolute; right: 10px; top: 10px" type="primary" @click="updateHelp"
+        >更新</b-button
+      >
     </div>
   </div>
 </template>
@@ -70,32 +80,11 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
-  import { listOptions } from '@/config/helpCfg.ts';
 
-  const bookmark = bookmarkStore();
-  const checkId = ref('');
-  function logItem(item) {
-    checkId.value = item.id;
-    nextTick(() => {
-      const dom = document.getElementById('view-body');
-      if (dom) {
-        dom.scrollTop = 0;
-      }
-    });
-  }
-  const searchValue = ref('');
-  const viewOptions = computed(() => {
-    if (searchValue.value) {
-      return listOptions.value.filter((data) => {
-        return data.title.includes(searchValue.value);
-      });
-    }
-    return listOptions.value;
-  });
-  const node = computed(() => {
-    const item = listOptions.value.find((data) => data.id === checkId.value);
-    return item ?? helpInfo;
-  });
+  import { apiBasePost } from '@/http/request.ts';
+  import '@wangeditor/editor/dist/css/style.css';
+  import { cloneDeep } from 'lodash-es';
+  import { listOptions} from '@/config/helpCfg.ts';
 
   const helpInfo = {
     content: `<div class="help-document-intro">
@@ -119,6 +108,30 @@
   </div>`,
   };
 
+  const node = ref(helpInfo);
+
+  const bookmark = bookmarkStore();
+  const checkId = ref('');
+  function logItem(item) {
+    checkId.value = item.id;
+    nextTick(() => {
+      const dom = document.getElementById('view-body');
+      if (dom) {
+        dom.scrollTop = 0;
+      }
+    });
+    node.value = item;
+  }
+  const searchValue = ref('');
+  const viewOptions = computed(() => {
+    if (searchValue.value) {
+      return listOptions.value.filter((data) => {
+        return data.title.includes(searchValue.value);
+      });
+    }
+    return listOptions.value;
+  });
+
   function setupClickListener() {
     document.addEventListener('click', imgClick);
   }
@@ -130,7 +143,29 @@
       bookmark.refreshViewer(e.target.src, {});
     }
   }
+
+  function updateHelp() {
+    const params = cloneDeep(node.value);
+    params.content = document.querySelector('.help-editor').innerHTML;
+    apiBasePost('/api/common/updateHelp', params).then((res) => {
+      if (res.status === 200) {
+        listOptions.value = res.data;
+        init();
+      }
+    });
+  }
+
+  function init() {
+    apiBasePost('/api/common/getHelpConfig').then((res) => {
+      if (res.status === 200) {
+        if (res.data.length > 0) {
+          listOptions.value = res.data;
+        }
+      }
+    });
+  }
   onMounted(() => {
+    init();
     setupClickListener();
   });
 
@@ -159,6 +194,7 @@
     cursor: pointer;
   }
   .help-body {
+    position: relative;
     display: flex;
     gap: 20px;
     height: calc(100% - 80px);
@@ -189,5 +225,9 @@
     background-color: var(--background-color);
     padding: 10px;
     border: 1px solid #ccc;
+  }
+  .help-editor {
+    height: 100%;
+    width: 100%;
   }
 </style>

@@ -45,6 +45,7 @@
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { listOptions } from '@/config/helpCfg.ts';
+  import { apiBasePost } from '@/http/request.ts';
 
   const bookmark = bookmarkStore();
   const checkId = ref('');
@@ -95,6 +96,16 @@
     if (e.target?.className === 'bookmark-image') {
       bookmark.refreshViewer(e.target.src, {});
     }
+  }
+
+  function init() {
+    apiBasePost('/api/common/getHelpConfig').then((res) => {
+      if (res.status === 200) {
+        if (res.data.length > 0) {
+          listOptions.value = res.data;
+        }
+      }
+    });
   }
   onMounted(() => {
     setupClickListener();
