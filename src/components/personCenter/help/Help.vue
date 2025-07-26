@@ -61,10 +61,14 @@
           flex-grow: 1;
         "
         v-html="node.content"
-        contenteditable="true"
+        :contenteditable="user.role === 'root'"
       >
       </div>
-      <b-button v-if="node.id" style="position: absolute; right: 10px; top: 10px" type="primary" @click="updateHelp"
+      <b-button
+        v-if="user.role === 'root' && node.id"
+        style="position: absolute; right: 10px; top: 10px"
+        type="primary"
+        @click="updateHelp"
         >更新</b-button
       >
     </div>
@@ -76,7 +80,7 @@
   import BList from '@/components/base/BasicComponents/BList.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
@@ -84,8 +88,8 @@
   import { apiBasePost } from '@/http/request.ts';
   import '@wangeditor/editor/dist/css/style.css';
   import { cloneDeep } from 'lodash-es';
-  import { listOptions} from '@/config/helpCfg.ts';
-
+  import { listOptions } from '@/config/helpCfg.ts';
+  const user = useUserStore();
   const helpInfo = {
     content: `<div class="help-document-intro">
     <h2>欢迎来到帮助中心</h2>
