@@ -1,19 +1,22 @@
 <template>
   <WorkbenchesCard title="更新日志">
     <template #rightHeader>
-      <a class="dom-hover" @click="$router.push('/updateLogs')">查看更多</a>
+      <a class="dom-hover" @click="$router.push('/updateLogs')" v-click-log="OPERATION_LOG_MAP.workbenches.moreLog"
+        >查看更多</a
+      >
     </template>
     <div class="logList">
       <div
         v-for="log in [...updateOptions].reverse().slice(0, 10)"
         class="log-item dom-hover"
         @click="viewLogDetail(log)"
+        v-click-log="OPERATION_LOG_MAP.workbenches.LogDetail"
       >
         <span class="label">{{ log.label }}</span>
         <span class="time">{{ log.time }}</span>
       </div>
     </div>
-    <b-modal title="更新详情" v-model:visible="detailVisible" v-if="detailVisible"  :show-footer="false">
+    <b-modal title="更新详情" v-model:visible="detailVisible" v-if="detailVisible" :show-footer="false">
       <div style="max-width: 800px; min-width: 500px">
         <div>{{ logObj.label }}</div>
         <div>
@@ -34,6 +37,7 @@
   import { updateOptions } from '@/config/updateLog.ts';
   import { computed, ref } from 'vue';
   import { cloneDeep } from 'lodash-es';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   const logObj = ref();
   const detailVisible = ref(false);
   function viewLogDetail(log) {

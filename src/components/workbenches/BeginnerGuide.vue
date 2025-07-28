@@ -1,11 +1,13 @@
 <template>
   <div class="guide-container-card">
     欢迎使用智能云平台轻笺
-    <b-button type="primary" @click="$router.push('/help')">新手指引</b-button>
+    <b-button type="primary" @click="$router.push('/help')" v-click-log="OPERATION_LOG_MAP.workbenches.guide">新手指引</b-button>
   </div>
 </template>
 
-<script lang="ts" setup></script>
+<script lang="ts" setup>
+import {OPERATION_LOG_MAP} from "@/config/logMap.ts";
+</script>
 
 <style lang="less" scoped>
   .guide-container-card {

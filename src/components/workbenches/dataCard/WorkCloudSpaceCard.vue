@@ -1,6 +1,11 @@
 <template>
   <div class="flex-align-center-gap">
-    <div class="flex-align-center icon-container" title="云空间" @click="$router.push('/cloudSpace')">
+    <div
+      class="flex-align-center icon-container"
+      title="云空间"
+      @click="$router.push('/cloudSpace')"
+      v-click-log="OPERATION_LOG_MAP.workbenches.cloud"
+    >
       <svg-icon size="40" :src="icon.common.folder" color="black" />
     </div>
     <div style="font-size: 12px">
@@ -17,6 +22,7 @@
 <script lang="ts" setup>
   import { cloudSpaceStore } from '@/store';
   import icon from '@/config/icon.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   const cloud = cloudSpaceStore();
 </script>
 

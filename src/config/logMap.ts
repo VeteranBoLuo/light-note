@@ -17,9 +17,10 @@ function createModule<T extends Record<string, string>>(module: string, operatio
 }
 export const OPERATION_LOG_MAP = {
   navigation: createModule('导航栏', {
-    home: '跳转首页',
-    note: '跳转笔记',
-    cloudSpace: '跳转云空间',
+    work: '工作台模块',
+    home: '书签模块',
+    note: '笔记模块',
+    cloudSpace: '云空间模块',
   }),
   login: createModule('登录', {
     previewMobile: '移动端预览',
@@ -39,6 +40,8 @@ export const OPERATION_LOG_MAP = {
   }),
   tagDetail: createModule('标签详情', {
     saveTag: '保存标签',
+    viewCopyTip: '查看图标复制示例',
+    uploadIcon: '上传图标',
   }),
   noteLibrary: createModule('笔记库', {
     addNote: '添加笔记',
@@ -53,4 +56,13 @@ export const OPERATION_LOG_MAP = {
     saveNote: '保存笔记',
   }),
   cloudSpace: createModule('云空间', {}),
+  workbenches: createModule('工作台', {
+    tag: '标签总览',
+    note: '笔记总览',
+    bookmark: '书签总览',
+    cloud: '云空间总览',
+    guide: '新手指引',
+    moreLog: '更多更新日志',
+    LogDetail: '更新日志详情',
+  }),
 };

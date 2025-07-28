@@ -1,6 +1,11 @@
 <template>
   <div class="flex-align-center-gap">
-    <div class="flex-align-center icon-container" title="标签" @click="$router.push('/manage/tagMg')">
+    <div
+      class="flex-align-center icon-container"
+      title="标签"
+      @click="$router.push('/manage/tagMg')"
+      v-click-log="OPERATION_LOG_MAP.workbenches.tag"
+    >
       <svg-icon size="40" :src="icon.workbenches.tag" color="black" />
     </div>
     <div style="font-size: 12px">
@@ -17,6 +22,8 @@
 <script lang="ts" setup>
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   const user = useUserStore();
   const bookmark = bookmarkStore();
 </script>

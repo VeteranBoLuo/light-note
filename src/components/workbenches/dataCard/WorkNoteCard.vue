@@ -1,6 +1,11 @@
 <template>
   <div class="flex-align-center-gap">
-    <div class="flex-align-center icon-container" title="笔记" @click="$router.push('/noteLibrary')">
+    <div
+      class="flex-align-center icon-container"
+      title="笔记"
+      @click="$router.push('/noteLibrary')"
+      v-click-log="OPERATION_LOG_MAP.workbenches.note"
+    >
       <svg-icon size="40" :src="icon.workbenches.note" color="black" />
     </div>
     <div style="font-size: 12px">
@@ -17,6 +22,7 @@
 <script lang="ts" setup>
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   const user = useUserStore();
   const bookmark = bookmarkStore();
 </script>

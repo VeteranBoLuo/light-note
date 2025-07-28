@@ -16,7 +16,7 @@
           v-if="bookmark.isMobile && route.path.includes('home') && !bookmark.isFold"
           @click="foldClick"
         />
-        <div class="navigation-title-link" @click="handleToIndex">
+        <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
           <img src="/favicon.svg" title="首页" width="25" height="25" alt="" />
           <span style="font-size: 18px">轻笺</span>
         </div>
