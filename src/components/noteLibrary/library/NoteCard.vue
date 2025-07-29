@@ -49,7 +49,7 @@
     tempElement.innerHTML = htmlContent;
 
     // 获取所有的<h>和<p>标签
-    const allowedTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'span', 'div', 'pre'];
+    const allowedTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'span', 'div', 'pre', 'table', 'tr', 'td'];
     const extractedContent = Array.from(tempElement.querySelectorAll('*'))
       .filter((el) => allowedTags.includes(el.tagName.toLowerCase()))
       .map((el) => {
