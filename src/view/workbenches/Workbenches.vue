@@ -22,11 +22,9 @@
       <BookmarkDistribution :isReady="readyObj.tagReady" style="flex: 1" />
       <NoteDistribution :isReady="readyObj.noteReady" style="flex: 1" />
     </div>
-    <div class="flex-align-center-gap">
-      <UpdateLogList style="height: 324px; flex: 1" />
-      <div style="flex: 1; height: 100%; font-size: 12px" class="card-container flex-center">
-        <WorkbechesDeveloping />
-      </div>
+    <div class="flex-align-center-gap" style="height: 324px; flex: 1; flex-grow: 0">
+      <CommonDataTable />
+      <UpdateLogList />
     </div>
     <div style="flex: 1" class="card-container flex-center"> 敬请期待... </div>
   </div>
@@ -45,7 +43,7 @@
   import UpdateLogList from '@/components/workbenches/UpdateLogList.vue';
   import BeginnerGuide from '@/components/workbenches/BeginnerGuide.vue';
   import NoteDistribution from '@/components/workbenches/NoteDistribution.vue';
-  import WorkbechesDeveloping from '@/components/workbenches/WorkbechesDeveloping.vue';
+  import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();

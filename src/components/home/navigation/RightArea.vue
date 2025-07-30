@@ -101,6 +101,7 @@
   import router from '@/router';
   import userApi from '@/api/userApi.ts';
   import { useRoute } from 'vue-router';
+  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const searchInputVisible = computed(() => {
     return !bookmark.isMobile && ['home'].some((item) => route.path.includes(item));
@@ -151,8 +152,8 @@
   }
 
   function githubClick() {
-    console.log('yes')
     window.open('https://github.com/VeteranBoLuo/light-note');
+    recordOperation({ module: '导航栏', operation: `点击书签卡片Github` });
   }
 
   function handleToPhoneUserCenter() {

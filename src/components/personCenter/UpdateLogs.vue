@@ -5,7 +5,7 @@
       :style="{ padding: bookmark.isMobile ? '20px' : '20px 100px' }"
     >
       <a-timeline>
-        <a-timeline-item color="#615ced" v-for="item in updateOptions"
+        <a-timeline-item color="#615ced" v-for="item in [...updateOptions].reverse()"
           >{{ item.label }}
           <span style="font-size: 14px; color: #a0a0a0">{{ item.time }}</span>
           <div style="margin-bottom: -10px">
@@ -19,7 +19,7 @@
 <script lang="ts" setup>
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { bookmarkStore } from '@/store';
-  import {updateOptions} from "@/config/updateLog.ts";
+  import { updateOptions } from '@/config/updateLog.ts';
   const bookmark = bookmarkStore();
 </script>
 
