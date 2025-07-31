@@ -127,7 +127,6 @@
         '/admin/operationLog': '/operationLog',
         '/admin/imageMg': '/imageMg',
         '/workbenches': '/home',
-        '/': '/home',
       };
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
