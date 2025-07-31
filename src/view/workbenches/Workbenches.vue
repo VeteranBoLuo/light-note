@@ -23,7 +23,7 @@
       <NoteDistribution :isReady="readyObj.noteReady" style="flex: 1" />
     </div>
     <div class="flex-align-center-gap" style="height: 324px; flex: 1; flex-grow: 0">
-      <CommonDataTable />
+      <CommonDataTable :tableData="tableData" />
       <UpdateLogList />
     </div>
     <div style="flex: 1" class="card-container flex-center"> 敬请期待... </div>
@@ -34,7 +34,7 @@
   import BookmarkDistribution from '@/components/workbenches/BookmarkDistribution.vue';
   import PlatformOverview from '@/components/workbenches/dataCard/WorkTagCard.vue';
   import WorkBookmarkCard from '@/components/workbenches/dataCard/WorkBookmarkCard.vue';
-  import { computed, onMounted, reactive, watch } from 'vue';
+  import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import WorkNoteCard from '@/components/workbenches/dataCard/WorkNoteCard.vue';
@@ -52,6 +52,7 @@
     tagReady: false,
     noteReady: false,
   });
+  const tableData = ref([]);
   function init() {
     readyObj.tagReady = false;
     readyObj.noteReady = false;
@@ -74,6 +75,14 @@
       if (res.status === 200) {
         bookmark.noteList = res.data;
         readyObj.noteReady = true;
+      }
+    });
+    apiBasePost('/api/bookmark/getCommonBookmarks').then((res) => {
+      if (res.status === 200) {
+        tableData.value = res.data.items;
+        tableData.value.forEach((item, index) => {
+          item.index = index + 1;
+        });
       }
     });
     cloud.queryFieldList();

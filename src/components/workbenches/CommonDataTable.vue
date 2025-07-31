@@ -12,9 +12,8 @@
           <template v-if="index === 2">
             <svg-icon :src="icon.workbenches.third" />
           </template>
-        </template>
-      </template></BTable
-    >
+        </template> </template
+    ></BTable>
   </WorkbenchesCard>
 </template>
 
@@ -24,7 +23,13 @@
   import { apiBasePost } from '@/http/request.ts';
   import icon from '@/config/icon.ts';
 
-  const tableData = ref([]);
+  defineProps({
+    tableData: {
+      type: Array,
+      default: () => [],
+    },
+  });
+
   const columns = ref([
     {
       title: '排名',
@@ -41,16 +46,7 @@
     },
   ]);
 
-  onMounted(() => {
-    apiBasePost('/api/bookmark/getCommonBookmarks').then((res) => {
-      if (res.status === 200) {
-        tableData.value = res.data.items;
-        tableData.value.forEach((item, index) => {
-          item.index = index + 1;
-        });
-      }
-    });
-  });
+  onMounted(() => {});
 </script>
 
 <style lang="less" scoped>
