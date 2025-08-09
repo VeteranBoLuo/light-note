@@ -127,6 +127,7 @@
         '/admin/operationLog': '/operationLog',
         '/admin/imageMg': '/imageMg',
         '/workbenches': '/home',
+        '/': '/home',
       };
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
@@ -156,6 +157,9 @@
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
     router.isReady().then(async () => {
+      if(to.name ==='workbenches'){
+        handleRouteChange(bookmark.isMobile,to.path)
+      }
       if (from.name === 'githubCallBack') {
         await getUserInfo();
       }
