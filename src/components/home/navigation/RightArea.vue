@@ -128,7 +128,7 @@
         bookmark.type = 'search';
         router.push({ path: `/home/search/${bookmark.bookmarkSearch}` });
       } else {
-        router.push({ path: '/' });
+        router.push({ path: '/home' });
       }
       bookmark.refreshData();
     }, 500);
