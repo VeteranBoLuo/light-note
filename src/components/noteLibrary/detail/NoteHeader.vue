@@ -77,9 +77,13 @@
       () => {
         if (props.nodeType === 'add') {
           router.push('/noteLibrary');
-        } else if (props.nodeType === 'share') {
-          router.push('/home');
-        } else {
+        }
+
+        // else if (props.nodeType === 'share') {
+        //   router.push('/home');
+        // }
+
+        else {
           router.back();
         }
       },

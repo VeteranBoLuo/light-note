@@ -59,7 +59,12 @@ export default defineStore('bookmark', {
       return this.screenWidth <= 1000;
     },
     iconColor() {
-      return this.theme === 'day' ? 'black' : 'white';
+        let  theme=  this.theme
+        if(theme === 'system') {
+          return  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'white' : 'black'
+        }
+        return theme === 'day' ? 'black' : 'white';
+
     },
     currentTheme() {
       return this.theme === 'system'
