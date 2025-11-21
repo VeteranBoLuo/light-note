@@ -27,7 +27,7 @@
             :style="{
               backgroundColor: bookmark.tagData?.id === item.id ? 'var(--category-item-ba-color)' : '',
             }"
-            :key="item"
+            :key="item.id"
             v-click-log="{ module: '首页', operation: `查询标签【${item.name}】下的书签列表` }"
             @click="handleClickTag(<TagInterface>item)"
           >

@@ -9,7 +9,7 @@
           <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">笔记库</div>
         </div>
         <div class="handle-btn-group">
-          <TagFilterSelector :allTags="allTags"  />
+          <TagFilterSelector :allTags="allTags" />
           <b-button
             type="primary"
             style="border-radius: 20px"
@@ -30,7 +30,7 @@
             <b-button type="primary" style="border-radius: 20px" @click="exitBatch"> 退出批量操作 </b-button>
           </template>
           <template v-else>
-            <TagFilterSelector :allTags="allTags"  />
+            <TagFilterSelector :allTags="allTags" />
             <div
               class="search-icon flex-center dom-hover"
               :class="searchActive ? 'normal-input' : 'icon-input'"
@@ -55,9 +55,16 @@
           </template>
         </div>
       </div>
-      <div class="note-library-body">
+      <VueDraggable
+        :draggable="!bookmark.isMobile"
+        :animation="200"
+        ref="el"
+        v-model="noteList"
+        class="note-library-body"
+        @end="onEnd"
+      >
         <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
-      </div>
+      </VueDraggable>
     </div>
   </b-loading>
 </template>
@@ -69,6 +76,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { computed, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
@@ -102,8 +110,8 @@
     }
   }
 
-   function getIndexNoteList() {
-     router.push('/noteLibrary');
+  function getIndexNoteList() {
+    router.push('/noteLibrary');
   }
 
   const searchValue = ref('');
@@ -129,7 +137,7 @@
   });
 
   function focusSearchInput() {
-    document.querySelector('.b-input').focus();
+    (document.querySelector('.b-input') as HTMLInputElement)?.focus();
   }
 
   const allTags = ref([]);
@@ -177,7 +185,7 @@
         document.addEventListener(
           'click',
           (e) => {
-            if (!e.target.matches('.search-icon *')) {
+            if (!(e.target as Element).matches('.search-icon *')) {
               searchActive.value = false;
             }
           },
@@ -187,7 +195,7 @@
         document.removeEventListener(
           'click',
           (e) => {
-            if (!e.target.matches('.search-icon *')) {
+            if (!(e.target as Element).matches('.search-icon *')) {
               searchActive.value = false;
             }
           },
@@ -200,6 +208,20 @@
   const handleNodeTypeChange = (tag) => {
     router.push(`/noteLibrary?tag=${tag}`);
   };
+
+  async function onEnd() {
+    try {
+      const sortedTags =
+        noteList.value.map((note: any, index: number) => ({
+          sort: index,
+          id: note.id,
+        })) || [];
+
+      await apiBasePost('/api/note/updateNoteSort', { notes: sortedTags });
+    } catch (error) {
+      console.error('Error updating note sort:', error);
+    }
+  }
 </script>
 
 <style lang="less" scoped>
@@ -270,7 +292,7 @@
     color: #f54e4e;
   }
   .search-icon {
-    overflow: hidden;// 防止因为padding变化导致动画开始时的错位问题
+    overflow: hidden; // 防止因为padding变化导致动画开始时的错位问题
     height: 32px;
     width: 32px;
     border-radius: 16px;

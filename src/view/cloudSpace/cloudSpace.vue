@@ -134,22 +134,22 @@
 </template>
 
 <script lang="ts" setup>
-  import icon from '@/config/icon.ts';
+  import icon from '@/config/icon';
   import { nextTick, reactive, ref } from 'vue';
-  import { deleteField, downloadField } from '@/http/common.ts';
+  import { deleteField, downloadField } from '@/http/common';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
-  import { debounce } from '@/utils/common.ts';
+  import { debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { apiBasePost } from '@/http/request.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import { apiBasePost } from '@/http/request';
   import { message } from 'ant-design-vue';
   import { cloneDeep } from 'lodash-es';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import { recordOperation } from '@/api/commonApi';
   import VideoPreview from '@/components/base/VideoPreview.vue';
 
   const bookmark = bookmarkStore();

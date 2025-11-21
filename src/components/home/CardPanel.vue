@@ -1,14 +1,23 @@
 <template>
-    <div class="card-panel" id="card-panel">
-      <div v-for="item in getBookList">
-        <RightMenu :menu="['编辑', '删除']" @select="rightMenuClick($event, item)">
-          <TagCard :cardInfo="item" />
-        </RightMenu>
-      </div>
+  <VueDraggable
+    :animation="200"
+    :draggable="!bookmark.isMobile"
+    ref="el"
+    v-model="bookmark.bookmarkList"
+    class="card-panel"
+    id="card-panel"
+    @end="onEnd"
+  >
+    <div v-for="item in getBookList">
+      <RightMenu :menu="['编辑', '删除']" @select="rightMenuClick($event, item)">
+        <TagCard :cardInfo="item" />
+      </RightMenu>
     </div>
+  </VueDraggable>
 </template>
 
 <script lang="ts" setup>
+  import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
   import { computed } from 'vue';
@@ -43,6 +52,20 @@
           });
         },
       });
+    }
+  }
+
+  async function onEnd() {
+    try {
+      const sortedTags =
+        bookmark.bookmarkList.map((bookmark: any, index: number) => ({
+          sort: index,
+          id: bookmark.id,
+        })) || [];
+
+      await apiBasePost('/api/bookmark/updateBookmarkSort', { bookmarks: sortedTags });
+    } catch (error) {
+      console.error('Error updating bookmark sort:', error);
     }
   }
 </script>

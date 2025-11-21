@@ -83,6 +83,7 @@ export const listOptions = ref([
           <p style="text-align: left">3、新增成功后可在书签管理页面和首页查看</p>
         <img src="${bookmarkTable}"  alt="书签示例" class="bookmark-image"   width="80%" style="border: 1px solid;"/>
         <img src="${bookmarkMainPage}"  alt="书签示例" class="bookmark-image"   width="80%" style="border: 1px solid;"/>
+        <p style="text-align: left;font-size: 12px">注：书签卡片可通过拖拽排序</p>
     </p>
         </div>
     </div>`,

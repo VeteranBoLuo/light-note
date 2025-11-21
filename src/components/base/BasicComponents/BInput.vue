@@ -52,14 +52,14 @@
 
   const props = withDefaults(
     defineProps<{
-      id: string;
-      placeholder: string;
-      type: string;
-      autocomplete: 'off' | 'on' | 'new-password';
-      height: string;
-      theme: 'al-day' | '';
-      rows: number;
-      maxlength: number | string;
+      id?: string;
+      placeholder?: string;
+      type?: string;
+      autocomplete?: 'off' | 'on' | 'new-password';
+      height?: string;
+      theme?: 'al-day' | '';
+      rows?: number;
+      maxlength?: number | string;
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),

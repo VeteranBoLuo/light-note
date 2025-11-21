@@ -52,14 +52,14 @@
 
   const props = withDefaults(
     defineProps<{
-      nodeType: {
+      nodeType?: {
         id: string | number;
         title: string;
       };
-      checkId: string | number;
-      placeholder: string;
-      searchFilter: boolean; // 启动自带input过滤功能
-      draggable: boolean;
+      checkId?: string | number;
+      placeholder?: string;
+      searchFilter?: boolean; // 启动自带input过滤功能
+      draggable?: boolean;
     }>(),
     {
       nodeType: () => ({
