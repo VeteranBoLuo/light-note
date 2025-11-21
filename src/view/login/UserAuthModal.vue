@@ -13,49 +13,60 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, onUnmounted, ref } from 'vue';
+  import { onMounted, onUnmounted, ref, Ref } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import LoginPage from '@/components/login/LoginPage.vue';
   import ResetPage from '@/components/login/ResetPage.vue';
   import RegisterPage from '@/components/login/RegisterPage.vue';
 
-  // 是否反转
-  const title = ref('登录');
+  // Modal title, supports: '登录' | '注册' | '重置'
+  const title = ref<'登录' | '注册' | '重置'>('登录');
 
   const user = useUserStore();
-
   const bookmark = bookmarkStore();
 
-  const formData = ref({
+  // 登录表单数据
+  interface FormData {
+    email: string;
+    password: string;
+  }
+  const formData = ref<FormData>({
     email: '',
     password: '',
   });
 
-  function registerSuccess(params: any) {
-    formData.value.email = params.email;
-    formData.value.password = params.password;
+  // 注册/重置成功后自动填充表单
+  function registerSuccess(params: { email: string; password: string }) {
+    setFormData(params.email, params.password);
+  }
+  function setFormData(email: string, password: string) {
+    formData.value.email = email;
+    formData.value.password = password;
   }
 
-  onMounted(() => {
-    document.addEventListener('keydown', clickEvent);
-    localStorage.setItem('userId', '');
-  });
+  // refs with type
+  const login = ref<InstanceType<typeof LoginPage> | null>(null);
+  const register = ref<InstanceType<typeof RegisterPage> | null>(null);
+  const reset = ref<InstanceType<typeof ResetPage> | null>(null);
 
-  onUnmounted(() => {
-    document.removeEventListener('keydown', clickEvent);
-  });
+  // Handler key enum
+  const HANDLER_KEY = {
+    LOGIN: '登录',
+    REGISTER: '注册',
+    RESET: '重置',
+  } as const;
+  type HandlerKey = typeof HANDLER_KEY[keyof typeof HANDLER_KEY];
 
-  const login = ref();
-  const register = ref();
-  const reset = ref();
-  const handlers = {
-    登录: { ref: login, method: 'handleLogin' },
-    注册: { ref: register, method: 'handleRegister' },
-    重置: { ref: reset, method: 'handleReset' },
+  // Handlers map
+  const handlers: Record<HandlerKey, { ref: Ref<any>; method: string }> = {
+    [HANDLER_KEY.LOGIN]: { ref: login, method: 'handleLogin' },
+    [HANDLER_KEY.REGISTER]: { ref: register, method: 'handleRegister' },
+    [HANDLER_KEY.RESET]: { ref: reset, method: 'handleReset' },
   };
 
-  function clickEvent(e) {
-    if (e.keyCode === 27) {
+  // Keyboard event handler
+  function clickEvent(e: KeyboardEvent) {
+    if (e.key === 'Escape' || e.keyCode === 27) {
       bookmark.isShowLogin = false;
     }
     if (e.key === 'Enter') {
@@ -65,6 +76,19 @@
       }
     }
   }
+
+  // Mount/unmount event listeners
+  onMounted(() => {
+    document.addEventListener('keydown', clickEvent);
+    localStorage.setItem('userId', '');
+  });
+
+  onUnmounted(() => {
+    // 健壮性：解绑前判断函数是否存在
+    if (clickEvent) {
+      document.removeEventListener('keydown', clickEvent);
+    }
+  });
 
 </script>
 

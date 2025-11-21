@@ -8,13 +8,6 @@
 <script lang="ts" setup>
   import TagInfo from '@/components/home/TagInfo.vue';
   import CardPanel from '@/components/home/CardPanel.vue';
-
-  defineProps({
-    loading: {
-      type: Boolean,
-      default: false,
-    },
-  });
 </script>
 
 <style lang="less">

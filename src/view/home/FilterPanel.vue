@@ -15,10 +15,10 @@
           </template>
         </b-input>
       </template>
-      <template #item="{ item }">
+      <template #item="{ item }: { item: TagInterface }">
         <RightMenu
           :menu="['添加书签', '重命名', '编辑', '删除']"
-          @select="handleTagMenu($event, <TagInterface>item)"
+          @select="handleTagMenu($event, item)"
           v-if="!item.isRename"
         >
           <div

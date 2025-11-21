@@ -56,36 +56,67 @@
   function init() {
     readyObj.tagReady = false;
     readyObj.noteReady = false;
+    fetchTagList();
+    fetchBookmarkList();
+    fetchNoteList();
+    fetchCommonBookmarks();
+    cloud.queryFieldList();
+  }
+
+  // 获取标签列表
+  function fetchTagList() {
     apiQueryPost('/api/bookmark/queryTagList', {
       filters: { userId: user.id },
-    }).then((res) => {
-      if (res.status === 200) {
-        bookmark.tagList = res.data;
-        readyObj.tagReady = true;
-      }
-    });
+    })
+      .then((res) => {
+        if (res.status === 200) {
+          bookmark.tagList = res.data;
+          readyObj.tagReady = true;
+        }
+      })
+       .catch(() => {});
+  }
+
+  // 获取书签列表
+  function fetchBookmarkList() {
     apiQueryPost('/api/bookmark/getBookmarkList', {
       filters: { userId: user.id, type: 'all' },
-    }).then((res) => {
-      if (res.status === 200) {
-        bookmark.bookmarkList = res.data.items;
-      }
-    });
-    apiBasePost('/api/note/queryNoteList').then((res) => {
-      if (res.status === 200) {
-        bookmark.noteList = res.data;
+    })
+      .then((res) => {
+        if (res.status === 200) {
+          bookmark.bookmarkList = res.data.items;
+        }
+      })
+      .catch(() => {});
+  }
+
+  // 获取笔记列表
+  function fetchNoteList() {
+    apiBasePost('/api/note/queryNoteList')
+      .then((res) => {
+        if (res.status === 200) {
+          bookmark.noteList = res.data;
+          readyObj.noteReady = true;
+        }
+      })
+      .catch(() => {
         readyObj.noteReady = true;
-      }
-    });
-    apiBasePost('/api/bookmark/getCommonBookmarks').then((res) => {
-      if (res.status === 200) {
-        tableData.value = res.data.items;
-        tableData.value.forEach((item, index) => {
-          item.index = index + 1;
-        });
-      }
-    });
-    cloud.queryFieldList();
+      });
+  }
+
+  // 获取常用书签
+  function fetchCommonBookmarks() {
+    apiBasePost('/api/bookmark/getCommonBookmarks')
+      .then((res) => {
+        if (res.status === 200 && Array.isArray(res.data.items)) {
+          tableData.value = res.data.items.map((item, index) => ({ ...item, index: index + 1 }));
+        } else {
+          tableData.value = [];
+        }
+      })
+      .catch(() => {
+        tableData.value = [];
+      });
   }
   onMounted(() => {
     init();

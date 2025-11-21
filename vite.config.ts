@@ -3,12 +3,12 @@ import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
 import Components from 'unplugin-vue-components/vite';
 import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
-
 import path from 'path';
+
 export default defineConfig({
   esbuild: {
-    // pure: ['console.log'], // 删除 console.log或
-    drop: ['debugger'], // 删除 debugger
+    pure: ['console.log'], // 构建时删除 console.log
+    drop: ['debugger'], // 构建时删除 debugger
   },
   build: {
     outDir: 'dist',
@@ -16,17 +16,15 @@ export default defineConfig({
   },
 
   plugins: [
+    vue(),
     vueJsx(),
-    vue(), //按需加载
     Components({
-      dirs: ['src/components/base/*'], // 自动导入的文件
+      dirs: ['src/components/base/*'],
       directoryAsNamespace: true,
       deep: true,
       resolvers: [
         ElementPlusResolver(),
-        AntDesignVueResolver({
-          importStyle: 'less',
-        }),
+        AntDesignVueResolver({ importStyle: 'less' }),
       ],
     }),
   ],
@@ -36,6 +34,7 @@ export default defineConfig({
   envDir: './',
   server: {
     proxy: {
+      // 本地开发 API 代理
       // '/api': {
       //   target: 'http://127.0.0.1:9001',
       //   changeOrigin: true,
@@ -46,6 +45,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // WebSocket 代理
       '/ws': {
         target: 'http://127.0.0.1:3000',
         changeOrigin: true,
@@ -57,18 +57,8 @@ export default defineConfig({
   },
   resolve: {
     alias: [
-      {
-        find: '@',
-        replacement: path.resolve(__dirname, 'src'),
-      },
-      {
-        find: 'src',
-        replacement: path.resolve(__dirname, 'src'),
-      },
-      {
-        find: 'assets',
-        replacement: path.resolve(__dirname, 'src/assets'),
-      },
+      { find: '@', replacement: path.resolve(__dirname, 'src') },
+      { find: 'assets', replacement: path.resolve(__dirname, 'src/assets') },
     ],
   },
 });

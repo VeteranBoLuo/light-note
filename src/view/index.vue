@@ -14,23 +14,33 @@
   import Navigation from '@/components/home/navigation/Navigation.vue';
   import { bookmarkStore } from '@/store';
   import { useRoute } from 'vue-router';
-  import { computed } from 'vue';
+  import { computed, onMounted, onBeforeUnmount } from 'vue';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
 
+  // 初始化屏幕尺寸
   bookmark.screenWidth = window.innerWidth;
-  window.onresize = () => {
+  bookmark.screenHeight = window.innerHeight;
+
+  // 窗口尺寸变化处理函数
+  function handleResize() {
     bookmark.screenWidth = window.innerWidth;
     bookmark.screenHeight = window.innerHeight;
-  };
+  }
 
-  const bgVisible = computed(() => {
-    if (bookmark.isMobile || route.name === 'NoteDetail') {
-      return 'unset';
-    }
-    return '';
+  // 组件挂载时添加监听，卸载时移除，防止内存泄漏
+  onMounted(() => {
+    window.addEventListener('resize', handleResize);
   });
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleResize);
+  });
+
+  // 背景图显示逻辑
+  const bgVisible = computed(() =>
+    bookmark.isMobile || route.name === 'NoteDetail' ? 'unset' : ''
+  );
 </script>
 
 <style lang="less" scoped>

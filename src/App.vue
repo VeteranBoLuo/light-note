@@ -8,16 +8,15 @@
       }"
     >
       <router-view />
-      <login v-if="bookmark.isShowLogin" />
+      <Login v-if="bookmark.isShowLogin" />
       <BViewer />
     </a-config-provider>
   </div>
 </template>
 <script setup lang="ts">
-  // 检查本地存储中是否有用户数据
   import { bookmarkStore, useUserStore } from '@/store';
-  import { h, nextTick, onMounted, watch } from 'vue';
-  import login from '@/view/login/UserAuthModal .vue';
+  import { h, nextTick, onMounted, onBeforeUnmount, watch } from 'vue';
+  import Login from '@/view/login/UserAuthModal.vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
   import { useRouter } from 'vue-router';
@@ -36,6 +35,29 @@
     },
   );
 
+  // 路由映射表
+  const phoneReplaceMap = {
+    '/admin/apiLog': '/apiLog',
+    '/admin/userMg': '/userMg',
+    '/admin/userOpinion': '/userOpinion',
+    '/admin/operationLog': '/operationLog',
+    '/admin/imageMg': '/imageMg',
+    '/workbenches': '/home',
+    '/': '/home',
+  };
+  const deskReplaceMap = {
+    '/apiLog': '/admin/apiLog',
+    '/userMg': '/admin/userMg',
+    '/userOpinion': '/admin/userOpinion',
+    '/operationLog': '/admin/operationLog',
+    '/imageMg': '/admin/imageMg',
+    '/opinions': '/home',
+    '/admin': '/admin/operationLog',
+  };
+
+  let mq = null;
+  let mqListener = null;
+
   function initApp() {
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
     const theme = localStorage.getItem('theme');
@@ -46,10 +68,11 @@
     // 设置指纹
     window['fingerprint'] = fingerprint();
 
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    mq.addEventListener('change', (e) => {
+    mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mqListener = (e) => {
       bookmark.theme = e.matches ? 'night' : 'day';
-    });
+    };
+    mq.addEventListener('change', mqListener);
     handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
   }
   async function getUserInfo() {
@@ -120,28 +143,10 @@
   function handleRouteChange(isMobile: boolean, path: string) {
     // 电脑端切换至手机端
     if (isMobile) {
-      const phoneReplaceMap = {
-        '/admin/apiLog': '/apiLog',
-        '/admin/userMg': '/userMg',
-        '/admin/userOpinion': '/userOpinion',
-        '/admin/operationLog': '/operationLog',
-        '/admin/imageMg': '/imageMg',
-        '/workbenches': '/home',
-        '/': '/home',
-      };
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
       }
     } else {
-      const deskReplaceMap = {
-        '/apiLog': '/admin/apiLog',
-        '/userMg': '/admin/userMg',
-        '/userOpinion': '/admin/userOpinion',
-        '/operationLog': '/admin/operationLog',
-        '/imageMg': '/admin/imageMg',
-        '/opinions': '/home',
-        '/admin': '/admin/operationLog',
-      };
       if (deskReplaceMap[path]) {
         router.push(deskReplaceMap[path]);
       }
@@ -184,6 +189,13 @@
     await init();
   });
 
+  // 解绑媒体查询监听，防止内存泄漏
+  onBeforeUnmount(() => {
+    if (mq && mqListener) {
+      mq.removeEventListener('change', mqListener);
+    }
+  });
+
   // 监听设备类型变化
   watch(
     () => bookmark.isMobile,
@@ -211,13 +223,14 @@
   }
 </script>
 <style>
-  .disable-animations * {
+  /* 只影响根元素下的主要内容，避免全局影响 */
+  .disable-animations #app, .disable-animations #app * {
     animation: none !important;
     transition: none !important;
     animation-play-state: paused !important;
   }
 
-  /* 2. 系统级动画禁用（尊重用户偏好） */
+  /* 系统级动画禁用*/
   @media (prefers-reduced-motion: reduce) {
     * {
       animation: none !important;

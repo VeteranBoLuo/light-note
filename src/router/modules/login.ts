@@ -7,7 +7,7 @@ const loginRouter: AppRouteRecordRaw = {
   },
   path: '/login',
   name: 'login',
-  component: () => import('@/view/login/UserAuthModal .vue'),
+  component: () => import('@/view/login/UserAuthModal.vue'),
 };
 
 export default loginRouter;

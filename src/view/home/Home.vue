@@ -15,7 +15,7 @@
 
   const bookmark = bookmarkStore();
   const router = useRouter();
-  const roure = useRoute();
+  const route = useRoute();
 
   // 处理滚动条滚动到顶部
   const scrollToTop = () => {
@@ -25,9 +25,10 @@
 
   // 获取书签列表
   const fetchBookmarkList = async (type: string, params?: Record<string, any>) => {
+    const user = useUserStore();
     const res = await apiQueryPost('/api/bookmark/getBookmarkList', {
       filters: {
-        userId,
+        userId: user.id,
         type,
         ...params,
       },
@@ -61,7 +62,7 @@
       bookmark.bookmarkList = [];
       const container: any = document.querySelector('#card-panel');
       if (bookmark.type === 'normal') {
-        const tag = bookmark.tagList?.find((item) => item.id === roure.params?.id);
+        const tag = bookmark.tagList?.find((item) => item.id === route.params?.id);
         bookmark.tagData = tag;
         if (tag) {
           await fetchBookmarkList('normal', { tagId: tag.id });
@@ -98,12 +99,14 @@
 
   watch(() => bookmark.refreshTagKey, queryTagList);
 
+  // 查询标签列表
   function queryTagList() {
+    const user = useUserStore();
     if (bookmark.type !== 'normal') {
       bookmark.refreshData();
     }
     apiQueryPost('/api/bookmark/queryTagList', {
-      filters: { userId },
+      filters: { userId: user.id },
     }).then((res) => {
       if (res.status === 200) {
         bookmark.tagList = res.data;
@@ -130,20 +133,19 @@
   );
 
   const user = useUserStore();
-  const userId = localStorage?.getItem('userId');
   onMounted(() => {
     bookmark.bookmarkList = [];
-    if (!userId) {
+    if (!user.id) {
       user.role = 'visitor';
     }
     bookmark.type = 'all';
     // 带有tagId刷新页面时
-    if (roure.params?.id) {
+    if (route.params?.id) {
       bookmark.type = 'normal';
-    } else if (roure.params?.value) {
+    } else if (route.params?.value) {
       // 带有search刷新页面时
       bookmark.type = 'search';
-      bookmark.bookmarkSearch = roure.params.value;
+      bookmark.bookmarkSearch = route.params.value;
     }
     queryTagList();
   });
