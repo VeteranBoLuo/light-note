@@ -56,7 +56,7 @@
         </div>
       </div>
       <VueDraggable
-        :disabled="!bookmark.isMobile"
+        :disabled="bookmark.isMobile"
         :animation="200"
         ref="el"
         v-model="noteList"
