@@ -46,7 +46,7 @@
    即dragList必须绑定用于computed计算的原始list，listOptions用于绑定页面实际可以看到的list（computed生成的）
    * */
   const dragList = defineModel('dragList');
-  if(!dragList.value){
+  if (!dragList.value) {
     dragList.value = [];
   }
 
