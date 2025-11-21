@@ -1,5 +1,4 @@
 <template>
-  {{ !bookmark.isMobile }}
   <VueDraggable
     :animation="200"
     :disabled="bookmark.isMobile"
