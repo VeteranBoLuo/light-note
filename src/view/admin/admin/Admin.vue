@@ -3,7 +3,7 @@
     <div class="menu-body">
       <BList style="font-size: 12px" :listOptions="viewOptions" @nodeClick="nodeClick" :check-id="checkId">
         <template #icon="{ item }">
-          <svg-icon :src="item.icon" />
+          <svg-icon :src="(item as any).icon" />
         </template>
       </BList>
     </div>

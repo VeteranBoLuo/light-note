@@ -133,6 +133,7 @@
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3; /* 显示的行数，根据需要调整 */
+    line-clamp: 3;
   }
 
   .footer-tag {
@@ -160,10 +161,10 @@
     .footer-tag {
       bottom: 12px;
     }
-
     .card-description {
       height: 2rem;
       -webkit-line-clamp: 2; /* 显示的行数，根据需要调整 */
+      line-clamp: 2;
     }
   }
 </style>

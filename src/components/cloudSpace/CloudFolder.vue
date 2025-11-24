@@ -89,7 +89,7 @@
         folder.isRename = true;
         newName.value = folder.name;
         nextTick(() => {
-          document.querySelector('.edit-input .b-input').focus();
+          (document.querySelector('.edit-input .b-input') as HTMLElement | null)?.focus();
         });
       },
       删除: () => handleDeleteFolder(folder),
@@ -124,7 +124,7 @@
     }
     cloud.folderList.push({ name: '', isRename: true });
     nextTick(() => {
-      document.querySelector('.edit-input .b-input').focus();
+      (document.querySelector('.edit-input .b-input') as HTMLElement | null)?.focus();
     });
   }
 

@@ -24,3 +24,5 @@ build/
 *.njsproj
 *.sln
 *.sw?
+components.d.ts
+.vscode/extensions.json

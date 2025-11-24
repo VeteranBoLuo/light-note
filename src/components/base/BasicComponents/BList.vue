@@ -45,8 +45,8 @@
    写dragList和listOptions两个列表，是因为如果VueDraggable绑定的可拖拽列表是通过computed生成的，拖拽传递的参数就不会发生变化，
    即dragList必须绑定用于computed计算的原始list，listOptions用于绑定页面实际可以看到的list（computed生成的）
    * */
-  const dragList = defineModel('dragList');
-  if (!dragList.value) {
+  const dragList = defineModel<any[]>('dragList');
+  if (!dragList.value || !Array.isArray(dragList.value)) {
     dragList.value = [];
   }
 

@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="mask-container" @click.stop>
-      <div class="modal-view"  :class="{ out: isOut }">
+      <div class="modal-view" :class="{ out: isOut }">
         <span
           style="position: absolute; right: 20px; top: 20px; z-index: 99999; font-size: 20px"
           @click="handleClose"
@@ -35,10 +35,10 @@
   const props = withDefaults(
     defineProps<{
       title: string;
-      maskClosable: boolean; // 点击遮罩层关闭
-      showFooter: boolean; // 是否显示底部
-      escClosable: boolean; // 按下esc关闭
-      top: string;
+      maskClosable?: boolean; // 点击遮罩层关闭
+      showFooter?: boolean; // 是否显示底部
+      escClosable?: boolean; // 按下esc关闭
+      top?: string;
     }>(),
     {
       title: '默认标题',

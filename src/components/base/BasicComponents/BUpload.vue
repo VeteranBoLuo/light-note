@@ -27,7 +27,7 @@
     defineProps<{
       accept: string;
       multiple: boolean;
-      maxTotalSize: number;
+      maxTotalSize?: number;
     }>(),
     {
       accept: 'qwe',

@@ -113,6 +113,7 @@
         } else {
           tableData.value = [];
         }
+
       })
       .catch(() => {
         tableData.value = [];

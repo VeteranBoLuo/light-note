@@ -317,9 +317,6 @@
   }
 
   @media (max-width: 1000px) {
-    .header_menu_ul {
-    }
-
     .modal-content {
       height: 60%;
       width: 80%;

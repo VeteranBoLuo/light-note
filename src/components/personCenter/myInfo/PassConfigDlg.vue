@@ -24,7 +24,7 @@
     return user.password ? '修改密码' : '设置密码';
   });
 
-  const formData = ref<{ password: string; confirmPassword: string; oldPassword?: string }>({
+  const formData = ref<{ type?: string; password: string; confirmPassword: string; oldPassword?: string }>({
     confirmPassword: '',
     password: '',
   });
@@ -67,7 +67,7 @@
     const isPass = passCfgRef.value?.validateForm();
     let condition: endCondition[] = [];
     if (isPass) {
-      if ((type.value = '设置密码')) {
+      if (type.value === '设置密码') {
         condition = [
           {
             endCondition: formData.value.password !== formData.value.confirmPassword,
@@ -101,7 +101,7 @@
       if (checkEndCondition(condition)) {
         return;
       }
-      formData.value.type = type.value === '修改密码' ? 'update' : 'set';
+      formData.value.type = type.value === '修改密码' ? 'update' : 'sZet';
       apiBasePost('/api/user/configPassword', formData.value).then((res) => {
         if (res.status === 200) {
           user.password = formData.value.password;
