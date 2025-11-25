@@ -159,20 +159,25 @@
 
   const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
 
-  // 监听路由守卫触发的事件
-  window.addEventListener('fetchUserInfo', async () => {
-    console.log('fetchUserInfo event triggered');
-    await getUserInfo();
-  });
-
-  // 只有第一次进入页面或者刷新页面才触发
-  async function init() {
+  // 路由发生变化触发
+  router.beforeEach(async (to, from, next) => {
     router.isReady().then(async () => {
-      await getUserInfo();
-      if (skipRouter.includes(<string>router.currentRoute.value.name)) {
+      if (to.name === 'workbenches') {
+        handleRouteChange(bookmark.isMobile, to.path);
+      }
+      if (from.name === 'githubCallBack') {
+        await getUserInfo();
+      }
+      if (skipRouter.includes(<string>to.name)) {
         bookmark.isShowLogin = false;
       }
     });
+    next();
+  });
+
+  // 只有第一次进入页面或者刷新页面才触发（简化）
+  async function init() {
+    // 移除 getUserInfo 调用，因为现在在路由守卫中处理
   }
   onMounted(async () => {
     initApp();

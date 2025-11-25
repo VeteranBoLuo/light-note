@@ -15,52 +15,6 @@ import { useUserStore, bookmarkStore } from '@/store';
 import aiAssistantRouter from '@/router/modules/aiAssistant.ts';
 import { message } from 'ant-design-vue';
 
-// 跳过登录显示的路由名称列表
-const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
-
-// 手机端路由映射：从桌面端路径映射到手机端路径
-const phoneReplaceMap = {
-  '/admin/apiLog': '/apiLog',
-  '/admin/userMg': '/userMg',
-  '/admin/userOpinion': '/userOpinion',
-  '/admin/operationLog': '/operationLog',
-  '/admin/imageMg': '/imageMg',
-  '/workbenches': '/home',
-  '/': '/home',
-};
-
-// 桌面端路由映射：从手机端路径映射到桌面端路径
-const deskReplaceMap = {
-  '/apiLog': '/admin/apiLog',
-  '/userMg': '/admin/userMg',
-  '/userOpinion': '/admin/userOpinion',
-  '/operationLog': '/admin/operationLog',
-  '/imageMg': '/admin/imageMg',
-  '/opinions': '/home',
-  '/admin': '/admin/operationLog',
-};
-
-// 处理用户登出：清除本地存储并显示登录界面
-function handleUserLogout() {
-  localStorage.setItem('userId', '');
-  const bookmark = bookmarkStore();
-  bookmark.isShowLogin = true;
-}
-
-// 处理路由变化：根据设备类型切换路由
-function handleRouteChange(isMobile: boolean, path: string, router: any) {
-  if (isMobile) {
-    if (phoneReplaceMap[path]) {
-      router.push(phoneReplaceMap[path]);
-    }
-  } else {
-    if (deskReplaceMap[path]) {
-      router.push(deskReplaceMap[path]);
-    }
-  }
-}
-
-// 路由配置
 const routes: RouteRecordRaw[] = [
   {
     meta: {
@@ -107,37 +61,6 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
-});
-
-// 路由守卫：检查权限和其他逻辑
-router.beforeEach(async (to, from, next) => {
-  const user = useUserStore();
-  const bookmark = bookmarkStore();
-
-  // 检查权限
-  const requiredRoles = to.meta?.roles as RoleEnum[] | undefined;
-  if (requiredRoles && !requiredRoles.includes(user.role as RoleEnum)) {
-    bookmark.isShowLogin = true;
-    message.warning('当前账号无权限访问该页面，请使用有权限的账号登录');
-    return
-  }
-
-  // 处理路由变化
-  if (to.name === 'workbenches') {
-    handleRouteChange(bookmark.isMobile, to.path, router);
-  }
-
-  // 从 GitHub 回调回来时触发获取用户信息事件
-  if (from.name === 'githubCallBack') {
-    window.dispatchEvent(new CustomEvent('fetchUserInfo'));
-  }
-
-  // 跳过登录显示的路由
-  if (skipRouter.includes(to.name as string)) {
-    bookmark.isShowLogin = false;
-  }
-
-  next();
 });
 
 export default router;
