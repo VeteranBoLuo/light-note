@@ -24,30 +24,40 @@ export const copyTextToClipboard = function (text) {
 };
 
 //  防抖函数
-export function debounce(func: any, time) {
-  let timer: any;
-  return function () {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      func.apply(this, arguments);
-      clearTimeout(timer);
-    }, time);
-  };
-}
-export function throttle(func, time) {
-  let timer = null;
+/**
+ * 防抖函数：延迟执行函数，直到停止调用后的指定时间
+ * @param func 要防抖的函数
+ * @param delay 延迟时间（毫秒）
+ * @returns 防抖后的函数
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: number | null = null;
 
-  return function () {
-    if (timer) {
-      return;
-    } else {
-      func.apply(this, arguments);
-      timer = setTimeout(() => {
-        timer = null;
-      }, time);
+  return (...args: Parameters<T>) => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
     }
+    timeoutId = setTimeout(() => {
+      func(...args);
+      timeoutId = null;
+    }, delay);
   };
 }
+ // 节流函数：限制函数调用频率
+export function throttle(func: Function, delay: number) {
+    let timeoutId: number | null = null;
+    return (...args: any[]) => {
+      if (timeoutId === null) {
+        func(...args);
+        timeoutId = setTimeout(() => {
+          timeoutId = null;
+        }, delay);
+      }
+    };
+  }
 
 // 获取浏览器类型
 export function getBrowserType() {
@@ -215,6 +225,5 @@ export function closeOpenWindow(className: string, flag: Ref<boolean>, remove?: 
 }
 
 export function openPage(url, newPage: boolean = true) {
-  console.log('url', url);
   window.open(url, newPage ? '_blank' : '_self');
 }

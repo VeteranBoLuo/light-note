@@ -1,24 +1,52 @@
-import axios, { AxiosRequestConfig } from 'axios';
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { message } from 'ant-design-vue';
 import { useUserStore } from '@/store';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 
+// 常量定义
+const TIMEOUT = 60000;
+const ROLES_ADMIN = ['admin', 'root'];
+const NO_AUTH_ENDPOINTS = ['del'];
+const ERROR_MESSAGES: { [key: number]: string } = {
+  500: '服务器错误',
+  403: '服务器拒绝请求',
+  401: '无权限，请登录',
+  400: '客户端请求异常',
+  404: '请求资源不存在',
+  504: '服务器异常',
+  505: 'HTTP 版本不受支持',
+};
+
+// 接口定义
+interface ApiResponse {
+  status: number;
+  msg: string;
+  data: any;
+}
+
+interface QueryData {
+  pageSize?: number;
+  currentPage?: number;
+  level?: number;
+  order?: { [key: string]: 'DESC' | 'ASC' };
+  filters?: any;
+}
+
 const request = axios.create({
-  timeout: 60000,
+  timeout: TIMEOUT,
 });
 //请求拦截
 request.interceptors.request.use(
-  async (config) => {
-    if (config.url.includes('/api')) {
+  (config) => {
+    if (config.url?.includes('/api')) {
       config.headers['OS'] = getUserOsInfo();
       config.headers['Browser'] = getBrowserType();
-      // 假设你有一个全局状态管理器（如Vuex）或者一个响应式的引用（如ref）来存储用户信息
-      const userId = localStorage?.getItem('userId'); /* 从你的状态管理器或响应式引用中获取用户信息 */
       const user = useUserStore();
-      const notNeedAuth = ['del'].some((key) => config.url.includes(key));
-      if (!['admin', 'root'].includes(user.role) && notNeedAuth) {
-        message.warn('没有操作权限.请登录！！！');
-        return Promise.reject('接口' + config.url + '没有操作权限');
+      const userId = localStorage?.getItem('userId');
+      const notNeedAuth = NO_AUTH_ENDPOINTS.some((key) => config.url?.includes(key));
+      if (!ROLES_ADMIN.includes(user.role) && notNeedAuth) {
+        message.warn('没有操作权限，请登录！！！');
+        return Promise.reject(new Error(`接口 ${config.url} 没有操作权限`));
       }
       if (config.url.includes('login')) {
         config.headers['X-User-Id'] = '';
@@ -29,8 +57,7 @@ request.interceptors.request.use(
       } else {
         config.headers['role'] = 'visitor';
       }
-      config.headers['fingerprint'] = window['fingerprint'];
-      return config;
+      config.headers['fingerprint'] = (window as any)['fingerprint'];
     }
     return config;
   },
@@ -41,19 +68,11 @@ request.interceptors.request.use(
 
 export const apiQueryPost = async (
   url: string,
-  data?: {
-    pageSize?: number; // 每页数量
-    currentPage?: number; // 当前页码
-    level?: number;
-    order?: {
-      [key: string]: 'DESC' | 'ASC';
-    }; // 排序对象，属性名和属性分别是字段名和排序方法（ASC/DESC）
-    filters?: any; // 通过指定条件筛选数据
-  },
+  data?: QueryData,
   options?: AxiosRequestConfig,
-) => {
+): Promise<ApiResponse> => {
   const res = await request({
-    url: url,
+    url,
     method: 'post',
     data: {
       pageSize: data?.pageSize ?? 10,
@@ -66,9 +85,14 @@ export const apiQueryPost = async (
   });
   return handleErrorResponse(res.data);
 };
-export const apiBasePost = async (url: string, data?: any, options?: AxiosRequestConfig) => {
+
+export const apiBasePost = async (
+  url: string,
+  data?: any,
+  options?: AxiosRequestConfig,
+): Promise<ApiResponse> => {
   const res = await request({
-    url: url,
+    url,
     method: 'post',
     data,
     ...options,
@@ -76,34 +100,25 @@ export const apiBasePost = async (url: string, data?: any, options?: AxiosReques
   return handleErrorResponse(res.data);
 };
 
-export const apiBaseGet = async (url: string, params?: any, options?: AxiosRequestConfig) => {
+export const apiBaseGet = async (
+  url: string,
+  params?: any,
+  options?: AxiosRequestConfig,
+): Promise<ApiResponse> => {
   const res = await request({
-    url: url,
+    url,
     method: 'get',
-    params: params,
+    params,
     ...options,
   });
   return handleErrorResponse(res.data);
 };
 
-export function handleErrorResponse(res: any): {
-  status: number;
-  msg: string;
-  data: any;
-} {
-  const errorMessages: { [key: number]: string } = {
-    500: '服务器错误',
-    403: '服务器拒绝请求',
-    401: '无权限，请登录',
-    400: '客户端请求异常',
-    404: '请求资源不存在',
-    504: '服务器异常',
-    505: 'HTTP 版本不受支持',
-  };
+export function handleErrorResponse(res: AxiosResponse['data']): ApiResponse {
   // 如果状态码在映射中，则显示错误消息
-  if (errorMessages[res.status]) {
-    const errorMsg = res.msg ?? errorMessages[res.status];
-    message.error(errorMsg).then();
+  if (ERROR_MESSAGES[res.status]) {
+    const errorMsg = res.msg ?? ERROR_MESSAGES[res.status];
+    message.error(errorMsg);
   }
   return res;
 }

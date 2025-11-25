@@ -30,7 +30,7 @@
     },
   });
 
-  const columns = ref([
+  const columns = ref<{ title: string; key: string; width?: string | number }[]>([
     {
       title: '排名',
       key: 'index',

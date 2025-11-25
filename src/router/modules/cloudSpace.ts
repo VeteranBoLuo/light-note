@@ -1,7 +1,7 @@
-import { AppRouteRecordRaw } from '@/router';
+import { RouteRecordRaw } from 'vue-router';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
-const cloudSpaceRouter: AppRouteRecordRaw[] = [
+const cloudSpaceRouter: RouteRecordRaw[] = [
   {
     meta: {
       title: '云空间',

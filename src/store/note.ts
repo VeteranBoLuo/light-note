@@ -1,29 +1,51 @@
 import { defineStore } from 'pinia';
 import { nextTick } from 'vue';
 
+// 接口定义
+interface Heading {
+  element: Element;
+  text: string;
+  level: number;
+}
+
+interface NoteState {
+  headings: Heading[];
+}
+
 export default defineStore('note', {
-  state: () =>
-    <
-      {
-        headings?: { element: Element; text: string; level: number }[];
-      }
-    >{
-      headings: [],
-    },
+  state: (): NoteState => ({
+    headings: [],
+  }),
   getters: {},
   actions: {
-    generateTOC() {
-      nextTick(() => {
-        const container = document.getElementById('editor-container');
-        if (!container) return;
-        const hTags = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    /**
+     * 生成目录（Table of Contents）
+     */
+    async generateTOC(): Promise<void> {
+      await nextTick();
+
+      const container = document.getElementById('editor-container');
+      if (!container) {
+        console.warn('Editor container not found');
+        return;
+      }
+
+      try {
+        const hTags = container.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6');
         this.headings = Array.from(hTags)
-          .filter((heading: any) => heading.innerText.trim() !== '' || heading.textContent.trim() !== '')
-          .map((heading: any, index) => {
-            const level = parseInt((heading.tagName as string).replace('H', ''), 10);
-            return { element: heading, text: heading.innerText || heading.textContent || '', level };
+          .filter((heading) => {
+            const text = heading.innerText || heading.textContent || '';
+            return text.trim() !== '';
+          })
+          .map((heading) => {
+            const level = parseInt(heading.tagName.replace('H', ''), 10);
+            const text = heading.innerText || heading.textContent || '';
+            return { element: heading, text, level };
           });
-      }).then();
+      } catch (error) {
+        console.error('Error generating TOC:', error);
+        this.headings = [];
+      }
     },
   },
 });

@@ -114,13 +114,18 @@
     <div
       v-if="viewVisible"
       class="both-center"
-      style="padding-top: 20px; border: 1px solid var(--bl-input-border-h-color); border-radius: 6px"
+      style="
+        padding: 20px 10px 10px 10px;
+        border: 1px solid var(--bl-input-border-h-color);
+        border-radius: 6px;
+        background-color: var(--background-color);
+      "
     >
       <svg-icon
         :src="icon.common.close"
-        size="20"
+        size="19"
         class="dom-hover"
-        style="position: absolute; right: 0; top: 0"
+        style="position: absolute; right: 2px; top: 0"
         @click="viewVisible = false"
       />
       <iframe
@@ -181,8 +186,9 @@
   function handleReName(file) {
     originalName.value = cloneDeep(file.fileName);
     file.isRename = true;
+    document.querySelector('.edit-file-input .b-input') as HTMLInputElement;
     nextTick(() => {
-      document.querySelector('.edit-file-input .b-input').focus();
+      (document.querySelector('.edit-file-input .b-input') as HTMLInputElement).focus();
     });
   }
 
@@ -218,24 +224,49 @@
     moveFileVisible: false,
     file: {},
   });
+  const viewVisible = ref(false);
+  const viewObj = ref();
+  const isListenerAdded = ref(false);
   function moveField(file) {
     moveCfg.moveFileVisible = true;
     moveCfg.file = file;
   }
-  const viewVisible = ref(false);
-  const viewObj = ref();
-  function previewFile(file: any) {
+  interface FileItem {
+    id: string;
+    fileName: string;
+    fileType: string;
+    fileUrl?: string;
+  }
+
+  const ALLOW_VIEW_TYPES = ['pdf', 'video'];
+
+  function previewFile(file: FileItem) {
+    if (!file || !file.fileType) return;
+
     viewObj.value = file;
-    const allowView = ['pdf', 'video'];
-    if (allowView.some((type) => file.fileType.includes(type))) {
+
+    if (ALLOW_VIEW_TYPES.some((type) => file.fileType.includes(type))) {
       viewVisible.value = true;
+      // 添加键盘事件监听器（确保只添加一次）
+      if (!isListenerAdded.value) {
+        document.addEventListener('keydown', handleKeyDown);
+        isListenerAdded.value = true;
+      }
     }
+
     if (file.fileType.includes('image')) {
       // 如果图片是被覆盖的，需要手动加上时间戳更新图片缓存
-      bookmark.refreshViewer(
-        cloud.cacheImgArr.includes(file.id) ? `${file.fileUrl}?t=${Date.now()}` : file.fileUrl,
-        {},
-      );
+      const url = cloud.cacheImgArr.includes(file.id) ? `${file.fileUrl}?t=${Date.now()}` : file.fileUrl;
+      bookmark.refreshViewer(url, {});
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      viewVisible.value = false;
+      // 移除事件监听器
+      document.removeEventListener('keydown', handleKeyDown);
+      isListenerAdded.value = false;
     }
   }
 

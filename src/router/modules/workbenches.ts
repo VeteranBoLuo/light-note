@@ -1,7 +1,7 @@
-import { AppRouteRecordRaw } from '@/router';
+import { RouteRecordRaw } from 'vue-router';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
-const workbenchesRouter: AppRouteRecordRaw = {
+const workbenchesRouter: RouteRecordRaw = {
   meta: {
     roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
   },

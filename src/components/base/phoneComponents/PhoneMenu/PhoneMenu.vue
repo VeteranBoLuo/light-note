@@ -12,12 +12,15 @@
 </template>
 
 <script lang="ts" setup>
+  import { PropType } from 'vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
+  type MenuListItem = any[] & { id: string | number };
+
   const props = defineProps({
     menuList: {
-      type: Array,
+      type: Array as PropType<MenuListItem[]>,
       default: () => [],
     },
     label: {
@@ -45,7 +48,6 @@
     &:not(:last-child) {
       border-bottom: 1px solid var(--phone-menu-item-border-color);
     }
-
 
     .phone-menu-item-des {
       color: #999fa8;

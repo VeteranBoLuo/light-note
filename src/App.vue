@@ -159,20 +159,10 @@
 
   const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
 
-  // 路由发生变化触发
-  router.beforeEach(async (to, from, next) => {
-    router.isReady().then(async () => {
-      if(to.name ==='workbenches'){
-        handleRouteChange(bookmark.isMobile,to.path)
-      }
-      if (from.name === 'githubCallBack') {
-        await getUserInfo();
-      }
-      if (skipRouter.includes(<string>to.name)) {
-        bookmark.isShowLogin = false;
-      }
-    });
-    next();
+  // 监听路由守卫触发的事件
+  window.addEventListener('fetchUserInfo', async () => {
+    console.log('fetchUserInfo event triggered');
+    await getUserInfo();
   });
 
   // 只有第一次进入页面或者刷新页面才触发
@@ -224,7 +214,8 @@
 </script>
 <style>
   /* 只影响根元素下的主要内容，避免全局影响 */
-  .disable-animations #app, .disable-animations #app * {
+  .disable-animations #app,
+  .disable-animations #app * {
     animation: none !important;
     transition: none !important;
     animation-play-state: paused !important;

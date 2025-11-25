@@ -1,7 +1,7 @@
-import { AppRouteRecordRaw } from '@/router';
+import { RouteRecordRaw } from 'vue-router';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
-const mainPageRouter: AppRouteRecordRaw = {
+const mainPageRouter: RouteRecordRaw = {
   path: 'home',
   meta: {
     title: '书签',

@@ -2,92 +2,109 @@ import { defineStore } from 'pinia';
 import { TagInterface } from '@/config/bookmarkCfg.ts';
 import Viewer from 'viewerjs';
 
-export default defineStore('bookmark', {
-  state: () =>
-    <
-      {
-        tagData?: TagInterface;
-        tagList?: TagInterface[]; // 标签列表
-        bookmarkList?: []; // 书签列表
-        noteList?: []; // 笔记列表
-        imgList?: any; // 网站图标列表
-        refreshKey?: boolean;
-        refreshTagKey?: boolean;
-        type: 'all' | 'normal' | 'search';
-        bookmarkSearch?: any;
-        screenWidth: number;
-        screenHeight: number;
-        isFold?: boolean; // 手机模式下菜单的折叠状态
-        theme: 'day' | 'night' | 'system' | string; // 主题
-        isShowLogin: boolean; // 是否弹出登录页面
-        viewerKey: string;
-        bookmarkLoading: boolean;
-        viewer: {
-          container: Viewer;
-          src: string;
-          options: Viewer.Options;
-        };
-        browserId: string; // 浏览器指纹
-      }
-    >{
-      tagData: {
-        relatedTagList: [], // 当前选中标签详情
-      },
-      tagList: [], // 标签列表
-      bookmarkList: [], // 书签列表
-      noteList: [],
-      imgList: [],
-      refreshKey: false,
-      refreshTagKey: false,
-      type: 'all',
-      bookmarkSearch: '',
-      screenWidth: window.innerWidth,
-      screenHeight: window.innerHeight,
-      isFold: true,
-      theme: 'day',
-      isShowLogin: false,
-      viewerKey: '',
-      bookmarkLoading: false,
-      viewer: {
-        src: '',
-        options: {},
-      },
-      browserId: '',
-    },
-  getters: {
-    isMobile() {
-      return this.screenWidth <= 1000;
-    },
-    iconColor() {
-        let  theme=  this.theme
-        if(theme === 'system') {
-          return  window.matchMedia('(prefers-color-scheme: dark)').matches ? 'white' : 'black'
-        }
-        return theme === 'day' ? 'black' : 'white';
+// 接口定义
+interface BookmarkState {
+  tagData: Partial<TagInterface>;
+  tagList: TagInterface[];
+  bookmarkList: any[];
+  noteList: any[];
+  imgList: any[];
+  refreshKey: boolean;
+  refreshTagKey: boolean;
+  type: 'all' | 'normal' | 'search';
+  bookmarkSearch: string;
+  screenWidth: number;
+  screenHeight: number;
+  isFold: boolean;
+  theme: 'day' | 'night' | 'system' | string;
+  isShowLogin: boolean;
+  viewerKey: string;
+  bookmarkLoading: boolean;
+  viewer: {
+    container?: Viewer;
+    src: string;
+    options: Viewer.Options;
+  };
+  browserId: string;
+}
 
+export default defineStore('bookmark', {
+  state: () => ({
+    tagData: {
+      relatedTagList: [], // 当前选中标签详情
     },
-    currentTheme() {
-      return this.theme === 'system'
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'night'
-          : 'day'
-        : this.theme;
+    tagList: [], // 标签列表
+    bookmarkList: [], // 书签列表
+    noteList: [],
+    imgList: [],
+    refreshKey: false,
+    refreshTagKey: false,
+    type: 'all',
+    bookmarkSearch: '',
+    screenWidth: typeof window !== 'undefined' ? window.innerWidth : 1920, // SSR 安全
+    screenHeight: typeof window !== 'undefined' ? window.innerHeight : 1080,
+    isFold: true,
+    theme: 'day',
+    isShowLogin: false,
+    viewerKey: '',
+    bookmarkLoading: false,
+    viewer: {
+      src: '',
+      options: {},
+    },
+    browserId: '',
+  }),
+  getters: {
+    /**
+     * 判断是否为移动设备
+     */
+    isMobile(state): boolean {
+      return state.screenWidth <= 1000;
+    },
+    /**
+     * 获取图标颜色
+     */
+    iconColor(state): string {
+      const theme = state.theme;
+      if (theme === 'system') {
+        return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'white' : 'black';
+      }
+      return theme === 'day' ? 'black' : 'white';
+    },
+    /**
+     * 获取当前主题
+     */
+    currentTheme(state): string {
+      return state.theme === 'system'
+        ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day')
+        : state.theme;
     },
   },
   actions: {
-    refreshData() {
+    /**
+     * 刷新数据
+     */
+    refreshData(): void {
       this.refreshKey = !this.refreshKey;
     },
-    refreshTag() {
+    /**
+     * 刷新标签
+     */
+    refreshTag(): void {
       this.refreshTagKey = !this.refreshTagKey;
     },
-    refreshViewer(src: string, options?: Viewer.Options) {
-      console.log(src);
+    /**
+     * 刷新查看器
+     */
+    refreshViewer(src: string, options?: Viewer.Options): void {
       this.viewer.src = src;
-      this.viewer.options = options;
-      this.viewerKey = (Math.random() * 9000000).toString();
+      this.viewer.options = options || {};
+      this.viewerKey = Math.random().toString(36).substr(2, 9); // 生成随机键
     },
-    reset() {
+    /**
+     * 重置状态
+     */
+    reset(): void {
       this.tagData = {
         relatedTagList: [],
       };

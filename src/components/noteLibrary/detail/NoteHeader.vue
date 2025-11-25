@@ -82,7 +82,6 @@
         // else if (props.nodeType === 'share') {
         //   router.push('/home');
         // }
-
         else {
           router.back();
         }

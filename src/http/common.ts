@@ -13,7 +13,7 @@ export async function downloadField(id: number | string) {
       {
         responseType: 'blob', // 必须设置为 blob 才能正确处理二进制流
         headers: {
-          // 可选：如果你需要带 token 或其他 header
+          // 可选：如果需要带 token 或其他 header
           // 'Authorization': 'Bearer your_token_here',
         },
       },

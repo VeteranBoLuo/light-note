@@ -1,7 +1,7 @@
-import { AppRouteRecordRaw } from '@/router';
+import { RouteRecordRaw } from 'vue-router';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
-const statusRouter: AppRouteRecordRaw[] = [
+const statusRouter: RouteRecordRaw[] = [
   {
     path: '/:catchAll(.*)',
     name: 'not-found',

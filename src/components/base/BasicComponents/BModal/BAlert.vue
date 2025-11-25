@@ -15,11 +15,7 @@
           "
         >
           <slot name="title">
-            <div
-              style="font-size: 16px; margin-bottom: 15px; font-weight: 550;"
-              class="row-center"
-              >{{ title }}</div
-            >
+            <div style="font-size: 16px; margin-bottom: 15px; font-weight: 550" class="row-center">{{ title }}</div>
           </slot>
           <div
             style="
@@ -114,29 +110,30 @@
   import { ref } from 'vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { bookmarkStore } from '@/store';
+
+  interface ButtonItem {
+    type?: 'function' | 'primary' | 'danger' | 'success';
+    label: string;
+    function?: () => void;
+  }
+
   const bookmark = bookmarkStore();
-  const props = defineProps({
-    title: {
-      type: String,
-      default: '',
+  const props = withDefaults(
+    defineProps<{
+      title: string;
+      okText: string;
+      cancelText: string;
+      content: string;
+      footer: ButtonItem[];
+    }>(),
+    {
+      title: '',
+      okText: '确认',
+      cancelText: '取消',
+      content: '取消',
+      footer: () => [],
     },
-    okText: {
-      type: String,
-      default: '确认',
-    },
-    cancelText: {
-      type: String,
-      default: '取消',
-    },
-    content: {
-      type: String,
-      default: '取消',
-    },
-    footer: {
-      type: Array,
-      default: () => [],
-    },
-  });
+  );
   const isExit = ref(false);
   function obClose(time = 200) {
     isExit.value = true;

@@ -1,7 +1,7 @@
-import { AppRouteRecordRaw } from '@/router';
+import { RouteRecordRaw } from 'vue-router';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
-const adminRouter: AppRouteRecordRaw[] = [
+const adminRouter: RouteRecordRaw[] = [
   {
     meta: {
       title: '后台管理',

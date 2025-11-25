@@ -1,7 +1,7 @@
-import { AppRouteRecordRaw } from '@/router';
+import { RouteRecordRaw } from 'vue-router';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
-const manageRouter: AppRouteRecordRaw = {
+const manageRouter: RouteRecordRaw = {
   meta: {
     title: '数据管理',
     keepAlive: true,

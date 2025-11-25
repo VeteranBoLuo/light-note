@@ -8,7 +8,7 @@ export default defineStore('dom', {
         usedSpace: number;
         maxSpace: number;
         folderList: { name: string; id?: string; isRename?: boolean }[];
-        fileList: { id: string; fileName: string; fileSize: number; uploadTime: string; folderName: string,isRename?:boolean,fileType?:string }[];
+        fileList: { id: string; fileName: string; fileSize: number; uploadTime: string; folderName: string,isRename?:boolean,fileType:string; fileUrl: string }[];
         typeCheckValue: any[];
         folder?: { id: string; name: string };
         searchFileName: string;

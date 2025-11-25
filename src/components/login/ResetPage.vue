@@ -91,12 +91,9 @@
                 <svg-icon :src="icon.login.code" size="16" />
               </template>
               <template #suffix>
-                <span
-                  style="color: var(--primary-text)"
-                  class="dom-hover"
-                  @click="sendEmail"
-                  >{{ codeTime == 0 ? '获取验证码' : codeTime + 's' }}</span
-                >
+                <span style="color: var(--primary-text)" class="dom-hover" @click="sendEmail">{{
+                  codeTime == 0 ? '获取验证码' : codeTime + 's'
+                }}</span>
               </template>
             </b-input>
           </span>
