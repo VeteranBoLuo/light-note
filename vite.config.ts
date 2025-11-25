@@ -34,17 +34,16 @@ export default defineConfig({
   envDir: './',
   server: {
     proxy: {
-      // 本地开发 API 代理
-      // '/api': {
-      //   target: 'http://127.0.0.1:9001',
-      //   changeOrigin: true,
-      //   rewrite: (path: string) => path.replace(/^\/api/, ''),
-      // },
       '/api': {
-        target: 'https://boluo66.top',
+        target: 'http://127.0.0.1:9001',
         changeOrigin: true,
-        secure: false,
+        rewrite: (path: string) => path.replace(/^\/api/, ''),
       },
+      // '/api': {
+      //   target: 'https://boluo66.top',
+      //   changeOrigin: true,
+      //   secure: false,
+      // },
       // WebSocket 代理
       '/ws': {
         target: 'http://127.0.0.1:3000',

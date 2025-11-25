@@ -9,6 +9,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     403: typeof import('./src/components/base/PageResponse/403.vue')['default']
     404: typeof import('./src/components/base/PageResponse/404.vue')['default']
+    AButton: typeof import('ant-design-vue/es')['Button']
     ACheckbox: typeof import('ant-design-vue/es')['Checkbox']
     ACheckboxGroup: typeof import('ant-design-vue/es')['CheckboxGroup']
     AConfigProvider: typeof import('ant-design-vue/es')['ConfigProvider']

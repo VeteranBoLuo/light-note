@@ -43,11 +43,18 @@
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
             @click="handleToCloudSpace"
             >云空间
-            <!--            <div-->
-            <!--              class="flex-align-center"-->
-            <!--              style="font-size: 10px; background-color: #ff4d4f; color: white; border-radius: 12px; padding: 0 4px"-->
-            <!--              >Beta</div-->
-            <!--            >-->
+          </div>
+          <div
+            v-if="user.role === 'root'"
+            :style="{ color: route.path.includes('/aiAssistant') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            v-click-log="OPERATION_LOG_MAP.navigation.note"
+            @click="router.push('/aiAssistant')"
+            >智能助手<div
+              class="flex-align-center"
+              style="font-size: 10px; background-color: #ff4d4f; color: white; border-radius: 12px; padding: 0 4px"
+              >Beta</div
+            >
           </div>
         </template>
       </div>
@@ -86,8 +93,8 @@
   const navigationFucVisible = computed(() => {
     return (
       !bookmark.isMobile &&
-      ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs', 'workbenches'].some((item) =>
-        route.path.includes(item),
+      ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs', 'workbenches', 'aiAssistant'].some(
+        (item) => route.path.includes(item),
       )
     );
   });

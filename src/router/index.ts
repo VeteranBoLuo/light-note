@@ -12,6 +12,8 @@ import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import { useUserStore, bookmarkStore } from '@/store';
+import aiAssistantRouter from '@/router/modules/aiAssistant.ts';
+import { message } from 'ant-design-vue';
 
 // 跳过登录显示的路由名称列表
 const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
@@ -77,6 +79,7 @@ const routes: RouteRecordRaw[] = [
       manageRouter,
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
+      ...aiAssistantRouter
     ],
   },
   {
@@ -114,8 +117,9 @@ router.beforeEach(async (to, from, next) => {
   // 检查权限
   const requiredRoles = to.meta?.roles as RoleEnum[] | undefined;
   if (requiredRoles && !requiredRoles.includes(user.role as RoleEnum)) {
-    next('/login');
-    return;
+    bookmark.isShowLogin = true;
+    message.warning('当前账号无权限访问该页面，请使用有权限的账号登录');
+    return
   }
 
   // 处理路由变化
