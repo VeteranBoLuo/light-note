@@ -177,7 +177,12 @@
 
   // 只有第一次进入页面或者刷新页面才触发（简化）
   async function init() {
-    // 移除 getUserInfo 调用，因为现在在路由守卫中处理
+    router.isReady().then(async () => {
+      await getUserInfo();
+      if (skipRouter.includes(<string>router.currentRoute.value.name)) {
+        bookmark.isShowLogin = false;
+      }
+    });
   }
   onMounted(async () => {
     initApp();
