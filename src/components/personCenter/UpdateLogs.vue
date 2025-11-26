@@ -5,11 +5,16 @@
       :style="{ padding: bookmark.isMobile ? '20px' : '20px 100px' }"
     >
       <a-timeline>
-        <a-timeline-item color="#615ced" v-for="item in [...updateOptions].reverse()"
-          >{{ item.label }}
-          <span style="font-size: 14px; color: #a0a0a0">{{ item.time }}</span>
+        <a-timeline-item color="#615ced" v-for="item in [...updateOptions].reverse()">
+          <span v-html="item.label"></span>
+          <span style="font-size: 14px; color: #a0a0a0">&nbsp;{{ item.time }}</span>
           <div style="margin-bottom: -10px">
-            <p v-for="(li, index) in item.list" style="font-size: 12px"> {{ index + 1 }}、{{ li }} </p>
+            <p v-for="(li, index) in item.list" style="font-size: 12px">
+              <template v-if="item.hideIndex">
+                <span v-html="li"></span>
+              </template>
+              <template v-else> {{ index + 1 }}、<span v-html="li"></span></template>
+            </p>
           </div>
         </a-timeline-item>
       </a-timeline>

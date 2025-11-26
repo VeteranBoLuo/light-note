@@ -5,7 +5,6 @@ import '@/assets/css/index.less';
 import { Icon } from '@iconify/vue';
 import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
-// 在入口文件中（如 main.ts 或 app.ts）
 import TableMenuPlugin from '@/config/wangEditor/table-menu-plugin.ts';
 // 创建vue实例
 const app = createApp(App);

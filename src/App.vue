@@ -10,6 +10,7 @@
       <router-view />
       <Login v-if="bookmark.isShowLogin" />
       <BViewer />
+      <FloatQuestion v-if="!bookmark.isShowLogin" />
     </a-config-provider>
   </div>
 </template>
@@ -22,6 +23,7 @@
   import { useRouter } from 'vue-router';
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
+  import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
 
   const router = useRouter();
   const user = useUserStore();

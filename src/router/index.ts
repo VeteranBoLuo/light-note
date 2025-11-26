@@ -11,9 +11,6 @@ import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
-import { useUserStore, bookmarkStore } from '@/store';
-import aiAssistantRouter from '@/router/modules/aiAssistant.ts';
-import { message } from 'ant-design-vue';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -33,7 +30,6 @@ const routes: RouteRecordRaw[] = [
       manageRouter,
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
-      ...aiAssistantRouter
     ],
   },
   {
