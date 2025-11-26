@@ -92,6 +92,7 @@
 
 <script setup lang="ts">
   import { ref, onMounted, nextTick, watch } from 'vue';
+  import { parse, Allow } from 'partial-json';
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
 
@@ -340,6 +341,7 @@
 
   let sessionId = '';
   // 修复：彻底重写发送消息函数，确保滚动逻辑正确
+  // 修复：重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
     showRecommendation.value = false;
     const inputText = userInput.value.trim();
@@ -366,7 +368,7 @@
     isLoading.value = true;
     adjustTextareaHeight();
     userHasInterrupted.value = false;
-    // 修复：发送新消息时，只有用户没有干预才自动滚动
+
     if (!userHasInterrupted.value) {
       await nextTick();
       scrollToBottom('auto');
@@ -374,6 +376,61 @@
 
     // 创建中止控制器
     abortController.value = new AbortController();
+
+    // 修复：新增打字机效果相关变量
+    const accumulatedContent = ref(''); // 累积的完整内容
+    const displayedContent = ref(''); // 当前显示的内容（逐字增加）
+    let typingTimer: number | null = null;
+    let typewriterQueue: string[] = []; // 打字队列
+    let isTyping = false; // 是否正在打字
+    const TYPING_SPEED = 10; // 打字速度（毫秒/字符）
+
+    // 修复：打字机效果函数[6,7](@ref)
+    const startTypewriter = async () => {
+      if (isTyping) {
+        return; // 如果正在打字，等待当前打字完成
+      }
+
+      isTyping = true;
+
+      while (typewriterQueue.length > 0) {
+        const textToType = typewriterQueue.shift();
+        if (!textToType) continue;
+
+        for (let i = 0; i < textToType.length; i++) {
+          if (!isLoading.value) break; // 如果响应被停止，退出打字
+
+          displayedContent.value += textToType[i];
+          messages.value[currentMessageIndex].content = displayedContent.value;
+
+          // 只有在用户没有干预时才自动滚动
+          if (autoScrollEnabled.value && !userHasInterrupted.value) {
+            await nextTick();
+            scrollToBottom('smooth');
+          }
+
+          // 控制打字速度[5](@ref)
+          await new Promise((resolve) => {
+            typingTimer = window.setTimeout(resolve, TYPING_SPEED);
+          });
+        }
+      }
+
+      isTyping = false;
+    };
+
+    // 修复：处理新内容的函数
+    const handleNewContent = (content: string) => {
+      if (!content) return;
+
+      accumulatedContent.value += content;
+      typewriterQueue.push(content);
+
+      // 如果没有正在打字，启动打字机
+      if (!isTyping) {
+        startTypewriter();
+      }
+    };
 
     try {
       const response = await fetch('/api/chat/receiveMessage', {
@@ -389,48 +446,17 @@
         signal: abortController.value.signal,
       });
 
-      if (!response.ok) throw new Error('请求失败');
+      if (!response.ok) throw new Error(`请求失败: ${response.status}`);
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('无法读取流数据');
 
       const decoder = new TextDecoder();
       let buffer = '';
-      let accumulatedContent = '';
-
-      const UPDATE_INTERVAL = 16;
-      let pendingUpdate = '';
-
-      // 修复：流式输出时的更新逻辑，充分尊重用户干预状态
-      const processUpdate = () => {
-        if (!pendingUpdate) return;
-
-        const char = pendingUpdate[0];
-        if (char) {
-          accumulatedContent += char;
-          pendingUpdate = pendingUpdate.substring(1);
-          messages.value[currentMessageIndex].content = accumulatedContent;
-
-          // 只有在用户没有干预时才自动滚动
-          if (autoScrollEnabled.value && !userHasInterrupted.value) {
-            nextTick(() => {
-              if (messagesContainer.value && !userHasInterrupted.value) {
-                messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-              }
-            });
-          }
-        }
-      };
-
-      let isStreamComplete = false;
-      const updateTimer = setInterval(processUpdate, UPDATE_INTERVAL);
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          isStreamComplete = true;
-          break;
-        }
+        if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
@@ -446,36 +472,52 @@
             const dataStr = line.slice(5).trim();
 
             if (dataStr === '[DONE]') {
-              isStreamComplete = true;
               break;
             }
 
             if (!dataStr) continue;
 
             try {
-              const data = JSON.parse(dataStr);
-              const content = data.output?.text || data.text || '';
+              const parseJSONSafely = (str) => {
+                try {
+                  return JSON.parse(str);
+                } catch (e) {
+                  if (e instanceof SyntaxError) {
+                    // 尝试使用partial-json解析不完整JSON
+                    try {
+                      return parse(str, Allow.ALL);
+                    } catch (partialError) {
+                      console.warn('Partial JSON解析也失败:', partialError);
+                      return null;
+                    }
+                  }
+                  throw e;
+                }
+              };
+
+              const data = parseJSONSafely(dataStr);
+              if (!data) continue;
+
+              const content = data.output?.text || data.text || data.content || '';
 
               if (content && typeof content === 'string') {
-                pendingUpdate += content;
+                // 修复：使用新的内容处理函数
+                handleNewContent(content);
               }
 
-              // 提取并更新 session_id
               if (data.output?.session_id) {
                 sessionId = data.output.session_id;
               }
             } catch (e) {
-              console.warn('解析数据失败，跳过该数据块:', dataStr);
+              console.warn('解析数据失败，跳过数据块:', dataStr);
               continue;
             }
           }
         }
-
-        if (isStreamComplete) break;
       }
 
-      // 处理流结束
-      if (buffer.trim() && buffer.includes('data:')) {
+      // 修复：处理缓冲区剩余数据
+      if (buffer.trim()) {
         const remainingLines = buffer.split('\n');
         for (const rawLine of remainingLines) {
           const line = rawLine.trim();
@@ -484,9 +526,9 @@
             if (dataStr && dataStr !== '[DONE]') {
               try {
                 const data = JSON.parse(dataStr);
-                const content = data.output?.text || data.text || '';
+                const content = data.output?.text || data.text || data.content || '';
                 if (content) {
-                  pendingUpdate += content;
+                  handleNewContent(content);
                 }
               } catch (e) {
                 console.warn('最终数据解析失败:', dataStr);
@@ -496,35 +538,55 @@
         }
       }
 
-      // 等待所有内容处理完成
-      await new Promise((resolve) => {
-        const checkPending = setInterval(() => {
-          if (!pendingUpdate) {
-            clearInterval(checkPending);
-            clearInterval(updateTimer);
-            resolve(true);
-          }
-        }, 100);
+      // 修复：等待打字机效果完成
+      const waitForTypewriter = () => {
+        return new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (!isTyping && typewriterQueue.length === 0) {
+              clearInterval(checkInterval);
+              resolve(true);
+            }
+          }, 100);
 
-        setTimeout(() => {
-          clearInterval(checkPending);
-          clearInterval(updateTimer);
-          resolve(true);
-        }, 3000);
-      });
+          // 设置最大等待时间
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve(true);
+          }, 10000);
+        });
+      };
+
+      await waitForTypewriter();
+
+      // 最终检查，确保显示完整内容
+      if (displayedContent.value !== accumulatedContent.value) {
+        messages.value[currentMessageIndex].content = accumulatedContent.value;
+        displayedContent.value = accumulatedContent.value;
+      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        messages.value[currentMessageIndex].content += '（已暂停）';
+        // 清理打字机定时器
+        if (typingTimer) {
+          clearTimeout(typingTimer);
+          typingTimer = null;
+        }
+        messages.value[currentMessageIndex].content += '（响应已暂停）';
       } else {
         console.error('请求失败:', error);
-        messages.value[currentMessageIndex].content = '抱歉，暂时无法回应';
+        messages.value[currentMessageIndex].content = '抱歉，暂时无法回应，请稍后重试';
       }
     } finally {
+      // 清理资源
+      if (typingTimer) {
+        clearTimeout(typingTimer);
+        typingTimer = null;
+      }
+
       isLoading.value = false;
       abortController.value = null;
       showRecommendation.value = true;
 
-      // 修复：消息发送完成后，只有用户没有干预才最终滚动到底部
+      // 最终滚动
       await nextTick();
       if (autoScrollEnabled.value && !userHasInterrupted.value) {
         scrollToBottom('smooth');

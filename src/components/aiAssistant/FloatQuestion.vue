@@ -16,7 +16,7 @@
               <button class="action-btn minimize" @click="clearConversation" title="新的对话">
                 <span>➕</span>
               </button>
-              <button class="action-btn close-btn" @click="minimize" title="最小化">
+              <button class="action-btn close-btn" @click="minimize" title="关闭">
                 <span>❌</span>
               </button>
             </div>
