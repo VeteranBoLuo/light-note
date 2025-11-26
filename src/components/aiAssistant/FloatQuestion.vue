@@ -40,7 +40,7 @@
     <div
       class="float-button"
       :class="{
-        'button-active': isOpen,
+        'button-active': !isMinimized,
         'button-minimized': isMinimized,
       }"
       @click="toggleModal"
