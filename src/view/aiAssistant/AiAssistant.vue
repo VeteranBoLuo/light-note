@@ -100,6 +100,10 @@
   import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github.css';
+
+  defineExpose({
+    clearHistory,
+  });
   const bookmark = bookmarkStore();
 
   const user = useUserStore();
@@ -236,18 +240,21 @@
   };
 
   // 清空对话
-  const clearHistory = () => {
+  function clearHistory() {
+    stopResponse();
     showRecommendation.value = false;
+    sessionId = '';
     if (isLoading.value) return;
     messages.value = [
       {
         role: 'assistant',
-        content: '对话已清空',
+        content: '您好！我是轻笺助手，专为效率控设计的书签管理专家。有什么问题需要我帮忙解答吗？',
         timestamp: new Date(),
       },
     ];
+    showRecommendation.value = true;
     resetScrollState();
-  };
+  }
 
   // 修复：重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
   const handleScroll = () => {

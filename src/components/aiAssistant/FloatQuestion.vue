@@ -12,11 +12,12 @@
               <span class="status-dot"></span>
             </div>
             <div class="header-actions">
-              <button class="action-btn minimize" @click="minimize" title="最小化">
-                <span>−</span>
+              <!-- 修改：最小化按钮改为清空对话 -->
+              <button class="action-btn minimize" @click="clearConversation" title="新的对话">
+                <span>➕</span>
               </button>
-              <button class="action-btn close-btn" @click="closeModal" title="关闭">
-                <span>×</span>
+              <button class="action-btn close-btn" @click="minimize" title="最小化">
+                <span>❌</span>
               </button>
             </div>
           </div>
@@ -24,7 +25,8 @@
 
         <!-- 内容区域 -->
         <div class="modal-content">
-          <AiAssistant />
+          <!-- 修改：添加ref以便调用清空方法 -->
+          <AiAssistant ref="aiAssistantRef" />
         </div>
 
         <!-- 底部装饰 -->
@@ -34,7 +36,7 @@
       </div>
     </transition>
 
-    <!-- 悬浮按钮 -->
+    <!-- 悬浮按钮保持不变 -->
     <div
       class="float-button"
       :class="{
@@ -59,11 +61,15 @@
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed } from 'vue';
   import AiAssistant from '@/view/aiAssistant/AiAssistant.vue';
+  import { message } from 'ant-design-vue';
 
   // 状态管理
   const isOpen = ref(false);
   const isClosed = ref(false);
   const isMinimized = ref(true);
+
+  // 修改：添加AiAssistant组件的ref
+  const aiAssistantRef = ref(null);
 
   // 悬浮按钮动画状态
   const isPulsing = ref(false);
@@ -74,33 +80,47 @@
     left: `${20 + index * 20}%`,
   });
 
-  // 切换弹窗显示
+  // 修改后的切换弹窗逻辑
   const toggleModal = () => {
     if (isMinimized.value) {
+      // 如果是最小化状态，则打开弹窗
       isMinimized.value = false;
       isOpen.value = true;
+    } else if (isOpen.value) {
+      // 如果弹窗是打开的，则最小化（而不是关闭）
+      minimize();
     } else {
-      isOpen.value = !isOpen.value;
+      // 如果弹窗是关闭的，则打开
+      isOpen.value = true;
+      isMinimized.value = false;
     }
   };
 
-  // 最小化
+  // 修改：最小化方法（原来关闭按钮的功能）
   const minimize = () => {
     isMinimized.value = true;
   };
 
-  // 关闭弹窗
+  // 修改：关闭弹窗现在改为最小化
   const closeModal = () => {
-    isOpen.value = false;
-    isMinimized.value = true;
+    minimize(); // 调用最小化方法而不是直接关闭
   };
 
-  // 关闭整个组件
+  // 新增：清空对话方法
+  const clearConversation = () => {
+    // 调用AiAssistant组件的清空方法
+    if (aiAssistantRef.value && aiAssistantRef.value.clearHistory) {
+      aiAssistantRef.value.clearHistory();
+      message.success('已开始新的对话');
+    }
+  };
+
+  // 关闭整个组件（保持不变）
   const closeComponent = () => {
     isClosed.value = true;
   };
 
-  // 按钮动画控制
+  // 按钮动画控制（保持不变）
   const startButtonPulse = () => {
     isPulsing.value = true;
   };
@@ -109,10 +129,10 @@
     isPulsing.value = false;
   };
 
-  // 键盘事件处理
+  // 修改键盘事件处理
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && isOpen.value) {
-      minimize();
+      minimize(); // ESC键触发最小化
     }
     if ((e.metaKey || e.ctrlKey) && e.key === 'm') {
       e.preventDefault();
@@ -120,7 +140,7 @@
     }
   };
 
-  // 生命周期
+  // 生命周期（保持不变）
   onMounted(() => {
     document.addEventListener('keydown', handleKeydown);
   });
@@ -133,7 +153,7 @@
 <style scoped>
   .float-question-container {
     position: fixed;
-    z-index: 99999;
+    z-index: 100;
     bottom: 40px;
     right: 40px;
   }
