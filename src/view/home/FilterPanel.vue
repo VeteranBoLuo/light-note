@@ -2,6 +2,7 @@
   <div class="filter-panel">
     <b-list
       :draggable="!bookmark.isMobileDevice"
+      :handle="'.tag-item-icon'"
       class="header-input"
       v-model:listOptions="filterTagList"
       v-model:dragList="bookmark.tagList"
@@ -31,7 +32,7 @@
             v-click-log="{ module: '首页', operation: `查询标签【${item.name}】下的书签列表` }"
             @click="handleClickTag(<TagInterface>item)"
           >
-            <svg-icon size="18" :src="item.iconUrl" />
+            <svg-icon size="18" :src="item.iconUrl" class="tag-item-icon" />
             <span class="text-hidden" style="width: calc(100% - 28px)">{{ item.name }}</span>
           </div>
         </RightMenu>
@@ -168,6 +169,10 @@
 
   .header-input {
     width: 180px;
+  }
+
+  .tag-item-icon{
+    cursor: move;
   }
 
   .edit-input {

@@ -22,11 +22,12 @@
                 <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
               </div>
             </div>
-            <div class="bubble">
+            <div class="bubble" v-if="message.content">
               <!-- 修改：使用Markdown渲染 -->
               <div class="text" v-html="formatMessage(message)"></div>
               <div class="time">{{ formatTime(message.timestamp) }}</div>
             </div>
+            <ReplyLoading v-else/>
           </div>
         </div>
         <!-- 智能滚动提示  -->
@@ -102,6 +103,7 @@
   import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github.css';
+  import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
 
   defineExpose({
     clearHistory,
@@ -128,7 +130,7 @@
   const showScrollToBottom = ref(false);
   const showRecommendation = ref(true);
 
-  // 修复：简化用户干预检测，只使用一个核心标志
+  // 简化用户干预检测，只使用一个核心标志
   const userHasInterrupted = ref(false); // 用户是否手动干预了滚动
   const lastScrollTop = ref(0);
   const SCROLL_THRESHOLD = 200; // 距离底部200px时显示提示
@@ -139,9 +141,6 @@
 
   // 推荐提示
   const recommendationItems = ref(['如何创建一个书签？', '云空间模块有什么用？', '如何关联书签和标签？']);
-
-  // 防抖相关
-  let scrollTimeout: number | null = null;
 
   // 配置Markdown解析器
   const configureMarkdownParser = () => {
@@ -258,7 +257,7 @@
     resetScrollState();
   }
 
-  // 修复：重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
+  // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
   const handleScroll = () => {
     if (!messagesContainer.value) return;
 
@@ -296,7 +295,7 @@
     }
   }
 
-  // 修复：简化自动滚动函数，确保在用户干预时不执行自动滚动
+  // 简化自动滚动函数，确保在用户干预时不执行自动滚动
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (!messagesContainer.value || userHasInterrupted.value) {
       return; // 用户干预时不再自动滚动
@@ -343,8 +342,8 @@
   };
 
   let sessionId = '';
-  // 修复：彻底重写发送消息函数，确保滚动逻辑正确
-  // 修复：重新设计打字机效果，确保内容完整且逐字显示
+  // 彻底重写发送消息函数，确保滚动逻辑正确
+  // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
     showRecommendation.value = false;
     const inputText = userInput.value.trim();
@@ -380,7 +379,7 @@
     // 创建中止控制器
     abortController.value = new AbortController();
 
-    // 修复：新增打字机效果相关变量
+    // 新增打字机效果相关变量
     const accumulatedContent = ref(''); // 累积的完整内容
     const displayedContent = ref(''); // 当前显示的内容（逐字增加）
     let typingTimer: number | null = null;
@@ -388,7 +387,7 @@
     let isTyping = false; // 是否正在打字
     const TYPING_SPEED = 10; // 打字速度（毫秒/字符）
 
-    // 修复：打字机效果函数[6,7](@ref)
+    // 打字机效果函数[6,7](@ref)
     const startTypewriter = async () => {
       if (isTyping) {
         return; // 如果正在打字，等待当前打字完成
@@ -422,7 +421,7 @@
       isTyping = false;
     };
 
-    // 修复：处理新内容的函数
+    // 处理新内容的函数
     const handleNewContent = (content: string) => {
       if (!content) return;
 
@@ -504,7 +503,7 @@
               const content = data.output?.text || data.text || data.content || '';
 
               if (content && typeof content === 'string') {
-                // 修复：使用新的内容处理函数
+                // 使用新的内容处理函数
                 handleNewContent(content);
               }
 
@@ -519,7 +518,7 @@
         }
       }
 
-      // 修复：处理缓冲区剩余数据
+      // 处理缓冲区剩余数据
       if (buffer.trim()) {
         const remainingLines = buffer.split('\n');
         for (const rawLine of remainingLines) {
@@ -541,7 +540,7 @@
         }
       }
 
-      // 修复：等待打字机效果完成
+      // 等待打字机效果完成
       const waitForTypewriter = () => {
         return new Promise((resolve) => {
           const checkInterval = setInterval(() => {
@@ -607,7 +606,7 @@
     });
   };
 
-  // 修复：简化消息监听逻辑，避免冲突
+  // 简化消息监听逻辑，避免冲突
   watch(
     () => messages.value,
     async (newLength, oldLength) => {
@@ -615,7 +614,6 @@
       if (newLength > oldLength && autoScrollEnabled.value && !userHasInterrupted.value) {
         await nextTick();
         scrollToBottom('smooth');
-        console.log('自动滚动到底部');
       }
     },
     { flush: 'post', deep: true },
@@ -647,6 +645,7 @@
     font-size: 1.1rem;
     position: relative;
     cursor: pointer;
+    color: #343434;
   }
 
   .loading-spinner {
@@ -741,7 +740,7 @@
   }
 
   .message.assistant .avatar {
-    background: #10b981;
+    background: #7b79d3;
   }
 
   .bubble {
@@ -753,8 +752,8 @@
   }
 
   .message.user .bubble {
-    background: #3b82f6;
-    color: white;
+    background: var(--ai-user-background-color);
+    color: var(--text-color);
     border-bottom-right-radius: 0.25rem;
   }
 

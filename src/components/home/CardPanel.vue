@@ -4,6 +4,7 @@
     :disabled="bookmark.isMobileDevice"
     ref="el"
     v-model="bookmark.bookmarkList"
+    handle=".card-img-container"
     class="card-panel"
     id="card-panel"
     @end="onEnd"

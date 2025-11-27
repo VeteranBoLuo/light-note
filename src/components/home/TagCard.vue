@@ -120,6 +120,7 @@
     background-color: rgb(255, 255, 255);
     border-radius: 0.5rem;
     flex-shrink: 0;
+    cursor: move;
   }
 
   .card-description {
