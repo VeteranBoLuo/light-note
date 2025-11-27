@@ -1,5 +1,5 @@
 <template>
-  <PAdmin v-if="bookmark.isMobile" />
+  <PAdmin v-if="bookmark.isMobileDevice" />
   <Admin v-else />
 </template>
 

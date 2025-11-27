@@ -1,7 +1,7 @@
 <template>
   <b-loading :loading="loading">
     <div class="note-library-container">
-      <div class="note-library-header" v-if="bookmark.isMobile">
+      <div class="note-library-header" v-if="bookmark.isMobileDevice">
         <div class="header-content">
           <div class="back-icon" @click="back">
             <SvgIcon :src="icon.noteDetail.back" />
@@ -56,7 +56,7 @@
         </div>
       </div>
       <VueDraggable
-        :disabled="bookmark.isMobile"
+        :disabled="bookmark.isMobileDevice"
         :animation="200"
         ref="el"
         v-model="noteList"
@@ -143,7 +143,7 @@
   const allTags = ref([]);
 
   function back() {
-    if (bookmark.isMobile) {
+    if (bookmark.isMobileDevice) {
       router.push('/personCenter');
     } else {
       router.back();

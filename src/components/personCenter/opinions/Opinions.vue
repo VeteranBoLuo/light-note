@@ -1,6 +1,6 @@
 <template>
   <b-modal :mask-closable="false" title="意见反馈" v-model:visible="visible" @close="visible = false">
-    <div :style="{ width: bookmark.isMobile ? '95%' : '450px' }">
+    <div :style="{ width: bookmark.isMobileDevice ? '95%' : '450px' }">
       <BTabs :options="['反馈类型', '反馈历史']" v-model:activeTab="activeTab" />
       <div class="type" style="height: 330px" v-if="activeTab === '反馈类型'">
         <b-radio
@@ -121,7 +121,7 @@
 
   function uploadImg(event) {
     event.forEach((img) => {
-      if (bookmark.isMobile) {
+      if (bookmark.isMobileDevice) {
         if (opinionData.imgArray.length === 2) {
           opinionData.imgArray.shift();
           opinionData.imgArray.push(img);

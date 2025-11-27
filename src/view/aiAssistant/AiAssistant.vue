@@ -76,6 +76,7 @@
           <div class="input-actions">
             <button
               @click="isLoading ? stopResponse() : sendMessage()"
+              v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
               :disabled="!userInput.trim() && !isLoading"
               class="send-btn"
               :class="{ stop: isLoading }"
@@ -84,7 +85,7 @@
             </button>
           </div>
         </div>
-        <div v-if="!bookmark.isMobile" class="input-hint">按 Enter 发送，Shift + Enter 换行</div>
+        <div v-if="!bookmark.isMobileDevice" class="input-hint">按 Enter 发送，Shift + Enter 换行</div>
       </footer>
     </div>
   </div>
@@ -281,17 +282,19 @@
       }
     }
     if (scrollPosition > SCROLL_THRESHOLD) {
-      showScrollToBottom.value = userHasInterrupted.value;
+      showScrollToBottom.value = true;
     }
   };
 
-  // 修复：增强防抖逻辑，避免频繁触发
-  const optimizedHandleScroll = () => {
-    if (scrollTimeout) {
-      clearTimeout(scrollTimeout);
+  // 设置是否显示跳转底部图标
+  function checkScrollPosition() {
+    if (!messagesContainer.value) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
+    const scrollPosition = scrollHeight - scrollTop - clientHeight;
+    if (scrollPosition > SCROLL_THRESHOLD) {
+      showScrollToBottom.value = true;
     }
-    scrollTimeout = window.setTimeout(handleScroll, 50);
-  };
+  }
 
   // 修复：简化自动滚动函数，确保在用户干预时不执行自动滚动
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -570,7 +573,9 @@
           clearTimeout(typingTimer);
           typingTimer = null;
         }
-        messages.value[currentMessageIndex].content += '（响应已暂停）';
+        if (messages.value[currentMessageIndex]) {
+          messages.value[currentMessageIndex].content += '（响应已暂停）';
+        }
       } else {
         console.error('请求失败:', error);
         messages.value[currentMessageIndex].content = '抱歉，暂时无法回应，请稍后重试';
@@ -604,14 +609,16 @@
 
   // 修复：简化消息监听逻辑，避免冲突
   watch(
-    () => messages.value.length,
+    () => messages.value,
     async (newLength, oldLength) => {
+      checkScrollPosition();
       if (newLength > oldLength && autoScrollEnabled.value && !userHasInterrupted.value) {
         await nextTick();
         scrollToBottom('smooth');
+        console.log('自动滚动到底部');
       }
     },
-    { flush: 'post' },
+    { flush: 'post', deep: true },
   );
 
   // 监听isLoading状态，在生成内容时保持自动滚动（尊重用户干预）

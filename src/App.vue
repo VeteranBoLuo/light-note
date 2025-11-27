@@ -10,7 +10,7 @@
       <router-view />
       <Login v-if="bookmark.isShowLogin" />
       <BViewer />
-      <FloatQuestion v-if="!bookmark.isShowLogin" />
+      <FloatQuestion v-if="!bookmark.isMobileDevice && !bookmark.isShowLogin" />
     </a-config-provider>
   </div>
 </template>
@@ -75,7 +75,7 @@
       bookmark.theme = e.matches ? 'night' : 'day';
     };
     mq.addEventListener('change', mqListener);
-    handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
+    handleRouteChange(bookmark.isMobileDevice, router.currentRoute.value.path);
   }
   async function getUserInfo() {
     try {
@@ -142,9 +142,9 @@
   }
 
   // 手机端路由和电脑端不一样，切换不同尺寸设备后需要切换对应路由地址
-  function handleRouteChange(isMobile: boolean, path: string) {
+  function handleRouteChange(isMobileDevice: boolean, path: string) {
     // 电脑端切换至手机端
-    if (isMobile) {
+    if (isMobileDevice) {
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
       }
@@ -165,7 +165,7 @@
   router.beforeEach(async (to, from, next) => {
     router.isReady().then(async () => {
       if (to.name === 'workbenches') {
-        handleRouteChange(bookmark.isMobile, to.path);
+        handleRouteChange(bookmark.isMobileDevice, to.path);
       }
       if (from.name === 'githubCallBack') {
         await getUserInfo();
@@ -200,7 +200,7 @@
 
   // 监听设备类型变化
   watch(
-    () => bookmark.isMobile,
+    () => bookmark.isMobileDevice,
     (val) => {
       handleRouteChange(val, router.currentRoute.value.path);
       setTransition(val);

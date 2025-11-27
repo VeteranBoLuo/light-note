@@ -35,7 +35,7 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">关联书签</span>
-          <div v-if="bookmark.isMobile" :style="{ height: bookmark.screenHeight - 400 + 'px', overflow: 'auto' }">
+          <div v-if="bookmark.isMobileDevice" :style="{ height: bookmark.screenHeight - 400 + 'px', overflow: 'auto' }">
             <a-checkbox-group v-model:value="tag.bookmarkList" name="checkboxgroup" :options="bookmarkOptions">
               <template #label="{ label }">
                 <div :style="{ width: bookmark.screenWidth / 2 - 20 - 16 - 16 + 'px' }" class="text-hidden"
@@ -93,7 +93,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import {OPERATION_LOG_MAP} from "@/config/logMap.ts";
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -264,7 +264,6 @@
   .tag-attr-label {
     white-space: nowrap;
   }
-
 
   :deep(.ant-transfer-list-header) {
     background-color: var(--background-color);

@@ -3,7 +3,7 @@
     <div class="cloud-container">
       <div class="header">
         <b-input
-          v-if="bookmark.isMobile"
+          v-if="bookmark.isMobileDevice"
           v-model:value="cloud.searchFileName"
           placeholder="文件名"
           class="header-input"
@@ -30,11 +30,13 @@
         <CloudFolder />
         <div class="field-list">
           <div class="field-header">
-            <div class="flex-align-center-gap" :style="{ width: bookmark.isMobile ? '80%' : '60%' }"> 文件名 </div>
+            <div class="flex-align-center-gap" :style="{ width: bookmark.isMobileDevice ? '80%' : '60%' }">
+              文件名
+            </div>
             <div class="default-area">
-              <div v-if="!bookmark.isMobile">文件夹</div>
+              <div v-if="!bookmark.isMobileDevice">文件夹</div>
               <div>文件大小</div>
-              <div v-if="!bookmark.isMobile"> 存储时间 </div>
+              <div v-if="!bookmark.isMobileDevice"> 存储时间 </div>
             </div>
           </div>
           <div class="file-container">
@@ -42,13 +44,13 @@
               <div
                 class="flex-align-center"
                 style="position: relative"
-                :style="{ width: bookmark.isMobile ? '80%' : '60%' }"
+                :style="{ width: bookmark.isMobileDevice ? '80%' : '60%' }"
               >
                 <span
                   v-if="!item.isRename"
                   :style="{
                     cursor:
-                      !bookmark.isMobile && ['image', 'pdf', 'video'].some((type) => item.fileType.includes(type))
+                      !bookmark.isMobileDevice && ['image', 'pdf', 'video'].some((type) => item.fileType.includes(type))
                         ? 'pointer'
                         : 'unset',
                   }"
@@ -80,7 +82,7 @@
                       @click="downloadField(item.id)"
                     />
                   </a-tooltip>
-                  <a-tooltip title="移动文件" v-if="!bookmark.isMobile">
+                  <a-tooltip title="移动文件" v-if="!bookmark.isMobileDevice">
                     <svg-icon
                       class="download-icon"
                       :src="icon.cloudSpace.moveFile"
@@ -100,9 +102,9 @@
                 </div>
               </div>
               <div class="default-area">
-                <div v-if="!bookmark.isMobile">{{ item.folderName }}</div>
+                <div v-if="!bookmark.isMobileDevice">{{ item.folderName }}</div>
                 <div>{{ Number(item.fileSize / 1024).toFixed() }} KB</div>
-                <div v-if="!bookmark.isMobile">{{ item.uploadTime }} </div>
+                <div v-if="!bookmark.isMobileDevice">{{ item.uploadTime }} </div>
               </div>
             </div>
           </div>

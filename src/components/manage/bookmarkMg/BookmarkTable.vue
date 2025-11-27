@@ -140,7 +140,7 @@
   }
 
   function handleToBack() {
-    if (bookmark.isMobile) {
+    if (bookmark.isMobileDevice) {
       router.push('/personCenter');
     } else {
       router.push('/home');

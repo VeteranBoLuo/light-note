@@ -182,7 +182,7 @@
               user.setUserInfo(res.data);
               bookmark.theme = res.data.theme;
               localStorage.setItem('theme', res.data.theme);
-              if (bookmark.isMobile) {
+              if (bookmark.isMobileDevice) {
                 router.push('/home');
               } else {
                 router.push('/');

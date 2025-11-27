@@ -1,6 +1,9 @@
 <template>
   <div class="toc-container">
-    <div :class="[bookmark.isMobile ? 'phone-catalog' : 'catalog']" v-if="!bookmark.isMobile || isShowPhoneCategory">
+    <div
+      :class="[bookmark.isMobileDevice ? 'phone-catalog' : 'catalog']"
+      v-if="!bookmark.isMobileDevice || isShowPhoneCategory"
+    >
       <div
         v-for="(heading, index) in note.headings"
         :key="index"
@@ -13,7 +16,7 @@
         <span class="text-hidden" style="font-size: 14px">{{ heading.text }}</span>
       </div>
     </div>
-    <div v-if="bookmark.isMobile && note.headings.length > 0" class="folder" title="目录" @click="getCategory">
+    <div v-if="bookmark.isMobileDevice && note.headings.length > 0" class="folder" title="目录" @click="getCategory">
       <svg-icon :src="icon.noteDetail.catalogue" size="24" style="color: var(--text-color)" />
     </div>
   </div>

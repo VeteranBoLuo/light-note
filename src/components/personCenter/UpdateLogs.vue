@@ -2,7 +2,7 @@
   <CommonContainer title="更新日志">
     <div
       style="color: white !important; height: 100%; overflow-y: auto"
-      :style="{ padding: bookmark.isMobile ? '20px' : '20px 100px' }"
+      :style="{ padding: bookmark.isMobileDevice ? '20px' : '20px 100px' }"
     >
       <a-timeline>
         <a-timeline-item color="#615ced" v-for="item in [...updateOptions].reverse()">

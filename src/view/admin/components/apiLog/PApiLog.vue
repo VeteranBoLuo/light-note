@@ -69,7 +69,7 @@
   const logList = ref([]);
 
   const logColumns = computed(() => {
-    if (bookmark.isMobile) {
+    if (bookmark.isMobileDevice) {
       return [
         {
           title: '邮箱',
@@ -144,7 +144,6 @@
 </script>
 
 <style lang="less" scoped>
-
   :deep(.ant-table-wrapper .ant-table) {
     background-color: var(--background-color);
     color: var(--text-color);

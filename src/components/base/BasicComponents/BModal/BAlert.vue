@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body" v-if="bookmark.isMobile">
+  <Teleport to="body" v-if="bookmark.isMobileDevice">
     <div class="bAlert-bg">
       <div class="bAlert" :class="{ out: isExit }">
         <div

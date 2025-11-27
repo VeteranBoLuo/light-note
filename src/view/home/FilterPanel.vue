@@ -1,7 +1,7 @@
 <template>
   <div class="filter-panel">
     <b-list
-      :draggable="!bookmark.isMobile"
+      :draggable="!bookmark.isMobileDevice"
       class="header-input"
       v-model:listOptions="filterTagList"
       v-model:dragList="bookmark.tagList"
@@ -139,16 +139,16 @@
     try {
       const userId = localStorage?.getItem('userId');
       const sortedTags =
-          bookmark.tagList?.map((tag: TagInterface, index: number) => ({
-            name: tag.name,
-            sort: index,
-            id: tag.id,
-          })) || [];
+        bookmark.tagList?.map((tag: TagInterface, index: number) => ({
+          name: tag.name,
+          sort: index,
+          id: tag.id,
+        })) || [];
 
-      const updateResponse = await apiBasePost('/api/bookmark/updateTagSort', {tags: sortedTags});
+      const updateResponse = await apiBasePost('/api/bookmark/updateTagSort', { tags: sortedTags });
       if (updateResponse.status === 200) {
         const queryResponse = await apiQueryPost('/api/bookmark/queryTagList', {
-          filters: {userId},
+          filters: { userId },
         });
         if (queryResponse.status === 200) {
           bookmark.tagList = queryResponse.data;

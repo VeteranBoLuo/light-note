@@ -56,11 +56,56 @@ export default defineStore('bookmark', {
   }),
   getters: {
     /**
-     * 判断是否为移动设备
+     * 判断设备类型
      */
-    isMobile(state): boolean {
-      return state.screenWidth <= 1000;
+    deviceType(): 'mobile' | 'tablet' | 'desktop' {
+      if (typeof window === 'undefined') return 'desktop'; // SSR 默认桌面
+      
+      const userAgent = navigator.userAgent.toLowerCase();
+      const width = this.screenWidth;
+      
+      // 移动设备检测
+      const isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+      const isTablet = /ipad|android|tablet|silk|kindle/i.test(userAgent) && !/mobile/i.test(userAgent);
+      
+      // 根据宽度和设备特征综合判断
+      if (width <= 768 || (isMobile && width <= 1024)) {
+        return 'mobile';
+      } else if ((width > 768 && width <= 1024) || isTablet) {
+        return 'tablet';
+      } else {
+        return 'desktop';
+      }
     },
+    
+    /**
+     * 判断是否为移动设备（手机）
+     */
+    isMobile(): boolean {
+      return this.deviceType === 'mobile';
+    },
+    
+    /**
+     * 判断是否为平板设备
+     */
+    isTablet(): boolean {
+      return this.deviceType === 'tablet';
+    },
+    
+    /**
+     * 判断是否为桌面设备
+     */
+    isDesktop(): boolean {
+      return this.deviceType === 'desktop';
+    },
+    
+    /**
+     * 判断是否为移动端（包含手机和平板）
+     */
+    isMobileDevice(): boolean {
+      return this.isMobile || this.isTablet;
+    },
+
     /**
      * 获取图标颜色
      */

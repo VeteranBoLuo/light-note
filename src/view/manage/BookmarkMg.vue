@@ -1,5 +1,5 @@
 <template>
-  <PBookmarkTable v-if="bookmark.isMobile" />
+  <PBookmarkTable v-if="bookmark.isMobileDevice" />
   <BookmarkTable v-else />
 </template>
 

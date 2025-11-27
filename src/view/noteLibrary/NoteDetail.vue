@@ -75,7 +75,7 @@
   function inputBlur() {
     nextTick(() => {
       if (note.title && note.title !== note.lastTitle) {
-        if (!bookmark.isMobile) {
+        if (!bookmark.isMobileDevice) {
           document.getElementById('note-header-title').innerText = note.title;
         }
         note.lastTitle = cloneDeep(note.title);
@@ -87,7 +87,7 @@
   function focusout() {
     if (!note.title) {
       note.title = note.lastTitle;
-      if (!bookmark.isMobile) {
+      if (!bookmark.isMobileDevice) {
         document.getElementById('note-header-title').innerText = note.title;
       }
       return;
@@ -225,7 +225,7 @@
           if (res.status === 200) {
             Object.assign(note, res.data);
             note.lastTitle = cloneDeep(note.title);
-            if (!bookmark.isMobile) {
+            if (!bookmark.isMobileDevice) {
               document.getElementById('note-header-title').innerText = note.title;
             }
             updateTime.value = res.data.updateTime ?? res.data.createTime;

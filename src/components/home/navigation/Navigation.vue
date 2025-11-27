@@ -6,14 +6,14 @@
           :src="icon.navigation.menu"
           size="25"
           class="dom-hover"
-          v-if="bookmark.isMobile && route.path.includes('home') && bookmark.isFold"
+          v-if="bookmark.isMobileDevice && route.path.includes('home') && bookmark.isFold"
           @click="foldClick"
         />
         <svg-icon
           :src="icon.navigation.close"
           size="25"
           class="dom-hover"
-          v-if="bookmark.isMobile && route.path.includes('home') && !bookmark.isFold"
+          v-if="bookmark.isMobileDevice && route.path.includes('home') && !bookmark.isFold"
           @click="foldClick"
         />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
@@ -80,7 +80,7 @@
   });
   const navigationFucVisible = computed(() => {
     return (
-      !bookmark.isMobile &&
+      !bookmark.isMobileDevice &&
       ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs', 'workbenches', 'aiAssistant'].some(
         (item) => route.path.includes(item),
       )
@@ -108,7 +108,7 @@
   function foldClick() {
     bookmark.isFold = !bookmark.isFold;
     const body: any = document.getElementById('phone-filter-panel');
-    if (bookmark.isMobile) {
+    if (bookmark.isMobileDevice) {
       body.style.transition = 'all 0.3s';
     } else {
       body.style.transition = 'none';

@@ -44,6 +44,7 @@
         'button-minimized': isMinimized,
       }"
       @click="toggleModal"
+      v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
       @mouseenter="startButtonPulse"
       @mouseleave="stopButtonPulse"
     >

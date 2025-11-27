@@ -114,7 +114,7 @@
         width: '100px',
       },
     ];
-    if (!bookmark.isMobile) {
+    if (!bookmark.isMobileDevice) {
       {
         columns.splice(
           1,
@@ -156,7 +156,7 @@
   }
 
   function handleToBack() {
-    if (bookmark.isMobile) {
+    if (bookmark.isMobileDevice) {
       router.push('/personCenter');
     } else {
       router.push('/home');
