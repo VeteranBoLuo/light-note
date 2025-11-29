@@ -27,37 +27,21 @@
               <div class="text" v-html="formatMessage(message)"></div>
               <div class="time">{{ formatTime(message.timestamp) }}</div>
             </div>
-            <ReplyLoading v-else/>
+            <ReplyLoading v-else />
           </div>
         </div>
         <!-- 智能滚动提示  -->
-        <div v-if="showScrollToBottom" class="scroll-prompt" @click="handleScrollToBottomClick">
-          <div class="prompt-icon">
-            <div
-              class="loading-spinner"
-              :style="{
-                borderTop: isLoading ? '2px solid #3b82f6' : '',
-              }"
-            >
-            </div>
-            <span class="both-center">⌵</span>
-          </div>
-        </div>
+        <ScrollPrompt
+          v-if="showScrollToBottom"
+          :is-loading="isLoading"
+          @scroll-to-bottom-click="handleScrollToBottomClick"
+        />
 
-        <!-- 轻笺推荐提示 -->
-        <div v-if="showRecommendation" class="recommendation-container">
-          <div class="recommendation-title">轻笺小提示</div>
-          <div class="recommendation-list">
-            <div
-              v-for="(item, index) in recommendationItems"
-              :key="index"
-              class="recommendation-item"
-              @click="handleRecommendationClick(item)"
-            >
-              {{ item }}
-            </div>
-          </div>
-        </div>
+        <!-- 常见问题提示 -->
+        <MainQuestionPrompt
+          v-if="showRecommendation"
+          @recommendation-click="handleRecommendationClick"
+        />
       </main>
 
       <!-- 输入区域 -->
@@ -104,6 +88,8 @@
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github.css';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
+  import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
+  import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
 
   defineExpose({
     clearHistory,
@@ -140,7 +126,6 @@
   let currentMessageIndex = -1;
 
   // 推荐提示
-  const recommendationItems = ref(['如何创建一个书签？', '云空间模块有什么用？', '如何关联书签和标签？']);
 
   // 配置Markdown解析器
   const configureMarkdownParser = () => {
@@ -629,52 +614,6 @@
 </script>
 
 <style scoped>
-  /* 智能滚动提示 - 重新设计为浮动定位，不占用布局空间 */
-  .scroll-prompt {
-    position: sticky;
-    bottom: 1rem;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: center;
-    z-index: 10;
-    animation: slideInUp 0.3s ease;
-  }
-
-  .prompt-icon {
-    font-size: 1.1rem;
-    position: relative;
-    cursor: pointer;
-    color: #343434;
-  }
-
-  .loading-spinner {
-    width: 25px;
-    height: 25px;
-    border: 2px solid transparent;
-    background-color: white;
-    box-shadow: 0 1px 16px rgba(0, 0, 0, 0.2);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-
-  .prompt-text {
-    font-weight: 500;
-  }
-
-  .prompt-content.loading .prompt-text {
-    color: #3b82f6;
-  }
-
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-
   /* 原有其他样式保持不变 */
   .ai-chat-container {
     width: 100%;
@@ -905,52 +844,7 @@
     }
   }
 
-  .recommendation-container {
-    padding: 1.5rem 1.5rem 0.5rem;
-    background: var(--menu-container-bg-color);
-    border-radius: 16px;
-    margin: 0 1.5rem 1rem;
-    border: 1px solid #dbeafe;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
-  }
 
-  .recommendation-title {
-    font-size: 0.875rem;
-    color: #10b981;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .recommendation-title::before {
-    content: '🔖';
-  }
-
-  .recommendation-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .recommendation-item {
-    background: white;
-    padding: 0.5rem 1rem;
-    border-radius: 1rem;
-    font-size: 0.875rem;
-    color: #4b5563;
-    border: 1px solid #e2e8f0;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  }
-
-  .recommendation-item:hover {
-    background: #f0f9ff;
-    color: #10b981;
-    border-color: #3b82f6;
-  }
 
   .input-section {
     background: var(--background-color);

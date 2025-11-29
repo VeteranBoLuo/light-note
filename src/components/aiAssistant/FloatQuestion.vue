@@ -12,7 +12,7 @@
               <span class="status-dot"></span>
             </div>
             <div class="header-actions">
-              <!-- 修改：最小化按钮改为清空对话 -->
+              <!-- 最小化按钮改为清空对话 -->
               <button class="action-btn minimize" @click="clearConversation" title="新的对话">
                 <span>➕</span>
               </button>
@@ -25,8 +25,8 @@
 
         <!-- 内容区域 -->
         <div class="modal-content">
-          <!-- 修改：添加ref以便调用清空方法 -->
-          <AiAssistant ref="aiAssistantRef" />
+          <!-- 添加ref以便调用清空方法 -->
+          <ChatContainer ref="aiAssistantRef" />
         </div>
 
         <!-- 底部装饰 -->
@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed } from 'vue';
-  import AiAssistant from '@/view/aiAssistant/AiAssistant.vue';
+  import ChatContainer from '@/view/aiAssistant/ChatContainer.vue';
   import { message } from 'ant-design-vue';
 
   // 状态管理
@@ -69,7 +69,6 @@
   const isClosed = ref(false);
   const isMinimized = ref(true);
 
-  // 修改：添加AiAssistant组件的ref
   const aiAssistantRef = ref(null);
 
   // 悬浮按钮动画状态
@@ -97,14 +96,9 @@
     }
   };
 
-  // 修改：最小化方法（原来关闭按钮的功能）
+  // 最小化方法（原来关闭按钮的功能）
   const minimize = () => {
     isMinimized.value = true;
-  };
-
-  // 修改：关闭弹窗现在改为最小化
-  const closeModal = () => {
-    minimize(); // 调用最小化方法而不是直接关闭
   };
 
   // 新增：清空对话方法
@@ -114,11 +108,6 @@
       aiAssistantRef.value.clearHistory();
       message.success('已开始新的对话');
     }
-  };
-
-  // 关闭整个组件（保持不变）
-  const closeComponent = () => {
-    isClosed.value = true;
   };
 
   // 按钮动画控制（保持不变）
