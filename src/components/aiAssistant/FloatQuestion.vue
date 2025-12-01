@@ -122,11 +122,7 @@
   // 修改键盘事件处理
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && isOpen.value) {
-      minimize(); // ESC键触发最小化
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'm') {
-      e.preventDefault();
-      toggleModal();
+      minimize();
     }
   };
 

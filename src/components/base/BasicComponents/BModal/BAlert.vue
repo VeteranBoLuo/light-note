@@ -69,9 +69,7 @@
         <slot name="title">
           <div style="font-size: 16px; margin-bottom: 15px">{{ title }}</div>
         </slot>
-        <div style="color: var(--desc-color); font-size: 14px">
-          {{ content }}
-        </div>
+        <div style="color: var(--desc-color); font-size: 14px" v-html="content" />
         <div
           style="
             position: absolute;

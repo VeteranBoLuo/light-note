@@ -5,12 +5,12 @@
       <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 20px">
         <b-input v-model:value="tableSearchValue" class="table-search-input" placeholder="请输入书签名" />
         <b-space :size="10">
-          <b-button
-            type="success"
-            @click="exportBookmark"
-            v-if="user.role === 'root'"
-            v-click-log="OPERATION_LOG_MAP.bookmarkMg.exportToExcel"
+          <b-button type="success" @click="exportBookmark" v-click-log="OPERATION_LOG_MAP.bookmarkMg.exportToExcel"
             >导出</b-button
+          >
+          <!-- 新增导入按钮 -->
+          <b-button type="success" @click="handleImport" v-click-log="{ module: '书签管理', operation: '导入' }"
+            >导入</b-button
           >
           <b-button
             type="primary"
@@ -72,6 +72,8 @@
             </div>
           </template> </template
       ></BTable>
+      <!-- 隐藏的文件输入框 -->
+      <input type="file" ref="importFileInput" accept=".xlsx" style="display: none" @change="handleFileChange" />
     </div>
   </b-loading>
 </template>
@@ -165,10 +167,9 @@
     // 随便声明一个结果
     const exportData = bookmarkList.value?.map((item: any) => {
       return {
-        标签名: item.name,
+        书签名: item.name,
         网址: item.url,
         描述: item?.description,
-        // 关联书签: item?.tagList?.map((home) => home.name).join(','),
       };
     });
     // 创建一个新的工作簿
@@ -177,7 +178,7 @@
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     // 获取第一列和第二列的最大字符长度
     const maxLen = [
-      Math.max(...exportData.map((item) => item.标签名.length)),
+      Math.max(...exportData.map((item) => item.书签名.length)),
       Math.max(...exportData.map((item) => item.网址.length)),
       Math.max(...exportData.map((item) => item.描述?.length)),
     ];
@@ -201,6 +202,94 @@
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjhlbSIgaGVpZ2h0PSIwLjhlbSIgdmlld0JveD0iMCAwIDIwIDIwIj48cGF0aCBmaWxsPSIjNWI1YjViIiBkPSJNMTAgMjBhMTAgMTAgMCAxIDEgMC0yMGExMCAxMCAwIDAgMSAwIDIwbTcuNzUtOGE4IDggMCAwIDAgMC00aC0zLjgyYTI5IDI5IDAgMCAxIDAgNHptLS44MiAyaC0zLjIyYTE0LjQgMTQuNCAwIDAgMS0uOTUgMy41MUE4LjAzIDguMDMgMCAwIDAgMTYuOTMgMTRtLTguODUtMmgzLjg0YTI0LjYgMjQuNiAwIDAgMCAwLTRIOC4wOGEyNC42IDI0LjYgMCAwIDAgMCA0bS4yNSAyYy40MSAyLjQgMS4xMyA0IDEuNjcgNHMxLjI2LTEuNiAxLjY3LTR6bS02LjA4LTJoMy44MmEyOSAyOSAwIDAgMSAwLTRIMi4yNWE4IDggMCAwIDAgMCA0bS44MiAyYTguMDMgOC4wMyAwIDAgMCA0LjE3IDMuNTFjLS40Mi0uOTYtLjc0LTIuMTYtLjk1LTMuNTF6bTEzLjg2LThhOC4wMyA4LjAzIDAgMCAwLTQuMTctMy41MWMuNDIuOTYuNzQgMi4xNi45NSAzLjUxem0tOC42IDBoMy4zNGMtLjQxLTIuNC0xLjEzLTQtMS42Ny00UzguNzQgMy42IDguMzMgNk0zLjA3IDZoMy4yMmMuMi0xLjM1LjUzLTIuNTUuOTUtMy41MUE4LjAzIDguMDMgMCAwIDAgMy4wNyA2Ii8+PC9zdmc+';
   }
 
+  // 新增导入功能
+  const importFileInput = ref<HTMLInputElement | null>(null);
+  const handleImport = () => {
+    importFileInput.value?.click();
+  };
+
+  const handleFileChange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const data = new Uint8Array(event.target.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        // 验证必需列
+        const requiredColumns = ['书签名', '网址', '描述'];
+        const hasRequired = requiredColumns.every(
+          (col) => jsonData.length > 0 && Object.keys(jsonData[0]).includes(col),
+        );
+
+        if (!hasRequired) {
+          message.error('导入文件格式不正确，请确保包含书签名、网址、描述列');
+          return;
+        }
+
+        // 构造书签数据
+        const bookmarksToImport = jsonData.map((item) => ({
+          name: item['书签名'].trim(),
+          url: item['网址'].trim(),
+          description: item['描述']?.trim() || '',
+        }));
+
+        // 逐个导入
+        let successCount = 0;
+        let failedCount = 0;
+        const failedItems = [];
+
+        const requests = bookmarksToImport.map((bookmark) => apiBasePost('/api/bookmark/addBookmark', bookmark));
+
+        const results = await Promise.allSettled(requests);
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value.status === 200) {
+            successCount++;
+          } else {
+            failedCount++;
+            failedItems.push({
+              name: bookmarksToImport[index].name,
+              url: bookmarksToImport[index].url,
+              error: result.value.msg,
+            });
+          }
+        });
+
+        // 重新加载数据
+        await init();
+        // 显示结果
+        if (failedCount > 0) {
+          const errorText = failedItems
+            .map((item) => `${item.name} (${item.url}): <span style="color: #ff5722">${item.error}</span>`)
+            .join('<br/>');
+
+          Alert.alert({
+            title: `导入完成 (${successCount}成功/${failedCount}失败)`,
+            content: errorText,
+            okText: '复制错误信息',
+            onOk() {
+              navigator.clipboard.writeText(failedItems.map((f) => `${f.name} (${f.url}): ${f.error}`).join('\n'));
+              message.success('错误信息已复制到剪贴板');
+            },
+          });
+        } else {
+          message.success(`导入成功！共导入 ${successCount} 个书签`);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      message.error('文件处理失败: ' + err.message);
+      console.error('导入错误:', err);
+    } finally {
+      target.value = '';
+    }
+  };
+
   init();
   const tableData = ref([{}]);
   async function init() {
@@ -217,7 +306,6 @@
         bookmark.iconUrl = getIcon(bookmark);
       });
       loading.value = false;
-      // 缓存图片
       await apiBasePost(
         '/api/common/analyzeImgUrl',
         allRes.data.items?.map((data: any) => {
