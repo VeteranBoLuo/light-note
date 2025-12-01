@@ -8,6 +8,8 @@
     class="card-panel"
     id="card-panel"
     @end="onEnd"
+    :scroll-sensitivity="50"
+    :forceFallback="true"
   >
     <div v-for="item in getBookList">
       <RightMenu :menu="['编辑', '删除']" @select="rightMenuClick($event, item)">

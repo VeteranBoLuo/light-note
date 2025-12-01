@@ -104,7 +104,7 @@
               <div class="default-area">
                 <div v-if="!bookmark.isMobileDevice">{{ item.folderName }}</div>
                 <div>{{ Number(item.fileSize / 1024).toFixed() }} KB</div>
-                <div v-if="!bookmark.isMobileDevice">{{ item.uploadTime }} </div>
+                <div v-if="!bookmark.isMobileDevice" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
               </div>
             </div>
           </div>
