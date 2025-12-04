@@ -13,13 +13,14 @@
   const videoPlayer = ref<HTMLVideoElement | null>(null);
   const loading = ref(true);
   const error = ref<string | null>(null);
-
+  const emit = defineEmits(['play']);
   const handleLoaded = () => {
     loading.value = false;
     // 自动播放（需要静音）
     videoPlayer.value?.play().catch((e) => {
       error.value = '自动播放失败: ' + e.message;
     });
+    emit('play');
   };
 </script>
 
@@ -35,5 +36,4 @@
     background: #000;
     object-fit: contain; /* 保持比例完整显示 */
   }
-
 </style>

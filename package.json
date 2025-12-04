@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@antv/g2plot": "^2.4.31",
+    "@vue-office/docx": "^1.6.3",
+    "@vue-office/excel": "^1.7.14",
+    "@vue-office/pptx": "^1.0.1",
     "@wangeditor/editor-for-vue": "^5.1.12",
     "ant": "^0.2.0",
     "ant-design-vue": "^4.0.8",

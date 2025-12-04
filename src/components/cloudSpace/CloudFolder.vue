@@ -21,7 +21,7 @@
       @nodeClick="folderClick"
     >
       <template #item="{ item }">
-        <RightMenu :menu="['上传文件', '重命名', '删除']" v-if="!item.isRename" @select="handleTagMenu($event, item)">
+        <RightMenu :menu="['重命名', '删除']" v-if="!item.isRename" @select="handleTagMenu($event, item)">
           <div
             class="category-item"
             style="height: 32px; margin-top: 5px !important"
