@@ -38,10 +38,7 @@
         />
 
         <!-- 常见问题提示 -->
-        <MainQuestionPrompt
-          v-if="showRecommendation"
-          @recommendation-click="handleRecommendationClick"
-        />
+        <MainQuestionPrompt v-if="showRecommendation" @recommendation-click="handleRecommendationClick" />
       </main>
 
       <!-- 输入区域 -->
@@ -90,6 +87,7 @@
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
+  import { gt } from '@/utils/global.ts';
 
   defineExpose({
     clearHistory,
@@ -147,7 +145,7 @@
     messages.value = [
       {
         role: 'assistant',
-        content: '您好！我是轻笺助手，专为效率控设计的书签管理专家。有什么问题需要我帮忙解答吗？',
+        content: gt('ai.greeting'),
         timestamp: new Date(),
       },
     ];
@@ -234,7 +232,7 @@
     messages.value = [
       {
         role: 'assistant',
-        content: '您好！我是轻笺助手，专为效率控设计的书签管理专家。有什么问题需要我帮忙解答吗？',
+        content: gt('ai.greeting'),
         timestamp: new Date(),
       },
     ];
@@ -843,8 +841,6 @@
       opacity: 0.7;
     }
   }
-
-
 
   .input-section {
     background: var(--background-color);

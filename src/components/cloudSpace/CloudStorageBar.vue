@@ -1,6 +1,6 @@
 <template>
   <div class="storage-usage">
-    <div>已用空间: {{ cloud.usedSpace }}MB / {{ cloud.maxSpace }}MB</div>
+    <div>{{$t('cloudSpace.hasUsedSpace')}}: {{ cloud.usedSpace }}MB / {{ cloud.maxSpace }}MB</div>
     <progress :value="cloud.usedSpace" :max="cloud.maxSpace"></progress>
   </div>
 </template>

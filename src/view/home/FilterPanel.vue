@@ -10,7 +10,7 @@
       @onEnd="onDragEnd"
     >
       <template #input>
-        <b-input placeholder="请输入标签名" v-model:value="tagName" id="ref1">
+        <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">
           <template #prefix>
             <svg-icon :src="icon.navigation.search" size="16" />
           </template>

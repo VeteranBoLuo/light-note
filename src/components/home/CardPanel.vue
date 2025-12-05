@@ -12,7 +12,7 @@
     :forceFallback="true"
   >
     <div v-for="item in getBookList">
-      <RightMenu :menu="['编辑', '删除']" @select="rightMenuClick($event, item)">
+      <RightMenu :menu="[$t('handle.edit'), $t('handle.delete')]" @select="rightMenuClick($event, item)">
         <TagCard :cardInfo="item" />
       </RightMenu>
     </div>

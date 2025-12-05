@@ -8,7 +8,7 @@
           <div class="header-content">
             <div class="title-section">
               <div class="ai-icon">🤖</div>
-              <h3>轻笺智能助手</h3>
+              <h3>{{ gt('ai.title') }}</h3>
               <span class="status-dot"></span>
             </div>
             <div class="header-actions">
@@ -63,6 +63,7 @@
   import { ref, onMounted, onUnmounted, computed } from 'vue';
   import ChatContainer from '@/view/aiAssistant/ChatContainer.vue';
   import { message } from 'ant-design-vue';
+  import { gt } from '@/utils/global.ts';
 
   // 状态管理
   const isOpen = ref(false);
@@ -106,7 +107,7 @@
     // 调用AiAssistant组件的清空方法
     if (aiAssistantRef.value && aiAssistantRef.value.clearHistory) {
       aiAssistantRef.value.clearHistory();
-      message.success('已开始新的对话');
+      message.success(gt('ai.newChart'));
     }
   };
 

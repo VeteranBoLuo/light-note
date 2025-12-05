@@ -18,15 +18,15 @@
         </div>
         <div class="user-icon-text" :style="{ color: bookmark.iconColor }">
           <div class="flex-align-center" style="gap: 10px"
-            ><b>{{ user.userName ? user.alias || '默认昵称' : '请登录' }}</b>
+            ><b>{{ user.userName ? user.alias || gt('personCenter.defaultNickname') : gt('personCenter.pleaseLogin') }}</b>
             <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
           </div>
           <div style="display: flex; gap: 20px; font-size: 12px">
             <span
-              >书签<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
+              >{{ gt('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
             >
             <span
-              >笔记<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
+              >{{ gt('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
             >
           </div>
         </div>
@@ -35,9 +35,9 @@
         <div class="handle-body-title-body">
           <div class="flex-center" style="height: 40px; color: var(--text-color); gap: 10px; font-size: 12px">
             <svg-icon size="14" :src="icon.theme" />
-            主题模式
+            {{ $t('personCenter.themeMode') }}
           </div>
-          <div style="text-align: right; padding-right: 20px; color: #969ba2">
+          <div style="text-align: right; padding-right: 20px; color: #969ba2; font-size: 12px">
             {{ ThemeName }}
           </div>
         </div>
@@ -59,11 +59,14 @@
           </div>
           <div
             class="flex-center li"
-            v-click-log="{ module: '个人中心', operation: user.role === 'visitor' ? '登录/注册' : '退出登录' }"
+            v-click-log="{
+              module: '个人中心',
+              operation: user.role === 'visitor' ? '登录/注册' : gt('personCenter.logout'),
+            }"
             @click="handleExitLogin"
           >
             <svg-icon size="14" :src="icon.user_exit" />
-            {{ user.role === 'visitor' ? '登录/注册' : '退出登录' }}
+            {{ user.role === 'visitor' ? gt('personCenter.loginRegister') : gt('personCenter.logout') }}
           </div>
         </div>
       </div>
@@ -86,6 +89,7 @@
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import Opinions from '@/components/personCenter/opinions/Opinions.vue';
+  import { gt } from '@/utils/global.ts';
 
   const bookmark = bookmarkStore();
   const getPopupContainer = (trigger: HTMLElement) => {
@@ -109,23 +113,29 @@
   const options = ref<menuItemInterface[]>([
     {
       name: 'admin',
-      label: '后台管理',
+      label: gt('personCenter.admin'),
       path: '/admin',
       role: 'root',
       icon: icon.user_admin,
     },
     {
       name: 'help',
-      label: '帮助中心',
+      label: gt('personCenter.help'),
       path: '/help',
       icon: icon.help_document,
     },
     {
       name: 'operationLog',
-      label: '意见反馈',
+      label: gt('personCenter.feedback'),
       icon: icon.userCenter.operationLog,
     },
-    { name: 'updateLogs', label: '更新日志', path: '/updateLogs', icon: icon.userCenter.log, version: '4.0' },
+    {
+      name: 'updateLogs',
+      label: gt('personCenter.changelog'),
+      path: '/updateLogs',
+      icon: icon.userCenter.log,
+      version: '4.0',
+    },
   ]);
   function getVersionIsNew(menu: any) {
     if (menu.version) {
@@ -196,12 +206,12 @@
 
   const ThemeName = computed(() => {
     if (bookmark.theme === 'night') {
-      return '深色';
+      return gt('navigation.night');
     }
     if (bookmark.theme === 'day') {
-      return '浅色';
+      return gt('navigation.day');
     }
-    return '跟随系统';
+    return gt('navigation.followSystem');
   });
 
   function zoomImage() {

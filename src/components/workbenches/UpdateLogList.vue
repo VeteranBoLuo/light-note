@@ -34,7 +34,7 @@
 
 <script lang="ts" setup>
   import WorkbenchesCard from '@/components/workbenches/WorkbenchesCard.vue';
-  import { updateOptions } from '@/config/updateLog.ts';
+  import { updateOptions } from '@/config/jsonCfg.ts';
   import { computed, ref } from 'vue';
   import { cloneDeep } from 'lodash-es';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';

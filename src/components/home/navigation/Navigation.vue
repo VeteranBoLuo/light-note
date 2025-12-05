@@ -17,8 +17,8 @@
           @click="foldClick"
         />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
-          <img src="/favicon.svg" title="首页" width="25" height="25" alt="" />
-          <span style="font-size: 18px">轻笺</span>
+          <img src="/favicon.svg" :title="$t('navigation.title')" width="25" height="25" alt="" />
+          <span style="font-size: 18px">{{ $t('navigation.title') }}</span>
         </div>
       </div>
       <div class="navigation-tab flex-align-center" style="gap: 30px; width: max-content">
@@ -28,21 +28,21 @@
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"
             @click="handleToBookmark"
-            >书签</div
+            >{{ $t('navigation.bookmark') }}</div
           >
           <div
             :style="{ color: route.path.includes('/noteLibrary') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.note"
             @click="router.push('/noteLibrary')"
-            >笔记
+            >{{ $t('navigation.note') }}
           </div>
           <div
             :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
             @click="handleToCloudSpace"
-            >云空间
+            >{{ $t('navigation.cloudSpace') }}
           </div>
         </template>
       </div>

@@ -6,7 +6,7 @@
           <div class="back-icon" @click="back">
             <SvgIcon :src="icon.noteDetail.back" />
           </div>
-          <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">笔记库</div>
+          <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
         </div>
         <div class="handle-btn-group">
           <TagFilterSelector :allTags="allTags" />
@@ -16,12 +16,12 @@
             @click="router.push('/noteLibrary/add')"
             v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
           >
-            + 新建笔记
+            + {{$t('note.newNote')}}
           </b-button>
         </div>
       </div>
       <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
-        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">笔记库</div>
+        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{ $t('note.title') }}</div>
         <div class="handle-btn-group">
           <template v-if="hasCheck">
             <span class="deleteText" @click="batchDeleteNote" v-click-log="OPERATION_LOG_MAP.noteLibrary.deleteNote"
@@ -50,7 +50,7 @@
               @click="router.push('/noteLibrary/add')"
               v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
             >
-              + 新建笔记
+              + {{$t('note.newNote')}}
             </b-button>
           </template>
         </div>

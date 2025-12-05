@@ -2,7 +2,7 @@
   <b-space :size="15">
     <CloudStorageBar v-if="!bookmark.isMobileDevice" />
     <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
-      <b-button type="primary">上传文件</b-button>
+      <b-button type="primary">{{ $t('cloudSpace.uploadFile') }}</b-button>
     </b-upload>
   </b-space>
 </template>

@@ -1,5 +1,5 @@
 <template>
-  <CommonContainer title="云空间">
+  <CommonContainer :title="$t('cloudSpace.title')">
     <div class="cloud-container">
       <div class="header">
         <b-input
@@ -14,7 +14,10 @@
           </template>
         </b-input>
         <div v-else class="flex-align-center">
-          <div style="font-weight: 500; font-size: 20px" @click="initializeCloudSpace" class="dom-hover">云空间</div>
+          <div style="font-weight: 500; font-size: 20px;position: absolute" @click="initializeCloudSpace" class="dom-hover">{{
+            $t('cloudSpace.title')
+          }}</div>
+          <div style="width: 60px"></div>
           <div class="search-icon">
             <b-input @input="inputQueryFieldList" v-model:value="cloud.searchFileName" placeholder="文件名">
               <template #suffix>

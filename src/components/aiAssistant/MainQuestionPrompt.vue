@@ -15,9 +15,10 @@
 </template>
 <script setup lang="ts">
   import { ref } from 'vue';
+  import { gt } from '@/utils/global.ts';
 
   const emit = defineEmits(['recommendation-click']);
-  const recommendationItems = ref(['如何创建一个书签？', '云空间模块有什么用？', '如何关联书签和标签？']);
+  const recommendationItems = ref([gt('ai.howToCreateBookmark'), gt('ai.cloudSpaceUsage'), gt('ai.howToLinkBookmarkAndTag')]);
 
   function handleRecommendationClick(item) {
     emit('recommendation-click', item);

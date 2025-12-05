@@ -1,7 +1,7 @@
 <template>
   <div class="category-panel">
     <template v-if="bookmark.type === 'normal' && bookmark.tagData">
-      <div class="category-title">{{ bookmark.tagData?.name || '轻笺' }}</div>
+      <div class="category-title">{{ bookmark.tagData?.name || $t('navigation.title') }}</div>
       <div class="category-content">
         {{ bookmark.tagData.relatedTagList?.length }} 个相关书签，{{ bookmark.tagData.bookmarkList?.length }}
         个关联标签
@@ -17,10 +17,10 @@
       <div class="category-tag-item" style="opacity: 0; height: 1px">占位块</div>
     </template>
     <template v-else-if="bookmark.type === 'all'">
-      <div class="category-title" style="font-size: 18px">{{ '轻笺' }}</div>
+      <div class="category-title" style="font-size: 18px">{{ $t('navigation.title') }}</div>
       <div class="category-content">
         <div style="text-align: center">
-          <div>收纳、分享、探索优质网站</div>
+          <div>{{ $t('home.allCard') }}</div>
           <div style="margin-top: 10px">已收录 {{ user.tagTotal }} 个标签，共 {{ user.bookmarkTotal }} 个书签</div>
         </div>
       </div>

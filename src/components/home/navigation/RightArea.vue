@@ -53,8 +53,8 @@
     <b-menu
       v-if="!bookmark.isMobileDevice"
       :menu-options="[
-        { label: '新增标签', icon: icon.common.add, function: () => router.push('/manage/editTag/add') },
-        { label: '标签管理', icon: icon.filterPanel.list, function: () => router.push('/manage/tagMg') },
+        { label: $t('navigation.newTag'), icon: icon.common.add, function: () => router.push('/manage/editTag/add') },
+        { label: $t('navigation.tagManagement'), icon: icon.filterPanel.list, function: () => router.push('/manage/tagMg') },
       ]"
     >
       <svg-icon size="26" hover :src="icon.manage_categoryBtn_tag"
@@ -62,8 +62,16 @@
     <b-menu
       v-if="!bookmark.isMobileDevice"
       :menu-options="[
-        { label: '新增书签', icon: icon.common.add, function: () => router.push('/manage/editBookmark/add') },
-        { label: '书签管理', icon: icon.filterPanel.list, function: () => router.push('/manage/bookmarkMg') },
+        {
+          label: $t('navigation.newTag'),
+          icon: icon.common.add,
+          function: () => router.push('/manage/editBookmark/add'),
+        },
+        {
+          label: $t('navigation.newBookmark'),
+          icon: icon.filterPanel.list,
+          function: () => router.push('/manage/bookmarkMg'),
+        },
       ]"
     >
       <svg-icon size="26" hover :src="icon.manage_categoryBtn_bookmark"
@@ -71,16 +79,17 @@
     <b-menu
       placement="bottom"
       :menu-options="[
-        { label: '跟随系统', icon: icon.navigation.system, function: () => changeTheme('system') },
-        { label: '浅色', icon: icon.navigation.sun, function: () => changeTheme('day') },
-        { label: '深色', icon: icon.navigation.moon, function: () => changeTheme('night') },
+        { label: $t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },
+        { label: $t('navigation.light'), icon: icon.navigation.sun, function: () => changeTheme('day') },
+        { label: $t('navigation.night'), icon: icon.navigation.moon, function: () => changeTheme('night') },
       ]"
     >
       <svg-icon size="26" :src="getThemeIcon()" hover
     /></b-menu>
-    <b-menu placement="bottom" :menu-options="[{ label: '项目地址', function: () => githubClick() }]">
+    <b-menu placement="bottom" :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }]">
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
     </b-menu>
+    <lang-switch />
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobileDevice" @click="handleToPhoneUserCenter">
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
@@ -102,6 +111,7 @@
   import userApi from '@/api/userApi.ts';
   import { useRoute } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
+  import LangSwitch from '@/components/base/LangSwitch.vue';
   const bookmark = bookmarkStore();
   const searchInputVisible = computed(() => {
     return !bookmark.isMobileDevice && ['home'].some((item) => route.path.includes(item));

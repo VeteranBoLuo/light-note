@@ -2,12 +2,14 @@ import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueJsx from '@vitejs/plugin-vue-jsx';
 import Components from 'unplugin-vue-components/vite';
+import AutoImport from 'unplugin-auto-import/vite';
 import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
-import path from 'path';
 
+import path from 'path';
 export default defineConfig(({ mode }) => {
   // 加载环境变量
   const env = loadEnv(mode, process.cwd(), '');
+  console.log('env.VITE_ENV', env.VITE_ENV);
   return {
     esbuild: {
       pure: ['console.log'], // 构建时删除 console.log
@@ -26,6 +28,13 @@ export default defineConfig(({ mode }) => {
         directoryAsNamespace: true,
         deep: true,
         resolvers: [ElementPlusResolver(), AntDesignVueResolver({ importStyle: 'less' })],
+      }),
+      AutoImport({
+        imports: [
+          {
+            'vue-i18n': ['useI18n'],
+          },
+        ],
       }),
     ],
     // 加载对应的.env文件
