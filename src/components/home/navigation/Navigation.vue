@@ -18,7 +18,7 @@
         />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
           <img src="/favicon.svg" :title="$t('navigation.title')" width="25" height="25" alt="" />
-          <span style="font-size: 18px">{{ $t('navigation.title') }}</span>
+          <span style="font-size: 18px" v-if="bookmark.isDesktop">{{ $t('navigation.title') }}</span>
         </div>
       </div>
       <div class="navigation-tab flex-align-center" style="gap: 30px; width: max-content">
