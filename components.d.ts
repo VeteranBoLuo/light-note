@@ -32,6 +32,7 @@ declare module 'vue' {
     ATimeline: typeof import('ant-design-vue/es')['Timeline']
     ATimelineItem: typeof import('ant-design-vue/es')['TimelineItem']
     ATooltip: typeof import('ant-design-vue/es')['Tooltip']
+    ATransfer: typeof import('ant-design-vue/es')['Transfer']
     BAlert: typeof import('./src/components/base/BasicComponents/BModal/BAlert.vue')['default']
     BButton: typeof import('./src/components/base/BasicComponents/BButton.vue')['default']
     BCard: typeof import('./src/components/base/BasicComponents/BCard.vue')['default']

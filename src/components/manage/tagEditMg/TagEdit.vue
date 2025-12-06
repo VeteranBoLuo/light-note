@@ -3,12 +3,12 @@
     <b-loading :loading="loading">
       <div class="tag-edit-body">
         <div class="tag-attr-item">
-          <span class="tag-attr-label">标签名称</span>
+          <span class="tag-attr-label">{{ $t('tagManage.tagName') }}</span>
           <b-input v-model:value="tag.name" />
         </div>
         <div class="tag-attr-item" style="position: relative">
-          <span class="tag-attr-label">图标</span>
-          <b-input v-model:value="tag.iconUrl" placeholder="支持svg代码、base64编码或者直接上传图标">
+          <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
+          <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')" >
             <template #prefix>
               <svg-icon
                 title="获取图标"
@@ -35,7 +35,7 @@
           </b-input>
         </div>
         <div class="tag-attr-item">
-          <span class="tag-attr-label">相关标签</span>
+          <span class="tag-attr-label">{{ $t('tagManage.relatedTag') }}</span>
           <a-select
             :listHeight="350"
             mode="multiple"
@@ -48,7 +48,7 @@
           />
         </div>
         <div class="tag-attr-item">
-          <span class="tag-attr-label">关联书签</span>
+          <span class="tag-attr-label">{{ $t('tagManage.relatedBookmark') }}</span>
           <div v-if="bookmark.isMobileDevice" :style="{ height: bookmark.screenHeight - 400 + 'px', overflow: 'auto' }">
             <a-checkbox-group v-model:value="tag.bookmarkList" name="checkboxgroup" :options="bookmarkOptions">
               <template #label="{ label }">
@@ -64,12 +64,12 @@
             v-model:target-keys="tag.bookmarkList"
             :filter-option="filterOption"
             :locale="{
-              itemUnit: '项',
-              itemsUnit: '项',
-              notFoundContent: '列表为空',
-              searchPlaceholder: '请输入搜索内容',
+               itemUnit: $t('tagManage.count'),
+              itemsUnit: $t('tagManage.count'),
+              notFoundContent: $t('tagManage.listEmptyText'),
+              searchPlaceholder: $t('placeholder.searchPlaceholder'),
             }"
-            :titles="['--未关联', '--已关联']"
+            :titles="['--' + $t('tagManage.unRelated'), '--'+$t('tagManage.isRelated')]"
             show-search
             :data-source="mockData"
             :list-style="{

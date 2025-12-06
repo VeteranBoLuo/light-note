@@ -1,18 +1,18 @@
 <template>
   <b-loading :loading="loading">
     <div class="edit-tag-container">
-      <h2>标签管理</h2>
+      <h2>{{ $t('tagManage.title') }}</h2>
       <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 20px">
-        <b-input v-model:value="tableSearchValue" class="table-search-input" placeholder="请输入标签名" />
+        <b-input v-model:value="tableSearchValue" class="table-search-input" :placeholder="$t('home.tagSearch')" />
         <b-space>
           <b-button
             config_id="test"
             v-click-log="OPERATION_LOG_MAP.tagMg.addTag"
             type="primary"
             @click="$router.push({ path: `/manage/editTag/add` })"
-            >新增</b-button
+            >{{ $t('common.add') }}</b-button
           >
-          <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: `返回` }">返回</b-button>
+          <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: `返回` }">{{  $t('common.back') }}</b-button>
         </b-space>
       </div>
       <BTable

@@ -2,7 +2,7 @@
   <PhoneListMg
     :loading="loading"
     :list-data="tableData"
-    title="标签管理"
+    :title="$t('tagManage.title')"
     @add="router.push('/manage/editTag/add')"
   >
     <template #item="{ data }">

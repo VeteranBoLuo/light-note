@@ -4,7 +4,7 @@
     <div class="filter-dropdown">
       <b-button class="filter-button" @click="toggleFilterMenu">
         <svg-icon :src="icon.cloudSpace.filter" />
-        <span>文件类型</span>
+        <span>{{ $t('cloudSpace.fileType') }}</span>
         <i :class="['arrow', { 'arrow-up': showFilterMenu }]"></i>
       </b-button>
 
@@ -12,7 +12,7 @@
       <div v-show="showFilterMenu" class="filter-menu">
         <div class="filter-header">
           <a-checkbox :indeterminate="indeterminate" v-model:checked="allTypesSelected" @change="toggleSelectAll">
-            <span style="color: var(--text-color)">全选</span>
+            <span style="color: var(--text-color)">{{ $t('common.selectAll') }}</span>
           </a-checkbox>
         </div>
         <a-checkbox-group class="filter-options" v-model:value="cloud.typeCheckValue">
@@ -30,6 +30,7 @@
   import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
   import { cloudSpaceStore } from '@/store';
+  import { gt } from '@/utils/global.ts';
 
   // 文件类型定义
   interface FileTypeOption {
@@ -38,12 +39,13 @@
   }
   // 文件类型选项
   const fileTypes = ref<FileTypeOption[]>([
-    { value: 'image', label: '图片' },
-    { value: 'pdf', label: 'PDF' },
-    { value: 'word', label: 'Word' },
-    { value: 'audio', label: '音频' },
-    { value: 'video', label: '视频' },
-    { value: 'other', label: '其他' },
+    { value: 'image', label: gt('cloudSpace.image') },
+    { value: 'pdf', label: gt('cloudSpace.pdf') },
+    { value: 'word', label: gt('cloudSpace.word') },
+    { value: 'excel', label: gt('cloudSpace.excel') },
+    { value: 'audio', label: gt('cloudSpace.audio') },
+    { value: 'video', label: gt('cloudSpace.video') },
+    { value: 'other', label: gt('cloudSpace.other') },
   ]);
   const cloud = cloudSpaceStore();
   // 响应式数据

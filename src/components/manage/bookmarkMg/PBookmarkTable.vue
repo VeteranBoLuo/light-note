@@ -2,7 +2,7 @@
   <PhoneListMg
     :loading="loading"
     :list-data="tableData"
-    title="书签管理"
+    :title="$t('bookmarkMg.title')"
     @add="router.push('/manage/editBookmark/add')"
   >
     <template #item="{ data }">

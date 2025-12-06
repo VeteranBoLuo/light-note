@@ -1,24 +1,26 @@
 <template xmlns="">
   <b-loading :loading="loading">
     <div class="edit-tag-container">
-      <h2>书签管理</h2>
+      <h2>{{ $t('bookmarkMg.title') }}</h2>
       <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 20px">
-        <b-input v-model:value="tableSearchValue" class="table-search-input" placeholder="请输入书签名" />
+        <b-input v-model:value="tableSearchValue" class="table-search-input" :placeholder="$t('bookmarkMg.bookmarkSearch')" />
         <b-space :size="10">
-          <b-button type="success" @click="exportBookmark" v-click-log="OPERATION_LOG_MAP.bookmarkMg.exportToExcel"
-            >导出</b-button
-          >
+          <b-button type="success" @click="exportBookmark" v-click-log="OPERATION_LOG_MAP.bookmarkMg.exportToExcel">{{
+            $t('common.export')
+          }}</b-button>
           <!-- 新增导入按钮 -->
-          <b-button type="success" @click="handleImport" v-click-log="{ module: '书签管理', operation: '导入' }"
-            >导入</b-button
-          >
+          <b-button type="success" @click="handleImport" v-click-log="{ module: '书签管理', operation: '导入' }">{{
+            $t('common.import')
+          }}</b-button>
           <b-button
             type="primary"
             @click="$router.push({ path: `/manage/editBookmark/add` })"
             v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
-            >新增</b-button
+            >{{ $t('common.add') }}</b-button
           >
-          <b-button @click="handleToBack" v-click-log="{ module: '书签管理', operation: `返回` }">返回</b-button>
+          <b-button @click="handleToBack" v-click-log="{ module: '书签管理', operation: `返回` }">{{
+            $t('common.back')
+          }}</b-button>
         </b-space>
       </div>
       <BTable

@@ -206,7 +206,7 @@
 
   const ThemeName = computed(() => {
     if (bookmark.theme === 'night') {
-      return gt('navigation.night');
+      return gt('navigation.dark');
     }
     if (bookmark.theme === 'day') {
       return gt('navigation.day');

@@ -27,8 +27,18 @@ export default {
   cloudSpace: {
     title: 'Cloud Space',
     uploadFile: 'Upload File',
+    fileName: 'File Name',
     newFolder: 'New Folder',
     hasUsedSpace: 'Used Space',
+    allFile: 'All Files',
+    fileType: 'File Type',
+    image: 'Image',
+    pdf: 'PDF',
+    word: 'Word',
+    excel: 'Excel',
+    audio: 'Audio',
+    video: 'Video',
+    other: 'Other',
   },
   personCenter: {
     admin: 'Admin',
@@ -41,7 +51,7 @@ export default {
     defaultNickname: 'Default Nickname',
     pleaseLogin: 'Please Login',
   },
-  handle: {
+  common: {
     edit: 'Edit',
     delete: 'Delete',
     refresh: 'Refresh',
@@ -51,6 +61,9 @@ export default {
     cancel: 'Cancel',
     save: 'Save',
     confirm: 'Confirm',
+    reName: 'Rename',
+    selectAll: 'Select All',
+    back: 'Back',
   },
   changelog: {
     title: 'Update Logs',
@@ -77,5 +90,30 @@ export default {
     howToCreateBookmark: 'How to create a bookmark?',
     cloudSpaceUsage: 'What is the cloud space module used for?',
     howToLinkBookmarkAndTag: 'How to associate bookmarks and tags?',
+  },
+  placeholder: {
+    input: 'Please enter',
+    searchPlaceholder: 'Please enter to search',
+    selectPlaceholder: 'Please select',
+  },
+  tagManage: {
+    title: 'Tag Management',
+    tagName: 'Tag Name',
+    icon: 'Icon',
+    relatedTag: 'Related Tag',
+    relatedBookmark: 'Related Bookmark',
+    unRelated: 'Unrelated',
+    isRelated: 'Related',
+    count: 'count',
+    listEmptyText: 'No data',
+    iconPlaceholder: 'Support svg code, base64 encoding or upload icon directly',
+  },
+  bookmarkMg: {
+    title: 'Bookmark Management',
+    bookmarkName: 'Bookmark Name',
+    bookmarkUrl: 'Bookmark URL',
+    relatedTag: 'Related Tag',
+    bookmarkSearch: 'Please enter bookmark name',
+    description: 'Description',
   },
 };

@@ -1,6 +1,6 @@
 <template>
   <CommonContainer :title="$t('changelog.title')">
-    <b-button class="edit_btn" v-if="user.role === 'root'" @click="editLogs">{{ $t('handle.edit') }}</b-button>
+    <b-button class="edit_btn" v-if="user.role === 'root'" @click="editLogs">{{ $t('common.edit') }}</b-button>
     <div
       style="color: white !important; height: 100%; overflow-y: auto"
       :style="{ padding: bookmark.isMobileDevice ? '20px' : '20px 100px' }"
@@ -45,7 +45,7 @@
               :loading="updating"
               :disabled="!isValidJson"
             >
-              {{ $t('handle.save') }}
+              {{ $t('common.save') }}
             </a-button>
           </div>
         </div>

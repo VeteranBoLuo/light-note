@@ -63,12 +63,12 @@
       v-if="!bookmark.isMobileDevice"
       :menu-options="[
         {
-          label: $t('navigation.newTag'),
+          label: $t('navigation.newBookmark'),
           icon: icon.common.add,
           function: () => router.push('/manage/editBookmark/add'),
         },
         {
-          label: $t('navigation.newBookmark'),
+          label: $t('navigation.bookmarkManagement'),
           icon: icon.filterPanel.list,
           function: () => router.push('/manage/bookmarkMg'),
         },
@@ -81,7 +81,7 @@
       :menu-options="[
         { label: $t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },
         { label: $t('navigation.light'), icon: icon.navigation.sun, function: () => changeTheme('day') },
-        { label: $t('navigation.night'), icon: icon.navigation.moon, function: () => changeTheme('night') },
+        { label: $t('navigation.dark'), icon: icon.navigation.moon, function: () => changeTheme('night') },
       ]"
     >
       <svg-icon size="26" :src="getThemeIcon()" hover

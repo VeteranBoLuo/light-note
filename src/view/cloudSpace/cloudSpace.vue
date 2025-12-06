@@ -5,7 +5,7 @@
         <b-input
           v-if="bookmark.isMobileDevice"
           v-model:value="cloud.searchFileName"
-          placeholder="文件名"
+          :placeholder="$t('cloudSpace.fileName')"
           class="header-input"
           @enter="cloud.queryFieldList"
         >
@@ -14,12 +14,19 @@
           </template>
         </b-input>
         <div v-else class="flex-align-center">
-          <div style="font-weight: 500; font-size: 20px;position: absolute" @click="initializeCloudSpace" class="dom-hover">{{
-            $t('cloudSpace.title')
-          }}</div>
+          <div
+            style="font-weight: 500; font-size: 20px; position: absolute"
+            @click="initializeCloudSpace"
+            class="dom-hover"
+            >{{ $t('cloudSpace.title') }}</div
+          >
           <div style="width: 60px"></div>
           <div class="search-icon">
-            <b-input @input="inputQueryFieldList" v-model:value="cloud.searchFileName" placeholder="文件名">
+            <b-input
+              @input="inputQueryFieldList"
+              v-model:value="cloud.searchFileName"
+              :placeholder="$t('cloudSpace.fileName')"
+            >
               <template #suffix>
                 <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
               </template>

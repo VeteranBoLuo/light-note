@@ -49,6 +49,7 @@
 
 <script setup lang="ts">
   import { useSlots, computed, Ref } from 'vue';
+  import { gt } from '@/utils/global.ts';
 
   const props = withDefaults(
     defineProps<{
@@ -63,7 +64,7 @@
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),
-      placeholder: '请输入',
+      placeholder: gt('placeholder.input'),
       type: 'text',
       autocomplete: 'off',
       height: '32px',

@@ -9,7 +9,7 @@
       @click="clickAllFolder"
     >
       <svg-icon size="16" :src="icon.common.folder" />
-      <span class="text-hidden" style="width: calc(100% - 28px)">全部文件</span>
+      <span class="text-hidden" style="width: calc(100% - 28px)">{{ $t('cloudSpace.allFile') }}</span>
     </div>
     <b-list
       draggable
@@ -21,7 +21,11 @@
       @nodeClick="folderClick"
     >
       <template #item="{ item }">
-        <RightMenu :menu="['重命名', '删除']" v-if="!item.isRename" @select="handleTagMenu($event, item)">
+        <RightMenu
+          :menu="[$t('common.reName'), $t('common.delete')]"
+          v-if="!item.isRename"
+          @select="handleTagMenu($event, item)"
+        >
           <div
             class="category-item"
             style="height: 32px; margin-top: 5px !important"
@@ -46,7 +50,9 @@
         </b-input>
       </template>
     </b-list>
-    <b-button v-if="!bookmark.isMobileDevice" @click="addFolder" style="width: 100%">新建文件夹</b-button>
+    <b-button v-if="!bookmark.isMobileDevice" @click="addFolder" style="width: 100%">{{
+      $t('cloudSpace.newFolder')
+    }}</b-button>
   </div>
 </template>
 

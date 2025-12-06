@@ -3,28 +3,29 @@
     <b-loading :loading="loading" style='height: unset'>
       <div class="tag-edit-body">
         <div class="tag-attr-item">
-          <span class="tag-attr-label">书签名称</span>
+          <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkName') }}</span>
           <b-input v-model:value="bookmarkData.name" />
         </div>
         <div class="tag-attr-item">
-          <span class="tag-attr-label">网站地址</span>
+          <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
           <b-input v-model:value="bookmarkData.url" />
         </div>
         <div class="tag-attr-item">
-          <span class="tag-attr-label">相关标签</span>
+          <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
           <a-select
             :listHeight="350"
             :dropdownMatchSelectWidth="false"
             mode="multiple"
             :max-tag-count="3"
             :options="tagOptions"
+            :placeholder="$t('placeholder.selectPlaceholder')"
             show-search
             :filter-option="SelectionSearch"
             v-model:value="bookmarkData.relatedTags"
           />
         </div>
         <div class="tag-attr-item">
-          <span class="tag-attr-label">描述</span>
+          <span class="tag-attr-label">{{ $t('bookmarkMg.description') }}</span>
           <b-input v-model:value="bookmarkData.description" />
         </div>
       </div>
