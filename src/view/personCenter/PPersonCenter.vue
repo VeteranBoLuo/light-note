@@ -1,6 +1,6 @@
 <template>
   <CommonContainer
-    title="个人中心"
+    :title="$t('personCenter.title')"
     :style="{ backgroundColor: bookmark.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
     @backClick="router.push('/home')"
   >
@@ -8,7 +8,7 @@
       class="person-title-card"
       :style="{ backgroundColor: bookmark.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }"
     >
-      <div style="display: flex; gap: 10px">
+      <div style="display: flex; gap: 20px; align-items: center">
         <div class="navigation-icon" :style="{ color: bookmark.iconColor }">
           <svg-icon
             img-id="viewUserImg"
@@ -19,33 +19,32 @@
           />
         </div>
         <div style="display: flex; flex-direction: column">
-          <b style="font-size: 20px">{{ user.alias ? user.alias : '默认昵称' }}</b>
-          <span style="font-size: 14px; color: #edf2fa">{{ user.userName }}</span>
+          <b style="font-size: 20px">{{ user.alias ? user.alias : $t('personCenter.defaultNickname') }}</b>
         </div>
       </div>
       <div class="user-icon-text" :style="{ color: bookmark.iconColor }">
         <div style="display: flex; gap: 20px; font-size: 14px">
           <span
-            >标签<span style="margin-left: 10px">{{ user.tagTotal }}</span></span
+            >{{ $t('navigation.tag') }}<span style="margin-left: 10px">{{ user.tagTotal }}</span></span
           >
           <span
-            >书签<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
+            >{{ $t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
           >
         </div>
       </div>
     </div>
     <div class="person-menu">
       <div class="person-menu-item" @click="$router.push('/myInfo')">
-        <span class="person-menu-item-title">个人资料</span>
+        <span class="person-menu-item-title">{{ $t('personCenter.personalProfile') }}</span>
         <span class="person-menu-item-des"
-          >邮箱、昵称等
+          >{{$t('personCenter.email_nickname')}}
           <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
         </span>
       </div>
     </div>
     <div class="person-menu">
       <div class="person-menu-item">
-        <span class="person-menu-item-title">主题设置</span>
+        <span class="person-menu-item-title">{{ $t('personCenter.themeMode') }}</span>
         <span class="person-menu-item-des">{{ ThemeName }}</span></div
       >
       <div
@@ -54,16 +53,16 @@
         @click="router.push('/admin')"
         v-click-log="{ module: '个人中心', operation: `后台管理` }"
       >
-        <span class="person-menu-item-title">后台管理</span>
+        <span class="person-menu-item-title">{{ $t('personCenter.admin') }}</span>
         <span class="person-menu-item-des"
-          >日志、用户管理等<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          >{{ $t('personCenter.logs_user_mg')}}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
       <div
         class="person-menu-item"
         @click="router.push('/noteLibrary')"
         v-click-log="{ module: '个人中心', operation: `笔记库` }"
       >
-        <span class="person-menu-item-title">笔记库</span>
+        <span class="person-menu-item-title">{{ $t('note.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
         /></span>
@@ -73,7 +72,7 @@
         @click="$router.push('/cloudSpace')"
         v-click-log="{ module: '个人中心', operation: `云空间` }"
       >
-        <span class="person-menu-item-title">云空间</span>
+        <span class="person-menu-item-title">{{ $t('cloudSpace.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
@@ -82,7 +81,7 @@
         @click="$router.push('/manage/tagMg')"
         v-click-log="{ module: '个人中心', operation: `标签管理` }"
       >
-        <span class="person-menu-item-title">标签管理</span>
+        <span class="person-menu-item-title">{{ $t('tagManage.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
@@ -91,7 +90,7 @@
         @click="$router.push('/manage/bookmarkMg')"
         v-click-log="{ module: '个人中心', operation: `书签管理` }"
       >
-        <span class="person-menu-item-title">书签管理</span>
+        <span class="person-menu-item-title">{{ $t('bookmarkMg.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
@@ -102,16 +101,16 @@
         @click="$router.push('/opinions')"
         v-click-log="{ module: '个人中心', operation: `意见反馈` }"
       >
-        <span class="person-menu-item-title">意见反馈</span>
+        <span class="person-menu-item-title">{{ $t('personCenter.feedback') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
       <div
         class="person-menu-item"
         @click="$router.push('/help')"
-        v-click-log="{ module: '个人中心', operation: `帮助中心` }"
+        v-click-log="{ module: '轻笺助手', operation: `轻笺助手` }"
       >
-        <span class="person-menu-item-title">帮助中心</span>
+        <span class="person-menu-item-title">{{ $t('ai.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
@@ -120,7 +119,7 @@
         @click="$router.push('/updateLogs')"
         v-click-log="{ module: '更新日志', operation: `更新日志` }"
       >
-        <span class="person-menu-item-title">更新日志</span>
+        <span class="person-menu-item-title">{{ $t('personCenter.changelog') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
@@ -128,10 +127,15 @@
     <div
       class="person-menu"
       @click="handleExitLogin"
-      v-click-log="{ module: '个人中心', operation: user.role === 'visitor' ? '登录/注册' : '退出登录' }"
+      v-click-log="{
+        module: '个人中心',
+        operation: user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout'),
+      }"
     >
       <div class="person-menu-item" style="justify-content: center">
-        <span class="person-menu-item-title">{{ user.role === 'visitor' ? '登录/注册' : '退出登录' }}</span></div
+        <span class="person-menu-item-title">{{
+          user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout')
+        }}</span></div
       >
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
@@ -147,8 +151,8 @@
   import { computed, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
-  import Viewer from '@/components/base/Viewer/BViewer.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import { gt } from '@/utils/global.ts';
 
   const bookmark = bookmarkStore();
   const menuVisible = ref(false);
@@ -193,12 +197,12 @@
 
   const ThemeName = computed(() => {
     if (bookmark.theme === 'night') {
-      return '深色';
+      return gt('navigation.dark');
     }
     if (bookmark.theme === 'day') {
-      return '浅色';
+      return gt('navigation.light');
     }
-    return '跟随系统';
+    return gt('navigation.followSystem');
   });
   ref<Viewer>();
   function zoomImage() {

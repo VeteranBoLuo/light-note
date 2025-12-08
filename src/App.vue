@@ -24,6 +24,7 @@
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
   import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
+  import { debounce } from 'lodash-es';
 
   const router = useRouter();
   const user = useUserStore();
@@ -55,11 +56,15 @@
     '/imageMg': '/admin/imageMg',
     '/opinions': '/home',
     '/admin': '/admin/operationLog',
+    '/personCenter': '/home',
   };
 
   let mq = null;
   let mqListener = null;
-
+  const handleResize = debounce(() => {
+    bookmark.screenWidth = window.innerWidth;
+    bookmark.screenHeight = window.innerHeight;
+  }, 50);
   function initApp() {
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
     const theme = localStorage.getItem('theme');
@@ -75,7 +80,6 @@
       bookmark.theme = e.matches ? 'night' : 'day';
     };
     mq.addEventListener('change', mqListener);
-    handleRouteChange(bookmark.isMobileDevice, router.currentRoute.value.path);
   }
   async function getUserInfo() {
     try {
@@ -179,8 +183,11 @@
 
   // 只有第一次进入页面或者刷新页面才触发（简化）
   async function init() {
+    window.addEventListener('resize', handleResize);
     router.isReady().then(async () => {
       await getUserInfo();
+      console.log('bookmark.isMobileDevice', bookmark.isMobileDevice);
+      handleRouteChange(bookmark.isMobileDevice, router.currentRoute.value.path);
       if (skipRouter.includes(<string>router.currentRoute.value.name)) {
         bookmark.isShowLogin = false;
       }
@@ -193,6 +200,7 @@
 
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
+    window.removeEventListener('resize', handleResize);
     if (mq && mqListener) {
       mq.removeEventListener('change', mqListener);
     }
@@ -202,6 +210,7 @@
   watch(
     () => bookmark.isMobileDevice,
     (val) => {
+      console.log('val',val);
       handleRouteChange(val, router.currentRoute.value.path);
       setTransition(val);
     },

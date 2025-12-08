@@ -18,7 +18,9 @@
         </div>
         <div class="user-icon-text" :style="{ color: bookmark.iconColor }">
           <div class="flex-align-center" style="gap: 10px"
-            ><b>{{ user.userName ? user.alias || gt('personCenter.defaultNickname') : gt('personCenter.pleaseLogin') }}</b>
+            ><b>{{
+              user.userName ? user.alias || gt('personCenter.defaultNickname') : gt('personCenter.pleaseLogin')
+            }}</b>
             <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
           </div>
           <div style="display: flex; gap: 20px; font-size: 12px">
@@ -161,7 +163,7 @@
       router.push(menuItem.path);
     } else {
       switch (menuItem.label) {
-        case '意见反馈':
+        case gt('personCenter.feedback'):
           opinionsVisible.value = true;
           break;
         default:

@@ -3,6 +3,7 @@ export default {
     title: '轻笺',
     index: '首页',
     bookmark: '书签',
+    tag: '标签',
     note: '笔记',
     cloudSpace: '云空间',
     newTag: '新增标签',
@@ -40,6 +41,8 @@ export default {
     other: '其他',
   },
   personCenter: {
+    title: '个人中心',
+    personalProfile: '个人资料',
     admin: '后台管理',
     help: '帮助中心',
     feedback: '意见反馈',
@@ -49,6 +52,8 @@ export default {
     logout: '退出登录',
     defaultNickname: '默认昵称',
     pleaseLogin: '请登录',
+    email_nickname: '邮箱、昵称等',
+    logs_user_mg: '日志、用户管理等',
   },
   common: {
     edit: '编辑',
@@ -62,7 +67,7 @@ export default {
     confirm: '确定',
     reName: '重命名',
     selectAll: '全选',
-    back:'返回'
+    back: '返回',
   },
   changelog: {
     title: '更新日志',

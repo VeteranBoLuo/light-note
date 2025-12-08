@@ -1,5 +1,5 @@
 <template>
-  <b-modal :mask-closable="false" title="意见反馈" v-model:visible="visible" @close="visible = false">
+  <b-modal :mask-closable="false" :title="gt('personCenter.feedback')" v-model:visible="visible" @close="visible = false">
     <div :style="{ width: bookmark.isMobileDevice ? '95%' : '450px' }">
       <BTabs :options="['反馈类型', '反馈历史']" v-model:activeTab="activeTab" />
       <div class="type" style="height: 330px" v-if="activeTab === '反馈类型'">
@@ -107,6 +107,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { gt } from '@/utils/global.ts';
 
   const visible = <Ref<boolean>>defineModel('visible');
   const bookmark = bookmarkStore();

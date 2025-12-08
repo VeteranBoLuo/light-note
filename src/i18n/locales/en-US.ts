@@ -3,6 +3,7 @@ export default {
     title: 'LightNote',
     index: 'Home',
     bookmark: 'Bookmark',
+    tag: 'Tag',
     note: 'Note',
     cloudSpace: 'Cloud Space',
     newTag: 'New Tag',
@@ -41,6 +42,8 @@ export default {
     other: 'Other',
   },
   personCenter: {
+    title: 'Personal Center',
+    personalProfile: 'Personal Profile',
     admin: 'Admin',
     help: 'Help Center',
     feedback: 'Feedback',
@@ -50,6 +53,8 @@ export default {
     logout: 'Logout',
     defaultNickname: 'Default Nickname',
     pleaseLogin: 'Please Login',
+    email_nickname: 'Email, nickname, etc',
+    logs_user_mg:'Logs, user management, etc'
   },
   common: {
     edit: 'Edit',

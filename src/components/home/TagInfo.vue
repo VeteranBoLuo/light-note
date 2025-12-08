@@ -21,7 +21,13 @@
       <div class="category-content">
         <div style="text-align: center">
           <div>{{ $t('home.allCard') }}</div>
-          <div style="margin-top: 10px">已收录 {{ user.tagTotal }} 个标签，共 {{ user.bookmarkTotal }} 个书签</div>
+          <div style="margin-top: 10px">
+            <template v-if="bookmark.local === 'zh-CN'">
+              已收录 {{ user.tagTotal }} 个标签，共 {{ user.bookmarkTotal }} 个书签
+            </template>
+            <template v-else>
+              Total {{ user.tagTotal }} tags, {{ user.bookmarkTotal }} bookmarks </template>
+          </div>
         </div>
       </div>
       <div class="category-tag-item" style="opacity: 0; height: 1px">占位块</div>

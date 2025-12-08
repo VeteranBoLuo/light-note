@@ -60,14 +60,14 @@ export default defineStore('bookmark', {
      */
     deviceType(): 'mobile' | 'tablet' | 'desktop' {
       if (typeof window === 'undefined') return 'desktop'; // SSR 默认桌面
-      
+
       const userAgent = navigator.userAgent.toLowerCase();
       const width = this.screenWidth;
-      
+
       // 移动设备检测
       const isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
       const isTablet = /ipad|android|tablet|silk|kindle/i.test(userAgent) && !/mobile/i.test(userAgent);
-      
+
       // 根据宽度和设备特征综合判断
       if (width <= 768 || (isMobile && width <= 1024)) {
         return 'mobile';
@@ -77,28 +77,28 @@ export default defineStore('bookmark', {
         return 'desktop';
       }
     },
-    
+
     /**
      * 判断是否为移动设备（手机）
      */
     isMobile(): boolean {
       return this.deviceType === 'mobile';
     },
-    
+
     /**
      * 判断是否为平板设备
      */
     isTablet(): boolean {
       return this.deviceType === 'tablet';
     },
-    
+
     /**
      * 判断是否为桌面设备
      */
     isDesktop(): boolean {
       return this.deviceType === 'desktop';
     },
-    
+
     /**
      * 判断是否为移动端（包含手机和平板）
      */
@@ -112,7 +112,9 @@ export default defineStore('bookmark', {
     iconColor(state): string {
       const theme = state.theme;
       if (theme === 'system') {
-        return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'white' : 'black';
+        return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'white'
+          : 'black';
       }
       return theme === 'day' ? 'black' : 'white';
     },
@@ -121,8 +123,16 @@ export default defineStore('bookmark', {
      */
     currentTheme(state): string {
       return state.theme === 'system'
-        ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'day')
+        ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'night'
+          : 'day'
         : state.theme;
+    },
+    /**
+     *  判断当前语言
+     */
+    locale(): string {
+      return localStorage.getItem('lang') || 'zh-CN';
     },
   },
   actions: {
