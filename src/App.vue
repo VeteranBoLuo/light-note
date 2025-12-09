@@ -186,7 +186,6 @@
     window.addEventListener('resize', handleResize);
     router.isReady().then(async () => {
       await getUserInfo();
-      console.log('bookmark.isMobileDevice', bookmark.isMobileDevice);
       handleRouteChange(bookmark.isMobileDevice, router.currentRoute.value.path);
       if (skipRouter.includes(<string>router.currentRoute.value.name)) {
         bookmark.isShowLogin = false;

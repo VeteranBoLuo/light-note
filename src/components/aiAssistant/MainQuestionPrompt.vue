@@ -1,6 +1,6 @@
 <template>
   <div class="recommendation-container">
-    <div class="recommendation-title">轻笺小提示</div>
+    <div class="recommendation-title">{{ $t('ai.tip') }}</div>
     <div class="recommendation-list">
       <div
         v-for="(item, index) in recommendationItems"
@@ -18,7 +18,11 @@
   import { gt } from '@/utils/global.ts';
 
   const emit = defineEmits(['recommendation-click']);
-  const recommendationItems = ref([gt('ai.howToCreateBookmark'), gt('ai.cloudSpaceUsage'), gt('ai.howToLinkBookmarkAndTag')]);
+  const recommendationItems = ref([
+    gt('ai.howToCreateBookmark'),
+    gt('ai.cloudSpaceUsage'),
+    gt('ai.howToLinkBookmarkAndTag'),
+  ]);
 
   function handleRecommendationClick(item) {
     emit('recommendation-click', item);

@@ -54,7 +54,7 @@ export default {
     defaultNickname: 'Default Nickname',
     pleaseLogin: 'Please Login',
     email_nickname: 'Email, nickname, etc',
-    logs_user_mg:'Logs, user management, etc'
+    logs_user_mg: 'Logs, user management, etc',
   },
   common: {
     edit: 'Edit',
@@ -95,6 +95,7 @@ export default {
     howToCreateBookmark: 'How to create a bookmark?',
     cloudSpaceUsage: 'What is the cloud space module used for?',
     howToLinkBookmarkAndTag: 'How to associate bookmarks and tags?',
+    tip: 'Light note tip',
   },
   placeholder: {
     input: 'Please enter',

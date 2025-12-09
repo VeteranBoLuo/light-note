@@ -93,6 +93,7 @@ export default {
     howToCreateBookmark: '如何创建一个书签？',
     cloudSpaceUsage: '云空间模块有什么用？',
     howToLinkBookmarkAndTag: '如何关联书签和标签？',
+    tip: '轻笺小提示',
   },
   placeholder: {
     input: '请输入',
