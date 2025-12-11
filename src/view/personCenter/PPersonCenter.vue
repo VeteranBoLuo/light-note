@@ -152,8 +152,9 @@
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const menuVisible = ref(false);
   const userVisible = ref(false);
@@ -197,12 +198,12 @@
 
   const ThemeName = computed(() => {
     if (bookmark.theme === 'night') {
-      return gt('navigation.dark');
+      return t('navigation.dark');
     }
     if (bookmark.theme === 'day') {
-      return gt('navigation.light');
+      return t('navigation.light');
     }
-    return gt('navigation.followSystem');
+    return t('navigation.followSystem');
   });
   ref<Viewer>();
   function zoomImage() {

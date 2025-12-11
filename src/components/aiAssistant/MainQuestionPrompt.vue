@@ -15,13 +15,15 @@
 </template>
 <script setup lang="ts">
   import { ref } from 'vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
+
+  const { t } = useI18n();
 
   const emit = defineEmits(['recommendation-click']);
   const recommendationItems = ref([
-    gt('ai.howToCreateBookmark'),
-    gt('ai.cloudSpaceUsage'),
-    gt('ai.howToLinkBookmarkAndTag'),
+    t('ai.howToCreateBookmark'),
+    t('ai.cloudSpaceUsage'),
+    t('ai.howToLinkBookmarkAndTag'),
   ]);
 
   function handleRecommendationClick(item) {

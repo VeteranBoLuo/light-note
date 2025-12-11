@@ -74,7 +74,9 @@
   import { json, jsonParseLinter } from '@codemirror/lang-json';
   import { linter } from '@codemirror/lint';
   import { oneDark } from '@codemirror/theme-one-dark';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const updateOptions = ref<any[]>([]);
@@ -93,7 +95,7 @@
       const res = await getJsonInfo(API_TEXTS.CHANGELOG);
       updateOptions.value = JSON.parse(res.data.jsonContent);
     } catch (error) {
-      message.error($t('changelog.errorInfo'));
+      message.error(t('changelog.errorInfo'));
     }
   }
 

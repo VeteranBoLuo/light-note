@@ -1,21 +1,19 @@
 <template>
-  <b-modal :mask-closable="false" :title="gt('personCenter.feedback')" v-model:visible="visible" @close="visible = false">
+  <b-modal
+    :mask-closable="false"
+    :title="t('personCenter.feedback')"
+    v-model:visible="visible"
+    @close="visible = false"
+  >
     <div :style="{ width: bookmark.isMobileDevice ? '95%' : '450px' }">
-      <BTabs :options="['反馈类型', '反馈历史']" v-model:activeTab="activeTab" />
-      <div class="type" style="height: 330px" v-if="activeTab === '反馈类型'">
-        <b-radio
-          v-model:value="opinionData.type"
-          :options="[
-            { label: '产品建议', value: '产品建议' },
-            { label: '功能故障', value: '功能故障' },
-            { label: '其他问题', value: '其他问题' },
-          ]"
-        />
+      <BTabs :options="tabOptions" v-model:activeTab="activeTab" />
+      <div class="type" style="height: 330px" v-if="activeTab === t('personCenter.opinions.feedbackType')">
+        <b-radio v-model:value="opinionData.type" :options="radioOptions" />
         <b-input
           style="margin-top: 20px"
           type="textarea"
           v-model:value="opinionData.content"
-          placeholder="请输入不少于6字的问题描述"
+          :placeholder="t('personCenter.opinions.contentPlaceholder')"
         />
         <div class="flex-align-center" style="gap: 20px; margin-top: 20px">
           <b-upload multiple accept="image/*" @change="uploadImg" />
@@ -45,8 +43,12 @@
           </div>
         </div>
         <div style="margin-top: 10px">
-          <div style="font-size: 14px">联系方式</div>
-          <b-input v-model:value="opinionData.phone" style="margin-top: 10px" placeholder="请输入邮箱/微信以便于答谢" />
+          <div style="font-size: 14px">{{ t('personCenter.opinions.contactInfo') }}</div>
+          <b-input
+            v-model:value="opinionData.phone"
+            style="margin-top: 10px"
+            :placeholder="t('personCenter.opinions.contactPlaceholder')"
+          />
         </div>
       </div>
       <div v-else style="height: 330px; overflow-y: auto; position: relative">
@@ -55,11 +57,12 @@
           <div v-if="opinionHistory.length > 0" class="opinion-history-container">
             <div v-for="(item, index) in opinionHistory" class="opinion-history-item" :key="index">
               <span
-                >反馈内容： <span style="color: coral">{{ item.content }}</span></span
+                >{{ t('personCenter.opinions.feedbackContent') }}
+                <span style="color: coral">{{ item.content }}</span></span
               >
-              <span>反馈类型：{{ item.type }}</span>
+              <span>{{ t('personCenter.opinions.feedbackTypeLabel') }}{{ item.type }}</span>
               <span>
-                反馈图片：
+                {{ t('personCenter.opinions.feedbackImages') }}
                 <span class="flex-align-center-gap" v-if="JSON.parse(item.imgArray).length > 0">
                   <img
                     v-for="src in JSON.parse(item.imgArray)"
@@ -72,13 +75,19 @@
                 </span>
                 <span v-else>-</span></span
               >
-              <span>反馈时间：{{ item.createTime }}</span>
+              <span>{{ t('personCenter.opinions.feedbackTime') }}{{ item.createTime }}</span>
               <span
-                >开发者答复：<span style="color: coral">{{ item.replay }}</span></span
+                >{{ t('personCenter.opinions.developerReply')
+                }}<span style="color: coral">{{ item.replay }}</span></span
               >
             </div>
           </div>
-          <a-empty v-else description="暂无反馈历史" class="both-center" style="color: #ccc" />
+          <a-empty
+            v-else
+            :description="t('personCenter.opinions.noFeedbackHistory')"
+            class="both-center"
+            style="color: #ccc"
+          />
         </div>
       </div>
     </div>
@@ -87,8 +96,11 @@
         type="primary"
         style="width: 100%; margin-top: 20px"
         @click="submit"
-        v-click-log="{ module: '意见反馈', operation: '提交反馈' }"
-        >提交</b-button
+        v-click-log="{
+          module: t('personCenter.opinions.feedbackModule'),
+          operation: t('personCenter.opinions.submitFeedback'),
+        }"
+        >{{ t('personCenter.opinions.submit') }}</b-button
       >
     </template>
   </b-modal>
@@ -101,24 +113,36 @@
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { reactive, Ref, ref, watch } from 'vue';
+  import { reactive, Ref, ref, watch, computed } from 'vue';
   import { message } from 'ant-design-vue';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const visible = <Ref<boolean>>defineModel('visible');
   const bookmark = bookmarkStore();
-  const activeTab = ref('反馈类型');
+  const activeTab = ref(t('personCenter.opinions.feedbackType'));
 
   const opinionData = reactive({
-    type: '产品建议',
+    type: t('personCenter.opinions.productSuggestion'),
     content: '',
     imgArray: [],
     phone: '',
   });
+
+  const tabOptions = computed(() => [
+    t('personCenter.opinions.feedbackType'),
+    t('personCenter.opinions.feedbackHistory'),
+  ]);
+
+  const radioOptions = computed(() => [
+    { label: t('personCenter.opinions.productSuggestion'), value: t('personCenter.opinions.productSuggestion') },
+    { label: t('personCenter.opinions.functionFault'), value: t('personCenter.opinions.functionFault') },
+    { label: t('personCenter.opinions.otherIssues'), value: t('personCenter.opinions.otherIssues') },
+  ]);
 
   function uploadImg(event) {
     event.forEach((img) => {
@@ -142,7 +166,7 @@
 
   function submit() {
     if (opinionData.content.length < 6) {
-      message.warning('请输入不少于6字的问题描述');
+      message.warning(t('personCenter.opinions.contentTooShort'));
       return;
     }
     const params: any = cloneDeep(opinionData);
@@ -150,7 +174,7 @@
     apiBasePost('/api/opinion/recordOpinion', params)
       .then((res) => {
         if (res.status === 200) {
-          message.success('感谢您的反馈');
+          message.success(t('personCenter.opinions.thankYouFeedback'));
         }
       })
       .finally(() => {
@@ -164,7 +188,7 @@
   watch(
     () => activeTab.value,
     (val) => {
-      if (val === '反馈历史') {
+      if (val === t('personCenter.opinions.feedbackHistory')) {
         loading.value = true;
         apiBasePost('/api/opinion/getOpinionList', {
           currentPage: 1,

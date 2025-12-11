@@ -24,6 +24,7 @@ export default {
     title: 'Note Library',
     allNote: 'All Notes',
     newNote: 'New Note',
+    noTagNote: 'Untagged Notes',
   },
   cloudSpace: {
     title: 'Cloud Space',
@@ -40,6 +41,16 @@ export default {
     audio: 'Audio',
     video: 'Video',
     other: 'Other',
+    folder: 'Folder',
+    fileSize: 'File Size',
+    uploadTime: 'Upload Time',
+    download: 'Download',
+    moveFile: 'Move File',
+    confirmDelete: 'Confirm delete this file?',
+    renameSuccess: 'Rename successful',
+    extensionWarning:
+      'Changing the file extension may cause the file to fail to open properly. Are you sure to continue?',
+    alertTitle: 'Prompt',
   },
   personCenter: {
     title: 'Personal Center',
@@ -55,6 +66,27 @@ export default {
     pleaseLogin: 'Please Login',
     email_nickname: 'Email, nickname, etc',
     logs_user_mg: 'Logs, user management, etc',
+    opinions: {
+      feedbackType: 'Feedback Type',
+      feedbackHistory: 'Feedback History',
+      productSuggestion: 'Product Suggestion',
+      functionFault: 'Function Fault',
+      otherIssues: 'Other Issues',
+      contentPlaceholder: 'Please enter a problem description of at least 6 characters',
+      contactInfo: 'Contact Information',
+      contactPlaceholder: 'Please enter email/WeChat for follow-up',
+      feedbackContent: 'Feedback Content: ',
+      feedbackTypeLabel: 'Feedback Type: ',
+      feedbackImages: 'Feedback Images: ',
+      feedbackTime: 'Feedback Time: ',
+      developerReply: 'Developer Reply: ',
+      noFeedbackHistory: 'No feedback history',
+      submit: 'Submit',
+      contentTooShort: 'Please enter a problem description of at least 6 characters',
+      thankYouFeedback: 'Thank you for your feedback',
+      feedbackModule: 'Feedback',
+      submitFeedback: 'Submit Feedback',
+    },
   },
   common: {
     edit: 'Edit',
@@ -96,6 +128,15 @@ export default {
     cloudSpaceUsage: 'What is the cloud space module used for?',
     howToLinkBookmarkAndTag: 'How to associate bookmarks and tags?',
     tip: 'Light note tip',
+    inputPlaceholder: 'Enter your question...',
+    inputHint: 'Press Enter to send, Shift + Enter for new line',
+    pause: 'Pause',
+    send: 'Send',
+    responsePaused: '(Response paused)',
+    errorMessage: 'Sorry, unable to respond temporarily, please try again later',
+    homeTitle: 'Home',
+    newConversation: 'New conversation',
+    close: 'Close',
   },
   placeholder: {
     input: 'Please enter',
@@ -121,5 +162,40 @@ export default {
     relatedTag: 'Related Tag',
     bookmarkSearch: 'Please enter bookmark name',
     description: 'Description',
+    importExport: 'Import/Export',
+    exportSection: 'Export',
+    importSection: 'Import',
+    exportExcel: 'Export Excel',
+    exportHTML: 'Export HTML Bookmarks',
+    importExcel: 'Import Excel',
+    importHTML: 'Import HTML Bookmarks',
+    exportExcelDesc: 'Export as Excel spreadsheet file',
+    exportHTMLDesc: 'Export as browser bookmark file',
+    importExcelDesc: 'Import bookmarks from Excel file',
+    importHTMLDesc: 'Import from browser bookmark file',
+    batchDelete: 'Batch Delete',
+    exportNote: 'If bookmarks are selected, export the selected ones; otherwise, export all bookmarks.',
+  },
+  help: {
+    searchPlaceholder: 'Please search for questions',
+    title: 'Help Center',
+    introTitle: 'Welcome to Help Center',
+    introContent: `
+      <p>Hello! Thank you for using 【Light Note】.</p>
+      <p>Light Note is a cloud-based bookmark management tool designed specifically for efficiency enthusiasts, with smart tags at its core, helping you instantly archive web pages, notes, and inspiration snippets. Through a dynamically associated tag network, it enables cross-device instant search, multi-dimensional classification, and intelligent recommendation of bookmarks/notes, making knowledge management as easy and fun as browsing social feeds.</p>
+      <p>This help documentation aims to provide you with detailed usage guides and answers to common questions, helping you use this platform more efficiently. Here, you can find detailed introductions about the following aspects:</p>
+      <ul>
+        <li><strong>Account Management</strong>: How to register, log in, recover passwords, and modify personal information.</li>
+        <li><strong>Function Operations</strong>: Operation steps and precautions for various platform functions.</li>
+        <li><strong>Frequently Asked Questions</strong>: Solutions to problems users may encounter during use.</li>
+      </ul>
+      <p>To better assist you, please search for the content you need to understand using the left directory or search box. In addition, our website supports <b>multi-device adaptation</b>, whether you are on PC, mobile phone, or tablet, you can enjoy a consistent excellent experience.</p>
+      <p>If you encounter any problems during use, please provide your valuable suggestions through feedback. You can also contact me through the following methods:</p>
+      <div>
+        Email: <a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
+      </div>
+      <p>Although the project was established not long ago, I guarantee that the quality is excellent, and considerable effort has been put into the details, ensuring you'll be satisfied with the experience! In the future, I will continue to upgrade it, such as adding bookmark export/import, bookmark sharing, bookmark synchronization and backup, team collaboration, AI analysis, and other features, making bookmark management more flexible and convenient. Please look forward to it - more practical features are on the way, guaranteeing to take your bookmark management experience to the next level!</p>
+      <p>Thank you for your understanding and support!</p>
+    `,
   },
 };

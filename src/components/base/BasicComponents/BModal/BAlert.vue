@@ -26,6 +26,8 @@
               text-align: center;
               padding: 0 20px;
               box-sizing: border-box;
+              overflow: auto;
+              height: calc(100% - 70px);
             "
             class="row-center"
           >
@@ -69,7 +71,10 @@
         <slot name="title">
           <div style="font-size: 16px; margin-bottom: 15px">{{ title }}</div>
         </slot>
-        <div style="color: var(--desc-color); font-size: 14px" v-html="content" />
+        <div
+          style="color: var(--desc-color); font-size: 14px; overflow: auto; height: calc(100% - 70px)"
+          v-html="content"
+        />
         <div
           style="
             position: absolute;

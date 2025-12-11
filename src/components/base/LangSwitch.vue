@@ -14,13 +14,17 @@
 
 <script lang="ts" setup>
   import { useI18n } from 'vue-i18n';
-  import { setLocale } from '@/i18n';
+  import i18n from '@/i18n';
 
   const { locale } = useI18n();
   const currentLang = locale;
 
   const handleLangChange = ({ key }: { key: string }) => {
-    setLocale(key as 'zh-CN' | 'en-US');
+    const lang = key as 'zh-CN' | 'en-US';
+    localStorage.setItem('lang', lang);
+    if (i18n.global.locale.value !== lang) {
+      location.reload();
+    }
   };
 </script>
 <style>

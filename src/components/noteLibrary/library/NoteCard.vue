@@ -1,7 +1,7 @@
 <template>
   <div
     @click="router.push(`/noteLibrary/${note.id}`)"
-    class="note-card"
+    class="note-card dark-theme"
     :style="{ boxShadow: bookmark.currentTheme === 'day' ? 'rgb(237, 242, 250) 0px 0px 10px' : 'unset' }"
   >
     <div class="note-title" :title="note.title">{{ note.title }}</div>
@@ -88,8 +88,12 @@
     padding: 20px;
     box-sizing: border-box;
     cursor: pointer;
-    &:hover .checkBox {
-      visibility: visible;
+    &:hover {
+      .checkBox {
+        visibility: visible;
+      }
+      box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
+      border-color: #8b88f2;
     }
   }
 

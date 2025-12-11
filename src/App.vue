@@ -209,7 +209,7 @@
   watch(
     () => bookmark.isMobileDevice,
     (val) => {
-      console.log('val',val);
+      console.log('val', val);
       handleRouteChange(val, router.currentRoute.value.path);
       setTransition(val);
     },

@@ -19,16 +19,16 @@
         <div class="user-icon-text" :style="{ color: bookmark.iconColor }">
           <div class="flex-align-center" style="gap: 10px"
             ><b>{{
-              user.userName ? user.alias || gt('personCenter.defaultNickname') : gt('personCenter.pleaseLogin')
+              user.userName ? user.alias || t('personCenter.defaultNickname') : t('personCenter.pleaseLogin')
             }}</b>
             <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
           </div>
           <div style="display: flex; gap: 20px; font-size: 12px">
             <span
-              >{{ gt('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
+              >{{ t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
             >
             <span
-              >{{ gt('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
+              >{{ t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
             >
           </div>
         </div>
@@ -63,12 +63,12 @@
             class="flex-center li"
             v-click-log="{
               module: '个人中心',
-              operation: user.role === 'visitor' ? '登录/注册' : gt('personCenter.logout'),
+              operation: user.role === 'visitor' ? '登录/注册' : t('personCenter.logout'),
             }"
             @click="handleExitLogin"
           >
             <svg-icon size="14" :src="icon.user_exit" />
-            {{ user.role === 'visitor' ? gt('personCenter.loginRegister') : gt('personCenter.logout') }}
+            {{ user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.logout') }}
           </div>
         </div>
       </div>
@@ -91,8 +91,9 @@
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import Opinions from '@/components/personCenter/opinions/Opinions.vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const getPopupContainer = (trigger: HTMLElement) => {
     return document.getElementById('tag-container');
@@ -115,25 +116,25 @@
   const options = ref<menuItemInterface[]>([
     {
       name: 'admin',
-      label: gt('personCenter.admin'),
+      label: t('personCenter.admin'),
       path: '/admin',
       role: 'root',
       icon: icon.user_admin,
     },
     {
       name: 'help',
-      label: gt('personCenter.help'),
+      label: t('personCenter.help'),
       path: '/help',
       icon: icon.help_document,
     },
     {
       name: 'operationLog',
-      label: gt('personCenter.feedback'),
+      label: t('personCenter.feedback'),
       icon: icon.userCenter.operationLog,
     },
     {
       name: 'updateLogs',
-      label: gt('personCenter.changelog'),
+      label: t('personCenter.changelog'),
       path: '/updateLogs',
       icon: icon.userCenter.log,
       version: '4.0',
@@ -163,7 +164,7 @@
       router.push(menuItem.path);
     } else {
       switch (menuItem.label) {
-        case gt('personCenter.feedback'):
+        case t('personCenter.feedback'):
           opinionsVisible.value = true;
           break;
         default:
@@ -208,12 +209,12 @@
 
   const ThemeName = computed(() => {
     if (bookmark.theme === 'night') {
-      return gt('navigation.dark');
+      return t('navigation.dark');
     }
     if (bookmark.theme === 'day') {
-      return gt('navigation.day');
+      return t('navigation.day');
     }
-    return gt('navigation.followSystem');
+    return t('navigation.followSystem');
   });
 
   function zoomImage() {

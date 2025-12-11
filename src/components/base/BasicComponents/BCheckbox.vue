@@ -24,7 +24,7 @@
 <script lang="ts" setup>
   const isCheck = defineModel('isCheck');
 
-  const props = withDefaults(defineProps<{ type: 'normal' | 'circle' }>(), {
+  const props = withDefaults(defineProps<{ type?: 'normal' | 'circle' }>(), {
     type: 'normal',
   });
   const emit = defineEmits(['change']);

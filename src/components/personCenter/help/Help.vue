@@ -2,7 +2,7 @@
   <div class="help-container">
     <b-input
       v-model:value="searchValue"
-      placeholder="请搜索问题"
+      :placeholder="t('help.searchPlaceholder')"
       style="width: 30%; margin: 0 auto; position: fixed; top: 15px; transform: translateX(-50%); left: 50%"
       id="ref2"
     >
@@ -17,14 +17,14 @@
         style="position: relative; top: 10px"
         @click="checkId = ''"
         v-click-log="{ module: '帮助中心', operation: `导览` }"
-        >帮助中心</div
+        >{{ t('help.title') }}</div
       >
       <div v-if="!bookmark.isMobileDevice" :style="{ width: '180px' }">
         <div
           class="help-title"
           @click="((checkId = ''), (node = helpInfo))"
           v-click-log="{ module: '帮助中心', operation: `导览` }"
-          >帮助中心</div
+          >{{ t('help.title') }}</div
         >
         <BList style="font-size: 12px" :listOptions="viewOptions" @nodeClick="logItem" :check-id="checkId">
           <template #icon>
@@ -64,19 +64,13 @@
         :contenteditable="user.role === 'root'"
       >
       </div>
-      <b-button
-        v-if="user.role === 'root' && node.id"
-        style="position: absolute; right: 10px; top: 10px"
-        type="primary"
-        @click="updateHelp"
-        >更新</b-button
-      >
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
   import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import BList from '@/components/base/BasicComponents/BList.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -87,31 +81,13 @@
 
   import '@wangeditor/editor/dist/css/style.css';
   import { listOptions } from '@/config/helpCfg.ts';
+  const { t } = useI18n();
   const user = useUserStore();
-  const helpInfo = {
-    content: `
-<div class="help-document-intro">
-    <h2>Welcome to Help Center</h2>
-    <p>Hello! Thank you for using 【Light Note】.
-    <p>Light Note is a cloud-based bookmark management tool designed specifically for efficiency enthusiasts, with smart tags at its core, helping you instantly archive web pages, notes, and inspiration snippets. Through a dynamically associated tag network, it enables cross-device instant search, multi-dimensional classification, and intelligent recommendation of bookmarks/notes, making knowledge management as easy and fun as browsing social feeds.</p>
-    This help documentation aims to provide you with detailed usage guides and answers to common questions, helping you use this platform more efficiently. Here, you can find detailed introductions about the following aspects:</p>
-    <ul>
-      <li><strong>Account Management</strong>: How to register, log in, recover passwords, and modify personal information.</li>
-      <li><strong>Function Operations</strong>: Operation steps and precautions for various platform functions.</li>
-      <li><strong>Frequently Asked Questions</strong>: Solutions to problems users may encounter during use.</li>
-    </ul>
-    <p>To better assist you, please search for the content you need to understand using the left directory or search box. In addition, our website supports <b>multi-device adaptation</b>, whether you are on PC, mobile phone, or tablet, you can enjoy a consistent excellent experience.</p>
-    <p>
-    If you encounter any problems during use, please provide your valuable suggestions through feedback. You can also contact me through the following methods:</p>
-    <div>
-      Email: <a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
-    </div>
-    <p>Although the project was established not long ago, I guarantee that the quality is excellent, and considerable effort has been put into the details, ensuring you'll be satisfied with the experience! In the future, I will continue to upgrade it, such as adding bookmark export/import, bookmark sharing, bookmark synchronization and backup, team collaboration, AI analysis, and other features, making bookmark management more flexible and convenient. Please look forward to it - more practical features are on the way, guaranteeing to take your bookmark management experience to the next level!
-    </p><p>Thank you for your understanding and support!</p>
-  </div>`,
-  };
+  const helpInfo = computed(() => ({
+    content: t('help.introContent'),
+  }));
 
-  const node = ref(helpInfo);
+  const node = ref(helpInfo.value);
 
   const bookmark = bookmarkStore();
   const checkId = ref('');

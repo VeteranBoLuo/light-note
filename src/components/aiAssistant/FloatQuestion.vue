@@ -8,15 +8,15 @@
           <div class="header-content">
             <div class="title-section">
               <div class="ai-icon">🤖</div>
-              <h3>{{ gt('ai.title') }}</h3>
+              <h3>{{ t('ai.title') }}</h3>
               <span class="status-dot"></span>
             </div>
             <div class="header-actions">
               <!-- 最小化按钮改为清空对话 -->
-              <button class="action-btn minimize" @click="clearConversation" title="新的对话">
+              <button class="action-btn minimize" @click="clearConversation" :title="t('ai.newConversation')">
                 <span>➕</span>
               </button>
-              <button class="action-btn close-btn" @click="minimize" title="关闭">
+              <button class="action-btn close-btn" @click="minimize" :title="t('ai.close')">
                 <span>❌</span>
               </button>
             </div>
@@ -63,7 +63,9 @@
   import { ref, onMounted, onUnmounted, computed } from 'vue';
   import ChatContainer from '@/view/aiAssistant/ChatContainer.vue';
   import { message } from 'ant-design-vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
+
+  const { t } = useI18n();
 
   // 状态管理
   const isOpen = ref(false);
@@ -107,7 +109,7 @@
     // 调用AiAssistant组件的清空方法
     if (aiAssistantRef.value && aiAssistantRef.value.clearHistory) {
       aiAssistantRef.value.clearHistory();
-      message.success(gt('ai.newChart'));
+      message.success(t('ai.newChart'));
     }
   };
 

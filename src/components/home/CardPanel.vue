@@ -30,8 +30,9 @@
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import { recordOperation } from '@/api/commonApi.ts';
-  import {gt} from "@/utils/global.ts";
+  import { useI18n } from 'vue-i18n';
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
 
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
@@ -39,7 +40,7 @@
 
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签${item.name}` });
-    if (type === gt('common.edit')) {
+    if (type === t('common.edit')) {
       router.push({ path: `/manage/editBookmark/${item.id}` });
     } else {
       Alert.alert({

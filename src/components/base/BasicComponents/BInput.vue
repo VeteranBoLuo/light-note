@@ -13,7 +13,7 @@
         paddingRight: hasSuffixSlot ? '30px' : '11px',
       }"
       :autocomplete="autocomplete"
-      :placeholder="placeholder"
+      :placeholder="computedPlaceholder"
       @focus="$emit('focus')"
       @focusout="$emit('focusout')"
     />
@@ -49,7 +49,9 @@
 
 <script setup lang="ts">
   import { useSlots, computed, Ref } from 'vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
+
+  const { t } = useI18n();
 
   const props = withDefaults(
     defineProps<{
@@ -64,7 +66,7 @@
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),
-      placeholder: gt('placeholder.input'),
+      placeholder: '',
       type: 'text',
       autocomplete: 'off',
       height: '32px',
@@ -87,6 +89,11 @@
   // 计算属性来判断是否有内容传递给 suffix 插槽
   const hasSuffixSlot = computed(() => {
     return !!slots.suffix;
+  });
+
+  // 计算属性来处理 placeholder，默认使用国际化文本
+  const computedPlaceholder = computed(() => {
+    return props.placeholder || t('placeholder.input');
   });
 
   function handleInput(event) {

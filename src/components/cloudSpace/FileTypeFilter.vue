@@ -30,8 +30,9 @@
   import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
   import { cloudSpaceStore } from '@/store';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   // 文件类型定义
   interface FileTypeOption {
     value: string;
@@ -39,13 +40,13 @@
   }
   // 文件类型选项
   const fileTypes = ref<FileTypeOption[]>([
-    { value: 'image', label: gt('cloudSpace.image') },
-    { value: 'pdf', label: gt('cloudSpace.pdf') },
-    { value: 'word', label: gt('cloudSpace.word') },
-    { value: 'excel', label: gt('cloudSpace.excel') },
-    { value: 'audio', label: gt('cloudSpace.audio') },
-    { value: 'video', label: gt('cloudSpace.video') },
-    { value: 'other', label: gt('cloudSpace.other') },
+    { value: 'image', label: t('cloudSpace.image') },
+    { value: 'pdf', label: t('cloudSpace.pdf') },
+    { value: 'word', label: t('cloudSpace.word') },
+    { value: 'excel', label: t('cloudSpace.excel') },
+    { value: 'audio', label: t('cloudSpace.audio') },
+    { value: 'video', label: t('cloudSpace.video') },
+    { value: 'other', label: t('cloudSpace.other') },
   ]);
   const cloud = cloudSpaceStore();
   // 响应式数据

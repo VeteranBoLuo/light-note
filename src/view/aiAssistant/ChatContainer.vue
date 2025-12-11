@@ -7,7 +7,14 @@
         <div v-for="(message, index) in messages" :key="index" class="message" :class="message.role">
           <div class="message-content">
             <div class="avatar" :class="message.role">
-              <img v-if="message.role !== 'user'" src="/favicon.svg" title="首页" width="25" height="25" alt="" />
+              <img
+                v-if="message.role !== 'user'"
+                src="/favicon.svg"
+                :title="t('ai.homeTitle')"
+                width="25"
+                height="25"
+                alt=""
+              />
               <div
                 class="navigation-icon"
                 style="
@@ -48,7 +55,7 @@
             v-model="userInput"
             @keydown.enter.exact.prevent="sendMessage"
             @keydown.shift.enter="handleNewLine"
-            placeholder="输入您的问题..."
+            :placeholder="t('ai.inputPlaceholder')"
             :disabled="isLoading"
             rows="1"
             ref="textInput"
@@ -63,11 +70,11 @@
               class="send-btn"
               :class="{ stop: isLoading }"
             >
-              {{ isLoading ? '暂停' : '发送' }}
+              {{ isLoading ? t('ai.pause') : t('ai.send') }}
             </button>
           </div>
         </div>
-        <div v-if="!bookmark.isMobileDevice" class="input-hint">按 Enter 发送，Shift + Enter 换行</div>
+        <div v-if="!bookmark.isMobileDevice" class="input-hint">{{ t('ai.inputHint') }}</div>
       </footer>
     </div>
   </div>
@@ -87,7 +94,9 @@
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
-  import { gt } from '@/utils/global.ts';
+  import { useI18n } from 'vue-i18n';
+
+  const { t } = useI18n();
 
   defineExpose({
     clearHistory,
@@ -145,7 +154,7 @@
     messages.value = [
       {
         role: 'assistant',
-        content: gt('ai.greeting'),
+        content: t('ai.greeting'),
         timestamp: new Date(),
       },
     ];
@@ -232,7 +241,7 @@
     messages.value = [
       {
         role: 'assistant',
-        content: gt('ai.greeting'),
+        content: t('ai.greeting'),
         timestamp: new Date(),
       },
     ];
@@ -556,11 +565,11 @@
           typingTimer = null;
         }
         if (messages.value[currentMessageIndex]) {
-          messages.value[currentMessageIndex].content += '（响应已暂停）';
+          messages.value[currentMessageIndex].content += t('ai.responsePaused');
         }
       } else {
         console.error('请求失败:', error);
-        messages.value[currentMessageIndex].content = '抱歉，暂时无法回应，请稍后重试';
+        messages.value[currentMessageIndex].content = t('ai.errorMessage');
       }
     } finally {
       // 清理资源

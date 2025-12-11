@@ -33,7 +33,6 @@
     "jspdf": "^3.0.1",
     "lodash-es": "^4.17.21",
     "marked": "^17.0.1",
-    "mysql": "^2.18.1",
     "partial-json": "^0.1.7",
     "pinia": "^2.1.7",
     "typescript": "^5.7.2",

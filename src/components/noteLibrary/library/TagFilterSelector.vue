@@ -13,10 +13,12 @@
     </b-button>
     <template #overlay>
       <div class="filter-container">
-        <div class="filter-item" @click.stop="viewNote('all')" :isFocus="tag === undefined ? true : false"
-          >全部笔记</div
-        >
-        <div class="filter-item" @click.stop="viewNote('null')" :isFocus="tag === 'null'">无标签笔记</div>
+        <div class="filter-item" @click.stop="viewNote('all')" :isFocus="tag === undefined ? true : false">{{
+          $t('note.allNote')
+        }}</div>
+        <div class="filter-item" @click.stop="viewNote('null')" :isFocus="tag === 'null'">{{
+          t('note.noTagNote')
+        }}</div>
         <div style="width: 100%; height: 1px; background: #f0f0f0; flex-shrink: 0"></div>
         <div
           :title="item"
@@ -33,6 +35,8 @@
 </template>
 
 <script lang="ts" setup>
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -51,10 +55,10 @@
 
   const viewNoteFilter = computed(() => {
     if (tag.value === undefined) {
-      return '全部笔记';
+      return t('note.allNote');
     }
     if (tag.value === 'null') {
-      return '无标签笔记';
+      return t('note.noTagNote');
     }
     return tag.value;
   });
@@ -69,6 +73,7 @@
     } else {
       router.push(`/noteLibrary?tag=${tag}`);
     }
+    filterVisible.value = false;
   }
 </script>
 
@@ -104,7 +109,8 @@
     box-sizing: border-box;
     border-radius: 8px;
     width: 100%;
-    height: 36px;
+    height: 30px;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     cursor: pointer;

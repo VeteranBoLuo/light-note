@@ -5,7 +5,7 @@
       <div class="header-content">
         <div class="title-section">
           <div class="ai-icon">🤖</div>
-          <h3>{{ gt('ai.title') }}</h3>
+          <h3>{{ t('ai.title') }}</h3>
           <span class="status-dot"></span>
         </div>
         <div class="flex-justify-center-gap">
@@ -20,7 +20,7 @@
       </div>
     </div>
     <!-- 内容区域 -->
-      <ChatContainer class="help-container-body" ref="aiAssistantRef" />
+    <ChatContainer class="help-container-body" ref="aiAssistantRef" />
     <!-- 底部装饰 -->
     <div class="modal-footer">
       <div class="footer-wave"></div>
@@ -34,11 +34,11 @@
   import { bookmarkStore } from '@/store';
   import Help from '@/components/personCenter/help/Help.vue';
   import ChatContainer from '@/view/aiAssistant/ChatContainer.vue';
-  import { gt } from '@/utils/global.ts';
   import { ref } from 'vue';
   import { message } from 'ant-design-vue';
-  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import { useI18n } from 'vue-i18n';
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
   const aiAssistantRef = ref(null);
 
   // 新增：清空对话方法
@@ -46,7 +46,7 @@
     // 调用AiAssistant组件的清空方法
     if (aiAssistantRef.value && aiAssistantRef.value.clearHistory) {
       aiAssistantRef.value.clearHistory();
-      message.success(gt('ai.newChart'));
+      message.success(t('ai.newChart'));
     }
   };
 </script>
