@@ -22,7 +22,7 @@
         <div style="text-align: center">
           <div>{{ $t('home.allCard') }}</div>
           <div style="margin-top: 10px">
-            <template v-if="bookmark.local === 'zh-CN'">
+            <template v-if="bookmark.locale === 'zh-CN'">
               已收录 {{ user.tagTotal }} 个标签，共 {{ user.bookmarkTotal }} 个书签
             </template>
             <template v-else>
