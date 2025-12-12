@@ -18,8 +18,8 @@
         <slot name="footer" v-if="showFooter">
           <div class="modal-footer">
             <b-space>
-              <b-button type="primary" @click="$emit('ok')">确定</b-button>
-              <b-button @click="handleClose">取消</b-button>
+              <b-button type="primary" @click="$emit('ok')">{{ t('common.confirm') }}</b-button>
+              <b-button @click="handleClose">{{ t('common.cancel') }}</b-button>
             </b-space>
           </div>
         </slot>
@@ -31,7 +31,9 @@
 <script lang="ts" setup>
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, useAttrs, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const props = withDefaults(
     defineProps<{
       title: string;

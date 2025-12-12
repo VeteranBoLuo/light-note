@@ -61,3 +61,20 @@ export async function deleteField(id: number | string) {
   await apiBasePost('/api/file/deleteFileById', { id });
   message.success('删除成功');
 }
+
+// 分享文件
+export async function shareField(id: number | string, fileName?: string, fileType?: string) {
+  try {
+    // 生成分享页面链接，通过前端页面处理下载
+    const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
+    const encodedFileType = fileType ? encodeURIComponent(fileType) : '';
+    const shareUrl = `${window.location.origin}/#/share/${id}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}`;
+    await navigator.clipboard.writeText(shareUrl);
+    message.success('分享链接已复制到剪贴板');
+    return shareUrl;
+  } catch (error) {
+    console.error('分享失败:', error);
+    message.error('生成分享链接失败');
+    throw error;
+  }
+}

@@ -1,5 +1,5 @@
 <template>
-  <CommonContainer title="编辑资料">
+  <CommonContainer :title="t('myInfo.title')">
     <div class="home-container">
       <div style="width: 100%" class="flex-justify-center">
         <div class="user_icon" @click="uploadImg" v-click-log="{ module: '我的信息', operation: `上传头像` }">
@@ -9,18 +9,18 @@
       <div class="home-user-body">
         <div class="flex-align-center" style="gap: 20px">
           <div class="flex-justify-center" style="gap: 20px">
-            <span class="user-item-label">角色</span>
+            <span class="user-item-label">{{ t('myInfo.role') }}</span>
             <span style="color: #8f9096">{{ getRoleName() }}</span>
           </div>
         </div>
         <div class="user-item">
-          <span class="user-item-label">昵称</span>
-          <b-input style="width: 100%" v-model:value="userData.alias" placeholder="请输入昵称" />
+          <span class="user-item-label">{{ t('myInfo.nickname') }}</span>
+          <b-input style="width: 100%" v-model:value="userData.alias" :placeholder="t('myInfo.enterNickname')" />
         </div>
 
         <div class="user-item">
-          <span class="user-item-label">邮箱</span>
-          <b-input v-model:value="userData.email" placeholder="请输入邮箱" />
+          <span class="user-item-label">{{ t('myInfo.email') }}</span>
+          <b-input v-model:value="userData.email" :placeholder="t('myInfo.enterEmail')" />
         </div>
       </div>
     </div>
@@ -29,7 +29,7 @@
       type="primary"
       @click="saveUserInfo"
       v-click-log="{ module: '我的信息', operation: `保存` }"
-      >保存</b-button
+      >{{ t('myInfo.save') }}</b-button
     >
   </CommonContainer>
 </template>
@@ -45,11 +45,13 @@
   import { cloneDeep } from 'lodash-es';
   import icon from '@/config/icon.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import { useI18n } from 'vue-i18n';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const visible = <Ref<boolean>>defineModel('visible');
 
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
   function uploadImg() {
     const input = document.createElement('input');
     input.type = 'file';
@@ -61,7 +63,7 @@
         // 检查文件大小是否超过5M
         const maxFileSize = 5000 * 1024;
         if (file.size > maxFileSize) {
-          message.warning('图片大小不能超过5MB');
+          message.warning(t('myInfo.imageSizeLimit'));
           return; // 如果文件过大，终止函数执行
         }
         const reader = new FileReader(); // 创建FileReader对象
@@ -80,11 +82,11 @@
 
   function saveUserInfo() {
     if (!['admin', 'root'].includes(user.role)) {
-      message.warn('请登录');
+      message.warn(t('myInfo.pleaseLogin'));
       return;
     }
     if (userData.value.email && !validateEmail(userData.value.email)) {
-      message.warning('请输入正确的邮箱格式');
+      message.warning(t('myInfo.invalidEmail'));
       return;
     }
     userApi
@@ -96,7 +98,7 @@
       })
       .then(async (res) => {
         if (res.status === 200) {
-          message.success('保存成功');
+          message.success(t('myInfo.saveSuccess'));
           const userPromise = await userApi.getUserInfoById({ id: localStorage.getItem('userId') });
           user.setUserInfo(userPromise.data);
           visible.value = false;
@@ -114,11 +116,11 @@
 
   function getRoleName() {
     const roleNames = {
-      admin: '管理员',
-      visitor: '游客',
-      root: '超级管理员',
+      admin: t('myInfo.admin'),
+      visitor: t('myInfo.visitor'),
+      root: t('myInfo.root'),
     };
-    return roleNames[user.role] || '未知角色';
+    return roleNames[user.role] || t('myInfo.unknownRole');
   }
   const userData = ref(cloneDeep(user));
   headPicture.value = cloneDeep(user.headPicture);
@@ -170,7 +172,7 @@
     overflow: hidden;
     position: relative;
     &:hover::after {
-      content: '上传头像'; /* 定义伪元素的内容 */
+      content: ''; /* 移除硬编码文本 */
       position: absolute; /* 绝对定位，相对于.preview-div定位 */
       top: 0;
       left: 0;

@@ -174,7 +174,6 @@
 
   // 处理换行
   const handleNewLine = () => {
-    userInput.value += '\n';
     nextTick(adjustTextareaHeight);
   };
 

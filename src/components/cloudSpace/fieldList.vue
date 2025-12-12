@@ -53,19 +53,27 @@
                 @click="downloadField(item.id)"
               />
             </a-tooltip>
-            <a-tooltip :title="$t('cloudSpace.moveFile')" v-if="!bookmark.isMobileDevice">
+            <a-tooltip :title="$t('cloudSpace.share')">
               <svg-icon
                 class="download-icon"
-                :src="icon.cloudSpace.moveFile"
+                :src="icon.cloudSpace.share"
                 size="20"
-                @click="emit('moveField', item)"
+                @click="handleShareFile(item.id, item.fileName, item.fileType)"
               />
+            </a-tooltip>
+            <!-- 删除按钮 -->
+            <a-tooltip :title="$t('common.delete')">
+              <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item.id)" />
             </a-tooltip>
             <b-menu
               :trigger="'click'"
               :menu-options="[
-                { label: $t('common.delete'), icon: icon.noteDetail.delete, function: () => handleDelFile(item.id) },
                 { label: $t('common.reName'), icon: icon.filterPanel.list, function: () => handleReName(item) },
+                {
+                  label: $t('cloudSpace.moveFile'),
+                  icon: icon.cloudSpace.moveFile,
+                  function: () => emit('moveField', item),
+                },
               ]"
             >
               <svg-icon class="download-icon" :src="icon.common.more" size="20" />
@@ -90,7 +98,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import icon from '@/config/icon.ts';
-  import { deleteField, downloadField } from '@/http/common.ts';
+  import { deleteField, downloadField, shareField } from '@/http/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { nextTick, ref } from 'vue';
   import { cloneDeep } from 'lodash-es';
@@ -137,6 +145,14 @@
         });
       },
     });
+  }
+
+  async function handleShareFile(id, fileName, fileType) {
+    try {
+      await shareField(id, fileName, fileType);
+    } catch (error) {
+      // 错误已在 shareField 中处理
+    }
   }
   const originalName = ref('');
   function handleReName(file) {

@@ -16,9 +16,7 @@ export interface EndCondition {
 export function checkEndCondition(conditions: EndCondition[]): boolean {
   for (const condition of conditions) {
     // 支持函数或布尔值
-    const isEnd = typeof condition.endCondition === 'function'
-      ? condition.endCondition()
-      : condition.endCondition;
+    const isEnd = typeof condition.endCondition === 'function' ? condition.endCondition() : condition.endCondition;
 
     if (isEnd) {
       if (condition.message) {

@@ -51,6 +51,11 @@ const routes: RouteRecordRaw[] = [
     name: 'githubCallBack',
     component: () => import('@/view/auth/callback/GithubCallBack.vue'),
   },
+  {
+    path: '/share/:id/:fileName?/:fileType?',
+    name: 'shareDownload',
+    component: () => import('@/view/share/ShareDownload.vue'),
+  },
 ];
 
 // 创建路由实例

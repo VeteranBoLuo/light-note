@@ -2,7 +2,7 @@
   <b-modal
     :mask-closable="false"
     v-model:visible="visible"
-    :title="user.password ? '修改密码' : '设置密码'"
+    :title="user.password ? t('myInfo.changePassword') : t('myInfo.setPassword')"
     @ok="submit"
   >
     <div class="password-cfg-container">
@@ -17,11 +17,13 @@
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
-  import { checkEndCondition, endCondition } from '@/utils/validator.ts';
+  import { checkEndCondition, EndCondition } from '@/utils/validator.ts';
+  import { useI18n } from 'vue-i18n';
   const user = useUserStore();
   const visible = defineModel('visible');
+  const { t } = useI18n();
   const type = computed(() => {
-    return user.password ? '修改密码' : '设置密码';
+    return user.password ? t('myInfo.changePassword') : t('myInfo.setPassword');
   });
 
   const formData = ref<{ type?: string; password: string; confirmPassword: string; oldPassword?: string }>({
@@ -30,20 +32,20 @@
   });
 
   const formFields: any = computed(() => {
-    if (type.value === '修改密码') {
+    if (type.value === t('myInfo.changePassword')) {
       return [
         {
-          label: '原密码',
+          label: t('myInfo.oldPassword'),
           name: 'oldPassword',
           required: true,
         },
         {
-          label: '新密码',
+          label: t('myInfo.newPassword'),
           name: 'password',
           required: true,
         },
         {
-          label: '确认新密码',
+          label: t('myInfo.confirmNewPassword'),
           name: 'confirmPassword',
           required: true,
         },
@@ -51,12 +53,12 @@
     }
     return [
       {
-        label: '密码',
+        label: t('myInfo.password'),
         name: 'password',
         required: true,
       },
       {
-        label: '确认新密码',
+        label: t('myInfo.confirmPassword'),
         name: 'confirmPassword',
         required: true,
       },
@@ -65,36 +67,36 @@
   const passCfgRef = ref(null);
   function submit() {
     const isPass = passCfgRef.value?.validateForm();
-    let condition: endCondition[] = [];
+    let condition: EndCondition[] = [];
     if (isPass) {
-      if (type.value === '设置密码') {
+      if (type.value === t('myInfo.setPassword')) {
         condition = [
           {
             endCondition: formData.value.password !== formData.value.confirmPassword,
-            message: '两次密码输入不一致',
+            message: t('myInfo.passwordMismatch'),
           },
           {
             endCondition: formData.value.password.length > 12,
-            message: '密码长度不能大于12位',
+            message: t('myInfo.passwordTooLong'),
           },
           {
             endCondition: formData.value.password.length < 6,
-            message: '密码长度不能小于6位',
+            message: t('myInfo.passwordTooShort'),
           },
         ];
       } else {
         condition = [
           {
-            endCondition: formData.value.oldPassword !== formData.value.confirmPassword,
-            message: '两次密码输入不一致',
+            endCondition: formData.value.password !== formData.value.confirmPassword,
+            message: t('myInfo.passwordMismatch'),
           },
           {
             endCondition: formData.value.password.length > 16,
-            message: '新密码长度不能大于16位',
+            message: t('myInfo.newPasswordTooLong'),
           },
           {
             endCondition: formData.value.password.length < 6,
-            message: '新密码长度不能小于6位',
+            message: t('myInfo.newPasswordTooShort'),
           },
         ];
       }
@@ -105,7 +107,11 @@
       apiBasePost('/api/user/configPassword', formData.value).then((res) => {
         if (res.status === 200) {
           user.password = formData.value.password;
-          message.success(type.value + '成功');
+          message.success(
+            type.value === t('myInfo.changePassword')
+              ? t('myInfo.changePasswordSuccess')
+              : t('myInfo.setPasswordSuccess'),
+          );
           visible.value = false;
           formData.value = { confirmPassword: '', password: '' };
         }
