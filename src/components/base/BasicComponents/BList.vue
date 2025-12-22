@@ -10,7 +10,16 @@
         height: hasInputSlot ? 'calc(100% - 40px)' : 'calc(100% - 10px)',
       }"
     >
-      <VueDraggable :disabled="!draggable" :animation="200" ref="el" v-model="dragList" @end="onEnd" :handle="handle">
+      <VueDraggable
+        :disabled="!draggable"
+        :animation="200"
+        ref="el"
+        v-model="dragList"
+        @end="onEnd"
+        :handle="handle"
+        :scroll-sensitivity="scrollSensitivity"
+        :forceFallback="forceFallback"
+      >
         <div :key="item[nodeType.id]" v-for="item in listOptions" @click="nodeClick(item)">
           <slot name="item" :item="item">
             <div
@@ -60,7 +69,9 @@
       placeholder?: string;
       searchFilter?: boolean; // 启动自带input过滤功能
       draggable?: boolean;
-      handle?:string
+      handle?: string;
+      scrollSensitivity?: number;
+      forceFallback?: boolean;
     }>(),
     {
       nodeType: () => ({
@@ -71,6 +82,7 @@
       checkId: '',
       searchFilter: false,
       draggable: false,
+      forceFallback: false,
     },
   );
   const bookmark = bookmarkStore();

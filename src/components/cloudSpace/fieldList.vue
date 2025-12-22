@@ -19,12 +19,6 @@
         >
           <span
             v-if="!item.isRename"
-            :style="{
-              cursor:
-                !bookmark.isMobileDevice && ['image', 'pdf', 'video'].some((type) => item.fileType.includes(type))
-                  ? 'pointer'
-                  : 'unset',
-            }"
             class="file-label text-hidden"
             @click="emit('previewFile', item)"
             >{{ item.fileName }}</span
@@ -209,6 +203,7 @@
   }
   .file-label {
     width: calc(100% - 120px);
+    cursor: pointer;
   }
   .default-area {
     display: flex;

@@ -2,12 +2,13 @@
   <div class="filter-panel">
     <b-list
       :draggable="!bookmark.isMobileDevice"
-      :handle="'.tag-item-icon'"
       class="header-input"
       v-model:listOptions="filterTagList"
       v-model:dragList="bookmark.tagList"
       :node-type="{ id: 'id', title: 'name' }"
       @onEnd="onDragEnd"
+      force-fallback
+      :scroll-sensitivity="20"
     >
       <template #input>
         <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">

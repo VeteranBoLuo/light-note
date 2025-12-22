@@ -125,8 +125,9 @@ export default {
     errorInfo: '获取更新日志失败',
   },
   ai: {
-    title: '轻笺智能助手',
-    greeting: '您好！我是轻笺助手，专为效率控设计的书签管理专家。有什么问题需要我帮忙解答吗？',
+    title: '轻笺智域',
+    greeting:
+      '您好！我是轻笺智域，专为效率控设计的智能助手，具备强大的联网搜索和深度思考能力，能为您提供全面而精准的解答。有什么问题需要我帮忙吗？',
     newChart: '已开始新的对话',
     howToCreateBookmark: '如何创建一个书签？',
     cloudSpaceUsage: '云空间模块有什么用？',

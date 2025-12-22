@@ -29,7 +29,21 @@
                 <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
               </div>
             </div>
-            <div class="bubble" v-if="message.content">
+            <div class="bubble" v-if="message.content || (message.thoughts && message.thoughts.length)">
+              <!-- 深度思考过程 -->
+              <div v-if="message.thoughts && message.thoughts.length" class="thoughts">
+                <div class="thoughts-header">{{
+                  message.thinkingText && hasAnswerStarted ? '思考完毕' : '深度思考中...'
+                }}</div>
+                <div v-if="message.thoughts.some((t) => t.action_type === 'reasoning')" class="reasoning">
+                  <strong>思考：</strong>{{ message.thinkingDisplay || message.thinkingText || '' }}
+                </div>
+                <div v-for="(thought, index) in message.thoughts" :key="index" class="thought">
+                  <div v-if="thought.action_type === 'agentRag'" class="rag">
+                    <strong>知识检索</strong>
+                  </div>
+                </div>
+              </div>
               <!-- 修改：使用Markdown渲染 -->
               <div class="text" v-html="formatMessage(message)"></div>
               <div class="time">{{ formatTime(message.timestamp) }}</div>
@@ -63,6 +77,19 @@
             @input="adjustTextareaHeight"
           ></textarea>
           <div class="input-actions">
+            <button
+              class="search-btn"
+              @click="toggleInternetSearch"
+              :class="{ active: useInternetSearch }"
+              title="联网搜索"
+            >
+              <svg-icon size="14" :src="icon.ai.internet" />
+              联网搜索
+            </button>
+            <button class="search-btn" @click="toggleThinking" :class="{ active: enableThinking }" title="深度思考">
+              <svg-icon size="14" :src="icon.ai.thinking" />
+              深度思考
+            </button>
             <button
               @click="isLoading ? stopResponse() : sendMessage()"
               v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
@@ -109,6 +136,9 @@
     role: 'user' | 'assistant';
     content: string;
     timestamp: Date;
+    thoughts?: any[];
+    thinkingText?: string; // 当前消息完整的思考过程文本
+    thinkingDisplay?: string; // 当前消息用于展示的思考文本（打字机效果）
   }
 
   // 响应式数据
@@ -117,6 +147,8 @@
   const isLoading = ref(false);
   const messagesContainer = ref<HTMLElement | null>(null);
   const textInput = ref<HTMLTextAreaElement | null>(null);
+  const useInternetSearch = ref(false);
+  const enableThinking = ref(false);
 
   // 智能滚动相关状态 - 简化状态管理
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
@@ -131,6 +163,15 @@
   // 流式输出控制
   const abortController = ref<AbortController | null>(null);
   let currentMessageIndex = -1;
+
+  // 当前这一轮对话是否已经开始输出答案正文
+  const hasAnswerStarted = ref(false);
+
+  // 打字机速度（毫秒/字符）
+  const TYPING_SPEED = 10;
+
+  // 思考打字机状态（仅作用于当前回答消息）
+  let thinkingTyping = false;
 
   // 推荐提示
 
@@ -148,6 +189,49 @@
     });
   };
 
+  // 启动当前消息的思考打字机（按字符逐步将 thinkingText 显示到 thinkingDisplay）
+  const startThinkingTypewriter = () => {
+    if (thinkingTyping) return;
+
+    thinkingTyping = true;
+
+    const run = async () => {
+      while (true) {
+        const msg = currentMessageIndex >= 0 ? messages.value[currentMessageIndex] : null;
+        if (!msg) break;
+
+        const full = msg.thinkingText || '';
+        const shown = msg.thinkingDisplay || '';
+
+        // 一旦答案正文开始输出，立即结束思考打字效果，直接展示最终思考内容
+        if (hasAnswerStarted.value) {
+          msg.thinkingDisplay = full;
+          break;
+        }
+
+        // 已全部展示或已停止加载时，直接同步并结束
+        if (!isLoading.value || shown.length >= full.length) {
+          msg.thinkingDisplay = full;
+          break;
+        }
+
+        msg.thinkingDisplay = shown + full.charAt(shown.length);
+
+        // 思考打字时，如果未被用户干预且允许自动滚动，则跟随到底部
+        if (autoScrollEnabled.value && !userHasInterrupted.value) {
+          await nextTick();
+          scrollToBottom('smooth');
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, TYPING_SPEED));
+      }
+
+      thinkingTyping = false;
+    };
+
+    run();
+  };
+
   // 初始化
   onMounted(() => {
     configureMarkdownParser();
@@ -156,6 +240,7 @@
         role: 'assistant',
         content: t('ai.greeting'),
         timestamp: new Date(),
+        thoughts: [],
       },
     ];
     adjustTextareaHeight();
@@ -175,6 +260,16 @@
   // 处理换行
   const handleNewLine = () => {
     nextTick(adjustTextareaHeight);
+  };
+
+  // 切换联网搜索
+  const toggleInternetSearch = () => {
+    useInternetSearch.value = !useInternetSearch.value;
+  };
+
+  // 切换深度思考
+  const toggleThinking = () => {
+    enableThinking.value = !enableThinking.value;
   };
 
   // 消息格式化函数
@@ -242,6 +337,7 @@
         role: 'assistant',
         content: t('ai.greeting'),
         timestamp: new Date(),
+        thoughts: [],
       },
     ];
     showRecommendation.value = true;
@@ -337,6 +433,13 @@
   // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
     showRecommendation.value = false;
+    // 每次开始新的提问时，重置自动滚动状态，确保本轮对话自动跟随到底部
+    autoScrollEnabled.value = true;
+    userHasInterrupted.value = false;
+    showScrollToBottom.value = false;
+    // 重置当前轮消息的思考状态，仅影响新创建的AI消息
+    hasAnswerStarted.value = false;
+    thinkingTyping = false;
     const inputText = userInput.value.trim();
     if (!inputText || isLoading.value) return;
 
@@ -353,6 +456,9 @@
       role: 'assistant',
       content: '',
       timestamp: new Date(),
+      thoughts: [],
+      thinkingText: '',
+      thinkingDisplay: '',
     };
     messages.value.push(aiMessage);
     currentMessageIndex = messages.value.length - 1;
@@ -376,7 +482,6 @@
     let typingTimer: number | null = null;
     let typewriterQueue: string[] = []; // 打字队列
     let isTyping = false; // 是否正在打字
-    const TYPING_SPEED = 10; // 打字速度（毫秒/字符）
 
     // 打字机效果函数[6,7](@ref)
     const startTypewriter = async () => {
@@ -411,7 +516,6 @@
 
       isTyping = false;
     };
-
     // 处理新内容的函数
     const handleNewContent = (content: string) => {
       if (!content) return;
@@ -435,6 +539,8 @@
           message: inputText,
           stream: true,
           sessionId: sessionId,
+          useInternetSearch: useInternetSearch.value, // 是否开启联网搜索
+          enableThinking: enableThinking.value, // 是否开启深度思考
         }),
         signal: abortController.value.signal,
       });
@@ -496,6 +602,25 @@
               if (content && typeof content === 'string') {
                 // 使用新的内容处理函数
                 handleNewContent(content);
+                // 一旦答案开始输出，标记并停止后续思考流
+                hasAnswerStarted.value = true;
+              }
+
+              // 只有在答案尚未开始输出时，才继续流式展示思考过程
+              if (!hasAnswerStarted.value && data.output?.thoughts && Array.isArray(data.output.thoughts)) {
+                const currentMsg = messages.value[currentMessageIndex];
+                if (currentMsg) {
+                  currentMsg.thoughts = data.output.thoughts;
+                  // 取本次推送中的 reasoning 片段，按顺序直接追加到完整思考文本
+                  const reasoningParts = data.output.thoughts
+                    .filter((t) => t.action_type === 'reasoning' && (t.thought || t.response))
+                    .map((t) => (t.thought || t.response) as string);
+                  if (reasoningParts.length) {
+                    currentMsg.thinkingText = (currentMsg.thinkingText || '') + reasoningParts.join('');
+                    // 触发/继续思考打字机，仅作用于当前消息
+                    startThinkingTypewriter();
+                  }
+                }
               }
 
               if (data.output?.session_id) {
@@ -522,6 +647,20 @@
                 const content = data.output?.text || data.text || data.content || '';
                 if (content) {
                   handleNewContent(content);
+                }
+                // 缓冲区尾部同样遵循：答案一旦开始，就不再追加思考流
+                if (!hasAnswerStarted.value && data.output?.thoughts && Array.isArray(data.output.thoughts)) {
+                  const currentMsg = messages.value[currentMessageIndex];
+                  if (currentMsg) {
+                    currentMsg.thoughts = data.output.thoughts;
+                    const reasoningParts = data.output.thoughts
+                      .filter((t) => t.action_type === 'reasoning' && (t.thought || t.response))
+                      .map((t) => (t.thought || t.response) as string);
+                    if (reasoningParts.length) {
+                      currentMsg.thinkingText = (currentMsg.thinkingText || '') + reasoningParts.join('');
+                      startThinkingTypewriter();
+                    }
+                  }
                 }
               } catch (e) {
                 console.warn('最终数据解析失败:', dataStr);
@@ -665,7 +804,7 @@
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    max-width: 70%;
+    max-width: 90%;
   }
 
   .message.user .message-content {
@@ -704,6 +843,9 @@
 
   .message.assistant .bubble {
     border-bottom-left-radius: 0.25rem;
+    /* 在深色模式下给 AI 回答一个更深、更对比清晰的背景 */
+    background: color-mix(in srgb, var(--menu-container-bg-color) 80%, #000 20%);
+    color: var(--text-color);
   }
 
   .text {
@@ -858,18 +1000,21 @@
   }
 
   .input-container {
-    display: flex;
-    gap: 0.75rem;
-    align-items: flex-end;
+    position: relative;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    background-color: var(--menu-container-bg-color);
+    padding: 0.75rem 0.75rem 2rem 0.75rem;
+    min-height: 60px;
   }
 
   .text-input {
-    flex: 1;
-    border: 1px solid #d1d5db;
+    width: 100%;
+    height: 100%;
+    min-height: 40px;
+    border: none;
+    background: transparent;
     color: var(--text-color);
-    background-color: var(--menu-container-bg-color);
-    border-radius: 0.75rem;
-    padding: 0.75rem 1rem;
     font-size: 1rem;
     line-height: 1.5;
     resize: none;
@@ -880,7 +1025,7 @@
   }
 
   .text-input:focus {
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    box-shadow: none;
   }
 
   .text-input::placeholder {
@@ -888,24 +1033,55 @@
   }
 
   .input-actions {
+    position: absolute;
+    bottom: 0.75rem;
+    right: 0.75rem;
     display: flex;
     gap: 0.5rem;
+    align-items: center;
+  }
+
+  .search-btn {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .search-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  .search-btn.active {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  .search-btn.active:hover {
+    background: #4f46e5;
   }
 
   .send-btn {
-    padding: 0.75rem 1.5rem;
+    padding: 0.25rem 0.75rem;
     border: none;
-    border-radius: 0.75rem;
-    background: #3b82f6;
+    border-radius: 0.5rem;
+    background: var(--primary-color);
     color: white;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.2s;
-    min-width: 80px;
+    min-width: 50px;
   }
 
   .send-btn:hover:not(:disabled) {
-    background: #2563eb;
+    background: #4f46e5;
   }
   .send-btn.stop {
     background: #dc2626;
@@ -993,6 +1169,44 @@
       bottom: 80px;
       right: 15px;
     }
+  }
+
+  /* 深度思考样式 */
+  .thoughts {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    line-height: 1.4;
+    /* 夜间主题下使用更深的背景以提高对比度，白天主题保持浅色 */
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 0.5rem;
+    border-left: 3px solid var(--primary-color);
+  }
+
+  .thoughts-header {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+  }
+
+  .thought {
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  .reasoning {
+    /* 夜间主题下使用高对比白色，白天主题使用深色以确保可读性 */
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.85rem;
+  }
+
+  .rag {
+    color: #007bff;
+  }
+
+  .observation {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #888;
   }
 
   @media (max-width: 480px) {

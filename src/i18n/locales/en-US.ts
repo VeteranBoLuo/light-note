@@ -127,9 +127,9 @@ export default {
     errorInfo: 'Failed to get update logs',
   },
   ai: {
-    title: 'LightNote AI Assistant',
+    title: 'Light Note Wisdom Realm',
     greeting:
-      'Hello! I am LightNote Assistant, a bookmark management expert designed for efficiency enthusiasts. Is there any question I can help you with?',
+      'Hello! I am Light Note Wisdom Realm, an intelligent assistant designed for efficiency enthusiasts, equipped with powerful web search and deep thinking capabilities to provide comprehensive and accurate answers. Is there anything I can help you with?',
     newChart: 'A new conversation has begun',
     howToCreateBookmark: 'How to create a bookmark?',
     cloudSpaceUsage: 'What is the cloud space module used for?',

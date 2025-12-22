@@ -4,9 +4,9 @@
     :disabled="bookmark.isMobileDevice"
     ref="el"
     v-model="bookmark.bookmarkList"
-    handle=".card-img-container"
     class="card-panel"
     id="card-panel"
+    @start="onDragStart"
     @end="onEnd"
     :scroll-sensitivity="50"
     :forceFallback="true"
@@ -59,8 +59,12 @@
       });
     }
   }
+  const onDragStart = () => {
+    document.body.classList.add('drag-active');
+  };
 
   async function onEnd() {
+    document.body.classList.remove('drag-active');
     try {
       const sortedTags =
         bookmark.bookmarkList.map((bookmark: any, index: number) => ({
