@@ -34,7 +34,8 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import icon from '@/config/icon.ts';
-  import {OPERATION_LOG_MAP} from "@/config/logMap.ts";
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { backRouterPage } from '@/utils/common';
 
   const props = defineProps({
     title: {
@@ -65,7 +66,7 @@
         return data.name.toLowerCase().includes(searchValue.value.toLowerCase());
       });
     } else {
-      return props.listData
+      return props.listData;
     }
   });
 </script>

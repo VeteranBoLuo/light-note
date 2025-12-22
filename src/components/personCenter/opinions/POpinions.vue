@@ -108,6 +108,7 @@
   import router from '@/router';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { backRouterPage } from '@/utils/common';
 
   const bookmark = bookmarkStore();
   const activeTab = ref('反馈类型');

@@ -56,7 +56,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
-  import { debounce } from '@/utils/common';
+  import { backRouterPage, debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';

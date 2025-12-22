@@ -46,6 +46,7 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { listOptions } from '@/config/helpCfg.ts';
   import { apiBasePost } from '@/http/request.ts';
+  import { backRouterPage } from '@/utils/common';
 
   const bookmark = bookmarkStore();
   const checkId = ref('');

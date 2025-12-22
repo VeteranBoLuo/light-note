@@ -46,6 +46,7 @@
   import icon from '@/config/icon.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { useI18n } from 'vue-i18n';
+  import { backRouterPage } from '@/utils/common';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const visible = <Ref<boolean>>defineModel('visible');

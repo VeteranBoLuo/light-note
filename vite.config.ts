@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       drop: ['debugger'], // 构建时删除 debugger
     },
     build: {
-      outDir: 'dist',
+      outDir: 'D:\\nginx-1.24.0\\html\\dist',
       sourcemap: false, // 默认就是false
     },
 

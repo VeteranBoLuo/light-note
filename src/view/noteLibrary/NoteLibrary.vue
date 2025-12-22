@@ -3,7 +3,7 @@
     <div class="note-library-container">
       <div class="note-library-header" v-if="bookmark.isMobileDevice">
         <div class="header-content">
-          <div class="back-icon" @click="back">
+          <div class="back-icon" @click="backRouterPage">
             <SvgIcon :src="icon.noteDetail.back" />
           </div>
           <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
@@ -16,12 +16,14 @@
             @click="router.push('/noteLibrary/add')"
             v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
           >
-            + {{$t('note.newNote')}}
+            + {{ $t('note.newNote') }}
           </b-button>
         </div>
       </div>
       <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
-        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{ $t('note.title') }}</div>
+        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{
+          $t('note.title')
+        }}</div>
         <div class="handle-btn-group">
           <template v-if="hasCheck">
             <span class="deleteText" @click="batchDeleteNote" v-click-log="OPERATION_LOG_MAP.noteLibrary.deleteNote"
@@ -50,7 +52,7 @@
               @click="router.push('/noteLibrary/add')"
               v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
             >
-              + {{$t('note.newNote')}}
+              + {{ $t('note.newNote') }}
             </b-button>
           </template>
         </div>
@@ -74,7 +76,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
@@ -85,6 +87,7 @@
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { backRouterPage } from '@/utils/common';
   const bookmark = bookmarkStore();
   const noteList = ref([]);
   const loading = ref(false);
@@ -141,14 +144,6 @@
   }
 
   const allTags = ref([]);
-
-  function back() {
-    if (bookmark.isMobileDevice) {
-      router.push('/personCenter');
-    } else {
-      router.back();
-    }
-  }
 
   const hasCheck = computed(() => {
     return viewNoteList.value.some((data) => data.isCheck === true);

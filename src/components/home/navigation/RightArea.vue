@@ -54,7 +54,11 @@
       v-if="!bookmark.isMobileDevice"
       :menu-options="[
         { label: $t('navigation.newTag'), icon: icon.common.add, function: () => router.push('/manage/editTag/add') },
-        { label: $t('navigation.tagManagement'), icon: icon.filterPanel.list, function: () => router.push('/manage/tagMg') },
+        {
+          label: $t('navigation.tagManagement'),
+          icon: icon.filterPanel.list,
+          function: () => router.push('/manage/tagMg'),
+        },
       ]"
     >
       <svg-icon size="26" hover :src="icon.manage_categoryBtn_tag"
@@ -86,7 +90,10 @@
     >
       <svg-icon size="26" :src="getThemeIcon()" hover
     /></b-menu>
-    <b-menu placement="bottom" :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }]">
+    <b-menu
+      placement="bottom"
+      :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }]"
+    >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
     </b-menu>
     <lang-switch />

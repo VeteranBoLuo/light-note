@@ -28,3 +28,4 @@ build/
 *.sln
 *.sw?
 .vscode/extensions.json
+components.d.ts

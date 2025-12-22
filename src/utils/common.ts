@@ -1,6 +1,7 @@
 // noinspection JSUnusedGlobalSymbols
 
 import { Ref } from 'vue';
+import bookmark from '@/store/bookmark';
 
 export const copyTextToClipboard = function (text) {
   // 检查浏览器是否支持Clipboard API
@@ -30,10 +31,7 @@ export const copyTextToClipboard = function (text) {
  * @param delay 延迟时间（毫秒）
  * @returns 防抖后的函数
  */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  delay: number
-): (...args: Parameters<T>) => void {
+export function debounce<T extends (...args: any[]) => any>(func: T, delay: number): (...args: Parameters<T>) => void {
   let timeoutId: number | null = null;
 
   return (...args: Parameters<T>) => {
@@ -46,18 +44,18 @@ export function debounce<T extends (...args: any[]) => any>(
     }, delay);
   };
 }
- // 节流函数：限制函数调用频率
+// 节流函数：限制函数调用频率
 export function throttle(func: Function, delay: number) {
-    let timeoutId: number | null = null;
-    return (...args: any[]) => {
-      if (timeoutId === null) {
-        func(...args);
-        timeoutId = setTimeout(() => {
-          timeoutId = null;
-        }, delay);
-      }
-    };
-  }
+  let timeoutId: number | null = null;
+  return (...args: any[]) => {
+    if (timeoutId === null) {
+      func(...args);
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+      }, delay);
+    }
+  };
+}
 
 // 获取浏览器类型
 export function getBrowserType() {
@@ -226,4 +224,14 @@ export function closeOpenWindow(className: string, flag: Ref<boolean>, remove?: 
 
 export function openPage(url, newPage: boolean = true) {
   window.open(url, newPage ? '_blank' : '_self');
+}
+
+import router from '@/router';
+
+export function backRouterPage() {
+  if (bookmark().isMobileDevice) {
+    router.push('/personCenter');
+  } else {
+    router.back();
+  }
 }

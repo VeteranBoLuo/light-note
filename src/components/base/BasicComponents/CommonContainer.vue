@@ -22,11 +22,11 @@
 </template>
 
 <script lang="ts" setup>
-  import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import { getCurrentInstance } from 'vue';
+  import { backRouterPage } from '@/utils/common';
   const bookmark = bookmarkStore();
   const props = defineProps({
     title: {
@@ -46,7 +46,7 @@
       emit('backClick');
     } else {
       // 否则执行默认行为
-      router.back();
+      backRouterPage();
     }
   }
 </script>

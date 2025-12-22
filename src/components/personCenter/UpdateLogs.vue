@@ -14,7 +14,7 @@
               <template v-if="item.hideIndex">
                 <span v-html="li"></span>
               </template>
-              <template v-else> {{ index + 1 }}、<span v-html="li"></span></template>
+              <template v-else> {{ (index as number) + 1 }}、<span v-html="li"></span></template>
             </p>
           </div>
         </a-timeline-item>
@@ -75,6 +75,7 @@
   import { linter } from '@codemirror/lint';
   import { oneDark } from '@codemirror/theme-one-dark';
   import { useI18n } from 'vue-i18n';
+  import { backRouterPage } from '@/utils/common';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
