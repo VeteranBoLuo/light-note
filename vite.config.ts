@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       drop: ['debugger'], // 构建时删除 debugger
     },
     build: {
-      outDir: 'dist',// D:\nginx-1.24.0\html\dist
+      outDir: 'dist', // D:\nginx-1.24.0\html\dist
       sourcemap: false, // 默认就是false
     },
 
@@ -44,14 +44,13 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api':
-          env.VITE_ENV === 'local'
+          env.VITE_ENV === 'local1'
             ? {
                 target: 'http://127.0.0.1:9001',
                 changeOrigin: true,
                 rewrite: (path: string) => path.replace(/^\/api/, ''),
               }
-            :
-            {
+            : {
                 target: 'https://boluo66.top',
                 changeOrigin: true,
                 secure: false,

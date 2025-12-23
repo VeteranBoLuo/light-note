@@ -33,8 +33,8 @@
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
         </div>
       </a-tooltip>
-      <a-tooltip title="导出为PDF">
-        <div class="note-header-title-icon" @click="exportToPDF" v-click-log="OPERATION_LOG_MAP.note.exportPdf">
+      <a-tooltip title="导出">
+        <div class="note-header-title-icon" @click="openExportModal" v-click-log="OPERATION_LOG_MAP.note.exportPdf">
           <SvgIcon :src="icon.noteDetail.export" />
         </div>
       </a-tooltip>
@@ -50,7 +50,13 @@
       </a-tooltip>
     </div>
     <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="$emit('saveTag')" />
-    <b-loading :loading="loading" class="both-center" title="生成PDF中" />
+    <ActionCardModal
+      v-model:visible="exportModalVisible"
+      title="导出笔记"
+      width="620px"
+      :sections="exportSections"
+      note="请选择要导出的格式，系统将自动转换并下载文件"
+    />
   </div>
 </template>
 
@@ -64,6 +70,8 @@
   import { generatePDF } from '@/utils/htmlToPdf.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import TurndownService from 'turndown';
+  import ActionCardModal from '@/components/base/ActionCardModal.vue';
 
   const props = defineProps<{
     updateTime: string;
@@ -74,6 +82,32 @@
   }>();
 
   const bookmark = bookmarkStore();
+
+  const turndownService = new TurndownService({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+  });
+
+  const downloadFile = (fileName: string, content: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const escapeHtml = (str: string) => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
 
   function back() {
     // 处于保存中的状态时，延迟300ms跳转，避免同时进行保存和跳转导致的异常情况
@@ -98,20 +132,88 @@
     tagConfDlgVisible.value = true;
   }
 
-  const loading = ref(false);
+  const exportModalVisible = ref(false);
+  const openExportModal = () => {
+    exportModalVisible.value = true;
+  };
+
   const exportToPDF = async () => {
     Alert.alert({
       title: '提示',
       content: `请确认是否导出为PDF？`,
       async onOk() {
-        loading.value = true;
+        exportModalVisible.value = false;
         await generatePDF(props.note.title, '.w-e-text-container [data-slate-editor]');
-        loading.value = false;
       },
     });
   };
-</script>
 
+  const exportToHTML = async () => {
+    Alert.alert({
+      title: '提示',
+      content: `请确认是否导出为HTML？`,
+      async onOk() {
+        exportModalVisible.value = false;
+        const title = props.note.title || '未命名文档';
+        const safeFileName = `${title}.html`;
+        const body = props.note.content || '';
+        const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8" /><title>${escapeHtml(
+          title,
+        )}</title></head><body>${body}</body></html>`;
+        downloadFile(safeFileName, html, 'text/html;charset=utf-8');
+      },
+    });
+  };
+
+  const exportToMarkdown = async () => {
+    Alert.alert({
+      title: '提示',
+      content: `请确认是否导出为Markdown？`,
+      async onOk() {
+        exportModalVisible.value = false;
+        const title = props.note.title || '未命名文档';
+        const safeFileName = `${title}.md`;
+        const body = props.note.content || '';
+        let markdownBody = '';
+        try {
+          markdownBody = turndownService.turndown(body);
+        } catch (e) {
+          console.error('HTML 转 Markdown 失败:', e);
+          markdownBody = body;
+        }
+        const markdown = `# ${title}\n\n${markdownBody}`;
+        downloadFile(safeFileName, markdown, 'text/markdown;charset=utf-8');
+      },
+    });
+  };
+
+  const exportSections = [
+    {
+      key: 'export',
+      title: '',
+      actions: [
+        {
+          key: 'pdf',
+          label: '导出为PDF',
+          description: '将笔记导出为PDF格式',
+          onClick: exportToPDF,
+        },
+        {
+          key: 'html',
+          label: '导出为HTML',
+          description: '将笔记导出为HTML格式',
+          onClick: exportToHTML,
+        },
+        {
+          key: 'markdown',
+          label: '导出为Markdown',
+          description: '将笔记导出为Markdown格式',
+          onClick: exportToMarkdown,
+        },
+      ],
+    },
+  ];
+</script>
 <style lang="less">
   .note-header {
     display: flex;
