@@ -98,59 +98,13 @@
         @change="handleHTMLFileChange"
       />
 
-      <!-- 导入导出模态框 -->
-      <b-modal
+      <ActionCardModal
         v-model:visible="importExportModalVisible"
-        :maskClosable="false"
         :title="$t('bookmarkMg.importExport')"
-        width="700px"
-      >
-        <div class="import-export-modal">
-          <div class="modal-content">
-            <div class="section export-section">
-              <div class="section-header">
-                <h3>{{ $t('bookmarkMg.exportSection') }}</h3>
-              </div>
-              <div class="cards-grid">
-                <div class="action-card" @click="exportBookmark">
-                  <div class="card-content">
-                    <h4>{{ $t('bookmarkMg.exportExcel') }}</h4>
-                    <p>{{ $t('bookmarkMg.exportExcelDesc') }}</p>
-                  </div>
-                </div>
-                <div class="action-card" @click="exportBookmarksHTML">
-                  <div class="card-content">
-                    <h4>{{ $t('bookmarkMg.exportHTML') }}</h4>
-                    <p>{{ $t('bookmarkMg.exportHTMLDesc') }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="section import-section">
-              <div class="section-header">
-                <h3>{{ $t('bookmarkMg.importSection') }}</h3>
-              </div>
-              <div class="cards-grid">
-                <div class="action-card" @click="handleImport">
-                  <div class="card-content">
-                    <h4>{{ $t('bookmarkMg.importExcel') }}</h4>
-                    <p>{{ $t('bookmarkMg.importExcelDesc') }}</p>
-                  </div>
-                </div>
-                <div class="action-card" @click="handleImportHTML">
-                  <div class="card-content">
-                    <h4>{{ $t('bookmarkMg.importHTML') }}</h4>
-                    <p>{{ $t('bookmarkMg.importHTMLDesc') }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="note-section">
-            <p>{{ $t('bookmarkMg.exportNote') }}</p>
-          </div>
-        </div>
-      </b-modal>
+        width="600px"
+        :sections="importExportSections"
+        :note="$t('bookmarkMg.exportNote')"
+      />
     </div>
   </b-loading>
 </template>
@@ -168,21 +122,63 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import ActionCardModal from '@/components/base/ActionCardModal.vue';
+  import { useI18n } from 'vue-i18n';
+  import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
 
   const visible = defineModel<boolean>('visible');
   const user = useUserStore();
+  const { t } = useI18n();
 
   const bookmark = bookmarkStore();
   const loading = ref(false);
-  const selectedRows = ref([]);
+  const selectedRows = ref<string[]>([]);
   const importExportModalVisible = ref(false);
-  const handleSelectionChange = (selected) => {
+  const handleSelectionChange = (selected: string[]) => {
     selectedRows.value = selected;
   };
   const showImportExportModal = () => {
     importExportModalVisible.value = true;
   };
+
+  const importExportSections = computed(() => [
+    {
+      key: 'export',
+      title: t('bookmarkMg.exportSection'),
+      actions: [
+        {
+          key: 'exportExcel',
+          label: t('bookmarkMg.exportExcel'),
+          description: t('bookmarkMg.exportExcelDesc'),
+          onClick: exportBookmark,
+        },
+        {
+          key: 'exportHTML',
+          label: t('bookmarkMg.exportHTML'),
+          description: t('bookmarkMg.exportHTMLDesc'),
+          onClick: exportBookmarksHTML,
+        },
+      ],
+    },
+    {
+      key: 'import',
+      title: t('bookmarkMg.importSection'),
+      actions: [
+        {
+          key: 'importExcel',
+          label: t('bookmarkMg.importExcel'),
+          description: t('bookmarkMg.importExcelDesc'),
+          onClick: handleImport,
+        },
+        {
+          key: 'importHTML',
+          label: t('bookmarkMg.importHTML'),
+          description: t('bookmarkMg.importHTMLDesc'),
+          onClick: handleImportHTML,
+        },
+      ],
+    },
+  ]);
 
   const handleBatchDelete = () => {
     if (selectedRows.value.length === 0) {
@@ -207,7 +203,7 @@
           let failedCount = 0;
           const failedItems = [];
 
-          results.forEach((result, index) => {
+          results.forEach((result: any, index) => {
             if (result.status === 'fulfilled' && result.value.status === 200) {
               successCount++;
             } else {
@@ -276,7 +272,7 @@
     router.push({ path: `/manage/editBookmark/${id}` });
   };
 
-  function handleDeleteTag(bookmark) {
+  function handleDeleteTag(bookmark: BookmarkInterface) {
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除书签【${bookmark.name}】？`,
@@ -304,7 +300,7 @@
   const tableSearchValue = ref('');
   const bookmarkList = computed(() => {
     if (tableSearchValue.value) {
-      return tableData.value.filter((data: any) => {
+      return tableData.value.filter((data: BookmarkInterface) => {
         return data.name.toLowerCase().includes(tableSearchValue.value.toLowerCase());
       });
     } else {
@@ -330,7 +326,7 @@
     }
 
     // 随便声明一个结果
-    const exportData = bookmarksToExport?.map((item: any) => {
+    const exportData = bookmarksToExport?.map((item: BookmarkInterface) => {
       return {
         书签名: item.name,
         网址: item.url,
@@ -429,7 +425,7 @@
     loading.value = false;
   }
 
-  function getIcon(bookmark) {
+  function getIcon(bookmark: BookmarkInterface) {
     if (bookmark.iconUrl) {
       return bookmark.iconUrl;
     } else {
@@ -495,7 +491,7 @@
 
         const requests = bookmarksToImport.map((bookmark) => apiBasePost('/api/bookmark/addBookmark', bookmark));
 
-        const results = await Promise.allSettled(requests);
+        const results: any = await Promise.allSettled(requests);
         results.forEach((result, index) => {
           if (result.status === 'fulfilled' && result.value.status === 200) {
             successCount++;
@@ -667,7 +663,7 @@
   };
 
   init();
-  const tableData = ref([{}]);
+  const tableData = ref<BookmarkInterface[]>([]);
   async function init() {
     loading.value = true;
     const allRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
@@ -678,7 +674,7 @@
     });
     if (allRes.status === 200) {
       tableData.value = cloneDeep(allRes.data.items);
-      tableData.value.forEach((bookmark: any) => {
+      tableData.value.forEach((bookmark: BookmarkInterface) => {
         bookmark.iconUrl = getIcon(bookmark);
       });
       loading.value = false;
@@ -728,99 +724,6 @@
     }
     .table-search-input {
       width: calc(100% - 145px);
-    }
-  }
-
-  .import-export-modal {
-    .modal-content {
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-      width: 600px;
-    }
-
-    .section {
-      .section-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 16px;
-
-        h3 {
-          margin: 0;
-          color: var(--text-color);
-          font-size: 18px;
-          font-weight: 600;
-        }
-      }
-
-      .cards-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
-
-      .action-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 16px;
-        background-color: var(--menu-item-bg-color);
-        border: 1px solid var(--menu-item-h-bg-color);
-        border-radius: 12px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        &:hover {
-          background-color: var(--menu-item-h-bg-color);
-          border-color: var(--primary-color);
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
-        .card-icon {
-          flex-shrink: 0;
-          color: var(--primary-color);
-        }
-
-        .card-content {
-          h4 {
-            margin: 0 0 4px 0;
-            color: var(--text-color);
-            font-size: 16px;
-            font-weight: 500;
-          }
-
-          p {
-            margin: 0;
-            color: var(--desc-color);
-            font-size: 14px;
-          }
-        }
-      }
-    }
-
-    .note-section {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      margin-top: 24px;
-      padding: 12px;
-      background-color: var(--menu-item-h-bg-color);
-      border-radius: 8px;
-      border-left: 4px solid var(--primary-color);
-
-      .note-icon {
-        flex-shrink: 0;
-        color: var(--primary-color);
-        margin-top: 2px;
-      }
-
-      p {
-        margin: 0;
-        color: var(--desc-color);
-        font-size: 14px;
-        line-height: 1.5;
-      }
     }
   }
 </style>

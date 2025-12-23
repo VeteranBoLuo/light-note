@@ -9,6 +9,16 @@ export interface TagInterface {
   [key: string]: any;
 }
 
+export interface BookmarkInterface {
+  id: string;
+  name: string;
+  url: string;
+  description?: string;
+  tagList?: TagInterface[];
+  iconUrl?: string;
+  [key: string]: any;
+}
+
 export type BaseOptions = {
   label: string;
   value: any;
