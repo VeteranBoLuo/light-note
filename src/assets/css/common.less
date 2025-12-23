@@ -1,0 +1,305 @@
+/*-------------------------IOS样式Start--------------------------*/
+* {
+  // 移动端点击时的背景设置。这个属性只适用于ios
+  -webkit-tap-highlight-color: transparent;
+}
+/*--------------------------IOS样式End-----------------------------*/
+
+/*滚动条轨道样式*/
+::-webkit-scrollbar-track {
+  background-color: rgb(0 0 0 / 5%);
+}
+
+/*滚动条滑动块样式*/
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-color);
+  border-radius: 2px;
+  box-shadow: inset 0 0 6px rgb(0 0 0 / 20%);
+}
+
+:root {
+  --primary-color: #615ced;
+  --primary-text: #fe2c55;
+  --primary-h-color: #3b82f6;
+  font-family: '微软雅黑', sans-serif;
+  pre {
+    font-family: inherit;
+  }
+}
+
+.element-primary {
+  background-color: #33343f;
+  color: #fff8e8;
+}
+
+.flex-align-center {
+  display: flex;
+  align-items: center;
+}
+.flex-align-center-gap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.flex-justify-center {
+  display: flex;
+  justify-content: center;
+}
+.flex-justify-center-gap {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flex-center-gap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.dom-hover {
+  cursor: pointer;
+}
+.dom-hover-click {
+  cursor: pointer;
+  &:hover {
+    color: #5c82ff !important;
+  }
+}
+
+a {
+  font-weight: 500;
+  color: #5c82ff;
+  text-decoration: inherit;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+.card {
+  padding: 2em;
+}
+
+.common-tag {
+  font-size: 12px;
+  color: var(--desc-color);
+  border-radius: 30px;
+  background-color: var(--common-tag-bg-color);
+  padding: 0.25rem 0.75rem;
+  line-height: 1rem;
+  box-sizing: border-box;
+  width: max-content;
+  &:hover {
+    color: var(--common-tag-h-color);
+  }
+}
+
+.text-hidden {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.col-center {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.both-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.category-item {
+  margin: 5px 0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 10px;
+
+  &:hover {
+    background-color: var(--category-item-ba-color);
+  }
+}
+
+.menu-item {
+  background-color: var(--menu-body-bg-color);
+  &:hover {
+    background-color: var(--menu-item-h-bg-color) !important;
+  }
+}
+// AntDesign组件
+
+/*--------------------------a-select下拉框配置----------------------*/
+.ant-select-selector {
+  color: var(--text-color) !important;
+  .ant-select-selection-item {
+    background-color: var(--ant-select-selection-item-bg-color) !important;
+  }
+  .anticon-close {
+    color: var(--ant-select-selection-item-anticon-close-color) !important;
+  }
+  border: none !important;
+  box-shadow: none !important;
+  background: var(--bl-input-noBorder-bg-color) !important;
+  &:hover {
+    background: var(--bl-input-noBorder-hover-bg-color) !important;
+  }
+  &:focus-visible {
+    background: var(--bl-input-noBorder-hover-bg-color) !important;
+  }
+}
+// 选择器下拉菜单背景颜色
+.ant-select-dropdown {
+  background-color: var(--ant-select-dropdown-bg-color) !important;
+}
+.ant-select-item-option-content {
+  color: var(--text-night-color);
+}
+.ant-select-item-option {
+  margin-bottom: 2px;
+  transition: none !important;
+  &:hover {
+    background-color: var(--ant-select-item-option-selected-bg-colot) !important;
+    color: #ffffff;
+  }
+}
+.ant-select-item-option-selected {
+  background-color: var(--ant-select-item-option-selected-bg-colot) !important;
+
+  color: white !important;
+}
+.anticon-close-circle {
+  background-color: unset;
+  color: var(--text-color);
+}
+// 穿梭框
+.ant-transfer-list {
+  border: none !important;
+  box-shadow: none !important;
+  background: var(--bl-input-noBorder-bg-color) !important;
+}
+.ant-transfer-list-header {
+  background: var(--bl-input-noBorder-bg-color) !important;
+}
+.ant-transfer-operation {
+  gap: 10px;
+}
+.ant-transfer-list-body-search-wrapper {
+  .ant-input-affix-wrapper {
+    border: none !important;
+  }
+}
+.ant-transfer-list-body-not-found {
+  color: var(--desc-color) !important;
+}
+
+.ant-input::placeholder {
+  color: #7d7d7d;
+}
+.ant-table-container {
+  box-shadow: var(--ant-table-boxShadow);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ant-table-wrapper .ant-table {
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+.ant-table-cell-ellipsis {
+  background-color: var(--background-color) !important;
+  color: var(--text-color) !important;
+}
+.ant-table-cell-scrollbar {
+  background-color: unset !important;
+  display: none;
+}
+.ant-table-cell {
+  &:hover {
+    background-color: unset !important;
+  }
+}
+.ant-table-wrapper .ant-table-thead > tr > th {
+  transition: none !important;
+}
+.ant-table-wrapper .ant-table-tbody > tr > td {
+  transition: none !important;
+}
+.ant-input-affix-wrapper-focused {
+  border: 1px solid var(--bl-input-border-h-color) !important;
+  box-shadow: 0 0 0 2px rgba(92, 90, 86, 0.1);
+}
+
+.ant-pagination .ant-pagination-options {
+  display: unset;
+}
+
+.ant-tooltip .ant-tooltip-inner {
+  padding: 10px;
+  box-sizing: border-box;
+  width: max-content;
+}
+
+.ant-timeline-item-content {
+  color: var(--text-color);
+}
+.ant-select .ant-select-arrow {
+  color: var(--text-color);
+}
+.ant-select-single.ant-select-open .ant-select-selection-item {
+  color: var(--select-open-color);
+}
+.ant-table-wrapper .ant-table-thead > tr > th {
+  color: var(--text-color);
+}
+
+.ant-dropdown-menu {
+  background-color: var(--menu-body-bg-color) !important;
+}
+.ant-dropdown-menu-item {
+  color: var(--text-color) !important;
+  &:hover {
+    background-color: var(--menu-item-h-bg-color) !important;
+  }
+}
+.ant-select-item-option-state {
+  color: white!important;
+}
+
+/* 禁用文本选择 */
+.drag-active * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  cursor: grabbing!important;
+}

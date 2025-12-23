@@ -1,0 +1,87 @@
+{
+  "name": "componet-collection",
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build",
+    "preview": "vite preview",
+    "prettier:comment": "自动格式化当前目录下的所有文件",
+    "prettier": "prettier --write",
+    "sql": "node src/sql/index.ts",
+    "websocket": "node src/http/websocket.ts"
+  },
+  "dependencies": {
+    "@antv/g2plot": "^2.4.31",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lint": "^6.9.2",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@vue-office/docx": "^1.6.3",
+    "@vue-office/excel": "^1.7.14",
+    "@vue-office/pptx": "^1.0.1",
+    "@wangeditor/editor-for-vue": "^5.1.12",
+    "ant": "^0.2.0",
+    "ant-design-vue": "^4.0.8",
+    "axios": "^0.24.0",
+    "cheerio": "^1.0.0",
+    "codemirror": "^6.0.2",
+    "dayjs": "^1.11.11",
+    "design": "^0.1.0",
+    "dompurify": "^3.3.0",
+    "express": "^4.18.2",
+    "highlight.js": "^11.11.1",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "lodash-es": "^4.17.21",
+    "marked": "^17.0.1",
+    "partial-json": "^0.1.7",
+    "pinia": "^2.1.7",
+    "typescript": "^5.7.2",
+    "viewerjs": "^1.11.7",
+    "vue": "^3.4.15",
+    "vue-draggable-plus": "^0.6.0",
+    "vue-i18n": "9",
+    "vue-router": "^4.2.5",
+    "ws": "^8.17.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@iconify/vue": "^4.1.2",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^22.13.10",
+    "@types/vue": "^2.0.0",
+    "@vitejs/plugin-vue": "^4.5.2",
+    "@vitejs/plugin-vue-jsx": "^3.1.0",
+    "dotenv": "^16.4.7",
+    "less": "^4.2.0",
+    "prettier": "^3.1.1",
+    "rimraf": "^6.0.1",
+    "unplugin-auto-import": "^0.17.5",
+    "unplugin-vue-components": "^0.26.0",
+    "vite": "^5.0.8",
+    "vite-plugin-cdn-import": "^0.3.5",
+    "vite-plugin-compression": "^0.5.1",
+    "vue-tsc": "^1.8.25"
+  },
+  "eslintConfig": {
+    "root": true,
+    "env": {
+      "node": true
+    },
+    "extends": [
+      "plugin:vue/vue3-essential",
+      "@vue/typescript/recommended",
+      "plugin:prettier/recommended"
+    ],
+    "parserOptions": {
+      "ecmaVersion": 2020
+    },
+    "rules": {
+      "vue/multi-word-component-names": 0,
+      "quotes": 0,
+      "semi": 0,
+      "trailing-comma": 0,
+      "vue/html-self-closing": 0,
+      "prettier/prettier": 0
+    }
+  }
+}
