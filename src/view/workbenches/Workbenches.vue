@@ -1,49 +1,51 @@
 <template>
   <div class="workbenches-container">
-    <div style="display: flex; gap: 10px; height: 184px">
+    <div style="display: flex; gap: 10px; height: 350px">
       <div class="quick-jump-container card-container" style="flex: 0.5">
-        <div class="flex-align-center" style="justify-content: space-between">
-          <PlatformOverview />
-          <WorkBookmarkCard />
-        </div>
-        <div class="flex-align-center" style="justify-content: space-between">
-          <WorkNoteCard />
-          <WorkCloudSpaceCard />
-        </div>
+        <WorkTagCard />
+        <WorkBookmarkCard />
+        <WorkNoteCard />
+        <WorkCloudSpaceCard />
       </div>
-      <!--      <div class="flex-align-center-gap card-container" style="flex: 1">-->
-      <!--        <CommonFunctions />-->
-      <!--      </div>-->
+
       <div class="card-container" style="flex: 1">
-        <BeginnerGuide />
+        <CommonDataTable
+          :tableData="tableData"
+          :columns="[
+            {
+              title: '排名',
+              key: 'index',
+            },
+            {
+              title: '书签',
+              key: 'name',
+              width: '400px',
+            },
+            {
+              title: '访问次数',
+              key: 'count',
+            },
+          ]"
+        />
       </div>
     </div>
-    <div class="flex-align-center-gap" style="height: 305px; flex-shrink: 0">
-      <BookmarkDistribution :isReady="readyObj.tagReady" style="flex: 1" />
-      <NoteDistribution :isReady="readyObj.noteReady" style="flex: 1" />
+    <div class="card-container" style="height: 450px">
+      <CommonDataTable :tableData="userStatsData" :columns="userStatsColumns" title="用户统计" />
     </div>
-    <div class="flex-align-center-gap" style="height: 324px; flex: 1; flex-grow: 0">
-      <CommonDataTable :tableData="tableData" />
-      <UpdateLogList />
-    </div>
-    <div style="flex: 1" class="card-container flex-center"> 敬请期待... </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import BookmarkDistribution from '@/components/workbenches/BookmarkDistribution.vue';
-  import PlatformOverview from '@/components/workbenches/dataCard/WorkTagCard.vue';
+  import WorkTagCard from '@/components/workbenches/dataCard/WorkTagCard.vue';
   import WorkBookmarkCard from '@/components/workbenches/dataCard/WorkBookmarkCard.vue';
-  import { computed, onMounted, reactive, ref, watch } from 'vue';
+  import { onMounted, reactive, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import WorkNoteCard from '@/components/workbenches/dataCard/WorkNoteCard.vue';
   import WorkCloudSpaceCard from '@/components/workbenches/dataCard/WorkCloudSpaceCard.vue';
   import useUser from '@/store/useUser.ts';
-  import UpdateLogList from '@/components/workbenches/UpdateLogList.vue';
-  import BeginnerGuide from '@/components/workbenches/BeginnerGuide.vue';
-  import NoteDistribution from '@/components/workbenches/NoteDistribution.vue';
   import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
+  import { useRouter } from 'vue-router';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
@@ -53,13 +55,35 @@
     noteReady: false,
   });
   const tableData = ref([]);
+  const userStatsData = ref([]);
+  const userStatsColumns = ref([
+    { title: 'ID', key: 'id' },
+    { title: '别名', key: 'alias' },
+    { title: '邮箱', key: 'email' },
+    { title: '手机号', key: 'phoneNumber' },
+    { title: '注册时间', key: 'createTime' },
+    { title: '书签数', key: 'bookmarkTotal' },
+    { title: '笔记数', key: 'noteTotal' },
+    { title: '云空间使用量 (MB)', key: 'storageUsed' },
+  ]);
+
+  const router = useRouter();
   function init() {
+    if (user.role !== 'root') {
+      router.push('/');
+      return;
+    }
     readyObj.tagReady = false;
     readyObj.noteReady = false;
     fetchTagList();
     fetchBookmarkList();
     fetchNoteList();
     fetchCommonBookmarks();
+    apiBasePost('/api/user/getUserStats').then((res) => {
+      if (res.status === 200) {
+        userStatsData.value = res.data;
+      }
+    });
     cloud.queryFieldList();
   }
 
@@ -74,7 +98,7 @@
           readyObj.tagReady = true;
         }
       })
-       .catch(() => {});
+      .catch(() => {});
   }
 
   // 获取书签列表
@@ -113,7 +137,6 @@
         } else {
           tableData.value = [];
         }
-
       })
       .catch(() => {
         tableData.value = [];

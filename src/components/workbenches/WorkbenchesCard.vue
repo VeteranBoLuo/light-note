@@ -2,11 +2,11 @@
   <div class="workbenches-card">
     <div>
       <b>{{ title }}</b>
-      <div style="position: absolute; right: 10px;top: 10px">
+      <div style="position: absolute; right: 10px; top: 10px">
         <slot name="rightHeader" />
       </div>
     </div>
-    <div style="margin-top: 10px; flex: 1">
+    <div style="margin-top: 10px; flex: 1; height: 100%">
       <slot />
     </div>
   </div>

@@ -1,51 +1,67 @@
 <template>
-  <div style="height: 100%; box-sizing: border-box">
-    <b-space style="width: 100%">
-      <b-input v-model:value="searchValue" placeholder="文件名" class="log-search-input" @input="handleSearch">
-        <template #prefix>
-          <svg-icon :src="icon.navigation.search" size="16" />
-        </template>
-      </b-input>
-      <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
-      <b-button @click="clearApiImages" type="primary">清理</b-button>
-    </b-space>
-    <a-table
-      :data-source="allImg[imgType]"
-      :columns="imageColumns"
-      row-key="id"
-      style="margin-top: 5px"
-      :scroll="{ y: bookmark.screenHeight - 250 }"
-      :pagination="false"
-    >
-      <template #bodyCell="{ column, text, record }">
-        <template v-if="column.dataIndex === 'img'">
-          <div
-            style="
-              width: 40px;
-              height: 40px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              padding: 0.125rem;
-              background-color: rgb(255, 255, 255);
-              border-radius: 0.5rem;
-              flex-shrink: 0;
-            "
-            class="dom-hover"
-            @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
-          >
-            <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)"
-          /></div>
-        </template>
-      </template>
-    </a-table>
-    <p>
-      总计
-      <a>
-        {{ allImg?.[imgType]?.length ?? 0 }}
-      </a>
-      张图片
-    </p>
+  <div class="admin-panel-container">
+    <section class="admin-panel image-mg__panel">
+      <header class="admin-header image-mg__header">
+        <div class="admin-title-block">
+          <p class="admin-eyebrow">Admin / Media</p>
+          <h2 class="admin-title">图片管理</h2>
+          <p class="admin-subtitle">管理系统中的图片资源</p>
+        </div>
+      </header>
+
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label image-mg__stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value image-mg__stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint image-mg__stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
+      <div class="admin-filters">
+        <div class="admin-filters-main">
+          <b-input v-model:value="searchValue" placeholder="文件名" class="log-search-input" @input="handleSearch">
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="16" />
+            </template>
+          </b-input>
+          <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
+          <b-button @click="clearApiImages" type="primary">清理</b-button>
+        </div>
+        <span class="admin-filters-hint">支持文件名搜索 · 选择类型查看不同状态的图片</span>
+      </div>
+
+      <div class="admin-table-card">
+        <a-table
+          :data-source="allImg[imgType]"
+          :columns="imageColumns"
+          row-key="id"
+          :scroll="{ y: 420 }"
+          :pagination="false"
+        >
+          <template #bodyCell="{ column, text, record }">
+            <template v-if="column.dataIndex === 'img'">
+              <div
+                style="
+                  width: 40px;
+                  height: 40px;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 0.125rem;
+                  background-color: rgb(255, 255, 255);
+                  border-radius: 0.5rem;
+                  flex-shrink: 0;
+                "
+                class="dom-hover"
+                @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
+              >
+                <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -129,6 +145,17 @@
   const searchValue = ref('');
   const imgType = ref('usedImages');
   const allImg = ref({});
+  const statCards = computed(() => {
+    const totalValue = allImg.value?.[imgType.value]?.length ?? 0;
+    return [
+      {
+        label: '总图片数',
+        value: totalValue,
+        hint: '累计',
+      },
+    ];
+  });
+
   function searchApiImage() {
     apiBasePost('/api/common/getImages', { name: searchValue.value }).then((res) => {
       if (res.status === 200) {
@@ -145,48 +172,22 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-manage.less';
+
   .log-search-input {
-    width: 50%;
+    flex: 1;
   }
 
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
+  .image-mg__footer {
+    margin-top: 12px;
+    display: flex;
+    justify-content: center;
   }
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
-  :deep(.ant-select-dropdown-placement-topLeft) {
-    min-width: 100px !important;
-    transition: none !important;
-  }
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-    transition: none !important;
-  }
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-  /*--分页背景调色--*/
-  :deep(.ant-pagination) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item a) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item-active a) {
-    color: #4e4b46;
-  }
-  :deep(.ant-pagination-item-ellipsis) {
-    color: var(--icon-color) !important;
+
+  @media (max-width: 960px) {
+    .image-mg__filters-main {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 </style>

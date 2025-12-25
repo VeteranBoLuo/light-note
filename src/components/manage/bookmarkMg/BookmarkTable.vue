@@ -101,7 +101,6 @@
       <ActionCardModal
         v-model:visible="importExportModalVisible"
         :title="$t('bookmarkMg.importExport')"
-        width="600px"
         :sections="importExportSections"
         :note="$t('bookmarkMg.exportNote')"
       />

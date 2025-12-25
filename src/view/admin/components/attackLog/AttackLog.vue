@@ -1,42 +1,86 @@
 <template>
-  <div style="height: 100%; box-sizing: border-box">
-    <a-table
-      :data-source="logList"
-      :columns="logColumns"
-      row-key="id"
-      style="margin-top: 5px"
-      :scroll="{ y: bookmark.screenHeight - 250 }"
-      :pagination="false"
-    >
-      <template #expandedRowRender="{ record }">
-        <div style="max-height: 300px; overflow-y: auto; min-height: 120px; color: var(--text-color)">
-          <div>攻击类型：{{ record.attackType }}</div>
-          <div>攻击时间：{{ record.createdAt }}</div>
-          <div>攻击者userAgent：{{ record.userAgent }}</div>
-          <div>请求方法：{{ record.requestMethod }}</div>
-          <div>请求地址：{{ record.requestPath }}</div>
-          <div>
-            攻击载荷：
-            <pre>{{ record.payload }}</pre>
-          </div>
-          <div>来源IP地址：{{ record?.sourceIp }}</div>
+  <div class="admin-panel-container">
+    <section class="admin-panel attack-log__panel">
+      <header class="admin-header attack-log__header">
+        <div class="admin-title-block">
+          <p class="admin-eyebrow">Admin / Security</p>
+          <h2 class="admin-title">攻击日志</h2>
+          <p class="admin-subtitle">监控和记录系统安全威胁</p>
         </div>
-      </template>
-    </a-table>
-    <p>
-      总计
-      <a>
-        {{ total }}
-      </a>
-      条攻击记录
-    </p>
+      </header>
+
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
+      <div class="admin-filters">
+        <div class="admin-filters-main">
+          <b-input
+            v-model:value="searchValue"
+            placeholder="攻击类型或来源IP地址..."
+            class="log-search-input"
+            @input="handleSearch"
+          >
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="16" />
+            </template>
+          </b-input>
+          <b-button @click="clearAttackLogs" type="primary">清空日志</b-button>
+        </div>
+        <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
+      </div>
+
+      <div class="admin-table-card">
+        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 500 }" :pagination="false">
+          <template #expandedRowRender="{ record }">
+            <div class="admin-expand-panel">
+              <div>攻击类型：{{ record.attackType }}</div>
+              <div>攻击时间：{{ record.createdAt }}</div>
+              <div>攻击者userAgent：{{ record.userAgent }}</div>
+              <div>请求方法：{{ record.requestMethod }}</div>
+              <div>请求地址：{{ record.requestPath }}</div>
+              <div>
+                攻击载荷：
+                <pre>{{ record.payload }}</pre>
+              </div>
+              <div>来源IP地址：{{ record?.sourceIp }}</div>
+            </div>
+          </template>
+        </a-table>
+      </div>
+
+      <footer class="admin-footer">
+        <a-pagination
+          :current="currentPage"
+          :page-size="pageSize"
+          show-size-changer
+          size="small"
+          :total="total"
+          @change="onChange"
+        >
+          <template #buildOptionText="props">
+            <span>{{ props.value }}条/页</span>
+          </template>
+        </a-pagination>
+      </footer>
+    </section>
   </div>
 </template>
 
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
-  import { apiQueryPost } from '@/http/request.ts';
+  import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import icon from '@/config/icon.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { message } from 'ant-design-vue';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
@@ -71,8 +115,77 @@
   });
 
   const total = ref(0);
+  const currentPage = ref<number>(1);
+  const pageSize = ref<number>(10);
+  const searchValue = ref('');
+
+  const onChange = (page: number, newPageSize: number) => {
+    if (newPageSize !== pageSize.value) {
+      currentPage.value = 1;
+    } else {
+      currentPage.value = page;
+    }
+    pageSize.value = newPageSize;
+    searchApiLog();
+  };
+
+  function clearAttackLogs() {
+    Alert.alert({
+      title: '提示',
+      content: `请确认是否要清空攻击日志？`,
+      onOk() {
+        apiBaseGet('/api/common/clearAttackLogs', {}).then((res) => {
+          if (res.status === 200) {
+            message.success('攻击日志清空成功');
+            searchApiLog();
+          }
+        });
+      },
+    });
+  }
+
+  const timer = ref();
+  function handleSearch() {
+    if (timer.value) {
+      clearTimeout(timer.value);
+    }
+    timer.value = setTimeout(() => {
+      searchApiLog();
+    }, 500);
+  }
+
+  const statCards = computed(() => {
+    const totalValue = total.value || 0;
+    const hasData = totalValue > 0;
+    const start = hasData ? (currentPage.value - 1) * pageSize.value + 1 : 0;
+    const end = hasData ? Math.min(totalValue, currentPage.value * pageSize.value) : 0;
+    return [
+      {
+        label: '当前展示区间',
+        value: `${start}-${end}`,
+        hint: '条记录',
+      },
+      {
+        label: '总攻击记录',
+        value: totalValue,
+        hint: '累计',
+      },
+      {
+        label: '分页尺寸',
+        value: pageSize.value,
+        hint: '条/页',
+      },
+    ];
+  });
+
   function searchApiLog() {
-    apiQueryPost('/api/common/getAttackLogs').then((res) => {
+    apiQueryPost('/api/common/getAttackLogs', {
+      currentPage: currentPage.value,
+      pageSize: pageSize.value,
+      filters: {
+        key: searchValue.value,
+      },
+    }).then((res) => {
       if (res.status === 200) {
         logList.value = res.data.items;
         total.value = res.data.total;
@@ -85,48 +198,12 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-manage.less';
+
   .log-search-input {
-    width: 50%;
+    flex: 1;
   }
 
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-  }
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
-  :deep(.ant-select-dropdown-placement-topLeft) {
-    min-width: 100px !important;
-    transition: none !important;
-  }
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-    transition: none !important;
-  }
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-  /*--分页背景调色--*/
-  :deep(.ant-pagination) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item a) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item-active a) {
-    color: #4e4b46;
-  }
-  :deep(.ant-pagination-item-ellipsis) {
-    color: var(--icon-color) !important;
+  @media (max-width: 960px) {
   }
 </style>

@@ -1,52 +1,75 @@
 <template>
-  <div style="height: 100%; box-sizing: border-box">
-    <b-space style="width: 100%">
-      <b-input v-model:value="searchValue" placeholder="用户名或ip..." class="log-search-input" @input="handleSearch">
-        <template #prefix>
-          <svg-icon :src="icon.navigation.search" size="16" />
-        </template>
-      </b-input>
-      <b-button @click="clearApiLogs" type="primary">清空</b-button>
-    </b-space>
-    <a-table
-      :data-source="logList"
-      :columns="logColumns"
-      row-key="id"
-      style="margin-top: 5px"
-      :scroll="{ y: bookmark.screenHeight - 250 }"
-      :pagination="false"
-    >
-      <template #expandedRowRender="{ record }">
-        <div style="max-height: 300px; overflow-y: auto; min-height: 120px; color: var(--text-color)">
-          <div>时间：{{ record.requestTime }}</div>
-          <div>接口：{{ record.url }}</div>
-          <div>
-            请求参数：
-            <pre>{{ record.req }}</pre>
-          </div>
-          <div>ip地址：{{ record?.ip }}</div>
-          <div>指纹：{{ record.system?.fingerprint }}</div>
-          <div>省份：{{ record.location?.province }}</div>
-          <div>城市：{{ record.location?.city }}</div>
-          <div>浏览器：{{ record.system?.browser }}</div>
-          <div>操作系统：{{ record.system?.os }}</div>
+  <div class="admin-panel-container">
+    <section class="admin-panel api-log__panel">
+      <header class="admin-header api-log__header">
+        <div class="admin-title-block">
+          <p class="admin-eyebrow">Admin / API</p>
+          <h2 class="admin-title">API日志</h2>
+          <p class="admin-subtitle">实时掌握API调用和用户行为状态</p>
         </div>
-      </template>
-    </a-table>
-    <a-pagination
-      style="margin-top: 10px"
-      :current="currentPage"
-      :page-size="pageSize"
-      show-size-changer
-      size="small"
-      :total="total"
-      :show-total="() => `总计 ${total} 条`"
-      @change="onChange"
-    >
-      <template #buildOptionText="props">
-        <span>{{ props.value }}条/页</span>
-      </template>
-    </a-pagination>
+      </header>
+
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label api-log__stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value api-log__stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint api-log__stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
+      <div class="admin-filters">
+        <div class="admin-filters-main">
+          <b-input
+            v-model:value="searchValue"
+            placeholder="用户名或ip..."
+            class="log-search-input"
+            @input="handleSearch"
+          >
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="16" />
+            </template>
+          </b-input>
+          <b-button @click="clearApiLogs" type="primary">清空日志</b-button>
+        </div>
+        <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
+      </div>
+
+      <div class="admin-table-card">
+        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
+          <template #expandedRowRender="{ record }">
+            <div class="admin-expand-panel">
+              <div>时间：{{ record.requestTime }}</div>
+              <div>接口：{{ record.url }}</div>
+              <div>
+                请求参数：
+                <pre>{{ record.req }}</pre>
+              </div>
+              <div>ip地址：{{ record?.ip }}</div>
+              <div>指纹：{{ record.system?.fingerprint }}</div>
+              <div>省份：{{ record.location?.province }}</div>
+              <div>城市：{{ record.location?.city }}</div>
+              <div>浏览器：{{ record.system?.browser }}</div>
+              <div>操作系统：{{ record.system?.os }}</div>
+            </div>
+          </template>
+        </a-table>
+      </div>
+
+      <footer class="admin-footer">
+        <a-pagination
+          :current="currentPage"
+          :page-size="pageSize"
+          show-size-changer
+          size="small"
+          :total="total"
+          @change="onChange"
+        >
+          <template #buildOptionText="props">
+            <span>{{ props.value }}条/页</span>
+          </template>
+        </a-pagination>
+      </footer>
+    </section>
   </div>
 </template>
 
@@ -133,6 +156,30 @@
 
   const total = ref(0);
   const searchValue = ref('');
+  const statCards = computed(() => {
+    const totalValue = total.value || 0;
+    const hasData = totalValue > 0;
+    const start = hasData ? (currentPage.value - 1) * pageSize.value + 1 : 0;
+    const end = hasData ? Math.min(totalValue, currentPage.value * pageSize.value) : 0;
+    return [
+      {
+        label: '当前展示区间',
+        value: `${start}-${end}`,
+        hint: '条记录',
+      },
+      {
+        label: '总日志数',
+        value: totalValue,
+        hint: '累计',
+      },
+      {
+        label: '分页尺寸',
+        value: pageSize.value,
+        hint: '条/页',
+      },
+    ];
+  });
+
   function searchApiLog() {
     apiQueryPost('/api/common/getApiLogs', {
       currentPage: currentPage.value,
@@ -153,48 +200,16 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-manage.less';
+
   .log-search-input {
-    width: 50%;
+    flex: 1;
   }
 
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-  }
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
-  :deep(.ant-select-dropdown-placement-topLeft) {
-    min-width: 100px !important;
-    transition: none !important;
-  }
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-    transition: none !important;
-  }
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-  /*--分页背景调色--*/
-  :deep(.ant-pagination) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item a) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item-active a) {
-    color: #4e4b46;
-  }
-  :deep(.ant-pagination-item-ellipsis) {
-    color: var(--icon-color) !important;
+  @media (max-width: 960px) {
+    .api-log__filters-main {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 </style>

@@ -1,11 +1,11 @@
 <template>
   <b-modal v-model:visible="visible" :maskClosable="maskClosable ?? false" :title="title">
-    <div class="action-card-modal" :style="{ width: width ?? '600px' }">
+    <div class="action-card-modal" :style="{ width: width ?? WIDTH }">
       <div v-for="section in sections" :key="section.key" class="section" :class="section.class">
         <div v-if="section.title" class="section-header">
           <h3>{{ section.title }}</h3>
         </div>
-        <div class="cards-grid">
+        <div class="cards-grid" :style="{ gridTemplateColumns: bookmark.isMobile ? '1fr' : '1fr 1fr' }">
           <div
             v-for="action in section.actions"
             :key="action.key"
@@ -28,8 +28,12 @@
 
 <script setup lang="ts">
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import { bookmarkStore } from '@/store';
 
   const visible = defineModel<boolean>('visible');
+  const bookmark = bookmarkStore();
+
+  const WIDTH = bookmark.isMobileDevice ? '80vw' : '600px';
 
   interface ActionItem {
     key: string;
