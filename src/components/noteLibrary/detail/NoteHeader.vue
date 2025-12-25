@@ -53,7 +53,6 @@
     <ActionCardModal
       v-model:visible="exportModalVisible"
       title="导出笔记"
-      width="620px"
       :sections="exportSections"
       note="请选择要导出的格式，系统将自动转换并下载文件"
     />

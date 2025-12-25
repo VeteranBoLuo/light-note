@@ -1,62 +1,80 @@
 <template>
-  <div style="height: 100%; box-sizing: border-box">
-    <b-space style="width: 100%">
-      <b-input
-        v-model:value="searchValue"
-        placeholder="用户名或接口名..."
-        class="log-search-input"
-        @input="handleSearch"
-      >
-        <template #prefix>
-          <svg-icon :src="icon.navigation.search" size="16" />
-        </template>
-      </b-input>
-    </b-space>
-    <a-table
-      :data-source="logList"
-      :columns="logColumns"
-      row-key="id"
-      style="margin-top: 5px"
-      :scroll="{ y: bookmark.screenHeight - 250 }"
-      :pagination="false"
-    >
-      <template #expandedRowRender="{ record }">
-        <div style="max-height: 300px; overflow-y: auto; min-height: 120px; color: var(--text-color)">
-          <p>反馈内容：{{ record.content }}</p>
-          <p>反馈时间：{{ record.createTime }}</p>
-          反馈图片：
-          <div class="flex-align-center-gap">
-            <img
-              v-for="src in JSON.parse(record.imgArray)"
-              :src="src"
-              height="100"
-              width="100"
-              @click="bookmark.refreshViewer(src)"
-              alt=""
-            />
-          </div>
+  <div class="admin-panel-container">
+    <section class="admin-panel user-opinion__panel">
+      <header class="admin-header user-opinion__header">
+        <div class="admin-title-block">
+          <p class="admin-eyebrow">Admin / Feedback</p>
+          <h2 class="admin-title">用户反馈</h2>
+          <p class="admin-subtitle">收集和管理系统用户意见</p>
         </div>
-      </template>
-      <template #bodyCell="{ column, text, record }">
-        <template v-if="column.dataIndex === 'operation'">
-          <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delOpinion(record)" class="dom-hover" />
-        </template>
-      </template>
-    </a-table>
-    <a-pagination
-      style="margin-top: 10px"
-      :current="currentPage"
-      :page-size="pageSize"
-      show-size-changer
-      size="small"
-      :total="total"
-      :show-total="() => `总计 ${total} 条`"
-      @change="onChange"
-    >
-      <template #buildOptionText="props">
-        <span>{{ props.value }}条/页</span>
-      </template>
-    </a-pagination>
+      </header>
+
+      <div class="admin-filters">
+        <div class="admin-filters-main">
+          <b-input
+            v-model:value="searchValue"
+            placeholder="用户名或接口名..."
+            class="log-search-input"
+            @input="handleSearch"
+          >
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="16" />
+            </template>
+          </b-input>
+        </div>
+        <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
+      </div>
+
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
+      <div class="admin-table-card">
+        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 500 }" :pagination="false">
+          <template #expandedRowRender="{ record }">
+            <div class="admin-expand-panel">
+              <p>反馈内容：{{ record.content }}</p>
+              <p>反馈时间：{{ record.createTime }}</p>
+              反馈图片：
+              <div class="flex-align-center-gap">
+                <img
+                  v-for="src in JSON.parse(record.imgArray)"
+                  :src="src"
+                  height="100"
+                  width="100"
+                  @click="bookmark.refreshViewer(src)"
+                  alt=""
+                />
+              </div>
+            </div>
+          </template>
+          <template #bodyCell="{ column, text, record }">
+            <template v-if="column.dataIndex === 'operation'">
+              <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delOpinion(record)" class="dom-hover" />
+            </template>
+          </template>
+        </a-table>
+      </div>
+
+      <footer class="admin-footer">
+        <a-pagination
+          :current="currentPage"
+          :page-size="pageSize"
+          show-size-changer
+          size="small"
+          :total="total"
+          @change="onChange"
+        >
+          <template #buildOptionText="props">
+            <span>{{ props.value }}条/页</span>
+          </template>
+        </a-pagination>
+      </footer>
+    </section>
   </div>
 </template>
 
@@ -130,6 +148,29 @@
 
   const total = ref(0);
   const searchValue = ref('');
+  const statCards = computed(() => {
+    const totalValue = total.value || 0;
+    const hasData = totalValue > 0;
+    const start = hasData ? (currentPage.value - 1) * pageSize.value + 1 : 0;
+    const end = hasData ? Math.min(totalValue, currentPage.value * pageSize.value) : 0;
+    return [
+      {
+        label: '当前展示区间',
+        value: `${start}-${end}`,
+        hint: '条记录',
+      },
+      {
+        label: '总反馈数',
+        value: totalValue,
+        hint: '累计',
+      },
+      {
+        label: '分页尺寸',
+        value: pageSize.value,
+        hint: '条/页',
+      },
+    ];
+  });
 
   function searchApiLog() {
     apiQueryPost('/api/opinion/getOpinionList', {
@@ -168,61 +209,22 @@
   });
 </script>
 
-<style lang="less" scoped>
+<style lang="less">
+  @import '@/assets/css/admin-manage.less';
+
   .log-search-input {
-    width: 50%;
+    flex: 1;
   }
 
-
-
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
+  .user-opinion__filters-hint {
+    font-size: 12px;
+    color: var(--sub-text-color, #7c8b9e);
   }
 
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
-
-  :deep(.ant-select-dropdown-placement-topLeft) {
-    min-width: 100px !important;
-    transition: none !important;
-  }
-
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-    transition: none !important;
-  }
-
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-
-  /*--分页背景调色--*/
-  :deep(.ant-pagination) {
-    color: var(--text-color);
-  }
-
-  :deep(.ant-pagination-item a) {
-    color: var(--text-color);
-  }
-
-  :deep(.ant-pagination-item-active a) {
-    color: #4e4b46;
-  }
-
-  :deep(.ant-pagination-item-ellipsis) {
-    color: var(--icon-color) !important;
+  @media (max-width: 960px) {
+    .user-opinion__filters-main {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 </style>

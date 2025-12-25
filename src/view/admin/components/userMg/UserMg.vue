@@ -1,39 +1,47 @@
 <template>
-  <div style="height: 100%; box-sizing: border-box">
-    <a-table
-      :data-source="userList"
-      :columns="userColumns"
-      row-key="id"
-      :scroll="{ y: bookmark.screenHeight - 350 }"
-      :pagination="false"
-    >
-      <template #bodyCell="{ column, text, record }">
-        <template v-if="column.dataIndex === 'operation'">
-          <b-space>
-            <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
-            <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
-          </b-space>
-        </template>
-      </template>
-    </a-table>
-    <p>
-      总计
-      <a>
-        {{ total }}
-      </a>
-      名用户
-    </p>
-    <b-modal
-      v-if="editVisible"
-      title="编辑用户信息"
-      v-model:visible="editVisible"
-      @close="editVisible = false"
-      @ok="saveUserInfo"
-    >
-      <div>
-        <b-form form-id="userEditForm" :form-data="editData" :fields="formFields" />
+  <div class="admin-panel-container">
+    <section class="admin-panel user-mg__panel">
+      <header class="admin-header user-mg__header">
+        <div class="admin-title-block">
+          <p class="admin-eyebrow">Admin / Users</p>
+          <h2>用户管理</h2>
+          <p class="admin-subtitle">管理系统用户账户和权限</p>
+        </div>
+      </header>
+
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
+      <div class="admin-table-card">
+        <a-table :data-source="userList" :columns="userColumns" row-key="id" :scroll="{ y: 500 }" :pagination="false">
+          <template #bodyCell="{ column, text, record }">
+            <template v-if="column.dataIndex === 'operation'">
+              <b-space>
+                <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
+                <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
+              </b-space>
+            </template>
+          </template>
+        </a-table>
       </div>
-    </b-modal>
+
+      <b-modal
+        v-if="editVisible"
+        title="编辑用户信息"
+        v-model:visible="editVisible"
+        @close="editVisible = false"
+        @ok="saveUserInfo"
+      >
+        <div>
+          <b-form form-id="userEditForm" :form-data="editData" :fields="formFields" />
+        </div>
+      </b-modal>
+    </section>
   </div>
 </template>
 
@@ -146,6 +154,16 @@
   }
 
   const total = ref(0);
+  const statCards = computed(() => {
+    const totalValue = total.value || 0;
+    return [
+      {
+        label: '总用户数',
+        value: totalValue,
+        hint: '累计',
+      },
+    ];
+  });
 
   function init() {
     apiQueryPost('/api/user/getUserList').then((res) => {
@@ -162,28 +180,12 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-manage.less';
+
   :deep(.ant-select-selector .ant-select-selection-item) {
     background-color: unset !important;
   }
 
-
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-  }
-
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
+  @media (max-width: 960px) {
   }
 </style>
