@@ -9,6 +9,14 @@
         </div>
       </header>
 
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
       <div class="admin-filters">
         <div class="admin-filters-main">
           <b-input
@@ -24,14 +32,6 @@
         </div>
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
-
-      <ul class="admin-stats">
-        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
-          <span class="admin-stat-label">{{ card.label }}</span>
-          <strong class="admin-stat-value">{{ card.value }}</strong>
-          <span class="admin-stat-hint">{{ card.hint }}</span>
-        </li>
-      </ul>
 
       <div class="admin-table-card">
         <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 500 }" :pagination="false">

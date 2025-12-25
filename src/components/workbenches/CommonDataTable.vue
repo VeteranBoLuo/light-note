@@ -1,6 +1,6 @@
 <template>
-  <WorkbenchesCard title="常用书签">
-    <BTable :data="tableData" :columns="columns" style="height: calc(100% - 200px)"
+  <WorkbenchesCard :title="title" style="height: 100%">
+    <BTable :data="tableData" :columns="columns" style="height: calc(100% - 40px)"
       ><template #bodyCell="{ column, text, record, index }">
         <template v-if="column.key === 'index'">
           <template v-if="index === 0">
@@ -28,23 +28,15 @@
       type: Array,
       default: () => [],
     },
+    title: {
+      type: String,
+      default: '常用书签',
+    },
+    columns: {
+      type: Array,
+      default: () => [],
+    },
   });
-
-  const columns = ref<{ title: string; key: string; width?: string | number }[]>([
-    {
-      title: '排名',
-      key: 'index',
-    },
-    {
-      title: '书签',
-      key: 'name',
-      width: '400px',
-    },
-    {
-      title: '访问次数',
-      key: 'count',
-    },
-  ]);
 
   onMounted(() => {});
 </script>
@@ -54,8 +46,17 @@
     background-color: unset;
     box-shadow: unset;
     padding: unset;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
   :deep(.table-body) {
     gap: 0;
+    flex: 1;
+    overflow-y: auto;
+    max-height: none;
+  }
+  :deep(.table-header) {
+    flex-shrink: 0;
   }
 </style>

@@ -71,7 +71,11 @@
             <small>{{ filteredTables.length }} / {{ tables.length }}</small>
           </div>
           <div class="table-filter">
-            <input v-model="tableFilter" type="text" class="table-filter-input" placeholder="输入关键字过滤" />
+            <b-input v-model:value="tableFilter" placeholder="输入关键字过滤" class="log-search-input">
+              <template #prefix>
+                <svg-icon :src="icon.navigation.search" size="16" />
+              </template>
+            </b-input>
             <span>点击高亮，再次点击自动插入。</span>
           </div>
           <div class="table-grid">
@@ -126,6 +130,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import icon from '@/config/icon.ts';
 
   type ExecutionState = 'idle' | 'running' | 'completed' | 'error';
 
@@ -184,7 +189,7 @@
   const tableTemplates = [
     {
       label: '最近 20 条数据',
-      build: (table: string) => `SELECT * FROM ${table} ORDER BY id DESC LIMIT 20;`,
+      build: (table: string) => `SELECT * FROM ${table} ORDER BY create_time DESC LIMIT 20;`,
     },
     {
       label: '统计行数',

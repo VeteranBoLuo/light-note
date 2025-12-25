@@ -9,6 +9,14 @@
         </div>
       </header>
 
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label image-mg__stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value image-mg__stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint image-mg__stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
       <div class="admin-filters">
         <div class="admin-filters-main">
           <b-input v-model:value="searchValue" placeholder="文件名" class="log-search-input" @input="handleSearch">
@@ -21,14 +29,6 @@
         </div>
         <span class="admin-filters-hint">支持文件名搜索 · 选择类型查看不同状态的图片</span>
       </div>
-
-      <ul class="admin-stats">
-        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
-          <span class="admin-stat-label image-mg__stat-label">{{ card.label }}</span>
-          <strong class="admin-stat-value image-mg__stat-value">{{ card.value }}</strong>
-          <span class="admin-stat-hint image-mg__stat-hint">{{ card.hint }}</span>
-        </li>
-      </ul>
 
       <div class="admin-table-card">
         <a-table

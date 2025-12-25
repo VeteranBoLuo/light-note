@@ -9,6 +9,14 @@
         </div>
       </header>
 
+      <ul class="admin-stats">
+        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+          <span class="admin-stat-label api-log__stat-label">{{ card.label }}</span>
+          <strong class="admin-stat-value api-log__stat-value">{{ card.value }}</strong>
+          <span class="admin-stat-hint api-log__stat-hint">{{ card.hint }}</span>
+        </li>
+      </ul>
+
       <div class="admin-filters">
         <div class="admin-filters-main">
           <b-input
@@ -21,18 +29,10 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button @click="clearApiLogs" type="primary">清空</b-button>
+          <b-button @click="clearApiLogs" type="primary">清空日志</b-button>
         </div>
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
-
-      <ul class="admin-stats">
-        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
-          <span class="admin-stat-label api-log__stat-label">{{ card.label }}</span>
-          <strong class="admin-stat-value api-log__stat-value">{{ card.value }}</strong>
-          <span class="admin-stat-hint api-log__stat-hint">{{ card.hint }}</span>
-        </li>
-      </ul>
 
       <div class="admin-table-card">
         <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
