@@ -64,6 +64,7 @@ export default {
     feedback: '意见反馈',
     changelog: '更新日志',
     themeMode: '主题模式',
+    storageUsed: '已用存储',
     loginRegister: '登录/注册',
     logout: '退出登录',
     defaultNickname: '默认昵称',

@@ -91,29 +91,57 @@
     position: fixed;
     z-index: 9999;
   }
+
   .context-menu {
-    padding: 5px 0;
-    background-color: var(--menu-body-bg-color);
-    width: 150px;
-    border-radius: 12px;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+    width: 188px;
+    padding: 4px 0;
+    border-radius: 10px;
+    background: var(--menu-body-bg-color);
+    border: 1px solid var(--card-border-color);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     overflow: hidden;
-    .context-menu-item {
-      padding-left: 10px;
-      font-size: 12px;
-      height: 26px;
-      display: flex;
-      align-items: center;
-      cursor: pointer;
-    }
+    color: var(--text-color);
   }
+
+  [data-theme='night'] .context-menu {
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 28px;
+    font-size: 13px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      background-color 0.16s ease,
+      color 0.16s ease;
+  }
+
+  .context-menu-item:hover {
+    background: var(--menu-item-h-bg-color);
+  }
+
   /*Transition样式设置*/
   .v-enter-active,
   .v-leave-active {
-    transition: opacity 0.5s ease;
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
   }
   .v-enter-from,
   .v-leave-to {
     opacity: 0;
+    transform: translateY(-2px) scale(0.99);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .v-enter-active,
+    .v-leave-active {
+      transition: none;
+    }
   }
 </style>

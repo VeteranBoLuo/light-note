@@ -110,6 +110,7 @@
     }).then((res) => {
       if (res.status === 200) {
         bookmark.tagList = res.data;
+        user.tagTotal = res.data.length;
         if (bookmark.type === 'normal') {
           bookmark.refreshData();
         }

@@ -66,6 +66,7 @@ export default {
     feedback: 'Feedback',
     changelog: 'Changelog',
     themeMode: 'Theme Mode',
+    storageUsed: 'Used Storage',
     loginRegister: 'Login/Register',
     logout: 'Logout',
     defaultNickname: 'Default Nickname',
