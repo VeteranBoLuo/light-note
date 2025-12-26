@@ -1,52 +1,58 @@
 <template>
   <a-tooltip
-    :color="bookmark.currentTheme === 'day' ? '#97a1c6' : '#4d5264'"
-    placement="bottomLeft"
+    :color="tooltipColor"
+    placement="bottomRight"
+    :overlay-style="{ maxWidth: 'calc(100vw - 24px)' }"
     :get-popup-container="getPopupContainer"
     v-model:open="menuVisible"
   >
     <template #title>
-      <div class="flex-align-center" style="gap: 15px; padding: 5px">
-        <div :class="['navigation-icon']" :style="{ color: bookmark.iconColor }">
-          <svg-icon
-            img-id="viewUserImg"
-            @click="zoomImage"
-            size="40"
-            :src="user.headPicture || icon.navigation.user"
-            class="dom-hover"
-          />
-        </div>
-        <div class="user-icon-text" :style="{ color: bookmark.iconColor }">
-          <div class="flex-align-center" style="gap: 10px"
-            ><b>{{
-              user.userName ? user.alias || t('personCenter.defaultNickname') : t('personCenter.pleaseLogin')
-            }}</b>
-            <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
+      <div class="user-card" :style="{ color: bookmark.iconColor }">
+        <div class="user-top">
+          <div class="avatar-ring" :class="bookmark.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
+            <svg-icon
+              img-id="viewUserImg"
+              @click="zoomImage"
+              size="40"
+              :src="user.headPicture || icon.navigation.user"
+              class="dom-hover"
+            />
           </div>
-          <div style="display: flex; gap: 20px; font-size: 12px">
-            <span
-              >{{ t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
-            >
-            <span
-              >{{ t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
-            >
+          <div class="user-meta">
+            <div class="user-name-row">
+              <span class="user-name">{{
+                user.userName ? user.alias || t('personCenter.defaultNickname') : t('personCenter.pleaseLogin')
+              }}</span>
+              <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
+            </div>
+            <div class="user-sub">
+              {{ user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.personalProfile') }}
+            </div>
           </div>
         </div>
-      </div>
-      <div class="handle-body">
-        <div class="handle-body-title-body">
-          <div class="flex-center" style="height: 40px; color: var(--text-color); gap: 10px; font-size: 12px">
+
+        <div class="stat-grid">
+          <div v-for="stat in userStats" :key="stat.label" class="stat-card">
+            <div class="stat-icon">
+              <svg-icon :src="stat.icon" size="14" />
+            </div>
+            <div class="stat-text">
+              <div class="stat-label">{{ stat.label }}</div>
+              <div class="stat-value">{{ stat.value }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="theme-row">
+          <div class="theme-left">
             <svg-icon size="14" :src="icon.theme" />
             {{ $t('personCenter.themeMode') }}
           </div>
-          <div style="text-align: right; padding-right: 20px; color: #969ba2; font-size: 12px">
-            {{ ThemeName }}
-          </div>
+          <div class="theme-right">{{ ThemeName }}</div>
         </div>
-        <hr
-          style="width: calc(100% - 20px); border: unset; height: 1px"
-          :color="bookmark.currentTheme === 'day' ? '#f6f7f9' : '#4e5262'"
-        />
+
+        <div class="menu-divider" />
+
         <div class="header_menu_ul">
           <div
             v-for="menuItem in menuOptions"
@@ -60,7 +66,7 @@
             <div v-if="getVersionIsNew(menuItem)" class="update-point" />
           </div>
           <div
-            class="flex-center li"
+            class="flex-center li logout"
             v-click-log="{
               module: '个人中心',
               operation: user.role === 'visitor' ? '登录/注册' : t('personCenter.logout'),
@@ -95,6 +101,7 @@
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
+  const tooltipColor = computed(() => (bookmark.currentTheme === 'day' ? '#ffffff' : '#33343f'));
   const getPopupContainer = (trigger: HTMLElement) => {
     return document.getElementById('tag-container');
   };
@@ -154,6 +161,24 @@
     }
     return options.value.filter((item) => item.role !== 'root');
   });
+
+  const userStats = computed(() => [
+    {
+      label: t('navigation.bookmark'),
+      value: user.bookmarkTotal,
+      icon: icon.manage_categoryBtn_bookmark,
+    },
+    {
+      label: t('navigation.note'),
+      value: user.noteTotal,
+      icon: icon.noteDetail.save,
+    },
+    {
+      label: t('personCenter.storageUsed'),
+      value: user.storageUsed,
+      icon: icon.file_upload,
+    },
+  ]);
 
   function menuItemClick(menuItem: menuItemInterface) {
     menuVisible.value = false;
@@ -237,48 +262,37 @@
   }
 
   .handle-body {
-    border-radius: 8px;
-    background-color: var(--user-body-bg-color);
-    margin-top: 10px;
-    padding: 5px;
-    width: 220px;
-
-    .handle-body-title-body {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      align-items: center;
-    }
+    display: none;
   }
 
   .header_menu_ul {
     list-style-type: none;
-    text-align: center;
-    margin-top: 5px;
-    margin-bottom: 5px;
+    margin-top: 8px;
+    margin-bottom: 2px;
     box-sizing: border-box;
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    gap: 8px;
 
     .li {
-      height: 30px;
+      height: 32px;
       cursor: pointer;
       font-size: 12px;
-      border-radius: 4px;
+      border-radius: 10px;
       color: var(--text-color);
-      gap: 10px;
+      gap: 8px;
+      background: var(--menu-item-h-bg-color);
+      transition: all 0.2s ease;
 
       &:hover {
-        background-color: var(--menu-item-h-bg-color);
-        border-radius: 8px;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+      }
+
+      &.logout {
+        background: linear-gradient(120deg, rgba(249, 112, 102, 0.18), rgba(255, 158, 130, 0.12));
       }
     }
-  }
-
-  .user-icon-text {
-    text-align: left;
-    color: white !important;
   }
 
   .modal-content {
@@ -303,6 +317,136 @@
     border-radius: 50%;
     position: absolute;
     right: 5px;
+  }
+
+  .user-card {
+    width: 320px;
+    max-width: calc(100vw - 28px);
+    background: var(--user-body-bg-color);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  }
+
+  .user-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--menu-item-h-bg-color);
+  }
+
+  .avatar-ring {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(79, 134, 255, 0.25), rgba(82, 196, 186, 0.18));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .ring-day {
+    box-shadow: 0 6px 18px rgba(46, 117, 255, 0.18);
+  }
+
+  .ring-night {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  .user-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .user-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .user-name {
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .user-sub {
+    font-size: 12px;
+    color: var(--text-secondary-color, #9aa0ad);
+  }
+
+  .stat-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(79, 134, 255, 0.12), rgba(82, 196, 186, 0.08));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .stat-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .stat-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-secondary-color, #8a8f99);
+  }
+
+  .stat-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-color);
+  }
+
+  .theme-row {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px dashed var(--menu-item-h-bg-color);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+  }
+
+  .theme-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-color);
+  }
+
+  .theme-right {
+    color: var(--text-secondary-color, #9aa0ad);
+  }
+
+  .menu-divider {
+    margin: 12px 0 6px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--menu-item-h-bg-color), transparent);
+    border: none;
   }
 
   @media (max-width: 1000px) {

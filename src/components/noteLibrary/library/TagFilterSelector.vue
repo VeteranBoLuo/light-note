@@ -81,7 +81,7 @@
   .noteType-select {
     position: relative;
     border-radius: 36px !important;
-    border: 1px solid #e8eaf2 !important;
+    border: 1px solid var(--noteType-border-color) !important;
     background-color: var(--background-color);
     display: flex;
     gap: 5px;

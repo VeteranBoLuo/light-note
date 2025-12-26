@@ -21,6 +21,7 @@ interface UserInfo {
   noteTotal: number;
   opinionTotal: number;
   location: UserLocation;
+  storageUsed: number; // 已使用单位：MB
 }
 
 interface UserState extends UserInfo {}
@@ -38,6 +39,7 @@ const defaultUserState: UserState = {
   bookmarkTotal: 0,
   noteTotal: 0,
   opinionTotal: 0,
+  storageUsed: 0,
   location: {
     province: '',
     city: '',
