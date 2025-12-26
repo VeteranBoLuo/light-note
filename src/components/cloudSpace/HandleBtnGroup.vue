@@ -12,11 +12,13 @@
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
+  import axios from 'axios';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
-  function handleChange(e) {
+
+  async function handleChange(e) {
     cloud.loading = true;
     let filesData = [];
     let totalSize = 0;
@@ -48,32 +50,67 @@
         }
         // 累计文件大小
         totalSize += processedFile.size;
-        filesData.push(processedFile);
+        filesData.push({
+          fileName: processedFile.name,
+          fileType: processedFile.type || 'application/octet-stream',
+          fileSize: processedFile.size,
+          file: processedFile,
+        });
       } catch (error) {
         invalidFiles.push({ name: file.name, error: '文件处理失败' });
       }
     }
+
     // 检查总空间
     const uploadAfterSize = Number((totalSize / 1024 / 1024 + cloud.usedSpace).toFixed(2));
     if (uploadAfterSize <= cloud.maxSpace) {
-      const formData = new FormData();
+      try {
+        // 第一步：调用后端获取预签名上传URL
+        const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: filesData });
+        if (uploadRes.status !== 200) {
+          throw new Error('获取上传URL失败');
+        }
 
-      // 添加所有文件到FormData
-      filesData.forEach((file, index) => {
-        formData.append('files', file, file.name); // 字段名必须与后端保持一致
-      });
-      // 发送上传请求
-      apiBasePost('/api/file/uploadFiles', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-        .then((res) => {
-          if (res.status === 200) {
-            // 处理上传结果
-            const successFiles = res.data.filter((item) => item.status === '已上传');
-            const existedFiles = res.data.filter((item) => item.status === '已覆盖');
-            const failedFiles = res.data.filter((item) => item.status === '处理失败');
+        const uploadInfos = uploadRes.data; // 数组，每个文件有 uploadUrl, headers 等
+
+        // 第二步：逐个上传到OBS
+        const uploadPromises = uploadInfos.map(async (info, index) => {
+          if (info.status === '处理失败') {
+            return { ...info, uploadStatus: 'failed' };
+          }
+          try {
+            const fileData = filesData[index].file;
+            await axios.put(info.uploadUrl, fileData, {
+              headers: {
+                ...info.headers,
+                'Content-Type': info.fileType,
+              },
+            });
+            return { ...info, uploadStatus: 'success' };
+          } catch (error) {
+            console.error('上传失败:', error);
+            return { ...info, uploadStatus: 'failed', error: error.message };
+          }
+        });
+
+        const uploadResults = await Promise.all(uploadPromises);
+
+        // 第三步：上传成功后，调用confirmUpload写入数据库
+        const confirmFiles = uploadResults
+          .filter((result) => result.uploadStatus === 'success')
+          .map((result) => ({
+            fileName: result.filename,
+            fileType: result.fileType,
+            fileSize: filesData.find((f) => f.fileName === result.filename)?.fileSize || 0,
+          }));
+
+        if (confirmFiles.length > 0) {
+          const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles });
+          if (confirmRes.status === 200) {
+            // 处理确认结果
+            const successFiles = confirmRes.data.filter((item) => item.status === '已上传');
+            const existedFiles = confirmRes.data.filter((item) => item.status === '已覆盖');
+            const failedFiles = confirmRes.data.filter((item) => item.status === '处理失败');
 
             if (successFiles.length > 0) {
               message.success(`成功上传 ${successFiles.length} 个文件`);
@@ -85,25 +122,32 @@
             }
 
             if (failedFiles.length > 0) {
-              message.error(`以下文件上传失败：${failedFiles.map((f) => f.filename).join(', ')}`);
+              message.error(`以下文件确认失败：${failedFiles.map((f) => f.filename).join(', ')}`);
             }
 
             if (successFiles.length > 0 || existedFiles.length > 0) {
               cloud.queryFieldList();
             }
+          } else {
+            message.error('确认上传失败');
           }
-        })
-        .catch((error) => {
-          message.error('上传失败：' + error.message);
-        })
-        .finally(() => {
-          cloud.loading = false;
+        }
 
-          // 显示预检错误信息
-          if (invalidFiles.length > 0) {
-            message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
-          }
-        });
+        // 处理上传失败的文件
+        const failedUploads = uploadResults.filter((result) => result.uploadStatus === 'failed');
+        if (failedUploads.length > 0) {
+          message.error(`以下文件上传失败：${failedUploads.map((f) => f.filename).join(', ')}`);
+        }
+      } catch (error) {
+        message.error('上传失败：' + error.message);
+      } finally {
+        cloud.loading = false;
+
+        // 显示预检错误信息
+        if (invalidFiles.length > 0) {
+          message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
+        }
+      }
     } else {
       message.warning('剩余空间不足');
       cloud.loading = false;
