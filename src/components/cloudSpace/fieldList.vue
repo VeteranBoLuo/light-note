@@ -94,7 +94,14 @@
         </div>
         <div class="default-area">
           <div v-if="!bookmark.isMobileDevice">{{ item.folderName }}</div>
-          <div>{{ Number(item.fileSize / 1024).toFixed() }} KB</div>
+          <div
+            >{{
+              Number(item.fileSize / 1024)
+                .toFixed()
+                .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+            }}
+            KB</div
+          >
           <div v-if="!bookmark.isMobileDevice" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
         </div>
       </div>
