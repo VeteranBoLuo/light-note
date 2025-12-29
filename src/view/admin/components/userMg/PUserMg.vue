@@ -133,7 +133,13 @@
   const total = ref(0);
 
   function init() {
-    apiQueryPost('/api/user/getUserList').then((res) => {
+    apiQueryPost('/api/user/getUserList', {
+      currentPage: 1,
+      pageSize: 1000,
+      filters: {
+        key: '',
+      },
+    }).then((res) => {
       if (res.status) {
         userList.value = res.data.items;
         total.value = res.data.total;

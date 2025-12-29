@@ -31,8 +31,8 @@
       <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
         <!-- 1. PDF预览 -->
         <iframe
-          v-if="previewType === 'pdf'"
-          :src="effectiveFileUrl"
+          v-if="previewType === 'pdf' && pdfBlobUrl"
+          :src="pdfBlobUrl"
           class="preview-iframe"
           @load="onLoad"
           @error="onError"
@@ -195,6 +195,7 @@
   const errorMessage = ref('');
   const textContent = ref('');
   const wrapText = ref(true);
+  const pdfBlobUrl = ref<string>('');
 
   // 文件类型映射配置
   const fileTypeConfig = {
@@ -286,18 +287,6 @@
     if (!props.fileInfo.fileUrl) return '';
 
     const url = props.fileInfo.fileUrl;
-    if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
-      return url;
-    }
-
-    try {
-      const urlObj = new URL(url);
-      if (urlObj.hostname === 'boluo66.top') {
-        return `/api${urlObj.pathname}`;
-      }
-    } catch (error) {
-      console.error('URL解析错误:', error);
-    }
 
     return url;
   });
@@ -321,7 +310,9 @@
     textContent.value = '';
 
     try {
-      if (previewType.value === 'text') {
+      if (previewType.value === 'pdf') {
+        await loadPdfBlob(effectiveFileUrl.value);
+      } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
       } else if (getFileTypeName(props.fileInfo.fileType) === '未知类型') {
         loading.value = false;
@@ -329,6 +320,40 @@
     } catch (err) {
       error.value = true;
       errorMessage.value = '文件加载失败';
+      loading.value = false;
+    }
+  }
+
+  // 加载PDF blob URL
+  async function loadPdfBlob(url?: string) {
+    if (!url) {
+      error.value = true;
+      errorMessage.value = '文件地址无效';
+      loading.value = false;
+      return;
+    }
+
+    try {
+      // 先清理之前的blob URL
+      if (pdfBlobUrl.value) {
+        URL.revokeObjectURL(pdfBlobUrl.value);
+        pdfBlobUrl.value = '';
+      }
+
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`HTTP错误! 状态码: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      pdfBlobUrl.value = blobUrl;
+    } catch (err) {
+      console.error('加载PDF文件失败:', err);
+      error.value = true;
+      errorMessage.value = 'PDF加载失败，请检查文件链接或格式';
+      throw err;
+    } finally {
       loading.value = false;
     }
   }
@@ -434,6 +459,11 @@
   }
 
   function handleClose() {
+    // 清理PDF blob URL
+    if (pdfBlobUrl.value) {
+      URL.revokeObjectURL(pdfBlobUrl.value);
+      pdfBlobUrl.value = '';
+    }
     emit('close');
   }
 
@@ -465,6 +495,11 @@
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyDown);
+    // 清理PDF blob URL
+    if (pdfBlobUrl.value) {
+      URL.revokeObjectURL(pdfBlobUrl.value);
+      pdfBlobUrl.value = '';
+    }
   });
 </script>
 
@@ -558,6 +593,12 @@
         height: 100%;
 
         .preview-iframe {
+          width: 100%;
+          height: 100%;
+          border: none;
+        }
+
+        .preview-pdf-viewer {
           width: 100%;
           height: 100%;
           border: none;

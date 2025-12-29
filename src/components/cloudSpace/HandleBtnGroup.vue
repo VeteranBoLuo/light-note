@@ -32,6 +32,7 @@
         if (file.isImg) {
           // Base64转Blob
           const base64String = file.file.split(';base64,').pop();
+          const mimeType = file.file.split(';base64,')[0].split(':')[1]; // 提取MIME类型
           const byteCharacters = atob(base64String);
           const byteNumbers = new Array(byteCharacters.length);
 
@@ -41,9 +42,9 @@
 
           const byteArray = new Uint8Array(byteNumbers);
           processedFile = new Blob([byteArray], {
-            type: 'image/svg+xml', // 根据实际情况调整MIME类型
+            type: mimeType, // 使用实际的MIME类型
           });
-          processedFile.name = file.fileName || 'converted-image.svg';
+          processedFile.name = file.fileName || `converted-image.${mimeType.split('/')[1]}`;
         } else {
           // 原始文件
           processedFile = file;
