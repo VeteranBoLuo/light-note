@@ -163,7 +163,8 @@
       bottom: 12px;
     }
     .card-description {
-      height: 2rem;
+      height: 2.4em;
+      line-height: 1.2;
       -webkit-line-clamp: 2; /* 显示的行数，根据需要调整 */
       line-clamp: 2;
     }

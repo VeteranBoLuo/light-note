@@ -1,7 +1,7 @@
 <template>
   <div class="field-list">
     <div class="field-header">
-      <div class="flex-align-center-gap" :style="{ width: bookmark.isMobileDevice ? '80%' : '60%' }">
+      <div class="flex-align-center-gap" :style="{ width: bookmark.isMobileDevice ? '70%' : '60%' }">
         {{ $t('cloudSpace.fileName') }}
       </div>
       <div class="default-area">
@@ -15,14 +15,11 @@
         <div
           class="flex-align-center"
           style="position: relative"
-          :style="{ width: bookmark.isMobileDevice ? '80%' : '60%' }"
+          :style="{ width: bookmark.isMobileDevice ? '70%' : '60%' }"
         >
-          <span
-            v-if="!item.isRename"
-            class="file-label text-hidden"
-            @click="emit('previewFile', item)"
-            >{{ item.fileName }}</span
-          >
+          <span v-if="!item.isRename" class="file-label text-hidden" @click="emit('previewFile', item)">{{
+            item.fileName
+          }}</span>
           <b-input
             style="width: 400px"
             v-else
