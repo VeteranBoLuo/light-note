@@ -88,6 +88,9 @@
     padding: 20px;
     box-sizing: border-box;
     cursor: pointer;
+    transition:
+      border-color 0.2s,
+      box-shadow 0.2s;
     &:hover {
       .checkBox {
         visibility: visible;
