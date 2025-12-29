@@ -734,9 +734,7 @@
       height: 2rem;
       font-size: 1rem;
     }
-    .bubble {
-      padding: 0.75rem 1rem;
-    }
+
     /* 移动端调整滚动提示位置 */
     .scroll-prompt {
       bottom: 80px;

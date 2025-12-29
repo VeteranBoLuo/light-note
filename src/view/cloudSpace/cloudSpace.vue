@@ -2,17 +2,18 @@
   <CommonContainer :title="$t('cloudSpace.title')">
     <div class="cloud-container">
       <div class="header">
-        <b-input
-          v-if="bookmark.isMobileDevice"
-          v-model:value="cloud.searchFileName"
-          :placeholder="$t('cloudSpace.fileName')"
-          class="header-input"
-          @enter="cloud.queryFieldList"
-        >
-          <template #suffix>
-            <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
-          </template>
-        </b-input>
+        <div v-if="bookmark.isMobileDevice" class="mobile-header-left">
+          <b-input
+            v-model:value="cloud.searchFileName"
+            :placeholder="$t('cloudSpace.fileName')"
+            class="header-input"
+            @enter="cloud.queryFieldList"
+          >
+            <template #suffix>
+              <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
+            </template>
+          </b-input>
+        </div>
         <div v-else class="flex-align-center">
           <div
             style="font-weight: 500; font-size: 20px; position: absolute"
@@ -33,15 +34,23 @@
             </b-input>
           </div>
           <FileTypeFilter />
+          <b-button type="default" class="batch-toggle-btn" @click="toggleBatchMode">
+            {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
+          </b-button>
         </div>
         <HandleBtnGroup />
       </div>
       <div class="content-area">
         <CloudFolder />
-        <FieldList @preview-file="previewFile" @move-field="moveField" />
+        <FieldList
+          :batch-mode="batchMode"
+          :clear-key="clearSelectionKey"
+          @preview-file="previewFile"
+          @move-field="moveField"
+        />
       </div>
     </div>
-    <MoveFile v-model:visible="moveCfg.moveFileVisible" :file="moveCfg.file" />
+    <MoveFile v-model:visible="moveCfg.moveFileVisible" :files="moveCfg.files" @moved="handleMoveDone" />
 
     <!-- 全屏文件预览 -->
     <FilePreview v-model:visible="previewVisible" :file-info="previewFileInfo" @close="closePreview" />
@@ -62,9 +71,12 @@
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
   import FilePreview from '@/components/FilePreview.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
+
+  const batchMode = ref(false);
 
   const inputQueryFieldList = debounce(cloud.queryFieldList, 500);
 
@@ -75,12 +87,22 @@
     };
     cloud.searchFileName = '';
     cloud.queryFieldList();
+    clearSelectionKey.value += 1;
+    batchMode.value = false;
   }
 
   const moveCfg = reactive({
     moveFileVisible: false,
-    file: {},
+    files: [],
   });
+  const clearSelectionKey = ref(0);
+
+  const toggleBatchMode = () => {
+    batchMode.value = !batchMode.value;
+    if (!batchMode.value) {
+      clearSelectionKey.value += 1;
+    }
+  };
 
   interface FileItem {
     id: string;
@@ -445,9 +467,13 @@
     }, 300);
   }
 
-  function moveField(file: FileItem) {
+  function moveField(fileOrFiles: FileItem | FileItem[]) {
     moveCfg.moveFileVisible = true;
-    moveCfg.file = file;
+    moveCfg.files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+  }
+
+  function handleMoveDone() {
+    clearSelectionKey.value += 1;
   }
 
   // 键盘事件处理
@@ -473,6 +499,9 @@
 
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
+    if (bookmark.isMobile) {
+      batchMode.value = true;
+    }
   });
 
   onUnmounted(() => {
@@ -498,8 +527,19 @@
     justify-content: space-between;
     align-items: center;
 
+    .mobile-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+
     .header-input {
       width: 300px;
+    }
+
+    .batch-toggle-btn {
+      margin-left: 10px;
     }
   }
 
@@ -526,6 +566,12 @@
 
       .header-input {
         flex: 1;
+        width: auto;
+      }
+
+      .batch-toggle-btn {
+        margin-left: 0;
+        white-space: nowrap;
       }
     }
 

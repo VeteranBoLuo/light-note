@@ -196,7 +196,7 @@
 
   .message.assistant .bubble {
     border-bottom-left-radius: 0.25rem;
-    background: color-mix(in srgb, var(--menu-container-bg-color) 80%, #000 20%);
+    background: color-mix(in srgb, var(--menu-container-bg-color) 20%, #7c73cb 50%);
     color: var(--text-color);
   }
 
