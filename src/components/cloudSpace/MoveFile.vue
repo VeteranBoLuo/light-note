@@ -28,36 +28,49 @@
   import { ref, watch } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
+  import { useI18n } from 'vue-i18n';
   const cloud = cloudSpaceStore();
   const checkValue = ref('');
+  const { t } = useI18n();
   const props = defineProps({
-    file: {
-      type: Object,
-      default: () => ({}),
+    files: {
+      type: Array,
+      default: () => [],
     },
   });
+  const emit = defineEmits(['moved']);
   const visible = defineModel('visible');
 
   function folderClick(folder) {
     checkValue.value = folder.id;
   }
   function moveFile() {
+    const fileIds = props.files?.map((f: any) => f.id) || [];
     apiBasePost('/api/file/associateFile', {
       folderId: checkValue.value === 'all' ? '' : checkValue.value,
-      fileId: props.file?.id,
+      fileIds,
     }).then((res) => {
       if (res.status === 200) {
-        message.success('移动文件夹成功');
-        visible.value = false;
-        cloud.queryFieldList();
+        const successMessage =
+          fileIds.length === 1
+            ? t('cloudSpace.moveSuccess')
+            : `${t('cloudSpace.batchMoveSuccess')} ${fileIds.length} ${t('cloudSpace.files')}`;
+        message.success(successMessage);
+        if (fileIds.length > 1) {
+          emit('moved');
+        }
+      } else {
+        message.error(res.msg || t('cloudSpace.moveFailed'));
       }
+      visible.value = false;
+      cloud.queryFieldList();
     });
   }
   watch(
     () => visible.value,
     (val) => {
-      if (val) {
-        checkValue.value = props.file.folderId;
+      if (val && props.files.length > 0) {
+        checkValue.value = props.files[0].folderId || 'all';
       }
     },
   );

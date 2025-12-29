@@ -1,5 +1,5 @@
 <template>
-  <div class="b_btn" :style="{ border }" :class="[btnClass, danger]">
+  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass, danger]">
     <slot></slot>
   </div>
 </template>
@@ -35,6 +35,16 @@
       return 'function_btn';
     } else {
       return 'default_btn';
+    }
+  });
+
+  const sizeClass = computed(() => {
+    if (props.size === 'small') {
+      return 'small_btn';
+    } else if (props.size === 'large') {
+      return 'large_btn';
+    } else {
+      return '';
     }
   });
 </script>
@@ -96,5 +106,19 @@
     &:hover {
       background-color: #6762ee;
     }
+  }
+
+  .small_btn {
+    height: 24px;
+    line-height: 24px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .large_btn {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 20px;
+    font-size: 16px;
   }
 </style>

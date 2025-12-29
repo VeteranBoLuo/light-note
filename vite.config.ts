@@ -19,7 +19,6 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist', // D:\nginx-1.24.0\html\dist
       sourcemap: false, // 默认就是false
     },
-
     plugins: [
       vue(),
       vueJsx(),
@@ -44,7 +43,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api':
-          env.VITE_ENV === 'local1'
+          env.VITE_ENV === 'local'
             ? {
                 target: 'http://127.0.0.1:9001',
                 changeOrigin: true,
@@ -61,6 +60,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           ws: true,
           rewrite: (path: string) => path.replace(/^\/ws/, ''),
+        },
+        '/obs': {
+          target: 'https://obs.cn-south-1.myhuaweicloud.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/obs/, ''),
+          // 可能需要配置secure，如果遇到证书问题可尝试设置为false
+          // secure: false,
         },
       },
       open: true,
