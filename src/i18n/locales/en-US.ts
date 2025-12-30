@@ -86,8 +86,7 @@ export default {
     moveCompleted: 'Move completed',
     batchMoveSuccess: 'Batch move successful! Moved',
     moveSuccess: 'Move successful',
-    singleModeHint: 'Single actions; enable batch to multi-select',
-    preview: 'Preview',
+    uploading: 'Uploading',
   },
   personCenter: {
     title: 'Personal Center',

@@ -25,12 +25,12 @@
 
   const props = withDefaults(
     defineProps<{
-      accept: string;
+      accept?: string;
       multiple: boolean;
       maxTotalSize?: number;
     }>(),
     {
-      accept: 'qwe',
+      accept: '*',
       multiple: false,
       maxTotalSize: 10 * 1024 * 1024,
     }, // 默认总大小限制为10MB

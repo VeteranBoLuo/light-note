@@ -26,7 +26,7 @@ export default defineStore('dom', {
       }
     >{
       usedSpace: 0,
-      maxSpace: 500,
+      maxSpace: 1000,
       folderList: [],
       fileList: [],
       typeCheckValue: ['image', 'pdf', 'word', 'excel', 'audio', 'video', 'other'],

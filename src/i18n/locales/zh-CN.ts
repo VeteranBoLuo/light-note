@@ -84,8 +84,7 @@ export default {
     moveCompleted: '移动完成',
     batchMoveSuccess: '批量移动成功！共移动',
     moveSuccess: '移动成功',
-    singleModeHint: '当前为单项操作，可开启批量模式多选',
-    preview: '预览',
+    uploading: '正在上传',
   },
   personCenter: {
     title: '个人中心',
