@@ -315,6 +315,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
     border-radius: 50%;
     height: 30px;
     width: 30px;
