@@ -209,7 +209,7 @@
   });
 </script>
 
-<style lang="less">
+<style lang="less" scoped>
   @import '@/assets/css/admin-manage.less';
 
   .log-search-input {

@@ -8,7 +8,7 @@
       </b-space>
     </div>
     <div class="field-header">
-      <div class="flex-align-center-gap" :style="{ width: bookmark.isMobileDevice ? '70%' : '60%' }">
+      <div class="flex-align-center-gap" style="width: 60%">
         <a-checkbox
           v-if="batchMode"
           :indeterminate="indeterminate"
@@ -26,11 +26,7 @@
     </div>
     <div class="file-container">
       <div class="field-item" v-for="(item, index) in cloud.fileList" :key="index">
-        <div
-          class="flex-align-center"
-          style="position: relative"
-          :style="{ width: bookmark.isMobileDevice ? '70%' : '60%' }"
-        >
+        <div class="flex-align-center" style="position: relative; width: 60%">
           <a-checkbox
             v-if="batchMode"
             :checked="selectedRows.includes(item.id)"
@@ -94,7 +90,14 @@
         </div>
         <div class="default-area">
           <div v-if="!bookmark.isMobileDevice">{{ item.folderName }}</div>
-          <div>{{ Number(item.fileSize / 1024).toFixed() }} KB</div>
+          <div
+            >{{
+              Number(item.fileSize / 1024)
+                .toFixed()
+                .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+            }}
+            KB</div
+          >
           <div v-if="!bookmark.isMobileDevice" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
         </div>
       </div>

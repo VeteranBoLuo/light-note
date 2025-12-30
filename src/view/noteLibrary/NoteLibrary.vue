@@ -180,7 +180,7 @@
         document.addEventListener(
           'click',
           (e) => {
-            if (!(e.target as Element).matches('.search-icon *')) {
+            if (!(e.target as Element).matches('.search-icon *') && searchValue.value === '') {
               searchActive.value = false;
             }
           },

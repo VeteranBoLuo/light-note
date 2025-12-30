@@ -19,7 +19,9 @@
           <svg-icon :src="icon.common.close" class="dom-hover-click" @click.stop="delTag(tag)" />
         </div>
       </VueDraggable>
-      <div style="font-size: 12px; color: var(--desc-color); margin-top: 10px">点击标签文本即可重新编辑选中标签</div>
+      <div style="font-size: 12px; color: var(--desc-color)" :style="{ marginTop: bookmark.isMobile ? '' : '10px' }"
+        >点击标签文本即可重新编辑选中标签</div
+      >
     </div>
   </BModal>
 </template>
@@ -29,11 +31,13 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { inject, onMounted, ref, watch } from 'vue';
-  import { checkEndCondition, endCondition } from '@/utils/validator.ts';
+  import { checkEndCondition, EndCondition } from '@/utils/validator.ts';
   import { VueDraggable } from 'vue-draggable-plus';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { apiBasePost } from '@/http/request.ts';
+  import { bookmarkStore } from '@/store';
+  const bookmark = bookmarkStore();
 
   const visible = defineModel('visible');
 
@@ -41,7 +45,7 @@
   const tagValue = ref('');
   function setTag(value?: string) {
     const TagValue = typeof value === 'string' ? value : tagValue.value;
-    const condition: endCondition[] = [
+    const condition: EndCondition[] = [
       {
         endCondition: currentTag.value === -1 && tagList.value.length >= 3,
         message: '最多只能关联3个标签！',
