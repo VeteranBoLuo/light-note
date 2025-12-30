@@ -139,6 +139,7 @@ export default {
     selectAll: 'Select All',
     back: 'Back',
     close: 'Close',
+    preview: 'Preview',
   },
   changelog: {
     title: 'Update Logs',

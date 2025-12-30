@@ -44,14 +44,14 @@
             </div>
           </div>
           <div class="action-buttons">
-            <a-space>
+            <a-space :size="40">
+              <a-button size="large" @click="previewFile" class="preview-btn">
+                <EyeOutlined />
+                {{ $t('common.preview') }}
+              </a-button>
               <a-button type="primary" size="large" @click="downloadFile" class="download-btn">
                 <DownloadOutlined />
                 {{ $t('cloudSpace.downloadAgain') }}
-              </a-button>
-              <a-button size="large" @click="previewFile" class="preview-btn">
-                <EyeOutlined />
-                {{ $t('cloudSpace.preview') }}
               </a-button>
             </a-space>
           </div>
@@ -90,7 +90,7 @@
             <a-space :size="40">
               <a-button size="large" @click="previewFile" class="preview-btn">
                 <EyeOutlined />
-                {{ $t('cloudSpace.preview') }}
+                {{ $t('common.preview') }}
               </a-button>
               <a-button type="primary" size="large" @click="downloadFile" class="download-btn">
                 <DownloadOutlined />

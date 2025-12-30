@@ -137,6 +137,7 @@ export default {
     selectAll: '全选',
     back: '返回',
     close: '关闭',
+    preview: '预览',
   },
   changelog: {
     title: '更新日志',
