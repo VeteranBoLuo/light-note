@@ -52,6 +52,16 @@
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
 
+  // 规范化文件名，确保后缀小写
+  const normalizeFileName = (name: string) => {
+    const parts = name.split('.');
+    if (parts.length > 1) {
+      const ext = parts.pop()?.toLowerCase();
+      return parts.join('.') + '.' + ext;
+    }
+    return name;
+  };
+
   // 格式化速度
   const formatSpeed = (speed: number) => {
     if (speed < 1024) return `${speed.toFixed(0)} B/s`;
@@ -116,6 +126,8 @@
           // 原始文件
           processedFile = file;
         }
+        // 规范化文件名
+        processedFile = new File([processedFile], normalizeFileName(processedFile.name), { type: processedFile.type });
         // 累计文件大小
         totalSize += processedFile.size;
         filesData.push({
@@ -554,6 +566,13 @@
       right: 10px;
       width: auto;
       max-width: none;
+    }
+  }
+</style>
+<style>
+  [data-theme='night'] {
+    .ant-popover-inner {
+      background-color: #edf2fa !important;
     }
   }
 </style>
