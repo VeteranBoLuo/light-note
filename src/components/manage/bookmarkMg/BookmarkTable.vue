@@ -24,7 +24,7 @@
           >
           <b-button
             type="primary"
-            @click="$router.push({ path: `/manage/editBookmark/add` })"
+            @click="router.push({ path: `/manage/editBookmark/add` })"
             v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
             >{{ $t('common.add') }}</b-button
           >
@@ -47,7 +47,14 @@
             <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
               <div style="display: flex; align-items: center; gap: 10px" :title="text">
                 <div class="card-img-container">
-                  <img v-if="record.iconUrl" :src="record.iconUrl" height="20" width="20" @error="onErrorImg" alt="" />
+                  <img
+                    v-if="(record as BookmarkInterface).iconUrl"
+                    :src="(record as BookmarkInterface).iconUrl"
+                    height="20"
+                    width="20"
+                    @error="onErrorImg"
+                    alt=""
+                  />
                 </div>
                 <div class="text-hidden">
                   {{ text }}
@@ -57,7 +64,7 @@
           </template>
           <template v-else-if="column.key === 'tagList'">
             <div class="flex-align-center-gap">
-              <span :title="t.name" class="common-tag" v-for="t in record.tagList" :key="t.id">
+              <span :title="t.name" class="common-tag" v-for="t in (record as BookmarkInterface).tagList" :key="t.id">
                 {{ t.name }}
               </span>
             </div>
@@ -73,7 +80,7 @@
                 title="编辑"
                 :src="icon.table_edit"
                 size="16"
-                @click="edit(record.id)"
+                @click="edit((record as BookmarkInterface).id)"
                 v-click-log="{ module: '书签管理', operation: `点击编辑图标` }"
                 class="dom-hover"
               />
@@ -81,7 +88,7 @@
                 title="删除"
                 :src="icon.table_delete"
                 size="16"
-                @click="handleDeleteTag(record)"
+                @click="handleDeleteTag(record as BookmarkInterface)"
                 v-click-log="{ module: '书签管理', operation: `点击删除图标` }"
                 class="dom-hover"
               />
@@ -254,6 +261,7 @@
     {
       title: '网址',
       key: 'url',
+      width: '300px',
     },
     {
       title: '关联标签',
@@ -542,119 +550,27 @@
     if (!file) return;
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        loading.value = true;
-        const htmlContent = event.target.result as string;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlContent, 'text/html');
+      loading.value = true;
+      const formData = new FormData();
+      formData.append('file', file);
 
-        // 解析书签
-        const bookmarks = [];
-        const parseBookmarks = (element, currentFolder = '') => {
-          const children = element.children;
-          for (let i = 0; i < children.length; i++) {
-            const child = children[i];
-            if (child.tagName === 'DT') {
-              const h3 = child.querySelector('H3');
-              if (h3) {
-                // 文件夹
-                const folderName = h3.textContent;
-                const dl = child.querySelector('DL');
-                if (dl) {
-                  parseBookmarks(dl, folderName);
-                }
-              } else {
-                const a = child.querySelector('A');
-                if (a) {
-                  // 书签
-                  bookmarks.push({
-                    name: a.textContent,
-                    url: a.href,
-                    folder: currentFolder,
-                  });
-                }
-              }
-            }
-          }
-        };
-
-        const rootDL = doc.querySelector('DL');
-        if (rootDL) {
-          parseBookmarks(rootDL);
-        }
-
-        if (bookmarks.length === 0) {
-          message.error('未找到有效的书签数据');
-          loading.value = false;
-          return;
-        }
-
-        // 去重：基于名字和网址
-        const uniqueBookmarks = [];
-        const seen = new Set();
-        bookmarks.forEach((bookmark) => {
-          const key = `${bookmark.name}-${bookmark.url}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueBookmarks.push(bookmark);
-          }
-        });
-
-        // 导入书签
-        let successCount = 0;
-        let failedCount = 0;
-        const failedItems = [];
-
-        const requests = uniqueBookmarks.map((bookmark) => {
-          const data = {
-            name: bookmark.name,
-            url: bookmark.url,
-            description: bookmark.folder ? `标签: ${bookmark.folder}` : '',
-          };
-          return apiBasePost('/api/bookmark/addBookmark', data);
-        });
-
-        const results = await Promise.allSettled(requests);
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled' && result.value.status === 200) {
-            successCount++;
-          } else {
-            failedCount++;
-            failedItems.push({
-              name: uniqueBookmarks[index].name,
-              url: uniqueBookmarks[index].url,
-              error: result.value?.msg || '导入失败',
-            });
-          }
-        });
-
-        // 重新加载数据
+      const res = await apiBasePost('/api/bookmark/importBookmarksHtml', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      if (res.status === 200) {
+        const { parsedTotal, createdTags, createdBookmarks, boundRelations } = res.data || {};
+        message.success(
+          `导入完成：解析 ${parsedTotal || 0}，新标签 ${createdTags || 0}，新书签 ${createdBookmarks || 0}，建立关联 ${boundRelations || 0}`,
+        );
         await init();
-        // 显示结果
-        if (failedCount > 0) {
-          const errorText = failedItems
-            .map((item) => `${item.name} (${item.url}): <span style="color: #ff5722">${item.error}</span>`)
-            .join('<br/>');
-
-          Alert.alert({
-            title: `导入完成 (${successCount}成功/${failedCount}失败)`,
-            content: errorText,
-            okText: '复制错误信息',
-            onOk() {
-              navigator.clipboard.writeText(failedItems.map((f) => `${f.name} (${f.url}): ${f.error}`).join('\n'));
-              message.success('错误信息已复制到剪贴板');
-            },
-          });
-        } else {
-          message.success(`导入成功！共导入 ${successCount} 个书签`);
-        }
-        loading.value = false;
-      };
-      reader.readAsText(file);
-    } catch (err) {
-      message.error('文件处理失败: ' + err.message);
-      console.error('导入错误:', err);
+      } else {
+        message.error(res.msg || '导入失败');
+      }
+      loading.value = false;
+    } catch (err: any) {
+      message.error('文件处理失败: ' + (err?.message || err));
       loading.value = false;
     } finally {
       target.value = '';

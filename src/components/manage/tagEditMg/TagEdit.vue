@@ -8,7 +8,7 @@
         </div>
         <div class="tag-attr-item" style="position: relative">
           <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
-          <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')" >
+          <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')">
             <template #prefix>
               <svg-icon
                 title="获取图标"
@@ -64,12 +64,12 @@
             v-model:target-keys="tag.bookmarkList"
             :filter-option="filterOption"
             :locale="{
-               itemUnit: $t('tagManage.count'),
+              itemUnit: $t('tagManage.count'),
               itemsUnit: $t('tagManage.count'),
               notFoundContent: $t('tagManage.listEmptyText'),
               searchPlaceholder: $t('placeholder.searchPlaceholder'),
             }"
-            :titles="['--' + $t('tagManage.unRelated'), '--'+$t('tagManage.isRelated')]"
+            :titles="['--' + $t('tagManage.unRelated'), '--' + $t('tagManage.isRelated')]"
             show-search
             :data-source="mockData"
             :list-style="{
@@ -198,10 +198,10 @@
     input.addEventListener('change', function (event: any) {
       const file = event.target.files[0]; // 获取用户选择的文件
       if (file) {
-        // 检查文件大小是否超过5M
-        const maxFileSize = 5000 * 1024;
+        // 检查文件大小是否超过5KB
+        const maxFileSize = 5 * 1024;
         if (file.size > maxFileSize) {
-          message.warning('图片大小不能超过5MB');
+          message.warning('自定义的图标大小不能超过5KB');
           return; // 如果文件过大，终止函数执行
         }
         const reader = new FileReader(); // 创建FileReader对象
