@@ -27,13 +27,17 @@
             class="category-item"
             :title="item.name"
             :style="{
-              backgroundColor: bookmark.tagData?.id === item.id ? 'var(--category-item-ba-color)' : '',
+              backgroundColor: (bookmark.tagData as any)?.id === item.id ? 'var(--category-item-ba-color)' : '',
             }"
             :key="item.id"
             v-click-log="{ module: '首页', operation: `查询标签【${item.name}】下的书签列表` }"
             @click="handleClickTag(<TagInterface>item)"
           >
-            <svg-icon size="18" :src="item.iconUrl" class="tag-item-icon" />
+            <svg-icon
+              size="18"
+              :src="item.iconUrl ? item.iconUrl : icon.manage_categoryBtn_tag"
+              class="tag-item-icon"
+            />
             <span class="text-hidden" style="width: calc(100% - 28px)">{{ item.name }}</span>
           </div>
         </RightMenu>
@@ -48,12 +52,22 @@
           </template>
         </b-input>
       </template>
+      <template #empty v-if="isReady">
+        <div class="empty-tag-prompt">
+          <div class="empty-card">
+            <h3>暂无标签</h3>
+            <div>开始创建您的第一个标签吧</div>
+            <br />
+            <b-button size="small" type="primary" @click="router.push('/manage/editTag/add')">新增标签</b-button>
+          </div>
+        </div>
+      </template>
     </b-list>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useRouter } from 'vue-router';
@@ -64,7 +78,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BList from '@/components/base/BasicComponents/BList.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { set } from 'lodash-es';
 
   const tagName = ref('');
   const filterTagList = computed(() => {
@@ -77,6 +93,7 @@
 
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
+  const isReady = ref(false);
 
   function handleTagMenu(menu, tag: TagInterface) {
     recordOperation({ module: '首页', operation: `右键${menu}标签${tag.name}` });
@@ -160,6 +177,27 @@
       console.error('Error updating tag sort:', error);
     }
   }
+
+  watch(
+    () => bookmark.tagList.length,
+    (val) => {
+      setTimeout(() => {
+        if (val === 0) {
+          isReady.value = true;
+        } else {
+          isReady.value = false;
+        }
+      }, 300);
+    },
+  );
+
+  onMounted(() => {
+    setTimeout(() => {
+      if (bookmark.tagList.length === 0) {
+        isReady.value = true;
+      }
+    }, 300);
+  });
 </script>
 
 <style lang="less" scoped>
@@ -172,7 +210,7 @@
     width: 180px;
   }
 
-  .tag-item-icon{
+  .tag-item-icon {
     cursor: move;
   }
 
@@ -211,6 +249,48 @@
     .filter-panel-menu {
       width: unset;
       padding-right: unset;
+    }
+  }
+
+  .empty-tag-prompt {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 20px;
+
+    .empty-card {
+      background: var(--background-color, #fff);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      max-width: 200px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+
+      .empty-icon {
+        color: var(--primary-color, #1890ff);
+        margin-bottom: 16px;
+      }
+
+      h3 {
+        margin: 0 0 8px 0;
+        font-size: 16px;
+        color: var(--text-color, #333);
+        font-weight: 500;
+      }
+
+      p {
+        margin: 0 0 16px 0;
+        font-size: 14px;
+        color: var(--text-secondary-color, #666);
+      }
+
+      .b-button {
+        width: 100%;
+      }
     }
   }
 </style>

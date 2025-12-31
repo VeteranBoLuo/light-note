@@ -39,6 +39,9 @@
             </div>
           </slot>
         </div>
+        <div v-if="listOptions && listOptions.length === 0" class="empty-state">
+          <slot name="empty"> </slot>
+        </div>
       </VueDraggable>
     </div>
   </div>
@@ -148,5 +151,18 @@
     &:hover {
       background-color: var(--category-item-ba-color);
     }
+  }
+
+  .empty-state {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: #999;
+    font-size: 14px;
+  }
+
+  .empty-content {
+    text-align: center;
   }
 </style>

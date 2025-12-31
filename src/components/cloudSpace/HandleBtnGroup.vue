@@ -14,9 +14,19 @@
         <span class="progress-title">{{ $t('cloudSpace.uploading') }}</span>
         <div class="progress-actions">
           <span class="progress-percent">{{ Math.round(uploadProgress.overall) }}%</span>
-          <a-button size="small" type="text" @click="cancelUpload" class="cancel-btn">
-            <template #icon><CloseOutlined /></template>
-          </a-button>
+          <span class="progress-speed">{{ formatSpeed(uploadProgress.speed) }}</span>
+          <a-popconfirm
+            title="确认取消上传"
+            description="确定要取消当前的文件上传吗？"
+            ok-text="确定取消"
+            cancel-text="继续上传"
+            ok-type="danger"
+            @confirm="handleCancelConfirm"
+          >
+            <a-button size="small" type="text" class="cancel-btn">
+              <template #icon><CloseOutlined /></template>
+            </a-button>
+          </a-popconfirm>
         </div>
       </div>
       <a-progress :percent="uploadProgress.overall" :show-info="false" class="overall-progress" />
@@ -34,7 +44,7 @@
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
-  import { message } from 'ant-design-vue';
+  import { message, Popconfirm } from 'ant-design-vue';
   import { CloseOutlined, UploadOutlined } from '@ant-design/icons-vue';
   import axios from 'axios';
   import { reactive, ref } from 'vue';
@@ -42,10 +52,19 @@
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
 
+  // 格式化速度
+  const formatSpeed = (speed: number) => {
+    if (speed < 1024) return `${speed.toFixed(0)} B/s`;
+    if (speed < 1024 * 1024) return `${(speed / 1024).toFixed(1)} KB/s`;
+    return `${(speed / (1024 * 1024)).toFixed(1)} MB/s`;
+  };
+
   // 上传进度状态
   const uploadProgress = reactive({
     visible: false,
     overall: 0,
+    speed: 0,
+    totalLoaded: 0,
     files: [] as Array<{
       name: string;
       progress: number;
@@ -57,13 +76,16 @@
   let uploadController = ref<AbortController | null>(null);
 
   async function handleChange(e) {
-    cloud.loading = true;
     uploadProgress.visible = true;
     uploadProgress.overall = 0;
+    uploadProgress.speed = 0;
+    uploadProgress.totalLoaded = 0;
     uploadProgress.files = [];
 
     // 创建上传控制器
     uploadController.value = new AbortController();
+
+    const startTime = Date.now();
 
     let filesData = [];
     let totalSize = 0;
@@ -146,6 +168,17 @@
                 // 计算总体进度
                 const totalProgress = uploadProgress.files.reduce((sum, file) => sum + file.progress, 0);
                 uploadProgress.overall = totalProgress / uploadProgress.files.length;
+                // 计算总上传字节数
+                uploadProgress.totalLoaded = uploadProgress.files.reduce((sum, file, idx) => {
+                  const fileSize = filesData[idx].fileSize;
+                  return sum + (file.progress / 100) * fileSize;
+                }, 0);
+                // 计算速度
+                const now = Date.now();
+                const elapsed = (now - startTime) / 1000;
+                if (elapsed > 0) {
+                  uploadProgress.speed = uploadProgress.totalLoaded / elapsed;
+                }
               },
             });
             uploadProgress.files[index].status = 'success';
@@ -211,7 +244,6 @@
           message.error('上传失败：' + error.message);
         }
       } finally {
-        cloud.loading = false;
         uploadProgress.visible = false;
         uploadController.value = null;
 
@@ -222,18 +254,16 @@
       }
     } else {
       message.warning('剩余空间不足');
-      cloud.loading = false;
       uploadProgress.visible = false;
     }
   }
 
-  // 取消上传
-  const cancelUpload = () => {
+  // 取消上传确认
+  const handleCancelConfirm = () => {
     if (uploadController.value) {
       uploadController.value.abort();
       uploadController.value = null;
       uploadProgress.visible = false;
-      cloud.loading = false;
       message.info('上传已取消');
     }
   };
@@ -368,6 +398,12 @@
           font-weight: 500;
         }
 
+        .progress-speed {
+          font-size: 14px;
+          color: #666;
+          font-weight: 500;
+        }
+
         .cancel-btn {
           color: #666;
 
@@ -440,6 +476,57 @@
 
         :deep(.ant-progress-status-exception .ant-progress-bg) {
           background: #ff4d4f;
+        }
+      }
+    }
+  }
+
+  // 深色主题样式
+  [data-theme='night'] {
+    .upload-progress {
+      background: rgba(53, 56, 63, 0.95);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(77, 77, 84, 0.3);
+
+      .progress-header {
+        .progress-title {
+          color: #ffffff;
+        }
+
+        .progress-actions {
+          .progress-percent,
+          .progress-speed {
+            color: #ffffff;
+          }
+
+          .cancel-btn {
+            color: #ffffff;
+
+            &:hover {
+              background: rgba(255, 77, 79, 0.2);
+            }
+          }
+        }
+      }
+
+      .file-progress-list {
+        .file-progress-item {
+          background: rgba(60, 63, 65, 0.9);
+          border: 1px solid rgba(77, 77, 84, 0.3);
+
+          .file-name {
+            color: #ffffff;
+          }
+
+          :deep(.ant-progress-text) {
+            color: #ffffff !important;
+          }
+        }
+      }
+
+      .overall-progress {
+        :deep(.ant-progress-text) {
+          color: #ffffff !important;
         }
       }
     }
