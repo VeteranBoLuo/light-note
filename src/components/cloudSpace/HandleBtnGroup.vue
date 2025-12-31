@@ -126,12 +126,10 @@
           // 原始文件
           processedFile = file;
         }
-        // 规范化文件名
-        processedFile = new File([processedFile], normalizeFileName(processedFile.name), { type: processedFile.type });
         // 累计文件大小
         totalSize += processedFile.size;
         filesData.push({
-          fileName: processedFile.name,
+          fileName: normalizeFileName(processedFile.name),
           fileType: processedFile.type || 'application/octet-stream',
           fileSize: processedFile.size,
           file: processedFile,
