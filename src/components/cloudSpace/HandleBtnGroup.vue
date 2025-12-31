@@ -93,6 +93,7 @@
 
     // 遍历所有选中的文件
     for (let file of e) {
+      console.log('处理文件:', file);
       try {
         // 处理Base64文件
         let processedFile;
@@ -554,6 +555,13 @@
       right: 10px;
       width: auto;
       max-width: none;
+    }
+  }
+</style>
+<style>
+  [data-theme='night'] {
+    .ant-popover-inner {
+      background-color: #edf2fa !important;
     }
   }
 </style>

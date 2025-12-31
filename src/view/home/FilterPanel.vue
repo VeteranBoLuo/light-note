@@ -187,7 +187,7 @@
         } else {
           isReady.value = false;
         }
-      }, 300);
+      }, 200);
     },
   );
 
@@ -196,7 +196,7 @@
       if (bookmark.tagList.length === 0) {
         isReady.value = true;
       }
-    }, 300);
+    }, 200);
   });
 </script>
 
