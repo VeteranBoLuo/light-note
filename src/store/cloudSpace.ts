@@ -29,7 +29,7 @@ export default defineStore('dom', {
       maxSpace: 1000,
       folderList: [],
       fileList: [],
-      typeCheckValue: ['image', 'pdf', 'word', 'excel', 'audio', 'video', 'other'],
+      typeCheckValue: ['image', 'text', 'pdf', 'word', 'excel', 'audio', 'video', 'other'],
       folder: {
         name: '全部文件',
         id: 'all',

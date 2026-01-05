@@ -9,7 +9,7 @@
     <template #title>
       <div class="user-card" :style="{ color: bookmark.iconColor }">
         <div class="user-top">
-          <div class="avatar-ring" :class="bookmark.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
+          <div class="avatar-ring" :class="user.preferences.theme === 'day' ? 'ring-day' : 'ring-night'">
             <svg-icon
               img-id="viewUserImg"
               @click="zoomImage"
@@ -101,7 +101,7 @@
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-  const tooltipColor = computed(() => (bookmark.currentTheme === 'day' ? '#ffffff' : '#33343f'));
+  const tooltipColor = computed(() => (user.preferences.theme === 'day' ? '#ffffff' : '#33343f'));
   const getPopupContainer = (trigger: HTMLElement) => {
     return document.getElementById('tag-container');
   };
@@ -218,7 +218,7 @@
           userApi.getUserInfoById({ id: '' }).then((res: any) => {
             if (res.status === 'visitor') {
               user.setUserInfo(res.data);
-              bookmark.theme = res.data.theme;
+              user.preferences.theme = res.data.theme;
               localStorage.setItem('theme', res.data.theme);
               if (bookmark.isMobileDevice) {
                 router.push('/home');
@@ -233,10 +233,10 @@
   }
 
   const ThemeName = computed(() => {
-    if (bookmark.theme === 'night') {
+    if (user.preferences.theme === 'night') {
       return t('navigation.dark');
     }
-    if (bookmark.theme === 'day') {
+    if (user.preferences.theme === 'day') {
       return t('navigation.day');
     }
     return t('navigation.followSystem');

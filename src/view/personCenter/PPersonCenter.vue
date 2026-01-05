@@ -1,12 +1,12 @@
 <template>
   <CommonContainer
     :title="$t('personCenter.title')"
-    :style="{ backgroundColor: bookmark.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
+    :style="{ backgroundColor: user.preferences.theme === 'day' ? '#f6f7f9' : '#222222' }"
     @backClick="router.push('/home')"
   >
     <div
       class="person-title-card"
-      :style="{ backgroundColor: bookmark.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }"
+      :style="{ backgroundColor: user.preferences.theme === 'day' ? '#97a1c6' : '#4d5264' }"
     >
       <div style="display: flex; gap: 20px; align-items: center">
         <div class="navigation-icon" :style="{ color: bookmark.iconColor }">
@@ -37,7 +37,7 @@
       <div class="person-menu-item" @click="$router.push('/myInfo')">
         <span class="person-menu-item-title">{{ $t('personCenter.personalProfile') }}</span>
         <span class="person-menu-item-des"
-          >{{$t('personCenter.email_nickname')}}
+          >{{ $t('personCenter.email_nickname') }}
           <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
         </span>
       </div>
@@ -55,7 +55,8 @@
       >
         <span class="person-menu-item-title">{{ $t('personCenter.admin') }}</span>
         <span class="person-menu-item-des"
-          >{{ $t('personCenter.logs_user_mg')}}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          >{{ $t('personCenter.logs_user_mg')
+          }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
       <div
         class="person-menu-item"
@@ -186,7 +187,7 @@
           userApi.getUserInfoById({ id: localStorage.getItem('userId') }).then((res) => {
             if (res.status === 200) {
               user.setUserInfo(res.data);
-              bookmark.theme = res.data.theme;
+              user.preferences.theme = res.data.theme;
               getThemeStyle(res.data.theme);
               localStorage.setItem('theme', res.data.theme);
             }
@@ -197,10 +198,10 @@
   }
 
   const ThemeName = computed(() => {
-    if (bookmark.theme === 'night') {
+    if (user.preferences.theme === 'night') {
       return t('navigation.dark');
     }
-    if (bookmark.theme === 'day') {
+    if (user.preferences.theme === 'day') {
       return t('navigation.light');
     }
     return t('navigation.followSystem');

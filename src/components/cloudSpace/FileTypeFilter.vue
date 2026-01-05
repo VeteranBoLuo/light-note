@@ -41,6 +41,7 @@
   // 文件类型选项
   const fileTypes = ref<FileTypeOption[]>([
     { value: 'image', label: t('cloudSpace.image') },
+    { value: 'text', label: t('cloudSpace.text', '文本') },
     { value: 'pdf', label: t('cloudSpace.pdf') },
     { value: 'word', label: t('cloudSpace.word') },
     { value: 'excel', label: t('cloudSpace.excel') },
@@ -171,6 +172,7 @@
   .filter-options {
     display: flex;
     flex-direction: column;
+    flex-wrap: nowrap;
     gap: 10px;
     max-height: 300px;
     overflow-y: auto;

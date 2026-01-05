@@ -2,12 +2,12 @@
   <div
     @click="router.push(`/noteLibrary/${note.id}`)"
     class="note-card dark-theme"
-    :style="{ boxShadow: bookmark.currentTheme === 'day' ? 'rgb(237, 242, 250) 0px 0px 10px' : 'unset' }"
+    :style="{ boxShadow: user.preferences.theme === 'night' ? 'unset' : 'rgb(237, 242, 250) 0px 0px 10px' }"
   >
     <div class="note-title" :title="note.title">{{ note.title }}</div>
     <div
       class="note-content"
-      :style="{ color: bookmark.currentTheme === 'day' ? 'rgb(102, 102, 102)' : '#ccc' }"
+      :style="{ color: user.preferences.theme === 'night' ? '#ccc' : 'rgb(102, 102, 102)' }"
       v-html="extractAndConvertTags(note.content)"
     />
     <div class="note-tags" v-if="getTags(note)">
@@ -17,7 +17,7 @@
     </div>
     <div class="note-tags" v-else style="font-size: 12px">_</div>
     <div
-      :style="{ color: bookmark.currentTheme === 'day' ? 'rgb(102, 102, 102)' : '#ccc' }"
+      :style="{ color: user.preferences.theme === 'night' ? '#ccc' : 'rgb(102, 102, 102)' }"
       style="font-size: 12px; margin-top: 10px"
       >{{ note['updateTime'] ?? note['createTime'] }}</div
     >
@@ -33,12 +33,12 @@
 
 <script lang="ts" setup>
   import router from '@/router';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   const props = defineProps<{ note: any }>();
 
   const bookmark = bookmarkStore();
-
+  const user = useUserStore();
   const getTags = function (note) {
     if (note.tags) {
       return JSON.parse(note.tags);

@@ -95,12 +95,17 @@
               <span class="text-info">字数: {{ textContent.length }} 字符</span>
             </a-space>
           </div>
+          <template v-if="fileInfo.fileType === 'text/html'">
+            <div v-html="textContent" class="html-container"></div>
+          </template>
           <pre
+            v-else
             :class="{ 'text-wrap': wrapText, 'text-no-wrap': !wrapText }"
             class="preview-text"
             @scroll="onTextScroll"
-            >{{ textContent }}</pre
           >
+              {{ textContent }}
+          </pre>
         </div>
 
         <!-- 8. 微软Office在线预览（备用方案） -->
@@ -550,8 +555,6 @@
       justify-content: center;
       align-items: center;
       overflow: auto;
-      background: #f5f5f5;
-
       .preview-loading {
         position: absolute;
         z-index: 10;
@@ -752,6 +755,16 @@
         border-radius: 4px;
         font-size: 12px;
       }
+    }
+  }
+
+  .html-container {
+    color: black;
+    padding: 9px;
+    :deep(a) {
+      text-decoration: underline !important;
+      font-family: 'Arial', sans-serif;
+      font-weight: 600;
     }
   }
 </style>

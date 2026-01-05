@@ -9,7 +9,11 @@
           <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
         </div>
         <div class="handle-btn-group">
-          <TagFilterSelector :allTags="allTags" />
+          <ViewModeToggle
+            :viewMode="user.preferences.noteViewMode"
+            @update:viewMode="user.preferences.noteViewMode = $event"
+          />
+          <TagFilterSelector v-if="user.preferences.noteViewMode === 'card'" :allTags="allTags" />
           <b-button
             type="primary"
             style="border-radius: 20px"
@@ -27,12 +31,15 @@
         <div class="handle-btn-group">
           <template v-if="hasCheck">
             <span class="deleteText" @click="batchDeleteNote" v-click-log="OPERATION_LOG_MAP.noteLibrary.deleteNote"
-              ><svg-icon :src="icon.noteDetail.delete" />删除所选</span
+              ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
             >
-            <b-button type="primary" style="border-radius: 20px" @click="exitBatch"> 退出批量操作 </b-button>
+            <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
+              {{ $t('note.exitBatch') }}
+            </b-button>
           </template>
           <template v-else>
-            <TagFilterSelector :allTags="allTags" />
+            <TagFilterSelector v-if="user.preferences.noteViewMode === 'card'" :allTags="allTags" />
+            <ViewModeToggle />
             <div
               class="search-icon flex-center dom-hover"
               :class="searchActive ? 'normal-input' : 'icon-input'"
@@ -40,7 +47,7 @@
               v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote"
               :style="{ width: searchActive ? '200px' : '32px' }"
             >
-              <b-input :placeholder="searchActive ? '搜索笔记' : ''" v-model:value="searchValue">
+              <b-input :placeholder="searchActive ? $t('note.searchNote') : ''" v-model:value="searchValue">
                 <template #prefix>
                   <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" @click="focusSearchInput" />
                 </template>
@@ -58,15 +65,44 @@
         </div>
       </div>
       <VueDraggable
+        v-if="user.preferences.noteViewMode === 'card'"
         :disabled="bookmark.isMobileDevice"
         :animation="200"
-        ref="el"
         v-model="noteList"
         class="note-library-body"
+        @start="onStart"
         @end="onEnd"
+        :scroll-sensitivity="50"
+        :forceFallback="true"
       >
         <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
       </VueDraggable>
+      <div v-else class="note-library-body-list">
+        <div class="tag-sidebar">
+          <div class="tag-item" :class="{ active: selectedTag === null }" @click="selectTag(null)">
+            {{ $t('note.allNote') }}
+          </div>
+          <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')">
+            {{ $t('note.noTagNote') }}
+          </div>
+          <div v-for="tag in allTags" class="tag-item" :class="{ active: selectedTag === tag }" @click="selectTag(tag)">
+            # {{ tag }}
+          </div>
+        </div>
+        <VueDraggable
+          :disabled="bookmark.isMobileDevice"
+          :animation="200"
+          ref="el"
+          v-model="noteList"
+          class="note-list"
+          @start="onStart"
+          @end="onEnd"
+          :scroll-sensitivity="50"
+          :forceFallback="true"
+        >
+          <note-list-item v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
+        </VueDraggable>
+      </div>
     </div>
   </b-loading>
 </template>
@@ -82,16 +118,19 @@
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
+  import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { backRouterPage } from '@/utils/common';
+  import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   const bookmark = bookmarkStore();
   const noteList = ref([]);
   const loading = ref(false);
   const user = useUserStore();
+  const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
   init();
   async function init() {
     loading.value = true;
@@ -118,25 +157,60 @@
   }
 
   const searchValue = ref('');
+  const debouncedSearch = ref('');
+  const searchTimer = ref<number | null>(null);
+
+  const toPlainText = (html: string) =>
+    html
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  watch(
+    () => searchValue.value,
+    (val) => {
+      if (searchTimer.value) clearTimeout(searchTimer.value);
+      searchTimer.value = window.setTimeout(() => {
+        debouncedSearch.value = val.trim().toLowerCase();
+      }, 200);
+    },
+    { immediate: true },
+  );
 
   const viewNoteList = computed(() => {
-    const filteredNotes = noteList.value.filter(
-      (note) =>
-        note.title.includes(searchValue.value) ||
-        note.content.includes(searchValue.value) ||
-        note.tags?.includes(searchValue.value),
-    );
-    const tag = router.currentRoute.value.query.tag;
+    const keyword = debouncedSearch.value;
 
-    if (tag === undefined) {
+    const filteredNotes = noteList.value.filter((note) => {
+      const title = (note.title || '').toLowerCase();
+      const contentText = toPlainText(note.content || '').toLowerCase();
+
+      let tags: string[] = [];
+      if (note.tags) {
+        try {
+          const parsed = JSON.parse(note.tags);
+          if (Array.isArray(parsed)) {
+            tags = parsed.map((t) => String(t).toLowerCase());
+          }
+        } catch (error) {
+          console.warn('Invalid tag json', error);
+        }
+      }
+
+      if (!keyword) return true;
+      return title.includes(keyword) || contentText.includes(keyword) || tags.some((t) => t.includes(keyword));
+    });
+
+    let tagFilter = router.currentRoute.value.query.tag;
+
+    if (tagFilter === undefined || tagFilter === null) {
       return filteredNotes;
     }
 
-    if (tag === 'null') {
+    if (tagFilter === 'null') {
       return filteredNotes.filter((note) => !note.tags);
     }
 
-    return filteredNotes.filter((note) => note.tags && JSON.parse(note.tags)?.includes(tag));
+    return filteredNotes.filter((note) => note.tags && JSON.parse(note.tags)?.includes(tagFilter));
   });
 
   function focusSearchInput() {
@@ -171,40 +245,30 @@
     });
   }
 
-  const searchActive = ref(false);
-
-  watch(
-    () => searchActive.value,
-    (val) => {
-      if (val) {
-        document.addEventListener(
-          'click',
-          (e) => {
-            if (!(e.target as Element).matches('.search-icon *') && searchValue.value === '') {
-              searchActive.value = false;
-            }
-          },
-          true,
-        );
-      } else {
-        document.removeEventListener(
-          'click',
-          (e) => {
-            if (!(e.target as Element).matches('.search-icon *')) {
-              searchActive.value = false;
-            }
-          },
-          true,
-        );
-      }
-    },
-  );
+  const searchActive = ref(true);
 
   const handleNodeTypeChange = (tag) => {
-    router.push(`/noteLibrary?tag=${tag}`);
+    if (tag === null) {
+      router.push('/noteLibrary');
+    } else {
+      router.push(`/noteLibrary?tag=${encodeURIComponent(tag)}`);
+    }
   };
 
+  function selectTag(tag) {
+    if (tag === null) {
+      router.push('/noteLibrary');
+    } else {
+      router.push(`/noteLibrary?tag=${encodeURIComponent(tag)}`);
+    }
+  }
+
+  function onStart() {
+    document.body.style.userSelect = 'none';
+  }
+
   async function onEnd() {
+    document.body.style.userSelect = '';
     try {
       const sortedTags =
         noteList.value.map((note: any, index: number) => ({
@@ -256,6 +320,48 @@
     overflow: auto;
     box-sizing: border-box;
     align-content: start;
+  }
+
+  .note-library-body-list {
+    display: flex;
+    height: calc(100% - 20px);
+    width: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+    gap: 20px;
+    .tag-sidebar {
+      width: 220px;
+      background: var(--background-color);
+      border: 1px solid var(--card-border-color);
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      overflow-y: auto;
+      .tag-item {
+        padding: 12px 16px;
+        cursor: pointer;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        color: var(--text-color);
+        &:hover {
+          background-color: var(--hover-bg-color, #f0f0f0);
+          color: #161824;
+        }
+        &.active {
+          background-color: #605ce5;
+          color: white;
+          font-weight: 600;
+        }
+      }
+    }
+    .note-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 10px;
+    }
   }
 
   @media (min-width: 2000px) {
