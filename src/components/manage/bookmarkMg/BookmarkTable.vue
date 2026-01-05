@@ -261,12 +261,12 @@
     {
       title: '网址',
       key: 'url',
-      width: '300px',
+      width: '500px',
     },
     {
       title: '关联标签',
       key: 'tagList',
-      width: '300px',
+      width: '500px',
     },
     {
       title: '操作',

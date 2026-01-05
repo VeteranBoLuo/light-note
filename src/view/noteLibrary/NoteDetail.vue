@@ -136,6 +136,7 @@
 
     if (params.id) {
       delete params.createBy;
+      delete params.updateTime;
       res = await apiBasePost('/api/note/updateNote', params);
     } else {
       res = await apiBasePost('/api/note/addNote', params);

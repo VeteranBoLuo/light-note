@@ -13,21 +13,42 @@
     </b-button>
     <template #overlay>
       <div class="filter-container">
-        <div class="filter-item" @click.stop="viewNote('all')" :isFocus="tag === undefined ? true : false">{{
-          $t('note.allNote')
-        }}</div>
-        <div class="filter-item" @click.stop="viewNote('null')" :isFocus="tag === 'null'">{{
-          t('note.noTagNote')
-        }}</div>
-        <div style="width: 100%; height: 1px; background: #f0f0f0; flex-shrink: 0"></div>
-        <div
-          :title="item"
-          v-for="item in allTags"
-          class="filter-item"
-          @click.stop="viewNote(item)"
-          :isFocus="tag === item"
-        >
-          <span class="text-hidden"> # {{ item }} </span>
+        <div class="fixed-section">
+          <div class="filter-header">
+            <b-input
+              class="tag-filter-input"
+              size="small"
+              :placeholder="$t('note.searchTag')"
+              v-model:value="keyword"
+              allow-clear
+            />
+            <span class="clear-action" @click.stop="(viewNote('all'), (keyword = ''))">{{
+              $t('note.clearFilter')
+            }}</span>
+          </div>
+
+          <div class="filter-item" @click.stop="viewNote('all')" :isFocus="tag === undefined ? true : false">{{
+            $t('note.allNote')
+          }}</div>
+          <div class="filter-item" @click.stop="viewNote('null')" :isFocus="tag === 'null'">{{
+            t('note.noTagNote')
+          }}</div>
+          <div class="divider"></div>
+        </div>
+
+        <div class="scrollable-section">
+          <div v-if="filteredTags.length === 0" class="filter-empty">{{ $t('note.noTag') }}</div>
+          <div
+            :title="item"
+            v-for="item in filteredTags"
+            :key="item"
+            class="filter-item"
+            @click.stop="viewNote(item)"
+            :isFocus="tag === item"
+          >
+            <span class="text-hidden"> # {{ item }} </span>
+            <span class="check-mark" v-if="tag === item">✓</span>
+          </div>
         </div>
       </div>
     </template>
@@ -40,11 +61,12 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { computed, onMounted, ref } from 'vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import { computed, ref } from 'vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import router from '@/router';
 
-  defineProps({
+  const props = defineProps({
     allTags: {
       type: Array,
       default: () => [],
@@ -52,6 +74,21 @@
   });
 
   const filterVisible = ref(false);
+  const keyword = ref('');
+
+  const uniqueTags = computed(() => {
+    const set = new Set<string>();
+    props.allTags?.forEach((t: any) => {
+      if (t !== undefined && t !== null) set.add(String(t));
+    });
+    return Array.from(set);
+  });
+
+  const filteredTags = computed(() => {
+    if (!keyword.value.trim()) return uniqueTags.value;
+    const lower = keyword.value.trim().toLowerCase();
+    return uniqueTags.value.filter((t) => t.toLowerCase().includes(lower));
+  });
 
   const viewNoteFilter = computed(() => {
     if (tag.value === undefined) {
@@ -71,7 +108,7 @@
     if (tag === 'all') {
       router.push(`/noteLibrary`);
     } else {
-      router.push(`/noteLibrary?tag=${tag}`);
+      router.push(`/noteLibrary?tag=${encodeURIComponent(tag)}`);
     }
     filterVisible.value = false;
   }
@@ -99,8 +136,39 @@
     border-radius: 8px;
     display: flex;
     flex-direction: column;
+    gap: 0;
+  }
+  .fixed-section {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
     gap: 5px;
+  }
+  .scrollable-section {
+    flex: 1;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 0; /* Allow flex item to shrink below content size */
+  }
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: #f0f0f0;
+    flex-shrink: 0;
+  }
+  .filter-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    .clear-action {
+      font-size: 12px;
+      color: var(--primary-color);
+      cursor: pointer;
+      white-space: nowrap;
+    }
   }
   .filter-item {
     text-align: left;
@@ -124,5 +192,25 @@
   [isFocus='true'] {
     background: #eeedff;
     color: #605ce5;
+  }
+  .filter-empty {
+    padding: 8px 10px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .check-mark {
+    margin-left: auto;
+    padding-right: 10px;
+    color: #605ce5;
+    font-size: 12px;
+  }
+</style>
+<style>
+  [data-theme='night'] {
+    .tag-filter-input {
+      .b-input {
+        background-color: #100a1685 !important;
+      }
+    }
   }
 </style>

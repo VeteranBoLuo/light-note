@@ -145,20 +145,21 @@
   ]);
 
   function uploadImg(event) {
+    console.log(event);
     event.forEach((img) => {
       if (bookmark.isMobileDevice) {
         if (opinionData.imgArray.length === 2) {
           opinionData.imgArray.shift();
-          opinionData.imgArray.push(img);
+          opinionData.imgArray.push(img.file);
         } else {
-          opinionData.imgArray.push(img);
+          opinionData.imgArray.push(img.file);
         }
       } else {
         if (opinionData.imgArray.length === 3) {
           opinionData.imgArray.shift();
-          opinionData.imgArray.push(img);
+          opinionData.imgArray.push(img.file);
         } else {
-          opinionData.imgArray.push(img);
+          opinionData.imgArray.push(img.file);
         }
       }
     });

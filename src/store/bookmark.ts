@@ -118,16 +118,7 @@ export default defineStore('bookmark', {
       }
       return theme === 'day' ? 'black' : 'white';
     },
-    /**
-     * 获取当前主题
-     */
-    currentTheme(state): string {
-      return state.theme === 'system'
-        ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'night'
-          : 'day'
-        : state.theme;
-    },
+
     /**
      *  判断当前语言
      */

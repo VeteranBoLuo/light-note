@@ -127,7 +127,7 @@
       if (res.status === 200) {
         localStorage.setItem('userId', res.data.id);
         localStorage.setItem('theme', res.data.theme);
-        bookmark.theme = res.data?.theme || 'day';
+        user.preferences.theme = res.data?.theme || 'day';
         user.setUserInfo(res.data);
         router.push('/');
         message.success('登录成功');

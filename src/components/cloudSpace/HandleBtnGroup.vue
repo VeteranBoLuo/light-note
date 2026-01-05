@@ -52,16 +52,6 @@
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
 
-  // 规范化文件名，确保后缀小写
-  const normalizeFileName = (name: string) => {
-    const parts = name.split('.');
-    if (parts.length > 1) {
-      const ext = parts.pop()?.toLowerCase();
-      return parts.join('.') + '.' + ext;
-    }
-    return name;
-  };
-
   // 格式化速度
   const formatSpeed = (speed: number) => {
     if (speed < 1024) return `${speed.toFixed(0)} B/s`;
@@ -129,7 +119,7 @@
         // 累计文件大小
         totalSize += processedFile.size;
         filesData.push({
-          fileName: normalizeFileName(processedFile.name),
+          fileName: processedFile.name,
           fileType: processedFile.type || 'application/octet-stream',
           fileSize: processedFile.size,
           file: processedFile,

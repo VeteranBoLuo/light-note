@@ -4,8 +4,8 @@
       <div
         style="width: 80px; height: 80px; color: #6c7074; border-radius: 8px"
         :style="{
-          backgroundColor: bookmark.currentTheme === 'day' ? '#F5F5F5' : '#333333',
-          border: bookmark.currentTheme === 'day' ? '1px dashed #ccc' : '',
+          backgroundColor: user.preferences.theme === 'day' ? '#F5F5F5' : '#333333',
+          border: user.preferences.theme === 'day' ? '1px dashed #ccc' : '',
         }"
         class="flex-center dom-hover"
       >
@@ -19,7 +19,7 @@
   import { message } from 'ant-design-vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
 
   const emit = defineEmits(['change']);
 
@@ -36,6 +36,7 @@
     }, // 默认总大小限制为10MB
   );
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   function handleUpload() {
     const input = document.createElement('input');
     input.type = 'file';

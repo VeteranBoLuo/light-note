@@ -22,6 +22,10 @@ interface UserInfo {
   opinionTotal: number;
   location: UserLocation;
   storageUsed: number; // 已使用单位：MB
+  preferences: {
+    theme: 'day' | 'night' | 'system' | string; // 主题
+    noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
+  };
 }
 
 interface UserState extends UserInfo {}
@@ -45,11 +49,27 @@ const defaultUserState: UserState = {
     city: '',
     rectangle: '',
   },
+  preferences: {
+    theme: 'day', // 主题
+    noteViewMode: 'card', // 笔记展示模式：卡片/列表
+  },
 };
 
 export default defineStore('user', {
   state: (): UserState => ({ ...defaultUserState }),
-  getters: {},
+  getters: {
+    /**
+     * 获取当前主题
+     */
+    currentTheme(state): string {
+      console.log('get currentTheme:', state.preferences.theme);
+      return state.preferences.theme === 'system'
+        ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'night'
+          : 'day'
+        : state.preferences.theme;
+    },
+  },
   actions: {
     /**
      * 设置用户信息

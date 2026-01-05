@@ -32,8 +32,9 @@
 
   // 监听主题变化
   watch(
-    () => bookmark.theme,
+    () => user.preferences.theme,
     () => {
+      console.log('theme change:', user.preferences.theme);
       applyTheme();
     },
   );
@@ -67,9 +68,9 @@
   }, 50);
   function initApp() {
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
-    const theme = localStorage.getItem('theme');
-    if (theme) {
-      bookmark.theme = theme;
+    const preferences = localStorage.getItem('preferences');
+    if (preferences) {
+      user.preferences = JSON.parse(preferences);
     }
     applyTheme();
     // 设置指纹
@@ -77,7 +78,7 @@
 
     mq = window.matchMedia('(prefers-color-scheme: dark)');
     mqListener = (e) => {
-      bookmark.theme = e.matches ? 'night' : 'day';
+      user.preferences.theme = e.matches ? 'night' : 'day';
     };
     mq.addEventListener('change', mqListener);
   }
@@ -96,14 +97,14 @@
           });
         }
       }
-      bookmark.theme = res.data.theme || 'day';
-      localStorage.setItem('theme', bookmark.theme);
+      user.preferences.theme = user.preferences.theme || 'day';
+      localStorage.setItem('preferences', JSON.stringify(user.preferences));
       if (res.status !== 200) {
         handleUserLogout();
       }
     } catch (error) {
       message.error('获取用户信息失败：', error);
-      bookmark.theme = 'day';
+      user.preferences.theme = 'day';
       handleUserLogout();
     }
   }
@@ -116,7 +117,7 @@
     // 强制重绘确保样式生效
     void document.documentElement.offsetWidth;
     // 执行主题切换
-    document.documentElement.setAttribute('data-theme', bookmark.currentTheme);
+    document.documentElement.setAttribute('data-theme', user.currentTheme);
 
     // 下一事件循环恢复动画
     setTimeout(() => {

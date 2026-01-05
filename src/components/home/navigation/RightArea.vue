@@ -179,7 +179,7 @@
   }
 
   function getThemeIcon() {
-    switch (bookmark.theme) {
+    switch (user.preferences.theme) {
       case 'system':
         return icon.navigation.system;
       case 'day':
@@ -190,14 +190,17 @@
   }
 
   function changeTheme(theme: string) {
-    bookmark.theme = theme;
+    user.preferences.theme = theme;
     userApi
       .updateUserInfo({
         id: localStorage.getItem('userId'),
-        theme: bookmark.theme,
+        preferences: JSON.stringify({
+          ...user.preferences,
+          theme: user.preferences.theme,
+        }),
       })
       .then(() => {
-        localStorage.setItem('theme', bookmark.theme);
+        localStorage.setItem('theme', user.preferences.theme);
       })
       .catch((err) => {
         console.error('后台错误：' + err);
