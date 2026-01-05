@@ -1,13 +1,10 @@
 <template>
   <CommonContainer
     :title="$t('personCenter.title')"
-    :style="{ backgroundColor: user.preferences.theme === 'day' ? '#f6f7f9' : '#222222' }"
+    :style="{ backgroundColor: user.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
     @backClick="router.push('/home')"
   >
-    <div
-      class="person-title-card"
-      :style="{ backgroundColor: user.preferences.theme === 'day' ? '#97a1c6' : '#4d5264' }"
-    >
+    <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
       <div style="display: flex; gap: 20px; align-items: center">
         <div class="navigation-icon" :style="{ color: bookmark.iconColor }">
           <svg-icon
@@ -201,7 +198,7 @@
     if (user.preferences.theme === 'night') {
       return t('navigation.dark');
     }
-    if (user.preferences.theme === 'day') {
+    if (user.currentTheme === 'day') {
       return t('navigation.light');
     }
     return t('navigation.followSystem');

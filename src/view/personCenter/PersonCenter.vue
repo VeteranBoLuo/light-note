@@ -9,7 +9,7 @@
     <template #title>
       <div class="user-card" :style="{ color: bookmark.iconColor }">
         <div class="user-top">
-          <div class="avatar-ring" :class="user.preferences.theme === 'day' ? 'ring-day' : 'ring-night'">
+          <div class="avatar-ring" :class="user.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
             <svg-icon
               img-id="viewUserImg"
               @click="zoomImage"
@@ -101,7 +101,7 @@
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-  const tooltipColor = computed(() => (user.preferences.theme === 'day' ? '#ffffff' : '#33343f'));
+  const tooltipColor = computed(() => (user.currentTheme === 'day' ? '#ffffff' : '#33343f'));
   const getPopupContainer = (trigger: HTMLElement) => {
     return document.getElementById('tag-container');
   };
@@ -236,7 +236,7 @@
     if (user.preferences.theme === 'night') {
       return t('navigation.dark');
     }
-    if (user.preferences.theme === 'day') {
+    if (user.currentTheme === 'day') {
       return t('navigation.day');
     }
     return t('navigation.followSystem');
@@ -364,6 +364,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    color: var(--text-color);
   }
 
   .user-name {
