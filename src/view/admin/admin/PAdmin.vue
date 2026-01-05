@@ -1,7 +1,7 @@
 <template>
   <CommonContainer
     title="后台管理"
-    :style="{ backgroundColor: user.preferences.theme === 'day' ? '#f6f7f9' : '#222222' }"
+    :style="{ backgroundColor: user.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
     @backClick="router.push('/personCenter')"
   >
     <PhoneMenu :menu-list="menuList" label="title" @click="clickItem" />

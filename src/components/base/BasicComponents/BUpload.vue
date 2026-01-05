@@ -4,8 +4,8 @@
       <div
         style="width: 80px; height: 80px; color: #6c7074; border-radius: 8px"
         :style="{
-          backgroundColor: user.preferences.theme === 'day' ? '#F5F5F5' : '#333333',
-          border: user.preferences.theme === 'day' ? '1px dashed #ccc' : '',
+          backgroundColor: user.currentTheme === 'day' ? '#F5F5F5' : '#333333',
+          border: user.currentTheme === 'day' ? '1px dashed #ccc' : '',
         }"
         class="flex-center dom-hover"
       >

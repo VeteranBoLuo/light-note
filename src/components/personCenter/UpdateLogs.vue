@@ -1,6 +1,8 @@
 <template>
   <CommonContainer :title="$t('changelog.title')">
-    <b-button class="edit_btn" v-if="user.role === 'root'" @click="editLogs">{{ $t('common.edit') }}</b-button>
+    <b-button type="primary" class="edit_btn" v-if="user.role === 'root'" @click="editLogs">{{
+      $t('common.edit')
+    }}</b-button>
     <div
       style="color: white !important; height: 100%; overflow-y: auto"
       :style="{ padding: bookmark.isMobileDevice ? '20px' : '20px 100px' }"
@@ -35,16 +37,9 @@
         <div class="editor-header">
           <span>{{ $t('changelog.jsonEditor') }} {{ jsonContent.length }} {{ $t('changelog.charCount') }}</span>
           <div class="editor-actions">
-            <a-button size="small" @click="formatJson" :disabled="!isValidJson">{{ $t('changelog.format') }}</a-button>
+            <a-button size="small" @click="formatJson">{{ $t('changelog.format') }}</a-button>
             <a-button size="small" @click="resetJson" style="margin-left: 8px">{{ $t('changelog.reset') }}</a-button>
-            <a-button
-              size="small"
-              type="primary"
-              class="bo"
-              @click="handleUpdate"
-              :loading="updating"
-              :disabled="!isValidJson"
-            >
+            <a-button size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating">
               {{ $t('common.save') }}
             </a-button>
           </div>
@@ -292,7 +287,8 @@
 
   .edit_btn {
     position: absolute;
-    right: 20px;
+    top: 50%;
+    right: 50%;
     z-index: 1;
   }
 
