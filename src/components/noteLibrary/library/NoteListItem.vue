@@ -8,7 +8,7 @@
       </div>
       <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>
-    <div class="note-time">{{ formatTime(note['updateTime'] ?? note['createTime']) }}</div>
+    <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     <div
       class="checkBox"
       v-if="!bookmark.isMobileDevice"
