@@ -34,7 +34,6 @@
   watch(
     () => user.preferences.theme,
     () => {
-      console.log('theme change:', user.preferences.theme);
       applyTheme();
     },
   );
@@ -69,7 +68,7 @@
   function initApp() {
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
     const preferences = localStorage.getItem('preferences');
-    if (preferences) {
+    if (preferences && preferences !== 'null') {
       user.preferences = JSON.parse(preferences);
     }
     applyTheme();

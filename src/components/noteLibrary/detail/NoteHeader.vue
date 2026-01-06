@@ -49,7 +49,7 @@
         </div>
       </a-tooltip>
     </div>
-    <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="$emit('saveTag')" />
+    <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" />
     <ActionCardModal
       v-model:visible="exportModalVisible"
       title="导出笔记"

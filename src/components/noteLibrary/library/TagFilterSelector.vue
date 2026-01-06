@@ -39,15 +39,15 @@
         <div class="scrollable-section">
           <div v-if="filteredTags.length === 0" class="filter-empty">{{ $t('note.noTag') }}</div>
           <div
-            :title="item"
+            :title="item.name"
             v-for="item in filteredTags"
-            :key="item"
+            :key="item.id"
             class="filter-item"
-            @click.stop="viewNote(item)"
-            :isFocus="tag === item"
+            @click.stop="viewNote(item.id)"
+            :isFocus="tag === item.id"
           >
-            <span class="text-hidden"> # {{ item }} </span>
-            <span class="check-mark" v-if="tag === item">✓</span>
+            <span class="text-hidden"> # {{ item.name }} </span>
+            <span class="check-mark" v-if="tag === item.id">✓</span>
           </div>
         </div>
       </div>
@@ -68,7 +68,7 @@
 
   const props = defineProps({
     allTags: {
-      type: Array,
+      type: Array as () => Array<{ id: string; name: string }>,
       default: () => [],
     },
   });
@@ -76,18 +76,10 @@
   const filterVisible = ref(false);
   const keyword = ref('');
 
-  const uniqueTags = computed(() => {
-    const set = new Set<string>();
-    props.allTags?.forEach((t: any) => {
-      if (t !== undefined && t !== null) set.add(String(t));
-    });
-    return Array.from(set);
-  });
-
   const filteredTags = computed(() => {
-    if (!keyword.value.trim()) return uniqueTags.value;
+    if (!keyword.value.trim()) return props.allTags;
     const lower = keyword.value.trim().toLowerCase();
-    return uniqueTags.value.filter((t) => t.toLowerCase().includes(lower));
+    return props.allTags.filter((t) => t.name.toLowerCase().includes(lower));
   });
 
   const viewNoteFilter = computed(() => {
@@ -97,7 +89,8 @@
     if (tag.value === 'null') {
       return t('note.noTagNote');
     }
-    return tag.value;
+    const found = props.allTags.find((t) => t.id === tag.value);
+    return found ? found.name : tag.value;
   });
 
   const tag = computed(() => {
@@ -145,6 +138,7 @@
     gap: 5px;
   }
   .scrollable-section {
+    margin-top: 5px;
     flex: 1;
     overflow-y: auto;
     display: flex;

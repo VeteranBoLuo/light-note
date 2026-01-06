@@ -4,7 +4,7 @@
       <div class="note-title">{{ note.title }}</div>
       <div class="note-description" v-html="getDescription(note.content)"></div>
       <div class="note-tags" v-if="getTags(note)">
-        <span class="b-tag" v-for="tag in getTags(note)" @click.stop="noteTypeChange(tag)">{{ tag }}</span>
+        <span class="b-tag" v-for="tag in getTags(note)" @click.stop="noteTypeChange(tag)">{{ tag.name }}</span>
       </div>
       <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>
@@ -29,7 +29,7 @@
 
   const getTags = function (note) {
     if (note.tags) {
-      return JSON.parse(note.tags);
+      return note.tags;
     }
     return '';
   };
