@@ -218,7 +218,6 @@
           userApi.getUserInfoById({ id: '' }).then((res: any) => {
             if (res.status === 'visitor') {
               user.setUserInfo(res.data);
-              user.preferences.theme = res.data.theme;
               localStorage.setItem('theme', res.data.theme);
               if (bookmark.isMobileDevice) {
                 router.push('/home');
@@ -236,8 +235,8 @@
     if (user.preferences.theme === 'night') {
       return t('navigation.dark');
     }
-    if (user.currentTheme === 'day') {
-      return t('navigation.day');
+    if (user.preferences.theme === 'day') {
+      return t('navigation.light');
     }
     return t('navigation.followSystem');
   });
@@ -392,6 +391,15 @@
     border-radius: 10px;
     background: linear-gradient(135deg, rgba(79, 134, 255, 0.12), rgba(82, 196, 186, 0.08));
     border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  [data-theme='night'] {
+    .stat-card {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .stat-icon {
+      background: gray;
+    }
   }
 
   .stat-icon {

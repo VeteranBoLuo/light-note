@@ -28,3 +28,5 @@ build/
 *.sw?
 .vscode/extensions.json
 components.d.ts
+.github/copilot-instructions.md
+

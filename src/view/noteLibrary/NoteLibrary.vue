@@ -91,7 +91,7 @@
             :class="{ active: selectedTag === tag.id }"
             @click="selectTag(tag)"
           >
-            # {{ tag.name }}
+            {{ tag.name }}
           </div>
         </div>
         <VueDraggable

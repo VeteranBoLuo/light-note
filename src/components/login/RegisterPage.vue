@@ -127,7 +127,6 @@
     rPassword: '',
     email: '',
     role: 'admin',
-    theme: 'day',
   });
   const bookmark = bookmarkStore();
   const disable = computed(() => {
