@@ -159,10 +159,6 @@
 
   const user = useUserStore();
 
-  function getThemeStyle(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-  }
-
   function handleExitLogin() {
     menuVisible.value = false;
     if (user.role === 'visitor') {
@@ -184,8 +180,6 @@
           userApi.getUserInfoById({ id: localStorage.getItem('userId') }).then((res) => {
             if (res.status === 200) {
               user.setUserInfo(res.data);
-              user.preferences.theme = res.data.theme;
-              getThemeStyle(res.data.theme);
               localStorage.setItem('theme', res.data.theme);
             }
           });

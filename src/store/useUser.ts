@@ -62,7 +62,6 @@ export default defineStore('user', {
      * 获取当前主题
      */
     currentTheme(state): string {
-      console.log('get currentTheme:', state.preferences.theme);
       return state.preferences.theme === 'system'
         ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
           ? 'night'
@@ -76,6 +75,9 @@ export default defineStore('user', {
      */
     setUserInfo(val: Partial<UserInfo>): void {
       Object.assign(this, { ...defaultUserState, ...val });
+      if (val.preferences === null) {
+        this.preferences = defaultUserState.preferences;
+      }
     },
     /**
      * 重置用户信息

@@ -32,7 +32,7 @@
 
   // 监听主题变化
   watch(
-    () => user.preferences.theme,
+    () => user.preferences?.theme,
     () => {
       applyTheme();
     },
@@ -71,6 +71,7 @@
     if (preferences && preferences !== 'null') {
       user.preferences = JSON.parse(preferences);
     }
+
     applyTheme();
     // 设置指纹
     window['fingerprint'] = fingerprint();
@@ -80,6 +81,7 @@
       user.preferences.theme = e.matches ? 'night' : 'day';
     };
     mq.addEventListener('change', mqListener);
+    console.log('初始屏幕尺寸：', user.preferences);
   }
   async function getUserInfo() {
     try {
@@ -103,7 +105,6 @@
       }
     } catch (error) {
       message.error('获取用户信息失败：', error);
-      user.preferences.theme = 'day';
       handleUserLogout();
     }
   }
