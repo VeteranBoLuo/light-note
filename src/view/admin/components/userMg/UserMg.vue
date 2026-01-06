@@ -114,11 +114,15 @@
         dataIndex: 'ip',
         ellipsis: true,
       },
-
+      {
+        title: '最近活跃时间',
+        dataIndex: 'lastActiveTime',
+        ellipsis: true,
+      },
       { title: '注册时间', dataIndex: 'createTime' },
-      { title: '书签数', dataIndex: 'bookmarkTotal' },
-      { title: '笔记数', dataIndex: 'noteTotal' },
-      { title: '云空间使用量 (MB)', dataIndex: 'storageUsed' },
+      { title: '书签数', dataIndex: 'bookmarkTotal', width: 80 },
+      { title: '笔记数', dataIndex: 'noteTotal', width: 80 },
+      { title: '云空间使用量 (MB)', dataIndex: 'storageUsed', width: 140 },
       {
         title: '操作',
         dataIndex: 'operation',
