@@ -107,19 +107,6 @@ export default defineStore('bookmark', {
     },
 
     /**
-     * 获取图标颜色
-     */
-    iconColor(state): string {
-      const theme = state.theme;
-      if (theme === 'system') {
-        return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'white'
-          : 'black';
-      }
-      return theme === 'day' ? 'black' : 'white';
-    },
-
-    /**
      *  判断当前语言
      */
     locale(): string {

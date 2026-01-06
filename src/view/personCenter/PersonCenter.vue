@@ -7,7 +7,7 @@
     v-model:open="menuVisible"
   >
     <template #title>
-      <div class="user-card" :style="{ color: bookmark.iconColor }">
+      <div class="user-card" :style="{ color: user.iconColor }">
         <div class="user-top">
           <div class="avatar-ring" :class="user.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
             <svg-icon

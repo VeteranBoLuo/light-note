@@ -68,6 +68,18 @@ export default defineStore('user', {
           : 'day'
         : state.preferences.theme;
     },
+    /**
+     * 获取图标颜色
+     */
+    iconColor(state): string {
+      const theme = state.preferences.theme;
+      if (theme === 'system') {
+        return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'white'
+          : 'black';
+      }
+      return theme === 'day' ? 'black' : 'white';
+    },
   },
   actions: {
     /**
