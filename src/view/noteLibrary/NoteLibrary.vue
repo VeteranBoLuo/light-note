@@ -85,8 +85,13 @@
           <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')">
             {{ $t('note.noTagNote') }}
           </div>
-          <div v-for="tag in allTags" class="tag-item" :class="{ active: selectedTag === tag }" @click="selectTag(tag)">
-            # {{ tag }}
+          <div
+            v-for="tag in allTags"
+            class="tag-item"
+            :class="{ active: selectedTag === tag.id }"
+            @click="selectTag(tag)"
+          >
+            # {{ tag.name }}
           </div>
         </div>
         <VueDraggable
@@ -138,20 +143,21 @@
     if (res.status === 200) {
       noteList.value = res.data ?? [];
       user.noteTotal = noteList.value.length;
-      noteList.value.forEach((data) => {
-        const tags = data.tags ? JSON.parse(data.tags) : null;
-        if (tags) {
-          tags.forEach((tag) => {
-            if (!allTags.value.includes(tag)) {
-              allTags.value.push(tag);
-            }
-          });
-        }
-      });
+      await getAllTags();
       loading.value = false;
     }
   }
 
+  async function getAllTags() {
+    try {
+      const res = await apiBasePost('/api/note/queryNoteTagList', { userId: user.id });
+      if (res.status === 200) {
+        allTags.value = res.data;
+      }
+    } catch (error) {
+      console.warn('fetchNoteTags fallback', error);
+    }
+  }
   function getIndexNoteList() {
     router.push('/noteLibrary');
   }
@@ -184,20 +190,8 @@
       const title = (note.title || '').toLowerCase();
       const contentText = toPlainText(note.content || '').toLowerCase();
 
-      let tags: string[] = [];
-      if (note.tags) {
-        try {
-          const parsed = JSON.parse(note.tags);
-          if (Array.isArray(parsed)) {
-            tags = parsed.map((t) => String(t).toLowerCase());
-          }
-        } catch (error) {
-          console.warn('Invalid tag json', error);
-        }
-      }
-
       if (!keyword) return true;
-      return title.includes(keyword) || contentText.includes(keyword) || tags.some((t) => t.includes(keyword));
+      return title.includes(keyword) || contentText.includes(keyword);
     });
 
     let tagFilter = router.currentRoute.value.query.tag;
@@ -207,10 +201,14 @@
     }
 
     if (tagFilter === 'null') {
-      return filteredNotes.filter((note) => !note.tags);
+      return filteredNotes.filter((note) => !note.tags || note.tags.length === 0);
     }
 
-    return filteredNotes.filter((note) => note.tags && JSON.parse(note.tags)?.includes(tagFilter));
+    return filteredNotes.filter((note) => {
+      if (!note.tags) return false;
+      const parsed = note.tags;
+      return Array.isArray(parsed) && parsed.some((t) => t.id === tagFilter);
+    });
   });
 
   function focusSearchInput() {
@@ -251,15 +249,17 @@
     if (tag === null) {
       router.push('/noteLibrary');
     } else {
-      router.push(`/noteLibrary?tag=${encodeURIComponent(tag)}`);
+      router.push(`/noteLibrary?tag=${tag.id}`);
     }
   };
 
   function selectTag(tag) {
     if (tag === null) {
       router.push('/noteLibrary');
+    } else if (tag === 'null') {
+      router.push('/noteLibrary?tag=null');
     } else {
-      router.push(`/noteLibrary?tag=${encodeURIComponent(tag)}`);
+      router.push(`/noteLibrary?tag=${tag.id}`);
     }
   }
 
@@ -391,6 +391,13 @@
     cursor: pointer;
     font-size: 14px;
     color: #f54e4e;
+    padding: 6px 12px;
+    border-radius: 6px;
+    background: rgba(245, 78, 78, 0.1);
+    transition: all 0.2s;
+    &:hover {
+      background: rgba(245, 78, 78, 0.2);
+    }
   }
   .search-icon {
     overflow: hidden; // 防止因为padding变化导致动画开始时的错位问题

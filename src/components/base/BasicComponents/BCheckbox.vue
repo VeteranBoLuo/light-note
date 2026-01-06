@@ -1,10 +1,10 @@
 <template>
   <div
     class="checkbox_container"
+    :data-type="type"
     @click="checkClick"
     :style="{
       backgroundColor: isCheck ? 'var(--primary-color)' : '',
-      borderRadius: type === 'circle' ? '8px' : 'unset',
     }"
   >
     <svg v-show="isCheck" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
@@ -36,12 +36,28 @@
 
 <style lang="less">
   .checkbox_container {
-    height: 12px;
-    width: 12px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    height: 14px;
+    width: 14px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 4px;
     display: flex;
     align-items: center;
+    justify-content: center;
     cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: transparent;
+
+    &:hover {
+      border-color: var(--primary-color);
+    }
+
+    &[data-type='circle'] {
+      border-radius: 50%;
+    }
+
+    svg {
+      width: 12px;
+      height: 12px;
+    }
   }
 </style>

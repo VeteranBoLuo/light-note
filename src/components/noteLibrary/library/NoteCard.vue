@@ -10,9 +10,9 @@
       :style="{ color: user.preferences.theme === 'night' ? '#ccc' : 'rgb(102, 102, 102)' }"
       v-html="extractAndConvertTags(note.content)"
     />
-    <div class="note-tags" v-if="getTags(note)">
-      <div :title="tag" class="b-tag text-hidden" v-for="tag in getTags(note)" @click.stop="noteTypeChange(tag)">{{
-        tag
+    <div class="note-tags" v-if="note.tags && note.tags.length">
+      <div :title="tag" class="b-tag text-hidden" v-for="tag in note.tags" @click.stop="noteTypeChange(tag)">{{
+        tag.name
       }}</div>
     </div>
     <div class="note-tags" v-else style="font-size: 12px">_</div>
@@ -39,12 +39,6 @@
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const getTags = function (note) {
-    if (note.tags) {
-      return JSON.parse(note.tags);
-    }
-    return '';
-  };
 
   // 提取<h>和<p>标签等并转换为<p>标签
   const extractAndConvertTags = (htmlContent: string) => {
@@ -143,6 +137,6 @@
     visibility: hidden;
     position: absolute;
     right: 20px;
-    top: 25px;
+    top: 22px;
   }
 </style>
