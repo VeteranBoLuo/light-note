@@ -28,7 +28,7 @@
       </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
-      <a-tooltip title="更新标签">
+      <a-tooltip title="标签">
         <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
         </div>

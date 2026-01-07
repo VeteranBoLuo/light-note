@@ -27,11 +27,15 @@
         :is-loading="isLoading"
         :use-internet-search="useInternetSearch"
         :enable-thinking="enableThinking"
+        :enable-translation="enableTranslation"
+        :translation-config="translationConfig"
         :is-mobile="bookmark.isMobileDevice"
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
         :toggle-internet-search="toggleInternetSearch"
         :toggle-thinking="toggleThinking"
+        @update:enable-translation="enableTranslation = $event"
+        @update:translation-config="translationConfig = $event"
       />
     </div>
   </div>
@@ -72,6 +76,8 @@
   const messagesContainer = ref<HTMLElement | null>(null);
   const useInternetSearch = ref(false);
   const enableThinking = ref(false);
+  const enableTranslation = ref(false);
+  const translationConfig = ref({ source: 'auto', target: 'en' });
 
   // 智能滚动相关状态 - 简化状态管理
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
@@ -165,6 +171,27 @@
   const toggleThinking = () => {
     enableThinking.value = !enableThinking.value;
   };
+
+  // 监听翻译状态，当启用翻译时禁用联网和深度思考
+  watch(enableTranslation, (newVal) => {
+    if (newVal) {
+      useInternetSearch.value = false;
+      enableThinking.value = false;
+    }
+  });
+
+  // 监听联网和深度思考状态，当启用时禁用翻译
+  watch(useInternetSearch, (newVal) => {
+    if (newVal) {
+      enableTranslation.value = false;
+    }
+  });
+
+  watch(enableThinking, (newVal) => {
+    if (newVal) {
+      enableTranslation.value = false;
+    }
+  });
 
   // 清空对话
   function clearHistory() {
@@ -379,6 +406,8 @@
           sessionId: sessionId,
           useInternetSearch: useInternetSearch.value, // 是否开启联网搜索
           enableThinking: enableThinking.value, // 是否开启深度思考
+          enableTranslation: enableTranslation.value, // 是否开启翻译
+          translationConfig: translationConfig.value, // 翻译配置
         }),
         signal: abortController.value.signal,
       });

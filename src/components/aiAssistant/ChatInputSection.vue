@@ -13,7 +13,15 @@
         class="text-input"
       ></textarea>
       <div class="input-actions">
+        <TranslationToggle
+          v-if="!useInternetSearch && !enableThinking"
+          :enableTranslation="enableTranslation"
+          :translationConfig="translationConfig"
+          @update:enableTranslation="$emit('update:enableTranslation', $event)"
+          @update:translationConfig="$emit('update:translationConfig', $event)"
+        />
         <button
+          v-if="!enableTranslation"
           class="search-btn"
           @click="toggleInternetSearch"
           :class="{ active: useInternetSearch }"
@@ -22,7 +30,13 @@
           <svg-icon size="14" :src="icon.ai.internet" />
           联网搜索
         </button>
-        <button class="search-btn" @click="toggleThinking" :class="{ active: enableThinking }" title="深度思考">
+        <button
+          v-if="!enableTranslation"
+          class="search-btn"
+          @click="toggleThinking"
+          :class="{ active: enableThinking }"
+          title="深度思考"
+        >
           <svg-icon size="14" :src="icon.ai.thinking" />
           深度思考
         </button>
@@ -45,6 +59,7 @@
   import { onMounted, ref, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
+  import TranslationToggle from './TranslationToggle.vue';
 
   const { t } = useI18n();
 
@@ -53,6 +68,8 @@
     isLoading: boolean;
     useInternetSearch: boolean;
     enableThinking: boolean;
+    enableTranslation: boolean;
+    translationConfig: { source: string; target: string };
     isMobile: boolean;
     sendFn: () => void;
     stopFn: () => void;
@@ -62,6 +79,8 @@
 
   const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;
+    (e: 'update:enableTranslation', value: boolean): void;
+    (e: 'update:translationConfig', value: { source: string; target: string }): void;
   }>();
 
   const textInput = ref<HTMLTextAreaElement | null>(null);
@@ -80,7 +99,13 @@
   };
 
   const handleSend = () => {
-    props.sendFn();
+    if (props.enableTranslation) {
+      nextTick(() => {
+        props.sendFn();
+      });
+    } else {
+      props.sendFn();
+    }
   };
 
   const handleNewLine = () => {

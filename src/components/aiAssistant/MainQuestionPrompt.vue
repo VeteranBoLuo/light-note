@@ -37,7 +37,6 @@
     t('ai.howToImportExportBookmarks'),
     t('ai.howToUseAIAssistant'),
     t('ai.howToCustomizeTheme'),
-    t('ai.howToBackupData'),
   ];
 
   const recommendationItems = ref<string[]>([]);
