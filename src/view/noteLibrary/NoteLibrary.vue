@@ -9,11 +9,7 @@
           <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
         </div>
         <div class="handle-btn-group">
-          <ViewModeToggle
-            :viewMode="user.preferences.noteViewMode"
-            @update:viewMode="user.preferences.noteViewMode = $event"
-          />
-          <TagFilterSelector v-if="user.preferences.noteViewMode === 'card'" :allTags="allTags" />
+          <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
           <b-button
             type="primary"
             style="border-radius: 20px"
@@ -38,7 +34,7 @@
             </b-button>
           </template>
           <template v-else>
-            <TagFilterSelector v-if="user.preferences.noteViewMode === 'card'" :allTags="allTags" />
+            <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
             <ViewModeToggle />
             <div
               class="search-icon flex-center dom-hover"
@@ -65,7 +61,7 @@
         </div>
       </div>
       <VueDraggable
-        v-if="user.preferences.noteViewMode === 'card'"
+        v-if="currentViewMode === 'card'"
         :disabled="bookmark.isMobileDevice"
         :animation="200"
         v-model="noteList"
@@ -77,7 +73,7 @@
       >
         <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
       </VueDraggable>
-      <div v-else class="note-library-body-list">
+      <div v-if="currentViewMode === 'list'" class="note-library-body-list">
         <div class="tag-sidebar">
           <div class="tag-item" :class="{ active: selectedTag === null }" @click="selectTag(null)">
             {{ $t('note.allNote') }}
@@ -136,6 +132,8 @@
   const loading = ref(false);
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
+  const currentViewMode = computed(() => (bookmark.isMobileDevice ? 'card' : user.preferences.noteViewMode));
+
   init();
   async function init() {
     loading.value = true;

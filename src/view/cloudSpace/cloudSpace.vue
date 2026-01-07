@@ -345,6 +345,9 @@
   }
 
   @media (max-width: 1000px) {
+    .cloud-container {
+      padding: unset;
+    }
     .header {
       height: 40px;
       display: flex;
