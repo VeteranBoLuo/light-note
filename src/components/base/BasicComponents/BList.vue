@@ -90,7 +90,7 @@
       searchFilter: false,
       draggable: false,
       forceFallback: false,
-      delay: 0,
+      delay: 100,
       options: () => ({}),
     },
   );

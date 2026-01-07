@@ -35,7 +35,7 @@
           :data-source="allImg[imgType]"
           :columns="imageColumns"
           row-key="id"
-          :scroll="{ y: 420 }"
+          :scroll="{ y: 430 }"
           :pagination="false"
         >
           <template #bodyCell="{ column, text, record }">

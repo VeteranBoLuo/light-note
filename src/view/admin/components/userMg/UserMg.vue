@@ -34,7 +34,7 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table :data-source="userList" :columns="userColumns" row-key="id" :scroll="{ y: 500 }" :pagination="false">
+        <a-table :data-source="userList" :columns="userColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
           <template #bodyCell="{ column, text, record }">
             <template v-if="column.dataIndex === 'operation'">
               <b-space>
