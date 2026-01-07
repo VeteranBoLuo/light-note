@@ -7,8 +7,10 @@
       v-model:dragList="bookmark.tagList"
       :node-type="{ id: 'id', title: 'name' }"
       @onEnd="onDragEnd"
+      @start="onStart"
       force-fallback
       :scroll-sensitivity="20"
+      :options="{ touchStartThreshold: 10 }"
     >
       <template #input>
         <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">
@@ -153,8 +155,11 @@
       });
     }
   }
-
+  function onStart() {
+    document.body.style.userSelect = 'none';
+  }
   async function onDragEnd() {
+    document.body.style.userSelect = '';
     try {
       const userId = localStorage?.getItem('userId');
       const sortedTags =
@@ -208,10 +213,6 @@
 
   .header-input {
     width: 180px;
-  }
-
-  .tag-item-icon {
-    cursor: move;
   }
 
   .edit-input {

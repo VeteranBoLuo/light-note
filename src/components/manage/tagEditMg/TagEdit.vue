@@ -78,7 +78,7 @@
             }"
           >
             <template #render="item">
-              <span class="custom-item" :style="{ color: bookmark.iconColor }">{{ item.name }}</span>
+              <span class="custom-item" :style="{ color: user.iconColor }">{{ item.name }}</span>
             </template>
           </a-transfer>
         </div>
