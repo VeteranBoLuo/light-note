@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api':
-          env.VITE_ENV === 'local1'
+          env.VITE_ENV === 'local'
             ? {
                 target: 'http://127.0.0.1:9001',
                 changeOrigin: true,

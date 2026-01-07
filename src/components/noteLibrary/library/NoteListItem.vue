@@ -12,7 +12,7 @@
     <div
       class="checkBox"
       v-if="!bookmark.isMobileDevice"
-      :style="{ visibility: note.isCheck === true ? 'visible' : '' }"
+      :style="{ visibility: note.isCheck === true ? 'visible' : 'hidden' }"
     >
       <b-checkbox v-model:isCheck="note.isCheck" @click.stop />
     </div>
@@ -84,10 +84,13 @@
       .note-description {
         font-size: 14px;
         color: var(--desc-color);
+        width: calc(100% - 20px);
         margin-bottom: 10px;
         line-height: 1.5;
+        word-break: break-all;
         display: -webkit-box;
         -webkit-line-clamp: 2;
+        line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
         text-overflow: ellipsis;

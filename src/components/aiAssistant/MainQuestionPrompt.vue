@@ -37,7 +37,6 @@
     t('ai.howToImportExportBookmarks'),
     t('ai.howToUseAIAssistant'),
     t('ai.howToCustomizeTheme'),
-    t('ai.howToBackupData'),
   ];
 
   const recommendationItems = ref<string[]>([]);
@@ -59,12 +58,8 @@
 
 <style scoped lang="less">
   .recommendation-container {
-    padding: 1.5rem 1.5rem 0.5rem;
-    background: var(--menu-container-bg-color);
+    padding: 0 1rem 0.5rem;
     border-radius: 16px;
-    margin: 0 1.5rem 1rem;
-    border: 1px solid #dbeafe;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
   }
 
   .recommendation-title {
@@ -91,7 +86,7 @@
     background: white;
     padding: 0.5rem 1rem;
     border-radius: 1rem;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     color: #4b5563;
     border: 1px solid #e2e8f0;
     cursor: pointer;
@@ -100,8 +95,14 @@
   }
 
   .recommendation-item:hover {
-    background: #f0f9ff;
     color: #10b981;
-    border-color: #3b82f6;
+  }
+
+  [data-theme='night'] .recommendation-item {
+    background: var(--background-color);
+    color: var(--desc-color);
+    &:hover {
+      color: var(--text-color);
+    }
   }
 </style>

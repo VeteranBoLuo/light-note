@@ -27,11 +27,15 @@
         :is-loading="isLoading"
         :use-internet-search="useInternetSearch"
         :enable-thinking="enableThinking"
+        :enable-translation="enableTranslation"
+        :translation-config="translationConfig"
         :is-mobile="bookmark.isMobileDevice"
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
         :toggle-internet-search="toggleInternetSearch"
         :toggle-thinking="toggleThinking"
+        @update:enable-translation="enableTranslation = $event"
+        @update:translation-config="translationConfig = $event"
       />
     </div>
   </div>
@@ -72,11 +76,16 @@
   const messagesContainer = ref<HTMLElement | null>(null);
   const useInternetSearch = ref(false);
   const enableThinking = ref(false);
+  const enableTranslation = ref(false);
+  const translationConfig = ref({ source: 'auto', target: 'en' });
 
   // 智能滚动相关状态 - 简化状态管理
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
   const showScrollToBottom = ref(false);
   const showRecommendation = ref(true);
+
+  // 新增：是否为程序触发的滚动
+  const isProgrammaticScroll = ref(false);
 
   // 简化用户干预检测，只使用一个核心标志
   const userHasInterrupted = ref(false); // 用户是否手动干预了滚动
@@ -166,6 +175,27 @@
     enableThinking.value = !enableThinking.value;
   };
 
+  // 监听翻译状态，当启用翻译时禁用联网和深度思考
+  watch(enableTranslation, (newVal) => {
+    if (newVal) {
+      useInternetSearch.value = false;
+      enableThinking.value = false;
+    }
+  });
+
+  // 监听联网和深度思考状态，当启用时禁用翻译
+  watch(useInternetSearch, (newVal) => {
+    if (newVal) {
+      enableTranslation.value = false;
+    }
+  });
+
+  watch(enableThinking, (newVal) => {
+    if (newVal) {
+      enableTranslation.value = false;
+    }
+  });
+
   // 清空对话
   function clearHistory() {
     stopResponse();
@@ -186,6 +216,9 @@
 
   // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
   const handleScroll = () => {
+    // 如果是程序触发的滚动，忽略处理
+    if (isProgrammaticScroll.value) return;
+
     if (!messagesContainer.value) return;
 
     const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
@@ -196,6 +229,7 @@
     lastScrollTop.value = scrollTop;
     // 用户向上滚动（无论距离多小）立即停止自动滚动
     if (scrollDelta < 0) {
+      console.log('用户向上滚动，自动滚动已禁用');
       userHasInterrupted.value = true;
       autoScrollEnabled.value = false;
     } else {
@@ -205,6 +239,7 @@
         autoScrollEnabled.value = true;
         userHasInterrupted.value = false;
         showScrollToBottom.value = false;
+        console.log('用户滚动到底部，自动滚动已启用');
       }
     }
     if (scrollPosition > SCROLL_THRESHOLD) {
@@ -228,6 +263,7 @@
       return; // 用户干预时不再自动滚动
     }
 
+    isProgrammaticScroll.value = true; // 标记为程序滚动
     const container = messagesContainer.value;
     const targetScrollTop = container.scrollHeight - container.clientHeight;
 
@@ -236,9 +272,15 @@
         top: targetScrollTop,
         behavior: 'smooth',
       });
+      // 延迟重置标志，等待 smooth 动画完成（假设 300ms）
+      setTimeout(() => {
+        isProgrammaticScroll.value = false;
+      }, 300);
     } else {
       // 立即滚动
       container.scrollTop = targetScrollTop;
+      // 立即重置（同步滚动）
+      isProgrammaticScroll.value = false;
     }
   };
 
@@ -379,6 +421,8 @@
           sessionId: sessionId,
           useInternetSearch: useInternetSearch.value, // 是否开启联网搜索
           enableThinking: enableThinking.value, // 是否开启深度思考
+          enableTranslation: enableTranslation.value, // 是否开启翻译
+          translationConfig: translationConfig.value, // 翻译配置
         }),
         signal: abortController.value.signal,
       });
@@ -560,6 +604,7 @@
 
       // 最终滚动
       await nextTick();
+      console.log('Final autoScrollEnabled:', autoScrollEnabled.value, 'userHasInterrupted:', userHasInterrupted.value);
       if (autoScrollEnabled.value && !userHasInterrupted.value) {
         scrollToBottom('smooth');
       }
