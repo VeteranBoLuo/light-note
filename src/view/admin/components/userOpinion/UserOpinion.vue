@@ -34,7 +34,7 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 500 }" :pagination="false">
+        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
           <template #expandedRowRender="{ record }">
             <div class="admin-expand-panel">
               <p>反馈内容：{{ record.content }}</p>

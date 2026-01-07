@@ -14,17 +14,43 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { ref, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
 
   const emit = defineEmits(['recommendation-click']);
-  const recommendationItems = ref([
+
+  // 定义一个大的常见问题列表
+  const allQuestions = [
     t('ai.howToCreateBookmark'),
     t('ai.cloudSpaceUsage'),
     t('ai.howToLinkBookmarkAndTag'),
-  ]);
+    t('ai.howToCreateTag'),
+    t('ai.bookmarkAndTagRelation'),
+    t('ai.cloudNoteUsage'),
+    t('ai.howToFeedback'),
+    t('ai.howToManageBookmarks'),
+    t('ai.howToEditNote'),
+    t('ai.howToSearchContent'),
+    t('ai.mobileUsage'),
+    t('ai.howToImportExportBookmarks'),
+    t('ai.howToUseAIAssistant'),
+    t('ai.howToCustomizeTheme'),
+    t('ai.howToBackupData'),
+  ];
+
+  const recommendationItems = ref<string[]>([]);
+
+  // 随机选择三个问题
+  function selectRandomQuestions() {
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    recommendationItems.value = shuffled.slice(0, 3);
+  }
+
+  onMounted(() => {
+    selectRandomQuestions();
+  });
 
   function handleRecommendationClick(item) {
     emit('recommendation-click', item);

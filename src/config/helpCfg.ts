@@ -143,10 +143,38 @@ const zhOptions = [
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
       <img src="${cloudSpace}" alt="云空间示例" class="bookmark-image"  />
-      <p style="text-align: left;font-size: 14px">1、支持用户上传文件至云端空间，实现跨设备数据存储与访，兼容移动端与桌面端操作体验，同时完善权限控制逻辑，确保用户仅能访问自身上传的文件资源</p>
-      <p style="text-align: left;font-size: 14px">2、引入用户配额管理机制，每位用户暂时默认可使用最大 100MB 存储空间，并提供空间使用状态展示组件</p>
-      <p style="text-align: left;font-size: 14px">3、支持按文件类型和文件夹两个维度管理文件</p>
-      <p style="text-align: left;font-size: 14px">4、支持文件的上传、下载、预览、删除、重命名、搜索和分享功能</p>
+      <p style="text-align: left;font-size: 14px">云空间是轻笺项目中的文件管理模块，帮助用户在云端存储、组织和分享各类文件。它支持文件夹分类、文件上传下载、批量操作和类型过滤，提供便捷的文件云存储体验。用户可以上传图片、文档、视频等文件，并通过文件夹和标签高效管理。云空间可将文件移动至指定文件夹中，实现跨设备数据存储与访问，兼容移动端与桌面端操作体验，同时完善权限控制逻辑，确保用户仅能访问自身上传的文件资源。引入用户配额管理机制，每位用户默认可使用最大1000MB存储空间，后续会升级容量。同时也提供空间使用状态展示组件。</p>
+      <br/>
+      <div><b>主要功能</b></div>
+      <p style="font-size: 14px">• 文件上传：支持多文件上传（最大100MB/文件），显示实时上传进度和速度，可取消上传。上传后自动关联到当前文件夹，支持批量上传。<br/>
+      • 文件夹管理：创建、重命名、删除文件夹；拖拽调整文件夹顺序；支持嵌套文件夹（但当前版本侧重扁平结构）。文件可移动至指定文件夹。<br/>
+      • 文件列表查看：显示文件名、大小、上传时间和所属文件夹；支持预览文件（目前支持PDF和照片视频，后续会支持文本、Word等）。<br/>
+      • 搜索与过滤：按文件名搜索；按文件类型和文件夹两个维度管理文件，支持类型过滤（图片、文本、PDF、Word、Excel、音频、视频、其他）。<br/>
+      • 批量操作：选择多文件进行批量删除、移动或上传，提高管理效率。<br/>
+      • 存储监控：显示已用空间和总空间（MB），进度条可视化，用户配额管理。<br/>
+      • 文件操作：重命名文件、移动文件、删除文件、下载、分享；右键菜单快捷操作，支持批量删除和移动。<br/>
+      • 响应式设计：适配桌面和移动设备，移动端简化搜索和操作。</p>
+      <br/>
+      <div><b>使用方法</b></div>
+      <p style="font-size: 14px">1.访问云空间：登录后，从菜单进入“云空间”页面。<br/>
+      2.上传文件：点击“上传文件”按钮，选择多个文件上传。查看进度条和速度，必要时取消上传。支持批量上传。<br/>
+      3.创建文件夹：在文件夹列表中右键或使用按钮新建文件夹，输入名称。<br/>
+      4.管理文件夹：点击文件夹切换查看内容；拖拽调整顺序；右键重命名或删除。<br/>
+      5.查看文件：在文件列表中点击文件名预览（支持PDF和照片视频）。<br/>
+      6.搜索文件：在搜索框输入文件名关键词，实时过滤。<br/>
+      7.过滤文件：点击“文件类型”按钮，选择类型（如图片、PDF），按文件类型和文件夹维度管理。<br/>
+      8.批量操作：点击“批量操作”按钮，勾选文件，选择批量删除或移动。<br/>
+      9.移动文件：选择文件后点击移动，选择目标文件夹确认，支持批量移动。<br/>
+      10.重命名/删除/下载/分享：右键文件选择操作，确认执行。下载和分享功能便于文件分发。</p>
+      <br/>
+      <div><b>注意事项</b></div>
+      <p style="font-size: 14px">• 文件大小限制：单个文件最大100MB，总上传大小受1000MB存储空间限制。<br/>
+      • 支持格式：图片（jpg/png等）、文本、PDF、Word、Excel、音频、视频及其他。<br/>
+      • 存储空间：监控使用情况，避免超出限额，后续可升级容量。<br/>
+      • 批量操作：仅在批量模式下可用，退出后恢复正常视图。<br/>
+      • 移动端：优先简化界面，触摸操作优化。<br/>
+      • 权限控制：用户仅能访问自己上传的文件，确保数据安全。<br/>
+      通过云空间，用户可以轻松管理个人文件，实现云端存储和多设备同步。</p>
     </div>
   </div>`,
   },
@@ -290,10 +318,38 @@ const enOptions = [
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
       <img src="${cloudSpace}" alt="Cloud Space Example" class="bookmark-image"  />
-      <p style="text-align: left;font-size: 14px">1. Supports users uploading files to cloud space, enabling cross-device data storage and access, compatible with mobile and desktop experiences, while improving permission control logic to ensure users can only access their own uploaded file resources</p>
-      <p style="text-align: left;font-size: 14px">2. Introduces user quota management mechanism, each user temporarily defaults to maximum 100MB storage space, and provides space usage status display components</p>
-      <p style="text-align: left;font-size: 14px">3. Supports managing files by two dimensions: file type and folder</p>
-      <p style="text-align: left;font-size: 14px">4. Supports file upload, download, preview, delete, rename, search, and share functions</p>
+      <p style="text-align: left;font-size: 14px">Cloud Space is a file management module in the Light Note project that helps users store, organize, and share various files in the cloud. It supports folder classification, file upload and download, batch operations, and type filtering, providing a convenient cloud file storage experience. Users can upload images, documents, videos, and other files, and manage them efficiently through folders and tags. Cloud Space allows moving files to specified folders, enabling cross-device data storage and access, compatible with mobile and desktop operation experiences, while improving permission control logic to ensure users can only access their own uploaded file resources. It introduces a user quota management mechanism, with each user defaulting to a maximum of 1000MB storage space, which will be upgraded in the future. It also provides space usage status display components.</p>
+      <br/>
+      <div><b>Main Features</b></div>
+      <p style="font-size: 14px">• File Upload: Supports multi-file upload (max 100MB/file), displays real-time upload progress and speed, can cancel upload. After upload, automatically associates with the current folder, supports batch upload.<br/>
+      • Folder Management: Create, rename, delete folders; drag to adjust folder order; supports nested folders (but current version focuses on flat structure). Files can be moved to specified folders.<br/>
+      • File List View: Displays file name, size, upload time, and belonging folder; supports file preview (currently supports PDF and photos/videos, will support text, Word, etc. later).<br/>
+      • Search and Filter: Search by file name; manage files by file type and folder dimensions, supports type filtering (images, text, PDF, Word, Excel, audio, video, other).<br/>
+      • Batch Operations: Select multiple files for batch delete, move, or upload to improve management efficiency.<br/>
+      • Storage Monitoring: Displays used space and total space (MB), progress bar visualization, user quota management.<br/>
+      • File Operations: Rename file, move file, delete file, download, share; right-click menu for quick operations, supports batch delete and move.<br/>
+      • Responsive Design: Adapts to desktop and mobile devices, mobile simplifies search and operations.</p>
+      <br/>
+      <div><b>How to Use</b></div>
+      <p style="font-size: 14px">1. Access Cloud Space: After logging in, enter the "Cloud Space" page from the menu.<br/>
+      2. Upload Files: Click the "Upload Files" button, select multiple files to upload. View progress bar and speed, cancel if necessary. Supports batch upload.<br/>
+      3. Create Folder: Right-click in the folder list or use the button to create a new folder, enter the name.<br/>
+      4. Manage Folders: Click folder to switch view content; drag to adjust order; right-click to rename or delete.<br/>
+      5. View Files: In the file list, click file name to preview (supports PDF and photos/videos).<br/>
+      6. Search Files: Enter file name keywords in the search box, filter in real-time.<br/>
+      7. Filter Files: Click the "File Type" button, select type (e.g., images, PDF), manage by file type and folder dimensions.<br/>
+      8. Batch Operations: Click the "Batch Operations" button, check files, select batch delete or move.<br/>
+      9. Move Files: After selecting files, click move, select target folder and confirm, supports batch move.<br/>
+      10. Rename/Delete/Download/Share: Right-click file to select operation, confirm execution. Download and share facilitate file distribution.</p>
+      <br/>
+      <div><b>Notes</b></div>
+      <p style="font-size: 14px">• File Size Limit: Single file max 100MB, total upload size limited by 1000MB storage space.<br/>
+      • Supported Formats: Images (jpg/png, etc.), text, PDF, Word, Excel, audio, video, and others.<br/>
+      • Storage Space: Monitor usage, avoid exceeding quota, capacity can be upgraded later.<br/>
+      • Batch Operations: Only available in batch mode, returns to normal view after exit.<br/>
+      • Mobile: Prioritizes simplified interface, optimized touch operations.<br/>
+      • Permission Control: Users can only access their own uploaded files, ensuring data security.<br/>
+      Through Cloud Space, users can easily manage personal files, achieve cloud storage and multi-device synchronization.</p>
     </div>
   </div>`,
   },

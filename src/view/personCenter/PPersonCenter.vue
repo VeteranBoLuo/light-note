@@ -6,7 +6,7 @@
   >
     <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
       <div style="display: flex; gap: 20px; align-items: center">
-        <div class="navigation-icon" :style="{ color: bookmark.iconColor }">
+        <div class="navigation-icon" :style="{ color: user.iconColor }">
           <svg-icon
             img-id="viewUserImg"
             @click="zoomImage"
@@ -19,7 +19,7 @@
           <b style="font-size: 20px">{{ user.alias ? user.alias : $t('personCenter.defaultNickname') }}</b>
         </div>
       </div>
-      <div class="user-icon-text" :style="{ color: bookmark.iconColor }">
+      <div class="user-icon-text" :style="{ color: user.iconColor }">
         <div style="display: flex; gap: 20px; font-size: 14px">
           <span
             >{{ $t('navigation.tag') }}<span style="margin-left: 10px">{{ user.tagTotal }}</span></span

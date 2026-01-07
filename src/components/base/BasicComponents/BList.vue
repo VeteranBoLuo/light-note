@@ -19,6 +19,8 @@
         :handle="handle"
         :scroll-sensitivity="scrollSensitivity"
         :forceFallback="forceFallback"
+        :delay="delay"
+        v-bind="options"
       >
         <div :key="item[nodeType.id]" v-for="item in listOptions" @click="nodeClick(item)">
           <slot name="item" :item="item">
@@ -75,6 +77,8 @@
       handle?: string;
       scrollSensitivity?: number;
       forceFallback?: boolean;
+      delay?: number;
+      options?: Record<string, any>;
     }>(),
     {
       nodeType: () => ({
@@ -86,6 +90,8 @@
       searchFilter: false,
       draggable: false,
       forceFallback: false,
+      delay: 100,
+      options: () => ({}),
     },
   );
   const bookmark = bookmarkStore();
