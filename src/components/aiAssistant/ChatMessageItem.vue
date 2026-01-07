@@ -1,15 +1,7 @@
 <template>
   <div class="message" :class="message.role">
     <div class="message-content">
-      <div class="avatar" :class="message.role">
-        <img
-          v-if="message.role !== 'user'"
-          src="/favicon.svg"
-          :title="t('ai.homeTitle')"
-          width="25"
-          height="25"
-          alt=""
-        />
+      <div class="avatar" :class="message.role" v-if="message.role === 'user'">
         <div
           class="navigation-icon"
           style="
@@ -19,7 +11,6 @@
             clip-path: circle(50% at 50% 50%);
             cursor: pointer;
           "
-          v-else
         >
           <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
         </div>
@@ -41,7 +32,7 @@
         </div>
         <!-- Markdown 渲染内容 -->
         <div class="text" v-html="formatMessage(message)"></div>
-        <div class="time">{{ formatTime(message.timestamp) }}</div>
+        <div class="time" v-if="message.role === 'user'">{{ formatTime(message.timestamp) }}</div>
       </div>
       <ReplyLoading v-else />
     </div>
@@ -181,14 +172,12 @@
   }
 
   .bubble {
-    background: var(--menu-container-bg-color);
-    padding: 1rem 1.25rem;
     border-radius: 1.125rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     max-width: 100%;
   }
 
   .message.user .bubble {
+    padding: 1rem 1.25rem;
     background: var(--ai-user-background-color);
     color: var(--text-color);
     border-bottom-right-radius: 0.25rem;
@@ -196,7 +185,6 @@
 
   .message.assistant .bubble {
     border-bottom-left-radius: 0.25rem;
-    background: color-mix(in srgb, var(--menu-container-bg-color) 20%, #7c73cb 50%);
     color: var(--text-color);
   }
 

@@ -84,6 +84,9 @@
   const showScrollToBottom = ref(false);
   const showRecommendation = ref(true);
 
+  // 新增：是否为程序触发的滚动
+  const isProgrammaticScroll = ref(false);
+
   // 简化用户干预检测，只使用一个核心标志
   const userHasInterrupted = ref(false); // 用户是否手动干预了滚动
   const lastScrollTop = ref(0);
@@ -213,6 +216,9 @@
 
   // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
   const handleScroll = () => {
+    // 如果是程序触发的滚动，忽略处理
+    if (isProgrammaticScroll.value) return;
+
     if (!messagesContainer.value) return;
 
     const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
@@ -223,6 +229,7 @@
     lastScrollTop.value = scrollTop;
     // 用户向上滚动（无论距离多小）立即停止自动滚动
     if (scrollDelta < 0) {
+      console.log('用户向上滚动，自动滚动已禁用');
       userHasInterrupted.value = true;
       autoScrollEnabled.value = false;
     } else {
@@ -232,6 +239,7 @@
         autoScrollEnabled.value = true;
         userHasInterrupted.value = false;
         showScrollToBottom.value = false;
+        console.log('用户滚动到底部，自动滚动已启用');
       }
     }
     if (scrollPosition > SCROLL_THRESHOLD) {
@@ -255,6 +263,7 @@
       return; // 用户干预时不再自动滚动
     }
 
+    isProgrammaticScroll.value = true; // 标记为程序滚动
     const container = messagesContainer.value;
     const targetScrollTop = container.scrollHeight - container.clientHeight;
 
@@ -263,9 +272,15 @@
         top: targetScrollTop,
         behavior: 'smooth',
       });
+      // 延迟重置标志，等待 smooth 动画完成（假设 300ms）
+      setTimeout(() => {
+        isProgrammaticScroll.value = false;
+      }, 300);
     } else {
       // 立即滚动
       container.scrollTop = targetScrollTop;
+      // 立即重置（同步滚动）
+      isProgrammaticScroll.value = false;
     }
   };
 
@@ -589,6 +604,7 @@
 
       // 最终滚动
       await nextTick();
+      console.log('Final autoScrollEnabled:', autoScrollEnabled.value, 'userHasInterrupted:', userHasInterrupted.value);
       if (autoScrollEnabled.value && !userHasInterrupted.value) {
         scrollToBottom('smooth');
       }
