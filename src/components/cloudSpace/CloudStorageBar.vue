@@ -1,14 +1,12 @@
 <template>
   <div class="storage-usage">
-    <div>{{$t('cloudSpace.hasUsedSpace')}}: {{ cloud.usedSpace }}MB / {{ cloud.maxSpace }}MB</div>
+    <div>{{ $t('cloudSpace.hasUsedSpace') }}: {{ cloud.usedSpace }}MB / {{ cloud.maxSpace }}MB</div>
     <progress :value="cloud.usedSpace" :max="cloud.maxSpace"></progress>
   </div>
 </template>
 
 <script setup lang="ts">
-
-
-  import {cloudSpaceStore} from "@/store";
+  import { cloudSpaceStore } from '@/store';
 
   const cloud = cloudSpaceStore();
 </script>
@@ -17,7 +15,7 @@
   .storage-usage {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: space-evenly;
     height: 32px;
     gap: 5px;
     font-size: 12px;

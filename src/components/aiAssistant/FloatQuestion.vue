@@ -2,7 +2,7 @@
   <div v-if="!isClosed" class="float-question-container">
     <!-- 问答弹窗 -->
     <transition name="modal-slide">
-      <div v-if="isOpen" v-show="!isMinimized" class="question-modal glassmorphism" @click.stop>
+      <div v-if="isOpen" v-show="!isMinimized" class="question-modal glassmorphism">
         <!-- 拖拽手柄区域 -->
         <div class="modal-header drag-handle">
           <div class="header-content">

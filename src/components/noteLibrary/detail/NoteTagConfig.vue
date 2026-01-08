@@ -348,7 +348,9 @@
     align-items: center;
 
     :deep(.b-input) {
+      height: 26px;
       width: 160px;
+      margin-left: 8px;
     }
   }
 
@@ -483,6 +485,8 @@
   }
 
   .chip-close {
+    position: absolute;
+    right: 50px;
     width: 12px;
     height: 12px;
     cursor: pointer;
