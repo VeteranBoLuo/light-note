@@ -22,7 +22,7 @@
     >
       <template #item="{ item }">
         <RightMenu
-          :menu="[$t('common.reName'), $t('common.delete')]"
+          :menu="[$t('common.reName'), $t('common.delete'), $t('cloudSpace.uploadFile')]"
           v-if="!item.isRename"
           @select="handleTagMenu($event, item)"
         >
@@ -53,6 +53,7 @@
     <b-button v-if="!bookmark.isMobileDevice" @click="addFolder" style="width: 100%">{{
       $t('cloudSpace.newFolder')
     }}</b-button>
+    <input type="file" id="folder-upload-input" multiple style="display: none" @change="onFileSelect" />
   </div>
 </template>
 
@@ -70,6 +71,8 @@
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
+
+  const emit = defineEmits(['uploadFiles']);
 
   function clickAllFolder() {
     cloud.folder = {
@@ -99,9 +102,23 @@
         });
       },
       删除: () => handleDeleteFolder(folder),
-      上传文件: () => {},
+      上传文件: () => handleUploadToFolder(folder),
     };
     actions[menu]?.();
+  }
+
+  const currentFolderId = ref('');
+  function handleUploadToFolder(folder) {
+    currentFolderId.value = folder.id;
+    const fileInput = document.getElementById('folder-upload-input') as HTMLInputElement;
+    fileInput?.click();
+  }
+
+  function onFileSelect(event) {
+    const files = Array.from(event.target.files);
+    emit('uploadFiles', { files, folderId: currentFolderId.value });
+    // 重置 input
+    event.target.value = '';
   }
 
   function handleDeleteFolder(folder: any) {

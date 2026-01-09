@@ -262,23 +262,22 @@
     }
   }
 
-  /* 按钮状态 */
   .button-active {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%);
+    background: linear-gradient(135deg, #f093fb, #f575a5, #f5576c, #f87b8a, #f093fb, #8fc0ff, #a0d4ff, #f093fb);
+    background-size: 600% 600%;
     transform: scale(1.1);
-    animation: glow 2s ease-in-out infinite alternate;
+    animation: gradient-flow 8s ease infinite;
   }
 
-  @keyframes glow {
-    from {
-      box-shadow:
-        0 10px 40px rgba(245, 87, 108, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  @keyframes gradient-flow {
+    0% {
+      background-position: 0% 50%;
     }
-    to {
-      box-shadow:
-        0 15px 50px rgba(245, 87, 108, 0.5),
-        0 0 40px rgba(255, 255, 255, 0.3);
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
     }
   }
 
