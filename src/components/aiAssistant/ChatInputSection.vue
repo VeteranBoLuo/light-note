@@ -25,20 +25,20 @@
           class="search-btn"
           @click="toggleInternetSearch"
           :class="{ active: useInternetSearch }"
-          title="联网搜索"
+          :title="t('ai.internetSearch')"
         >
           <svg-icon size="14" :src="icon.ai.internet" />
-          联网搜索
+          {{ t('ai.internetSearch') }}
         </button>
         <button
           v-if="!enableTranslation"
           class="search-btn"
           @click="toggleThinking"
           :class="{ active: enableThinking }"
-          title="深度思考"
+          :title="t('ai.deepThinking')"
         >
           <svg-icon size="14" :src="icon.ai.thinking" />
-          深度思考
+          {{ t('ai.deepThinking') }}
         </button>
         <button
           @click="isLoading ? stopFn() : sendFn()"
@@ -166,6 +166,7 @@
   }
 
   .input-actions {
+    height: 25px;
     position: absolute;
     bottom: 0.75rem;
     right: 0.75rem;

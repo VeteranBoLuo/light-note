@@ -1,8 +1,13 @@
 <template>
   <div class="translation-toggle">
-    <button class="toggle-btn" @click="toggleTranslation" :class="{ active: enableTranslation }" title="翻译">
+    <button
+      class="toggle-btn"
+      @click="toggleTranslation"
+      :class="{ active: enableTranslation }"
+      :title="t('ai.translation.translate')"
+    >
       <svg-icon size="14" :src="icon.ai.internet" />
-      翻译
+      {{ t('ai.translation.translate') }}
     </button>
     <div v-if="enableTranslation" class="translation-options">
       <div
@@ -56,7 +61,10 @@
 
 <script setup lang="ts">
   import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
+
+  const { t } = useI18n();
 
   const props = defineProps<{
     enableTranslation: boolean;
@@ -76,14 +84,14 @@
   const targetDropdown = ref<HTMLElement | null>(null);
 
   const languages = [
-    { value: 'auto', label: '自动识别' },
-    { value: 'zh', label: '中文' },
-    { value: 'en', label: '英文' },
-    { value: 'ja', label: '日文' },
-    { value: 'ko', label: '韩文' },
-    { value: 'fr', label: '法文' },
-    { value: 'de', label: '德文' },
-    { value: 'es', label: '西班牙文' },
+    { value: 'auto', label: t('ai.translation.autoDetect') },
+    { value: 'zh', label: t('ai.translation.chinese') },
+    { value: 'en', label: t('ai.translation.english') },
+    { value: 'ja', label: t('ai.translation.japanese') },
+    { value: 'ko', label: t('ai.translation.korean') },
+    { value: 'fr', label: t('ai.translation.french') },
+    { value: 'de', label: t('ai.translation.german') },
+    { value: 'es', label: t('ai.translation.spanish') },
   ];
 
   const targetLanguages = languages.filter((lang) => lang.value !== 'auto');
