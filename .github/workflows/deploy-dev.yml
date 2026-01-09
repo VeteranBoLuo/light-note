@@ -4,30 +4,43 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # 允许手动部署
+  workflow_dispatch: # 允许手动部署
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: 读取仓库内容
-        uses: actions/checkout@master
+        uses: actions/checkout@v4
+
+      - name: 读取 Node 版本（来自 package.json）
+        id: node_version
+        run: echo "version=$(jq -r '.engines.node // "20.x"' package.json)" >> $GITHUB_OUTPUT
 
       - name: 安装 pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
           version: 10.25.0
-          
+
       - name: 安装nodejs
-        uses: actions/setup-node@master
+        uses: actions/setup-node@v4
         with:
-          cache: 'pnpm' 
+          node-version: ${{ steps.node_version.outputs.version }}
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: 安装依赖
-        run: pnpm install --no-frozen-lockfile 
+        run: pnpm install --frozen-lockfile
 
       - name: 打包
-        run: npm run build 
+        run: pnpm run build
 
       - name: 将dist文件复制到服务器
         uses: appleboy/scp-action@v0.1.7
@@ -36,5 +49,5 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.PORT }}
-          source: "dist"
-          target: "/www/wwwroot"
+          source: 'dist'
+          target: '/www/wwwroot'

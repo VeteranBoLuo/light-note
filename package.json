@@ -1,6 +1,18 @@
 {
   "name": "componet-collection",
   "version": "0.0.0",
+  "engines": {
+    "node": "20.x"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@vue-office/docx",
+      "@vue-office/excel", 
+      "@vue-office/pdf",
+      "@vue-office/pptx",
+      "vue-demi"
+    ]
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build",
