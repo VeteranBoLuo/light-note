@@ -15,7 +15,9 @@ jobs:
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v2
-
+        with:
+          version: 10.25.0
+          
       - name: 安装nodejs
         uses: actions/setup-node@master
         with:
