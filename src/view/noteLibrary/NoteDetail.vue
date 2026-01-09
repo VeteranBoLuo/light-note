@@ -51,15 +51,11 @@
     title: '未命名文档',
     lastTitle: '未命名文档',
     content: '<p><br></p>',
-    tags: '',
     createBy: '',
   });
 
   provide('note', note);
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
-  function setNoteId(id) {
-    note.id = id;
-  }
 
   const readonly = computed(() => {
     if (user.role === 'root') {
