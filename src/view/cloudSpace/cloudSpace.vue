@@ -38,10 +38,10 @@
             {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
           </b-button>
         </div>
-        <HandleBtnGroup />
+        <HandleBtnGroup ref="handleBtnGroup" />
       </div>
       <div class="content-area">
-        <CloudFolder />
+        <CloudFolder @uploadFiles="onUploadFiles" />
         <FieldList
           :batch-mode="batchMode"
           :clear-key="clearSelectionKey"
@@ -76,6 +76,7 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
 
+  const handleBtnGroup = ref();
   const batchMode = ref(false);
 
   const inputQueryFieldList = debounce(cloud.queryFieldList, 500);
@@ -102,6 +103,10 @@
     if (!batchMode.value) {
       clearSelectionKey.value += 1;
     }
+  };
+
+  const onUploadFiles = ({ files, folderId }) => {
+    handleBtnGroup.value.uploadFiles(files, folderId);
   };
 
   interface FileItem {

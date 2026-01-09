@@ -12,7 +12,7 @@
     <div
       class="checkBox"
       v-if="!bookmark.isMobileDevice"
-      :style="{ visibility: note.isCheck === true ? 'visible' : 'hidden' }"
+      :style="{ visibility: note.isCheck === true ? 'visible' : 'auto' }"
     >
       <b-checkbox v-model:isCheck="note.isCheck" @click.stop />
     </div>

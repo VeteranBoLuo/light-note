@@ -75,7 +75,7 @@
   // 上传控制器
   let uploadController = ref<AbortController | null>(null);
 
-  async function handleChange(e) {
+  const uploadFiles = async (files, folderId = null) => {
     uploadProgress.visible = true;
     uploadProgress.overall = 0;
     uploadProgress.speed = 0;
@@ -92,7 +92,7 @@
     let invalidFiles = [];
 
     // 遍历所有选中的文件
-    for (let file of e) {
+    for (let file of files) {
       try {
         // 处理Base64文件
         let processedFile;
@@ -205,7 +205,7 @@
           }));
 
         if (confirmFiles.length > 0) {
-          const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles });
+          const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles, folderId });
           if (confirmRes.status === 200) {
             // 处理确认结果
             const successFiles = confirmRes.data.filter((item) => item.status === '已上传');
@@ -256,6 +256,10 @@
       message.warning('剩余空间不足');
       uploadProgress.visible = false;
     }
+  };
+
+  async function handleChange(e) {
+    await uploadFiles(e, null);
   }
 
   // 取消上传确认
@@ -267,8 +271,9 @@
       message.info('上传已取消');
     }
   };
-</script>
 
+  defineExpose({ uploadFiles });
+</script>
 <style lang="less" scoped>
   .upload-btn {
     :deep(.ant-btn) {
@@ -424,7 +429,7 @@
     }
 
     .file-progress-list {
-      max-height: 200px;
+      max-height: 230px;
       overflow-y: auto;
 
       .file-progress-item {

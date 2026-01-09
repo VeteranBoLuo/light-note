@@ -144,7 +144,7 @@
       label: t('personCenter.changelog'),
       path: '/updateLogs',
       icon: icon.userCenter.log,
-      version: '4.1',
+      version: '4.2',
     },
   ]);
   function getVersionIsNew(menu: any) {

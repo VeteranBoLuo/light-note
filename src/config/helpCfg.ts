@@ -178,12 +178,21 @@ const zhOptions = [
     </div>
   </div>`,
   },
+
   {
     id: 'github-login',
-    title: 'github快捷登录',
+    title: 'GitHub快捷登录',
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
-      <p style="text-align: left;font-size: 14px">已经注册过轻笺账号的情况下，如果github快捷登录想要和已注册的轻笺账户关联，则github的绑定邮箱需要和轻笺的注册邮箱一致</p>
+      <p style="text-align: left;font-size: 14px">如果您还没有注册轻笺账号，可以直接通过GitHub快速注册和登录。系统会自动使用您的GitHub邮箱作为账号，默认密码设置为“123456”。注册后，您可以随时修改密码以增强账户安全。</p>
+      <p style="text-align: left;font-size: 14px">GitHub登录步骤：</p>
+      <ol style="text-align: left;font-size: 14px">
+        <li>在登录页面点击“GitHub登录”按钮。</li>
+        <li>授权轻笺访问您的GitHub信息。</li>
+        <li>系统自动创建账号，使用GitHub邮箱作为用户名，密码默认为“123456”。</li>
+        <li>登录成功后，您可以修改密码或绑定其他信息。</li>
+      </ol>
+      <p style="text-align: left;font-size: 14px">如果您已有轻笺账号，且GitHub绑定邮箱与注册邮箱一致，则会自动关联现有账号。</p>
     </div>
   </div>`,
   },
@@ -358,7 +367,15 @@ const enOptions = [
     title: 'GitHub Quick Login',
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
-      <p style="text-align: left;font-size: 14px">If you have already registered a Light Note account and want to associate GitHub quick login with your existing Light Note account, the GitHub binding email must match the Light Note registration email</p>
+      <p style="text-align: left;font-size: 14px">If you haven't registered a Light Note account yet, you can register and log in quickly through GitHub. The system will automatically use your GitHub email as the account, with the default password set to "123456". After registration, you can change the password at any time to enhance account security.</p>
+      <p style="text-align: left;font-size: 14px">GitHub Login Steps:</p>
+      <ol style="text-align: left;font-size: 14px">
+        <li>On the login page, click the "GitHub Login" button.</li>
+        <li>Authorize Light Note to access your GitHub information.</li>
+        <li>The system automatically creates an account, using your GitHub email as the username, with the default password "123456".</li>
+        <li>After successful login, you can change the password or bind other information.</li>
+      </ol>
+      <p style="text-align: left;font-size: 14px">If you already have a Light Note account and the GitHub binding email matches the registered email, it will automatically associate with the existing account.</p>
     </div>
   </div>`,
   },

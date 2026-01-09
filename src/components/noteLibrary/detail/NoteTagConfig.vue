@@ -1,7 +1,7 @@
 <template>
   <BModal
     v-model:visible="visible"
-    title="笔记标签配置"
+    :title="$t('note.tagConfig.title')"
     :mask-closable="false"
     wrap-class-name="note-tag-modal"
     @ok="handleOk"
@@ -9,10 +9,10 @@
     <div class="tag-config" :class="{ mobile: bookmark.isMobile }">
       <div class="panel tag-panel">
         <div class="panel-header">
-          <div class="title">标签库</div>
+          <div class="title">{{ $t('note.tagConfig.tagLibrary') }}</div>
           <div class="tag-actions">
-            <b-input v-model:value="searchValue" :maxlength="20" placeholder="搜索标签" />
-            <b-button type="primary" size="small" @click="startCreate"> 新建标签 </b-button>
+            <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
+            <b-button type="primary" size="small" @click="startCreate"> {{ $t('note.tagConfig.newTag') }} </b-button>
           </div>
         </div>
         <div class="tag-list" v-if="filteredTags.length">
@@ -30,33 +30,35 @@
               </div>
             </div>
             <div class="tag-meta">
-              <b-button size="small" @click.stop="bindTag(tag)">添加</b-button>
+              <b-button size="small" @click.stop="bindTag(tag)">{{ $t('common.add') }}</b-button>
             </div>
           </div>
         </div>
-        <div class="empty" v-else>暂无标签，点击右上角新建</div>
+        <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
       </div>
 
       <div class="panel edit-panel">
         <div class="panel-header">
-          <div class="title">{{ editingTag?.id ? '编辑标签' : '新建标签' }}</div>
-          <div class="hint">名称必填，20 字内</div>
+          <div class="title">{{ editingTag?.id ? $t('note.tagConfig.editTag') : $t('note.tagConfig.newTag') }}</div>
+          <div class="hint">{{ $t('note.tagConfig.nameRequired') }}</div>
         </div>
         <div class="form-item">
-          <div class="label">名称</div>
-          <b-input v-model:value="form.name" :maxlength="20" placeholder="输入标签名称" />
+          <div class="label">{{ $t('note.tagConfig.name') }}</div>
+          <b-input v-model:value="form.name" :maxlength="20" :placeholder="$t('note.tagConfig.name')" />
         </div>
-        <div class="form-item single-line">仅需填写标签名称，提交后可直接绑定</div>
+        <div class="form-item single-line">{{ $t('note.tagConfig.fillNameOnly') }}</div>
         <div class="form-actions">
-          <b-button type="primary" :loading="saving" @click="submitTag">保存</b-button>
-          <b-button v-if="editingTag?.id" :danger="true" @click="handleDelete(editingTag.id)">删除</b-button>
+          <b-button type="primary" :loading="saving" @click="submitTag">{{ $t('note.tagConfig.save') }}</b-button>
+          <b-button v-if="editingTag?.id" :danger="true" @click="handleDelete(editingTag.id)">{{
+            $t('note.tagConfig.delete')
+          }}</b-button>
         </div>
       </div>
 
       <div class="panel note-panel">
         <div class="panel-header">
-          <div class="title">已选标签</div>
-          <b-button size="small" @click="resetTags">重置</b-button>
+          <div class="title">{{ $t('note.tagConfig.selectedTags') }}</div>
+          <b-button size="small" @click="resetTags">{{ $t('note.tagConfig.reset') }}</b-button>
         </div>
         <div class="chip-list" v-if="noteTags.length">
           <div v-for="tag in noteTags" :key="tag.id" class="chip">
@@ -65,7 +67,7 @@
             <SvgIcon :src="icon.common.close" class="chip-close" @click.stop="unbindTag(tag)" />
           </div>
         </div>
-        <div class="empty" v-else>暂无标签，去左侧选择绑定</div>
+        <div class="empty" v-else>{{ $t('note.tagConfig.noTags') }}</div>
       </div>
     </div>
   </BModal>
@@ -81,7 +83,8 @@
   import { apiBaseGet, apiBasePost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import { message, Modal } from 'ant-design-vue';
-  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
 
   interface TagItem {
     id: number;
@@ -183,16 +186,16 @@
   function validateForm() {
     const name = form.name.trim();
     if (!name) {
-      message.warning('名称不能为空');
+      message.warning(t('note.tagConfig.nameEmpty'));
       return false;
     }
     if (name.length > 20) {
-      message.warning('名称需在 20 字以内');
+      message.warning(t('note.tagConfig.nameTooLong'));
       return false;
     }
     const duplicated = allTags.value.some((t) => t.name === name && t.id !== form.id);
     if (duplicated) {
-      message.warning('标签名称已存在');
+      message.warning(t('note.tagConfig.nameExists'));
       return false;
     }
     return true;
@@ -209,7 +212,7 @@
       const url = form.id ? '/api/note/editNoteTag' : '/api/note/addNoteTag';
       const res = await apiBasePost(url, payload);
       if (res.status === 200) {
-        message.success(form.id ? '更新成功' : '创建成功');
+        message.success(form.id ? t('note.tagConfig.updateSuccess') : t('note.tagConfig.createSuccess'));
         await fetchAllTags();
         if (!form.id && res.data?.id) {
           const created = allTags.value.find((t) => t.id === Number(res.data.id));
@@ -229,12 +232,12 @@
 
   async function handleDelete(id: number) {
     Modal.confirm({
-      title: '删除标签',
-      content: '删除后会同时解除与笔记的绑定，确认删除？',
+      title: t('note.tagConfig.confirmDelete'),
+      content: t('note.tagConfig.confirmDeleteContent'),
       async onOk() {
         const res = await apiBasePost('/api/note/delNoteTag', { id });
         if (res.status === 200) {
-          message.success('删除成功');
+          message.success(t('note.tagConfig.deleteSuccess'));
           await fetchAllTags();
           noteTags.value = noteTags.value.filter((t) => t.id !== id);
           resetForm();
@@ -245,11 +248,11 @@
 
   function bindTag(tag: TagItem) {
     if (noteTags.value.some((t) => t.id === tag.id)) {
-      message.warning('标签已绑定');
+      message.warning(t('note.tagConfig.tagBound'));
       return;
     }
     if (noteTags.value.length >= 3) {
-      message.warning('最多关联 3 个标签');
+      message.warning(t('note.tagConfig.maxTags'));
       return;
     }
     noteTags.value.push(tag);
@@ -265,7 +268,7 @@
 
   async function handleOk() {
     if (!note?.id) {
-      message.warning('笔记未保存');
+      message.warning(t('note.tagConfig.noteNotSaved'));
       return;
     }
     const newTagIds = noteTags.value.map((t) => t.id);
@@ -273,7 +276,7 @@
     if (res.status === 200) {
       visible.value = false;
       emit('saveTag');
-      message.success('保存成功');
+      message.success(t('note.tagConfig.saveSuccess'));
     }
   }
 
@@ -348,7 +351,9 @@
     align-items: center;
 
     :deep(.b-input) {
+      height: 26px;
       width: 160px;
+      margin-left: 8px;
     }
   }
 
@@ -422,6 +427,7 @@
   }
 
   .single-line {
+    max-width: 300px;
     color: var(--desc-color);
     font-size: 13px;
     background: var(--common-tag-bg-color, #f0f0f0);
@@ -483,6 +489,8 @@
   }
 
   .chip-close {
+    position: absolute;
+    right: 50px;
     width: 12px;
     height: 12px;
     cursor: pointer;

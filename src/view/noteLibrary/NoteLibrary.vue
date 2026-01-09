@@ -71,6 +71,7 @@
         :scroll-sensitivity="50"
         :forceFallback="true"
         :touchStartThreshold="10"
+        :delay="100"
       >
         <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
       </VueDraggable>
@@ -102,6 +103,7 @@
           :scroll-sensitivity="50"
           :forceFallback="true"
           :touchStartThreshold="10"
+          :delay="100"
         >
           <note-list-item v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
         </VueDraggable>
