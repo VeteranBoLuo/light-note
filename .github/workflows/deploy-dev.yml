@@ -1,4 +1,5 @@
 name: 打包前端并部署到服务器
+
 on:
   push:
     branches:
@@ -9,17 +10,23 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-
       - name: 读取仓库内容
         uses: actions/checkout@master
 
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v2
+
       - name: 安装nodejs
         uses: actions/setup-node@master
+        with:
+          cache: 'pnpm' 
 
       - name: 安装依赖
-        run: npm install
+        run: pnpm install 
+
       - name: 打包
-        run: npm run build
+        run: npm run build 
+
       - name: 将dist文件复制到服务器
         uses: appleboy/scp-action@v0.1.7
         with:
