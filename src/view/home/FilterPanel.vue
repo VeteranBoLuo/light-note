@@ -11,6 +11,7 @@
       force-fallback
       :scroll-sensitivity="20"
       :options="{ touchStartThreshold: 10 }"
+      :delay="100"
     >
       <template #input>
         <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">
