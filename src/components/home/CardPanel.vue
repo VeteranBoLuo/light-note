@@ -10,6 +10,7 @@
     @end="onEnd"
     :scroll-sensitivity="50"
     :forceFallback="true"
+    :delay="50"
   >
     <div v-for="item in getBookList">
       <RightMenu :menu="[$t('common.edit'), $t('common.delete')]" @select="rightMenuClick($event, item)">

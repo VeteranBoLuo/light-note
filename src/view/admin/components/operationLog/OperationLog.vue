@@ -21,7 +21,7 @@
         <div class="admin-filters-main">
           <b-input
             v-model:value="searchValue"
-            placeholder="搜索昵称 / 邮箱 / 接口名"
+            placeholder="搜索昵称 / 模块 / 操作名"
             class="log-search-input"
             @input="handleSearch"
           >

@@ -313,13 +313,12 @@
     error.value = false;
     errorMessage.value = '';
     textContent.value = '';
-
     try {
       if (previewType.value === 'pdf') {
         await loadPdfBlob(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
-      } else if (getFileTypeName(props.fileInfo.fileType) === '未知类型') {
+      } else if (previewType.value === 'unsupported') {
         loading.value = false;
       }
     } catch (err) {
