@@ -21,7 +21,7 @@
         <div class="admin-filters-main">
           <b-input
             v-model:value="searchValue"
-            placeholder="用户名或ip..."
+            placeholder="搜索昵称|IP/接口URL"
             class="log-search-input"
             @input="handleSearch"
           >
