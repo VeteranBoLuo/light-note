@@ -106,7 +106,7 @@
   import { cloneDeep } from 'lodash-es';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
-
+  import i18n, { setLocale } from '@/i18n';
   const title = defineModel('title');
   const formData: any = defineModel('formData');
   const isCheck = ref(true);
@@ -126,11 +126,13 @@
     apiBasePost('/api/user/login', formData.value).then((res: any) => {
       if (res.status === 200) {
         localStorage.setItem('userId', res.data.id);
-        localStorage.setItem('theme', res.data.theme);
-        user.preferences.theme = res.data?.theme || 'day';
         user.setUserInfo(res.data);
         router.push('/');
         message.success('登录成功');
+        user.preferences.theme = res.data?.preferences?.theme || 'day';
+        user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
+        user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+        localStorage.setItem('preferences', JSON.stringify(user.preferences));
         if (isCheck.value) {
           const params = cloneDeep(formData.value);
           params.password = encrypt(params.password);
@@ -138,6 +140,7 @@
         } else {
           localStorage.setItem('loginInfo', '');
         }
+        setLocale(user.preferences.lang || 'zh-CN');
         bookmark.isShowLogin = false;
         bookmark.type = 'all';
         bookmark.refreshTag();

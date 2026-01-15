@@ -25,6 +25,7 @@ interface UserInfo {
   preferences: {
     theme: 'day' | 'night' | 'system' | string; // 主题
     noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
+    lang?: 'zh-CN' | 'en-US'; // 语言
   };
 }
 
@@ -52,6 +53,7 @@ const defaultUserState: UserState = {
   preferences: {
     theme: 'day', // 主题
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
+    lang: 'zh-CN', // 语言
   },
 };
 

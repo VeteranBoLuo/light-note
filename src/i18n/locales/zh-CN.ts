@@ -260,6 +260,7 @@ export default {
     relatedTag: '关联标签',
     bookmarkSearch: '请输入书签名称',
     description: '描述',
+    generateDescriptionTitle: '生成描述',
     importExport: '导入导出',
     exportSection: '导出',
     importSection: '导入',
