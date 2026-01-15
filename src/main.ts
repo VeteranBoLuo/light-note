@@ -14,7 +14,7 @@ TableMenuPlugin(); // 全局注册一次
 
 app.use(pinia);
 app.use(router);
-app.use(i18n)
+app.use(i18n);
 app.component('Icon', Icon);
 app.config.globalProperties.$t = i18n.global.t;
 globalDirect(app);

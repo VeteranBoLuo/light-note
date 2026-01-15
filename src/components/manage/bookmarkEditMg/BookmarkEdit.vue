@@ -26,7 +26,13 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.description') }}</span>
-          <b-input v-model:value="bookmarkData.description" />
+          <b-input v-model:value="bookmarkData.description">
+            <template #prefix>
+              <div class="generate-btn" @click="generateDescription" :class="{ loading: generatingDescription }">
+                <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateDescriptionTitle')" />
+              </div>
+            </template>
+          </b-input>
         </div>
       </div>
     </b-loading>
@@ -45,9 +51,13 @@
   import { message } from 'ant-design-vue';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
+
+  const generatingDescription = ref(false);
 
   const bookmarkData = ref<any>({
     id: '',
@@ -116,6 +126,24 @@
       }
     });
   }
+
+  const generateDescription = async () => {
+    if (!bookmarkData.value.url) {
+      message.warning('请先填写书签地址');
+      return;
+    }
+    generatingDescription.value = true;
+    try {
+      const res = await apiBasePost('/api/chat/generateBookmarkDescription', {
+        url: bookmarkData.value.url,
+      });
+      if (res.status === 200) {
+        bookmarkData.value.description = res.data.description;
+      }
+    } finally {
+      generatingDescription.value = false;
+    }
+  };
 
   const handleType = computed(() => {
     if (router.currentRoute.value.params.id === 'add' || router.currentRoute.value.params.tagId) {
@@ -227,6 +255,44 @@
   }
   :deep(.ant-btn-icon-only) {
     color: #ccc;
+  }
+  .generate-btn {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition:
+      background-color 0.3s,
+      color 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-color);
+    &:hover {
+      background-color: var(--bl-input-noBorder-hover-bg-color);
+    }
+    &.loading {
+      animation: multiColorFade 2s ease-in-out infinite;
+    }
+  }
+  @keyframes multiColorFade {
+    0% {
+      color: var(--text-color);
+    }
+    20% {
+      color: var(--primary-color);
+    }
+    40% {
+      color: #ff6b6b;
+    }
+    60% {
+      color: #4ecdc4;
+    }
+    80% {
+      color: var(--primary-color);
+    }
+    100% {
+      color: var(--text-color);
+    }
   }
   @media (max-width: 1300px) {
     .tag-attr-item {

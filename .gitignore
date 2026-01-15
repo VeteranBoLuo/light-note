@@ -27,6 +27,7 @@ build/
 *.sln
 *.sw?
 .vscode/extensions.json
-components.d.ts
+
 .github/copilot-instructions.md
+.github/workflows/deploy-dev.yml
 

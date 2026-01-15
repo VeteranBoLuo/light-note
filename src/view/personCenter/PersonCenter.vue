@@ -98,7 +98,7 @@
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import Opinions from '@/components/personCenter/opinions/Opinions.vue';
   import { useI18n } from 'vue-i18n';
-
+  import i18n, { setLocale } from '@/i18n';
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const tooltipColor = computed(() => (user.currentTheme === 'day' ? '#ffffff' : '#33343f'));
@@ -224,6 +224,7 @@
               } else {
                 router.push('/');
               }
+              setLocale(res.data.preferences.lang || 'zh-CN');
             }
           });
         },

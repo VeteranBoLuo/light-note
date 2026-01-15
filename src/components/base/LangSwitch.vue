@@ -1,7 +1,7 @@
 <template>
   <a-dropdown :trigger="['click']" placement="bottomRight">
     <div type="text" size="small" class="icon-hover">
-      {{ currentLang === 'zh-CN' ? '中文' : 'EN' }}
+      {{ i18n.global.locale.value === 'zh-CN' ? '中文' : 'EN' }}
     </div>
     <template #overlay>
       <a-menu @click="handleLangChange">
@@ -13,18 +13,37 @@
 </template>
 
 <script lang="ts" setup>
-  import { useI18n } from 'vue-i18n';
-  import i18n from '@/i18n';
-
-  const { locale } = useI18n();
-  const currentLang = locale;
+  import i18n, { setLocale } from '@/i18n';
+  import { useUserStore } from '@/store';
+  import userApi from '@/api/userApi.ts';
+  const user = useUserStore();
 
   const handleLangChange = ({ key }: { key: string }) => {
     const lang = key as 'zh-CN' | 'en-US';
-    localStorage.setItem('lang', lang);
-    if (i18n.global.locale.value !== lang) {
-      location.reload();
-    }
+    document.documentElement.lang = lang;
+    userApi
+      .updateUserInfo({
+        id: localStorage.getItem('userId'),
+        preferences: JSON.stringify({
+          ...user.preferences,
+          lang: lang,
+        }),
+      })
+      .then(() => {
+        if (i18n.global.locale.value !== lang) {
+          location.reload();
+          localStorage.setItem(
+            'preferences',
+            JSON.stringify({
+              ...JSON.parse(localStorage.getItem('preferences') || '{}'),
+              lang: lang,
+            }),
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('后台错误：' + err);
+      });
   };
 </script>
 <style>

@@ -25,6 +25,7 @@
   import { message, notification } from 'ant-design-vue';
   import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
   import { debounce } from 'lodash-es';
+  import { setLocale } from './i18n';
 
   const router = useRouter();
   const user = useUserStore();
@@ -98,8 +99,11 @@
           });
         }
       }
-      user.preferences.theme = user.preferences.theme || 'day';
+      user.preferences.theme = res.data?.preferences?.theme || 'day';
+      user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
+      user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      setLocale(user.preferences.lang || 'zh-CN');
       if (res.status !== 200) {
         handleUserLogout();
       }

@@ -262,6 +262,7 @@ export default {
     relatedTag: 'Related Tag',
     bookmarkSearch: 'Please enter bookmark name',
     description: 'Description',
+    generateDescriptionTitle: 'Generate Description',
     importExport: 'Import/Export',
     exportSection: 'Export',
     importSection: 'Import',
