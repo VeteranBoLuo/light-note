@@ -130,7 +130,7 @@
     menubar: false,
     branding: false,
     skin: bookmark.theme === 'night' ? 'oxide-dark' : 'oxide',
-    skin_url: bookmark.theme === 'night' ? `/tinymce/skins/ui/oxide-dark` : '',
+    skin_url: bookmark.theme === 'night' ? `/tinymce/skins/ui/oxide-dark` : `/tinymce/skins/ui/oxide`,
     statusbar: false,
     language: currentLang.value === 'zh-CN' ? 'zh_CN' : 'en',
     language_url: currentLang.value === 'zh-CN' ? '/tinymce/langs/zh_CN.js' : undefined,
