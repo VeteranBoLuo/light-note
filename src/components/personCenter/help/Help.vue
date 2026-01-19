@@ -78,7 +78,6 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
-  import '@wangeditor/editor/dist/css/style.css';
   import { listOptions } from '@/config/helpCfg.ts';
 
   const { t, locale } = useI18n();
