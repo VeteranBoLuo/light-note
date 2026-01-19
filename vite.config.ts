@@ -4,7 +4,6 @@ import vueJsx from '@vitejs/plugin-vue-jsx';
 import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
-import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 import path from 'path';
 export default defineConfig(({ mode }) => {
@@ -33,22 +32,6 @@ export default defineConfig(({ mode }) => {
         imports: [
           {
             'vue-i18n': ['useI18n'],
-          },
-        ],
-      }),
-      viteStaticCopy({
-        targets: [
-          {
-            src: 'node_modules/tinymce/skins',
-            dest: 'tinymce',
-          },
-          {
-            src: 'node_modules/tinymce/plugins/emoticons/js/emojis.js',
-            dest: 'tinymce/plugins/emoticons/js',
-          },
-          {
-            src: 'node_modules/tinymce/langs',
-            dest: 'tinymce',
           },
         ],
       }),
