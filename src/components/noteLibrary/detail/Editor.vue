@@ -146,7 +146,7 @@
     placeholder: '请输入内容...',
     readonly: false,
     content_css: false,
-    emoticons_database_url: '/node_modules/tinymce/plugins/emoticons/js/emojis.js',
+    emoticons_database_url: '/tinymce/plugins/emoticons/js/emojis.js',
     images_upload_handler: (blobInfo: any) =>
       new Promise((resolve, reject) => {
         const formData = new FormData();
