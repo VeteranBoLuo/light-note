@@ -29,7 +29,7 @@
   import 'tinymce/plugins/lists';
   import 'tinymce/plugins/table';
   import 'tinymce/plugins/wordcount';
-  import 'tinymce/skins/ui/oxide/skin.min.css';
+  import 'tinymce/skins/ui/oxide-dark/skin.min.css';
   import hljs from 'highlight.js/lib/core';
   import javascript from 'highlight.js/lib/languages/javascript';
   import typescript from 'highlight.js/lib/languages/typescript';
@@ -78,6 +78,9 @@
   const bookmark = bookmarkStore();
   let highlightTimer: number | null = null;
   let visibilityObserver: IntersectionObserver | null = null;
+  const tinymceBaseUrl = import.meta.env.PROD
+    ? `${import.meta.env.BASE_URL}tinymce`.replace(/\/$/, '')
+    : '/node_modules/tinymce';
 
   hljs.registerLanguage('javascript', javascript);
   hljs.registerLanguage('typescript', typescript);
@@ -129,11 +132,12 @@
     menubar: false,
     branding: false,
     skin: 'oxide-dark',
+    skin_url: `${tinymceBaseUrl}/skins/ui/oxide-dark`,
     statusbar: false,
     language: currentLang.value === 'zh-CN' ? 'zh_CN' : 'en',
-    language_url: currentLang.value === 'zh-CN' ? '/tinymce/langs/zh_CN.js' : undefined,
+    language_url: currentLang.value === 'zh-CN' ? `${tinymceBaseUrl}/langs/zh_CN.js` : undefined,
     license_key: 'gpl',
-    base_url: '/node_modules/tinymce',
+    base_url: tinymceBaseUrl,
     plugins: 'autolink autoresize code emoticons image link lists table wordcount',
     toolbar: props.readonly
       ? false
@@ -144,7 +148,7 @@
     placeholder: '请输入内容...',
     readonly: false,
     content_css: false,
-    emoticons_database_url: '/node_modules/tinymce/plugins/emoticons/js/emojis.js',
+    emoticons_database_url: `${tinymceBaseUrl}/plugins/emoticons/js/emojis.js`,
     images_upload_handler: (blobInfo: any) =>
       new Promise((resolve, reject) => {
         const formData = new FormData();
