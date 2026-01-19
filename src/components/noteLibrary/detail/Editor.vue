@@ -46,7 +46,7 @@
   import 'highlight.js/styles/github.css';
   import { apiBasePost } from '@/http/request.ts';
   import i18n from '@/i18n';
-  import { bookmarkStore } from '@/store';
+  import { useUserStore } from '@/store';
 
   const props = defineProps({
     value: {
@@ -75,10 +75,9 @@
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
   const editorKey = ref(0);
-  const bookmark = bookmarkStore();
+  const user = useUserStore();
   let highlightTimer: number | null = null;
   let visibilityObserver: IntersectionObserver | null = null;
-  const tinymceBaseUrl = import.meta.env.PROD ? '/tinymce' : '/node_modules/tinymce';
 
   hljs.registerLanguage('javascript', javascript);
   hljs.registerLanguage('typescript', typescript);
@@ -129,8 +128,8 @@
     inline: true,
     menubar: false,
     branding: false,
-    skin: bookmark.theme === 'night' ? 'oxide-dark' : 'oxide',
-    skin_url: bookmark.theme === 'night' ? `/tinymce/skins/ui/oxide-dark` : `/tinymce/skins/ui/oxide`,
+    skin: user?.preferences?.theme === 'night' ? 'oxide-dark' : 'oxide',
+    skin_url: user?.preferences?.theme === 'night' ? `/tinymce/skins/ui/oxide-dark` : `/tinymce/skins/ui/oxide`,
     statusbar: false,
     language: currentLang.value === 'zh-CN' ? 'zh_CN' : 'en',
     language_url: currentLang.value === 'zh-CN' ? '/tinymce/langs/zh_CN.js' : undefined,
