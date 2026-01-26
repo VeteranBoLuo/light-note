@@ -28,22 +28,10 @@
   import 'tinymce/plugins/link';
   import 'tinymce/plugins/lists';
   import 'tinymce/plugins/table';
+  import 'tinymce/plugins/codesample';
+  import 'tinymce/plugins/searchreplace';
   import 'tinymce/plugins/wordcount';
   import 'tinymce/skins/ui/oxide-dark/skin.min.css';
-  import hljs from 'highlight.js/lib/core';
-  import javascript from 'highlight.js/lib/languages/javascript';
-  import typescript from 'highlight.js/lib/languages/typescript';
-  import xml from 'highlight.js/lib/languages/xml';
-  import css from 'highlight.js/lib/languages/css';
-  import json from 'highlight.js/lib/languages/json';
-  import bash from 'highlight.js/lib/languages/bash';
-  import python from 'highlight.js/lib/languages/python';
-  import java from 'highlight.js/lib/languages/java';
-  import go from 'highlight.js/lib/languages/go';
-  import rust from 'highlight.js/lib/languages/rust';
-  import cpp from 'highlight.js/lib/languages/cpp';
-  import sql from 'highlight.js/lib/languages/sql';
-  import 'highlight.js/styles/github.css';
   import { apiBasePost } from '@/http/request.ts';
   import i18n from '@/i18n';
   import { useUserStore } from '@/store';
@@ -76,22 +64,7 @@
   const editorReady = ref(false);
   const editorKey = ref(0);
   const user = useUserStore();
-  let highlightTimer: number | null = null;
   let visibilityObserver: IntersectionObserver | null = null;
-
-  hljs.registerLanguage('javascript', javascript);
-  hljs.registerLanguage('typescript', typescript);
-  hljs.registerLanguage('html', xml);
-  hljs.registerLanguage('xml', xml);
-  hljs.registerLanguage('css', css);
-  hljs.registerLanguage('json', json);
-  hljs.registerLanguage('bash', bash);
-  hljs.registerLanguage('python', python);
-  hljs.registerLanguage('java', java);
-  hljs.registerLanguage('go', go);
-  hljs.registerLanguage('rust', rust);
-  hljs.registerLanguage('cpp', cpp);
-  hljs.registerLanguage('sql', sql);
 
   const ensureToolbar = async () => {
     await nextTick();
@@ -135,10 +108,10 @@
     language_url: currentLang.value === 'zh-CN' ? '/tinymce/langs/zh_CN.js' : undefined,
     license_key: 'gpl',
     base_url: '/node_modules/tinymce',
-    plugins: 'autolink autoresize code emoticons image link lists table wordcount',
+    plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount',
     toolbar: props.readonly
       ? false
-      : 'undo redo | blocks | bold italic underline | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | emoticons | link image | codeblock',
+      : 'undo redo | blocks | bold italic underline | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | emoticons | link image | codesampleCustom',
     fixed_toolbar_container: '#editor-toolbar',
     toolbar_persist: true,
     toolbar_mode: 'wrap',
@@ -171,79 +144,100 @@
     setup: (editor: any) => {
       editorRef.value = editor;
       const codeLanguages = [
-        { value: 'plaintext', text: 'Plain Text', hljs: null },
-        { value: 'javascript', text: 'JavaScript', hljs: 'javascript' },
-        { value: 'typescript', text: 'TypeScript', hljs: 'typescript' },
-        { value: 'html', text: 'HTML', hljs: 'html' },
-        { value: 'css', text: 'CSS', hljs: 'css' },
-        { value: 'json', text: 'JSON', hljs: 'json' },
-        { value: 'bash', text: 'Bash', hljs: 'bash' },
-        { value: 'python', text: 'Python', hljs: 'python' },
-        { value: 'java', text: 'Java', hljs: 'java' },
-        { value: 'go', text: 'Go', hljs: 'go' },
-        { value: 'rust', text: 'Rust', hljs: 'rust' },
-        { value: 'cpp', text: 'C++', hljs: 'cpp' },
-        { value: 'sql', text: 'SQL', hljs: 'sql' },
+        { value: 'plaintext', text: 'Plain Text' },
+        { value: 'javascript', text: 'JavaScript' },
+        { value: 'typescript', text: 'TypeScript' },
+        { value: 'html', text: 'HTML' },
+        { value: 'css', text: 'CSS' },
+        { value: 'json', text: 'JSON' },
+        { value: 'bash', text: 'Bash' },
+        { value: 'python', text: 'Python' },
+        { value: 'java', text: 'Java' },
+        { value: 'go', text: 'Go' },
+        { value: 'rust', text: 'Rust' },
+        { value: 'cpp', text: 'C++' },
+        { value: 'sql', text: 'SQL' },
       ];
-      const normalizeLanguageClass = (className: string) => {
-        const cleaned = className
-          .replace(/\blanguage-[^\s]+/g, '')
-          .replace(/\bhljs\b/g, '')
-          .trim();
-        return cleaned.length ? `${cleaned} ` : '';
+      editor.options.set(
+        'codesample_languages',
+        codeLanguages.map((lang) => ({ text: lang.text, value: lang.value })),
+      );
+
+      const isCodeSample = (node: Node | null) => {
+        if (!node || (node as HTMLElement).nodeName !== 'PRE') return false;
+        return ((node as HTMLElement).className || '').includes('language-');
       };
-      const setCodeLanguage = (preNode: HTMLElement, codeNode: HTMLElement, lang: string) => {
-        const preBase = normalizeLanguageClass(preNode.className);
-        preNode.className = `${preBase}code-block language-${lang}`.trim();
-        preNode.setAttribute('data-language', lang);
-        const codeBase = normalizeLanguageClass(codeNode.className);
-        codeNode.className = `${codeBase}language-${lang}`.trim();
+
+      const getSelectedCodeSample = () => {
+        const node = editor.selection ? editor.selection.getNode() : null;
+        return isCodeSample(node) ? (node as HTMLElement) : null;
       };
-      const highlightCodeBlocks = () => {
-        if (!editorRef.value) return;
-        if (highlightTimer) {
-          window.clearTimeout(highlightTimer);
-        }
-        highlightTimer = window.setTimeout(() => {
-          const body = editorRef.value.getBody();
-          if (!body) return;
-          const nodes = body.querySelectorAll('pre code');
-          nodes.forEach((node) => {
-            hljs.highlightElement(node as HTMLElement);
-          });
-        }, 50);
-      };
-      const insertOrUpdateCodeBlock = (lang: string) => {
-        const selectionNode = editor.selection.getNode();
-        const codeNode = editor.dom.getParent(selectionNode, 'code') as HTMLElement | null;
-        const preNode = editor.dom.getParent(selectionNode, 'pre') as HTMLElement | null;
-        if (codeNode && preNode) {
-          setCodeLanguage(preNode, codeNode, lang);
-          highlightCodeBlocks();
-          return;
-        }
+      const openCodeSampleDialog = () => {
+        const selectedNode = getSelectedCodeSample();
         const selectedText = editor.selection.getContent({ format: 'text' }) || '';
         const normalizedText = selectedText.replace(/\r\n/g, '\n');
-        const encodedText = editor.dom.encode(normalizedText);
-        const codeInner = encodedText || '&#8203;';
-        const codeHtml = `<pre class="code-block language-${lang}" data-language="${lang}"><code class="language-${lang}">${codeInner}</code></pre>`;
-        editor.insertContent(codeHtml);
-        highlightCodeBlocks();
+        const languageOptions = editor.options.get('codesample_languages') || [];
+        const initialLanguage = languageOptions[0]?.value || 'plaintext';
+        const currentLanguage = (() => {
+          if (!selectedNode) return initialLanguage;
+          const matches = selectedNode.className.match(/language-(\w+)/);
+          return matches ? matches[1] : initialLanguage;
+        })();
+        const currentCode = selectedNode ? selectedNode.textContent || '' : normalizedText;
+
+        editor.windowManager.open({
+          title: editor.translate('Insert/Edit Code Sample'),
+          size: 'large',
+          body: {
+            type: 'panel',
+            items: [
+              {
+                type: 'listbox',
+                name: 'language',
+                label: editor.translate('Language'),
+                items: languageOptions,
+              },
+              {
+                type: 'textarea',
+                name: 'code',
+                label: editor.translate('Code view'),
+                spellcheck: false,
+              },
+            ],
+          },
+          buttons: [
+            { type: 'cancel', name: 'cancel', text: editor.translate('Cancel') },
+            { type: 'submit', name: 'save', text: editor.translate('Save'), primary: true },
+          ],
+          initialData: {
+            language: currentLanguage,
+            code: currentCode,
+          },
+          onSubmit: (api) => {
+            const data = api.getData();
+            const lang = data.language || currentLanguage;
+            const code = (data.code || '').replace(/\r\n/g, '\n');
+            const encodedText = editor.dom.encode(code);
+
+            editor.undoManager.transact(() => {
+              const node = getSelectedCodeSample();
+              if (node) {
+                editor.dom.setAttrib(node, 'class', `language-${lang}`);
+                node.innerHTML = encodedText;
+                editor.selection.select(node);
+              } else {
+                editor.insertContent(`<pre class="language-${lang}">${encodedText}</pre>`);
+              }
+            });
+
+            api.close();
+          },
+        });
       };
-      editor.ui.registry.addMenuButton('codeblock', {
-        text: 'block',
-        icon: 'sourcecode',
-        fetch: (callback) => {
-          const items = codeLanguages.map((lang) => ({
-            type: 'menuitem',
-            text: lang.text,
-            onAction: () => insertOrUpdateCodeBlock(lang.value),
-          }));
-          callback(items);
-        },
-      });
-      editor.on('SetContent Change Input Undo Redo', () => {
-        highlightCodeBlocks();
+      editor.ui.registry.addButton('codesampleCustom', {
+        icon: 'code-sample',
+        tooltip: editor.translate('Insert/edit code sample'),
+        onAction: () => openCodeSampleDialog(),
       });
       editor.on('init', async () => {
         if (editor.mode?.set) {
@@ -257,7 +251,7 @@
       });
     },
     content_style:
-      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 10px 20px; line-height: 1.7; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .mce-content-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; }',
+      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 10px 20px; line-height: 1.7; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; }',
   }));
 
   watchEffect(() => {
@@ -310,7 +304,6 @@
     border-bottom: 1px solid rgb(204, 204, 204);
   }
   .note-editor-body {
-    min-height: 100%;
     outline: none;
     overflow: auto;
     background-color: var(--background-color);

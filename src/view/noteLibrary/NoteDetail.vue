@@ -107,7 +107,6 @@
     });
   }
 
-  const content = ref('');
   const isStartEdit = ref(false);
   const isCurrentSave = ref(false);
   const updateTime = ref('');
@@ -225,7 +224,7 @@
             if (!bookmark.isMobileDevice) {
               document.getElementById('note-header-title').innerText = note.title;
             }
-            updateTime.value = res.data.updateTime ?? res.data.createTime;
+            updateTime.value = res.data?.updateTime ?? res.data?.createTime;
           }
         })
         .finally(() => {
