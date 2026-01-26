@@ -20,13 +20,37 @@
             >
             <span>点击表名选中，再次点击插入编辑器</span>
           </div>
-          <BInput
-            class="sql-input"
-            type="textarea"
-            v-model:value="sql"
-            :rows="18"
-            placeholder="SELECT * FROM user WHERE id = ?;"
-          />
+          <div class="sql-input-wrapper">
+            <BInput
+              ref="sqlInputRef"
+              class="sql-input"
+              type="textarea"
+              v-model:value="sql"
+              :rows="18"
+              placeholder="SELECT * FROM user WHERE id = ?;"
+              @input="handleSqlInput"
+              @focus="handleSqlFocus"
+              @focusout="handleSqlBlur"
+            />
+            <div v-if="showSuggest" class="sql-suggest">
+              <div class="sql-suggest-header">
+                <span>智能提示</span>
+                <small>↑↓ 选择 · Enter/Tab 确认 · Esc 关闭</small>
+              </div>
+              <div class="sql-suggest-list">
+                <button
+                  v-for="(item, index) in filteredSuggestions"
+                  :key="item"
+                  type="button"
+                  class="sql-suggest-item"
+                  :class="{ active: index === activeSuggestIndex }"
+                  @mousedown.prevent="applySuggestion(item)"
+                >
+                  {{ item }}
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="editor-meta">
             <span>字符数：{{ sql.length }}</span>
             <span>最后执行：{{ lastExecutedAt || '——' }}</span>
@@ -55,18 +79,6 @@
 
         <div class="helper-card glass-card">
           <div class="panel-header">
-            <h3>关键词</h3>
-            <small>常用 SQL 片段</small>
-          </div>
-          <div class="chip-grid four-col">
-            <button v-for="item in keyWords" :key="item" type="button" class="chip" @click="appendSql(item)">
-              {{ item }}
-            </button>
-          </div>
-        </div>
-
-        <div class="helper-card glass-card">
-          <div class="panel-header">
             <h3>数据表</h3>
             <small>{{ filteredTables.length }} / {{ tables.length }}</small>
           </div>
@@ -76,7 +88,6 @@
                 <svg-icon :src="icon.navigation.search" size="16" />
               </template>
             </b-input>
-            <span>点击高亮，再次点击自动插入。</span>
           </div>
           <div class="table-grid">
             <button
@@ -112,27 +123,71 @@
       </aside>
     </div>
 
-    <section class="result-panel glass-card">
-      <div class="panel-header">
-        <div>
-          <h3>执行结果</h3>
-          <small>{{ executionSummary }}</small>
+    <section class="result-grid">
+      <section class="schema-panel glass-card">
+        <div class="panel-header">
+          <div>
+            <h3>表结构</h3>
+            <small>{{ schemaSummary }}</small>
+          </div>
+          <span class="status-pill" :class="schemaState">{{ schemaStatusCopy }}</span>
         </div>
-        <span class="status-pill" :class="executionState">{{ statusCopy }}</span>
-      </div>
-      <pre class="result-view">{{ result || '等待执行...' }}</pre>
+        <div class="schema-body">
+          <div v-if="!selectedTable" class="schema-empty">选择一张表查看结构</div>
+          <template v-else>
+            <div v-if="schemaRows.length" class="schema-table">
+              <div class="schema-row schema-head">
+                <span>字段</span>
+                <span>类型</span>
+                <span>空</span>
+                <span>键</span>
+                <span>默认</span>
+                <span>附加</span>
+              </div>
+              <div v-for="(row, index) in schemaRows" :key="`${row.field}-${index}`" class="schema-row">
+                <span>{{ row.field }}</span>
+                <span>{{ row.type || '-' }}</span>
+                <span>{{ row.nullable || '-' }}</span>
+                <span>{{ row.key || '-' }}</span>
+                <span>{{ row.defaultValue || '-' }}</span>
+                <span>{{ row.extra || '-' }}</span>
+              </div>
+            </div>
+            <pre v-else class="schema-result">{{ schemaResult || '暂无结构信息' }}</pre>
+          </template>
+        </div>
+      </section>
+
+      <section class="result-panel glass-card">
+        <div class="panel-header">
+          <div>
+            <h3>执行结果</h3>
+            <small>{{ executionSummary }}</small>
+          </div>
+          <span class="status-pill" :class="executionState">{{ statusCopy }}</span>
+        </div>
+        <pre class="result-view">{{ result || '等待执行...' }}</pre>
+      </section>
     </section>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import icon from '@/config/icon.ts';
 
   type ExecutionState = 'idle' | 'running' | 'completed' | 'error';
+  type SchemaRow = {
+    field: string;
+    type?: string;
+    nullable?: string;
+    key?: string;
+    defaultValue?: string;
+    extra?: string;
+  };
 
   const sql = ref('');
   const result = ref('');
@@ -140,6 +195,10 @@
   const tableFilter = ref('');
   const executionState = ref<ExecutionState>('idle');
   const lastExecutedAt = ref('');
+  const schemaState = ref<ExecutionState>('idle');
+  const schemaRows = ref<SchemaRow[]>([]);
+  const schemaResult = ref('');
+  const schemaUpdatedAt = ref('');
   const errorSignatures = ['error', 'exception', 'unknown column', 'denied', 'syntax', "doesn't exist", 'duplicate'];
 
   const tables = [
@@ -169,6 +228,7 @@
 
   const keyWords = [
     'SELECT',
+    'FROM',
     'INSERT INTO',
     'UPDATE',
     'DELETE',
@@ -178,18 +238,51 @@
     'LIMIT',
     'INNER JOIN',
     'LEFT JOIN',
+    'RIGHT JOIN',
     'COUNT(*)',
     'SUM()',
     'MAX()',
     'MIN()',
     'LIKE',
     'BETWEEN',
+    'AND',
+    'OR',
+    'NOT',
+    'IN',
+    'IS NULL',
+    'IS NOT NULL',
+    'DESC',
+    'ASC',
   ];
+
+  const sqlInputRef = ref<InstanceType<typeof BInput> | null>(null);
+  const isSqlFocused = ref(false);
+  const tokenInfo = ref<{ token: string; start: number; end: number } | null>(null);
+  const activeSuggestIndex = ref(0);
+  const suggestionSource = computed(() => {
+    const merged = [...keyWords, ...tables];
+    if (selectedTable.value && schemaRows.value.length > 0) {
+      const fields = schemaRows.value.map((row) => row.field);
+      merged.push(...fields);
+    }
+    return Array.from(new Set(merged));
+  });
+
+  const filteredSuggestions = computed(() => {
+    const info = tokenInfo.value;
+    if (!info?.token) return [];
+    const keyword = info.token.trim();
+    if (!keyword) return [];
+    const upper = keyword.toUpperCase();
+    return suggestionSource.value.filter((item) => item.toUpperCase().startsWith(upper)).slice(0, 12);
+  });
+
+  const showSuggest = computed(() => isSqlFocused.value && filteredSuggestions.value.length > 0);
 
   const tableTemplates = [
     {
-      label: '最近 20 条数据',
-      build: (table: string) => `SELECT * FROM ${table} ORDER BY create_time DESC LIMIT 20;`,
+      label: '查询 20 条数据',
+      build: (table: string) => `SELECT * FROM ${table}  LIMIT 20;`,
     },
     {
       label: '统计行数',
@@ -240,25 +333,166 @@
     return lastExecutedAt.value ? `最后执行：${lastExecutedAt.value}` : '尚未执行';
   });
 
+  const schemaStatusCopy = computed(() => {
+    switch (schemaState.value) {
+      case 'running':
+        return '加载中';
+      case 'completed':
+        return '已更新';
+      case 'error':
+        return '异常';
+      default:
+        return '待选择';
+    }
+  });
+
+  const schemaSummary = computed(() => {
+    if (!selectedTable.value) return '尚未选择数据表';
+    return schemaUpdatedAt.value
+      ? `${selectedTable.value} · 更新于 ${schemaUpdatedAt.value}`
+      : `${selectedTable.value} · 暂未加载`;
+  });
+
   function appendSql(fragment: string) {
     if (!fragment) return;
     const normalized = fragment.trim();
     if (!normalized) return;
-    const current = sql.value.trimEnd();
-    sql.value = current ? `${current} ${normalized} ` : `${normalized} `;
+    sql.value = `${normalized} `;
   }
 
   function clearSql() {
     sql.value = '';
   }
 
-  function handleTableClick(table: string) {
-    if (selectedTable.value === table) {
-      appendSql(table);
+  function getSqlTextarea(): HTMLTextAreaElement | null {
+    const el = (sqlInputRef.value as any)?.$el as HTMLElement | undefined;
+    if (!el) return null;
+    return el.querySelector('textarea');
+  }
+
+  function updateTokenInfo() {
+    const textarea = getSqlTextarea();
+    if (!textarea) {
+      tokenInfo.value = null;
       return;
     }
-    selectedTable.value = table;
+    const cursor = textarea.selectionStart ?? 0;
+    const text = textarea.value ?? '';
+    const before = text.slice(0, cursor);
+    const match = before.match(/[A-Za-z_][\w]*$/);
+    if (!match) {
+      tokenInfo.value = null;
+      return;
+    }
+    const token = match[0];
+    tokenInfo.value = {
+      token,
+      start: cursor - token.length,
+      end: cursor,
+    };
   }
+
+  function handleSqlInput() {
+    updateTokenInfo();
+  }
+
+  function handleSqlFocus() {
+    isSqlFocused.value = true;
+    updateTokenInfo();
+  }
+
+  function handleSqlBlur() {
+    isSqlFocused.value = false;
+    tokenInfo.value = null;
+  }
+
+  function applySuggestion(value: string) {
+    const info = tokenInfo.value;
+    if (!info) {
+      appendSql(value);
+      return;
+    }
+    const before = sql.value.slice(0, info.start);
+    const after = sql.value.slice(info.end);
+    const insertion = `${value} `;
+    sql.value = `${before}${insertion}${after}`;
+    nextTick(() => {
+      const textarea = getSqlTextarea();
+      if (!textarea) return;
+      const cursor = before.length + insertion.length;
+      textarea.focus();
+      textarea.setSelectionRange(cursor, cursor);
+      updateTokenInfo();
+    });
+  }
+
+  function handleTableClick(table: string) {
+    selectedTable.value = table;
+    loadTableSchema(table);
+  }
+
+  function handleSuggestKeydown(event: KeyboardEvent) {
+    if (!showSuggest.value) return;
+    if (!filteredSuggestions.value.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      activeSuggestIndex.value = (activeSuggestIndex.value + 1) % filteredSuggestions.value.length;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      activeSuggestIndex.value =
+        (activeSuggestIndex.value - 1 + filteredSuggestions.value.length) % filteredSuggestions.value.length;
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      const value = filteredSuggestions.value[activeSuggestIndex.value];
+      if (value) applySuggestion(value);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      tokenInfo.value = null;
+    }
+  }
+
+  function bindSqlEvents() {
+    const textarea = getSqlTextarea();
+    if (!textarea) return;
+    textarea.addEventListener('keydown', handleSuggestKeydown);
+    textarea.addEventListener('keyup', updateTokenInfo);
+    textarea.addEventListener('mouseup', updateTokenInfo);
+  }
+
+  function unbindSqlEvents() {
+    const textarea = getSqlTextarea();
+    if (!textarea) return;
+    textarea.removeEventListener('keydown', handleSuggestKeydown);
+    textarea.removeEventListener('keyup', updateTokenInfo);
+    textarea.removeEventListener('mouseup', updateTokenInfo);
+  }
+
+  watch(
+    () => tokenInfo.value?.token ?? '',
+    (nextToken, prevToken) => {
+      if (nextToken !== prevToken) {
+        activeSuggestIndex.value = 0;
+      }
+    },
+  );
+
+  onMounted(() => {
+    nextTick(bindSqlEvents);
+    if (!selectedTable.value && tables.length > 0) {
+      selectedTable.value = tables[0];
+      loadTableSchema(tables[0]);
+    }
+  });
+
+  onBeforeUnmount(() => {
+    unbindSqlEvents();
+  });
 
   function formatResult(payload: unknown): string {
     if (payload === null || payload === undefined) return '';
@@ -288,6 +522,46 @@
       }
     }
     return false;
+  }
+
+  function normalizeSchemaRows(payload: unknown): SchemaRow[] {
+    if (!Array.isArray(payload)) return [];
+    return payload
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, any>;
+        const field = record.Field ?? record.field ?? record.column ?? record.name;
+        if (!field) return null;
+        return {
+          field: String(field),
+          type: record.Type ?? record.type ?? record.dataType,
+          nullable: record.Null ?? record.null ?? record.isNullable,
+          key: record.Key ?? record.key,
+          defaultValue: record.Default ?? record.default ?? record.defaultValue,
+          extra: record.Extra ?? record.extra,
+        } as SchemaRow;
+      })
+      .filter((row): row is SchemaRow => Boolean(row));
+  }
+
+  async function loadTableSchema(table: string) {
+    schemaState.value = 'running';
+    schemaRows.value = [];
+    schemaResult.value = '加载中...';
+    try {
+      const res: any = await apiBasePost('/api/common/runSql', { sql: `DESC ${table};` });
+      const isOk = res?.status === 200;
+      const payload = isOk ? res?.data : (res?.msg ?? res);
+      const rows = normalizeSchemaRows(payload);
+      schemaRows.value = rows;
+      schemaResult.value = rows.length ? '' : formatResult(payload) || '无返回结果';
+      schemaState.value = detectResultError(payload) || !isOk ? 'error' : 'completed';
+    } catch (error: any) {
+      schemaResult.value = error?.message || '请求异常';
+      schemaState.value = 'error';
+    } finally {
+      schemaUpdatedAt.value = new Date().toLocaleString();
+    }
   }
 
   async function runSql() {
@@ -459,10 +733,70 @@
     flex: 1;
   }
 
+  .sql-input-wrapper {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+
   .sql-input :deep(textarea) {
     height: 100%;
     min-height: 220px;
     font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  }
+
+  .sql-suggest {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 5;
+    background: color-mix(in srgb, var(--background-color) 96%, transparent);
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent);
+    border-radius: 14px;
+    box-shadow:
+      0 10px 24px rgba(0, 0, 0, 0.12),
+      0 2px 6px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+  }
+
+  .sql-suggest-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--background-color) 90%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent);
+  }
+
+  .sql-suggest-list {
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sql-suggest-item {
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .sql-suggest-item:hover,
+  .sql-suggest-item.active {
+    background: color-mix(in srgb, #3488ff 12%, transparent);
+    color: color-mix(in srgb, #3488ff 85%, var(--text-color) 15%);
   }
 
   .panel-header {
@@ -553,7 +887,7 @@
   }
 
   .table-templates {
-    min-height: 70px;
+    min-height: 60px;
   }
 
   .chip-grid {
@@ -656,14 +990,86 @@
     color: #3488ff;
   }
 
+  .result-grid {
+    display: grid;
+    grid-template-columns: 0.6fr 1fr;
+    gap: 16px;
+    height: 320px;
+  }
+
+  .schema-panel,
   .result-panel {
-    flex: 0 0 auto;
-    min-height: 200px;
-    max-height: 300px;
     display: flex;
     flex-direction: column;
     gap: 12px;
     overflow: hidden;
+  }
+
+  .schema-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .schema-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--desc-color);
+    background: var(--bl-input-noBorder-bg-color);
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  .schema-table {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: auto;
+    padding-right: 4px;
+  }
+
+  .schema-row {
+    display: grid;
+    grid-template-columns: 1.1fr 1.4fr 0.5fr 0.6fr 0.9fr 1fr;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: color-mix(in srgb, var(--background-color) 90%, transparent);
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent);
+  }
+
+  .schema-row.schema-head {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--background-color) 80%, transparent);
+  }
+
+  .schema-row span {
+    word-break: break-word;
+  }
+
+  .schema-result {
+    flex: 1;
+    margin: 0;
+    padding: 14px;
+    background: var(--bl-input-noBorder-bg-color);
+    border-radius: 12px;
+    overflow: auto;
+    font-size: 13px;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+
+  .result-panel {
+    min-height: 200px;
+    max-height: 320px;
   }
 
   .result-view {
@@ -688,7 +1094,13 @@
       max-height: 500px;
     }
 
-    .result-panel {
+    .result-grid {
+      grid-template-columns: 1fr;
+      max-height: none;
+    }
+
+    .result-panel,
+    .schema-panel {
       max-height: none;
     }
   }
