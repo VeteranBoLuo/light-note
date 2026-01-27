@@ -15,6 +15,7 @@ export default {
     dark: 'Dark',
     projectAddress: 'Project Address',
   },
+  todo: 'Todo',
   home: {
     allCard: 'Organize, share, and explore quality websites',
     tagSearch: 'Enter tag name',

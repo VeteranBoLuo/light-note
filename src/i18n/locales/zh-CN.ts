@@ -15,6 +15,7 @@ export default {
     dark: '深色',
     projectAddress: '项目地址',
   },
+  todo: '待办',
   home: {
     allCard: '收纳、分享、探索优质网站',
     tagSearch: '请输入标签名',

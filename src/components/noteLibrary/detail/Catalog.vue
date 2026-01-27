@@ -109,7 +109,7 @@
   }
   .folder {
     position: fixed;
-    right: 5px;
+    right: 20px;
     top: 10%;
     color: white;
     cursor: pointer;
@@ -122,8 +122,8 @@
   }
   .phone-catalog {
     position: fixed;
-    top: 10%;
-    right: 30px;
+    top: 13%;
+    right: 20px;
     z-index: 999;
     background: var(--menu-container-bg-color);
     width: 200px;
