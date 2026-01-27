@@ -52,9 +52,18 @@
             :src="effectiveFileUrl"
             :alt="fileInfo.fileName"
             class="preview-image"
+            :style="{
+              transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotate}deg)`,
+              cursor: scale > 1 ? 'grab' : 'default',
+              userSelect: 'none',
+            }"
             @load="onImageLoad"
             @error="onError"
             @click="previewImage"
+            @mousedown="startDrag"
+            @mousemove="drag"
+            @mouseup="stopDrag"
+            @mouseleave="stopDrag"
           />
         </div>
 
@@ -142,13 +151,38 @@
     <div class="preview-controls">
       <a-space>
         <span class="file-type-badge">{{ getFileTypeName(previewType) }}</span>
-        <a-button-group size="small">
+        <a-space size="small" gap="8">
           <a-tooltip title="下载文件">
             <a-button size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
               <template #icon><DownloadOutlined /></template>
             </a-button>
           </a-tooltip>
-        </a-button-group>
+          <a-tooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
+            <a-button size="small" @click="zoomIn" class="action-btn">
+              <template #icon><ZoomInOutlined /></template>
+            </a-button>
+          </a-tooltip>
+          <a-tooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
+            <a-button size="small" @click="zoomOut" class="action-btn">
+              <template #icon><ZoomOutOutlined /></template>
+            </a-button>
+          </a-tooltip>
+          <a-tooltip
+            title="重置"
+            v-if="
+              previewType === 'image' && (scale !== 1 || rotate !== 0 || imagePosition.x !== 0 || imagePosition.y !== 0)
+            "
+          >
+            <a-button size="small" @click="resetZoom" class="action-btn">
+              <template #icon><ReloadOutlined /></template>
+            </a-button>
+          </a-tooltip>
+          <a-tooltip title="旋转图片" v-if="previewType === 'image'">
+            <a-button size="small" @click="rotateImage" class="action-btn">
+              <template #icon><RotateRightOutlined /></template>
+            </a-button>
+          </a-tooltip>
+        </a-space>
       </a-space>
     </div>
   </div>
@@ -177,6 +211,10 @@
     GlobalOutlined,
     InfoCircleOutlined,
     RedoOutlined,
+    ReloadOutlined,
+    RotateRightOutlined,
+    ZoomInOutlined,
+    ZoomOutOutlined,
   } from '@ant-design/icons-vue';
 
   const props = defineProps<{
@@ -198,6 +236,11 @@
   const loading = ref(false);
   const error = ref(false);
   const errorMessage = ref('');
+  const rotate = ref(0);
+  const scale = ref(1);
+  const isDragging = ref(false);
+  const dragStart = ref({ x: 0, y: 0 });
+  const imagePosition = ref({ x: 0, y: 0 });
   const textContent = ref('');
   const wrapText = ref(true);
   const pdfBlobUrl = ref<string>('');
@@ -468,7 +511,53 @@
       URL.revokeObjectURL(pdfBlobUrl.value);
       pdfBlobUrl.value = '';
     }
+    rotate.value = 0; // 重置旋转角度
+    scale.value = 1; // 重置缩放
+    imagePosition.value = { x: 0, y: 0 }; // 重置位置
     emit('close');
+  }
+
+  function rotateImage() {
+    rotate.value = (rotate.value + 90) % 360;
+  }
+
+  function zoomIn() {
+    scale.value = Math.min(scale.value * 1.2, 5); // 最大5倍
+  }
+
+  function zoomOut() {
+    scale.value = Math.max(scale.value / 1.2, 0.1); // 最小0.1倍
+  }
+
+  function resetZoom() {
+    scale.value = 1;
+    rotate.value = 0;
+    imagePosition.value = { x: 0, y: 0 };
+  }
+
+  function startDrag(e: MouseEvent) {
+    if (scale.value > 1) {
+      isDragging.value = true;
+      dragStart.value = {
+        x: e.clientX - imagePosition.value.x,
+        y: e.clientY - imagePosition.value.y,
+      };
+      e.preventDefault();
+    }
+  }
+
+  function drag(e: MouseEvent) {
+    if (isDragging.value) {
+      imagePosition.value = {
+        x: e.clientX - dragStart.value.x,
+        y: e.clientY - dragStart.value.y,
+      };
+      e.preventDefault();
+    }
+  }
+
+  function stopDrag() {
+    isDragging.value = false;
   }
 
   function getFileTypeName(type: string) {
@@ -493,12 +582,33 @@
     }
   }
 
+  function preventSelect(e: Event) {
+    if (isDragging.value) {
+      e.preventDefault();
+    }
+  }
+
+  function handleWheel(e: WheelEvent) {
+    if (e.ctrlKey && previewType.value === 'image') {
+      e.preventDefault();
+      if (e.deltaY < 0) {
+        zoomIn();
+      } else {
+        zoomOut();
+      }
+    }
+  }
+
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    document.addEventListener('selectstart', preventSelect);
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyDown);
+    document.removeEventListener('wheel', handleWheel);
+    document.removeEventListener('selectstart', preventSelect);
     // 清理PDF blob URL
     if (pdfBlobUrl.value) {
       URL.revokeObjectURL(pdfBlobUrl.value);
