@@ -167,6 +167,11 @@
               <template #icon><ZoomOutOutlined /></template>
             </a-button>
           </a-tooltip>
+          <a-tooltip title="旋转图片" v-if="previewType === 'image'">
+            <a-button size="small" @click="rotateImage" class="action-btn">
+              <template #icon><RotateRightOutlined /></template>
+            </a-button>
+          </a-tooltip>
           <a-tooltip
             title="重置"
             v-if="
@@ -175,11 +180,6 @@
           >
             <a-button size="small" @click="resetZoom" class="action-btn">
               <template #icon><ReloadOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="旋转图片" v-if="previewType === 'image'">
-            <a-button size="small" @click="rotateImage" class="action-btn">
-              <template #icon><RotateRightOutlined /></template>
             </a-button>
           </a-tooltip>
         </a-space>

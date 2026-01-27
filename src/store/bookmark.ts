@@ -69,7 +69,7 @@ export default defineStore('bookmark', {
       const isTablet = /ipad|android|tablet|silk|kindle/i.test(userAgent) && !/mobile/i.test(userAgent);
 
       // 根据宽度和设备特征综合判断
-      if (width <= 768 || (isMobile && width <= 1024)) {
+      if (width <= 768 || (isMobile && width < 1024)) {
         return 'mobile';
       } else if ((width > 768 && width <= 1024) || isTablet) {
         return 'tablet';

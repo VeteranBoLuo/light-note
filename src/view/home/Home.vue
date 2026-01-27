@@ -159,7 +159,7 @@
     box-sizing: border-box;
     display: flex;
   }
-  @media (max-width: 1000px) {
+  @media (max-width: 1024px) {
     .main-page {
       padding: 20px 0;
       display: flex;
