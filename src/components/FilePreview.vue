@@ -31,8 +31,8 @@
       <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
         <!-- 1. PDF预览 -->
         <iframe
-          v-if="previewType === 'pdf'"
-          :src="effectiveFileUrl"
+          v-if="previewType === 'pdf' && pdfBlobUrl"
+          :src="pdfBlobUrl"
           class="preview-iframe"
           @load="onLoad"
           @error="onError"
@@ -334,11 +334,7 @@
   const effectiveFileUrl = computed(() => {
     if (!props.fileInfo.fileUrl) return '';
 
-    // 将 OBS URL 替换为 Nginx /obs/ 路径
-    const url = props.fileInfo.fileUrl.replace(
-      'https://light-note-files.obs.cn-south-1.myhuaweicloud.com:443/',
-      '/obs/',
-    );
+    const url = props.fileInfo.fileUrl;
 
     return url;
   });
@@ -361,7 +357,9 @@
     errorMessage.value = '';
     textContent.value = '';
     try {
-      if (previewType.value === 'text') {
+      if (previewType.value === 'pdf') {
+        await loadPdfBlob(effectiveFileUrl.value);
+      } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
       } else if (previewType.value === 'unsupported') {
         loading.value = false;
