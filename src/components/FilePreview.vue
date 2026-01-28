@@ -31,7 +31,7 @@
       <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
         <!-- 1. PDF预览 -->
         <iframe
-          v-if="previewType === 'pdf' && pdfBlobUrl"
+          v-if="previewType === 'pdf'"
           :src="effectiveFileUrl"
           class="preview-iframe"
           @load="onLoad"
