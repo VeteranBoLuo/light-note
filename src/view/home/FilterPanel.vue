@@ -229,7 +229,7 @@
     overflow: hidden auto;
   }
 
-  @media (max-width: 1000px) {
+  @media (max-width: 1024px) {
     .filter-panel {
       min-width: unset;
       width: 100%;

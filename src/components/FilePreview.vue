@@ -32,7 +32,7 @@
         <!-- 1. PDF预览 -->
         <iframe
           v-if="previewType === 'pdf' && pdfBlobUrl"
-          :src="pdfBlobUrl"
+          :src="effectiveFileUrl"
           class="preview-iframe"
           @load="onLoad"
           @error="onError"
@@ -334,7 +334,11 @@
   const effectiveFileUrl = computed(() => {
     if (!props.fileInfo.fileUrl) return '';
 
-    const url = props.fileInfo.fileUrl;
+    // 将 OBS URL 替换为 Nginx /obs/ 路径
+    const url = props.fileInfo.fileUrl.replace(
+      'https://light-note-files.obs.cn-south-1.myhuaweicloud.com:443/',
+      '/obs/',
+    );
 
     return url;
   });
@@ -357,9 +361,7 @@
     errorMessage.value = '';
     textContent.value = '';
     try {
-      if (previewType.value === 'pdf') {
-        await loadPdfBlob(effectiveFileUrl.value);
-      } else if (previewType.value === 'text') {
+      if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
       } else if (previewType.value === 'unsupported') {
         loading.value = false;

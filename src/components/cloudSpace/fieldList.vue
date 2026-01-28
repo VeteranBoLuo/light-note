@@ -8,7 +8,7 @@
       </b-space>
     </div>
     <div class="field-header">
-      <div class="flex-align-center-gap" style="width: 60%">
+      <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <a-checkbox
           v-if="batchMode"
           :indeterminate="indeterminate"
@@ -19,14 +19,14 @@
         {{ $t('cloudSpace.fileName') }}
       </div>
       <div class="default-area">
-        <div v-if="!bookmark.isMobileDevice">{{ $t('cloudSpace.folder') }}</div>
+        <div v-if="!bookmark.isMobile">{{ $t('cloudSpace.folder') }}</div>
         <div>{{ $t('cloudSpace.fileSize') }}</div>
-        <div v-if="!bookmark.isMobileDevice"> {{ $t('cloudSpace.uploadTime') }} </div>
+        <div v-if="!bookmark.isMobile"> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
     <div class="file-container">
       <div class="field-item" v-for="(item, index) in cloud.fileList" :key="index">
-        <div class="flex-align-center" style="position: relative; width: 60%">
+        <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
           <a-checkbox
             v-if="batchMode"
             :checked="selectedRows.includes(item.id)"
@@ -60,7 +60,7 @@
                 @click="downloadField(item.id)"
               />
             </a-tooltip>
-            <a-tooltip :title="$t('cloudSpace.share')" v-if="!bookmark.isMobileDevice">
+            <a-tooltip :title="$t('cloudSpace.share')" v-if="!bookmark.isMobile">
               <svg-icon
                 class="download-icon"
                 :src="icon.cloudSpace.share"
@@ -73,7 +73,7 @@
               <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item.id)" />
             </a-tooltip>
             <b-menu
-              v-if="!bookmark.isMobileDevice"
+              v-if="!bookmark.isMobile"
               :trigger="'click'"
               :menu-options="[
                 { label: $t('common.reName'), icon: icon.filterPanel.list, function: () => handleReName(item) },
@@ -89,7 +89,7 @@
           </div>
         </div>
         <div class="default-area">
-          <div v-if="!bookmark.isMobileDevice">{{ item.folderName }}</div>
+          <div v-if="!bookmark.isMobile">{{ item.folderName }}</div>
           <div
             >{{
               Number(item.fileSize / 1024)
@@ -98,7 +98,7 @@
             }}
             KB</div
           >
-          <div v-if="!bookmark.isMobileDevice" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
+          <div v-if="!bookmark.isMobile" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
         </div>
       </div>
     </div>
@@ -149,6 +149,13 @@
     }
     selectAll.value = cloud.fileList.length > 0 && selectedRows.value.length === cloud.fileList.length;
   };
+
+  const fieldNameWidth = computed(() => {
+    if (bookmark.isMobile) {
+      return '70%';
+    }
+    return '55%';
+  });
 
   watch(
     () => cloud.fileList,
