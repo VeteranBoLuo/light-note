@@ -253,4 +253,9 @@
       transition: none !important;
     }
   }
+  @media (max-width: 768px) {
+    *::-webkit-scrollbar {
+      display: none;
+    }
+  }
 </style>

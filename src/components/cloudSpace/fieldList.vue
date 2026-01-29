@@ -152,7 +152,7 @@
 
   const fieldNameWidth = computed(() => {
     if (bookmark.isMobile) {
-      return '70%';
+      return '80%';
     }
     return '55%';
   });
@@ -186,25 +186,33 @@
     },
   );
 
+  const getFileExt = (name: string) => {
+    const lastDot = name.lastIndexOf('.');
+    if (lastDot <= 0) return '';
+    return name.slice(lastDot + 1);
+  };
+
+  const getFileBaseName = (name: string) => {
+    const lastDot = name.lastIndexOf('.');
+    if (lastDot <= 0) return name;
+    return name.slice(0, lastDot);
+  };
+
   function submitReName(file) {
-    // 判断是否改变扩展名(只有修改扩展名时提示，直接删除后缀不提示，后端会自动补全)
-    if (file.fileName.includes('.') && originalName.value.split('.').pop() !== file.fileName.split('.').pop()) {
-      Alert.alert({
-        title: t('cloudSpace.alertTitle'),
-        content: t('cloudSpace.extensionWarning'),
-        onOk() {
-          updateFileName(file);
-        },
-      });
-    } else {
-      updateFileName(file);
-    }
+    const baseName = String(file.fileName || '').trim();
+    const nextName = originalExt.value ? `${baseName}.${originalExt.value}` : baseName;
+    updateFileName(file, nextName);
   }
-  function updateFileName(file) {
+
+  function updateFileName(file, nextName: string) {
     file.isRename = false;
+    if (nextName === originalName.value) {
+      return;
+    }
+    file.fileName = nextName;
     apiBasePost('/api/file/updateFile', {
       id: file.id,
-      fileName: file.fileName,
+      fileName: nextName,
     }).then((res) => {
       if (res.status === 200) {
         message.success(t('cloudSpace.renameSuccess'));
@@ -271,8 +279,11 @@
     }
   }
   const originalName = ref('');
+  const originalExt = ref('');
   function handleReName(file) {
     originalName.value = cloneDeep(file.fileName);
+    originalExt.value = getFileExt(originalName.value);
+    file.fileName = getFileBaseName(originalName.value);
     file.isRename = true;
     document.querySelector('.edit-file-input .b-input') as HTMLInputElement;
     nextTick(() => {

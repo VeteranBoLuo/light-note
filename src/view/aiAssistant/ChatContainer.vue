@@ -3,7 +3,14 @@
     <!-- 主聊天容器 -->
     <div class="chat-wrapper">
       <!-- 消息区域 -->
-      <main class="messages-container" ref="messagesContainer" @scroll="handleScroll">
+      <main
+        class="messages-container"
+        ref="messagesContainer"
+        @scroll="handleScroll"
+        @wheel.passive="handleUserInteraction"
+        @touchstart.passive="handleUserInteraction"
+        @pointerdown.passive="handleUserInteraction"
+      >
         <ChatMessageItem
           v-for="(message, index) in messages"
           :key="index"
@@ -86,6 +93,7 @@
 
   // 新增：是否为程序触发的滚动
   const isProgrammaticScroll = ref(false);
+  let programmaticResetTimer: number | null = null;
 
   // 简化用户干预检测，只使用一个核心标志
   const userHasInterrupted = ref(false); // 用户是否手动干预了滚动
@@ -216,9 +224,6 @@
 
   // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
   const handleScroll = () => {
-    // 如果是程序触发的滚动，忽略处理
-    if (isProgrammaticScroll.value) return;
-
     if (!messagesContainer.value) return;
 
     const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
@@ -232,6 +237,7 @@
       console.log('用户向上滚动，自动滚动已禁用');
       userHasInterrupted.value = true;
       autoScrollEnabled.value = false;
+      isProgrammaticScroll.value = false;
     } else {
       // 更新滚动提示状态
       if (scrollPosition <= SCROLL_THRESHOLD) {
@@ -244,6 +250,18 @@
     }
     if (scrollPosition > SCROLL_THRESHOLD) {
       showScrollToBottom.value = true;
+    }
+  };
+
+  // 用户交互时立即取消自动滚动（用于移动端与平滑滚动冲突）
+  const handleUserInteraction = () => {
+    if (!autoScrollEnabled.value && userHasInterrupted.value) return;
+    userHasInterrupted.value = true;
+    autoScrollEnabled.value = false;
+    isProgrammaticScroll.value = false;
+    if (programmaticResetTimer) {
+      clearTimeout(programmaticResetTimer);
+      programmaticResetTimer = null;
     }
   };
 
@@ -267,15 +285,22 @@
     const container = messagesContainer.value;
     const targetScrollTop = container.scrollHeight - container.clientHeight;
 
-    if (behavior === 'smooth') {
+    // 移动端优先使用即时滚动，避免惯性与自动滚动冲突
+    const finalBehavior: ScrollBehavior = bookmark.isMobileDevice ? 'auto' : behavior;
+
+    if (finalBehavior === 'smooth') {
       container.scrollTo({
         top: targetScrollTop,
         behavior: 'smooth',
       });
-      // 延迟重置标志，等待 smooth 动画完成（假设 300ms）
-      setTimeout(() => {
+      if (programmaticResetTimer) {
+        clearTimeout(programmaticResetTimer);
+      }
+      // 延迟重置标志，等待 smooth 动画完成
+      programmaticResetTimer = window.setTimeout(() => {
         isProgrammaticScroll.value = false;
-      }, 300);
+        programmaticResetTimer = null;
+      }, 600);
     } else {
       // 立即滚动
       container.scrollTop = targetScrollTop;

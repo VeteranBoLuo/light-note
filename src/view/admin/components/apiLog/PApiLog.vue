@@ -14,7 +14,7 @@
         :columns="logColumns"
         row-key="id"
         style="margin-top: 5px"
-        :scroll="{ y: bookmark.screenHeight - 250 }"
+        :scroll="{ y: bookmark.screenHeight - 235 }"
         :pagination="false"
       >
         <template #expandedRowRender="{ record }">

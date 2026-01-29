@@ -58,7 +58,9 @@
           </slot>
           <div v-else style="width: 100%" class="flex-align-center">
             <div class="btn dom-hover" @click="obClose(200)">{{ cancelText }}</div>
-            <div class="btn dom-hover" style="color: #5c82ff" type="primary" @click="onOk">{{ okText }}</div>
+            <div class="btn dom-hover" style="color: var(--primary-color)" type="primary" @click="onOk">{{
+              okText
+            }}</div>
           </div>
         </div>
       </div>

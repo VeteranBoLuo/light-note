@@ -22,10 +22,13 @@
       <div class="user-icon-text" :style="{ color: user.iconColor }">
         <div style="display: flex; gap: 20px; font-size: 14px">
           <span
-            >{{ $t('navigation.tag') }}<span style="margin-left: 10px">{{ user.tagTotal }}</span></span
+            >{{ $t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
           >
           <span
-            >{{ $t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
+            >{{ $t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
+          >
+          <span
+            >{{ $t('personCenter.storageUsed') }}<span style="margin-left: 10px">{{ user.storageUsed }} MB</span></span
           >
         </div>
       </div>
@@ -204,7 +207,7 @@
   }
 </script>
 
-<style lang="less">
+<style lang="less" scoped>
   .person-title-card {
     gap: 40px;
     padding: 15px;

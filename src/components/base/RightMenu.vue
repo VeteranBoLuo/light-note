@@ -26,7 +26,9 @@
 </template>
 
 <script setup>
+  import bookmarkStore from '@/store/bookmark';
   import { ref, onMounted, onUnmounted } from 'vue';
+  const bookmark = bookmarkStore();
   const showMenu = ref(false);
   const props = defineProps({
     // 接收传递进来的菜单项
@@ -71,6 +73,9 @@
   const mouseY = ref(0);
   onMounted(() => {
     containerRef.value.addEventListener('contextmenu', (e) => {
+      if (!bookmark.isDesktop) {
+        return;
+      }
       e.preventDefault(); // 阻止浏览器的默认行为
       mouseX.value = e.x;
       mouseY.value = e.y + 5;

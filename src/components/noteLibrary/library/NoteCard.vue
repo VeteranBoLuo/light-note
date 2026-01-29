@@ -85,12 +85,14 @@
     transition:
       border-color 0.2s,
       box-shadow 0.2s;
-    &:hover {
-      .checkBox {
-        visibility: visible;
+    @media (hover: hover) {
+      &:hover {
+        .checkBox {
+          visibility: visible;
+        }
+        box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
+        border-color: #8b88f2;
       }
-      box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
-      border-color: #8b88f2;
     }
   }
 

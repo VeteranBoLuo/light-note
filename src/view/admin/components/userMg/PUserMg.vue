@@ -4,7 +4,7 @@
       :data-source="userList"
       :columns="userColumns"
       row-key="id"
-      :scroll="{ y: bookmark.screenHeight - 350 }"
+      :scroll="{ y: bookmark.screenHeight - 200 }"
       :pagination="false"
     >
       <template #bodyCell="{ column, text, record }">
@@ -58,8 +58,9 @@
   const userColumns = computed(() => {
     return [
       {
-        title: 'ip',
-        dataIndex: 'ip',
+        title: '昵称',
+        dataIndex: 'alias',
+        width: 100,
         ellipsis: true,
       },
       {
@@ -68,13 +69,9 @@
         ellipsis: true,
       },
       {
-        title: '权限',
-        dataIndex: 'role',
-        ellipsis: true,
-      },
-      {
         title: '操作',
         dataIndex: 'operation',
+        width: 100,
         ellipsis: true,
       },
     ];

@@ -27,7 +27,7 @@
     <b-modal
       v-model:visible="visible"
       :title="$t('changelog.editTitle')"
-      width="800px"
+      top="45%"
       :maskClosable="false"
       :showFooter="false"
       @ok="handleUpdate"
@@ -287,8 +287,8 @@
 
   .edit_btn {
     position: absolute;
-    top: 50%;
-    right: 50%;
+    top: 0;
+    right: 5%;
     z-index: 1;
   }
 
@@ -296,10 +296,13 @@
     display: flex;
     flex-direction: column;
     height: 600px;
-    width: 1200px;
+
     border: 1px solid #434343;
     border-radius: 6px;
     overflow: hidden;
+    @media (min-width: 764px) {
+      width: 1200px;
+    }
   }
 
   .editor-header {

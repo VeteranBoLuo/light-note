@@ -15,7 +15,7 @@
         :columns="imageColumns"
         row-key="id"
         style="margin-top: 5px"
-        :scroll="{ y: bookmark.screenHeight - 250 }"
+        :scroll="{ y: bookmark.screenHeight - 235 }"
         :pagination="false"
       >
       </a-table>
@@ -102,7 +102,6 @@
 </script>
 
 <style lang="less" scoped>
-
   :deep(.ant-table-wrapper .ant-table) {
     background-color: var(--background-color);
     color: var(--text-color);
