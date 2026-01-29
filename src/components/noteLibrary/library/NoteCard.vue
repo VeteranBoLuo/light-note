@@ -141,4 +141,7 @@
     right: 20px;
     top: 22px;
   }
+  @media (max-width: 768px) {
+    border-color: unset !important;
+  }
 </style>

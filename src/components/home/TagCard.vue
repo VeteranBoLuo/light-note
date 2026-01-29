@@ -149,6 +149,10 @@
   @media (max-width: 1000px) {
     .card-body {
       height: 140px;
+      &:hover {
+        box-shadow: none; /* 移除 :hover 状态下的阴影 */
+        border: 2px solid var(--card-border-color);
+      }
     }
 
     .card-title {

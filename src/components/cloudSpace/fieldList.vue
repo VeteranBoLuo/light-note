@@ -90,14 +90,15 @@
         </div>
         <div class="default-area">
           <div v-if="!bookmark.isMobile">{{ item.folderName }}</div>
-          <div
-            >{{
-              Number(item.fileSize / 1024)
-                .toFixed()
-                .replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-            }}
-            KB</div
-          >
+          <div>{{
+            item.fileSize >= 1024 * 1024
+              ? Number(item.fileSize / (1024 * 1024))
+                  .toFixed(1)
+                  .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' MB'
+              : Number(item.fileSize / 1024)
+                  .toFixed()
+                  .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' KB'
+          }}</div>
           <div v-if="!bookmark.isMobile" class="text-hidden" :title="item.uploadTime">{{ item.uploadTime }} </div>
         </div>
       </div>
@@ -152,7 +153,7 @@
 
   const fieldNameWidth = computed(() => {
     if (bookmark.isMobile) {
-      return '80%';
+      return '70%';
     }
     return '55%';
   });
