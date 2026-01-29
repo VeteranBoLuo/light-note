@@ -85,14 +85,12 @@
     transition:
       border-color 0.2s,
       box-shadow 0.2s;
-    @media (hover: hover) {
-      &:hover {
-        .checkBox {
-          visibility: visible;
-        }
-        box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
-        border-color: #8b88f2;
+    &:hover {
+      .checkBox {
+        visibility: visible;
       }
+      box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
+      border-color: #8b88f2;
     }
   }
 
@@ -141,7 +139,9 @@
     right: 20px;
     top: 22px;
   }
-  @media (max-width: 768px) {
-    border-color: unset !important;
+  @media (max-width: 1023px) {
+    .note-card {
+      border-color: unset !important;
+    }
   }
 </style>

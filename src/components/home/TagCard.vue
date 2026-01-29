@@ -91,11 +91,9 @@
     cursor: pointer;
     position: relative;
     transition: border-color 0.1s;
-    @media (hover: hover) {
-      &:hover {
-        box-shadow: 0 6px 6px rgba(59, 130, 246, 0.5);
-        border: 2px solid var(--primary-h-color);
-      }
+    &:hover {
+      box-shadow: 0 6px 6px rgba(59, 130, 246, 0.5);
+      border: 2px solid var(--primary-h-color);
     }
   }
 
@@ -146,7 +144,7 @@
     gap: 8px;
   }
 
-  @media (max-width: 1000px) {
+  @media (max-width: 1023px) {
     .card-body {
       height: 140px;
       &:hover {
