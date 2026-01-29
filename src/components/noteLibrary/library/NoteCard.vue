@@ -141,7 +141,7 @@
   }
   @media (max-width: 1023px) {
     .note-card {
-      border-color: unset !important;
+      border-color: #edf2fa !important;
     }
   }
 </style>
