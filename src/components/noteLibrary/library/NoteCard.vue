@@ -20,7 +20,7 @@
       :style="{ color: user.preferences.theme === 'night' ? '#ccc' : 'rgb(102, 102, 102)' }"
       style="font-size: 12px; margin-top: 10px"
       >{{ note['updateTime'] ?? note['createTime'] }}</div
-    >
+    >#edf2fa;
     <div
       v-if="!bookmark.isMobileDevice"
       class="checkBox"

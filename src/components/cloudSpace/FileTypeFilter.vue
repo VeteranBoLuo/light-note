@@ -4,7 +4,7 @@
     <div class="filter-dropdown">
       <b-button class="filter-button" @click="toggleFilterMenu">
         <svg-icon :src="icon.cloudSpace.filter" />
-        <span>{{ $t('cloudSpace.fileType') }}</span>
+        <span>{{ bookmark.isDesktop ? $t('cloudSpace.fileType') : '' }}</span>
         <i :class="['arrow', { 'arrow-up': showFilterMenu }]"></i>
       </b-button>
 
@@ -29,7 +29,7 @@
   import { ref, watch } from 'vue';
   import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
-  import { cloudSpaceStore } from '@/store';
+  import { cloudSpaceStore, bookmarkStore } from '@/store';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
@@ -50,6 +50,7 @@
     { value: 'other', label: t('cloudSpace.other') },
   ]);
   const cloud = cloudSpaceStore();
+  const bookmark = bookmarkStore();
   // 响应式数据
   const showFilterMenu = ref(false);
 
@@ -199,5 +200,10 @@
     height: 18px;
     border-radius: 3px;
     flex-shrink: 0;
+  }
+  @media (max-width: 768px) {
+    .filter-menu {
+      width: 100px;
+    }
   }
 </style>

@@ -377,4 +377,15 @@
       }
     }
   }
+  @media (max-width: 1024px) {
+    .batch-actions {
+      padding: 10px 0;
+    }
+    .field-header {
+      padding: 0 10px 10px 10px;
+    }
+    .field-item {
+      padding: 0 10px 10px 10px;
+    }
+  }
 </style>

@@ -8,7 +8,7 @@
         }"
       >
       </div>
-      <span class="both-center">⌵</span>
+      <span class="both-center" style="top: 45%">⌵</span>
     </div>
   </div>
 </template>

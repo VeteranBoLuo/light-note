@@ -4,7 +4,7 @@
     <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
       <b-button type="primary">
         <UploadOutlined />
-        {{ $t('cloudSpace.uploadFile') }}
+        {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
       </b-button>
     </b-upload>
 

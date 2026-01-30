@@ -13,6 +13,7 @@
               <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
             </template>
           </b-input>
+          <FileTypeFilter />
         </div>
         <div v-else class="flex-align-center">
           <div
@@ -323,7 +324,6 @@
     .mobile-header-left {
       display: flex;
       align-items: center;
-      gap: 10px;
       flex: 1;
     }
 

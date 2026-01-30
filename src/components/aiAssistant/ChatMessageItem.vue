@@ -296,7 +296,7 @@
     margin-bottom: 1rem;
     padding: 0.5rem;
     line-height: 1.4;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(189, 177, 177, 0.25);
     border-radius: 0.5rem;
     border-left: 3px solid var(--primary-color);
   }
@@ -313,7 +313,7 @@
   }
 
   .reasoning {
-    color: rgba(255, 255, 255, 0.95);
+    color: #888;
     font-size: 0.85rem;
   }
 
