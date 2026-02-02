@@ -10,13 +10,13 @@
       <router-view />
       <Login v-if="bookmark.isShowLogin" />
       <BViewer />
-      <FloatQuestion v-if="!bookmark.isMobileDevice && !bookmark.isShowLogin" />
+      <FloatQuestion v-if="aiVisible" />
     </a-config-provider>
   </div>
 </template>
 <script setup lang="ts">
   import { bookmarkStore, useUserStore } from '@/store';
-  import { h, nextTick, onMounted, onBeforeUnmount, watch } from 'vue';
+  import { h, nextTick, onMounted, onBeforeUnmount, watch, ref, computed } from 'vue';
   import Login from '@/view/login/UserAuthModal.vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
@@ -39,6 +39,9 @@
     },
   );
 
+  const aiVisible = computed(() => {
+    return !bookmark.isMobileDevice && !bookmark.isShowLogin && router.currentRoute.value.name !== 'noteDetail';
+  });
   // 路由映射表
   const phoneReplaceMap = {
     '/admin/apiLog': '/apiLog',
@@ -84,6 +87,9 @@
     mq.addEventListener('change', mqListener);
     console.log('初始屏幕尺寸：', user.preferences);
   }
+
+  // 添加应用就绪状态
+  // const isAppReady = ref(false); // 已移除，不再需要loading界面
   async function getUserInfo() {
     try {
       const res = await apiBaseGet('/api/user/getUserInfo');
@@ -103,6 +109,7 @@
       user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      localStorage.setItem('userId', res.data.id);
       setLocale(user.preferences.lang || 'zh-CN');
       if (res.status !== 200) {
         handleUserLogout();
@@ -256,6 +263,128 @@
   @media (max-width: 768px) {
     *::-webkit-scrollbar {
       display: none;
+    }
+  }
+  .app-loading {
+    height: 100vh;
+    width: 100vw;
+    background: linear-gradient(135deg, #f5f7fa 0%, #8999b3 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .app-loading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+      radial-gradient(circle at 30% 40%, rgba(78, 75, 70, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 70% 60%, rgba(78, 75, 70, 0.05) 0%, transparent 50%);
+    animation: backgroundShift 8s ease-in-out infinite;
+  }
+
+  @keyframes backgroundShift {
+    0%,
+    100% {
+      transform: translateX(0) translateY(0);
+    }
+    25% {
+      transform: translateX(-10px) translateY(10px);
+    }
+    50% {
+      transform: translateX(10px) translateY(-10px);
+    }
+    75% {
+      transform: translateX(-5px) translateY(-5px);
+    }
+  }
+
+  .loading-container {
+    text-align: center;
+    z-index: 1;
+    position: relative;
+  }
+
+  .loading-spinner {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+  }
+
+  .spinner-ring {
+    position: absolute;
+    border: 3px solid rgba(78, 75, 70, 0.1);
+    border-top: 3px solid #4e4b46;
+    border-radius: 50%;
+    width: 100%;
+    height: 100%;
+    animation: spin 1.5s linear infinite;
+  }
+
+  .spinner-ring:nth-child(2) {
+    animation-delay: 0.2s;
+    border-top-color: #6b7280;
+  }
+
+  .spinner-ring:nth-child(3) {
+    animation-delay: 0.4s;
+    border-top-color: #9ca3af;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-text h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #4e4b46;
+    margin: 0 0 10px 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    animation: fadeInUp 1s ease-out;
+  }
+
+  .loading-text p {
+    font-size: 1rem;
+    color: #6b7280;
+    margin: 0;
+    animation: fadeInUp 1.2s ease-out;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    .loading-spinner {
+      width: 60px;
+      height: 60px;
+    }
+    .loading-text h2 {
+      font-size: 1.5rem;
+    }
+    .loading-text p {
+      font-size: 0.9rem;
     }
   }
 </style>

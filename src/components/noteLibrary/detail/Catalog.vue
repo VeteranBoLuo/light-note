@@ -80,10 +80,10 @@
 
 <style scoped>
   .toc-container {
-    width: 300px;
     height: calc(100% - 60px);
     overflow: auto;
     box-sizing: border-box;
+    flex: 0 0 300px;
   }
 
   .toc-item {

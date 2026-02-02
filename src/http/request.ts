@@ -86,11 +86,7 @@ export const apiQueryPost = async (
   return handleErrorResponse(res.data);
 };
 
-export const apiBasePost = async (
-  url: string,
-  data?: any,
-  options?: AxiosRequestConfig,
-): Promise<ApiResponse> => {
+export const apiBasePost = async (url: string, data?: any, options?: AxiosRequestConfig): Promise<ApiResponse> => {
   const res = await request({
     url,
     method: 'post',
@@ -100,11 +96,7 @@ export const apiBasePost = async (
   return handleErrorResponse(res.data);
 };
 
-export const apiBaseGet = async (
-  url: string,
-  params?: any,
-  options?: AxiosRequestConfig,
-): Promise<ApiResponse> => {
+export const apiBaseGet = async (url: string, params?: any, options?: AxiosRequestConfig): Promise<ApiResponse> => {
   const res = await request({
     url,
     method: 'get',

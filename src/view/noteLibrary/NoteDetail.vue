@@ -13,8 +13,8 @@
         @saveTag="clickSaveNote"
       />
       <div class="note-body">
-        <Catalog :content="note.content" />
-        <div class="note-body-header row-center">
+        <Catalog class="catalog-panel" :content="note.content" />
+        <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
             <a-input
               :disabled="readonly"
@@ -24,8 +24,9 @@
               placeholder="请输入标题"
             />
           </div>
-          <editor v-model:content="note.content" :readonly="readonly" :note-id="note.id" />
+          <editor class="editor-component" v-model:content="note.content" :readonly="readonly" :note-id="note.id" />
         </div>
+        <AiReply class="ai-panel" />
       </div>
     </div>
     <b-loading :loading="!isReady" style="z-index: -1" />
@@ -44,6 +45,7 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import AiReply from '@/components/noteLibrary/detail/AiReply.vue';
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const note = reactive({
@@ -55,6 +57,17 @@
   });
 
   provide('note', note);
+  provide('triggerSave', () => saveFunc());
+  provide('applyTitleFromAi', (newTitle: string) => {
+    note.title = newTitle;
+    note.lastTitle = cloneDeep(newTitle);
+    if (!bookmark.isMobileDevice) {
+      const el = document.getElementById('note-header-title');
+      if (el) {
+        el.innerText = newTitle;
+      }
+    }
+  });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
 
   const readonly = computed(() => {
@@ -301,11 +314,31 @@
   .note-body {
     display: flex;
     padding: 20px;
+    flex-direction: row;
+    gap: 20px;
     box-sizing: border-box;
-    height: 100%;
+    height: calc(100% - 60px);
     position: fixed;
     top: 60px;
     width: 100%;
+  }
+  .catalog-panel {
+    flex: 0 0 240px;
+    min-width: 200px;
+    max-width: 280px;
+  }
+  .editor-panel {
+    flex: 1 1 auto;
+    min-width: 480px;
+  }
+  .editor-component {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .ai-panel {
+    flex: 0 0 320px;
+    min-width: 280px;
+    max-width: 360px;
   }
   .back-icon {
     display: flex;
@@ -326,6 +359,7 @@
     height: calc(100% - 80px);
     display: flex;
     flex-direction: column;
+    flex: 1;
   }
   .tag-container {
     padding-left: 15px;
@@ -352,6 +386,14 @@
     .note-body-header {
       width: 90%;
       min-width: unset;
+    }
+    .note-body {
+      flex-direction: column;
+    }
+    .catalog-panel,
+    .ai-panel {
+      flex: 0 0 auto;
+      max-width: 100%;
     }
   }
 </style>

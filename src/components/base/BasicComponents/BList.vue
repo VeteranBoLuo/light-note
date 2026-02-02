@@ -6,8 +6,8 @@
     <div
       class="category-body"
       :style="{
-        marginTop: hasInputSlot ? '10px' : '',
-        height: hasInputSlot ? 'calc(100% - 40px)' : 'calc(100% - 10px)',
+        marginTop: bookmark.isDesktop ? '5px' : '',
+        height: bookmark.isDesktop ? 'calc(100% - 40px)' : 'calc(100% - 50px)',
       }"
     >
       <VueDraggable
@@ -107,17 +107,6 @@
     nodeCheckId.value = item[props.nodeType.id];
     emit('node-click', item);
   }
-
-  // 获取插槽内容
-  const slots = useSlots();
-  // 计算属性来判断是否有内容传递给 input 插槽
-  const hasInputSlot = computed(() => {
-    return !!slots.input;
-  });
-
-  const hasIconSlot = computed(() => {
-    return !!slots.icon;
-  });
 
   watch(
     () => props.checkId,
