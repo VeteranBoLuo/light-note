@@ -36,8 +36,8 @@
       <BTable
         :data="bookmarkList"
         :columns="tagColumns"
-        style="margin-top: 10px; width: 90vw"
-        :style="{ height: bookmark.screenHeight - 300 + 'px' }"
+        style="margin-top: 15px; width: 90vw"
+        :style="{ height: bookmark.screenHeight - 280 + 'px' }"
         :selectable="true"
         :selectedRows="selectedRows"
         :rowKey="'id'"
@@ -298,7 +298,7 @@
   }
 
   function handleToBack() {
-    if (bookmark.isMobileDevice) {
+    if (bookmark.isMobile) {
       router.push('/personCenter');
     } else {
       router.push('/home');

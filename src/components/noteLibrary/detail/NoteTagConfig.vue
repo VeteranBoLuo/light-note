@@ -7,14 +7,37 @@
     @ok="handleOk"
   >
     <div class="tag-config" :class="{ mobile: bookmark.isMobile }">
+      <div class="panel edit-panel">
+        <div class="panel-header">
+          <div class="title">
+            {{ editingTag?.id ? $t('note.tagConfig.editTag') : $t('note.tagConfig.newTag') }}
+            <span class="mode-badge">{{ editingTag?.id ? '编辑中' : '创建中' }}</span>
+          </div>
+          <div class="header-actions">
+            <b-button title="清空当前输入" size="small" @click="startCreate">清空编辑</b-button>
+          </div>
+        </div>
+        <div class="form-item">
+          <b-input v-model:value="form.name" :maxlength="20" :placeholder="$t('note.tagConfig.name')" />
+        </div>
+        <div class="form-item single-line"
+          >{{ $t('note.tagConfig.nameRequired') }}（保存后进入标签库，可在右侧选择加入待选）)
+        </div>
+        <div class="form-actions">
+          <b-button type="primary" :loading="saving" @click="submitTag">{{ $t('note.tagConfig.save') }}</b-button>
+          <b-button v-if="editingTag?.id" :danger="true" @click="handleDelete(editingTag.id)">{{
+            $t('note.tagConfig.delete')
+          }}</b-button>
+        </div>
+      </div>
       <div class="panel tag-panel">
         <div class="panel-header">
           <div class="title">{{ $t('note.tagConfig.tagLibrary') }}</div>
           <div class="tag-actions">
             <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
-            <b-button type="primary" size="small" @click="startCreate"> {{ $t('note.tagConfig.newTag') }} </b-button>
           </div>
         </div>
+        <div class="panel-subtitle">选择标签将加入待选列表，最终绑定请点击右上角保存。</div>
         <div class="tag-list" v-if="filteredTags.length">
           <div
             v-for="tag in filteredTags"
@@ -30,29 +53,11 @@
               </div>
             </div>
             <div class="tag-meta">
-              <b-button size="small" @click.stop="bindTag(tag)">{{ $t('common.add') }}</b-button>
+              <b-button size="small" @click.stop="bindTag(tag)">加入待选</b-button>
             </div>
           </div>
         </div>
         <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
-      </div>
-
-      <div class="panel edit-panel">
-        <div class="panel-header">
-          <div class="title">{{ editingTag?.id ? $t('note.tagConfig.editTag') : $t('note.tagConfig.newTag') }}</div>
-          <div class="hint">{{ $t('note.tagConfig.nameRequired') }}</div>
-        </div>
-        <div class="form-item">
-          <div class="label">{{ $t('note.tagConfig.name') }}</div>
-          <b-input v-model:value="form.name" :maxlength="20" :placeholder="$t('note.tagConfig.name')" />
-        </div>
-        <div class="form-item single-line">{{ $t('note.tagConfig.fillNameOnly') }}</div>
-        <div class="form-actions">
-          <b-button type="primary" :loading="saving" @click="submitTag">{{ $t('note.tagConfig.save') }}</b-button>
-          <b-button v-if="editingTag?.id" :danger="true" @click="handleDelete(editingTag.id)">{{
-            $t('note.tagConfig.delete')
-          }}</b-button>
-        </div>
       </div>
 
       <div class="panel note-panel">
@@ -338,11 +343,36 @@
     font-weight: 600;
     font-size: 16px;
     color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mode-badge {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(96, 92, 229, 0.12);
+    color: rgba(96, 92, 229, 1);
+    border: 1px solid rgba(96, 92, 229, 0.35);
   }
 
   .hint {
     font-size: 12px;
     color: var(--desc-color);
+    margin-bottom: 12px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-subtitle {
+    font-size: 12px;
+    color: var(--desc-color);
+    margin: 0 0 10px;
   }
 
   .tag-actions {
@@ -352,7 +382,7 @@
 
     :deep(.b-input) {
       height: 26px;
-      width: 160px;
+      width: 250px;
       margin-left: 8px;
     }
   }

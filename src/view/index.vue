@@ -40,10 +40,10 @@
   });
 
   // 导航栏显示逻辑
-  const showNavigation = computed(() => !bookmark.isMobileDevice || route.path.includes('home'));
+  const showNavigation = computed(() => !bookmark.isMobile || route.path.includes('home'));
 
   // 背景图显示逻辑
-  const bgVisible = computed(() => (bookmark.isMobileDevice || route.name === 'NoteDetail' ? 'unset' : ''));
+  const bgVisible = computed(() => (bookmark.isMobile || route.name === 'NoteDetail' ? 'unset' : ''));
 </script>
 
 <style lang="less" scoped>

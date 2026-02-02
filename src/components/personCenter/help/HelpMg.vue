@@ -1,5 +1,5 @@
 <template>
-  <div v-if="bookmark.isMobileDevice" class="help-phone-container">
+  <div v-if="bookmark.isMobile" class="help-phone-container">
     <!-- 拖拽手柄区域 -->
     <div class="modal-header">
       <div class="header-content">

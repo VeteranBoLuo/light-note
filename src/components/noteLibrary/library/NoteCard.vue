@@ -21,11 +21,7 @@
       style="font-size: 12px; margin-top: 10px"
       >{{ note['updateTime'] ?? note['createTime'] }}</div
     >
-    <div
-      v-if="!bookmark.isMobileDevice"
-      class="checkBox"
-      :style="{ visibility: note.isCheck === true ? 'visible' : '' }"
-    >
+    <div v-if="!bookmark.isMobile" class="checkBox" :style="{ visibility: note.isCheck === true ? 'visible' : '' }">
       <b-checkbox v-model:isCheck="note.isCheck" @click.stop />
     </div>
   </div>

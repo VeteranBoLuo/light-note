@@ -12,14 +12,16 @@
             @click="$router.push({ path: `/manage/editTag/add` })"
             >{{ $t('common.add') }}</b-button
           >
-          <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: `返回` }">{{  $t('common.back') }}</b-button>
+          <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: `返回` }">{{
+            $t('common.back')
+          }}</b-button>
         </b-space>
       </div>
       <BTable
         :data="tagList"
         :columns="tagColumns"
-        style="margin-top: 10px; width: 90vw"
-        :style="{ height: bookmark.screenHeight - 300 + 'px' }"
+        style="margin-top: 15px; width: 90vw"
+        :style="{ height: bookmark.screenHeight - 280 + 'px' }"
       >
         <template #bodyCell="{ column, text, record }">
           <template v-if="column.key === 'name'">
@@ -114,7 +116,7 @@
         width: '100px',
       },
     ];
-    if (!bookmark.isMobileDevice) {
+    if (!bookmark.isMobile) {
       {
         columns.splice(
           1,
@@ -156,7 +158,7 @@
   }
 
   function handleToBack() {
-    if (bookmark.isMobileDevice) {
+    if (bookmark.isMobile) {
       router.push('/personCenter');
     } else {
       router.push('/home');

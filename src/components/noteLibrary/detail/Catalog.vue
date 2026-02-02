@@ -1,9 +1,6 @@
 <template>
   <div class="toc-container">
-    <div
-      :class="[bookmark.isMobileDevice ? 'phone-catalog' : 'catalog']"
-      v-if="!bookmark.isMobileDevice || isShowPhoneCategory"
-    >
+    <div :class="[bookmark.isMobile ? 'phone-catalog' : 'catalog']" v-if="!bookmark.isMobile || isShowPhoneCategory">
       <div
         v-for="(heading, index) in note.headings"
         :key="index"
@@ -16,7 +13,7 @@
         <span class="text-hidden" style="font-size: 14px">{{ heading.text }}</span>
       </div>
     </div>
-    <div v-if="bookmark.isMobileDevice && note.headings.length > 0" class="folder" title="目录" @click="getCategory">
+    <div v-if="bookmark.isMobile && note.headings.length > 0" class="folder" title="目录" @click="getCategory">
       <svg-icon :src="icon.noteDetail.catalogue" size="24" style="color: var(--text-color)" />
     </div>
   </div>
@@ -83,7 +80,6 @@
     height: calc(100% - 60px);
     overflow: auto;
     box-sizing: border-box;
-    flex: 0 0 300px;
   }
 
   .toc-item {
@@ -109,7 +105,7 @@
   }
   .folder {
     position: fixed;
-    right: 20px;
+    right: 5px;
     top: 10%;
     color: white;
     cursor: pointer;
@@ -136,31 +132,6 @@
     overflow-y: auto;
     .toc-item.active {
       color: #615ced !important;
-    }
-  }
-  @media (max-width: 1919px) {
-    .toc-container {
-      width: 280px;
-    }
-  }
-  @media (max-width: 1500px) {
-    .toc-container {
-      width: 250px;
-    }
-  }
-  @media (max-width: 1200px) {
-    .toc-container {
-      width: 200px;
-    }
-  }
-  @media (max-width: 1000px) {
-    .toc-container {
-      width: 170px;
-    }
-  }
-  @media (max-width: 800px) {
-    .toc-container {
-      width: 150px;
     }
   }
 </style>

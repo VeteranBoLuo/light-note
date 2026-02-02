@@ -1,5 +1,5 @@
 <template>
-  <div class="folder-list" v-if="!bookmark.isMobileDevice">
+  <div class="folder-list" v-if="!bookmark.isMobile">
     <div
       class="category-item"
       style="margin: 0 0 5px 0"
@@ -50,7 +50,7 @@
         </b-input>
       </template>
     </b-list>
-    <b-button v-if="!bookmark.isMobileDevice" @click="addFolder" style="width: 100%">{{
+    <b-button v-if="!bookmark.isMobile" @click="addFolder" style="width: 100%">{{
       $t('cloudSpace.newFolder')
     }}</b-button>
     <input type="file" id="folder-upload-input" multiple style="display: none" @change="onFileSelect" />

@@ -22,30 +22,31 @@ export default defineStore('note', {
      * 生成目录（Table of Contents）
      */
     async generateTOC(): Promise<void> {
-      await nextTick();
-
-      const container = document.getElementById('editor-container');
-      if (!container) {
-        console.warn('Editor container not found');
-        return;
-      }
-
-      try {
-        const hTags = container.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6');
-        this.headings = Array.from(hTags)
-          .filter((heading) => {
-            const text = heading.innerText || heading.textContent || '';
-            return text.trim() !== '';
-          })
-          .map((heading) => {
-            const level = parseInt(heading.tagName.replace('H', ''), 10);
-            const text = heading.innerText || heading.textContent || '';
-            return { element: heading, text, level };
-          });
-      } catch (error) {
-        console.error('Error generating TOC:', error);
-        this.headings = [];
-      }
+      setTimeout(() => {
+        const container = document.getElementById('editor-container');
+        if (!container) {
+          console.warn('Editor container not found');
+          return;
+        }
+        console.log('生成目录中...', container);
+        try {
+          const hTags = container.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6');
+          console.log('找到的标题标签:', hTags);
+          this.headings = Array.from(hTags)
+            .filter((heading) => {
+              const text = heading.innerText || heading.textContent || '';
+              return text.trim() !== '';
+            })
+            .map((heading) => {
+              const level = parseInt(heading.tagName.replace('H', ''), 10);
+              const text = heading.innerText || heading.textContent || '';
+              return { element: heading, text, level };
+            });
+        } catch (error) {
+          console.error('Error generating TOC:', error);
+          this.headings = [];
+        }
+      }, 100);
     },
   },
 });

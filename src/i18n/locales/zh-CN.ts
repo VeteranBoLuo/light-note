@@ -56,7 +56,7 @@ export default {
       noTagsCreate: '暂无标签，点击右上角新建',
       noteNotSaved: '笔记未保存',
       saveSuccess: '保存成功',
-      fillNameOnly: '仅需填写标签名称，提交后可直接绑定',
+      fillNameOnly: '仅需填写标签名称，保存后会进入标签库',
       nameEmpty: '名称不能为空',
       nameTooLong: '名称需在 20 字以内',
       nameExists: '标签名称已存在',
@@ -176,6 +176,7 @@ export default {
     back: '返回',
     close: '关闭',
     preview: '预览',
+    select: '选择',
   },
   changelog: {
     title: '更新日志',

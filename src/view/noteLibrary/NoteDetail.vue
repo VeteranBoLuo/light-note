@@ -24,9 +24,15 @@
               placeholder="请输入标题"
             />
           </div>
-          <editor class="editor-component" v-model:content="note.content" :readonly="readonly" :note-id="note.id" />
+          <editor
+            ref="editorRef"
+            class="editor-component"
+            v-model:content="note.content"
+            :readonly="readonly"
+            :note-id="note.id"
+          />
         </div>
-        <AiReply class="ai-panel" />
+        <AiReply class="ai-panel" v-if="!bookmark.isMobile" />
       </div>
     </div>
     <b-loading :loading="!isReady" style="z-index: -1" />
@@ -55,18 +61,22 @@
     content: '<p><br></p>',
     createBy: '',
   });
+  const editorRef = ref<InstanceType<typeof Editor> | null>(null);
 
   provide('note', note);
   provide('triggerSave', () => saveFunc());
   provide('applyTitleFromAi', (newTitle: string) => {
     note.title = newTitle;
     note.lastTitle = cloneDeep(newTitle);
-    if (!bookmark.isMobileDevice) {
+    if (!bookmark.isMobile) {
       const el = document.getElementById('note-header-title');
       if (el) {
         el.innerText = newTitle;
       }
     }
+  });
+  provide('focusEditorToEnd', () => {
+    editorRef.value?.focusToEnd?.();
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
 
@@ -84,7 +94,7 @@
   function inputBlur() {
     nextTick(() => {
       if (note.title && note.title !== note.lastTitle) {
-        if (!bookmark.isMobileDevice) {
+        if (!bookmark.isMobile) {
           document.getElementById('note-header-title').innerText = note.title;
         }
         note.lastTitle = cloneDeep(note.title);
@@ -96,7 +106,7 @@
   function focusout() {
     if (!note.title) {
       note.title = note.lastTitle;
-      if (!bookmark.isMobileDevice) {
+      if (!bookmark.isMobile) {
         document.getElementById('note-header-title').innerText = note.title;
       }
       return;
@@ -234,7 +244,7 @@
           if (res.status === 200) {
             Object.assign(note, res.data);
             note.lastTitle = cloneDeep(note.title);
-            if (!bookmark.isMobileDevice) {
+            if (!bookmark.isMobile) {
               document.getElementById('note-header-title').innerText = note.title;
             }
             updateTime.value = res.data?.updateTime ?? res.data?.createTime;
@@ -323,22 +333,18 @@
     width: 100%;
   }
   .catalog-panel {
-    flex: 0 0 240px;
-    min-width: 200px;
-    max-width: 280px;
+    flex: 1 1 18%;
   }
   .editor-panel {
-    flex: 1 1 auto;
-    min-width: 480px;
+    flex: 1 1 58%;
   }
   .editor-component {
     flex: 1 1 auto;
     min-height: 0;
   }
   .ai-panel {
-    flex: 0 0 320px;
-    min-width: 280px;
-    max-width: 360px;
+    flex: 1 1 24%;
+    min-width: 220px;
   }
   .back-icon {
     display: flex;
@@ -356,10 +362,8 @@
     }
   }
   .note-body-header {
-    height: calc(100% - 80px);
     display: flex;
     flex-direction: column;
-    flex: 1;
   }
   .tag-container {
     padding-left: 15px;
@@ -377,23 +381,15 @@
       border-radius: 4px;
     }
   }
-  @media (max-width: 1920px) {
+
+  @media (max-width: 1024px) {
     .note-body-header {
-      min-width: 1160px;
+      width: calc(100% - 40px);
     }
-  }
-  @media (max-width: 1000px) {
-    .note-body-header {
-      width: 90%;
-      min-width: unset;
-    }
-    .note-body {
-      flex-direction: column;
-    }
-    .catalog-panel,
-    .ai-panel {
-      flex: 0 0 auto;
-      max-width: 100%;
+    .catalog-panel {
+      flex: unset !important;
+      width: 0;
+      min-width: none !important;
     }
   }
 </style>

@@ -12,14 +12,14 @@
     </b-input>
     <div class="help-body">
       <div
-        v-if="bookmark.isMobileDevice"
+        v-if="bookmark.isMobile"
         class="help-title"
         style="position: relative; top: 10px"
         @click="checkId = ''"
         v-click-log="{ module: '帮助中心', operation: `导览` }"
         >{{ t('help.title') }}</div
       >
-      <div v-if="!bookmark.isMobileDevice" :style="{ width: '180px' }">
+      <div v-if="!bookmark.isMobile" :style="{ width: '180px' }">
         <div
           class="help-title"
           @click="((checkId = ''), (node = helpInfo))"
@@ -49,7 +49,7 @@
       <div
         id="view-body"
         class="help-editor"
-        :style="{ width: bookmark.isMobileDevice ? 'calc(100% - 40px)' : 'calc(100% - 180px)' }"
+        :style="{ width: bookmark.isMobile ? 'calc(100% - 40px)' : 'calc(100% - 180px)' }"
         style="
           height: 100%;
           border: 1px solid var(--card-border-color);

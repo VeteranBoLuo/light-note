@@ -6,19 +6,19 @@
           :src="icon.navigation.menu"
           size="25"
           class="dom-hover"
-          v-if="bookmark.isMobileDevice && route.path.includes('home') && bookmark.isFold"
+          v-if="bookmark.isMobile && route.path.includes('home') && bookmark.isFold"
           @click="foldClick"
         />
         <svg-icon
           :src="icon.navigation.close"
           size="25"
           class="dom-hover"
-          v-if="bookmark.isMobileDevice && route.path.includes('home') && !bookmark.isFold"
+          v-if="bookmark.isMobile && route.path.includes('home') && !bookmark.isFold"
           @click="foldClick"
         />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
           <img src="/favicon.svg" :title="$t('navigation.title')" width="25" height="25" alt="" />
-          <span style="font-size: 18px" v-if="bookmark.isDesktop">{{ $t('navigation.title') }}</span>
+          <span style="font-size: 18px" v-if="!bookmark.isMobile">{{ $t('navigation.title') }}</span>
         </div>
       </div>
       <div class="navigation-tab flex-align-center" style="gap: 30px; width: max-content">
@@ -80,7 +80,7 @@
   });
   const navigationFucVisible = computed(() => {
     return (
-      !bookmark.isMobileDevice &&
+      !bookmark.isMobile &&
       ['home', 'noteLibrary', 'manage', 'help', 'cloudSpace', 'admin', 'updateLogs', 'workbenches', 'aiAssistant'].some(
         (item) => route.path.includes(item),
       )
@@ -108,7 +108,7 @@
   function foldClick() {
     bookmark.isFold = !bookmark.isFold;
     const body: any = document.getElementById('phone-filter-panel');
-    if (bookmark.isMobileDevice) {
+    if (bookmark.isMobile) {
       body.style.transition = 'all 0.3s';
     } else {
       body.style.transition = 'none';

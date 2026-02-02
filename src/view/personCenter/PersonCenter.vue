@@ -219,7 +219,7 @@
             if (res.status === 'visitor') {
               user.setUserInfo(res.data);
               localStorage.setItem('theme', res.data.theme);
-              if (bookmark.isMobileDevice) {
+              if (bookmark.isMobile) {
                 router.push('/home');
               } else {
                 router.push('/');

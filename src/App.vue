@@ -40,7 +40,7 @@
   );
 
   const aiVisible = computed(() => {
-    return !bookmark.isMobileDevice && !bookmark.isShowLogin && router.currentRoute.value.name !== 'noteDetail';
+    return !bookmark.isMobile && !bookmark.isShowLogin && router.currentRoute.value.name !== 'noteDetail';
   });
   // 路由映射表
   const phoneReplaceMap = {
@@ -181,7 +181,7 @@
   router.beforeEach(async (to, from, next) => {
     router.isReady().then(async () => {
       if (to.name === 'workbenches') {
-        handleRouteChange(bookmark.isMobileDevice, to.path);
+        handleRouteChange(bookmark.isMobile, to.path);
       }
       if (from.name === 'githubCallBack') {
         await getUserInfo();
@@ -198,7 +198,7 @@
     window.addEventListener('resize', handleResize);
     router.isReady().then(async () => {
       await getUserInfo();
-      handleRouteChange(bookmark.isMobileDevice, router.currentRoute.value.path);
+      handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
       if (skipRouter.includes(<string>router.currentRoute.value.name)) {
         bookmark.isShowLogin = false;
       }
@@ -219,9 +219,8 @@
 
   // 监听设备类型变化
   watch(
-    () => bookmark.isMobileDevice,
+    () => bookmark.isMobile,
     (val) => {
-      console.log('val', val);
       handleRouteChange(val, router.currentRoute.value.path);
       setTransition(val);
     },

@@ -5,7 +5,7 @@
     v-model:visible="visible"
     @close="visible = false"
   >
-    <div :style="{ width: bookmark.isMobileDevice ? '95%' : '450px' }">
+    <div :style="{ width: bookmark.isMobile ? '95%' : '450px' }">
       <BTabs :options="tabOptions" v-model:activeTab="activeTab" />
       <div class="type" style="height: 330px" v-if="activeTab === t('personCenter.opinions.feedbackType')">
         <b-radio v-model:value="opinionData.type" :options="radioOptions" />
@@ -147,7 +147,7 @@
   function uploadImg(event) {
     console.log(event);
     event.forEach((img) => {
-      if (bookmark.isMobileDevice) {
+      if (bookmark.isMobile) {
         if (opinionData.imgArray.length === 2) {
           opinionData.imgArray.shift();
           opinionData.imgArray.push(img.file);

@@ -2,7 +2,7 @@
   <CommonContainer :title="$t('cloudSpace.title')">
     <div class="cloud-container">
       <div class="header">
-        <div v-if="bookmark.isMobileDevice" class="mobile-header-left">
+        <div v-if="bookmark.isMobile" class="mobile-header-left">
           <b-input
             v-model:value="cloud.searchFileName"
             :placeholder="$t('cloudSpace.fileName')"

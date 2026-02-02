@@ -75,7 +75,7 @@
         v-click-log="OPERATION_LOG_MAP.login.previewMobile"
         class="tips-text dom-hover"
         style="left: 20px; font-size: 12px; width: max-content"
-        v-if="!bookmark.isMobileDevice"
+        v-if="!bookmark.isMobile"
         @click="viewPhoneVisible = true"
         >移动端预览</a
       >

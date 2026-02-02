@@ -77,7 +77,7 @@
           <button
             style="max-width: 100px"
             class="ghost-btn text-hidden"
-            :disabled="!output || !hasBody"
+            :disabled="!outputFull || !hasBody"
             @click="insertToNote"
             :title="t('ai.reply.replaceContent')"
             >{{ t('ai.reply.replaceContent') }}</button
@@ -85,20 +85,22 @@
           <button
             style="max-width: 100px"
             class="ghost-btn text-hidden"
-            :disabled="!output || !hasTitle"
+            :disabled="!outputFull || !hasTitle"
             @click="replaceTitle"
             :title="t('ai.reply.replaceTitle')"
             >{{ t('ai.reply.replaceTitle') }}</button
           >
-          <button class="ghost-btn" :disabled="!output" @click="clearOutput" :title="t('ai.reply.clear')">{{
+          <button class="ghost-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')">{{
             t('ai.reply.clear')
           }}</button>
         </div>
       </div>
-      <div class="output-body">
-        <div v-if="!output" class="empty">{{ t('ai.reply.emptyMessage') }}</div>
-        <pre v-else>{{ output }}</pre>
-      </div>
+      <TypewriterOutput
+        class="output-body"
+        :typing-speed="1"
+        :content="outputFull"
+        :empty-text="t('ai.reply.emptyMessage')"
+      />
     </div>
   </div>
 </template>
@@ -107,14 +109,17 @@
   import { computed, inject, ref } from 'vue';
   import { parse, Allow } from 'partial-json';
   import { useI18n } from 'vue-i18n';
+  import axios from 'axios';
+  import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
 
   const { t } = useI18n();
 
   const note = inject<any>('note', null);
   const applyTitleFromAi = inject<((title: string) => void) | null>('applyTitleFromAi', null);
   const triggerSave = inject<(() => void) | null>('triggerSave', null);
+  const focusEditorToEnd = inject<(() => void) | null>('focusEditorToEnd', null);
   const prompt = ref('');
-  const output = ref('');
+  const outputFull = ref('');
   const lastAction = ref('');
   const isLoading = ref(false);
   const sessionId = ref('');
@@ -144,16 +149,15 @@
       return '不必省略说明，但请务必在最后严格按以下格式输出，且【标题】必须位于末尾：\n【标题】\n<一行标题建议>';
     }
     if (format === 'body') {
-      return '不必省略说明，但请务必在最后严格按以下格式输出，且【正文】必须位于末尾：\n【正文】\n<正文内容>';
+      return '不必省略说明，但请务必在最后严格按以下格式输出，且【正文】必须位于末尾；【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【正文】\n<HTML 正文内容>';
     }
-    return '不必省略说明，但请务必在最后严格按以下格式输出，且【标题】/【正文】两段必须位于末尾：\n【标题】\n<一行标题建议>\n【正文】\n<正文内容>';
+    return '不必省略说明，但请务必在最后严格按以下格式输出，且【标题】/【正文】两段必须位于末尾；【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【标题】\n<一行标题建议>\n【正文】\n<HTML 正文内容>';
   };
 
   const buildMessage = (actionOverride?: string) => {
     const title = note?.title || t('ai.reply.untitled');
     const action = actionOverride || lastAction.value || 'custom';
     const requirement = prompt.value ? prompt.value : '无';
-    const content = getPlainContent();
     const format = actionConfig[action]?.format || 'both';
     const actionText =
       {
@@ -164,7 +168,7 @@
         rewriteSection: '改写选段',
         custom: '自定义处理',
       }[action] || '自定义处理';
-    return `任务：${actionText}\n标题：${title}\n内容：${content}\n补充要求：${requirement}\n\n${buildFormatHint(format)}`;
+    return `任务：${actionText}\n标题：${title}\n内容：${note?.content}\n补充要求：${requirement}\n\n${buildFormatHint(format)}`;
   };
 
   const runAction = (action: string) => {
@@ -175,7 +179,7 @@
   const generate = async (mode: 'custom' | 'action' = 'action') => {
     if (isLoading.value) return;
     if (mode === 'custom' && !prompt.value.trim()) return;
-    output.value = '';
+    outputFull.value = '';
     isLoading.value = true;
     abortController.value = new AbortController();
 
@@ -197,32 +201,15 @@
 
     try {
       const actionOverride = mode === 'custom' ? '自定义处理' : undefined;
-      const response = await fetch('/api/chat/receiveMessage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: buildMessage(actionOverride),
-          stream: true,
-          sessionId: sessionId.value,
-        }),
-        signal: abortController.value.signal,
-      });
-
-      if (!response.ok) throw new Error(`请求失败: ${response.status}`);
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取流数据');
-
-      const decoder = new TextDecoder();
       let buffer = '';
+      let processedLength = 0;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const handleNewContent = (content: string) => {
+        if (!content) return;
+        outputFull.value += content;
+      };
 
-        const chunk = decoder.decode(value, { stream: true });
+      const handleChunk = (chunk: string) => {
         buffer += chunk;
 
         const lines = buffer.split('\n');
@@ -244,14 +231,41 @@
 
             const content = data.output?.text || data.text || data.content || '';
             if (content && typeof content === 'string') {
-              output.value += content;
+              handleNewContent(content);
             }
             if (data.output?.session_id) {
               sessionId.value = data.output.session_id;
             }
           }
         }
-      }
+      };
+
+      await axios.post(
+        '/api/chat/receiveMessage',
+        {
+          message: buildMessage(actionOverride),
+          stream: true,
+          sessionId: sessionId.value,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          responseType: 'text',
+          signal: abortController.value.signal,
+          onDownloadProgress: (progressEvent) => {
+            const event = (progressEvent as any).event ?? progressEvent;
+            const responseText = (event?.target as XMLHttpRequest | null)?.responseText ?? '';
+            if (!responseText) return;
+
+            const newText = responseText.slice(processedLength);
+            if (!newText) return;
+
+            processedLength = responseText.length;
+            handleChunk(newText);
+          },
+        },
+      );
 
       if (buffer.trim()) {
         const remainingLines = buffer.split('\n');
@@ -264,7 +278,7 @@
           if (!data) continue;
           const content = data.output?.text || data.text || data.content || '';
           if (content && typeof content === 'string') {
-            output.value += content;
+            handleNewContent(content);
           }
           if (data.output?.session_id) {
             sessionId.value = data.output.session_id;
@@ -273,9 +287,9 @@
       }
     } catch (error: any) {
       if (error?.name === 'AbortError') {
-        output.value += '\n[已停止]';
+        outputFull.value += '\n[已停止]';
       } else {
-        output.value = '请求失败，请稍后再试。';
+        outputFull.value = '请求失败，请稍后再试。';
       }
     } finally {
       isLoading.value = false;
@@ -321,35 +335,36 @@
       .trim();
   };
 
-  const buildPlainText = () => {
-    const body = extractSection(output.value, '正文');
-    const base = body || cleanupFallback(output.value);
+  const buildHtmlContent = () => {
+    const body = extractSection(outputFull.value, '正文');
+    const base = body || cleanupFallback(outputFull.value);
+    if (!base) return '';
+    const hasHtmlTag = /<\/?[a-z][\s\S]*?>/i.test(base);
+    if (hasHtmlTag) return base.trim();
     return base
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
-      .join('\n');
-  };
-
-  const hasTitle = computed(() => !!extractSection(output.value, '标题'));
-  const hasBody = computed(() => !!extractSection(output.value, '正文'));
-
-  const insertToNote = () => {
-    if (!note || !output.value) return;
-    const plain = buildPlainText();
-    if (!plain) return;
-    const paragraphs = plain
-      .split('\n')
       .map((line) => `<p>${line}</p>`)
       .join('');
-    note.content = paragraphs;
+  };
+
+  const hasTitle = computed(() => !!extractSection(outputFull.value, '标题'));
+  const hasBody = computed(() => !!extractSection(outputFull.value, '正文'));
+
+  const insertToNote = () => {
+    if (!note || !outputFull.value) return;
+    const html = buildHtmlContent();
+    if (!html) return;
+    note.content = html;
     triggerSave?.();
+    focusEditorToEnd?.();
   };
 
   const replaceTitle = () => {
-    if (!note || !output.value) return;
-    const titleSection = extractSection(output.value, '标题');
-    const firstLine = (titleSection || cleanupFallback(output.value)).split('\n').find((line) => line.trim());
+    if (!note || !outputFull.value) return;
+    const titleSection = extractSection(outputFull.value, '标题');
+    const firstLine = (titleSection || cleanupFallback(outputFull.value)).split('\n').find((line) => line.trim());
     if (firstLine) {
       if (applyTitleFromAi) {
         applyTitleFromAi(firstLine.trim());
@@ -361,7 +376,7 @@
   };
 
   const clearOutput = () => {
-    output.value = '';
+    outputFull.value = '';
   };
 </script>
 
@@ -529,12 +544,38 @@
     overflow: auto;
     height: 100%;
   }
-  .output-body pre {
+  .output-body :deep(.typewriter-content) {
     margin: 0;
     white-space: pre-wrap;
     font-size: 12px;
     line-height: 1.5;
     color: #2d2f33;
+  }
+  .output-body :deep(p),
+  .output-body :deep(h1),
+  .output-body :deep(h2),
+  .output-body :deep(h3),
+  .output-body :deep(h4),
+  .output-body :deep(h5),
+  .output-body :deep(h6),
+  .output-body :deep(ul),
+  .output-body :deep(ol),
+  .output-body :deep(li),
+  .output-body :deep(blockquote) {
+    margin: 8px 0 0 0;
+  }
+  .output-body :deep(p:last-child),
+  .output-body :deep(h1:last-child),
+  .output-body :deep(h2:last-child),
+  .output-body :deep(h3:last-child),
+  .output-body :deep(h4:last-child),
+  .output-body :deep(h5:last-child),
+  .output-body :deep(h6:last-child),
+  .output-body :deep(ul:last-child),
+  .output-body :deep(ol:last-child),
+  .output-body :deep(li:last-child),
+  .output-body :deep(blockquote:last-child) {
+    margin-bottom: 0;
   }
   .empty {
     color: #9aa0a6;
@@ -547,7 +588,7 @@
   }
   [data-theme='night'] .ai-title,
   [data-theme='night'] .meta-row .value,
-  [data-theme='night'] .output-body pre {
+  [data-theme='night'] .output-body :deep(.typewriter-content) {
     color: #f3f4f6;
   }
   [data-theme='night'] .ai-subtitle,

@@ -66,7 +66,7 @@
         bookmark.tagData = tag;
         if (tag) {
           await fetchBookmarkList('normal', { tagId: tag.id });
-          if (bookmark.isMobileDevice) {
+          if (bookmark.isMobile) {
             bookmark.isFold = true;
           }
         }
@@ -122,7 +122,7 @@
     () => bookmark.isFold,
     (val) => {
       const filter: any = document.getElementById('phone-filter-panel');
-      if (bookmark.isMobileDevice) {
+      if (bookmark.isMobile) {
         filter.style.transition = 'all 0.3s';
         if (val) {
           filter.style.transform = 'translateX(-100%)';

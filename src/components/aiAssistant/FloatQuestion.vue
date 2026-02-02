@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!isClosed" class="float-question-container">
+  <div v-if="!isClosed" class="float-question-container" :class="{ 'container-peek': isPeeked }">
     <!-- 问答弹窗 -->
     <transition name="modal-slide">
       <div v-if="isOpen" v-show="!isMinimized" class="question-modal glassmorphism">
@@ -45,8 +45,8 @@
       }"
       @click="toggleModal"
       v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
-      @mouseenter="startButtonPulse"
-      @mouseleave="stopButtonPulse"
+      @mouseenter="handleButtonMouseEnter"
+      @mouseleave="handleButtonMouseLeave"
     >
       <div class="button-inner">
         <span class="button-icon">💬</span>
@@ -71,6 +71,8 @@
   const isOpen = ref(false);
   const isClosed = ref(false);
   const isMinimized = ref(true);
+  const isPeeked = ref(true);
+  let peekTimer: number | null = null;
 
   const aiAssistantRef = ref(null);
 
@@ -89,6 +91,7 @@
       // 如果是最小化状态，则打开弹窗
       isMinimized.value = false;
       isOpen.value = true;
+      isPeeked.value = false;
     } else if (isOpen.value) {
       // 如果弹窗是打开的，则最小化（而不是关闭）
       minimize();
@@ -96,12 +99,14 @@
       // 如果弹窗是关闭的，则打开
       isOpen.value = true;
       isMinimized.value = false;
+      isPeeked.value = false;
     }
   };
 
   // 最小化方法（原来关闭按钮的功能）
   const minimize = () => {
     isMinimized.value = true;
+    schedulePeek();
   };
 
   // 新增：清空对话方法
@@ -122,6 +127,34 @@
     isPulsing.value = false;
   };
 
+  const clearPeekTimer = () => {
+    if (peekTimer) {
+      clearTimeout(peekTimer);
+      peekTimer = null;
+    }
+  };
+
+  const schedulePeek = () => {
+    if (!isMinimized.value) return;
+    clearPeekTimer();
+    peekTimer = window.setTimeout(() => {
+      if (isMinimized.value) {
+        isPeeked.value = true;
+      }
+    }, 2000);
+  };
+
+  const handleButtonMouseEnter = () => {
+    startButtonPulse();
+    clearPeekTimer();
+    isPeeked.value = false;
+  };
+
+  const handleButtonMouseLeave = () => {
+    stopButtonPulse();
+    schedulePeek();
+  };
+
   // 修改键盘事件处理
   const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && isOpen.value) {
@@ -132,10 +165,12 @@
   // 生命周期（保持不变）
   onMounted(() => {
     document.addEventListener('keydown', handleKeydown);
+    schedulePeek();
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
+    clearPeekTimer();
   });
 </script>
 
@@ -145,6 +180,11 @@
     z-index: 100;
     bottom: 40px;
     right: 40px;
+    transition: right 0.35s ease;
+  }
+
+  .container-peek {
+    right: 0;
   }
 
   /* 悬浮按钮样式 */
@@ -164,6 +204,26 @@
     position: relative;
     overflow: hidden;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .container-peek .float-button {
+    transform: translateX(50%) scale(0.95);
+    box-shadow:
+      0 6px 24px rgba(102, 126, 234, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+
+  .container-peek .float-button::after {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    width: 18px;
+    height: 34px;
+    transform: translateY(-50%);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.75);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   }
 
   .float-button::before {

@@ -1,5 +1,5 @@
 <template>
-  <PTagEdit v-if="bookmark.isMobileDevice" />
+  <PTagEdit v-if="bookmark.isMobile" />
   <TagEdit v-else />
 </template>
 

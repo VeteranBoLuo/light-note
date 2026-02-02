@@ -36,7 +36,7 @@
         :enable-thinking="enableThinking"
         :enable-translation="enableTranslation"
         :translation-config="translationConfig"
-        :is-mobile="bookmark.isMobileDevice"
+        :is-mobile="bookmark.isMobile"
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
         :toggle-internet-search="toggleInternetSearch"
@@ -57,6 +57,7 @@
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
   import { useI18n } from 'vue-i18n';
+  import axios from 'axios';
 
   const { t } = useI18n();
 
@@ -286,7 +287,7 @@
     const targetScrollTop = container.scrollHeight - container.clientHeight;
 
     // 移动端优先使用即时滚动，避免惯性与自动滚动冲突
-    const finalBehavior: ScrollBehavior = bookmark.isMobileDevice ? 'auto' : behavior;
+    const finalBehavior: ScrollBehavior = bookmark.isMobile ? 'auto' : behavior;
 
     if (finalBehavior === 'smooth') {
       container.scrollTo({
@@ -435,12 +436,83 @@
     };
 
     try {
-      const response = await fetch('/api/chat/receiveMessage', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      let buffer = '';
+      let processedLength = 0;
+
+      const parseJSONSafely = (str) => {
+        try {
+          return JSON.parse(str);
+        } catch (e) {
+          if (e instanceof SyntaxError) {
+            // 尝试使用partial-json解析不完整JSON
+            try {
+              return parse(str, Allow.ALL);
+            } catch (partialError) {
+              console.warn('Partial JSON解析也失败:', partialError);
+              return null;
+            }
+          }
+          throw e;
+        }
+      };
+
+      const handleDataLine = (dataStr: string) => {
+        if (!dataStr || dataStr === '[DONE]') return;
+        try {
+          const data = parseJSONSafely(dataStr);
+          if (!data) return;
+
+          const content = data.output?.text || data.text || data.content || '';
+
+          if (content && typeof content === 'string') {
+            // 使用新的内容处理函数
+            handleNewContent(content);
+            // 一旦答案开始输出，标记并停止后续思考流
+            hasAnswerStarted.value = true;
+          }
+
+          // 只有在答案尚未开始输出时，才继续流式展示思考过程
+          if (!hasAnswerStarted.value && data.output?.thoughts && Array.isArray(data.output.thoughts)) {
+            const currentMsg = messages.value[currentMessageIndex];
+            if (currentMsg) {
+              currentMsg.thoughts = data.output.thoughts;
+              // 取本次推送中的 reasoning 片段，按顺序直接追加到完整思考文本
+              const reasoningParts = data.output.thoughts
+                .filter((t) => t.action_type === 'reasoning' && (t.thought || t.response))
+                .map((t) => (t.thought || t.response) as string);
+              if (reasoningParts.length) {
+                currentMsg.thinkingText = (currentMsg.thinkingText || '') + reasoningParts.join('');
+                // 触发/继续思考打字机，仅作用于当前消息
+                startThinkingTypewriter();
+              }
+            }
+          }
+
+          if (data.output?.session_id) {
+            sessionId = data.output.session_id;
+          }
+        } catch (e) {
+          console.warn('解析数据失败，跳过数据块:', dataStr);
+        }
+      };
+
+      const handleChunk = (chunk: string) => {
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line) continue;
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          handleDataLine(dataStr);
+        }
+      };
+
+      await axios.post(
+        '/api/chat/receiveMessage',
+        {
           message: inputText,
           stream: true,
           sessionId: sessionId,
@@ -448,132 +520,36 @@
           enableThinking: enableThinking.value, // 是否开启深度思考
           enableTranslation: enableTranslation.value, // 是否开启翻译
           translationConfig: translationConfig.value, // 翻译配置
-        }),
-        signal: abortController.value.signal,
-      });
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          responseType: 'text',
+          signal: abortController.value.signal,
+          onDownloadProgress: (progressEvent) => {
+            const event = (progressEvent as any).event ?? progressEvent;
+            const responseText = (event?.target as XMLHttpRequest | null)?.responseText ?? '';
+            if (!responseText) return;
 
-      if (!response.ok) throw new Error(`请求失败: ${response.status}`);
+            const newText = responseText.slice(processedLength);
+            if (!newText) return;
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('无法读取流数据');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line) continue;
-
-          if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim();
-
-            if (dataStr === '[DONE]') {
-              break;
-            }
-
-            if (!dataStr) continue;
-
-            try {
-              const parseJSONSafely = (str) => {
-                try {
-                  return JSON.parse(str);
-                } catch (e) {
-                  if (e instanceof SyntaxError) {
-                    // 尝试使用partial-json解析不完整JSON
-                    try {
-                      return parse(str, Allow.ALL);
-                    } catch (partialError) {
-                      console.warn('Partial JSON解析也失败:', partialError);
-                      return null;
-                    }
-                  }
-                  throw e;
-                }
-              };
-
-              const data = parseJSONSafely(dataStr);
-              if (!data) continue;
-
-              const content = data.output?.text || data.text || data.content || '';
-
-              if (content && typeof content === 'string') {
-                // 使用新的内容处理函数
-                handleNewContent(content);
-                // 一旦答案开始输出，标记并停止后续思考流
-                hasAnswerStarted.value = true;
-              }
-
-              // 只有在答案尚未开始输出时，才继续流式展示思考过程
-              if (!hasAnswerStarted.value && data.output?.thoughts && Array.isArray(data.output.thoughts)) {
-                const currentMsg = messages.value[currentMessageIndex];
-                if (currentMsg) {
-                  currentMsg.thoughts = data.output.thoughts;
-                  // 取本次推送中的 reasoning 片段，按顺序直接追加到完整思考文本
-                  const reasoningParts = data.output.thoughts
-                    .filter((t) => t.action_type === 'reasoning' && (t.thought || t.response))
-                    .map((t) => (t.thought || t.response) as string);
-                  if (reasoningParts.length) {
-                    currentMsg.thinkingText = (currentMsg.thinkingText || '') + reasoningParts.join('');
-                    // 触发/继续思考打字机，仅作用于当前消息
-                    startThinkingTypewriter();
-                  }
-                }
-              }
-
-              if (data.output?.session_id) {
-                sessionId = data.output.session_id;
-              }
-            } catch (e) {
-              console.warn('解析数据失败，跳过数据块:', dataStr);
-              continue;
-            }
-          }
-        }
-      }
+            processedLength = responseText.length;
+            handleChunk(newText);
+          },
+        },
+      );
 
       // 处理缓冲区剩余数据
       if (buffer.trim()) {
         const remainingLines = buffer.split('\n');
         for (const rawLine of remainingLines) {
           const line = rawLine.trim();
-          if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim();
-            if (dataStr && dataStr !== '[DONE]') {
-              try {
-                const data = JSON.parse(dataStr);
-                const content = data.output?.text || data.text || data.content || '';
-                if (content) {
-                  handleNewContent(content);
-                }
-                // 缓冲区尾部同样遵循：答案一旦开始，就不再追加思考流
-                if (!hasAnswerStarted.value && data.output?.thoughts && Array.isArray(data.output.thoughts)) {
-                  const currentMsg = messages.value[currentMessageIndex];
-                  if (currentMsg) {
-                    currentMsg.thoughts = data.output.thoughts;
-                    const reasoningParts = data.output.thoughts
-                      .filter((t) => t.action_type === 'reasoning' && (t.thought || t.response))
-                      .map((t) => (t.thought || t.response) as string);
-                    if (reasoningParts.length) {
-                      currentMsg.thinkingText = (currentMsg.thinkingText || '') + reasoningParts.join('');
-                      startThinkingTypewriter();
-                    }
-                  }
-                }
-              } catch (e) {
-                console.warn('最终数据解析失败:', dataStr);
-              }
-            }
-          }
+          if (!line.startsWith('data:')) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr || dataStr === '[DONE]') continue;
+          handleDataLine(dataStr);
         }
       }
 

@@ -49,7 +49,7 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('tagManage.relatedBookmark') }}</span>
-          <div v-if="bookmark.isMobileDevice" :style="{ height: bookmark.screenHeight - 400 + 'px', overflow: 'auto' }">
+          <div v-if="bookmark.isMobile" :style="{ height: bookmark.screenHeight - 400 + 'px', overflow: 'auto' }">
             <a-checkbox-group v-model:value="tag.bookmarkList" name="checkboxgroup" :options="bookmarkOptions">
               <template #label="{ label }">
                 <div :style="{ width: bookmark.screenWidth / 2 - 20 - 16 - 16 + 'px' }" class="text-hidden"

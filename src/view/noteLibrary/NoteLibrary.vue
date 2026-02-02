@@ -1,7 +1,7 @@
 <template>
   <b-loading :loading="loading">
     <div class="note-library-container">
-      <div class="note-library-header" v-if="bookmark.isMobileDevice">
+      <div class="note-library-header" v-if="bookmark.isMobile">
         <div class="header-content">
           <div class="back-icon" @click="backRouterPage">
             <SvgIcon :src="icon.noteDetail.back" />
@@ -62,7 +62,7 @@
       </div>
       <VueDraggable
         v-if="currentViewMode === 'card'"
-        :disabled="bookmark.isMobileDevice"
+        :disabled="bookmark.isMobile"
         :animation="200"
         v-model="noteList"
         class="note-library-body"
@@ -93,7 +93,7 @@
           </div>
         </div>
         <VueDraggable
-          :disabled="bookmark.isMobileDevice"
+          :disabled="bookmark.isMobile"
           :animation="200"
           ref="el"
           v-model="noteList"
@@ -136,7 +136,7 @@
   const loading = ref(false);
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
-  const currentViewMode = computed(() => (bookmark.isMobileDevice ? 'card' : user.preferences.noteViewMode));
+  const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
 
   init();
   async function init() {

@@ -33,7 +33,7 @@
   const visible = defineModel<boolean>('visible');
   const bookmark = bookmarkStore();
 
-  const WIDTH = bookmark.isMobileDevice ? '80vw' : '600px';
+  const WIDTH = bookmark.isMobile ? '80vw' : '600px';
 
   interface ActionItem {
     key: string;

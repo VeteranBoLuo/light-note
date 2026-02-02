@@ -8,7 +8,7 @@
         }"
       >
       </div>
-      <span class="both-center" style="top: 45%">⌵</span>
+      <span class="both-center">⌵</span>
     </div>
   </div>
 </template>
@@ -38,6 +38,9 @@
     position: relative;
     cursor: pointer;
     color: #343434;
+    width: 25px;
+    height: 25px;
+    display: inline-block;
   }
 
   .loading-spinner {
@@ -48,6 +51,18 @@
     box-shadow: 0 1px 16px rgba(0, 0, 0, 0.2);
     border-radius: 50%;
     animation: spin 1s linear infinite;
+  }
+
+  .both-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-40%, -50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    pointer-events: none;
   }
 
   .prompt-text {

@@ -1,10 +1,10 @@
 <template>
   <div
     class="navigation-right-area"
-    :class="{ 'phone-top-menu': bookmark.isMobileDevice }"
-    :style="{ marginLeft: searchInputVisible ? '0' : 'auto', gap: bookmark.isMobileDevice ? '15px' : '5px' }"
+    :class="{ 'phone-top-menu': bookmark.isMobile }"
+    :style="{ marginLeft: searchInputVisible ? '0' : 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
-    <Teleport v-if="bookmark.isMobileDevice" to="body">
+    <Teleport v-if="bookmark.isMobile" to="body">
       <div id="phone-navigation-search" class="phone-navigation-search">
         <b-input
           v-model:value="bookmark.bookmarkSearch"
@@ -51,7 +51,7 @@
       <svg-icon size="26" :src="icon.navigation.phone_search" @click="phoneSearchClick" />
     </div>
     <b-menu
-      v-if="!bookmark.isMobileDevice"
+      v-if="!bookmark.isMobile"
       :menu-options="[
         { label: $t('navigation.newTag'), icon: icon.common.add, function: () => router.push('/manage/editTag/add') },
         {
@@ -64,7 +64,7 @@
       <svg-icon size="26" hover :src="icon.manage_categoryBtn_tag"
     /></b-menu>
     <b-menu
-      v-if="!bookmark.isMobileDevice"
+      v-if="!bookmark.isMobile"
       :menu-options="[
         {
           label: $t('navigation.newBookmark'),
@@ -98,7 +98,7 @@
     </b-menu>
     <lang-switch />
     <!--移动端个人中心       -->
-    <div :class="['navigation-icon']" v-if="bookmark.isMobileDevice" @click="handleToPhoneUserCenter">
+    <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
     <!--pc端个人中心       -->
@@ -121,10 +121,10 @@
   import LangSwitch from '@/components/base/LangSwitch.vue';
   const bookmark = bookmarkStore();
   const searchInputVisible = computed(() => {
-    return !bookmark.isMobileDevice && ['home'].some((item) => route.path.includes(item));
+    return !bookmark.isMobile && ['home'].some((item) => route.path.includes(item));
   });
   const phoneSearchVisible = computed(() => {
-    return bookmark.isMobileDevice && route.path.includes('home') && bookmark.isFold;
+    return bookmark.isMobile && route.path.includes('home') && bookmark.isFold;
   });
 
   const route = useRoute();

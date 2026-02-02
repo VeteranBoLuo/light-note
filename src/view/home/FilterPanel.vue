@@ -1,7 +1,7 @@
 <template>
   <div class="filter-panel">
     <b-list
-      :draggable="!bookmark.isMobileDevice"
+      :draggable="!bookmark.isMobile"
       class="header-input"
       v-model:listOptions="filterTagList"
       v-model:dragList="bookmark.tagList"

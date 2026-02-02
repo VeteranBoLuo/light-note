@@ -9,11 +9,7 @@
       <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>
     <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
-    <div
-      class="checkBox"
-      v-if="!bookmark.isMobileDevice"
-      :style="{ visibility: note.isCheck === true ? 'visible' : 'auto' }"
-    >
+    <div class="checkBox" v-if="!bookmark.isMobile" :style="{ visibility: note.isCheck === true ? 'visible' : 'auto' }">
       <b-checkbox v-model:isCheck="note.isCheck" @click.stop />
     </div>
   </div>

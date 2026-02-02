@@ -178,6 +178,7 @@ export default {
     back: 'Back',
     close: 'Close',
     preview: 'Preview',
+    select: 'Select',
   },
   changelog: {
     title: 'Update Logs',

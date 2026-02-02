@@ -1,5 +1,5 @@
 <template>
-  <PTagTable v-if="bookmark.isMobileDevice" />
+  <PTagTable v-if="bookmark.isMobile" />
   <TagTable v-else />
 </template>
 

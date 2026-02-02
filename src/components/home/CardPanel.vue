@@ -1,7 +1,7 @@
 <template>
   <VueDraggable
     :animation="200"
-    :disabled="bookmark.isMobileDevice"
+    :disabled="bookmark.isMobile"
     ref="el"
     v-model="bookmark.bookmarkList"
     class="card-panel"
