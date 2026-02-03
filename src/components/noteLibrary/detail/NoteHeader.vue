@@ -17,29 +17,29 @@
         v-if="!isStartEdit"
         :style="{ marginLeft: bookmark.isMobile ? '20px' : '0' }"
       >
-        <span v-show="note.id"> 已保存于 {{ updateTime }} </span>
+        <span v-show="note.id"> {{ $t('noteDetail.savedAt') }} {{ updateTime }} </span>
       </div>
       <div v-else style="color: #c0c0c0; font-size: 12px" :style="{ marginLeft: bookmark.isMobile ? '20px' : '0' }">
-        <span>保存中...</span>
+        <span>{{ $t('noteDetail.saving') }}</span>
       </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
-      <a-tooltip title="标签">
+      <a-tooltip :title="$t('noteDetail.tags')">
         <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
         </div>
       </a-tooltip>
-      <a-tooltip title="导出">
+      <a-tooltip :title="$t('noteDetail.export')">
         <div class="note-header-title-icon" @click="openExportModal" v-click-log="OPERATION_LOG_MAP.note.exportPdf">
           <SvgIcon :src="icon.noteDetail.export" />
         </div>
       </a-tooltip>
-      <a-tooltip title="删除">
+      <a-tooltip :title="$t('noteDetail.delete')">
         <div class="note-header-title-icon" @click="$emit('del')" v-click-log="OPERATION_LOG_MAP.note.deleteNote">
           <SvgIcon :src="icon.noteDetail.delete" />
         </div>
       </a-tooltip>
-      <a-tooltip title="保存" v-if="!bookmark.isMobile">
+      <a-tooltip :title="$t('noteDetail.save')" v-if="!bookmark.isMobile">
         <div class="note-header-title-icon" @click="$emit('save')" v-click-log="OPERATION_LOG_MAP.note.saveNote">
           <SvgIcon :src="icon.noteDetail.save" />
         </div>
@@ -48,9 +48,9 @@
     <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" />
     <ActionCardModal
       v-model:visible="exportModalVisible"
-      title="导出笔记"
+      :title="$t('noteDetail.exportNote')"
       :sections="exportSections"
-      note="请选择要导出的格式，系统将自动转换并下载文件"
+      :note="$t('noteDetail.exportNoteDesc')"
     />
   </div>
 </template>
@@ -67,6 +67,8 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import TurndownService from 'turndown';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
+  import { useI18n } from 'vue-i18n';
+  import { computed } from 'vue';
 
   const props = defineProps<{
     updateTime: string;
@@ -75,6 +77,8 @@
     isStartEdit: boolean;
     note: any;
   }>();
+
+  const { t } = useI18n();
 
   const bookmark = bookmarkStore();
 
@@ -134,8 +138,8 @@
 
   const exportToPDF = async () => {
     Alert.alert({
-      title: '提示',
-      content: `请确认是否导出为PDF？`,
+      title: t('alertTitle'),
+      content: t('noteDetail.confirmExportPdf'),
       async onOk() {
         exportModalVisible.value = false;
         await generatePDF(props.note.title, '.w-e-text-container [data-slate-editor]');
@@ -145,11 +149,11 @@
 
   const exportToHTML = async () => {
     Alert.alert({
-      title: '提示',
-      content: `请确认是否导出为HTML？`,
+      title: t('alertTitle'),
+      content: t('noteDetail.confirmExportHtml'),
       async onOk() {
         exportModalVisible.value = false;
-        const title = props.note.title || '未命名文档';
+        const title = props.note.title || t('noteDetail.unnamedDoc');
         const safeFileName = `${title}.html`;
         const body = props.note.content || '';
         const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8" /><title>${escapeHtml(
@@ -162,11 +166,11 @@
 
   const exportToMarkdown = async () => {
     Alert.alert({
-      title: '提示',
-      content: `请确认是否导出为Markdown？`,
+      title: $t('alertTitle'),
+      content: $t('noteDetail.confirmExportMd'),
       async onOk() {
         exportModalVisible.value = false;
-        const title = props.note.title || '未命名文档';
+        const title = props.note.title || $t('noteDetail.unnamedDoc');
         const safeFileName = `${title}.md`;
         const body = props.note.content || '';
         let markdownBody = '';
@@ -182,32 +186,32 @@
     });
   };
 
-  const exportSections = [
+  const exportSections = computed(() => [
     {
       key: 'export',
       title: '',
       actions: [
         {
           key: 'pdf',
-          label: '导出为PDF',
-          description: '将笔记导出为PDF格式',
+          label: t('noteDetail.exportAsPdf'),
+          description: t('noteDetail.exportAsPdfDesc'),
           onClick: exportToPDF,
         },
         {
           key: 'html',
-          label: '导出为HTML',
-          description: '将笔记导出为HTML格式',
+          label: t('noteDetail.exportAsHtml'),
+          description: t('noteDetail.exportAsHtmlDesc'),
           onClick: exportToHTML,
         },
         {
           key: 'markdown',
-          label: '导出为Markdown',
-          description: '将笔记导出为Markdown格式',
+          label: t('noteDetail.exportAsMd'),
+          description: t('noteDetail.exportAsMdDesc'),
           onClick: exportToMarkdown,
         },
       ],
     },
-  ];
+  ]);
 </script>
 <style lang="less">
   .note-header {

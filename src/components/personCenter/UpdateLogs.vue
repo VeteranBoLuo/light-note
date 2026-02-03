@@ -5,6 +5,11 @@
     </b-button>
 
     <div class="logs-container">
+      <div class="logs-intro">
+        <h2 class="intro-title">{{ ($t('changelog.pageTitle'), '更新日志') }}</h2>
+        <p class="intro-desc">{{ ($t('changelog.pageDesc'), '查看系统的版本更新历史与功能改进详情。') }}</p>
+      </div>
+
       <div class="timeline-wrapper">
         <a-timeline>
           <a-timeline-item color="#615ced" v-for="(item, index) in displayLogs" :key="item.time || index">
@@ -47,7 +52,7 @@
     >
       <div class="json-editor-wrapper">
         <div class="editor-header">
-          <span>{{ $t('changelog.jsonEditor') }} {{ jsonContent.length }} {{ $t('changelog.charCount') }}</span>
+          <span>{{ $t('changelog.charCount', { count: jsonContent.length }) }}</span>
           <div class="editor-actions">
             <a-button size="small" @click="formatJson">{{ $t('changelog.format') }}</a-button>
             <a-button size="small" @click="resetJson" style="margin-left: 8px">{{ $t('changelog.reset') }}</a-button>
@@ -266,6 +271,38 @@
     }
     @media (min-width: 1200px) {
       padding: 32px 15%;
+    }
+  }
+
+  .logs-intro {
+    text-align: center;
+    margin-bottom: 40px;
+    animation: fadeIn 0.6s ease;
+
+    .intro-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #615ced 0%, #3d37c9 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .intro-desc {
+      font-size: 14px;
+      color: var(--text-secondary-color);
+      opacity: 0.8;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 
