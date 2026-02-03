@@ -28,6 +28,7 @@
       title="编辑用户信息"
       v-model:visible="editVisible"
       @close="editVisible = false"
+      width="90%"
       @ok="saveUserInfo"
     >
       <div>

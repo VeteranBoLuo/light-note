@@ -1,14 +1,28 @@
 <template>
   <div class="storage-usage">
     <div>{{ $t('cloudSpace.hasUsedSpace') }}: {{ cloud.usedSpace }}MB / {{ cloud.maxSpace }}MB</div>
-    <progress :value="cloud.usedSpace" :max="cloud.maxSpace"></progress>
+    <progress :value="cloud.usedSpace" :max="cloud.maxSpace" :class="progressClass"></progress>
   </div>
 </template>
 
 <script setup lang="ts">
+  import { computed } from 'vue';
   import { cloudSpaceStore } from '@/store';
 
   const cloud = cloudSpaceStore();
+
+  const usageRatio = computed(() => {
+    const max = Number(cloud.maxSpace) || 0;
+    const used = Number(cloud.usedSpace) || 0;
+    if (max <= 0) return 0;
+    return Math.min(1, Math.max(0, used / max));
+  });
+
+  const progressClass = computed(() => {
+    if (usageRatio.value >= 0.95) return 'progress-red';
+    if (usageRatio.value >= 0.75) return 'progress-yellow';
+    return 'progress-green';
+  });
 </script>
 
 <style lang="less" scoped>
@@ -29,18 +43,38 @@
       background-color: #f5f5f5; /* 未填充部分的背景颜色 */
     }
 
-    progress::-webkit-progress-value {
-      background-color: #42b883; /* 填充部分的颜色（可以换成任意色） */
+    progress.progress-green::-webkit-progress-value {
+      background-color: #42b883; /* 充足：绿色 */
+    }
+    progress.progress-yellow::-webkit-progress-value {
+      background-color: #f2b84b; /* 不多：黄色 */
+    }
+    progress.progress-red::-webkit-progress-value {
+      background-color: #ef4444; /* 紧张：红色 */
     }
 
     /* Firefox */
-    progress::-moz-progress-bar {
-      background-color: #42b883; /* 填充部分的颜色 */
+    progress.progress-green::-moz-progress-bar {
+      background-color: #42b883; /* 充足：绿色 */
+    }
+    progress.progress-yellow::-moz-progress-bar {
+      background-color: #f2b84b; /* 不多：黄色 */
+    }
+    progress.progress-red::-moz-progress-bar {
+      background-color: #ef4444; /* 紧张：红色 */
     }
 
     /* 兜底样式 - 标准语法 */
-    progress[value] {
+    progress.progress-green[value] {
       color: #42b883;
+      background-color: #f5f5f5;
+    }
+    progress.progress-yellow[value] {
+      color: #f2b84b;
+      background-color: #f5f5f5;
+    }
+    progress.progress-red[value] {
+      color: #ef4444;
       background-color: #f5f5f5;
     }
   }

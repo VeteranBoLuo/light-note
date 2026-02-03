@@ -1,7 +1,14 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="mask-container" @click.stop>
-      <div class="modal-view" :class="{ out: isOut }">
+      <div
+        class="modal-view"
+        :class="{ out: isOut }"
+        :style="{
+          width: props.width !== 'auto' ? props.width : undefined,
+          height: props.height !== 'auto' ? props.height : undefined,
+        }"
+      >
         <span
           style="position: absolute; right: 20px; top: 20px; z-index: 99999; font-size: 20px"
           @click="handleClose"
@@ -41,6 +48,8 @@
       showFooter?: boolean; // 是否显示底部
       escClosable?: boolean; // 按下esc关闭
       top?: string;
+      width?: string;
+      height?: string;
     }>(),
     {
       title: '默认标题',
@@ -48,6 +57,8 @@
       showFooter: true,
       escClosable: true,
       top: '40%',
+      width: 'auto',
+      height: 'auto',
     },
   );
   const visible = defineModel('visible');
@@ -68,7 +79,7 @@
     }, 200);
   }
   function closeMask(e) {
-    if (props.maskClosable && !e.target.matches('.modal-view *')) {
+    if (props.maskClosable && !e.target.closest('.modal-view')) {
       handleClose();
     }
   }
@@ -125,7 +136,6 @@
     background-color: var(--background-color);
     padding: 20px;
     border-radius: 10px;
-    width: max-content;
     min-width: 400px;
     min-height: 100px;
     max-width: 90%;

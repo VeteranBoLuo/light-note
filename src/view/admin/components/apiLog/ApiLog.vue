@@ -35,7 +35,13 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
+        <a-table
+          :data-source="logList"
+          :columns="logColumns"
+          row-key="id"
+          :scroll="{ y: tableScrollY }"
+          :pagination="false"
+        >
           <template #expandedRowRender="{ record }">
             <div class="admin-expand-panel">
               <div>时间：{{ record.requestTime }}</div>
@@ -84,6 +90,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
@@ -156,6 +163,7 @@
 
   const total = ref(0);
   const searchValue = ref('');
+  const { tableScrollY } = useTableScrollY();
   const statCards = computed(() => {
     const totalValue = total.value || 0;
     const hasData = totalValue > 0;

@@ -35,7 +35,7 @@
           :data-source="allImg[imgType]"
           :columns="imageColumns"
           row-key="id"
-          :scroll="{ y: 430 }"
+          :scroll="{ y: tableScrollY }"
           :pagination="false"
         >
           <template #bodyCell="{ column, text, record }">
@@ -76,6 +76,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
 
   const imgOptions = [
@@ -114,6 +115,7 @@
     pageSize.value = newPageSize;
     searchApiImage();
   };
+  const { tableScrollY } = useTableScrollY({ reservedHeight: 480 });
 
   function clearApiImages() {
     Alert.alert({
@@ -164,7 +166,7 @@
     });
   }
   function getImgFullUrl(fullFileName) {
-    return `${window.location.protocol}//${import.meta.env.VITE_HOST_URL}/uploads/${fullFileName}`;
+    return `https://boluo66.top/uploads/${fullFileName}`;
   }
   onMounted(() => {
     searchApiImage();

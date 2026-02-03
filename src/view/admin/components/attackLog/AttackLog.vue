@@ -35,7 +35,13 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table :data-source="logList" :columns="logColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
+        <a-table
+          :data-source="logList"
+          :columns="logColumns"
+          row-key="id"
+          :scroll="{ y: tableScrollY }"
+          :pagination="false"
+        >
           <template #expandedRowRender="{ record }">
             <div class="admin-expand-panel">
               <div>攻击类型：{{ record.attackType }}</div>
@@ -81,6 +87,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
@@ -118,6 +125,7 @@
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(10);
   const searchValue = ref('');
+  const { tableScrollY } = useTableScrollY();
 
   const onChange = (page: number, newPageSize: number) => {
     if (newPageSize !== pageSize.value) {

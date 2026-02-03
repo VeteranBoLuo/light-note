@@ -18,6 +18,27 @@
         :scroll="{ y: bookmark.screenHeight - 235 }"
         :pagination="false"
       >
+        <template #bodyCell="{ column, text, record }">
+          <template v-if="column.dataIndex === 'img'">
+            <div
+              style="
+                width: 40px;
+                height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0.125rem;
+                background-color: rgb(255, 255, 255);
+                border-radius: 0.5rem;
+                flex-shrink: 0;
+              "
+              class="dom-hover"
+              @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
+            >
+              <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
+            </div>
+          </template>
+        </template>
       </a-table>
       <p>
         总计
@@ -51,6 +72,12 @@
 
   const imageColumns = computed(() => {
     return [
+      {
+        title: '图片',
+        dataIndex: 'img',
+        width: 100,
+      },
+      ,
       {
         title: '名称',
         dataIndex: 'name',
@@ -95,6 +122,9 @@
         allImg.value = res.data.items;
       }
     });
+  }
+  function getImgFullUrl(fullFileName) {
+    return `https://boluo66.top/uploads/${fullFileName}`;
   }
   onMounted(() => {
     searchApiImage();

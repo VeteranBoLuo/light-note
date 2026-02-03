@@ -40,7 +40,7 @@
   );
 
   const aiVisible = computed(() => {
-    return !bookmark.isMobile && !bookmark.isShowLogin && router.currentRoute.value.name !== 'noteDetail';
+    return !bookmark.isMobile && !bookmark.isShowLogin;
   });
   // 路由映射表
   const phoneReplaceMap = {

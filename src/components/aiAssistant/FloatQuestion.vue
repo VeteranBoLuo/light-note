@@ -49,7 +49,44 @@
       @mouseleave="handleButtonMouseLeave"
     >
       <div class="button-inner">
-        <span class="button-icon">💬</span>
+        <div class="button-icon">
+          <svg class="ai-svg-icon" viewBox="0 0 100 100">
+            <circle
+              class="orbit orbit-1"
+              cx="50"
+              cy="50"
+              r="40"
+              fill="none"
+              stroke="white"
+              stroke-width="4"
+              stroke-dasharray="20 230"
+              stroke-linecap="round"
+            />
+            <circle
+              class="orbit orbit-2"
+              cx="50"
+              cy="50"
+              r="32"
+              fill="none"
+              stroke="white"
+              stroke-width="4"
+              stroke-dasharray="20 180"
+              stroke-linecap="round"
+            />
+            <circle
+              class="orbit orbit-3"
+              cx="50"
+              cy="50"
+              r="24"
+              fill="none"
+              stroke="white"
+              stroke-width="3"
+              stroke-dasharray="10 140"
+              stroke-linecap="round"
+            />
+            <circle class="core" cx="50" cy="50" r="10" fill="white" />
+          </svg>
+        </div>
         <div class="pulse-ring"></div>
         <div class="sparkle-container">
           <div class="sparkle" v-for="i in 3" :key="i" :style="sparkleStyle(i)"></div>
@@ -207,23 +244,56 @@
   }
 
   .container-peek .float-button {
-    transform: translateX(50%) scale(0.95);
+    transform: translateX(15px);
+    width: 44px;
+    height: 110px;
+    border-radius: 22px 0 0 22px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-right: none;
     box-shadow:
-      0 6px 24px rgba(102, 126, 234, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      -5px 0 25px rgba(0, 0, 0, 0.1),
+      inset 2px 0 2px rgba(255, 255, 255, 0.2);
   }
 
+  /* 隐藏原有内容 */
+  .container-peek .float-button .button-icon,
+  .container-peek .float-button .pulse-ring,
+  .container-peek .float-button .sparkle-container {
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  /* 新的能量条装饰 */
   .container-peek .float-button::after {
     content: '';
     position: absolute;
-    left: -10px;
     top: 50%;
-    width: 18px;
-    height: 34px;
-    transform: translateY(-50%);
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.75);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    left: 18px;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 60px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%);
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.6);
+    animation: neon-breath 2s ease-in-out infinite;
+  }
+
+  @keyframes neon-breath {
+    0%,
+    100% {
+      height: 50px;
+      opacity: 0.7;
+      box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
+      filter: hue-rotate(0deg);
+    }
+    50% {
+      height: 80px;
+      opacity: 1;
+      box-shadow: 0 0 30px rgba(0, 242, 254, 0.8);
+      filter: hue-rotate(30deg);
+    }
   }
 
   .float-button::before {
@@ -258,13 +328,63 @@
   }
 
   .button-icon {
-    font-size: 28px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-    transition: transform 0.3s ease;
+    transition: all 0.3s ease;
+  }
+
+  .ai-svg-icon {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .orbit {
+    transform-origin: 50% 50%;
+    opacity: 0.9;
+  }
+
+  .orbit-1 {
+    animation: spin 4s linear infinite;
+  }
+  .orbit-2 {
+    animation: spin 5s linear infinite reverse;
+  }
+  .orbit-3 {
+    animation: spin 3s linear infinite;
+  }
+
+  .core {
+    transform-origin: 50% 50%;
+    animation: core-breath 2s ease-in-out infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes core-breath {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.3);
+      opacity: 1;
+      filter: drop-shadow(0 0 8px white);
+    }
   }
 
   .float-button:hover .button-icon {
-    transform: scale(1.1);
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
   }
 
   /* 脉冲光环 */

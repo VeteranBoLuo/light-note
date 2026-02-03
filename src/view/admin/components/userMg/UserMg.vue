@@ -34,7 +34,13 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table :data-source="userList" :columns="userColumns" row-key="id" :scroll="{ y: 400 }" :pagination="false">
+        <a-table
+          :data-source="userList"
+          :columns="userColumns"
+          row-key="id"
+          :scroll="{ y: tableScrollY }"
+          :pagination="false"
+        >
           <template #bodyCell="{ column, text, record }">
             <template v-if="column.dataIndex === 'operation'">
               <b-space>
@@ -64,6 +70,7 @@
       <b-modal
         v-if="editVisible"
         title="编辑用户信息"
+        width="600px"
         v-model:visible="editVisible"
         @close="editVisible = false"
         @ok="saveUserInfo"
@@ -90,6 +97,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
 
   const userList = ref([]);
   const userColumns = computed(() => {
@@ -134,6 +142,7 @@
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(50);
   const searchValue = ref('');
+  const { tableScrollY } = useTableScrollY();
 
   const onChange = (page: number, newPageSize: number) => {
     if (newPageSize !== pageSize.value) {

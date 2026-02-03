@@ -18,7 +18,7 @@
         :pagination="false"
       >
         <template #expandedRowRender="{ record }">
-          <div style="overflow: auto; height: 300px; color: var(--text-color)">
+          <div style="overflow: auto; height: 150px; color: var(--text-color)">
             <div>昵称：{{ record.alias }}</div>
             <div>邮箱：{{ record.email }}</div>
             <div>模块：{{ record.module }}</div>

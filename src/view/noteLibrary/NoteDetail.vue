@@ -333,18 +333,18 @@
     width: 100%;
   }
   .catalog-panel {
-    flex: 1 1 18%;
+    flex: 2;
   }
   .editor-panel {
-    flex: 1 1 58%;
+    flex: 10;
   }
   .editor-component {
     flex: 1 1 auto;
     min-height: 0;
   }
   .ai-panel {
-    flex: 1 1 24%;
-    min-width: 220px;
+    flex: 3;
+    min-width: 310px;
   }
   .back-icon {
     display: flex;
