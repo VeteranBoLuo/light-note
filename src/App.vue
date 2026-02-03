@@ -26,6 +26,7 @@
   import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
   import { debounce } from 'lodash-es';
   import { setLocale } from './i18n';
+  import { updateNotice } from '@/config/updateNotice';
 
   const router = useRouter();
   const user = useUserStore();
@@ -204,9 +205,44 @@
       }
     });
   }
+
+  function checkUpdateNotice() {
+    const lastSeen = localStorage.getItem(updateNotice.storageKey);
+    if (lastSeen === updateNotice.version) {
+      return;
+    }
+    const noticeKey = `update-notice-${updateNotice.version}`;
+    const markAsSeen = () => {
+      localStorage.setItem(updateNotice.storageKey, updateNotice.version);
+    };
+    notification.open({
+      key: noticeKey,
+      placement: 'topRight',
+      message: updateNotice.title,
+      description: updateNotice.description,
+      duration: 0,
+      btn: () =>
+        h(
+          'a',
+          {
+            onClick: () => {
+              markAsSeen();
+              notification.close(noticeKey);
+              router.push(updateNotice.logRoute);
+            },
+            style: { color: 'var(--primary-color)' },
+          },
+          { default: () => updateNotice.actionText },
+        ),
+      onClose: () => {
+        markAsSeen();
+      },
+    });
+  }
   onMounted(async () => {
     initApp();
     await init();
+    checkUpdateNotice();
   });
 
   // 解绑媒体查询监听，防止内存泄漏
@@ -258,6 +294,10 @@
       animation: none !important;
       transition: none !important;
     }
+  }
+  .ant-notification-notice-description {
+    font-size: 13px !important;
+    color: #6b7280 !important;
   }
   @media (max-width: 768px) {
     *::-webkit-scrollbar {

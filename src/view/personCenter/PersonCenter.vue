@@ -99,6 +99,7 @@
   import Opinions from '@/components/personCenter/opinions/Opinions.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
+  import { updateNotice } from '@/config/updateNotice';
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const tooltipColor = computed(() => (user.currentTheme === 'day' ? '#ffffff' : '#33343f'));
@@ -144,12 +145,14 @@
       label: t('personCenter.changelog'),
       path: '/updateLogs',
       icon: icon.userCenter.log,
-      version: '4.3',
+      version: updateNotice.version,
+      versionKey: updateNotice.storageKey,
     },
   ]);
   function getVersionIsNew(menu: any) {
     if (menu.version) {
-      const version = localStorage.getItem(`${menu.name}Version`);
+      const versionKey = menu.versionKey || `${menu.name}Version`;
+      const version = localStorage.getItem(versionKey);
       return version !== menu.version;
     }
     return false;
@@ -183,7 +186,8 @@
   function menuItemClick(menuItem: menuItemInterface) {
     menuVisible.value = false;
     if (menuItem.version) {
-      localStorage.setItem(`${menuItem.name}Version`, menuItem.version);
+      const versionKey = menuItem.versionKey || `${menuItem.name}Version`;
+      localStorage.setItem(versionKey, menuItem.version);
     }
     if (menuItem.path) {
       router.push(menuItem.path);
