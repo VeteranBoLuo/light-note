@@ -80,6 +80,17 @@ export default {
     exportAsMd: '导出为Markdown',
     exportAsMdDesc: '将笔记导出为Markdown格式',
     unnamedDoc: '未命名文档',
+    editor: {
+      codeBlock: '代码块',
+      headingMenu: '标题',
+      heading1: '一级标题',
+      heading2: '二级标题',
+      heading3: '三级标题',
+      heading4: '四级标题',
+      heading5: '五级标题',
+      heading6: '六级标题',
+      paragraph: '段落',
+    },
   },
   cloudSpace: {
     title: '云空间',
@@ -281,6 +292,7 @@ export default {
       clear: '清空',
       emptyMessage: '暂无内容，点击上方操作开始。',
       untitled: '未命名文档',
+      stop: '停止生成',
     },
   },
   placeholder: {

@@ -331,20 +331,25 @@
     position: fixed;
     top: 60px;
     width: 100%;
+    min-width: 0;
   }
   .catalog-panel {
     flex: 2;
+    min-width: 0;
   }
   .editor-panel {
     flex: 10;
+    min-width: 0;
+  }
+
+  .ai-panel {
+    flex: 3;
+    min-width: 310px;
+    width: 0;
   }
   .editor-component {
     flex: 1 1 auto;
     min-height: 0;
-  }
-  .ai-panel {
-    flex: 3;
-    min-width: 310px;
   }
   .back-icon {
     display: flex;

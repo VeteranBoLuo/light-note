@@ -83,6 +83,17 @@ export default {
     exportAsMd: 'Export as Markdown',
     exportAsMdDesc: 'Export the note as Markdown format',
     unnamedDoc: 'Untitled Document',
+    editor: {
+      codeBlock: 'Code Block',
+      headingMenu: 'Heading',
+      heading1: 'Heading 1',
+      heading2: 'Heading 2',
+      heading3: 'Heading 3',
+      heading4: 'Heading 4',
+      heading5: 'Heading 5',
+      heading6: 'Heading 6',
+      paragraph: 'Paragraph',
+    },
   },
   cloudSpace: {
     title: 'Cloud Space',
@@ -286,6 +297,7 @@ export default {
       clear: 'Clear',
       emptyMessage: 'No content yet, click the operations above to start.',
       untitled: 'Untitled Document',
+      stop: 'Stop Generation',
     },
   },
   placeholder: {

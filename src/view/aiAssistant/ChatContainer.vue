@@ -579,7 +579,7 @@
         displayedContent.value = accumulatedContent.value;
       }
     } catch (error: any) {
-      if (error.name === 'AbortError') {
+      if (axios.isCancel(error)) {
         // 清理打字机定时器
         if (typingTimer) {
           clearTimeout(typingTimer);

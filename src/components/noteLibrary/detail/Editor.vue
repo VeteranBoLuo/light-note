@@ -31,6 +31,7 @@
   import 'tinymce/plugins/codesample';
   import 'tinymce/plugins/searchreplace';
   import 'tinymce/plugins/wordcount';
+  import 'tinymce/plugins/quickbars';
   import 'tinymce/skins/ui/oxide-dark/skin.min.css';
   import { apiBasePost } from '@/http/request.ts';
   import i18n from '@/i18n';
@@ -145,12 +146,14 @@
     language_url: currentLang.value === 'zh-CN' ? '/tinymce/langs/zh_CN.js' : undefined,
     license_key: 'gpl',
     base_url: '/node_modules/tinymce',
-    plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount',
+    plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount quickbars',
+    quickbars_selection_toolbar: 'myHeadingMenu |  bold italic forecolor backcolor | removeformat |quicklink',
+    quickbars_insert_toolbar: false,
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements: 'input[type|class|checked]',
     toolbar: props.readonly
       ? false
-      : 'undo redo | blocks | bold italic underline | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | emoticons | link image | codesampleCustom',
+      : 'undo redo | blocks  | bold italic underline removeformat | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | link image emoticons |  codeBlock',
     fixed_toolbar_container: '#editor-toolbar',
     toolbar_persist: true,
     toolbar_mode: 'wrap',
@@ -187,81 +190,6 @@
         CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
       );
 
-      const isCodeSample = (node: Node | null) => {
-        if (!node || (node as HTMLElement).nodeName !== 'PRE') return false;
-        return ((node as HTMLElement).className || '').includes('language-');
-      };
-
-      const getSelectedCodeSample = () => {
-        const node = editor.selection ? editor.selection.getNode() : null;
-        return isCodeSample(node) ? (node as HTMLElement) : null;
-      };
-      const openCodeSampleDialog = () => {
-        const selectedNode = getSelectedCodeSample();
-        const selectedText = editor.selection.getContent({ format: 'text' }) || '';
-        const normalizedText = selectedText.replace(/\r\n/g, '\n');
-        const languageOptions = (() => {
-          const options = editor.options.get('codesample_languages');
-          if (Array.isArray(options) && options.length) return options;
-          return CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value }));
-        })();
-        const initialLanguage = languageOptions[0]?.value || 'plaintext';
-        const currentLanguage = (() => {
-          if (!selectedNode) return initialLanguage;
-          const matches = selectedNode.className.match(/language-(\w+)/);
-          return matches ? matches[1] : initialLanguage;
-        })();
-        const currentCode = selectedNode ? selectedNode.textContent || '' : normalizedText;
-
-        editor.windowManager.open({
-          title: editor.translate('Insert/Edit Code Sample'),
-          size: 'large',
-          body: {
-            type: 'panel',
-            items: [
-              {
-                type: 'listbox',
-                name: 'language',
-                label: editor.translate('Language'),
-                items: languageOptions,
-              },
-              {
-                type: 'textarea',
-                name: 'code',
-                label: editor.translate('Code view'),
-                spellcheck: false,
-              },
-            ],
-          },
-          buttons: [
-            { type: 'cancel', name: 'cancel', text: editor.translate('Cancel') },
-            { type: 'submit', name: 'save', text: editor.translate('Save'), primary: true },
-          ],
-          initialData: {
-            language: currentLanguage,
-            code: currentCode,
-          },
-          onSubmit: (api) => {
-            const data = api.getData();
-            const lang = data.language || currentLanguage;
-            const code = (data.code || '').replace(/\r\n/g, '\n');
-            const encodedText = editor.dom.encode(code);
-
-            editor.undoManager.transact(() => {
-              const node = getSelectedCodeSample();
-              if (node) {
-                editor.dom.setAttrib(node, 'class', `language-${lang}`);
-                node.innerHTML = encodedText;
-                editor.selection.select(node);
-              } else {
-                editor.insertContent(`<pre class="language-${lang}">${encodedText}</pre>`);
-              }
-            });
-
-            api.close();
-          },
-        });
-      };
       const todoCheckboxHtml = '<input type="checkbox" class="note-todo-checkbox" />';
       const getCurrentBlock = () => {
         const node = editor.selection ? editor.selection.getNode() : null;
@@ -382,18 +310,69 @@
           });
         },
       });
-      editor.ui.registry.addButton('codesampleCustom', {
-        icon: 'code-sample',
-        tooltip: editor.translate('Insert/edit code sample'),
-        onAction: () => openCodeSampleDialog(),
+      editor.ui.registry.addIcon('code-block', icon.noteDetail.toolbar.codeBlock);
+      editor.ui.registry.addToggleButton('codeBlock', {
+        icon: 'code-block',
+        tooltip: t('noteDetail.editor.codeBlock'),
+        onSetup: (api) => {
+          const refresh = () => {
+            const node = editor.selection ? editor.selection.getStart() : null;
+            const isActive = node ? editor.dom.is(node, 'pre') : false;
+            api.setActive(isActive);
+          };
+          refresh();
+          editor.on('NodeChange', refresh);
+          return () => editor.off('NodeChange', refresh);
+        },
+        onAction: () => editor.execCommand('FormatBlock', false, 'pre'),
       });
-      editor.on('DblClick', (event: MouseEvent) => {
-        const target = event.target as HTMLElement | null;
-        if (!target) return;
-        const pre = editor.dom.getParent(target, 'pre');
-        if (!isCodeSample(pre)) return;
-        event.preventDefault();
-        openCodeSampleDialog();
+      editor.ui.registry.addMenuButton('myHeadingMenu', {
+        text: t('noteDetail.editor.headingMenu'), // 在快捷工具栏上显示的文字
+        fetch: function (callback) {
+          const items = [
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.heading1'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'h1'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.heading2'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'h2'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.heading3'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'h3'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.heading4'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'h4'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.heading5'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'h5'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.heading6'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'h6'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.paragraph'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'p'),
+            },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.codeBlock'),
+              onAction: () => editor.execCommand('FormatBlock', false, 'pre'),
+            },
+          ];
+          callback(items);
+        },
       });
       const syncCheckboxAttribute = (target: EventTarget | null) => {
         if (!target) return;
@@ -523,5 +502,46 @@
   .note-editor .tox .tox-edit-area,
   .note-editor .tox .tox-edit-area__iframe {
     background-color: var(--background-color) !important;
+  }
+  code[data-mce-selected='inline-boundary'] {
+    background-color: unset !important;
+  }
+  .note-editor-body pre[class*='language-'],
+  .mce-content-body pre[class*='language-'] {
+    text-shadow: none !important;
+  }
+  .tox .tox-collection__item {
+    cursor: pointer;
+    height: 24px;
+  }
+  .tox-collection__item-label {
+    h1 {
+      font-size: 17px !important;
+    }
+    h2 {
+      font-size: 16px !important;
+    }
+    h3 {
+      font-size: 15px !important;
+    }
+    h4 {
+      font-size: 14px !important;
+    }
+    h5 {
+      font-size: 13px !important;
+    }
+    h6 {
+      font-size: 12px !important;
+    }
+    p {
+      font-size: 11px !important;
+    }
+    pre {
+      color: var(--text-color) !important;
+      font-family: 微软雅黑 !important;
+      font-size: 12px !important;
+      background-color: transparent !important;
+      border: none !important;
+    }
   }
 </style>

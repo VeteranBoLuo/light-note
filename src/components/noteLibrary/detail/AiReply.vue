@@ -48,25 +48,23 @@
         :title="t('ai.reply.actions.correctErrors')"
         >{{ t('ai.reply.actions.correctErrors') }}</button
       >
-      <button
-        class="action-btn text-hidden"
-        :disabled="isLoading"
-        @click="runAction('rewriteSection')"
-        :title="t('ai.reply.actions.rewriteSection')"
-        >{{ t('ai.reply.actions.rewriteSection') }}</button
-      >
     </div>
 
     <div class="ai-input">
       <div class="input-label">{{ t('ai.reply.inputLabel') }}</div>
       <textarea v-model="prompt" :placeholder="t('ai.reply.inputPlaceholder')" />
+      <button v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')">
+        <span class="stop-icon"></span>
+        {{ t('ai.reply.stop', '停止生成') }}
+      </button>
       <button
+        v-else
         class="primary-btn"
-        :disabled="isLoading || !prompt.trim()"
+        :disabled="!prompt.trim()"
         @click="generate('custom')"
-        :title="isLoading ? t('ai.reply.processing') : t('ai.reply.processButton')"
+        :title="t('ai.reply.processButton')"
       >
-        {{ isLoading ? t('ai.reply.processing') : t('ai.reply.processButton') }}
+        {{ t('ai.reply.processButton') }}
       </button>
     </div>
 
@@ -140,7 +138,6 @@
     optimizeTitle: { format: 'title' },
     generateSummary: { format: 'body' },
     correctErrors: { format: 'body' },
-    rewriteSection: { format: 'body' },
     custom: { format: 'both' },
   };
 
@@ -165,7 +162,6 @@
         optimizeTitle: '优化标题',
         generateSummary: '生成摘要',
         correctErrors: '纠错与语病',
-        rewriteSection: '改写选段',
         custom: '自定义处理',
       }[action] || '自定义处理';
     return `任务：${actionText}\n标题：${title}\n内容：${note?.content}\n补充要求：${requirement}\n\n${buildFormatHint(format)}`;
@@ -174,6 +170,13 @@
   const runAction = (action: string) => {
     lastAction.value = action;
     generate('action');
+  };
+
+  const stopGenerating = () => {
+    if (abortController.value) {
+      abortController.value.abort();
+      abortController.value = null;
+    }
   };
 
   const generate = async (mode: 'custom' | 'action' = 'action') => {
@@ -286,7 +289,8 @@
         }
       }
     } catch (error: any) {
-      if (error?.name === 'AbortError') {
+      console.error('AI 回复生成失败:', error, axios.isCancel(error));
+      if (axios.isCancel(error)) {
         outputFull.value += '\n[已停止]';
       } else {
         outputFull.value = '请求失败，请稍后再试。';
@@ -502,6 +506,31 @@
     opacity: 0.7;
   }
 
+  .stop-btn {
+    height: 34px;
+    border: 1px solid #ff4d4f;
+    border-radius: 8px;
+    background: #fff1f0;
+    color: #ff4d4f;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .stop-btn:hover {
+    background: #ffccc7;
+    border-color: #ff7875;
+  }
+  .stop-btn .stop-icon {
+    width: 8px;
+    height: 8px;
+    background: currentColor;
+    border-radius: 1px;
+  }
+
   .ai-output {
     flex: 1 1 auto;
     display: flex;
@@ -591,9 +620,16 @@
   [data-theme='night'] .output-body :deep(.typewriter-content) {
     color: #f3f4f6;
   }
-  [data-theme='night'] .ai-subtitle,
-  [data-theme='night'] .meta-row .label,
-  [data-theme='night'] .input-label,
+
+  [data-theme='night'] .stop-btn {
+    background: rgba(255, 77, 79, 0.1);
+    border-color: rgba(255, 77, 79, 0.4);
+    color: #ff4d4f;
+  }
+  [data-theme='night'] .stop-btn:hover {
+    background: rgba(255, 77, 79, 0.2);
+    border-color: #ff4d4f;
+  }
   [data-theme='night'] .output-header,
   [data-theme='night'] .empty {
     color: #b3b9c2;

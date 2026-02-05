@@ -139,7 +139,7 @@
   const emptyText = computed(() => props.emptyText ?? '');
 </script>
 
-<style scoped>
+<style>
   .typewriter-output {
     overflow: auto;
   }
@@ -147,6 +147,19 @@
   .typewriter-content {
     margin: 0;
     white-space: pre-wrap;
+  }
+
+  .typewriter-content pre {
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    background: rgba(15, 23, 42, 0.8);
+    color: #f8fafc;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.4);
+  }
+  .typewriter-content pre {
+    overflow: auto;
   }
 
   .empty {
