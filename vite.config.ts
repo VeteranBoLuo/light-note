@@ -35,6 +35,7 @@ export default defineConfig(({ mode }) => {
           },
         ],
       }),
+    ],
     // 加载对应的.env文件
     envPrefix: 'VITE_',
     // 根据mode加载不同的.env文件
