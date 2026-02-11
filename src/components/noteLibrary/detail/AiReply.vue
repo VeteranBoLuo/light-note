@@ -109,6 +109,7 @@
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
+  import { apiBasePost } from '@/http/request';
 
   const { t } = useI18n();
 
@@ -243,7 +244,7 @@
         }
       };
 
-      await axios.post(
+      await apiBasePost(
         '/api/chat/receiveMessage',
         {
           message: buildMessage(actionOverride),

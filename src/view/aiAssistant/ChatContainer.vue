@@ -58,6 +58,7 @@
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
+  import { apiBasePost } from '@/http/request';
 
   const { t } = useI18n();
 
@@ -510,7 +511,7 @@
         }
       };
 
-      await axios.post(
+      await apiBasePost(
         '/api/chat/receiveMessage',
         {
           message: inputText,
