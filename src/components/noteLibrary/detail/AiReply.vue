@@ -115,6 +115,7 @@
 
   const note = inject<any>('note', null);
   const applyTitleFromAi = inject<((title: string) => void) | null>('applyTitleFromAi', null);
+  const applyContentFromAi = inject<((html: string) => Promise<void> | void) | null>('applyContentFromAi', null);
   const triggerSave = inject<(() => void) | null>('triggerSave', null);
   const focusEditorToEnd = inject<(() => void) | null>('focusEditorToEnd', null);
   const prompt = ref('');
@@ -361,7 +362,11 @@
     if (!note || !outputFull.value) return;
     const html = buildHtmlContent();
     if (!html) return;
-    note.content = html;
+    if (applyContentFromAi) {
+      applyContentFromAi(html);
+    } else {
+      note.content = html;
+    }
     triggerSave?.();
     focusEditorToEnd?.();
   };

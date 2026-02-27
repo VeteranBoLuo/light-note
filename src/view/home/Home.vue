@@ -16,6 +16,7 @@
   const bookmark = bookmarkStore();
   const router = useRouter();
   const route = useRoute();
+  const MIN_SKELETON_MS = 100;
 
   // 处理滚动条滚动到顶部
   const scrollToTop = () => {
@@ -60,37 +61,38 @@
     () => watchedRefreshKey.value,
     async () => {
       bookmark.bookmarkList = [];
-      const container: any = document.querySelector('#card-panel');
-      if (bookmark.type === 'normal') {
-        const tag = bookmark.tagList?.find((item) => item.id === route.params?.id);
-        bookmark.tagData = tag;
-        if (tag) {
-          await fetchBookmarkList('normal', { tagId: tag.id });
-          if (bookmark.isMobile) {
-            bookmark.isFold = true;
+      bookmark.bookmarkLoading = true;
+      const loadingStart = Date.now();
+      try {
+        if (bookmark.type === 'normal') {
+          const tag = bookmark.tagList?.find((item) => item.id === route.params?.id);
+          bookmark.tagData = tag;
+          if (tag) {
+            await fetchBookmarkList('normal', { tagId: tag.id });
+            if (bookmark.isMobile) {
+              bookmark.isFold = true;
+            }
           }
+        } else if (bookmark.type === 'all') {
+          bookmark.tagData = null;
+          await fetchBookmarkList('all');
+        } else if (bookmark.type === 'search' && bookmark.bookmarkSearch) {
+          bookmark.tagData = null;
+          await fetchBookmarkList('search', { value: bookmark.bookmarkSearch });
+        } else {
+          bookmark.tagData = null;
+          bookmark.type = 'all';
+          bookmark.refreshData();
         }
-      } else if (bookmark.type === 'all') {
-        bookmark.tagData = null;
-        await fetchBookmarkList('all');
-      } else if (bookmark.type === 'search' && bookmark.bookmarkSearch) {
-        bookmark.tagData = null;
-        await fetchBookmarkList('search', { value: bookmark.bookmarkSearch });
-      } else {
-        bookmark.tagData = null;
-        bookmark.type = 'all';
-        bookmark.refreshData();
+        scrollToTop();
+        await cacheImages();
+      } finally {
+        const elapsed = Date.now() - loadingStart;
+        if (elapsed < MIN_SKELETON_MS) {
+          await new Promise((resolve) => setTimeout(resolve, MIN_SKELETON_MS - elapsed));
+        }
+        bookmark.bookmarkLoading = false;
       }
-      container.style.transform = 'translateY(0)';
-      container.style.transition = 'none';
-      container.style.opacity = 0;
-      nextTick(() => {
-        container.style.transition = 'all 0.5s';
-        container.style.transform = 'translateY(-100px)';
-        container.style.opacity = 1;
-      });
-      scrollToTop();
-      await cacheImages();
     },
     {
       deep: true,
@@ -146,7 +148,7 @@
     } else if (route.params?.value) {
       // 带有search刷新页面时
       bookmark.type = 'search';
-      bookmark.bookmarkSearch = route.params.value;
+      bookmark.bookmarkSearch = Array.isArray(route.params.value) ? route.params.value[0] : route.params.value;
     }
     queryTagList();
   });

@@ -24,6 +24,10 @@
             <p class="success-subtitle">{{ fileName }}</p>
           </div>
           <div class="file-details">
+            <div class="detail-item" v-if="shareDesc">
+              <InfoCircleOutlined />
+              <span><strong>描述:</strong> {{ shareDesc }}</span>
+            </div>
             <div class="detail-item">
               <FileTextOutlined />
               <span
@@ -67,6 +71,10 @@
             <p class="file-subtitle">{{ $t('cloudSpace.shareDescription') }}</p>
           </div>
           <div class="file-details">
+            <div class="detail-item" v-if="shareDesc">
+              <InfoCircleOutlined />
+              <span><strong>描述:</strong> {{ shareDesc }}</span>
+            </div>
             <div class="detail-item">
               <FileTextOutlined />
               <span
@@ -112,6 +120,7 @@
   import { useI18n } from 'vue-i18n';
   import {
     CheckCircleOutlined,
+    InfoCircleOutlined,
     FileTextOutlined,
     FileImageOutlined,
     FilePdfOutlined,
@@ -180,6 +189,16 @@
   };
 
   const fileName = computed(() => file.fileName);
+  const shareDesc = computed(() => {
+    const raw = route.params.desc;
+    if (!raw) return '';
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return String(value);
+    }
+  });
 
   // 预览文件信息
   const previewFileInfo = computed(() => ({

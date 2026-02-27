@@ -104,6 +104,23 @@
       </div>
     </div>
     <b-loading :loading="cloud.loading" class="both-center" />
+
+    <a-modal v-model:open="shareDescVisible" :title="$t('cloudSpace.share')" :footer="null" :width="460">
+      <div class="share-desc-body">
+        <div class="share-desc-tip">可选描述，将展示在分享页</div>
+        <a-textarea
+          v-model:value="shareDescValue"
+          :max-length="200"
+          :auto-size="{ minRows: 3, maxRows: 6 }"
+          placeholder="请输入分享描述（可选）"
+        />
+        <div class="share-desc-actions">
+          <a-button :loading="shareSubmitting" @click="submitShare(false)">直接分享</a-button>
+          <a-button :loading="shareSubmitting" type="primary" @click="submitShare(true)">分享</a-button>
+          <a-button :disabled="shareSubmitting" @click="closeShareDialog">取消</a-button>
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 <script setup lang="ts">
@@ -157,6 +174,11 @@
     }
     return '55%';
   });
+
+  const shareDescVisible = ref(false);
+  const shareDescValue = ref('');
+  const shareSubmitting = ref(false);
+  const shareTarget = ref<{ id: string; fileName?: string; fileType?: string } | null>(null);
 
   watch(
     () => cloud.fileList,
@@ -273,12 +295,33 @@
   };
 
   async function handleShareFile(id, fileName, fileType) {
+    shareTarget.value = { id, fileName, fileType };
+    shareDescValue.value = '';
+    shareDescVisible.value = true;
+  }
+
+  const closeShareDialog = () => {
+    if (shareSubmitting.value) return;
+    shareDescVisible.value = false;
+    shareTarget.value = null;
+    shareDescValue.value = '';
+  };
+
+  const submitShare = async (withDesc: boolean) => {
+    if (!shareTarget.value) return;
     try {
-      await shareField(id, fileName, fileType);
+      shareSubmitting.value = true;
+      const desc = withDesc ? shareDescValue.value.trim() : '';
+      await shareField(shareTarget.value.id, shareTarget.value.fileName, shareTarget.value.fileType, desc);
+      shareDescVisible.value = false;
+      shareTarget.value = null;
+      shareDescValue.value = '';
     } catch (error) {
       // 错误已在 shareField 中处理
+    } finally {
+      shareSubmitting.value = false;
     }
-  }
+  };
   const originalName = ref('');
   const originalExt = ref('');
   function handleReName(file) {
@@ -369,6 +412,20 @@
     div {
       flex: 1;
     }
+  }
+  .share-desc-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .share-desc-tip {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .share-desc-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
   }
   @media (max-width: 1400px) {
     .field-item {

@@ -131,8 +131,20 @@
     editor.nodeChanged?.();
   };
 
+  const replaceContentWithUndo = async (html: string) => {
+    await nextTick();
+    const editor = editorRef.value;
+    if (!editor) return false;
+    editor.undoManager?.transact(() => {
+      editor.setContent(html || '');
+    });
+    editor.nodeChanged?.();
+    return true;
+  };
+
   defineExpose({
     focusToEnd,
+    replaceContentWithUndo,
   });
 
   const editorInit = computed(() => ({

@@ -54,7 +54,14 @@
     <MoveFile v-model:visible="moveCfg.moveFileVisible" :files="moveCfg.files" @moved="handleMoveDone" />
 
     <!-- 全屏文件预览 -->
-    <FilePreview v-model:visible="previewVisible" :file-info="previewFileInfo" @close="closePreview" />
+    <FilePreview
+      v-model:visible="previewVisible"
+      :file-info="previewFileInfo"
+      :show-next="cloud.fileList.length > 1"
+      @prev="previewPrevFile"
+      @next="previewNextFile"
+      @close="closePreview"
+    />
   </CommonContainer>
 </template>
 
@@ -268,6 +275,24 @@
 
     // 设置文件信息
     Object.assign(previewFileInfo, file);
+    previewVisible.value = true;
+  }
+
+  function previewNextFile() {
+    const list = cloud.fileList || [];
+    if (!list.length) return;
+    const currentIndex = list.findIndex((item) => item.id === previewFileInfo.id);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % list.length;
+    Object.assign(previewFileInfo, list[nextIndex]);
+    previewVisible.value = true;
+  }
+
+  function previewPrevFile() {
+    const list = cloud.fileList || [];
+    if (!list.length) return;
+    const currentIndex = list.findIndex((item) => item.id === previewFileInfo.id);
+    const prevIndex = currentIndex === -1 ? 0 : (currentIndex - 1 + list.length) % list.length;
+    Object.assign(previewFileInfo, list[prevIndex]);
     previewVisible.value = true;
   }
 

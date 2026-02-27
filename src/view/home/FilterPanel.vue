@@ -1,6 +1,11 @@
 <template>
   <div class="filter-panel">
+    <div v-if="tagLoading" class="tag-skeleton-wrap">
+      <div class="skeleton-input"></div>
+      <div class="skeleton-body"></div>
+    </div>
     <b-list
+      v-else
       :draggable="!bookmark.isMobile"
       class="header-input"
       v-model:listOptions="filterTagList"
@@ -70,7 +75,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useRouter } from 'vue-router';
@@ -97,6 +102,19 @@
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
   const isReady = ref(false);
+  const tagLoading = ref(true);
+  const MIN_SKELETON_MS = 300;
+  const loadingStartAt = ref(Date.now());
+  let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const finishTagLoading = () => {
+    const elapsed = Date.now() - loadingStartAt.value;
+    const delay = Math.max(0, MIN_SKELETON_MS - elapsed);
+    setTimeout(() => {
+      tagLoading.value = false;
+      isReady.value = bookmark.tagList.length === 0;
+    }, delay);
+  };
 
   function handleTagMenu(menu, tag: TagInterface) {
     recordOperation({ module: '首页', operation: `右键${menu}标签${tag.name}` });
@@ -187,22 +205,37 @@
   watch(
     () => bookmark.tagList.length,
     (val) => {
-      setTimeout(() => {
-        if (val === 0) {
-          isReady.value = true;
-        } else {
-          isReady.value = false;
-        }
-      }, 200);
+      if (tagLoading.value) {
+        finishTagLoading();
+        return;
+      }
+      isReady.value = val === 0;
+    },
+  );
+
+  watch(
+    () => bookmark.refreshTagKey,
+    () => {
+      tagLoading.value = true;
+      loadingStartAt.value = Date.now();
+      isReady.value = false;
     },
   );
 
   onMounted(() => {
-    setTimeout(() => {
-      if (bookmark.tagList.length === 0) {
-        isReady.value = true;
+    loadingStartAt.value = Date.now();
+    fallbackTimer = setTimeout(() => {
+      if (tagLoading.value) {
+        finishTagLoading();
       }
-    }, 200);
+    }, 1200);
+  });
+
+  onUnmounted(() => {
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
   });
 </script>
 
@@ -214,6 +247,60 @@
 
   .header-input {
     width: 180px;
+  }
+
+  .tag-skeleton-wrap {
+    width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .skeleton-input,
+  .skeleton-body {
+    position: relative;
+    overflow: hidden;
+    background: var(--background-color);
+    border: 2px solid var(--card-border-color);
+  }
+
+  .skeleton-input {
+    height: 34px;
+    border-radius: 8px;
+  }
+
+  .skeleton-body {
+    height: 100vh;
+    min-height: 260px;
+    border-radius: 10px;
+    background:
+      linear-gradient(rgba(120, 120, 120, 0.18) 0 0) 14px 16px / calc(100% - 28px) 16px no-repeat,
+      linear-gradient(rgba(120, 120, 120, 0.18) 0 0) 14px 48px / calc(75% - 14px) 12px no-repeat,
+      linear-gradient(rgba(120, 120, 120, 0.18) 0 0) 14px 76px / calc(88% - 14px) 12px no-repeat,
+      linear-gradient(rgba(120, 120, 120, 0.18) 0 0) 14px 104px / calc(66% - 14px) 12px no-repeat,
+      linear-gradient(rgba(120, 120, 120, 0.18) 0 0) 14px 132px / calc(82% - 14px) 12px no-repeat,
+      var(--background-color);
+  }
+
+  .skeleton-input::after,
+  .skeleton-body::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: filter-skeleton-shine 1.2s infinite;
+  }
+
+  @keyframes filter-skeleton-shine {
+    0% {
+      left: -60%;
+    }
+    100% {
+      left: 120%;
+    }
   }
 
   .edit-input {
@@ -238,6 +325,10 @@
 
     &.header-input {
       width: unset;
+    }
+
+    .tag-skeleton-wrap {
+      width: 100%;
     }
 
     .category-item {

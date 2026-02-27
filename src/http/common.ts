@@ -33,12 +33,13 @@ export async function deleteField(id: number | string) {
 }
 
 // 分享文件
-export async function shareField(id: number | string, fileName?: string, fileType?: string) {
+export async function shareField(id: number | string, fileName?: string, fileType?: string, description?: string) {
   try {
     // 生成分享页面链接，通过前端页面处理下载
     const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
     const encodedFileType = fileType ? encodeURIComponent(fileType) : '';
-    const shareUrl = `${window.location.origin}/#/share/${id}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}`;
+    const encodedDesc = description ? encodeURIComponent(description) : '';
+    const shareUrl = `${window.location.origin}/#/share/${id}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}${encodedDesc ? `/${encodedDesc}` : ''}`;
     await navigator.clipboard.writeText(shareUrl);
     message.success('分享链接已复制到剪贴板');
     return shareUrl;

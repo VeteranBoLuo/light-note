@@ -78,6 +78,12 @@
   provide('focusEditorToEnd', () => {
     editorRef.value?.focusToEnd?.();
   });
+  provide('applyContentFromAi', async (html: string) => {
+    const applied = await editorRef.value?.replaceContentWithUndo?.(html);
+    if (!applied) {
+      note.content = html;
+    }
+  });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
 
   const readonly = computed(() => {
