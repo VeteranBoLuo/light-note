@@ -252,7 +252,6 @@
   const textContent = ref('');
   const wrapText = ref(true);
   const pdfBlobUrl = ref<string>('');
-  const lastWheelSwitchAt = ref(0);
   const previewHistoryActive = ref(false);
 
   // 文件类型映射配置
@@ -625,8 +624,24 @@
 
   // 键盘事件
   function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && props.visible) {
+    if (!props.visible) return;
+
+    if (e.key === 'Escape') {
       handleClose();
+      return;
+    }
+
+    if (!showNext.value) return;
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      handlePrev();
+      return;
+    }
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      handleNext();
     }
   }
 
@@ -646,19 +661,6 @@
         zoomOut();
       }
       return;
-    }
-
-    if (!showNext.value || e.deltaY === 0) return;
-
-    e.preventDefault();
-    const now = Date.now();
-    if (now - lastWheelSwitchAt.value < 280) return;
-    lastWheelSwitchAt.value = now;
-
-    if (e.deltaY > 0) {
-      handleNext();
-    } else {
-      handlePrev();
     }
   }
 
