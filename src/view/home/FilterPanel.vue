@@ -1,6 +1,6 @@
 <template>
   <div class="filter-panel">
-    <div v-if="tagLoading" class="tag-skeleton-wrap">
+    <div v-if="bookmark.tagLoading" class="tag-skeleton-wrap">
       <div class="skeleton-input"></div>
       <div class="skeleton-body"></div>
     </div>
@@ -88,33 +88,20 @@
   import BList from '@/components/base/BasicComponents/BList.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { set } from 'lodash-es';
 
   const tagName = ref('');
   const filterTagList = computed(() => {
     return bookmark.tagList.filter((item) => item.name.toUpperCase().includes(tagName.value.toUpperCase()));
   });
 
-  const user = useUserStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
 
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
   const isReady = ref(false);
-  const tagLoading = ref(true);
-  const MIN_SKELETON_MS = 300;
   const loadingStartAt = ref(Date.now());
   let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const finishTagLoading = () => {
-    const elapsed = Date.now() - loadingStartAt.value;
-    const delay = Math.max(0, MIN_SKELETON_MS - elapsed);
-    setTimeout(() => {
-      tagLoading.value = false;
-      isReady.value = bookmark.tagList.length === 0;
-    }, delay);
-  };
 
   function handleTagMenu(menu, tag: TagInterface) {
     recordOperation({ module: '首页', operation: `右键${menu}标签${tag.name}` });
@@ -205,10 +192,6 @@
   watch(
     () => bookmark.tagList.length,
     (val) => {
-      if (tagLoading.value) {
-        finishTagLoading();
-        return;
-      }
       isReady.value = val === 0;
     },
   );
@@ -216,20 +199,10 @@
   watch(
     () => bookmark.refreshTagKey,
     () => {
-      tagLoading.value = true;
       loadingStartAt.value = Date.now();
       isReady.value = false;
     },
   );
-
-  onMounted(() => {
-    loadingStartAt.value = Date.now();
-    fallbackTimer = setTimeout(() => {
-      if (tagLoading.value) {
-        finishTagLoading();
-      }
-    }, 1200);
-  });
 
   onUnmounted(() => {
     if (fallbackTimer) {
@@ -290,7 +263,7 @@
     left: -60%;
     width: 60%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    background: linear-gradient(90deg, transparent, var(--skeleton-body-bg-color), transparent);
     animation: filter-skeleton-shine 1.2s infinite;
   }
 

@@ -124,7 +124,7 @@
     left: -60%;
     width: 60%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    background: linear-gradient(90deg, transparent, var(--skeleton-body-bg-color), transparent);
     animation: skeleton-shine 1.2s infinite;
   }
   .skeleton-title {

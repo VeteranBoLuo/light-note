@@ -1,15 +1,53 @@
 <template>
-  <b-loading :loading="loading">
-    <div class="note-library-container">
-      <div class="note-library-header" v-if="bookmark.isMobile">
-        <div class="header-content">
-          <div class="back-icon" @click="backRouterPage">
-            <SvgIcon :src="icon.noteDetail.back" />
-          </div>
-          <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
+  <div class="note-library-container">
+    <div class="note-library-header" v-if="bookmark.isMobile">
+      <div class="header-content">
+        <div class="back-icon" @click="backRouterPage">
+          <SvgIcon :src="icon.noteDetail.back" />
         </div>
-        <div class="handle-btn-group">
+        <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
+      </div>
+      <div class="handle-btn-group">
+        <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
+        <b-button
+          type="primary"
+          style="border-radius: 20px"
+          @click="router.push('/noteLibrary/add')"
+          v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+        >
+          + {{ $t('note.newNote') }}
+        </b-button>
+      </div>
+    </div>
+    <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
+      <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{
+        $t('note.title')
+      }}</div>
+      <div class="handle-btn-group">
+        <template v-if="hasCheck">
+          <span class="deleteText" @click="batchDeleteNote" v-click-log="OPERATION_LOG_MAP.noteLibrary.deleteNote"
+            ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
+          >
+          <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
+            {{ $t('note.exitBatch') }}
+          </b-button>
+        </template>
+        <template v-else>
           <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
+          <ViewModeToggle />
+          <div
+            class="search-icon flex-center dom-hover"
+            :class="searchActive ? 'normal-input' : 'icon-input'"
+            @click="searchActive = true"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote"
+            :style="{ width: searchActive ? '200px' : '32px' }"
+          >
+            <b-input :placeholder="searchActive ? $t('note.searchNote') : ''" v-model:value="searchValue">
+              <template #prefix>
+                <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" @click="focusSearchInput" />
+              </template>
+            </b-input>
+          </div>
           <b-button
             type="primary"
             style="border-radius: 20px"
@@ -18,65 +56,47 @@
           >
             + {{ $t('note.newNote') }}
           </b-button>
+        </template>
+      </div>
+    </div>
+    <div v-if="loading && currentViewMode === 'card'" class="note-library-body note-card-skeleton-wrap">
+      <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
+        <div class="skeleton-line long"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line short"></div>
+        <div class="skeleton-tags">
+          <div class="skeleton-chip"></div>
+          <div class="skeleton-chip"></div>
         </div>
       </div>
-      <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
-        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{
-          $t('note.title')
-        }}</div>
-        <div class="handle-btn-group">
-          <template v-if="hasCheck">
-            <span class="deleteText" @click="batchDeleteNote" v-click-log="OPERATION_LOG_MAP.noteLibrary.deleteNote"
-              ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
-            >
-            <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
-              {{ $t('note.exitBatch') }}
-            </b-button>
-          </template>
-          <template v-else>
-            <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
-            <ViewModeToggle />
-            <div
-              class="search-icon flex-center dom-hover"
-              :class="searchActive ? 'normal-input' : 'icon-input'"
-              @click="searchActive = true"
-              v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote"
-              :style="{ width: searchActive ? '200px' : '32px' }"
-            >
-              <b-input :placeholder="searchActive ? $t('note.searchNote') : ''" v-model:value="searchValue">
-                <template #prefix>
-                  <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" @click="focusSearchInput" />
-                </template>
-              </b-input>
-            </div>
-            <b-button
-              type="primary"
-              style="border-radius: 20px"
-              @click="router.push('/noteLibrary/add')"
-              v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-            >
-              + {{ $t('note.newNote') }}
-            </b-button>
-          </template>
-        </div>
-      </div>
-      <VueDraggable
-        v-if="currentViewMode === 'card'"
-        :disabled="bookmark.isMobile"
-        :animation="200"
-        v-model="noteList"
-        class="note-library-body"
-        @start="onStart"
-        @end="onEnd"
-        :scroll-sensitivity="50"
-        :forceFallback="true"
-        :touchStartThreshold="10"
-        :delay="100"
-      >
-        <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
-      </VueDraggable>
-      <div v-if="currentViewMode === 'list'" class="note-library-body-list">
-        <div class="tag-sidebar">
+    </div>
+    <VueDraggable
+      v-else-if="currentViewMode === 'card'"
+      :disabled="bookmark.isMobile"
+      :animation="200"
+      v-model="noteList"
+      class="note-library-body"
+      @start="onStart"
+      @end="onEnd"
+      :scroll-sensitivity="50"
+      :forceFallback="true"
+      :touchStartThreshold="10"
+      :delay="100"
+    >
+      <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
+    </VueDraggable>
+    <div v-if="currentViewMode === 'list'" class="note-library-body-list">
+      <div class="tag-sidebar">
+        <template v-if="loading">
+          <div class="tag-tree-skeleton">
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line short"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line medium"></div>
+            <div class="skeleton-line short"></div>
+          </div>
+        </template>
+        <template v-else>
           <div class="tag-item" :class="{ active: selectedTag === null }" @click="selectTag(null)">
             {{ $t('note.allNote') }}
           </div>
@@ -91,25 +111,33 @@
           >
             {{ tag.name }}
           </div>
-        </div>
-        <VueDraggable
-          :disabled="bookmark.isMobile"
-          :animation="200"
-          ref="el"
-          v-model="noteList"
-          class="note-list"
-          @start="onStart"
-          @end="onEnd"
-          :scroll-sensitivity="50"
-          :forceFallback="true"
-          :touchStartThreshold="10"
-          :delay="100"
-        >
-          <note-list-item v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
-        </VueDraggable>
+        </template>
       </div>
+      <div v-if="loading" class="note-list note-list-skeleton-wrap">
+        <div v-for="n in 10" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
+          <div class="skeleton-line long"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+        </div>
+      </div>
+      <VueDraggable
+        v-else
+        :disabled="bookmark.isMobile"
+        :animation="200"
+        ref="el"
+        v-model="noteList"
+        class="note-list"
+        @start="onStart"
+        @end="onEnd"
+        :scroll-sensitivity="50"
+        :forceFallback="true"
+        :touchStartThreshold="10"
+        :delay="100"
+      >
+        <note-list-item v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
+      </VueDraggable>
     </div>
-  </b-loading>
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -324,6 +352,87 @@
     align-content: start;
   }
 
+  .note-card-skeleton-wrap {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+
+  .note-card-skeleton,
+  .note-list-skeleton-item,
+  .tag-tree-skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--background-color);
+  }
+
+  .note-card-skeleton,
+  .note-list-skeleton-item {
+    border-radius: 12px;
+    padding: 14px;
+    box-sizing: border-box;
+  }
+
+  .note-card-skeleton {
+    height: 300px;
+    border: 1px solid #edf2fa;
+    box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
+  }
+
+  .skeleton-line {
+    height: 12px;
+    border-radius: 6px;
+    background: rgba(120, 120, 120, 0.18);
+    margin-bottom: 10px;
+  }
+
+  .skeleton-line.long {
+    width: 88%;
+  }
+
+  .skeleton-line.medium {
+    width: 72%;
+  }
+
+  .skeleton-line.short {
+    width: 56%;
+  }
+
+  .skeleton-tags {
+    position: absolute;
+    left: 14px;
+    bottom: 14px;
+    display: flex;
+    gap: 8px;
+  }
+
+  .skeleton-chip {
+    width: 52px;
+    height: 16px;
+    border-radius: 8px;
+    background: rgba(120, 120, 120, 0.18);
+  }
+
+  .note-card-skeleton::after,
+  .note-list-skeleton-item::after,
+  .tag-tree-skeleton::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--skeleton-body-bg-color), transparent);
+    animation: note-skeleton-shine 2s infinite;
+  }
+
+  @keyframes note-skeleton-shine {
+    0% {
+      left: -60%;
+    }
+    100% {
+      left: 120%;
+    }
+  }
+
   .note-library-body-list {
     display: flex;
     height: calc(100% - 20px);
@@ -363,6 +472,26 @@
       flex: 1;
       overflow-y: auto;
       padding: 0 10px;
+    }
+
+    .tag-tree-skeleton {
+      border-radius: 8px;
+      padding: 12px;
+      box-sizing: border-box;
+      height: 100%;
+    }
+
+    .note-list-skeleton-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      padding: 0 10px;
+      flex: 1;
+    }
+
+    .note-list-skeleton-item {
+      min-height: 88px;
     }
   }
 

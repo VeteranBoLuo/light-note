@@ -103,21 +103,26 @@
 
   // 查询标签列表
   function queryTagList() {
+    bookmark.tagLoading = true;
     const user = useUserStore();
     if (bookmark.type !== 'normal') {
       bookmark.refreshData();
     }
     apiQueryPost('/api/bookmark/queryTagList', {
       filters: { userId: user.id },
-    }).then((res) => {
-      if (res.status === 200) {
-        bookmark.tagList = res.data;
-        user.tagTotal = res.data.length;
-        if (bookmark.type === 'normal') {
-          bookmark.refreshData();
+    })
+      .then((res) => {
+        if (res.status === 200) {
+          bookmark.tagList = res.data;
+          user.tagTotal = res.data.length;
+          if (bookmark.type === 'normal') {
+            bookmark.refreshData();
+          }
         }
-      }
-    });
+      })
+      .finally(() => {
+        bookmark.tagLoading = false;
+      });
   }
 
   watch(

@@ -135,6 +135,7 @@
     setTimeout(() => {
       document.documentElement.classList.remove('disable-animations');
     }, 0);
+    localStorage.setItem('preferences', JSON.stringify(user.preferences));
   }
 
   // 设置动画

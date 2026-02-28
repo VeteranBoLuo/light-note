@@ -48,6 +48,7 @@ export default defineStore('bookmark', {
     isShowLogin: false,
     viewerKey: '',
     bookmarkLoading: false,
+    tagLoading: false,
     viewer: {
       src: '',
       options: {},
