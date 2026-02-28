@@ -374,7 +374,6 @@
   .note-card-skeleton {
     height: 300px;
     border: 1px solid #edf2fa;
-    box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
   }
 
   .skeleton-line {
@@ -492,6 +491,7 @@
 
     .note-list-skeleton-item {
       min-height: 88px;
+      border: 1px solid var(--card-border-color);
     }
   }
 
