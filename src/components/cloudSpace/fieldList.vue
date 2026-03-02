@@ -60,13 +60,8 @@
                 @click="downloadField(item.id)"
               />
             </a-tooltip>
-            <a-tooltip :title="$t('cloudSpace.share')" v-if="!bookmark.isMobile">
-              <svg-icon
-                class="download-icon"
-                :src="icon.cloudSpace.share"
-                size="20"
-                @click="handleShareFile(item.id, item.fileName, item.fileType)"
-              />
+            <a-tooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
+              <svg-icon class="download-icon" :src="icon.cloudSpace.rename" size="20" @click="handleReName(item)" />
             </a-tooltip>
             <!-- 删除按钮 -->
             <a-tooltip :title="$t('common.delete')">
@@ -76,7 +71,11 @@
               v-if="!bookmark.isMobile"
               :trigger="'click'"
               :menu-options="[
-                { label: $t('common.reName'), icon: icon.filterPanel.list, function: () => handleReName(item) },
+                {
+                  label: $t('cloudSpace.share'),
+                  icon: icon.cloudSpace.share,
+                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
+                },
                 {
                   label: $t('cloudSpace.moveFile'),
                   icon: icon.cloudSpace.moveFile,
@@ -105,22 +104,28 @@
     </div>
     <b-loading :loading="cloud.loading" class="both-center" />
 
-    <a-modal v-model:open="shareDescVisible" :title="$t('cloudSpace.share')" :footer="null" :width="460">
+    <b-modal
+      v-model:visible="shareDescVisible"
+      :title="$t('cloudSpace.share')"
+      :footer="null"
+      width="450px"
+      :show-footer="false"
+    >
       <div class="share-desc-body">
         <div class="share-desc-tip">可选描述，将展示在分享页</div>
-        <a-textarea
+        <b-input
+          type="textarea"
           v-model:value="shareDescValue"
           :max-length="200"
           :auto-size="{ minRows: 3, maxRows: 6 }"
           placeholder="请输入分享描述（可选）"
         />
         <div class="share-desc-actions">
-          <a-button :loading="shareSubmitting" @click="submitShare(false)">直接分享</a-button>
-          <a-button :loading="shareSubmitting" type="primary" @click="submitShare(true)">分享</a-button>
-          <a-button :disabled="shareSubmitting" @click="closeShareDialog">取消</a-button>
+          <b-button :loading="shareSubmitting" type="primary" @click="submitShare">分享</b-button>
+          <b-button :disabled="shareSubmitting" @click="closeShareDialog">取消</b-button>
         </div>
       </div>
-    </a-modal>
+    </b-modal>
   </div>
 </template>
 <script setup lang="ts">
@@ -307,11 +312,11 @@
     shareDescValue.value = '';
   };
 
-  const submitShare = async (withDesc: boolean) => {
+  const submitShare = async () => {
     if (!shareTarget.value) return;
     try {
       shareSubmitting.value = true;
-      const desc = withDesc ? shareDescValue.value.trim() : '';
+      const desc = shareDescValue.value.trim();
       await shareField(shareTarget.value.id, shareTarget.value.fileName, shareTarget.value.fileType, desc);
       shareDescVisible.value = false;
       shareTarget.value = null;

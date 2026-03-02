@@ -529,24 +529,31 @@
   .tox-collection__item-label {
     h1 {
       font-size: 17px !important;
+      background-color: transparent !important;
     }
     h2 {
       font-size: 16px !important;
+      background-color: transparent !important;
     }
     h3 {
       font-size: 15px !important;
+      background-color: transparent !important;
     }
     h4 {
       font-size: 14px !important;
+      background-color: transparent !important;
     }
     h5 {
       font-size: 13px !important;
+      background-color: transparent !important;
     }
     h6 {
       font-size: 12px !important;
+      background-color: transparent !important;
     }
     p {
       font-size: 11px !important;
+      background-color: transparent !important;
     }
     pre {
       color: var(--text-color) !important;

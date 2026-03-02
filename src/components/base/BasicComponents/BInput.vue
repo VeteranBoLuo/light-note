@@ -139,7 +139,7 @@
     padding: 4px 11px;
     width: 100%;
     box-sizing: border-box;
-    background-color: var(--bl-input-bg-color);
+    background-color: unset !important;
     color: var(--bl-input-color);
     font-family: '微软雅黑 Light', serif;
     &:focus {
