@@ -290,6 +290,7 @@
 
 <style lang="less" scoped>
   .tag-config {
+    width: 60vw;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;

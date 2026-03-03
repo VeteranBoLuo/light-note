@@ -1,7 +1,13 @@
 <template>
   <WorkbenchesCard :title="title" style="height: 100%">
-    <BTable :data="tableData" :columns="columns" style="height: calc(100% - 40px)"
-      ><template #bodyCell="{ column, text, record, index }">
+    <BTable
+      :data="tableData"
+      :columns="columns"
+      :rowClickable="rowClickable"
+      style="height: 100%"
+      @rowClick="(record, index) => emit('rowClick', record, index)"
+    >
+      <template #bodyCell="{ column, index }">
         <template v-if="column.key === 'index'">
           <template v-if="index === 0">
             <svg-icon :src="icon.workbenches.first" />
@@ -12,16 +18,19 @@
           <template v-if="index === 2">
             <svg-icon :src="icon.workbenches.third" />
           </template>
-        </template> </template
-    ></BTable>
+        </template>
+      </template>
+    </BTable>
   </WorkbenchesCard>
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, ref } from 'vue';
+  import { PropType } from 'vue';
   import WorkbenchesCard from '@/components/workbenches/WorkbenchesCard.vue';
-  import { apiBasePost } from '@/http/request.ts';
+  import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import icon from '@/config/icon.ts';
+
+  const emit = defineEmits(['rowClick']);
 
   defineProps({
     tableData: {
@@ -33,12 +42,14 @@
       default: '常用书签',
     },
     columns: {
-      type: Array,
+      type: Array as PropType<Column[]>,
       default: () => [],
     },
+    rowClickable: {
+      type: Boolean,
+      default: false,
+    },
   });
-
-  onMounted(() => {});
 </script>
 
 <style lang="less" scoped>
@@ -58,5 +69,9 @@
   }
   :deep(.table-header) {
     flex-shrink: 0;
+  }
+
+  :deep(.table-row.is-clickable) {
+    cursor: pointer;
   }
 </style>

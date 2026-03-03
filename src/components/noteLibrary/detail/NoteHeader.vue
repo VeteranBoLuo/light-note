@@ -24,12 +24,12 @@
       </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
-      <a-tooltip :title="$t('noteDetail.tags')">
+      <a-tooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
         <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
         </div>
       </a-tooltip>
-      <a-tooltip :title="$t('noteDetail.export')">
+      <a-tooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
         <div class="note-header-title-icon" @click="openExportModal" v-click-log="OPERATION_LOG_MAP.note.exportPdf">
           <SvgIcon :src="icon.noteDetail.export" />
         </div>

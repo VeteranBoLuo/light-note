@@ -24,6 +24,13 @@
       <div class="navigation-tab flex-align-center" style="gap: 30px; width: max-content">
         <template v-if="navigationFucVisible">
           <div
+            :style="{ color: route.path.includes('/workbenches') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.work"
+            @click="router.push('/workbenches')"
+            >{{ $t('navigation.workbench') }}</div
+          >
+          <div
             :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"

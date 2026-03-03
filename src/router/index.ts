@@ -10,7 +10,7 @@ import phoneRouter from '@/router/modules/phone';
 import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
-// import workbenchesRouter from '@/router/modules/workbenches.ts';
+import workbenchesRouter from '@/router/modules/workbenches.ts';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -23,7 +23,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/view/index.vue'),
     // 放入此处的有顶部导航栏
     children: [
-      // workbenchesRouter,
+      workbenchesRouter,
       mainPageRouter,
       ...commonRouter,
       ...adminRouter,

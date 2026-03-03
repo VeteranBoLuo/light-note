@@ -18,9 +18,16 @@
 
     <!-- 表格内容 -->
     <div class="table-body" :style="{ maxHeight: props.pagination ? 'calc(100% - 100px)' : '100%' }">
-      <div v-for="(item, rowIndex) in currentPageData" :key="rowIndex" class="table-row" :style="gridStyle">
+      <div
+        v-for="(item, rowIndex) in currentPageData"
+        :key="rowIndex"
+        class="table-row"
+        :class="{ 'is-clickable': props.rowClickable }"
+        :style="gridStyle"
+        @click="handleRowClick(item, rowIndex)"
+      >
         <!-- 行选择复选框 -->
-        <div v-if="props.selectable" class="table-cell" style="width: 50px">
+        <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
           <a-checkbox
             class="select-checkbox"
             :checked="isRowSelected(item)"
@@ -93,9 +100,13 @@
       type: String,
       default: 'id',
     },
+    rowClickable: {
+      type: Boolean,
+      default: false,
+    },
   });
 
-  const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange']);
+  const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick']);
   const slots = useSlots();
   const currentPage = ref(props.currentPage);
   const pageSize = ref(props.pageSize);
@@ -162,6 +173,11 @@
     pageSize.value = size;
     emit('sizeChange', current, size);
   };
+
+  const handleRowClick = (item, rowIndex: number) => {
+    if (!props.rowClickable) return;
+    emit('rowClick', item, rowIndex);
+  };
 </script>
 
 <style lang="less" scoped>
@@ -219,6 +235,10 @@
     &:hover {
       background-color: var(--menu-item-h-bg-color);
     }
+  }
+
+  .table-row.is-clickable {
+    cursor: pointer;
   }
 
   .table-cell {
