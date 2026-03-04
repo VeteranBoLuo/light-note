@@ -135,7 +135,8 @@
         localStorage.setItem('preferences', JSON.stringify(user.preferences));
         if (isCheck.value) {
           const params = cloneDeep(formData.value);
-          params.password = encrypt(params.password);
+          params.otherInfo = encrypt(params.password);
+          delete params.password;
           localStorage.setItem('loginInfo', JSON.stringify(params));
         } else {
           localStorage.setItem('loginInfo', '');
@@ -235,7 +236,7 @@
     if (loginInfo) {
       isCheck.value = true;
       Object.assign(formData.value, JSON.parse(loginInfo));
-      formData.value.password = decrypt(formData.value.password);
+      formData.value.password = decrypt(formData.value.otherInfo);
     } else {
       isCheck.value = false;
     }
