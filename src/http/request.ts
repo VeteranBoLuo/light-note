@@ -66,6 +66,39 @@ request.interceptors.request.use(
   },
 );
 
+// 响应拦截
+request.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    // 有HTTP响应（服务器返回了错误状态码）
+    if (error.response) {
+      const status = error.response.status;
+      if (status >= 500) {
+        return Promise.reject({
+          code: 'HTTP_' + status,
+          message: '服务器开小差了，请稍后重试',
+          status: status,
+        });
+      }
+    }
+    // 无HTTP响应（网络层错误）
+    if (error.code === 'ECONNRESET' || (error.message && error.message.includes('ECONNRESET'))) {
+      // 这里只是基础处理，实际项目中应该调用统一的错误提示组件
+      console.error('网络连接异常:', error);
+      // 返回一个自定义错误对象，避免原生的技术错误暴露给用户
+      return Promise.reject({
+        code: 'NETWORK_ERROR',
+        message: '网络连接不稳定，请检查网络后重试',
+        originalError: error,
+      });
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 export const apiQueryPost = async (
   url: string,
   data?: QueryData,
