@@ -10,7 +10,6 @@
         :note="note"
         @del="delNote"
         @save="clickSaveNote"
-        @saveTag="clickSaveNote"
       />
       <div class="note-body">
         <Catalog class="catalog-panel" :content="note.content" />

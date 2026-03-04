@@ -108,6 +108,8 @@ export default {
       tagLibrary: 'Tag Library',
       newTag: 'New Tag',
       editTag: 'Edit Tag',
+      editing: 'Editing',
+      creating: 'Creating',
       tagSearch: 'Search Tag',
       name: 'Name',
       nameRequired: 'Name is required, within 20 characters',
@@ -131,6 +133,9 @@ export default {
       nameEmpty: 'Name cannot be empty',
       nameTooLong: 'Name must be within 20 characters',
       nameExists: 'Tag name already exists',
+      clearEdit: 'Clear Edit',
+      clearCurrentInput: 'Clear current input',
+      addToPending: 'Add to Pending',
     },
   },
   noteDetail: {

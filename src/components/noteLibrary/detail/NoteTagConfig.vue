@@ -11,18 +11,20 @@
         <div class="panel-header">
           <div class="title">
             {{ editingTag?.id ? $t('note.tagConfig.editTag') : $t('note.tagConfig.newTag') }}
-            <span class="mode-badge">{{ editingTag?.id ? '编辑中' : '创建中' }}</span>
+            <span class="mode-badge">{{
+              editingTag?.id ? t('note.tagConfig.editing') : t('note.tagConfig.creating')
+            }}</span>
           </div>
           <div class="header-actions">
-            <b-button title="清空当前输入" size="small" @click="startCreate">清空编辑</b-button>
+            <b-button :title="t('note.tagConfig.clearCurrentInput')" size="small" @click="startCreate">{{
+              t('note.tagConfig.clearEdit')
+            }}</b-button>
           </div>
         </div>
         <div class="form-item">
           <b-input v-model:value="form.name" :maxlength="20" :placeholder="$t('note.tagConfig.name')" />
         </div>
-        <div class="form-item single-line"
-          >{{ $t('note.tagConfig.nameRequired') }}（保存后进入标签库，可在右侧选择加入待选）)
-        </div>
+        <div class="form-item single-line">{{ $t('note.tagConfig.nameRequired') }} </div>
         <div class="form-actions">
           <b-button type="primary" :loading="saving" @click="submitTag">{{ $t('note.tagConfig.save') }}</b-button>
           <b-button v-if="editingTag?.id" :danger="true" @click="handleDelete(editingTag.id)">{{
@@ -37,7 +39,6 @@
             <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
           </div>
         </div>
-        <div class="panel-subtitle">选择标签将加入待选列表，最终绑定请点击右上角保存。</div>
         <div class="tag-list" v-if="filteredTags.length">
           <div
             v-for="tag in filteredTags"
@@ -53,7 +54,7 @@
               </div>
             </div>
             <div class="tag-meta">
-              <b-button size="small" @click.stop="bindTag(tag)">加入待选</b-button>
+              <b-button size="small" @click.stop="bindTag(tag)">{{ t('note.tagConfig.addToPending') }}</b-button>
             </div>
           </div>
         </div>
@@ -290,7 +291,7 @@
 
 <style lang="less" scoped>
   .tag-config {
-    width: 60vw;
+    width: 65vw;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;

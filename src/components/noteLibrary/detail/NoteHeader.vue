@@ -22,6 +22,10 @@
       <div v-else style="color: #c0c0c0; font-size: 12px" :style="{ marginLeft: bookmark.isMobile ? '20px' : '0' }">
         <span>{{ $t('noteDetail.saving') }}</span>
       </div>
+      <!--标签-->
+      <div class="inline-note-tags" v-if="visibleTags.length">
+        <span class="inline-note-tag" v-for="tag in visibleTags" :key="`${tag.id ?? tag.name}`">{{ tag.name }}</span>
+      </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
       <a-tooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
@@ -45,7 +49,7 @@
         </div>
       </a-tooltip>
     </div>
-    <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" />
+    <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="handleTagSaved" />
     <ActionCardModal
       v-model:visible="exportModalVisible"
       :title="$t('noteDetail.exportNote')"
@@ -69,6 +73,8 @@
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';
+  import { apiBasePost } from '@/http/request.ts';
+  import { watch } from 'vue';
 
   const props = defineProps<{
     updateTime: string;
@@ -79,6 +85,7 @@
   }>();
 
   const { t } = useI18n();
+  const emit = defineEmits(['focusout', 'del', 'save']);
 
   const bookmark = bookmarkStore();
 
@@ -136,6 +143,66 @@
     exportModalVisible.value = true;
   };
 
+  const headerTags = ref<any[]>([]);
+
+  function normalizeTags(raw: any) {
+    if (!raw) return [];
+    let source = raw;
+    if (typeof source === 'string') {
+      try {
+        source = JSON.parse(source);
+      } catch {
+        return [];
+      }
+    }
+    if (!Array.isArray(source)) return [];
+    return source
+      .map((item) => {
+        if (item && typeof item === 'object' && item.name) {
+          return { id: item.id, name: item.name };
+        }
+        if (typeof item === 'string') {
+          return { id: item, name: item };
+        }
+        return null;
+      })
+      .filter((item) => item && item.name);
+  }
+
+  async function fetchNoteTags() {
+    if (!props.note?.id) {
+      headerTags.value = [];
+      return;
+    }
+    try {
+      const res = await apiBasePost('/api/note/getNoteTags', { id: props.note.id });
+      if (res.status === 200 && Array.isArray(res.data)) {
+        headerTags.value = normalizeTags(res.data);
+      }
+    } catch (error) {
+      console.warn('fetch note tags failed', error);
+    }
+  }
+
+  function handleTagSaved() {
+    fetchNoteTags();
+  }
+
+  const visibleTags = computed(() => {
+    if (headerTags.value.length) {
+      return headerTags.value;
+    }
+    return normalizeTags(props.note?.tags || props.note?.tagList);
+  });
+
+  watch(
+    () => props.note?.id,
+    () => {
+      fetchNoteTags();
+    },
+    { immediate: true },
+  );
+
   const exportToPDF = async () => {
     Alert.alert({
       title: t('alertTitle'),
@@ -166,11 +233,11 @@
 
   const exportToMarkdown = async () => {
     Alert.alert({
-      title: $t('alertTitle'),
-      content: $t('noteDetail.confirmExportMd'),
+      title: t('alertTitle'),
+      content: t('noteDetail.confirmExportMd'),
       async onOk() {
         exportModalVisible.value = false;
-        const title = props.note.title || $t('noteDetail.unnamedDoc');
+        const title = props.note.title || t('noteDetail.unnamedDoc');
         const safeFileName = `${title}.md`;
         const body = props.note.content || '';
         let markdownBody = '';
@@ -264,5 +331,32 @@
     &:hover {
       border-color: var(--primary-color);
     }
+  }
+
+  .inline-note-tags {
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 320px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+  }
+
+  .inline-note-tag {
+    background-color: var(--common-tag-bg-color);
+    border: 1px solid var(--card-border-color);
+    padding: 1px 6px;
+    max-width: 80px;
+    text-align: left;
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--desc-color);
+    cursor: default;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.9;
   }
 </style>

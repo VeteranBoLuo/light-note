@@ -90,9 +90,10 @@
     box-sizing: border-box;
     cursor: pointer;
     position: relative;
-    transition: border-color 0.1s;
+    transition:
+      border-color 0.1s,
+      box-shadow 0.1s;
     &:hover {
-      box-shadow: 0 6px 6px rgba(59, 130, 246, 0.5);
       border: 2px solid var(--primary-h-color);
     }
   }

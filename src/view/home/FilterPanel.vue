@@ -234,7 +234,7 @@
     position: relative;
     overflow: hidden;
     background: var(--background-color);
-    border: 2px solid var(--card-border-color);
+    box-shadow: var(--ant-table-boxShadow);
   }
 
   .skeleton-input {

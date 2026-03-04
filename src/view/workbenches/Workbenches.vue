@@ -1,8 +1,10 @@
 <template>
   <div class="workbenches-container">
     <div class="workbench-header">
-      <div class="title">{{ t('workbench.title') }}</div>
-      <div class="subtitle">{{ t('workbench.subtitle') }}</div>
+      <div class="title">{{ t('workbench.title', '工作台') }}</div>
+      <div class="subtitle">{{
+        t('workbench.subtitle', '聚合查看书签、笔记、文件与标签状态，快速完成常用操作。')
+      }}</div>
     </div>
 
     <div class="summary-grid">
@@ -40,7 +42,7 @@
 
     <div class="insight-grid">
       <div class="panel-card activity-panel">
-        <div class="panel-title">{{ t('workbench.panel.weeklyActive') }}</div>
+        <div class="panel-title">{{ t('workbench.panel.weeklyActive', '最近 7 天活跃') }}</div>
         <div v-if="activityLoading" class="activity-grid">
           <div class="activity-item activity-skeleton-item" v-for="n in 3" :key="`activity-skeleton-${n}`">
             <div class="sk-line sk-label"></div>
@@ -49,22 +51,22 @@
         </div>
         <div v-else class="activity-grid">
           <div class="activity-item">
-            <div class="activity-label">{{ t('workbench.panel.newBookmarks') }}</div>
+            <div class="activity-label">{{ t('workbench.panel.newBookmarks', '新增书签') }}</div>
             <div class="activity-value">{{ weeklyStats.bookmark }}</div>
           </div>
           <div class="activity-item">
-            <div class="activity-label">{{ t('workbench.panel.updatedNotes') }}</div>
+            <div class="activity-label">{{ t('workbench.panel.updatedNotes', '更新笔记') }}</div>
             <div class="activity-value">{{ weeklyStats.note }}</div>
           </div>
           <div class="activity-item">
-            <div class="activity-label">{{ t('workbench.panel.uploadedFiles') }}</div>
+            <div class="activity-label">{{ t('workbench.panel.uploadedFiles', '上传文件') }}</div>
             <div class="activity-value">{{ weeklyStats.file }}</div>
           </div>
         </div>
       </div>
 
       <div class="panel-card quick-panel">
-        <div class="panel-title">{{ t('workbench.panel.quickActions') }}</div>
+        <div class="panel-title">{{ t('workbench.panel.quickActions', '快捷操作') }}</div>
         <div v-if="quickActionsLoading" class="quick-action-grid">
           <div class="quick-action-item quick-skeleton-item" v-for="n in 8" :key="`action-skeleton-${n}`">
             <div class="sk-line sk-action-title"></div>
@@ -85,7 +87,7 @@
       </div>
 
       <div class="panel-card update-log-panel">
-        <div class="panel-title">{{ t('workbench.panel.updateLogs') }}</div>
+        <div class="panel-title">{{ t('workbench.panel.updateLogs', '更新日志') }}</div>
         <div v-if="updateLogsLoading" class="update-log-content skeleton-log-content">
           <div class="update-log-list skeleton-log-list">
             <div class="update-log-title" v-for="n in 4" :key="`log-skeleton-${n}`">
@@ -108,15 +110,15 @@
               :class="{ active: activeUpdateLogIndex === index }"
               @click="toggleUpdateLog(index)"
             >
-              <span class="log-label" v-html="log.label || `${t('workbench.logs.update')} ${index + 1}`"></span>
+              <span class="log-label" v-html="log.label || `${t('workbench.logs.update', '更新')} ${index + 1}`"></span>
               <span class="log-time">{{ log.time || '-' }}</span>
             </button>
           </div>
-          <div v-else class="empty-log list-empty">{{ t('workbench.logs.empty') }}</div>
+          <div v-else class="empty-log list-empty">{{ t('workbench.logs.empty', '暂无更新日志') }}</div>
 
           <div class="update-log-detail">
             <template v-if="activeUpdateLog">
-              <div class="detail-title">{{ activeUpdateLog.time || t('workbench.logs.latest') }}</div>
+              <div class="detail-title">{{ activeUpdateLog.time || t('workbench.logs.latest', '最近更新') }}</div>
               <div class="detail-list" v-if="Array.isArray(activeUpdateLog.list) && activeUpdateLog.list.length">
                 <div class="detail-item" v-for="(item, index) in activeUpdateLog.list" :key="`detail-${index}`">
                   <span class="detail-index">{{ Number(index) + 1 }}.</span>
@@ -124,7 +126,7 @@
                 </div>
               </div>
             </template>
-            <div class="empty-log" v-else>{{ t('workbench.logs.clickForDetail') }}</div>
+            <div class="empty-log" v-else>{{ t('workbench.logs.clickForDetail', '点击上方日志标题查看详情') }}</div>
           </div>
         </div>
       </div>
@@ -143,7 +145,7 @@
           :tableData="commonBookmarkTable"
           rowClickable
           @rowClick="handleCommonBookmarkClick"
-          :title="t('workbench.table.frequentBookmarks')"
+          :title="t('workbench.table.frequentBookmarks', '高频书签')"
           :columns="commonBookmarkColumns"
         />
       </div>
@@ -160,7 +162,7 @@
           :tableData="hotTagTable"
           rowClickable
           @rowClick="handleHotTagClick"
-          :title="t('workbench.table.tagHotTop10')"
+          :title="t('workbench.table.tagHotTop10', '标签热度（Top 10）')"
           :columns="hotTagColumns"
         />
       </div>
@@ -179,7 +181,7 @@
           :tableData="recentNoteTable"
           rowClickable
           @rowClick="handleRecentNoteClick"
-          :title="t('workbench.table.recentNotes')"
+          :title="t('workbench.table.recentNotes', '近期笔记')"
           :columns="recentNoteColumns"
         />
       </div>
@@ -193,10 +195,13 @@
         </div>
         <CommonDataTable
           v-else
+          rowClickable
+          @rowClick="handleViewFile"
           :tableData="recentFileTable"
-          :title="t('workbench.table.recentFiles')"
+          :title="t('workbench.table.recentFiles', '近期文件')"
           :columns="recentFileColumns"
         />
+        <FilePreview v-model:visible="fileVisible" :fileInfo="activeFile" @close="fileVisible = false" />
       </div>
     </div>
 
@@ -211,7 +216,7 @@
         v-else
         :tableData="userStatsData"
         :columns="userStatsColumns"
-        :title="t('workbench.table.userStats')"
+        :title="t('workbench.table.userStats', '用户统计')"
       />
     </div>
   </div>
@@ -226,6 +231,7 @@
   import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
+  import FilePreview from '@/components/FilePreview.vue';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
@@ -259,44 +265,48 @@
   const activeUpdateLogIndex = ref<number | null>(null);
   const userStatsData = ref<any[]>([]);
   const userStatsColumns = computed(() => [
-    { title: t('workbench.table.alias'), key: 'alias' },
-    { title: t('workbench.table.email'), key: 'email' },
-    { title: t('workbench.table.password'), key: 'password' },
-    { title: t('workbench.table.lastActiveTime'), key: 'lastActiveTime' },
-    { title: t('workbench.table.registerTime'), key: 'createTime' },
-    { title: t('workbench.table.bookmarkCount'), key: 'bookmarkTotal' },
-    { title: t('workbench.table.tagCount'), key: 'tagTotal' },
-    { title: t('workbench.table.noteCount'), key: 'noteTotal' },
-    { title: t('workbench.table.storageUsedMb'), key: 'storageUsed' },
+    { title: t('workbench.table.alias', '别名'), key: 'alias' },
+    { title: t('workbench.table.email', '邮箱'), key: 'email' },
+    { title: t('workbench.table.password', '密码'), key: 'password' },
+    { title: t('workbench.table.lastActiveTime', '最近活跃时间'), key: 'lastActiveTime' },
+    { title: t('workbench.table.registerTime', '注册时间'), key: 'createTime' },
+    { title: t('workbench.table.bookmarkCount', '书签数'), key: 'bookmarkTotal' },
+    { title: t('workbench.table.tagCount', '标签数'), key: 'tagTotal' },
+    { title: t('workbench.table.noteCount', '笔记数'), key: 'noteTotal' },
+    { title: t('workbench.table.storageUsedMb', '云空间使用量 (MB)'), key: 'storageUsed' },
   ]);
 
   const summaryCards = computed(() => [
     {
       key: 'bookmark',
-      label: t('workbench.summary.bookmarkTotal'),
+      label: t('workbench.summary.bookmarkTotal', '书签总数'),
       value: `${bookmarkList.value.length}`,
-      extra: t('workbench.summary.toBookmarks'),
+      extra: t('workbench.summary.toBookmarks', '点击进入书签页'),
       to: '/home',
     },
     {
       key: 'tag',
-      label: t('workbench.summary.tagTotal'),
+      label: t('workbench.summary.tagTotal', '标签总数'),
       value: `${bookmark.tagList.length}`,
-      extra: t('workbench.summary.toTags'),
+      extra: t('workbench.summary.toTags', '点击进入标签管理'),
       to: '/manage/tagMg',
     },
     {
       key: 'note',
-      label: t('workbench.summary.noteTotal'),
+      label: t('workbench.summary.noteTotal', '笔记总数'),
       value: `${noteList.value.length}`,
-      extra: t('workbench.summary.toNotes'),
+      extra: t('workbench.summary.toNotes', '点击进入笔记库'),
       to: '/noteLibrary',
     },
     {
       key: 'cloud',
-      label: t('workbench.summary.cloudUsage'),
+      label: t('workbench.summary.cloudUsage', '云空间使用'),
       value: `${cloud.usedSpace.toFixed(2)} / ${cloud.maxSpace} MB`,
-      extra: t('workbench.summary.cloudExtra', { percent: storagePercent.value }),
+      extra: t(
+        'workbench.summary.cloudExtra',
+        { percent: storagePercent.value },
+        '当前使用率 {percent}% · 点击进入云空间',
+      ),
       to: '/cloudSpace',
     },
   ]);
@@ -304,78 +314,78 @@
   const quickActions = computed(() => [
     {
       key: 'add-bookmark',
-      label: t('workbench.actions.addBookmark.label'),
-      desc: t('workbench.actions.addBookmark.desc'),
+      label: t('workbench.actions.addBookmark.label', '新增书签'),
+      desc: t('workbench.actions.addBookmark.desc', '快速收藏链接'),
       to: '/manage/editBookmark/add',
     },
     {
       key: 'add-tag',
-      label: t('workbench.actions.addTag.label'),
-      desc: t('workbench.actions.addTag.desc'),
+      label: t('workbench.actions.addTag.label', '新增标签'),
+      desc: t('workbench.actions.addTag.desc', '创建分类标签'),
       to: '/manage/editTag/add',
     },
     {
       key: 'add-note',
-      label: t('workbench.actions.addNote.label'),
-      desc: t('workbench.actions.addNote.desc'),
+      label: t('workbench.actions.addNote.label', '新建笔记'),
+      desc: t('workbench.actions.addNote.desc', '创建空白笔记'),
       to: '/noteLibrary/add',
     },
     {
       key: 'upload-file',
-      label: t('workbench.actions.uploadFile.label'),
-      desc: t('workbench.actions.uploadFile.desc'),
+      label: t('workbench.actions.uploadFile.label', '上传文件'),
+      desc: t('workbench.actions.uploadFile.desc', '进入云空间上传'),
       to: '/cloudSpace',
     },
     {
       key: 'bookmark-mg',
-      label: t('workbench.actions.bookmarkManage.label'),
-      desc: t('workbench.actions.bookmarkManage.desc'),
+      label: t('workbench.actions.bookmarkManage.label', '书签管理'),
+      desc: t('workbench.actions.bookmarkManage.desc', '整理全部书签'),
       to: '/manage/bookmarkMg',
     },
     {
       key: 'tag-mg',
-      label: t('workbench.actions.tagManage.label'),
-      desc: t('workbench.actions.tagManage.desc'),
+      label: t('workbench.actions.tagManage.label', '标签管理'),
+      desc: t('workbench.actions.tagManage.desc', '维护标签体系'),
       to: '/manage/tagMg',
     },
     {
       key: 'note-lib',
-      label: t('workbench.actions.noteLibrary.label'),
-      desc: t('workbench.actions.noteLibrary.desc'),
+      label: t('workbench.actions.noteLibrary.label', '进入笔记库'),
+      desc: t('workbench.actions.noteLibrary.desc', '查看全部笔记'),
       to: '/noteLibrary',
     },
     {
       key: 'update-log',
-      label: t('workbench.actions.updateLogs.label'),
-      desc: t('workbench.actions.updateLogs.desc'),
+      label: t('workbench.actions.updateLogs.label', '更新日志'),
+      desc: t('workbench.actions.updateLogs.desc', '查看最近更新'),
       to: '/updateLogs',
     },
   ]);
 
   const commonBookmarkColumns = computed(() => [
-    { title: t('workbench.table.rank'), key: 'index', width: '70px' },
-    { title: t('workbench.table.bookmark'), key: 'name', width: '300px' },
-    { title: t('workbench.table.visits'), key: 'count' },
+    { title: t('workbench.table.rank', '排名'), key: 'index', width: '70px' },
+    { title: t('workbench.table.bookmark', '书签'), key: 'name', width: '300px' },
+    { title: t('workbench.table.visits', '访问次数'), key: 'count' },
   ]);
 
   const hotTagColumns = computed(() => [
-    { title: t('workbench.table.tag'), key: 'name' },
-    { title: t('workbench.table.relatedBookmarks'), key: 'bookmarkCount', width: '110px' },
-    { title: t('workbench.table.relatedNotes'), key: 'noteCount', width: '110px' },
-    { title: t('workbench.table.totalHeat'), key: 'total', width: '90px' },
+    { title: t('workbench.table.rank', '排名'), key: 'index', width: '70px' },
+    { title: t('workbench.table.tag', '标签'), key: 'name' },
+    { title: t('workbench.table.relatedBookmarks', '关联书签'), key: 'bookmarkCount', width: '110px' },
+    { title: t('workbench.table.relatedNotes', '关联笔记'), key: 'noteCount', width: '110px' },
+    { title: t('workbench.table.totalHeat', '总热度'), key: 'total', width: '90px' },
   ]);
 
   const recentNoteColumns = computed(() => [
-    { title: t('workbench.table.title'), key: 'title' },
-    { title: t('workbench.table.updateTime'), key: 'updateTime', width: '170px' },
-    { title: t('workbench.table.tagCount'), key: 'tagCount', width: '90px' },
+    { title: t('workbench.table.title', '标题'), key: 'title' },
+    { title: t('workbench.table.updateTime', '更新时间'), key: 'updateTime', width: '200px' },
+    { title: t('workbench.table.tagCount', '标签数'), key: 'tagCount', width: '90px' },
   ]);
 
   const recentFileColumns = computed(() => [
-    { title: t('workbench.table.fileName'), key: 'fileName' },
-    { title: t('workbench.table.type'), key: 'fileType', width: '110px' },
-    { title: t('workbench.table.sizeMb'), key: 'fileSizeMB', width: '100px' },
-    { title: t('workbench.table.uploadTime'), key: 'uploadTime', width: '170px' },
+    { title: t('workbench.table.fileName', '文件名'), key: 'fileName' },
+    { title: t('workbench.table.uploadTime', '上传时间'), key: 'uploadTime', width: '200px' },
+    { title: t('workbench.table.sizeMb', '大小(MB)'), key: 'fileSizeMB', width: '100px' },
   ]);
 
   const storagePercent = computed(() => {
@@ -409,7 +419,7 @@
       .slice(0, 10)
       .map((item) => ({
         id: item.id,
-        title: item.title || t('noteDetail.unnamedDoc'),
+        title: item.title || t('noteDetail.unnamedDoc', '未命名文档'),
         updateTime: item.updateTime || item.createTime || '-',
         tagCount: Array.isArray(item.tags) ? item.tags.length : 0,
       }));
@@ -421,9 +431,11 @@
       .slice(0, 10)
       .map((item) => ({
         fileName: item.fileName,
-        fileType: item.fileType?.split('/')[0] || t('workbench.table.other'),
+        fileType: item.fileType,
         fileSizeMB: Number(((item.fileSize || 0) / 1024 / 1024).toFixed(2)),
         uploadTime: item.uploadTime || '-',
+        fileUrl: item.fileUrl,
+        id: item.id,
       }));
   });
 
@@ -452,9 +464,10 @@
       });
     });
 
-    return Object.values(hotMap)
+    const res = Object.values(hotMap)
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
+    return res.map((item, index) => ({ ...item, index: index + 1 }));
   });
 
   function handleCommonBookmarkClick(record) {
@@ -479,6 +492,13 @@
       return;
     }
     router.push('/noteLibrary');
+  }
+
+  const fileVisible = ref(false);
+  const activeFile = ref<any>(null);
+  function handleViewFile(file) {
+    activeFile.value = file;
+    fileVisible.value = true;
   }
 
   function toggleUpdateLog(index: number) {
@@ -942,7 +962,7 @@
       linear-gradient(145deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color)),
       linear-gradient(35deg, var(--noteType-hover-bg-color), var(--menu-body-bg-color));
     color: var(--text-color);
-    padding: 8px;
+    padding: 16px;
     text-align: left;
     cursor: pointer;
     box-shadow: var(--ant-table-boxShadow);
@@ -1083,7 +1103,7 @@
     background-color: var(--bl-input-noBorder-bg-color);
     padding: 8px;
     margin-right: -8px; // 让滚动条和标题列表的滚动条对齐
-    flex: 1;
+    flex: 0.6;
     min-height: 0;
     display: flex;
     flex-direction: column;
