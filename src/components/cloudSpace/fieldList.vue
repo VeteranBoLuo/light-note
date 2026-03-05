@@ -36,14 +36,7 @@
           <span v-if="!item.isRename" class="file-label text-hidden" @click="emit('previewFile', item)">{{
             item.fileName
           }}</span>
-          <b-input
-            style="width: 400px"
-            v-else
-            class="edit-file-input"
-            v-model:value="item.fileName"
-            @click.stop
-            @enter="submitReName(item)"
-          >
+          <b-input v-else class="edit-file-input" v-model:value="item.fileName" @click.stop @enter="submitReName(item)">
             <template #suffix>
               <div class="flex-align-center-gap">
                 <svg-icon :src="icon.filterPanel.check" size="18" class="dom-hover" @click="submitReName(item)" />
@@ -393,15 +386,20 @@
       color: var(--desc-color);
       opacity: 0;
       position: absolute;
-      right: 30px;
+      right: 8px;
       gap: 10px;
+      transition: opacity 0.2s;
       div {
         cursor: pointer;
       }
     }
   }
+  .edit-file-input {
+    width: min(400px, calc(100% - 120px));
+  }
   .file-label {
     width: calc(100% - 120px);
+    display: inline-block;
     cursor: pointer;
   }
   .row-checkbox {
@@ -416,6 +414,8 @@
     color: var(--desc-color);
     div {
       flex: 1;
+      min-width: 0;
+      padding-right: 12px;
     }
   }
   .share-desc-body {
@@ -447,7 +447,10 @@
       padding: 0 10px 10px 10px;
     }
     .field-item {
-      padding: 0 10px 10px 10px;
+      padding: 0 10px;
+    }
+    .edit-file-input {
+      width: calc(100% - 92px);
     }
   }
 </style>

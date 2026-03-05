@@ -267,7 +267,7 @@
   const quickActionsLoading = computed(() => loadingBookmarks.value || loadingNotes.value);
   const updateLogsLoading = computed(() => loadingUpdateLogs.value);
   const commonBookmarksLoading = computed(() => loadingCommonBookmarks.value);
-  const hotTagsLoading = computed(() => loadingBookmarks.value || loadingNotes.value);
+  const hotTagsLoading = computed(() => loadingTag.value);
   const recentNotesLoading = computed(() => loadingNotes.value);
   const recentFilesLoading = computed(() => loadingCloud.value);
   const userStatsLoading = computed(() => user.role === 'root' && loadingUserStats.value);
@@ -384,8 +384,7 @@
     { title: t('workbench.table.rank', '排名'), key: 'index', width: '70px' },
     { title: t('workbench.table.tag', '标签'), key: 'name' },
     { title: t('workbench.table.relatedBookmarks', '关联书签'), key: 'bookmarkCount', width: '110px' },
-    { title: t('workbench.table.relatedNotes', '关联笔记'), key: 'noteCount', width: '110px' },
-    { title: t('workbench.table.totalHeat', '总热度'), key: 'total', width: '90px' },
+    { title: t('workbench.table.relatedTags', '相关标签'), key: 'relatedTagNames' },
   ]);
 
   const recentNoteColumns = computed(() => [
@@ -524,31 +523,25 @@
   });
 
   const hotTagTable = computed(() => {
-    const hotMap: Record<
-      string,
-      { id: string; name: string; bookmarkCount: number; noteCount: number; total: number }
-    > = {};
-    bookmarkList.value.forEach((item) => {
-      (item.tagList || []).forEach((tag) => {
-        if (!hotMap[tag.id]) {
-          hotMap[tag.id] = { id: tag.id, name: tag.name, bookmarkCount: 0, noteCount: 0, total: 0 };
-        }
-        hotMap[tag.id].bookmarkCount += 1;
-        hotMap[tag.id].total += 1;
-      });
-    });
-
-    noteList.value.forEach((item) => {
-      (item.tags || []).forEach((tag) => {
-        if (!hotMap[tag.id]) {
-          hotMap[tag.id] = { id: tag.id, name: tag.name, bookmarkCount: 0, noteCount: 0, total: 0 };
-        }
-        hotMap[tag.id].noteCount += 1;
-        hotMap[tag.id].total += 1;
-      });
-    });
-
-    const res = Object.values(hotMap)
+    const tagList = Array.isArray(bookmark.tagList) ? bookmark.tagList : [];
+    const res = tagList
+      .map((tag) => {
+        const bookmarkCount = Array.isArray(tag.bookmarkList) ? tag.bookmarkList.length : 0;
+        const relatedTagCount = Array.isArray(tag.relatedTagList) ? tag.relatedTagList.length : 0;
+        const relatedTagNames = Array.isArray(tag.relatedTagList)
+          ? tag.relatedTagList
+              .map((relatedTag) => relatedTag?.name)
+              .filter((name) => typeof name === 'string' && name)
+              .join('、') || '-'
+          : '-';
+        return {
+          id: tag.id,
+          name: tag.name,
+          bookmarkCount,
+          relatedTagNames,
+          total: bookmarkCount + relatedTagCount,
+        };
+      })
       .sort((a, b) => b.total - a.total)
       .slice(0, 10);
     return res.map((item, index) => ({ ...item, index: index + 1 }));

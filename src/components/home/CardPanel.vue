@@ -27,7 +27,7 @@
     :forceFallback="true"
     :delay="50"
   >
-    <div v-for="item in getBookList">
+    <div v-for="item in getBookList" :key="item.id">
       <RightMenu :menu="[$t('common.edit'), $t('common.delete')]" @select="rightMenuClick($event, item)">
         <TagCard :cardInfo="item" />
       </RightMenu>
@@ -53,7 +53,7 @@
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
   });
-  const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 56));
+  const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
 
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签${item.name}` });
@@ -98,17 +98,18 @@
 
 <style lang="less" scoped>
   .card-panel {
-    margin-top: 20px;
+    margin-top: 16px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    padding: 0 20px;
-    gap: 30px;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    padding: 0 16px;
+    gap: 20px;
+    align-content: start;
   }
   .skeleton-panel {
-    margin-top: 20px;
+    margin-top: 16px;
   }
   .card-skeleton {
-    border: 2px solid var(--card-border-color);
+    border: 1px solid var(--card-border-color);
     height: 150px;
     border-radius: 1rem;
     padding: 14px;
@@ -116,6 +117,7 @@
     background: var(--background-color);
     position: relative;
     overflow: hidden;
+    box-shadow: var(--ant-table-boxShadow);
   }
   .card-skeleton::after {
     content: '';
@@ -137,12 +139,12 @@
     width: 24px;
     height: 24px;
     border-radius: 8px;
-    background: rgba(120, 120, 120, 0.2);
+    background: var(--common-tag-bg-color);
   }
   .skeleton-line {
     height: 10px;
     border-radius: 6px;
-    background: rgba(120, 120, 120, 0.18);
+    background: var(--btn-h-bg-color);
     margin-bottom: 8px;
   }
   .skeleton-line.short {
@@ -159,7 +161,15 @@
     width: 50px;
     height: 16px;
     border-radius: 8px;
-    background: rgba(120, 120, 120, 0.18);
+    background: var(--btn-h-bg-color);
+  }
+  :global(body.drag-active) {
+    .card-panel {
+      cursor: grabbing;
+    }
+  }
+  .card-panel > div {
+    min-width: 0;
   }
   @keyframes skeleton-shine {
     0% {
@@ -169,9 +179,19 @@
       left: 120%;
     }
   }
+  @media (max-width: 1200px) {
+    .card-panel {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      padding: 0 12px;
+    }
+  }
   @media (max-width: 1000px) {
     .card-panel {
       justify-content: center;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 14px;
+      padding: 0 20px;
     }
   }
   .panel-loading {

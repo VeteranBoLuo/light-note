@@ -77,7 +77,7 @@ export default {
       visits: '访问次数',
       tag: '标签',
       relatedBookmarks: '关联书签',
-      relatedNotes: '关联笔记',
+      relatedTags: '相关标签',
       totalHeat: '总热度',
       title: '标题',
       updateTime: '更新时间',

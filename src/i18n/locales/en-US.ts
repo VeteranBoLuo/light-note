@@ -78,7 +78,7 @@ export default {
       visits: 'Visits',
       tag: 'Tag',
       relatedBookmarks: 'Related Bookmarks',
-      relatedNotes: 'Related Notes',
+      relatedTags: 'Related Tags',
       totalHeat: 'Total Heat',
       title: 'Title',
       updateTime: 'Updated At',

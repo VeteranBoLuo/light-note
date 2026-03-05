@@ -83,18 +83,25 @@
 
 <style lang="less">
   .card-body {
-    border: 2px solid var(--card-border-color);
+    border: 1px solid var(--card-border-color);
     height: 150px;
     border-radius: 1rem;
     padding: 14px;
     box-sizing: border-box;
     cursor: pointer;
     position: relative;
+    background-color: var(--background-color);
     transition:
-      border-color 0.1s,
-      box-shadow 0.1s;
+      border-color 0.2s,
+      box-shadow 0.2s,
+      transform 0.2s;
     &:hover {
-      border: 2px solid var(--primary-h-color);
+      border-color: var(--primary-h-color);
+      box-shadow: var(--ant-table-boxShadow);
+      transform: translateY(-2px);
+    }
+    &:active {
+      transform: translateY(0);
     }
   }
 
@@ -118,7 +125,8 @@
     align-items: center;
     justify-content: center;
     padding: 0.125rem;
-    background-color: rgb(255, 255, 255);
+    background-color: var(--common-tag-bg-color);
+    border: 1px solid var(--card-border-color);
     border-radius: 0.5rem;
     flex-shrink: 0;
     cursor: move;
@@ -129,9 +137,10 @@
     overflow: hidden;
     width: 100%;
     font-size: 12px;
+    line-height: 1.5;
     color: var(--desc-color);
-    margin-top: 8px;
-    height: 50px;
+    margin-top: 10px;
+    height: 54px;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3; /* 显示的行数，根据需要调整 */
@@ -143,6 +152,8 @@
     bottom: 14px;
     display: flex;
     gap: 8px;
+    max-width: calc(100% - 28px);
+    overflow: hidden;
   }
 
   @media (max-width: 1023px) {
@@ -150,13 +161,14 @@
       height: 140px;
       &:hover {
         box-shadow: none; /* 移除 :hover 状态下的阴影 */
-        border: 2px solid var(--card-border-color);
+        border: 1px solid var(--card-border-color);
+        transform: none;
       }
     }
 
     .card-title {
       .card-title-text {
-        width: 280px;
+        width: calc(100% - 44px);
       }
     }
 
