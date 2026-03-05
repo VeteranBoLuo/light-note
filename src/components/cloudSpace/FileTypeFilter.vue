@@ -47,6 +47,7 @@
     { value: 'excel', label: t('cloudSpace.excel') },
     { value: 'audio', label: t('cloudSpace.audio') },
     { value: 'video', label: t('cloudSpace.video') },
+    { value: 'compress', label: t('cloudSpace.compress') },
     { value: 'other', label: t('cloudSpace.other') },
   ]);
   const cloud = cloudSpaceStore();

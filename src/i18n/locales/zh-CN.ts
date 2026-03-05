@@ -190,6 +190,7 @@ export default {
     excel: 'Excel',
     audio: '音频',
     video: '视频',
+    compress: '压缩包',
     other: '其他',
     folder: '文件夹',
     fileSize: '文件大小',

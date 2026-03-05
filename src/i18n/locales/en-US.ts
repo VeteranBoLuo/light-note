@@ -192,6 +192,7 @@ export default {
     excel: 'Excel',
     audio: 'Audio',
     video: 'Video',
+    compress: 'Compress',
     other: 'Other',
     folder: 'Folder',
     fileSize: 'File Size',
