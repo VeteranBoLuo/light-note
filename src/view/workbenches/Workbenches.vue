@@ -1400,11 +1400,6 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.14);
     box-sizing: border-box;
     overflow: hidden;
-
-    > * {
-      position: relative;
-      z-index: 1;
-    }
   }
 
   .table-card {
