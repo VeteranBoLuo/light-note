@@ -64,15 +64,47 @@
     height: 100%;
     display: flex;
     flex-direction: column;
+    border-radius: 10px;
+    overflow: hidden;
   }
   :deep(.table-body) {
-    gap: 0;
+    gap: 6px;
     flex: 1;
     overflow-y: auto;
     max-height: none;
+    padding: 2px;
   }
   :deep(.table-header) {
     flex-shrink: 0;
+    height: 38px;
+    border-radius: 9px;
+    background: linear-gradient(180deg, var(--workbench-table-header-bg), transparent 190%);
+    border: 1px solid var(--workbench-table-inner-border);
+    padding: 0 10px;
+  }
+
+  :deep(.header-cell) {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--desc-color);
+  }
+
+  :deep(.table-row) {
+    height: 38px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  :deep(.table-cell) {
+    font-size: 13px;
+  }
+
+  :deep(.table-row:hover) {
+    background-color: var(--workbench-table-row-hover-bg);
+    border-color: var(--workbench-table-row-hover-border);
   }
 
   :deep(.table-row.is-clickable) {

@@ -23,8 +23,9 @@
   .workbenches-card {
     position: relative;
     padding: 10px;
-    box-shadow: var(--ant-table-boxShadow);
-    background-color: var(--menu-body-bg-color);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    background: linear-gradient(160deg, var(--workbench-table-inner-bg-start), var(--workbench-table-inner-bg-end));
+    border: 1px solid var(--workbench-table-inner-border);
     color: var(--text-color);
     height: 100%;
     width: 100%;
@@ -38,6 +39,8 @@
 
   .card-header {
     flex-shrink: 0;
+    padding: 0 2px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--workbench-table-inner-border) 72%, transparent);
   }
 
   .card-title {
@@ -79,5 +82,6 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+    padding-top: 2px;
   }
 </style>
