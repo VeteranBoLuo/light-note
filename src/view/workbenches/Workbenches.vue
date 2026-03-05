@@ -25,7 +25,7 @@
         v-else
         v-for="item in summaryCards"
         :key="item.key"
-        class="summary-card dom-hover"
+        :class="['summary-card', 'dom-hover', `summary-card--${item.key}`]"
         @click="router.push(item.to)"
       >
         <div class="summary-top">
@@ -132,6 +132,13 @@
       </div>
     </div>
 
+    <WorkbenchCharts
+      :loading="activityLoading"
+      :themeKey="user.preferences?.theme || 'day'"
+      :trendData="trendChartData"
+      :fileTypeData="fileTypeChartData"
+    />
+
     <div class="table-grid">
       <div class="table-card">
         <div v-if="commonBookmarksLoading" class="table-skeleton">
@@ -143,6 +150,7 @@
         <CommonDataTable
           v-else
           :tableData="commonBookmarkTable"
+          titleType="bookmark"
           rowClickable
           @rowClick="handleCommonBookmarkClick"
           :title="t('workbench.table.frequentBookmarks', '高频书签')"
@@ -160,6 +168,7 @@
         <CommonDataTable
           v-else
           :tableData="hotTagTable"
+          titleType="tag"
           rowClickable
           @rowClick="handleHotTagClick"
           :title="t('workbench.table.tagHotTop10', '标签热度（Top 10）')"
@@ -179,6 +188,7 @@
         <CommonDataTable
           v-else
           :tableData="recentNoteTable"
+          titleType="note"
           rowClickable
           @rowClick="handleRecentNoteClick"
           :title="t('workbench.table.recentNotes', '近期笔记')"
@@ -195,6 +205,7 @@
         </div>
         <CommonDataTable
           v-else
+          titleType="file"
           rowClickable
           @rowClick="handleViewFile"
           :tableData="recentFileTable"
@@ -232,6 +243,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import FilePreview from '@/components/FilePreview.vue';
+  import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
@@ -391,6 +403,78 @@
   const storagePercent = computed(() => {
     if (!cloud.maxSpace) return 0;
     return Math.min(100, Number(((cloud.usedSpace / cloud.maxSpace) * 100).toFixed(1)));
+  });
+
+  const trendChartData = computed(() => {
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const current = new Date();
+      current.setHours(0, 0, 0, 0);
+      current.setDate(current.getDate() - (6 - index));
+      return current;
+    });
+
+    const dayLabel = (date: Date) => {
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${month}-${day}`;
+    };
+
+    const dateCount = (items: any[], dateField: string) => {
+      const map: Record<string, number> = {};
+      days.forEach((date) => {
+        map[dayLabel(date)] = 0;
+      });
+      items.forEach((item) => {
+        const raw = item?.[dateField];
+        if (!raw) return;
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return;
+        const key = dayLabel(date);
+        if (Object.prototype.hasOwnProperty.call(map, key)) {
+          map[key] += 1;
+        }
+      });
+      return map;
+    };
+
+    const bookmarkMap = dateCount(bookmarkList.value, 'createTime');
+    const noteMap = dateCount(noteList.value, 'updateTime');
+    const fileMap = dateCount(cloud.fileList || [], 'uploadTime');
+
+    const data: { date: string; type: string; value: number }[] = [];
+    days.forEach((date) => {
+      const label = dayLabel(date);
+      data.push({ date: label, type: t('workbench.chart.bookmark', '书签'), value: bookmarkMap[label] || 0 });
+      data.push({ date: label, type: t('workbench.chart.note', '笔记'), value: noteMap[label] || 0 });
+      data.push({ date: label, type: t('workbench.chart.file', '文件'), value: fileMap[label] || 0 });
+    });
+
+    return data;
+  });
+
+  const fileTypeChartData = computed(() => {
+    const map: Record<string, number> = {};
+
+    const getType = (item: any) => {
+      const fileType = (item?.fileType || '').toLowerCase();
+      const fileName = (item?.fileName || '').toLowerCase();
+
+      if (fileType.includes('image') || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/.test(fileName)) return '图片';
+      if (fileType.includes('video') || /\.(mp4|avi|mov|wmv|flv|webm)$/.test(fileName)) return '视频';
+      if (fileType.includes('audio') || /\.(mp3|wav|ogg|flac|aac)$/.test(fileName)) return '音频';
+      if (fileType.includes('pdf') || fileName.endsWith('.pdf')) return 'PDF';
+      if (fileType.includes('word') || /\.(doc|docx)$/.test(fileName)) return 'Word';
+      if (fileType.includes('excel') || /\.(xls|xlsx)$/.test(fileName)) return 'Excel';
+      if (fileType.includes('text') || /\.(txt|md|json|xml|csv|log)$/.test(fileName)) return '文本';
+      return '其他';
+    };
+
+    (cloud.fileList || []).forEach((item) => {
+      const type = getType(item);
+      map[type] = (map[type] || 0) + 1;
+    });
+
+    return Object.entries(map).map(([type, value]) => ({ type, value }));
   });
 
   const weeklyStats = computed(() => {
@@ -791,17 +875,57 @@
   }
 
   .summary-card {
+    --summary-accent-start: var(--workbench-accent-bookmark-start);
+    --summary-accent-end: var(--workbench-accent-bookmark-end);
+    position: relative;
     padding: 14px;
     border-radius: 12px;
     box-sizing: border-box;
     cursor: pointer;
-    box-shadow: var(--ant-table-boxShadow);
+    overflow: hidden;
+    box-shadow:
+      0 14px 22px -20px var(--workbench-summary-shadow-color),
+      inset 0 1px 0 var(--workbench-summary-inner-line);
     background:
-      linear-gradient(140deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color)),
-      linear-gradient(30deg, var(--noteType-hover-bg-color), var(--menu-body-bg-color));
+      linear-gradient(180deg, var(--workbench-summary-surface-top), var(--workbench-summary-surface-bottom)),
+      linear-gradient(135deg, transparent 0%, var(--workbench-summary-pattern-color) 100%);
     color: var(--text-color);
-    border: 1px solid var(--bl-input-noBorder-bg-color);
-    transition: transform 0.2s ease;
+    border: 1px solid var(--workbench-summary-border-color);
+    transition:
+      transform 0.2s ease,
+      border-color 0.2s ease;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    &::before {
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--summary-accent-start), var(--summary-accent-end));
+      opacity: 0.96;
+    }
+
+    &::after {
+      width: 120px;
+      height: 120px;
+      right: -44px;
+      bottom: -52px;
+      border-radius: 20px;
+      background: radial-gradient(circle, var(--workbench-summary-pattern-color) 0%, transparent 70%);
+      opacity: 0.75;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
 
     &:hover {
       transform: translateY(-2px);
@@ -823,8 +947,10 @@
       font-size: 12px;
       padding: 2px 8px;
       border-radius: 999px;
-      background: linear-gradient(120deg, var(--noteType-hover-bg-color), var(--bl-input-noBorder-bg-color));
-      color: var(--text-color);
+      background: linear-gradient(120deg, var(--summary-accent-start), var(--summary-accent-end));
+      color: #fff;
+      border: none;
+      box-shadow: none;
     }
 
     .summary-value {
@@ -845,7 +971,7 @@
     .summary-mini-bar {
       height: 100%;
       border-radius: 999px;
-      background-color: var(--noteType-hover-color);
+      background: linear-gradient(90deg, var(--summary-accent-start), var(--summary-accent-end));
     }
 
     .summary-extra {
@@ -853,6 +979,30 @@
       font-size: 12px;
       opacity: 0.65;
     }
+  }
+
+  .summary-card--bookmark {
+    --summary-accent-start: var(--workbench-accent-bookmark-start);
+    --summary-accent-end: var(--workbench-accent-bookmark-end);
+  }
+
+  .summary-card--tag {
+    --summary-accent-start: var(--workbench-accent-tag-start);
+    --summary-accent-end: var(--workbench-accent-tag-end);
+  }
+
+  .summary-card--note {
+    --summary-accent-start: var(--workbench-accent-note-start);
+    --summary-accent-end: var(--workbench-accent-note-end);
+  }
+
+  .summary-card--cloud {
+    --summary-accent-start: var(--workbench-accent-file-start);
+    --summary-accent-end: var(--workbench-accent-file-end);
+  }
+
+  [data-theme='night'] .summary-card::after {
+    opacity: 0.9;
   }
 
   .summary-skeleton {
@@ -872,24 +1022,74 @@
   }
 
   .panel-card {
+    --panel-accent: var(--workbench-insight-activity-accent);
+    position: relative;
     border-radius: 12px;
     padding: 14px;
     box-sizing: border-box;
-    background:
-      linear-gradient(145deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color)),
-      linear-gradient(20deg, var(--noteType-hover-bg-color), var(--menu-body-bg-color));
-    box-shadow: var(--ant-table-boxShadow);
+    background: linear-gradient(160deg, var(--workbench-surface-start), var(--workbench-surface-end));
+    box-shadow:
+      0 14px 26px -20px var(--workbench-shadow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
     color: var(--text-color);
     height: var(--insight-card-height);
-    border: 1px solid var(--bl-input-noBorder-bg-color);
+    border: 1px solid var(--workbench-border-color);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    &::before {
+      width: 180px;
+      height: 180px;
+      right: -92px;
+      top: -96px;
+      border-radius: 999px;
+      background: radial-gradient(circle, color-mix(in srgb, var(--panel-accent) 26%, transparent) 0%, transparent 72%);
+      opacity: 0.95;
+    }
+
+    &::after {
+      left: -56px;
+      bottom: -64px;
+      width: 180px;
+      height: 180px;
+      border-radius: 44px;
+      transform: rotate(-18deg);
+      background: linear-gradient(140deg, var(--workbench-pattern-color), transparent 68%);
+      opacity: 0.9;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
   }
 
   .panel-title {
     font-size: 13px;
-    opacity: 0.8;
+    opacity: 0.9;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    &::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--panel-accent);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--panel-accent) 18%, transparent);
+      flex-shrink: 0;
+    }
   }
 
   .panel-desc {
@@ -910,13 +1110,14 @@
   .activity-item {
     border-radius: 10px;
     padding: 8px;
-    background-color: var(--bl-input-noBorder-bg-color);
-    border: 1px solid var(--menu-body-bg-color);
+    background: linear-gradient(150deg, var(--workbench-subcard-bg), transparent 160%);
+    border: 1px solid var(--workbench-subcard-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex: 1;
     min-height: 0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   .activity-label {
@@ -956,29 +1157,32 @@
     gap: 2px;
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--bl-input-noBorder-bg-color);
+    border: 1px solid var(--workbench-subcard-border);
     border-radius: 10px;
-    background:
-      linear-gradient(145deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color)),
-      linear-gradient(35deg, var(--noteType-hover-bg-color), var(--menu-body-bg-color));
+    background: linear-gradient(145deg, var(--workbench-subcard-bg), transparent 140%);
     color: var(--text-color);
     padding: 16px;
     text-align: left;
     cursor: pointer;
-    box-shadow: var(--ant-table-boxShadow);
-    transition: transform 0.2s ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition:
+      transform 0.2s ease,
+      border-color 0.2s ease,
+      background-color 0.2s ease;
     justify-content: center;
     height: 100%;
 
     &:hover {
       transform: translateY(-2px);
-      border-color: var(--noteType-border-color);
+      border-color: color-mix(in srgb, var(--panel-accent) 48%, var(--workbench-subcard-border));
+      background-color: var(--workbench-subcard-hover);
     }
   }
 
   .action-name {
     font-size: 12px;
     font-weight: 600;
+    color: color-mix(in srgb, var(--panel-accent) 66%, var(--text-color));
   }
 
   .action-desc {
@@ -993,20 +1197,18 @@
     overflow: hidden;
   }
 
-  .quick-action-grid {
-    column-gap: 8px;
-    row-gap: 8px;
-  }
-
   .quick-panel {
+    --panel-accent: var(--workbench-insight-quick-accent);
     height: var(--insight-card-height);
   }
 
   .activity-panel {
+    --panel-accent: var(--workbench-insight-activity-accent);
     height: var(--insight-card-height);
   }
 
   .update-log-panel {
+    --panel-accent: var(--workbench-insight-log-accent);
     height: var(--insight-card-height);
   }
 
@@ -1036,9 +1238,9 @@
   .update-log-title {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--bl-input-noBorder-bg-color);
+    border: 1px solid var(--workbench-subcard-border);
     border-radius: 8px;
-    background-color: var(--bl-input-noBorder-bg-color);
+    background: linear-gradient(145deg, var(--workbench-subcard-bg), transparent 140%);
     color: var(--text-color);
     text-align: left;
     padding: 7px 9px;
@@ -1047,6 +1249,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    transition:
+      border-color 0.2s ease,
+      background-color 0.2s ease;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--panel-accent) 44%, var(--workbench-subcard-border));
+      background-color: var(--workbench-subcard-hover);
+    }
   }
 
   .table-skeleton {
@@ -1056,8 +1266,8 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background-color: var(--menu-body-bg-color);
-    box-shadow: var(--ant-table-boxShadow);
+    background: linear-gradient(160deg, var(--workbench-subcard-bg), transparent 130%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     box-sizing: border-box;
     overflow: hidden;
   }
@@ -1079,8 +1289,8 @@
   }
 
   .update-log-title.active {
-    border-color: var(--noteType-hover-color);
-    background: linear-gradient(120deg, var(--noteType-hover-bg-color), var(--bl-input-noBorder-bg-color));
+    border-color: var(--workbench-active-border);
+    background: linear-gradient(120deg, var(--workbench-active-bg), var(--workbench-subcard-bg));
   }
 
   .log-label {
@@ -1099,8 +1309,8 @@
 
   .update-log-detail {
     border-radius: 10px;
-    border: 1px solid var(--bl-input-noBorder-bg-color);
-    background-color: var(--bl-input-noBorder-bg-color);
+    border: 1px solid var(--workbench-subcard-border);
+    background: linear-gradient(160deg, var(--workbench-subcard-bg), transparent 120%);
     padding: 8px;
     margin-right: -8px; // 让滚动条和标题列表的滚动条对齐
     flex: 0.6;
@@ -1156,8 +1366,8 @@
     align-items: center;
     justify-content: center;
     border-radius: 10px;
-    border: 1px dashed var(--bl-input-noBorder-bg-color);
-    background-color: var(--bl-input-noBorder-bg-color);
+    border: 1px dashed var(--workbench-table-empty-border);
+    background-color: var(--workbench-table-empty-bg);
   }
 
   @keyframes workbench-skeleton-shine {
@@ -1177,26 +1387,58 @@
     align-items: stretch;
   }
 
-  .table-card {
-    height: 100%;
+  .table-card,
+  .admin-table-card {
+    position: relative;
     min-height: 0;
     border-radius: 12px;
     padding: 8px;
-    background: linear-gradient(150deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color));
-    border: 1px solid var(--bl-input-noBorder-bg-color);
+    background: linear-gradient(160deg, var(--workbench-surface-start), var(--workbench-surface-end));
+    border: 1px solid var(--workbench-border-color);
+    box-shadow:
+      0 14px 26px -22px var(--workbench-shadow-color),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
     box-sizing: border-box;
     overflow: hidden;
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  .table-card {
+    height: 100%;
+
+    &::before {
+      content: '';
+      position: absolute;
+      width: 180px;
+      height: 180px;
+      right: -88px;
+      top: -96px;
+      border-radius: 999px;
+      background: radial-gradient(circle, var(--workbench-pattern-color) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
   }
 
   .admin-table-card {
     height: 380px;
-    min-height: 0;
-    border-radius: 12px;
-    padding: 8px;
-    background: linear-gradient(150deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color));
-    border: 1px solid var(--bl-input-noBorder-bg-color);
-    box-sizing: border-box;
-    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      left: -120px;
+      bottom: -122px;
+      border-radius: 999px;
+      background: radial-gradient(circle, var(--workbench-pattern-color) 0%, transparent 72%);
+      pointer-events: none;
+      z-index: 0;
+    }
   }
 
   @media (max-width: 1200px) {

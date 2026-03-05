@@ -1,5 +1,5 @@
 <template>
-  <WorkbenchesCard :title="title" style="height: 100%">
+  <WorkbenchesCard :title="title" :titleType="titleType" style="height: 100%">
     <BTable
       :data="tableData"
       :columns="columns"
@@ -40,6 +40,10 @@
     title: {
       type: String,
       default: '常用书签',
+    },
+    titleType: {
+      type: String as PropType<'bookmark' | 'tag' | 'note' | 'file' | ''>,
+      default: '',
     },
     columns: {
       type: Array as PropType<Column[]>,

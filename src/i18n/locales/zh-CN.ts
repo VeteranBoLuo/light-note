@@ -58,6 +58,14 @@ export default {
       latest: '最近更新',
       clickForDetail: '点击上方日志标题查看详情',
     },
+    chart: {
+      trend: '近 7 天内容趋势',
+      fileType: '文件类型分布',
+      empty: '暂无数据',
+      bookmark: '书签',
+      note: '笔记',
+      file: '文件',
+    },
     table: {
       frequentBookmarks: '高频书签',
       tagHotTop10: '标签热度（Top 10）',

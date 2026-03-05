@@ -59,6 +59,14 @@ export default {
       latest: 'Latest Update',
       clickForDetail: 'Click a title above to view details',
     },
+    chart: {
+      trend: '7-Day Content Trend',
+      fileType: 'File Type Distribution',
+      empty: 'No Data',
+      bookmark: 'Bookmark',
+      note: 'Note',
+      file: 'File',
+    },
     table: {
       frequentBookmarks: 'Frequent Bookmarks',
       tagHotTop10: 'Tag Popularity (Top 10)',
