@@ -125,8 +125,6 @@
     align-items: center;
     justify-content: center;
     padding: 0.125rem;
-    background-color: var(--common-tag-bg-color);
-    border: 1px solid var(--card-border-color);
     border-radius: 0.5rem;
     flex-shrink: 0;
     cursor: move;
