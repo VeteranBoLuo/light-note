@@ -128,7 +128,7 @@
         </div>
 
         <!-- 9. 不支持预览的文件类型 -->
-        <div v-else-if="previewType === 'unsupported'" class="unsupported-preview">
+        <div v-else-if="unsupportedTypes.includes(previewType)" class="unsupported-preview">
           <div class="unsupported-icon">
             <FileUnknownOutlined />
           </div>
@@ -290,6 +290,17 @@
       'application/x-sh',
       'application/x-bat',
     ],
+    compress: [
+      'application/zip',
+      'application/x-zip-compressed',
+      'application/x-rar-compressed',
+      'application/x-7z-compressed',
+      'application/x-tar',
+      'application/gzip',
+      'application/x-bzip2',
+      'application/x-xz',
+      'application/octet-stream',
+    ],
   };
 
   // 计算预览类型
@@ -328,6 +339,8 @@
 
     return extensionMap[extension] || 'unsupported';
   });
+
+  const unsupportedTypes = ['unsupported', 'compress'];
 
   // 微软Office在线预览URL
   const microsoftOfficeViewerUrl = computed(() => {
@@ -378,7 +391,7 @@
         await loadPdfBlob(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
-      } else if (previewType.value === 'unsupported') {
+      } else if (unsupportedTypes.includes(previewType.value)) {
         loading.value = false;
       }
     } catch (err) {
@@ -616,6 +629,7 @@
       image: '图片',
       video: '视频',
       text: '文本文件',
+      compress: '压缩包',
       'office-online': 'Office在线预览',
       unsupported: '不支持的类型',
     };

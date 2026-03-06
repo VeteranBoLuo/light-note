@@ -33,9 +33,10 @@
             @change="(e: any) => toggleRow(item.id, e.target.checked)"
             class="row-checkbox"
           />
-          <div v-if="!item.isRename" class="file-label text-hidden flex-align-center" @click="emit('previewFile', item)"
-            ><svg-icon :src="icon.cloudSpace.fileIcon[item.type]" size="20" />{{ item.fileName }}</div
-          >
+          <div v-if="!item.isRename" class="file-label flex-align-center" @click="emit('previewFile', item)"
+            ><svg-icon :src="icon.cloudSpace.fileIcon[item.type]" size="20" style="min-width: 20px" />
+            <span style="width: 100%" class="text-hidden">{{ item.fileName }}</span>
+          </div>
           <b-input v-else class="edit-file-input" v-model:value="item.fileName" @click.stop @enter="submitReName(item)">
             <template #suffix>
               <div class="flex-align-center-gap">
@@ -398,7 +399,7 @@
     width: min(400px, calc(100% - 120px));
   }
   .file-label {
-    width: calc(100% - 120px);
+    width: calc(100% - 100px);
     cursor: pointer;
     gap: 5px;
   }
