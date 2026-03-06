@@ -52,6 +52,7 @@
     <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="handleTagSaved" />
     <ActionCardModal
       v-model:visible="exportModalVisible"
+      maskClosable
       :title="$t('noteDetail.exportNote')"
       :sections="exportSections"
       :note="$t('noteDetail.exportNoteDesc')"
@@ -205,18 +206,18 @@
 
   const exportToPDF = async () => {
     Alert.alert({
-      title: t('alertTitle'),
+      title: t('cloudSpace.alertTitle'),
       content: t('noteDetail.confirmExportPdf'),
       async onOk() {
         exportModalVisible.value = false;
-        await generatePDF(props.note.title, '.w-e-text-container [data-slate-editor]');
+        await generatePDF(props.note.title, '.note-editor-body');
       },
     });
   };
 
   const exportToHTML = async () => {
     Alert.alert({
-      title: t('alertTitle'),
+      title: t('cloudSpace.alertTitle'),
       content: t('noteDetail.confirmExportHtml'),
       async onOk() {
         exportModalVisible.value = false;
@@ -233,7 +234,7 @@
 
   const exportToMarkdown = async () => {
     Alert.alert({
-      title: t('alertTitle'),
+      title: t('cloudSpace.alertTitle'),
       content: t('noteDetail.confirmExportMd'),
       async onOk() {
         exportModalVisible.value = false;

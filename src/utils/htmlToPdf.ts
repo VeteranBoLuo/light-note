@@ -76,25 +76,12 @@ export async function generatePDF(title: string, selector: string, options: PDFO
       const ctx = pageCanvas.getContext('2d');
       if (ctx) {
         const sourceY = (renderedHeight / imgHeight) * canvas.height;
-        ctx.drawImage(
-          canvas,
-          0, sourceY, canvas.width, pageCanvas.height,
-          0, 0, pageCanvas.width, pageCanvas.height
-        );
+        ctx.drawImage(canvas, 0, sourceY, canvas.width, pageCanvas.height, 0, 0, pageCanvas.width, pageCanvas.height);
       }
 
       // 添加到 PDF
       const imgData = pageCanvas.toDataURL('image/jpeg', quality);
-      pdf.addImage(
-        imgData,
-        'JPEG',
-        margins,
-        margins,
-        imgWidth,
-        currentPageHeight,
-        undefined,
-        'FAST'
-      );
+      pdf.addImage(imgData, 'JPEG', margins, margins, imgWidth, currentPageHeight, undefined, 'FAST');
 
       renderedHeight += currentPageHeight;
 

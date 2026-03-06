@@ -32,3 +32,4 @@ build/
 .github/workflows/deploy-dev.yml
 
 .github/agents/轻笺助手.agent.md
+docs/

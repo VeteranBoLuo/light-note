@@ -344,6 +344,7 @@ export default {
     howToImportExportBookmarks: 'How to import/export bookmarks?',
     howToUseAIAssistant: 'How to use AI Assistant?',
     howToCustomizeTheme: 'How to customize theme?',
+    workbenchUsage: 'What is the workbench used for?',
     internetSearch: 'Internet Search',
     deepThinking: 'Deep Thinking',
     translation: {

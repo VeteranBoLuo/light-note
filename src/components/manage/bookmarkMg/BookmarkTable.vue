@@ -301,7 +301,7 @@
     if (bookmark.isMobile) {
       router.push('/personCenter');
     } else {
-      router.push('/home');
+      router.back();
     }
   }
   const tableSearchValue = ref('');

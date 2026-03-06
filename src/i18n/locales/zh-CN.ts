@@ -340,6 +340,7 @@ export default {
     howToImportExportBookmarks: '如何导入导出书签？',
     howToUseAIAssistant: '如何使用AI助手？',
     howToCustomizeTheme: '如何自定义主题？',
+    workbenchUsage: '工作台有什么用？',
     internetSearch: '联网搜索',
     deepThinking: '深度思考',
     translation: {

@@ -169,17 +169,17 @@
     {
       label: t('navigation.bookmark'),
       value: user.bookmarkTotal,
-      icon: icon.manage_categoryBtn_bookmark,
+      icon: icon.workbenches.bookmark,
     },
     {
       label: t('navigation.note'),
       value: user.noteTotal,
-      icon: icon.noteDetail.save,
+      icon: icon.workbenches.note,
     },
     {
       label: t('personCenter.storageUsed'),
       value: user.storageUsed,
-      icon: icon.file_upload,
+      icon: icon.storage,
     },
   ]);
 

@@ -1,5 +1,5 @@
 <template>
-  <b-modal v-model:visible="visible" :maskClosable="maskClosable ?? false" :title="title">
+  <b-modal v-model:visible="visible" :maskClosable="maskClosable ?? false" :title="title" :showFooter="false">
     <div class="action-card-modal" :style="{ width: width ?? WIDTH }">
       <div v-for="section in sections" :key="section.key" class="section" :class="section.class">
         <div v-if="section.title" class="section-header">
