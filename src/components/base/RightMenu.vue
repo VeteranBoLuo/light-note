@@ -76,6 +76,8 @@
       if (!bookmark.isDesktop) {
         return;
       }
+      // Prevent nested context-menu wrappers from all opening at once.
+      e.stopPropagation();
       e.preventDefault(); // 阻止浏览器的默认行为
       mouseX.value = e.x;
       mouseY.value = e.y + 5;

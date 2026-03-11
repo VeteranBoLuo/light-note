@@ -11,6 +11,7 @@ import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
+import toolsRouter from '@/router/modules/tools.ts';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -30,6 +31,7 @@ const routes: RouteRecordRaw[] = [
       manageRouter,
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
+      ...toolsRouter,
     ],
   },
   {

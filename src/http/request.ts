@@ -76,6 +76,7 @@ request.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       if (status >= 500) {
+        message.error('服务器开小差了，请稍后重试');
         return Promise.reject({
           code: 'HTTP_' + status,
           message: '服务器开小差了，请稍后重试',

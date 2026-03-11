@@ -7,6 +7,7 @@ export default {
     tag: 'Tag',
     note: 'Note',
     cloudSpace: 'Cloud Space',
+    tools: 'Tools',
     newTag: 'New Tag',
     tagManagement: 'Tag Management',
     newBookmark: 'New Bookmark',

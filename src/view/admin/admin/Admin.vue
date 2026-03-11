@@ -98,9 +98,6 @@
     justify-content: space-between;
     cursor: pointer;
 
-    .person-menu-item-title {
-    }
-
     .person-menu-item-des {
       color: #999fa8;
       font-size: 14px;

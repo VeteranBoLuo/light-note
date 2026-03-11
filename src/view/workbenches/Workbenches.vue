@@ -1102,7 +1102,7 @@
 
   .activity-item {
     border-radius: 10px;
-    padding: 8px;
+    padding: 16px;
     background: linear-gradient(150deg, var(--workbench-subcard-bg), transparent 160%);
     border: 1px solid var(--workbench-subcard-border);
     display: flex;

@@ -21,6 +21,7 @@ export const OPERATION_LOG_MAP = {
     home: '书签模块',
     note: '笔记模块',
     cloudSpace: '云空间模块',
+    tools: '工具模块',
     aiAssistant: 'AI智能助手模块',
   }),
   login: createModule('登录', {
