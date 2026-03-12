@@ -30,6 +30,11 @@
       title: 'JSON编辑器',
       icon: icon.userCenter.sql,
     },
+    {
+      id: 'base64',
+      title: 'Base64编解码',
+      icon: icon.userCenter.operationLog,
+    },
   ]);
 
   const handleNodeClick = (menu: { id: string }) => {
@@ -37,7 +42,9 @@
   };
 
   const syncCheckId = () => {
-    checkId.value = route.path.split('/').pop() || 'jsonEditor';
+    const currentId = route.path.split('/').pop() || 'jsonEditor';
+    const exists = toolOptions.value.some((item) => item.id === currentId);
+    checkId.value = exists ? currentId : 'jsonEditor';
   };
 
   onMounted(() => {
