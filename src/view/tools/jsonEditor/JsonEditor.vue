@@ -15,36 +15,41 @@
     </section>
 
     <section class="workbench">
-      <article class="editor-panel">
-        <div class="panel-title">
-          <span>代码编辑区</span>
-          <small>Ctrl+S 可快速校验</small>
-        </div>
-        <div ref="editorRef" class="code-editor"></div>
-        <div class="panel-foot" :class="{ error: jsonError }">
-          <span>{{ statusText }}</span>
-          <span>字符数：{{ jsonContent.length }}</span>
-        </div>
-      </article>
-
-      <article class="tree-panel">
-        <div class="panel-title">
-          <span>结构树</span>
-          <small>{{ treeSummary }}</small>
-        </div>
-        <div class="tree-scroll">
-          <div v-if="jsonError" class="tree-placeholder">JSON 无法解析，右侧树结构暂停渲染。</div>
-          <div v-else-if="!treeRoot" class="tree-placeholder">请输入 JSON 内容。</div>
-          <JsonTreeNode
-            v-else
-            :node="treeRoot"
-            :level="0"
-            :collapsed-map="collapsedMap"
-            @toggle="toggleNode"
-            @remove="removeNode"
-          />
-        </div>
-      </article>
+      <Splitpanes class="split-workbench" :mobile-breakpoint="1120">
+        <template #first>
+          <article class="editor-panel">
+            <div class="panel-title">
+              <span>代码编辑区</span>
+              <small>Ctrl+S 可快速校验</small>
+            </div>
+            <div ref="editorRef" class="code-editor"></div>
+            <div class="panel-foot" :class="{ error: jsonError }">
+              <span>{{ statusText }}</span>
+              <span>字符数：{{ jsonContent.length }}</span>
+            </div>
+          </article>
+        </template>
+        <template #second>
+          <article class="tree-panel">
+            <div class="panel-title">
+              <span>结构树</span>
+              <small>{{ treeSummary }}</small>
+            </div>
+            <div class="tree-scroll">
+              <div v-if="jsonError" class="tree-placeholder">JSON 无法解析，右侧树结构暂停渲染。</div>
+              <div v-else-if="!treeRoot" class="tree-placeholder">请输入 JSON 内容。</div>
+              <JsonTreeNode
+                v-else
+                :node="treeRoot"
+                :level="0"
+                :collapsed-map="collapsedMap"
+                @toggle="toggleNode"
+                @remove="removeNode"
+              />
+            </div>
+          </article>
+        </template>
+      </Splitpanes>
     </section>
   </div>
 </template>
@@ -58,6 +63,7 @@
   import { oneDark } from '@codemirror/theme-one-dark';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import JsonTreeNode from './JsonTreeNode.vue';
+  import Splitpanes from '@/components/base/Splitpanes.vue';
 
   type NodeType = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
 
@@ -436,11 +442,13 @@
   }
 
   .workbench {
-    display: grid;
-    grid-template-columns: 2fr 3fr;
     gap: 14px;
     min-height: 0;
     flex: 1;
+  }
+
+  .split-workbench {
+    height: 700px;
   }
 
   .editor-panel,
@@ -451,7 +459,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--menu-item-h-bg-color) 84%, transparent);
     background: color-mix(in srgb, var(--menu-item-h-bg-color) 65%, transparent);
-    height: 700px;
+    height: 100%;
   }
 
   .panel-title {
@@ -519,7 +527,11 @@
 
   @media (max-width: 1120px) {
     .workbench {
-      grid-template-columns: 1fr;
+      display: block;
+    }
+
+    .split-workbench {
+      height: auto;
     }
 
     .code-editor,

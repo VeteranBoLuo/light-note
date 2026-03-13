@@ -16,27 +16,32 @@
     </section>
 
     <section class="workbench">
-      <article class="panel">
-        <div class="panel-title">
-          <span>输入区</span>
-          <small>{{ inputText.length }} 字符</small>
-        </div>
-        <textarea v-model="inputText" class="panel-textarea" placeholder="输入原文或 Base64 文本"></textarea>
-      </article>
-
-      <article class="panel">
-        <div class="panel-title">
-          <span>输出区</span>
-          <small>{{ outputText.length }} 字符</small>
-        </div>
-        <textarea
-          v-model="outputText"
-          class="panel-textarea"
-          placeholder="编码或解码结果会显示在这里"
-          readonly
-        ></textarea>
-        <div class="status" :class="{ error: statusType === 'error' }">{{ statusText }}</div>
-      </article>
+      <Splitpanes class="split-workbench" :mobile-breakpoint="1180">
+        <template #first>
+          <article class="panel">
+            <div class="panel-title">
+              <span>输入区</span>
+              <small>{{ inputText.length }} 字符</small>
+            </div>
+            <textarea v-model="inputText" class="panel-textarea" placeholder="输入原文或 Base64 文本"></textarea>
+          </article>
+        </template>
+        <template #second>
+          <article class="panel">
+            <div class="panel-title">
+              <span>输出区</span>
+              <small>{{ outputText.length }} 字符</small>
+            </div>
+            <textarea
+              v-model="outputText"
+              class="panel-textarea"
+              placeholder="编码或解码结果会显示在这里"
+              readonly
+            ></textarea>
+            <div class="status" :class="{ error: statusType === 'error' }">{{ statusText }}</div>
+          </article>
+        </template>
+      </Splitpanes>
     </section>
   </div>
 </template>
@@ -45,6 +50,7 @@
   import { ref } from 'vue';
   import { message } from 'ant-design-vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import Splitpanes from '@/components/base/Splitpanes.vue';
 
   const inputText = ref('');
   const outputText = ref('');
@@ -184,12 +190,13 @@
   }
 
   .workbench {
-    display: grid;
-    grid-template-columns: 0.15fr 1fr;
     gap: 14px;
-    align-items: stretch;
-    flex: 1;
     min-height: 0;
+    flex: 1;
+  }
+
+  .split-workbench {
+    height: 700px;
   }
 
   .panel {
@@ -199,7 +206,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--menu-item-h-bg-color) 84%, transparent);
     background: color-mix(in srgb, var(--menu-item-h-bg-color) 65%, transparent);
-    min-height: 580px;
+    height: 100%;
   }
 
   .panel-title {
@@ -248,8 +255,8 @@
   }
 
   @media (max-width: 1180px) {
-    .workbench {
-      grid-template-columns: 1fr;
+    .split-workbench {
+      height: auto;
     }
 
     .panel {
