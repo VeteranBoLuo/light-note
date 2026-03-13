@@ -43,6 +43,7 @@
     "highlight.js": "^11.11.1",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.1",
+    "jszip": "^3.10.1",
     "lodash-es": "^4.17.21",
     "marked": "^17.0.1",
     "partial-json": "^0.1.7",

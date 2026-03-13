@@ -1,5 +1,5 @@
 <template>
-  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass, danger]">
+  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass]">
     <slot></slot>
   </div>
 </template>
@@ -16,10 +16,6 @@
       type: String as PropType<'primary' | 'danger' | 'success' | 'function'>,
       default: '',
     },
-    danger: {
-      type: Boolean,
-      default: false,
-    },
     border: {
       type: String,
       default: '',
@@ -33,6 +29,8 @@
       return 'success_btn';
     } else if (props.type === 'function') {
       return 'function_btn';
+    } else if (props.type === 'danger') {
+      return 'danger_btn';
     } else {
       return 'default_btn';
     }
@@ -74,7 +72,7 @@
       background-color: #6b66ef;
     }
   }
-  .danger {
+  .danger_btn {
     background-color: #fe2c55;
     color: white;
     transition: all 0.3s;
@@ -83,11 +81,11 @@
     }
   }
   .success_btn {
-    background-color: #ff5722;
+    background-color: #52c41a;
     color: white;
     transition: all 0.3s;
     &:hover {
-      background-color: #ff7432;
+      background-color: #73d13d;
     }
   }
   .default_btn {

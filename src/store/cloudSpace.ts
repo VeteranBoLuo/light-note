@@ -14,6 +14,8 @@ export default defineStore('dom', {
           fileSize: number;
           uploadTime: string;
           folderName: string;
+          folderId?: string;
+          type?: string;
           isRename?: boolean;
           fileType: string;
           fileUrl: string;
@@ -23,6 +25,7 @@ export default defineStore('dom', {
         searchFileName: string;
         loading: boolean;
         cacheImgArr: any[]; // 记录需要清空缓存的图片，因为图片直接覆盖后地址不变，需要手动记录一下方便浏览器清空老图片缓存
+        draggingFile: { id: string; folderId?: string } | null;
       }
     >{
       usedSpace: 0,
@@ -37,6 +40,7 @@ export default defineStore('dom', {
       searchFileName: '',
       loading: false,
       cacheImgArr: [],
+      draggingFile: null,
     },
   getters: {},
   actions: {

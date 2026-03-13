@@ -4,8 +4,23 @@
       <b-space :size="10">
         <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
         <b-button size="small" type="primary" @click="handleBatchMove">{{ $t('cloudSpace.batchMove') }}</b-button>
+        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+          {{ $t('cloudSpace.batchDownload') }}
+        </b-button>
         <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
       </b-space>
+    </div>
+    <div v-if="downloadProgress.visible" class="download-progress-floating">
+      <div class="download-progress-header">
+        <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
+        <div class="download-progress-ops">
+          <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
+          <a-button size="small" type="text" class="download-cancel-btn" @click="cancelBatchDownload">
+            {{ $t('common.cancel') }}
+          </a-button>
+        </div>
+      </div>
+      <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
     </div>
     <div class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
@@ -25,7 +40,15 @@
       </div>
     </div>
     <div class="file-container">
-      <div class="field-item" v-for="(item, index) in cloud.fileList" :key="index">
+      <div
+        class="field-item"
+        :class="{ 'field-item-draggable': canDragFile(item) }"
+        :draggable="canDragFile(item)"
+        @dragstart="onFileDragStart($event, item)"
+        @dragend="onFileDragEnd"
+        v-for="(item, index) in cloud.fileList"
+        :key="index"
+      >
         <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
           <a-checkbox
             v-if="batchMode"
@@ -137,6 +160,7 @@
   import { nextTick, ref, computed, watch } from 'vue';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
+  import JSZip from 'jszip';
 
   const { t } = useI18n();
   const emit = defineEmits(['previewFile', 'moveField']);
@@ -178,6 +202,16 @@
   const shareDescValue = ref('');
   const shareSubmitting = ref(false);
   const shareTarget = ref<{ id: string; fileName?: string; fileType?: string } | null>(null);
+  const batchDownloadLoading = ref(false);
+  const batchDownloadAbortController = ref<AbortController | null>(null);
+  const batchDownloadCancelled = ref(false);
+  const downloadProgress = ref({
+    visible: false,
+    percent: 0,
+    current: 0,
+    total: 0,
+    phaseText: '',
+  });
 
   watch(
     () => cloud.fileList,
@@ -293,6 +327,164 @@
     emit('moveField', selectedFiles);
   };
 
+  const decodeSafeName = (name?: string) => {
+    if (!name) return '';
+    try {
+      return decodeURIComponent(name);
+    } catch (error) {
+      return name;
+    }
+  };
+
+  const normalizeFileName = (name?: string, fallback = 'file') => {
+    const raw = decodeSafeName(name).trim() || fallback;
+    return raw.replace(/[\\/:*?"<>|]/g, '_');
+  };
+
+  const buildUniqueName = (name: string, usedNames: Set<string>) => {
+    if (!usedNames.has(name)) {
+      usedNames.add(name);
+      return name;
+    }
+    const dotIndex = name.lastIndexOf('.');
+    const base = dotIndex > 0 ? name.slice(0, dotIndex) : name;
+    const ext = dotIndex > 0 ? name.slice(dotIndex) : '';
+    let counter = 2;
+    let candidate = `${base}(${counter})${ext}`;
+    while (usedNames.has(candidate)) {
+      counter += 1;
+      candidate = `${base}(${counter})${ext}`;
+    }
+    usedNames.add(candidate);
+    return candidate;
+  };
+
+  const getDownloadMeta = async (file: any, index: number) => {
+    const fallbackName = `file-${index + 1}`;
+    if (file.fileUrl) {
+      return {
+        downloadUrl: file.fileUrl,
+        fileName: normalizeFileName(file.fileName, fallbackName),
+      };
+    }
+
+    const res = await apiBasePost('/api/file/downloadFileById', { id: file.id });
+    if (res.status !== 200 || !res.data?.downloadUrl) {
+      throw new Error(t('cloudSpace.downloadFailed'));
+    }
+
+    return {
+      downloadUrl: res.data.downloadUrl,
+      fileName: normalizeFileName(res.data.fileName || file.fileName, fallbackName),
+    };
+  };
+
+  const isBatchDownloadCancelledError = (error: any) => {
+    return (
+      batchDownloadCancelled.value || error?.name === 'AbortError' || error?.message === 'BATCH_DOWNLOAD_CANCELLED'
+    );
+  };
+
+  const cancelBatchDownload = () => {
+    if (!batchDownloadLoading.value) return;
+    batchDownloadCancelled.value = true;
+    batchDownloadAbortController.value?.abort();
+  };
+
+  const handleBatchDownload = async () => {
+    if (!hasSelection.value) {
+      message.warning(t('cloudSpace.selectFilesToDownload'));
+      return;
+    }
+
+    const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
+    if (selectedFiles.length === 1) {
+      await downloadField(selectedFiles[0].id);
+      return;
+    }
+
+    batchDownloadLoading.value = true;
+    batchDownloadCancelled.value = false;
+    batchDownloadAbortController.value = new AbortController();
+    downloadProgress.value = {
+      visible: true,
+      percent: 0,
+      current: 0,
+      total: selectedFiles.length,
+      phaseText: t('cloudSpace.batchDownloading'),
+    };
+
+    try {
+      const zip = new JSZip();
+      const usedNames = new Set<string>();
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        if (batchDownloadCancelled.value) {
+          throw new Error('BATCH_DOWNLOAD_CANCELLED');
+        }
+        const file = selectedFiles[i];
+        const { downloadUrl, fileName } = await getDownloadMeta(file, i);
+        const response = await fetch(downloadUrl, {
+          signal: batchDownloadAbortController.value?.signal,
+        });
+        if (!response.ok) {
+          throw new Error(t('cloudSpace.downloadFailed'));
+        }
+        const blob = await response.blob();
+        const uniqueName = buildUniqueName(fileName, usedNames);
+        zip.file(uniqueName, blob);
+
+        downloadProgress.value.current = i + 1;
+        downloadProgress.value.percent = Math.round(((i + 1) / selectedFiles.length) * 80);
+      }
+
+      downloadProgress.value.phaseText = t('cloudSpace.batchPacking');
+      const zipBlob = await zip.generateAsync(
+        {
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 },
+        },
+        (metadata) => {
+          if (batchDownloadCancelled.value) {
+            throw new Error('BATCH_DOWNLOAD_CANCELLED');
+          }
+          downloadProgress.value.percent = 80 + Math.round((metadata.percent || 0) * 0.2);
+        },
+      );
+
+      if (batchDownloadCancelled.value) {
+        throw new Error('BATCH_DOWNLOAD_CANCELLED');
+      }
+
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+      const zipName = `file-${timestamp}.zip`;
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = zipName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      downloadProgress.value.percent = 100;
+    } catch (error) {
+      if (isBatchDownloadCancelledError(error)) {
+        message.info(t('cloudSpace.batchDownloadCancelled'));
+      } else {
+        console.error('batch download failed:', error);
+        message.error(t('cloudSpace.batchDownloadFailed'));
+      }
+    } finally {
+      batchDownloadLoading.value = false;
+      batchDownloadAbortController.value = null;
+      setTimeout(() => {
+        downloadProgress.value.visible = false;
+      }, 600);
+    }
+  };
+
   async function handleShareFile(id, fileName, fileType) {
     shareTarget.value = { id, fileName, fileType };
     shareDescValue.value = '';
@@ -323,6 +515,68 @@
   };
   const originalName = ref('');
   const originalExt = ref('');
+  const dragPreviewEl = ref<HTMLElement | null>(null);
+
+  function canDragFile(file) {
+    return !bookmark.isMobile && !batchMode.value && !file.isRename;
+  }
+
+  function onFileDragStart(event, file) {
+    if (!canDragFile(file)) {
+      event.preventDefault();
+      return;
+    }
+
+    const dragTarget = event.currentTarget as HTMLElement | null;
+    const fileLabel = dragTarget?.querySelector('.file-label') as HTMLElement | null;
+    if (fileLabel) {
+      const preview = fileLabel.cloneNode(true) as HTMLElement;
+      preview.style.position = 'fixed';
+      preview.style.top = '-9999px';
+      preview.style.left = '-9999px';
+      preview.style.pointerEvents = 'none';
+      preview.style.margin = '0';
+      preview.style.padding = '8px 10px';
+      preview.style.borderRadius = '8px';
+      preview.style.background = 'var(--bl-input-noBorder-bg-color)';
+      preview.style.border = '1px solid var(--folder-list-border-color)';
+      preview.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.12)';
+      preview.style.maxWidth = '320px';
+      document.body.appendChild(preview);
+      dragPreviewEl.value = preview;
+      event.dataTransfer.setDragImage(preview, 18, 18);
+    }
+
+    event.dataTransfer.effectAllowed = 'copyMove';
+    const fileUrl = String(file.fileUrl || '');
+    const fileName = String(file.fileName || 'file');
+    const mimeType = String(file.fileType || '').includes('/') ? String(file.fileType) : 'application/octet-stream';
+    cloud.draggingFile = {
+      id: String(file.id),
+      folderId: String(file.folderId || ''),
+    };
+
+    event.dataTransfer.clearData();
+    if (fileUrl) {
+      // Local folder drag-out uses DownloadURL.
+      event.dataTransfer.setData('DownloadURL', `${mimeType}:${fileName}:${fileUrl}`);
+      // Enterprise chat accepts link payloads.
+      event.dataTransfer.setData('text/plain', fileUrl);
+      event.dataTransfer.setData('text/uri-list', fileUrl);
+    } else {
+      event.dataTransfer.setData('text/plain', fileName);
+    }
+  }
+
+  function onFileDragEnd(event) {
+    event.dataTransfer.dropEffect = 'none';
+    cloud.draggingFile = null;
+    if (dragPreviewEl.value) {
+      dragPreviewEl.value.remove();
+      dragPreviewEl.value = null;
+    }
+  }
+
   function handleReName(file) {
     originalName.value = cloneDeep(file.fileName);
     originalExt.value = getFileExt(originalName.value);
@@ -366,6 +620,40 @@
       font-size: 14px;
     }
   }
+  .download-progress-floating {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: min(380px, calc(100% - 24px));
+    z-index: 30;
+    background: var(--bl-input-noBorder-bg-color);
+    border: 1px solid var(--folder-list-border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+    .download-progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--desc-color);
+      margin-bottom: 6px;
+      .download-progress-title {
+        font-weight: 600;
+        color: var(--text-color);
+      }
+      .download-progress-ops {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .download-cancel-btn {
+        padding: 0 4px;
+        height: 20px;
+        color: var(--text-color);
+      }
+    }
+  }
   .file-container {
     height: calc(100% - 40px);
     overflow-y: auto;
@@ -393,6 +681,12 @@
       div {
         cursor: pointer;
       }
+    }
+  }
+  .field-item-draggable {
+    cursor: grab;
+    &:active {
+      cursor: grabbing;
     }
   }
   .edit-file-input {

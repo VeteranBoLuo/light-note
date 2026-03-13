@@ -136,16 +136,25 @@
   };
 
   // 拖拽事件处理
+  function isExternalFileDrag(event) {
+    const types = event?.dataTransfer?.types;
+    if (!types) return false;
+    return Array.from(types).includes('Files');
+  }
+
   function onDragOver(event) {
+    if (!isExternalFileDrag(event)) return;
     dragActive.value = true;
     event.dataTransfer.dropEffect = 'copy';
   }
 
   function onDragEnter(event) {
+    if (!isExternalFileDrag(event)) return;
     dragActive.value = true;
   }
 
   function onDragLeave(event) {
+    if (!isExternalFileDrag(event)) return;
     // 检查是否完全离开容器
     const relatedTarget = event.relatedTarget;
     if (!relatedTarget || !event.currentTarget.contains(relatedTarget)) {
@@ -154,6 +163,10 @@
   }
 
   function onDrop(event) {
+    if (!isExternalFileDrag(event)) {
+      dragActive.value = false;
+      return;
+    }
     dragActive.value = false;
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {

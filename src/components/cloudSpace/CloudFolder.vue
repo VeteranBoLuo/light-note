@@ -76,11 +76,37 @@
   import { message } from 'ant-design-vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { useI18n } from 'vue-i18n';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
+  const { t } = useI18n();
 
   const emit = defineEmits(['uploadFiles']);
+
+  function isInnerFileDrag() {
+    return Boolean(cloud.draggingFile?.id);
+  }
+
+  function normalizeFolderId(folderId?: string) {
+    return folderId && folderId !== 'all' ? folderId : '';
+  }
+
+  async function moveSingleFileToFolder(fileId: string, sourceFolderId: string, targetFolderId: string) {
+    if (!fileId || sourceFolderId === targetFolderId) {
+      return;
+    }
+    const res = await apiBasePost('/api/file/associateFile', {
+      folderId: targetFolderId,
+      fileIds: [fileId],
+    });
+    if (res.status === 200) {
+      message.success(t('cloudSpace.moveSuccess'));
+      cloud.queryFieldList();
+    } else {
+      message.error(res.msg || t('cloudSpace.moveFailed'));
+    }
+  }
 
   function clickAllFolder() {
     cloud.folder = {
@@ -199,7 +225,7 @@
 
   // 文件夹拖拽上传事件处理
   function onDragOverAll(event) {
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = isInnerFileDrag() ? 'move' : 'copy';
   }
 
   function onDragEnterAll(event) {
@@ -217,6 +243,12 @@
 
   function onDropAll(event) {
     event.currentTarget.style.backgroundColor = cloud.folder.id === 'all' ? 'var(--category-item-ba-color)' : '';
+    const innerFile = cloud.draggingFile;
+    if (innerFile?.id) {
+      moveSingleFileToFolder(innerFile.id, normalizeFolderId(innerFile.folderId), '');
+      cloud.draggingFile = null;
+      return;
+    }
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
       emit('uploadFiles', { files, folderId: null }); // null 表示上传到根目录
@@ -224,7 +256,7 @@
   }
 
   function onDragOverItem(event, item) {
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = isInnerFileDrag() ? 'move' : 'copy';
   }
 
   function onDragEnterItem(event, item) {
@@ -242,6 +274,12 @@
 
   function onDropItem(event, item) {
     event.currentTarget.style.backgroundColor = cloud.folder.id === item.id ? 'var(--category-item-ba-color)' : '';
+    const innerFile = cloud.draggingFile;
+    if (innerFile?.id) {
+      moveSingleFileToFolder(innerFile.id, normalizeFolderId(innerFile.folderId), item.id);
+      cloud.draggingFile = null;
+      return;
+    }
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
       emit('uploadFiles', { files, folderId: item.id });
