@@ -241,6 +241,10 @@ export default {
     batchMoveSuccess: 'Batch move successful! Moved',
     moveSuccess: 'Move successful',
     uploading: 'Uploading',
+    dropFiles: 'Drop files here to upload',
+    uploadTip:
+      'File upload methods:\n1. Click the upload button to select files\n2. Paste files directly (supports all file types)\n3. Drag and drop files from your computer to cloud space',
+    dropFilesToFolder: 'Drop files here to upload to current folder',
   },
   personCenter: {
     title: 'Personal Center',

@@ -7,6 +7,10 @@
         backgroundColor: 'all' === cloud.folder.id ? 'var(--category-item-ba-color)' : '',
       }"
       @click="clickAllFolder"
+      @dragover.prevent="onDragOverAll"
+      @dragenter.prevent="onDragEnterAll"
+      @dragleave.prevent="onDragLeaveAll"
+      @drop.prevent="onDropAll"
     >
       <svg-icon size="16" :src="icon.common.folder" />
       <span class="text-hidden" style="width: calc(100% - 28px)">{{ $t('cloudSpace.allFile') }}</span>
@@ -35,6 +39,10 @@
             }"
             :key="item"
             v-click-log="{ module: '云空间', operation: `查询文件夹【${item.name}】下的文件列表` }"
+            @dragover.prevent="onDragOverItem($event, item)"
+            @dragenter.prevent="onDragEnterItem($event, item)"
+            @dragleave.prevent="onDragLeaveItem($event, item)"
+            @drop.prevent="onDropItem($event, item)"
           >
             <svg-icon size="16" :src="icon.common.folder" />
             <span class="text-hidden" style="width: calc(100% - 28px)">{{ item['name'] }}</span>
@@ -186,6 +194,57 @@
       }
     } catch (error) {
       console.error('Error updating tag sort:', error);
+    }
+  }
+
+  // 文件夹拖拽上传事件处理
+  function onDragOverAll(event) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDragEnterAll(event) {
+    event.currentTarget.style.backgroundColor = 'var(--category-item-ba-color)';
+  }
+
+  function onDragLeaveAll(event) {
+    const relatedTarget = event.relatedTarget;
+    if (!relatedTarget || !event.currentTarget.contains(relatedTarget)) {
+      if (cloud.folder.id !== 'all') {
+        event.currentTarget.style.backgroundColor = '';
+      }
+    }
+  }
+
+  function onDropAll(event) {
+    event.currentTarget.style.backgroundColor = cloud.folder.id === 'all' ? 'var(--category-item-ba-color)' : '';
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length) {
+      emit('uploadFiles', { files, folderId: null }); // null 表示上传到根目录
+    }
+  }
+
+  function onDragOverItem(event, item) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDragEnterItem(event, item) {
+    event.currentTarget.style.backgroundColor = 'var(--category-item-ba-color)';
+  }
+
+  function onDragLeaveItem(event, item) {
+    const relatedTarget = event.relatedTarget;
+    if (!relatedTarget || !event.currentTarget.contains(relatedTarget)) {
+      if (cloud.folder.id !== item.id) {
+        event.currentTarget.style.backgroundColor = '';
+      }
+    }
+  }
+
+  function onDropItem(event, item) {
+    event.currentTarget.style.backgroundColor = cloud.folder.id === item.id ? 'var(--category-item-ba-color)' : '';
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length) {
+      emit('uploadFiles', { files, folderId: item.id });
     }
   }
 

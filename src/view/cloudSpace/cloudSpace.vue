@@ -1,6 +1,20 @@
 <template>
   <CommonContainer :title="$t('cloudSpace.title')">
-    <div class="cloud-container">
+    <div
+      class="cloud-container"
+      @dragover.prevent="onDragOver"
+      @dragenter.prevent="onDragEnter"
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="onDrop"
+    >
+      <!-- 拖拽提示层 -->
+      <div v-if="dragActive" class="drag-overlay">
+        <div class="drag-content">
+          <svg-icon :src="icon.file_upload" size="64" color="#667eea" />
+          <p>{{ $t('cloudSpace.dropFiles') }}</p>
+        </div>
+      </div>
+
       <div class="header">
         <div v-if="bookmark.isMobile" class="mobile-header-left">
           <b-input
@@ -75,6 +89,7 @@
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
   import { backRouterPage, debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
+  import { Tooltip } from 'ant-design-vue';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
@@ -86,6 +101,9 @@
 
   const handleBtnGroup = ref();
   const batchMode = ref(false);
+
+  // 拖拽状态
+  const dragActive = ref(false);
 
   const inputQueryFieldList = debounce(cloud.queryFieldList, 500);
 
@@ -116,6 +134,66 @@
   const onUploadFiles = ({ files, folderId }) => {
     handleBtnGroup.value.uploadFiles(files, folderId);
   };
+
+  // 拖拽事件处理
+  function onDragOver(event) {
+    dragActive.value = true;
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDragEnter(event) {
+    dragActive.value = true;
+  }
+
+  function onDragLeave(event) {
+    // 检查是否完全离开容器
+    const relatedTarget = event.relatedTarget;
+    if (!relatedTarget || !event.currentTarget.contains(relatedTarget)) {
+      dragActive.value = false;
+    }
+  }
+
+  function onDrop(event) {
+    dragActive.value = false;
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length) {
+      handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
+    }
+  }
+
+  // 粘贴事件处理
+  function onPaste(event) {
+    const clipboardData = event.clipboardData || (window as any).clipboardData;
+    const items = clipboardData.items;
+
+    if (items) {
+      const files = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file') {
+          // 处理所有类型的文件粘贴
+          const file = item.getAsFile();
+          if (file) {
+            // 为截图等没有文件名的文件生成唯一名称
+            if (!file.name || file.name === 'image.png') {
+              const timestamp = Date.now();
+              const extension = file.type.split('/')[1] || 'png';
+              const uniqueName = `paste_${timestamp}.${extension}`;
+              // 创建新的文件对象，保留原始文件的内容和类型
+              const newFile = new File([file], uniqueName, { type: file.type });
+              files.push(newFile);
+            } else {
+              files.push(file);
+            }
+          }
+        }
+      }
+
+      if (files.length) {
+        handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
+      }
+    }
+  }
 
   interface FileItem {
     id: string;
@@ -323,9 +401,14 @@
     if (bookmark.isMobile) {
       batchMode.value = true;
     }
+    // 为window添加粘贴事件监听
+    window.addEventListener('paste', onPaste);
   });
 
-  onUnmounted(() => {});
+  onUnmounted(() => {
+    // 移除window粘贴事件监听
+    window.removeEventListener('paste', onPaste);
+  });
 </script>
 
 <style lang="less" scoped>
@@ -338,6 +421,7 @@
     display: flex;
     gap: 10px;
     flex-direction: column;
+    position: relative;
   }
 
   .header {
@@ -372,6 +456,35 @@
     width: 200px;
     margin-left: 250px;
     border-color: var(--card-border-color) !important;
+  }
+
+  // 拖拽样式
+  .drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    border: 2px dashed #667eea;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+    transition: all 0.3s ease;
+  }
+
+  .drag-content {
+    text-align: center;
+    color: #667eea;
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  .drag-content p {
+    margin-top: 16px;
   }
 
   @media (max-width: 1000px) {

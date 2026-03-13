@@ -1,13 +1,18 @@
 <template>
   <b-space :size="15">
     <CloudStorageBar v-if="!bookmark.isMobile" />
-    <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
-      <b-button type="primary">
-        <UploadOutlined />
-        {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
-      </b-button>
-    </b-upload>
-
+    <!-- 上传按钮及提示 -->
+    <div class="upload-container">
+      <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
+        <b-button type="primary">
+          <UploadOutlined />
+          {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
+          <div class="upload-tip">
+            <div class="tip-content">{{ $t('cloudSpace.uploadTip') }}</div>
+          </div>
+        </b-button>
+      </b-upload>
+    </div>
     <!-- 上传进度条 -->
     <div v-if="uploadProgress.visible" class="upload-progress">
       <div class="progress-header">
@@ -48,6 +53,7 @@
   import { CloseOutlined, UploadOutlined } from '@ant-design/icons-vue';
   import axios from 'axios';
   import { reactive, ref } from 'vue';
+  import icon from '@/config/icon';
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
@@ -276,6 +282,7 @@
 </script>
 <style lang="less" scoped>
   .upload-btn {
+    position: relative;
     :deep(.ant-btn) {
       height: 48px;
       padding: 0 24px;
@@ -335,7 +342,6 @@
 
     // 整体悬停效果
     &:hover {
-      transform: scale(1.02);
       transition: transform 0.3s ease;
     }
 
@@ -537,6 +543,49 @@
     }
   }
 
+  // 上传容器样式
+  .upload-container {
+    position: relative;
+    display: inline-block;
+  }
+
+  // 上传提示样式
+  .upload-tip {
+    position: absolute;
+    left: -120px;
+    top: 35px;
+    background-color: rgba(14, 8, 8, 0.8);
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    width: 200px;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      right: 12px;
+    }
+  }
+
+  .upload-container:hover .upload-tip {
+    opacity: 1;
+  }
+
+  // 深色主题样式
+  [data-theme='night'] {
+    .upload-tip {
+      border: 1px solid rgba(231, 222, 222, 0.603) !important;
+    }
+  }
+
   // 响应式设计
   @media (max-width: 768px) {
     .upload-btn {
@@ -550,6 +599,12 @@
           margin-right: 6px;
         }
       }
+    }
+
+    .upload-tip {
+      bottom: -90px;
+      max-width: 250px;
+      font-size: 11px;
     }
 
     .upload-progress {
