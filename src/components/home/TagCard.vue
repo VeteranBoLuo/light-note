@@ -81,7 +81,7 @@
   });
 </script>
 
-<style lang="less">
+<style lang="less" scoped>
   .card-body {
     border: 1px solid var(--card-border-color);
     height: 150px;
