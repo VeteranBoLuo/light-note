@@ -1,5 +1,3 @@
-import { url } from 'inspector';
-
 export default {
   // 空白图片
   nullImg:
