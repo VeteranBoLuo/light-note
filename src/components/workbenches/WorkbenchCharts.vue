@@ -54,9 +54,9 @@
   function getColors() {
     const isNight = props.themeKey === 'night';
     if (isNight) {
-      return ['#7C5CFF', '#00E5FF', '#FF6EC7', '#54F29E', '#FFC857', '#7DD3FC', '#F472B6'];
+      return ['#ef41c9', '#7859f4', '#ff5493', '#ff8d66', '#ffc653', '#f9f871'];
     }
-    return ['#6C63FF', '#00C2FF', '#FF5FA2', '#22C55E', '#F59E0B', '#14B8A6', '#8B5CF6'];
+    return ['#b68eff', '#7859f4', '#d000d7', '#67baa7', '#ff5f51', '#4a4453', '#d5cabd'];
   }
 
   function getCommonConfig() {

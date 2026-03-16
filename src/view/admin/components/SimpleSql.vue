@@ -1076,7 +1076,7 @@
     flex: 1;
     margin: 0;
     padding: 18px;
-    background: var(--bl-input-noBorder-bg-color);
+    background: var(--pre-bg-color);
     border-radius: 12px;
     overflow: auto;
     font-size: 14px;

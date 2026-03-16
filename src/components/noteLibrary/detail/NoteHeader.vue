@@ -44,7 +44,7 @@
         </div>
       </a-tooltip>
       <a-tooltip :title="$t('noteDetail.save')" v-if="!bookmark.isMobile">
-        <div class="note-header-title-icon" @click="$emit('save')" v-click-log="OPERATION_LOG_MAP.note.saveNote">
+        <div class="note-header-title-icon" @click="$emit('save', true)" v-click-log="OPERATION_LOG_MAP.note.saveNote">
           <SvgIcon :src="icon.noteDetail.save" />
         </div>
       </a-tooltip>
@@ -186,6 +186,7 @@
   }
 
   function handleTagSaved() {
+    emit('save');
     fetchNoteTags();
   }
 

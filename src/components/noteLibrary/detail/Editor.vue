@@ -1,15 +1,17 @@
 <template>
   <div id="editor-container" class="note-editor">
     <div id="editor-toolbar" class="note-editor-toolbar"></div>
-    <TinyMceEditor
-      v-if="editorReady"
-      :key="editorKey"
-      v-model="content"
-      tag-name="div"
-      class="note-editor-body"
-      :init="editorInit"
-      license-key="gpl"
-    />
+    <div class="note-editor-scroll">
+      <TinyMceEditor
+        v-if="editorReady"
+        :key="editorKey"
+        v-model="content"
+        tag-name="div"
+        class="note-editor-body"
+        :init="editorInit"
+        license-key="gpl"
+      />
+    </div>
   </div>
 </template>
 
@@ -475,16 +477,24 @@
     display: flex;
     flex-direction: column;
     height: calc(100% - 60px);
+    overflow: hidden;
   }
   .note-editor-toolbar {
     border-bottom: 1px solid rgb(204, 204, 204);
+    background-color: var(--w-e-toolbar-bg-color);
+  }
+  .note-editor-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
   }
   .note-editor-body {
     outline: none;
-    overflow: auto;
+    overflow: visible;
     background-color: var(--background-color);
     color: var(--text-color);
     padding: 5px 10px 20px;
+    min-height: 100%;
   }
   .note-editor .tox .tox-toolbar,
   .note-editor .tox .tox-toolbar__primary,

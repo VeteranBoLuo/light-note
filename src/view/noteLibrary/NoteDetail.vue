@@ -183,8 +183,8 @@
     }
   }
 
-  function clickSaveNote() {
-    saveFunc(true);
+  function clickSaveNote(flag?: boolean) {
+    saveFunc(flag);
   }
 
   const timer: any = ref(null);
