@@ -24,6 +24,11 @@ const toolsRouter: RouteRecordRaw[] = [
         name: 'toolsBase64',
         component: () => import('@/view/tools/base64/Base64Tool.vue'),
       },
+      {
+        path: 'urlCodec',
+        name: 'toolsUrlCodec',
+        component: () => import('@/view/tools/urlCodec/UrlCodecTool.vue'),
+      },
     ],
   },
 ];

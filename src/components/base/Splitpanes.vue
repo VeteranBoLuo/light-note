@@ -131,6 +131,7 @@
     align-items: stretch;
     width: 100%;
     height: 100%;
+    min-height: 0;
 
     &.mobile {
       flex-direction: column;

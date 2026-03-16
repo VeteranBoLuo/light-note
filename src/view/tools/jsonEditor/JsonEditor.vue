@@ -399,6 +399,8 @@
   .json-editor-page {
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
     gap: 14px;
     min-height: calc(100vh - 140px);
     background:
@@ -442,23 +444,27 @@
   }
 
   .workbench {
+    display: flex;
     gap: 14px;
+    flex: 1 1 auto;
     min-height: 0;
-    flex: 1;
   }
 
   .split-workbench {
-    height: 700px;
+    flex: 1 1 auto;
+    height: calc(100% - 10px);
+    min-height: 0;
   }
 
   .editor-panel,
   .tree-panel {
     display: flex;
     flex-direction: column;
+    min-height: 0;
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--menu-item-h-bg-color) 84%, transparent);
-    background: color-mix(in srgb, var(--menu-item-h-bg-color) 65%, transparent);
+    background: color-mix(in srgb, var(--user-body-bg-color) 65%, transparent);
     height: 100%;
   }
 
@@ -483,13 +489,14 @@
 
   .code-editor {
     flex: 1;
-    min-height: 420px;
+    min-height: 0;
     overflow: hidden;
 
     :deep(.cm-editor) {
       height: 100%;
 
       .cm-scroller {
+        overflow: auto;
         font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
       }
     }
@@ -512,7 +519,7 @@
   .tree-scroll {
     overflow: auto;
     flex: 1;
-    min-height: 420px;
+    min-height: 0;
     padding: 8px 8px 12px;
   }
 

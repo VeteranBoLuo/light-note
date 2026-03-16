@@ -548,8 +548,8 @@
   });
 
   function handleCommonBookmarkClick(record) {
-    if (record?.id) {
-      router.push(`/manage/editBookmark/${record.id}`);
+    if (record?.url) {
+      window.open(record.url, '_blank');
       return;
     }
     router.push('/home');

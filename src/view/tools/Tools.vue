@@ -28,12 +28,17 @@
     {
       id: 'jsonEditor',
       title: 'JSON编辑器',
-      icon: icon.userCenter.sql,
+      icon: icon.tool.json,
     },
     {
       id: 'base64',
       title: 'Base64编解码',
-      icon: icon.userCenter.operationLog,
+      icon: icon.tool.base64,
+    },
+    {
+      id: 'urlCodec',
+      title: 'URL编码解码',
+      icon: icon.tool.urlEncode,
     },
   ]);
 

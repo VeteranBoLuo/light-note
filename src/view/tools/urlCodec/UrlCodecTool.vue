@@ -1,13 +1,15 @@
 <template>
-  <div class="base64-page">
+  <div class="url-codec-page">
     <section class="hero-card">
       <div class="hero-left">
-        <h2>Base64 编解码</h2>
-        <p>支持 UTF-8 文本编码与解码，适合快速处理参数、密钥片段和调试数据。</p>
+        <h2>URL 编码解码</h2>
+        <p>支持 encodeURIComponent / decodeURIComponent 与 encodeURI / decodeURI，适合处理查询参数和完整链接。</p>
       </div>
       <div class="hero-actions">
-        <b-button size="small" @click="encodeText">编码为 Base64</b-button>
-        <b-button size="small" @click="decodeText">解码为文本</b-button>
+        <b-button size="small" @click="encodeComponent">编码参数</b-button>
+        <b-button size="small" @click="decodeComponent">解码参数</b-button>
+        <b-button size="small" @click="encodeFullUrl">编码链接</b-button>
+        <b-button size="small" @click="decodeFullUrl">解码链接</b-button>
         <b-button size="small" @click="swapText">交换输入输出</b-button>
         <b-button size="small" @click="copyOutput">复制输出</b-button>
         <b-button size="small" @click="fillSample">示例</b-button>
@@ -23,7 +25,7 @@
               <span>输入区</span>
               <small>{{ inputText.length }} 字符</small>
             </div>
-            <textarea v-model="inputText" class="panel-textarea" placeholder="输入原文或 Base64 文本"></textarea>
+            <textarea v-model="inputText" class="panel-textarea" placeholder="输入 URL 文本或编码文本"></textarea>
           </article>
         </template>
         <template #second>
@@ -57,55 +59,54 @@
   const statusText = ref('等待操作');
   const statusType = ref<'normal' | 'error'>('normal');
 
-  const encodeBase64Utf8 = (value: string): string => {
-    const bytes = new TextEncoder().encode(value);
-    let binary = '';
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
-    return btoa(binary);
-  };
-
-  const decodeBase64Utf8 = (value: string): string => {
-    const normalized = value.replace(/\s+/g, '');
-    const binary = atob(normalized);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
-  };
-
   const setStatus = (text: string, type: 'normal' | 'error' = 'normal') => {
     statusText.value = text;
     statusType.value = type;
   };
 
-  const encodeText = () => {
+  const withInputGuard = (emptyTip: string, action: () => void) => {
     if (!inputText.value) {
       outputText.value = '';
-      setStatus('请输入需要编码的文本', 'error');
+      setStatus(emptyTip, 'error');
       return;
     }
-
-    try {
-      outputText.value = encodeBase64Utf8(inputText.value);
-      setStatus('编码成功');
-    } catch {
-      setStatus('编码失败，请检查输入内容', 'error');
-    }
+    action();
   };
 
-  const decodeText = () => {
-    if (!inputText.value) {
-      outputText.value = '';
-      setStatus('请输入需要解码的 Base64 文本', 'error');
-      return;
-    }
+  const encodeComponent = () => {
+    withInputGuard('请输入需要编码的参数文本', () => {
+      outputText.value = encodeURIComponent(inputText.value);
+      setStatus('参数编码成功');
+    });
+  };
 
-    try {
-      outputText.value = decodeBase64Utf8(inputText.value);
-      setStatus('解码成功');
-    } catch {
-      setStatus('解码失败，请确认 Base64 格式是否正确', 'error');
-    }
+  const decodeComponent = () => {
+    withInputGuard('请输入需要解码的参数文本', () => {
+      try {
+        outputText.value = decodeURIComponent(inputText.value);
+        setStatus('参数解码成功');
+      } catch {
+        setStatus('参数解码失败，请确认输入为合法编码', 'error');
+      }
+    });
+  };
+
+  const encodeFullUrl = () => {
+    withInputGuard('请输入需要编码的完整 URL', () => {
+      outputText.value = encodeURI(inputText.value);
+      setStatus('链接编码成功');
+    });
+  };
+
+  const decodeFullUrl = () => {
+    withInputGuard('请输入需要解码的 URL 文本', () => {
+      try {
+        outputText.value = decodeURI(inputText.value);
+        setStatus('链接解码成功');
+      } catch {
+        setStatus('链接解码失败，请确认输入为合法编码', 'error');
+      }
+    });
   };
 
   const swapText = () => {
@@ -138,14 +139,14 @@
   };
 
   const fillSample = () => {
-    inputText.value = 'light-note 工具箱';
+    inputText.value = 'https://example.com/search?q=轻笺 工具&lang=zh-CN';
     outputText.value = '';
     setStatus('已填充示例文本');
   };
 </script>
 
 <style scoped lang="less">
-  .base64-page {
+  .url-codec-page {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
@@ -264,10 +265,6 @@
   @media (max-width: 1180px) {
     .split-workbench {
       height: auto;
-    }
-
-    .panel-textarea {
-      min-height: 320px;
     }
 
     .panel {
