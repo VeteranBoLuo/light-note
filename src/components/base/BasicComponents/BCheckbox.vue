@@ -60,4 +60,9 @@
       height: 12px;
     }
   }
+  [data-theme='night'] {
+    .checkbox_container {
+      border-color: #6e6e77 !important;
+    }
+  }
 </style>
