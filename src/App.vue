@@ -20,13 +20,14 @@
   import Login from '@/view/login/UserAuthModal.vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
-  import { useRouter } from 'vue-router';
+  import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
   import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
   import { debounce } from 'lodash-es';
   import { setLocale } from './i18n';
   import { updateNotice } from '@/config/updateNotice';
+  import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
   const router = useRouter();
   const user = useUserStore();
@@ -178,20 +179,52 @@
   }
 
   const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
+  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
+
+  function getRequiredRoles(to: RouteLocationNormalized): string[] {
+    const targetRecord = [...to.matched].reverse().find((record) => Array.isArray(record.meta?.roles));
+    const targetRoles = (targetRecord?.meta?.roles as string[]) || [];
+    if (targetRoles.length > 0) {
+      return targetRoles;
+    }
+    if (mobileAdminRoute.includes(to.path)) {
+      return [RoleEnum.Root];
+    }
+    return [];
+  }
 
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
-    router.isReady().then(async () => {
-      if (to.name === 'workbenches') {
-        handleRouteChange(bookmark.isMobile, to.path);
+    if (to.name === 'workbenches') {
+      handleRouteChange(bookmark.isMobile, to.path);
+    }
+
+    if (from.name === 'githubCallBack') {
+      await getUserInfo();
+    }
+
+    if (skipRouter.includes(<string>to.name)) {
+      bookmark.isShowLogin = false;
+      next();
+      return;
+    }
+
+    // 用户刷新后 store 为空时，先尝试恢复用户信息再做权限判断。
+    if (!user.id) {
+      await getUserInfo();
+    }
+
+    const requiredRoles = getRequiredRoles(to);
+    if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
+      if (!user.id || user.role === RoleEnum.VISITOR) {
+        handleUserLogout();
+        next('/home');
+        return;
       }
-      if (from.name === 'githubCallBack') {
-        await getUserInfo();
-      }
-      if (skipRouter.includes(<string>to.name)) {
-        bookmark.isShowLogin = false;
-      }
-    });
+      next('/403');
+      return;
+    }
+
     next();
   });
 
