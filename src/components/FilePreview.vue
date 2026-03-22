@@ -108,6 +108,9 @@
           <template v-if="fileInfo.fileType === 'text/html'">
             <div v-html="textContent" class="html-container"></div>
           </template>
+          <template v-else-if="isMarkdownFile">
+            <div v-html="markdownContent" class="markdown-container"></div>
+          </template>
           <pre
             v-else
             :class="{ 'text-wrap': wrapText, 'text-no-wrap': !wrapText }"
@@ -191,6 +194,8 @@
 
 <script setup lang="ts">
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+  import DOMPurify from 'dompurify';
+  import { marked } from 'marked';
   import VideoPreview from '@/components/base/VideoPreview.vue';
 
   // 引入vue-office组件
@@ -289,6 +294,7 @@
       'text/csv',
       'application/x-sh',
       'application/x-bat',
+      'application/octet-stream'
     ],
     compress: [
       'application/zip',
@@ -299,7 +305,6 @@
       'application/gzip',
       'application/x-bzip2',
       'application/x-xz',
-      'application/octet-stream',
     ],
   };
 
@@ -341,6 +346,20 @@
   });
 
   const unsupportedTypes = ['unsupported', 'compress'];
+
+  const isMarkdownFile = computed(() => {
+    const fileName = props.fileInfo.fileName?.toLowerCase() || '';
+    return fileName.endsWith('.md') || fileName.endsWith('.markdown');
+  });
+
+  const markdownContent = computed(() => {
+    if (!isMarkdownFile.value || !textContent.value) return '';
+    const html = marked.parse(textContent.value, {
+      gfm: true,
+      breaks: true,
+    });
+    return DOMPurify.sanitize(typeof html === 'string' ? html : '');
+  });
 
   // 微软Office在线预览URL
   const microsoftOfficeViewerUrl = computed(() => {
@@ -964,6 +983,68 @@
       text-decoration: underline !important;
       font-family: 'Arial', sans-serif;
       font-weight: 600;
+    }
+  }
+
+  .markdown-container {
+    flex: 1;
+    margin: 0;
+    padding: 16px;
+    overflow: auto;
+    color: #333;
+    line-height: 1.7;
+
+    :deep(h1),
+    :deep(h2),
+    :deep(h3),
+    :deep(h4),
+    :deep(h5),
+    :deep(h6) {
+      margin: 0.9em 0 0.5em;
+      color: #222;
+      font-weight: 600;
+    }
+
+    :deep(p),
+    :deep(ul),
+    :deep(ol),
+    :deep(blockquote) {
+      margin: 0.7em 0;
+    }
+
+    :deep(blockquote) {
+      border-left: 4px solid #d9d9d9;
+      padding-left: 12px;
+      color: #666;
+    }
+
+    :deep(code) {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', 'Consolas', 'Ubuntu Mono', monospace;
+      font-size: 13px;
+    }
+
+    :deep(pre) {
+      border-radius: 8px;
+      padding: 12px;
+      overflow: auto;
+    }
+
+    :deep(pre code) {
+      background: transparent;
+      padding: 0;
+    }
+
+    :deep(a) {
+      color: #1677ff;
+      text-decoration: underline;
+    }
+
+    :deep(img) {
+      max-width: 100%;
+      height: auto;
     }
   }
 </style>
