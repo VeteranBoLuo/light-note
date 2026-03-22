@@ -872,7 +872,7 @@
             margin: 0;
             padding: 16px;
             overflow: auto;
-            background: #f8f9fa;
+            background: var(--pre-bg-color);
             font-family: 'Monaco', 'Menlo', 'Consolas', 'Ubuntu Mono', monospace;
             font-size: 14px;
             line-height: 1.5;
