@@ -1,38 +1,47 @@
 <template>
-  <div v-if="bookmark.bookmarkLoading" class="card-panel skeleton-panel">
-    <div v-for="n in skeletonCount" :key="n" class="card-skeleton">
-      <div class="skeleton-title">
-        <div class="skeleton-avatar"></div>
-        <div class="skeleton-line short"></div>
+  <div class="card-panel-wrap">
+    <div v-if="bookmark.bookmarkLoading" class="card-panel skeleton-panel">
+      <div v-for="n in skeletonCount" :key="n" class="card-skeleton">
+        <div class="skeleton-title">
+          <div class="skeleton-avatar"></div>
+          <div class="skeleton-line short"></div>
+        </div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-tags">
+          <div class="skeleton-chip"></div>
+          <div class="skeleton-chip"></div>
+        </div>
       </div>
-      <div class="skeleton-line"></div>
-      <div class="skeleton-line"></div>
-      <div class="skeleton-tags">
-        <div class="skeleton-chip"></div>
-        <div class="skeleton-chip"></div>
+    </div>
+    <VueDraggable
+      v-else
+      :animation="200"
+      :disabled="bookmark.isMobile"
+      ref="el"
+      v-model="bookmark.bookmarkList"
+      class="card-panel"
+      id="card-panel"
+      @start="onDragStart"
+      @end="onEnd"
+      :scroll-sensitivity="50"
+      :forceFallback="true"
+      :delay="50"
+    >
+      <div v-for="item in getBookList" :key="item.id">
+        <RightMenu :menu="[$t('common.edit'), $t('common.delete')]" @select="rightMenuClick($event, item)">
+          <TagCard :cardInfo="item" />
+        </RightMenu>
       </div>
+    </VueDraggable>
+    <div class="beian-wrap">
+      <span class="beian-copy">© {{ currentYear }} 轻笺</span>
+      <span class="beian-separator">|</span>
+      <a class="icp-beian-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+        网站备案号：粤ICP备2024318205号-1
+      </a>
     </div>
   </div>
-  <VueDraggable
-    v-else
-    :animation="200"
-    :disabled="bookmark.isMobile"
-    ref="el"
-    v-model="bookmark.bookmarkList"
-    class="card-panel"
-    id="card-panel"
-    @start="onDragStart"
-    @end="onEnd"
-    :scroll-sensitivity="50"
-    :forceFallback="true"
-    :delay="50"
-  >
-    <div v-for="item in getBookList" :key="item.id">
-      <RightMenu :menu="[$t('common.edit'), $t('common.delete')]" @select="rightMenuClick($event, item)">
-        <TagCard :cardInfo="item" />
-      </RightMenu>
-    </div>
-  </VueDraggable>
 </template>
 
 <script lang="ts" setup>
@@ -54,6 +63,7 @@
     return bookmark.bookmarkList;
   });
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
+  const currentYear = new Date().getFullYear();
 
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签${item.name}` });
@@ -97,6 +107,12 @@
 </script>
 
 <style lang="less" scoped>
+  .card-panel-wrap {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
   .card-panel {
     margin-top: 16px;
     display: grid;
@@ -197,6 +213,43 @@
   .panel-loading {
     :deep(.loading) {
       top: 40% !important;
+    }
+  }
+
+  .beian-wrap {
+    margin-top: auto;
+    padding: 18px 16px 12px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: var(--text-second-color);
+    opacity: 0.58;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  .icp-beian-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .beian-copy,
+  .beian-separator {
+    color: inherit;
+  }
+
+  .icp-beian-link:hover {
+    opacity: 0.82;
+  }
+
+  @media (max-width: 768px) {
+    .beian-wrap {
+      padding: 14px 12px 10px;
+      font-size: 11px;
+      gap: 6px;
     }
   }
 </style>

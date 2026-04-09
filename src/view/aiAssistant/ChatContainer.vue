@@ -86,7 +86,7 @@
   const useInternetSearch = ref(false);
   const enableThinking = ref(false);
   const enableTranslation = ref(false);
-  const translationConfig = ref({ source: 'auto', target: 'en' });
+  const translationConfig = ref({ source: 'auto', target: 'zh' });
 
   // 智能滚动相关状态 - 简化状态管理
   const autoScrollEnabled = ref(true); // 是否启用自动滚动

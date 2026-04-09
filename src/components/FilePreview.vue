@@ -109,7 +109,12 @@
             <div v-html="textContent" class="html-container"></div>
           </template>
           <template v-else-if="isMarkdownFile">
-            <div v-html="markdownContent" class="markdown-container"></div>
+            <div
+              ref="markdownContainerRef"
+              v-html="markdownContent"
+              class="markdown-container"
+              @click="handleMarkdownLink"
+            ></div>
           </template>
           <pre
             v-else
@@ -258,6 +263,7 @@
   const wrapText = ref(true);
   const pdfBlobUrl = ref<string>('');
   const previewHistoryActive = ref(false);
+  const markdownContainerRef = ref<HTMLElement | null>(null);
 
   // 文件类型映射配置
   const fileTypeConfig = {
@@ -352,13 +358,48 @@
     return fileName.endsWith('.md') || fileName.endsWith('.markdown');
   });
 
+  function buildHeadingId(text: string) {
+    return text
+      .trim()
+      .toLowerCase()
+      .replace(/[^\u4e00-\u9fa5a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+  }
+
+  function enrichMarkdownHeadings(html: string) {
+    if (!html) return '';
+    const template = document.createElement('template');
+    template.innerHTML = html;
+
+    const headingEls = template.content.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    const usedIds = new Set<string>();
+
+    headingEls.forEach((heading) => {
+      const el = heading as HTMLElement;
+      const text = (el.textContent || '').trim();
+      let id = (el.id || '').trim() || buildHeadingId(text) || 'section';
+      let uniqueId = id;
+      let i = 2;
+      while (usedIds.has(uniqueId)) {
+        uniqueId = `${id}-${i}`;
+        i += 1;
+      }
+      usedIds.add(uniqueId);
+      el.id = uniqueId;
+    });
+
+    return template.innerHTML;
+  }
+
   const markdownContent = computed(() => {
     if (!isMarkdownFile.value || !textContent.value) return '';
     const html = marked.parse(textContent.value, {
       gfm: true,
       breaks: true,
     });
-    return DOMPurify.sanitize(typeof html === 'string' ? html : '');
+    const sanitized = DOMPurify.sanitize(typeof html === 'string' ? html : '');
+    return enrichMarkdownHeadings(typeof sanitized === 'string' ? sanitized : '');
   });
 
   // 微软Office在线预览URL
@@ -523,6 +564,63 @@
       console.log('文本已复制到剪贴板');
     } catch (err) {
       console.error('复制失败:', err);
+    }
+  }
+
+  function normalizeAnchorKey(value: string) {
+    return decodeURIComponent(value)
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '')
+      .replace(/[^\u4e00-\u9fa5a-z0-9]/g, '');
+  }
+
+  function findAnchorTarget(container: HTMLElement, rawHash: string) {
+    const decodedHash = decodeURIComponent(rawHash);
+    const candidateIds = [rawHash, decodedHash, rawHash.toLowerCase(), decodedHash.toLowerCase()];
+
+    for (const id of candidateIds) {
+      if (!id) continue;
+      const exact = container.querySelector(`[id="${id}"]`) as HTMLElement | null;
+      if (exact) return exact;
+    }
+
+    const normalizedHash = normalizeAnchorKey(rawHash);
+    if (!normalizedHash) return null;
+
+    const headingEls = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6')) as HTMLElement[];
+    return (
+      headingEls.find((el) => normalizeAnchorKey(el.id || '') === normalizedHash) ||
+      headingEls.find((el) => normalizeAnchorKey(el.textContent || '') === normalizedHash) ||
+      null
+    );
+  }
+
+  function handleMarkdownLink(event: Event) {
+    const target = event.target as HTMLElement | null;
+    const link = target?.closest('a') as HTMLAnchorElement | null;
+    if (!link) return;
+
+    const href = (link.getAttribute('href') || '').trim();
+    if (!href) return;
+
+    if (/^(https?:|mailto:|tel:)/i.test(href)) {
+      return;
+    }
+
+    const hashIndex = href.indexOf('#');
+    if (hashIndex === -1) return;
+
+    const rawHash = href.slice(hashIndex + 1);
+    if (!rawHash) return;
+
+    event.preventDefault();
+    const container = markdownContainerRef.value;
+    if (!container) return;
+
+    const targetElement = findAnchorTarget(container, rawHash);
+    if (targetElement) {
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 
