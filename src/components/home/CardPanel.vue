@@ -35,10 +35,10 @@
       </div>
     </VueDraggable>
     <div class="beian-wrap">
-      <span class="beian-copy">© {{ currentYear }} 轻笺</span>
+      <span class="beian-copy">© 2026轻笺</span>
       <span class="beian-separator">|</span>
       <a class="icp-beian-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
-        网站备案号：粤ICP备2024318205号-1
+        网站备案号：蜀ICP备2026017699号-1
       </a>
     </div>
   </div>
@@ -63,7 +63,6 @@
     return bookmark.bookmarkList;
   });
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
-  const currentYear = new Date().getFullYear();
 
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签${item.name}` });
