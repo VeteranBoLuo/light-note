@@ -6,10 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- ===== 核心SEO元标签 ===== -->
-  <title>轻笺 - 轻量级知识管理工具</title>
+  <title>轻笺</title>
   <meta
     name="description"
-    content="轻笺是一个书签、云笔记和云存储管理平台，支持多标签分类、智能检索和数据同步。帮助用户高效管理网页书签、个人笔记和云端文件。"
+    content="轻笺是AI驱动的智能知识管理平台，集成书签、云笔记和云空间三大核心功能。通过AI技术实现智能内容分析、自动标签分类、语义搜索和智能推荐，帮助您高效管理网页书签、个人笔记和云端文件，构建完整的个人知识体系。"
   />
   <meta
     name="keywords"
@@ -21,7 +21,7 @@
   <meta property="og:title" content="轻笺 - AI智能书签管理平台 | 云笔记 | 云空间 | 智能知识管理" />
   <meta
     property="og:description"
-    content="轻笺是一个轻量级的知识管理平台，集成书签管理、云笔记和云空间功能，支持多标签分类、智能检索和跨设备同步。"
+    content="轻笺AI智能知识管理平台：集成书签管理、云笔记和云空间三大功能，基于深度学习的智能内容理解技术，自动分析网页内容、笔记文本和文件信息，生成精准标签和智能摘要，构建完整的个人知识图谱。"
   />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://boluo66.top" />
@@ -41,9 +41,9 @@
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "轻笺",
-      "description": "一个集成的书签、笔记和云存储管理平台，支持多标签分类、智能检索和跨设备同步功能。",
+      "description": "基于人工智能技术的智能知识管理平台，集成书签管理、云笔记和云空间三大核心功能，具备智能内容分析、自动标签分类、语义搜索和知识图谱构建等AI能力。",
       "url": "https://boluo66.top",
-      "applicationCategory": "ProductivityApplication",
+      "applicationCategory": "UtilityApplication",
       "operatingSystem": "Any",
       "permissions": "browser",
       "featureList": [

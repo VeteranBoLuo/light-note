@@ -2,7 +2,7 @@
 
 ![top-language](https://img.shields.io/github/languages/top/VeteranBoLuo/light-note) [![Website](https://img.shields.io/website?up_message=online&url=https%3A%2F%2Fboluo66.top)](https://boluo66.top) ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/VeteranBoLuo/light-note) ![GitHub last commit](https://img.shields.io/github/last-commit/VeteranBoLuo/light-note)
 
-> **以智能标签为中枢的知识连接工具**
+> **以标签为核心的知识管理工具**
 >
 > 轻笺（light-note）是一个围绕“标签网络”构建的云端效率系统，核心覆盖：**书签归档、笔记沉淀、云空间协同**。目标是把网址、笔记、文件统一组织在同一套标签语义下，实现跨设备检索与联动管理。
 
@@ -75,7 +75,7 @@
 
 - 登录注册、GitHub OAuth 回调、个人中心、帮助文档、更新日志
 - 管理页支持标签与书签的编辑管理
-- AI 助手能力入口已预留（按路由与角色策略逐步开放）
+- AI 功能扩展预留（按路由与角色策略逐步开放）
 
 ## 🚀 快速开始
 
@@ -118,10 +118,10 @@ git clone https://github.com/VeteranBoLuo/BMS_Back
 
 ## ✨ 下一步规划
 
-- 标签驱动的跨模块推荐（书签 ↔ 笔记 ↔ 文件）
+- 标签关联系统（书签、笔记、文件多端同步）
 - 知识卡片化（链接与笔记联动沉淀）
-- AI 辅助归档与标签建议
-- 工作台智能洞察增强（趋势分析与个性化效率建议）
+- 内容自动分类与标签建议
+- 工作台数据分析增强（趋势分析与效率优化建议）
 
 ## 📢 更新日志
 
