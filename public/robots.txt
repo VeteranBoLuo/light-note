@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /#/admin
+Disallow: /#/share/download
+
+Sitemap: https://boluo66.top/sitemap.xml
