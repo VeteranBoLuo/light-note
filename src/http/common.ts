@@ -39,7 +39,7 @@ export async function shareField(id: number | string, fileName?: string, fileTyp
     const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
     const encodedFileType = fileType ? encodeURIComponent(fileType) : '';
     const encodedDesc = description ? encodeURIComponent(description) : '';
-    const shareUrl = `${window.location.origin}/#/share/${id}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}${encodedDesc ? `/${encodedDesc}` : ''}`;
+    const shareUrl = `${window.location.origin}/share/${id}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}${encodedDesc ? `/${encodedDesc}` : ''}`;
     await navigator.clipboard.writeText(shareUrl);
     message.success('分享链接已复制到剪贴板');
     return shareUrl;

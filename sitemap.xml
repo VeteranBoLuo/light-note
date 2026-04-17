@@ -7,19 +7,25 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://boluo66.top/#/login</loc>
+    <loc>https://boluo66.top/login</loc>
     <lastmod>2026-04-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://boluo66.top/#/status</loc>
+    <loc>https://boluo66.top/403</loc>
     <lastmod>2026-04-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://boluo66.top/#/updateLogs</loc>
+    <loc>https://boluo66.top/updateLogs</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url> 
+  <loc>https://boluo66.top/workbenches</loc>
     <lastmod>2026-04-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>

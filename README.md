@@ -125,7 +125,7 @@ git clone https://github.com/VeteranBoLuo/BMS_Back
 
 ## 📢 更新日志
 
-[查看更新日志](https://boluo66.top/#/updateLogs)
+[查看更新日志](https://boluo66.top/updateLogs)
 
 ## ⭐ Stargazers
 
