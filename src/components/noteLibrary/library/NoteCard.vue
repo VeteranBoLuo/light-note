@@ -2,7 +2,6 @@
   <div
     @click="router.push(`/noteLibrary/${note.id}`)"
     class="note-card dark-theme"
-    :style="{ boxShadow: user.preferences.theme === 'night' ? 'unset' : 'rgb(237, 242, 250) 0px 0px 10px' }"
   >
     <div class="note-title" :title="note.title">{{ note.title }}</div>
     <div
@@ -85,7 +84,6 @@
       .checkBox {
         visibility: visible;
       }
-      box-shadow: 0 6px 20px rgba(237, 242, 250, 0.6);
       border-color: #8b88f2;
     }
   }
