@@ -174,6 +174,11 @@
     placeholder: '请输入内容...',
     readonly: false,
     content_css: false,
+    // Keep uploaded resource URLs absolute so route depth does not affect rendering.
+    convert_urls: false,
+    relative_urls: false,
+    remove_script_host: false,
+    document_base_url: `${window.location.origin}/`,
     emoticons_database_url: '/tinymce/plugins/emoticons/js/emojis.js',
     images_upload_handler: (blobInfo: any) =>
       new Promise((resolve, reject) => {
