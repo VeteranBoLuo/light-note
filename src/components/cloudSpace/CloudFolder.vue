@@ -1,5 +1,5 @@
 <template>
-  <div class="folder-list" v-if="!bookmark.isMobile">
+  <div class="folder-list">
     <div
       class="category-item"
       style="margin: 0 0 5px 0"

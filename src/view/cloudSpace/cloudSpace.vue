@@ -55,8 +55,30 @@
         </div>
         <HandleBtnGroup ref="handleBtnGroup" />
       </div>
+      <div v-if="bookmark.isMobile" class="mobile-folder-filter">
+        <div class="mobile-folder-list">
+          <div
+            class="mobile-folder-item"
+            :class="{ active: cloud.folder.id === 'all' }"
+            @click="selectAllFolder"
+            :title="$t('cloudSpace.allFile')"
+          >
+            {{ $t('cloudSpace.allFile') }}
+          </div>
+          <div
+            v-for="folder in cloud.folderList"
+            :key="folder.id"
+            class="mobile-folder-item"
+            :class="{ active: cloud.folder.id === folder.id }"
+            :title="folder.name"
+            @click="selectFolder(folder)"
+          >
+            {{ folder.name }}
+          </div>
+        </div>
+      </div>
       <div class="content-area">
-        <CloudFolder @uploadFiles="onUploadFiles" />
+        <CloudFolder v-if="!bookmark.isMobile" @uploadFiles="onUploadFiles" />
         <FieldList
           :batch-mode="batchMode"
           :clear-key="clearSelectionKey"
@@ -106,6 +128,19 @@
   const dragActive = ref(false);
 
   const inputQueryFieldList = debounce(cloud.queryFieldList, 500);
+
+  function selectAllFolder() {
+    cloud.folder = {
+      name: '全部文件',
+      id: 'all',
+    };
+    cloud.queryFieldList();
+  }
+
+  function selectFolder(folder) {
+    cloud.folder = folder;
+    cloud.queryFieldList();
+  }
 
   function initializeCloudSpace() {
     cloud.folder = {
@@ -464,6 +499,40 @@
     display: flex;
   }
 
+  .mobile-folder-filter {
+    margin-top: 4px;
+  }
+
+  .mobile-folder-list {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 0 6px;
+  }
+
+  .mobile-folder-item {
+    max-width: 140px;
+    min-width: fit-content;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--folder-list-border-color);
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: 12px;
+    line-height: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-folder-item.active {
+    border-color: var(--primary-color);
+    background: var(--category-item-ba-color);
+    color: var(--primary-color);
+  }
+
   .search-icon {
     height: 32px;
     width: 200px;
@@ -520,6 +589,26 @@
         margin-left: 0;
         white-space: nowrap;
       }
+    }
+
+    .mobile-folder-filter {
+      margin-top: 0;
+      margin-bottom: 6px;
+    }
+
+    .mobile-folder-list {
+      gap: 6px;
+      padding-bottom: 4px;
+    }
+
+    .mobile-folder-item {
+      font-size: 12px;
+      padding: 4px 10px;
+      max-width: 120px;
+    }
+
+    .content-area {
+      height: calc(100% - 88px);
     }
 
     .file-container {

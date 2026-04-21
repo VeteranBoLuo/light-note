@@ -72,7 +72,7 @@
     </div>
     <VueDraggable
       v-else-if="currentViewMode === 'card'"
-      :disabled="bookmark.isMobile"
+      :disabled="!bookmark.isDesktop"
       :animation="200"
       v-model="noteList"
       class="note-library-body"

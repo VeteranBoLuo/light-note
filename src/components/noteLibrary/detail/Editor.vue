@@ -540,23 +540,22 @@
     h1 {
       font-size: 17px !important;
       background-color: transparent !important;
-    color: var(--background-color) !important;
+      color: var(--background-color) !important;
     }
     h2 {
       font-size: 16px !important;
       background-color: transparent !important;
-    color: var(--background-color) !important;
-
+      color: var(--background-color) !important;
     }
     h3 {
       font-size: 15px !important;
       background-color: transparent !important;
- color: var(--background-color) !important;
+      color: var(--background-color) !important;
     }
     h4 {
       font-size: 14px !important;
       background-color: transparent !important;
-         color: var(--background-color) !important;
+      color: var(--background-color) !important;
     }
     h5 {
       font-size: 13px !important;
@@ -571,7 +570,7 @@
     p {
       font-size: 11px !important;
       background-color: transparent !important;
-       color: var(--background-color) !important;
+      color: var(--background-color) !important;
     }
     pre {
       color: var(--background-color) !important;
