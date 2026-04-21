@@ -174,11 +174,6 @@
     placeholder: '请输入内容...',
     readonly: false,
     content_css: false,
-    // Keep uploaded resource URLs absolute so route depth does not affect rendering.
-    convert_urls: false,
-    relative_urls: false,
-    remove_script_host: false,
-    document_base_url: `${window.location.origin}/`,
     emoticons_database_url: '/tinymce/plugins/emoticons/js/emojis.js',
     images_upload_handler: (blobInfo: any) =>
       new Promise((resolve, reject) => {
@@ -545,37 +540,46 @@
     h1 {
       font-size: 17px !important;
       background-color: transparent !important;
+    color: var(--background-color) !important;
     }
     h2 {
       font-size: 16px !important;
       background-color: transparent !important;
+    color: var(--background-color) !important;
+
     }
     h3 {
       font-size: 15px !important;
       background-color: transparent !important;
+ color: var(--background-color) !important;
     }
     h4 {
       font-size: 14px !important;
       background-color: transparent !important;
+         color: var(--background-color) !important;
     }
     h5 {
       font-size: 13px !important;
       background-color: transparent !important;
+      color: var(--background-color) !important;
     }
     h6 {
       font-size: 12px !important;
       background-color: transparent !important;
+      color: var(--background-color) !important;
     }
     p {
       font-size: 11px !important;
       background-color: transparent !important;
+       color: var(--background-color) !important;
     }
     pre {
-      color: var(--text-color) !important;
+      color: var(--background-color) !important;
       font-family: 微软雅黑 !important;
       font-size: 12px !important;
       background-color: transparent !important;
       border: none !important;
+      overflow: hidden !important;
     }
   }
 </style>
