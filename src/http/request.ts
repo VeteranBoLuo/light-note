@@ -1,6 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { message } from 'ant-design-vue';
-import { useUserStore } from '@/store';
+import useUserStore from '@/store/useUser';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 
 // 常量定义

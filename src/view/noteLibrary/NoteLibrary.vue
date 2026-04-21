@@ -171,7 +171,7 @@
     loading.value = true;
     const res = await apiBasePost('/api/note/queryNoteList');
     if (res.status === 200) {
-      noteList.value = res.data ?? [];
+      noteList.value = buildSearchIndex(res.data ?? []);
       user.noteTotal = noteList.value.length;
       await getAllTags();
       loading.value = false;
@@ -202,6 +202,13 @@
       .replace(/\s+/g, ' ')
       .trim();
 
+  const buildSearchIndex = (list: any[]) =>
+    list.map((note: any) => ({
+      ...note,
+      __searchTitle: (note.title || '').toLowerCase(),
+      __searchContent: toPlainText(note.content || '').toLowerCase(),
+    }));
+
   watch(
     () => searchValue.value,
     (val) => {
@@ -217,11 +224,8 @@
     const keyword = debouncedSearch.value;
 
     const filteredNotes = noteList.value.filter((note) => {
-      const title = (note.title || '').toLowerCase();
-      const contentText = toPlainText(note.content || '').toLowerCase();
-
       if (!keyword) return true;
-      return title.includes(keyword) || contentText.includes(keyword);
+      return note.__searchTitle.includes(keyword) || note.__searchContent.includes(keyword);
     });
 
     let tagFilter = router.currentRoute.value.query.tag;

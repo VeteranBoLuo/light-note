@@ -81,7 +81,7 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon';
-  import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+  import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -93,8 +93,8 @@
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
-  import FilePreview from '@/components/FilePreview.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();

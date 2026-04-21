@@ -198,19 +198,12 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-  import DOMPurify from 'dompurify';
-  import { marked } from 'marked';
+  import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
   import VideoPreview from '@/components/base/VideoPreview.vue';
 
-  // 引入vue-office组件
-  import VueOfficeDocx from '@vue-office/docx';
-  import VueOfficeExcel from '@vue-office/excel';
-  import VueOfficePptx from '@vue-office/pptx';
-
-  // 引入vue-office样式
-  import '@vue-office/docx/lib/index.css';
-  import '@vue-office/excel/lib/index.css';
+  const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx'));
+  const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel'));
+  const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx'));
 
   // 引入Ant Design Vue图标
   import {
@@ -264,6 +257,12 @@
   const pdfBlobUrl = ref<string>('');
   const previewHistoryActive = ref(false);
   const markdownContainerRef = ref<HTMLElement | null>(null);
+  const markdownContent = ref('');
+
+  let officeStyleLoaded = false;
+  let markdownLibLoaded = false;
+  let markdownParser: ((markdown: string) => string) | null = null;
+  let markdownSanitizer: ((html: string) => string) | null = null;
 
   // 文件类型映射配置
   const fileTypeConfig = {
@@ -392,15 +391,34 @@
     return template.innerHTML;
   }
 
-  const markdownContent = computed(() => {
-    if (!isMarkdownFile.value || !textContent.value) return '';
-    const html = marked.parse(textContent.value, {
-      gfm: true,
-      breaks: true,
-    });
-    const sanitized = DOMPurify.sanitize(typeof html === 'string' ? html : '');
-    return enrichMarkdownHeadings(typeof sanitized === 'string' ? sanitized : '');
-  });
+  async function ensureOfficeStylesLoaded() {
+    if (officeStyleLoaded) return;
+    await Promise.all([import('@vue-office/docx/lib/index.css'), import('@vue-office/excel/lib/index.css')]);
+    officeStyleLoaded = true;
+  }
+
+  async function ensureMarkdownLibLoaded() {
+    if (markdownLibLoaded) return;
+    const [{ marked }, dompurifyModule] = await Promise.all([import('marked'), import('dompurify')]);
+    markdownParser = (markdown: string) =>
+      marked.parse(markdown, {
+        gfm: true,
+        breaks: true,
+      }) as string;
+    markdownSanitizer = (html: string) => dompurifyModule.default.sanitize(html) as string;
+    markdownLibLoaded = true;
+  }
+
+  async function updateMarkdownContent() {
+    if (!isMarkdownFile.value || !textContent.value) {
+      markdownContent.value = '';
+      return;
+    }
+    await ensureMarkdownLibLoaded();
+    const html = markdownParser ? markdownParser(textContent.value) : '';
+    const sanitized = markdownSanitizer ? markdownSanitizer(html) : html;
+    markdownContent.value = enrichMarkdownHeadings(sanitized);
+  }
 
   // 微软Office在线预览URL
   const microsoftOfficeViewerUrl = computed(() => {
@@ -440,13 +458,25 @@
     { immediate: true },
   );
 
+  watch(
+    () => [isMarkdownFile.value, textContent.value],
+    () => {
+      updateMarkdownContent();
+    },
+    { immediate: true },
+  );
+
   // 开始预览
   async function startPreview(file: typeof props.fileInfo) {
     loading.value = true;
     error.value = false;
     errorMessage.value = '';
     textContent.value = '';
+    markdownContent.value = '';
     try {
+      if (['word', 'excel', 'ppt'].includes(previewType.value)) {
+        await ensureOfficeStylesLoaded();
+      }
       if (previewType.value === 'pdf') {
         await loadPdfBlob(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {

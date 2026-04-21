@@ -39,7 +39,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from 'vue';
   import router from '@/router';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
@@ -50,7 +50,7 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import AiReply from '@/components/noteLibrary/detail/AiReply.vue';
+  const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const note = reactive({
@@ -198,7 +198,7 @@
     }
     timer.value = setTimeout(() => {
       saveNote(isMsg);
-    }, 300);
+    }, 500);
   }
 
   function delNote() {

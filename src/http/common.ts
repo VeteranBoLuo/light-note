@@ -1,5 +1,5 @@
 import { message } from 'ant-design-vue';
-import { cloudSpaceStore } from '@/store';
+import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
 const cloud = cloudSpaceStore();
 export async function downloadField(id: number | string) {

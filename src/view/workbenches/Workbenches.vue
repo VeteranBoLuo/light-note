@@ -234,7 +234,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { getJsonInfo } from '@/config/jsonCfg.ts';
   import { API_TEXTS } from '@/config/constants.ts';
@@ -242,8 +242,8 @@
   import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import FilePreview from '@/components/FilePreview.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
+  const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
