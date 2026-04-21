@@ -42,6 +42,10 @@ const adminRouter: RouteRecordRaw[] = [
         path: 'simpleSql',
         component: () => import('@/view/admin/components/SimpleSql.vue'),
       },
+      {
+        path: 'helpMg',
+        component: () => import('@/view/admin/components/helpMg/HelpMg.vue'),
+      },
     ],
   },
   {

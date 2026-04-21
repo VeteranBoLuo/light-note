@@ -38,30 +38,34 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, onMounted, onUnmounted, ref } from 'vue';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import { listOptions } from '@/config/helpCfg.ts';
-  import { apiBasePost } from '@/http/request.ts';
-  import { backRouterPage } from '@/utils/common';
+  import { getHelpConfig } from '@/api/helpApi';
 
   const bookmark = bookmarkStore();
   const checkId = ref('');
   const searchValue = ref('');
+  type HelpItem = {
+    id: string;
+    title: string;
+    content: string;
+  };
+  const serverOptions = ref<HelpItem[]>([]);
   const viewOptions = computed(() => {
     if (searchValue.value) {
-      return listOptions.value.filter((data) => {
+      return serverOptions.value.filter((data) => {
         return data.title.includes(searchValue.value);
       });
     }
-    return listOptions.value;
+    return serverOptions.value;
   });
 
   const node = computed(() => {
-    const item = listOptions.value.find((data) => data.id === checkId.value);
+    const item = serverOptions.value.find((data) => data.id === checkId.value);
     return item ?? helpInfo;
   });
 
@@ -99,16 +103,14 @@
     }
   }
 
-  function init() {
-    apiBasePost('/api/common/getHelpConfig').then((res) => {
-      if (res.status === 200) {
-        if (res.data.length > 0) {
-          listOptions.value = res.data;
-        }
-      }
-    });
+  async function init() {
+    const res = await getHelpConfig();
+    if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
+      serverOptions.value = res.data;
+    }
   }
   onMounted(() => {
+    init();
     setupClickListener();
   });
 

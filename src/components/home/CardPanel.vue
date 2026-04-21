@@ -35,7 +35,7 @@
       </div>
     </VueDraggable>
     <div class="beian-wrap">
-      <span class="beian-copy">© 2026轻笺</span>
+      <span class="beian-copy">© 2024轻笺</span>
       <span class="beian-separator">|</span>
       <a class="icp-beian-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
         网站备案号：蜀ICP备2026017699号-1
@@ -154,12 +154,12 @@
     width: 24px;
     height: 24px;
     border-radius: 8px;
-    background: var(--common-tag-bg-color);
+    background: rgba(120, 120, 120, 0.18);
   }
   .skeleton-line {
     height: 10px;
     border-radius: 6px;
-    background: var(--btn-h-bg-color);
+    background: rgba(120, 120, 120, 0.18);
     margin-bottom: 8px;
   }
   .skeleton-line.short {
@@ -176,7 +176,7 @@
     width: 50px;
     height: 16px;
     border-radius: 8px;
-    background: var(--btn-h-bg-color);
+    background: rgba(120, 120, 120, 0.18);
   }
   :global(body.drag-active) {
     .card-panel {

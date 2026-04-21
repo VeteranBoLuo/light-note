@@ -61,7 +61,6 @@
           flex-grow: 1;
         "
         v-html="node.content"
-        :contenteditable="user.role === 'root'"
       >
       </div>
     </div>
@@ -74,14 +73,13 @@
   import BList from '@/components/base/BasicComponents/BList.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import { getHelpConfig } from '@/api/helpApi';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
-  import { listOptions } from '@/config/helpCfg.ts';
 
   const { t, locale } = useI18n();
-  const user = useUserStore();
   const helpInfo = {
     content:
       locale.value === 'zh-CN'
@@ -122,6 +120,12 @@
   };
 
   const node = ref(helpInfo);
+  type HelpItem = {
+    id: string;
+    title: string;
+    content: string;
+  };
+  const serverOptions = ref<HelpItem[]>([]);
 
   const bookmark = bookmarkStore();
   const checkId = ref('');
@@ -138,11 +142,11 @@
   const searchValue = ref('');
   const viewOptions = computed(() => {
     if (searchValue.value) {
-      return listOptions.value.filter((data) => {
+      return serverOptions.value.filter((data) => {
         return data.title.includes(searchValue.value);
       });
     }
-    return listOptions.value;
+    return serverOptions.value;
   });
 
   function setupClickListener() {
@@ -157,8 +161,16 @@
     }
   }
 
+  async function loadHelpConfig() {
+    const res = await getHelpConfig();
+    if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
+      serverOptions.value = res.data;
+    }
+  }
+
   onMounted(() => {
     setupClickListener();
+    loadHelpConfig();
   });
 
   onUnmounted(() => {

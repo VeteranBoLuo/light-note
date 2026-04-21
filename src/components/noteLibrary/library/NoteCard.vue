@@ -1,8 +1,5 @@
 <template>
-  <div
-    @click="router.push(`/noteLibrary/${note.id}`)"
-    class="note-card dark-theme"
-  >
+  <div @click="router.push(`/noteLibrary/${note.id}`)" class="note-card dark-theme">
     <div class="note-title" :title="note.title">{{ note.title }}</div>
     <div
       class="note-content"

@@ -299,7 +299,7 @@
       'text/csv',
       'application/x-sh',
       'application/x-bat',
-      'application/octet-stream'
+      'application/octet-stream',
     ],
     compress: [
       'application/zip',
@@ -353,8 +353,8 @@
   const unsupportedTypes = ['unsupported', 'compress'];
 
   const isMarkdownFile = computed(() => {
-    const fileName = props.fileInfo.fileName?.toLowerCase() || '';
-    return fileName.endsWith('.md') || fileName.endsWith('.markdown');
+    const fileName = props.fileInfo?.fileName?.toLowerCase() || '';
+    return fileName?.endsWith('.md') || fileName?.endsWith('.markdown');
   });
 
   function buildHeadingId(text: string) {

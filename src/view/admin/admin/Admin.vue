@@ -59,6 +59,11 @@
       title: 'simpleSql',
       icon: icon.userCenter.sql,
     },
+    {
+      id: 'helpMg',
+      title: '帮助中心',
+      icon: icon.help_document,
+    },
   ]);
 
   function nodeClick(menu: any) {

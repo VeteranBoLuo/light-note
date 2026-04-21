@@ -209,6 +209,7 @@
     'files',
     'folders',
     'help_config',
+    'help_config_draft',
     'note',
     'note_images',
     'operation_logs',
