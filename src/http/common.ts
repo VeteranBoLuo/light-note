@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { message } from 'ant-design-vue';
 import { cloudSpaceStore } from '@/store';
 import { apiBasePost } from '@/http/request.ts';

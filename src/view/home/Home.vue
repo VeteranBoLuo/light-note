@@ -94,9 +94,6 @@
         bookmark.bookmarkLoading = false;
       }
     },
-    {
-      deep: true,
-    },
   );
 
   watch(() => bookmark.refreshTagKey, queryTagList);
@@ -166,11 +163,13 @@
     box-sizing: border-box;
     display: flex;
   }
+
   @media (max-width: 1024px) {
     .main-page {
       padding: 20px 0;
       display: flex;
     }
+
     .phone-filter-panel {
       box-sizing: border-box;
       width: 100%;

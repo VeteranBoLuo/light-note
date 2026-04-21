@@ -24,7 +24,7 @@
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
   import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
-  import { debounce } from 'lodash-es';
+  import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
   import { updateNotice } from '@/config/updateNotice';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
@@ -67,10 +67,10 @@
 
   let mq = null;
   let mqListener = null;
-  const handleResize = debounce(() => {
+  const handleResize = throttle(() => {
     bookmark.screenWidth = window.innerWidth;
     bookmark.screenHeight = window.innerHeight;
-  }, 50);
+  }, 100);
   function initApp() {
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
     const preferences = localStorage.getItem('preferences');
