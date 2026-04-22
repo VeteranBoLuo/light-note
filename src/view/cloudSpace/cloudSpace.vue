@@ -448,6 +448,7 @@
   onMounted(() => {
     if (bookmark.isMobile) {
       batchMode.value = true;
+      cloud.queryFolder();
     }
     // 为window添加粘贴事件监听
     window.addEventListener('paste', onPaste);

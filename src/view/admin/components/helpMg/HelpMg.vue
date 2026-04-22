@@ -34,7 +34,6 @@
           <b-button type="danger" @click="deleteCurrentDraft">删除草稿</b-button>
           <b-button type="success" @click="publishAllDraft">发布全部</b-button>
         </div>
-        <span class="admin-filters-hint">编辑仅限 root 用户 · 发布后帮助中心立即生效</span>
       </div>
 
       <div class="help-draft__body">
@@ -55,10 +54,10 @@
         </div>
         <div class="help-draft__editor-panel">
           <div class="help-draft__mode-switch">
+            <b-input v-model:value="editTitle" placeholder="请输入标题" style="width: 200px" />
             <b-button :type="isCreateMode ? 'primary' : ''" @click="switchMode(true)">新增模式</b-button>
             <b-button :type="!isCreateMode ? 'primary' : ''" @click="switchMode(false)">编辑模式</b-button>
           </div>
-          <b-input v-model:value="editTitle" placeholder="请输入标题" />
           <div ref="editorRef" class="help-draft__editor" contenteditable="true"></div>
         </div>
       </div>
@@ -106,7 +105,9 @@
     if (!searchValue.value) {
       return draftOptions.value;
     }
-    return draftOptions.value.filter((item) => item.title.includes(searchValue.value) || item.id.includes(searchValue.value));
+    return draftOptions.value.filter(
+      (item) => item.title.includes(searchValue.value) || item.id.includes(searchValue.value),
+    );
   });
 
   const currentNode = computed<HelpItem | null>(() => {
@@ -189,7 +190,8 @@
     if (draftOptions.value.length > 0 && !checkId.value) {
       checkId.value = String(draftOptions.value[0].id);
     }
-    const target = draftOptions.value.find((item) => String(item.id) === String(checkId.value)) || draftOptions.value[0];
+    const target =
+      draftOptions.value.find((item) => String(item.id) === String(checkId.value)) || draftOptions.value[0];
     editTitle.value = target?.title || '';
     await updateEditorContent(target?.content || '');
   };
@@ -200,45 +202,45 @@
     }
     savingDraft.value = true;
     try {
-    if (isCreateMode.value) {
-      const title = (editTitle.value || '').trim();
-      const content = editorRef.value?.innerHTML || '';
-      if (!title) {
-        message.warning('请先输入标题');
+      if (isCreateMode.value) {
+        const title = (editTitle.value || '').trim();
+        const content = editorRef.value?.innerHTML || '';
+        if (!title) {
+          message.warning('请先输入标题');
+          return false;
+        }
+        const res = await saveHelpDraft({
+          title,
+          content,
+        });
+        if (res.status !== 200) {
+          return false;
+        }
+        const newId = res.data?.id ? String(res.data.id) : '';
+        await fetchDraftConfig();
+        if (newId) {
+          checkId.value = newId;
+        }
+        isCreateMode.value = false;
+        message.success('新增草稿成功');
+        return true;
+      }
+      persistCurrentLocalDraft();
+      if (!currentNode.value) {
+        message.warning('暂无可保存的草稿');
         return false;
       }
-      const res = await saveHelpDraft({
-        title,
-        content,
-      });
-      if (res.status !== 200) {
-        return false;
+      const payload = {
+        id: String(currentNode.value.id),
+        title: editTitle.value || '',
+        content: editorRef.value?.innerHTML || '',
+      };
+      const res = await saveHelpDraft(payload);
+      if (res.status === 200) {
+        message.success('草稿保存成功');
+        return true;
       }
-      const newId = res.data?.id ? String(res.data.id) : '';
-      await fetchDraftConfig();
-      if (newId) {
-        checkId.value = newId;
-      }
-      isCreateMode.value = false;
-      message.success('新增草稿成功');
-      return true;
-    }
-    persistCurrentLocalDraft();
-    if (!currentNode.value) {
-      message.warning('暂无可保存的草稿');
       return false;
-    }
-    const payload = {
-      id: String(currentNode.value.id),
-      title: editTitle.value || '',
-      content: editorRef.value?.innerHTML || '',
-    };
-    const res = await saveHelpDraft(payload);
-    if (res.status === 200) {
-      message.success('草稿保存成功');
-      return true;
-    }
-    return false;
     } finally {
       savingDraft.value = false;
     }
@@ -389,7 +391,10 @@
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     padding: 8px;
-    overflow: auto;
+    overflow: hidden !important;
+    :deep(.category-body) {
+      height: 100% !important;
+    }
   }
 
   .help-draft__editor-panel {
