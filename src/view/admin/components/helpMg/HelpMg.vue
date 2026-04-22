@@ -58,7 +58,7 @@
             <b-button :type="isCreateMode ? 'primary' : ''" @click="switchMode(true)">新增模式</b-button>
             <b-button :type="!isCreateMode ? 'primary' : ''" @click="switchMode(false)">编辑模式</b-button>
           </div>
-          <div ref="editorRef" class="help-draft__editor" contenteditable="true"></div>
+          <Editor class="help-draft__editor" v-model:content="draftContent" image-upload-mode="base64" />
         </div>
       </div>
     </section>
@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, onMounted, onUnmounted, ref } from 'vue';
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -83,6 +83,7 @@
     syncHelpDraftFromPublished,
   } from '@/api/helpApi';
   import { bookmarkStore } from '@/store';
+  import Editor from '@/components/noteLibrary/detail/Editor.vue';
 
   type HelpItem = {
     id: string;
@@ -98,7 +99,7 @@
   const isCreateMode = ref(false);
   const savingDraft = ref(false);
   const savingSort = ref(false);
-  const editorRef = ref<HTMLElement>();
+  const draftContent = ref('');
   const canDragDraft = computed(() => !isCreateMode.value && !searchValue.value.trim());
 
   const viewOptions = computed(() => {
@@ -118,13 +119,11 @@
   });
 
   const updateEditorContent = async (content?: string) => {
-    await nextTick();
-    if (!editorRef.value) return;
     if (isCreateMode.value) {
-      editorRef.value.innerHTML = '<p>请在这里编辑帮助内容</p>';
+      draftContent.value = '<p>请在这里编辑帮助内容</p>';
       return;
     }
-    editorRef.value.innerHTML = content ?? currentNode.value?.content ?? '';
+    draftContent.value = content ?? currentNode.value?.content ?? '';
   };
 
   const persistCurrentLocalDraft = () => {
@@ -135,7 +134,7 @@
     const item = draftOptions.value.find((row) => String(row.id) === String(currentNode.value?.id));
     if (!item) return;
     item.title = editTitle.value || '';
-    item.content = editorRef.value?.innerHTML || '';
+    item.content = draftContent.value || '';
   };
 
   const normalizeHelpRows = (rows: any[]): HelpItem[] => {
@@ -204,7 +203,7 @@
     try {
       if (isCreateMode.value) {
         const title = (editTitle.value || '').trim();
-        const content = editorRef.value?.innerHTML || '';
+        const content = draftContent.value || '';
         if (!title) {
           message.warning('请先输入标题');
           return false;
@@ -233,7 +232,7 @@
       const payload = {
         id: String(currentNode.value.id),
         title: editTitle.value || '',
-        content: editorRef.value?.innerHTML || '',
+        content: draftContent.value || '',
       };
       const res = await saveHelpDraft(payload);
       if (res.status === 200) {
@@ -358,7 +357,7 @@
 
   const handleImageClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement;
-    if (target?.classList?.contains('bookmark-image')) {
+    if (target?.tagName === 'IMG' || target?.classList?.contains('bookmark-image')) {
       bookmark.refreshViewer((target as HTMLImageElement).src, {});
     }
   };
@@ -411,10 +410,22 @@
     min-height: 0;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
-    padding: 16px;
-    overflow: auto;
-    line-height: 2rem;
+    padding: 0;
+    overflow: hidden;
     outline: none;
+  }
+
+  .help-draft__editor :deep(#editor-container.note-editor) {
+    height: 100%;
+  }
+
+  .help-draft__editor :deep(.note-editor-toolbar) {
+    border-radius: 12px 12px 0 0;
+  }
+
+  .help-draft__editor :deep(.note-editor-body) {
+    padding: 16px;
+    line-height: 2rem;
   }
 
   .help-draft__editor :deep(.bookmark-image) {

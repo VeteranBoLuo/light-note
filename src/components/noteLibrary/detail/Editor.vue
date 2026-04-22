@@ -77,6 +77,10 @@
       type: String,
       default: '',
     },
+    imageUploadMode: {
+      type: String as () => 'api' | 'base64',
+      default: 'api',
+    },
   });
 
   const emits = defineEmits(['update:modelValue', 'setHtml', 'setNoteId', 'saveData']);
@@ -175,28 +179,34 @@
     readonly: false,
     content_css: false,
     emoticons_database_url: '/tinymce/plugins/emoticons/js/emojis.js',
-    images_upload_handler: (blobInfo: any) =>
-      new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('file', blobInfo.blob(), blobInfo.filename());
-        formData.append('noteId', props.noteId);
-        apiBasePost('/api/note/uploadImage', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        })
-          .then((res) => {
-            if (res.data?.noteId) {
-              emits('setNoteId', res.data.noteId);
-            }
-            if (res.data?.url) {
-              resolve(res.data.url);
-              return;
-            }
-            reject('上传失败');
-          })
-          .catch(() => reject('上传失败'));
-      }),
+    paste_data_images: true,
+    automatic_uploads: props.imageUploadMode !== 'base64',
+    ...(props.imageUploadMode === 'base64'
+      ? {}
+      : {
+          images_upload_handler: (blobInfo: any) =>
+            new Promise((resolve, reject) => {
+              const formData = new FormData();
+              formData.append('file', blobInfo.blob(), blobInfo.filename());
+              formData.append('noteId', props.noteId);
+              apiBasePost('/api/note/uploadImage', formData, {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                },
+              })
+                .then((res) => {
+                  if (res.data?.noteId) {
+                    emits('setNoteId', res.data.noteId);
+                  }
+                  if (res.data?.url) {
+                    resolve(res.data.url);
+                    return;
+                  }
+                  reject('上传失败');
+                })
+                .catch(() => reject('上传失败'));
+            }),
+        }),
     setup: (editor: any) => {
       editorRef.value = editor;
       editor.options.set(
