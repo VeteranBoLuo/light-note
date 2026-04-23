@@ -1,7 +1,21 @@
 <template>
-  <div class="storage-usage">
-    <div>{{ $t('cloudSpace.hasUsedSpace') }}: {{ cloud.usedSpace }}MB / {{ cloud.maxSpace }}MB</div>
-    <progress :value="cloud.usedSpace" :max="cloud.maxSpace" :class="progressClass"></progress>
+  <div class="storage-usage" :class="statusClass">
+    <div class="storage-head">
+      <div class="storage-title">{{ $t('cloudSpace.hasUsedSpace') }}</div>
+      <div class="storage-meta">
+        <span class="storage-value">{{ formattedUsed }}MB / {{ formattedMax }}MB</span>
+        <span class="storage-percent">{{ usagePercent }}%</span>
+      </div>
+    </div>
+    <div
+      class="storage-bar"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      :aria-valuenow="Math.round(usagePercent)"
+    >
+      <div class="storage-bar-fill" :style="{ width: `${usagePercent}%` }"></div>
+    </div>
   </div>
 </template>
 
@@ -18,64 +32,118 @@
     return Math.min(1, Math.max(0, used / max));
   });
 
-  const progressClass = computed(() => {
+  const usagePercent = computed(() => Number((usageRatio.value * 100).toFixed(1)));
+
+  const statusClass = computed(() => {
     if (usageRatio.value >= 0.95) return 'progress-red';
     if (usageRatio.value >= 0.75) return 'progress-yellow';
     return 'progress-green';
   });
+
+  const formatSpace = (value: number) => {
+    const numeric = Number(value) || 0;
+    return Number(numeric.toFixed(1)).toString();
+  };
+
+  const formattedUsed = computed(() => formatSpace(cloud.usedSpace));
+  const formattedMax = computed(() => formatSpace(cloud.maxSpace));
 </script>
 
 <style lang="less" scoped>
   .storage-usage {
     display: flex;
     flex-direction: column;
-    justify-content: space-evenly;
-    height: 32px;
-    gap: 5px;
+    justify-content: center;
+    min-width: 250px;
+    gap: 6px;
     font-size: 12px;
-    progress {
-      width: 100%; /* 设置宽度 */
-      height: 3px; /* 设置高度（有些浏览器默认高度不足） */
+  }
+
+  .storage-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .storage-title {
+    color: #727785;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .storage-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .storage-value {
+    color: #2f3441;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .storage-percent {
+    display: inline-block;
+    min-width: 40px;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    color: #1fb487;
+  }
+
+  .storage-bar {
+    position: relative;
+    overflow: hidden;
+    height: 4px;
+    border-radius: 999px;
+    background-color: rgba(111, 119, 138, 0.2);
+  }
+
+  .storage-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #1fb487 0%, #46cbac 100%);
+    transition: width 0.3s ease;
+  }
+
+  .storage-usage.progress-yellow {
+    .storage-percent {
+      color: #d99a22;
     }
 
-    /* WebKit 浏览器（Chrome、Safari） */
-    progress::-webkit-progress-bar {
-      background-color: #f5f5f5; /* 未填充部分的背景颜色 */
+    .storage-bar-fill {
+      background: linear-gradient(90deg, #de9d22 0%, #f0ba58 100%);
+    }
+  }
+
+  .storage-usage.progress-red {
+    .storage-percent {
+      color: #e2525d;
     }
 
-    progress.progress-green::-webkit-progress-value {
-      background-color: #42b883; /* 充足：绿色 */
+    .storage-bar-fill {
+      background: linear-gradient(90deg, #e2525d 0%, #f5767f 100%);
     }
-    progress.progress-yellow::-webkit-progress-value {
-      background-color: #f2b84b; /* 不多：黄色 */
-    }
-    progress.progress-red::-webkit-progress-value {
-      background-color: #ef4444; /* 紧张：红色 */
+  }
+
+  [data-theme='night'] .storage-usage {
+    .storage-title {
+      color: #aeb4c5;
     }
 
-    /* Firefox */
-    progress.progress-green::-moz-progress-bar {
-      background-color: #42b883; /* 充足：绿色 */
-    }
-    progress.progress-yellow::-moz-progress-bar {
-      background-color: #f2b84b; /* 不多：黄色 */
-    }
-    progress.progress-red::-moz-progress-bar {
-      background-color: #ef4444; /* 紧张：红色 */
+    .storage-value {
+      color: #e6eaf7;
     }
 
-    /* 兜底样式 - 标准语法 */
-    progress.progress-green[value] {
-      color: #42b883;
-      background-color: #f5f5f5;
-    }
-    progress.progress-yellow[value] {
-      color: #f2b84b;
-      background-color: #f5f5f5;
-    }
-    progress.progress-red[value] {
-      color: #ef4444;
-      background-color: #f5f5f5;
+    .storage-bar {
+      background-color: rgba(179, 190, 218, 0.2);
     }
   }
 </style>

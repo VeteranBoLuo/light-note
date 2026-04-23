@@ -2,9 +2,12 @@
   <div class="filter-container">
     <!-- 下拉筛选按钮 -->
     <div class="filter-dropdown">
-      <b-button class="filter-button" @click="toggleFilterMenu">
-        <svg-icon :src="icon.cloudSpace.filter" />
+      <b-button class="filter-button" :class="{ 'filter-button--active': showFilterMenu }" @click="toggleFilterMenu">
+        <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
         <span>{{ bookmark.isDesktop ? $t('cloudSpace.fileType') : '' }}</span>
+        <span v-if="selectedCount > 0 && selectedCount < fileTypes.length && bookmark.isDesktop" class="filter-badge">
+          {{ selectedCount }}
+        </span>
         <i :class="['arrow', { 'arrow-up': showFilterMenu }]"></i>
       </b-button>
 
@@ -12,8 +15,9 @@
       <div v-show="showFilterMenu" class="filter-menu">
         <div class="filter-header">
           <a-checkbox :indeterminate="indeterminate" v-model:checked="allTypesSelected" @change="toggleSelectAll">
-            <span style="color: var(--text-color)">{{ $t('common.selectAll') }}</span>
+            <span class="select-all-label">{{ $t('common.selectAll') }}</span>
           </a-checkbox>
+          <span class="selected-info">{{ selectedCount }}/{{ fileTypes.length }}</span>
         </div>
         <a-checkbox-group class="filter-options" v-model:value="cloud.typeCheckValue">
           <a-checkbox v-for="type in fileTypes" :key="type.value" :value="type.value" class="filter-option">
@@ -26,7 +30,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
   import { cloudSpaceStore, bookmarkStore } from '@/store';
@@ -59,6 +63,7 @@
   const allTypesSelected = ref(true);
 
   const indeterminate = ref(false);
+  const selectedCount = computed(() => cloud.typeCheckValue.length);
 
   // 筛选逻辑
   const toggleSelectAll = (e) => {
@@ -101,17 +106,45 @@
   .filter-button {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border-radius: 4px;
+    gap: 7px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
     cursor: pointer;
     font-size: 14px;
-    transition: all 0.3s;
+    font-weight: 500;
+    transition: all 0.22s ease;
     color: var(--catalog-color);
+    background-color: var(--primary-btn-bg-color);
   }
 
   .filter-button:hover {
-    border-color: #c0c4cc;
+    background-color: var(--primary-btn-h-bg-color);
+  }
+
+  .filter-button--active {
+    border-color: rgba(96, 108, 255, 0.35);
+    background-color: var(--primary-btn-h-bg-color);
+    box-shadow: 0 0 0 2px rgba(96, 108, 255, 0.1);
+  }
+
+  .filter-icon {
+    opacity: 0.9;
+  }
+
+  .filter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(120deg, #5f76ff 0%, #7b58ff 100%);
   }
 
   .arrow {
@@ -132,22 +165,34 @@
     position: absolute;
     top: 100%;
     left: 0;
-    margin-top: 5px;
-    border-radius: 8px;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+    margin-top: 8px;
+    border-radius: 10px;
+    border: 1px solid var(--noteType-border-color);
+    box-shadow: 0 10px 24px rgba(19, 22, 35, 0.14);
     z-index: 1000;
-    width: 200px;
-    padding: 12px;
+    width: 214px;
+    padding: 10px;
     background-color: var(--menu-body-bg-color);
   }
 
   .filter-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    margin-left: 5px;
-    border-bottom: 1px solid #eee;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 2px 4px 10px;
+    border-bottom: 1px solid var(--noteType-border-color);
+  }
+
+  .select-all-label {
+    color: var(--text-color);
+    font-weight: 500;
+  }
+
+  .selected-info {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--desc-color);
   }
 
   .select-all {
@@ -175,24 +220,39 @@
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
-    gap: 10px;
-    max-height: 300px;
+    gap: 4px;
+    max-height: 290px;
     overflow-y: auto;
+    padding-right: 2px;
   }
 
   .filter-option {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 6px;
-    border-radius: 4px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 7px;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s ease;
     color: var(--text-color);
   }
 
   .filter-option:hover {
     background-color: var(--menu-item-h-bg-color);
+  }
+
+  .filter-options::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .filter-options::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(130, 138, 156, 0.45);
+  }
+
+  .filter-options::-webkit-scrollbar-track {
+    background: transparent;
   }
 
   .file-icon {
@@ -204,7 +264,7 @@
   }
   @media (max-width: 768px) {
     .filter-menu {
-      width: 100px;
+      width: 180px;
     }
   }
 </style>

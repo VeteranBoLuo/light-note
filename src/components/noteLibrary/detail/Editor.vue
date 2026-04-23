@@ -115,6 +115,7 @@
   };
 
   const currentLang = computed(() => i18n.global.locale.value);
+  const isNightTheme = computed(() => user.currentTheme === 'night');
 
   const forceReinit = async () => {
     editorKey.value += 1;
@@ -157,8 +158,8 @@
     inline: true,
     menubar: false,
     branding: false,
-    skin: user?.preferences?.theme === 'night' ? 'oxide-dark' : 'oxide',
-    skin_url: user?.preferences?.theme === 'night' ? `/tinymce/skins/ui/oxide-dark` : `/tinymce/skins/ui/oxide`,
+    skin: isNightTheme.value ? 'oxide-dark' : 'oxide',
+    skin_url: isNightTheme.value ? `/tinymce/skins/ui/oxide-dark` : `/tinymce/skins/ui/oxide`,
     statusbar: false,
     language: currentLang.value === 'zh-CN' ? 'zh_CN' : 'en',
     language_url: currentLang.value === 'zh-CN' ? '/tinymce/langs/zh_CN.js' : undefined,
@@ -471,6 +472,11 @@
     forceReinit();
   });
 
+  watch(isNightTheme, () => {
+    if (!editorReady.value) return;
+    forceReinit();
+  });
+
   onBeforeUnmount(() => {
     if (visibilityObserver) {
       visibilityObserver.disconnect();
@@ -535,6 +541,148 @@
   .note-editor .tox .tox-edit-area__iframe {
     background-color: var(--background-color) !important;
   }
+  [data-theme='night'] {
+    .note-editor-toolbar {
+      border-bottom-color: #3a3d46;
+      background-color: #25262b;
+    }
+
+    .note-editor .tox .tox-toolbar,
+    .note-editor .tox .tox-toolbar__primary,
+    .note-editor .tox .tox-toolbar__overflow,
+    .note-editor .tox .tox-editor-header {
+      background-color: #25262b !important;
+    }
+
+    .note-editor .tox .tox-toolbar__group {
+      background-color: transparent !important;
+      border-right: 1px solid #3a3d46 !important;
+    }
+
+    .note-editor .tox .tox-tbtn,
+    .note-editor .tox .tox-mbtn {
+      color: #d5d8e1 !important;
+      background-color: #343741 !important;
+      border: 1px solid #474b56 !important;
+    }
+
+    .note-editor .tox .tox-tbtn__select-label,
+    .note-editor .tox .tox-mbtn__select-label {
+      color: #d5d8e1 !important;
+    }
+
+    .note-editor .tox .tox-tbtn svg,
+    .note-editor .tox .tox-mbtn svg {
+      fill: #d5d8e1 !important;
+    }
+
+    .note-editor .tox .tox-tbtn:hover,
+    .note-editor .tox .tox-tbtn:focus,
+    .note-editor .tox .tox-mbtn:hover,
+    .note-editor .tox .tox-mbtn:focus {
+      background-color: #414654 !important;
+      border-color: #596073 !important;
+      color: #f5f7ff !important;
+    }
+
+    .note-editor .tox .tox-tbtn:hover svg,
+    .note-editor .tox .tox-tbtn:focus svg,
+    .note-editor .tox .tox-mbtn:hover svg,
+    .note-editor .tox .tox-mbtn:focus svg {
+      fill: #f5f7ff !important;
+    }
+
+    .note-editor .tox .tox-tbtn.tox-tbtn--enabled,
+    .note-editor .tox .tox-tbtn.tox-tbtn--enabled:hover {
+      background-color: #59637d !important;
+      border-color: #7480a0 !important;
+      color: #ffffff !important;
+    }
+
+    .note-editor .tox .tox-tbtn.tox-tbtn--enabled svg,
+    .note-editor .tox .tox-tbtn.tox-tbtn--enabled:hover svg {
+      fill: #ffffff !important;
+    }
+
+    .note-editor .tox .tox-tbtn--disabled,
+    .note-editor .tox .tox-tbtn--disabled:hover {
+      background-color: #2b2d33 !important;
+      border-color: #3a3d46 !important;
+      color: #767d8f !important;
+    }
+
+    .note-editor .tox .tox-tbtn--disabled svg {
+      fill: #767d8f !important;
+    }
+
+    .note-editor .tox .tox-collection,
+    .note-editor .tox .tox-menu,
+    .note-editor .tox .tox-collection--list,
+    .note-editor .tox .tox-collection--grid {
+      background-color: #2c2f37 !important;
+      border: 1px solid #444955 !important;
+      color: #dfe3ee !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+    }
+
+    .note-editor .tox .tox-collection__item,
+    .note-editor .tox .tox-collection__item-label {
+      color: #dfe3ee !important;
+    }
+
+    .note-editor .tox .tox-collection__item--active,
+    .note-editor .tox .tox-collection__item--enabled:hover,
+    .note-editor .tox .tox-collection__item--enabled:focus {
+      background-color: #414654 !important;
+      color: #ffffff !important;
+    }
+
+    .note-editor .tox .tox-collection--list .tox-collection__item,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label h1,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label h2,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label h3,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label h4,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label h5,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label h6,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label p,
+    .note-editor .tox .tox-collection--list .tox-collection__item-label pre {
+      color: #dfe3ee !important;
+    }
+
+    .note-editor .tox .tox-collection--list .tox-collection__item--active,
+    .note-editor .tox .tox-collection--list .tox-collection__item--enabled:hover,
+    .note-editor .tox .tox-collection--list .tox-collection__item--enabled:focus,
+    .note-editor .tox .tox-collection--list .tox-collection__item--selected {
+      background-color: #4a5163 !important;
+      color: #ffffff !important;
+    }
+
+    .note-editor .tox .tox-collection--list .tox-collection__item--state-disabled,
+    .note-editor .tox .tox-collection--list .tox-collection__item--state-disabled .tox-collection__item-label,
+    .note-editor .tox .tox-collection--list .tox-collection__item--state-disabled .tox-collection__item-label * {
+      color: #7b8294 !important;
+    }
+
+    .tox .tox-collection--list .tox-collection__item--active,
+    .tox .tox-collection--list .tox-collection__item--enabled:hover,
+    .tox .tox-collection--list .tox-collection__item--enabled:focus,
+    .tox .tox-collection--list .tox-collection__item--selected {
+      background-color: #4a5163 !important;
+      color: #ffffff !important;
+    }
+
+    .tox .tox-collection--list .tox-collection__item--enabled:not(.tox-collection__item--state-disabled) {
+      background-color: #2f3442 !important;
+      color: #dfe3ee !important;
+    }
+
+    .tox .tox-collection--list .tox-collection__item--active:not(.tox-collection__item--state-disabled),
+    .tox .tox-collection--list .tox-collection__item--active.tox-collection__item--state-disabled {
+      background-color: #4a5163 !important;
+      color: #ffffff !important;
+    }
+  }
   code[data-mce-selected='inline-boundary'] {
     background-color: unset !important;
   }
@@ -550,40 +698,40 @@
     h1 {
       font-size: 17px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     h2 {
       font-size: 16px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     h3 {
       font-size: 15px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     h4 {
       font-size: 14px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     h5 {
       font-size: 13px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     h6 {
       font-size: 12px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     p {
       font-size: 11px !important;
       background-color: transparent !important;
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
     }
     pre {
-      color: var(--background-color) !important;
+      color: var(--text-color) !important;
       font-family: 微软雅黑 !important;
       font-size: 12px !important;
       background-color: transparent !important;
