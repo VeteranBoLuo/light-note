@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+import { CLOUD_FILE_CATEGORY_ORDER, type CloudFileCategory } from '@/constants/cloudFileCategory.ts';
 
 export default defineStore('dom', {
   state: () =>
@@ -15,12 +16,13 @@ export default defineStore('dom', {
           uploadTime: string;
           folderName: string;
           folderId?: string;
-          type?: string;
+          category?: CloudFileCategory;
+          ext?: string;
           isRename?: boolean;
           fileType: string;
           fileUrl: string;
         }[];
-        typeCheckValue: any[];
+        typeCheckValue: CloudFileCategory[];
         folder?: { id: string; name: string };
         searchFileName: string;
         loading: boolean;
@@ -32,7 +34,7 @@ export default defineStore('dom', {
       maxSpace: 1000,
       folderList: [],
       fileList: [],
-      typeCheckValue: ['image', 'text', 'pdf', 'word', 'excel', 'audio', 'video', 'compress', 'other'],
+      typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],
       folder: {
         name: '全部文件',
         id: 'all',
@@ -49,7 +51,7 @@ export default defineStore('dom', {
       apiQueryPost('/api/file/queryFiles', {
         filters: {
           fileName: this.searchFileName,
-          type: this.typeCheckValue,
+          category: this.typeCheckValue,
           folderId: this.folder?.id ?? 'all',
         },
       })

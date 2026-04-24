@@ -243,6 +243,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
+  import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const bookmark = bookmarkStore();
@@ -454,22 +455,9 @@
   const fileTypeChartData = computed(() => {
     const map: Record<string, number> = {};
 
-    const getType = (item: any) => {
-      const fileType = (item?.fileType || '').toLowerCase();
-      const fileName = (item?.fileName || '').toLowerCase();
-
-      if (fileType.includes('image') || /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/.test(fileName)) return '图片';
-      if (fileType.includes('video') || /\.(mp4|avi|mov|wmv|flv|webm)$/.test(fileName)) return '视频';
-      if (fileType.includes('audio') || /\.(mp3|wav|ogg|flac|aac)$/.test(fileName)) return '音频';
-      if (fileType.includes('pdf') || fileName.endsWith('.pdf')) return 'PDF';
-      if (fileType.includes('word') || /\.(doc|docx)$/.test(fileName)) return 'Word';
-      if (fileType.includes('excel') || /\.(xls|xlsx)$/.test(fileName)) return 'Excel';
-      if (fileType.includes('text') || /\.(txt|md|json|xml|csv|log)$/.test(fileName)) return '文本';
-      return '其他';
-    };
-
     (cloud.fileList || []).forEach((item) => {
-      const type = getType(item);
+      const category = getCloudFileCategory(item);
+      const type = t(CLOUD_FILE_CATEGORY_LABEL_KEY[category]);
       map[type] = (map[type] || 0) + 1;
     });
 
@@ -513,12 +501,9 @@
       .sort((a, b) => new Date(b.uploadTime || 0).getTime() - new Date(a.uploadTime || 0).getTime())
       .slice(0, 10)
       .map((item) => ({
-        fileName: item.fileName,
-        fileType: item.fileType,
         fileSizeMB: Number(((item.fileSize || 0) / 1024 / 1024).toFixed(2)),
         uploadTime: item.uploadTime || '-',
-        fileUrl: item.fileUrl,
-        id: item.id,
+        ...item,
       }));
   });
 
@@ -692,7 +677,7 @@
       const fileRes = await apiQueryPost('/api/file/queryFiles', {
         filters: {
           fileName: '',
-          type: cloud.typeCheckValue,
+          category: cloud.typeCheckValue,
           folderId: 'all',
         },
       });

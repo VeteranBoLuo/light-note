@@ -105,7 +105,7 @@
               <span class="text-info">字数: {{ textContent.length }} 字符</span>
             </a-space>
           </div>
-          <template v-if="fileInfo.fileType === 'text/html'">
+          <template v-if="isHtmlText">
             <div v-html="textContent" class="html-container"></div>
           </template>
           <template v-else-if="isMarkdownFile">
@@ -159,7 +159,7 @@
     <!-- 预览控制栏 -->
     <div class="preview-controls">
       <a-space>
-        <span class="file-type-badge">{{ getFileTypeName(previewType) }}</span>
+        <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
         <a-space size="small" gap="8">
           <a-tooltip title="上一个文件" v-if="showNext">
             <a-button size="small" @click="handlePrev" class="action-btn">
@@ -199,7 +199,13 @@
 
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import VideoPreview from '@/components/base/VideoPreview.vue';
+  import {
+    CLOUD_FILE_CATEGORY_LABEL_KEY,
+    getCloudFileCategory,
+    getCloudPreviewType,
+  } from '@/constants/cloudFileCategory.ts';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel'));
@@ -231,6 +237,7 @@
       fileName: string;
       fileType: string;
       fileUrl?: string;
+      category?: string;
     };
   }>();
 
@@ -242,6 +249,7 @@
   }>();
 
   const showNext = computed(() => !!props.showNext);
+  const { t } = useI18n();
 
   // 内部状态
   const loading = ref(false);
@@ -264,93 +272,17 @@
   let markdownParser: ((markdown: string) => string) | null = null;
   let markdownSanitizer: ((html: string) => string) | null = null;
 
-  // 文件类型映射配置
-  const fileTypeConfig = {
-    image: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp', 'image/svg+xml'],
-    video: ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/quicktime'],
-    pdf: ['application/pdf'],
-    word: [
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-word',
-      'application/doc',
-      'application/docx',
-    ],
-    excel: [
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/xls',
-      'application/xlsx',
-    ],
-    ppt: [
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'application/ppt',
-      'application/pptx',
-    ],
-    text: [
-      'text/plain',
-      'text/html',
-      'text/css',
-      'text/javascript',
-      'application/javascript',
-      'text/xml',
-      'application/json',
-      'text/csv',
-      'application/x-sh',
-      'application/x-bat',
-      'application/octet-stream',
-    ],
-    compress: [
-      'application/zip',
-      'application/x-zip-compressed',
-      'application/x-rar-compressed',
-      'application/x-7z-compressed',
-      'application/x-tar',
-      'application/gzip',
-      'application/x-bzip2',
-      'application/x-xz',
-    ],
-  };
-
-  // 计算预览类型
-  const previewType = computed(() => {
-    if (!props.fileInfo.fileType || !props.fileInfo.fileName) return 'unsupported';
-
-    const fileType = props.fileInfo.fileType.toLowerCase();
-    const fileName = props.fileInfo.fileName.toLowerCase();
-
-    for (const [type, mimeTypes] of Object.entries(fileTypeConfig)) {
-      if (mimeTypes.some((mime) => fileType.includes(mime))) {
-        return type;
-      }
-    }
-
-    const extension = fileName.split('.').pop();
-    const extensionMap: { [key: string]: string } = {
-      doc: 'word',
-      docx: 'word',
-      xls: 'excel',
-      xlsx: 'excel',
-      ppt: 'ppt',
-      pptx: 'ppt',
-      pdf: 'pdf',
-      txt: 'text',
-      html: 'text',
-      htm: 'text',
-      css: 'text',
-      js: 'text',
-      json: 'text',
-      xml: 'text',
-      csv: 'text',
-      md: 'text',
-      log: 'text',
-    };
-
-    return extensionMap[extension] || 'unsupported';
-  });
-
-  const unsupportedTypes = ['unsupported', 'compress'];
+  const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
+  const previewType = computed(() => getCloudPreviewType(props.fileInfo));
+  const unsupportedTypes = ['unsupported'];
+  const normalizedMimeType = computed(
+    () =>
+      String(props.fileInfo.fileType || '')
+        .trim()
+        .toLowerCase()
+        .split(';')[0],
+  );
+  const isHtmlText = computed(() => normalizedMimeType.value === 'text/html');
 
   const isMarkdownFile = computed(() => {
     const fileName = props.fileInfo?.fileName?.toLowerCase() || '';
@@ -428,7 +360,7 @@
   });
 
   const canTryOnlinePreview = computed(() => {
-    return ['word', 'excel', 'ppt'].includes(previewType.value);
+    return ['word', 'excel', 'ppt'].includes(currentCategory.value);
   });
 
   const effectiveFileUrl = computed(() => {
@@ -768,19 +700,9 @@
   }
 
   function getFileTypeName(type: string) {
-    const typeNames: { [key: string]: string } = {
-      pdf: 'PDF文档',
-      word: 'Word文档',
-      excel: 'Excel表格',
-      ppt: 'PPT演示文稿',
-      image: '图片',
-      video: '视频',
-      text: '文本文件',
-      compress: '压缩包',
-      'office-online': 'Office在线预览',
-      unsupported: '不支持的类型',
-    };
-    return typeNames[type] || '未知类型';
+    if (type === 'office-online') return t('common.preview');
+    const labelKey = CLOUD_FILE_CATEGORY_LABEL_KEY[getCloudFileCategory({ category: type })];
+    return t(labelKey);
   }
 
   // 键盘事件

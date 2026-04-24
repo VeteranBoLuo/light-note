@@ -35,37 +35,31 @@
   import icon from '@/config/icon.ts';
   import { cloudSpaceStore, bookmarkStore } from '@/store';
   import { useI18n } from 'vue-i18n';
+  import {
+    CLOUD_FILE_CATEGORY_LABEL_KEY,
+    CLOUD_FILE_CATEGORY_ORDER,
+    type CloudFileCategory,
+  } from '@/constants/cloudFileCategory.ts';
 
   const { t } = useI18n();
-  // 文件类型定义
   interface FileTypeOption {
-    value: string;
+    value: CloudFileCategory;
     label: string;
   }
-  // 文件类型选项
-  const fileTypes = ref<FileTypeOption[]>([
-    { value: 'image', label: t('cloudSpace.image') },
-    { value: 'text', label: t('cloudSpace.text', '文本') },
-    { value: 'pdf', label: t('cloudSpace.pdf') },
-    { value: 'word', label: t('cloudSpace.word') },
-    { value: 'excel', label: t('cloudSpace.excel') },
-    { value: 'audio', label: t('cloudSpace.audio') },
-    { value: 'video', label: t('cloudSpace.video') },
-    { value: 'compress', label: t('cloudSpace.compress') },
-    { value: 'other', label: t('cloudSpace.other') },
-  ]);
+
+  const fileTypes = computed<FileTypeOption[]>(() =>
+    CLOUD_FILE_CATEGORY_ORDER.map((type) => ({
+      value: type,
+      label: t(CLOUD_FILE_CATEGORY_LABEL_KEY[type]),
+    })),
+  );
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
-  // 响应式数据
   const showFilterMenu = ref(false);
-
-  // 计算属性
   const allTypesSelected = ref(true);
-
   const indeterminate = ref(false);
   const selectedCount = computed(() => cloud.typeCheckValue.length);
 
-  // 筛选逻辑
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
       cloud.typeCheckValue = fileTypes.value.map((type) => type.value);

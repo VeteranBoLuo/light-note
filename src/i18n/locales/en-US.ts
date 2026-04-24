@@ -191,6 +191,7 @@ export default {
     pdf: 'PDF',
     word: 'Word',
     excel: 'Excel',
+    ppt: 'PPT',
     audio: 'Audio',
     video: 'Video',
     compress: 'Compress',

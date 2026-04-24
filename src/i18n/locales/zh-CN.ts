@@ -189,6 +189,7 @@ export default {
     pdf: 'PDF',
     word: 'Word',
     excel: 'Excel',
+    ppt: 'PPT',
     audio: '音频',
     video: '视频',
     compress: '压缩包',

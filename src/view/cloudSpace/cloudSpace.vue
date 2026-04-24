@@ -103,15 +103,14 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon';
-  import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
+  import { defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
-  import { backRouterPage, debounce } from '@/utils/common';
+  import { debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
-  import { Tooltip } from 'ant-design-vue';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
@@ -249,155 +248,22 @@
     fileType: string;
     fileUrl?: string;
     size?: number;
+    category?: string;
   }
 
   // 预览相关状态
   const previewVisible = ref(false);
-  const previewLoading = ref(false);
-  const previewError = ref(false);
-  const errorMessage = ref('');
   const previewFileInfo = reactive<FileItem>({
     id: '',
     fileName: '',
     fileType: '',
     fileUrl: '',
-  });
-
-  // 文本预览相关状态
-  const textContent = ref('');
-  const wrapText = ref(true);
-
-  // 缩放控制
-  const zoomLevel = ref(1);
-
-  // 文件类型映射配置
-  const fileTypeConfig = {
-    // 图片类型
-    image: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp', 'image/svg+xml'],
-
-    // 视频类型
-    video: ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/quicktime'],
-
-    // 文档类型
-    pdf: ['application/pdf'],
-    word: [
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-word',
-      'application/doc',
-      'application/docx',
-    ],
-    excel: [
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/xls',
-      'application/xlsx',
-    ],
-    ppt: [
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'application/ppt',
-      'application/pptx',
-    ],
-
-    // 文本类型
-    text: [
-      'text/plain',
-      'text/html',
-      'text/css',
-      'text/javascript',
-      'application/javascript',
-      'text/xml',
-      'application/json',
-      'text/csv',
-      'application/x-sh',
-      'application/x-bat',
-    ],
-  };
-
-  // 计算预览类型
-  const previewType = computed(() => {
-    if (!previewFileInfo.fileType || !previewFileInfo.fileName) return 'unsupported';
-
-    const fileType = previewFileInfo.fileType.toLowerCase();
-    const fileName = previewFileInfo.fileName.toLowerCase();
-
-    // 检查每种文件类型
-    for (const [type, mimeTypes] of Object.entries(fileTypeConfig)) {
-      if (mimeTypes.some((mime) => fileType.includes(mime))) {
-        return type;
-      }
-    }
-
-    // 通过文件扩展名判断
-    const extension = fileName.split('.').pop();
-    const extensionMap: { [key: string]: string } = {
-      doc: 'word',
-      docx: 'word',
-      xls: 'excel',
-      xlsx: 'excel',
-      ppt: 'ppt',
-      pptx: 'ppt',
-      pdf: 'pdf',
-      txt: 'text',
-      html: 'text',
-      htm: 'text',
-      css: 'text',
-      js: 'text',
-      json: 'text',
-      xml: 'text',
-      csv: 'text',
-      md: 'text',
-      log: 'text',
-    };
-
-    return extensionMap[extension] || 'unsupported';
-  });
-
-  // 计算预览对话框宽度和高度
-  const previewModalWidth = computed(() => {
-    if (['image', 'text'].includes(previewType.value)) return '80vw';
-    if (['word', 'excel', 'ppt', 'pdf'].includes(previewType.value)) return '90vw';
-    return '85vw';
-  });
-
-  const previewModalHeight = computed(() => {
-    if (['excel', 'ppt'].includes(previewType.value)) return '100vh';
-    return '100vh';
-  });
-
-  const previewContentStyle = computed(() => ({
-    height: `calc(${previewModalHeight.value} - 80px)`,
-    transform: `scale(${zoomLevel.value})`,
-    transformOrigin: 'center center',
-  }));
-
-  // 微软Office在线预览URL
-  const microsoftOfficeViewerUrl = computed(() => {
-    if (!previewFileInfo.fileUrl) return '';
-    const encodedUrl = encodeURIComponent(previewFileInfo.fileUrl);
-    return `https://view.officeapps.live.com/op/view.aspx?src=${encodedUrl}`;
-  });
-
-  // 是否可以尝试在线预览
-  const canTryOnlinePreview = computed(() => {
-    return ['word', 'excel', 'ppt'].includes(previewType.value);
-  });
-
-  const effectiveFileUrl = computed(() => {
-    return previewFileInfo.fileUrl; // 返回原始URL作为fallback
+    category: 'other',
   });
 
   // 文件预览函数
   async function previewFile(file: FileItem) {
     if (!file || !file.fileType) return;
-
-    // 重置状态
-    previewLoading.value = true;
-    previewError.value = false;
-    errorMessage.value = '';
-    zoomLevel.value = 1;
-    textContent.value = '';
 
     // 设置文件信息
     Object.assign(previewFileInfo, file);
@@ -425,13 +291,6 @@
   // 关闭预览
   function closePreview() {
     previewVisible.value = false;
-    // 延迟重置状态，避免动画卡顿
-    setTimeout(() => {
-      previewLoading.value = false;
-      previewError.value = false;
-      textContent.value = '';
-      zoomLevel.value = 1;
-    }, 300);
   }
 
   function moveField(fileOrFiles: FileItem | FileItem[]) {

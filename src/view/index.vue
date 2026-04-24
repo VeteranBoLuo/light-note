@@ -7,7 +7,7 @@
   >
     <!-- 导航栏：仅在非移动端或指定页面显示，笔记详情使用自己的顶栏 -->
     <Navigation v-if="showNavigation" />
-    <router-view :style="viewStyle" />
+    <router-view :style="viewStyle" style="z-index: 100000" />
   </div>
 </template>
 
@@ -25,7 +25,9 @@
 
   // 导航栏显示逻辑
   const showNavigation = computed(
-    () => !isNoteDetailRoute.value && (!bookmark.isMobile || mobileNavigationRoutes.some((item) => route.path.includes(item))),
+    () =>
+      !isNoteDetailRoute.value &&
+      (!bookmark.isMobile || mobileNavigationRoutes.some((item) => route.path.includes(item))),
   );
 
   // 背景图显示逻辑

@@ -57,7 +57,7 @@
             class="row-checkbox"
           />
           <div v-if="!item.isRename" class="file-label flex-align-center" @click="emit('previewFile', item)"
-            ><svg-icon :src="icon.cloudSpace.fileIcon[item.type]" size="20" style="min-width: 20px" />
+            ><svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
             <span style="width: 100%" class="text-hidden">{{ item.fileName }}</span>
           </div>
           <b-input v-else class="edit-file-input" v-model:value="item.fileName" @click.stop @enter="submitReName(item)">
@@ -161,6 +161,7 @@
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
+  import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
 
   const { t } = useI18n();
   const emit = defineEmits(['previewFile', 'moveField']);
@@ -212,6 +213,8 @@
     total: 0,
     phaseText: '',
   });
+
+  const getFileCategory = (file: { category?: string }) => getCloudFileCategory(file);
 
   watch(
     () => cloud.fileList,

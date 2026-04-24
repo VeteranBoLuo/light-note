@@ -4,7 +4,7 @@
       <div v-if="loading" class="loading-section">
         <div class="loading-card">
           <div class="loading-icon">
-            <component :is="fileIcon" class="pulse" />
+            <svg-icon :src="fileIcon" class="pulse" />
           </div>
           <h2 class="loading-title">{{ $t('cloudSpace.downloading') }}</h2>
           <p class="loading-subtitle">{{ fileName ? ` - ${fileName}` : '' }}</p>
@@ -65,7 +65,7 @@
         <div class="file-card">
           <div class="file-header">
             <div class="file-icon">
-              <component :is="fileIcon" />
+              <svg-icon :src="fileIcon" />
             </div>
             <h2 class="file-title">{{ fileName || $t('cloudSpace.share') }}</h2>
             <p class="file-subtitle">{{ $t('cloudSpace.shareDescription') }}</p>
@@ -122,12 +122,6 @@
     CheckCircleOutlined,
     InfoCircleOutlined,
     FileTextOutlined,
-    FileImageOutlined,
-    FilePdfOutlined,
-    FileWordOutlined,
-    FileExcelOutlined,
-    VideoCameraOutlined,
-    AudioOutlined,
     DownloadOutlined,
     ClockCircleOutlined,
     UserOutlined,
@@ -136,6 +130,9 @@
   import { downloadField } from '@/http/common.ts';
   import { apiBasePost } from '@/http/request';
   import FilePreview from '@/components/FilePreview.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
+  import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
 
   const route = useRoute();
   const { t } = useI18n();
@@ -143,22 +140,12 @@
   const downloadSuccess = ref(false);
   const previewVisible = ref(false);
 
-  // 根据文件类型获取对应的图标组件
-  const fileIcon = computed(() => {
-    const type = file.type.toLowerCase();
-    if (type.includes('image')) return FileImageOutlined;
-    if (type.includes('pdf')) return FilePdfOutlined;
-    if (type.includes('word') || type.includes('doc')) return FileWordOutlined;
-    if (type.includes('excel') || type.includes('xls')) return FileExcelOutlined;
-    if (type.includes('video')) return VideoCameraOutlined;
-    if (type.includes('audio')) return AudioOutlined;
-    return FileTextOutlined;
-  });
+  const fileIcon = computed(() => icon.cloudSpace.fileIcon[getCloudFileCategory(file)]);
 
   const file = reactive<{
     id: string;
     fileName: string;
-    type: string;
+    category: string;
     createBy: string;
     createTime: string;
     fileSize: number;
@@ -168,7 +155,7 @@
   }>({
     id: '',
     fileName: '',
-    type: '',
+    category: 'other',
     createBy: '',
     createTime: '',
     fileSize: 0,
@@ -206,6 +193,7 @@
     fileName: file.fileName,
     fileType: file.fileType,
     fileUrl: file.fileUrl,
+    category: file.category,
   }));
 
   // 从路由参数中获取文件名 and 文件类型
