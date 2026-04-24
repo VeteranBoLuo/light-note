@@ -1,4 +1,5 @@
 import { apiBasePost } from '@/http/request.ts';
+import i18n from '@/i18n';
 
 export type SearchType = 'bookmark' | 'note' | 'file' | 'tag';
 
@@ -8,6 +9,7 @@ export interface SearchResultItem {
   title: string;
   description: string;
   extra?: string;
+  category?: string;
   url?: string;
   route?: string;
   iconUrl?: string;
@@ -38,7 +40,8 @@ const cache = new Map<string, GlobalSearchResponse>();
 
 export async function fetchGlobalSearch(keyword = '', limitPerType = 12, force = false): Promise<GlobalSearchResponse> {
   const normalizedKeyword = keyword.trim();
-  const cacheKey = `${normalizedKeyword}::${limitPerType}`;
+  const locale = i18n.global.locale.value;
+  const cacheKey = `${locale}::${normalizedKeyword}::${limitPerType}`;
 
   if (!force && cache.has(cacheKey)) {
     return cache.get(cacheKey) as GlobalSearchResponse;

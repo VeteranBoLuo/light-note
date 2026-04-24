@@ -39,8 +39,15 @@ const request = axios.create({
 request.interceptors.request.use(
   (config) => {
     if (config.url?.includes('/api')) {
+      let currentLang = 'zh-CN';
+      try {
+        currentLang = JSON.parse(localStorage.getItem('preferences') || '{}').lang || 'zh-CN';
+      } catch (e) {
+        currentLang = 'zh-CN';
+      }
       config.headers['OS'] = getUserOsInfo();
       config.headers['Browser'] = getBrowserType();
+      config.headers['X-Lang'] = currentLang;
       const user = useUserStore();
       const userId = localStorage?.getItem('userId');
       const notNeedAuth = NO_AUTH_ENDPOINTS.some((key) => config.url?.includes(key));

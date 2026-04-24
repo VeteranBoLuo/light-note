@@ -7,7 +7,7 @@
   >
     <!-- 导航栏：仅在非移动端或指定页面显示，笔记详情使用自己的顶栏 -->
     <Navigation v-if="showNavigation" />
-    <router-view :style="viewStyle" style="z-index: 100000" />
+    <router-view :style="viewStyle" />
   </div>
 </template>
 

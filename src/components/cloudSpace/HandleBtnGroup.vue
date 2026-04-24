@@ -617,10 +617,3 @@
     }
   }
 </style>
-<style>
-  [data-theme='night'] {
-    .ant-popover-inner {
-      background-color: #edf2fa !important;
-    }
-  }
-</style>

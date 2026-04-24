@@ -93,6 +93,7 @@
         'workbenches',
         'aiAssistant',
         'tools',
+        'search',
       ].some((item) => route.path.includes(item))
     );
   });

@@ -1,200 +1,202 @@
 <template>
-  <div v-if="visible" class="fullscreen-preview">
-    <div class="preview-header">
-      <span class="file-name">{{ fileInfo.fileName }}</span>
-      <div class="preview-actions">
-        <a-tooltip title="关闭预览">
-          <a-button size="small" @click="handleClose" class="action-btn">
-            <template #icon><CloseOutlined /></template>
+  <Teleport to="body">
+    <div v-if="visible" class="fullscreen-preview">
+      <div class="preview-header">
+        <span class="file-name">{{ fileInfo.fileName }}</span>
+        <div class="preview-actions">
+          <a-tooltip title="关闭预览">
+            <a-button size="small" @click="handleClose" class="action-btn">
+              <template #icon><CloseOutlined /></template>
+            </a-button>
+          </a-tooltip>
+        </div>
+      </div>
+      <div class="preview-content" @click.stop>
+        <!-- 加载状态 -->
+        <div v-if="loading" class="preview-loading">
+          <a-spin size="large" tip="文件加载中..." />
+        </div>
+
+        <!-- 错误状态 -->
+        <div v-else-if="error" class="preview-error">
+          <FileUnknownOutlined class="error-icon" />
+          <h3>文件加载失败</h3>
+          <p>{{ errorMessage }}</p>
+          <a-button type="primary" @click="retry" class="retry-btn">
+            <RedoOutlined />
+            重新加载
           </a-button>
-        </a-tooltip>
-      </div>
-    </div>
-    <div class="preview-content" @click.stop>
-      <!-- 加载状态 -->
-      <div v-if="loading" class="preview-loading">
-        <a-spin size="large" tip="文件加载中..." />
-      </div>
+        </div>
 
-      <!-- 错误状态 -->
-      <div v-else-if="error" class="preview-error">
-        <FileUnknownOutlined class="error-icon" />
-        <h3>文件加载失败</h3>
-        <p>{{ errorMessage }}</p>
-        <a-button type="primary" @click="retry" class="retry-btn">
-          <RedoOutlined />
-          重新加载
-        </a-button>
-      </div>
-
-      <!-- 文件预览内容 -->
-      <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
-        <!-- 1. PDF预览 -->
-        <iframe
-          v-if="previewType === 'pdf' && pdfBlobUrl"
-          :src="pdfBlobUrl"
-          class="preview-iframe"
-          @load="onLoad"
-          @error="onError"
-        />
-
-        <!-- 2. 视频预览 -->
-        <VideoPreview
-          v-else-if="previewType === 'video'"
-          :video-url="effectiveFileUrl"
-          class="preview-video"
-          @play="onRendered"
-        />
-
-        <!-- 3. 图片预览 -->
-        <div v-else-if="previewType === 'image'" class="preview-image-container">
-          <img
-            :src="effectiveFileUrl"
-            :alt="fileInfo.fileName"
-            class="preview-image"
-            :style="{
-              transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotate}deg)`,
-              cursor: scale > 1 ? 'grab' : 'default',
-              userSelect: 'none',
-            }"
-            @load="onImageLoad"
+        <!-- 文件预览内容 -->
+        <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
+          <!-- 1. PDF预览 -->
+          <iframe
+            v-if="previewType === 'pdf' && pdfBlobUrl"
+            :src="pdfBlobUrl"
+            class="preview-iframe"
+            @load="onLoad"
             @error="onError"
-            @click="previewImage"
-            @dblclick="handleImageDblClick"
-            @mousedown="startDrag"
-            @mousemove="drag"
-            @mouseup="stopDrag"
-            @mouseleave="stopDrag"
           />
-        </div>
 
-        <!-- 4. Word文档预览 -->
-        <div v-else-if="previewType === 'word'" class="office-preview-container">
-          <VueOfficeDocx :src="effectiveFileUrl" @rendered="onRendered" @error="onOfficeError" class="office-preview" />
-        </div>
-
-        <!-- 5. Excel预览 -->
-        <div v-else-if="previewType === 'excel'" class="office-preview-container">
-          <VueOfficeExcel
-            :src="effectiveFileUrl"
-            @rendered="onRendered"
-            @error="onOfficeError"
-            class="office-preview"
+          <!-- 2. 视频预览 -->
+          <VideoPreview
+            v-else-if="previewType === 'video'"
+            :video-url="effectiveFileUrl"
+            class="preview-video"
+            @play="onRendered"
           />
-        </div>
 
-        <!-- 6. PPT预览 -->
-        <div v-else-if="previewType === 'ppt'" class="office-preview-container">
-          <VueOfficePptx :src="effectiveFileUrl" @rendered="onRendered" @error="onOfficeError" class="office-preview" />
-        </div>
+          <!-- 3. 图片预览 -->
+          <div v-else-if="previewType === 'image'" class="preview-image-container">
+            <img
+              :src="effectiveFileUrl"
+              :alt="fileInfo.fileName"
+              class="preview-image"
+              :style="{
+                transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotate}deg)`,
+                cursor: scale > 1 ? 'grab' : 'default',
+                userSelect: 'none',
+              }"
+              @load="onImageLoad"
+              @error="onError"
+              @click="previewImage"
+              @dblclick="handleImageDblClick"
+              @mousedown="startDrag"
+              @mousemove="drag"
+              @mouseup="stopDrag"
+              @mouseleave="stopDrag"
+            />
+          </div>
 
-        <!-- 7. 文本文件预览 -->
-        <div v-else-if="previewType === 'text'" class="text-preview-container">
-          <div class="text-toolbar">
+          <!-- 4. Word文档预览 -->
+          <div v-else-if="previewType === 'word'" class="office-preview-container">
+            <VueOfficeDocx :src="effectiveFileUrl" @rendered="onRendered" @error="onOfficeError" class="office-preview" />
+          </div>
+
+          <!-- 5. Excel预览 -->
+          <div v-else-if="previewType === 'excel'" class="office-preview-container">
+            <VueOfficeExcel
+              :src="effectiveFileUrl"
+              @rendered="onRendered"
+              @error="onOfficeError"
+              class="office-preview"
+            />
+          </div>
+
+          <!-- 6. PPT预览 -->
+          <div v-else-if="previewType === 'ppt'" class="office-preview-container">
+            <VueOfficePptx :src="effectiveFileUrl" @rendered="onRendered" @error="onOfficeError" class="office-preview" />
+          </div>
+
+          <!-- 7. 文本文件预览 -->
+          <div v-else-if="previewType === 'text'" class="text-preview-container">
+            <div class="text-toolbar">
+              <a-space>
+                <a-tooltip title="自动换行">
+                  <a-button size="small" @click="toggleWrap" :type="wrapText ? 'primary' : 'default'" class="toolbar-btn">
+                    <AlignLeftOutlined />
+                  </a-button>
+                </a-tooltip>
+                <a-tooltip title="复制文本">
+                  <a-button size="small" @click="copyText" class="toolbar-btn">
+                    <CopyOutlined />
+                  </a-button>
+                </a-tooltip>
+                <span class="text-info">字数: {{ textContent.length }} 字符</span>
+              </a-space>
+            </div>
+            <template v-if="isHtmlText">
+              <div v-html="textContent" class="html-container"></div>
+            </template>
+            <template v-else-if="isMarkdownFile">
+              <div
+                ref="markdownContainerRef"
+                v-html="markdownContent"
+                class="markdown-container"
+                @click="handleMarkdownLink"
+              ></div>
+            </template>
+            <pre
+              v-else
+              :class="{ 'text-wrap': wrapText, 'text-no-wrap': !wrapText }"
+              class="preview-text"
+              @scroll="onTextScroll"
+            >
+                {{ textContent }}
+            </pre>
+          </div>
+
+          <!-- 8. 微软Office在线预览（备用方案） -->
+          <div v-else-if="previewType === 'office-online'" class="online-preview-container">
+            <iframe :src="microsoftOfficeViewerUrl" class="online-preview-iframe" @load="onLoad" @error="onError" />
+            <div class="online-preview-notice">
+              <InfoCircleOutlined />
+              正在使用微软Office在线预览服务
+            </div>
+          </div>
+
+          <!-- 9. 不支持预览的文件类型 -->
+          <div v-else-if="unsupportedTypes.includes(previewType)" class="unsupported-preview">
+            <div class="unsupported-icon">
+              <FileUnknownOutlined />
+            </div>
+            <h3>不支持预览此文件类型</h3>
+            <p>当前文件格式暂不支持在线预览，您可以通过下载后查看</p>
             <a-space>
-              <a-tooltip title="自动换行">
-                <a-button size="small" @click="toggleWrap" :type="wrapText ? 'primary' : 'default'" class="toolbar-btn">
-                  <AlignLeftOutlined />
-                </a-button>
-              </a-tooltip>
-              <a-tooltip title="复制文本">
-                <a-button size="small" @click="copyText" class="toolbar-btn">
-                  <CopyOutlined />
-                </a-button>
-              </a-tooltip>
-              <span class="text-info">字数: {{ textContent.length }} 字符</span>
+              <a-button type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
+                <DownloadOutlined />
+                下载文件
+              </a-button>
+              <a-button @click="tryOnlinePreview" v-if="canTryOnlinePreview">
+                <GlobalOutlined />
+                尝试在线预览
+              </a-button>
             </a-space>
           </div>
-          <template v-if="isHtmlText">
-            <div v-html="textContent" class="html-container"></div>
-          </template>
-          <template v-else-if="isMarkdownFile">
-            <div
-              ref="markdownContainerRef"
-              v-html="markdownContent"
-              class="markdown-container"
-              @click="handleMarkdownLink"
-            ></div>
-          </template>
-          <pre
-            v-else
-            :class="{ 'text-wrap': wrapText, 'text-no-wrap': !wrapText }"
-            class="preview-text"
-            @scroll="onTextScroll"
-          >
-              {{ textContent }}
-          </pre>
-        </div>
-
-        <!-- 8. 微软Office在线预览（备用方案） -->
-        <div v-else-if="previewType === 'office-online'" class="online-preview-container">
-          <iframe :src="microsoftOfficeViewerUrl" class="online-preview-iframe" @load="onLoad" @error="onError" />
-          <div class="online-preview-notice">
-            <InfoCircleOutlined />
-            正在使用微软Office在线预览服务
-          </div>
-        </div>
-
-        <!-- 9. 不支持预览的文件类型 -->
-        <div v-else-if="unsupportedTypes.includes(previewType)" class="unsupported-preview">
-          <div class="unsupported-icon">
-            <FileUnknownOutlined />
-          </div>
-          <h3>不支持预览此文件类型</h3>
-          <p>当前文件格式暂不支持在线预览，您可以通过下载后查看</p>
-          <a-space>
-            <a-button type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
-              <DownloadOutlined />
-              下载文件
-            </a-button>
-            <a-button @click="tryOnlinePreview" v-if="canTryOnlinePreview">
-              <GlobalOutlined />
-              尝试在线预览
-            </a-button>
-          </a-space>
         </div>
       </div>
-    </div>
 
-    <!-- 预览控制栏 -->
-    <div class="preview-controls">
-      <a-space>
-        <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
-        <a-space size="small" gap="8">
-          <a-tooltip title="上一个文件" v-if="showNext">
-            <a-button size="small" @click="handlePrev" class="action-btn">
-              <template #icon><LeftOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="下一个文件" v-if="showNext">
-            <a-button size="small" @click="handleNext" class="action-btn">
-              <template #icon><RightOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="下载文件">
-            <a-button size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
-              <template #icon><DownloadOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
-            <a-button size="small" @click="zoomIn" class="action-btn">
-              <template #icon><ZoomInOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
-            <a-button size="small" @click="zoomOut" class="action-btn">
-              <template #icon><ZoomOutOutlined /></template>
-            </a-button>
-          </a-tooltip>
-          <a-tooltip title="旋转图片" v-if="previewType === 'image'">
-            <a-button size="small" @click="rotateImage" class="action-btn">
-              <template #icon><RotateRightOutlined /></template>
-            </a-button>
-          </a-tooltip>
+      <!-- 预览控制栏 -->
+      <div class="preview-controls">
+        <a-space>
+          <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
+          <a-space size="small" gap="8">
+            <a-tooltip title="上一个文件" v-if="showNext">
+              <a-button size="small" @click="handlePrev" class="action-btn">
+                <template #icon><LeftOutlined /></template>
+              </a-button>
+            </a-tooltip>
+            <a-tooltip title="下一个文件" v-if="showNext">
+              <a-button size="small" @click="handleNext" class="action-btn">
+                <template #icon><RightOutlined /></template>
+              </a-button>
+            </a-tooltip>
+            <a-tooltip title="下载文件">
+              <a-button size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
+                <template #icon><DownloadOutlined /></template>
+              </a-button>
+            </a-tooltip>
+            <a-tooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
+              <a-button size="small" @click="zoomIn" class="action-btn">
+                <template #icon><ZoomInOutlined /></template>
+              </a-button>
+            </a-tooltip>
+            <a-tooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
+              <a-button size="small" @click="zoomOut" class="action-btn">
+                <template #icon><ZoomOutOutlined /></template>
+              </a-button>
+            </a-tooltip>
+            <a-tooltip title="旋转图片" v-if="previewType === 'image'">
+              <a-button size="small" @click="rotateImage" class="action-btn">
+                <template #icon><RotateRightOutlined /></template>
+              </a-button>
+            </a-tooltip>
+          </a-space>
         </a-space>
-      </a-space>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -271,6 +273,7 @@
   let markdownLibLoaded = false;
   let markdownParser: ((markdown: string) => string) | null = null;
   let markdownSanitizer: ((html: string) => string) | null = null;
+  let previousBodyOverflow = '';
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
   const previewType = computed(() => getCloudPreviewType(props.fileInfo));
@@ -376,6 +379,8 @@
     () => props.visible,
     async (newVisible) => {
       if (newVisible && props.fileInfo) {
+        previousBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
         if (!previewHistoryActive.value) {
           history.pushState({ preview: true }, '');
           previewHistoryActive.value = true;
@@ -384,6 +389,7 @@
         return;
       }
       if (!newVisible) {
+        document.body.style.overflow = previousBodyOverflow;
         previewHistoryActive.value = false;
       }
     },
@@ -768,6 +774,7 @@
     document.removeEventListener('mousedown', handleMiddleDblClick);
     document.removeEventListener('selectstart', preventSelect);
     window.removeEventListener('popstate', handlePopState);
+    document.body.style.overflow = previousBodyOverflow;
     // 清理PDF blob URL
     if (pdfBlobUrl.value) {
       URL.revokeObjectURL(pdfBlobUrl.value);
@@ -779,12 +786,12 @@
 <style lang="less" scoped>
   .fullscreen-preview {
     position: fixed;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100vw;
     height: 100vh;
     background: white;
-    z-index: 99999;
+    z-index: 200000;
+    isolation: isolate;
 
     .preview-header {
       display: flex;
