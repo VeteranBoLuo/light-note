@@ -43,10 +43,22 @@
       </div>
     </div>
     <div class="person-menu">
-      <div class="person-menu-item">
-        <span class="person-menu-item-title">{{ $t('personCenter.themeMode') }}</span>
-        <span class="person-menu-item-des">{{ ThemeName }}</span></div
-      >
+      <b-menu :trigger="['click']" :menu-options="themeMenuOptions">
+        <div class="person-menu-item">
+          <span class="person-menu-item-title">{{ $t('personCenter.themeMode') }}</span>
+          <span class="person-menu-item-des"
+            >{{ ThemeName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
+          /></span>
+        </div>
+      </b-menu>
+      <b-menu :trigger="['click']" :menu-options="langMenuOptions">
+        <div class="person-menu-item">
+          <span class="person-menu-item-title">语言</span>
+          <span class="person-menu-item-des"
+            >{{ LanguageName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
+          /></span>
+        </div>
+      </b-menu>
       <div
         v-if="user.role === 'root'"
         class="person-menu-item"
@@ -153,7 +165,9 @@
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
+  import i18n from '@/i18n';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -161,6 +175,57 @@
   const userVisible = ref(false);
 
   const user = useUserStore();
+
+  const themeMenuOptions = computed(() => [
+    { label: t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },
+    { label: t('navigation.light'), icon: icon.navigation.sun, function: () => changeTheme('day') },
+    { label: t('navigation.dark'), icon: icon.navigation.moon, function: () => changeTheme('night') },
+  ]);
+  const langMenuOptions = computed(() => [
+    { label: '中文', function: () => changeLanguage('zh-CN') },
+    { label: 'English', function: () => changeLanguage('en-US') },
+  ]);
+
+  function changeTheme(theme: string) {
+    user.preferences.theme = theme;
+    userApi
+      .updateUserInfo({
+        id: localStorage.getItem('userId'),
+        preferences: JSON.stringify({
+          ...user.preferences,
+          theme,
+        }),
+      })
+      .then(() => {
+        localStorage.setItem('theme', user.preferences.theme);
+        localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      })
+      .catch((err) => {
+        console.error('后台错误：' + err);
+      });
+  }
+
+  function changeLanguage(lang: 'zh-CN' | 'en-US') {
+    document.documentElement.lang = lang;
+    user.preferences.lang = lang;
+    userApi
+      .updateUserInfo({
+        id: localStorage.getItem('userId'),
+        preferences: JSON.stringify({
+          ...user.preferences,
+          lang,
+        }),
+      })
+      .then(() => {
+        if (i18n.global.locale.value !== lang) {
+          localStorage.setItem('preferences', JSON.stringify(user.preferences));
+          location.reload();
+        }
+      })
+      .catch((err) => {
+        console.error('后台错误：' + err);
+      });
+  }
 
   function handleExitLogin() {
     menuVisible.value = false;
@@ -200,6 +265,7 @@
     }
     return t('navigation.followSystem');
   });
+  const LanguageName = computed(() => (user.preferences.lang === 'en-US' ? 'English' : '中文'));
   ref<Viewer>();
   function zoomImage() {
     bookmark.refreshViewer(user.headPicture || icon.navigation.user);

@@ -17,6 +17,7 @@
   const router = useRouter();
   const route = useRoute();
   const MIN_SKELETON_MS = 100;
+  const isHomeDrawerLayout = computed(() => bookmark.isMobile);
 
   // 处理滚动条滚动到顶部
   const scrollToTop = () => {
@@ -69,7 +70,7 @@
           bookmark.tagData = tag;
           if (tag) {
             await fetchBookmarkList('normal', { tagId: tag.id });
-            if (bookmark.isMobile) {
+            if (isHomeDrawerLayout.value) {
               bookmark.isFold = true;
             }
           }
@@ -126,7 +127,7 @@
     () => bookmark.isFold,
     (val) => {
       const filter: any = document.getElementById('phone-filter-panel');
-      if (bookmark.isMobile) {
+      if (isHomeDrawerLayout.value) {
         filter.style.transition = 'all 0.3s';
         if (val) {
           filter.style.transform = 'translateX(-100%)';
@@ -164,7 +165,7 @@
     display: flex;
   }
 
-  @media (max-width: 1024px) {
+  @media (max-width: 767px) {
     .main-page {
       padding: 20px 0;
       display: flex;

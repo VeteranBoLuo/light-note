@@ -1,13 +1,21 @@
 <template>
-  <a-tooltip
-    :color="tooltipColor"
+  <a-popover
     placement="bottomRight"
     :overlay-style="{ maxWidth: 'calc(100vw - 24px)' }"
+    overlay-class-name="user-center-popover"
     :get-popup-container="getPopupContainer"
     v-model:open="menuVisible"
+    trigger="hover"
+    :arrow="false"
+    @openChange="handlePopoverOpenChange"
   >
-    <template #title>
-      <div class="user-card" :style="{ color: user.iconColor }">
+    <template #content>
+      <div
+        class="user-card"
+        :style="{ color: user.iconColor }"
+        @mouseenter="handleCardMouseEnter"
+        @mouseleave="handleCardMouseLeave"
+      >
         <div class="user-top">
           <div class="avatar-ring" :class="user.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
             <svg-icon
@@ -43,12 +51,39 @@
           </div>
         </div>
 
-        <div class="theme-row">
-          <div class="theme-left">
-            <svg-icon size="14" :src="icon.theme" />
-            {{ $t('personCenter.themeMode') }}
-          </div>
-          <div class="theme-right">{{ ThemeName }}</div>
+        <div class="settings-grid">
+          <b-menu
+            :trigger="['click']"
+            placement="bottom"
+            overlay-class-name="user-setting-dropdown"
+            :menu-options="themeMenuOptions"
+            :get-popup-container="getSettingPopupContainer"
+            @open-change="handleSettingMenuChange"
+          >
+            <button class="setting-card">
+              <span class="setting-left">
+                <svg-icon size="14" :src="icon.theme" />
+                {{ $t('personCenter.themeMode') }}
+              </span>
+              <span class="setting-right">{{ ThemeName }}</span>
+            </button>
+          </b-menu>
+          <b-menu
+            :trigger="['click']"
+            placement="bottom"
+            overlay-class-name="user-setting-dropdown"
+            :menu-options="langMenuOptions"
+            :get-popup-container="getSettingPopupContainer"
+            @open-change="handleSettingMenuChange"
+          >
+            <button class="setting-card">
+              <span class="setting-left">
+                <svg-icon size="14" :src="icon.nullImg" />
+                语言
+              </span>
+              <span class="setting-right">{{ LanguageName }}</span>
+            </button>
+          </b-menu>
         </div>
 
         <div class="menu-divider" />
@@ -79,12 +114,12 @@
         </div>
       </div>
     </template>
-    <div class="navigation-icon" style="margin-left: 5px">
+    <div class="navigation-icon" style="margin-left: 5px" @mouseenter="handleTriggerMouseEnter" @mouseleave="handleTriggerMouseLeave">
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
     <Opinions v-if="opinionsVisible" v-model:visible="opinionsVisible" />
-  </a-tooltip>
+  </a-popover>
 </template>
 
 <script setup lang="ts">
@@ -97,21 +132,93 @@
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import Opinions from '@/components/personCenter/opinions/Opinions.vue';
+  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
   import { updateNotice } from '@/config/updateNotice';
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-  const tooltipColor = computed(() => (user.currentTheme === 'day' ? '#ffffff' : '#33343f'));
   const getPopupContainer = (trigger: HTMLElement) => {
     return document.getElementById('tag-container');
   };
   const menuVisible = ref(false);
+  const isHoveringTrigger = ref(false);
+  const isHoveringCard = ref(false);
+  const isSettingMenuOpen = ref(false);
+  let closeTimer: ReturnType<typeof setTimeout> | null = null;
   const userVisible = ref(false);
 
   const opinionsVisible = ref(false);
 
   const user = useUserStore();
+
+  function clearCloseTimer() {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+  }
+
+  function syncPopoverVisible() {
+    menuVisible.value = isHoveringTrigger.value || isHoveringCard.value || isSettingMenuOpen.value;
+  }
+
+  function delayClosePopover() {
+    clearCloseTimer();
+    closeTimer = setTimeout(() => {
+      syncPopoverVisible();
+    }, 120);
+  }
+
+  function handleTriggerMouseEnter() {
+    clearCloseTimer();
+    isHoveringTrigger.value = true;
+    menuVisible.value = true;
+  }
+
+  function handleTriggerMouseLeave() {
+    isHoveringTrigger.value = false;
+    delayClosePopover();
+  }
+
+  function handleCardMouseEnter() {
+    clearCloseTimer();
+    isHoveringCard.value = true;
+    menuVisible.value = true;
+  }
+
+  function handleCardMouseLeave() {
+    isHoveringCard.value = false;
+    delayClosePopover();
+  }
+
+  function handleSettingMenuChange(open: boolean) {
+    clearCloseTimer();
+    isSettingMenuOpen.value = open;
+    syncPopoverVisible();
+  }
+
+  function handlePopoverOpenChange(open: boolean) {
+    if (open) {
+      menuVisible.value = true;
+      return;
+    }
+    delayClosePopover();
+  }
+
+  function getSettingPopupContainer(trigger: HTMLElement) {
+    return (trigger.closest('.settings-grid') as HTMLElement) || getPopupContainer(trigger);
+  }
+
+  const themeMenuOptions = computed(() => [
+    { label: t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },
+    { label: t('navigation.light'), icon: icon.navigation.sun, function: () => changeTheme('day') },
+    { label: t('navigation.dark'), icon: icon.navigation.moon, function: () => changeTheme('night') },
+  ]);
+  const langMenuOptions = computed(() => [
+    { label: '中文', function: () => changeLanguage('zh-CN') },
+    { label: 'English', function: () => changeLanguage('en-US') },
+  ]);
 
   interface menuItemInterface {
     label: string;
@@ -245,6 +352,48 @@
     }
     return t('navigation.followSystem');
   });
+  const LanguageName = computed(() => (user.preferences.lang === 'en-US' ? 'English' : '中文'));
+
+  function changeTheme(theme: string) {
+    user.preferences.theme = theme;
+    userApi
+      .updateUserInfo({
+        id: localStorage.getItem('userId'),
+        preferences: JSON.stringify({
+          ...user.preferences,
+          theme,
+        }),
+      })
+      .then(() => {
+        localStorage.setItem('theme', user.preferences.theme);
+        localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      })
+      .catch((err) => {
+        console.error('后台错误：' + err);
+      });
+  }
+
+  function changeLanguage(lang: 'zh-CN' | 'en-US') {
+    document.documentElement.lang = lang;
+    user.preferences.lang = lang;
+    userApi
+      .updateUserInfo({
+        id: localStorage.getItem('userId'),
+        preferences: JSON.stringify({
+          ...user.preferences,
+          lang,
+        }),
+      })
+      .then(() => {
+        localStorage.setItem('preferences', JSON.stringify(user.preferences));
+        if (i18n.global.locale.value !== lang) {
+          location.reload();
+        }
+      })
+      .catch((err) => {
+        console.error('后台错误：' + err);
+      });
+  }
 
   function zoomImage() {
     bookmark.refreshViewer(user.headPicture || icon.navigation.user);
@@ -433,8 +582,15 @@
     color: var(--text-color);
   }
 
-  .theme-row {
+  .settings-grid {
     margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .setting-card {
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -442,18 +598,46 @@
     border-radius: 10px;
     border: 1px dashed var(--menu-item-h-bg-color);
     background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    cursor: pointer;
     font-size: 12px;
   }
 
-  .theme-left {
+  .setting-card:hover {
+    background: var(--menu-item-h-bg-color);
+  }
+
+  .setting-left {
     display: flex;
     align-items: center;
     gap: 8px;
     color: var(--text-color);
   }
 
-  .theme-right {
+  .setting-right {
     color: var(--text-secondary-color, #9aa0ad);
+  }
+
+  :global(.user-setting-dropdown) {
+    z-index: 100001;
+  }
+
+  :global(.user-center-popover) {
+    z-index: 100001;
+  }
+
+  :global(.user-center-popover .ant-popover-inner) {
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :global(.user-center-popover .ant-popover-inner-content) {
+    padding: 0;
+  }
+
+  :global(.user-center-popover .ant-popover-arrow) {
+    display: none;
   }
 
   .menu-divider {

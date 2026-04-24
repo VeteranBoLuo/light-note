@@ -1,15 +1,5 @@
 <template>
   <div class="help-container">
-    <b-input
-      v-model:value="searchValue"
-      :placeholder="t('help.searchPlaceholder')"
-      style="width: 30%; margin: 0 auto; position: fixed; top: 15px; transform: translateX(-50%); left: 50%"
-      id="ref2"
-    >
-      <template #prefix>
-        <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
-      </template>
-    </b-input>
     <div class="help-body">
       <div
         v-if="bookmark.isMobile"
@@ -19,14 +9,19 @@
         v-click-log="{ module: '帮助中心', operation: `导览` }"
         >{{ t('help.title') }}</div
       >
-      <div v-if="!bookmark.isMobile" :style="{ width: '180px' }">
+      <div v-if="!bookmark.isMobile" class="help-sidebar">
         <div
           class="help-title"
           @click="((checkId = ''), (node = helpInfo))"
           v-click-log="{ module: '帮助中心', operation: `导览` }"
           >{{ t('help.title') }}</div
         >
-        <BList style="font-size: 12px" :listOptions="viewOptions" @nodeClick="logItem" :check-id="checkId">
+        <b-input v-model:value="searchValue" :placeholder="t('help.searchPlaceholder')" class="help-search-input" id="ref2">
+          <template #prefix>
+            <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
+          </template>
+        </b-input>
+        <BList class="help-menu-list" style="font-size: 12px" :listOptions="viewOptions" @nodeClick="logItem" :check-id="checkId">
           <template #icon>
             <svg-icon :src="icon.help_document" />
           </template>
@@ -49,7 +44,7 @@
       <div
         id="view-body"
         class="help-editor"
-        :style="{ width: bookmark.isMobile ? 'calc(100% - 40px)' : 'calc(100% - 180px)' }"
+        :style="{ width: bookmark.isMobile ? 'calc(100% - 40px)' : 'calc(100% - 220px)' }"
         style="
           height: 100%;
           border: 1px solid var(--card-border-color);
@@ -181,6 +176,7 @@
 <style lang="less">
   .help-container {
     width: 100%;
+    height: 100%;
     padding: 20px;
     box-sizing: border-box;
     flex-direction: column;
@@ -201,7 +197,33 @@
     position: relative;
     display: flex;
     gap: 20px;
-    height: calc(100% - 80px);
+    height: 100%;
+  }
+  .help-sidebar {
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
+    flex: 0 0 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    box-sizing: border-box;
+  }
+  .help-search-input {
+    width: 100% !important;
+    min-width: 100%;
+    max-width: 100%;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+  }
+  .help-search-input.input-container {
+    width: 100% !important;
+  }
+  .help-menu-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
   }
 
   .tag-explanation {
@@ -232,6 +254,6 @@
   }
   .help-editor {
     height: 100%;
-    width: 100%;
+    min-width: 0;
   }
 </style>

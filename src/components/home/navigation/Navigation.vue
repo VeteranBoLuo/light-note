@@ -6,14 +6,14 @@
           :src="icon.navigation.menu"
           size="25"
           class="dom-hover"
-          v-if="bookmark.isMobile && route.path.includes('home') && bookmark.isFold"
+          v-if="isHomeDrawerLayout && bookmark.isFold"
           @click="foldClick"
         />
         <svg-icon
           :src="icon.navigation.close"
           size="25"
           class="dom-hover"
-          v-if="bookmark.isMobile && route.path.includes('home') && !bookmark.isFold"
+          v-if="isHomeDrawerLayout && !bookmark.isFold"
           @click="foldClick"
         />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
@@ -67,32 +67,18 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import router from '@/router';
-  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useRoute } from 'vue-router';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import { isFocused } from '@/utils/validator.ts';
   import RightArea from '@/components/home/navigation/RightArea.vue';
 
   const route = useRoute();
   const user = useUserStore();
 
-  document.addEventListener('DOMContentLoaded', function () {
-    const searchInput = document.getElementById('searchInput');
-
-    searchInput.addEventListener('focus', function () {
-      console.log('输入框获得了焦点！');
-      // 这里可以添加其他你希望在输入框聚焦时执行的代码
-    });
-
-    searchInput.addEventListener('blur', function () {
-      console.log('输入框失去了焦点！');
-      // 这里可以添加其他你希望在输入框失去焦点时执行的代码
-    });
-  });
   const navigationFucVisible = computed(() => {
     return (
       !bookmark.isMobile &&
@@ -112,6 +98,7 @@
   });
 
   const bookmark = bookmarkStore();
+  const isHomeDrawerLayout = computed(() => route.path.includes('home') && bookmark.isMobile);
 
   async function handleToIndex() {
     bookmark.type = 'all';
@@ -132,7 +119,7 @@
   function foldClick() {
     bookmark.isFold = !bookmark.isFold;
     const body: any = document.getElementById('phone-filter-panel');
-    if (bookmark.isMobile) {
+    if (isHomeDrawerLayout.value) {
       body.style.transition = 'all 0.3s';
     } else {
       body.style.transition = 'none';
@@ -153,20 +140,17 @@
     },
   );
 
+  watch(
+    () => route.path,
+    () => {
+      if (bookmark.isMobile) {
+        bookmark.isFold = true;
+      }
+    },
+  );
+
   const pagePath = computed(() => {
     return route.path;
-  });
-  onMounted(() => {
-    document.addEventListener('keydown', function (event) {
-      if (event.key === '/') {
-        const deskInput = document.getElementById('bookmark-input');
-        // 没有聚焦在输入框上时，聚焦到输入框
-        if (deskInput && !isFocused(deskInput)) {
-          event.preventDefault();
-          deskInput.focus();
-        }
-      }
-    });
   });
 </script>
 
@@ -178,6 +162,7 @@
     width: 100%;
     position: fixed;
     top: 0;
+    z-index: 100000;
   }
   .navigation-title {
     height: 100%;
@@ -199,12 +184,17 @@
   .user-icon-text {
     text-align: left;
   }
-  @media (max-width: 1000px) {
+  @media (max-width: 767px) {
     .navigation-title {
-      gap: 20px;
+      width: 104px;
+      gap: 14px;
+      padding-left: 20px;
+      position: relative;
+      z-index: 100003;
 
       .navigation-title-link {
-        gap: 10px;
+        width: 25px;
+        overflow: hidden;
       }
     }
   }

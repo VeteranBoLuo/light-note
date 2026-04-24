@@ -160,10 +160,10 @@
     }
   }
 
-  // 手机端路由和电脑端不一样，切换不同尺寸设备后需要切换对应路由地址
-  function handleRouteChange(isMobileDevice: boolean, path: string) {
-    // 电脑端切换至手机端
-    if (isMobileDevice) {
+  // 手机布局和桌面布局的路由不一样，切换断点后需要切换对应路由地址
+  function handleRouteChange(isMobileLayout: boolean, path: string) {
+    // 桌面布局切换至手机布局
+    if (isMobileLayout) {
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
       }
@@ -287,7 +287,7 @@
     }
   });
 
-  // 监听设备类型变化
+  // 监听布局断点变化
   watch(
     () => bookmark.isMobile,
     (val) => {

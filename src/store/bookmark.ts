@@ -2,6 +2,11 @@ import { defineStore } from 'pinia';
 import { TagInterface } from '@/config/bookmarkCfg.ts';
 import Viewer from 'viewerjs';
 
+const VIEWPORT_BREAKPOINTS = {
+  mobile: 768,
+  desktop: 1200,
+} as const;
+
 // 接口定义
 interface BookmarkState {
   tagData: Partial<TagInterface>;
@@ -57,54 +62,55 @@ export default defineStore('bookmark', {
   }),
   getters: {
     /**
-     * 判断设备类型
+     * 判断当前布局类型。
+     * 这里按视口宽度分层，而不是按设备 UA 判断；适配逻辑本质上应该跟可用空间走。
      */
     deviceType(): 'mobile' | 'tablet' | 'desktop' {
-      if (typeof window === 'undefined') return 'desktop'; // SSR 默认桌面
-
-      const userAgent = navigator.userAgent.toLowerCase();
       const width = this.screenWidth;
 
-      // 移动设备检测
-      const isMobile = /android|webos|iphone|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
-      const isTablet = /ipad|android|tablet|silk|kindle/i.test(userAgent) && !/mobile/i.test(userAgent);
-
-      // 根据宽度和设备特征综合判断
-      if (width <= 1024) {
+      if (width < VIEWPORT_BREAKPOINTS.mobile) {
         return 'mobile';
-      } else if ((width > 1024 && width < 1920) || isTablet) {
-        return 'tablet';
-      } else {
-        return 'desktop';
       }
+      if (width < VIEWPORT_BREAKPOINTS.desktop) {
+        return 'tablet';
+      }
+      return 'desktop';
     },
 
     /**
-     * 判断是否为移动设备（手机）
+     * 判断是否为手机布局
      */
     isMobile(): boolean {
       return this.deviceType === 'mobile';
     },
 
     /**
-     * 判断是否为平板设备
+     * 判断是否为平板/中等宽度布局
      */
     isTablet(): boolean {
       return this.deviceType === 'tablet';
     },
 
     /**
-     * 判断是否为桌面设备
+     * 判断是否为桌面布局
      */
     isDesktop(): boolean {
       return this.deviceType === 'desktop';
     },
 
     /**
-     * 判断是否为移动端（包含手机和平板）
+     * 判断是否为窄屏布局（包含手机和平板宽度）
      */
     isMobileDevice(): boolean {
       return this.isMobile || this.isTablet;
+    },
+
+    /**
+     * 判断当前主要输入方式是否偏触摸。
+     * 交互能力与布局宽度分开判断，避免把 iPad、折叠屏、桌面窄窗口混为一类。
+     */
+    isTouchDevice(): boolean {
+      return typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
     },
 
     /**

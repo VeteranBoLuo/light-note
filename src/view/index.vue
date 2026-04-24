@@ -5,9 +5,9 @@
       backgroundImage: bgVisible,
     }"
   >
-    <!-- 导航栏：仅在非移动端或包含 'home' 的路径时显示 -->
+    <!-- 导航栏：仅在非移动端或指定页面显示，笔记详情使用自己的顶栏 -->
     <Navigation v-if="showNavigation" />
-    <router-view style="position: fixed; top: 60px; height: calc(100% - 60px); width: 100%; box-sizing: border-box" />
+    <router-view :style="viewStyle" />
   </div>
 </template>
 
@@ -20,11 +20,24 @@
   const route = useRoute();
   const bookmark = bookmarkStore();
 
+  const mobileNavigationRoutes = ['home', 'workbenches', 'noteLibrary', 'cloudSpace', 'search'];
+  const isNoteDetailRoute = computed(() => route.name === 'noteDetail');
+
   // 导航栏显示逻辑
-  const showNavigation = computed(() => !bookmark.isMobile || route.path.includes('home'));
+  const showNavigation = computed(
+    () => !isNoteDetailRoute.value && (!bookmark.isMobile || mobileNavigationRoutes.some((item) => route.path.includes(item))),
+  );
 
   // 背景图显示逻辑
-  const bgVisible = computed(() => (bookmark.isMobile || route.name === 'NoteDetail' ? 'unset' : ''));
+  const bgVisible = computed(() => (bookmark.isMobile || route.name === 'noteDetail' ? 'unset' : ''));
+
+  const viewStyle = computed(() => ({
+    position: 'fixed',
+    top: showNavigation.value ? '60px' : '0',
+    height: showNavigation.value ? 'calc(100% - 60px)' : '100%',
+    width: '100%',
+    boxSizing: 'border-box',
+  }));
 </script>
 
 <style lang="less" scoped>

@@ -12,6 +12,7 @@ import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import toolsRouter from '@/router/modules/tools.ts';
+import searchRouter from '@/router/modules/search.ts';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -31,6 +32,7 @@ const routes: RouteRecordRaw[] = [
       manageRouter,
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
+      searchRouter,
       ...toolsRouter,
     ],
   },

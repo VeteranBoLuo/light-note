@@ -1,5 +1,10 @@
 <template>
-  <a-dropdown :trigger="trigger">
+  <a-dropdown
+    :trigger="trigger"
+    :overlay-class-name="overlayClassName"
+    :get-popup-container="getPopupContainer"
+    @openChange="handleOpenChange"
+  >
     <slot />
     <template #overlay>
       <a-menu>
@@ -18,15 +23,25 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { Trigger } from 'ant-design-vue/es/dropdown/props';
 
-  const props = withDefaults(
+  const emit = defineEmits<{
+    openChange: [open: boolean];
+  }>();
+
+  withDefaults(
     defineProps<{
       menuOptions: { label: string; icon?: string; function?: () => void }[];
       trigger: Trigger | Trigger[];
+      overlayClassName?: string;
+      getPopupContainer?: (trigger: HTMLElement) => HTMLElement;
     }>(),
     {
       trigger: 'hover',
     },
   );
+
+  function handleOpenChange(open: boolean) {
+    emit('openChange', open);
+  }
 </script>
 
 <style lang="less" scoped></style>
