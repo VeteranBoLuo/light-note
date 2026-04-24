@@ -2,18 +2,15 @@
   <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
     <section class="hero-card">
       <div class="hero-copy">
-        <div class="eyebrow">Global Search</div>
-        <h1>统一搜索中心</h1>
-        <p
-          >把书签、笔记、云文件和标签放进同一个入口里找。当前已接入后端聚合查询，后续可以继续升级全文检索或 AI
-          语义搜索。</p
-        >
+        <div class="eyebrow">{{ t('resourceCenter.eyebrow') }}</div>
+        <h1>{{ t('resourceCenter.title') }}</h1>
+        <p>{{ t('resourceCenter.subtitle') }}</p>
       </div>
       <div class="hero-search">
         <b-input
           id="search-center-input"
           v-model:value="keyword"
-          placeholder="搜索书签 / 笔记 / 文件 / 标签"
+          :placeholder="t('resourceCenter.searchPlaceholder')"
           height="46px"
           @input="syncQuery"
           @enter="syncQueryNow"
@@ -22,7 +19,7 @@
             <svg-icon :src="icon.navigation.search" size="18" />
           </template>
         </b-input>
-        <button class="refresh-btn" @click="refreshData">刷新索引</button>
+        <button class="refresh-btn" @click="refreshData">{{ t('resourceCenter.refresh') }}</button>
       </div>
       <div class="hero-stats">
         <div v-for="stat in stats" :key="stat.type" class="stat-card">
@@ -50,13 +47,10 @@
       <main class="result-panel">
         <div class="result-toolbar">
           <div>
-            <div class="result-title">搜索结果</div>
-            <div class="result-subtitle">
-              {{ keyword.trim() ? `关键词「${keyword.trim()}」` : '展示当前可检索内容' }} · 共
-              {{ flatResults.length }} 条
-            </div>
+            <div class="result-title">{{ t('resourceCenter.results') }}</div>
+            <div class="result-subtitle">{{ resultSubtitle }}</div>
           </div>
-          <button class="clear-btn" :disabled="!keyword" @click="clearKeyword">清空搜索</button>
+          <button class="clear-btn" :disabled="!keyword" @click="clearKeyword">{{ t('resourceCenter.clear') }}</button>
         </div>
 
         <div v-if="loading" class="result-skeleton">
@@ -66,8 +60,8 @@
         <template v-else-if="visibleGroups.length">
           <section v-for="group in visibleGroups" :key="group.type" class="result-group">
             <div class="group-header">
-              <span>{{ group.label }}</span>
-              <span>{{ group.items.length }} 条</span>
+              <span>{{ labels[group.type] }}</span>
+              <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
             </div>
             <div class="result-grid">
               <button
@@ -77,12 +71,14 @@
                 @click="openItem(item)"
               >
                 <div class="card-top">
-                  <span class="type-pill" :class="`type-pill--${item.type}`">{{ group.label }}</span>
+                  <span class="type-pill" :class="`type-pill--${item.type}`">{{ labels[group.type] }}</span>
                   <span class="card-extra">{{ item.extra }}</span>
                 </div>
                 <div class="card-title">{{ item.title }}</div>
                 <div class="card-desc">{{ item.description }}</div>
-                <div class="card-action">{{ item.type === 'bookmark' ? '打开网页' : '进入查看' }}</div>
+                <div class="card-action">
+                  {{ item.type === 'bookmark' ? t('resourceCenter.openWebsite') : t('resourceCenter.openItem') }}
+                </div>
               </button>
             </div>
           </section>
@@ -90,8 +86,8 @@
 
         <div v-else class="empty-state">
           <div class="empty-orbit"></div>
-          <h3>没有找到匹配内容</h3>
-          <p>换一个关键词试试，比如标签名、笔记标题、文件名或者网址里的关键字。</p>
+          <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
+          <p>{{ t('resourceCenter.emptyDesc') }}</p>
         </div>
       </main>
     </section>
@@ -106,10 +102,12 @@
   import icon from '@/config/icon.ts';
   import { fetchGlobalSearch, SearchGroup, SearchResultItem, SearchType } from '@/api/search.ts';
   import { useUserStore } from '@/store';
+  import { useI18n } from 'vue-i18n';
 
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const { t } = useI18n();
   const keyword = ref('');
   const activeType = ref<SearchType | 'all'>('all');
   const loading = ref(false);
@@ -118,11 +116,11 @@
   const queryTimer = ref<number | null>(null);
 
   const labels: Record<SearchType | 'all', string> = {
-    all: '全部',
-    bookmark: '书签',
-    note: '笔记',
-    file: '文件',
-    tag: '标签',
+    all: t('resourceCenter.types.all'),
+    bookmark: t('resourceCenter.types.bookmark'),
+    note: t('resourceCenter.types.note'),
+    file: t('resourceCenter.types.file'),
+    tag: t('resourceCenter.types.tag'),
   };
 
   const visibleGroups = computed(() => {
@@ -130,6 +128,13 @@
     return groups.value.filter((group) => group.type === activeType.value);
   });
   const flatResults = computed(() => visibleGroups.value.flatMap((group) => group.items));
+  const resultSubtitle = computed(() => {
+    const q = keyword.value.trim();
+    const prefix = q
+      ? t('resourceCenter.keywordSummary', { keyword: q })
+      : t('resourceCenter.defaultSummary');
+    return `${prefix} · ${t('resourceCenter.totalCount', { count: flatResults.value.length })}`;
+  });
   const stats = computed(() =>
     (['bookmark', 'note', 'file', 'tag'] as SearchType[]).map((type) => ({
       type,
@@ -140,7 +145,7 @@
   const typeFilters = computed(() => [
     {
       value: 'all' as const,
-      label: '全部结果',
+      label: t('resourceCenter.types.allResults'),
       count: groups.value.reduce((sum, group) => sum + group.items.length, 0),
     },
     ...(['bookmark', 'note', 'file', 'tag'] as SearchType[]).map((type) => ({
@@ -153,7 +158,7 @@
   async function loadData(force = false) {
     loading.value = true;
     try {
-      const res = await fetchGlobalSearch(keyword.value, 50, force);
+      const res = await fetchGlobalSearch(keyword.value, 0, force);
       sourceItems.value = res.items;
       groups.value = res.groups;
     } finally {
@@ -234,8 +239,9 @@
     border-radius: 28px;
     padding: 30px;
     background:
-      radial-gradient(circle at 12% 18%, rgba(255, 153, 102, 0.22), transparent 28%),
-      radial-gradient(circle at 86% 14%, rgba(97, 92, 237, 0.22), transparent 30%), var(--search-hero-bg);
+      radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--resource-file-color) 22%, transparent), transparent 28%),
+      radial-gradient(circle at 86% 14%, color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent), transparent 30%),
+      var(--search-hero-bg);
     border: 1px solid var(--card-border-color);
     box-shadow: var(--ant-table-boxShadow);
   }
@@ -248,7 +254,7 @@
     width: 260px;
     height: 260px;
     border-radius: 50%;
-    border: 44px solid rgba(97, 92, 237, 0.08);
+    border: 44px solid color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent);
   }
 
   .hero-copy,
@@ -259,7 +265,7 @@
   }
 
   .eyebrow {
-    color: #615ced;
+    color: var(--resource-bookmark-color);
     font-size: 12px;
     font-weight: 800;
     letter-spacing: 0.12em;
@@ -305,7 +311,11 @@
     height: 46px;
     border-radius: 16px;
     color: #fff;
-    background: linear-gradient(135deg, #615ced, #8b5cf6);
+    background: linear-gradient(
+      135deg,
+      var(--resource-bookmark-color),
+      color-mix(in srgb, var(--resource-bookmark-color) 68%, #ffffff)
+    );
     font-weight: 800;
   }
 
@@ -397,16 +407,16 @@
   }
 
   .filter-dot--bookmark {
-    background: #615ced;
+    background: var(--resource-bookmark-color);
   }
   .filter-dot--note {
-    background: #00a884;
+    background: var(--resource-note-color);
   }
   .filter-dot--file {
-    background: #ff8a00;
+    background: var(--resource-file-color);
   }
   .filter-dot--tag {
-    background: #ec4899;
+    background: var(--resource-tag-color);
   }
 
   .result-panel {
@@ -493,21 +503,21 @@
     border-radius: 999px;
     font-size: 12px;
     font-weight: 800;
-    background: rgba(97, 92, 237, 0.1);
-    color: #615ced;
+    background: color-mix(in srgb, var(--resource-bookmark-color) 12%, transparent);
+    color: var(--resource-bookmark-color);
   }
 
   .type-pill--note {
-    background: rgba(0, 168, 132, 0.12);
-    color: #008f70;
+    background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
+    color: var(--resource-note-color);
   }
   .type-pill--file {
-    background: rgba(255, 138, 0, 0.14);
-    color: #d97706;
+    background: color-mix(in srgb, var(--resource-file-color) 14%, transparent);
+    color: var(--resource-file-color);
   }
   .type-pill--tag {
-    background: rgba(236, 72, 153, 0.12);
-    color: #db2777;
+    background: color-mix(in srgb, var(--resource-tag-color) 12%, transparent);
+    color: var(--resource-tag-color);
   }
 
   .card-title {
@@ -528,7 +538,7 @@
 
   .card-action {
     margin-top: auto;
-    color: #615ced;
+    color: var(--resource-bookmark-color);
     font-weight: 800;
   }
 
@@ -570,8 +580,8 @@
     width: 76px;
     height: 76px;
     border-radius: 50%;
-    border: 12px solid rgba(97, 92, 237, 0.14);
-    border-top-color: #615ced;
+    border: 12px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
+    border-top-color: var(--resource-bookmark-color);
   }
 
   @keyframes shimmer {

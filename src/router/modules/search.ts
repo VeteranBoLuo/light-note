@@ -3,7 +3,7 @@ import { RoleEnum } from '@/config/bookmarkCfg.ts';
 
 const searchRouter: RouteRecordRaw = {
   meta: {
-    title: '统一搜索',
+    title: '资源中心',
     keepAlive: true,
     requireAuth: true,
     roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],

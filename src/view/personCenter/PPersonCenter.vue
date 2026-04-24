@@ -53,7 +53,7 @@
       </b-menu>
       <b-menu :trigger="['click']" :menu-options="langMenuOptions">
         <div class="person-menu-item">
-          <span class="person-menu-item-title">语言</span>
+          <span class="person-menu-item-title">{{ $t('personCenter.language') }}</span>
           <span class="person-menu-item-des"
             >{{ LanguageName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
           /></span>
@@ -68,6 +68,16 @@
         <span class="person-menu-item-title">{{ $t('personCenter.admin') }}</span>
         <span class="person-menu-item-des"
           >{{ $t('personCenter.logs_user_mg')
+          }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+      ></div>
+      <div
+        class="person-menu-item"
+        @click="$router.push('/search')"
+        v-click-log="{ module: '个人中心', operation: `资源中心` }"
+      >
+        <span class="person-menu-item-title">{{ $t('personCenter.resourceCenter') }}</span>
+        <span class="person-menu-item-des"
+          >{{ $t('personCenter.resourceCenterDesc')
           }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
       <div

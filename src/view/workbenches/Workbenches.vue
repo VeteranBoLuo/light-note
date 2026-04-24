@@ -3,7 +3,7 @@
     <div class="workbench-header">
       <div class="title">{{ t('workbench.title', '工作台') }}</div>
       <div class="subtitle">{{
-        t('workbench.subtitle', '聚合查看书签、笔记、文件与标签状态，快速完成常用操作。')
+        t('workbench.subtitle', '聚合查看书签、笔记和云空间状态，快速完成常用操作。')
       }}</div>
     </div>
 
@@ -134,7 +134,7 @@
 
     <WorkbenchCharts
       :loading="activityLoading"
-      :themeKey="user.preferences?.theme || 'day'"
+      :themeKey="user.currentTheme || 'day'"
       :trendData="trendChartData"
       :fileTypeData="fileTypeChartData"
     />
@@ -168,10 +168,10 @@
         <CommonDataTable
           v-else
           :tableData="hotTagTable"
-          titleType="tag"
+          titleType="bookmark"
           rowClickable
           @rowClick="handleHotTagClick"
-          :title="t('workbench.table.tagHotTop10', '标签热度（Top 10）')"
+          :title="t('workbench.table.bookmarkTagHotTop10', '书签标签热度（Top 10）')"
           :columns="hotTagColumns"
         />
       </div>
@@ -238,42 +238,46 @@
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { getJsonInfo } from '@/config/jsonCfg.ts';
   import { API_TEXTS } from '@/config/constants.ts';
-  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
+  import { cloudSpaceStore, useUserStore } from '@/store';
   import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
-  import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
+  import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
-  const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const user = useUserStore();
   const router = useRouter();
   const { t } = useI18n();
 
-  const bookmarkList = ref<any[]>([]);
-  const noteList = ref<any[]>([]);
-  const loadingTag = ref(true);
-  const loadingBookmarks = ref(true);
-  const loadingNotes = ref(true);
-  const loadingCommonBookmarks = ref(true);
-  const loadingCloud = ref(true);
+  const loadingWorkbench = ref(true);
   const loadingUpdateLogs = ref(true);
   const loadingUserStats = ref(false);
-  const summaryLoading = computed(
-    () => loadingTag.value || loadingBookmarks.value || loadingNotes.value || loadingCloud.value,
-  );
-  const activityLoading = computed(() => loadingBookmarks.value || loadingNotes.value || loadingCloud.value);
-  const quickActionsLoading = computed(() => loadingBookmarks.value || loadingNotes.value);
+  const summaryLoading = computed(() => loadingWorkbench.value);
+  const activityLoading = computed(() => loadingWorkbench.value);
+  const quickActionsLoading = computed(() => loadingWorkbench.value);
   const updateLogsLoading = computed(() => loadingUpdateLogs.value);
-  const commonBookmarksLoading = computed(() => loadingCommonBookmarks.value);
-  const hotTagsLoading = computed(() => loadingTag.value);
-  const recentNotesLoading = computed(() => loadingNotes.value);
-  const recentFilesLoading = computed(() => loadingCloud.value);
+  const commonBookmarksLoading = computed(() => loadingWorkbench.value);
+  const hotTagsLoading = computed(() => loadingWorkbench.value);
+  const recentNotesLoading = computed(() => loadingWorkbench.value);
+  const recentFilesLoading = computed(() => loadingWorkbench.value);
   const userStatsLoading = computed(() => user.role === 'root' && loadingUserStats.value);
 
   const commonBookmarkTable = ref<any[]>([]);
+  const hotTagTable = ref<any[]>([]);
+  const recentNoteTable = ref<any[]>([]);
+  const recentFileTable = ref<any[]>([]);
+  const trendSummary = ref<any[]>([]);
+  const fileTypeSummary = ref<any[]>([]);
+  const weeklyStats = ref({ bookmark: 0, note: 0, file: 0 });
+  const workbenchCounts = ref({
+    bookmarkTotal: 0,
+    tagTotal: 0,
+    noteTotal: 0,
+    fileTotal: 0,
+    usedSpace: 0,
+  });
   const updateLogList = ref<any[]>([]);
   const activeUpdateLogIndex = ref<number | null>(null);
   const userStatsData = ref<any[]>([]);
@@ -293,23 +297,23 @@
     {
       key: 'bookmark',
       label: t('workbench.summary.bookmarkTotal', '书签总数'),
-      value: `${bookmarkList.value.length}`,
+      value: `${workbenchCounts.value.bookmarkTotal}`,
       extra: t('workbench.summary.toBookmarks', '点击进入书签页'),
       to: '/home',
     },
     {
-      key: 'tag',
-      label: t('workbench.summary.tagTotal', '标签总数'),
-      value: `${bookmark.tagList.length}`,
-      extra: t('workbench.summary.toTags', '点击进入标签管理'),
-      to: '/manage/tagMg',
-    },
-    {
       key: 'note',
       label: t('workbench.summary.noteTotal', '笔记总数'),
-      value: `${noteList.value.length}`,
+      value: `${workbenchCounts.value.noteTotal}`,
       extra: t('workbench.summary.toNotes', '点击进入笔记库'),
       to: '/noteLibrary',
+    },
+    {
+      key: 'file',
+      label: t('workbench.summary.fileTotal', '云文件总数'),
+      value: `${workbenchCounts.value.fileTotal}`,
+      extra: t('workbench.summary.toFiles', '点击进入云空间'),
+      to: '/cloudSpace',
     },
     {
       key: 'cloud',
@@ -333,8 +337,8 @@
     },
     {
       key: 'add-tag',
-      label: t('workbench.actions.addTag.label', '新增标签'),
-      desc: t('workbench.actions.addTag.desc', '创建分类标签'),
+      label: t('workbench.actions.addTag.label', '新增书签标签'),
+      desc: t('workbench.actions.addTag.desc', '创建书签分类'),
       to: '/manage/editTag/add',
     },
     {
@@ -406,72 +410,21 @@
   });
 
   const trendChartData = computed(() => {
-    const days = Array.from({ length: 7 }, (_, index) => {
-      const current = new Date();
-      current.setHours(0, 0, 0, 0);
-      current.setDate(current.getDate() - (6 - index));
-      return current;
-    });
-
-    const dayLabel = (date: Date) => {
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${month}-${day}`;
-    };
-
-    const dateCount = (items: any[], dateField: string) => {
-      const map: Record<string, number> = {};
-      days.forEach((date) => {
-        map[dayLabel(date)] = 0;
-      });
-      items.forEach((item) => {
-        const raw = item?.[dateField];
-        if (!raw) return;
-        const date = new Date(raw);
-        if (Number.isNaN(date.getTime())) return;
-        const key = dayLabel(date);
-        if (Object.prototype.hasOwnProperty.call(map, key)) {
-          map[key] += 1;
-        }
-      });
-      return map;
-    };
-
-    const bookmarkMap = dateCount(bookmarkList.value, 'createTime');
-    const noteMap = dateCount(noteList.value, 'updateTime');
-    const fileMap = dateCount(cloud.fileList || [], 'uploadTime');
-
     const data: { date: string; type: string; value: number }[] = [];
-    days.forEach((date) => {
-      const label = dayLabel(date);
-      data.push({ date: label, type: t('workbench.chart.bookmark', '书签'), value: bookmarkMap[label] || 0 });
-      data.push({ date: label, type: t('workbench.chart.note', '笔记'), value: noteMap[label] || 0 });
-      data.push({ date: label, type: t('workbench.chart.file', '文件'), value: fileMap[label] || 0 });
+    trendSummary.value.forEach((item) => {
+      data.push({ date: item.date, type: t('workbench.chart.bookmark', '书签'), value: item.bookmark || 0 });
+      data.push({ date: item.date, type: t('workbench.chart.note', '笔记'), value: item.note || 0 });
+      data.push({ date: item.date, type: t('workbench.chart.file', '文件'), value: item.file || 0 });
     });
 
     return data;
   });
 
   const fileTypeChartData = computed(() => {
-    const map: Record<string, number> = {};
-
-    (cloud.fileList || []).forEach((item) => {
-      const category = getCloudFileCategory(item);
-      const type = t(CLOUD_FILE_CATEGORY_LABEL_KEY[category]);
-      map[type] = (map[type] || 0) + 1;
-    });
-
-    return Object.entries(map).map(([type, value]) => ({ type, value }));
-  });
-
-  const weeklyStats = computed(() => {
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const bookmark = bookmarkList.value.filter((item) => new Date(item.createTime || 0).getTime() >= weekAgo).length;
-    const note = noteList.value.filter(
-      (item) => new Date(item.updateTime || item.createTime || 0).getTime() >= weekAgo,
-    ).length;
-    const file = (cloud.fileList || []).filter((item) => new Date(item.uploadTime || 0).getTime() >= weekAgo).length;
-    return { bookmark, note, file };
+    return fileTypeSummary.value.map((item) => ({
+      type: t(CLOUD_FILE_CATEGORY_LABEL_KEY[item.category] || 'workbench.table.other'),
+      value: item.value,
+    }));
   });
 
   const activeUpdateLog = computed(() => {
@@ -481,56 +434,6 @@
     return updateLogList.value[activeUpdateLogIndex.value] || null;
   });
 
-  const recentNoteTable = computed(() => {
-    return [...noteList.value]
-      .sort(
-        (a, b) =>
-          new Date(b.updateTime || b.createTime || 0).getTime() - new Date(a.updateTime || a.createTime || 0).getTime(),
-      )
-      .slice(0, 10)
-      .map((item) => ({
-        id: item.id,
-        title: item.title || t('noteDetail.unnamedDoc', '未命名文档'),
-        updateTime: item.updateTime || item.createTime || '-',
-        tagCount: Array.isArray(item.tags) ? item.tags.length : 0,
-      }));
-  });
-
-  const recentFileTable = computed(() => {
-    return [...(cloud.fileList || [])]
-      .sort((a, b) => new Date(b.uploadTime || 0).getTime() - new Date(a.uploadTime || 0).getTime())
-      .slice(0, 10)
-      .map((item) => ({
-        fileSizeMB: Number(((item.fileSize || 0) / 1024 / 1024).toFixed(2)),
-        uploadTime: item.uploadTime || '-',
-        ...item,
-      }));
-  });
-
-  const hotTagTable = computed(() => {
-    const tagList = Array.isArray(bookmark.tagList) ? bookmark.tagList : [];
-    const res = tagList
-      .map((tag) => {
-        const bookmarkCount = Array.isArray(tag.bookmarkList) ? tag.bookmarkList.length : 0;
-        const relatedTagCount = Array.isArray(tag.relatedTagList) ? tag.relatedTagList.length : 0;
-        const relatedTagNames = Array.isArray(tag.relatedTagList)
-          ? tag.relatedTagList
-              .map((relatedTag) => relatedTag?.name)
-              .filter((name) => typeof name === 'string' && name)
-              .join('、') || '-'
-          : '-';
-        return {
-          id: tag.id,
-          name: tag.name,
-          bookmarkCount,
-          relatedTagNames,
-          total: bookmarkCount + relatedTagCount,
-        };
-      })
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10);
-    return res.map((item, index) => ({ ...item, index: index + 1 }));
-  });
 
   function handleCommonBookmarkClick(record) {
     if (record?.url) {
@@ -568,22 +471,11 @@
   }
 
   async function init() {
-    loadingTag.value = true;
-    loadingBookmarks.value = true;
-    loadingNotes.value = true;
-    loadingCommonBookmarks.value = true;
-    loadingCloud.value = true;
+    loadingWorkbench.value = true;
     loadingUpdateLogs.value = true;
     loadingUserStats.value = user.role === 'root';
 
-    const tasks: Promise<any>[] = [
-      fetchTagList(),
-      fetchBookmarkList(),
-      fetchNoteList(),
-      fetchCommonBookmarks(),
-      fetchCloudData(),
-      fetchUpdateLogs(),
-    ];
+    const tasks: Promise<any>[] = [fetchWorkbenchSummary(), fetchUpdateLogs()];
     if (user.role === 'root') {
       tasks.push(fetchUserStats());
     }
@@ -608,89 +500,39 @@
     }
   }
 
-  // 获取标签列表
-  async function fetchTagList() {
-    loadingTag.value = true;
+  async function fetchWorkbenchSummary() {
+    loadingWorkbench.value = true;
     try {
-      const res = await apiQueryPost('/api/bookmark/queryTagList', {
-        filters: { userId: user.id },
-      });
+      const res = await apiBasePost('/api/workbench/summary');
       if (res.status === 200) {
-        bookmark.tagList = res.data || [];
-        user.tagTotal = bookmark.tagList.length;
+        const data = res.data || {};
+        workbenchCounts.value = {
+          bookmarkTotal: Number(data.counts?.bookmarkTotal || 0),
+          tagTotal: Number(data.counts?.tagTotal || 0),
+          noteTotal: Number(data.counts?.noteTotal || 0),
+          fileTotal: Number(data.counts?.fileTotal || 0),
+          usedSpace: Number(data.counts?.usedSpace || 0),
+        };
+        user.bookmarkTotal = workbenchCounts.value.bookmarkTotal;
+        user.tagTotal = workbenchCounts.value.tagTotal;
+        user.noteTotal = workbenchCounts.value.noteTotal;
+        cloud.usedSpace = workbenchCounts.value.usedSpace;
+        weeklyStats.value = data.weeklyStats || { bookmark: 0, note: 0, file: 0 };
+        trendSummary.value = Array.isArray(data.trend) ? data.trend : [];
+        fileTypeSummary.value = Array.isArray(data.fileTypeStats) ? data.fileTypeStats : [];
+        commonBookmarkTable.value = Array.isArray(data.commonBookmarks) ? data.commonBookmarks : [];
+        hotTagTable.value = Array.isArray(data.hotTags) ? data.hotTags : [];
+        recentNoteTable.value = Array.isArray(data.recentNotes)
+          ? data.recentNotes.map((item) => ({
+              ...item,
+              title: item.title || t('noteDetail.unnamedDoc', '未命名文档'),
+              updateTime: item.updateTime || '-',
+            }))
+          : [];
+        recentFileTable.value = Array.isArray(data.recentFiles) ? data.recentFiles : [];
       }
     } finally {
-      loadingTag.value = false;
-    }
-  }
-
-  // 获取书签列表
-  async function fetchBookmarkList() {
-    loadingBookmarks.value = true;
-    try {
-      const res = await apiQueryPost('/api/bookmark/getBookmarkList', {
-        filters: { userId: user.id, type: 'all' },
-      });
-      if (res.status === 200) {
-        bookmarkList.value = res.data.items || [];
-        bookmark.bookmarkList = bookmarkList.value;
-        user.bookmarkTotal = bookmarkList.value.length;
-      }
-    } finally {
-      loadingBookmarks.value = false;
-    }
-  }
-
-  // 获取笔记列表
-  async function fetchNoteList() {
-    loadingNotes.value = true;
-    try {
-      const res = await apiBasePost('/api/note/queryNoteList');
-      if (res.status === 200) {
-        noteList.value = res.data || [];
-        bookmark.noteList = noteList.value;
-        user.noteTotal = noteList.value.length;
-      }
-    } finally {
-      loadingNotes.value = false;
-    }
-  }
-
-  // 获取常用书签
-  async function fetchCommonBookmarks() {
-    loadingCommonBookmarks.value = true;
-    try {
-      const res = await apiBasePost('/api/bookmark/getCommonBookmarks');
-      if (res.status === 200 && Array.isArray(res.data.items)) {
-        commonBookmarkTable.value = res.data.items.map((item, index) => ({ ...item, index: index + 1 }));
-      } else {
-        commonBookmarkTable.value = [];
-      }
-    } finally {
-      loadingCommonBookmarks.value = false;
-    }
-  }
-
-  async function fetchCloudData() {
-    loadingCloud.value = true;
-    try {
-      const fileRes = await apiQueryPost('/api/file/queryFiles', {
-        filters: {
-          fileName: '',
-          category: cloud.typeCheckValue,
-          folderId: 'all',
-        },
-      });
-      if (fileRes.status === 200) {
-        cloud.fileList = fileRes.data || [];
-      }
-
-      const sizeRes = await apiBasePost('/api/file/queryTotalFileSize');
-      if (sizeRes.status === 200) {
-        cloud.usedSpace = sizeRes.data.totalSizeMB || 0;
-      }
-    } finally {
-      loadingCloud.value = false;
+      loadingWorkbench.value = false;
     }
   }
 
@@ -872,6 +714,7 @@
     transition:
       transform 0.2s ease,
       border-color 0.2s ease;
+    border-color: color-mix(in srgb, var(--summary-accent-start) 38%, var(--workbench-summary-border-color));
 
     &::before,
     &::after {
@@ -907,7 +750,7 @@
 
     &:hover {
       transform: translateY(-2px);
-      border-color: var(--noteType-border-color);
+      border-color: color-mix(in srgb, var(--summary-accent-start) 58%, var(--workbench-summary-border-color));
     }
 
     .summary-top {
@@ -972,6 +815,11 @@
   .summary-card--note {
     --summary-accent-start: var(--workbench-accent-note-start);
     --summary-accent-end: var(--workbench-accent-note-end);
+  }
+
+  .summary-card--file {
+    --summary-accent-start: var(--workbench-accent-file-start);
+    --summary-accent-end: var(--workbench-accent-file-end);
   }
 
   .summary-card--cloud {

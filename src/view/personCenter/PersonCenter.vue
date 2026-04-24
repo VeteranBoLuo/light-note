@@ -79,7 +79,7 @@
             <button class="setting-card">
               <span class="setting-left">
                 <svg-icon size="14" :src="icon.nullImg" />
-                语言
+                {{ $t('personCenter.language') }}
               </span>
               <span class="setting-right">{{ LanguageName }}</span>
             </button>
@@ -114,7 +114,12 @@
         </div>
       </div>
     </template>
-    <div class="navigation-icon" style="margin-left: 5px" @mouseenter="handleTriggerMouseEnter" @mouseleave="handleTriggerMouseLeave">
+    <div
+      class="navigation-icon"
+      style="margin-left: 5px"
+      @mouseenter="handleTriggerMouseEnter"
+      @mouseleave="handleTriggerMouseLeave"
+    >
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
@@ -252,6 +257,12 @@
       label: t('personCenter.help'),
       path: '/help',
       icon: icon.help_document,
+    },
+    {
+      name: 'resourceCenter',
+      label: t('personCenter.resourceCenter'),
+      path: '/search',
+      icon: icon.navigation.search,
     },
     {
       name: 'operationLog',

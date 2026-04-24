@@ -47,15 +47,24 @@
   --ai-user-background-color: #e5e5e5;
   --skeleton-body-bg-color: rgba(255, 255, 255, 0.4);
 
-  --workbench-accent-bookmark-start: #5f78ff;
-  --workbench-accent-bookmark-end: #7da4ff;
-  --workbench-accent-tag-start: #8b6dff;
-  --workbench-accent-tag-end: #b387ff;
-  --workbench-accent-note-start: #23b7a4;
-  --workbench-accent-note-end: #53d3c1;
-  --workbench-accent-file-start: #ff6fa3;
-  --workbench-accent-file-end: #ff9d7a;
+  --resource-bookmark-color: #615ced;
+  --resource-note-color: #00a884;
+  --resource-file-color: #ff8a00;
+  --resource-tag-color: #ec4899;
+
+  --workbench-accent-bookmark-start: var(--resource-bookmark-color);
+  --workbench-accent-bookmark-end: color-mix(in srgb, var(--resource-bookmark-color) 72%, #ffffff);
+  --workbench-accent-tag-start: var(--resource-tag-color);
+  --workbench-accent-tag-end: color-mix(in srgb, var(--resource-tag-color) 72%, #ffffff);
+  --workbench-accent-note-start: var(--resource-note-color);
+  --workbench-accent-note-end: color-mix(in srgb, var(--resource-note-color) 72%, #ffffff);
+  --workbench-accent-file-start: var(--resource-file-color);
+  --workbench-accent-file-end: color-mix(in srgb, var(--resource-file-color) 72%, #ffffff);
   --workbench-accent-ring-alpha: 18%;
+  --workbench-chart-bookmark-color: var(--workbench-accent-bookmark-start);
+  --workbench-chart-note-color: var(--workbench-accent-note-start);
+  --workbench-chart-file-color: var(--workbench-accent-file-start);
+  --workbench-chart-tag-color: var(--workbench-accent-tag-start);
 
   --workbench-summary-surface-top: #ffffff;
   --workbench-summary-surface-bottom: #f8f9ff;
@@ -176,15 +185,24 @@
   --noteType-border-color: #4d4d54;
   --skeleton-body-bg-color: #2a2a2a;
 
-  --workbench-accent-bookmark-start: #6d86ff;
-  --workbench-accent-bookmark-end: #94b0ff;
-  --workbench-accent-tag-start: #a07bff;
-  --workbench-accent-tag-end: #c59bff;
-  --workbench-accent-note-start: #36b7a7;
-  --workbench-accent-note-end: #66d6c7;
-  --workbench-accent-file-start: #ff7faf;
-  --workbench-accent-file-end: #ffb182;
+  --resource-bookmark-color: #615ced;
+  --resource-note-color: #00a884;
+  --resource-file-color: #ff8a00;
+  --resource-tag-color: #ec4899;
+
+  --workbench-accent-bookmark-start: var(--resource-bookmark-color);
+  --workbench-accent-bookmark-end: color-mix(in srgb, var(--resource-bookmark-color) 72%, #ffffff);
+  --workbench-accent-tag-start: var(--resource-tag-color);
+  --workbench-accent-tag-end: color-mix(in srgb, var(--resource-tag-color) 72%, #ffffff);
+  --workbench-accent-note-start: var(--resource-note-color);
+  --workbench-accent-note-end: color-mix(in srgb, var(--resource-note-color) 72%, #ffffff);
+  --workbench-accent-file-start: var(--resource-file-color);
+  --workbench-accent-file-end: color-mix(in srgb, var(--resource-file-color) 72%, #ffffff);
   --workbench-accent-ring-alpha: 12%;
+  --workbench-chart-bookmark-color: var(--workbench-accent-bookmark-start);
+  --workbench-chart-note-color: var(--workbench-accent-note-start);
+  --workbench-chart-file-color: var(--workbench-accent-file-start);
+  --workbench-chart-tag-color: var(--workbench-accent-tag-start);
 
   --workbench-summary-surface-top: #323846;
   --workbench-summary-surface-bottom: #2a303d;

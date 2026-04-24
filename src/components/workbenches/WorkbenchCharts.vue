@@ -20,6 +20,7 @@
   import { Line, Pie } from '@antv/g2plot';
   import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
 
   interface TrendItem {
     date: string;
@@ -51,12 +52,28 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
-  function getColors() {
-    const isNight = props.themeKey === 'night';
-    if (isNight) {
-      return ['#ef41c9', '#7859f4', '#ff5493', '#ff8d66', '#ffc653', '#f9f871'];
-    }
-    return ['#b68eff', '#7859f4', '#d000d7', '#67baa7', '#ff5f51', '#4a4453', '#d5cabd'];
+  function getFileTypeColorMap() {
+    return {
+      [t('cloudSpace.image', '图片')]: FILE_TYPE_COLOR_HEX.image,
+      [t('cloudSpace.video', '视频')]: FILE_TYPE_COLOR_HEX.video,
+      [t('cloudSpace.audio', '音频')]: FILE_TYPE_COLOR_HEX.audio,
+      [t('cloudSpace.pdf', 'PDF')]: FILE_TYPE_COLOR_HEX.pdf,
+      [t('cloudSpace.word', 'Word')]: FILE_TYPE_COLOR_HEX.word,
+      [t('cloudSpace.excel', 'Excel')]: FILE_TYPE_COLOR_HEX.excel,
+      [t('cloudSpace.ppt', 'PPT')]: FILE_TYPE_COLOR_HEX.ppt,
+      [t('cloudSpace.text', '文本')]: FILE_TYPE_COLOR_HEX.text,
+      [t('cloudSpace.compress', '压缩包')]: FILE_TYPE_COLOR_HEX.compress,
+      [t('cloudSpace.other', '其他')]: FILE_TYPE_COLOR_HEX.other,
+    };
+  }
+
+  function getTrendColorMap() {
+    return {
+      [t('workbench.chart.bookmark', '书签')]: getThemeVar(RESOURCE_COLOR_CSS_VAR.bookmark, RESOURCE_COLOR_HEX.bookmark),
+      [t('workbench.chart.note', '笔记')]: getThemeVar(RESOURCE_COLOR_CSS_VAR.note, RESOURCE_COLOR_HEX.note),
+      [t('workbench.chart.file', '文件')]: getThemeVar(RESOURCE_COLOR_CSS_VAR.file, RESOURCE_COLOR_HEX.file),
+      [t('workbench.chart.tag', '标签')]: getThemeVar(RESOURCE_COLOR_CSS_VAR.tag, RESOURCE_COLOR_HEX.tag),
+    };
   }
 
   function getCommonConfig() {
@@ -127,86 +144,118 @@
     typePlot = null;
   }
 
-  async function renderCharts() {
-    destroyAll();
-    if (props.loading) {
-      return;
-    }
-    await nextTick();
+  function destroyTrend() {
+    trendPlot?.destroy();
+    trendPlot = null;
+  }
 
-    const colors = getColors();
-    const common = getCommonConfig();
+  function destroyType() {
+    typePlot?.destroy();
+    typePlot = null;
+  }
 
-    if (trendRef.value && props.trendData.length) {
-      trendPlot = new Line(trendRef.value, {
-        data: props.trendData,
-        xField: 'date',
-        yField: 'value',
-        seriesField: 'type',
-        color: colors,
-        smooth: true,
-        lineStyle: {
-          lineWidth: 3,
+  function getTrendConfig(common) {
+    const trendColorMap = getTrendColorMap();
+    return {
+      data: props.trendData,
+      xField: 'date',
+      yField: 'value',
+      seriesField: 'type',
+      color: ({ type }: TrendItem) => trendColorMap[type] || RESOURCE_COLOR_HEX.bookmark,
+      smooth: true,
+      lineStyle: {
+        lineWidth: 3,
+      },
+      point: {
+        size: 3,
+        shape: 'circle',
+        style: {
+          lineWidth: 1,
+          stroke: getThemeVar('--menu-body-bg-color', '#fff'),
         },
-        point: {
-          size: 3,
-          shape: 'circle',
+      },
+      ...common,
+    };
+  }
+
+  function getTypeConfig() {
+    const descColor = getThemeVar('--desc-color', '#71717a');
+    const fileTypeColorMap = getFileTypeColorMap();
+    return {
+      data: props.fileTypeData,
+      angleField: 'value',
+      colorField: 'type',
+      radius: 0.9,
+      innerRadius: 0.55,
+      color: ({ type }: FileTypeItem) => fileTypeColorMap[type] || FILE_TYPE_COLOR_HEX.other,
+      label: {
+        type: 'spider',
+        content: '{name}',
+        style: {
+          fill: descColor,
+          fontSize: 12,
+          fontWeight: 400,
+        },
+      },
+      statistic: {
+        title: false,
+        content: {
           style: {
-            lineWidth: 1,
-            stroke: getThemeVar('--menu-body-bg-color', '#fff'),
+            whiteSpace: 'pre-wrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontSize: '13px',
+            fontWeight: 600,
+            color: descColor,
           },
+          formatter: () => t('workbench.chart.fileType', '文件类型分布'),
         },
-        ...common,
-      });
-      trendPlot.render();
-    }
-
-    if (typeRef.value && props.fileTypeData.length) {
-      const textColor = getThemeVar('--text-color', '#161824');
-      const descColor = getThemeVar('--desc-color', '#71717a');
-      typePlot = new Pie(typeRef.value, {
-        data: props.fileTypeData,
-        angleField: 'value',
-        colorField: 'type',
-        radius: 0.9,
-        innerRadius: 0.55,
-        color: colors,
-        label: {
-          type: 'spider',
-          content: '{name}',
+      },
+      legend: {
+        position: 'right',
+        itemName: {
           style: {
             fill: descColor,
             fontSize: 12,
             fontWeight: 400,
           },
         },
-        statistic: {
-          title: false,
-          content: {
-            style: {
-              whiteSpace: 'pre-wrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: descColor,
-            },
-            formatter: () => t('workbench.chart.fileType', '文件类型分布'),
-          },
-        },
-        legend: {
-          position: 'right',
-          itemName: {
-            style: {
-              fill: descColor,
-              fontSize: 12,
-              fontWeight: 400,
-            },
-          },
-        },
-        interactions: [{ type: 'element-active' }],
-      });
-      typePlot.render();
+      },
+      interactions: [{ type: 'element-active' }],
+    };
+  }
+
+  async function syncCharts() {
+    if (props.loading) {
+      destroyAll();
+      return;
+    }
+    await nextTick();
+
+    const common = getCommonConfig();
+
+    if (trendRef.value && props.trendData.length) {
+      const trendConfig = getTrendConfig(common);
+      if (trendPlot) {
+        trendPlot.update(trendConfig);
+      } else {
+        trendPlot = new Line(trendRef.value, trendConfig);
+        trendPlot.render();
+      }
+    } else {
+      destroyTrend();
+    }
+
+    if (typeRef.value && props.fileTypeData.length) {
+      const typeConfig = getTypeConfig();
+      if (typePlot) {
+        typePlot.update(typeConfig);
+      } else {
+        typePlot = new Pie(typeRef.value, typeConfig);
+        typePlot.render();
+      }
+    } else {
+      destroyType();
     }
   }
 
@@ -222,7 +271,7 @@
   watch(
     () => [props.loading, props.themeKey, props.trendData, props.fileTypeData],
     () => {
-      renderCharts();
+      syncCharts();
     },
     { deep: true, immediate: true },
   );

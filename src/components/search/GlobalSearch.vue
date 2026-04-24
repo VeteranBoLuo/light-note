@@ -14,7 +14,7 @@
           <svg-icon :src="icon.navigation.search" size="16" />
         </template>
         <template #suffix>
-          <button v-if="keyword" class="clear-btn" @mousedown.prevent="clearKeyword">清空</button>
+          <button v-if="keyword" class="clear-btn" @mousedown.prevent="clearKeyword">{{ t('resourceCenter.clearShort') }}</button>
           <span v-else class="shortcut">/</span>
         </template>
       </b-input>
@@ -22,10 +22,10 @@
       <div v-if="suggestVisible" class="suggest-panel">
         <div class="suggest-head">
           <div>
-            <div class="suggest-title">统一搜索</div>
-            <div class="suggest-subtitle">从书签、笔记、文件和标签里一起找</div>
+            <div class="suggest-title">{{ t('resourceCenter.title') }}</div>
+            <div class="suggest-subtitle">{{ t('resourceCenter.suggestSubtitle') }}</div>
           </div>
-          <button class="refresh-btn" @mousedown.prevent="refreshData">刷新</button>
+          <button class="refresh-btn" @mousedown.prevent="refreshData">{{ t('resourceCenter.refreshShort') }}</button>
         </div>
 
         <div v-if="loading" class="suggest-loading">
@@ -34,7 +34,7 @@
 
         <template v-else-if="suggestGroups.length">
           <div v-for="group in suggestGroups" :key="group.type" class="suggest-group">
-            <div class="group-label">{{ group.label }}</div>
+            <div class="group-label">{{ getGroupLabel(group.type) }}</div>
             <button v-for="item in group.items" :key="`${item.type}-${item.id}`" class="suggest-item" @mousedown.prevent="openItem(item)">
               <span class="type-dot" :class="`type-dot--${item.type}`"></span>
               <span class="item-main">
@@ -44,19 +44,19 @@
               <span class="item-extra">{{ item.extra }}</span>
             </button>
           </div>
-          <button class="view-all" @mousedown.prevent="goSearch">查看全部搜索结果</button>
+          <button class="view-all" @mousedown.prevent="goSearch">{{ t('resourceCenter.viewAll') }}</button>
         </template>
 
         <div v-else class="suggest-empty">
-          <div class="empty-title">{{ keyword ? '没有匹配结果' : '输入关键词开始搜索' }}</div>
-          <div class="empty-desc">可以试试标签名、笔记标题、文件名或者网址关键词。</div>
+          <div class="empty-title">{{ keyword ? t('resourceCenter.noMatch') : t('resourceCenter.startSearch') }}</div>
+          <div class="empty-desc">{{ t('resourceCenter.emptyDesc') }}</div>
         </div>
       </div>
     </div>
 
     <button v-else class="mobile-search-trigger" @click="openMobileSearch">
       <svg-icon size="16" :src="icon.navigation.search" />
-      <span class="mobile-search-placeholder">搜索书签 / 笔记 / 文件</span>
+      <span class="mobile-search-placeholder">{{ t('resourceCenter.mobileTrigger') }}</span>
     </button>
 
     <Teleport v-if="bookmark.isMobile" to="body">
@@ -65,7 +65,7 @@
           <b-input
             id="global-mobile-search-input"
             v-model:value="keyword"
-            placeholder="搜索书签 / 笔记 / 文件 / 标签"
+            :placeholder="t('resourceCenter.searchPlaceholder')"
             height="40px"
             @input="handleInput"
             @enter="goSearch"
@@ -74,7 +74,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <button class="mobile-cancel" @click="mobileVisible = false">取消</button>
+          <button class="mobile-cancel" @click="mobileVisible = false">{{ t('resourceCenter.cancel') }}</button>
         </div>
 
         <div class="mobile-search-body">
@@ -83,7 +83,7 @@
           </div>
           <template v-else-if="suggestGroups.length">
             <div v-for="group in suggestGroups" :key="group.type" class="suggest-group">
-              <div class="group-label">{{ group.label }}</div>
+              <div class="group-label">{{ getGroupLabel(group.type) }}</div>
               <button v-for="item in group.items" :key="`${item.type}-${item.id}`" class="suggest-item" @click="openItem(item)">
                 <span class="type-dot" :class="`type-dot--${item.type}`"></span>
                 <span class="item-main">
@@ -92,11 +92,11 @@
                 </span>
               </button>
             </div>
-            <button class="view-all" @click="goSearch">查看全部搜索结果</button>
+            <button class="view-all" @click="goSearch">{{ t('resourceCenter.viewAll') }}</button>
           </template>
           <div v-else class="suggest-empty">
-            <div class="empty-title">{{ keyword ? '没有匹配结果' : '搜索你的轻笺知识库' }}</div>
-            <div class="empty-desc">把零散内容聚在一起找，少翻几个抽屉。</div>
+            <div class="empty-title">{{ keyword ? t('resourceCenter.noMatch') : t('resourceCenter.mobileEmptyTitle') }}</div>
+            <div class="empty-desc">{{ t('resourceCenter.mobileEmptyDesc') }}</div>
           </div>
         </div>
       </div>
@@ -112,10 +112,12 @@
   import icon from '@/config/icon.ts';
   import { bookmarkStore } from '@/store';
   import { fetchGlobalSearch, SearchGroup, SearchResultItem } from '@/api/search.ts';
+  import { useI18n } from 'vue-i18n';
 
   const router = useRouter();
   const route = useRoute();
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
   const keyword = ref('');
   const loading = ref(false);
   const suggestVisible = ref(false);
@@ -127,7 +129,13 @@
 
   const visibleRoutes = ['workbenches', 'home', 'noteLibrary', 'cloudSpace', 'search'];
   const isSearchAvailable = computed(() => visibleRoutes.some((item) => route.path.includes(item)));
-  const placeholder = computed(() => (route.path.includes('/search') ? '继续搜索...' : '搜索书签 / 笔记 / 文件 / 标签'));
+  const placeholder = computed(() =>
+    route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
+  );
+
+  function getGroupLabel(type: string) {
+    return t(`resourceCenter.types.${type}`);
+  }
 
   async function ensureData(force = false) {
     const seq = ++requestSeq;
@@ -309,7 +317,7 @@
   }
 
   .refresh-btn {
-    color: #615ced;
+    color: var(--resource-bookmark-color);
     white-space: nowrap;
   }
 
@@ -347,10 +355,10 @@
     border-radius: 50%;
   }
 
-  .type-dot--bookmark { background: #615ced; }
-  .type-dot--note { background: #00a884; }
-  .type-dot--file { background: #ff8a00; }
-  .type-dot--tag { background: #ec4899; }
+  .type-dot--bookmark { background: var(--resource-bookmark-color); }
+  .type-dot--note { background: var(--resource-note-color); }
+  .type-dot--file { background: var(--resource-file-color); }
+  .type-dot--tag { background: var(--resource-tag-color); }
 
   .item-main {
     min-width: 0;
@@ -377,8 +385,8 @@
     margin-top: 12px;
     padding: 10px;
     border-radius: 12px;
-    color: #615ced;
-    background: rgba(97, 92, 237, 0.08);
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent);
     font-weight: 700;
   }
 
