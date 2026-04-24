@@ -128,7 +128,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, ref } from 'vue';
+  import { computed, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import Opinions from '@/components/personCenter/opinions/Opinions.vue';
@@ -159,8 +159,12 @@
     }
   }
 
+  function hasActivePopoverSource() {
+    return isHoveringTrigger.value || isHoveringCard.value || isSettingMenuOpen.value;
+  }
+
   function syncPopoverVisible() {
-    menuVisible.value = isHoveringTrigger.value || isHoveringCard.value || isSettingMenuOpen.value;
+    menuVisible.value = hasActivePopoverSource();
   }
 
   function delayClosePopover() {
@@ -198,9 +202,16 @@
     syncPopoverVisible();
   }
 
+  function closeSettingMenuAndSyncPopover() {
+    isSettingMenuOpen.value = false;
+    delayClosePopover();
+  }
+
   function handlePopoverOpenChange(open: boolean) {
     if (open) {
-      menuVisible.value = true;
+      if (hasActivePopoverSource()) {
+        menuVisible.value = true;
+      }
       return;
     }
     delayClosePopover();
@@ -355,6 +366,7 @@
   const LanguageName = computed(() => (user.preferences.lang === 'en-US' ? 'English' : '中文'));
 
   function changeTheme(theme: string) {
+    closeSettingMenuAndSyncPopover();
     user.preferences.theme = theme;
     userApi
       .updateUserInfo({
@@ -374,6 +386,7 @@
   }
 
   function changeLanguage(lang: 'zh-CN' | 'en-US') {
+    closeSettingMenuAndSyncPopover();
     document.documentElement.lang = lang;
     user.preferences.lang = lang;
     userApi
@@ -404,6 +417,10 @@
     userVisible.value = true;
     menuVisible.value = false;
   }
+
+  onBeforeUnmount(() => {
+    clearCloseTimer();
+  });
 </script>
 
 <style lang="less" scoped>
