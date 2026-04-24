@@ -21,6 +21,7 @@ export default {
   home: {
     allCard: '收纳、分享、探索优质网站',
     tagSearch: '请输入标签名',
+    showEmptyTags: '显示空标签',
   },
   workbench: {
     title: '工作台',
@@ -150,6 +151,7 @@ export default {
     exitBatch: '退出批量操作',
     clearFilter: '清空筛选',
     noTag: '暂无标签',
+    showEmptyTags: '显示空标签',
     searchTag: '搜索标签',
     tagConfig: {
       title: '笔记标签配置',
@@ -163,7 +165,7 @@ export default {
       save: '保存',
       delete: '删除',
       confirmDelete: '删除标签',
-      confirmDeleteContent: '删除后会同时解除与笔记的绑定，确认删除？',
+      confirmDeleteContent: '删除后会同时解除与书签、笔记等资源的绑定，确认删除？',
       deleteSuccess: '删除成功',
       createSuccess: '创建成功',
       updateSuccess: '更新成功',

@@ -86,14 +86,14 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { apiBaseGet, apiBasePost } from '@/http/request.ts';
+  import { apiBasePost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import { message, Modal } from 'ant-design-vue';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
 
   interface TagItem {
-    id: number;
+    id: string;
     name: string;
   }
 
@@ -104,12 +104,12 @@
   const allTags = ref<TagItem[]>([]);
   const noteTags = ref<TagItem[]>([]);
   const initialNoteTags = ref<TagItem[]>([]);
-  const selectedTagId = ref<number | null>(null);
+  const selectedTagId = ref<string | null>(null);
   const searchValue = ref('');
   const saving = ref(false);
 
   const form = reactive({
-    id: null as number | null,
+    id: null as string | null,
     name: '',
   });
 
@@ -162,7 +162,7 @@
     try {
       const parsed = JSON.parse(note.tags);
       if (Array.isArray(parsed)) {
-        const ids = parsed.map((v) => Number(v)).filter((v) => !Number.isNaN(v));
+        const ids = parsed.map((v) => String(v?.id ?? v)).filter(Boolean);
         noteTags.value = allTags.value.filter((t) => ids.includes(t.id));
         initialNoteTags.value = [...noteTags.value];
       }
@@ -221,7 +221,7 @@
         message.success(form.id ? t('note.tagConfig.updateSuccess') : t('note.tagConfig.createSuccess'));
         await fetchAllTags();
         if (!form.id && res.data?.id) {
-          const created = allTags.value.find((t) => t.id === Number(res.data.id));
+          const created = allTags.value.find((t) => t.id === String(res.data.id));
           if (created) bindTag(created);
         }
         if (form.id) {
@@ -236,7 +236,7 @@
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: string) {
     Modal.confirm({
       title: t('note.tagConfig.confirmDelete'),
       content: t('note.tagConfig.confirmDeleteContent'),

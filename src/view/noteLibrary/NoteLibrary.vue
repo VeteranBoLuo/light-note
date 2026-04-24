@@ -8,7 +8,11 @@
         <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
       </div>
       <div class="handle-btn-group">
-        <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
+        <TagFilterSelector
+          v-if="currentViewMode === 'card'"
+          :allTags="visibleNoteTags"
+          v-model:showEmptyTags="showEmptyNoteTags"
+        />
         <b-button
           type="primary"
           style="border-radius: 20px"
@@ -33,7 +37,11 @@
           </b-button>
         </template>
         <template v-else>
-          <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="allTags" />
+          <TagFilterSelector
+            v-if="currentViewMode === 'card'"
+            :allTags="visibleNoteTags"
+            v-model:showEmptyTags="showEmptyNoteTags"
+          />
           <ViewModeToggle />
           <div
             class="search-icon flex-center dom-hover"
@@ -103,8 +111,12 @@
           <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')">
             {{ $t('note.noTagNote') }}
           </div>
+          <label class="tag-toggle-item">
+            <b-checkbox v-model:isCheck="showEmptyNoteTags" />
+            <span>{{ $t('note.showEmptyTags') }}</span>
+          </label>
           <div
-            v-for="tag in allTags"
+            v-for="tag in visibleNoteTags"
             class="tag-item"
             :class="{ active: selectedTag === tag.id }"
             @click="selectTag(tag)"
@@ -156,6 +168,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { backRouterPage } from '@/utils/common';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
@@ -165,6 +178,7 @@
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
+  const showEmptyNoteTags = ref(false);
 
   init();
   async function init() {
@@ -249,7 +263,11 @@
     (document.querySelector('.b-input') as HTMLInputElement)?.focus();
   }
 
-  const allTags = ref([]);
+  const allTags = ref<any[]>([]);
+  const visibleNoteTags = computed(() => {
+    if (showEmptyNoteTags.value) return allTags.value;
+    return allTags.value.filter((tag) => Number(tag.noteCount || 0) > 0);
+  });
 
   const hasCheck = computed(() => {
     return viewNoteList.value.some((data) => data.isCheck === true);
@@ -469,6 +487,18 @@
           color: white;
           font-weight: 600;
         }
+      }
+
+      .tag-toggle-item {
+        min-height: 30px;
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--desc-color);
+        font-size: 12px;
+        cursor: pointer;
+        user-select: none;
       }
     }
     .note-list {

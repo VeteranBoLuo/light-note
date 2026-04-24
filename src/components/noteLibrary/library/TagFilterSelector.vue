@@ -33,6 +33,10 @@
           <div class="filter-item" @click.stop="viewNote('null')" :isFocus="tag === 'null'">{{
             t('note.noTagNote')
           }}</div>
+          <label class="filter-toggle" @click.stop>
+            <b-checkbox v-model:isCheck="showEmptyTags" />
+            <span>{{ t('note.showEmptyTags') }}</span>
+          </label>
           <div class="divider"></div>
         </div>
 
@@ -62,6 +66,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { computed, ref } from 'vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import router from '@/router';
@@ -75,6 +80,7 @@
 
   const filterVisible = ref(false);
   const keyword = ref('');
+  const showEmptyTags = defineModel<boolean>('showEmptyTags', { default: false });
 
   const filteredTags = computed(() => {
     if (!keyword.value.trim()) return props.allTags;
@@ -163,6 +169,17 @@
       cursor: pointer;
       white-space: nowrap;
     }
+  }
+  .filter-toggle {
+    min-height: 28px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--desc-color);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
   }
   .filter-item {
     text-align: left;

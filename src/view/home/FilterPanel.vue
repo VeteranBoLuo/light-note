@@ -6,7 +6,7 @@
     </div>
     <b-list
       v-else
-      :draggable="!bookmark.isMobile"
+      :draggable="tagDraggable"
       class="header-input"
       v-model:listOptions="filterTagList"
       v-model:dragList="bookmark.tagList"
@@ -19,11 +19,17 @@
       :delay="100"
     >
       <template #input>
-        <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">
-          <template #prefix>
-            <svg-icon :src="icon.navigation.search" size="16" />
-          </template>
-        </b-input>
+        <div class="filter-tools">
+          <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="16" />
+            </template>
+          </b-input>
+          <label class="empty-tag-toggle">
+            <b-checkbox v-model:isCheck="showEmptyBookmarkTags" />
+            <span>{{ $t('home.showEmptyTags') }}</span>
+          </label>
+        </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
         <RightMenu
@@ -87,12 +93,21 @@
   import icon from '@/config/icon.ts';
   import BList from '@/components/base/BasicComponents/BList.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { recordOperation } from '@/api/commonApi.ts';
 
   const tagName = ref('');
+  const showEmptyBookmarkTags = ref(false);
+  const hasBookmark = (tag: TagInterface) => Array.isArray(tag.bookmarkList) && tag.bookmarkList.length > 0;
   const filterTagList = computed(() => {
-    return bookmark.tagList.filter((item) => item.name.toUpperCase().includes(tagName.value.toUpperCase()));
+    const keyword = tagName.value.trim().toUpperCase();
+    return bookmark.tagList.filter((item) => {
+      const matchKeyword = !keyword || item.name.toUpperCase().includes(keyword);
+      const matchEmptyVisible = showEmptyBookmarkTags.value || hasBookmark(item);
+      return matchKeyword && matchEmptyVisible;
+    });
   });
+  const tagDraggable = computed(() => !bookmark.isMobile && showEmptyBookmarkTags.value && !tagName.value.trim());
 
   const bookmark = bookmarkStore();
   const router = useRouter();
@@ -220,6 +235,23 @@
 
   .header-input {
     width: 180px;
+  }
+
+  .filter-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .empty-tag-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--desc-color);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 18px;
+    user-select: none;
   }
 
   .tag-skeleton-wrap {

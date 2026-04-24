@@ -21,6 +21,7 @@ export default {
   home: {
     allCard: 'Organize, share, and explore quality websites',
     tagSearch: 'Enter tag name',
+    showEmptyTags: 'Show empty tags',
     alreadyIncluded: 'Already included',
   },
   workbench: {
@@ -152,6 +153,7 @@ export default {
     clearFilter: 'Clear Filter',
     searchTag: 'Search Tag',
     noTag: 'No tags yet',
+    showEmptyTags: 'Show empty tags',
     tagConfig: {
       title: 'Note Tag Configuration',
       tagLibrary: 'Tag Library',
@@ -166,7 +168,7 @@ export default {
       delete: 'Delete',
       confirmDelete: 'Delete Tag',
       confirmDeleteContent:
-        'After deletion, the binding with notes will be released at the same time. Confirm deletion?',
+        'After deletion, bindings with bookmarks, notes, and other resources will be released. Confirm deletion?',
       deleteSuccess: 'Delete successful',
       createSuccess: 'Create successful',
       updateSuccess: 'Update successful',

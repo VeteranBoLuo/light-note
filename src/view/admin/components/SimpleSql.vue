@@ -214,6 +214,7 @@
     'note_images',
     'operation_logs',
     'opinion',
+    'resource_tag_relations',
     'tag',
     'tag_bookmark_relations',
     'tag_relations',
