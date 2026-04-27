@@ -13,16 +13,6 @@
           </div>
           {{ data.name }}
         </div>
-        <div v-if="data.tagList?.length" class="bookmark-item-tags">
-          <span
-            v-for="tag in data.tagList"
-            :key="tag.id"
-            class="bookmark-item-tag"
-            @click.stop="router.push(`/tag/${tag.id}`)"
-          >
-            {{ tag.name }}
-          </span>
-        </div>
       </div>
       <div class="edit-tag-operation">
         <svg-icon

@@ -7,15 +7,17 @@
           <b-input v-model:value="bookmarkData.name" />
         </div>
         <div class="tag-attr-item">
-          <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
-          <b-input v-model:value="bookmarkData.url">
-            <template #suffix>
-              <div class="generate-btn" @click="generateBookmarkMeta" :class="{ loading: generatingDescription }">
+          <div class="tag-attr-head">
+            <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
+            <a-tooltip :title="$t('bookmarkMg.generateMetaDesc')">
+              <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generatingDescription }">
                 <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
-              </div>
-            </template>
+                <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
+              </button>
+            </a-tooltip>
+          </div>
+          <b-input v-model:value="bookmarkData.url">
           </b-input>
-          <span class="tag-attr-tip">{{ $t('bookmarkMg.generateMetaDesc') }}</span>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -215,9 +217,11 @@
     white-space: nowrap;
   }
 
-  .tag-attr-tip {
-    font-size: 12px;
-    color: var(--desc-color);
+  .tag-attr-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
 
   .edit-tag-footer {
@@ -268,17 +272,23 @@
   :deep(.ant-btn-icon-only) {
     color: #ccc;
   }
-  .generate-btn {
+  .generate-meta-action {
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
     transition:
       background-color 0.3s,
-      color 0.3s;
-    display: flex;
+      color 0.3s,
+      border-color 0.3s;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
     color: var(--text-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
+    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
+    font-size: 12px;
+    line-height: 1;
     &:hover {
       background-color: var(--bl-input-noBorder-hover-bg-color);
     }
@@ -312,6 +322,12 @@
       flex-direction: column;
       gap: 10px;
       width: 90%;
+    }
+
+    .tag-attr-head {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
     }
 
     :deep(.ant-checkbox-group) {
