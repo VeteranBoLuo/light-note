@@ -35,6 +35,7 @@
       </div>
       <div class="default-area">
         <div v-if="!bookmark.isMobile">{{ $t('cloudSpace.folder') }}</div>
+        <div v-if="!bookmark.isMobile">{{ $t('cloudSpace.relateTags') }}</div>
         <div>{{ $t('cloudSpace.fileSize') }}</div>
         <div v-if="!bookmark.isMobile"> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
@@ -80,6 +81,9 @@
             <a-tooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
               <svg-icon class="download-icon" :src="icon.cloudSpace.rename" size="20" @click="handleReName(item)" />
             </a-tooltip>
+            <a-tooltip :title="$t('cloudSpace.relateTags')">
+              <svg-icon class="download-icon" :src="icon.manage_categoryBtn_tag" size="20" @click="openTagDialog(item)" />
+            </a-tooltip>
             <!-- 删除按钮 -->
             <a-tooltip :title="$t('common.delete')">
               <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item.id)" />
@@ -98,6 +102,11 @@
                   icon: icon.cloudSpace.moveFile,
                   function: () => emit('moveField', [item]),
                 },
+                {
+                  label: $t('cloudSpace.relateTags'),
+                  icon: icon.manage_categoryBtn_tag,
+                  function: () => openTagDialog(item),
+                },
               ]"
             >
               <svg-icon class="download-icon" :src="icon.common.more" size="20" />
@@ -106,6 +115,19 @@
         </div>
         <div class="default-area">
           <div v-if="!bookmark.isMobile">{{ item.folderName }}</div>
+          <div v-if="!bookmark.isMobile" class="file-tags-cell">
+            <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
+            <div v-else class="file-tags-list">
+              <span
+                v-for="tag in item.tags"
+                :key="tag.id"
+                class="file-tag-chip text-hidden dom-hover"
+                @click.stop="goToTagDetail(tag.id)"
+              >
+                {{ tag.name }}
+              </span>
+            </div>
+          </div>
           <div>{{
             item.fileSize >= 1024 * 1024
               ? Number(item.fileSize / (1024 * 1024))
@@ -143,6 +165,32 @@
         </div>
       </div>
     </b-modal>
+
+    <b-modal
+      v-model:visible="tagModalVisible"
+      :title="$t('cloudSpace.relateTags')"
+      width="560px"
+      @ok="submitFileTags"
+      @close="closeTagDialog"
+    >
+      <div class="file-tag-modal">
+        <div class="file-tag-target text-hidden">
+          {{ activeTagFile?.fileName || '-' }}
+        </div>
+        <a-select
+          v-model:value="selectedTagIds"
+          mode="multiple"
+          show-search
+          :options="tagOptions"
+          :get-popup-container="getSelectPopupContainer"
+          :list-height="320"
+          :dropdown-match-select-width="false"
+          popup-class-name="file-tag-select-popup"
+          style="width: 100%"
+          :placeholder="$t('tagManage.relatedTag')"
+        />
+      </div>
+    </b-modal>
   </div>
 </template>
 <script setup lang="ts">
@@ -150,9 +198,10 @@
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { bookmarkStore } from '@/store';
   import { cloudSpaceStore } from '@/store';
-  import { apiBasePost } from '@/http/request.ts';
+  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import icon from '@/config/icon.ts';
   import { deleteField, downloadField, shareField } from '@/http/common.ts';
@@ -162,11 +211,13 @@
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
+  import { useRouter } from 'vue-router';
 
   const { t } = useI18n();
   const emit = defineEmits(['previewFile', 'moveField']);
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
+  const router = useRouter();
   const props = defineProps<{ clearKey?: number; batchMode: boolean }>();
 
   const batchMode = computed(() => props.batchMode ?? false);
@@ -192,11 +243,16 @@
     selectAll.value = cloud.fileList.length > 0 && selectedRows.value.length === cloud.fileList.length;
   };
 
+  const goToTagDetail = (tagId: string) => {
+    if (!tagId) return;
+    router.push(`/tag/${tagId}`);
+  };
+
   const fieldNameWidth = computed(() => {
     if (bookmark.isMobile) {
       return '70%';
     }
-    return '55%';
+    return '42%';
   });
 
   const shareDescVisible = ref(false);
@@ -206,6 +262,11 @@
   const batchDownloadLoading = ref(false);
   const batchDownloadAbortController = ref<AbortController | null>(null);
   const batchDownloadCancelled = ref(false);
+  const tagModalVisible = ref(false);
+  const tagSaving = ref(false);
+  const activeTagFile = ref<any>(null);
+  const tagOptions = ref<{ label: string; value: string }[]>([]);
+  const selectedTagIds = ref<string[]>([]);
   const downloadProgress = ref({
     visible: false,
     percent: 0,
@@ -289,6 +350,54 @@
         });
       },
     });
+  }
+
+  async function openTagDialog(file: any) {
+    activeTagFile.value = file;
+    tagModalVisible.value = true;
+    const [tagRes, fileTagRes] = await Promise.all([
+      apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: localStorage.getItem('userId') } }),
+      apiBasePost('/api/file/getFileTags', { id: file.id }),
+    ]);
+    tagOptions.value =
+      tagRes.status === 200
+        ? (tagRes.data || []).map((tag: any) => ({
+            label: tag.name,
+            value: tag.id,
+          }))
+        : [];
+    selectedTagIds.value =
+      fileTagRes.status === 200 ? (fileTagRes.data || []).map((tag: any) => String(tag.id)) : [];
+  }
+
+  function closeTagDialog() {
+    tagModalVisible.value = false;
+    activeTagFile.value = null;
+    selectedTagIds.value = [];
+  }
+
+  function getSelectPopupContainer(triggerNode: HTMLElement) {
+    return triggerNode.parentElement || document.body;
+  }
+
+  async function submitFileTags() {
+    if (!activeTagFile.value?.id) return;
+    tagSaving.value = true;
+    try {
+      const res = await apiBasePost('/api/file/updateFileTags', {
+        id: activeTagFile.value.id,
+        tags: selectedTagIds.value,
+      });
+      if (res.status === 200) {
+        message.success(t('common.saveSuccess'));
+        closeTagDialog();
+        cloud.queryFieldList();
+      } else {
+        message.error(res.msg || t('common.saveFailed'));
+      }
+    } finally {
+      tagSaving.value = false;
+    }
   }
 
   const handleBatchDelete = () => {
@@ -750,5 +859,52 @@
     .edit-file-input {
       width: calc(100% - 92px);
     }
+  }
+
+  .file-tag-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .file-tag-target {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--bl-input-noBorder-bg-color);
+    border: 1px solid var(--card-border-color);
+  }
+
+  .file-tags-cell {
+    min-width: 0;
+  }
+
+  .file-tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 40px;
+    overflow: hidden;
+  }
+
+  .file-tag-chip {
+    max-width: 90px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--desc-color);
+    background: var(--common-tag-bg-color);
+    display: inline-block;
+    cursor: pointer;
+  }
+
+  .file-tags-empty {
+    color: var(--desc-color);
+    opacity: 0.7;
+  }
+
+  :deep(.file-tag-select-popup .ant-select-item) {
+    white-space: normal;
+    line-height: 1.4;
   }
 </style>

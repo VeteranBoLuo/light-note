@@ -11,7 +11,6 @@
         <TagFilterSelector
           v-if="currentViewMode === 'card'"
           :allTags="visibleNoteTags"
-          v-model:showEmptyTags="showEmptyNoteTags"
         />
         <b-button
           type="primary"
@@ -40,7 +39,6 @@
           <TagFilterSelector
             v-if="currentViewMode === 'card'"
             :allTags="visibleNoteTags"
-            v-model:showEmptyTags="showEmptyNoteTags"
           />
           <ViewModeToggle />
           <div
@@ -111,10 +109,6 @@
           <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')">
             {{ $t('note.noTagNote') }}
           </div>
-          <label class="tag-toggle-item">
-            <b-checkbox v-model:isCheck="showEmptyNoteTags" />
-            <span>{{ $t('note.showEmptyTags') }}</span>
-          </label>
           <div
             v-for="tag in visibleNoteTags"
             class="tag-item"
@@ -178,8 +172,6 @@
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
-  const showEmptyNoteTags = ref(false);
-
   init();
   async function init() {
     loading.value = true;
@@ -265,7 +257,6 @@
 
   const allTags = ref<any[]>([]);
   const visibleNoteTags = computed(() => {
-    if (showEmptyNoteTags.value) return allTags.value;
     return allTags.value.filter((tag) => Number(tag.noteCount || 0) > 0);
   });
 

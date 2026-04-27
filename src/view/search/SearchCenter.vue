@@ -173,7 +173,14 @@
 
   function syncQueryNow() {
     const q = keyword.value.trim();
-    router.replace({ path: '/search', query: q ? { q } : {} });
+    const type = activeType.value !== 'all' ? activeType.value : undefined;
+    router.replace({
+      path: '/search',
+      query: {
+        ...(q ? { q } : {}),
+        ...(type ? { type } : {}),
+      },
+    });
   }
 
   function clearKeyword() {
@@ -195,9 +202,28 @@
   }
 
   watch(
-    () => route.query.q,
+    () => activeType.value,
     (val) => {
-      keyword.value = Array.isArray(val) ? String(val[0] || '') : String(val || '');
+      const currentType = Array.isArray(route.query.type) ? route.query.type[0] : route.query.type;
+      const normalizedCurrent = currentType && currentType !== 'all' ? String(currentType) : 'all';
+      if (normalizedCurrent === val) return;
+      const q = keyword.value.trim();
+      router.replace({
+        path: '/search',
+        query: {
+          ...(q ? { q } : {}),
+          ...(val !== 'all' ? { type: val } : {}),
+        },
+      });
+    },
+  );
+
+  watch(
+    () => [route.query.q, route.query.type],
+    ([qVal, typeVal]) => {
+      keyword.value = Array.isArray(qVal) ? String(qVal[0] || '') : String(qVal || '');
+      const nextType = Array.isArray(typeVal) ? String(typeVal[0] || 'all') : String(typeVal || 'all');
+      activeType.value = ['bookmark', 'note', 'file', 'tag'].includes(nextType) ? (nextType as SearchType) : 'all';
       loadData();
     },
     { immediate: true },

@@ -25,10 +25,6 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <label class="empty-tag-toggle">
-            <b-checkbox v-model:isCheck="showEmptyBookmarkTags" />
-            <span>{{ $t('home.showEmptyTags') }}</span>
-          </label>
         </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
@@ -97,17 +93,16 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const tagName = ref('');
-  const showEmptyBookmarkTags = ref(false);
   const hasBookmark = (tag: TagInterface) => Array.isArray(tag.bookmarkList) && tag.bookmarkList.length > 0;
   const filterTagList = computed(() => {
     const keyword = tagName.value.trim().toUpperCase();
     return bookmark.tagList.filter((item) => {
       const matchKeyword = !keyword || item.name.toUpperCase().includes(keyword);
-      const matchEmptyVisible = showEmptyBookmarkTags.value || hasBookmark(item);
+      const matchEmptyVisible = hasBookmark(item);
       return matchKeyword && matchEmptyVisible;
     });
   });
-  const tagDraggable = computed(() => !bookmark.isMobile && showEmptyBookmarkTags.value && !tagName.value.trim());
+  const tagDraggable = computed(() => !bookmark.isMobile && !tagName.value.trim());
 
   const bookmark = bookmarkStore();
   const router = useRouter();

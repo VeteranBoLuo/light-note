@@ -4,7 +4,9 @@ export interface TagInterface {
   isRename?: boolean;
   relatedTagIds?: any;
   iconUrl?: string;
-  bookmarkList?: [];
+  bookmarkList?: string[];
+  noteList?: string[];
+  fileList?: string[];
   relatedTagList?: { id: string; name: string }[];
   [key: string]: any;
 }

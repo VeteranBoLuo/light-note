@@ -7,64 +7,15 @@
     @ok="handleOk"
   >
     <div class="tag-config" :class="{ mobile: bookmark.isMobile }">
-      <div class="panel edit-panel">
-        <div class="panel-header">
-          <div class="title">
-            {{ editingTag?.id ? $t('note.tagConfig.editTag') : $t('note.tagConfig.newTag') }}
-            <span class="mode-badge">{{
-              editingTag?.id ? t('note.tagConfig.editing') : t('note.tagConfig.creating')
-            }}</span>
-          </div>
-          <div class="header-actions">
-            <b-button :title="t('note.tagConfig.clearCurrentInput')" size="small" @click="startCreate">{{
-              t('note.tagConfig.clearEdit')
-            }}</b-button>
-          </div>
-        </div>
-        <div class="form-item">
-          <b-input v-model:value="form.name" :maxlength="20" :placeholder="$t('note.tagConfig.name')" />
-        </div>
-        <div class="form-item single-line">{{ $t('note.tagConfig.nameRequired') }} </div>
-        <div class="form-actions">
-          <b-button type="primary" :loading="saving" @click="submitTag">{{ $t('note.tagConfig.save') }}</b-button>
-          <b-button v-if="editingTag?.id" :danger="true" @click="handleDelete(editingTag.id)">{{
-            $t('note.tagConfig.delete')
-          }}</b-button>
-        </div>
-      </div>
-      <div class="panel tag-panel">
-        <div class="panel-header">
-          <div class="title">{{ $t('note.tagConfig.tagLibrary') }}</div>
-          <div class="tag-actions">
-            <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
-          </div>
-        </div>
-        <div class="tag-list" v-if="filteredTags.length">
-          <div
-            v-for="tag in filteredTags"
-            :key="tag.id"
-            class="tag-row"
-            :class="{ active: selectedTagId === tag.id }"
-            @click="selectTag(tag)"
-          >
-            <div class="tag-left">
-              <span class="color-dot" />
-              <div class="tag-text">
-                <div class="tag-name">{{ tag.name }}</div>
-              </div>
-            </div>
-            <div class="tag-meta">
-              <b-button size="small" @click.stop="bindTag(tag)">{{ t('note.tagConfig.addToPending') }}</b-button>
-            </div>
-          </div>
-        </div>
-        <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
-      </div>
-
-      <div class="panel note-panel">
+      <div class="panel selected-panel">
         <div class="panel-header">
           <div class="title">{{ $t('note.tagConfig.selectedTags') }}</div>
           <b-button size="small" @click="resetTags">{{ $t('note.tagConfig.reset') }}</b-button>
+        </div>
+        <div class="panel-subtitle">{{ $t('note.tagConfig.selectedDesc') }}</div>
+        <div class="selected-overview">
+          <div class="overview-count">{{ noteTags.length }}</div>
+          <div class="overview-text">{{ $t('note.tagConfig.selectedCountText', { count: noteTags.length }) }}</div>
         </div>
         <div class="chip-list" v-if="noteTags.length">
           <div v-for="tag in noteTags" :key="tag.id" class="chip">
@@ -75,51 +26,93 @@
         </div>
         <div class="empty" v-else>{{ $t('note.tagConfig.noTags') }}</div>
       </div>
+
+      <div class="panel library-panel">
+        <div class="panel-header panel-header--library">
+          <div>
+            <div class="title flex-align-center-gap"
+              >{{ $t('note.tagConfig.tagLibrary') }}
+              <b-button size="small" @click="fetchAllTags">{{ $t('common.refresh') }}</b-button>
+              <b-button size="small" @click="openTagWorkspace()">{{ $t('note.tagConfig.manageTags') }}</b-button></div
+            >
+            <div class="panel-subtitle panel-subtitle--tight">{{ $t('note.tagConfig.sharedDesc') }}</div>
+          </div>
+          <div class="tag-actions">
+            <b-button size="small" type="primary" @click="openTagWorkspace('add')">
+              {{ $t('note.tagConfig.newSharedTag') }}
+            </b-button>
+          </div>
+        </div>
+
+        <div class="tag-toolbar">
+          <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('note.tagConfig.tagSearch')" />
+        </div>
+
+        <div class="tag-list" v-if="filteredTags.length">
+          <div
+            v-for="tag in filteredTags"
+            :key="tag.id"
+            class="tag-row"
+            :class="{ active: isTagBound(tag.id) }"
+            @click="toggleTag(tag)"
+          >
+            <div class="tag-left">
+              <span class="color-dot" />
+              <div class="tag-text">
+                <div class="tag-name">{{ tag.name }}</div>
+                <div class="tag-state">{{
+                  isTagBound(tag.id) ? $t('note.tagConfig.bound') : $t('note.tagConfig.unbound')
+                }}</div>
+              </div>
+            </div>
+            <div class="tag-meta">
+              <b-button size="small" @click.stop="openTagWorkspace(tag.id)">{{
+                t('note.tagConfig.editInWorkspace')
+              }}</b-button>
+            </div>
+          </div>
+        </div>
+        <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
+      </div>
     </div>
   </BModal>
 </template>
 
 <script lang="ts" setup>
-  import { computed, inject, onMounted, reactive, ref } from 'vue';
+  import { computed, inject, onMounted, ref } from 'vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { apiBasePost } from '@/http/request.ts';
-  import { bookmarkStore } from '@/store';
-  import { message, Modal } from 'ant-design-vue';
+  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import { message } from 'ant-design-vue';
   import { useI18n } from 'vue-i18n';
-  const { t } = useI18n();
+  import { useRouter } from 'vue-router';
 
   interface TagItem {
     id: string;
     name: string;
   }
 
+  const { t } = useI18n();
   const visible = defineModel('visible');
+  const emit = defineEmits(['saveTag']);
   const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const router = useRouter();
   const note: any = inject('note');
 
   const allTags = ref<TagItem[]>([]);
   const noteTags = ref<TagItem[]>([]);
   const initialNoteTags = ref<TagItem[]>([]);
-  const selectedTagId = ref<string | null>(null);
   const searchValue = ref('');
-  const saving = ref(false);
-
-  const form = reactive({
-    id: null as string | null,
-    name: '',
-  });
-
-  const editingTag = computed(() => (form.id ? (allTags.value.find((t) => t.id === form.id) ?? null) : null));
 
   const filteredTags = computed(() => {
     const keyword = searchValue.value.trim().toLowerCase();
-    const list = [...allTags.value];
-    if (!keyword) return list;
-    return list.filter((tag) => tag.name.toLowerCase().includes(keyword));
+    if (!keyword) return allTags.value;
+    return allTags.value.filter((tag) => tag.name.toLowerCase().includes(keyword));
   });
 
   onMounted(() => {
@@ -128,10 +121,11 @@
   });
 
   async function fetchAllTags() {
-    const res = await apiBasePost('/api/note/queryNoteTagList');
+    const res = await apiQueryPost('/api/bookmark/queryTagList', {
+      filters: { userId: user.id },
+    });
     if (res.status === 200) {
       allTags.value = (res.data ?? []).map(normalizeTag);
-      console.log('allTags', allTags.value);
     }
   }
 
@@ -140,8 +134,8 @@
     try {
       const res = await apiBasePost('/api/note/getNoteTags', { id: note.id });
       if (res.status === 200) {
-        noteTags.value = res.data;
-        initialNoteTags.value = [...res.data];
+        noteTags.value = (res.data ?? []).map(normalizeTag);
+        initialNoteTags.value = [...noteTags.value];
         return;
       }
     } catch (error) {
@@ -152,7 +146,7 @@
 
   function normalizeTag(raw: any): TagItem {
     return {
-      id: raw.id,
+      id: String(raw.id),
       name: raw.name ?? '',
     };
   }
@@ -160,7 +154,7 @@
   function hydrateFromLocal() {
     if (!note?.tags) return;
     try {
-      const parsed = JSON.parse(note.tags);
+      const parsed = typeof note.tags === 'string' ? JSON.parse(note.tags) : note.tags;
       if (Array.isArray(parsed)) {
         const ids = parsed.map((v) => String(v?.id ?? v)).filter(Boolean);
         noteTags.value = allTags.value.filter((t) => ids.includes(t.id));
@@ -171,89 +165,12 @@
     }
   }
 
-  function startCreate() {
-    resetForm();
-    selectedTagId.value = null;
-  }
-
-  function selectTag(tag: TagItem) {
-    console.log('selectTag', tag);
-    selectedTagId.value = tag.id;
-    form.id = tag.id;
-    form.name = tag.name;
-  }
-
-  function resetForm() {
-    form.name = '';
-    form.id = null;
-    selectedTagId.value = null;
-  }
-
-  function validateForm() {
-    const name = form.name.trim();
-    if (!name) {
-      message.warning(t('note.tagConfig.nameEmpty'));
-      return false;
-    }
-    if (name.length > 20) {
-      message.warning(t('note.tagConfig.nameTooLong'));
-      return false;
-    }
-    const duplicated = allTags.value.some((t) => t.name === name && t.id !== form.id);
-    if (duplicated) {
-      message.warning(t('note.tagConfig.nameExists'));
-      return false;
-    }
-    return true;
-  }
-
-  async function submitTag() {
-    if (!validateForm()) return;
-    saving.value = true;
-    const payload = {
-      id: form.id,
-      name: form.name.trim(),
-    };
-    try {
-      const url = form.id ? '/api/note/editNoteTag' : '/api/note/addNoteTag';
-      const res = await apiBasePost(url, payload);
-      if (res.status === 200) {
-        message.success(form.id ? t('note.tagConfig.updateSuccess') : t('note.tagConfig.createSuccess'));
-        await fetchAllTags();
-        if (!form.id && res.data?.id) {
-          const created = allTags.value.find((t) => t.id === String(res.data.id));
-          if (created) bindTag(created);
-        }
-        if (form.id) {
-          const updated = allTags.value.find((t) => t.id === form.id);
-          if (updated) selectTag(updated);
-        } else {
-          resetForm();
-        }
-      }
-    } finally {
-      saving.value = false;
-    }
-  }
-
-  async function handleDelete(id: string) {
-    Modal.confirm({
-      title: t('note.tagConfig.confirmDelete'),
-      content: t('note.tagConfig.confirmDeleteContent'),
-      async onOk() {
-        const res = await apiBasePost('/api/note/delNoteTag', { id });
-        if (res.status === 200) {
-          message.success(t('note.tagConfig.deleteSuccess'));
-          await fetchAllTags();
-          noteTags.value = noteTags.value.filter((t) => t.id !== id);
-          resetForm();
-        }
-      },
-    });
+  function isTagBound(tagId: string) {
+    return noteTags.value.some((t) => t.id === tagId);
   }
 
   function bindTag(tag: TagItem) {
-    if (noteTags.value.some((t) => t.id === tag.id)) {
+    if (isTagBound(tag.id)) {
       message.warning(t('note.tagConfig.tagBound'));
       return;
     }
@@ -268,8 +185,22 @@
     noteTags.value = noteTags.value.filter((t) => t.id !== tag.id);
   }
 
+  function toggleTag(tag: TagItem) {
+    if (isTagBound(tag.id)) {
+      unbindTag(tag);
+      return;
+    }
+    bindTag(tag);
+  }
+
   function resetTags() {
     noteTags.value = [...initialNoteTags.value];
+  }
+
+  function openTagWorkspace(tagId?: string) {
+    const target = tagId === 'add' ? '/manage/editTag/add' : tagId ? `/manage/editTag/${tagId}` : '/manage/tagMg';
+    const resolved = router.resolve(target);
+    window.open(resolved.href, '_blank');
   }
 
   async function handleOk() {
@@ -285,200 +216,92 @@
       message.success(t('note.tagConfig.saveSuccess'));
     }
   }
-
-  const emit = defineEmits(['saveTag']);
 </script>
 
 <style lang="less" scoped>
   .tag-config {
-    width: 65vw;
+    width: min(74vw, 980px);
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-    min-height: 450px;
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    gap: 18px;
+    min-height: 460px;
     color: var(--text-color);
 
     &.mobile {
+      width: 100%;
       grid-template-columns: 1fr;
       gap: 16px;
     }
   }
 
   .panel {
-    background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.7)) var(--user-body-bg-color, #ffffff),
-      var(--user-body-bg-color, #ffffff);
-    border: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
-    border-radius: 16px;
+    background: var(--background-color);
+    border: 1px solid var(--card-border-color);
+    border-radius: 14px;
     padding: 16px;
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.1),
-      0 4px 12px rgba(0, 0, 0, 0.05);
-    transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
-
-    &:hover {
-      box-shadow:
-        0 12px 32px rgba(0, 0, 0, 0.15),
-        0 6px 16px rgba(0, 0, 0, 0.1);
-    }
-
-    [data-theme='night'] &:hover {
-      background:
-        linear-gradient(145deg, rgba(53, 56, 65, 0.95), rgba(34, 34, 34, 0.9)) var(--user-body-bg-color, #2b2b2b),
-        var(--user-body-bg-color, #2b2b2b);
-      box-shadow:
-        0 8px 24px rgba(0, 0, 0, 0.5),
-        0 4px 12px rgba(0, 0, 0, 0.3);
-    }
+    box-shadow: var(--ant-table-boxShadow);
   }
 
   .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .panel-header--library {
+    align-items: flex-start;
   }
 
   .title {
     font-weight: 600;
     font-size: 16px;
     color: var(--text-color);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .mode-badge {
-    font-size: 12px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(96, 92, 229, 0.12);
-    color: rgba(96, 92, 229, 1);
-    border: 1px solid rgba(96, 92, 229, 0.35);
-  }
-
-  .hint {
-    font-size: 12px;
-    color: var(--desc-color);
-    margin-bottom: 12px;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 
   .panel-subtitle {
     font-size: 12px;
     color: var(--desc-color);
     margin: 0 0 10px;
+    line-height: 1.5;
   }
 
-  .tag-actions {
+  .panel-subtitle--tight {
+    margin: 6px 0 0;
+  }
+
+  .selected-overview {
     display: flex;
-    gap: 8px;
     align-items: center;
-
-    :deep(.b-input) {
-      height: 26px;
-      width: 250px;
-      margin-left: 8px;
-    }
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+    background: color-mix(in srgb, var(--noteType-hover-color) 10%, var(--background-color));
+    border: 1px solid color-mix(in srgb, var(--noteType-hover-color) 24%, var(--card-border-color));
   }
 
-  .tag-list {
+  .overview-count {
+    min-width: 44px;
+    height: 44px;
+    border-radius: 12px;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: 360px;
-    overflow: auto;
-  }
-
-  .tag-row {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 10px;
-    border: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
-    border-radius: 10px;
-    background: var(--background-color, #ffffff);
-    transition: all 0.15s ease;
-    cursor: pointer;
-
-    &:hover {
-      border-color: rgba(96, 92, 229, 0.4);
-      transform: translateY(-1px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
-    }
-
-    &.active {
-      border-color: rgba(96, 92, 229, 0.8);
-      box-shadow: 0 0 0 1px rgba(96, 92, 229, 0.4);
-    }
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--noteType-hover-color);
+    background: color-mix(in srgb, var(--noteType-hover-color) 14%, white);
   }
 
-  .tag-left {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
-
-  .color-dot {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    box-shadow: 0 0 0 2px rgba(96, 92, 229, 0.12);
-    background: var(--noteType-hover-color, #605ce5);
-    flex-shrink: 0;
-  }
-
-  .tag-text {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .tag-name {
-    color: var(--text-color);
-    font-weight: 600;
-  }
-
-  .edit-panel .form-item,
-  .note-panel .form-item {
-    margin-bottom: 12px;
-  }
-
-  .label {
+  .overview-text {
     font-size: 13px;
+    line-height: 1.5;
     color: var(--desc-color);
-    margin-bottom: 6px;
   }
 
-  .single-line {
-    max-width: 300px;
-    color: var(--desc-color);
-    font-size: 13px;
-    background: var(--common-tag-bg-color, #f0f0f0);
-    border: 1px dashed var(--card-border-color, rgba(0, 0, 0, 0.08));
-    padding: 10px;
-    border-radius: 10px;
-
-    [data-theme='night'] & {
-      background: var(--common-tag-bg-color, #333333);
-    }
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-  }
-
-  .note-panel .chip-list {
+  .chip-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -489,43 +312,109 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 10px 12px;
     border-radius: 12px;
     border: 1px solid rgba(96, 92, 229, 0.3);
     background: rgba(96, 92, 229, 0.06);
     color: var(--text-color);
-    font-size: 14px;
-    transition: all 0.15s ease;
-    cursor: default;
+  }
 
-    &:hover {
-      border-color: rgba(96, 92, 229, 0.5);
-      background: rgba(96, 92, 229, 0.1);
-    }
-
-    [data-theme='night'] & {
-      background: rgba(96, 92, 229, 0.1);
-      border-color: rgba(96, 92, 229, 0.4);
-
-      &:hover {
-        background: rgba(96, 92, 229, 0.15);
-      }
-    }
+  .color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--noteType-hover-color, #605ce5);
+    flex: 0 0 auto;
   }
 
   .chip-text {
-    max-width: 120px;
+    min-width: 0;
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .chip-close {
-    position: absolute;
-    right: 50px;
-    width: 12px;
-    height: 12px;
     cursor: pointer;
+    flex: 0 0 auto;
+  }
+
+  .tag-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .tag-toolbar {
+    margin-bottom: 12px;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 360px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .tag-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--background-color);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba(96, 92, 229, 0.4);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+    }
+
+    &.active {
+      border-color: rgba(96, 92, 229, 0.75);
+      box-shadow: 0 0 0 1px rgba(96, 92, 229, 0.18);
+      background: color-mix(in srgb, var(--noteType-hover-color) 7%, var(--background-color));
+    }
+  }
+
+  .tag-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .tag-text {
+    min-width: 0;
+  }
+
+  .tag-name {
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tag-state {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+
+  .tag-meta {
+    flex: 0 0 auto;
   }
 
   .empty {
@@ -533,5 +422,16 @@
     font-size: 13px;
     padding: 16px 0;
     text-align: center;
+  }
+
+  @media (max-width: 900px) {
+    .panel-header--library {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .tag-actions {
+      justify-content: flex-start;
+    }
   }
 </style>

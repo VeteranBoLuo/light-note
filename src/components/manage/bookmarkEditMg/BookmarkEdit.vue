@@ -8,7 +8,14 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
-          <b-input v-model:value="bookmarkData.url" />
+          <b-input v-model:value="bookmarkData.url">
+            <template #suffix>
+              <div class="generate-btn" @click="generateBookmarkMeta" :class="{ loading: generatingDescription }">
+                <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
+              </div>
+            </template>
+          </b-input>
+          <span class="tag-attr-tip">{{ $t('bookmarkMg.generateMetaDesc') }}</span>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -26,13 +33,7 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.description') }}</span>
-          <b-input v-model:value="bookmarkData.description">
-            <template #prefix>
-              <div class="generate-btn" @click="generateDescription" :class="{ loading: generatingDescription }">
-                <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateDescriptionTitle')" />
-              </div>
-            </template>
-          </b-input>
+          <b-input v-model:value="bookmarkData.description" />
         </div>
       </div>
     </b-loading>
@@ -127,18 +128,24 @@
     });
   }
 
-  const generateDescription = async () => {
+  const generateBookmarkMeta = async () => {
     if (!bookmarkData.value.url) {
       message.warning('请先填写书签地址');
       return;
     }
     generatingDescription.value = true;
     try {
-      const res = await apiBasePost('/api/chat/generateBookmarkDescription', {
+      const res = await apiBasePost('/api/chat/generateBookmarkMeta', {
         url: bookmarkData.value.url,
       });
       if (res.status === 200) {
-        bookmarkData.value.description = res.data.description;
+        if (res.data.name) {
+          bookmarkData.value.name = res.data.name;
+        }
+        if (res.data.description) {
+          bookmarkData.value.description = res.data.description;
+        }
+        message.success('已生成名称和描述');
       }
     } finally {
       generatingDescription.value = false;
@@ -206,6 +213,11 @@
 
   .tag-attr-label {
     white-space: nowrap;
+  }
+
+  .tag-attr-tip {
+    font-size: 12px;
+    color: var(--desc-color);
   }
 
   .edit-tag-footer {

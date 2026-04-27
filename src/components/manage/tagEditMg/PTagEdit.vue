@@ -2,86 +2,74 @@
   <CommonContainer :title="(handleType === 'add' ? '新增' : '编辑') + '标签'">
     <b-loading :loading="loading" style="height: unset">
       <div class="tag-edit-body">
-        <div class="tag-attr-item">
-          <span class="tag-attr-label">{{ $t('tagManage.tagName') }}</span>
-          <b-input v-model:value="tag.name" />
-        </div>
-        <div class="tag-attr-item" style="position: relative">
-          <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
-          <b-input v-model:value="tag.iconUrl">
-            <template #suffix>
-              <svg-icon
-                :src="icon.file_upload"
-                class="dom-hover-click"
-                size="20"
-                style="height: 32px"
-                @click.stop="uploadTagImg"
-              />
-            </template>
-          </b-input>
-        </div>
-        <div class="tag-attr-item">
-          <span class="tag-attr-label">{{ $t('tagManage.relatedTag') }}</span>
-          <a-select
-            :listHeight="350"
-            :dropdownMatchSelectWidth="false"
-            mode="multiple"
-            :max-tag-count="3"
-            :options="tagOptions"
-            show-search
-            :filter-option="SelectionSearch"
-            v-model:value="tag.relatedTagIds"
-          />
-        </div>
-        <div class="tag-attr-item">
-          <span class="tag-attr-label">{{ $t('tagManage.relatedBookmark') }}</span>
-          <div v-if="bookmark.isMobile" :style="{ height: bookmark.screenHeight - 400 + 'px', overflow: 'auto' }">
-            <a-checkbox-group v-model:value="tag.bookmarkList" name="checkboxgroup" :options="bookmarkOptions">
-              <template #label="{ label }">
-                <div :style="{ width: bookmark.screenWidth / 2 - 20 - 16 - 16 + 'px' }" class="text-hidden"
-                  >{{ label }}
-                </div>
-              </template>
-            </a-checkbox-group>
+        <div class="base-card">
+          <div class="tag-attr-item">
+            <span class="tag-attr-label">{{ $t('tagManage.tagName') }}</span>
+            <b-input v-model:value="tag.name" />
           </div>
-          <a-transfer
-            v-else
-            :rowKey="(record) => record.id"
-            v-model:target-keys="tag.bookmarkList"
-            :filter-option="filterOption"
-            :locale="{
-              itemUnit: $t('tagManage.count'),
-              itemsUnit: $t('tagManage.count'),
-              notFoundContent: $t('tagManage.listEmptyText'),
-              searchPlaceholder: $t('placeholder.searchPlaceholder'),
-            }"
-            :titles="['--' + $t('tagManage.unRelated'), '--' + $t('tagManage.isRelated')]"
-            show-search
-            :data-source="mockData"
-            :list-style="{
-              width: '100%',
-              height: bookmark.screenHeight - 400 + 'px',
-            }"
-          >
-            <template #render="item">
-              <span class="custom-item" :style="{ color: user.iconColor }">{{ item.name }}</span>
-            </template>
-          </a-transfer>
+          <div class="tag-attr-item">
+            <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
+            <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')">
+              <template #suffix>
+                <svg-icon :src="icon.file_upload" class="dom-hover-click" size="20" style="height: 32px" @click.stop="uploadTagImg" />
+              </template>
+            </b-input>
+          </div>
+          <div class="tag-attr-item">
+            <span class="tag-attr-label">{{ $t('tagManage.relatedTag') }}</span>
+            <a-select
+              v-model:value="tag.relatedTagIds"
+              mode="multiple"
+              show-search
+              :max-tag-count="3"
+              :options="tagOptions"
+              :filter-option="SelectionSearch"
+            />
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div v-for="card in sectionCards" :key="card.type" class="summary-card" :style="{ '--section-color': card.color }">
+            <div class="summary-label">{{ card.label }}</div>
+            <div class="summary-value">{{ card.count }}</div>
+          </div>
+        </div>
+
+        <div class="resource-panel">
+          <div v-for="section in resourceSections" :key="section.type" class="resource-section" :style="{ '--section-color': section.color }">
+            <div class="section-header">
+              <div class="section-title-wrap">
+                <span class="section-dot"></span>
+                <span class="section-title">{{ section.label }}</span>
+                <span class="section-count">{{ section.selectedCount }}/{{ section.items.length }}</span>
+              </div>
+              <b-input v-model:value="searchMap[section.type]" class="section-search" :placeholder="$t('placeholder.searchPlaceholder')" />
+            </div>
+            <div class="resource-list">
+              <label
+                v-for="item in section.filteredItems"
+                :key="`${section.type}-${item.rawId}`"
+                class="resource-card"
+                :class="{ active: section.selectedIds.includes(item.rawId) }"
+              >
+                <a-checkbox :checked="section.selectedIds.includes(item.rawId)" @change="toggleResource(section.type, item.rawId, $event.target.checked)" />
+                <div class="resource-info">
+                  <div class="resource-name text-hidden">{{ item.name }}</div>
+                  <div class="resource-meta">{{ section.label }}</div>
+                </div>
+              </label>
+              <div v-if="!section.filteredItems.length" class="resource-empty">{{ $t('tagManage.listEmptyText') }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </b-loading>
-    <b-button
-      class="container-footer-btn"
-      type="primary"
-      @click="submit"
-      v-click-log="OPERATION_LOG_MAP.tagDetail.saveTag"
-      >确定
-    </b-button>
+    <b-button class="container-footer-btn" type="primary" @click="submit" v-click-log="OPERATION_LOG_MAP.tagDetail.saveTag">确定</b-button>
   </CommonContainer>
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onMounted, reactive, ref } from 'vue';
   import { TagInterface } from '@/config/bookmarkCfg.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useRouter } from 'vue-router';
@@ -94,9 +82,15 @@
   import icon from '@/config/icon.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';
+  import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
 
+  type ResourceItem = { rawId: string; name: string; type: ResourceType };
+
+  const router = useRouter();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const loading = ref(false);
 
   const tag = ref<TagInterface>({
     id: '',
@@ -106,227 +100,316 @@
     createTime: '',
     updateTime: '',
     bookmarkList: [],
+    noteList: [],
+    fileList: [],
   });
 
-  getAllBookmarkList();
-  getTagSelect();
-  const mockData = ref<any[]>([]);
-  const filterOption = (inputValue: string, option: any) => {
-    return option.name.toUpperCase().indexOf(inputValue.toUpperCase()) > -1;
-  };
+  const allResources = ref<ResourceItem[]>([]);
+  const selectedBookmarkIds = ref<string[]>([]);
+  const selectedNoteIds = ref<string[]>([]);
+  const selectedFileIds = ref<string[]>([]);
+  const tagOptions = ref<{ label: string; value: string }[]>([]);
+  const searchMap = reactive<Record<'bookmark' | 'note' | 'file', string>>({
+    bookmark: '',
+    note: '',
+    file: '',
+  });
 
-  async function getAllBookmarkList() {
-    const allRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
-      filters: {
-        userId: localStorage.getItem('userId'),
-        type: 'all',
-      },
-    });
-    if (allRes.status === 200) {
-      mockData.value = allRes.data.items;
-    }
+  const handleType = computed(() => (router.currentRoute.value.params.id === 'add' ? 'add' : 'edit'));
+
+  const sectionCards = computed(() => [
+    { type: 'bookmark', label: '书签', count: selectedBookmarkIds.value.length, color: RESOURCE_COLOR_HEX.bookmark },
+    { type: 'note', label: '笔记', count: selectedNoteIds.value.length, color: RESOURCE_COLOR_HEX.note },
+    { type: 'file', label: '文件', count: selectedFileIds.value.length, color: RESOURCE_COLOR_HEX.file },
+  ]);
+
+  function getResourceItems(type: 'bookmark' | 'note' | 'file') {
+    return allResources.value.filter((item) => item.type === type);
   }
 
-  const bookmarkOptions = computed(() => {
-    return mockData.value.map((data) => {
-      return {
-        label: data.name,
-        value: data.id,
-      };
-    });
-  });
+  function filterItems(type: 'bookmark' | 'note' | 'file') {
+    const keyword = String(searchMap[type] || '').trim().toLowerCase();
+    const items = getResourceItems(type);
+    if (!keyword) return items;
+    return items.filter((item) => item.name.toLowerCase().includes(keyword));
+  }
 
-  const tagOptions = ref([]);
+  const resourceSections = computed(() => [
+    {
+      type: 'bookmark' as const,
+      label: '书签',
+      color: RESOURCE_COLOR_HEX.bookmark,
+      items: getResourceItems('bookmark'),
+      filteredItems: filterItems('bookmark'),
+      selectedIds: selectedBookmarkIds.value,
+      selectedCount: selectedBookmarkIds.value.length,
+    },
+    {
+      type: 'note' as const,
+      label: '笔记',
+      color: RESOURCE_COLOR_HEX.note,
+      items: getResourceItems('note'),
+      filteredItems: filterItems('note'),
+      selectedIds: selectedNoteIds.value,
+      selectedCount: selectedNoteIds.value.length,
+    },
+    {
+      type: 'file' as const,
+      label: '文件',
+      color: RESOURCE_COLOR_HEX.file,
+      items: getResourceItems('file'),
+      filteredItems: filterItems('file'),
+      selectedIds: selectedFileIds.value,
+      selectedCount: selectedFileIds.value.length,
+    },
+  ]);
+
+  function toggleResource(type: 'bookmark' | 'note' | 'file', id: string, checked: boolean) {
+    const map = {
+      bookmark: selectedBookmarkIds,
+      note: selectedNoteIds,
+      file: selectedFileIds,
+    };
+    const target = map[type].value;
+    if (checked) {
+      if (!target.includes(id)) target.push(id);
+      return;
+    }
+    map[type].value = target.filter((item) => item !== id);
+  }
+
+  async function getAllResources() {
+    const [bookmarkRes, noteRes, fileRes] = await Promise.all([
+      apiQueryPost('/api/bookmark/getBookmarkList', {
+        filters: { userId: localStorage.getItem('userId'), type: 'all' },
+      }),
+      apiBasePost('/api/note/queryNoteList'),
+      apiBasePost('/api/file/queryFiles', { filters: { category: CLOUD_FILE_CATEGORY_ORDER } }),
+    ]);
+
+    const resources: ResourceItem[] = [];
+    if (bookmarkRes.status === 200) {
+      bookmarkRes.data.items.forEach((item: any) => {
+        resources.push({ rawId: String(item.id), name: item.name, type: 'bookmark' });
+      });
+    }
+    if (noteRes.status === 200) {
+      (noteRes.data ?? []).forEach((item: any) => {
+        resources.push({ rawId: String(item.id), name: item.title || '未命名笔记', type: 'note' });
+      });
+    }
+    if (fileRes.status === 200) {
+      (fileRes.data ?? []).forEach((item: any) => {
+        resources.push({ rawId: String(item.id), name: item.fileName, type: 'file' });
+      });
+    }
+    allResources.value = resources;
+  }
 
   async function getTagSelect() {
     const res = await apiQueryPost('/api/bookmark/queryTagList', {
-      filters: {
-        userId: user.id,
-      },
+      filters: { userId: user.id },
     });
     if (res.status === 200) {
       bookmark.tagList = res.data;
-      tagOptions.value = [];
-      res.data.forEach((tag) => {
-        if (tag.id !== router.currentRoute.value.params.id) {
-          tagOptions.value.push({
-            label: tag.name,
-            value: tag.id,
-          });
-        }
-      });
-      return tagOptions.value;
+      tagOptions.value = (res.data || [])
+        .filter((item: any) => item.id !== router.currentRoute.value.params.id)
+        .map((item: any) => ({ label: item.name, value: item.id }));
     }
-    return [];
   }
 
   function uploadTagImg() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-
     input.addEventListener('change', function (event: any) {
-      const file = event.target.files[0]; // 获取用户选择的文件
-      if (file) {
-        // 检查文件大小是否超过5M
-        const maxFileSize = 5000 * 1024;
-        if (file.size > maxFileSize) {
-          message.warning('图片大小不能超过5MB');
-          return; // 如果文件过大，终止函数执行
-        }
-        const reader = new FileReader(); // 创建FileReader对象
-        reader.onload = function (e) {
-          const base64 = e.target.result; // 直接获取Base64编码的字符串
-          tag.value.iconUrl = base64.toString();
-        };
-        reader.onerror = function (error) {
-          console.error('Error reading file:', error);
-        };
-        reader.readAsDataURL(file); // 读取文件内容，结果为Base64编码的字符串
+      const file = event.target.files[0];
+      if (!file) return;
+      const maxFileSize = 5000 * 1024;
+      if (file.size > maxFileSize) {
+        message.warning('图片大小不能超过5MB');
+        return;
       }
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        tag.value.iconUrl = String(e.target?.result || '');
+      };
+      reader.readAsDataURL(file);
     });
-
-    input.click(); // 触发文件选择对话框
+    input.click();
   }
 
-  function submit() {
+  async function submit() {
     if (loading.value) {
       message.warning('请等待数据请求完毕');
-    }
-    let url = '/api/bookmark/updateTag';
-    if (handleType.value === 'add') {
-      url = '/api/bookmark/addTag';
-    }
-    apiBasePost(url, tag.value).then((res) => {
-      if (res.status === 200) {
-        message.success('保存成功');
-        router.back();
-      }
-    });
-  }
-
-  const handleType = computed(() => {
-    if (router.currentRoute.value.params.id === 'add') {
-      return 'add';
-    }
-    return 'edit';
-  });
-
-  const router = useRouter();
-  const loading = ref(false);
-  onMounted(async () => {
-    if (handleType.value === 'add') {
       return;
     }
+    tag.value.bookmarkList = selectedBookmarkIds.value;
+    tag.value.noteList = selectedNoteIds.value;
+    tag.value.fileList = selectedFileIds.value;
+    const url = handleType.value === 'add' ? '/api/bookmark/addTag' : '/api/bookmark/updateTag';
+    const res = await apiBasePost(url, tag.value);
+    if (res.status === 200) {
+      message.success('保存成功');
+      router.back();
+    }
+  }
+
+  onMounted(async () => {
     loading.value = true;
-    // 创建两个Promise，分别对应两个API调用
-    const res = await apiQueryPost('/api/bookmark/getTagDetail', {
-      filters: {
-        id: router.currentRoute.value.params?.id,
-      },
-    });
-    tag.value = res.data;
-    const bookmarkListRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
-      filters: {
-        userId: user.id,
-        tagId: tag.value.id,
-        type: 'normal',
-      },
-    });
-    tag.value.bookmarkList = bookmarkListRes.data.items?.map((data) => data.id);
-    const relatedRes = await apiQueryPost('/api/bookmark/getRelatedTag', {
-      filters: {
-        userId: user.id,
-        id: tag.value.id,
-      },
-    });
-    tag.value.relatedTagIds = relatedRes.data?.map((data) => data.id);
-    loading.value = false;
+    try {
+      await Promise.all([getAllResources(), getTagSelect()]);
+      if (handleType.value === 'add') return;
+      const res = await apiQueryPost('/api/bookmark/getTagDetail', {
+        filters: { id: router.currentRoute.value.params?.id },
+      });
+      tag.value = res.data;
+
+      const [bookmarkListRes, noteListRes, fileListRes, relatedRes] = await Promise.all([
+        apiQueryPost('/api/bookmark/getBookmarkList', {
+          filters: { userId: user.id, tagId: tag.value.id, type: 'normal' },
+        }),
+        apiBasePost('/api/note/queryNoteList', { tagId: tag.value.id }),
+        apiBasePost('/api/file/queryFiles', { filters: { tagId: tag.value.id, category: CLOUD_FILE_CATEGORY_ORDER } }),
+        apiQueryPost('/api/bookmark/getRelatedTag', {
+          filters: { userId: user.id, id: tag.value.id },
+        }),
+      ]);
+
+      selectedBookmarkIds.value = (bookmarkListRes.data.items || []).map((item: any) => String(item.id));
+      selectedNoteIds.value = (noteListRes.data || []).map((item: any) => String(item.id));
+      selectedFileIds.value = (fileListRes.data || []).map((item: any) => String(item.id));
+      tag.value.relatedTagIds = (relatedRes.data || []).map((item: any) => item.id);
+    } finally {
+      loading.value = false;
+    }
   });
 </script>
 
 <style lang="less" scoped>
   .tag-edit-body {
-    width: 100%;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 10px;
+    gap: 12px;
+    padding: 12px 0 20px;
+  }
+
+  .base-card,
+  .summary-card,
+  .resource-section {
+    border: 1px solid var(--card-border-color);
+    background: var(--background-color);
+    border-radius: 8px;
+  }
+
+  .base-card,
+  .resource-section {
+    padding: 12px;
   }
 
   .tag-attr-item {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    width: 50%;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .tag-attr-item:last-child {
+    margin-bottom: 0;
   }
 
   .tag-attr-label {
-    white-space: nowrap;
+    font-size: 13px;
+    color: var(--desc-color);
   }
 
-  :deep(.ant-transfer-list-header) {
-    background-color: var(--background-color);
-    color: var(--text-color);
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  :deep(.ant-input) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-    transition: none;
+  .summary-card {
+    padding: 12px;
+    border-top: 3px solid var(--section-color);
   }
 
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-
-  :deep(.ant-input-affix-wrapper) {
-    transition: none;
+  .summary-label {
+    font-size: 12px;
+    color: var(--desc-color);
   }
 
-  :deep(.ant-transfer-list-search) {
-    background-color: var(--background-color);
+  .summary-value {
+    margin-top: 6px;
+    font-size: 20px;
+    font-weight: 600;
   }
 
-  :deep(.anticon-search) {
-    color: var(--text-color) !important;
+  .resource-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
-  :deep(.ant-btn-primary) {
-    box-shadow: none;
+  .section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
   }
 
-  :deep(.ant-transfer-list-content-item-text) {
-    color: var(--text-color) !important;
+  .section-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
-  :deep(.ant-spin-container::after) {
-    background-color: unset;
+  .section-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--section-color);
   }
 
-  :deep(.ant-btn-icon-only) {
-    color: #ccc;
+  .section-title {
+    font-weight: 600;
   }
 
-  @media (max-width: 1300px) {
-    .tag-attr-item {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 90%;
-    }
+  .section-count {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
 
-    :deep(.ant-checkbox-group) {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-    }
+  .resource-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 220px;
+    overflow: auto;
+  }
 
-    :deep(.ant-checkbox-group-item) {
-      color: var(--text-color);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+  .resource-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border-color);
+    min-width: 0;
+  }
+
+  .resource-card.active {
+    border-color: var(--section-color);
+    background: color-mix(in srgb, var(--section-color) 8%, var(--background-color));
+  }
+
+  .resource-info {
+    min-width: 0;
+  }
+
+  .resource-meta,
+  .resource-empty {
+    font-size: 12px;
+    color: var(--desc-color);
   }
 </style>

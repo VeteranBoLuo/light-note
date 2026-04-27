@@ -13,6 +13,7 @@ import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import toolsRouter from '@/router/modules/tools.ts';
 import searchRouter from '@/router/modules/search.ts';
+import tagDetailRouter from '@/router/modules/tagDetail.ts';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -33,6 +34,7 @@ const routes: RouteRecordRaw[] = [
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
       searchRouter,
+      tagDetailRouter,
       ...toolsRouter,
     ],
   },

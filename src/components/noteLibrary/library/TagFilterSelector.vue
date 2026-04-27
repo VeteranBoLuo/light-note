@@ -33,10 +33,6 @@
           <div class="filter-item" @click.stop="viewNote('null')" :isFocus="tag === 'null'">{{
             t('note.noTagNote')
           }}</div>
-          <label class="filter-toggle" @click.stop>
-            <b-checkbox v-model:isCheck="showEmptyTags" />
-            <span>{{ t('note.showEmptyTags') }}</span>
-          </label>
           <div class="divider"></div>
         </div>
 
@@ -80,7 +76,6 @@
 
   const filterVisible = ref(false);
   const keyword = ref('');
-  const showEmptyTags = defineModel<boolean>('showEmptyTags', { default: false });
 
   const filteredTags = computed(() => {
     if (!keyword.value.trim()) return props.allTags;

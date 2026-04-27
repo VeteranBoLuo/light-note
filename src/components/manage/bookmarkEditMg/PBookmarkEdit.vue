@@ -8,7 +8,14 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
-          <b-input v-model:value="bookmarkData.url" />
+          <b-input v-model:value="bookmarkData.url">
+            <template #suffix>
+              <div class="generate-btn" @click="generateBookmarkMeta" :class="{ loading: generatingMeta }">
+                <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
+              </div>
+            </template>
+          </b-input>
+          <span class="tag-attr-tip">{{ $t('bookmarkMg.generateMetaDesc') }}</span>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -50,9 +57,12 @@
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import {OPERATION_LOG_MAP} from "@/config/logMap.ts";
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const generatingMeta = ref(false);
 
   const bookmarkData = ref<any>({
     id: '',
@@ -120,6 +130,30 @@
     });
   }
 
+  const generateBookmarkMeta = async () => {
+    if (!bookmarkData.value.url) {
+      message.warning('请先填写书签地址');
+      return;
+    }
+    generatingMeta.value = true;
+    try {
+      const res = await apiBasePost('/api/chat/generateBookmarkMeta', {
+        url: bookmarkData.value.url,
+      });
+      if (res.status === 200) {
+        if (res.data.name) {
+          bookmarkData.value.name = res.data.name;
+        }
+        if (res.data.description) {
+          bookmarkData.value.description = res.data.description;
+        }
+        message.success('已生成名称和描述');
+      }
+    } finally {
+      generatingMeta.value = false;
+    }
+  };
+
   const handleType = computed(() => {
     if (router.currentRoute.value.params.id === 'add' || router.currentRoute.value.params.tagId) {
       return 'add';
@@ -174,6 +208,51 @@
 
   .tag-attr-label {
     white-space: nowrap;
+  }
+
+  .tag-attr-tip {
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+
+  .generate-btn {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition:
+      background-color 0.3s,
+      color 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-color);
+    &:hover {
+      background-color: var(--bl-input-noBorder-hover-bg-color);
+    }
+    &.loading {
+      animation: multiColorFade 2s ease-in-out infinite;
+    }
+  }
+
+  @keyframes multiColorFade {
+    0% {
+      color: var(--text-color);
+    }
+    20% {
+      color: var(--primary-color);
+    }
+    40% {
+      color: #ff6b6b;
+    }
+    60% {
+      color: #4ecdc4;
+    }
+    80% {
+      color: var(--primary-color);
+    }
+    100% {
+      color: var(--text-color);
+    }
   }
 
 

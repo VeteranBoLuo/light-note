@@ -43,7 +43,7 @@
               </div>
             </div>
           </template>
-          <template v-else-if="column.key === 'bookmarkList'">
+          <template v-else-if="column.key === 'relatedContent'">
             <div class="flex-align-center-gap">
               <span
                 :title="b.name"
@@ -51,8 +51,29 @@
                 v-for="b in record.bookmarkList"
                 :key="b.id"
                 @click="openPage(b.url)"
+                :style="{ borderColor: '#615ced', color: '#615ced', background: 'rgba(97, 92, 237, 0.08)' }"
               >
                 {{ b.name }}
+              </span>
+              <span
+                :title="n.name"
+                class="common-tag dom-hover"
+                v-for="n in record.noteList"
+                :key="n.id"
+                @click="openNote(n.id)"
+                :style="{ borderColor: '#00a884', color: '#00a884', background: 'rgba(0, 168, 132, 0.08)' }"
+              >
+                {{ n.name }}
+              </span>
+              <span
+                :title="f.name"
+                class="common-tag dom-hover"
+                v-for="f in record.fileList"
+                :key="f.id"
+                @click="previewFile(f.id)"
+                :style="{ borderColor: '#ff8a00', color: '#ff8a00', background: 'rgba(255, 138, 0, 0.08)' }"
+              >
+                {{ f.name }}
               </span>
             </div>
           </template>
@@ -79,12 +100,13 @@
         </template>
       </BTable>
     </div>
+    <FilePreview v-model:visible="filePreviewVisible" :fileInfo="previewFileInfo" @close="filePreviewVisible = false" />
   </b-loading>
 </template>
 
 <script lang="ts" setup>
   import { bookmarkStore } from '@/store';
-  import { computed, ref } from 'vue';
+  import { computed, defineAsyncComponent, ref } from 'vue';
   import { message } from 'ant-design-vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -103,6 +125,9 @@
 
   const bookmark = bookmarkStore();
   const loading = ref(false);
+  const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
+  const filePreviewVisible = ref(false);
+  const previewFileInfo = ref<any>({});
   const tagColumns = computed(() => {
     let columns: Column[] = [
       {
@@ -127,8 +152,8 @@
             width: '300px',
           },
           {
-            title: '关联书签',
-            key: 'bookmarkList',
+            title: '关联内容',
+            key: 'relatedContent',
           },
         );
       }
@@ -139,6 +164,26 @@
   const edit = (id: string) => {
     router.push({ path: `/manage/editTag/${id}` });
   };
+
+  function openNote(id: string) {
+    if (!id) return;
+    router.push(`/noteLibrary/${id}`);
+  }
+
+  async function previewFile(id: string) {
+    if (!id) return;
+    const res = await apiBasePost('/api/file/getFileInfo', { id });
+    if (res.status === 200 && res.data) {
+      previewFileInfo.value = {
+        ...res.data,
+        fileName: res.data.file_name || res.data.fileName,
+        fileType: res.data.file_type || res.data.fileType,
+        fileUrl: res.data.fileUrl,
+        category: res.data.category,
+      };
+      filePreviewVisible.value = true;
+    }
+  }
 
   function handleDeleteTag(tag) {
     Alert.alert({

@@ -168,10 +168,10 @@
         <CommonDataTable
           v-else
           :tableData="hotTagTable"
-          titleType="bookmark"
+          titleType="tag"
           rowClickable
           @rowClick="handleHotTagClick"
-          :title="t('workbench.table.bookmarkTagHotTop10', '书签标签热度（Top 10）')"
+          :title="t('workbench.table.unifiedTagHotTop10', '统一标签热度（Top 10）')"
           :columns="hotTagColumns"
         />
       </div>
@@ -309,22 +309,26 @@
       to: '/noteLibrary',
     },
     {
-      key: 'file',
-      label: t('workbench.summary.fileTotal', '云文件总数'),
+      key: 'cloud',
+      label: t('workbench.summary.cloudOverview', '云空间概览'),
       value: `${workbenchCounts.value.fileTotal}`,
-      extra: t('workbench.summary.toFiles', '点击进入云空间'),
+      extra: t(
+        'workbench.summary.cloudOverviewExtra',
+        {
+          used: cloud.usedSpace.toFixed(2),
+          total: cloud.maxSpace,
+          percent: storagePercent.value,
+        },
+        '{used} / {total} MB · 使用率 {percent}%',
+      ),
       to: '/cloudSpace',
     },
     {
-      key: 'cloud',
-      label: t('workbench.summary.cloudUsage', '云空间使用'),
-      value: `${cloud.usedSpace.toFixed(2)} / ${cloud.maxSpace} MB`,
-      extra: t(
-        'workbench.summary.cloudExtra',
-        { percent: storagePercent.value },
-        '当前使用率 {percent}% · 点击进入云空间',
-      ),
-      to: '/cloudSpace',
+      key: 'tag',
+      label: t('workbench.summary.tagTotal', '标签总数'),
+      value: `${workbenchCounts.value.tagTotal}`,
+      extra: t('workbench.summary.toTags', '点击进入标签管理'),
+      to: '/manage/tagMg',
     },
   ]);
 
@@ -337,8 +341,8 @@
     },
     {
       key: 'add-tag',
-      label: t('workbench.actions.addTag.label', '新增书签标签'),
-      desc: t('workbench.actions.addTag.desc', '创建书签分类'),
+      label: t('workbench.actions.addTag.label', '新增标签'),
+      desc: t('workbench.actions.addTag.desc', '创建统一标签'),
       to: '/manage/editTag/add',
     },
     {
@@ -389,6 +393,8 @@
     { title: t('workbench.table.rank', '排名'), key: 'index', width: '70px' },
     { title: t('workbench.table.tag', '标签'), key: 'name' },
     { title: t('workbench.table.relatedBookmarks', '关联书签'), key: 'bookmarkCount', width: '110px' },
+    { title: t('workbench.table.relatedNotes', '关联笔记'), key: 'noteCount', width: '110px' },
+    { title: t('workbench.table.relatedFiles', '关联文件'), key: 'fileCount', width: '110px' },
     { title: t('workbench.table.relatedTags', '相关标签'), key: 'relatedTagNames' },
   ]);
 
@@ -445,7 +451,7 @@
 
   function handleHotTagClick(record) {
     if (record?.id) {
-      router.push(`/home/${record.id}`);
+      router.push(`/tag/${record.id}`);
       return;
     }
     router.push('/manage/tagMg');

@@ -64,7 +64,13 @@
           </template>
           <template v-else-if="column.key === 'tagList'">
             <div class="flex-align-center-gap">
-              <span :title="t.name" class="common-tag" v-for="t in (record as BookmarkInterface).tagList" :key="t.id">
+              <span
+                :title="t.name"
+                class="common-tag dom-hover"
+                v-for="t in (record as BookmarkInterface).tagList"
+                :key="t.id"
+                @click.stop="router.push(`/tag/${t.id}`)"
+              >
                 {{ t.name }}
               </span>
             </div>

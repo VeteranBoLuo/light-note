@@ -6,11 +6,23 @@
     @add="router.push('/manage/editBookmark/add')"
   >
     <template #item="{ data }">
-      <div style="display: flex; align-items: center; gap: 10px">
-        <div class="card-img-container">
-          <img v-if="data.iconUrl" :src="data.iconUrl" height="20" width="20" @error="onErrorImg" alt="" />
+      <div class="bookmark-item-main">
+        <div class="bookmark-item-title">
+          <div class="card-img-container">
+            <img v-if="data.iconUrl" :src="data.iconUrl" height="20" width="20" @error="onErrorImg" alt="" />
+          </div>
+          {{ data.name }}
         </div>
-        {{ data.name }}
+        <div v-if="data.tagList?.length" class="bookmark-item-tags">
+          <span
+            v-for="tag in data.tagList"
+            :key="tag.id"
+            class="bookmark-item-tag"
+            @click.stop="router.push(`/tag/${tag.id}`)"
+          >
+            {{ tag.name }}
+          </span>
+        </div>
       </div>
       <div class="edit-tag-operation">
         <svg-icon
@@ -185,6 +197,33 @@
 </script>
 
 <style lang="less" scoped>
+  .bookmark-item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding-right: 86px;
+  }
+  .bookmark-item-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .bookmark-item-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .bookmark-item-tag {
+    max-width: 120px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--desc-color);
+    background: var(--common-tag-bg-color);
+  }
   .edit-tag-container {
     height: 100%;
     box-sizing: border-box;
