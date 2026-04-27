@@ -79,24 +79,7 @@
   const route = useRoute();
   const user = useUserStore();
 
-  const navigationFucVisible = computed(() => {
-    return (
-      !bookmark.isMobile &&
-      [
-        'home',
-        'noteLibrary',
-        'manage',
-        'help',
-        'cloudSpace',
-        'admin',
-        'updateLogs',
-        'workbenches',
-        'aiAssistant',
-        'tools',
-        'search',
-      ].some((item) => route.path.includes(item))
-    );
-  });
+  const navigationFucVisible = computed(() => !bookmark.isMobile);
 
   const bookmark = bookmarkStore();
   const isHomeDrawerLayout = computed(() => route.path.includes('home') && bookmark.isMobile);
@@ -163,7 +146,10 @@
     width: 100%;
     position: fixed;
     top: 0;
-    z-index: 100000;
+    z-index: 900;
+  }
+  .navigation--search-open {
+    z-index: 300000;
   }
   .navigation-title {
     height: 100%;

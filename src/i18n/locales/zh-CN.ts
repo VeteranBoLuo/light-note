@@ -496,6 +496,7 @@ export default {
   help: {
     searchPlaceholder: '请搜索问题',
     title: '帮助中心',
+    outline: '内容大纲',
     introTitle: '欢迎来到帮助中心',
     introContent: `
       <p>您好！感谢您使用【轻笺】。</p>

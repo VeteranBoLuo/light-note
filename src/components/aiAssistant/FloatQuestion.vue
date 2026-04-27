@@ -1,5 +1,9 @@
 <template>
-  <div v-if="!isClosed" class="float-question-container" :class="{ 'container-peek': isPeeked }">
+  <div
+    v-if="!isClosed"
+    class="float-question-container"
+    :class="{ 'container-peek': isPeeked, 'float-question-container--open': isOpen && !isMinimized }"
+  >
     <!-- 问答弹窗 -->
     <transition name="modal-slide">
       <div v-if="isOpen" v-show="!isMinimized" class="question-modal glassmorphism">
@@ -218,6 +222,10 @@
     bottom: 40px;
     right: 40px;
     transition: right 0.35s ease;
+  }
+
+  .float-question-container--open {
+    z-index: 200000;
   }
 
   .container-peek {

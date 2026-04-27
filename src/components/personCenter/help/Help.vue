@@ -44,19 +44,24 @@
       <div
         id="view-body"
         class="help-editor"
-        :style="{ width: bookmark.isMobile ? 'calc(100% - 40px)' : 'calc(100% - 220px)' }"
-        style="
-          height: 100%;
-          border: 1px solid var(--card-border-color);
-          border-radius: 8px;
-          padding: 20px;
-          overflow: auto;
-          box-sizing: border-box;
-          line-height: 2rem;
-          flex-grow: 1;
-        "
-        v-html="node.content"
+        :class="{ 'help-editor--with-outline': !bookmark.isMobile && helpOutline.length }"
+        @scroll="syncActiveOutline"
+        v-html="renderedContent"
       >
+      </div>
+      <div v-if="helpOutline.length" :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']">
+        <div class="help-outline-title">{{ t('help.outline') }}</div>
+        <button
+          v-for="heading in helpOutline"
+          :key="heading.id"
+          class="help-outline-item"
+          :class="{ active: activeOutlineId === heading.id }"
+          :style="{ paddingLeft: `${Math.max(heading.level - 1, 0) * 12 + 10}px` }"
+          @click="scrollToHelpHeading(heading.id)"
+        >
+          <span class="help-outline-marker"></span>
+          <span class="text-hidden">{{ heading.text }}</span>
+        </button>
       </div>
     </div>
   </div>
@@ -115,6 +120,11 @@
   };
 
   const node = ref(helpInfo);
+  type HelpOutlineItem = {
+    id: string;
+    text: string;
+    level: number;
+  };
   type HelpItem = {
     id: string;
     title: string;
@@ -124,8 +134,38 @@
 
   const bookmark = bookmarkStore();
   const checkId = ref('');
+  const activeOutlineId = ref('');
+  const renderedHelp = computed(() => {
+    const source = node.value?.content || '';
+    if (!source) {
+      return { html: '', outline: [] as HelpOutlineItem[] };
+    }
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div>${source}</div>`, 'text/html');
+    const headings = Array.from(doc.body.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6'));
+    const outline = headings
+      .map((heading, index) => {
+        const text = (heading.innerText || heading.textContent || '').trim();
+        if (!text) return null;
+        const id = `help-heading-${index}`;
+        heading.id = id;
+        return {
+          id,
+          text,
+          level: Number(heading.tagName.replace('H', '')),
+        };
+      })
+      .filter(Boolean) as HelpOutlineItem[];
+    return {
+      html: doc.body.firstElementChild?.innerHTML || source,
+      outline,
+    };
+  });
+  const renderedContent = computed(() => renderedHelp.value.html);
+  const helpOutline = computed(() => renderedHelp.value.outline);
   function logItem(item) {
     checkId.value = item.id;
+    activeOutlineId.value = '';
     nextTick(() => {
       const dom = document.getElementById('view-body');
       if (dom) {
@@ -133,6 +173,27 @@
       }
     });
     node.value = item;
+  }
+  function scrollToHelpHeading(id: string) {
+    activeOutlineId.value = id;
+    nextTick(() => {
+      const container = document.getElementById('view-body');
+      const heading = container?.querySelector<HTMLElement>(`#${id}`);
+      if (!container || !heading) return;
+      container.scrollTo({
+        top: Math.max(heading.offsetTop - 14, 0),
+        behavior: 'smooth',
+      });
+    });
+  }
+  function syncActiveOutline() {
+    const container = document.getElementById('view-body');
+    if (!container || !helpOutline.value.length) return;
+    const headings = helpOutline.value
+      .map((item) => container.querySelector<HTMLElement>(`#${item.id}`))
+      .filter(Boolean) as HTMLElement[];
+    const current = [...headings].reverse().find((heading) => heading.offsetTop - container.scrollTop <= 36);
+    activeOutlineId.value = current?.id || helpOutline.value[0]?.id || '';
   }
   const searchValue = ref('');
   const viewOptions = computed(() => {
@@ -198,6 +259,7 @@
     display: flex;
     gap: 20px;
     height: 100%;
+    min-height: 0;
   }
   .help-sidebar {
     width: 200px;
@@ -254,6 +316,98 @@
   }
   .help-editor {
     height: 100%;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    padding: 20px;
+    overflow: auto;
+    box-sizing: border-box;
+    line-height: 2rem;
+    flex: 1 1 auto;
     min-width: 0;
+  }
+  .help-editor--with-outline {
+    flex-basis: calc(100% - 420px);
+  }
+  .help-outline {
+    width: 180px;
+    min-width: 180px;
+    max-width: 180px;
+    height: 100%;
+    padding: 12px 0;
+    box-sizing: border-box;
+    overflow: auto;
+    border-left: 1px solid var(--card-border-color);
+  }
+  .help-outline-title {
+    padding: 0 10px 8px;
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .help-outline-item {
+    width: 100%;
+    min-height: 30px;
+    border: 0;
+    background: transparent;
+    color: var(--catalog-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    box-sizing: border-box;
+    text-align: left;
+    font: inherit;
+    font-size: 13px;
+    border-radius: 6px;
+  }
+  .help-outline-item:hover {
+    background: var(--bl-input-noBorder-bg-color);
+  }
+  .help-outline-item.active {
+    color: var(--resource-bookmark-color);
+    font-weight: 700;
+  }
+  .help-outline-marker {
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: transparent;
+    flex: 0 0 auto;
+  }
+  .help-outline-item.active .help-outline-marker {
+    background: var(--resource-bookmark-color);
+  }
+  .phone-help-outline {
+    position: fixed;
+    right: 16px;
+    bottom: 18px;
+    z-index: 900;
+    width: min(240px, calc(100vw - 32px));
+    max-height: 42vh;
+    padding: 10px 0;
+    overflow: auto;
+    border-radius: 8px;
+    border: 1px solid var(--card-border-color);
+    background: var(--menu-container-bg-color);
+    box-shadow:
+      0 6px 16px 0 rgba(0, 0, 0, 0.08),
+      0 3px 6px -4px rgba(0, 0, 0, 0.12),
+      0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  }
+  .phone-help-outline .help-outline-item {
+    padding-right: 12px;
+  }
+  @media (max-width: 768px) {
+    .help-body {
+      flex-direction: column;
+      gap: 12px;
+    }
+    .help-editor {
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      flex: 1 1 auto;
+    }
   }
 </style>

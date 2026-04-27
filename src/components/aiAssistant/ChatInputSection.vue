@@ -4,8 +4,10 @@
       <textarea
         :value="modelValue"
         @input="onInput"
-        @keydown.enter.exact.prevent="handleSend"
+        @keydown.enter.exact="handleSend"
         @keydown.shift.enter="handleNewLine"
+        @compositionstart="isComposing = true"
+        @compositionend="handleCompositionEnd"
         :placeholder="t('ai.inputPlaceholder')"
         :disabled="isLoading"
         rows="1"
@@ -84,6 +86,7 @@
   }>();
 
   const textInput = ref<HTMLTextAreaElement | null>(null);
+  const isComposing = ref(false);
 
   const adjustTextareaHeight = () => {
     if (textInput.value) {
@@ -98,7 +101,16 @@
     adjustTextareaHeight();
   };
 
-  const handleSend = () => {
+  const handleCompositionEnd = (event: CompositionEvent) => {
+    isComposing.value = false;
+    onInput(event);
+  };
+
+  const handleSend = (event: KeyboardEvent) => {
+    if (isComposing.value || event.isComposing || event.keyCode === 229) {
+      return;
+    }
+    event.preventDefault();
     if (props.enableTranslation) {
       nextTick(() => {
         props.sendFn();

@@ -5,7 +5,7 @@
       backgroundImage: bgVisible,
     }"
   >
-    <!-- 导航栏：仅在非移动端或指定页面显示，笔记详情使用自己的顶栏 -->
+    <!-- 导航栏默认显示，少数页面通过配置隐藏 -->
     <Navigation v-if="showNavigation" />
     <router-view :style="viewStyle" />
   </div>
@@ -16,22 +16,18 @@
   import { bookmarkStore } from '@/store';
   import { useRoute } from 'vue-router';
   import { computed } from 'vue';
+  import { NAVIGATION_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
 
-  const mobileNavigationRoutes = ['home', 'workbenches', 'noteLibrary', 'cloudSpace', 'search'];
-  const isNoteDetailRoute = computed(() => route.name === 'noteDetail');
+  const routeName = computed(() => String(route.name || ''));
 
   // 导航栏显示逻辑
-  const showNavigation = computed(
-    () =>
-      !isNoteDetailRoute.value &&
-      (!bookmark.isMobile || mobileNavigationRoutes.some((item) => route.path.includes(item))),
-  );
+  const showNavigation = computed(() => !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value));
 
   // 背景图显示逻辑
-  const bgVisible = computed(() => (bookmark.isMobile || route.name === 'noteDetail' ? 'unset' : ''));
+  const bgVisible = computed(() => (bookmark.isMobile || !showNavigation.value ? 'unset' : ''));
 
   const viewStyle = computed(() => ({
     position: 'fixed',

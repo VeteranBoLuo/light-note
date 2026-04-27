@@ -500,6 +500,7 @@ export default {
   help: {
     searchPlaceholder: 'Please search for questions',
     title: 'Help Center',
+    outline: 'Outline',
     introTitle: 'Welcome to Help Center',
     introContent: `
       <p>Hello! Thank you for using 【Light Note】.</p>

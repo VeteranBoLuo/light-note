@@ -1,6 +1,6 @@
 <template>
   <div v-if="isSearchAvailable" class="global-search" :class="{ 'global-search--mobile': bookmark.isMobile }">
-    <div v-if="!bookmark.isMobile" class="global-search-box" ref="searchBoxRef">
+    <div v-if="!bookmark.isMobile" class="global-search-box" :class="{ 'global-search-box--open': suggestVisible }" ref="searchBoxRef">
       <b-input
         id="global-search-input"
         v-model:value="keyword"
@@ -14,7 +14,7 @@
           <svg-icon :src="icon.navigation.search" size="16" />
         </template>
         <template #suffix>
-          <button v-if="keyword" class="clear-btn" @mousedown.prevent="clearKeyword">{{ t('resourceCenter.clearShort') }}</button>
+          <button v-if="keyword" class="clear-btn" :title="t('resourceCenter.clear')" @mousedown.prevent="clearKeyword">×</button>
           <span v-else class="shortcut">/</span>
         </template>
       </b-input>
@@ -113,6 +113,7 @@
   import { bookmarkStore } from '@/store';
   import { fetchGlobalSearch, SearchGroup, SearchResultItem } from '@/api/search.ts';
   import { useI18n } from 'vue-i18n';
+  import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
 
   const router = useRouter();
   const route = useRoute();
@@ -127,8 +128,8 @@
   const searchTimer = ref<number | null>(null);
   let requestSeq = 0;
 
-  const visibleRoutes = ['workbenches', 'home', 'noteLibrary', 'cloudSpace', 'search'];
-  const isSearchAvailable = computed(() => visibleRoutes.some((item) => route.path.includes(item)));
+  const routeName = computed(() => String(route.name || ''));
+  const isSearchAvailable = computed(() => !GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES.includes(routeName.value));
   const placeholder = computed(() =>
     route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
   );
@@ -217,6 +218,10 @@
     openSuggest();
   }
 
+  function syncNavigationLayer(visible: boolean) {
+    document.querySelector('.navigation')?.classList.toggle('navigation--search-open', visible);
+  }
+
   watch(
     () => route.query.q,
     (val) => {
@@ -227,6 +232,13 @@
     { immediate: true },
   );
 
+  watch(
+    () => suggestVisible.value || mobileVisible.value,
+    (visible) => {
+      syncNavigationLayer(visible);
+    },
+  );
+
   onMounted(() => {
     document.addEventListener('mousedown', handleDocumentMouseDown);
     document.addEventListener('keydown', handleShortcut);
@@ -235,6 +247,7 @@
   onBeforeUnmount(() => {
     document.removeEventListener('mousedown', handleDocumentMouseDown);
     document.removeEventListener('keydown', handleShortcut);
+    syncNavigationLayer(false);
     if (searchTimer.value) clearTimeout(searchTimer.value);
   });
 </script>
@@ -252,7 +265,11 @@
 
   .global-search-box {
     position: relative;
-    z-index: 100001;
+    z-index: 1;
+  }
+
+  .global-search-box--open {
+    z-index: 300000;
   }
 
   :deep(.b-input) {
@@ -260,8 +277,7 @@
     height: 36px;
   }
 
-  .shortcut,
-  .clear-btn {
+  .shortcut {
     color: var(--desc-color);
     font-size: 12px;
   }
@@ -279,6 +295,25 @@
     font: inherit;
   }
 
+  .clear-btn {
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 50%;
+    color: var(--desc-color);
+    font-size: 14px;
+    line-height: 1;
+    font-weight: 500;
+    background: color-mix(in srgb, var(--text-color) 8%, transparent);
+  }
+
+  .clear-btn:hover {
+    color: var(--text-color);
+    background: color-mix(in srgb, var(--text-color) 14%, transparent);
+  }
+
   .suggest-panel {
     position: absolute;
     right: 0;
@@ -291,7 +326,7 @@
     background: var(--menu-body-bg-color);
     box-shadow: 0 20px 60px rgba(20, 20, 43, 0.22);
     border: 1px solid var(--card-border-color);
-    z-index: 100002;
+    z-index: 300001;
   }
 
   .suggest-head {
@@ -440,7 +475,7 @@
   .mobile-search-layer {
     position: fixed;
     inset: 0;
-    z-index: 100002;
+    z-index: 300001;
     background: var(--background-color);
     padding: 14px;
     box-sizing: border-box;
