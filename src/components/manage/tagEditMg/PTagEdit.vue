@@ -8,7 +8,15 @@
             <b-input v-model:value="tag.name" />
           </div>
           <div class="tag-attr-item">
-            <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
+            <div class="tag-attr-head">
+              <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
+              <a-tooltip :title="$t('tagManage.generateIconDesc')">
+                <button type="button" class="generate-icon-action" @click="generateTagIcon" :class="{ loading: generatingIcon }">
+                  <svg-icon :src="icon.common.magicWand" :title="$t('tagManage.generateIconTitle')" />
+                  <span>{{ $t('tagManage.generateIconTitle') }}</span>
+                </button>
+              </a-tooltip>
+            </div>
             <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')">
               <template #suffix>
                 <svg-icon :src="icon.file_upload" class="dom-hover-click" size="20" style="height: 32px" @click.stop="uploadTagImg" />
@@ -91,6 +99,7 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const loading = ref(false);
+  const generatingIcon = ref(false);
 
   const tag = ref<TagInterface>({
     id: '',
@@ -239,6 +248,54 @@
     input.click();
   }
 
+  function encodeSvgToDataUrl(svg: string) {
+    const normalized = svg.replace(/\r?\n|\r/g, '').trim();
+    const encoded = window.btoa(unescape(encodeURIComponent(normalized)));
+    return `data:image/svg+xml;base64,${encoded}`;
+  }
+
+  function extractSvg(content: string) {
+    const match = content.match(/<svg[\s\S]*<\/svg>/i);
+    return match?.[0]?.trim() || '';
+  }
+
+  async function generateTagIcon() {
+    if (!tag.value.name?.trim()) {
+      message.warning('请先填写标签名称');
+      return;
+    }
+    generatingIcon.value = true;
+    try {
+      const prompt = [
+        '请根据下面的标签名称生成一个简洁、可读性高、适合知识管理产品使用的小图标。',
+        `标签名称：${tag.value.name}`,
+        '要求：',
+        '1. 只输出一个完整的 SVG 字符串，不要输出 markdown 代码块，不要输出解释。',
+        '2. 图标风格简洁、现代、单图标居中，适合 20px 左右显示。',
+        '3. 尽量使用 1 到 2 种颜色，避免复杂渐变和过多细节。',
+        '4. SVG 代码尽量精简，viewBox 使用 0 0 24 24。',
+        '5. 不要包含脚本、foreignObject、外链资源。',
+      ].join('\n');
+      const res = await apiBasePost('/api/chat/receiveMessage', {
+        message: prompt,
+        stream: false,
+      });
+      const content = String(res?.data?.output?.text || res?.data?.text || res?.data?.content || res?.data || '');
+      const svg = extractSvg(content);
+      if (!svg) {
+        message.warning('AI 未返回可用图标，请重试');
+        return;
+      }
+      tag.value.iconUrl = encodeSvgToDataUrl(svg);
+      message.success('已生成标签图标');
+    } catch (error) {
+      console.error('generate tag icon failed', error);
+      message.error('生成图标失败，请稍后再试');
+    } finally {
+      generatingIcon.value = false;
+    }
+  }
+
   async function submit() {
     if (loading.value) {
       message.warning('请等待数据请求完毕');
@@ -321,6 +378,41 @@
   .tag-attr-label {
     font-size: 13px;
     color: var(--desc-color);
+  }
+
+  .tag-attr-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .generate-icon-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 26%, var(--card-border-color));
+    background: color-mix(in srgb, var(--resource-tag-color) 8%, var(--background-color));
+    color: var(--resource-tag-color);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      transform 0.2s ease,
+      border-color 0.2s ease,
+      background-color 0.2s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--resource-tag-color) 44%, var(--card-border-color));
+      background: color-mix(in srgb, var(--resource-tag-color) 12%, var(--background-color));
+    }
+
+    &.loading {
+      opacity: 0.72;
+      cursor: wait;
+    }
   }
 
   .summary-grid {
