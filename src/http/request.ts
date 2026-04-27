@@ -4,7 +4,7 @@ import useUserStore from '@/store/useUser';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 
 // 常量定义
-const TIMEOUT = 60000;
+const TIMEOUT = 120000;
 const ROLES_ADMIN = ['admin', 'root'];
 const NO_AUTH_ENDPOINTS = ['del'];
 const ERROR_MESSAGES: { [key: number]: string } = {
