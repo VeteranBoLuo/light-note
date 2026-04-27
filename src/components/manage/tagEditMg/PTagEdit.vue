@@ -92,12 +92,14 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
+  import { useI18n } from 'vue-i18n';
 
   type ResourceItem = { rawId: string; name: string; type: ResourceType };
 
   const router = useRouter();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const { t } = useI18n();
   const loading = ref(false);
   const generatingIcon = ref(false);
 
@@ -248,49 +250,26 @@
     input.click();
   }
 
-  function encodeSvgToDataUrl(svg: string) {
-    const normalized = svg.replace(/\r?\n|\r/g, '').trim();
-    const encoded = window.btoa(unescape(encodeURIComponent(normalized)));
-    return `data:image/svg+xml;base64,${encoded}`;
-  }
-
-  function extractSvg(content: string) {
-    const match = content.match(/<svg[\s\S]*<\/svg>/i);
-    return match?.[0]?.trim() || '';
-  }
-
   async function generateTagIcon() {
     if (!tag.value.name?.trim()) {
-      message.warning('请先填写标签名称');
+      message.warning(t('tagManage.generateIconNeedName'));
       return;
     }
     generatingIcon.value = true;
     try {
-      const prompt = [
-        '请根据下面的标签名称生成一个简洁、可读性高、适合知识管理产品使用的小图标。',
-        `标签名称：${tag.value.name}`,
-        '要求：',
-        '1. 只输出一个完整的 SVG 字符串，不要输出 markdown 代码块，不要输出解释。',
-        '2. 图标风格简洁、现代、单图标居中，适合 20px 左右显示。',
-        '3. 尽量使用 1 到 2 种颜色，避免复杂渐变和过多细节。',
-        '4. SVG 代码尽量精简，viewBox 使用 0 0 24 24。',
-        '5. 不要包含脚本、foreignObject、外链资源。',
-      ].join('\n');
-      const res = await apiBasePost('/api/chat/receiveMessage', {
-        message: prompt,
-        stream: false,
+      const res = await apiBasePost('/api/chat/generateTagIcon', {
+        tagName: tag.value.name.trim(),
       });
-      const content = String(res?.data?.output?.text || res?.data?.text || res?.data?.content || res?.data || '');
-      const svg = extractSvg(content);
-      if (!svg) {
-        message.warning('AI 未返回可用图标，请重试');
+      const iconUrl = String(res?.data?.iconUrl || '');
+      if (!iconUrl) {
+        message.warning(t('tagManage.generateIconInvalid'));
         return;
       }
-      tag.value.iconUrl = encodeSvgToDataUrl(svg);
-      message.success('已生成标签图标');
+      tag.value.iconUrl = iconUrl;
+      message.success(t('tagManage.generateIconSuccess'));
     } catch (error) {
       console.error('generate tag icon failed', error);
-      message.error('生成图标失败，请稍后再试');
+      message.error(t('tagManage.generateIconFailed'));
     } finally {
       generatingIcon.value = false;
     }
