@@ -9,9 +9,20 @@
           </div>
           <div class="tag-attr-item" style="position: relative">
             <div class="tag-attr-head">
-              <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
+              <div class="tag-label-with-preview">
+                <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
+                <span class="icon-preview-box" :class="{ empty: !iconPreviewSrc }">
+                  <svg-icon v-if="iconPreviewSrc" :src="iconPreviewSrc" size="18" />
+                  <svg-icon v-else :src="icon.nullImg" size="16" />
+                </span>
+              </div>
               <a-tooltip :title="$t('tagManage.generateIconDesc')">
-                <button type="button" class="generate-icon-action" @click="generateTagIcon" :class="{ loading: generatingIcon }">
+                <button
+                  type="button"
+                  class="generate-icon-action"
+                  @click="generateTagIcon"
+                  :class="{ loading: generatingIcon }"
+                >
                   <svg-icon :src="icon.common.magicWand" :title="$t('tagManage.generateIconTitle')" />
                   <span>{{ $t('tagManage.generateIconTitle') }}</span>
                 </button>
@@ -94,7 +105,10 @@
                 class="resource-card"
                 :class="{ active: section.selectedIds.includes(item.rawId) }"
               >
-                <a-checkbox :checked="section.selectedIds.includes(item.rawId)" @change="toggleResource(section.type, item.rawId, $event.target.checked)" />
+                <a-checkbox
+                  :checked="section.selectedIds.includes(item.rawId)"
+                  @change="toggleResource(section.type, item.rawId, $event.target.checked)"
+                />
                 <div class="resource-info">
                   <div class="resource-name text-hidden">{{ item.name }}</div>
                   <div class="resource-meta">{{ section.label }}</div>
@@ -116,7 +130,12 @@
           <span class="footer-desc">已关联 {{ totalSelectedCount }} 项内容</span>
         </div>
         <div class="footer-summary-chips">
-          <span v-for="card in sectionCards" :key="`footer-${card.type}`" class="footer-chip" :style="{ '--section-color': card.color }">
+          <span
+            v-for="card in sectionCards"
+            :key="`footer-${card.type}`"
+            class="footer-chip"
+            :style="{ '--section-color': card.color }"
+          >
             <span class="footer-chip-dot"></span>
             <span>{{ card.label }}</span>
             <strong>{{ card.count }}</strong>
@@ -200,6 +219,28 @@
     file: '',
   });
 
+  const iconPreviewSrc = computed(() => {
+    const raw = String(tag.value.iconUrl || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('data:image/')) return raw;
+    if (raw.includes('<svg')) return raw;
+    if (/^[A-Za-z0-9+/=]+$/.test(raw) && raw.length > 64) {
+      return `data:image/svg+xml;base64,${raw}`;
+    }
+    return raw;
+  });
+
+  function normalizeIconUrl(input: string) {
+    const raw = String(input || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('data:image/')) return raw;
+    if (raw.includes('<svg')) return raw;
+    if (/^[A-Za-z0-9+/=]+$/.test(raw) && raw.length > 64) {
+      return `data:image/svg+xml;base64,${raw}`;
+    }
+    return raw;
+  }
+
   const handleType = computed(() => (router.currentRoute.value.params.id === 'add' ? 'add' : 'edit'));
 
   const sectionCards = computed(() => [
@@ -224,7 +265,7 @@
   ]);
 
   const totalSelectedCount = computed(
-    () => selectedBookmarkIds.value.length + selectedNoteIds.value.length + selectedFileIds.value.length
+    () => selectedBookmarkIds.value.length + selectedNoteIds.value.length + selectedFileIds.value.length,
   );
 
   function getResourceItems(type: 'bookmark' | 'note' | 'file') {
@@ -232,7 +273,9 @@
   }
 
   function filterItems(type: 'bookmark' | 'note' | 'file') {
-    const keyword = String(searchMap[type] || '').trim().toLowerCase();
+    const keyword = String(searchMap[type] || '')
+      .trim()
+      .toLowerCase();
     const items = getResourceItems(type);
     if (!keyword) return items;
     return items.filter((item) => item.name.toLowerCase().includes(keyword));
@@ -377,6 +420,7 @@
       message.warning('请等待数据请求完毕');
       return;
     }
+    tag.value.iconUrl = normalizeIconUrl(tag.value.iconUrl);
     tag.value.bookmarkList = selectedBookmarkIds.value;
     tag.value.noteList = selectedNoteIds.value;
     tag.value.fileList = selectedFileIds.value;
@@ -470,6 +514,28 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .tag-label-with-preview {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .icon-preview-box {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border-color);
+    background: var(--background-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    &.empty {
+      opacity: 0.6;
+    }
   }
 
   .generate-icon-action {
