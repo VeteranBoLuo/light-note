@@ -2,9 +2,7 @@
   <div class="workbenches-container">
     <div class="workbench-header">
       <div class="title">{{ t('workbench.title', '工作台') }}</div>
-      <div class="subtitle">{{
-        t('workbench.subtitle', '聚合查看书签、笔记和云空间状态，快速完成常用操作。')
-      }}</div>
+      <div class="subtitle">{{ t('workbench.subtitle', '聚合查看书签、笔记和云空间状态，快速完成常用操作。') }}</div>
     </div>
 
     <div class="summary-grid">
@@ -86,48 +84,103 @@
         </div>
       </div>
 
-      <div class="panel-card update-log-panel">
-        <div class="panel-title">{{ t('workbench.panel.updateLogs', '更新日志') }}</div>
-        <div v-if="updateLogsLoading" class="update-log-content skeleton-log-content">
-          <div class="update-log-list skeleton-log-list">
-            <div class="update-log-title" v-for="n in 4" :key="`log-skeleton-${n}`">
-              <div class="sk-line"></div>
-            </div>
-          </div>
-          <div class="update-log-detail">
-            <div class="sk-line sk-short"></div>
-            <div class="detail-list">
-              <div class="sk-line" v-for="n in 3" :key="`detail-skeleton-${n}`"></div>
-            </div>
-          </div>
+      <div class="panel-card preferences-panel">
+        <div class="panel-title">{{ t('workbench.panel.preferences', '快捷偏好') }}</div>
+        <div class="preferences-subtitle">
+          {{ t('workbench.preferences.subtitle', '在这里快速设置主题、语言和默认首页。') }}
         </div>
-        <div v-else class="update-log-content">
-          <div class="update-log-list" v-if="updateLogList.length">
+        <div class="preference-group preference-group--theme">
+          <div class="preference-label">{{ t('workbench.preferences.theme', '主题') }}</div>
+          <div class="preference-options">
             <button
-              v-for="(log, index) in updateLogList"
-              :key="`${log.label || 'log'}-${index}`"
-              class="update-log-title dom-hover"
-              :class="{ active: activeUpdateLogIndex === index }"
-              @click="toggleUpdateLog(index)"
+              v-for="option in themePreferenceOptions"
+              :key="option.value"
+              type="button"
+              class="preference-chip dom-hover"
+              :class="{ active: user.preferences.theme === option.value }"
+              :disabled="preferenceSaving"
+              @click="updatePreference('theme', option.value)"
             >
-              <span class="log-label" v-html="log.label || `${t('workbench.logs.update', '更新')} ${index + 1}`"></span>
-              <span class="log-time">{{ log.time || '-' }}</span>
+              {{ option.label }}
             </button>
           </div>
-          <div v-else class="empty-log list-empty">{{ t('workbench.logs.empty', '暂无更新日志') }}</div>
-
-          <div class="update-log-detail">
-            <template v-if="activeUpdateLog">
-              <div class="detail-title">{{ activeUpdateLog.time || t('workbench.logs.latest', '最近更新') }}</div>
-              <div class="detail-list" v-if="Array.isArray(activeUpdateLog.list) && activeUpdateLog.list.length">
-                <div class="detail-item" v-for="(item, index) in activeUpdateLog.list" :key="`detail-${index}`">
-                  <span class="detail-index">{{ Number(index) + 1 }}.</span>
-                  <span class="detail-text" v-html="item"></span>
-                </div>
-              </div>
-            </template>
-            <div class="empty-log" v-else>{{ t('workbench.logs.clickForDetail', '点击上方日志标题查看详情') }}</div>
+        </div>
+        <div class="preference-group preference-group--language">
+          <div class="preference-label">{{ t('workbench.preferences.language', '语言') }}</div>
+          <div class="preference-options">
+            <button
+              v-for="option in languagePreferenceOptions"
+              :key="option.value"
+              type="button"
+              class="preference-chip dom-hover"
+              :class="{ active: user.preferences.lang === option.value }"
+              :disabled="preferenceSaving"
+              @click="updatePreference('lang', option.value)"
+            >
+              {{ option.label }}
+            </button>
           </div>
+        </div>
+        <div class="preference-group preference-group--home">
+          <div class="preference-label">{{ t('workbench.preferences.homePage', '默认首页') }}</div>
+          <div class="preference-options">
+            <button
+              v-for="option in homePagePreferenceOptions"
+              :key="option.value"
+              type="button"
+              class="preference-chip dom-hover"
+              :class="{ active: currentHomePage === option.value }"
+              :disabled="preferenceSaving"
+              @click="updatePreference('homePage', option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-card update-log-panel">
+      <div class="panel-title">{{ t('workbench.panel.updateLogs', '更新日志') }}</div>
+      <div v-if="updateLogsLoading" class="update-log-content skeleton-log-content">
+        <div class="update-log-list skeleton-log-list">
+          <div class="update-log-title" v-for="n in 4" :key="`log-skeleton-${n}`">
+            <div class="sk-line"></div>
+          </div>
+        </div>
+        <div class="update-log-detail">
+          <div class="sk-line sk-short"></div>
+          <div class="detail-list">
+            <div class="sk-line" v-for="n in 3" :key="`detail-skeleton-${n}`"></div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="update-log-content">
+        <div class="update-log-list" v-if="updateLogList.length">
+          <button
+            v-for="(log, index) in updateLogList"
+            :key="`${log.label || 'log'}-${index}`"
+            class="update-log-title dom-hover"
+            :class="{ active: activeUpdateLogIndex === index }"
+            @click="toggleUpdateLog(index)"
+          >
+            <span class="log-label" v-html="log.label || `${t('workbench.logs.update', '更新')} ${index + 1}`"></span>
+            <span class="log-time">{{ log.time || '-' }}</span>
+          </button>
+        </div>
+        <div v-else class="empty-log list-empty">{{ t('workbench.logs.empty', '暂无更新日志') }}</div>
+
+        <div class="update-log-detail">
+          <template v-if="activeUpdateLog">
+            <div class="detail-title">{{ activeUpdateLog.time || t('workbench.logs.latest', '最近更新') }}</div>
+            <div class="detail-list" v-if="Array.isArray(activeUpdateLog.list) && activeUpdateLog.list.length">
+              <div class="detail-item" v-for="(item, index) in activeUpdateLog.list" :key="`detail-${index}`">
+                <span class="detail-index">{{ Number(index) + 1 }}.</span>
+                <span class="detail-text" v-html="item"></span>
+              </div>
+            </div>
+          </template>
+          <div v-else class="empty-log">{{ t('workbench.logs.clickForDetail', '点击上方日志标题查看详情') }}</div>
         </div>
       </div>
     </div>
@@ -244,6 +297,15 @@
   import { useI18n } from 'vue-i18n';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
+  import userApi from '@/api/userApi.ts';
+  import { message } from 'ant-design-vue';
+  import { setLocale } from '@/i18n';
+  import {
+    getHomePagePreference,
+    type HomePagePreference,
+    type LanguagePreference,
+    type ThemePreference,
+  } from '@/utils/preferences.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const cloud = cloudSpaceStore();
@@ -254,6 +316,7 @@
   const loadingWorkbench = ref(true);
   const loadingUpdateLogs = ref(true);
   const loadingUserStats = ref(false);
+  const preferenceSaving = ref(false);
   const summaryLoading = computed(() => loadingWorkbench.value);
   const activityLoading = computed(() => loadingWorkbench.value);
   const quickActionsLoading = computed(() => loadingWorkbench.value);
@@ -440,6 +503,22 @@
     return updateLogList.value[activeUpdateLogIndex.value] || null;
   });
 
+  const currentHomePage = computed(() => getHomePagePreference(user.preferences));
+  const themePreferenceOptions = computed(() => [
+    { value: 'system', label: t('navigation.followSystem') },
+    { value: 'day', label: t('navigation.light') },
+    { value: 'night', label: t('navigation.dark') },
+  ]);
+  const languagePreferenceOptions = computed(() => [
+    { value: 'zh-CN', label: '中文' },
+    { value: 'en-US', label: 'English' },
+  ]);
+  const homePagePreferenceOptions = computed(() => [
+    { value: 'workbench', label: t('navigation.workbench') },
+    { value: 'bookmark', label: t('navigation.bookmark') },
+    { value: 'noteLibrary', label: t('navigation.note') },
+    { value: 'cloudSpace', label: t('navigation.cloudSpace') },
+  ]);
 
   function handleCommonBookmarkClick(record) {
     if (record?.url) {
@@ -563,6 +642,54 @@
   const hasInitedOnce = ref(false);
   const initRunning = ref(false);
 
+  async function updatePreference(
+    key: 'theme' | 'lang' | 'homePage',
+    value: ThemePreference | LanguagePreference | HomePagePreference,
+  ) {
+    if (preferenceSaving.value || user.preferences[key] === value) {
+      return;
+    }
+
+    const previousPreferences = { ...user.preferences };
+    const shouldReloadAfterSave = key === 'lang' && previousPreferences.lang !== value;
+    const nextPreferences = {
+      ...user.preferences,
+      [key]: value,
+      homePage: key === 'homePage' ? value : getHomePagePreference(user.preferences),
+    };
+
+    preferenceSaving.value = true;
+    user.preferences = nextPreferences;
+    localStorage.setItem('preferences', JSON.stringify(user.preferences));
+
+    if (key === 'lang') {
+      document.documentElement.lang = value as LanguagePreference;
+      setLocale(value as LanguagePreference);
+    }
+
+    try {
+      await userApi.updateUserInfo({
+        id: localStorage.getItem('userId'),
+        preferences: JSON.stringify(nextPreferences),
+      });
+      message.success(t('workbench.preferences.saved', '偏好设置已更新'));
+      if (shouldReloadAfterSave) {
+        location.reload();
+      }
+    } catch (error) {
+      user.preferences = previousPreferences;
+      localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      if (key === 'lang') {
+        document.documentElement.lang = (previousPreferences.lang || 'zh-CN') as string;
+        setLocale((previousPreferences.lang || 'zh-CN') as LanguagePreference);
+      }
+      console.error('update preference failed', error);
+      message.error(t('workbench.preferences.saveFailed', '偏好设置更新失败'));
+    } finally {
+      preferenceSaving.value = false;
+    }
+  }
+
   watch(
     () => user.id,
     async (val, oldVal) => {
@@ -617,6 +744,122 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(180px, 1fr));
     gap: 12px;
+  }
+
+  .preferences-panel {
+    --panel-accent: var(--resource-bookmark-color);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .preferences-subtitle {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--secondary-text);
+  }
+
+  .preference-group {
+    --preference-accent: #7a5af8;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .preference-group--theme {
+    --preference-accent: #7a5af8;
+  }
+
+  .preference-group--language {
+    --preference-accent: #7a5af8;
+  }
+
+  .preference-group--home {
+    --preference-accent: #7a5af8;
+  }
+
+  .preference-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--preference-accent) 68%, var(--primary-text));
+  }
+
+  .preference-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .preference-chip {
+    border: 1px solid var(--workbench-subcard-border);
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--preference-accent) 8%, var(--workbench-subcard-bg)),
+      transparent 145%
+    );
+    color: var(--text-color);
+    min-width: 76px;
+    padding: 7px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+    transition:
+      transform 0.2s ease,
+      border-color 0.2s ease,
+      background-color 0.2s ease,
+      box-shadow 0.2s ease,
+      color 0.2s ease;
+
+    &:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--preference-accent) 44%, var(--workbench-subcard-border));
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--preference-accent) 14%, var(--workbench-subcard-bg)),
+        var(--workbench-subcard-hover)
+      );
+      color: color-mix(in srgb, var(--preference-accent) 78%, var(--primary-text));
+    }
+
+    &.active {
+      border-color: color-mix(in srgb, var(--preference-accent) 78%, #ffffff 22%);
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--preference-accent) 92%, #7c73ff 8%),
+        color-mix(in srgb, var(--preference-accent) 78%, #4b46cc 22%)
+      );
+      color: #ffffff;
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--preference-accent) 28%, transparent),
+        0 12px 24px -18px color-mix(in srgb, var(--preference-accent) 56%, transparent);
+
+      &:hover:not(:disabled) {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, var(--preference-accent) 78%, #ffffff 22%);
+        background: linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--preference-accent) 92%, #7c73ff 8%),
+          color-mix(in srgb, var(--preference-accent) 78%, #4b46cc 22%)
+        );
+        color: #ffffff;
+        box-shadow:
+          0 0 0 1px color-mix(in srgb, var(--preference-accent) 28%, transparent),
+          0 12px 24px -18px color-mix(in srgb, var(--preference-accent) 56%, transparent);
+      }
+    }
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+  }
+
+  .preferences-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--secondary-text);
   }
 
   .sk-line {
@@ -846,7 +1089,7 @@
   }
 
   .insight-grid {
-    --insight-card-height: 270px;
+    --insight-card-min-height: 270px;
     display: grid;
     grid-template-columns: minmax(210px, 0.65fr) minmax(0, 1.55fr) minmax(280px, 1.1fr);
     gap: 12px;
@@ -864,7 +1107,7 @@
       0 14px 26px -20px var(--workbench-shadow-color),
       inset 0 1px 0 rgba(255, 255, 255, 0.18);
     color: var(--text-color);
-    height: var(--insight-card-height);
+    min-height: var(--insight-card-min-height);
     border: 1px solid var(--workbench-border-color);
     display: flex;
     flex-direction: column;
@@ -1031,26 +1274,26 @@
 
   .quick-panel {
     --panel-accent: var(--workbench-insight-quick-accent);
-    height: var(--insight-card-height);
   }
 
   .activity-panel {
     --panel-accent: var(--workbench-insight-activity-accent);
-    height: var(--insight-card-height);
   }
 
   .update-log-panel {
     --panel-accent: var(--workbench-insight-log-accent);
-    height: var(--insight-card-height);
+    height: 258px;
+    min-height: 258px;
   }
 
   .update-log-content {
     margin-top: 8px;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
     gap: 8px;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
   }
 
   .update-log-list {
@@ -1143,9 +1386,7 @@
     border-radius: 10px;
     border: 1px solid var(--workbench-subcard-border);
     background: linear-gradient(160deg, var(--workbench-subcard-bg), transparent 120%);
-    padding: 8px;
-    margin-right: -8px; // 让滚动条和标题列表的滚动条对齐
-    flex: 0.6;
+    padding: 10px;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -1274,10 +1515,7 @@
     }
     .insight-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      --insight-card-height: 260px;
-    }
-    .update-log-panel {
-      grid-column: 1 / -1;
+      --insight-card-min-height: 260px;
     }
     .table-grid {
       grid-template-columns: 1fr;
@@ -1293,13 +1531,18 @@
     }
     .insight-grid {
       grid-template-columns: 1fr;
-      --insight-card-height: 240px;
+      --insight-card-min-height: 240px;
     }
     .quick-action-grid {
       grid-template-columns: 1fr;
     }
+    .update-log-content {
+      grid-template-columns: 1fr;
+    }
+
     .update-log-panel {
-      grid-column: auto;
+      height: auto;
+      min-height: 258px;
     }
   }
 </style>

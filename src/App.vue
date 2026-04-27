@@ -28,6 +28,7 @@
   import { setLocale } from './i18n';
   import { updateNotice } from '@/config/updateNotice';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
+  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
 
   const router = useRouter();
   const user = useUserStore();
@@ -110,6 +111,7 @@
       user.preferences.theme = res.data?.preferences?.theme || 'day';
       user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+      user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
       localStorage.setItem('userId', res.data.id);
       setLocale(user.preferences.lang || 'zh-CN');
@@ -218,7 +220,7 @@
     if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
       if (!user.id || user.role === RoleEnum.VISITOR) {
         handleUserLogout();
-        next('/home');
+        next(getAppHomePath(user.preferences, bookmark.isMobile));
         return;
       }
       next('/403');

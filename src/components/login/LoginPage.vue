@@ -107,6 +107,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
   import i18n, { setLocale } from '@/i18n';
+  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   const title = defineModel('title');
   const formData: any = defineModel('formData');
   const isCheck = ref(true);
@@ -127,12 +128,13 @@
       if (res.status === 200) {
         localStorage.setItem('userId', res.data.id);
         user.setUserInfo(res.data);
-        router.push('/');
-        message.success('登录成功');
         user.preferences.theme = res.data?.preferences?.theme || 'day';
         user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
         user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+        user.preferences.homePage = getHomePagePreference(res.data?.preferences);
         localStorage.setItem('preferences', JSON.stringify(user.preferences));
+        router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+        message.success('登录成功');
         if (isCheck.value) {
           const params = cloneDeep(formData.value);
           params.otherInfo = encrypt(params.password);

@@ -14,6 +14,7 @@ import workbenchesRouter from '@/router/modules/workbenches.ts';
 import toolsRouter from '@/router/modules/tools.ts';
 import searchRouter from '@/router/modules/search.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
+import { getDesktopHomePath } from '@/utils/preferences.ts';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -22,7 +23,7 @@ const routes: RouteRecordRaw[] = [
     },
     path: '/',
     name: '/',
-    redirect: '/home',
+    redirect: () => getDesktopHomePath(JSON.parse(localStorage.getItem('preferences') || '{}')),
     component: () => import('@/view/index.vue'),
     // 放入此处的有顶部导航栏
     children: [

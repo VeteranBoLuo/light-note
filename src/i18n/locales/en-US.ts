@@ -46,7 +46,17 @@ export default {
       updatedNotes: 'Updated Notes',
       uploadedFiles: 'Uploaded Files',
       quickActions: 'Quick Actions',
+      preferences: 'Quick Preferences',
       updateLogs: 'Update Logs',
+    },
+    preferences: {
+      subtitle: 'Quickly adjust theme, language, and your default home page here.',
+      theme: 'Theme',
+      language: 'Language',
+      homePage: 'Default Home',
+      homePageHint: 'Your default home applies the next time you open the app, sign in again, or use the brand entry.',
+      saved: 'Preferences updated',
+      saveFailed: 'Failed to update preferences',
     },
     actions: {
       addBookmark: { label: 'New Bookmark', desc: 'Save link quickly' },

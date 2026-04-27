@@ -45,7 +45,16 @@ export default {
       updatedNotes: '更新笔记',
       uploadedFiles: '上传文件',
       quickActions: '快捷操作',
+      preferences: '快捷偏好',
       updateLogs: '更新日志',
+    },
+    preferences: {
+      subtitle: '在这里快速设置主题、语言和默认首页。',
+      theme: '主题',
+      language: '语言',
+      homePage: '默认首页',
+      saved: '偏好设置已更新',
+      saveFailed: '偏好设置更新失败',
     },
     actions: {
       addBookmark: { label: '新增书签', desc: '快速收藏链接' },
