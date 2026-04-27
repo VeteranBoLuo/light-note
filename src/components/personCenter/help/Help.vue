@@ -1,46 +1,30 @@
 <template>
   <div class="help-container">
     <div class="help-body">
-      <div
-        v-if="bookmark.isMobile"
-        class="help-title"
-        style="position: relative; top: 10px"
-        @click="checkId = ''"
-        v-click-log="{ module: '帮助中心', operation: `导览` }"
-        >{{ t('help.title') }}</div
-      >
-      <div v-if="!bookmark.isMobile" class="help-sidebar">
-        <div
-          class="help-title"
-          @click="((checkId = ''), (node = helpInfo))"
-          v-click-log="{ module: '帮助中心', operation: `导览` }"
-          >{{ t('help.title') }}</div
+      <div class="help-sidebar">
+        <b-input
+          v-model:value="searchValue"
+          :placeholder="t('help.searchPlaceholder')"
+          class="help-search-input"
+          id="ref2"
         >
-        <b-input v-model:value="searchValue" :placeholder="t('help.searchPlaceholder')" class="help-search-input" id="ref2">
           <template #prefix>
             <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
-        <BList class="help-menu-list" style="font-size: 12px" :listOptions="viewOptions" @nodeClick="logItem" :check-id="checkId">
+        <BList
+          class="help-menu-list"
+          style="font-size: 12px"
+          :listOptions="viewOptions"
+          @nodeClick="logItem"
+          :check-id="checkId"
+        >
           <template #icon>
             <svg-icon :src="icon.help_document" />
           </template>
         </BList>
       </div>
-      <div v-else class="phone-help-menu">
-        <div
-          v-for="item in viewOptions"
-          :style="{
-            background: checkId === item.id ? '#4e4b46' : '',
-            color: checkId === item.id ? 'white' : '',
-          }"
-          class="phone-help-menu-item"
-          @click="checkId = item.id"
-          v-click-log="{ module: '帮助中心', operation: `${item.title}` }"
-        >
-          {{ item.title }}
-        </div>
-      </div>
+
       <div
         id="view-body"
         class="help-editor"
@@ -84,38 +68,90 @@
     content:
       locale.value === 'zh-CN'
         ? `
-      <p>您好！感谢您使用【轻笺】。</p>
-      <p>轻笺是一款专为效率爱好者设计的云端书签管理工具，以智能标签为核心，帮助您即时归档网页、笔记和灵感片段。通过动态关联的标签网络，实现跨设备即时搜索、多维度分类以及智能推荐书签/笔记，让知识管理像浏览社交 feed 一样轻松有趣。</p>
-      <p>本帮助文档旨在为您提供详细的使用指南和常见问题解答，帮助您更高效地使用本平台。在此，您可以找到以下方面的详细介绍：</p>
-      <ul>
-        <li><strong>账户管理</strong>：如何注册、登录、找回密码以及修改个人信息。</li>
-        <li><strong>功能操作</strong>：平台各项功能的操作步骤和注意事项。</li>
-        <li><strong>常见问题</strong>：用户在使用过程中可能遇到的问题解决方案。</li>
-      </ul>
-      <p>为了更好地帮助您，请使用左侧目录或搜索框搜索您需要了解的内容。此外，我们的网站支持<b>多设备适配</b>，无论您在 PC、手机还是平板上，都能享受到一致的优质体验。</p>
-      <p>如果您在使用过程中遇到任何问题，请通过意见反馈提供您的宝贵建议。您也可以通过以下方式联系我：</p>
-      <div>
-        邮箱：<a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
-      </div>
-      <p>虽然项目成立不久，但我保证质量上乘，并在细节上倾注了大量心血，确保您满意体验！未来，我将继续升级它，例如添加书签导出/导入、书签分享、书签同步备份、团队协作、AI 分析等功能，让书签管理更加灵活便捷。请期待吧——更多实用功能正在路上，保证将您的书签管理体验提升到新水平！</p>
-      <p>感谢您的理解和支持！</p>
+      <h2>欢迎来到轻笺帮助中心 👋</h2>
+<p>您好！感谢您选择<b>轻笺</b>——一款以智能标签为核心的云端知识管理工具。</p>
+<p>轻笺不只是书签收藏夹，更是一个将<b>书签、笔记、文件</b>统一管理、通过<b>共享标签体系</b>动态关联的知识中台。无论您是在收集灵感、整理资料还是深度写作，轻笺都能帮您把零散信息串联成体系。</p>
+
+<h3>✨ 核心功能</h3>
+<ul>
+  <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述，支持 Excel / HTML 格式导入导出</li>
+  <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
+  <li><strong>笔记库</strong>：富文本编辑器支持多级标题与代码块；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；支持导出为 PDF / HTML / Markdown</li>
+  <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
+  <li><strong>资源中心</strong>：导航栏全局搜索，一键检索书签、笔记、文件和标签，支持按类型筛选；按 <code>/</code> 键可快速唤起搜索</li>
+  <li><strong>轻笺智域</strong>：内置 AI 对话助手，支持联网搜索、深度思考、多语言翻译，以及常见功能问题快捷问答</li>
+  <li><strong>工作台</strong>：聚合书签/笔记/文件总数、7 天活跃趋势、高频书签与标签热度排行，快捷操作一步直达</li>
+</ul>
+
+<h3>🖥 多端体验</h3>
+<p>轻笺全面适配<b>PC、手机和平板</b>，各端界面与交互均做了针对性优化，数据云端同步，随时随地访问您的知识库。</p>
+
+<h3>🎨 个性化设置</h3>
+<ul>
+  <li><strong>主题模式</strong>：浅色 / 深色 / 跟随系统，三种模式自由切换</li>
+  <li><strong>语言</strong>：支持中文和英文界面</li>
+</ul>
+
+<h3>📂 快速上手</h3>
+<ol>
+  <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
+  <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
+  <li>打开<b>笔记库</b>新建笔记，用标签关联相关知识</li>
+  <li>使用<b>云空间</b>上传文件，为文件关联标签实现分类</li>
+  <li>在导航栏搜索框输入关键词，一键定位任何资源</li>
+</ol>
+
+<h3>💬 反馈与支持</h3>
+<p>如果您在使用中遇到问题或有改进建议，可通过以下方式联系我：</p>
+<div style="margin: 8px 0;">
+  邮箱：<a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
+</div>
+<p>也可以在<b>个人中心 → 意见反馈</b>直接提交，我会尽快回复。</p>
+
+<p>感谢您的信任与支持！轻笺仍在持续迭代，更多实用功能正在路上 ✌️</p>
     `
         : `
-      <p>Hello! Thank you for using 【Light Note】.</p>
-      <p>Light Note is a cloud-based bookmark management tool designed specifically for efficiency enthusiasts, with smart tags at its core, helping you instantly archive web pages, notes, and inspiration snippets. Through a dynamically associated tag network, it enables cross-device instant search, multi-dimensional classification, and intelligent recommendation of bookmarks/notes, making knowledge management as easy and fun as browsing social feeds.</p>
-      <p>This help documentation aims to provide you with detailed usage guides and answers to common questions, helping you use this platform more efficiently. Here, you can find detailed introductions about the following aspects:</p>
-      <ul>
-        <li><strong>Account Management</strong>: How to register, log in, recover passwords, and modify personal information.</li>
-        <li><strong>Function Operations</strong>: Operation steps and precautions for various platform functions.</li>
-        <li><strong>Frequently Asked Questions</strong>: Solutions to problems users may encounter during use.</li>
-      </ul>
-      <p>To better assist you, please search for the content you need to understand using the left directory or search box. In addition, our website supports <b>multi-device adaptation</b>, whether you are on PC, mobile phone, or tablet, you can enjoy a consistent excellent experience.</p>
-      <p>If you encounter any problems during use, please provide your valuable suggestions through feedback. You can also contact me through the following methods:</p>
-      <div>
-        Email: <a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
-      </div>
-      <p>Although the project was established not long ago, I guarantee that the quality is excellent, and considerable effort has been put into the details, ensuring you'll be satisfied with the experience! In the future, I will continue to upgrade it, such as adding bookmark export/import, bookmark sharing, bookmark synchronization and backup, team collaboration, AI analysis, and other features, making bookmark management more flexible and convenient. Please look forward to it - more practical features are on the way, guaranteeing to take your bookmark management experience to the next level!</p>
-      <p>Thank you for your understanding and support!</p>
+     <h2>Welcome to Light Note Help Center 👋</h2>
+<p>Hello! Thank you for choosing <b>Light Note</b> — a smart tag-powered cloud knowledge management tool.</p>
+<p>Light Note is more than a bookmark collector. It's a knowledge hub that unifies <b>bookmarks, notes, and files</b> under a <b>shared tag system</b> for dynamic cross-type association. Whether you're capturing inspiration, organizing research, or writing in depth, Light Note helps you connect scattered information into a coherent system.</p>
+
+<h3>✨ Core Features</h3>
+<ul>
+  <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats</li>
+  <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
+  <li><strong>Note Library</strong>: Rich text editor with multi-level headings and code blocks; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
+  <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
+  <li><strong>Resource Center</strong>: Global search from the navigation bar — find bookmarks, notes, files, and tags in one place; filter by type; press <code>/</code> to quickly activate search</li>
+  <li><strong>Light Note AI</strong>: Built-in AI chat assistant with web search, deep thinking, multi-language translation, and quick answers to common feature questions</li>
+  <li><strong>Workbench</strong>: Aggregate bookmark/note/file totals, 7-day activity trends, top bookmarks and tag popularity rankings, and one-click quick actions</li>
+</ul>
+
+<h3>🖥 Multi-Device Experience</h3>
+<p>Light Note is fully optimized for <b>PC, mobile, and tablet</b>, with tailored interfaces and interactions for each device. Your data syncs via the cloud, so you can access your knowledge base anytime, anywhere.</p>
+
+<h3>🎨 Personalization</h3>
+<ul>
+  <li><strong>Theme</strong>: Light / Dark / Follow System — switch freely among three modes</li>
+  <li><strong>Language</strong>: Supports Chinese and English interfaces</li>
+</ul>
+
+<h3>📂 Quick Start</h3>
+<ol>
+  <li>On the <b>Bookmarks</b> page, click tags to filter your saved web pages</li>
+  <li>Go to <b>Bookmark Management</b> to add, edit, or batch-operate bookmarks</li>
+  <li>Open the <b>Note Library</b> to create notes and link them with tags</li>
+  <li>Use <b>Cloud Space</b> to upload files and associate tags for classification</li>
+  <li>Type keywords in the navigation search bar to locate any resource instantly</li>
+</ol>
+
+<h3>💬 Feedback & Support</h3>
+<p>If you encounter any issues or have suggestions for improvement, feel free to reach out:</p>
+<div style="margin: 8px 0;">
+  Email: <a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
+</div>
+<p>You can also submit feedback directly via <b>Personal Center → Feedback</b>, and I'll respond as soon as possible.</p>
+
+<p>Thank you for your trust and support! Light Note is continuously evolving — more practical features are on the way ✌️</p>
     `,
   };
 

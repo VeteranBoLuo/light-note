@@ -8,10 +8,7 @@
         <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
       </div>
       <div class="handle-btn-group">
-        <TagFilterSelector
-          v-if="currentViewMode === 'card'"
-          :allTags="visibleNoteTags"
-        />
+        <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
         <b-button
           type="primary"
           style="border-radius: 20px"
@@ -36,10 +33,7 @@
           </b-button>
         </template>
         <template v-else>
-          <TagFilterSelector
-            v-if="currentViewMode === 'card'"
-            :allTags="visibleNoteTags"
-          />
+          <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
           <ViewModeToggle />
           <div
             class="search-icon flex-center dom-hover"
@@ -333,6 +327,8 @@
     height: 100%;
     border-top: 1px solid var(--notePage-topBody-border-color);
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
   }
 
   .note-library-header {
@@ -584,6 +580,11 @@
       :deep(.icon-base64) {
         color: var(--primary-color) !important;
       }
+    }
+  }
+  @media (max-width: 767px) {
+    .note-library-body {
+      margin-top: 40px;
     }
   }
 </style>

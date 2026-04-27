@@ -6,7 +6,6 @@
     <div
       class="category-body"
       :style="{
-        marginTop: bookmark.isDesktop ? '5px' : '',
         height: bookmark.isDesktop ? 'calc(100% - 40px)' : 'calc(100% - 50px)',
       }"
     >
@@ -33,7 +32,7 @@
               }"
             >
               <slot name="icon" :item="item"> </slot>
-              <span class="text-hidden" :style="{ width: hasIconSlot ? 'calc(100% - 28px)' : '100%' }">
+              <span class="text-hidden" style="width: 100%">
                 <slot name="title" :item="item">
                   {{ item[nodeType.title] }}
                 </slot>

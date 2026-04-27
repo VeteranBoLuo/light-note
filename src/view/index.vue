@@ -24,7 +24,12 @@
   const routeName = computed(() => String(route.name || ''));
 
   // 导航栏显示逻辑
-  const showNavigation = computed(() => !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value));
+  const showNavigation = computed(() => {
+    if (bookmark.isMobile) {
+      return route.path === '/home';
+    }
+    return !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value);
+  });
 
   // 背景图显示逻辑
   const bgVisible = computed(() => (bookmark.isMobile || !showNavigation.value ? 'unset' : ''));
