@@ -16,7 +16,7 @@
 </template>
 <script setup lang="ts">
   import { bookmarkStore, useUserStore } from '@/store';
-  import { h, nextTick, onMounted, onBeforeUnmount, watch, ref, computed } from 'vue';
+  import { h, nextTick, onMounted, onBeforeUnmount, watch, computed } from 'vue';
   import Login from '@/view/login/UserAuthModal.vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
@@ -37,6 +37,8 @@
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const OPINION_NOTICE_KEY = 'opinion-notice';
+  const OPINION_NOTICE_POLLING_INTERVAL = 60 * 1000;
+  const OPINION_NOTICE_MIN_REFRESH_GAP = 10 * 1000;
 
   // 监听主题变化
   watch(
@@ -71,6 +73,9 @@
 
   let mq = null;
   let mqListener = null;
+  let opinionNoticeTimer: number | null = null;
+  let lastOpinionNoticeRefreshAt = 0;
+  let opinionNoticeRequest: Promise<void> | null = null;
   const handleResize = throttle(() => {
     bookmark.screenWidth = window.innerWidth;
     bookmark.screenHeight = window.innerHeight;
@@ -171,6 +176,7 @@
   function handleUserLogout() {
     localStorage.setItem('userId', '');
     bookmark.isShowLogin = true;
+    stopOpinionNoticePolling();
     notification.close(OPINION_NOTICE_KEY);
   }
 
@@ -213,25 +219,64 @@
     });
   }
 
-  const refreshOpinionNotice = throttle(
-    async () => {
-      if (!localStorage.getItem('userId')) {
-        return;
-      }
+  async function refreshOpinionNotice(force = false) {
+    if (!localStorage.getItem('userId')) {
+      stopOpinionNoticePolling();
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastOpinionNoticeRefreshAt < OPINION_NOTICE_MIN_REFRESH_GAP) {
+      return;
+    }
+
+    if (opinionNoticeRequest) {
+      return opinionNoticeRequest;
+    }
+
+    opinionNoticeRequest = (async () => {
       try {
         const res = await opinionApi.getOpinionNotice();
         if (res.status === 200) {
+          lastOpinionNoticeRefreshAt = Date.now();
           user.pendingOpinionTotal = res.data.pendingTotal || 0;
           user.unreadOpinionReplyTotal = res.data.unreadReplyTotal || 0;
           openOpinionNotice(res.data);
         }
       } catch (error) {
         console.error('获取反馈提醒失败', error);
+      } finally {
+        opinionNoticeRequest = null;
       }
-    },
-    800,
-    { trailing: true },
-  );
+    })();
+
+    return opinionNoticeRequest;
+  }
+
+  function stopOpinionNoticePolling() {
+    if (opinionNoticeTimer !== null) {
+      window.clearInterval(opinionNoticeTimer);
+      opinionNoticeTimer = null;
+    }
+  }
+
+  function startOpinionNoticePolling() {
+    stopOpinionNoticePolling();
+    if (!localStorage.getItem('userId')) {
+      return;
+    }
+    opinionNoticeTimer = window.setInterval(() => {
+      if (!document.hidden) {
+        refreshOpinionNotice();
+      }
+    }, OPINION_NOTICE_POLLING_INTERVAL);
+  }
+
+  function handlePageActivated() {
+    if (!document.hidden) {
+      refreshOpinionNotice(true);
+    }
+  }
 
   const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
@@ -331,18 +376,18 @@
   onMounted(async () => {
     initApp();
     await init();
+    startOpinionNoticePolling();
+    window.addEventListener('focus', handlePageActivated);
+    document.addEventListener('visibilitychange', handlePageActivated);
     checkUpdateNotice();
-  });
-  const removeAfterEach = router.afterEach(() => {
-    if (localStorage.getItem('userId')) {
-      refreshOpinionNotice();
-    }
   });
 
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
-    removeAfterEach();
+    stopOpinionNoticePolling();
     window.removeEventListener('resize', handleResize);
+    window.removeEventListener('focus', handlePageActivated);
+    document.removeEventListener('visibilitychange', handlePageActivated);
     if (mq && mqListener) {
       mq.removeEventListener('change', mqListener);
     }

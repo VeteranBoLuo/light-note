@@ -29,7 +29,9 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button @click="clearApiLogs" type="primary">清空日志</b-button>
+          <a-switch v-model:checked="filterRoot" @change="searchApiLog()" />开启管理员过滤
+          <b-button @click="handleSearch" type="primary">搜索</b-button>
+          <b-button @click="clearApiLogs">清空日志</b-button>
         </div>
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
@@ -49,6 +51,10 @@
               <div>
                 请求参数：
                 <pre>{{ record.req }}</pre>
+                <div
+                  >响应结果：
+                  <pre>{{ record.res }}</pre>
+                </div>
               </div>
               <div>ip地址：{{ record?.ip }}</div>
               <div>指纹：{{ record.system?.fingerprint }}</div>
@@ -80,7 +86,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -89,10 +95,13 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
   const logList = ref([]);
+  const loading = ref(false);
+  const hasLoaded = ref(false);
+  const inPageActive = ref(false);
+  const requestToken = ref(0);
 
   const logColumns = computed(() => {
     return [
@@ -119,6 +128,11 @@
       {
         title: 'ip',
         dataIndex: 'ip',
+        ellipsis: true,
+      },
+      {
+        title: 'code',
+        dataIndex: 'statusCode',
         ellipsis: true,
       },
     ];
@@ -151,14 +165,19 @@
     });
   }
 
-  const timer = ref();
-  function handleSearch() {
+  const timer = ref<any>(null);
+  function clearSearchTimer() {
     if (timer.value) {
       clearTimeout(timer.value);
+      timer.value = null;
     }
+  }
+  function handleSearch() {
+    clearSearchTimer();
     timer.value = setTimeout(() => {
-      searchApiLog();
-    }, 500);
+      currentPage.value = 1;
+      searchApiLog({ silent: true });
+    }, 300);
   }
 
   const total = ref(0);
@@ -188,22 +207,80 @@
     ];
   });
 
-  function searchApiLog() {
+  function cancelPendingRequest() {
+    requestToken.value += 1;
+    loading.value = false;
+  }
+
+  const filterRoot = ref(true);
+
+  function searchApiLog(options: { silent?: boolean } = {}) {
+    const currentToken = ++requestToken.value;
+    loading.value = true;
     apiQueryPost('/api/common/getApiLogs', {
       currentPage: currentPage.value,
       pageSize: pageSize.value,
       filters: {
         key: searchValue.value,
+        filterRoot: filterRoot.value,
       },
-    }).then((res) => {
-      if (res.status === 200) {
-        logList.value = res.data.items;
-        total.value = res.data.total;
-      }
-    });
+    })
+      .then((res) => {
+        if (currentToken !== requestToken.value) {
+          return;
+        }
+        if (res.status === 200) {
+          logList.value = res.data.items;
+          total.value = res.data.total;
+          hasLoaded.value = true;
+        } else if (!options.silent) {
+          message.error(res.msg || '查询日志失败');
+        }
+      })
+      .catch((error) => {
+        if (currentToken !== requestToken.value) {
+          return;
+        }
+        if (!options.silent) {
+          message.error(error?.message || '查询日志失败');
+        }
+      })
+      .finally(() => {
+        if (currentToken === requestToken.value) {
+          loading.value = false;
+        }
+      });
   }
+
+  const handleVisibilityChange = () => {
+    if (!document.hidden && hasLoaded.value && inPageActive.value) {
+      searchApiLog({ silent: true });
+    }
+  };
+
   onMounted(() => {
+    inPageActive.value = true;
     searchApiLog();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  });
+
+  onActivated(() => {
+    inPageActive.value = true;
+    if (hasLoaded.value) {
+      searchApiLog({ silent: true });
+    }
+  });
+
+  onDeactivated(() => {
+    inPageActive.value = false;
+    cancelPendingRequest();
+  });
+
+  onUnmounted(() => {
+    inPageActive.value = false;
+    clearSearchTimer();
+    cancelPendingRequest();
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 </script>
 
