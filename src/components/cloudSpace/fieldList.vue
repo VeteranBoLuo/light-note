@@ -2,9 +2,27 @@
   <div class="field-list">
     <div v-if="batchMode" class="batch-actions">
       <b-space :size="10">
-        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
-        <b-button size="small" type="primary" @click="handleBatchMove">{{ $t('cloudSpace.batchMove') }}</b-button>
-        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+        <b-button
+          size="small"
+          type="danger"
+          @click="handleBatchDelete"
+          v-click-log="{ module: '云空间', operation: '点击批量删除文件' }"
+          >{{ $t('cloudSpace.batchDelete') }}</b-button
+        >
+        <b-button
+          size="small"
+          type="primary"
+          @click="handleBatchMove"
+          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
+          >{{ $t('cloudSpace.batchMove') }}</b-button
+        >
+        <b-button
+          size="small"
+          type="success"
+          :loading="batchDownloadLoading"
+          @click="handleBatchDownload"
+          v-click-log="{ module: '云空间', operation: '点击批量下载文件' }"
+        >
           {{ $t('cloudSpace.batchDownload') }}
         </b-button>
         <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
@@ -57,8 +75,13 @@
             @change="(e: any) => toggleRow(item.id, e.target.checked)"
             class="row-checkbox"
           />
-          <div v-if="!item.isRename" class="file-label flex-align-center" @click="emit('previewFile', item)"
-            ><svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
+          <div
+            v-if="!item.isRename"
+            class="file-label flex-align-center"
+            @click="emit('previewFile', item)"
+            v-click-log="{ module: '云空间', operation: `预览文件【${item.fileName}】` }"
+          >
+            <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
             <span style="width: 100%" class="text-hidden">{{ item.fileName }}</span>
           </div>
           <b-input v-else class="edit-file-input" v-model:value="item.fileName" @click.stop @enter="submitReName(item)">
@@ -75,18 +98,37 @@
                 class="download-icon"
                 :src="icon.cloudSpace.download"
                 size="20"
-                @click="downloadField(item.id)"
+                @click="handleDownloadFile(item)"
+                v-click-log="{ module: '云空间', operation: `点击下载文件【${item.fileName}】` }"
               />
             </a-tooltip>
             <a-tooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
-              <svg-icon class="download-icon" :src="icon.cloudSpace.rename" size="20" @click="handleReName(item)" />
+              <svg-icon
+                class="download-icon"
+                :src="icon.cloudSpace.rename"
+                size="20"
+                @click="handleReName(item)"
+                v-click-log="{ module: '云空间', operation: `编辑文件名【${item.fileName}】` }"
+              />
             </a-tooltip>
             <a-tooltip :title="$t('cloudSpace.relateTags')">
-              <svg-icon class="download-icon" :src="icon.manage_categoryBtn_tag" size="20" @click="openTagDialog(item)" />
+              <svg-icon
+                class="download-icon"
+                :src="icon.manage_categoryBtn_tag"
+                size="20"
+                @click="openTagDialog(item)"
+                v-click-log="{ module: '云空间', operation: `打开文件标签配置【${item.fileName}】` }"
+              />
             </a-tooltip>
             <!-- 删除按钮 -->
             <a-tooltip :title="$t('common.delete')">
-              <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item.id)" />
+              <svg-icon
+                class="delete-icon"
+                :src="icon.noteDetail.delete"
+                size="20"
+                @click="handleDelFile(item)"
+                v-click-log="{ module: '云空间', operation: `点击删除文件【${item.fileName}】` }"
+              />
             </a-tooltip>
             <b-menu
               v-if="!bookmark.isMobile"
@@ -123,6 +165,7 @@
                 :key="tag.id"
                 class="file-tag-chip text-hidden dom-hover"
                 @click.stop="goToTagDetail(tag.id)"
+                v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
               >
                 {{ tag.name }}
               </span>
@@ -212,6 +255,7 @@
   import JSZip from 'jszip';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { useRouter } from 'vue-router';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
   const emit = defineEmits(['previewFile', 'moveField']);
@@ -335,21 +379,28 @@
       fileName: nextName,
     }).then((res) => {
       if (res.status === 200) {
+        recordOperation({ module: '云空间', operation: `重命名文件【${nextName}】` });
         message.success(t('cloudSpace.renameSuccess'));
         cloud.queryFieldList();
       }
     });
   }
-  function handleDelFile(id) {
+  function handleDelFile(file) {
     Alert.alert({
       title: t('cloudSpace.alertTitle'),
       content: t('cloudSpace.confirmDelete'),
       onOk() {
-        deleteField(id).then(() => {
+        deleteField(file.id).then(() => {
+          recordOperation({ module: '云空间', operation: `删除文件【${file.fileName}】` });
           cloud.queryFieldList();
         });
       },
     });
+  }
+
+  async function handleDownloadFile(file: any) {
+    await downloadField(file.id);
+    recordOperation({ module: '云空间', operation: `下载文件【${file.fileName}】` });
   }
 
   async function openTagDialog(file: any) {
@@ -389,6 +440,7 @@
         tags: selectedTagIds.value,
       });
       if (res.status === 200) {
+        recordOperation({ module: '云空间', operation: `保存文件关联标签【${activeTagFile.value.fileName}】` });
         message.success(t('common.saveSuccess'));
         closeTagDialog();
         cloud.queryFieldList();
@@ -416,6 +468,7 @@
         apiBasePost('/api/file/deleteFileById', { ids: selectedRows.value }).then((res) => {
           if (res.status === 200) {
             const count = res.data?.count || selectedRows.value.length;
+            recordOperation({ module: '云空间', operation: `批量删除文件【${count}个】` });
             message.success(`${t('cloudSpace.batchDeleteSuccess')} ${count} ${t('cloudSpace.files')}`);
           } else {
             message.error(res.msg || t('cloudSpace.deleteFailed'));
@@ -512,6 +565,7 @@
     const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
     if (selectedFiles.length === 1) {
       await downloadField(selectedFiles[0].id);
+      recordOperation({ module: '云空间', operation: `下载文件【${selectedFiles[0].fileName}】` });
       return;
     }
 
@@ -581,6 +635,7 @@
       URL.revokeObjectURL(url);
 
       downloadProgress.value.percent = 100;
+      recordOperation({ module: '云空间', operation: `批量下载文件成功【${selectedFiles.length}个】` });
     } catch (error) {
       if (isBatchDownloadCancelledError(error)) {
         message.info(t('cloudSpace.batchDownloadCancelled'));
@@ -598,6 +653,7 @@
   };
 
   async function handleShareFile(id, fileName, fileType) {
+    recordOperation({ module: '云空间', operation: `打开文件分享弹窗【${fileName}】` });
     shareTarget.value = { id, fileName, fileType };
     shareDescValue.value = '';
     shareDescVisible.value = true;
@@ -616,6 +672,7 @@
       shareSubmitting.value = true;
       const desc = shareDescValue.value.trim();
       await shareField(shareTarget.value.id, shareTarget.value.fileName, shareTarget.value.fileType, desc);
+      recordOperation({ module: '云空间', operation: `分享文件【${shareTarget.value.fileName}】` });
       shareDescVisible.value = false;
       shareTarget.value = null;
       shareDescValue.value = '';
@@ -660,6 +717,7 @@
     }
 
     event.dataTransfer.effectAllowed = 'copyMove';
+    recordOperation({ module: '云空间', operation: `拖拽文件【${file.fileName}】` });
     const fileUrl = String(file.fileUrl || '');
     const fileName = String(file.fileName || 'file');
     const mimeType = String(file.fileType || '').includes('/') ? String(file.fileType) : 'application/octet-stream';

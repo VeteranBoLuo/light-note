@@ -25,7 +25,13 @@
             <div class="suggest-title">{{ t('resourceCenter.title') }}</div>
             <div class="suggest-subtitle">{{ t('resourceCenter.suggestSubtitle') }}</div>
           </div>
-          <button class="refresh-btn" @mousedown.prevent="refreshData">{{ t('resourceCenter.refreshShort') }}</button>
+          <button
+            class="refresh-btn"
+            @mousedown.prevent="refreshData"
+            v-click-log="{ module: '全局搜索', operation: '刷新搜索建议' }"
+          >
+            {{ t('resourceCenter.refreshShort') }}
+          </button>
         </div>
 
         <div v-if="loading" class="suggest-loading">
@@ -35,7 +41,13 @@
         <template v-else-if="suggestGroups.length">
           <div v-for="group in suggestGroups" :key="group.type" class="suggest-group">
             <div class="group-label">{{ getGroupLabel(group.type) }}</div>
-            <button v-for="item in group.items" :key="`${item.type}-${item.id}`" class="suggest-item" @mousedown.prevent="openItem(item)">
+            <button
+              v-for="item in group.items"
+              :key="`${item.type}-${item.id}`"
+              class="suggest-item"
+              @mousedown.prevent="openItem(item)"
+              v-click-log="{ module: '全局搜索', operation: `打开搜索建议【${item.type}:${item.title}】` }"
+            >
               <span class="type-dot" :class="`type-dot--${item.type}`"></span>
               <span class="item-main">
                 <span class="item-title">{{ item.title }}</span>
@@ -54,7 +66,7 @@
       </div>
     </div>
 
-    <button v-else class="mobile-search-trigger" @click="openMobileSearch">
+    <button v-else class="mobile-search-trigger" @click="openMobileSearch" v-click-log="{ module: '全局搜索', operation: '打开移动端搜索' }">
       <svg-icon size="16" :src="icon.navigation.search" />
       <span class="mobile-search-placeholder">{{ t('resourceCenter.mobileTrigger') }}</span>
     </button>
@@ -84,7 +96,13 @@
           <template v-else-if="suggestGroups.length">
             <div v-for="group in suggestGroups" :key="group.type" class="suggest-group">
               <div class="group-label">{{ getGroupLabel(group.type) }}</div>
-              <button v-for="item in group.items" :key="`${item.type}-${item.id}`" class="suggest-item" @click="openItem(item)">
+              <button
+                v-for="item in group.items"
+                :key="`${item.type}-${item.id}`"
+                class="suggest-item"
+                @click="openItem(item)"
+                v-click-log="{ module: '全局搜索', operation: `打开搜索建议【${item.type}:${item.title}】` }"
+              >
                 <span class="type-dot" :class="`type-dot--${item.type}`"></span>
                 <span class="item-main">
                   <span class="item-title">{{ item.title }}</span>
@@ -114,6 +132,7 @@
   import { fetchGlobalSearch, SearchGroup, SearchResultItem } from '@/api/search.ts';
   import { useI18n } from 'vue-i18n';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const router = useRouter();
   const route = useRoute();
@@ -185,6 +204,7 @@
 
   function goSearch() {
     const q = keyword.value.trim();
+    recordOperation({ module: '全局搜索', operation: q ? `进入资源中心搜索【${q}】` : '进入资源中心' });
     suggestVisible.value = false;
     mobileVisible.value = false;
     router.push({ path: '/search', query: q ? { q } : {} });
@@ -214,6 +234,7 @@
     if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
     if (!isSearchAvailable.value) return;
     event.preventDefault();
+    recordOperation({ module: '全局搜索', operation: '使用快捷键唤起搜索' });
     document.getElementById('global-search-input')?.focus();
     openSuggest();
   }

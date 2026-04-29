@@ -6,11 +6,11 @@
         <p>面向对象/数组的可视化编辑面板，左侧写代码，右侧快速折叠展开结构。右键结构树节点可进行更多操作。</p>
       </div>
       <div class="hero-actions">
-        <b-button size="small" @click="loadSample">加载示例</b-button>
-        <b-button size="small" @click="compressJson">压缩</b-button>
-        <b-button size="small" @click="formatJson">格式化</b-button>
-        <b-button size="small" @click="expandAll">全部展开</b-button>
-        <b-button size="small" @click="collapseAll">全部折叠</b-button>
+        <b-button size="small" @click="loadSample" v-click-log="{ module: '工具箱', operation: 'JSON加载示例' }">加载示例</b-button>
+        <b-button size="small" @click="compressJson" v-click-log="{ module: '工具箱', operation: 'JSON压缩' }">压缩</b-button>
+        <b-button size="small" @click="formatJson" v-click-log="{ module: '工具箱', operation: 'JSON格式化' }">格式化</b-button>
+        <b-button size="small" @click="expandAll" v-click-log="{ module: '工具箱', operation: 'JSON全部展开' }">全部展开</b-button>
+        <b-button size="small" @click="collapseAll" v-click-log="{ module: '工具箱', operation: 'JSON全部折叠' }">全部折叠</b-button>
       </div>
     </section>
 
@@ -64,6 +64,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import JsonTreeNode from './JsonTreeNode.vue';
   import Splitpanes from '@/components/base/Splitpanes.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   type NodeType = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
 
@@ -149,6 +150,7 @@
       jsonContent.value = formatted;
       updateEditorDoc(formatted);
       syncTree();
+      recordOperation({ module: '工具箱', operation: 'JSON格式化成功' });
       message.success('JSON 已格式化');
     } catch {
       message.error('当前 JSON 无法格式化');
@@ -162,6 +164,7 @@
       jsonContent.value = compact;
       updateEditorDoc(compact);
       syncTree();
+      recordOperation({ module: '工具箱', operation: 'JSON压缩成功' });
       message.success('JSON 已压缩');
     } catch {
       message.error('当前 JSON 无法压缩');
@@ -318,6 +321,7 @@
       updateEditorDoc('');
       syncTree();
       collapsedMap.value = {};
+      recordOperation({ module: '工具箱', operation: 'JSON删除根节点' });
       message.success('根节点已删除，内容已清空');
       return;
     }
@@ -334,6 +338,7 @@
       jsonContent.value = nextJson;
       updateEditorDoc(nextJson);
       syncTree();
+      recordOperation({ module: '工具箱', operation: 'JSON删除节点' });
       message.success('节点已删除');
     } catch {
       message.error('当前 JSON 无法解析，删除失败');
@@ -374,6 +379,7 @@
       if (jsonError.value) {
         message.error('JSON 校验失败');
       } else {
+        recordOperation({ module: '工具箱', operation: 'JSON快捷键校验通过' });
         message.success('JSON 校验通过');
       }
     }

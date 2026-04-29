@@ -6,14 +6,14 @@
         <p>支持 encodeURIComponent / decodeURIComponent 与 encodeURI / decodeURI，适合处理查询参数和完整链接。</p>
       </div>
       <div class="hero-actions">
-        <b-button size="small" @click="encodeComponent">编码参数</b-button>
-        <b-button size="small" @click="decodeComponent">解码参数</b-button>
-        <b-button size="small" @click="encodeFullUrl">编码链接</b-button>
-        <b-button size="small" @click="decodeFullUrl">解码链接</b-button>
-        <b-button size="small" @click="swapText">交换输入输出</b-button>
-        <b-button size="small" @click="copyOutput">复制输出</b-button>
-        <b-button size="small" @click="fillSample">示例</b-button>
-        <b-button size="small" @click="clearAll">清空</b-button>
+        <b-button size="small" @click="encodeComponent" v-click-log="{ module: '工具箱', operation: 'URL编码参数' }">编码参数</b-button>
+        <b-button size="small" @click="decodeComponent" v-click-log="{ module: '工具箱', operation: 'URL解码参数' }">解码参数</b-button>
+        <b-button size="small" @click="encodeFullUrl" v-click-log="{ module: '工具箱', operation: 'URL编码链接' }">编码链接</b-button>
+        <b-button size="small" @click="decodeFullUrl" v-click-log="{ module: '工具箱', operation: 'URL解码链接' }">解码链接</b-button>
+        <b-button size="small" @click="swapText" v-click-log="{ module: '工具箱', operation: 'URL交换输入输出' }">交换输入输出</b-button>
+        <b-button size="small" @click="copyOutput" v-click-log="{ module: '工具箱', operation: 'URL复制输出' }">复制输出</b-button>
+        <b-button size="small" @click="fillSample" v-click-log="{ module: '工具箱', operation: 'URL加载示例' }">示例</b-button>
+        <b-button size="small" @click="clearAll" v-click-log="{ module: '工具箱', operation: 'URL清空' }">清空</b-button>
       </div>
     </section>
 

@@ -133,6 +133,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const route = useRoute();
   const { t } = useI18n();
@@ -213,6 +214,7 @@
         await downloadField(id);
         loading.value = false;
         downloadSuccess.value = true;
+        recordOperation({ module: '分享文件', operation: `下载分享文件【${file.fileName || id}】` });
       } catch (error) {
         console.error('下载失败:', error);
         loading.value = false;
@@ -221,6 +223,7 @@
   };
 
   const previewFile = () => {
+    recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName || route.params.id}】` });
     previewVisible.value = true;
   };
 

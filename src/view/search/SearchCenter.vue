@@ -13,13 +13,15 @@
           :placeholder="t('resourceCenter.searchPlaceholder')"
           height="46px"
           @input="syncQuery"
-          @enter="syncQueryNow"
+          @enter="submitSearch"
         >
           <template #prefix>
             <svg-icon :src="icon.navigation.search" size="18" />
           </template>
         </b-input>
-        <button class="refresh-btn" @click="refreshData">{{ t('resourceCenter.refresh') }}</button>
+        <button class="refresh-btn" @click="refreshData" v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }">
+          {{ t('resourceCenter.refresh') }}
+        </button>
       </div>
       <div class="hero-stats">
         <div v-for="stat in stats" :key="stat.type" class="stat-card">
@@ -36,7 +38,8 @@
           :key="item.value"
           class="filter-item"
           :class="{ active: activeType === item.value }"
-          @click="activeType = item.value"
+          @click="setActiveType(item.value)"
+          v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
         >
           <span class="filter-dot" :class="`filter-dot--${item.value}`"></span>
           <span>{{ item.label }}</span>
@@ -50,7 +53,9 @@
             <div class="result-title">{{ t('resourceCenter.results') }}</div>
             <div class="result-subtitle">{{ resultSubtitle }}</div>
           </div>
-          <button class="clear-btn" :disabled="!keyword" @click="clearKeyword">{{ t('resourceCenter.clear') }}</button>
+          <button class="clear-btn" :disabled="!keyword" @click="clearKeyword" v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }">
+            {{ t('resourceCenter.clear') }}
+          </button>
         </div>
 
         <div v-if="loading" class="result-skeleton">
@@ -69,6 +74,7 @@
                 :key="`${item.type}-${item.id}`"
                 class="result-card"
                 @click="openItem(item)"
+                v-click-log="{ module: '资源中心', operation: `打开搜索结果【${item.type}:${item.title}】` }"
               >
                 <div class="card-top">
                   <span class="type-pill" :class="`type-pill--${item.type}`">{{ labels[group.type] }}</span>
@@ -103,6 +109,7 @@
   import { fetchGlobalSearch, SearchGroup, SearchResultItem, SearchType } from '@/api/search.ts';
   import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const route = useRoute();
   const router = useRouter();
@@ -183,6 +190,14 @@
     });
   }
 
+  function submitSearch() {
+    const q = keyword.value.trim();
+    if (q) {
+      recordOperation({ module: '资源中心', operation: `搜索资源【${q}】` });
+    }
+    syncQueryNow();
+  }
+
   function clearKeyword() {
     keyword.value = '';
     syncQueryNow();
@@ -199,6 +214,10 @@
       return;
     }
     if (item.route) router.push(item.route);
+  }
+
+  function setActiveType(type: SearchType | 'all') {
+    activeType.value = type;
   }
 
   watch(

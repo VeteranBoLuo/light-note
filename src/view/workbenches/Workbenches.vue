@@ -25,6 +25,7 @@
         :key="item.key"
         :class="['summary-card', 'dom-hover', `summary-card--${item.key}`]"
         @click="router.push(item.to)"
+        v-click-log="{ module: '工作台', operation: `查看${item.label}` }"
       >
         <div class="summary-top">
           <div class="summary-label">{{ item.label }}</div>
@@ -77,6 +78,7 @@
             :key="action.key"
             class="quick-action-item dom-hover"
             @click="router.push(action.to)"
+            v-click-log="{ module: '工作台', operation: `点击快捷操作【${action.label}】` }"
           >
             <span class="action-name">{{ action.label }}</span>
             <span class="action-desc">{{ action.desc }}</span>
@@ -100,6 +102,7 @@
               :class="{ active: user.preferences.theme === option.value }"
               :disabled="preferenceSaving"
               @click="updatePreference('theme', option.value)"
+              v-click-log="{ module: '工作台', operation: `设置主题偏好【${option.label}】` }"
             >
               {{ option.label }}
             </button>
@@ -116,6 +119,7 @@
               :class="{ active: user.preferences.lang === option.value }"
               :disabled="preferenceSaving"
               @click="updatePreference('lang', option.value)"
+              v-click-log="{ module: '工作台', operation: `设置语言偏好【${option.label}】` }"
             >
               {{ option.label }}
             </button>
@@ -132,6 +136,7 @@
               :class="{ active: currentHomePage === option.value }"
               :disabled="preferenceSaving"
               @click="updatePreference('homePage', option.value)"
+              v-click-log="{ module: '工作台', operation: `设置默认首页【${option.label}】` }"
             >
               {{ option.label }}
             </button>
@@ -163,6 +168,7 @@
             class="update-log-title dom-hover"
             :class="{ active: activeUpdateLogIndex === index }"
             @click="toggleUpdateLog(index)"
+            v-click-log="{ module: '工作台', operation: `查看更新日志【${log.time || index + 1}】` }"
           >
             <span class="log-label" v-html="log.label || `${t('workbench.logs.update', '更新')} ${index + 1}`"></span>
             <span class="log-time">{{ log.time || '-' }}</span>
@@ -306,6 +312,7 @@
     type LanguagePreference,
     type ThemePreference,
   } from '@/utils/preferences.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const cloud = cloudSpaceStore();
@@ -521,6 +528,9 @@
   ]);
 
   function handleCommonBookmarkClick(record) {
+    if (record?.name) {
+      recordOperation({ module: '工作台', operation: `点击书签卡片${record.name}` });
+    }
     if (record?.url) {
       window.open(record.url, '_blank');
       return;
@@ -529,6 +539,7 @@
   }
 
   function handleHotTagClick(record) {
+    recordOperation({ module: '工作台', operation: `查看热门标签【${record?.name || '未知标签'}】` });
     if (record?.id) {
       router.push(`/tag/${record.id}`);
       return;
@@ -537,6 +548,7 @@
   }
 
   function handleRecentNoteClick(record) {
+    recordOperation({ module: '工作台', operation: `查看近期笔记【${record?.title || '未命名文档'}】` });
     if (record?.id) {
       router.push(`/noteLibrary/${record.id}`);
       return;
@@ -547,6 +559,7 @@
   const fileVisible = ref(false);
   const activeFile = ref<any>(null);
   function handleViewFile(file) {
+    recordOperation({ module: '工作台', operation: `预览近期文件【${file?.fileName || '未知文件'}】` });
     activeFile.value = file;
     fileVisible.value = true;
   }
@@ -672,6 +685,7 @@
         id: localStorage.getItem('userId'),
         preferences: JSON.stringify(nextPreferences),
       });
+      recordOperation({ module: '工作台', operation: `保存偏好设置【${key}】` });
       message.success(t('workbench.preferences.saved', '偏好设置已更新'));
       if (shouldReloadAfterSave) {
         location.reload();

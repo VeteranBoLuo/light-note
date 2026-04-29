@@ -20,6 +20,7 @@
   import icon from '@/config/icon.ts';
   import BList from '@/components/base/BasicComponents/BList.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const route = useRoute();
   const checkId = ref('jsonEditor');
@@ -43,6 +44,8 @@
   ]);
 
   const handleNodeClick = (menu: { id: string }) => {
+    const target = toolOptions.value.find((item) => item.id === menu.id);
+    recordOperation({ module: '工具箱', operation: `打开工具【${target?.title || menu.id}】` });
     router.push(`/tools/${menu.id}`);
   };
 

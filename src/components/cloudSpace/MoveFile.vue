@@ -29,6 +29,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
   const cloud = cloudSpaceStore();
   const checkValue = ref('');
   const { t } = useI18n();
@@ -51,6 +52,7 @@
       fileIds,
     }).then((res) => {
       if (res.status === 200) {
+        recordOperation({ module: '云空间', operation: `移动文件【${fileIds.length}个】` });
         const successMessage =
           fileIds.length === 1
             ? t('cloudSpace.moveSuccess')

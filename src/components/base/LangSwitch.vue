@@ -16,6 +16,7 @@
   import i18n, { setLocale } from '@/i18n';
   import { useUserStore } from '@/store';
   import userApi from '@/api/userApi.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
 
   const handleLangChange = ({ key }: { key: string }) => {
@@ -30,6 +31,7 @@
         }),
       })
       .then(() => {
+        recordOperation({ module: '导航栏', operation: `切换语言【${lang}】` });
         if (i18n.global.locale.value !== lang) {
           location.reload();
           localStorage.setItem(

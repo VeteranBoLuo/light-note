@@ -29,10 +29,12 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button type="primary" @click="syncFromPublished">同步帮助中心</b-button>
-          <b-button type="primary" @click="saveCurrentDraft">保存草稿</b-button>
-          <b-button type="danger" @click="deleteCurrentDraft">删除草稿</b-button>
-          <b-button type="success" @click="publishAllDraft">发布全部</b-button>
+          <b-button type="primary" @click="syncFromPublished" v-click-log="{ module: '后台管理-帮助中心', operation: '同步帮助中心' }">同步帮助中心</b-button>
+          <b-button type="primary" @click="saveCurrentDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '保存草稿' }">保存草稿</b-button>
+          <b-button type="danger" @click="deleteCurrentDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '删除草稿' }">删除草稿</b-button>
+          <b-button type="success" @click="publishAllDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '发布全部' }">发布全部</b-button>
+          <b-button @click="exportCurrentDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '导出当前草稿' }">导出</b-button>
+          <b-button @click="exportAllDrafts" v-click-log="{ module: '后台管理-帮助中心', operation: '导出全部草稿' }">导出全部</b-button>
         </div>
       </div>
 
@@ -55,8 +57,8 @@
         <div class="help-draft__editor-panel">
           <div class="help-draft__mode-switch">
             <b-input v-model:value="editTitle" placeholder="请输入标题" style="width: 200px" />
-            <b-button :type="isCreateMode ? 'primary' : ''" @click="switchMode(true)">新增模式</b-button>
-            <b-button :type="!isCreateMode ? 'primary' : ''" @click="switchMode(false)">编辑模式</b-button>
+            <b-button :type="isCreateMode ? 'primary' : ''" @click="switchMode(true)" v-click-log="{ module: '后台管理-帮助中心', operation: '切换新增模式' }">新增模式</b-button>
+            <b-button :type="!isCreateMode ? 'primary' : ''" @click="switchMode(false)" v-click-log="{ module: '后台管理-帮助中心', operation: '切换编辑模式' }">编辑模式</b-button>
           </div>
           <Editor class="help-draft__editor" v-model:content="draftContent" image-upload-mode="base64" />
         </div>
@@ -66,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -84,6 +86,9 @@
   } from '@/api/helpApi';
   import { bookmarkStore } from '@/store';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
+  import TurndownService from 'turndown';
+  import JSZip from 'jszip';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   type HelpItem = {
     id: string;
@@ -101,6 +106,10 @@
   const savingSort = ref(false);
   const draftContent = ref('');
   const canDragDraft = computed(() => !isCreateMode.value && !searchValue.value.trim());
+  const turndownService = new TurndownService({
+    headingStyle: 'atx',
+    codeBlockStyle: 'fenced',
+  });
 
   const viewOptions = computed(() => {
     if (!searchValue.value) {
@@ -112,26 +121,55 @@
   });
 
   const currentNode = computed<HelpItem | null>(() => {
-    if (!checkId.value) {
-      return draftOptions.value[0] || null;
+    if (isCreateMode.value || !checkId.value) {
+      return null;
     }
     return draftOptions.value.find((item) => String(item.id) === String(checkId.value)) || null;
   });
 
+  const resetEditorScroll = async () => {
+    await nextTick();
+    const editorRoot = document.querySelector<HTMLElement>('.help-draft__editor');
+    const scrollContainer = editorRoot?.querySelector<HTMLElement>('.note-editor-scroll');
+    const editorBody = editorRoot?.querySelector<HTMLElement>('.note-editor-body');
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0;
+    }
+    if (editorBody) {
+      editorBody.scrollTop = 0;
+    }
+  };
+
   const updateEditorContent = async (content?: string) => {
     if (isCreateMode.value) {
       draftContent.value = '<p>请在这里编辑帮助内容</p>';
+      await resetEditorScroll();
       return;
     }
     draftContent.value = content ?? currentNode.value?.content ?? '';
+    await resetEditorScroll();
+  };
+
+  const selectDraftLocally = async (item?: HelpItem | null) => {
+    if (!item) {
+      isCreateMode.value = false;
+      checkId.value = '';
+      editTitle.value = '';
+      draftContent.value = '';
+      return;
+    }
+    isCreateMode.value = false;
+    checkId.value = String(item.id);
+    editTitle.value = item.title || '';
+    await updateEditorContent(item.content || '');
   };
 
   const persistCurrentLocalDraft = () => {
     if (isCreateMode.value) {
       return;
     }
-    if (!currentNode.value) return;
-    const item = draftOptions.value.find((row) => String(row.id) === String(currentNode.value?.id));
+    if (!checkId.value) return;
+    const item = draftOptions.value.find((row) => String(row.id) === String(checkId.value));
     if (!item) return;
     item.title = editTitle.value || '';
     item.content = draftContent.value || '';
@@ -153,13 +191,10 @@
       draftOptions.value = [];
     }
     if (draftOptions.value.length > 0) {
-      checkId.value = draftOptions.value[0].id;
-      editTitle.value = draftOptions.value[0].title || '';
-      await updateEditorContent(draftOptions.value[0].content || '');
+      await selectDraftLocally(draftOptions.value[0]);
       return;
     }
-    editTitle.value = '';
-    await updateEditorContent('');
+    await selectDraftLocally(null);
   };
 
   const selectNode = async (item: HelpItem) => {
@@ -167,9 +202,7 @@
       persistCurrentLocalDraft();
     }
     isCreateMode.value = false;
-    checkId.value = String(item.id);
-    editTitle.value = item.title || '';
-    await updateEditorContent(item.content || '');
+    await selectDraftLocally(item);
   };
 
   const switchMode = async (createMode: boolean) => {
@@ -191,8 +224,7 @@
     }
     const target =
       draftOptions.value.find((item) => String(item.id) === String(checkId.value)) || draftOptions.value[0];
-    editTitle.value = target?.title || '';
-    await updateEditorContent(target?.content || '');
+    await selectDraftLocally(target);
   };
 
   const saveDraftInternal = async () => {
@@ -217,10 +249,9 @@
         }
         const newId = res.data?.id ? String(res.data.id) : '';
         await fetchDraftConfig();
-        if (newId) {
-          checkId.value = newId;
-        }
-        isCreateMode.value = false;
+        const createdItem = draftOptions.value.find((item) => String(item.id) === newId);
+        await selectDraftLocally(createdItem || draftOptions.value[0] || null);
+        recordOperation({ module: '后台管理-帮助中心', operation: `新增帮助草稿【${title}】` });
         message.success('新增草稿成功');
         return true;
       }
@@ -236,6 +267,7 @@
       };
       const res = await saveHelpDraft(payload);
       if (res.status === 200) {
+        recordOperation({ module: '后台管理-帮助中心', operation: `保存帮助草稿【${payload.title || payload.id}】` });
         message.success('草稿保存成功');
         return true;
       }
@@ -257,6 +289,93 @@
       sort: index,
     }));
 
+  const safeFileName = (name?: string, fallback = '帮助文档') => {
+    const value = (name || fallback).trim() || fallback;
+    return value.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+  };
+
+  const downloadFile = (fileName: string, content: BlobPart, mimeType: string) => {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const htmlToMarkdown = (html: string) => {
+    try {
+      return turndownService.turndown(html || '').trim();
+    } catch (error) {
+      console.error('帮助文档 HTML 转 Markdown 失败:', error);
+      return html || '';
+    }
+  };
+
+  const buildMarkdown = (item: HelpItem) => {
+    const title = (item.title || '未命名帮助文档').trim();
+    const markdownBody = htmlToMarkdown(item.content || '');
+    return `# ${title}\n\n${markdownBody}\n`;
+  };
+
+  const getCurrentExportItem = (): HelpItem | null => {
+    if (isCreateMode.value) {
+      return {
+        id: 'new',
+        title: editTitle.value || '未保存帮助文档',
+        content: draftContent.value || '',
+      };
+    }
+    persistCurrentLocalDraft();
+    return currentNode.value;
+  };
+
+  const exportCurrentDraft = () => {
+    const item = getCurrentExportItem();
+    if (!item) {
+      message.warning('请选择要导出的草稿');
+      return;
+    }
+    if (!item.title?.trim()) {
+      message.warning('请先输入标题');
+      return;
+    }
+    const markdown = buildMarkdown(item);
+    downloadFile(`${safeFileName(item.title)}.md`, markdown, 'text/markdown;charset=utf-8');
+    recordOperation({ module: '后台管理-帮助中心', operation: `导出帮助草稿【${item.title}】` });
+    message.success('当前草稿已导出为 Markdown');
+  };
+
+  const exportAllDrafts = async () => {
+    if (!draftOptions.value.length) {
+      message.warning('暂无可导出的草稿');
+      return;
+    }
+    if (!isCreateMode.value) {
+      persistCurrentLocalDraft();
+    }
+    const zip = new JSZip();
+    const usedNames = new Set<string>();
+    draftOptions.value.forEach((item, index) => {
+      const baseName = safeFileName(`${String(index + 1).padStart(2, '0')}-${item.title || '未命名帮助文档'}`);
+      let fileName = `${baseName}.md`;
+      let count = 2;
+      while (usedNames.has(fileName)) {
+        fileName = `${baseName}-${count}.md`;
+        count += 1;
+      }
+      usedNames.add(fileName);
+      zip.file(fileName, buildMarkdown(item));
+    });
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    downloadFile('轻笺帮助中心草稿-Markdown.zip', zipBlob, 'application/zip');
+    recordOperation({ module: '后台管理-帮助中心', operation: `导出全部帮助草稿【${draftOptions.value.length}篇】` });
+    message.success(`已导出 ${draftOptions.value.length} 篇草稿`);
+  };
+
   const syncFromPublished = () => {
     Alert.alert({
       title: '提示',
@@ -264,6 +383,7 @@
       onOk() {
         syncHelpDraftFromPublished().then(async (res) => {
           if (res.status === 200) {
+            recordOperation({ module: '后台管理-帮助中心', operation: '同步帮助中心成功' });
             message.success('同步成功');
             await fetchDraftConfig();
           }
@@ -292,6 +412,7 @@
           publishAllHelpDraft().then((publishRes) => {
             if (publishRes.status === 200) {
               const total = Number(publishRes?.data?.total || 0);
+              recordOperation({ module: '后台管理-帮助中心', operation: `发布全部帮助文档【${total}条】` });
               message.success(`全量替换成功，已同步 ${total} 条草稿到帮助中心`);
             }
           });
@@ -318,6 +439,7 @@
         if (res.status !== 200) {
           return;
         }
+        recordOperation({ module: '后台管理-帮助中心', operation: `删除帮助草稿【${currentNode.value?.title || deletingId}】` });
         draftOptions.value = draftOptions.value.filter((item) => String(item.id) !== deletingId);
         if (draftOptions.value.length > 0) {
           const nextItem = draftOptions.value[0];
@@ -349,6 +471,8 @@
       const res = await saveHelpDraftBatch(toBatchPayload());
       if (res.status !== 200) {
         message.error('顺序保存失败，请重试');
+      } else {
+        recordOperation({ module: '后台管理-帮助中心', operation: '调整帮助草稿排序' });
       }
     } finally {
       savingSort.value = false;

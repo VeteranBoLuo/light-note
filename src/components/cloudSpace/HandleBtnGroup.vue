@@ -3,7 +3,13 @@
     <CloudStorageBar v-if="!bookmark.isMobile" />
     <!-- 上传按钮及提示 -->
     <div class="upload-container">
-      <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
+      <b-upload
+        multiple
+        class="upload-btn"
+        @change="handleChange"
+        :max-total-size="100 * 1024 * 1024"
+        v-click-log="{ module: '云空间', operation: '点击上传文件' }"
+      >
         <b-button type="primary">
           <UploadOutlined />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
@@ -54,6 +60,7 @@
   import axios from 'axios';
   import { reactive, ref } from 'vue';
   import icon from '@/config/icon';
+  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
@@ -219,10 +226,12 @@
             const failedFiles = confirmRes.data.filter((item) => item.status === '处理失败');
 
             if (successFiles.length > 0) {
+              recordOperation({ module: '云空间', operation: `上传文件成功【${successFiles.length}个】` });
               message.success(`成功上传 ${successFiles.length} 个文件`);
             }
 
             if (existedFiles.length > 0) {
+              recordOperation({ module: '云空间', operation: `覆盖已有文件【${existedFiles.length}个】` });
               message.warning(`覆盖了 ${existedFiles.length} 个已有文件`);
               existedFiles.forEach((item) => cloud.cacheImgArr.push(item.fileId));
             }
@@ -271,6 +280,7 @@
   // 取消上传确认
   const handleCancelConfirm = () => {
     if (uploadController.value) {
+      recordOperation({ module: '云空间', operation: '取消上传文件' });
       uploadController.value.abort();
       uploadController.value = null;
       uploadProgress.visible = false;

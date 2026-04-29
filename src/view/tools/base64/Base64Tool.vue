@@ -6,12 +6,12 @@
         <p>支持 UTF-8 文本编码与解码，适合快速处理参数、密钥片段和调试数据。</p>
       </div>
       <div class="hero-actions">
-        <b-button size="small" @click="encodeText">编码为 Base64</b-button>
-        <b-button size="small" @click="decodeText">解码为文本</b-button>
-        <b-button size="small" @click="swapText">交换输入输出</b-button>
-        <b-button size="small" @click="copyOutput">复制输出</b-button>
-        <b-button size="small" @click="fillSample">示例</b-button>
-        <b-button size="small" @click="clearAll">清空</b-button>
+        <b-button size="small" @click="encodeText" v-click-log="{ module: '工具箱', operation: 'Base64编码' }">编码为 Base64</b-button>
+        <b-button size="small" @click="decodeText" v-click-log="{ module: '工具箱', operation: 'Base64解码' }">解码为文本</b-button>
+        <b-button size="small" @click="swapText" v-click-log="{ module: '工具箱', operation: 'Base64交换输入输出' }">交换输入输出</b-button>
+        <b-button size="small" @click="copyOutput" v-click-log="{ module: '工具箱', operation: 'Base64复制输出' }">复制输出</b-button>
+        <b-button size="small" @click="fillSample" v-click-log="{ module: '工具箱', operation: 'Base64加载示例' }">示例</b-button>
+        <b-button size="small" @click="clearAll" v-click-log="{ module: '工具箱', operation: 'Base64清空' }">清空</b-button>
       </div>
     </section>
 

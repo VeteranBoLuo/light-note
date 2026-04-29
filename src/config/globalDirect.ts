@@ -1,4 +1,4 @@
-import { apiBasePost } from '@/http/request';
+import { recordOperation } from '@/api/commonApi.ts';
 
 export default function (app) {
   app.directive('drag', (el, binding) => {
@@ -113,7 +113,7 @@ export default function (app) {
     };
     el.onmouseup = () => {
       if (isMouseDown) {
-        apiBasePost('/api/common/recordOperationLogs', binding.value).then(() => {});
+        recordOperation(binding.value);
       }
       isMouseDown = false;
     };

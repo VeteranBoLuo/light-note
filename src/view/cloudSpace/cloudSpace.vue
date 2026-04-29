@@ -33,6 +33,7 @@
           <div
             style="font-weight: 500; font-size: 20px; position: absolute"
             @click="initializeCloudSpace"
+            v-click-log="{ module: '云空间', operation: '刷新云空间' }"
             class="dom-hover"
             >{{ $t('cloudSpace.title') }}</div
           >
@@ -49,7 +50,11 @@
             </b-input>
           </div>
           <FileTypeFilter />
-          <b-button class="batch-toggle-btn" @click="toggleBatchMode">
+          <b-button
+            class="batch-toggle-btn"
+            @click="toggleBatchMode"
+            v-click-log="{ module: '云空间', operation: batchMode ? '退出批量操作' : '开启批量操作' }"
+          >
             {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
           </b-button>
         </div>
@@ -61,6 +66,7 @@
             class="mobile-folder-item"
             :class="{ active: cloud.folder.id === 'all' }"
             @click="selectAllFolder"
+            v-click-log="{ module: '云空间', operation: '查看全部文件' }"
             :title="$t('cloudSpace.allFile')"
           >
             {{ $t('cloudSpace.allFile') }}
@@ -72,6 +78,7 @@
             :class="{ active: cloud.folder.id === folder.id }"
             :title="folder.name"
             @click="selectFolder(folder)"
+            v-click-log="{ module: '云空间', operation: `查看文件夹【${folder.name}】` }"
           >
             {{ folder.name }}
           </div>
@@ -111,6 +118,7 @@
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
   import { debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
@@ -204,6 +212,7 @@
     dragActive.value = false;
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
+      recordOperation({ module: '云空间', operation: `拖拽上传文件【${files.length}个】` });
       handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
     }
   }
@@ -237,6 +246,7 @@
       }
 
       if (files.length) {
+        recordOperation({ module: '云空间', operation: `粘贴上传文件【${files.length}个】` });
         handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
       }
     }
@@ -294,8 +304,10 @@
   }
 
   function moveField(fileOrFiles: FileItem | FileItem[]) {
+    const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+    recordOperation({ module: '云空间', operation: `打开移动文件弹窗【${files.length}个】` });
     moveCfg.moveFileVisible = true;
-    moveCfg.files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+    moveCfg.files = files;
   }
 
   function handleMoveDone() {
