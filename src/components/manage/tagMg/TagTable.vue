@@ -47,6 +47,7 @@
             class="filter-item"
             :class="{ active: activeFilter === filter.value }"
             @click="activeFilter = filter.value"
+            v-click-log="{ module: '标签管理', operation: `筛选标签【${filter.label}】` }"
           >
             <span class="filter-left">
               <span class="filter-dot" :class="`filter-dot--${filter.value}`"></span>
@@ -86,7 +87,11 @@
                 </div>
 
                 <div class="tag-actions">
-                  <button class="action-btn" @click="edit(tag.id)">
+                  <button
+                    class="action-btn"
+                    @click="edit(tag.id)"
+                    v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
+                  >
                     <svg-icon :src="icon.table_edit" size="15" />
                     <span>{{ t('common.edit') }}</span>
                   </button>
@@ -134,6 +139,7 @@
                         class="resource-chip resource-chip--bookmark"
                         :title="bookmarkItem.name"
                         @click="openPage(bookmarkItem.url)"
+                        v-click-log="{ module: '标签管理', operation: `打开关联书签【${bookmarkItem.name}】` }"
                       >
                         {{ bookmarkItem.name }}
                       </button>
@@ -149,6 +155,7 @@
                         class="resource-chip resource-chip--note"
                         :title="noteItem.name"
                         @click="openNote(noteItem.id)"
+                        v-click-log="{ module: '标签管理', operation: `打开关联笔记【${noteItem.name}】` }"
                       >
                         {{ noteItem.name }}
                       </button>
@@ -164,6 +171,7 @@
                         class="resource-chip resource-chip--file"
                         :title="fileItem.name"
                         @click="previewFile(fileItem.id)"
+                        v-click-log="{ module: '标签管理', operation: `预览关联文件【${fileItem.name}】` }"
                       >
                         {{ fileItem.name }}
                       </button>
@@ -206,6 +214,7 @@
   import { openPage } from '@/utils/common.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   interface RelatedItem {
     id: string;
@@ -375,6 +384,7 @@
       onOk() {
         apiBasePost('/api/bookmark/delTag', { id: tag.id }).then((res) => {
           if (res.status == 200) {
+            recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
             message.success('删除成功');
             init();
           }

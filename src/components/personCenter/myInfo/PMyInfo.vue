@@ -28,7 +28,6 @@
       class="container-footer-btn"
       type="primary"
       @click="saveUserInfo"
-      v-click-log="{ module: '我的信息', operation: `保存` }"
       >{{ t('myInfo.save') }}</b-button
     >
   </CommonContainer>
@@ -47,6 +46,7 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { useI18n } from 'vue-i18n';
   import { backRouterPage } from '@/utils/common';
+  import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const visible = <Ref<boolean>>defineModel('visible');
@@ -99,6 +99,7 @@
       })
       .then(async (res) => {
         if (res.status === 200) {
+          recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
           message.success(t('myInfo.saveSuccess'));
           const userPromise = await userApi.getUserInfoById({ id: localStorage.getItem('userId') });
           user.setUserInfo(userPromise.data);

@@ -29,7 +29,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button class="operation-log__clear" @click="clearOperationLogs" type="primary" v-click-log="{ module: '后台管理-操作日志', operation: '清空操作日志' }">清空日志</b-button>
+          <b-button class="operation-log__clear" @click="clearOperationLogs" type="primary">清空日志</b-button>
         </div>
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
@@ -83,7 +83,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
-  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
@@ -137,7 +136,6 @@
         apiBaseGet('/api/common/clearOperationLogs', {}).then((res) => {
           if (res.status === 200) {
             message.success('日志清空成功');
-            recordOperation({ module: '后台管理-操作日志', operation: '清空操作日志成功' });
             searchApiLog();
           }
         });

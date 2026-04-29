@@ -8,7 +8,7 @@
           </template>
         </b-input>
         <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
-        <b-button @click="clearApiImages" type="primary" v-click-log="{ module: '后台管理-图片管理', operation: '清理图片' }">清空</b-button>
+        <b-button @click="clearApiImages" type="primary">清空</b-button>
       </b-space>
       <a-table
         :data-source="allImg[imgType]"
@@ -34,7 +34,6 @@
               "
               class="dom-hover"
               @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
-              v-click-log="{ module: '后台管理-图片管理', operation: `预览图片【${record.name || record.fullFileName}】` }"
             >
               <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
             </div>
@@ -65,7 +64,6 @@
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const imgOptions = [
     { label: '使用中', value: 'usedImages' },
@@ -97,7 +95,6 @@
           images: allImg.value[imgType.value],
         }).then((res) => {
           if (res.status === 200) {
-            recordOperation({ module: '后台管理-图片管理', operation: `清理图片成功【${allImg.value[imgType.value]?.length || 0}张】` });
             message.success('日志清空成功');
             searchApiImage();
           }

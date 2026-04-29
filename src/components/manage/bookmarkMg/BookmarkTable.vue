@@ -13,7 +13,6 @@
             v-if="selectedRows.length > 0"
             type="danger"
             @click="handleBatchDelete"
-            v-click-log="{ module: '书签管理', operation: '批量删除' }"
             >{{ $t('bookmarkMg.batchDelete') }}</b-button
           >
           <b-button
@@ -95,7 +94,6 @@
                 :src="icon.table_delete"
                 size="16"
                 @click="handleDeleteTag(record as BookmarkInterface)"
-                v-click-log="{ module: '书签管理', operation: `点击删除图标` }"
                 class="dom-hover"
               />
             </div>
@@ -202,11 +200,10 @@
     const names = selectedBookmarks.map((b) => b.name).join('、');
 
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要批量删除选中的 ${selectedRows.value.length} 个书签？<br/>书签列表：${names}`,
-      onOk() {
-        loading.value = true;
-        recordOperation({ module: '书签管理', operation: `批量删除书签` });
+        title: '提示',
+        content: `请确认是否要批量删除选中的 ${selectedRows.value.length} 个书签？<br/>书签列表：${names}`,
+        onOk() {
+          loading.value = true;
 
         const requests = selectedRows.value.map((id) => apiBasePost('/api/bookmark/delBookmark', { id }));
 
@@ -251,6 +248,16 @@
             message.success(`批量删除成功！共删除 ${successCount} 个书签`);
           }
 
+          if (successCount > 0) {
+            recordOperation({
+              module: '书签管理',
+              operation:
+                failedCount > 0
+                  ? `批量删除书签部分成功【${successCount}成功/${failedCount}失败】`
+                  : `批量删除书签成功【${successCount}个】`,
+            });
+          }
+
           // 清空选择
           selectedRows.value = [];
           loading.value = false;
@@ -290,11 +297,11 @@
       title: '提示',
       content: `请确认是否要删除书签【${bookmark.name}】？`,
       onOk() {
-        recordOperation({ module: '书签管理', operation: `删除书签【${bookmark.name}】` });
         apiBasePost('/api/bookmark/delBookmark', {
           id: bookmark.id,
         }).then((res) => {
           if (res.status == 200) {
+            recordOperation({ module: '书签管理', operation: `删除书签成功【${bookmark.name}】` });
             message.success('删除成功');
             init();
           }

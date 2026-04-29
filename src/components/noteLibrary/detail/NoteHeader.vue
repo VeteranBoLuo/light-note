@@ -34,17 +34,17 @@
         </div>
       </a-tooltip>
       <a-tooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
-        <div class="note-header-title-icon" @click="openExportModal" v-click-log="OPERATION_LOG_MAP.note.exportPdf">
+        <div class="note-header-title-icon" @click="openExportModal">
           <SvgIcon :src="icon.noteDetail.export" />
         </div>
       </a-tooltip>
       <a-tooltip :title="$t('noteDetail.delete')">
-        <div class="note-header-title-icon" @click="$emit('del')" v-click-log="OPERATION_LOG_MAP.note.deleteNote">
+        <div class="note-header-title-icon" @click="$emit('del')">
           <SvgIcon :src="icon.noteDetail.delete" />
         </div>
       </a-tooltip>
       <a-tooltip :title="$t('noteDetail.save')" v-if="!bookmark.isMobile">
-        <div class="note-header-title-icon" @click="$emit('save', true)" v-click-log="OPERATION_LOG_MAP.note.saveNote">
+        <div class="note-header-title-icon" @click="$emit('save', true)">
           <SvgIcon :src="icon.noteDetail.save" />
         </div>
       </a-tooltip>
@@ -76,6 +76,7 @@
   import { computed } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import { watch } from 'vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const props = defineProps<{
     updateTime: string;
@@ -212,6 +213,7 @@
       async onOk() {
         exportModalVisible.value = false;
         await generatePDF(props.note.title, '.note-editor-body');
+        recordOperation({ module: '笔记', operation: `导出PDF成功【${props.note.title || t('noteDetail.unnamedDoc')}】` });
       },
     });
   };
@@ -229,6 +231,7 @@
           title,
         )}</title></head><body>${body}</body></html>`;
         downloadFile(safeFileName, html, 'text/html;charset=utf-8');
+        recordOperation({ module: '笔记', operation: `导出HTML成功【${title}】` });
       },
     });
   };
@@ -251,6 +254,7 @@
         }
         const markdown = `# ${title}\n\n${markdownBody}`;
         downloadFile(safeFileName, markdown, 'text/markdown;charset=utf-8');
+        recordOperation({ module: '笔记', operation: `导出Markdown成功【${title}】` });
       },
     });
   };

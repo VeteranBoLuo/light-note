@@ -27,6 +27,7 @@
             :class="{ active: lang.value === sourceLang }"
             @click.stop="chooseLang('source', lang.value)"
             type="button"
+            v-click-log="{ module: 'AI助手', operation: `选择源语言【${lang.label}】` }"
           >
             {{ lang.label }}
           </button>
@@ -51,6 +52,7 @@
             :class="{ active: lang.value === targetLang }"
             @click.stop="chooseLang('target', lang.value)"
             type="button"
+            v-click-log="{ module: 'AI助手', operation: `选择目标语言【${lang.label}】` }"
           >
             {{ lang.label }}
           </button>

@@ -8,7 +8,6 @@
         class="upload-btn"
         @change="handleChange"
         :max-total-size="100 * 1024 * 1024"
-        v-click-log="{ module: '云空间', operation: '点击上传文件' }"
       >
         <b-button type="primary">
           <UploadOutlined />
@@ -231,7 +230,7 @@
             }
 
             if (existedFiles.length > 0) {
-              recordOperation({ module: '云空间', operation: `覆盖已有文件【${existedFiles.length}个】` });
+              recordOperation({ module: '云空间', operation: `覆盖已有文件成功【${existedFiles.length}个】` });
               message.warning(`覆盖了 ${existedFiles.length} 个已有文件`);
               existedFiles.forEach((item) => cloud.cacheImgArr.push(item.fileId));
             }

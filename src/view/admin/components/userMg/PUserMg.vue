@@ -10,8 +10,8 @@
       <template #bodyCell="{ column, text, record }">
         <template v-if="column.dataIndex === 'operation'">
           <b-space>
-            <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" v-click-log="{ module: '后台管理-用户管理', operation: `编辑用户【${record.alias || record.email}】` }" />
-            <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" v-click-log="{ module: '后台管理-用户管理', operation: `删除用户【${record.alias || record.email}】` }" />
+            <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
+            <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
           </b-space>
         </template>
       </template>
@@ -54,7 +54,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
-  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const userList = ref([]);
   const userColumns = computed(() => {
@@ -92,7 +91,6 @@
       onOk() {
         userApi.deleteUserById(record.id).then((res) => {
           if (res.status === 200) {
-            recordOperation({ module: '后台管理-用户管理', operation: `删除用户成功【${record.alias || record.email || record.id}】` });
             message.success('删除成功');
             init();
           }
@@ -124,7 +122,6 @@
   function saveUserInfo() {
     userApi.updateUserInfo(editData.value).then((res) => {
       if (res.status) {
-        recordOperation({ module: '后台管理-用户管理', operation: `保存用户信息【${editData.value?.alias || editData.value?.email || editData.value?.id}】` });
         message.success('保存成功');
         editVisible.value = false;
         init();

@@ -43,7 +43,6 @@
       class="container-footer-btn"
       type="primary"
       @click="submit"
-      v-click-log="OPERATION_LOG_MAP.bookmarkDetail.save"
       >确定</b-button
     >
   </CommonContainer>
@@ -58,9 +57,9 @@
   import { message } from 'ant-design-vue';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import {OPERATION_LOG_MAP} from "@/config/logMap.ts";
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -124,8 +123,12 @@
       url = '/api/bookmark/addBookmark';
       params.userId = user.id;
     }
-    apiBasePost(url, bookmarkData.value).then((res) => {
+    apiBasePost(url, params).then((res) => {
       if (res.status === 200) {
+        recordOperation({
+          module: '书签详情',
+          operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || bookmarkData.value.url}】`,
+        });
         message.success('保存成功');
         router.back();
       }
@@ -149,6 +152,7 @@
         if (res.data.description) {
           bookmarkData.value.description = res.data.description;
         }
+        recordOperation({ module: '书签详情', operation: `生成书签信息成功【${bookmarkData.value.url}】` });
         message.success('已生成名称和描述');
       }
     } finally {

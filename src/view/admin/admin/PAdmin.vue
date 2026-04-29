@@ -14,7 +14,6 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import PhoneMenu from '@/components/base/phoneComponents/PhoneMenu/PhoneMenu.vue';
   import router from '@/router';
-  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const menuList = [
@@ -52,7 +51,6 @@
     ],
   ];
   function clickItem(item) {
-    recordOperation({ module: '后台管理', operation: `打开后台模块【${item.title || item.id}】` });
     router.push(item.url);
   }
 </script>

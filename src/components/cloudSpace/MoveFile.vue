@@ -52,7 +52,7 @@
       fileIds,
     }).then((res) => {
       if (res.status === 200) {
-        recordOperation({ module: '云空间', operation: `移动文件【${fileIds.length}个】` });
+        recordOperation({ module: '云空间', operation: `移动文件成功【${fileIds.length}个】` });
         const successMessage =
           fileIds.length === 1
             ? t('cloudSpace.moveSuccess')

@@ -35,7 +35,6 @@
         style="margin-top: 10px; place-self: center; width: 100%"
         type="primary"
         @click="saveUserInfo"
-        v-click-log="{ module: '我的信息', operation: `保存` }"
         >{{ t('myInfo.save') }}</b-button
       >
     </template>
@@ -55,6 +54,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import PassConfigDlg from '@/components/personCenter/myInfo/PassConfigDlg.vue';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const visible = <Ref<boolean>>defineModel('visible');
@@ -107,6 +107,7 @@
       })
       .then(async (res) => {
         if (res.status === 200) {
+          recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
           message.success(t('myInfo.saveSuccess'));
           const userPromise = await userApi.getUserInfoById({ id: localStorage.getItem('userId') });
           user.setUserInfo(userPromise.data);

@@ -7,8 +7,8 @@
       </div>
       <div class="hero-actions">
         <b-button size="small" @click="loadSample" v-click-log="{ module: '工具箱', operation: 'JSON加载示例' }">加载示例</b-button>
-        <b-button size="small" @click="compressJson" v-click-log="{ module: '工具箱', operation: 'JSON压缩' }">压缩</b-button>
-        <b-button size="small" @click="formatJson" v-click-log="{ module: '工具箱', operation: 'JSON格式化' }">格式化</b-button>
+        <b-button size="small" @click="compressJson">压缩</b-button>
+        <b-button size="small" @click="formatJson">格式化</b-button>
         <b-button size="small" @click="expandAll" v-click-log="{ module: '工具箱', operation: 'JSON全部展开' }">全部展开</b-button>
         <b-button size="small" @click="collapseAll" v-click-log="{ module: '工具箱', operation: 'JSON全部折叠' }">全部折叠</b-button>
       </div>

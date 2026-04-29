@@ -25,7 +25,7 @@
             </template>
           </b-input>
           <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
-          <b-button @click="clearApiImages" type="primary" v-click-log="{ module: '后台管理-图片管理', operation: '清理图片' }">清理</b-button>
+          <b-button @click="clearApiImages" type="primary">清理</b-button>
         </div>
         <span class="admin-filters-hint">支持文件名搜索 · 选择类型查看不同状态的图片</span>
       </div>
@@ -54,7 +54,6 @@
                 "
                 class="dom-hover"
                 @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
-                v-click-log="{ module: '后台管理-图片管理', operation: `预览图片【${record.name || record.fullFileName}】` }"
               >
                 <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
               </div>
@@ -78,7 +77,6 @@
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
-  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
 
   const imgOptions = [
@@ -128,7 +126,6 @@
           images: allImg.value[imgType.value],
         }).then((res) => {
           if (res.status === 200) {
-            recordOperation({ module: '后台管理-图片管理', operation: `清理图片成功【${allImg.value[imgType.value]?.length || 0}张】` });
             message.success('日志清空成功');
             searchApiImage();
           }

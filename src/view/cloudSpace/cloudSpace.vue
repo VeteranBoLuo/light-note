@@ -212,7 +212,6 @@
     dragActive.value = false;
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
-      recordOperation({ module: '云空间', operation: `拖拽上传文件【${files.length}个】` });
       handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
     }
   }
@@ -246,7 +245,6 @@
       }
 
       if (files.length) {
-        recordOperation({ module: '云空间', operation: `粘贴上传文件【${files.length}个】` });
         handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
       }
     }

@@ -25,7 +25,7 @@
       }}</div>
       <div class="handle-btn-group">
         <template v-if="hasCheck">
-          <span class="deleteText" @click="batchDeleteNote" v-click-log="OPERATION_LOG_MAP.noteLibrary.deleteNote"
+          <span class="deleteText" @click="batchDeleteNote"
             ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
           >
           <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
@@ -97,10 +97,10 @@
           </div>
         </template>
         <template v-else>
-          <div class="tag-item" :class="{ active: selectedTag === null }" @click="selectTag(null)">
+          <div class="tag-item" :class="{ active: selectedTag === null }" @click="selectTag(null)" v-click-log="{ module: '笔记库', operation: '筛选全部笔记' }">
             {{ $t('note.allNote') }}
           </div>
-          <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')">
+          <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')" v-click-log="{ module: '笔记库', operation: '筛选无标签笔记' }">
             {{ $t('note.noTagNote') }}
           </div>
           <div
@@ -108,6 +108,7 @@
             class="tag-item"
             :class="{ active: selectedTag === tag.id }"
             @click="selectTag(tag)"
+            v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
           >
             {{ tag.name }}
           </div>
@@ -160,6 +161,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { backRouterPage } from '@/utils/common';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const noteList = ref([]);
   const loading = ref(false);
@@ -272,9 +274,12 @@
       onOk() {
         apiBasePost('/api/note/delNote', {
           ids: delIds,
-        }).then(() => {
-          message.success('删除成功');
-          init();
+        }).then((res) => {
+          if (res.status === 200) {
+            recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${delIds.length}篇】` });
+            message.success('删除成功');
+            init();
+          }
         });
       },
     });
@@ -313,7 +318,10 @@
           id: note.id,
         })) || [];
 
-      await apiBasePost('/api/note/updateNoteSort', { notes: sortedTags });
+      const res = await apiBasePost('/api/note/updateNoteSort', { notes: sortedTags });
+      if (res.status === 200) {
+        recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
+      }
     } catch (error) {
       console.error('Error updating note sort:', error);
     }

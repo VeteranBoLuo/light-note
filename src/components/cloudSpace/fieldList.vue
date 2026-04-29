@@ -6,7 +6,6 @@
           size="small"
           type="danger"
           @click="handleBatchDelete"
-          v-click-log="{ module: '云空间', operation: '点击批量删除文件' }"
           >{{ $t('cloudSpace.batchDelete') }}</b-button
         >
         <b-button
@@ -21,7 +20,6 @@
           type="success"
           :loading="batchDownloadLoading"
           @click="handleBatchDownload"
-          v-click-log="{ module: '云空间', operation: '点击批量下载文件' }"
         >
           {{ $t('cloudSpace.batchDownload') }}
         </b-button>
@@ -99,7 +97,6 @@
                 :src="icon.cloudSpace.download"
                 size="20"
                 @click="handleDownloadFile(item)"
-                v-click-log="{ module: '云空间', operation: `点击下载文件【${item.fileName}】` }"
               />
             </a-tooltip>
             <a-tooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
@@ -127,7 +124,6 @@
                 :src="icon.noteDetail.delete"
                 size="20"
                 @click="handleDelFile(item)"
-                v-click-log="{ module: '云空间', operation: `点击删除文件【${item.fileName}】` }"
               />
             </a-tooltip>
             <b-menu
@@ -379,7 +375,7 @@
       fileName: nextName,
     }).then((res) => {
       if (res.status === 200) {
-        recordOperation({ module: '云空间', operation: `重命名文件【${nextName}】` });
+        recordOperation({ module: '云空间', operation: `重命名文件成功【${nextName}】` });
         message.success(t('cloudSpace.renameSuccess'));
         cloud.queryFieldList();
       }
@@ -390,17 +386,21 @@
       title: t('cloudSpace.alertTitle'),
       content: t('cloudSpace.confirmDelete'),
       onOk() {
-        deleteField(file.id).then(() => {
-          recordOperation({ module: '云空间', operation: `删除文件【${file.fileName}】` });
-          cloud.queryFieldList();
+        deleteField(file.id).then((success) => {
+          if (success) {
+            recordOperation({ module: '云空间', operation: `删除文件成功【${file.fileName}】` });
+            cloud.queryFieldList();
+          }
         });
       },
     });
   }
 
   async function handleDownloadFile(file: any) {
-    await downloadField(file.id);
-    recordOperation({ module: '云空间', operation: `下载文件【${file.fileName}】` });
+    const success = await downloadField(file.id);
+    if (success) {
+      recordOperation({ module: '云空间', operation: `下载文件成功【${file.fileName}】` });
+    }
   }
 
   async function openTagDialog(file: any) {
@@ -440,7 +440,7 @@
         tags: selectedTagIds.value,
       });
       if (res.status === 200) {
-        recordOperation({ module: '云空间', operation: `保存文件关联标签【${activeTagFile.value.fileName}】` });
+        recordOperation({ module: '云空间', operation: `保存文件关联标签成功【${activeTagFile.value.fileName}】` });
         message.success(t('common.saveSuccess'));
         closeTagDialog();
         cloud.queryFieldList();
@@ -468,7 +468,7 @@
         apiBasePost('/api/file/deleteFileById', { ids: selectedRows.value }).then((res) => {
           if (res.status === 200) {
             const count = res.data?.count || selectedRows.value.length;
-            recordOperation({ module: '云空间', operation: `批量删除文件【${count}个】` });
+            recordOperation({ module: '云空间', operation: `批量删除文件成功【${count}个】` });
             message.success(`${t('cloudSpace.batchDeleteSuccess')} ${count} ${t('cloudSpace.files')}`);
           } else {
             message.error(res.msg || t('cloudSpace.deleteFailed'));
@@ -564,8 +564,10 @@
 
     const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
     if (selectedFiles.length === 1) {
-      await downloadField(selectedFiles[0].id);
-      recordOperation({ module: '云空间', operation: `下载文件【${selectedFiles[0].fileName}】` });
+      const success = await downloadField(selectedFiles[0].id);
+      if (success) {
+        recordOperation({ module: '云空间', operation: `下载文件成功【${selectedFiles[0].fileName}】` });
+      }
       return;
     }
 
@@ -672,7 +674,7 @@
       shareSubmitting.value = true;
       const desc = shareDescValue.value.trim();
       await shareField(shareTarget.value.id, shareTarget.value.fileName, shareTarget.value.fileType, desc);
-      recordOperation({ module: '云空间', operation: `分享文件【${shareTarget.value.fileName}】` });
+      recordOperation({ module: '云空间', operation: `分享文件成功【${shareTarget.value.fileName}】` });
       shareDescVisible.value = false;
       shareTarget.value = null;
       shareDescValue.value = '';
@@ -717,7 +719,6 @@
     }
 
     event.dataTransfer.effectAllowed = 'copyMove';
-    recordOperation({ module: '云空间', operation: `拖拽文件【${file.fileName}】` });
     const fileUrl = String(file.fileUrl || '');
     const fileName = String(file.fileName || 'file');
     const mimeType = String(file.fileType || '').includes('/') ? String(file.fileType) : 'application/octet-stream';

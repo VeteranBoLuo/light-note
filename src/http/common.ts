@@ -14,12 +14,15 @@ export async function downloadField(id: number | string) {
       document.body.appendChild(a);
       a.click();
       a.remove();
+      return true;
     } else {
       message.error('获取下载链接失败');
+      return false;
     }
   } catch (error) {
     console.error('下载失败:', error);
     message.error('下载失败，请重试');
+    return false;
   } finally {
     cloud.loading = false;
   }
@@ -28,8 +31,8 @@ export async function downloadField(id: number | string) {
 // 删除文件
 export async function deleteField(id: number | string) {
   await apiBasePost('/api/file/deleteFileById', { id });
-  message.success('删除成功');
-}
+    message.success('删除成功');
+    }
 
 // 分享文件
 export async function shareField(id: number | string, fileName?: string, fileType?: string, description?: string) {

@@ -28,7 +28,6 @@
           :src="icon.table_delete"
           size="16"
           @click="handleDeleteTag(data)"
-          v-click-log="{ module: '书签管理', operation: `点击删除图标` }"
           class="dom-hover"
         />
       </div>
@@ -86,11 +85,11 @@
       title: '提示',
       content: `请确认是否要删除标签【${bookmark.name}】？`,
       onOk() {
-        recordOperation({ module: '书签管理', operation: `删除书签【${bookmark.name}】` });
         apiBasePost('/api/bookmark/delBookmark', {
           id: bookmark.id,
         }).then((res) => {
           if (res.status == 200) {
+            recordOperation({ module: '书签管理', operation: `删除书签成功【${bookmark.name}】` });
             message.success('删除成功');
             init();
           }

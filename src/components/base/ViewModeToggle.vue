@@ -4,13 +4,13 @@
       class="toggle-slider"
       :style="{ transform: user.preferences.noteViewMode === 'card' ? 'translateX(0)' : 'translateX(100%)' }"
     ></div>
-    <button @click="setMode('card')" :class="{ active: user.preferences.noteViewMode === 'card' }" v-click-log="{ module: '笔记库', operation: '切换卡片视图' }">
+    <button @click="setMode('card')" :class="{ active: user.preferences.noteViewMode === 'card' }">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM9 7h6v2H9V7zm0 4h6v2H9v11z" />
       </svg>
       {{ $t('note.cardView') }}
     </button>
-    <button @click="setMode('list')" :class="{ active: user.preferences.noteViewMode === 'list' }" v-click-log="{ module: '笔记库', operation: '切换列表视图' }">
+    <button @click="setMode('list')" :class="{ active: user.preferences.noteViewMode === 'list' }">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z" />
       </svg>
@@ -44,7 +44,7 @@
         }),
       })
       .then(() => {
-        recordOperation({ module: '笔记库', operation: `保存视图模式【${mode}】` });
+        recordOperation({ module: '笔记库', operation: `保存视图模式成功【${mode}】` });
       })
       .catch((err) => {
         console.error('后台错误：' + err);

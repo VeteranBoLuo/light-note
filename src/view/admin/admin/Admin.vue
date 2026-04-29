@@ -20,7 +20,6 @@
   import { onMounted, ref } from 'vue';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
-  import { recordOperation } from '@/api/commonApi.ts';
 
   const checkId = ref('operationLog');
   const bookmark = bookmarkStore();
@@ -68,7 +67,6 @@
   ]);
 
   function nodeClick(menu: any) {
-    recordOperation({ module: '后台管理', operation: `打开后台模块【${menu.title || menu.id}】` });
     router.push('/admin/' + menu.id);
   }
   onMounted(() => {

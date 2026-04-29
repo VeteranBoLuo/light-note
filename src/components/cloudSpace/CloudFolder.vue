@@ -59,7 +59,7 @@
         </b-input>
       </template>
     </b-list>
-    <b-button v-if="!bookmark.isMobile" @click="addFolder" style="width: 100%" v-click-log="{ module: '云空间', operation: '新增文件夹' }">{{
+    <b-button v-if="!bookmark.isMobile" @click="addFolder" style="width: 100%">{{
       $t('cloudSpace.newFolder')
     }}</b-button>
     <input type="file" id="folder-upload-input" multiple style="display: none" @change="onFileSelect" />
@@ -102,7 +102,7 @@
       fileIds: [fileId],
     });
     if (res.status === 200) {
-      recordOperation({ module: '云空间', operation: targetFolderId ? '拖拽移动文件到文件夹' : '拖拽移动文件到全部文件' });
+      recordOperation({ module: '云空间', operation: targetFolderId ? '拖拽移动文件到文件夹成功' : '拖拽移动文件到全部文件成功' });
       message.success(t('cloudSpace.moveSuccess'));
       cloud.queryFieldList();
     } else {
@@ -152,9 +152,6 @@
 
   function onFileSelect(event) {
     const files = Array.from(event.target.files);
-    if (files.length) {
-      recordOperation({ module: '云空间', operation: `上传文件到文件夹【${files.length}个】` });
-    }
     emit('uploadFiles', { files, folderId: currentFolderId.value });
     // 重置 input
     event.target.value = '';
@@ -165,16 +162,18 @@
       title: '提示',
       content: `请确认是否要删除文件夹【${folder.name}】？`,
       onOk() {
-        apiBasePost('/api/file/deleteFolder', { id: folder.id }).then(() => {
-          recordOperation({ module: '云空间', operation: `删除文件夹【${folder.name}】` });
-          cloud.queryFolder();
-          message.success('删除成功');
-          if (folder.id === cloud.folder.id) {
-            cloud.folder = {
-              name: '全部文件',
-              id: 'all',
-            };
-            cloud.queryFieldList();
+        apiBasePost('/api/file/deleteFolder', { id: folder.id }).then((res) => {
+          if (res.status === 200) {
+            recordOperation({ module: '云空间', operation: `删除文件夹成功【${folder.name}】` });
+            cloud.queryFolder();
+            message.success('删除成功');
+            if (folder.id === cloud.folder.id) {
+              cloud.folder = {
+                name: '全部文件',
+                id: 'all',
+              };
+              cloud.queryFieldList();
+            }
           }
         });
       },
@@ -196,15 +195,17 @@
       folder.isRename = !folder.isRename;
       folder.name = newName.value;
       if (folder.id) {
-        apiBasePost('/api/file/updateFolder', folder).then(() => {
-          recordOperation({ module: '云空间', operation: `重命名文件夹【${folder.name}】` });
-          cloud.queryFolder();
-          message.success('重命名成功');
+        apiBasePost('/api/file/updateFolder', folder).then((res) => {
+          if (res.status === 200) {
+            recordOperation({ module: '云空间', operation: `重命名文件夹成功【${folder.name}】` });
+            cloud.queryFolder();
+            message.success('重命名成功');
+          }
         });
       } else {
         apiBasePost('/api/file/addFolder', folder).then((res) => {
           if (res.status === 200) {
-            recordOperation({ module: '云空间', operation: `保存新增文件夹【${folder.name}】` });
+            recordOperation({ module: '云空间', operation: `新增文件夹成功【${folder.name}】` });
             cloud.queryFolder();
             message.success('新增文件夹成功');
           }
@@ -224,7 +225,7 @@
 
       const updateResponse = await apiBasePost('/api/file/updateFolderSort', { tags: sortedTags });
       if (updateResponse.status === 200) {
-        recordOperation({ module: '云空间', operation: '调整文件夹排序' });
+        recordOperation({ module: '云空间', operation: '调整文件夹排序成功' });
         cloud.queryFolder();
       }
     } catch (error) {
@@ -260,7 +261,6 @@
     }
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
-      recordOperation({ module: '云空间', operation: `拖拽上传文件到全部文件【${files.length}个】` });
       emit('uploadFiles', { files, folderId: null }); // null 表示上传到根目录
     }
   }
@@ -292,7 +292,6 @@
     }
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
-      recordOperation({ module: '云空间', operation: `拖拽上传文件到文件夹【${item.name}】` });
       emit('uploadFiles', { files, folderId: item.id });
     }
   }

@@ -78,7 +78,7 @@
         </div>
       </div>
     </b-loading>
-    <b-button class="container-footer-btn" type="primary" @click="submit" v-click-log="OPERATION_LOG_MAP.tagDetail.saveTag">确定</b-button>
+    <b-button class="container-footer-btn" type="primary" @click="submit">确定</b-button>
   </CommonContainer>
 </template>
 
@@ -95,10 +95,10 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   type ResourceItem = { rawId: string; name: string; type: ResourceType };
 
@@ -294,6 +294,7 @@
         return;
       }
       tag.value.iconUrl = iconUrl;
+      recordOperation({ module: '标签详情', operation: `生成标签图标成功【${tag.value.name.trim()}】` });
       message.success(t('tagManage.generateIconSuccess'));
     } catch (error) {
       console.error('generate tag icon failed', error);
@@ -315,6 +316,10 @@
     const url = handleType.value === 'add' ? '/api/bookmark/addTag' : '/api/bookmark/updateTag';
     const res = await apiBasePost(url, tag.value);
     if (res.status === 200) {
+      recordOperation({
+        module: '标签详情',
+        operation: `${handleType.value === 'add' ? '新增' : '保存'}标签成功【${tag.value.name}】`,
+      });
       message.success('保存成功');
       router.back();
     }

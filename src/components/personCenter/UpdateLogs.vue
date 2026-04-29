@@ -56,7 +56,7 @@
           <div class="editor-actions">
             <a-button size="small" @click="formatJson" v-click-log="{ module: '更新日志', operation: '格式化JSON' }">{{ $t('changelog.format') }}</a-button>
             <a-button size="small" @click="resetJson" style="margin-left: 8px" v-click-log="{ module: '更新日志', operation: '重置JSON' }">{{ $t('changelog.reset') }}</a-button>
-            <a-button size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating" v-click-log="{ module: '更新日志', operation: '保存更新日志' }">
+            <a-button size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating">
               {{ $t('common.save') }}
             </a-button>
           </div>

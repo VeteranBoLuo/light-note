@@ -22,7 +22,6 @@
           :src="icon.table_delete"
           size="16"
           @click="handleDeleteTag(data)"
-          v-click-log="{ module: '标签管理', operation: `点击删除图标` }"
           class="dom-hover"
         />
       </div>
@@ -57,11 +56,11 @@
       title: '提示',
       content: `请确认是否要删除标签【${tag.name}】？`,
       onOk() {
-        recordOperation({ module: '标签管理', operation: `删除标签【${tag.name}】` });
         apiBasePost('/api/bookmark/delTag', {
           id: tag.id,
         }).then((res) => {
           if (res.status == 200) {
+            recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
             message.success('删除成功');
             init();
           }

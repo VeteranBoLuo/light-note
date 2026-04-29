@@ -50,7 +50,6 @@
                   size="16"
                   @click="editUser(record)"
                   class="dom-hover"
-                  v-click-log="{ module: '后台管理-用户管理', operation: `编辑用户【${record.alias || record.email}】` }"
                 />
                 <svg-icon
                   title="删除"
@@ -58,7 +57,6 @@
                   size="16"
                   @click="delUser(record)"
                   class="dom-hover"
-                  v-click-log="{ module: '后台管理-用户管理', operation: `删除用户【${record.alias || record.email}】` }"
                 />
               </b-space>
             </template>
@@ -112,7 +110,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
-  import { recordOperation } from '@/api/commonApi.ts';
 
   const userList = ref([]);
   const userColumns = computed(() => {
@@ -218,7 +215,6 @@
       onOk() {
         userApi.deleteUserById(record.id).then((res) => {
           if (res.status === 200) {
-            recordOperation({ module: '后台管理-用户管理', operation: `删除用户成功【${record.alias || record.email || record.id}】` });
             message.success('删除成功');
             init();
           }
@@ -250,7 +246,6 @@
   function saveUserInfo() {
     userApi.updateUserInfo(editData.value).then((res) => {
       if (res.status) {
-        recordOperation({ module: '后台管理-用户管理', operation: `保存用户信息【${editData.value?.alias || editData.value?.email || editData.value?.id}】` });
         message.success('保存成功');
         editVisible.value = false;
         init();

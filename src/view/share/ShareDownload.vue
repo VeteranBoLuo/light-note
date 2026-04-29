@@ -211,10 +211,12 @@
     if (id) {
       loading.value = true;
       try {
-        await downloadField(id);
+        const success = await downloadField(id);
         loading.value = false;
-        downloadSuccess.value = true;
-        recordOperation({ module: '分享文件', operation: `下载分享文件【${file.fileName || id}】` });
+        if (success) {
+          downloadSuccess.value = true;
+          recordOperation({ module: '分享文件', operation: `下载分享文件成功【${file.fileName || id}】` });
+        }
       } catch (error) {
         console.error('下载失败:', error);
         loading.value = false;

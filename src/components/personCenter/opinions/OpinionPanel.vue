@@ -77,10 +77,6 @@
           type="primary"
           class="opinion-submit"
           @click="submit"
-          v-click-log="{
-            module: t('personCenter.opinions.feedbackModule'),
-            operation: t('personCenter.opinions.submitFeedback'),
-          }"
         >
           {{ t('personCenter.opinions.submit') }}
         </b-button>
@@ -172,6 +168,7 @@
   import { message } from 'ant-design-vue';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const props = withDefaults(
     defineProps<{
@@ -357,6 +354,10 @@
     params.imgArray = JSON.stringify(params.imgArray);
     const res = await opinionApi.createOpinion(params);
     if (res.status === 200) {
+      recordOperation({
+        module: t('personCenter.opinions.feedbackModule'),
+        operation: `${t('personCenter.opinions.submitFeedback')}成功`,
+      });
       message.success(t('personCenter.opinions.thankYouFeedback'));
       resetDraft();
       emit('submitted');

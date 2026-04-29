@@ -173,6 +173,8 @@
       }
       if (isFirstSave) {
         recordOperation({ module: '笔记', operation: `新建笔记成功【${note.title}】` });
+      } else if (isMsg) {
+        recordOperation({ module: '笔记', operation: `保存笔记成功【${note.title}】` });
       }
       const elapsedTime = Date.now() - startTime;
       const delay = Math.max(500 - elapsedTime, 0);

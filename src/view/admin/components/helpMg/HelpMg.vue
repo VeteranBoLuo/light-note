@@ -29,12 +29,12 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button type="primary" @click="syncFromPublished" v-click-log="{ module: '后台管理-帮助中心', operation: '同步帮助中心' }">同步帮助中心</b-button>
-          <b-button type="primary" @click="saveCurrentDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '保存草稿' }">保存草稿</b-button>
-          <b-button type="danger" @click="deleteCurrentDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '删除草稿' }">删除草稿</b-button>
-          <b-button type="success" @click="publishAllDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '发布全部' }">发布全部</b-button>
-          <b-button @click="exportCurrentDraft" v-click-log="{ module: '后台管理-帮助中心', operation: '导出当前草稿' }">导出</b-button>
-          <b-button @click="exportAllDrafts" v-click-log="{ module: '后台管理-帮助中心', operation: '导出全部草稿' }">导出全部</b-button>
+          <b-button type="primary" @click="syncFromPublished">同步帮助中心</b-button>
+          <b-button type="primary" @click="saveCurrentDraft">保存草稿</b-button>
+          <b-button type="danger" @click="deleteCurrentDraft">删除草稿</b-button>
+          <b-button type="success" @click="publishAllDraft">发布全部</b-button>
+          <b-button @click="exportCurrentDraft">导出</b-button>
+          <b-button @click="exportAllDrafts">导出全部</b-button>
         </div>
       </div>
 
@@ -57,8 +57,8 @@
         <div class="help-draft__editor-panel">
           <div class="help-draft__mode-switch">
             <b-input v-model:value="editTitle" placeholder="请输入标题" style="width: 200px" />
-            <b-button :type="isCreateMode ? 'primary' : ''" @click="switchMode(true)" v-click-log="{ module: '后台管理-帮助中心', operation: '切换新增模式' }">新增模式</b-button>
-            <b-button :type="!isCreateMode ? 'primary' : ''" @click="switchMode(false)" v-click-log="{ module: '后台管理-帮助中心', operation: '切换编辑模式' }">编辑模式</b-button>
+            <b-button :type="isCreateMode ? 'primary' : ''" @click="switchMode(true)">新增模式</b-button>
+            <b-button :type="!isCreateMode ? 'primary' : ''" @click="switchMode(false)">编辑模式</b-button>
           </div>
           <Editor class="help-draft__editor" v-model:content="draftContent" image-upload-mode="base64" />
         </div>
@@ -88,7 +88,6 @@
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import TurndownService from 'turndown';
   import JSZip from 'jszip';
-  import { recordOperation } from '@/api/commonApi.ts';
 
   type HelpItem = {
     id: string;
@@ -251,7 +250,6 @@
         await fetchDraftConfig();
         const createdItem = draftOptions.value.find((item) => String(item.id) === newId);
         await selectDraftLocally(createdItem || draftOptions.value[0] || null);
-        recordOperation({ module: '后台管理-帮助中心', operation: `新增帮助草稿【${title}】` });
         message.success('新增草稿成功');
         return true;
       }
@@ -267,7 +265,6 @@
       };
       const res = await saveHelpDraft(payload);
       if (res.status === 200) {
-        recordOperation({ module: '后台管理-帮助中心', operation: `保存帮助草稿【${payload.title || payload.id}】` });
         message.success('草稿保存成功');
         return true;
       }
@@ -345,7 +342,6 @@
     }
     const markdown = buildMarkdown(item);
     downloadFile(`${safeFileName(item.title)}.md`, markdown, 'text/markdown;charset=utf-8');
-    recordOperation({ module: '后台管理-帮助中心', operation: `导出帮助草稿【${item.title}】` });
     message.success('当前草稿已导出为 Markdown');
   };
 
@@ -372,7 +368,6 @@
     });
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     downloadFile('轻笺帮助中心草稿-Markdown.zip', zipBlob, 'application/zip');
-    recordOperation({ module: '后台管理-帮助中心', operation: `导出全部帮助草稿【${draftOptions.value.length}篇】` });
     message.success(`已导出 ${draftOptions.value.length} 篇草稿`);
   };
 
@@ -383,7 +378,6 @@
       onOk() {
         syncHelpDraftFromPublished().then(async (res) => {
           if (res.status === 200) {
-            recordOperation({ module: '后台管理-帮助中心', operation: '同步帮助中心成功' });
             message.success('同步成功');
             await fetchDraftConfig();
           }
@@ -412,7 +406,6 @@
           publishAllHelpDraft().then((publishRes) => {
             if (publishRes.status === 200) {
               const total = Number(publishRes?.data?.total || 0);
-              recordOperation({ module: '后台管理-帮助中心', operation: `发布全部帮助文档【${total}条】` });
               message.success(`全量替换成功，已同步 ${total} 条草稿到帮助中心`);
             }
           });
@@ -439,7 +432,6 @@
         if (res.status !== 200) {
           return;
         }
-        recordOperation({ module: '后台管理-帮助中心', operation: `删除帮助草稿【${currentNode.value?.title || deletingId}】` });
         draftOptions.value = draftOptions.value.filter((item) => String(item.id) !== deletingId);
         if (draftOptions.value.length > 0) {
           const nextItem = draftOptions.value[0];
@@ -472,7 +464,6 @@
       if (res.status !== 200) {
         message.error('顺序保存失败，请重试');
       } else {
-        recordOperation({ module: '后台管理-帮助中心', operation: '调整帮助草稿排序' });
       }
     } finally {
       savingSort.value = false;
