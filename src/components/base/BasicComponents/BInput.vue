@@ -112,6 +112,7 @@
   .input-container {
     width: 100%;
     position: relative;
+    color: var(--text-color);
   }
   .b-input {
     border-radius: 6px;
@@ -180,8 +181,8 @@
     transition: background-color 50000s ease-in-out 0s;
   }
   .input-al-day {
-    border: 1px solid #d9d9d9 !important;
-    background-color: #ffffff !important;
-    color: rgb(0, 0, 0) !important;
+    border: 1px solid var(--card-border-color) !important;
+    background-color: var(--background-color) !important;
+    color: var(--text-color) !important;
   }
 </style>

@@ -6,7 +6,7 @@
     <div class="view-page">
       <span>
         <span class="dom-hover" style="color: var(--primary-text)" @click="title = '登录'">返回</span>
-        <b style="font-size: 30px; color: #161824; position: absolute; left: 50%; transform: translateX(-50%)"
+        <b style="font-size: 30px; color: var(--text-color); position: absolute; left: 50%; transform: translateX(-50%)"
           >重置密码</b
         >
       </span>
@@ -197,6 +197,6 @@
 </script>
 <style lang="less" scoped>
   :deep(:-webkit-autofill) {
-    -webkit-text-fill-color: #161824 !important;
+    -webkit-text-fill-color: var(--text-color) !important;
   }
 </style>

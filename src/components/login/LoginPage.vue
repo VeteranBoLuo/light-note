@@ -11,7 +11,7 @@
       游客体验
     </a>
     <div class="view-page">
-      <b style="font-size: 30px; justify-self: center; color: #161824">登录</b>
+      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">登录</b>
       <span
         style="
           font-size: 12px;
@@ -19,7 +19,7 @@
           left: 50%;
           transform: translateX(-50%);
           top: 65px;
-          color: #a9a1ad;
+          color: var(--desc-color);
           width: 100%;
           text-align: center;
         "
@@ -265,7 +265,7 @@
 
 <style lang="less" scoped>
   :deep(:-webkit-autofill) {
-    -webkit-text-fill-color: #161824 !important; //这个地方的颜色是字体颜色，可以根据实际情况修改
+    -webkit-text-fill-color: var(--text-color) !important;
   }
   .login-tips-text {
     height: 40px;
@@ -282,7 +282,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    color: #1f1f1f !important;
+    color: var(--text-color) !important;
   }
 
   .forget-text {

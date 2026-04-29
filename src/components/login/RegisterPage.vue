@@ -4,7 +4,7 @@
       游客体验
     </span>
     <div class="view-page">
-      <b style="font-size: 30px; justify-self: center; color: #161824">注册</b>
+      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">注册</b>
       <a-form
         :label-col="{
           span: 4,
@@ -175,6 +175,6 @@
 
 <style lang="less" scoped>
   :deep(:-webkit-autofill) {
-    -webkit-text-fill-color: #161824 !important; //这个地方的颜色是字体颜色，可以根据实际情况修改
+    -webkit-text-fill-color: var(--text-color) !important;
   }
 </style>

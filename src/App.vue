@@ -20,6 +20,7 @@
   import Login from '@/view/login/UserAuthModal.vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
+  import opinionApi from '@/api/opinionApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
@@ -29,10 +30,13 @@
   import { updateNotice } from '@/config/updateNotice';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { useI18n } from 'vue-i18n';
 
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
+  const OPINION_NOTICE_KEY = 'opinion-notice';
 
   // 监听主题变化
   watch(
@@ -61,7 +65,6 @@
     '/userOpinion': '/admin/userOpinion',
     '/operationLog': '/admin/operationLog',
     '/imageMg': '/admin/imageMg',
-    '/opinions': '/home',
     '/admin': '/admin/operationLog',
     '/personCenter': '/home',
   };
@@ -97,17 +100,6 @@
     try {
       const res = await apiBaseGet('/api/user/getUserInfo');
       user.setUserInfo(res.data);
-      if (res.data.role === 'root') {
-        if (res.data.opinionTotal > 0) {
-          notification.open({
-            message: '有新反馈',
-            description: h('a', `总计${res.data.opinionTotal}条反馈`),
-            onClick: () => {
-              router.push('/admin/userOpinion');
-            },
-          });
-        }
-      }
       user.preferences.theme = res.data?.preferences?.theme || 'day';
       user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
@@ -115,6 +107,7 @@
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
       localStorage.setItem('userId', res.data.id);
       setLocale(user.preferences.lang || 'zh-CN');
+      await refreshOpinionNotice();
       if (res.status !== 200) {
         handleUserLogout();
       }
@@ -178,7 +171,67 @@
   function handleUserLogout() {
     localStorage.setItem('userId', '');
     bookmark.isShowLogin = true;
+    notification.close(OPINION_NOTICE_KEY);
   }
+
+  function openOpinionNotice(data) {
+    if (user.role === 'root') {
+      if (!data.pendingTotal) {
+        notification.close(OPINION_NOTICE_KEY);
+        return;
+      }
+      notification.open({
+        key: OPINION_NOTICE_KEY,
+        message: t('personCenter.opinions.rootNoticeTitle'),
+        description: h(
+          'a',
+          `${t('personCenter.opinions.pendingReply')}${data.pendingTotal}${t('personCenter.opinions.noticeCountSuffix')}`,
+        ),
+        onClick: () => {
+          router.push({ path: '/admin/userOpinion', query: { status: 'pending' } });
+        },
+      });
+      return;
+    }
+
+    if (!data.unreadReplyTotal) {
+      notification.close(OPINION_NOTICE_KEY);
+      return;
+    }
+
+    const latestReplySummary = data.latestReply?.replyContent || t('personCenter.opinions.userNoticeDesc');
+    notification.open({
+      key: OPINION_NOTICE_KEY,
+      message: t('personCenter.opinions.userNoticeTitle'),
+      description: h(
+        'a',
+        `${t('personCenter.opinions.replyCountPrefix')}${data.unreadReplyTotal}${t('personCenter.opinions.noticeCountSuffix')} · ${latestReplySummary}`,
+      ),
+      onClick: () => {
+        router.push({ path: '/opinions', query: { tab: 'history', markViewed: '1' } });
+      },
+    });
+  }
+
+  const refreshOpinionNotice = throttle(
+    async () => {
+      if (!localStorage.getItem('userId')) {
+        return;
+      }
+      try {
+        const res = await opinionApi.getOpinionNotice();
+        if (res.status === 200) {
+          user.pendingOpinionTotal = res.data.pendingTotal || 0;
+          user.unreadOpinionReplyTotal = res.data.unreadReplyTotal || 0;
+          openOpinionNotice(res.data);
+        }
+      } catch (error) {
+        console.error('获取反馈提醒失败', error);
+      }
+    },
+    800,
+    { trailing: true },
+  );
 
   const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
@@ -280,9 +333,15 @@
     await init();
     checkUpdateNotice();
   });
+  const removeAfterEach = router.afterEach(() => {
+    if (localStorage.getItem('userId')) {
+      refreshOpinionNotice();
+    }
+  });
 
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
+    removeAfterEach();
     window.removeEventListener('resize', handleResize);
     if (mq && mqListener) {
       mq.removeEventListener('change', mqListener);

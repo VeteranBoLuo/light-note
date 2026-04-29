@@ -20,6 +20,8 @@ interface UserInfo {
   bookmarkTotal: number;
   noteTotal: number;
   opinionTotal: number;
+  pendingOpinionTotal: number;
+  unreadOpinionReplyTotal: number;
   location: UserLocation;
   storageUsed: number; // 已使用单位：MB
   preferences: {
@@ -45,6 +47,8 @@ const defaultUserState: UserState = {
   bookmarkTotal: 0,
   noteTotal: 0,
   opinionTotal: 0,
+  pendingOpinionTotal: 0,
+  unreadOpinionReplyTotal: 0,
   storageUsed: 0,
   location: {
     province: '',

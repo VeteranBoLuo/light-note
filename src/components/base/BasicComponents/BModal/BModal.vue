@@ -139,7 +139,9 @@
     min-width: 400px;
     min-height: 100px;
     max-width: 90%;
+    max-height: calc(100vh - 32px);
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     z-index: 1000;
     animation: in-animation 0.3s ease;
   }
@@ -153,6 +155,8 @@
   .modal-content {
     word-wrap: break-word; /* 允许单词在到达边界时断开换行 */
     overflow-wrap: break-word;
+    min-height: 0;
+    overflow: auto;
   }
   :deep(.b-input) {
     background-color: var(--modal-input-bg);
@@ -191,6 +195,7 @@
     .modal-view {
       top: 45%;
       min-width: 80%;
+      max-height: calc(100vh - 20px);
     }
   }
 </style>

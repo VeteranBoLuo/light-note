@@ -180,7 +180,7 @@
               </div>
             </div>
           </template>
-          <div v-else class="empty-log">{{ t('workbench.logs.clickForDetail', '点击上方日志标题查看详情') }}</div>
+          <div v-else class="empty-log">{{ t('workbench.logs.clickForDetail', '点击日志标题查看详情') }}</div>
         </div>
       </div>
     </div>
@@ -1289,7 +1289,7 @@
   .update-log-content {
     margin-top: 8px;
     display: grid;
-    grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+    grid-template-columns: minmax(280px, 1fr) minmax(0, 1fr);
     gap: 8px;
     flex: 1;
     min-height: 0;

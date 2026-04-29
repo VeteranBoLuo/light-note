@@ -130,10 +130,10 @@
     position: absolute;
     height: 100%;
     width: 100%;
-    background-color: white;
+    background-color: var(--background-color);
     backface-visibility: hidden;
     transition: transform 0.6s linear;
-    border: 1px solid #ccc;
+    border: 1px solid var(--card-border-color);
     border-radius: 8px;
     background-image: var(--bg-image2);
   }
@@ -148,7 +148,7 @@
     position: absolute;
     right: 20px;
     bottom: 20px;
-    color: black;
+    color: var(--text-color);
   }
   :deep(.handle-btn) {
     width: 80% !important;

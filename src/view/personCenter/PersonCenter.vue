@@ -123,7 +123,6 @@
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
-    <Opinions v-if="opinionsVisible" v-model:visible="opinionsVisible" />
   </a-popover>
 </template>
 
@@ -136,7 +135,6 @@
   import { computed, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
-  import Opinions from '@/components/personCenter/opinions/Opinions.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
@@ -152,8 +150,6 @@
   const isSettingMenuOpen = ref(false);
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
   const userVisible = ref(false);
-
-  const opinionsVisible = ref(false);
 
   const user = useUserStore();
 
@@ -323,7 +319,7 @@
     } else {
       switch (menuItem.label) {
         case t('personCenter.feedback'):
-          opinionsVisible.value = true;
+          router.push('/opinions');
           break;
         default:
           break;
