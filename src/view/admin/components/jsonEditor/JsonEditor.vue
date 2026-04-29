@@ -6,11 +6,11 @@
         <p>面向对象/数组的可视化编辑面板，左侧写代码，右侧快速折叠展开结构。右键可进行更多操作。</p>
       </div>
       <div class="hero-actions">
-        <b-button size="small" @click="loadSample">加载示例</b-button>
-        <b-button size="small" @click="compressJson">压缩</b-button>
-        <b-button size="small" @click="formatJson">格式化</b-button>
-        <b-button size="small" @click="expandAll">全部展开</b-button>
-        <b-button size="small" @click="collapseAll">全部折叠</b-button>
+        <b-button size="small" @click="loadSample" v-click-log="{ module: '后台管理-JSON编辑器', operation: '加载示例' }">加载示例</b-button>
+        <b-button size="small" @click="compressJson" v-click-log="{ module: '后台管理-JSON编辑器', operation: '压缩JSON' }">压缩</b-button>
+        <b-button size="small" @click="formatJson" v-click-log="{ module: '后台管理-JSON编辑器', operation: '格式化JSON' }">格式化</b-button>
+        <b-button size="small" @click="expandAll" v-click-log="{ module: '后台管理-JSON编辑器', operation: '全部展开' }">全部展开</b-button>
+        <b-button size="small" @click="collapseAll" v-click-log="{ module: '后台管理-JSON编辑器', operation: '全部折叠' }">全部折叠</b-button>
       </div>
     </section>
 
@@ -58,6 +58,7 @@
   import { oneDark } from '@codemirror/theme-one-dark';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import JsonTreeNode from './JsonTreeNode.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   type NodeType = 'object' | 'array' | 'string' | 'number' | 'boolean' | 'null';
 

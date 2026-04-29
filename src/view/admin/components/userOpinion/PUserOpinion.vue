@@ -41,6 +41,7 @@
                 :src="src"
                 alt=""
                 @click="bookmark.refreshViewer(src)"
+                v-click-log="{ module: '后台管理-用户反馈', operation: '预览反馈图片' }"
               />
             </div>
           </div>
@@ -57,8 +58,8 @@
           <div class="p-user-opinion__actions">
             <span class="p-user-opinion__meta" v-if="record.replyTime">上次回复：{{ record.replyTime }}</span>
             <div class="p-user-opinion__buttons">
-              <b-button @click="delOpinion(record)">删除</b-button>
-              <b-button type="primary" @click="submitReply(record)">保存回复</b-button>
+              <b-button @click="delOpinion(record)" v-click-log="{ module: '后台管理-用户反馈', operation: `删除反馈【${record.alias || record.id}】` }">删除</b-button>
+              <b-button type="primary" @click="submitReply(record)" v-click-log="{ module: '后台管理-用户反馈', operation: `保存回复【${record.alias || record.id}】` }">保存回复</b-button>
             </div>
           </div>
         </article>
@@ -95,6 +96,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import { useRoute } from 'vue-router';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
@@ -183,6 +185,7 @@
       replyContent,
     });
     if (res.status === 200) {
+      recordOperation({ module: '后台管理-用户反馈', operation: `保存回复成功【${record.alias || record.id}】` });
       message.success('回复已保存');
       searchOpinionList();
     }
@@ -195,6 +198,7 @@
       onOk() {
         opinionApi.deleteOpinion({ id: record.id }).then((res) => {
           if (res.status === 200) {
+            recordOperation({ module: '后台管理-用户反馈', operation: `删除反馈成功【${record.alias || record.id}】` });
             message.success('删除成功');
             searchOpinionList();
           }

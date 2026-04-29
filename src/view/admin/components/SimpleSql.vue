@@ -8,8 +8,8 @@
             <small>轻笺数据运维工具</small>
           </div>
           <div class="sql-header-actions">
-            <b-button class="ghost-btn" @click="clearSql">清空</b-button>
-            <b-button class="primary-btn" @click="runSql">运行</b-button>
+            <b-button class="ghost-btn" @click="clearSql" v-click-log="{ module: '后台管理-SQL工具', operation: '清空SQL' }">清空</b-button>
+            <b-button class="primary-btn" @click="runSql" v-click-log="{ module: '后台管理-SQL工具', operation: '运行SQL' }">运行</b-button>
           </div>
           <span class="status-pill" :class="executionState">{{ statusCopy }}</span>
         </div>
@@ -71,6 +71,7 @@
               type="button"
               class="chip"
               @click="appendSql(item.value)"
+              v-click-log="{ module: '后台管理-SQL工具', operation: `快捷语句【${item.label}】` }"
             >
               {{ item.label }}
             </button>
@@ -97,6 +98,7 @@
               class="table-chip"
               :class="{ active: selectedTable === table }"
               @click="handleTableClick(table)"
+              v-click-log="{ module: '后台管理-SQL工具', operation: `选择表【${table}】` }"
             >
               {{ table }}
             </button>
@@ -115,6 +117,7 @@
               type="button"
               class="chip"
               @click="appendSql(item.value)"
+              v-click-log="{ module: '后台管理-SQL工具', operation: `表模板【${item.label}】` }"
             >
               {{ item.label }}
             </button>
@@ -178,6 +181,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import icon from '@/config/icon.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   type ExecutionState = 'idle' | 'running' | 'completed' | 'error';
   type SchemaRow = {
@@ -583,6 +587,9 @@
       const hasError = detectResultError(payload) || !isOk;
       result.value = formatted || '无返回结果';
       executionState.value = hasError ? 'error' : 'completed';
+      if (!hasError) {
+        recordOperation({ module: '后台管理-SQL工具', operation: '运行SQL成功' });
+      }
     } catch (error: any) {
       result.value = error?.message || '请求异常';
       executionState.value = 'error';

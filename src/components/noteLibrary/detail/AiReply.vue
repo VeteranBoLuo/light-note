@@ -25,6 +25,7 @@
         :disabled="isLoading"
         @click="runAction('polishFull')"
         :title="t('ai.reply.actions.polishFull')"
+        v-click-log="{ module: '笔记-AI助手', operation: '润色全文' }"
         >{{ t('ai.reply.actions.polishFull') }}</button
       >
       <button
@@ -32,6 +33,7 @@
         :disabled="isLoading"
         @click="runAction('optimizeTitle')"
         :title="t('ai.reply.actions.optimizeTitle')"
+        v-click-log="{ module: '笔记-AI助手', operation: '优化标题' }"
         >{{ t('ai.reply.actions.optimizeTitle') }}</button
       >
       <button
@@ -39,6 +41,7 @@
         :disabled="isLoading"
         @click="runAction('generateSummary')"
         :title="t('ai.reply.actions.generateSummary')"
+        v-click-log="{ module: '笔记-AI助手', operation: '生成摘要' }"
         >{{ t('ai.reply.actions.generateSummary') }}</button
       >
       <button
@@ -46,6 +49,7 @@
         :disabled="isLoading"
         @click="runAction('correctErrors')"
         :title="t('ai.reply.actions.correctErrors')"
+        v-click-log="{ module: '笔记-AI助手', operation: '纠错与语病' }"
         >{{ t('ai.reply.actions.correctErrors') }}</button
       >
     </div>
@@ -53,7 +57,7 @@
     <div class="ai-input">
       <div class="input-label">{{ t('ai.reply.inputLabel') }}</div>
       <textarea v-model="prompt" :placeholder="t('ai.reply.inputPlaceholder')" />
-      <button v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')">
+      <button v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')" v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }">
         <span class="stop-icon"></span>
         {{ t('ai.reply.stop', '停止生成') }}
       </button>
@@ -63,6 +67,7 @@
         :disabled="!prompt.trim()"
         @click="generate('custom')"
         :title="t('ai.reply.processButton')"
+        v-click-log="{ module: '笔记-AI助手', operation: '自定义处理' }"
       >
         {{ t('ai.reply.processButton') }}
       </button>
@@ -78,6 +83,7 @@
             :disabled="!outputFull || !hasBody"
             @click="insertToNote"
             :title="t('ai.reply.replaceContent')"
+            v-click-log="{ module: '笔记-AI助手', operation: '插入到笔记' }"
             >{{ t('ai.reply.replaceContent') }}</button
           >
           <button
@@ -86,9 +92,10 @@
             :disabled="!outputFull || !hasTitle"
             @click="replaceTitle"
             :title="t('ai.reply.replaceTitle')"
+            v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
             >{{ t('ai.reply.replaceTitle') }}</button
           >
-          <button class="ghost-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')">{{
+          <button class="ghost-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">{{
             t('ai.reply.clear')
           }}</button>
         </div>

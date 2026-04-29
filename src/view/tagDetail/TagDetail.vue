@@ -5,7 +5,7 @@
       <div class="tag-header-main">
         <img v-if="tag.iconUrl" :src="tag.iconUrl" class="tag-icon" alt=" " />
         <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="28" />
-        <span class="tag-name dom-hover" @click="goToEditTag">{{ tag.name }}</span>
+        <span class="tag-name dom-hover" @click="goToEditTag" v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }">{{ tag.name }}</span>
       </div>
       <div v-if="relatedTags.length" class="tag-related">
         <span class="related-label">{{ $t('tagManage.relatedTag') }}:</span>
@@ -14,6 +14,7 @@
           :key="rt.id"
           class="related-tag-item dom-hover"
           @click="goToTag(rt.id)"
+          v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
           >{{ rt.name }}</span
         >
       </div>
@@ -46,7 +47,7 @@
           {{ $t('tagManage.relatedTag') }} ({{ relatedTags.length }})
         </div>
         <div class="related-tag-grid">
-          <div v-for="rt in relatedTags" :key="rt.id" class="related-tag-card dom-hover" @click="goToTag(rt.id)">
+          <div v-for="rt in relatedTags" :key="rt.id" class="related-tag-card dom-hover" @click="goToTag(rt.id)" v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }">
             <div class="related-tag-name">{{ rt.name }}</div>
           </div>
         </div>
@@ -64,6 +65,7 @@
             :key="bm.id"
             class="bookmark-card dom-hover"
             @click="openBookmark(bm)"
+            v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
           >
             <div class="bookmark-card-header">
               <img
@@ -90,6 +92,7 @@
             :key="note.id"
             class="note-item dom-hover"
             @click="router.push(`/noteLibrary/${note.id}`)"
+            v-click-log="{ module: '标签详情', operation: `打开笔记【${note.title || '未命名文档'}】` }"
           >
             <div class="note-item-title">{{ note.title || $t('noteDetail.unnamedDoc', '未命名文档') }}</div>
             <div class="note-item-desc" v-html="getNoteDesc(note.content)" />
@@ -99,6 +102,7 @@
                 :key="noteTag.id"
                 class="note-item-tag dom-hover"
                 @click.stop="goToTag(noteTag.id)"
+                v-click-log="{ module: '标签详情', operation: `查看笔记标签【${noteTag.name}】` }"
               >
                 {{ noteTag.name }}
               </span>
@@ -120,6 +124,7 @@
             :key="file.id"
             class="file-item dom-hover"
             @click="previewFile(file)"
+            v-click-log="{ module: '标签详情', operation: `预览文件【${file.fileName}】` }"
           >
             <div class="file-item-left">
               <svg-icon :src="getFileIcon(file)" size="28" />

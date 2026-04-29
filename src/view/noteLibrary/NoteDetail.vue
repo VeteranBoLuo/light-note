@@ -50,6 +50,7 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -165,9 +166,13 @@
       res = await apiBasePost('/api/note/addNote', params);
     }
     if (res.status === 200) {
+      const isFirstSave = !note.id && res.data.id;
       if (res.data.id) {
         note.id = res.data.id;
         router.push(`/noteLibrary/${note.id}`).then();
+      }
+      if (isFirstSave) {
+        recordOperation({ module: '笔记', operation: `新建笔记成功【${note.title}】` });
       }
       const elapsedTime = Date.now() - startTime;
       const delay = Math.max(500 - elapsedTime, 0);
@@ -211,6 +216,7 @@
         }).then((res) => {
           if (res.status) {
             message.success('删除成功');
+            recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}】` });
             router.push('/noteLibrary');
           }
         });

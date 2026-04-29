@@ -5,6 +5,7 @@
       @click="toggleTranslation"
       :class="{ active: enableTranslation }"
       :title="t('ai.translation.translate')"
+      v-click-log="{ module: 'AI助手', operation: enableTranslation ? '关闭翻译' : '开启翻译' }"
     >
       <svg-icon size="14" :src="icon.ai.internet" />
       {{ t('ai.translation.translate') }}

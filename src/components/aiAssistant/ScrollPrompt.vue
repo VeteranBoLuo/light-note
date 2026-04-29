@@ -1,5 +1,5 @@
 <template>
-  <div class="scroll-prompt" @click="$emit('scrollToBottomClick')">
+  <div class="scroll-prompt" @click="$emit('scrollToBottomClick')" v-click-log="{ module: 'AI助手', operation: '滚动到底部' }">
     <div class="prompt-icon">
       <div
         class="loading-spinner"

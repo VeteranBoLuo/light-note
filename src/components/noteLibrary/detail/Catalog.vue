@@ -8,12 +8,13 @@
         :class="{ active: activeHeading === index }"
         class="toc-item"
         :style="{ paddingLeft: `${heading.level * 16}px` }"
+        v-click-log="{ module: '笔记', operation: `点击目录【${heading.text}】` }"
       >
         <span class="toc-line" v-if="activeHeading === index"></span>
         <span class="text-hidden" style="font-size: 14px">{{ heading.text }}</span>
       </div>
     </div>
-    <div v-if="bookmark.isMobile && note.headings.length > 0" class="folder" title="目录" @click="getCategory">
+    <div v-if="bookmark.isMobile && note.headings.length > 0" class="folder" title="目录" @click="getCategory" v-click-log="{ module: '笔记', operation: '切换目录显示' }">
       <svg-icon :src="icon.noteDetail.catalogue" size="24" style="color: var(--text-color)" />
     </div>
   </div>

@@ -7,6 +7,7 @@
         :key="index"
         class="recommendation-item"
         @click="handleRecommendationClick(item)"
+        v-click-log="{ module: 'AI助手', operation: `点击推荐问题【${item}】` }"
       >
         {{ item }}
       </div>

@@ -11,6 +11,7 @@
           class="category-tag-item dom-hover"
           @click="handleToTagPage(tag)"
           v-for="tag in bookmark.tagData?.relatedTagList"
+          v-click-log="{ module: '首页', operation: `点击相关标签【${tag.name}】` }"
           >{{ tag.name }}</div
         >
       </div>

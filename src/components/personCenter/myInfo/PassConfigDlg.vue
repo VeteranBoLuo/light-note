@@ -19,6 +19,7 @@
   import { message } from 'ant-design-vue';
   import { checkEndCondition, EndCondition } from '@/utils/validator.ts';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
   const visible = defineModel('visible');
   const { t } = useI18n();
@@ -112,6 +113,7 @@
               ? t('myInfo.changePasswordSuccess')
               : t('myInfo.setPasswordSuccess'),
           );
+          recordOperation({ module: '我的信息', operation: type.value === '修改密码' ? '修改密码成功' : '设置密码成功' });
           visible.value = false;
           formData.value = { confirmPassword: '', password: '' };
         }

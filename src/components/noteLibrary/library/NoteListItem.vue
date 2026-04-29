@@ -1,10 +1,10 @@
 <template>
-  <div class="note-list-item" @click="router.push(`/noteLibrary/${note.id}`)">
+  <div class="note-list-item" @click="router.push(`/noteLibrary/${note.id}`)" v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }">
     <div class="note-info">
       <div class="note-title">{{ note.title }}</div>
       <div class="note-description" v-html="getDescription(note.content)"></div>
       <div class="note-tags" v-if="getTags(note)">
-        <span class="b-tag" v-for="tag in getTags(note)" @click.stop="noteTypeChange(tag)">{{ tag.name }}</span>
+        <span class="b-tag" v-for="tag in getTags(note)" @click.stop="noteTypeChange(tag)" v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }">{{ tag.name }}</span>
       </div>
       <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>

@@ -1,6 +1,6 @@
 <template>
   <CommonContainer :title="$t('changelog.title')">
-    <b-button type="primary" size="small" v-if="user.role === 'root'" @click="editLogs" class="edit-btn">
+    <b-button type="primary" size="small" v-if="user.role === 'root'" @click="editLogs" class="edit-btn" v-click-log="{ module: '更新日志', operation: '编辑更新日志' }">
       {{ $t('common.edit') }}
     </b-button>
 
@@ -54,9 +54,9 @@
         <div class="editor-header">
           <span>{{ $t('changelog.charCount', { count: jsonContent.length }) }}</span>
           <div class="editor-actions">
-            <a-button size="small" @click="formatJson">{{ $t('changelog.format') }}</a-button>
-            <a-button size="small" @click="resetJson" style="margin-left: 8px">{{ $t('changelog.reset') }}</a-button>
-            <a-button size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating">
+            <a-button size="small" @click="formatJson" v-click-log="{ module: '更新日志', operation: '格式化JSON' }">{{ $t('changelog.format') }}</a-button>
+            <a-button size="small" @click="resetJson" style="margin-left: 8px" v-click-log="{ module: '更新日志', operation: '重置JSON' }">{{ $t('changelog.reset') }}</a-button>
+            <a-button size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating" v-click-log="{ module: '更新日志', operation: '保存更新日志' }">
               {{ $t('common.save') }}
             </a-button>
           </div>
@@ -88,6 +88,7 @@
   import { oneDark } from '@codemirror/theme-one-dark';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -223,6 +224,7 @@
 
       if (response.status === 200) {
         message.success('更新成功');
+        recordOperation({ module: '更新日志', operation: '保存更新日志成功' });
         visible.value = false;
       } else {
         // 如果后端失败，回滚

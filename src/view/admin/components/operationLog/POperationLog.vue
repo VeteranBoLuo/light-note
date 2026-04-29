@@ -7,7 +7,7 @@
             <svg-icon :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
-        <b-button @click="clearOperationLogs" type="primary">清空</b-button>
+        <b-button @click="clearOperationLogs" type="primary" v-click-log="{ module: '后台管理-操作日志', operation: '清空操作日志' }">清空</b-button>
       </b-space>
       <a-table
         :data-source="logList"
@@ -58,6 +58,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
+  import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
@@ -96,6 +97,7 @@
         apiBaseGet('/api/common/clearOperationLogs', {}).then((res) => {
           if (res.status === 200) {
             message.success('日志清空成功');
+            recordOperation({ module: '后台管理-操作日志', operation: '清空操作日志成功' });
             searchApiLog();
           }
         });

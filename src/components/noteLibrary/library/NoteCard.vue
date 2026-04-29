@@ -1,5 +1,5 @@
 <template>
-  <div @click="router.push(`/noteLibrary/${note.id}`)" class="note-card dark-theme">
+  <div @click="router.push(`/noteLibrary/${note.id}`)" class="note-card dark-theme" v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }">
     <div class="note-title" :title="note.title">{{ note.title }}</div>
     <div
       class="note-content"
@@ -7,7 +7,7 @@
       v-html="extractAndConvertTags(note.content)"
     />
     <div class="note-tags" v-if="note.tags && note.tags.length">
-      <div :title="tag" class="b-tag text-hidden" v-for="tag in note.tags" @click.stop="noteTypeChange(tag)">{{
+      <div :title="tag" class="b-tag text-hidden" v-for="tag in note.tags" @click.stop="noteTypeChange(tag)" v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }">{{
         tag.name
       }}</div>
     </div>

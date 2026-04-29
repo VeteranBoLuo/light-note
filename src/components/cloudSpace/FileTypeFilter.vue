@@ -2,7 +2,7 @@
   <div class="filter-container">
     <!-- 下拉筛选按钮 -->
     <div class="filter-dropdown">
-      <b-button class="filter-button" :class="{ 'filter-button--active': showFilterMenu }" @click="toggleFilterMenu">
+      <b-button class="filter-button" :class="{ 'filter-button--active': showFilterMenu }" @click="toggleFilterMenu" v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }">
         <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
         <span>{{ bookmark.isDesktop ? $t('cloudSpace.fileType') : '' }}</span>
         <span v-if="selectedCount > 0 && selectedCount < fileTypes.length && bookmark.isDesktop" class="filter-badge">
