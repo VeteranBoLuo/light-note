@@ -373,6 +373,7 @@ export default {
     close: 'Close',
     preview: 'Preview',
     select: 'Select',
+    saveSuccess: 'Save Successful',
   },
   changelog: {
     title: 'Update Logs',

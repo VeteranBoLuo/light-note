@@ -69,7 +69,7 @@
               <div class="tag-card__head">
                 <div class="tag-identity">
                   <div class="tag-icon-wrap">
-                    <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" />
+                    <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="24" />
                     <span v-else>#</span>
                   </div>
                   <div class="tag-meta">
@@ -170,7 +170,9 @@
                     </div>
                   </div>
 
-                  <div v-if="!getTotalResourceCount(tag)" class="empty-inline">{{ t('tagManage.noRelatedContent') }}</div>
+                  <div v-if="!getTotalResourceCount(tag)" class="empty-inline">{{
+                    t('tagManage.noRelatedContent')
+                  }}</div>
                 </div>
               </div>
             </article>
@@ -908,9 +910,23 @@
     border-radius: 999px;
     margin-bottom: 18px;
     background:
-      radial-gradient(circle at center, color-mix(in srgb, var(--resource-tag-color) 26%, transparent) 0 26%, transparent 27%),
-      radial-gradient(circle at center, transparent 0 54%, color-mix(in srgb, var(--resource-tag-color) 18%, transparent) 55% 58%, transparent 59%),
-      radial-gradient(circle at center, transparent 0 72%, color-mix(in srgb, var(--resource-tag-color) 12%, transparent) 73% 76%, transparent 77%);
+      radial-gradient(
+        circle at center,
+        color-mix(in srgb, var(--resource-tag-color) 26%, transparent) 0 26%,
+        transparent 27%
+      ),
+      radial-gradient(
+        circle at center,
+        transparent 0 54%,
+        color-mix(in srgb, var(--resource-tag-color) 18%, transparent) 55% 58%,
+        transparent 59%
+      ),
+      radial-gradient(
+        circle at center,
+        transparent 0 72%,
+        color-mix(in srgb, var(--resource-tag-color) 12%, transparent) 73% 76%,
+        transparent 77%
+      );
   }
 
   @media (max-width: 1280px) {

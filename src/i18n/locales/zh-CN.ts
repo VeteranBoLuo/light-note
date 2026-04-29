@@ -369,6 +369,7 @@ export default {
     close: '关闭',
     preview: '预览',
     select: '选择',
+    saveSuccess: '保存成功',
   },
   changelog: {
     title: '更新日志',
