@@ -66,18 +66,11 @@
 
           <div class="opinion-field">
             <label class="opinion-field__label">{{ t('personCenter.opinions.contactInfo') }}</label>
-            <b-input
-              v-model:value="opinionData.phone"
-              :placeholder="t('personCenter.opinions.contactPlaceholder')"
-            />
+            <b-input v-model:value="opinionData.phone" :placeholder="t('personCenter.opinions.contactPlaceholder')" />
           </div>
         </section>
 
-        <b-button
-          type="primary"
-          class="opinion-submit"
-          @click="submit"
-        >
+        <b-button type="primary" class="opinion-submit" @click="submit">
           {{ t('personCenter.opinions.submit') }}
         </b-button>
       </div>
@@ -108,7 +101,10 @@
                   <span class="opinion-status-badge" :class="`opinion-status-badge--${item.status || 'pending'}`">
                     {{ statusMeta(item).label }}
                   </span>
-                  <span v-if="item.status === 'replied' && !item.replyViewed" class="opinion-status-badge opinion-status-badge--new">
+                  <span
+                    v-if="item.status === 'replied' && !item.replyViewed"
+                    class="opinion-status-badge opinion-status-badge--new"
+                  >
                     {{ t('personCenter.opinions.newReply') }}
                   </span>
                 </div>
@@ -144,11 +140,7 @@
             </article>
           </div>
 
-          <a-empty
-            v-else
-            :description="t('personCenter.opinions.noFeedbackHistory')"
-            class="both-center"
-          />
+          <a-empty v-else :description="t('personCenter.opinions.noFeedbackHistory')" class="both-center" />
         </div>
       </div>
     </div>
@@ -191,7 +183,9 @@
   const user = useUserStore();
 
   const activeTab = ref(
-    props.initialTab === 'history' ? t('personCenter.opinions.feedbackHistory') : t('personCenter.opinions.feedbackType'),
+    props.initialTab === 'history'
+      ? t('personCenter.opinions.feedbackHistory')
+      : t('personCenter.opinions.feedbackType'),
   );
 
   const opinionData = reactive({
@@ -346,7 +340,7 @@
 
   async function submit() {
     if (opinionData.content.trim().length < 6) {
-      message.warning(t('personCenter.opinions.contentTooShort'));
+      message.warning(t('personCenter.opinions.contentPlaceholder'));
       return;
     }
 
@@ -405,7 +399,8 @@
   watch(
     () => props.initialTab,
     (value) => {
-      activeTab.value = value === 'history' ? t('personCenter.opinions.feedbackHistory') : t('personCenter.opinions.feedbackType');
+      activeTab.value =
+        value === 'history' ? t('personCenter.opinions.feedbackHistory') : t('personCenter.opinions.feedbackType');
       if (value === 'history') {
         hasMarkedViewed.value = false;
         fetchOpinionHistory();
@@ -483,7 +478,11 @@
     border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
     border-radius: 14px;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--card-bg-color, var(--background-color)) 96%, transparent), transparent),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--card-bg-color, var(--background-color)) 96%, transparent),
+        transparent
+      ),
       var(--background-color);
   }
 
@@ -591,7 +590,11 @@
     border-radius: 14px;
     border: 1px dashed color-mix(in srgb, var(--resource-bookmark-color) 36%, var(--border-color));
     background:
-      radial-gradient(circle at top right, color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent), transparent 36%),
+      radial-gradient(
+        circle at top right,
+        color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent),
+        transparent 36%
+      ),
       var(--background-color);
     display: flex;
     flex-direction: column;
@@ -600,7 +603,10 @@
     gap: 6px;
     text-align: center;
     outline: none;
-    transition: border-color 0.2s ease, transform 0.2s ease, background-color 0.2s ease;
+    transition:
+      border-color 0.2s ease,
+      transform 0.2s ease,
+      background-color 0.2s ease;
   }
 
   .opinion-upload-dropzone:focus-visible {
@@ -612,7 +618,11 @@
     border-color: var(--resource-bookmark-color);
     transform: translateY(-1px);
     background:
-      radial-gradient(circle at top right, color-mix(in srgb, var(--resource-bookmark-color) 16%, transparent), transparent 42%),
+      radial-gradient(
+        circle at top right,
+        color-mix(in srgb, var(--resource-bookmark-color) 16%, transparent),
+        transparent 42%
+      ),
       color-mix(in srgb, var(--resource-bookmark-color) 6%, var(--background-color));
   }
 

@@ -360,7 +360,6 @@ export default {
       replyTime: 'Reply Time: ',
       noFeedbackHistory: 'No feedback history',
       submit: 'Submit',
-      contentTooShort: 'Please enter a problem description of at least 6 characters',
       thankYouFeedback: 'Thank you for your feedback',
       feedbackModule: 'Feedback',
       submitFeedback: 'Submit Feedback',
