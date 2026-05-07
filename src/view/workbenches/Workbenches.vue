@@ -42,24 +42,110 @@
     <div class="insight-grid">
       <div class="panel-card activity-panel">
         <div class="panel-title">{{ t('workbench.panel.weeklyActive', '最近 7 天活跃') }}</div>
-        <div v-if="activityLoading" class="activity-grid">
-          <div class="activity-item activity-skeleton-item" v-for="n in 3" :key="`activity-skeleton-${n}`">
-            <div class="sk-line sk-label"></div>
-            <div class="sk-line sk-number"></div>
-          </div>
+        <div v-if="activityLoading" class="activity-ring-wrap">
+          <div class="ring-skeleton"></div>
         </div>
-        <div v-else class="activity-grid">
-          <div class="activity-item">
-            <div class="activity-label">{{ t('workbench.panel.newBookmarks', '新增书签') }}</div>
-            <div class="activity-value">{{ weeklyStats.bookmark }}</div>
+        <div v-else class="activity-ring-wrap">
+          <div class="activity-ring-stage">
+            <svg viewBox="0 0 160 160" class="activity-rings-svg" aria-hidden="true">
+              <defs>
+                <linearGradient
+                  id="ring-gradient-bookmark"
+                  x1="18"
+                  y1="80"
+                  x2="142"
+                  y2="80"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0%" stop-color="var(--workbench-accent-bookmark-start)" />
+                  <stop offset="52%" stop-color="var(--workbench-accent-bookmark-end)" />
+                  <stop offset="100%" stop-color="var(--workbench-accent-bookmark-start)" />
+                  <animateTransform
+                    attributeName="gradientTransform"
+                    type="rotate"
+                    from="0 80 80"
+                    to="360 80 80"
+                    dur="5s"
+                    repeatCount="indefinite"
+                  />
+                </linearGradient>
+                <linearGradient id="ring-gradient-note" x1="32" y1="80" x2="128" y2="80" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="var(--workbench-accent-note-start)" />
+                  <stop offset="52%" stop-color="var(--workbench-accent-note-end)" />
+                  <stop offset="100%" stop-color="var(--workbench-accent-note-start)" />
+                  <animateTransform
+                    attributeName="gradientTransform"
+                    type="rotate"
+                    from="120 80 80"
+                    to="480 80 80"
+                    dur="4.6s"
+                    repeatCount="indefinite"
+                  />
+                </linearGradient>
+                <linearGradient id="ring-gradient-file" x1="48" y1="80" x2="112" y2="80" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="var(--workbench-accent-file-start)" />
+                  <stop offset="52%" stop-color="var(--workbench-accent-file-end)" />
+                  <stop offset="100%" stop-color="var(--workbench-accent-file-start)" />
+                  <animateTransform
+                    attributeName="gradientTransform"
+                    type="rotate"
+                    from="240 80 80"
+                    to="600 80 80"
+                    dur="4.2s"
+                    repeatCount="indefinite"
+                  />
+                </linearGradient>
+                <filter id="ring-glow-bookmark" x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="3.2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="ring-glow-note" x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="3.2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="ring-glow-file" x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="3.2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <circle class="ring-halo" cx="80" cy="80" r="67" fill="none" />
+              <circle class="ring-track ring-track--single" cx="80" cy="80" r="56" fill="none" />
+              <path
+                v-for="segment in activityRingSegments"
+                :key="segment.key"
+                :class="['ring-progress', `ring-${segment.key}`]"
+                :d="segment.path"
+                fill="none"
+                :stroke="segment.stroke"
+                stroke-width="15"
+                stroke-linecap="round"
+                :filter="segment.filter"
+              />
+            </svg>
+            <div class="ring-center-info">
+              <div class="ring-center-value">{{ animatedTotalActivityCount }}</div>
+              <div class="ring-center-label">{{ t('workbench.panel.weeklyChanges', '本周变化') }}</div>
+              <div class="ring-center-extra"
+                >{{ animatedActiveDays }}/7 {{ t('workbench.panel.activeDays', '活跃天数') }}</div
+              >
+              <div class="ring-center-tooltip">{{ activityChangeTooltip }}</div>
+            </div>
           </div>
-          <div class="activity-item">
-            <div class="activity-label">{{ t('workbench.panel.updatedNotes', '更新笔记') }}</div>
-            <div class="activity-value">{{ weeklyStats.note }}</div>
-          </div>
-          <div class="activity-item">
-            <div class="activity-label">{{ t('workbench.panel.uploadedFiles', '上传文件') }}</div>
-            <div class="activity-value">{{ weeklyStats.file }}</div>
+          <div class="activity-ring-legend">
+            <div v-for="item in activityLegendItems" :key="item.key" class="ring-legend-item">
+              <span :class="['rc-dot', `rc-dot--${item.key}`]"></span>
+              <span class="ring-legend-label">{{ item.label }}</span>
+              <span class="ring-legend-value">{{ item.count }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -147,41 +233,43 @@
 
     <div class="panel-card update-log-panel">
       <div class="panel-title">{{ t('workbench.panel.updateLogs', '更新日志') }}</div>
-      <div v-if="updateLogsLoading" class="update-log-content skeleton-log-content">
-        <div class="update-log-list skeleton-log-list">
-          <div class="update-log-title" v-for="n in 4" :key="`log-skeleton-${n}`">
-            <div class="sk-line"></div>
-          </div>
-        </div>
-        <div class="update-log-detail">
-          <div class="sk-line sk-short"></div>
-          <div class="detail-list">
-            <div class="sk-line" v-for="n in 3" :key="`detail-skeleton-${n}`"></div>
-          </div>
+      <div v-if="updateLogsLoading" class="update-log-timeline skeleton-timeline">
+        <div class="tl-track"></div>
+        <div class="tl-node-skel" v-for="n in 4" :key="`ts-${n}`">
+          <div class="sk-line"></div>
         </div>
       </div>
-      <div v-else class="update-log-content">
-        <div class="update-log-list" v-if="updateLogList.length">
+      <div v-else class="update-log-timeline">
+        <div class="tl-track"></div>
+        <div class="tl-entries">
           <button
             v-for="(log, index) in updateLogList"
             :key="`${log.label || 'log'}-${index}`"
-            class="update-log-title dom-hover"
-            :class="{ active: activeUpdateLogIndex === index }"
+            class="tl-entry"
+            :class="{ 'tl-entry--active': activeUpdateLogIndex === index }"
             @click="toggleUpdateLog(index)"
             v-click-log="{ module: '工作台', operation: `查看更新日志【${log.time || index + 1}】` }"
           >
-            <span class="log-label" v-html="log.label || `${t('workbench.logs.update', '更新')} ${index + 1}`"></span>
-            <span class="log-time">{{ log.time || '-' }}</span>
+            <div class="tl-node">
+              <div class="tl-dot"></div>
+              <div class="tl-ripple" v-if="activeUpdateLogIndex === index"></div>
+            </div>
+            <div class="tl-content">
+              <span class="tl-label" v-html="log.label || `${t('workbench.logs.update', '更新')} ${index + 1}`"></span>
+              <span class="tl-time">{{ log.time || '-' }}</span>
+            </div>
           </button>
+          <div v-if="!updateLogList.length" class="tl-empty">{{ t('workbench.logs.empty', '暂无更新日志') }}</div>
         </div>
-        <div v-else class="empty-log list-empty">{{ t('workbench.logs.empty', '暂无更新日志') }}</div>
-
-        <div class="update-log-detail">
+        <div class="tl-detail">
           <template v-if="activeUpdateLog">
-            <div class="detail-title">{{ activeUpdateLog.time || t('workbench.logs.latest', '最近更新') }}</div>
+            <div class="tl-detail-header">
+              <div class="tl-detail-dot"></div>
+              <div class="detail-title">{{ activeUpdateLog.time || t('workbench.logs.latest', '最近更新') }}</div>
+            </div>
             <div class="detail-list" v-if="Array.isArray(activeUpdateLog.list) && activeUpdateLog.list.length">
-              <div class="detail-item" v-for="(item, index) in activeUpdateLog.list" :key="`detail-${index}`">
-                <span class="detail-index">{{ Number(index) + 1 }}.</span>
+              <div class="detail-item" v-for="(item, idx) in activeUpdateLog.list" :key="`detail-${idx}`">
+                <span class="detail-index">{{ Number(idx) + 1 }}.</span>
                 <span class="detail-text" v-html="item"></span>
               </div>
             </div>
@@ -341,6 +429,184 @@
   const trendSummary = ref<any[]>([]);
   const fileTypeSummary = ref<any[]>([]);
   const weeklyStats = ref({ bookmark: 0, note: 0, file: 0 });
+
+  // ─── Activity Rings Animation ────────────────────────────
+  type ActivityMetricKey = 'bookmark' | 'note' | 'file';
+
+  const ACTIVE_WEEK_DAYS = 7;
+  const activityMetricKeys: ActivityMetricKey[] = ['bookmark', 'note', 'file'];
+  const animatedBookmark = ref(0);
+  const animatedNote = ref(0);
+  const animatedFile = ref(0);
+  const animatedActiveDays = ref(0);
+  const animatedTotalActivityCount = ref(0);
+  const activityRingProgress = ref(0);
+
+  const weeklyActivityBreakdown = computed(() => {
+    const counts = {
+      bookmark: Number(weeklyStats.value.bookmark || 0),
+      note: Number(weeklyStats.value.note || 0),
+      file: Number(weeklyStats.value.file || 0),
+    };
+    const days: Record<ActivityMetricKey, number> = { bookmark: 0, note: 0, file: 0 };
+    let totalActiveDays = 0;
+
+    if (trendSummary.value.length) {
+      trendSummary.value.slice(-ACTIVE_WEEK_DAYS).forEach((item) => {
+        let dayIsActive = false;
+        activityMetricKeys.forEach((key) => {
+          if (Number(item?.[key] || 0) > 0) {
+            days[key] += 1;
+            dayIsActive = true;
+          }
+        });
+        if (dayIsActive) totalActiveDays += 1;
+      });
+    } else {
+      const maxCount = Math.max(counts.bookmark, counts.note, counts.file, 1);
+      activityMetricKeys.forEach((key) => {
+        days[key] = counts[key] > 0 ? Math.max(1, Math.ceil((counts[key] / maxCount) * ACTIVE_WEEK_DAYS)) : 0;
+      });
+      totalActiveDays = Math.max(days.bookmark, days.note, days.file);
+    }
+
+    const ratios = {
+      bookmark: 0,
+      note: 0,
+      file: 0,
+    };
+    const totalActivityCount = Math.max(counts.bookmark + counts.note + counts.file, 1);
+    activityMetricKeys.forEach((key) => {
+      ratios[key] = counts[key] / totalActivityCount;
+    });
+
+    const percents = {
+      bookmark: Math.round(ratios.bookmark * 100),
+      note: Math.round(ratios.note * 100),
+      file: Math.round(ratios.file * 100),
+    };
+
+    return { counts, days, ratios, percents, totalActiveDays };
+  });
+
+  const activityLegendItems = computed(() => [
+    {
+      key: 'bookmark',
+      label: t('workbench.panel.newBookmarks', '新增书签'),
+      count: animatedBookmark.value,
+      days: weeklyActivityBreakdown.value.days.bookmark,
+    },
+    {
+      key: 'note',
+      label: t('workbench.panel.updatedNotes', '更新笔记'),
+      count: animatedNote.value,
+      days: weeklyActivityBreakdown.value.days.note,
+    },
+    {
+      key: 'file',
+      label: t('workbench.panel.uploadedFiles', '上传文件'),
+      count: animatedFile.value,
+      days: weeklyActivityBreakdown.value.days.file,
+    },
+  ]);
+
+  const activityChangeTooltip = computed(() => {
+    return t('workbench.panel.weeklyChangesTip', '本周变化 = 最近 7 天新增书签、创建或更新笔记、上传文件的合计。');
+  });
+
+  function describeRingArc(cx: number, cy: number, radius: number, startRatio: number, endRatio: number) {
+    const startAngle = -Math.PI / 2 + startRatio * Math.PI * 2;
+    const endAngle = -Math.PI / 2 + endRatio * Math.PI * 2;
+    const startX = cx + radius * Math.cos(startAngle);
+    const startY = cy + radius * Math.sin(startAngle);
+    const endX = cx + radius * Math.cos(endAngle);
+    const endY = cy + radius * Math.sin(endAngle);
+    const largeArcFlag = endRatio - startRatio > 0.5 ? 1 : 0;
+    return `M ${startX.toFixed(3)} ${startY.toFixed(3)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX.toFixed(3)} ${endY.toFixed(3)}`;
+  }
+
+  const activityRingSegments = computed(() => {
+    const segments = [
+      {
+        key: 'bookmark',
+        ratio: weeklyActivityBreakdown.value.ratios.bookmark,
+        stroke: 'url(#ring-gradient-bookmark)',
+        filter: 'url(#ring-glow-bookmark)',
+      },
+      {
+        key: 'note',
+        ratio: weeklyActivityBreakdown.value.ratios.note,
+        stroke: 'url(#ring-gradient-note)',
+        filter: 'url(#ring-glow-note)',
+      },
+      {
+        key: 'file',
+        ratio: weeklyActivityBreakdown.value.ratios.file,
+        stroke: 'url(#ring-gradient-file)',
+        filter: 'url(#ring-glow-file)',
+      },
+    ];
+    let cursor = 0;
+    const visibleProgress = activityRingProgress.value;
+    return segments
+      .map((segment) => {
+        const rawStart = cursor;
+        const rawEnd = cursor + segment.ratio;
+        cursor = rawEnd;
+        const start = Math.min(rawStart, visibleProgress);
+        const end = Math.min(rawEnd, visibleProgress);
+        if (segment.ratio <= 0 || end - start <= 0.002) return null;
+        const gap = Math.min(0.008, (end - start) * 0.2);
+        return {
+          ...segment,
+          path: describeRingArc(80, 80, 56, start + gap, Math.min(end - gap, 0.999)),
+        };
+      })
+      .filter(Boolean);
+  });
+
+  let ringAnimId: number | null = null;
+  function animateRings() {
+    if (ringAnimId) cancelAnimationFrame(ringAnimId);
+    const activity = weeklyActivityBreakdown.value;
+    const targets = activity.counts;
+    const targetTotal = targets.bookmark + targets.note + targets.file;
+    const duration = 800;
+    const start = performance.now();
+    const startNumB = animatedBookmark.value;
+    const startNumN = animatedNote.value;
+    const startNumF = animatedFile.value;
+    const startActiveDays = animatedActiveDays.value;
+    const startTotal = animatedTotalActivityCount.value;
+    activityRingProgress.value = 0;
+
+    function step(now: number) {
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      activityRingProgress.value = ease;
+      animatedBookmark.value = Math.round(startNumB + (targets.bookmark - startNumB) * ease);
+      animatedNote.value = Math.round(startNumN + (targets.note - startNumN) * ease);
+      animatedFile.value = Math.round(startNumF + (targets.file - startNumF) * ease);
+      animatedActiveDays.value = Math.round(startActiveDays + (activity.totalActiveDays - startActiveDays) * ease);
+      animatedTotalActivityCount.value = Math.round(startTotal + (targetTotal - startTotal) * ease);
+      if (t < 1) {
+        ringAnimId = requestAnimationFrame(step);
+      } else {
+        ringAnimId = null;
+      }
+    }
+    ringAnimId = requestAnimationFrame(step);
+  }
+
+  watch(
+    () => [weeklyStats.value, trendSummary.value],
+    () => {
+      animateRings();
+    },
+    { deep: true },
+  );
+
   const workbenchCounts = ref({
     bookmarkTotal: 0,
     tagTotal: 0,
@@ -764,12 +1030,14 @@
     --panel-accent: var(--resource-bookmark-color);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 11px;
+    justify-content: flex-start;
   }
 
   .preferences-subtitle {
+    margin-top: 2px;
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.45;
     color: var(--secondary-text);
   }
 
@@ -777,7 +1045,8 @@
     --preference-accent: #7a5af8;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 7px;
+    min-height: 0;
   }
 
   .preference-group--theme {
@@ -796,12 +1065,14 @@
     font-size: 12px;
     font-weight: 600;
     color: color-mix(in srgb, var(--preference-accent) 68%, var(--primary-text));
+    white-space: nowrap;
   }
 
   .preference-options {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    min-width: 0;
   }
 
   .preference-chip {
@@ -813,8 +1084,8 @@
     );
     color: var(--text-color);
     min-width: 76px;
-    padding: 7px 12px;
-    border-radius: 10px;
+    padding: 8px 13px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 12px;
     line-height: 1.2;
@@ -1103,9 +1374,9 @@
   }
 
   .insight-grid {
-    --insight-card-min-height: 270px;
+    --insight-card-min-height: 322px;
     display: grid;
-    grid-template-columns: minmax(210px, 0.65fr) minmax(0, 1.55fr) minmax(280px, 1.1fr);
+    grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.58fr) minmax(340px, 1.1fr);
     gap: 12px;
     align-items: stretch;
   }
@@ -1122,6 +1393,7 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.18);
     color: var(--text-color);
     min-height: var(--insight-card-min-height);
+    height: var(--insight-card-min-height);
     border: 1px solid var(--workbench-border-color);
     display: flex;
     flex-direction: column;
@@ -1187,49 +1459,236 @@
     opacity: 0.7;
   }
 
-  .activity-grid {
+  // ─── Activity Rings ─────────────────────────────────────
+  .activity-ring-wrap {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
-    flex: 1;
-    min-height: 0;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    gap: 7px;
   }
 
-  .activity-item {
-    border-radius: 10px;
-    padding: 16px;
-    background: linear-gradient(150deg, var(--workbench-subcard-bg), transparent 160%);
-    border: 1px solid var(--workbench-subcard-border);
+  .activity-ring-stage {
+    width: 158px;
+    height: 158px;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .activity-rings-svg {
+    width: 100%;
+    height: 100%;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 16px rgba(100, 140, 255, 0.18));
+  }
+
+  .ring-halo {
+    stroke: color-mix(in srgb, var(--panel-accent) 22%, transparent);
+    stroke-width: 2;
+    filter: drop-shadow(0 0 12px color-mix(in srgb, var(--panel-accent) 42%, transparent));
+    animation: activity-ring-breathe 2.8s ease-in-out infinite;
+  }
+
+  .ring-track {
+    stroke: color-mix(in srgb, var(--text-color) 12%, transparent);
+    stroke-width: 15;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 7px rgba(0, 0, 0, 0.08));
+  }
+
+  .ring-track--single {
+    stroke: color-mix(in srgb, var(--text-color) 10%, transparent);
+  }
+
+  .ring-progress {
+    animation: activity-ring-stroke-breathe 2.8s ease-in-out infinite;
+  }
+
+  .ring-center-info {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    cursor: help;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .ring-center-info:hover .ring-center-tooltip {
+    opacity: 1;
+    transform: translate(-50%, -8px);
+    visibility: visible;
+  }
+
+  .ring-center-value {
+    font-size: 31px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #f5fbff 0%, #7df9ff 45%, #b98cff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 0.96;
+    text-shadow: 0 0 18px rgba(125, 249, 255, 0.28);
+  }
+
+  .ring-center-label {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.75;
+    white-space: nowrap;
+  }
+
+  .ring-center-extra {
+    font-size: 10px;
+    opacity: 0.5;
+    white-space: nowrap;
+  }
+
+  .ring-center-tooltip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    width: 188px;
+    box-sizing: border-box;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--menu-body-bg-color) 94%, transparent);
+    border: 1px solid color-mix(in srgb, var(--panel-accent) 32%, var(--workbench-border-color));
+    box-shadow:
+      0 10px 22px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    color: var(--text-color);
+    font-size: 11px;
+    line-height: 1.45;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 0);
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease,
+      visibility 0.18s ease;
+    visibility: hidden;
+    z-index: 4;
+  }
+
+  .activity-ring-legend {
+    width: min(100%, 222px);
+    display: grid;
+    gap: 5px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .ring-legend-item {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--menu-body-bg-color) 58%, transparent);
+    border: 1px solid color-mix(in srgb, var(--workbench-border-color) 72%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .ring-legend-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    opacity: 0.74;
+  }
+
+  .ring-legend-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ring-legend-days {
+    min-width: 26px;
+    height: 16px;
+    border-radius: 999px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    flex: 1;
-    min-height: 0;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    justify-content: center;
+    font-size: 10px;
+    color: color-mix(in srgb, var(--panel-accent) 72%, var(--text-color));
+    background: color-mix(in srgb, var(--panel-accent) 13%, transparent);
   }
 
-  .activity-label {
-    font-size: 12px;
-    opacity: 0.75;
+  .rc-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
   }
 
-  .activity-skeleton-item {
-    justify-content: space-between;
+  .rc-dot--bookmark {
+    background: var(--workbench-accent-bookmark-start);
+    box-shadow: 0 0 8px var(--workbench-accent-bookmark-start);
+  }
+  .rc-dot--note {
+    background: var(--workbench-accent-note-start);
+    box-shadow: 0 0 8px var(--workbench-accent-note-start);
+  }
+  .rc-dot--file {
+    background: var(--workbench-accent-file-start);
+    box-shadow: 0 0 8px var(--workbench-accent-file-start);
   }
 
-  .activity-value {
-    font-size: 18px;
-    font-weight: 600;
-    margin-top: 0;
+  .ring-skeleton {
+    width: 190px;
+    height: 190px;
+    border-radius: 50%;
+    background: linear-gradient(
+      90deg,
+      var(--bl-input-noBorder-bg-color) 20%,
+      var(--skeleton-body-bg-color) 50%,
+      var(--bl-input-noBorder-bg-color) 80%
+    );
+    background-size: 200% 100%;
+    animation: workbench-skeleton-shine 1.2s infinite;
+  }
+
+  @keyframes activity-ring-breathe {
+    0%,
+    100% {
+      opacity: 0.48;
+      stroke-width: 1.5;
+    }
+    50% {
+      opacity: 1;
+      stroke-width: 3.5;
+    }
+  }
+
+  @keyframes activity-ring-stroke-breathe {
+    0%,
+    100% {
+      opacity: 0.86;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .quick-action-grid {
-    margin-top: 8px;
+    margin-top: 10px;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
     flex: 1;
     min-height: 0;
 
@@ -1243,14 +1702,16 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 5px;
     width: 100%;
     box-sizing: border-box;
     border: 1px solid var(--workbench-subcard-border);
-    border-radius: 10px;
-    background: linear-gradient(145deg, var(--workbench-subcard-bg), transparent 140%);
+    border-radius: 11px;
+    background:
+      radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--panel-accent) 12%, transparent), transparent 52%),
+      linear-gradient(145deg, var(--workbench-subcard-bg), transparent 140%);
     color: var(--text-color);
-    padding: 16px;
+    padding: 15px;
     text-align: left;
     cursor: pointer;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -1260,6 +1721,20 @@
       background-color 0.2s ease;
     justify-content: center;
     height: 100%;
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 14px;
+      bottom: 14px;
+      width: 3px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--panel-accent), transparent);
+      opacity: 0.78;
+    }
 
     &:hover {
       transform: translateY(-2px);
@@ -1269,7 +1744,7 @@
   }
 
   .action-name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: color-mix(in srgb, var(--panel-accent) 66%, var(--text-color));
   }
@@ -1294,58 +1769,188 @@
     --panel-accent: var(--workbench-insight-activity-accent);
   }
 
+  .preferences-panel {
+    height: var(--insight-card-min-height);
+  }
+
+  // ─── Update Log Timeline ────────────────────────────────
   .update-log-panel {
     --panel-accent: var(--workbench-insight-log-accent);
     height: 258px;
     min-height: 258px;
   }
 
-  .update-log-content {
+  .update-log-timeline {
     margin-top: 8px;
     display: grid;
-    grid-template-columns: minmax(280px, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(240px, 1fr) minmax(0, 1fr);
     gap: 8px;
     flex: 1;
     min-height: 0;
     overflow: hidden;
   }
 
-  .update-log-list {
+  .tl-track {
+    position: absolute;
+    left: 11px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-accent) 60%, transparent) 0%,
+      color-mix(in srgb, var(--panel-accent) 20%, transparent) 70%,
+      transparent 100%
+    );
+  }
+
+  .tl-entries {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    padding-left: 28px;
   }
 
-  .skeleton-log-list {
+  .tl-entry {
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--text-color);
+    text-align: left;
+    cursor: pointer;
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    transition:
+      border-color 0.25s ease,
+      background 0.25s ease;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--panel-accent) 30%, transparent);
+      background: color-mix(in srgb, var(--panel-accent) 6%, transparent);
+    }
+
+    .tl-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: 8px;
+    }
+  }
+
+  .tl-entry--active {
+    border-color: color-mix(in srgb, var(--panel-accent) 55%, transparent);
+    background: linear-gradient(120deg, color-mix(in srgb, var(--panel-accent) 12%, transparent), transparent 60%);
+    box-shadow: 0 0 16px -4px color-mix(in srgb, var(--panel-accent) 25%, transparent);
+  }
+
+  .tl-node {
+    position: absolute;
+    left: -25px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tl-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--panel-accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--panel-accent) 60%, transparent);
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease;
+    z-index: 1;
+  }
+
+  .tl-entry--active .tl-dot {
+    transform: scale(1.5);
+    box-shadow:
+      0 0 14px color-mix(in srgb, var(--panel-accent) 80%, transparent),
+      0 0 24px color-mix(in srgb, var(--panel-accent) 40%, transparent);
+  }
+
+  .tl-ripple {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, var(--panel-accent) 50%, transparent);
+    animation: tl-ripple 1.8s ease-out infinite;
+  }
+
+  @keyframes tl-ripple {
+    0% {
+      transform: scale(0.5);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+
+  .tl-label {
+    font-size: 12px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tl-time {
+    font-size: 11px;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .tl-empty {
+    font-size: 12px;
+    opacity: 0.5;
+    padding: 12px 0;
+    text-align: center;
+  }
+
+  .tl-detail {
+    border-radius: 10px;
+    border: 1px solid var(--workbench-subcard-border);
+    background: linear-gradient(160deg, var(--workbench-subcard-bg), transparent 120%);
+    padding: 10px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 
-  .update-log-title {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid var(--workbench-subcard-border);
-    border-radius: 8px;
-    background: linear-gradient(145deg, var(--workbench-subcard-bg), transparent 140%);
-    color: var(--text-color);
-    text-align: left;
-    padding: 7px 9px;
-    cursor: pointer;
+  .tl-detail-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    transition:
-      border-color 0.2s ease,
-      background-color 0.2s ease;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
 
-    &:hover {
-      border-color: color-mix(in srgb, var(--panel-accent) 44%, var(--workbench-subcard-border));
-      background-color: var(--workbench-subcard-hover);
-    }
+  .tl-detail-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--panel-accent);
+    flex-shrink: 0;
   }
 
   .table-skeleton {
@@ -1361,8 +1966,30 @@
     overflow: hidden;
   }
 
-  .skeleton-log-content {
+  .skeleton-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 28px;
     overflow: hidden;
+
+    .tl-track {
+      position: absolute;
+      left: 11px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      border-radius: 1px;
+      background: var(--bl-input-noBorder-bg-color);
+    }
+
+    .tl-node-skel {
+      position: relative;
+      padding: 6px 8px;
+      .sk-line {
+        height: 14px;
+      }
+    }
   }
 
   .table-skeleton-title {
@@ -1375,36 +2002,6 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-  }
-
-  .update-log-title.active {
-    border-color: var(--workbench-active-border);
-    background: linear-gradient(120deg, var(--workbench-active-bg), var(--workbench-subcard-bg));
-  }
-
-  .log-label {
-    font-size: 12px;
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .log-time {
-    font-size: 11px;
-    opacity: 0.7;
-    flex-shrink: 0;
-  }
-
-  .update-log-detail {
-    border-radius: 10px;
-    border: 1px solid var(--workbench-subcard-border);
-    background: linear-gradient(160deg, var(--workbench-subcard-bg), transparent 120%);
-    padding: 10px;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
   }
 
   .detail-title {
@@ -1531,6 +2128,14 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       --insight-card-min-height: 260px;
     }
+    .panel-card,
+    .preferences-panel {
+      height: auto;
+      min-height: var(--insight-card-min-height);
+    }
+    .activity-panel {
+      min-height: 310px;
+    }
     .table-grid {
       grid-template-columns: 1fr;
     }
@@ -1547,8 +2152,16 @@
       grid-template-columns: 1fr;
       --insight-card-min-height: 240px;
     }
+    .panel-card,
+    .preferences-panel {
+      height: auto;
+      min-height: var(--insight-card-min-height);
+    }
     .quick-action-grid {
       grid-template-columns: 1fr;
+    }
+    .preference-options {
+      gap: 7px;
     }
     .update-log-content {
       grid-template-columns: 1fr;

@@ -25,7 +25,7 @@
       :value="value"
       :type="type"
       @input="handleInput"
-      @keydown.enter="$emit('enter')"
+      @keydown.enter="handleEnter"
       :style="{
         paddingLeft: hasPrefixSlot ? '35px' : '11px',
         paddingRight: hasSuffixSlot ? '35px' : '11px',
@@ -99,6 +99,11 @@
   function handleInput(event) {
     value.value = event.target.value;
     emit('input', event.target.value);
+  }
+
+  function handleEnter(event: KeyboardEvent) {
+    if (event.isComposing) return;
+    emit('enter');
   }
 
   const inputTheme = computed(() => {
