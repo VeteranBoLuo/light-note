@@ -1030,7 +1030,7 @@
     --panel-accent: var(--resource-bookmark-color);
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 21px;
     justify-content: flex-start;
   }
 
