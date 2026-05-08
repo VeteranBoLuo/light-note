@@ -115,11 +115,21 @@ request.interceptors.response.use(
     if (error.response) {
       notifyAuthExpired(error.response);
       const status = error.response.status;
+      if (status === 429) {
+        const msg = error.response.data?.msg || '请求过于频繁，请稍后再试';
+        message.error(msg);
+        return Promise.reject({
+          code: 'HTTP_429',
+          message: msg,
+          status: 429,
+        });
+      }
       if (status >= 500) {
-        message.error('服务器开小差了，请稍后重试');
+        const msg = error.response.data?.msg || '服务器开小差了，请稍后重试';
+        message.error(msg);
         return Promise.reject({
           code: 'HTTP_' + status,
-          message: '服务器开小差了，请稍后重试',
+          message: msg,
           status: status,
         });
       }
