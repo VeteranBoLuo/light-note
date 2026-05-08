@@ -97,10 +97,20 @@
           </div>
         </template>
         <template v-else>
-          <div class="tag-item" :class="{ active: selectedTag === null }" @click="selectTag(null)" v-click-log="{ module: '笔记库', operation: '筛选全部笔记' }">
+          <div
+            class="tag-item"
+            :class="{ active: selectedTag === null }"
+            @click="selectTag(null)"
+            v-click-log="{ module: '笔记库', operation: '筛选全部笔记' }"
+          >
             {{ $t('note.allNote') }}
           </div>
-          <div class="tag-item" :class="{ active: selectedTag === 'null' }" @click="selectTag('null')" v-click-log="{ module: '笔记库', operation: '筛选无标签笔记' }">
+          <div
+            class="tag-item"
+            :class="{ active: selectedTag === 'null' }"
+            @click="selectTag('null')"
+            v-click-log="{ module: '笔记库', operation: '筛选无标签笔记' }"
+          >
             {{ $t('note.noTagNote') }}
           </div>
           <div
@@ -390,7 +400,7 @@
 
   .note-card-skeleton {
     height: 300px;
-    border: 1px solid #edf2fa;
+    border: 1px solid var(--card-border-color);
   }
 
   .skeleton-line {

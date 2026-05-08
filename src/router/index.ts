@@ -11,7 +11,7 @@ import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
-import toolsRouter from '@/router/modules/tools.ts';
+import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import searchRouter from '@/router/modules/search.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
 import { getDesktopHomePath } from '@/utils/preferences.ts';
@@ -36,7 +36,7 @@ const routes: RouteRecordRaw[] = [
       ...cloudSpaceRouter,
       searchRouter,
       tagDetailRouter,
-      ...toolsRouter,
+      securityCenterRouter,
     ],
   },
   {

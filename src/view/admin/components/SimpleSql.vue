@@ -203,7 +203,6 @@
 
   const tables = [
     'api_logs',
-    'attack_logs',
     'bookmark',
     'config_json',
     'files',
@@ -222,7 +221,6 @@
   ];
 
   const sqlOptions = [
-    { label: '清空攻击日志', value: 'DELETE FROM attack_logs;' },
     { label: '查询最新操作日志', value: 'SELECT * FROM operation_logs ORDER BY create_by DESC LIMIT 100;' },
     { label: '统计标签数量', value: 'SELECT COUNT(*) AS total_tags FROM tag;' },
     { label: '恢复书签（逻辑删除）', value: 'UPDATE bookmark SET del_flag = 0 WHERE id = ?;' },

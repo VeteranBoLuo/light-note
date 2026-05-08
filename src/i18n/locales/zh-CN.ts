@@ -7,7 +7,7 @@ export default {
     tag: '标签',
     note: '笔记',
     cloudSpace: '云空间',
-    tools: '工具',
+    securityCenter: '安全中心',
     newTag: '新增标签',
     tagManagement: '标签管理',
     newBookmark: '新增书签',

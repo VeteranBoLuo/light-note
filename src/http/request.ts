@@ -14,6 +14,7 @@ const NO_AUTH_ENDPOINTS = ['del'];
 const ERROR_MESSAGES: { [key: number]: string } = {
   500: '服务器错误',
   403: '服务器拒绝请求',
+  423: '账号已被封禁',
   401: '无权限，请登录',
   400: '客户端请求异常',
   404: '请求资源不存在',
@@ -42,6 +43,7 @@ const request = axios.create({
 });
 
 let authExpiredFlow = false;
+let userBannedNotifyLocked = false;
 
 function notifyAuthSession(response?: any) {
   const expiresIn = Number(response?.headers?.['x-auth-expires-in'] || 0);
@@ -69,6 +71,24 @@ function notifyAuthExpired(response?: any) {
     return true;
   }
   return false;
+}
+
+function notifyUserBanned(response?: any) {
+  const status = response?.status || response?.data?.status;
+  const headerBanned = response?.headers?.['x-user-banned'] === '1';
+  if (status !== 423 && !headerBanned) {
+    return false;
+  }
+  const msg = response?.data?.msg || '账号已被封禁，请登录其他账号或联系管理员';
+  if (!userBannedNotifyLocked) {
+    userBannedNotifyLocked = true;
+    message.error(msg);
+    window.dispatchEvent(new CustomEvent('light-note:user-banned'));
+    window.setTimeout(() => {
+      userBannedNotifyLocked = false;
+    }, 4000);
+  }
+  return true;
 }
 //请求拦截
 request.interceptors.request.use(
@@ -107,12 +127,20 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => {
     notifyAuthSession(response);
+    notifyUserBanned(response);
     notifyAuthExpired(response);
     return response;
   },
   (error) => {
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
+      if (notifyUserBanned(error.response)) {
+        return Promise.reject({
+          code: 'USER_BANNED',
+          message: error.response.data?.msg || '账号已被封禁',
+          status: 423,
+        });
+      }
       notifyAuthExpired(error.response);
       const status = error.response.status;
       if (status === 429) {
@@ -193,6 +221,10 @@ export const apiBaseGet = async (url: string, params?: any, options?: AxiosReque
 export function handleErrorResponse(res: AxiosResponse['data']): ApiResponse {
   // 如果状态码在映射中，则显示错误消息
   if (authExpiredFlow && (res.status === 'visitor' || res.status === 401 || res.status === 403)) {
+    return res;
+  }
+  if (res.status === 423) {
+    notifyUserBanned({ data: res, status: 423, headers: { 'x-user-banned': '1' } });
     return res;
   }
   if (ERROR_MESSAGES[res.status]) {

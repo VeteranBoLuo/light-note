@@ -100,6 +100,7 @@
   let userInfoRequest: Promise<any> | null = null;
   let userInfoLoaded = false;
   let isHandlingAuthExpired = false;
+  let isHandlingUserBanned = false;
   let authExpireTimer: number | null = null;
   const handleResize = throttle(() => {
     bookmark.screenWidth = window.innerWidth;
@@ -267,6 +268,23 @@
     isHandlingAuthExpired = false;
   }
 
+  async function handleUserBanned() {
+    if (isHandlingUserBanned) {
+      return;
+    }
+    isHandlingUserBanned = true;
+    try {
+      userInfoLoaded = true;
+      handleUserLogout(true);
+      bookmark.type = 'all';
+      if (!['login'].includes(String(router.currentRoute.value.name || ''))) {
+        await redirectToGuestHome();
+      }
+    } finally {
+      isHandlingUserBanned = false;
+    }
+  }
+
   function handleAuthSession(event: Event) {
     const expiresIn = Number((event as CustomEvent<{ expiresIn: number }>).detail?.expiresIn || 0);
     if (!expiresIn) {
@@ -432,6 +450,7 @@
   async function init() {
     window.addEventListener('resize', handleResize);
     window.addEventListener('light-note:auth-expired', handleAuthExpired);
+    window.addEventListener('light-note:user-banned', handleUserBanned);
     window.addEventListener('light-note:auth-session', handleAuthSession);
     router.isReady().then(async () => {
       await getUserInfo();
@@ -489,6 +508,7 @@
     stopOpinionNoticePolling();
     window.removeEventListener('resize', handleResize);
     window.removeEventListener('light-note:auth-expired', handleAuthExpired);
+    window.removeEventListener('light-note:user-banned', handleUserBanned);
     window.removeEventListener('light-note:auth-session', handleAuthSession);
     window.removeEventListener('focus', handlePageActivated);
     document.removeEventListener('visibilitychange', handlePageActivated);
