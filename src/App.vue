@@ -31,6 +31,11 @@
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { useI18n } from 'vue-i18n';
+  import {
+    getAdminLoginPreviewPreferences,
+    getAdminLoginPreviewUserId,
+    isAdminLoginPreview,
+  } from '@/utils/authStorage.ts';
 
   const router = useRouter();
   const user = useUserStore();
@@ -51,6 +56,33 @@
   const aiVisible = computed(() => {
     return !bookmark.isMobile && !bookmark.isShowLogin;
   });
+  function getStoredPreferences() {
+    if (isAdminLoginPreview()) {
+      return getAdminLoginPreviewPreferences();
+    }
+    try {
+      return JSON.parse(localStorage.getItem('preferences') || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function setStoredPreferences(preferences) {
+    if (!isAdminLoginPreview()) {
+      localStorage.setItem('preferences', JSON.stringify(preferences));
+    }
+  }
+
+  function getStoredUserId() {
+    return isAdminLoginPreview() ? getAdminLoginPreviewUserId() : localStorage.getItem('userId');
+  }
+
+  function setStoredUserId(userId = '') {
+    if (!isAdminLoginPreview()) {
+      localStorage.setItem('userId', userId);
+    }
+  }
+
   // 路由映射表
   const phoneReplaceMap = {
     '/admin/apiLog': '/apiLog',
@@ -82,9 +114,9 @@
   }, 100);
   function initApp() {
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
-    const preferences = localStorage.getItem('preferences');
-    if (preferences && preferences !== 'null') {
-      user.preferences = JSON.parse(preferences);
+    const preferences = getStoredPreferences();
+    if (Object.keys(preferences).length > 0) {
+      user.preferences = preferences as any;
     }
 
     applyTheme();
@@ -109,8 +141,8 @@
       user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
-      localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      localStorage.setItem('userId', res.data.id);
+      setStoredPreferences(user.preferences);
+      setStoredUserId(res.data.id);
       setLocale(user.preferences.lang || 'zh-CN');
       await refreshOpinionNotice();
       if (res.status !== 200) {
@@ -136,7 +168,7 @@
     setTimeout(() => {
       document.documentElement.classList.remove('disable-animations');
     }, 0);
-    localStorage.setItem('preferences', JSON.stringify(user.preferences));
+    setStoredPreferences(user.preferences);
   }
 
   // 设置动画
@@ -174,7 +206,7 @@
     }
   }
   function handleUserLogout() {
-    localStorage.setItem('userId', '');
+    setStoredUserId('');
     bookmark.isShowLogin = true;
     stopOpinionNoticePolling();
     notification.close(OPINION_NOTICE_KEY);
@@ -220,7 +252,7 @@
   }
 
   async function refreshOpinionNotice(force = false) {
-    if (!localStorage.getItem('userId')) {
+    if (!getStoredUserId()) {
       stopOpinionNoticePolling();
       return;
     }
@@ -262,7 +294,7 @@
 
   function startOpinionNoticePolling() {
     stopOpinionNoticePolling();
-    if (!localStorage.getItem('userId')) {
+    if (!getStoredUserId()) {
       return;
     }
     opinionNoticeTimer = window.setInterval(() => {

@@ -1366,6 +1366,7 @@
   }
 
   .summary-skeleton {
+    height: 134px;
     pointer-events: none;
     display: flex;
     flex-direction: column;

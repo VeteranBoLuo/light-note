@@ -1,6 +1,10 @@
 import { apiBasePost } from '@/http/request.ts';
+import { isAdminLoginPreview } from '@/utils/authStorage.ts';
 
 export const recordOperation = async function (params: { module: string; operation: string }) {
+  if (isAdminLoginPreview()) {
+    return;
+  }
   if (!params?.module || !params?.operation) {
     return;
   }

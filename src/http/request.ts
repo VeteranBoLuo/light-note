@@ -2,6 +2,11 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { message } from 'ant-design-vue';
 import useUserStore from '@/store/useUser';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
+import {
+  getAdminLoginPreviewPreferences,
+  getAdminLoginPreviewUserId,
+  isAdminLoginPreview,
+} from '@/utils/authStorage.ts';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -41,7 +46,8 @@ request.interceptors.request.use(
     if (config.url?.includes('/api')) {
       let currentLang = 'zh-CN';
       try {
-        currentLang = JSON.parse(localStorage.getItem('preferences') || '{}').lang || 'zh-CN';
+        currentLang =
+          getAdminLoginPreviewPreferences().lang || JSON.parse(localStorage.getItem('preferences') || '{}').lang || 'zh-CN';
       } catch (e) {
         currentLang = 'zh-CN';
       }
@@ -49,7 +55,11 @@ request.interceptors.request.use(
       config.headers['Browser'] = getBrowserType();
       config.headers['X-Lang'] = currentLang;
       const user = useUserStore();
-      const userId = localStorage?.getItem('userId');
+      const previewUserId = getAdminLoginPreviewUserId();
+      const userId = previewUserId || localStorage?.getItem('userId');
+      if (previewUserId && config.data?.filters && Object.prototype.hasOwnProperty.call(config.data.filters, 'userId')) {
+        config.data.filters.userId = previewUserId;
+      }
       const notNeedAuth = NO_AUTH_ENDPOINTS.some((key) => config.url?.includes(key));
       if (!ROLES_ADMIN.includes(user.role) && notNeedAuth) {
         message.warn('没有操作权限，请登录！！！');
@@ -60,7 +70,7 @@ request.interceptors.request.use(
         config.headers['role'] = '';
       } else if (userId) {
         config.headers['X-User-Id'] = userId;
-        config.headers['role'] = user.role;
+        config.headers['role'] = isAdminLoginPreview() ? 'admin' : user.role;
       } else {
         config.headers['role'] = 'visitor';
       }

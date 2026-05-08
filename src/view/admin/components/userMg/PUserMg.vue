@@ -10,6 +10,7 @@
       <template #bodyCell="{ column, text, record }">
         <template v-if="column.dataIndex === 'operation'">
           <b-space>
+            <svg-icon title="登录此用户" :src="icon.navigation.user" size="16" @click="loginAsUser(record)" class="dom-hover" />
             <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
             <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
           </b-space>
@@ -35,6 +36,7 @@
         <b-form form-id="userEditForm" :form-data="editData" :fields="formFields" />
       </div>
     </b-modal>
+    <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
   </CommonContainer>
 </template>
 
@@ -54,6 +56,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
+  import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   const bookmark = bookmarkStore();
   const userList = ref([]);
   const userColumns = computed(() => {
@@ -79,9 +82,21 @@
   });
   const editData = ref();
   const editVisible = ref(false);
+  const previewVisible = ref(false);
+  const previewUser = ref<any>(null);
+
   const editUser = (record) => {
     editData.value = record;
     editVisible.value = true;
+  };
+
+  const loginAsUser = (record) => {
+    if (!record?.id) {
+      message.warning('此用户缺少用户ID，无法预览');
+      return;
+    }
+    previewUser.value = record;
+    previewVisible.value = true;
   };
 
   const delUser = (record) => {
@@ -170,4 +185,5 @@
     background-color: var(--background-color) !important;
     color: black;
   }
+
 </style>

@@ -1,10 +1,11 @@
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 import enUS from '@/i18n/locales/en-US';
+import { getAdminLoginPreviewPreferences, isAdminLoginPreview } from '@/utils/authStorage.ts';
 // 创建 i18n 实例
 const i18n = createI18n({
   legacy: false, // 使用组合式 API
-  locale: JSON.parse(localStorage.getItem('preferences') || '{}').lang || 'zh-CN', // 默认语言
+  locale: getAdminLoginPreviewPreferences().lang || JSON.parse(localStorage.getItem('preferences') || '{}').lang || 'zh-CN', // 默认语言
   fallbackLocale: 'zh-CN', // 回退语言
   messages: {
     'zh-CN': zhCN,
@@ -15,6 +16,9 @@ const i18n = createI18n({
 // 切换语言的方法
 export function setLocale(lang: 'zh-CN' | 'en-US') {
   i18n.global.locale.value = lang;
+  if (isAdminLoginPreview()) {
+    return;
+  }
   localStorage.setItem(
     'preferences',
     JSON.stringify({
