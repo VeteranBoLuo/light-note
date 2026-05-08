@@ -5,7 +5,6 @@ import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 import {
   getAdminLoginPreviewPreferences,
   getAdminLoginPreviewUserId,
-  isAdminLoginPreview,
 } from '@/utils/authStorage.ts';
 
 // 常量定义
@@ -39,7 +38,38 @@ interface QueryData {
 
 const request = axios.create({
   timeout: TIMEOUT,
+  withCredentials: true,
 });
+
+let authExpiredFlow = false;
+
+function notifyAuthSession(response?: any) {
+  const expiresIn = Number(response?.headers?.['x-auth-expires-in'] || 0);
+  const serverRole = response?.headers?.['x-auth-role'];
+  if (serverRole && serverRole !== 'visitor' && expiresIn > 0) {
+    window.dispatchEvent(new CustomEvent('light-note:auth-session', { detail: { expiresIn } }));
+  }
+}
+
+function notifyAuthExpired(response?: any) {
+  const user = useUserStore();
+  const status = response?.data?.status;
+  const headerExpired = response?.headers?.['x-auth-expired'] === '1';
+  const serverRole = response?.headers?.['x-auth-role'];
+  const lostLoginState =
+    user.id &&
+    user.role !== 'visitor' &&
+    (serverRole === 'visitor' || status === 'visitor' || status === 401);
+  if (status === 200 && serverRole && serverRole !== 'visitor') {
+    authExpiredFlow = false;
+  }
+  if (headerExpired || lostLoginState) {
+    authExpiredFlow = true;
+    window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
+    return true;
+  }
+  return false;
+}
 //请求拦截
 request.interceptors.request.use(
   (config) => {
@@ -56,7 +86,6 @@ request.interceptors.request.use(
       config.headers['X-Lang'] = currentLang;
       const user = useUserStore();
       const previewUserId = getAdminLoginPreviewUserId();
-      const userId = previewUserId || localStorage?.getItem('userId');
       if (previewUserId && config.data?.filters && Object.prototype.hasOwnProperty.call(config.data.filters, 'userId')) {
         config.data.filters.userId = previewUserId;
       }
@@ -64,15 +93,6 @@ request.interceptors.request.use(
       if (!ROLES_ADMIN.includes(user.role) && notNeedAuth) {
         message.warn('没有操作权限，请登录！！！');
         return Promise.reject(new Error(`接口 ${config.url} 没有操作权限`));
-      }
-      if (config.url.includes('login')) {
-        config.headers['X-User-Id'] = '';
-        config.headers['role'] = '';
-      } else if (userId) {
-        config.headers['X-User-Id'] = userId;
-        config.headers['role'] = isAdminLoginPreview() ? 'admin' : user.role;
-      } else {
-        config.headers['role'] = 'visitor';
       }
       config.headers['fingerprint'] = (window as any)['fingerprint'];
     }
@@ -86,11 +106,14 @@ request.interceptors.request.use(
 // 响应拦截
 request.interceptors.response.use(
   (response) => {
+    notifyAuthSession(response);
+    notifyAuthExpired(response);
     return response;
   },
   (error) => {
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
+      notifyAuthExpired(error.response);
       const status = error.response.status;
       if (status >= 500) {
         message.error('服务器开小差了，请稍后重试');
@@ -159,6 +182,9 @@ export const apiBaseGet = async (url: string, params?: any, options?: AxiosReque
 
 export function handleErrorResponse(res: AxiosResponse['data']): ApiResponse {
   // 如果状态码在映射中，则显示错误消息
+  if (authExpiredFlow && (res.status === 'visitor' || res.status === 401 || res.status === 403)) {
+    return res;
+  }
   if (ERROR_MESSAGES[res.status]) {
     const errorMsg = res.msg ?? ERROR_MESSAGES[res.status];
     message.error(errorMsg);

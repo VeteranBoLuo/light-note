@@ -75,7 +75,7 @@
     loading.value = true;
     apiQueryPost('/api/bookmark/queryTagList', {
       filters: {
-        userId: localStorage.getItem('userId'),
+        userId: user.id,
       },
     })
       .then((res) => {

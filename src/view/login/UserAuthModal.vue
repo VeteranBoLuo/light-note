@@ -80,7 +80,6 @@
   // Mount/unmount event listeners
   onMounted(() => {
     document.addEventListener('keydown', clickEvent);
-    localStorage.setItem('userId', '');
   });
 
   onUnmounted(() => {

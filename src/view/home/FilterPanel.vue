@@ -177,7 +177,7 @@
   async function onDragEnd() {
     document.body.style.userSelect = '';
     try {
-      const userId = localStorage?.getItem('userId');
+      const userId = user.id;
       const sortedTags =
         bookmark.tagList?.map((tag: TagInterface, index: number) => ({
           name: tag.name,

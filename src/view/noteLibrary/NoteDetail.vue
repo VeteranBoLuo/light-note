@@ -94,7 +94,7 @@
     } else if (nodeType.value === 'add') {
       return false;
     } else {
-      return userId !== note.createBy;
+      return user.id !== note.createBy;
     }
   });
   function inputBlur() {
@@ -243,7 +243,6 @@
       router.back();
     }
   }
-  const userId = localStorage.getItem('userId');
   const isReady = ref(true);
   const a = ref();
   onMounted(() => {
@@ -265,7 +264,7 @@
         })
         .finally(() => {
           isReady.value = true;
-          if (userId !== note.createBy) {
+          if (user.id !== note.createBy) {
             nodeType.value = 'share';
             const observer = new MutationObserver(() => {
               const el: any = document.querySelector('.tox-editor-header');

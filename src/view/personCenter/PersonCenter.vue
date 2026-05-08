@@ -334,28 +334,11 @@
     } else {
       Alert.alert({
         title: '提示',
-        content: '此操作将退出登录, 是否继续?',
-        onOk() {
-          // 清空当前用户信息
-          user.resetUserInfo();
-          // 打开登录页面
-          bookmark.isShowLogin = true;
-          // 刷新游客书签和标签
-          bookmark.type = 'all';
-          bookmark.refreshTag();
-          // 获取游客信息
-          userApi.getUserInfoById({ id: '' }).then((res: any) => {
-            if (res.status === 'visitor') {
-              user.setUserInfo(res.data);
-              localStorage.setItem('theme', res.data.theme);
-              if (bookmark.isMobile) {
-                router.push('/home');
-              } else {
-                router.push('/');
-              }
-              setLocale(res.data.preferences.lang || 'zh-CN');
-            }
-          });
+	        content: '此操作将退出登录, 是否继续?',
+	        async onOk() {
+	          sessionStorage.setItem('manualLogout', '1');
+	          await userApi.logout();
+	          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
         },
       });
     }
@@ -377,14 +360,13 @@
     user.preferences.theme = theme;
     userApi
       .updateUserInfo({
-        id: localStorage.getItem('userId'),
+        id: user.id,
         preferences: JSON.stringify({
           ...user.preferences,
           theme,
         }),
       })
       .then(() => {
-        localStorage.setItem('theme', user.preferences.theme);
         localStorage.setItem('preferences', JSON.stringify(user.preferences));
       })
       .catch((err) => {
@@ -398,7 +380,7 @@
     user.preferences.lang = lang;
     userApi
       .updateUserInfo({
-        id: localStorage.getItem('userId'),
+        id: user.id,
         preferences: JSON.stringify({
           ...user.preferences,
           lang,

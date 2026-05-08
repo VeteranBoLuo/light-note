@@ -220,7 +220,7 @@
   async function getAllResources() {
     const [bookmarkRes, noteRes, fileRes] = await Promise.all([
       apiQueryPost('/api/bookmark/getBookmarkList', {
-        filters: { userId: localStorage.getItem('userId'), type: 'all' },
+        filters: { userId: user.id, type: 'all' },
       }),
       apiBasePost('/api/note/queryNoteList'),
       apiBasePost('/api/file/queryFiles', { filters: { category: CLOUD_FILE_CATEGORY_ORDER } }),

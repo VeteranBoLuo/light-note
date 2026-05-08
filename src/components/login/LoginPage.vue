@@ -61,7 +61,7 @@
         </a-form-item>
         <a-form-item>
           <div class="login-tips-text">
-            <span class="remember-text"><b-checkbox type="circle" v-model:isCheck="isCheck" />Remember Me</span>
+	            <span class="remember-text"><b-checkbox type="circle" v-model:isCheck="isCheck" />记住账号</span>
             <a class="dom-hover-click" @click="loginWithGitHub">GitHub快捷登录</a>
           </div>
         </a-form-item>
@@ -103,13 +103,13 @@
   import { message } from 'ant-design-vue';
   import { computed, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { cloneDeep } from 'lodash-es';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
-  import i18n, { setLocale } from '@/i18n';
+  import { setLocale } from '@/i18n';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   const title = defineModel('title');
   const formData: any = defineModel('formData');
+  const REMEMBERED_EMAIL_KEY = 'rememberedLoginEmail';
   const isCheck = ref(true);
   const disable = computed(() => {
     return !formData.value.email || !formData.value.password;
@@ -124,9 +124,13 @@
     }
     await formDataRef.value.validate();
 
-    apiBasePost('/api/user/login', formData.value).then((res: any) => {
+    apiBasePost('/api/user/login', { ...formData.value, rememberMe: isCheck.value }).then((res: any) => {
       if (res.status === 200) {
-        localStorage.setItem('userId', res.data.id);
+        if (isCheck.value) {
+          localStorage.setItem(REMEMBERED_EMAIL_KEY, formData.value.email || '');
+        } else {
+          localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+        }
         user.setUserInfo(res.data);
         user.preferences.theme = res.data?.preferences?.theme || 'day';
         user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
@@ -135,14 +139,6 @@
         localStorage.setItem('preferences', JSON.stringify(user.preferences));
         router.push(getAppHomePath(user.preferences, bookmark.isMobile));
         message.success('登录成功');
-        if (isCheck.value) {
-          const params = cloneDeep(formData.value);
-          params.otherInfo = encrypt(params.password);
-          delete params.password;
-          localStorage.setItem('loginInfo', JSON.stringify(params));
-        } else {
-          localStorage.setItem('loginInfo', '');
-        }
         setLocale(user.preferences.lang || 'zh-CN');
         bookmark.isShowLogin = false;
         bookmark.type = 'all';
@@ -162,87 +158,12 @@
     window.location.href = authUrl;
   };
 
-  watch(
-    () => isCheck.value,
-    () => {
-      if (!isCheck.value) {
-        localStorage.setItem('loginInfo', '');
-      }
-    },
-  );
-  // 加密映射表
-  const encryptionMap = {
-    a: '!',
-    b: 'a',
-    c: '#',
-    d: '$',
-    e: '%',
-    f: '^',
-    g: '&',
-    h: '*',
-    i: 'm',
-    j: ')',
-    k: '-',
-    l: '_',
-    m: '=',
-    n: '+',
-    o: 'g',
-    p: 'b',
-    q: '{',
-    r: 'j',
-    s: 'x',
-    t: ':',
-    u: "'",
-    v: '"',
-    w: '<',
-    x: '>',
-    y: ',',
-    z: '.',
-    '0': ']',
-    '1': 'n',
-    '2': 'd',
-    '3': ';',
-    '4': 'u',
-    '5': 'l',
-    '6': '[',
-    '7': 'z',
-    '8': 'm',
-    '9': 'e',
-  };
-  // 反向加密映射表
-  const decryptionMap = {};
-  for (const key in encryptionMap) {
-    decryptionMap[encryptionMap[key]] = key;
-  }
-  // 加密函数
-  function encrypt(text) {
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i].toLowerCase();
-      result += encryptionMap[char] || char;
-    }
-    return result;
-  }
-  // 解密函数
-  function decrypt(text) {
-    let result = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      result += decryptionMap[char] || char;
-    }
-    return result;
-  }
-
   onMounted(() => {
-    const loginInfo = localStorage.getItem('loginInfo');
-    if (loginInfo) {
+    const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY) || '';
+    if (rememberedEmail) {
       isCheck.value = true;
-      Object.assign(formData.value, JSON.parse(loginInfo));
-      formData.value.password = decrypt(formData.value.otherInfo);
-    } else {
-      isCheck.value = false;
+      formData.value.email = rememberedEmail;
     }
-    localStorage.setItem('userId', '');
   });
 
   watch(

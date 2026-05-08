@@ -100,7 +100,7 @@
     }
     userApi
       .updateUserInfo({
-        id: localStorage.getItem('userId'),
+        id: user.id,
         headPicture: headPicture.value,
         alias: userData.value.alias,
         email: userData.value.email,
@@ -109,7 +109,7 @@
         if (res.status === 200) {
           recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
           message.success(t('myInfo.saveSuccess'));
-          const userPromise = await userApi.getUserInfoById({ id: localStorage.getItem('userId') });
+          const userPromise = await userApi.getUserInfoById({ id: user.id });
           user.setUserInfo(userPromise.data);
           visible.value = false;
         }

@@ -35,7 +35,7 @@ interface UserInfo {
 interface UserState extends UserInfo {}
 
 // 默认用户状态
-const defaultUserState: UserState = {
+const createDefaultUserState = (): UserState => ({
   id: '',
   userName: '默认用户名',
   alias: '默认昵称',
@@ -61,10 +61,25 @@ const defaultUserState: UserState = {
     lang: 'zh-CN', // 语言
     homePage: 'workbench', // 默认首页
   },
+});
+
+const normalizePreferences = (preferences: Partial<UserInfo['preferences']> | string | null | undefined) => {
+  const defaultPreferences = createDefaultUserState().preferences;
+  if (!preferences) {
+    return defaultPreferences;
+  }
+  if (typeof preferences === 'string') {
+    try {
+      return { ...defaultPreferences, ...JSON.parse(preferences) };
+    } catch (e) {
+      return defaultPreferences;
+    }
+  }
+  return { ...defaultPreferences, ...preferences };
 };
 
 export default defineStore('user', {
-  state: (): UserState => ({ ...defaultUserState }),
+  state: (): UserState => createDefaultUserState(),
   getters: {
     /**
      * 获取当前主题
@@ -94,17 +109,15 @@ export default defineStore('user', {
      * 设置用户信息
      */
     setUserInfo(val: Partial<UserInfo>): void {
-      Object.assign(this, { ...defaultUserState, ...val });
-      if (val.preferences === null) {
-        this.preferences = defaultUserState.preferences;
-      }
+      const nextUser = { ...createDefaultUserState(), ...val };
+      nextUser.preferences = normalizePreferences(val.preferences);
+      Object.assign(this, nextUser);
     },
     /**
      * 重置用户信息
      */
     resetUserInfo(): void {
-      Object.assign(this, defaultUserState);
-      localStorage.setItem('userId', '');
+      Object.assign(this, createDefaultUserState());
     },
     /**
      * 获取用户信息（敏感信息除外）

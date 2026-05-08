@@ -33,7 +33,6 @@
   import { useI18n } from 'vue-i18n';
   import {
     getAdminLoginPreviewPreferences,
-    getAdminLoginPreviewUserId,
     isAdminLoginPreview,
   } from '@/utils/authStorage.ts';
 
@@ -73,16 +72,6 @@
     }
   }
 
-  function getStoredUserId() {
-    return isAdminLoginPreview() ? getAdminLoginPreviewUserId() : localStorage.getItem('userId');
-  }
-
-  function setStoredUserId(userId = '') {
-    if (!isAdminLoginPreview()) {
-      localStorage.setItem('userId', userId);
-    }
-  }
-
   // 路由映射表
   const phoneReplaceMap = {
     '/admin/apiLog': '/apiLog',
@@ -108,11 +97,16 @@
   let opinionNoticeTimer: number | null = null;
   let lastOpinionNoticeRefreshAt = 0;
   let opinionNoticeRequest: Promise<void> | null = null;
+  let userInfoRequest: Promise<any> | null = null;
+  let userInfoLoaded = false;
+  let isHandlingAuthExpired = false;
+  let authExpireTimer: number | null = null;
   const handleResize = throttle(() => {
     bookmark.screenWidth = window.innerWidth;
     bookmark.screenHeight = window.innerHeight;
   }, 100);
   function initApp() {
+    localStorage.removeItem('theme');
     // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
     const preferences = getStoredPreferences();
     if (Object.keys(preferences).length > 0) {
@@ -133,25 +127,48 @@
 
   // 添加应用就绪状态
   // const isAppReady = ref(false); // 已移除，不再需要loading界面
-  async function getUserInfo() {
-    try {
-      const res = await apiBaseGet('/api/user/getUserInfo');
-      user.setUserInfo(res.data);
-      user.preferences.theme = res.data?.preferences?.theme || 'day';
-      user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
-      user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
-      user.preferences.homePage = getHomePagePreference(res.data?.preferences);
-      setStoredPreferences(user.preferences);
-      setStoredUserId(res.data.id);
-      setLocale(user.preferences.lang || 'zh-CN');
-      await refreshOpinionNotice();
-      if (res.status !== 200) {
-        handleUserLogout();
-      }
-    } catch (error) {
-      message.error('获取用户信息失败：', error);
-      handleUserLogout();
+  function applyUserInfo(data) {
+    user.setUserInfo(data || {});
+    user.preferences.theme = user.preferences?.theme || 'day';
+    user.preferences.lang = user.preferences?.lang || 'zh-CN';
+    user.preferences.noteViewMode = user.preferences?.noteViewMode || 'list';
+    user.preferences.homePage = getHomePagePreference(user.preferences);
+    setStoredPreferences(user.preferences);
+    setLocale(user.preferences.lang || 'zh-CN');
+  }
+
+  async function getUserInfo(force = false) {
+    if (!force && userInfoLoaded) {
+      return;
     }
+    if (userInfoRequest) {
+      return userInfoRequest;
+    }
+
+    userInfoRequest = (async () => {
+      try {
+        const res = await apiBaseGet('/api/user/me');
+        userInfoLoaded = true;
+        applyUserInfo(res.data);
+        if (res.status === 200) {
+          await refreshOpinionNotice();
+        } else {
+          bookmark.isShowLogin = true;
+          stopOpinionNoticePolling();
+          notification.close(OPINION_NOTICE_KEY);
+        }
+        return res;
+      } catch (error) {
+        userInfoLoaded = true;
+        message.error('获取用户信息失败：', error);
+        handleUserLogout();
+        return null;
+      } finally {
+        userInfoRequest = null;
+      }
+    })();
+
+    return userInfoRequest;
   }
 
   // 应用主题样式
@@ -205,11 +222,62 @@
       }
     }
   }
-  function handleUserLogout() {
-    setStoredUserId('');
+  async function redirectToGuestHome() {
+    const targetPath = getAppHomePath(user.preferences, bookmark.isMobile);
+    if (router.currentRoute.value.path !== targetPath) {
+      await router.replace(targetPath);
+    }
+  }
+
+  function handleUserLogout(resetUser = true) {
+    if (authExpireTimer !== null) {
+      window.clearTimeout(authExpireTimer);
+      authExpireTimer = null;
+    }
+    if (resetUser) {
+      user.resetUserInfo();
+    }
+    setStoredPreferences(user.preferences);
     bookmark.isShowLogin = true;
     stopOpinionNoticePolling();
     notification.close(OPINION_NOTICE_KEY);
+  }
+
+  async function handleAuthExpired(options: { refreshUser?: boolean; redirect?: boolean; resetUser?: boolean } = {}) {
+    const { refreshUser = true, redirect = true, resetUser = true } = options;
+    if (isHandlingAuthExpired) {
+      return;
+    }
+    isHandlingAuthExpired = true;
+    const isManualLogout = sessionStorage.getItem('manualLogout') === '1';
+    sessionStorage.removeItem('manualLogout');
+    if (!isManualLogout) {
+      message.warning('登录已过期，请重新登录');
+    }
+    userInfoLoaded = true;
+    handleUserLogout(resetUser);
+    bookmark.type = 'all';
+    if (refreshUser) {
+      await getUserInfo(true);
+    }
+    bookmark.refreshTag();
+    if (redirect) {
+      await redirectToGuestHome();
+    }
+    isHandlingAuthExpired = false;
+  }
+
+  function handleAuthSession(event: Event) {
+    const expiresIn = Number((event as CustomEvent<{ expiresIn: number }>).detail?.expiresIn || 0);
+    if (!expiresIn) {
+      return;
+    }
+    if (authExpireTimer !== null) {
+      window.clearTimeout(authExpireTimer);
+    }
+    authExpireTimer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
+    }, Math.max(0, expiresIn * 1000 + 300));
   }
 
   function openOpinionNotice(data) {
@@ -252,7 +320,7 @@
   }
 
   async function refreshOpinionNotice(force = false) {
-    if (!getStoredUserId()) {
+    if (!user.id || user.role === RoleEnum.VISITOR) {
       stopOpinionNoticePolling();
       return;
     }
@@ -294,7 +362,7 @@
 
   function startOpinionNoticePolling() {
     stopOpinionNoticePolling();
-    if (!getStoredUserId()) {
+    if (!user.id || user.role === RoleEnum.VISITOR) {
       return;
     }
     opinionNoticeTimer = window.setInterval(() => {
@@ -332,7 +400,7 @@
     }
 
     if (from.name === 'githubCallBack') {
-      await getUserInfo();
+      await getUserInfo(true);
     }
 
     if (skipRouter.includes(<string>to.name)) {
@@ -363,6 +431,8 @@
   // 只有第一次进入页面或者刷新页面才触发（简化）
   async function init() {
     window.addEventListener('resize', handleResize);
+    window.addEventListener('light-note:auth-expired', handleAuthExpired);
+    window.addEventListener('light-note:auth-session', handleAuthSession);
     router.isReady().then(async () => {
       await getUserInfo();
       handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
@@ -418,6 +488,8 @@
   onBeforeUnmount(() => {
     stopOpinionNoticePolling();
     window.removeEventListener('resize', handleResize);
+    window.removeEventListener('light-note:auth-expired', handleAuthExpired);
+    window.removeEventListener('light-note:auth-session', handleAuthSession);
     window.removeEventListener('focus', handlePageActivated);
     document.removeEventListener('visibilitychange', handlePageActivated);
     if (mq && mqListener) {

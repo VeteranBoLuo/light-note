@@ -80,7 +80,7 @@
   async function getAllBookmarkList() {
     const allRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
       filters: {
-        userId: localStorage.getItem('userId'),
+        userId: user.id,
         type: 'all',
       },
     });

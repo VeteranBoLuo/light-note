@@ -20,12 +20,10 @@
 <script setup>
   import { onMounted, ref } from 'vue';
   import { useRouter } from 'vue-router';
-  import { useUserStore } from '@/store';
   import { apiBasePost } from '@/http/request';
   import { message } from 'ant-design-vue';
 
   const router = useRouter();
-  const user = useUserStore();
   const status = ref(200);
   const time = ref(3);
   function toHome() {
@@ -38,8 +36,6 @@
       const cRes = await apiBasePost('/api/user/github', { code });
       status.value = cRes.status;
       if (cRes.status === 200) {
-        const { userInfo } = cRes.data;
-        localStorage.setItem('userId', userInfo.id);
         toHome();
       } else {
         setInterval(() => {

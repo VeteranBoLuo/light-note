@@ -37,7 +37,7 @@
     );
     userApi
       .updateUserInfo({
-        id: localStorage.getItem('userId'),
+        id: user.id,
         preferences: JSON.stringify({
           ...user.preferences,
           noteViewMode: mode,

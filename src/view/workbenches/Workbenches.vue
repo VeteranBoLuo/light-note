@@ -948,7 +948,7 @@
 
     try {
       await userApi.updateUserInfo({
-        id: localStorage.getItem('userId'),
+        id: user.id,
         preferences: JSON.stringify(nextPreferences),
       });
       recordOperation({ module: '工作台', operation: `保存偏好设置【${key}】` });
@@ -973,7 +973,6 @@
   watch(
     () => user.id,
     async (val, oldVal) => {
-      if (!val) return;
       if (initRunning.value) return;
       if (hasInitedOnce.value && val === oldVal) return;
       initRunning.value = true;

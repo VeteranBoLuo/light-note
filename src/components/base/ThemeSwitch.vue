@@ -20,9 +20,10 @@
   </label>
 </template>
 <script setup lang="ts">
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import userApi from '@/api/userApi.ts';
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   function changed(e) {
     if (e.target.checked) {
       user.preferences.theme = 'night';
@@ -31,11 +32,11 @@
     }
     userApi
       .updateUserInfo({
-        id: localStorage.getItem('userId'),
+        id: user.id,
         theme: user.preferences.theme,
       })
       .then(() => {
-        localStorage.setItem('theme', user.preferences.theme);
+        localStorage.setItem('preferences', JSON.stringify(user.preferences));
       })
       .catch((err) => {
         console.error('后台错误：' + err);

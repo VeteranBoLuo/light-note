@@ -238,8 +238,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import { bookmarkStore } from '@/store';
-  import { cloudSpaceStore } from '@/store';
+  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import icon from '@/config/icon.ts';
@@ -258,6 +257,7 @@
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
+  const user = useUserStore();
   const props = defineProps<{ clearKey?: number; batchMode: boolean }>();
 
   const batchMode = computed(() => props.batchMode ?? false);
@@ -407,7 +407,7 @@
     activeTagFile.value = file;
     tagModalVisible.value = true;
     const [tagRes, fileTagRes] = await Promise.all([
-      apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: localStorage.getItem('userId') } }),
+      apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: user.id } }),
       apiBasePost('/api/file/getFileTags', { id: file.id }),
     ]);
     tagOptions.value =
