@@ -13,41 +13,43 @@
             >
           </div>
         </div>
-        <a-table
-          :data-source="ipAccounts"
-          :columns="ipAccountColumns"
-          row-key="userId"
-          size="small"
-          :pagination="false"
-          :loading="ipAccountLoading"
-          :row-selection="{ selectedRowKeys: selectedIpAccountIds, onChange: onIpAccountSelect }"
-          :custom-row="ipAccountRecordRow"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.dataIndex === 'account'">
-              <div class="account-cell">
-                <strong>{{ record.alias || record.email || record.userId }}</strong>
-                <span>{{ record.email || record.userId }}</span>
-              </div>
+        <b-loading :loading="ipAccountLoading">
+          <BTable
+            :data="ipAccounts"
+            :columns="ipAccountColumns"
+            :rowKey="'userId'"
+            :selectable="true"
+            :selectedRows="selectedIpAccountIds"
+            :row-clickable="true"
+            @selectionChange="onIpAccountSelect"
+            @row-click="onRowClick"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'account'">
+                <div class="account-cell">
+                  <strong>{{ record.alias || record.email || record.userId }}</strong>
+                  <span>{{ record.email || record.userId }}</span>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'delFlag'">
+                <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
+                  Number(record.delFlag) === 1 ? '已封禁' : '正常'
+                }}</span>
+              </template>
+              <template v-else-if="column.key === 'lastSeenAt'">
+                <a-tooltip :title="record.lastSeenAt">
+                  <span class="ellipsis-cell">{{ record.lastSeenAt || '-' }}</span>
+                </a-tooltip>
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount?.(record)"
+                  >封禁账号</b-button
+                >
+                <b-button v-else size="small" @click.stop="unbanAccount?.(record)">解封账号</b-button>
+              </template>
             </template>
-            <template v-else-if="column.dataIndex === 'delFlag'">
-              <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
-                Number(record.delFlag) === 1 ? '已封禁' : '正常'
-              }}</span>
-            </template>
-            <template v-else-if="column.dataIndex === 'lastSeenAt'">
-              <a-tooltip :title="record.lastSeenAt">
-                <span class="ellipsis-cell">{{ record.lastSeenAt || '-' }}</span>
-              </a-tooltip>
-            </template>
-            <template v-else-if="column.dataIndex === 'action'">
-              <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount?.(record)"
-                >封禁账号</b-button
-              >
-              <b-button v-else size="small" @click.stop="unbanAccount?.(record)">解封账号</b-button>
-            </template>
-          </template>
-        </a-table>
+          </BTable>
+        </b-loading>
       </section>
     </div>
   </a-drawer>
@@ -58,6 +60,8 @@
   import { message, Modal } from 'ant-design-vue';
   import { apiBasePost } from '@/http/request.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import {
     BAN_IP,
     UNBAN_IP,
@@ -84,20 +88,6 @@
 
   function onIpAccountSelect(keys: string[]) {
     selectedIpAccountIds.value = keys;
-  }
-
-  function ipAccountRecordRow(record: any) {
-    return {
-      class: 'clickable-row',
-      onClick: (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
-        if (target.closest('button,input,.ant-checkbox-wrapper,.ant-checkbox')) {
-          return;
-        }
-        navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
-        emit('close');
-      },
-    };
   }
 
   async function loadIpAccounts() {
@@ -151,4 +141,25 @@
 
 <style lang="less" scoped>
   @import './securityCenter.less';
+</style>
+
+<style lang="less">
+  .ant-drawer-content,
+  .ant-drawer-header {
+    background: var(--background-color) !important;
+    color: var(--text-color) !important;
+  }
+
+  .ant-drawer-title,
+  .ant-drawer-close {
+    color: var(--text-color) !important;
+  }
+
+  .ant-drawer-header {
+    border-bottom-color: var(--card-border-color) !important;
+  }
+
+  .ant-drawer-body {
+    background: var(--background-color) !important;
+  }
 </style>

@@ -12,25 +12,25 @@
       </div>
     </div>
     <div class="admin-table-card">
-      <a-table
-        :data-source="accountRepList"
+      <BTable
+        :style="{ height: tableScrollY + 'px' }"
+        :data="accountRepList"
         :columns="accountRepColumns"
-        row-key="userId"
-        :pagination="false"
-        :scroll="{ y: tableScrollY }"
-        :custom-row="acctRepRecordRow"
+        :rowKey="'userId'"
+        :row-clickable="true"
+        @row-click="onRowClick"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.dataIndex === 'account'">
+          <template v-if="column.key === 'account'">
             <div class="account-cell">
               <strong>{{ record.alias || record.email || record.userId }}</strong>
               <span>{{ record.email || record.userId }}</span>
             </div>
           </template>
-          <template v-else-if="column.dataIndex === 'role'">
+          <template v-else-if="column.key === 'role'">
             <span class="security-pill is-neutral">{{ record.role }}</span>
           </template>
-          <template v-else-if="column.dataIndex === 'riskScore'">
+          <template v-else-if="column.key === 'riskScore'">
             <a-progress
               :percent="record.riskScore || 0"
               size="small"
@@ -38,24 +38,24 @@
               trail-color="var(--security-progress-trail)"
             />
           </template>
-          <template v-else-if="column.dataIndex === 'delFlag'">
+          <template v-else-if="column.key === 'delFlag'">
             <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
               Number(record.delFlag) === 1 ? '已封禁' : '正常'
             }}</span>
           </template>
-          <template v-else-if="column.dataIndex === 'lastEventAt'">
+          <template v-else-if="column.key === 'lastEventAt'">
             <a-tooltip :title="record.lastEventAt">
               <span class="ellipsis-cell">{{ record.lastEventAt || '-' }}</span>
             </a-tooltip>
           </template>
-          <template v-else-if="column.dataIndex === 'action'">
+          <template v-else-if="column.key === 'action'">
             <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount?.(record)"
               >封禁账号</b-button
             >
             <b-button v-else size="small" @click.stop="unbanAccount?.(record)">解封账号</b-button>
           </template>
         </template>
-      </a-table>
+      </BTable>
     </div>
   </div>
 </template>
@@ -65,6 +65,7 @@
   import { apiQueryPost } from '@/http/request.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import {
     NAVIGATE_TO_USER_EVENTS,
@@ -79,7 +80,7 @@
   const refreshTrigger = inject(REFRESH_TRIGGER);
   const banAccount = inject(BAN_ACCOUNT);
   const unbanAccount = inject(UNBAN_ACCOUNT);
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 350 });
+  const { tableScrollY } = useTableScrollY({ reservedHeight: 302 });
 
   const accountRepList = ref<any[]>([]);
   const acctRepTotal = ref(0);
@@ -87,17 +88,8 @@
   const acctRepFilters = reactive<any>({ key: '' });
   const acctRepSearchTimer = ref<any>(null);
 
-  function acctRepRecordRow(record: any) {
-    return {
-      class: 'clickable-row',
-      onClick: (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
-        if (target.closest('button,input,.ant-checkbox-wrapper,.ant-checkbox')) {
-          return;
-        }
-        navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
-      },
-    };
+  function onRowClick(record: any) {
+    navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
   }
 
   async function searchAccountReputation() {
@@ -118,12 +110,6 @@
       acctRepPage.currentPage = 1;
       searchAccountReputation();
     }, 300);
-  }
-
-  function onAcctRepPageChange(page: number, pageSize: number) {
-    acctRepPage.currentPage = pageSize !== acctRepPage.pageSize ? 1 : page;
-    acctRepPage.pageSize = pageSize;
-    searchAccountReputation();
   }
 
   watch(

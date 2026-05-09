@@ -4,9 +4,9 @@
   overflow: hidden;
   --security-surface: color-mix(in srgb, var(--background-color) 94%, var(--menu-item-h-bg-color) 6%);
   --security-sub-surface: color-mix(in srgb, var(--background-color) 88%, var(--menu-item-bg-color) 12%);
-  --security-border: color-mix(in srgb, var(--card-border-color) 70%, transparent);
+  --security-border: color-mix(in srgb, var(--card-border-color) 40%, transparent);
   --security-muted: var(--desc-color);
-  --security-progress-trail: color-mix(in srgb, var(--card-border-color) 35%, transparent);
+  --security-progress-trail: color-mix(in srgb, var(--card-border-color) 20%, transparent);
   --security-low: #2f8f61;
   --security-medium: #9a6a00;
   --security-high: #bd4b18;
@@ -165,7 +165,6 @@ code {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
 }
 
 .account-cell strong {
@@ -222,29 +221,6 @@ code {
   flex: 1;
 }
 
-:deep(.ant-table) {
-  background: var(--background-color);
-  color: var(--text-color);
-}
-
-:deep(.ant-table-thead > tr > th) {
-  background: var(--table-header-bg-color);
-  color: var(--text-color);
-  border-bottom-color: var(--security-border);
-}
-
-:deep(.ant-table-tbody > tr > td) {
-  border-bottom-color: var(--security-border);
-  color: var(--text-color);
-}
-
-:deep(.ant-table-tbody > tr.ant-table-row:hover > td) {
-  background: var(--menu-item-bg-color);
-}
-
-:deep(.clickable-row) {
-  cursor: pointer;
-}
 
 @media (max-width: 960px) {
   .security-grid {

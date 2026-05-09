@@ -13,25 +13,25 @@
       <span class="admin-filters-hint">账号封禁会让该账号退出登录；登录时会明确提示账号已被封禁</span>
     </div>
     <div class="admin-table-card">
-      <a-table
-        :data-source="accountBans"
+      <BTable
+        :style="{ height: tableScrollY + 'px' }"
+        :data="accountBans"
         :columns="accountColumns"
-        row-key="userId"
-        :pagination="false"
-        :scroll="{ y: tableScrollY }"
-        :custom-row="accountBanRecordRow"
+        :rowKey="'userId'"
+        :row-clickable="true"
+        @row-click="onRowClick"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.dataIndex === 'account'">
+          <template v-if="column.key === 'account'">
             <div class="account-cell">
               <strong>{{ record.alias || record.email || record.userId }}</strong>
               <span>{{ record.email || record.userId }}</span>
             </div>
           </template>
-          <template v-else-if="column.dataIndex === 'role'">
+          <template v-else-if="column.key === 'role'">
             <span class="security-pill is-neutral">{{ record.role }}</span>
           </template>
-          <template v-else-if="column.dataIndex === 'riskScore'">
+          <template v-else-if="column.key === 'riskScore'">
             <a-progress
               :percent="record.riskScore || 0"
               size="small"
@@ -39,11 +39,11 @@
               trail-color="var(--security-progress-trail)"
             />
           </template>
-          <template v-else-if="column.dataIndex === 'action'">
+          <template v-else-if="column.key === 'action'">
             <b-button size="small" @click.stop="unbanAccount?.(record)">解封账号</b-button>
           </template>
         </template>
-      </a-table>
+      </BTable>
     </div>
   </div>
 </template>
@@ -53,6 +53,7 @@
   import { apiQueryPost } from '@/http/request.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import {
     NAVIGATE_TO_USER_EVENTS,
@@ -65,7 +66,7 @@
   const navigateToUserEvents = inject(NAVIGATE_TO_USER_EVENTS);
   const refreshTrigger = inject(REFRESH_TRIGGER);
   const unbanAccount = inject(UNBAN_ACCOUNT);
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 350 });
+  const { tableScrollY } = useTableScrollY({ reservedHeight: 330 });
 
   const accountBans = ref<any[]>([]);
   const accountTotal = ref(0);
@@ -73,17 +74,8 @@
   const accountFilters = reactive<any>({ key: '' });
   const accountSearchTimer = ref<any>(null);
 
-  function accountBanRecordRow(record: any) {
-    return {
-      class: 'clickable-row',
-      onClick: (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
-        if (target.closest('button')) {
-          return;
-        }
-        navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
-      },
-    };
+  function onRowClick(record: any) {
+    navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
   }
 
   async function searchAccountBans() {
@@ -104,12 +96,6 @@
       accountPage.currentPage = 1;
       searchAccountBans();
     }, 300);
-  }
-
-  function onAccountPageChange(page: number, pageSize: number) {
-    accountPage.currentPage = pageSize !== accountPage.pageSize ? 1 : page;
-    accountPage.pageSize = pageSize;
-    searchAccountBans();
   }
 
   watch(

@@ -31,17 +31,14 @@
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { useI18n } from 'vue-i18n';
-  import {
-    getAdminLoginPreviewPreferences,
-    isAdminLoginPreview,
-  } from '@/utils/authStorage.ts';
+  import { getAdminLoginPreviewPreferences, isAdminLoginPreview } from '@/utils/authStorage.ts';
 
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const OPINION_NOTICE_KEY = 'opinion-notice';
-  const OPINION_NOTICE_POLLING_INTERVAL = 60 * 1000;
+  const OPINION_NOTICE_POLLING_INTERVAL = 300 * 1000;
   const OPINION_NOTICE_MIN_REFRESH_GAP = 10 * 1000;
 
   // 监听主题变化
@@ -294,9 +291,12 @@
     if (authExpireTimer !== null) {
       window.clearTimeout(authExpireTimer);
     }
-    authExpireTimer = window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
-    }, Math.max(0, expiresIn * 1000 + 300));
+    authExpireTimer = window.setTimeout(
+      () => {
+        window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
+      },
+      Math.max(0, expiresIn * 1000 + 300),
+    );
   }
 
   function openOpinionNotice(data) {
@@ -338,14 +338,14 @@
     });
   }
 
-  async function refreshOpinionNotice(force = false) {
+  async function refreshOpinionNotice() {
     if (!user.id || user.role === RoleEnum.VISITOR) {
       stopOpinionNoticePolling();
       return;
     }
 
     const now = Date.now();
-    if (!force && now - lastOpinionNoticeRefreshAt < OPINION_NOTICE_MIN_REFRESH_GAP) {
+    if (now - lastOpinionNoticeRefreshAt < OPINION_NOTICE_MIN_REFRESH_GAP) {
       return;
     }
 
@@ -389,12 +389,6 @@
         refreshOpinionNotice();
       }
     }, OPINION_NOTICE_POLLING_INTERVAL);
-  }
-
-  function handlePageActivated() {
-    if (!document.hidden) {
-      refreshOpinionNotice(true);
-    }
   }
 
   const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
@@ -499,8 +493,6 @@
     initApp();
     await init();
     startOpinionNoticePolling();
-    window.addEventListener('focus', handlePageActivated);
-    document.addEventListener('visibilitychange', handlePageActivated);
     checkUpdateNotice();
   });
 
@@ -511,8 +503,6 @@
     window.removeEventListener('light-note:auth-expired', handleAuthExpired);
     window.removeEventListener('light-note:user-banned', handleUserBanned);
     window.removeEventListener('light-note:auth-session', handleAuthSession);
-    window.removeEventListener('focus', handlePageActivated);
-    document.removeEventListener('visibilitychange', handlePageActivated);
     if (mq && mqListener) {
       mq.removeEventListener('change', mqListener);
     }

@@ -189,69 +189,63 @@
 </script>
 
 <style lang="less" scoped>
-  @import './securityCenter.less';
+@import './securityCenter.less';
 
-  .security-tab-bar {
-    // Hide empty tab-pane content area since RouterView handles content
-    :deep(.ant-tabs-content-holder) {
-      display: none;
-    }
+.security-tab-bar {
+  :deep(.ant-tabs-content-holder) {
+    display: none;
   }
+}
 
-  .security-tab-content {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-  }
+.security-tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+</style>
 
-  :deep(.ant-tabs-tab) {
-    color: var(--desc-color);
-  }
-
-  :deep(.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn) {
-    color: var(--text-color);
-  }
-
-  :deep(.ant-tabs-ink-bar) {
-    background: var(--primary-color, var(--text-color));
-  }
-
-  :deep(.ant-table) {
+<style lang="less">
+.security-panel {
+  .ant-table {
     background: var(--background-color);
     color: var(--text-color);
   }
 
-  :deep(.ant-table-thead > tr > th) {
+  .ant-table-thead > tr > th {
     background: var(--table-header-bg-color);
     color: var(--text-color);
-    border-bottom-color: var(--security-border);
+    border-bottom-color: var(--card-border-color);
   }
 
-  :deep(.ant-table-tbody > tr > td) {
-    border-bottom-color: var(--security-border);
+  .ant-table-tbody > tr > td {
+    border-bottom-color: color-mix(in srgb, var(--card-border-color) 18%, transparent);
     color: var(--text-color);
   }
 
-  :deep(.ant-table-tbody > tr.ant-table-row:hover > td) {
+  .ant-table-tbody > tr.ant-table-row:hover > td {
     background: var(--menu-item-bg-color);
   }
 
-  :deep(.clickable-row) {
+  .clickable-row {
     cursor: pointer;
   }
 
-  :deep(.ant-drawer-content),
-  :deep(.ant-drawer-header) {
-    background: var(--background-color);
+  .ant-tabs-tab {
+    color: var(--desc-color);
+  }
+
+  .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
     color: var(--text-color);
   }
 
-  :deep(.ant-drawer-title),
-  :deep(.ant-drawer-close) {
-    color: var(--text-color);
+  .ant-tabs-ink-bar {
+    background: var(--primary-color, var(--text-color));
   }
+}
 
-  :deep(.ant-drawer-header) {
-    border-bottom-color: var(--security-border);
+[data-theme="dark"] .security-panel {
+  .ant-table-tbody > tr > td {
+    border-bottom-color: color-mix(in srgb, var(--card-border-color) 8%, transparent);
   }
+}
 </style>

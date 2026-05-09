@@ -37,13 +37,7 @@
 
       <section>
         <h3>同IP近期事件</h3>
-        <a-table
-          :data-source="eventDetail.ipRecent"
-          :columns="ipRecentColumns"
-          size="small"
-          row-key="eventId"
-          :pagination="false"
-        />
+        <BTable :data="eventDetail.ipRecent" :columns="ipRecentColumns" :rowKey="'eventId'" />
       </section>
 
       <section>
@@ -78,6 +72,7 @@ import { message, Modal } from 'ant-design-vue';
 import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
+import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 import { BAN_IP, UNBAN_IP, BAN_ACCOUNT, UNBAN_ACCOUNT, severityColor, ipRecentColumns } from './securityShared';
 
 const props = defineProps<{ visible: boolean; eventId: string | null }>();
@@ -158,4 +153,25 @@ watch(
 
 <style lang="less" scoped>
 @import './securityCenter.less';
+</style>
+
+<style lang="less">
+.ant-drawer-content,
+.ant-drawer-header {
+  background: var(--background-color) !important;
+  color: var(--text-color) !important;
+}
+
+.ant-drawer-title,
+.ant-drawer-close {
+  color: var(--text-color) !important;
+}
+
+.ant-drawer-header {
+  border-bottom-color: var(--card-border-color) !important;
+}
+
+.ant-drawer-body {
+  background: var(--background-color) !important;
+}
 </style>

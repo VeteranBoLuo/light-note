@@ -187,6 +187,7 @@
     max-height: 100%;
     width: 100%;
     padding: 12px;
+    box-sizing: border-box;
     background-color: var(--table-bg-color);
     box-shadow:
       0 0 5px 0 rgba(0, 0, 0, 0.02),
@@ -226,7 +227,7 @@
 
   .table-row {
     display: grid;
-    height: 40px;
+    min-height: 40px;
     border-radius: 8px;
     align-items: center;
     padding: 0 12px;

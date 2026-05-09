@@ -12,16 +12,16 @@
       </div>
     </div>
     <div class="admin-table-card">
-      <a-table
-        :data-source="ipList"
+      <BTable
+        :style="{ height: tableScrollY + 'px' }"
+        :data="ipList"
         :columns="ipColumns"
-        row-key="ip"
-        :pagination="false"
-        :scroll="{ y: tableScrollY }"
-        :custom-row="ipRecordRow"
+        :rowKey="'ip'"
+        :row-clickable="true"
+        @row-click="onRowClick"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.dataIndex === 'riskScore'">
+          <template v-if="column.key === 'riskScore'">
             <a-progress
               :percent="record.riskScore || 0"
               size="small"
@@ -29,16 +29,16 @@
               trail-color="var(--security-progress-trail)"
             />
           </template>
-          <template v-else-if="column.dataIndex === 'isBanned'">
+          <template v-else-if="column.key === 'isBanned'">
             <span class="security-pill" :class="record.isBanned ? 'is-high' : 'is-low'">{{
               record.isBanned ? '封禁中' : '正常'
             }}</span>
           </template>
-          <template v-else-if="column.dataIndex === 'action'">
-            <b-button size="small" @click="openIpAccounts?.(record.ip, record.isBanned)">账户</b-button>
+          <template v-else-if="column.key === 'action'">
+            <b-button size="small" @click.stop="openIpAccounts?.(record.ip, record.isBanned)">账户</b-button>
           </template>
         </template>
-      </a-table>
+      </BTable>
     </div>
   </div>
 </template>
@@ -48,12 +48,13 @@
   import { apiQueryPost } from '@/http/request.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import { OPEN_IP_ACCOUNTS, REFRESH_TRIGGER, ipColumns, scoreColor } from './securityShared';
 
   const openIpAccounts = inject(OPEN_IP_ACCOUNTS);
   const refreshTrigger = inject(REFRESH_TRIGGER);
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 350 });
+  const { tableScrollY } = useTableScrollY({ reservedHeight: 302 });
 
   const ipList = ref<any[]>([]);
   const ipTotal = ref(0);
@@ -61,17 +62,8 @@
   const ipFilters = reactive<any>({ key: '' });
   const ipSearchTimer = ref<any>(null);
 
-  function ipRecordRow(record: any) {
-    return {
-      class: 'clickable-row',
-      onClick: (event: MouseEvent) => {
-        const target = event.target as HTMLElement;
-        if (target.closest('button')) {
-          return;
-        }
-        openIpAccounts?.(record.ip, record.isBanned);
-      },
-    };
+  function onRowClick(record: any) {
+    openIpAccounts?.(record.ip, record.isBanned);
   }
 
   async function searchIps() {
@@ -92,12 +84,6 @@
       ipPage.currentPage = 1;
       searchIps();
     }, 300);
-  }
-
-  function onIpPageChange(page: number, pageSize: number) {
-    ipPage.currentPage = pageSize !== ipPage.pageSize ? 1 : page;
-    ipPage.pageSize = pageSize;
-    searchIps();
   }
 
   watch(

@@ -67,103 +67,103 @@ export const UNBAN_ACCOUNT: InjectionKey<(account: any) => void> = Symbol('unban
 
 // Table columns
 export const eventColumns = [
-  { title: '时间', dataIndex: 'createdAt', ellipsis: true, width: 165 },
-  { title: '等级', dataIndex: 'severity', width: 82 },
-  { title: '分数', dataIndex: 'threatScore', width: 120 },
-  { title: '类型', dataIndex: 'attackType', ellipsis: true, width: 135 },
-  { title: '用户昵称', dataIndex: 'user', ellipsis: true, width: 130 },
-  { title: '来源IP', dataIndex: 'sourceIp', ellipsis: true, width: 145 },
-  { title: '接口', dataIndex: 'requestPath', ellipsis: true, width: 220 },
-  { title: '拦截', dataIndex: 'blocked', width: 82 },
-  { title: '状态', dataIndex: 'handledStatus', width: 95 },
+  { title: '时间', key: 'createdAt' },
+  { title: '等级', key: 'severity' },
+  { title: '分数', key: 'threatScore' },
+  { title: '类型', key: 'attackType' },
+  { title: '用户昵称', key: 'user' },
+  { title: '来源IP', key: 'sourceIp' },
+  { title: '接口', key: 'requestPath' },
+  { title: '拦截', key: 'blocked' },
+  { title: '状态', key: 'handledStatus' },
 ];
 
 export const typeColumns = [
-  { title: '攻击类型', dataIndex: 'attackType' },
-  { title: '数量', dataIndex: 'total', width: 90 },
+  { title: '攻击类型', key: 'attackType' },
+  { title: '数量', key: 'total' },
 ];
 
 export const trendColumns = [
-  { title: '时间', dataIndex: 'time' },
-  { title: '事件', dataIndex: 'total', width: 90 },
-  { title: '拦截', dataIndex: 'blocked', width: 90 },
+  { title: '时间', key: 'time' },
+  { title: '事件', key: 'total' },
+  { title: '拦截', key: 'blocked' },
 ];
 
 export const topIpColumns = [
-  { title: 'IP', dataIndex: 'sourceIp' },
-  { title: '次数', dataIndex: 'total', width: 80 },
-  { title: '最高分', dataIndex: 'maxScore', width: 90 },
+  { title: 'IP', key: 'sourceIp' },
+  { title: '次数', key: 'total' },
+  { title: '最高分', key: 'maxScore' },
 ];
 
 export const topPathColumns = [
-  { title: '接口', dataIndex: 'requestPath', ellipsis: true },
-  { title: '次数', dataIndex: 'total', width: 80 },
-  { title: '最高分', dataIndex: 'maxScore', width: 90 },
+  { title: '接口', key: 'requestPath' },
+  { title: '次数', key: 'total' },
+  { title: '最高分', key: 'maxScore' },
 ];
 
 export const recentColumns = [
-  { title: '时间', dataIndex: 'createdAt', ellipsis: true },
-  { title: '类型', dataIndex: 'attackType', ellipsis: true },
-  { title: 'IP', dataIndex: 'sourceIp', ellipsis: true },
-  { title: '分数', dataIndex: 'threatScore', width: 80 },
-  { title: '动作', dataIndex: 'actionTaken', width: 80 },
+  { title: '时间', key: 'createdAt' },
+  { title: '类型', key: 'attackType' },
+  { title: 'IP', key: 'sourceIp' },
+  { title: '分数', key: 'threatScore' },
+  { title: '动作', key: 'actionTaken' },
 ];
 
 export const ipColumns = [
-  { title: 'IP', dataIndex: 'ip', ellipsis: true },
-  { title: '风险分', dataIndex: 'riskScore', width: 140 },
-  { title: '攻击次数', dataIndex: 'totalAttacks', width: 100 },
-  { title: '高危', dataIndex: 'highRiskCount', width: 80 },
-  { title: '严重', dataIndex: 'criticalCount', width: 80 },
-  { title: '状态', dataIndex: 'isBanned', width: 90 },
-  { title: '最近攻击', dataIndex: 'lastAttackTime', ellipsis: true },
-  { title: '操作', dataIndex: 'action', width: 90 },
+  { title: 'IP', key: 'ip' },
+  { title: '风险分', key: 'riskScore' },
+  { title: '攻击次数', key: 'totalAttacks' },
+  { title: '高危', key: 'highRiskCount' },
+  { title: '严重', key: 'criticalCount' },
+  { title: '状态', key: 'isBanned' },
+  { title: '最近攻击', key: 'lastAttackTime' },
+  { title: '操作', key: 'action' },
 ];
 
 export const accountColumns = [
-  { title: '账号', dataIndex: 'account', ellipsis: true },
-  { title: '角色', dataIndex: 'role', width: 90 },
-  { title: '风险分', dataIndex: 'riskScore', width: 140 },
-  { title: '封禁原因', dataIndex: 'banReason', ellipsis: true },
-  { title: '封禁时间', dataIndex: 'bannedAt', ellipsis: true, width: 160 },
-  { title: '操作', dataIndex: 'action', width: 110 },
+  { title: '账号', key: 'account' },
+  { title: '角色', key: 'role' },
+  { title: '风险分', key: 'riskScore' },
+  { title: '封禁原因', key: 'banReason' },
+  { title: '封禁时间', key: 'bannedAt' },
+  { title: '操作', key: 'action' },
 ];
 
 export const accountRepColumns = [
-  { title: '账号', dataIndex: 'account', ellipsis: true, width: 200 },
-  { title: '角色', dataIndex: 'role', width: 80 },
-  { title: '风险分', dataIndex: 'riskScore', width: 140 },
-  { title: '事件次数', dataIndex: 'totalEvents', width: 90 },
-  { title: '高危', dataIndex: 'highRiskCount', width: 70 },
-  { title: '严重', dataIndex: 'criticalCount', width: 70 },
-  { title: '状态', dataIndex: 'delFlag', width: 80 },
-  { title: '最近事件', dataIndex: 'lastEventAt', ellipsis: true, width: 160 },
-  { title: '操作', dataIndex: 'action', width: 100 },
+  { title: '账号', key: 'account' },
+  { title: '角色', key: 'role' },
+  { title: '风险分', key: 'riskScore' },
+  { title: '事件次数', key: 'totalEvents' },
+  { title: '高危', key: 'highRiskCount' },
+  { title: '严重', key: 'criticalCount' },
+  { title: '状态', key: 'delFlag' },
+  { title: '最近事件', key: 'lastEventAt' },
+  { title: '操作', key: 'action' },
 ];
 
 export const ruleColumns = [
-  { title: '规则', dataIndex: 'ruleName', ellipsis: true },
-  { title: '类型', dataIndex: 'attackType', width: 160 },
-  { title: '等级', dataIndex: 'severity', width: 100 },
-  { title: '基础分', dataIndex: 'baseScore', width: 90 },
-  { title: '置信度', dataIndex: 'confidence', width: 90 },
-  { title: '动作', dataIndex: 'action', width: 90 },
-  { title: '状态', dataIndex: 'enabled', width: 90 },
+  { title: '规则', key: 'ruleName' },
+  { title: '类型', key: 'attackType' },
+  { title: '等级', key: 'severity' },
+  { title: '基础分', key: 'baseScore' },
+  { title: '置信度', key: 'confidence' },
+  { title: '动作', key: 'action' },
+  { title: '状态', key: 'enabled' },
 ];
 
 export const ipRecentColumns = [
-  { title: '时间', dataIndex: 'createdAt', ellipsis: true },
-  { title: '类型', dataIndex: 'attackType', ellipsis: true },
-  { title: '等级', dataIndex: 'severity', width: 90 },
-  { title: '分数', dataIndex: 'threatScore', width: 80 },
+  { title: '时间', key: 'createdAt' },
+  { title: '类型', key: 'attackType' },
+  { title: '等级', key: 'severity' },
+  { title: '分数', key: 'threatScore' },
 ];
 
 export const ipAccountColumns = [
-  { title: '账号', dataIndex: 'account', ellipsis: true },
-  { title: '状态', dataIndex: 'delFlag', width: 90 },
-  { title: '安全事件', dataIndex: 'securityEvents', width: 90 },
-  { title: '访问次数', dataIndex: 'apiRequests', width: 90 },
-  { title: '最近出现', dataIndex: 'lastSeenAt', ellipsis: true, width: 160 },
-  { title: '来源', dataIndex: 'sources', ellipsis: true, width: 110 },
-  { title: '操作', dataIndex: 'action', width: 100 },
+  { title: '账号', key: 'account' },
+  { title: '状态', key: 'delFlag' },
+  { title: '安全事件', key: 'securityEvents' },
+  { title: '访问次数', key: 'apiRequests' },
+  { title: '最近出现', key: 'lastSeenAt' },
+  { title: '来源', key: 'sources' },
+  { title: '操作', key: 'action' },
 ];

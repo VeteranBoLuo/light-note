@@ -53,54 +53,56 @@
     </div>
 
     <div class="admin-table-card">
-      <a-table
-        :data-source="events"
-        :columns="eventColumns"
-        row-key="eventId"
-        :pagination="false"
-        :scroll="{ x: 1180, y: tableScrollY }"
-        :loading="eventLoading"
-        :custom-row="eventRecordRow"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.dataIndex === 'createdAt'">
-            <a-tooltip :title="record.createdAt">
-              <span class="ellipsis-cell">{{ record.createdAt }}</span>
-            </a-tooltip>
+      <b-loading :loading="eventLoading">
+        <BTable
+          :data="events"
+          :columns="eventColumns"
+          :rowKey="'eventId'"
+          :row-clickable="true"
+          :style="{ height: tableScrollY + 'px' }"
+          @row-click="onRowClick"
+          class="eventClass"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'createdAt'">
+              <a-tooltip :title="record.createdAt">
+                <span class="ellipsis-cell">{{ record.createdAt }}</span>
+              </a-tooltip>
+            </template>
+            <template v-else-if="column.key === 'severity'">
+              <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
+            </template>
+            <template v-else-if="column.key === 'attackType'">
+              <a-tooltip :title="record.attackType">
+                <span class="ellipsis-cell">{{ record.attackType }}</span>
+              </a-tooltip>
+            </template>
+            <template v-else-if="column.key === 'user'">
+              <a-tooltip :title="eventUserTooltip(record)">
+                <span class="ellipsis-cell">{{ eventUserText(record) }}</span>
+              </a-tooltip>
+            </template>
+            <template v-else-if="column.key === 'sourceIp'">
+              <a-tooltip :title="record.sourceIp">
+                <span class="ellipsis-cell">{{ record.sourceIp }}</span>
+              </a-tooltip>
+            </template>
+            <template v-else-if="column.key === 'requestPath'">
+              <a-tooltip :title="record.requestPath">
+                <span class="ellipsis-cell">{{ record.requestPath }}</span>
+              </a-tooltip>
+            </template>
+            <template v-else-if="column.key === 'blocked'">
+              <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{
+                record.blocked ? '已拦截' : '已放行'
+              }}</span>
+            </template>
+            <template v-else-if="column.key === 'handledStatus'">
+              <span class="security-pill is-neutral">{{ statusText(record.handledStatus) }}</span>
+            </template>
           </template>
-          <template v-else-if="column.dataIndex === 'severity'">
-            <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
-          </template>
-          <template v-else-if="column.dataIndex === 'attackType'">
-            <a-tooltip :title="record.attackType">
-              <span class="ellipsis-cell">{{ record.attackType }}</span>
-            </a-tooltip>
-          </template>
-          <template v-else-if="column.dataIndex === 'user'">
-            <a-tooltip :title="eventUserTooltip(record)">
-              <span class="ellipsis-cell">{{ eventUserText(record) }}</span>
-            </a-tooltip>
-          </template>
-          <template v-else-if="column.dataIndex === 'sourceIp'">
-            <a-tooltip :title="record.sourceIp">
-              <span class="ellipsis-cell">{{ record.sourceIp }}</span>
-            </a-tooltip>
-          </template>
-          <template v-else-if="column.dataIndex === 'requestPath'">
-            <a-tooltip :title="record.requestPath">
-              <span class="ellipsis-cell">{{ record.requestPath }}</span>
-            </a-tooltip>
-          </template>
-          <template v-else-if="column.dataIndex === 'blocked'">
-            <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{
-              record.blocked ? '已拦截' : '已放行'
-            }}</span>
-          </template>
-          <template v-else-if="column.dataIndex === 'handledStatus'">
-            <span class="security-pill is-neutral">{{ statusText(record.handledStatus) }}</span>
-          </template>
-        </template>
-      </a-table>
+        </BTable>
+      </b-loading>
     </div>
   </div>
 </template>
@@ -111,6 +113,8 @@
   import { apiQueryPost } from '@/http/request.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import {
     OPEN_EVENT_DETAIL,
@@ -125,7 +129,7 @@
   const refreshTrigger = inject(REFRESH_TRIGGER);
   const route = useRoute();
   const router = useRouter();
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 380 });
+  const { tableScrollY } = useTableScrollY({ reservedHeight: 330 });
 
   const events = ref<any[]>([]);
   const eventTotal = ref(0);
@@ -141,11 +145,8 @@
   });
   const eventSearchTimer = ref<any>(null);
 
-  function eventRecordRow(record: any) {
-    return {
-      class: 'clickable-row',
-      onClick: () => openEventDetail?.(record.eventId),
-    };
+  function onRowClick(record: any) {
+    openEventDetail?.(record.eventId);
   }
 
   async function searchEvents() {
@@ -182,12 +183,6 @@
     eventFilters.userLabel = '';
     eventPage.currentPage = 1;
     router.replace({ query: {} });
-    searchEvents();
-  }
-
-  function onEventPageChange(page: number, pageSize: number) {
-    eventPage.currentPage = pageSize !== eventPage.pageSize ? 1 : page;
-    eventPage.pageSize = pageSize;
     searchEvents();
   }
 

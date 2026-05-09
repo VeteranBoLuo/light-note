@@ -11,55 +11,25 @@
     <div class="security-grid">
       <section class="security-section">
         <h3>攻击类型分布</h3>
-        <a-table
-          :data-source="overview.typeDistribution"
-          :columns="typeColumns"
-          size="small"
-          :pagination="false"
-          row-key="attackType"
-        />
+        <BTable :data="overview.typeDistribution" :columns="typeColumns" :rowKey="'attackType'" />
       </section>
       <section class="security-section">
         <h3>24小时趋势</h3>
-        <a-table
-          :data-source="overview.trend"
-          :columns="trendColumns"
-          size="small"
-          :pagination="false"
-          row-key="time"
-        />
+        <BTable :data="overview.trend" :columns="trendColumns" :rowKey="'time'" />
       </section>
       <section class="security-section">
         <h3>Top 攻击 IP</h3>
-        <a-table
-          :data-source="overview.topIps"
-          :columns="topIpColumns"
-          size="small"
-          :pagination="false"
-          row-key="sourceIp"
-        />
+        <BTable :data="overview.topIps" :columns="topIpColumns" :rowKey="'sourceIp'" />
       </section>
       <section class="security-section">
         <h3>Top 被攻击接口</h3>
-        <a-table
-          :data-source="overview.topPaths"
-          :columns="topPathColumns"
-          size="small"
-          :pagination="false"
-          row-key="requestPath"
-        />
+        <BTable :data="overview.topPaths" :columns="topPathColumns" :rowKey="'requestPath'" />
       </section>
     </div>
 
     <div v-if="overview.recentEvents?.length" class="security-section" style="margin-top: 12px">
       <h3>近期安全事件</h3>
-      <a-table
-        :data-source="overview.recentEvents"
-        :columns="recentColumns"
-        size="small"
-        :pagination="false"
-        row-key="eventId"
-      />
+      <BTable :data="overview.recentEvents" :columns="recentColumns" :rowKey="'eventId'" />
     </div>
   </div>
 </template>
@@ -67,6 +37,7 @@
 <script lang="ts" setup>
 import { computed, inject, onMounted, reactive } from 'vue';
 import { apiBasePost } from '@/http/request.ts';
+import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 import { REFRESH_TRIGGER, typeColumns, trendColumns, topIpColumns, topPathColumns, recentColumns } from './securityShared';
 
 const refreshTrigger = inject(REFRESH_TRIGGER);

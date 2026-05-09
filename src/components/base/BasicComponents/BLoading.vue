@@ -49,7 +49,6 @@
     font-size: 12px;
   }
   .loader-container {
-    position: absolute;
     height: 100%;
     width: 100%;
   }
