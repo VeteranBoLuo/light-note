@@ -152,6 +152,7 @@
         userInfoLoaded = true;
         applyUserInfo(res.data);
         if (res.status === 200) {
+          bookmark.isShowLogin = false;
           await refreshOpinionNotice();
         } else {
           bookmark.isShowLogin = true;

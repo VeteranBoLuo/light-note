@@ -64,6 +64,7 @@ function notifyAuthExpired(response?: any) {
     (serverRole === 'visitor' || status === 'visitor' || status === 401);
   if (status === 200 && serverRole && serverRole !== 'visitor') {
     authExpiredFlow = false;
+    return false;
   }
   if (headerExpired || lostLoginState) {
     authExpiredFlow = true;
