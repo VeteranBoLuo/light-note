@@ -7,10 +7,6 @@
           <h2 class="admin-title">安全中心</h2>
           <p class="admin-subtitle">查看攻击态势、拦截记录、IP风险和处置状态</p>
         </div>
-        <div class="security-header-actions">
-          <b-button @click="activeTab = 'accountBans'">账号封禁</b-button>
-          <b-button type="primary" @click="refreshAll">刷新</b-button>
-        </div>
       </header>
 
       <a-tabs v-model:activeKey="activeTab" class="security-tabs">
@@ -26,19 +22,43 @@
           <div class="security-grid">
             <section class="security-section">
               <h3>攻击类型分布</h3>
-              <a-table :data-source="overview.typeDistribution" :columns="typeColumns" size="small" :pagination="false" row-key="attackType" />
+              <a-table
+                :data-source="overview.typeDistribution"
+                :columns="typeColumns"
+                size="small"
+                :pagination="false"
+                row-key="attackType"
+              />
             </section>
             <section class="security-section">
               <h3>24小时趋势</h3>
-              <a-table :data-source="overview.trend" :columns="trendColumns" size="small" :pagination="false" row-key="time" />
+              <a-table
+                :data-source="overview.trend"
+                :columns="trendColumns"
+                size="small"
+                :pagination="false"
+                row-key="time"
+              />
             </section>
             <section class="security-section">
               <h3>Top 攻击 IP</h3>
-              <a-table :data-source="overview.topIps" :columns="topIpColumns" size="small" :pagination="false" row-key="sourceIp" />
+              <a-table
+                :data-source="overview.topIps"
+                :columns="topIpColumns"
+                size="small"
+                :pagination="false"
+                row-key="sourceIp"
+              />
             </section>
             <section class="security-section">
               <h3>Top 被攻击接口</h3>
-              <a-table :data-source="overview.topPaths" :columns="topPathColumns" size="small" :pagination="false" row-key="requestPath" />
+              <a-table
+                :data-source="overview.topPaths"
+                :columns="topPathColumns"
+                size="small"
+                :pagination="false"
+                row-key="requestPath"
+              />
             </section>
           </div>
         </a-tab-pane>
@@ -46,26 +66,51 @@
         <a-tab-pane key="events" tab="攻击日志">
           <div class="admin-filters security-filters">
             <div class="admin-filters-main security-filters-main">
-              <b-input v-model:value="eventFilters.key" placeholder="搜索IP/接口/类型/用户" class="security-search-input" @input="handleEventSearch" />
-              <a-select v-model:value="eventFilters.severity" allow-clear placeholder="威胁等级" class="security-select" @change="searchEvents">
+              <b-input
+                v-model:value="eventFilters.key"
+                placeholder="搜索IP/接口/类型/用户"
+                class="security-search-input"
+                @input="handleEventSearch"
+              />
+              <a-select
+                v-model:value="eventFilters.severity"
+                allow-clear
+                placeholder="威胁等级"
+                class="security-select"
+                @change="searchEvents"
+              >
                 <a-select-option value="low">low</a-select-option>
                 <a-select-option value="medium">medium</a-select-option>
                 <a-select-option value="high">high</a-select-option>
                 <a-select-option value="critical">critical</a-select-option>
               </a-select>
-              <a-select v-model:value="eventFilters.actionTaken" allow-clear placeholder="处置动作" class="security-select" @change="searchEvents">
+              <a-select
+                v-model:value="eventFilters.actionTaken"
+                allow-clear
+                placeholder="处置动作"
+                class="security-select"
+                @change="searchEvents"
+              >
                 <a-select-option value="log">记录</a-select-option>
                 <a-select-option value="block">拦截</a-select-option>
                 <a-select-option value="ban">封禁</a-select-option>
               </a-select>
-              <a-select v-model:value="eventFilters.handledStatus" allow-clear placeholder="处理状态" class="security-select" @change="searchEvents">
+              <a-select
+                v-model:value="eventFilters.handledStatus"
+                allow-clear
+                placeholder="处理状态"
+                class="security-select"
+                @change="searchEvents"
+              >
                 <a-select-option value="unhandled">未处理</a-select-option>
-                <a-select-option value="confirmed">已确认</a-select-option>
+                <a-select-option value="processed">已处理</a-select-option>
                 <a-select-option value="false_positive">误报</a-select-option>
-                <a-select-option value="ignored">已忽略</a-select-option>
-                <a-select-option value="resolved">已解决</a-select-option>
               </a-select>
               <b-button type="primary" @click="searchEvents">搜索</b-button>
+            </div>
+            <div v-if="eventFilters.userId" class="active-filter-row">
+              <span>当前账号：{{ eventFilters.userLabel || eventFilters.userId }}</span>
+              <b-button size="small" @click="clearEventAccountFilter">清除</b-button>
             </div>
             <span class="admin-filters-hint">支持查看命中证据、脱敏请求快照、同IP近期行为和处置备注</span>
           </div>
@@ -78,6 +123,7 @@
               :pagination="false"
               :scroll="{ x: 1180, y: tableScrollY }"
               :loading="eventLoading"
+              :custom-row="eventRecordRow"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'createdAt'">
@@ -108,42 +154,64 @@
                     <span class="ellipsis-cell">{{ record.requestPath }}</span>
                   </a-tooltip>
                 </template>
-                <template v-else-if="column.dataIndex === 'threatScore'">
-                  <a-progress :percent="record.threatScore" size="small" :show-info="true" :stroke-color="scoreColor(record.threatScore)" trail-color="var(--security-progress-trail)" />
-                </template>
                 <template v-else-if="column.dataIndex === 'blocked'">
-                  <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{ record.blocked ? '已拦截' : '已放行' }}</span>
+                  <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{
+                    record.blocked ? '已拦截' : '已放行'
+                  }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'handledStatus'">
                   <span class="security-pill is-neutral">{{ statusText(record.handledStatus) }}</span>
-                </template>
-                <template v-else-if="column.dataIndex === 'action'">
-                  <b-button size="small" @click="openEventDetail(record)">详情</b-button>
                 </template>
               </template>
             </a-table>
           </div>
 
           <footer class="admin-footer">
-            <a-pagination :current="eventPage.currentPage" :page-size="eventPage.pageSize" show-size-changer size="small" :total="eventTotal" @change="onEventPageChange" />
+            <a-pagination
+              :current="eventPage.currentPage"
+              :page-size="eventPage.pageSize"
+              show-size-changer
+              size="small"
+              :total="eventTotal"
+              @change="onEventPageChange"
+            />
           </footer>
         </a-tab-pane>
 
         <a-tab-pane key="ips" tab="IP画像">
           <div class="admin-filters security-filters">
             <div class="admin-filters-main security-filters-main">
-              <b-input v-model:value="ipFilters.key" placeholder="搜索IP或封禁原因" class="security-search-input" @input="handleIpSearch" />
+              <b-input
+                v-model:value="ipFilters.key"
+                placeholder="搜索IP或封禁原因"
+                class="security-search-input"
+                @input="handleIpSearch"
+              />
               <b-button type="primary" @click="searchIps">搜索</b-button>
             </div>
           </div>
           <div class="admin-table-card">
-            <a-table :data-source="ipList" :columns="ipColumns" row-key="ip" :pagination="false" :scroll="{ y: tableScrollY }" :custom-row="ipRecordRow">
+            <a-table
+              :data-source="ipList"
+              :columns="ipColumns"
+              row-key="ip"
+              :pagination="false"
+              :scroll="{ y: tableScrollY }"
+              :custom-row="ipRecordRow"
+            >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'riskScore'">
-                  <a-progress :percent="record.riskScore || 0" size="small" :stroke-color="scoreColor(record.riskScore || 0)" trail-color="var(--security-progress-trail)" />
+                  <a-progress
+                    :percent="record.riskScore || 0"
+                    size="small"
+                    :stroke-color="scoreColor(record.riskScore || 0)"
+                    trail-color="var(--security-progress-trail)"
+                  />
                 </template>
                 <template v-else-if="column.dataIndex === 'isBanned'">
-                  <span class="security-pill" :class="record.isBanned ? 'is-high' : 'is-low'">{{ record.isBanned ? '封禁中' : '正常' }}</span>
+                  <span class="security-pill" :class="record.isBanned ? 'is-high' : 'is-low'">{{
+                    record.isBanned ? '封禁中' : '正常'
+                  }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'action'">
                   <b-button size="small" @click="openIpAccounts(record)">账户</b-button>
@@ -152,20 +220,39 @@
             </a-table>
           </div>
           <footer class="admin-footer">
-            <a-pagination :current="ipPage.currentPage" :page-size="ipPage.pageSize" show-size-changer size="small" :total="ipTotal" @change="onIpPageChange" />
+            <a-pagination
+              :current="ipPage.currentPage"
+              :page-size="ipPage.pageSize"
+              show-size-changer
+              size="small"
+              :total="ipTotal"
+              @change="onIpPageChange"
+            />
           </footer>
         </a-tab-pane>
 
         <a-tab-pane key="accountBans" tab="账号封禁">
           <div class="admin-filters security-filters">
             <div class="admin-filters-main security-filters-main">
-              <b-input v-model:value="accountFilters.key" placeholder="搜索账号/邮箱/封禁原因" class="security-search-input" @input="handleAccountSearch" />
+              <b-input
+                v-model:value="accountFilters.key"
+                placeholder="搜索账号/邮箱/封禁原因"
+                class="security-search-input"
+                @input="handleAccountSearch"
+              />
               <b-button type="primary" @click="searchAccountBans">搜索</b-button>
             </div>
             <span class="admin-filters-hint">账号封禁会让该账号退出登录；登录时会明确提示账号已被封禁</span>
           </div>
           <div class="admin-table-card">
-            <a-table :data-source="accountBans" :columns="accountColumns" row-key="userId" :pagination="false" :scroll="{ y: tableScrollY }">
+            <a-table
+              :data-source="accountBans"
+              :columns="accountColumns"
+              row-key="userId"
+              :pagination="false"
+              :scroll="{ y: tableScrollY }"
+              :custom-row="accountBanRecordRow"
+            >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'account'">
                   <div class="account-cell">
@@ -177,25 +264,40 @@
                   <span class="security-pill is-neutral">{{ record.role }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'action'">
-                  <b-button size="small" @click="unbanAccount(record.userId)">解封账号</b-button>
+                  <b-button size="small" @click.stop="unbanAccount(record)">解封账号</b-button>
                 </template>
               </template>
             </a-table>
           </div>
           <footer class="admin-footer">
-            <a-pagination :current="accountPage.currentPage" :page-size="accountPage.pageSize" show-size-changer size="small" :total="accountTotal" @change="onAccountPageChange" />
+            <a-pagination
+              :current="accountPage.currentPage"
+              :page-size="accountPage.pageSize"
+              show-size-changer
+              size="small"
+              :total="accountTotal"
+              @change="onAccountPageChange"
+            />
           </footer>
         </a-tab-pane>
 
         <a-tab-pane key="rules" tab="规则库">
           <div class="admin-table-card security-rules-card">
-            <a-table :data-source="rules" :columns="ruleColumns" row-key="ruleCode" :pagination="false">
+            <a-table
+              :data-source="rules"
+              :columns="ruleColumns"
+              row-key="ruleCode"
+              :pagination="false"
+              :scroll="{ x: 860, y: tableScrollY }"
+            >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.dataIndex === 'severity'">
                   <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
                 </template>
                 <template v-else-if="column.dataIndex === 'enabled'">
-                  <span class="security-pill" :class="record.enabled ? 'is-low' : 'is-neutral'">{{ record.enabled ? '启用' : '停用' }}</span>
+                  <span class="security-pill" :class="record.enabled ? 'is-low' : 'is-neutral'">{{
+                    record.enabled ? '启用' : '停用'
+                  }}</span>
                 </template>
               </template>
             </a-table>
@@ -209,14 +311,17 @@
         <section>
           <h3>事件概览</h3>
           <div class="detail-grid">
-            <span>类型</span><strong>{{ eventDetail.event.attackType }}</strong>
-            <span>等级</span><strong>{{ eventDetail.event.severity }}</strong>
-            <span>分数</span><strong>{{ eventDetail.event.threatScore }}</strong>
-            <span>动作</span><strong>{{ eventDetail.event.actionTaken }}</strong>
-            <span>IP</span><strong>{{ eventDetail.event.sourceIp }}</strong>
-            <span>账号</span><strong>{{ eventAccountText }}</strong>
-            <span>用户ID</span><strong>{{ eventDetail.event.userId || '未识别' }}</strong>
-            <span>接口</span><strong>{{ eventDetail.event.requestPath }}</strong>
+            <span>类型</span><strong>{{ eventDetail.event.attackType }}</strong> <span>等级</span
+            ><strong>{{ eventDetail.event.severity }}</strong> <span>分数</span
+            ><strong>{{ eventDetail.event.threatScore }}</strong> <span>动作</span
+            ><strong>{{ eventDetail.event.actionTaken }}</strong> <span>IP</span
+            ><strong>{{ eventDetail.event.sourceIp }}</strong> <span>账号</span><strong>{{ eventAccountText }}</strong>
+            <span>用户ID</span><strong>{{ eventDetail.event.userId || '未识别' }}</strong> <span>接口</span
+            ><strong>{{ eventDetail.event.requestPath }}</strong> <span>IP风险影响</span
+            ><strong>
+              +{{ eventDetail.event.ipRiskDelta || 0 }}
+              <em>{{ eventDetail.event.ipRiskReverted ? '已回滚' : '未回滚' }}</em>
+            </strong>
           </div>
         </section>
 
@@ -238,7 +343,13 @@
 
         <section>
           <h3>同IP近期事件</h3>
-          <a-table :data-source="eventDetail.ipRecent" :columns="ipRecentColumns" size="small" row-key="eventId" :pagination="false" />
+          <a-table
+            :data-source="eventDetail.ipRecent"
+            :columns="ipRecentColumns"
+            size="small"
+            row-key="eventId"
+            :pagination="false"
+          />
         </section>
 
         <section>
@@ -246,15 +357,18 @@
           <div class="quick-actions">
             <b-button @click="banIp(eventDetail.event.sourceIp)">封禁此IP 1小时</b-button>
             <b-button @click="unbanIp(eventDetail.event.sourceIp)">解封此IP</b-button>
-            <b-button v-if="eventDetail.event.userId" @click="banAccount(eventDetail.event.userId)">封禁关联账号</b-button>
-            <b-button v-if="eventDetail.event.userId" @click="unbanAccount(eventDetail.event.userId)">解封关联账号</b-button>
+            <b-button v-if="eventDetail.event.userId" @click="banAccount(eventDetail.event.userId)"
+              >封禁关联账号</b-button
+            >
+            <b-button v-if="eventDetail.event.userId" @click="unbanAccount(eventDetail.event.userId)"
+              >解封关联账号</b-button
+            >
           </div>
           <div class="handle-row">
             <a-select v-model:value="handleForm.handledStatus" class="security-select">
-              <a-select-option value="confirmed">已确认</a-select-option>
+              <a-select-option value="unhandled">未处理</a-select-option>
+              <a-select-option value="processed">已处理</a-select-option>
               <a-select-option value="false_positive">误报</a-select-option>
-              <a-select-option value="ignored">已忽略</a-select-option>
-              <a-select-option value="resolved">已解决</a-select-option>
             </a-select>
             <b-input v-model:value="handleForm.remark" placeholder="处理备注" class="handle-input" />
             <b-button type="primary" @click="submitHandle">保存</b-button>
@@ -263,7 +377,7 @@
       </div>
     </a-drawer>
 
-    <a-drawer v-model:open="ipAccountVisible" title="IP关联账号" placement="right" width="760">
+    <a-drawer v-model:open="ipAccountVisible" title="IP关联账号" placement="right" width="1000">
       <div class="security-detail">
         <section>
           <h3>{{ currentIp }} 使用过的账号</h3>
@@ -272,7 +386,9 @@
             <div class="table-actions">
               <b-button v-if="currentIpInfo?.isBanned" @click="unbanIp(currentIp)">解封此IP</b-button>
               <b-button v-else @click="banIp(currentIp)">封禁此IP 1小时</b-button>
-              <b-button :disabled="selectedIpAccountIds.length === 0" @click="banSelectedIpAccounts">封禁选中账号</b-button>
+              <b-button :disabled="selectedIpAccountIds.length === 0" @click="banSelectedIpAccounts"
+                >封禁选中账号</b-button
+              >
             </div>
           </div>
           <a-table
@@ -283,6 +399,7 @@
             :pagination="false"
             :loading="ipAccountLoading"
             :row-selection="{ selectedRowKeys: selectedIpAccountIds, onChange: onIpAccountSelect }"
+            :custom-row="ipAccountRecordRow"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.dataIndex === 'account'">
@@ -292,7 +409,9 @@
                 </div>
               </template>
               <template v-else-if="column.dataIndex === 'delFlag'">
-                <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{ Number(record.delFlag) === 1 ? '已封禁' : '正常' }}</span>
+                <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
+                  Number(record.delFlag) === 1 ? '已封禁' : '正常'
+                }}</span>
               </template>
               <template v-else-if="column.dataIndex === 'lastSeenAt'">
                 <a-tooltip :title="record.lastSeenAt">
@@ -300,8 +419,10 @@
                 </a-tooltip>
               </template>
               <template v-else-if="column.dataIndex === 'action'">
-                <b-button v-if="Number(record.delFlag) !== 1" size="small" @click="banAccount(record.userId)">封禁账号</b-button>
-                <b-button v-else size="small" @click="unbanAccount(record.userId)">解封账号</b-button>
+                <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount(record)"
+                  >封禁账号</b-button
+                >
+                <b-button v-else size="small" @click.stop="unbanAccount(record)">解封账号</b-button>
               </template>
             </template>
           </a-table>
@@ -320,7 +441,7 @@
   import { useTableScrollY } from '@/composables/useTableScrollY';
 
   const activeTab = ref('overview');
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 360 });
+  const { tableScrollY } = useTableScrollY({ reservedHeight: 300 });
 
   const overview = reactive<any>({
     summary: {},
@@ -340,6 +461,8 @@
     severity: undefined,
     actionTaken: undefined,
     handledStatus: undefined,
+    userId: undefined,
+    userLabel: '',
   });
 
   const ipList = ref<any[]>([]);
@@ -358,7 +481,7 @@
   const ipAccounts = ref<any[]>([]);
   const selectedIpAccountIds = ref<string[]>([]);
   const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null });
-  const handleForm = reactive({ handledStatus: 'confirmed', remark: '' });
+  const handleForm = reactive({ handledStatus: 'processed', remark: '' });
   const eventSearchTimer = ref<any>(null);
   const ipSearchTimer = ref<any>(null);
   const accountSearchTimer = ref<any>(null);
@@ -385,7 +508,6 @@
     { title: '接口', dataIndex: 'requestPath', ellipsis: true, width: 220 },
     { title: '拦截', dataIndex: 'blocked', width: 82 },
     { title: '状态', dataIndex: 'handledStatus', width: 95 },
-    { title: '操作', dataIndex: 'action', width: 90 },
   ];
   const typeColumns = [
     { title: '攻击类型', dataIndex: 'attackType' },
@@ -414,7 +536,6 @@
     { title: '严重', dataIndex: 'criticalCount', width: 80 },
     { title: '状态', dataIndex: 'isBanned', width: 90 },
     { title: '最近攻击', dataIndex: 'lastAttackTime', ellipsis: true },
-    { title: '操作', dataIndex: 'action', width: 90 },
   ];
   const accountColumns = [
     { title: '账号', dataIndex: 'account', ellipsis: true },
@@ -469,10 +590,11 @@
     return (
       {
         unhandled: '未处理',
-        confirmed: '已确认',
+        processed: '已处理',
+        confirmed: '已处理',
         false_positive: '误报',
-        ignored: '已忽略',
-        resolved: '已解决',
+        ignored: '已处理',
+        resolved: '已处理',
       }[status] || status
     );
   }
@@ -503,6 +625,7 @@
         severity: eventFilters.severity,
         actionTaken: eventFilters.actionTaken,
         handledStatus: eventFilters.handledStatus,
+        userId: eventFilters.userId,
       },
     }).finally(() => {
       eventLoading.value = false;
@@ -540,8 +663,48 @@
     }
   }
 
+  function eventRecordRow(record: any) {
+    return {
+      class: 'clickable-row',
+      onClick: () => openEventDetail(record),
+    };
+  }
+
   function onIpAccountSelect(keys: string[]) {
     selectedIpAccountIds.value = keys;
+  }
+
+  function openAccountEvents(record: any) {
+    if (!record?.userId) return;
+    eventFilters.userId = record.userId;
+    eventFilters.userLabel = record.alias || record.email || record.userId;
+    eventPage.currentPage = 1;
+    ipAccountVisible.value = false;
+    if (activeTab.value === 'events') {
+      searchEvents();
+    } else {
+      activeTab.value = 'events';
+    }
+  }
+
+  function clearEventAccountFilter() {
+    eventFilters.userId = undefined;
+    eventFilters.userLabel = '';
+    eventPage.currentPage = 1;
+    searchEvents();
+  }
+
+  function ipAccountRecordRow(record: any) {
+    return {
+      class: 'clickable-row',
+      onClick: (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button,input,.ant-checkbox-wrapper,.ant-checkbox')) {
+          return;
+        }
+        openAccountEvents(record);
+      },
+    };
   }
 
   function ipRecordRow(record: any) {
@@ -553,6 +716,19 @@
           return;
         }
         openIpAccounts(record);
+      },
+    };
+  }
+
+  function accountBanRecordRow(record: any) {
+    return {
+      class: 'clickable-row',
+      onClick: (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button')) {
+          return;
+        }
+        openAccountEvents(record);
       },
     };
   }
@@ -580,21 +756,48 @@
     const res = await apiBaseGet(`/api/security/events/${record.eventId}`);
     if (res.status === 200) {
       Object.assign(eventDetail, res.data);
-      handleForm.handledStatus = res.data.event.handledStatus || 'confirmed';
+      handleForm.handledStatus =
+        {
+          confirmed: 'processed',
+          resolved: 'processed',
+          ignored: 'processed',
+        }[res.data.event.handledStatus] ||
+        res.data.event.handledStatus ||
+        'processed';
       handleForm.remark = res.data.event.remark || '';
       detailVisible.value = true;
     }
   }
 
-  async function submitHandle() {
+  async function doSubmitHandle() {
     if (!eventDetail.event?.eventId) return;
     const res = await apiBasePost(`/api/security/events/${eventDetail.event.eventId}/handle`, handleForm);
     if (res.status === 200) {
-      message.success('处置状态已保存');
+      message.success(res.msg || '处置状态已保存');
       detailVisible.value = false;
       searchEvents();
+      searchIps();
       loadOverview();
     }
+  }
+
+  async function submitHandle() {
+    if (!eventDetail.event?.eventId) return;
+    if (
+      handleForm.handledStatus === 'false_positive' &&
+      Number(eventDetail.event.ipRiskDelta || 0) > 0 &&
+      !eventDetail.event.ipRiskReverted
+    ) {
+      Modal.confirm({
+        title: '标记为误报',
+        content: `确认标记为误报？系统会保留攻击日志，并撤销本次事件带来的 ${eventDetail.event.ipRiskDelta} 分 IP风险影响。`,
+        okText: '确认误报',
+        cancelText: '取消',
+        onOk: doSubmitHandle,
+      });
+      return;
+    }
+    await doSubmitHandle();
   }
 
   async function banIp(ip: string) {
@@ -639,15 +842,23 @@
     });
   }
 
-  async function banAccount(userId: string) {
-    if (!userId) return;
+  function normalizeAccount(account: any) {
+    return typeof account === 'string' ? { userId: account } : account || {};
+  }
+
+  async function banAccount(account: any) {
+    account = normalizeAccount(account);
+    if (!account?.userId) return;
     Modal.confirm({
       title: '封禁账号',
-      content: `确认封禁账号 ${userId}？该账号会退出登录并无法访问业务接口。`,
+      content: `确认封禁账号【${account.alias || account.userId}】吗？该账号会退出登录并无法访问业务接口。`,
       okText: '确认封禁',
       cancelText: '取消',
       onOk: async () => {
-        const res = await apiBasePost('/api/security/accountBan', { userId, reason: '管理员在安全中心手动封禁' });
+        const res = await apiBasePost('/api/security/accountBan', {
+          userId: account.userId,
+          reason: '管理员在安全中心手动封禁',
+        });
         if (res.status === 200) {
           message.success('已封禁账号');
           searchAccountBans();
@@ -662,15 +873,16 @@
     });
   }
 
-  async function unbanAccount(userId: string) {
-    if (!userId) return;
+  async function unbanAccount(account: any) {
+    account = normalizeAccount(account);
+    if (!account?.userId) return;
     Modal.confirm({
       title: '解封账号',
-      content: `确认解封账号 ${userId}？`,
+      content: `确认解封账号【${account.alias || account.userId}】吗？`,
       okText: '确认解封',
       cancelText: '取消',
       onOk: async () => {
-        const res = await apiBasePost('/api/security/accountUnban', { userId });
+        const res = await apiBasePost('/api/security/accountUnban', { userId: account.userId });
         if (res.status === 200) {
           message.success('已解封账号');
           searchAccountBans();
@@ -697,7 +909,11 @@
       okText: '确认封禁',
       cancelText: '取消',
       onOk: async () => {
-        await Promise.all(ids.map((userId) => apiBasePost('/api/security/accountBan', { userId, reason: `管理员按IP ${currentIp.value} 批量封禁` })));
+        await Promise.all(
+          ids.map((userId) =>
+            apiBasePost('/api/security/accountBan', { userId, reason: `管理员按IP ${currentIp.value} 批量封禁` }),
+          ),
+        );
         message.success('已封禁选中账号');
         selectedIpAccountIds.value = [];
         searchAccountBans();
@@ -759,10 +975,11 @@
   }
 
   watch(activeTab, (tab) => {
-    if (tab === 'events' && events.value.length === 0) searchEvents();
-    if (tab === 'ips' && ipList.value.length === 0) searchIps();
-    if (tab === 'accountBans' && accountBans.value.length === 0) searchAccountBans();
-    if (tab === 'rules' && rules.value.length === 0) loadRules();
+    if (tab === 'overview') loadOverview();
+    if (tab === 'events') searchEvents();
+    if (tab === 'ips') searchIps();
+    if (tab === 'accountBans') searchAccountBans();
+    if (tab === 'rules') loadRules();
   });
 
   onMounted(() => {
@@ -784,11 +1001,6 @@
     --security-medium: #9a6a00;
     --security-high: #bd4b18;
     --security-critical: #c93a4b;
-  }
-
-  .security-header-actions {
-    display: flex;
-    gap: 8px;
   }
 
   .security-tabs {
@@ -838,6 +1050,15 @@
     flex-wrap: wrap;
   }
 
+  .active-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    color: var(--security-muted);
+    font-size: 13px;
+  }
+
   .security-search-input {
     min-width: 220px;
     flex: 1;
@@ -866,6 +1087,13 @@
 
   .detail-grid span {
     color: var(--security-muted);
+  }
+
+  .detail-grid em {
+    margin-left: 8px;
+    color: var(--security-muted);
+    font-style: normal;
+    font-weight: 500;
   }
 
   pre {
