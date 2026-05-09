@@ -35,7 +35,7 @@
             }}</span>
           </template>
           <template v-else-if="column.dataIndex === 'action'">
-            <b-button size="small" @click="openIpAccounts?.(record.ip)">账户</b-button>
+            <b-button size="small" @click="openIpAccounts?.(record.ip, record.isBanned)">账户</b-button>
           </template>
         </template>
       </a-table>
@@ -69,7 +69,7 @@
         if (target.closest('button')) {
           return;
         }
-        openIpAccounts?.(record.ip);
+        openIpAccounts?.(record.ip, record.isBanned);
       },
     };
   }

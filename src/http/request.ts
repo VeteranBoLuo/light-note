@@ -91,6 +91,24 @@ function notifyUserBanned(response?: any) {
   }
   return true;
 }
+
+let ipBannedNotifyLocked = false;
+function notifyIpBanned(response?: any) {
+  const status = response?.status || response?.data?.status;
+  const msg = response?.data?.msg || '';
+  if (status !== 403 || !msg.includes('IP 已处于封禁期')) {
+    return false;
+  }
+  if (!ipBannedNotifyLocked) {
+    ipBannedNotifyLocked = true;
+    message.error(msg);
+    window.dispatchEvent(new CustomEvent('light-note:user-banned'));
+    window.setTimeout(() => {
+      ipBannedNotifyLocked = false;
+    }, 4000);
+  }
+  return true;
+}
 //请求拦截
 request.interceptors.request.use(
   (config) => {
@@ -129,12 +147,20 @@ request.interceptors.response.use(
   (response) => {
     notifyAuthSession(response);
     notifyUserBanned(response);
+    notifyIpBanned(response);
     notifyAuthExpired(response);
     return response;
   },
   (error) => {
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
+      if (notifyIpBanned(error.response)) {
+        return Promise.reject({
+          code: 'IP_BANNED',
+          message: error.response.data?.msg || 'IP 已处于封禁期',
+          status: 403,
+        });
+      }
       if (notifyUserBanned(error.response)) {
         return Promise.reject({
           code: 'USER_BANNED',

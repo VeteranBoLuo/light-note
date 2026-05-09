@@ -54,101 +54,101 @@
 </template>
 
 <script lang="ts" setup>
-import { inject, ref, watch } from 'vue';
-import { message, Modal } from 'ant-design-vue';
-import { apiBasePost } from '@/http/request.ts';
-import BButton from '@/components/base/BasicComponents/BButton.vue';
-import {
-  BAN_IP,
-  UNBAN_IP,
-  BAN_ACCOUNT,
-  UNBAN_ACCOUNT,
-  NAVIGATE_TO_USER_EVENTS,
-  ipAccountColumns,
-} from './securityShared';
+  import { inject, ref, watch } from 'vue';
+  import { message, Modal } from 'ant-design-vue';
+  import { apiBasePost } from '@/http/request.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import {
+    BAN_IP,
+    UNBAN_IP,
+    BAN_ACCOUNT,
+    UNBAN_ACCOUNT,
+    NAVIGATE_TO_USER_EVENTS,
+    ipAccountColumns,
+  } from './securityShared';
 
-const props = defineProps<{ visible: boolean; ip: string; ipBanned: boolean }>();
-const emit = defineEmits<{
-  close: [];
-}>();
+  const props = defineProps<{ visible: boolean; ip: string; ipBanned: boolean }>();
+  const emit = defineEmits<{
+    close: [];
+  }>();
 
-const banIp = inject(BAN_IP);
-const unbanIp = inject(UNBAN_IP);
-const banAccount = inject(BAN_ACCOUNT);
-const unbanAccount = inject(UNBAN_ACCOUNT);
-const navigateToUserEvents = inject(NAVIGATE_TO_USER_EVENTS);
+  const banIp = inject(BAN_IP);
+  const unbanIp = inject(UNBAN_IP);
+  const banAccount = inject(BAN_ACCOUNT);
+  const unbanAccount = inject(UNBAN_ACCOUNT);
+  const navigateToUserEvents = inject(NAVIGATE_TO_USER_EVENTS);
 
-const ipAccounts = ref<any[]>([]);
-const ipAccountLoading = ref(false);
-const selectedIpAccountIds = ref<string[]>([]);
+  const ipAccounts = ref<any[]>([]);
+  const ipAccountLoading = ref(false);
+  const selectedIpAccountIds = ref<string[]>([]);
 
-function onIpAccountSelect(keys: string[]) {
-  selectedIpAccountIds.value = keys;
-}
-
-function ipAccountRecordRow(record: any) {
-  return {
-    class: 'clickable-row',
-    onClick: (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (target.closest('button,input,.ant-checkbox-wrapper,.ant-checkbox')) {
-        return;
-      }
-      navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
-      emit('close');
-    },
-  };
-}
-
-async function loadIpAccounts() {
-  if (!props.visible || !props.ip) return;
-  ipAccountLoading.value = true;
-  selectedIpAccountIds.value = [];
-  const res = await apiBasePost('/api/security/ipAccounts', { ip: props.ip }).finally(() => {
-    ipAccountLoading.value = false;
-  });
-  if (res.status === 200) {
-    ipAccounts.value = res.data.items;
+  function onIpAccountSelect(keys: string[]) {
+    selectedIpAccountIds.value = keys;
   }
-}
 
-function banSelectedIpAccounts() {
-  const ids = selectedIpAccountIds.value.filter((id) => {
-    const item = ipAccounts.value.find((account) => account.userId === id);
-    return item && Number(item.delFlag) !== 1;
-  });
-  if (ids.length === 0) {
-    message.warning('请选择未封禁账号');
-    return;
+  function ipAccountRecordRow(record: any) {
+    return {
+      class: 'clickable-row',
+      onClick: (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button,input,.ant-checkbox-wrapper,.ant-checkbox')) {
+          return;
+        }
+        navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
+        emit('close');
+      },
+    };
   }
-  Modal.confirm({
-    title: '批量封禁账号',
-    content: `确认封禁选中的 ${ids.length} 个账号？这些账号会退出登录并无法访问业务接口。`,
-    okText: '确认封禁',
-    cancelText: '取消',
-    onOk: async () => {
-      await Promise.all(
-        ids.map((userId) =>
-          apiBasePost('/api/security/accountBan', { userId, reason: `管理员按IP ${props.ip} 批量封禁` }),
-        ),
-      );
-      message.success('已封禁选中账号');
-      selectedIpAccountIds.value = [];
-      loadIpAccounts();
-    },
-  });
-}
 
-watch(
-  () => props.visible,
-  (v) => {
-    if (v && props.ip) {
-      loadIpAccounts();
+  async function loadIpAccounts() {
+    if (!props.visible || !props.ip) return;
+    ipAccountLoading.value = true;
+    selectedIpAccountIds.value = [];
+    const res = await apiBasePost('/api/security/ipAccounts', { ip: props.ip }).finally(() => {
+      ipAccountLoading.value = false;
+    });
+    if (res.status === 200) {
+      ipAccounts.value = res.data.items;
     }
-  },
-);
+  }
+
+  function banSelectedIpAccounts() {
+    const ids = selectedIpAccountIds.value.filter((id) => {
+      const item = ipAccounts.value.find((account) => account.userId === id);
+      return item && Number(item.delFlag) !== 1;
+    });
+    if (ids.length === 0) {
+      message.warning('请选择未封禁账号');
+      return;
+    }
+    Modal.confirm({
+      title: '批量封禁账号',
+      content: `确认封禁选中的 ${ids.length} 个账号？这些账号会退出登录并无法访问业务接口。`,
+      okText: '确认封禁',
+      cancelText: '取消',
+      onOk: async () => {
+        await Promise.all(
+          ids.map((userId) =>
+            apiBasePost('/api/security/accountBan', { userId, reason: `管理员按IP ${props.ip} 批量封禁` }),
+          ),
+        );
+        message.success('已封禁选中账号');
+        selectedIpAccountIds.value = [];
+        loadIpAccounts();
+      },
+    });
+  }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v && props.ip) {
+        loadIpAccounts();
+      }
+    },
+  );
 </script>
 
 <style lang="less" scoped>
-@import './securityCenter.less';
+  @import './securityCenter.less';
 </style>
