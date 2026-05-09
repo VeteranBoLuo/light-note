@@ -36,7 +36,7 @@ const routes: RouteRecordRaw[] = [
       ...cloudSpaceRouter,
       searchRouter,
       tagDetailRouter,
-      securityCenterRouter,
+      ...securityCenterRouter,
     ],
   },
   {

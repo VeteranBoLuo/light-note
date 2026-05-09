@@ -41,6 +41,8 @@
 - 多端路由映射在 `src/App.vue`。
 - 新入口或页面需检查 `phoneReplaceMap` / `deskReplaceMap`。
 - 常用 store：`bookmark.ts`、`useUser.ts`、`note.ts`、`cloudSpace.ts`
+- 大模块、大功能不要全部堆在一个组件里；页签、子页面、复杂表格、抽屉/弹窗、业务表单等达到独立职责时应拆分组件，并用路由或清晰状态边界承载页面级状态。
+- 多页签模块需每个页签对应独立路由和组件(参照 admin 模块的 children 路由结构和安全中心的重构模式)，父组件做布局+共享抽屉，子组件各自管理数据。共享逻辑抽到模块内 `shared.ts`，跨组件通信用 provide/inject。
 
 ## 修改自检
 
