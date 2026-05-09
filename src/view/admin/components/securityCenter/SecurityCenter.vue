@@ -61,6 +61,17 @@
               />
             </section>
           </div>
+
+          <div v-if="overview.recentEvents?.length" class="security-section" style="margin-top: 12px">
+            <h3>近期安全事件</h3>
+            <a-table
+              :data-source="overview.recentEvents"
+              :columns="recentColumns"
+              size="small"
+              :pagination="false"
+              row-key="eventId"
+            />
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="events" tab="攻击日志">
@@ -93,7 +104,6 @@
               >
                 <a-select-option value="log">记录</a-select-option>
                 <a-select-option value="block">拦截</a-select-option>
-                <a-select-option value="ban">封禁</a-select-option>
               </a-select>
               <a-select
                 v-model:value="eventFilters.handledStatus"
@@ -263,6 +273,14 @@
                 <template v-else-if="column.dataIndex === 'role'">
                   <span class="security-pill is-neutral">{{ record.role }}</span>
                 </template>
+                <template v-else-if="column.dataIndex === 'riskScore'">
+                  <a-progress
+                    :percent="record.riskScore || 0"
+                    size="small"
+                    :stroke-color="scoreColor(record.riskScore || 0)"
+                    trail-color="var(--security-progress-trail)"
+                  />
+                </template>
                 <template v-else-if="column.dataIndex === 'action'">
                   <b-button size="small" @click.stop="unbanAccount(record)">解封账号</b-button>
                 </template>
@@ -277,6 +295,76 @@
               size="small"
               :total="accountTotal"
               @change="onAccountPageChange"
+            />
+          </footer>
+        </a-tab-pane>
+
+        <a-tab-pane key="accountReputation" tab="账号画像">
+          <div class="admin-filters security-filters">
+            <div class="admin-filters-main security-filters-main">
+              <b-input
+                v-model:value="acctRepFilters.key"
+                placeholder="搜索账号/邮箱"
+                class="security-search-input"
+                @input="handleAcctRepSearch"
+              />
+              <b-button type="primary" @click="searchAccountReputation">搜索</b-button>
+            </div>
+          </div>
+          <div class="admin-table-card">
+            <a-table
+              :data-source="accountRepList"
+              :columns="accountRepColumns"
+              row-key="userId"
+              :pagination="false"
+              :scroll="{ y: tableScrollY }"
+              :custom-row="acctRepRecordRow"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.dataIndex === 'account'">
+                  <div class="account-cell">
+                    <strong>{{ record.alias || record.email || record.userId }}</strong>
+                    <span>{{ record.email || record.userId }}</span>
+                  </div>
+                </template>
+                <template v-else-if="column.dataIndex === 'role'">
+                  <span class="security-pill is-neutral">{{ record.role }}</span>
+                </template>
+                <template v-else-if="column.dataIndex === 'riskScore'">
+                  <a-progress
+                    :percent="record.riskScore || 0"
+                    size="small"
+                    :stroke-color="scoreColor(record.riskScore || 0)"
+                    trail-color="var(--security-progress-trail)"
+                  />
+                </template>
+                <template v-else-if="column.dataIndex === 'delFlag'">
+                  <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
+                    Number(record.delFlag) === 1 ? '已封禁' : '正常'
+                  }}</span>
+                </template>
+                <template v-else-if="column.dataIndex === 'lastEventAt'">
+                  <a-tooltip :title="record.lastEventAt">
+                    <span class="ellipsis-cell">{{ record.lastEventAt || '-' }}</span>
+                  </a-tooltip>
+                </template>
+                <template v-else-if="column.dataIndex === 'action'">
+                  <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount(record)"
+                    >封禁账号</b-button
+                  >
+                  <b-button v-else size="small" @click.stop="unbanAccount(record)">解封账号</b-button>
+                </template>
+              </template>
+            </a-table>
+          </div>
+          <footer class="admin-footer">
+            <a-pagination
+              :current="acctRepPage.currentPage"
+              :page-size="acctRepPage.pageSize"
+              show-size-changer
+              size="small"
+              :total="acctRepTotal"
+              @change="onAcctRepPageChange"
             />
           </footer>
         </a-tab-pane>
@@ -315,7 +403,8 @@
             ><strong>{{ eventDetail.event.severity }}</strong> <span>分数</span
             ><strong>{{ eventDetail.event.threatScore }}</strong> <span>动作</span
             ><strong>{{ eventDetail.event.actionTaken }}</strong> <span>IP</span
-            ><strong>{{ eventDetail.event.sourceIp }}</strong> <span>账号</span><strong>{{ eventAccountText }}</strong>
+            ><strong>{{ eventDetail.event.sourceIp }}</strong> <span>账号</span
+            ><strong>{{ eventDetail.event.alias || eventDetail.event.email || eventDetail.event.userId }}</strong>
             <span>用户ID</span><strong>{{ eventDetail.event.userId || '未识别' }}</strong> <span>接口</span
             ><strong>{{ eventDetail.event.requestPath }}</strong> <span>IP风险影响</span
             ><strong>
@@ -473,6 +562,13 @@
   const accountTotal = ref(0);
   const accountPage = reactive({ currentPage: 1, pageSize: 10 });
   const accountFilters = reactive<any>({ key: '' });
+
+  const accountRepList = ref<any[]>([]);
+  const acctRepTotal = ref(0);
+  const acctRepPage = reactive({ currentPage: 1, pageSize: 10 });
+  const acctRepFilters = reactive<any>({ key: '' });
+  const acctRepSearchTimer = ref<any>(null);
+
   const rules = ref<any[]>([]);
   const detailVisible = ref(false);
   const ipAccountVisible = ref(false);
@@ -480,7 +576,7 @@
   const currentIp = ref('');
   const ipAccounts = ref<any[]>([]);
   const selectedIpAccountIds = ref<string[]>([]);
-  const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null });
+  const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
   const handleForm = reactive({ handledStatus: 'processed', remark: '' });
   const eventSearchTimer = ref<any>(null);
   const ipSearchTimer = ref<any>(null);
@@ -497,6 +593,8 @@
       { label: '今日严重', value: summary.todayCritical || 0, hint: 'critical' },
     ];
   });
+
+  const currentIpInfo = computed(() => ipList.value.find((item) => item.ip === currentIp.value));
 
   const eventColumns = [
     { title: '时间', dataIndex: 'createdAt', ellipsis: true, width: 165 },
@@ -528,6 +626,13 @@
     { title: '次数', dataIndex: 'total', width: 80 },
     { title: '最高分', dataIndex: 'maxScore', width: 90 },
   ];
+  const recentColumns = [
+    { title: '时间', dataIndex: 'createdAt', ellipsis: true },
+    { title: '类型', dataIndex: 'attackType', ellipsis: true },
+    { title: 'IP', dataIndex: 'sourceIp', ellipsis: true },
+    { title: '分数', dataIndex: 'threatScore', width: 80 },
+    { title: '动作', dataIndex: 'actionTaken', width: 80 },
+  ];
   const ipColumns = [
     { title: 'IP', dataIndex: 'ip', ellipsis: true },
     { title: '风险分', dataIndex: 'riskScore', width: 140 },
@@ -536,13 +641,26 @@
     { title: '严重', dataIndex: 'criticalCount', width: 80 },
     { title: '状态', dataIndex: 'isBanned', width: 90 },
     { title: '最近攻击', dataIndex: 'lastAttackTime', ellipsis: true },
+    { title: '操作', dataIndex: 'action', width: 90 },
   ];
   const accountColumns = [
     { title: '账号', dataIndex: 'account', ellipsis: true },
     { title: '角色', dataIndex: 'role', width: 90 },
+    { title: '风险分', dataIndex: 'riskScore', width: 140 },
     { title: '封禁原因', dataIndex: 'banReason', ellipsis: true },
     { title: '封禁时间', dataIndex: 'bannedAt', ellipsis: true, width: 160 },
     { title: '操作', dataIndex: 'action', width: 110 },
+  ];
+  const accountRepColumns = [
+    { title: '账号', dataIndex: 'account', ellipsis: true, width: 200 },
+    { title: '角色', dataIndex: 'role', width: 80 },
+    { title: '风险分', dataIndex: 'riskScore', width: 140 },
+    { title: '事件次数', dataIndex: 'totalEvents', width: 90 },
+    { title: '高危', dataIndex: 'highRiskCount', width: 70 },
+    { title: '严重', dataIndex: 'criticalCount', width: 70 },
+    { title: '状态', dataIndex: 'delFlag', width: 80 },
+    { title: '最近事件', dataIndex: 'lastEventAt', ellipsis: true, width: 160 },
+    { title: '操作', dataIndex: 'action', width: 100 },
   ];
   const ruleColumns = [
     { title: '规则', dataIndex: 'ruleName', ellipsis: true },
@@ -573,7 +691,6 @@
     const event = eventDetail.event || {};
     return event.alias || event.email || event.userId || '未识别';
   });
-  const currentIpInfo = computed(() => ipList.value.find((item) => item.ip === currentIp.value));
 
   function severityColor(severity: string) {
     return { low: 'blue', medium: 'orange', high: 'volcano', critical: 'red' }[severity] || 'default';
@@ -745,6 +862,18 @@
     }
   }
 
+  async function searchAccountReputation() {
+    const res = await apiQueryPost('/api/security/accountReputation', {
+      currentPage: acctRepPage.currentPage,
+      pageSize: acctRepPage.pageSize,
+      filters: { key: acctRepFilters.key },
+    });
+    if (res.status === 200) {
+      accountRepList.value = res.data.items;
+      acctRepTotal.value = res.data.total;
+    }
+  }
+
   async function loadRules() {
     const res = await apiBasePost('/api/security/rules', {});
     if (res.status === 200) {
@@ -783,14 +912,18 @@
 
   async function submitHandle() {
     if (!eventDetail.event?.eventId) return;
-    if (
-      handleForm.handledStatus === 'false_positive' &&
-      Number(eventDetail.event.ipRiskDelta || 0) > 0 &&
-      !eventDetail.event.ipRiskReverted
-    ) {
+    const riskParts: string[] = [];
+    if (Number(eventDetail.event.ipRiskDelta || 0) > 0 && !eventDetail.event.ipRiskReverted) {
+      riskParts.push(`${eventDetail.event.ipRiskDelta} 分 IP风险`);
+    }
+    if (Number(eventDetail.event.userRiskDelta || 0) > 0 && !eventDetail.event.userRiskReverted) {
+      riskParts.push(`${eventDetail.event.userRiskDelta} 分 账号风险`);
+    }
+    const riskText = riskParts.length > 0 ? `，并撤销本次事件带来的 ${riskParts.join('、')}影响` : '';
+    if (handleForm.handledStatus === 'false_positive' && riskParts.length > 0) {
       Modal.confirm({
         title: '标记为误报',
-        content: `确认标记为误报？系统会保留攻击日志，并撤销本次事件带来的 ${eventDetail.event.ipRiskDelta} 分 IP风险影响。`,
+        content: `确认标记为误报？系统会保留攻击日志${riskText}。`,
         okText: '确认误报',
         cancelText: '取消',
         onOk: doSubmitHandle,
@@ -942,6 +1075,12 @@
     searchAccountBans();
   }
 
+  function onAcctRepPageChange(page: number, pageSize: number) {
+    acctRepPage.currentPage = pageSize !== acctRepPage.pageSize ? 1 : page;
+    acctRepPage.pageSize = pageSize;
+    searchAccountReputation();
+  }
+
   function handleEventSearch() {
     clearTimeout(eventSearchTimer.value);
     eventSearchTimer.value = setTimeout(() => {
@@ -966,11 +1105,33 @@
     }, 300);
   }
 
+  function handleAcctRepSearch() {
+    clearTimeout(acctRepSearchTimer.value);
+    acctRepSearchTimer.value = setTimeout(() => {
+      acctRepPage.currentPage = 1;
+      searchAccountReputation();
+    }, 300);
+  }
+
+  function acctRepRecordRow(record: any) {
+    return {
+      class: 'clickable-row',
+      onClick: (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button,input,.ant-checkbox-wrapper,.ant-checkbox')) {
+          return;
+        }
+        openAccountEvents(record);
+      },
+    };
+  }
+
   function refreshAll() {
     loadOverview();
     searchEvents();
     searchIps();
     searchAccountBans();
+    searchAccountReputation();
     loadRules();
   }
 
@@ -979,6 +1140,7 @@
     if (tab === 'events') searchEvents();
     if (tab === 'ips') searchIps();
     if (tab === 'accountBans') searchAccountBans();
+    if (tab === 'accountReputation') searchAccountReputation();
     if (tab === 'rules') loadRules();
   });
 
