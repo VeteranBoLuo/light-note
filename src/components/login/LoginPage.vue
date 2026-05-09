@@ -61,7 +61,7 @@
         </a-form-item>
         <a-form-item>
           <div class="login-tips-text">
-	            <span class="remember-text"><b-checkbox type="circle" v-model:isCheck="isCheck" />记住账号</span>
+            <span class="remember-text"><b-checkbox type="circle" v-model:isCheck="isCheck" />记住账号</span>
             <a class="dom-hover-click" @click="loginWithGitHub">GitHub快捷登录</a>
           </div>
         </a-form-item>
@@ -148,8 +148,8 @@
   }
 
   const loginWithGitHub = () => {
-    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
-    const redirectUri = encodeURIComponent(import.meta.env.VITE_GITHUB_REDIRECT_URI);
+    const clientId = 'Ov23liuOPhDka7KkXrpQ';
+    const redirectUri = 'https://boluo66.top/auth/callback';
     const scope = 'user:email';
     const state = Math.random().toString(36).substring(7);
 
