@@ -24,6 +24,9 @@
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
+            <template #suffix>
+              <a-switch title="隐藏空标签" size="small" v-model:checked="hideEmptyTags" />
+            </template>
           </b-input>
         </div>
       </template>
@@ -93,12 +96,13 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const tagName = ref('');
+  const hideEmptyTags = ref(true);
   const hasBookmark = (tag: TagInterface) => Array.isArray(tag.bookmarkList) && tag.bookmarkList.length > 0;
   const filterTagList = computed(() => {
     const keyword = tagName.value.trim().toUpperCase();
     return bookmark.tagList.filter((item) => {
       const matchKeyword = !keyword || item.name.toUpperCase().includes(keyword);
-      const matchEmptyVisible = hasBookmark(item);
+      const matchEmptyVisible = !hideEmptyTags.value || hasBookmark(item);
       return matchKeyword && matchEmptyVisible;
     });
   });

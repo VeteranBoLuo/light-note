@@ -32,11 +32,13 @@
           </template>
           <template v-else-if="column.key === 'riskScore'">
             <a-progress
+              :title="record.riskScore || 0"
               :percent="record.riskScore || 0"
               size="small"
               :stroke-color="scoreColor(record.riskScore || 0)"
               trail-color="var(--security-progress-trail)"
-            />
+              :show-info="false"
+            ></a-progress>
           </template>
           <template v-else-if="column.key === 'delFlag'">
             <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
