@@ -29,10 +29,10 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button type="primary" @click="syncFromPublished">同步帮助中心</b-button>
+          <b-button type="success" @click="publishAllDraft">发布全部</b-button>
           <b-button type="primary" @click="saveCurrentDraft">保存草稿</b-button>
           <b-button type="danger" @click="deleteCurrentDraft">删除草稿</b-button>
-          <b-button type="success" @click="publishAllDraft">发布全部</b-button>
+          <b-button @click="syncFromPublished">同步帮助中心</b-button>
           <b-button @click="exportCurrentDraft">导出</b-button>
           <b-button @click="exportAllDrafts">导出全部</b-button>
         </div>

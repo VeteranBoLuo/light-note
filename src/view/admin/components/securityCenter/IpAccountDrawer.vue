@@ -90,6 +90,11 @@
     selectedIpAccountIds.value = keys;
   }
 
+  function onRowClick(record: any) {
+    navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
+    emit('close');
+  }
+
   async function loadIpAccounts() {
     if (!props.visible || !props.ip) return;
     ipAccountLoading.value = true;
