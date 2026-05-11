@@ -422,6 +422,10 @@
       message.warning('请等待数据请求完毕');
       return;
     }
+    if (!tag.value.name || !tag.value.name.trim()) {
+      message.warning('请输入标签名称');
+      return;
+    }
     tag.value.iconUrl = normalizeIconUrl(tag.value.iconUrl);
     tag.value.bookmarkList = selectedBookmarkIds.value;
     tag.value.noteList = selectedNoteIds.value;

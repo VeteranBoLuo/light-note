@@ -151,6 +151,10 @@
   }
 
   async function saveNote(isMsg?: boolean) {
+    if (!note.title || !note.title.trim()) {
+      message.warning('请输入笔记标题');
+      return;
+    }
     isStartEdit.value = true;
     isCurrentSave.value = true;
     const params: any = cloneDeep(note);

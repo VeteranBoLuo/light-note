@@ -4,6 +4,10 @@
 
 - 回答必须用中文
 
+---
+
+# 前端
+
 ## 核心原则
 
 - 默认同时考虑 PC 和移动端。
@@ -53,18 +57,189 @@
 - 前端改动默认检查：PC、移动端、主题、中英文。
 - 涉及路由、导航、顶部栏、浮层、搜索、个人中心时，额外检查遮挡、错位、无法点击。
 
-## 环境
-
-- 推荐 Node：`20.x`
-
 ## 埋点规范
 
 - 项目使用 `v-click-log` 和 `recordOperation` 做操作日志埋点。页面修改、新增入口、新增关键交互时，需要同步检查是否需要埋点。
-- 操作日志用于记录“用户完成了什么业务动作”，API 日志用于排查接口请求和成功失败；不要把操作日志写成 API 日志的重复版。
+- 操作日志用于记录"用户完成了什么业务动作"，API 日志用于排查接口请求和成功失败；不要把操作日志写成 API 日志的重复版。
 - 后台管理页面只保留 API 日志，不新增 `v-click-log` 或 `recordOperation` 操作日志。
 - `v-click-log` 优先用于 template 中的简单点击行为：页面跳转、打开弹窗、查看详情、筛选、切换展示、展开收起等。
 - `recordOperation` 用于 JS 中才能确认语义的操作：接口成功后的新增、删除、保存、上传、移动、清空、发布；以及快捷键、右键、拖拽、粘贴、批处理等非普通点击入口。
 - 新增、删除、保存、上传、移动、清空、发布等会改数据或可失败的操作，默认在接口返回成功后记录 `xxx成功`，不要只在点击按钮时记录。
-- 同一个业务动作不要同时用 `v-click-log` 和 `recordOperation` 重复记录；除非两条日志表达的是不同语义，例如“打开分享弹窗”和“分享文件成功”。
+- 同一个业务动作不要同时用 `v-click-log` 和 `recordOperation` 重复记录；除非两条日志表达的是不同语义，例如"打开分享弹窗"和"分享文件成功"。
 - 只打开确认弹窗或编辑弹窗的点击，不等同于业务完成；删除、保存这类动作应记录确认并成功后的结果。
 - 操作文案使用稳定的业务名，必要时带对象名或数量，例如 `删除书签成功【xxx】`、`批量删除文件成功【3个】`。
+
+## 环境
+
+- 推荐 Node：`20.x`
+
+---
+
+# 后端
+
+- 后端路径：`light-note-back`
+- 数据库连接：`db/index.js`
+- 工具函数：`util/common.js`
+
+## INSERT 规范（UUID 生成）
+
+- 所有带 `id` 列的表（`user`、`bookmark`、`tag`、`note`、`note_tags`、`api_logs`、`operation_logs`、`opinion`、`help_config`、`help_config_draft`），INSERT 时**必须**使用 `insertData()` 而不是 `snakeCaseKeys()`。
+- `insertData()` 会自动注入时间戳 UUID v1（格式与 MySQL `UUID()` 一致，InnoDB 友好），再转 snake_case。
+- 关系表（`tag_bookmark_relations`、`tag_relations`、`note_tag_relations`、`resource_tag_relations`）没有 `id` 列，用 `snakeCaseKeys()` 即可。
+- 获取新记录的 ID 时，直接取 `insertData()` 返回值的 `.id`，**不要**用 `SELECT id FROM t ORDER BY create_time DESC LIMIT 1`。
+- 不需要改 `files`、`folders` 表，它们使用数据库自增主键。
+
+```javascript
+import { insertData, snakeCaseKeys, generateUUID } from '../util/common.js';
+
+// ✅ 正确：有 id 列的表用 insertData
+const data = insertData({ name: 'xxx', userId });
+await pool.query('INSERT INTO tag SET ?', [data]);
+const tagId = data.id; // 直接拿到 UUID
+
+// ✅ 正确：显式指定 id 的 INSERT，用 generateUUID
+const helpId = generateUUID();
+await pool.query('INSERT INTO help_config (id,title,content,sort) VALUES (?,?,?,?)', [helpId, title, content, sort]);
+
+// ✅ 正确：关系表用 snakeCaseKeys
+await pool.query('INSERT INTO tag_bookmark_relations SET ?', [snakeCaseKeys({ tag_id, bookmark_id })]);
+
+// ❌ 错误：有 id 列的表用 snakeCaseKeys（id 为空，插入失败）
+await pool.query('INSERT INTO tag SET ?', [snakeCaseKeys(params)]);
+
+// ❌ 错误：用 ORDER BY create_time DESC LIMIT 1 获取 ID（并发不安全）
+```
+
+## 事务
+
+- 修改多张表的操作**必须**放在事务里。
+- 标准模式：`getConnection` → `beginTransaction` → 业务查询 → `commit` / `rollback` → `finally release`。
+- 事务内**必须用 `connection.query()`**，不能用 `pool.query()`（会脱离事务）。
+- 纯读查询不需要 `getConnection`，直接用 `pool.query()`。
+
+```javascript
+// ✅ 正确
+const connection = await pool.getConnection();
+try {
+  await connection.beginTransaction();
+  await connection.query('INSERT INTO tag SET ?', [tagData]);
+  await connection.query('INSERT INTO tag_bookmark_relations SET ?', [relData]);
+  await connection.commit();
+  res.send(resultData(null));
+} catch (e) {
+  await connection.rollback();
+  res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+} finally {
+  connection.release();
+}
+
+// ❌ 错误：事务内用了 pool.query
+await connection.beginTransaction();
+await pool.query('INSERT INTO tag SET ?', [data]); // 不在事务里！
+
+// ❌ 错误：纯读查询用了 getConnection（浪费连接）
+const conn = await pool.getConnection();
+const [rows] = await conn.query('SELECT * FROM tag WHERE user_id = ?', [userId]);
+conn.release();
+```
+
+## 响应格式
+
+- 统一用 `resultData(data, status, msg)`。
+- 状态码约定：`200` 成功、`400` 客户端输入错误、`401` 未登录、`403` 无权限、`404` 不存在、`423` 账号封禁、`500` 服务端错误。
+- 每个 handler 最外层必须 `try/catch`，catch 中返回 `resultData(null, 500, ...)`。
+- `resultData` 会自动 camelCase 转换 key，非 200 响应会自动记录错误日志。
+
+```javascript
+// ✅ 正确
+res.send(resultData({ id, name }, 200));
+res.send(resultData(null, 400, '标签名称不能为空'));
+res.send(resultData(null, 401, '请先登录'));
+res.send(resultData(null, 403, '无权限操作'));
+
+// ❌ 错误：不用 res.json 或手动构造响应
+res.json({ code: 0, data: xxx });
+```
+
+## 权限检查
+
+- 权限检查写在各 handler 内部，用 `req.user?.role`。
+- Root 操作用已有的 `ensureRootRole(req, res)`（在 `commonHandle.js` 和 `securityHandle.js` 中各有一份，功能相同）。
+- **不要**用 `requireRole()`（`util/auth.js` 导出了但没有任何地方用）。
+- **不要**新增权限中间件，保持 inline 检查风格。
+
+```javascript
+// ✅ 正确
+const userId = await ensureRootRole(req, res);
+if (!userId) return; // ensureRootRole 内部已发送 403
+
+// ✅ 正确：非 root 的简单检查
+if (!req.user?.id || req.user?.role === 'visitor') {
+  return res.send(resultData(null, 401, '请先登录'));
+}
+
+// ❌ 错误
+import { requireRole } from '../util/auth.js';
+app.use('/api/admin', requireRole('root')); // 不要用这套
+```
+
+## 分页
+
+- 使用 `validateQueryParams(req.body)` 提取 `{ filters, pageSize, currentPage, order }`。
+- `offset = pageSize * (currentPage - 1)`。
+- 并行执行数据查询和 count 查询。
+- `pageSize = -1` 表示不分页（去掉 LIMIT）。
+
+```javascript
+// ✅ 正确
+const { filters, pageSize, currentPage } = validateQueryParams(req.body);
+const offset = pageSize * (currentPage - 1);
+const [rows] = await pool.query(`SELECT * FROM bookmark WHERE user_id = ? LIMIT ? OFFSET ?`, [
+  userId,
+  pageSize,
+  offset,
+]);
+const [countRes] = await pool.query(`SELECT COUNT(*) as total FROM bookmark WHERE user_id = ?`, [userId]);
+res.send(resultData({ items: rows, total: countRes[0].total }));
+```
+
+## 资源标签关联
+
+- 书签、笔记、文件关联标签时**必须同时写入两套关联表**：
+  - 统一表 `resource_tag_relations`（通过 `insertResourceTagRelations` / `replaceResourceTagRelations`）
+  - 书签遗留表 `tag_bookmark_relations`（通过 `insertBookmarkLegacyRelations` / `replaceBookmarkLegacyRelations`）
+- 新增资源标签关联入口时，参照 `bookmarkHandle.js` 的 `addBookmark` / `addTag` 方法，**两套函数都要调用**。
+
+```javascript
+import { insertResourceTagRelations, insertBookmarkLegacyRelations } from '../util/resourceTags.js';
+
+// ✅ 正确：两套都要写
+await insertResourceTagRelations(connection, { tagIds, resourceType: 'bookmark', resourceId, userId });
+await insertBookmarkLegacyRelations(connection, { tagIds, bookmarkId: resourceId, userId });
+```
+
+## SQL 安全
+
+- **所有**用户输入必须通过参数化占位符 `?` 传入，永远不要字符串拼接。
+- 动态 `IN (...)` 子句时，用 `map(() => '?').join(',')` 生成占位符。
+- 需要动态表名/列名/排序字段时必须白名单校验。
+
+```javascript
+// ✅ 正确
+const [rows] = await pool.query('SELECT * FROM tag WHERE user_id = ? AND name LIKE ?', [userId, `%${keyword}%`]);
+
+// ✅ 正确：动态 IN
+const placeholders = ids.map(() => '?').join(',');
+const [rows] = await pool.query(`SELECT * FROM tag WHERE id IN (${placeholders})`, ids);
+
+// ❌ 错误
+const [rows] = await pool.query(`SELECT * FROM tag WHERE name = '${name}'`); // SQL 注入！
+```
+
+## 常见错误
+
+- **事务内用 `pool.query` 而不是 `connection.query`**：查询脱离事务，回滚无效。
+- **纯读查询用 `getConnection`**：浪费连接池，直接用 `pool.query()`。
+- **忘记 `ORDER BY create_time DESC LIMIT 1` 获取新 ID**：改用 `insertData()` 直接拿 `.id`。
+- **`connection.release()` 写在 try 里而不是 finally**：异常时连接泄漏。
+- **`res.send` 后没有 `return`**：代码继续执行，可能导致重复响应。

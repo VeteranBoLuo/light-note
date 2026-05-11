@@ -94,6 +94,10 @@
       message.warn(t('myInfo.pleaseLogin'));
       return;
     }
+    if (!userData.value.alias || !userData.value.alias.trim()) {
+      message.warning(t('myInfo.enterNickname'));
+      return;
+    }
     if (userData.value.email && !validateEmail(userData.value.email)) {
       message.warning(t('myInfo.invalidEmail'));
       return;

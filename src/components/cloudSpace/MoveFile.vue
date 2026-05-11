@@ -46,6 +46,10 @@
     checkValue.value = folder.id;
   }
   function moveFile() {
+    if (!checkValue.value || checkValue.value === '') {
+      message.warning('请选择目标文件夹');
+      return;
+    }
     const fileIds = props.files?.map((f: any) => f.id) || [];
     apiBasePost('/api/file/associateFile', {
       folderId: checkValue.value === 'all' ? '' : checkValue.value,

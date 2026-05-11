@@ -191,26 +191,30 @@
   }
 
   function handleRename(folder: any) {
-    if (newName.value) {
-      folder.isRename = !folder.isRename;
-      folder.name = newName.value;
+    const trimmed = (newName.value || '').trim();
+    if (!trimmed) {
+      message.warning('请输入文件夹名称');
+      return;
+    }
+    folder.isRename = !folder.isRename;
+    folder.name = trimmed;
+    newName.value = trimmed;
       if (folder.id) {
-        apiBasePost('/api/file/updateFolder', folder).then((res) => {
-          if (res.status === 200) {
-            recordOperation({ module: '云空间', operation: `重命名文件夹成功【${folder.name}】` });
-            cloud.queryFolder();
-            message.success('重命名成功');
-          }
-        });
-      } else {
-        apiBasePost('/api/file/addFolder', folder).then((res) => {
-          if (res.status === 200) {
-            recordOperation({ module: '云空间', operation: `新增文件夹成功【${folder.name}】` });
-            cloud.queryFolder();
-            message.success('新增文件夹成功');
-          }
-        });
-      }
+      apiBasePost('/api/file/updateFolder', folder).then((res) => {
+        if (res.status === 200) {
+          recordOperation({ module: '云空间', operation: `重命名文件夹成功【${folder.name}】` });
+          cloud.queryFolder();
+          message.success('重命名成功');
+        }
+      });
+    } else {
+      apiBasePost('/api/file/addFolder', folder).then((res) => {
+        if (res.status === 200) {
+          recordOperation({ module: '云空间', operation: `新增文件夹成功【${folder.name}】` });
+          cloud.queryFolder();
+          message.success('新增文件夹成功');
+        }
+      });
     }
   }
 

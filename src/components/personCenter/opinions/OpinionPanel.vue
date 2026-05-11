@@ -338,7 +338,11 @@
   }
 
   async function submit() {
-    if (opinionData.content.trim().length < 6) {
+    if (!opinionData.type) {
+      message.warning('请选择反馈类型');
+      return;
+    }
+    if (!opinionData.content || !opinionData.content.trim()) {
       message.warning(t('personCenter.opinions.contentPlaceholder'));
       return;
     }

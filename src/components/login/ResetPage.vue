@@ -69,7 +69,14 @@
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item label="" name="rPassword" @blur="validateFun('rPassword')">
+        <a-form-item
+          label=""
+          name="rPassword"
+          :rules="[
+            { required: true, message: '请确认密码' },
+            { validator: validatePasswordMatch, message: '两次密码输入不一致' },
+          ]"
+        >
           <b-input
             height="40px"
             theme="al-day"
@@ -77,14 +84,17 @@
             autocomplete="new-password"
             v-model:value="formData.rPassword"
             placeholder="密码确认"
-            @blur="validateFun('rPassword')"
           >
             <template #prefix>
               <svg-icon :src="icon.login.password" size="16" />
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item label="" name="rPassword">
+        <a-form-item
+          label=""
+          name="code"
+          :rules="[{ required: true, message: '请输入验证码' }]"
+        >
           <span class="flex-center">
             <b-input :maxlength="6" theme="al-day" height="40px" placeholder="验证码" v-model:value="formData.code">
               <template #prefix>
@@ -124,6 +134,13 @@
     rPassword: '',
     code: '',
   });
+
+  const validatePasswordMatch = (_rule: any, value: string) => {
+    if (value && value !== formData.password) {
+      return Promise.reject('两次密码输入不一致');
+    }
+    return Promise.resolve();
+  };
 
   const bookmark = bookmarkStore();
   const disable = computed(() => {

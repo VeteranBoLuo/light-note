@@ -10,14 +10,18 @@
           <div class="tag-attr-head">
             <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
             <a-tooltip :title="$t('bookmarkMg.generateMetaDesc')">
-              <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generatingDescription }">
+              <button
+                type="button"
+                class="generate-meta-action"
+                @click="generateBookmarkMeta"
+                :class="{ loading: generatingDescription }"
+              >
                 <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
                 <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
               </button>
             </a-tooltip>
           </div>
-          <b-input v-model:value="bookmarkData.url">
-          </b-input>
+          <b-input v-model:value="bookmarkData.url"> </b-input>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -113,7 +117,17 @@
   function submit() {
     if (loading.value) {
       message.warning('请等待数据请求完毕');
+      return;
     }
+    if (!bookmarkData.value.name || !bookmarkData.value.name.trim()) {
+      message.warning('请输入书签名称');
+      return;
+    }
+    if (!bookmarkData.value.url || !bookmarkData.value.url.trim()) {
+      message.warning('请输入书签地址');
+      return;
+    }
+
     let params = JSON.parse(JSON.stringify(bookmarkData.value));
     let url = '/api/bookmark/updateBookmark';
     if (handleType.value === 'add') {

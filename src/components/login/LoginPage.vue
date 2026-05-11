@@ -32,14 +32,25 @@
         ref="formDataRef"
         :model="formData"
       >
-        <a-form-item label="" name="email">
+        <a-form-item
+          label=""
+          name="email"
+          :rules="[
+            { required: true, message: '请输入邮箱' },
+            { type: 'email', message: '请输入正确的邮箱格式' },
+          ]"
+        >
           <b-input theme="al-day" height="40px" v-model:value="formData.email" placeholder="邮箱">
             <template #prefix>
               <svg-icon :src="icon.login.email" size="16" />
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item label="" name="password">
+        <a-form-item
+          label=""
+          name="password"
+          :rules="[{ required: true, message: '请输入密码' }]"
+        >
           <span class="flex-center">
             <b-input
               theme="al-day"
