@@ -253,7 +253,7 @@
       };
 
       await apiBasePost(
-        '/api/chat/receiveMessage',
+        '/api/note/assist',
         {
           message: buildMessage(actionOverride),
           stream: true,

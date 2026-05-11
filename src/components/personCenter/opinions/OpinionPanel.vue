@@ -48,7 +48,6 @@
               @input.prevent="clearPasteZoneText"
               @keydown="handlePasteZoneKeydown"
             >
-              <div class="opinion-upload-dropzone__icon">+</div>
               <div class="opinion-upload-dropzone__main">{{ t('personCenter.opinions.dropzoneTitle') }}</div>
               <div class="opinion-upload-dropzone__sub">{{ t('personCenter.opinions.dropzoneDesc') }}</div>
               <div class="opinion-upload-dropzone__actions">

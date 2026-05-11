@@ -10,7 +10,9 @@
       <div class="panel selected-panel">
         <div class="panel-header">
           <div class="title">{{ $t('note.tagConfig.selectedTags') }}</div>
-          <b-button size="small" @click="resetTags" v-click-log="{ module: '笔记-标签配置', operation: '重置标签' }">{{ $t('note.tagConfig.reset') }}</b-button>
+          <b-button size="small" @click="resetTags" v-click-log="{ module: '笔记-标签配置', operation: '重置标签' }">{{
+            $t('note.tagConfig.reset')
+          }}</b-button>
         </div>
         <div class="panel-subtitle">{{ $t('note.tagConfig.selectedDesc') }}</div>
         <div class="selected-overview">
@@ -21,7 +23,12 @@
           <div v-for="tag in noteTags" :key="tag.id" class="chip">
             <span class="color-dot" />
             <span class="chip-text">{{ tag.name }}</span>
-            <SvgIcon :src="icon.common.close" class="chip-close" @click.stop="unbindTag(tag)" v-click-log="{ module: '笔记-标签配置', operation: `解绑标签【${tag.name}】` }" />
+            <SvgIcon
+              :src="icon.common.close"
+              class="chip-close"
+              @click.stop="unbindTag(tag)"
+              v-click-log="{ module: '笔记-标签配置', operation: `解绑标签【${tag.name}】` }"
+            />
           </div>
         </div>
         <div class="empty" v-else>{{ $t('note.tagConfig.noTags') }}</div>
@@ -32,13 +39,28 @@
           <div>
             <div class="title flex-align-center-gap"
               >{{ $t('note.tagConfig.tagLibrary') }}
-              <b-button size="small" @click="fetchAllTags" v-click-log="{ module: '笔记-标签配置', operation: '刷新标签' }">{{ $t('common.refresh') }}</b-button>
-              <b-button size="small" @click="openTagWorkspace()" v-click-log="{ module: '笔记-标签配置', operation: '管理标签' }">{{ $t('note.tagConfig.manageTags') }}</b-button></div
+              <b-button
+                size="small"
+                @click="fetchAllTags"
+                v-click-log="{ module: '笔记-标签配置', operation: '刷新标签' }"
+                >{{ $t('common.refresh') }}</b-button
+              >
+              <b-button
+                size="small"
+                @click="openTagWorkspace()"
+                v-click-log="{ module: '笔记-标签配置', operation: '管理标签' }"
+                >{{ $t('note.tagConfig.manageTags') }}</b-button
+              ></div
             >
             <div class="panel-subtitle panel-subtitle--tight">{{ $t('note.tagConfig.sharedDesc') }}</div>
           </div>
           <div class="tag-actions">
-            <b-button size="small" type="primary" @click="openTagWorkspace('add')" v-click-log="{ module: '笔记-标签配置', operation: '新增共享标签' }">
+            <b-button
+              size="small"
+              type="primary"
+              @click="openTagWorkspace('add')"
+              v-click-log="{ module: '笔记-标签配置', operation: '新增共享标签' }"
+            >
               {{ $t('note.tagConfig.newSharedTag') }}
             </b-button>
           </div>
@@ -67,9 +89,12 @@
               </div>
             </div>
             <div class="tag-meta">
-              <b-button size="small" @click.stop="openTagWorkspace(tag.id)" v-click-log="{ module: '笔记-标签配置', operation: `编辑标签【${tag.name}】` }">{{
-                t('note.tagConfig.editInWorkspace')
-              }}</b-button>
+              <b-button
+                size="small"
+                @click.stop="openTagWorkspace(tag.id)"
+                v-click-log="{ module: '笔记-标签配置', operation: `编辑标签【${tag.name}】` }"
+                >{{ t('note.tagConfig.editInWorkspace') }}</b-button
+              >
             </div>
           </div>
         </div>

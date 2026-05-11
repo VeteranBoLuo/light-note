@@ -1,11 +1,6 @@
 <template>
   <CommonContainer v-if="bookmark.isMobile" :title="t('personCenter.feedback')" @backClick="goBack">
-    <OpinionPanel
-      page-mode
-      :initial-tab="initialTab"
-      @replyViewed="handleReplyViewed"
-      @submitted="handleSubmitted"
-    />
+    <OpinionPanel page-mode :initial-tab="initialTab" @replyViewed="handleReplyViewed" @submitted="handleSubmitted" />
   </CommonContainer>
 
   <div v-else class="opinion-page">
@@ -24,13 +19,6 @@
       </header>
 
       <div class="opinion-page__body">
-        <aside class="opinion-page__side">
-          <div class="opinion-page__side-card">
-            <div class="opinion-page__side-title">{{ t('personCenter.opinions.sideTitle') }}</div>
-            <p>{{ t('personCenter.opinions.sideDesc') }}</p>
-          </div>
-        </aside>
-
         <main class="opinion-page__main">
           <OpinionPanel
             page-mode
@@ -100,8 +88,16 @@
     padding: 32px 24px 40px;
     box-sizing: border-box;
     background:
-      radial-gradient(circle at top left, color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent), transparent 28%),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--resource-note-color) 12%, transparent), transparent 24%),
+      radial-gradient(
+        circle at top left,
+        color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent),
+        transparent 28%
+      ),
+      radial-gradient(
+        circle at top right,
+        color-mix(in srgb, var(--resource-note-color) 12%, transparent),
+        transparent 24%
+      ),
       var(--page-background, var(--background-color));
   }
 
@@ -109,7 +105,8 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
       linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
     background-size: 24px 24px;
     opacity: 0.5;
@@ -130,7 +127,11 @@
     border-radius: 24px;
     padding: 24px 28px;
     background:
-      linear-gradient(135deg, color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--background-color)), transparent 60%),
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--background-color)),
+        transparent 60%
+      ),
       var(--background-color);
     box-shadow: 0 18px 46px rgba(0, 0, 0, 0.08);
     display: flex;
@@ -173,10 +174,6 @@
   }
 
   .opinion-page__body {
-    display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
-    gap: 20px;
-    align-items: start;
     min-height: calc(100vh - 290px);
   }
 

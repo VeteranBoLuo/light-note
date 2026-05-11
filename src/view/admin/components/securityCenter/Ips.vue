@@ -23,10 +23,12 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'riskScore'">
             <a-progress
+              :title="record.riskScore || 0"
               :percent="record.riskScore || 0"
               size="small"
               :stroke-color="scoreColor(record.riskScore || 0)"
               trail-color="var(--security-progress-trail)"
+              :show-info="false"
             />
           </template>
           <template v-else-if="column.key === 'isBanned'">

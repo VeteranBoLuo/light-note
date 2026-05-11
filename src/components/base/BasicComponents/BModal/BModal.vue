@@ -136,10 +136,11 @@
     background-color: var(--background-color);
     padding: 20px;
     border-radius: 10px;
-    min-width: 400px;
+    min-width: max-content;
     min-height: 100px;
     max-width: 90%;
     max-height: calc(100vh - 32px);
+    width: max-content;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     z-index: 1000;
