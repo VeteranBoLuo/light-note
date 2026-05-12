@@ -111,6 +111,7 @@ export const recentColumns = [
 
 export const ipColumns = [
   { title: 'IP', key: 'ip' },
+  { title: '来源地', key: 'city' },
   { title: '风险分', key: 'riskScore' },
   { title: '攻击次数', key: 'totalAttacks' },
   { title: '高危', key: 'highRiskCount' },
