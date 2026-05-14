@@ -13,7 +13,7 @@ const securityCenterRouter: RouteRecordRaw[] = [
     meta: securityCenterMeta,
     path: '/securityCenter',
     name: 'securityCenter',
-    component: () => import('@/view/admin/components/securityCenter/SecurityCenter.vue'),
+    component: () => import('@/view/admin/components/securityCenter/SecurityCenterMg.vue'),
     children: [
       {
         path: '',
@@ -50,6 +50,49 @@ const securityCenterRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/securityCenter/Rules.vue'),
       },
     ],
+  },
+  // 移动端安全中心路由
+  {
+    meta: securityCenterMeta,
+    path: '/securityCenterMobile',
+    name: 'securityCenterMobile',
+    component: () => import('@/view/admin/components/securityCenter/PSecurityCenter.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityOverview',
+    name: 'securityOverview',
+    component: () => import('@/view/admin/components/securityCenter/POverview.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityEvents',
+    name: 'securityEvents',
+    component: () => import('@/view/admin/components/securityCenter/PEvents.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityIps',
+    name: 'securityIps',
+    component: () => import('@/view/admin/components/securityCenter/PIps.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityAccountBans',
+    name: 'securityAccountBans',
+    component: () => import('@/view/admin/components/securityCenter/PAccountBans.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityAccountReputation',
+    name: 'securityAccountReputation',
+    component: () => import('@/view/admin/components/securityCenter/PAccountReputation.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityRules',
+    name: 'securityRules',
+    component: () => import('@/view/admin/components/securityCenter/PRules.vue'),
   },
 ];
 

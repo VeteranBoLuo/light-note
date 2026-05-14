@@ -125,8 +125,11 @@ request.interceptors.request.use(
       config.headers['X-Lang'] = currentLang;
       const user = useUserStore();
       const previewUserId = getAdminLoginPreviewUserId();
-      if (previewUserId && config.data?.filters && Object.prototype.hasOwnProperty.call(config.data.filters, 'userId')) {
-        config.data.filters.userId = previewUserId;
+      if (previewUserId) {
+        config.headers['X-Admin-Preview-User-Id'] = previewUserId;
+        if (config.data?.filters && Object.prototype.hasOwnProperty.call(config.data.filters, 'userId')) {
+          config.data.filters.userId = previewUserId;
+        }
       }
       const notNeedAuth = NO_AUTH_ENDPOINTS.some((key) => config.url?.includes(key));
       if (!ROLES_ADMIN.includes(user.role) && notNeedAuth) {

@@ -38,7 +38,7 @@ export default {
       toNotes: 'Click to open note library',
       toFiles: 'Click to open cloud space',
       cloudExtra: 'Usage {percent}% · Click to open cloud space',
-      cloudOverviewExtra: '{used} / {total} MB · Usage {percent}%',
+      cloudOverviewExtra: '{used} / {total} · Usage {percent}%',
     },
     panel: {
       weeklyActive: 'Last 7 Days Activity',

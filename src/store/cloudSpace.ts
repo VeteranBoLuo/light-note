@@ -31,7 +31,7 @@ export default defineStore('dom', {
       }
     >{
       usedSpace: 0,
-      maxSpace: 1000,
+      maxSpace: 1024,
       folderList: [],
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],

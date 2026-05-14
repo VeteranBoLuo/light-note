@@ -37,7 +37,7 @@ export default {
       toNotes: '点击进入笔记库',
       toFiles: '点击进入云空间',
       cloudExtra: '当前使用率 {percent}% · 点击进入云空间',
-      cloudOverviewExtra: '{used} / {total} MB · 使用率 {percent}%',
+      cloudOverviewExtra: '{used} / {total} · 使用率 {percent}%',
     },
     panel: {
       weeklyActive: '最近 7 天活跃',

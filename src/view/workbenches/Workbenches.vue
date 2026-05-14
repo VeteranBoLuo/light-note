@@ -391,6 +391,7 @@
   import { useI18n } from 'vue-i18n';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
+import { formatStorageSize } from '@/utils/common';
   import userApi from '@/api/userApi.ts';
   import { message } from 'ant-design-vue';
   import { setLocale } from '@/i18n';
@@ -651,11 +652,11 @@
       extra: t(
         'workbench.summary.cloudOverviewExtra',
         {
-          used: cloud.usedSpace.toFixed(2),
-          total: cloud.maxSpace,
+          used: formatStorageSize(cloud.usedSpace),
+          total: formatStorageSize(cloud.maxSpace),
           percent: storagePercent.value,
         },
-        '{used} / {total} MB · 使用率 {percent}%',
+        '{used} / {total} · 使用率 {percent}%',
       ),
       to: '/cloudSpace',
     },

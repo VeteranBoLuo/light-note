@@ -49,6 +49,14 @@
         url: '/imageMg',
       },
     ],
+    [
+      {
+        id: 'securityCenter',
+        title: '安全中心',
+        icon: icon.user_admin,
+        url: '/securityCenterMobile',
+      },
+    ],
   ];
   function clickItem(item) {
     router.push(item.url);

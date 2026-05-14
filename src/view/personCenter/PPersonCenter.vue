@@ -28,7 +28,7 @@
             >{{ $t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
           >
           <span
-            >{{ $t('personCenter.storageUsed') }}<span style="margin-left: 10px">{{ user.storageUsed }} MB</span></span
+            >{{ $t('personCenter.storageUsed') }}<span style="margin-left: 10px">{{ formatStorageSize(user.storageUsed) }}</span></span
           >
         </div>
       </div>
@@ -170,7 +170,8 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { formatStorageSize } from '@/utils/common';
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';

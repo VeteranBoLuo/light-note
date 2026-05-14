@@ -1,6 +1,11 @@
 <template>
   <div v-if="isSearchAvailable" class="global-search" :class="{ 'global-search--mobile': bookmark.isMobile }">
-    <div v-if="!bookmark.isMobile" class="global-search-box" :class="{ 'global-search-box--open': suggestVisible }" ref="searchBoxRef">
+    <div
+      v-if="!bookmark.isMobile"
+      class="global-search-box"
+      :class="{ 'global-search-box--open': suggestVisible }"
+      ref="searchBoxRef"
+    >
       <b-input
         id="global-search-input"
         v-model:value="keyword"
@@ -14,7 +19,9 @@
           <svg-icon :src="icon.navigation.search" size="16" />
         </template>
         <template #suffix>
-          <button v-if="keyword" class="clear-btn" :title="t('resourceCenter.clear')" @mousedown.prevent="clearKeyword">×</button>
+          <button v-if="keyword" class="clear-btn" :title="t('resourceCenter.clear')" @mousedown.prevent="clearKeyword"
+            >×</button
+          >
           <span v-else class="shortcut">/</span>
         </template>
       </b-input>
@@ -66,7 +73,12 @@
       </div>
     </div>
 
-    <button v-else class="mobile-search-trigger" @click="openMobileSearch" v-click-log="{ module: '全局搜索', operation: '打开移动端搜索' }">
+    <button
+      v-else
+      class="mobile-search-trigger"
+      @click="openMobileSearch"
+      v-click-log="{ module: '全局搜索', operation: '打开移动端搜索' }"
+    >
       <svg-icon size="16" :src="icon.navigation.search" />
       <span class="mobile-search-placeholder">{{ t('resourceCenter.mobileTrigger') }}</span>
     </button>
@@ -113,7 +125,9 @@
             <button class="view-all" @click="goSearch">{{ t('resourceCenter.viewAll') }}</button>
           </template>
           <div v-else class="suggest-empty">
-            <div class="empty-title">{{ keyword ? t('resourceCenter.noMatch') : t('resourceCenter.mobileEmptyTitle') }}</div>
+            <div class="empty-title">{{
+              keyword ? t('resourceCenter.noMatch') : t('resourceCenter.mobileEmptyTitle')
+            }}</div>
             <div class="empty-desc">{{ t('resourceCenter.mobileEmptyDesc') }}</div>
           </div>
         </div>
@@ -397,7 +411,9 @@
     padding: 10px;
     border-radius: 12px;
     text-align: left;
-    transition: background-color 0.2s, transform 0.2s;
+    transition:
+      background-color 0.2s,
+      transform 0.2s;
   }
 
   .suggest-item:hover {
@@ -411,10 +427,18 @@
     border-radius: 50%;
   }
 
-  .type-dot--bookmark { background: var(--resource-bookmark-color); }
-  .type-dot--note { background: var(--resource-note-color); }
-  .type-dot--file { background: var(--resource-file-color); }
-  .type-dot--tag { background: var(--resource-tag-color); }
+  .type-dot--bookmark {
+    background: var(--resource-bookmark-color);
+  }
+  .type-dot--note {
+    background: var(--resource-note-color);
+  }
+  .type-dot--file {
+    background: var(--resource-file-color);
+  }
+  .type-dot--tag {
+    background: var(--resource-tag-color);
+  }
 
   .item-main {
     min-width: 0;
@@ -465,7 +489,12 @@
     height: 34px;
     border-radius: 10px;
     margin-bottom: 10px;
-    background: linear-gradient(90deg, var(--bl-input-noBorder-bg-color), var(--background-color), var(--bl-input-noBorder-bg-color));
+    background: linear-gradient(
+      90deg,
+      var(--bl-input-noBorder-bg-color),
+      var(--background-color),
+      var(--bl-input-noBorder-bg-color)
+    );
     background-size: 200% 100%;
     animation: shimmer 1.4s infinite;
   }
@@ -520,8 +549,12 @@
   }
 
   @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 
   @media (max-width: 1200px) {

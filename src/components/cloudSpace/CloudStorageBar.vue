@@ -3,7 +3,7 @@
     <div class="storage-head">
       <div class="storage-title">{{ $t('cloudSpace.hasUsedSpace') }}</div>
       <div class="storage-meta">
-        <span class="storage-value">{{ formattedUsed }}MB / {{ formattedMax }}MB</span>
+        <span class="storage-value">{{ formattedUsed }} / {{ formattedMax }}</span>
         <span class="storage-percent">{{ usagePercent }}%</span>
       </div>
     </div>
@@ -22,6 +22,7 @@
 <script setup lang="ts">
   import { computed } from 'vue';
   import { cloudSpaceStore } from '@/store';
+  import { formatStorageSize } from '@/utils/common';
 
   const cloud = cloudSpaceStore();
 
@@ -40,13 +41,8 @@
     return 'progress-green';
   });
 
-  const formatSpace = (value: number) => {
-    const numeric = Number(value) || 0;
-    return Number(numeric.toFixed(1)).toString();
-  };
-
-  const formattedUsed = computed(() => formatSpace(cloud.usedSpace));
-  const formattedMax = computed(() => formatSpace(cloud.maxSpace));
+  const formattedUsed = computed(() => formatStorageSize(cloud.usedSpace));
+  const formattedMax = computed(() => formatStorageSize(cloud.maxSpace));
 </script>
 
 <style lang="less" scoped>

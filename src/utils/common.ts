@@ -235,3 +235,11 @@ export function backRouterPage() {
     router.back();
   }
 }
+
+export function formatStorageSize(mb: number): string {
+  const value = Number(mb) || 0;
+  if (value >= 1024) {
+    return `${(value / 1024).toFixed(2)} GB`;
+  }
+  return `${value.toFixed(1)} MB`;
+}

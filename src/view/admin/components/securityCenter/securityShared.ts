@@ -41,6 +41,19 @@ export function statusText(status: string) {
   );
 }
 
+export function statusPillClass(status: string) {
+  return (
+    {
+      unhandled: 'is-unhandled',
+      processed: 'is-processed',
+      confirmed: 'is-processed',
+      false_positive: 'is-false-positive',
+      ignored: 'is-processed',
+      resolved: 'is-processed',
+    }[status] || 'is-neutral'
+  );
+}
+
 export function eventUserText(record: any) {
   return record.alias || record.email || record.userId || '-';
 }

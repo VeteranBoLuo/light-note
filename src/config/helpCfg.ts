@@ -168,7 +168,7 @@ const zhOptions = [
       10.重命名/删除/下载/分享：右键文件选择操作，确认执行。下载和分享功能便于文件分发。</p>
       <br/>
       <div><b>注意事项</b></div>
-      <p style="font-size: 14px">• 文件大小限制：单个文件最大100MB，总上传大小受1000MB存储空间限制。<br/>
+      <p style="font-size: 14px">• 文件大小限制：单个文件最大100MB，总上传大小受1GB存储空间限制。<br/>
       • 支持格式：图片（jpg/png等）、文本、PDF、Word、Excel、音频、视频及其他。<br/>
       • 存储空间：监控使用情况，避免超出限额，后续可升级容量。<br/>
       • 批量操作：仅在批量模式下可用，退出后恢复正常视图。<br/>
@@ -352,7 +352,7 @@ const enOptions = [
       10. Rename/Delete/Download/Share: Right-click file to select operation, confirm execution. Download and share facilitate file distribution.</p>
       <br/>
       <div><b>Notes</b></div>
-      <p style="font-size: 14px">• File Size Limit: Single file max 100MB, total upload size limited by 1000MB storage space.<br/>
+      <p style="font-size: 14px">• File Size Limit: Single file max 100MB, total upload size limited by 1GB storage space.<br/>
       • Supported Formats: Images (jpg/png, etc.), text, PDF, Word, Excel, audio, video, and others.<br/>
       • Storage Space: Monitor usage, avoid exceeding quota, capacity can be upgraded later.<br/>
       • Batch Operations: Only available in batch mode, returns to normal view after exit.<br/>

@@ -78,6 +78,12 @@
     '/admin/imageMg': '/imageMg',
     '/workbenches': '/home',
     '/': '/home',
+    '/securityCenter/overview': '/securityOverview',
+    '/securityCenter/events': '/securityEvents',
+    '/securityCenter/ips': '/securityIps',
+    '/securityCenter/account-bans': '/securityAccountBans',
+    '/securityCenter/account-reputation': '/securityAccountReputation',
+    '/securityCenter/rules': '/securityRules',
   };
   const deskReplaceMap = {
     '/apiLog': '/admin/apiLog',
@@ -87,6 +93,13 @@
     '/imageMg': '/admin/imageMg',
     '/admin': '/admin/operationLog',
     '/personCenter': '/home',
+    '/securityOverview': '/securityCenter/overview',
+    '/securityEvents': '/securityCenter/events',
+    '/securityIps': '/securityCenter/ips',
+    '/securityAccountBans': '/securityCenter/account-bans',
+    '/securityAccountReputation': '/securityCenter/account-reputation',
+    '/securityRules': '/securityCenter/rules',
+    '/securityCenterMobile': '/securityCenter/overview',
   };
 
   let mq = null;

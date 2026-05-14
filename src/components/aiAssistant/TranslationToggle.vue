@@ -106,7 +106,7 @@
     if (!newValue) {
       // 重置为默认
       sourceLang.value = 'auto';
-      targetLang.value = 'en';
+      targetLang.value = 'zh';
       updateConfig();
     }
   };

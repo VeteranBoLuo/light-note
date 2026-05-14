@@ -98,7 +98,7 @@
               }}</span>
             </template>
             <template v-else-if="column.key === 'handledStatus'">
-              <span class="security-pill is-neutral">{{ statusText(record.handledStatus) }}</span>
+              <span class="security-pill" :class="statusPillClass(record.handledStatus)">{{ statusText(record.handledStatus) }}</span>
             </template>
           </template>
         </BTable>
@@ -123,6 +123,7 @@
     eventUserText,
     eventUserTooltip,
     statusText,
+    statusPillClass,
   } from './securityShared';
 
   const openEventDetail = inject(OPEN_EVENT_DETAIL);

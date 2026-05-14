@@ -160,6 +160,24 @@ code {
   color: var(--desc-color);
 }
 
+.security-pill.is-unhandled {
+  border-color: color-mix(in srgb, var(--security-medium) 38%, transparent);
+  background: color-mix(in srgb, var(--security-medium) 12%, var(--background-color));
+  color: color-mix(in srgb, var(--security-medium) 86%, var(--text-color));
+}
+
+.security-pill.is-processed {
+  border-color: color-mix(in srgb, var(--security-low) 38%, transparent);
+  background: color-mix(in srgb, var(--security-low) 12%, var(--background-color));
+  color: color-mix(in srgb, var(--security-low) 82%, var(--text-color));
+}
+
+.security-pill.is-false-positive {
+  border-color: color-mix(in srgb, var(--resource-bookmark-color) 38%, transparent);
+  background: color-mix(in srgb, var(--resource-bookmark-color) 12%, var(--background-color));
+  color: color-mix(in srgb, var(--resource-bookmark-color) 82%, var(--text-color));
+}
+
 .account-cell {
   display: flex;
   min-width: 0;

@@ -46,7 +46,7 @@
             </div>
             <div class="stat-text">
               <div class="stat-label">{{ stat.label }}</div>
-              <div class="stat-value">{{ stat.value }}</div>
+              <div class="stat-value" :title="String(stat.value)">{{ stat.value }}</div>
             </div>
           </div>
         </div>
@@ -131,7 +131,8 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { formatStorageSize } from '@/utils/common';
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
@@ -303,7 +304,7 @@
     },
     {
       label: t('personCenter.storageUsed'),
-      value: user.storageUsed,
+      value: formatStorageSize(user.storageUsed),
       icon: icon.storage,
     },
   ]);
@@ -586,6 +587,9 @@
     font-size: 13px;
     font-weight: 700;
     color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .settings-grid {
