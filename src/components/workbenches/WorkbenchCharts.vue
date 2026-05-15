@@ -1,7 +1,7 @@
 <template>
   <div class="chart-grid">
     <div class="chart-card" :class="cardThemeClass">
-      <div class="chart-title">{{ t('workbench.chart.trend', '近 7 天内容趋势') }}</div>
+      <div class="chart-title">{{ t('workbench.chart.trend', '本周内容趋势') }}</div>
       <div v-if="loading" class="chart-skeleton"></div>
       <div v-else-if="trendData.length" ref="trendRef" class="chart-body neon-trend">
         <canvas ref="trendCanvasRef" class="trend-canvas"></canvas>

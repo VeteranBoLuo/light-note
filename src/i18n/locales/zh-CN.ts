@@ -40,7 +40,7 @@ export default {
       cloudOverviewExtra: '{used} / {total} · 使用率 {percent}%',
     },
     panel: {
-      weeklyActive: '最近 7 天活跃',
+      weeklyActive: '本周活跃',
       newBookmarks: '新增书签',
       updatedNotes: '更新笔记',
       uploadedFiles: '上传文件',
@@ -73,7 +73,7 @@ export default {
       clickForDetail: '点击日志标题查看详情',
     },
     chart: {
-      trend: '近 7 天内容趋势',
+      trend: '本周内容趋势',
       fileType: '文件类型分布',
       empty: '暂无数据',
       bookmark: '书签',

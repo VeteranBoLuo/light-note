@@ -41,7 +41,7 @@ export default {
       cloudOverviewExtra: '{used} / {total} · Usage {percent}%',
     },
     panel: {
-      weeklyActive: 'Last 7 Days Activity',
+      weeklyActive: 'This Week Activity',
       newBookmarks: 'New Bookmarks',
       updatedNotes: 'Updated Notes',
       uploadedFiles: 'Uploaded Files',
@@ -75,7 +75,7 @@ export default {
       clickForDetail: 'Click a title to view details',
     },
     chart: {
-      trend: '7-Day Content Trend',
+      trend: 'This Week Content Trend',
       fileType: 'File Type Distribution',
       empty: 'No Data',
       bookmark: 'Bookmark',

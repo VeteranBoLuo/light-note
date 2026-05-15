@@ -41,7 +41,7 @@
 
     <div class="insight-grid">
       <div class="panel-card activity-panel">
-        <div class="panel-title">{{ t('workbench.panel.weeklyActive', '最近 7 天活跃') }}</div>
+        <div class="panel-title">{{ t('workbench.panel.weeklyActive', '本周活跃') }}</div>
         <div v-if="activityLoading" class="activity-ring-wrap">
           <div class="ring-skeleton"></div>
         </div>
@@ -135,7 +135,7 @@
               <div class="ring-center-value">{{ animatedTotalActivityCount }}</div>
               <div class="ring-center-label">{{ t('workbench.panel.weeklyChanges', '本周变化') }}</div>
               <div class="ring-center-extra"
-                >{{ animatedActiveDays }}/7 {{ t('workbench.panel.activeDays', '活跃天数') }}</div
+                >{{ animatedActiveDays }}/{{ weekDays }} {{ t('workbench.panel.activeDays', '活跃天数') }}</div
               >
               <div class="ring-center-tooltip">{{ activityChangeTooltip }}</div>
             </div>
@@ -434,7 +434,7 @@ import { formatStorageSize } from '@/utils/common';
   // ─── Activity Rings Animation ────────────────────────────
   type ActivityMetricKey = 'bookmark' | 'note' | 'file';
 
-  const ACTIVE_WEEK_DAYS = 7;
+  const weekDays = ref(7);
   const activityMetricKeys: ActivityMetricKey[] = ['bookmark', 'note', 'file'];
   const animatedBookmark = ref(0);
   const animatedNote = ref(0);
@@ -453,7 +453,7 @@ import { formatStorageSize } from '@/utils/common';
     let totalActiveDays = 0;
 
     if (trendSummary.value.length) {
-      trendSummary.value.slice(-ACTIVE_WEEK_DAYS).forEach((item) => {
+      trendSummary.value.slice(-weekDays.value).forEach((item) => {
         let dayIsActive = false;
         activityMetricKeys.forEach((key) => {
           if (Number(item?.[key] || 0) > 0) {
@@ -466,7 +466,7 @@ import { formatStorageSize } from '@/utils/common';
     } else {
       const maxCount = Math.max(counts.bookmark, counts.note, counts.file, 1);
       activityMetricKeys.forEach((key) => {
-        days[key] = counts[key] > 0 ? Math.max(1, Math.ceil((counts[key] / maxCount) * ACTIVE_WEEK_DAYS)) : 0;
+        days[key] = counts[key] > 0 ? Math.max(1, Math.ceil((counts[key] / maxCount) * weekDays.value)) : 0;
       });
       totalActiveDays = Math.max(days.bookmark, days.note, days.file);
     }
@@ -512,7 +512,7 @@ import { formatStorageSize } from '@/utils/common';
   ]);
 
   const activityChangeTooltip = computed(() => {
-    return t('workbench.panel.weeklyChangesTip', '本周变化 = 最近 7 天新增书签、创建或更新笔记、上传文件的合计。');
+    return t('workbench.panel.weeklyChangesTip', '本周变化 = 本周新增书签、创建或更新笔记、上传文件的合计。');
   });
 
   function describeRingArc(cx: number, cy: number, radius: number, startRatio: number, endRatio: number) {
@@ -883,6 +883,7 @@ import { formatStorageSize } from '@/utils/common';
         user.noteTotal = workbenchCounts.value.noteTotal;
         cloud.usedSpace = workbenchCounts.value.usedSpace;
         weeklyStats.value = data.weeklyStats || { bookmark: 0, note: 0, file: 0 };
+        weekDays.value = Number(data.weekDays) || 7;
         trendSummary.value = Array.isArray(data.trend) ? data.trend : [];
         fileTypeSummary.value = Array.isArray(data.fileTypeStats) ? data.fileTypeStats : [];
         commonBookmarkTable.value = Array.isArray(data.commonBookmarks) ? data.commonBookmarks : [];
