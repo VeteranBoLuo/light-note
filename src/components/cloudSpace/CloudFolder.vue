@@ -165,15 +165,15 @@
         apiBasePost('/api/file/deleteFolder', { id: folder.id }).then((res) => {
           if (res.status === 200) {
             recordOperation({ module: '云空间', operation: `删除文件夹成功【${folder.name}】` });
-            cloud.queryFolder();
             message.success('删除成功');
+            cloud.queryFolder();
             if (folder.id === cloud.folder.id) {
               cloud.folder = {
                 name: '全部文件',
                 id: 'all',
               };
-              cloud.queryFieldList();
             }
+            cloud.queryFieldList();
           }
         });
       },

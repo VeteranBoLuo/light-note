@@ -30,9 +30,19 @@ export async function downloadField(id: number | string) {
 
 // 删除文件
 export async function deleteField(id: number | string) {
-  await apiBasePost('/api/file/deleteFileById', { id });
-    message.success('删除成功');
+  try {
+    const res = await apiBasePost('/api/file/deleteFileById', { id });
+    if (res.status === 200) {
+      message.success('删除成功');
+      return true;
     }
+    message.error(res.msg || '删除失败');
+    return false;
+  } catch (error) {
+    message.error('删除失败，请重试');
+    return false;
+  }
+}
 
 // 分享文件
 export async function shareField(id: number | string, fileName?: string, fileType?: string, description?: string) {
