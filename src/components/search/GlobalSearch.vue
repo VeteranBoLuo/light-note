@@ -32,13 +32,6 @@
             <div class="suggest-title">{{ t('resourceCenter.title') }}</div>
             <div class="suggest-subtitle">{{ t('resourceCenter.suggestSubtitle') }}</div>
           </div>
-          <button
-            class="refresh-btn"
-            @mousedown.prevent="refreshData"
-            v-click-log="{ module: '全局搜索', operation: '刷新搜索建议' }"
-          >
-            {{ t('resourceCenter.refreshShort') }}
-          </button>
         </div>
 
         <div v-if="loading" class="suggest-loading">
@@ -193,12 +186,12 @@
 
   function openSuggest() {
     suggestVisible.value = true;
-    ensureData();
+    ensureData(true);
   }
 
   function openMobileSearch() {
     mobileVisible.value = true;
-    ensureData();
+    ensureData(true);
     nextTick(() => document.getElementById('global-mobile-search-input')?.focus());
   }
 
@@ -210,10 +203,6 @@
   function clearKeyword() {
     keyword.value = '';
     nextTick(() => document.getElementById('global-search-input')?.focus());
-  }
-
-  async function refreshData() {
-    await ensureData(true);
   }
 
   function goSearch() {
@@ -318,7 +307,6 @@
   }
 
   .clear-btn,
-  .refresh-btn,
   .view-all,
   .mobile-search-trigger,
   .mobile-cancel,
@@ -384,11 +372,6 @@
   .item-extra {
     color: var(--desc-color);
     font-size: 12px;
-  }
-
-  .refresh-btn {
-    color: var(--resource-bookmark-color);
-    white-space: nowrap;
   }
 
   .suggest-group {

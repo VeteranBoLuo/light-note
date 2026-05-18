@@ -84,6 +84,7 @@
     '/securityCenter/account-bans': '/securityAccountBans',
     '/securityCenter/account-reputation': '/securityAccountReputation',
     '/securityCenter/rules': '/securityRules',
+    '/trash': '/ptrash',
   };
   const deskReplaceMap = {
     '/apiLog': '/admin/apiLog',
@@ -100,6 +101,7 @@
     '/securityAccountReputation': '/securityCenter/account-reputation',
     '/securityRules': '/securityCenter/rules',
     '/securityCenterMobile': '/securityCenter/overview',
+    '/ptrash': '/trash',
   };
 
   let mq = null;

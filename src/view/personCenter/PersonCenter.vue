@@ -256,6 +256,12 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
       icon: icon.help_document,
     },
     {
+      name: 'trash',
+      label: t('trash.title'),
+      path: '/trash',
+      icon: icon.table_delete,
+    },
+    {
       name: 'resourceCenter',
       label: t('personCenter.resourceCenter'),
       path: '/search',

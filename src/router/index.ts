@@ -14,6 +14,7 @@ import workbenchesRouter from '@/router/modules/workbenches.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import searchRouter from '@/router/modules/search.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
+import trashRouter from '@/router/modules/trash.ts';
 import { getDesktopHomePath } from '@/utils/preferences.ts';
 
 const routes: RouteRecordRaw[] = [
@@ -36,6 +37,7 @@ const routes: RouteRecordRaw[] = [
       ...cloudSpaceRouter,
       searchRouter,
       tagDetailRouter,
+      trashRouter,
       ...securityCenterRouter,
     ],
   },

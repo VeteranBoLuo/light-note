@@ -8,6 +8,16 @@ const phoneRouter: RouteRecordRaw[] = [
       requireAuth: true,
       roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
     },
+    path: '/ptrash',
+    name: 'ptrash',
+    component: () => import('@/view/trash/PTrash.vue'),
+  },
+  {
+    meta: {
+      keepAlive: true,
+      requireAuth: true,
+      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+    },
     path: '/opinions',
     name: 'opinions',
     component: () => import('@/components/personCenter/opinions/POpinions.vue'),
