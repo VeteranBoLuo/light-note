@@ -1,6 +1,6 @@
 <template>
   <div class="note-container">
-    <div v-show="isReady">
+    <div v-if="isReady">
       <NoteHeader
         :updateTime="updateTime"
         :nodeType="nodeType"
@@ -68,12 +68,7 @@
   provide('applyTitleFromAi', (newTitle: string) => {
     note.title = newTitle;
     note.lastTitle = cloneDeep(newTitle);
-    if (!bookmark.isMobile) {
-      const el = document.getElementById('note-header-title');
-      if (el) {
-        el.innerText = newTitle;
-      }
-    }
+    syncHeaderTitle();
   });
   provide('focusEditorToEnd', () => {
     editorRef.value?.focusToEnd?.();
@@ -100,9 +95,7 @@
   function inputBlur() {
     nextTick(() => {
       if (note.title && note.title !== note.lastTitle) {
-        if (!bookmark.isMobile) {
-          document.getElementById('note-header-title').innerText = note.title;
-        }
+        syncHeaderTitle();
         note.lastTitle = cloneDeep(note.title);
         saveFunc();
       }
@@ -112,9 +105,7 @@
   function focusout() {
     if (!note.title) {
       note.title = note.lastTitle;
-      if (!bookmark.isMobile) {
-        document.getElementById('note-header-title').innerText = note.title;
-      }
+      syncHeaderTitle();
       return;
     }
   }
@@ -122,6 +113,7 @@
   function titleBlur() {
     nextTick(() => {
       const title = document.getElementById('note-header-title');
+      if (!title) return;
       const text = title.innerText;
       if (!text || text === '\n') {
         note.title = note.lastTitle;
@@ -139,6 +131,15 @@
   const isStartEdit = ref(false);
   const isCurrentSave = ref(false);
   const updateTime = ref('');
+  async function syncHeaderTitle() {
+    if (bookmark.isMobile) return;
+    await nextTick();
+    const title = document.getElementById('note-header-title');
+    if (title) {
+      title.innerText = note.title;
+    }
+  }
+
   function setUpdateTime() {
     const now = new Date();
     const year = now.getFullYear();
@@ -247,7 +248,7 @@
       router.back();
     }
   }
-  const isReady = ref(true);
+  const isReady = ref(router.currentRoute.value.params.id === 'add');
   const a = ref();
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -260,14 +261,12 @@
           if (res.status === 200) {
             Object.assign(note, res.data);
             note.lastTitle = cloneDeep(note.title);
-            if (!bookmark.isMobile) {
-              document.getElementById('note-header-title').innerText = note.title;
-            }
             updateTime.value = res.data?.updateTime ?? res.data?.createTime;
           }
         })
-        .finally(() => {
+        .finally(async () => {
           isReady.value = true;
+          await syncHeaderTitle();
           if (user.id !== note.createBy) {
             nodeType.value = 'share';
             const observer = new MutationObserver(() => {

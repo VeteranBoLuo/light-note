@@ -406,7 +406,7 @@
     }, OPINION_NOTICE_POLLING_INTERVAL);
   }
 
-  const skipRouter = ['help', 'noteDetail', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
+  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {

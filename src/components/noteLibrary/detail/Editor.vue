@@ -104,6 +104,7 @@
   };
 
   const ensureToolbarRendered = async () => {
+    if (props.readonly) return;
     await nextTick();
     const toolbar = document.querySelector('#editor-toolbar .tox-toolbar');
     if (!toolbar) {
@@ -122,6 +123,12 @@
     editorReady.value = false;
     await nextTick();
     editorReady.value = true;
+  };
+
+  const resetUndoHistory = (editor: any) => {
+    editor.undoManager?.clear?.();
+    editor.undoManager?.add?.();
+    editor.setDirty?.(false);
   };
 
   const focusToEnd = async () => {
@@ -431,12 +438,13 @@
       editor.on('init', async () => {
         if (editor.mode?.set) {
           editor.mode.set(props.readonly ? 'readonly' : 'design');
-          return;
-        }
-        if (editor.setMode) {
+        } else if (editor.setMode) {
           editor.setMode(props.readonly ? 'readonly' : 'design');
         }
         await ensureToolbarRendered();
+        window.setTimeout(() => {
+          resetUndoHistory(editor);
+        }, 0);
       });
     },
     content_style:
