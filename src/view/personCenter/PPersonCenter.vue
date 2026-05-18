@@ -70,6 +70,8 @@
           >{{ $t('personCenter.logs_user_mg')
           }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
+    </div>
+    <div class="person-menu">
       <div
         class="person-menu-item"
         @click="$router.push('/search')"
@@ -96,6 +98,15 @@
         v-click-log="{ module: '个人中心', operation: `云空间` }"
       >
         <span class="person-menu-item-title">{{ $t('cloudSpace.title') }}</span>
+        <span class="person-menu-item-des"
+          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+      ></div>
+      <div
+        class="person-menu-item"
+        @click="$router.push('/ptrash')"
+        v-click-log="{ module: '个人中心', operation: '回收站' }"
+      >
+        <span class="person-menu-item-title">{{ $t('trash.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
