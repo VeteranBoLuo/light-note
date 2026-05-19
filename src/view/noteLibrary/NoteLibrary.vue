@@ -72,18 +72,21 @@
     </div>
     <VueDraggable
       v-else-if="currentViewMode === 'card'"
-      :disabled="!bookmark.isDesktop"
+      :disabled="!canDragNote"
       :animation="200"
-      v-model="noteList"
+      v-model="visibleDragNoteList"
       class="note-library-body"
       @start="onStart"
       @end="onEnd"
+      ghost-class="note-card-drag-ghost"
+      chosen-class="note-card-drag-chosen"
+      drag-class="note-card-dragging"
       :scroll-sensitivity="50"
       :forceFallback="true"
       :touchStartThreshold="10"
       :delay="100"
     >
-      <note-card v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
+      <note-card v-for="note in visibleDragNoteList" :key="note.id" :note="note" @nodeTypeChange="handleNodeTypeChange" />
     </VueDraggable>
     <div v-if="currentViewMode === 'list'" class="note-library-body-list">
       <div class="tag-sidebar">
@@ -133,10 +136,10 @@
       </div>
       <VueDraggable
         v-else
-        :disabled="bookmark.isMobile"
+        :disabled="!canDragNote"
         :animation="200"
         ref="el"
-        v-model="noteList"
+        v-model="visibleDragNoteList"
         class="note-list"
         @start="onStart"
         @end="onEnd"
@@ -145,7 +148,12 @@
         :touchStartThreshold="10"
         :delay="100"
       >
-        <note-list-item v-for="note in viewNoteList" :note="note" @nodeTypeChange="handleNodeTypeChange" />
+        <note-list-item
+          v-for="note in visibleDragNoteList"
+          :key="note.id"
+          :note="note"
+          @nodeTypeChange="handleNodeTypeChange"
+        />
       </VueDraggable>
     </div>
   </div>
@@ -174,6 +182,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   const bookmark = bookmarkStore();
   const noteList = ref([]);
+  const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
@@ -207,6 +216,7 @@
   const searchValue = ref('');
   const debouncedSearch = ref('');
   const searchTimer = ref<number | null>(null);
+  const canDragNote = computed(() => !bookmark.isMobile && !debouncedSearch.value && visibleDragNoteList.value.length > 1);
 
   const toPlainText = (html: string) =>
     html
@@ -256,6 +266,14 @@
       return Array.isArray(parsed) && parsed.some((t) => t.id === tagFilter);
     });
   });
+
+  watch(
+    viewNoteList,
+    (val) => {
+      visibleDragNoteList.value = [...val];
+    },
+    { immediate: true },
+  );
 
   function focusSearchInput() {
     (document.querySelector('.b-input') as HTMLInputElement)?.focus();
@@ -319,20 +337,72 @@
     document.body.style.userSelect = 'none';
   }
 
-  async function onEnd() {
+  function moveVisibleNoteInAllNotes(
+    allNotes: any[],
+    sortedVisibleNotes: any[],
+    event?: { oldIndex?: number; newIndex?: number },
+  ) {
+    const oldIndex = Number(event?.oldIndex);
+    const newIndex = Number(event?.newIndex);
+    if (!Number.isInteger(oldIndex) || !Number.isInteger(newIndex) || oldIndex === newIndex) {
+      return allNotes;
+    }
+
+    const movedNote = Number.isInteger(newIndex) ? sortedVisibleNotes[newIndex] : null;
+    if (!movedNote) {
+      return allNotes;
+    }
+
+    const movedId = String(movedNote.id);
+    const nextNotes = allNotes.filter((note: any) => String(note.id) !== movedId);
+    const prevVisibleNote = sortedVisibleNotes[newIndex - 1];
+    const nextVisibleNote = sortedVisibleNotes[newIndex + 1];
+
+    if (prevVisibleNote) {
+      const prevIndex = nextNotes.findIndex((note: any) => String(note.id) === String(prevVisibleNote.id));
+      if (prevIndex >= 0) {
+        nextNotes.splice(prevIndex + 1, 0, movedNote);
+        return nextNotes;
+      }
+    }
+
+    if (nextVisibleNote) {
+      const nextIndex = nextNotes.findIndex((note: any) => String(note.id) === String(nextVisibleNote.id));
+      if (nextIndex >= 0) {
+        nextNotes.splice(nextIndex, 0, movedNote);
+        return nextNotes;
+      }
+    }
+
+    nextNotes.push(movedNote);
+    return nextNotes;
+  }
+
+  async function onEnd(event?: { oldIndex?: number; newIndex?: number }) {
     document.body.style.userSelect = '';
+    const sourceNotes = [...noteList.value];
     try {
+      const mergedNotes = moveVisibleNoteInAllNotes(sourceNotes, visibleDragNoteList.value, event);
+      if (mergedNotes === sourceNotes) {
+        visibleDragNoteList.value = [...viewNoteList.value];
+        return;
+      }
       const sortedTags =
-        noteList.value.map((note: any, index: number) => ({
+        mergedNotes.map((note: any, index: number) => ({
           sort: index,
           id: note.id,
         })) || [];
 
       const res = await apiBasePost('/api/note/updateNoteSort', { notes: sortedTags });
       if (res.status === 200) {
+        noteList.value = mergedNotes;
         recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
+      } else {
+        visibleDragNoteList.value = [...viewNoteList.value];
       }
     } catch (error) {
+      noteList.value = sourceNotes;
+      visibleDragNoteList.value = [...viewNoteList.value];
       console.error('Error updating note sort:', error);
     }
   }
@@ -377,6 +447,45 @@
     overflow: auto;
     box-sizing: border-box;
     align-content: start;
+
+    :deep(.note-card) {
+      will-change: transform;
+      transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        border-color 0.2s ease,
+        opacity 0.2s ease !important;
+    }
+
+    :deep(.note-card-drag-chosen) {
+      box-shadow:
+        0 14px 34px rgba(97, 92, 237, 0.18),
+        0 4px 12px rgba(0, 0, 0, 0.12);
+      border-color: var(--primary-color);
+    }
+
+    :deep(.note-card-drag-ghost) {
+      opacity: 0.35;
+      border: 1px dashed var(--primary-color);
+      background: var(--category-item-ba-color);
+      box-shadow: none;
+    }
+
+    :deep(.note-card-dragging) {
+      opacity: 0.95;
+      transform: rotate(1deg) scale(1.02);
+      box-shadow:
+        0 18px 40px rgba(97, 92, 237, 0.22),
+        0 8px 20px rgba(0, 0, 0, 0.14);
+    }
+  }
+
+  :global(.note-card-dragging) {
+    opacity: 0.95;
+    transform: rotate(1deg) scale(1.02);
+    box-shadow:
+      0 18px 40px rgba(97, 92, 237, 0.22),
+      0 8px 20px rgba(0, 0, 0, 0.14);
   }
 
   .note-card-skeleton-wrap {

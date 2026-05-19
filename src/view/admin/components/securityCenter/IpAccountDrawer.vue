@@ -26,13 +26,13 @@
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'account'">
-                <div class="account-cell">
+                <div class="account-cell" :title="record.alias || record.email || record.userId">
                   <strong>{{ record.alias || record.email || record.userId }}</strong>
                   <span>{{ record.email || record.userId }}</span>
                 </div>
               </template>
               <template v-else-if="column.key === 'delFlag'">
-                <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
+                <span :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
                   Number(record.delFlag) === 1 ? '已封禁' : '正常'
                 }}</span>
               </template>

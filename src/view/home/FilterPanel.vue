@@ -8,8 +8,8 @@
       v-else
       :draggable="tagDraggable"
       class="header-input"
-      v-model:listOptions="filterTagList"
-      v-model:dragList="bookmark.tagList"
+      v-model:listOptions="visibleDragTagList"
+      v-model:dragList="visibleDragTagList"
       :node-type="{ id: 'id', title: 'name' }"
       @onEnd="onDragEnd"
       @start="onStart"
@@ -106,9 +106,11 @@
       return matchKeyword && matchEmptyVisible;
     });
   });
-  const tagDraggable = computed(() => !bookmark.isMobile && !tagName.value.trim());
+  const visibleDragTagList = ref<TagInterface[]>([]);
+  const tagDraggable = computed(() => !bookmark.isMobile && !tagName.value.trim() && visibleDragTagList.value.length > 1);
 
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const router = useRouter();
 
   const newName = ref('');
@@ -178,12 +180,60 @@
   function onStart() {
     document.body.style.userSelect = 'none';
   }
-  async function onDragEnd() {
+
+  function moveVisibleTagInAllTags(
+    allTags: TagInterface[],
+    sortedVisibleTags: TagInterface[],
+    event?: { oldIndex?: number; newIndex?: number },
+  ) {
+    const oldIndex = Number(event?.oldIndex);
+    const newIndex = Number(event?.newIndex);
+    if (!Number.isInteger(oldIndex) || !Number.isInteger(newIndex) || oldIndex === newIndex) {
+      return allTags;
+    }
+
+    const movedTag = Number.isInteger(newIndex) ? sortedVisibleTags[newIndex] : null;
+    if (!movedTag) {
+      return allTags;
+    }
+
+    const movedId = String(movedTag.id);
+    const nextTags = allTags.filter((tag) => String(tag.id) !== movedId);
+    const prevVisibleTag = sortedVisibleTags[newIndex - 1];
+    const nextVisibleTag = sortedVisibleTags[newIndex + 1];
+
+    if (prevVisibleTag) {
+      const prevIndex = nextTags.findIndex((tag) => String(tag.id) === String(prevVisibleTag.id));
+      if (prevIndex >= 0) {
+        nextTags.splice(prevIndex + 1, 0, movedTag);
+        return nextTags;
+      }
+    }
+
+    if (nextVisibleTag) {
+      const nextIndex = nextTags.findIndex((tag) => String(tag.id) === String(nextVisibleTag.id));
+      if (nextIndex >= 0) {
+        nextTags.splice(nextIndex, 0, movedTag);
+        return nextTags;
+      }
+    }
+
+    nextTags.push(movedTag);
+    return nextTags;
+  }
+
+  async function onDragEnd(event?: { oldIndex?: number; newIndex?: number }) {
     document.body.style.userSelect = '';
+    const sourceTags = [...bookmark.tagList];
     try {
       const userId = user.id;
+      const mergedTags = moveVisibleTagInAllTags(sourceTags, visibleDragTagList.value, event);
+      if (mergedTags === sourceTags) {
+        visibleDragTagList.value = [...filterTagList.value];
+        return;
+      }
       const sortedTags =
-        bookmark.tagList?.map((tag: TagInterface, index: number) => ({
+        mergedTags.map((tag: TagInterface, index: number) => ({
           name: tag.name,
           sort: index,
           id: tag.id,
@@ -191,14 +241,19 @@
 
       const updateResponse = await apiBasePost('/api/bookmark/updateTagSort', { tags: sortedTags });
       if (updateResponse.status === 200) {
+        bookmark.tagList = mergedTags;
         const queryResponse = await apiQueryPost('/api/bookmark/queryTagList', {
           filters: { userId },
         });
         if (queryResponse.status === 200) {
           bookmark.tagList = queryResponse.data;
         }
+      } else {
+        visibleDragTagList.value = [...filterTagList.value];
       }
     } catch (error) {
+      bookmark.tagList = sourceTags;
+      visibleDragTagList.value = [...filterTagList.value];
       console.error('Error updating tag sort:', error);
     }
   }
@@ -208,6 +263,14 @@
     (val) => {
       isReady.value = val === 0;
     },
+  );
+
+  watch(
+    filterTagList,
+    (val) => {
+      visibleDragTagList.value = [...val];
+    },
+    { immediate: true },
   );
 
   watch(

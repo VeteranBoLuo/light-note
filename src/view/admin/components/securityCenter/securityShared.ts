@@ -167,17 +167,17 @@ export const ruleColumns = [
 
 export const ipRecentColumns = [
   { title: '时间', key: 'createdAt' },
-  { title: '类型', key: 'attackType' },
-  { title: '等级', key: 'severity' },
-  { title: '分数', key: 'threatScore' },
+  { title: '类型', key: 'attackType', width: '120px' },
+  { title: '等级', key: 'severity', width: '80px' },
+  { title: '分数', key: 'threatScore', width: '80px' },
 ];
 
 export const ipAccountColumns = [
   { title: '账号', key: 'account' },
-  { title: '状态', key: 'delFlag' },
-  { title: '安全事件', key: 'securityEvents' },
-  { title: '访问次数', key: 'apiRequests' },
-  { title: '最近出现', key: 'lastSeenAt' },
-  { title: '来源', key: 'sources' },
+  { title: '状态', key: 'delFlag', width: '60px' },
+  { title: '安全事件', key: 'securityEvents', width: '80px' },
+  { title: '访问次数', key: 'apiRequests', width: '80px' },
+  { title: '最近出现', key: 'lastSeenAt', width: '200px' },
+  { title: '来源', key: 'sources', width: '150px' },
   { title: '操作', key: 'action' },
 ];
