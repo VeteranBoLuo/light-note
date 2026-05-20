@@ -1,4 +1,4 @@
-import { apiBasePost } from '@/http/request.ts';
+import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 import { isAdminLoginPreview } from '@/utils/authStorage.ts';
 
 export const recordOperation = async function (params: { module: string; operation: string }) {
@@ -13,4 +13,8 @@ export const recordOperation = async function (params: { module: string; operati
   } catch (error) {
     console.warn('record operation failed:', error);
   }
+};
+
+export const getNoticeSummary = async function () {
+  return apiBaseGet('/api/common/noticeSummary');
 };

@@ -5,7 +5,7 @@
         <div class="admin-filters-main security-filters-main">
           <b-input
             v-model:value="eventFilters.key"
-            placeholder="搜索IP/接口/类型/用户"
+            placeholder="搜索IP/接口/规则/用户"
             class="security-search-input"
             @input="handleEventSearch"
           />
@@ -18,20 +18,32 @@
       </div>
 
       <div class="admin-table-card">
+        <div class="event-batch-bar" v-if="selectedEventIds.length">
+          <span>已选择 {{ selectedEventIds.length }} 条</span>
+          <div class="event-batch-actions">
+            <b-button size="small" type="primary" @click="confirmBatchHandle('processed')">已处理</b-button>
+            <b-button size="small" @click="confirmBatchHandle('false_positive')">误报</b-button>
+            <b-button size="small" @click="confirmBatchHandle('unhandled')">未处理</b-button>
+            <b-button size="small" @click="selectedEventIds = []">取消</b-button>
+          </div>
+        </div>
         <b-loading :loading="eventLoading">
           <BTable
             :data="events"
             :columns="mobileEventColumns"
             :rowKey="'eventId'"
             :row-clickable="true"
+            :selectable="true"
+            :selected-rows="selectedEventIds"
             @row-click="onRowClick"
+            @selectionChange="selectedEventIds = $event"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'severity'">
                 <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
               </template>
-              <template v-else-if="column.key === 'attackType'">
-                <span class="ellipsis-cell">{{ record.attackType }}</span>
+              <template v-else-if="column.key === 'matchedRule'">
+                <span class="ellipsis-cell">{{ record.matchedRule || record.attackType || '-' }}</span>
               </template>
               <template v-else-if="column.key === 'sourceIp'">
                 <a-tooltip :title="record.sourceIp">
@@ -64,6 +76,7 @@
           <section>
             <h3>事件概览</h3>
             <div class="detail-grid">
+              <span>规则</span><strong>{{ eventDetail.event.matchedRule || eventDetail.event.attackType }}</strong>
               <span>类型</span><strong>{{ eventDetail.event.attackType }}</strong>
               <span>等级</span><strong>{{ eventDetail.event.severity }}</strong>
               <span>分数</span><strong>{{ eventDetail.event.threatScore }}</strong>
@@ -129,7 +142,7 @@ const drawerWidth = bookmark.isMobile ? '100%' : '720px';
 
 const mobileEventColumns = [
   { title: '等级', key: 'severity' },
-  { title: '类型', key: 'attackType' },
+  { title: '规则', key: 'matchedRule' },
   { title: 'IP', key: 'sourceIp' },
   { title: '拦截', key: 'blocked' },
   { title: '状态', key: 'handledStatus' },
@@ -148,6 +161,8 @@ const eventFilters = reactive<any>({
   userLabel: '',
 });
 const eventSearchTimer = ref<any>(null);
+const selectedEventIds = ref<string[]>([]);
+const batchLoading = ref(false);
 
 const eventDetailVisible = ref(false);
 const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [] });
@@ -177,6 +192,7 @@ async function searchEvents() {
   if (res.status === 200) {
     events.value = res.data.items;
     eventTotal.value = res.data.total;
+    selectedEventIds.value = selectedEventIds.value.filter((id) => events.value.some((event) => event.eventId === id));
   }
 }
 
@@ -194,6 +210,47 @@ function clearEventAccountFilter() {
   eventPage.currentPage = 1;
   router.replace({ query: {} });
   searchEvents();
+}
+
+function applyRouteFilters() {
+  eventFilters.userId = route.query.userId ? String(route.query.userId) : undefined;
+  eventFilters.userLabel = route.query.userLabel ? String(route.query.userLabel) : '';
+  eventFilters.handledStatus = route.query.handledStatus ? String(route.query.handledStatus) : eventFilters.handledStatus;
+  eventFilters.severity = route.query.severity ? String(route.query.severity) : eventFilters.severity;
+}
+
+const batchStatusText = {
+  processed: '已处理',
+  false_positive: '误报',
+  unhandled: '未处理',
+};
+
+function confirmBatchHandle(handledStatus: 'processed' | 'false_positive' | 'unhandled') {
+  if (!selectedEventIds.value.length || batchLoading.value) return;
+  Alert.alert({
+    title: '批量处理攻击日志',
+    content:
+      handledStatus === 'false_positive'
+        ? `确认将选中的 ${selectedEventIds.value.length} 条攻击日志标记为误报？误报会回滚对应风险分。`
+        : `确认将选中的 ${selectedEventIds.value.length} 条攻击日志标记为${batchStatusText[handledStatus]}？`,
+    okText: '确认处理',
+    cancelText: '取消',
+    onOk: async () => {
+      batchLoading.value = true;
+      const res = await apiBasePost('/api/security/events/batchHandle', {
+        eventIds: selectedEventIds.value,
+        handledStatus,
+        remark: `管理员批量标记为${batchStatusText[handledStatus]}`,
+      }).finally(() => {
+        batchLoading.value = false;
+      });
+      if (res.status === 200) {
+        message.success(res.msg || '批量处理成功');
+        selectedEventIds.value = [];
+        searchEvents();
+      }
+    },
+  });
 }
 
 async function loadDetail(eventId: string) {
@@ -306,22 +363,16 @@ async function handleUnbanAccount(userId: string) {
 }
 
 watch(
-  () => route.query.userId,
-  (userId) => {
-    if (userId) {
-      eventFilters.userId = String(userId);
-      eventFilters.userLabel = String(route.query.userLabel || userId);
-      eventPage.currentPage = 1;
-      searchEvents();
-    }
+  () => [route.query.userId, route.query.userLabel, route.query.handledStatus, route.query.severity],
+  () => {
+    applyRouteFilters();
+    eventPage.currentPage = 1;
+    searchEvents();
   },
 );
 
 onMounted(() => {
-  if (route.query.userId) {
-    eventFilters.userId = String(route.query.userId);
-    eventFilters.userLabel = String(route.query.userLabel || route.query.userId);
-  }
+  applyRouteFilters();
   searchEvents();
 });
 </script>

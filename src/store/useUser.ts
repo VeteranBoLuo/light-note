@@ -22,6 +22,8 @@ interface UserInfo {
   opinionTotal: number;
   pendingOpinionTotal: number;
   unreadOpinionReplyTotal: number;
+  pendingSecurityTotal: number;
+  criticalSecurityTotal: number;
   location: UserLocation;
   storageUsed: number; // 已使用单位：MB
   preferences: {
@@ -49,6 +51,8 @@ const createDefaultUserState = (): UserState => ({
   opinionTotal: 0,
   pendingOpinionTotal: 0,
   unreadOpinionReplyTotal: 0,
+  pendingSecurityTotal: 0,
+  criticalSecurityTotal: 0,
   storageUsed: 0,
   location: {
     province: '',

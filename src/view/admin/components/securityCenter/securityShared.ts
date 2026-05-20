@@ -84,7 +84,7 @@ export const eventColumns = [
   { title: '时间', key: 'createdAt' },
   { title: '等级', key: 'severity' },
   { title: '分数', key: 'threatScore' },
-  { title: '类型', key: 'attackType' },
+  { title: '规则', key: 'matchedRule' },
   { title: '用户昵称', key: 'user' },
   { title: '来源IP', key: 'sourceIp' },
   { title: '接口', key: 'requestPath' },
@@ -117,7 +117,7 @@ export const topPathColumns = [
 
 export const recentColumns = [
   { title: '时间', key: 'createdAt' },
-  { title: '类型', key: 'attackType' },
+  { title: '规则', key: 'matchedRule' },
   { title: 'IP', key: 'sourceIp' },
   { title: '分数', key: 'threatScore' },
   { title: '动作', key: 'actionTaken' },
@@ -178,7 +178,7 @@ export const whitelistColumns = [
 
 export const ipRecentColumns = [
   { title: '时间', key: 'createdAt' },
-  { title: '类型', key: 'attackType', width: '120px' },
+  { title: '规则', key: 'matchedRule', width: '160px' },
   { title: '等级', key: 'severity', width: '80px' },
   { title: '分数', key: 'threatScore', width: '80px' },
 ];

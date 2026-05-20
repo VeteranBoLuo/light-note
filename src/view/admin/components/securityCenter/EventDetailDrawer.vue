@@ -4,6 +4,7 @@
       <section>
         <h3>事件概览</h3>
         <div class="detail-grid">
+          <span>规则</span><strong>{{ eventDetail.event.matchedRule || eventDetail.event.attackType }}</strong>
           <span>类型</span><strong>{{ eventDetail.event.attackType }}</strong> <span>等级</span
           ><strong>{{ eventDetail.event.severity }}</strong> <span>分数</span
           ><strong>{{ eventDetail.event.threatScore }}</strong> <span>动作</span

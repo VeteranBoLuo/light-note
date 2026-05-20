@@ -20,7 +20,7 @@
   import Login from '@/view/login/UserAuthModal.vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
-  import opinionApi from '@/api/opinionApi.ts';
+  import { getNoticeSummary } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
@@ -37,9 +37,9 @@
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const { t } = useI18n();
-  const OPINION_NOTICE_KEY = 'opinion-notice';
-  const OPINION_NOTICE_POLLING_INTERVAL = 300 * 1000;
-  const OPINION_NOTICE_MIN_REFRESH_GAP = 10 * 1000;
+  const NOTICE_KEY = 'pending-notice';
+  const NOTICE_POLLING_INTERVAL = 300 * 1000;
+  const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
 
   // 监听主题变化
   watch(
@@ -108,9 +108,9 @@
 
   let mq = null;
   let mqListener = null;
-  let opinionNoticeTimer: number | null = null;
-  let lastOpinionNoticeRefreshAt = 0;
-  let opinionNoticeRequest: Promise<void> | null = null;
+  let noticeTimer: number | null = null;
+  let lastNoticeRefreshAt = 0;
+  let noticeRequest: Promise<void> | null = null;
   let userInfoRequest: Promise<any> | null = null;
   let userInfoLoaded = false;
   let isHandlingAuthExpired = false;
@@ -171,7 +171,7 @@
         } else {
           bookmark.isShowLogin = true;
           stopOpinionNoticePolling();
-          notification.close(OPINION_NOTICE_KEY);
+          notification.close(NOTICE_KEY);
         }
         return res;
       } catch (error) {
@@ -256,7 +256,7 @@
     setStoredPreferences(user.preferences);
     bookmark.isShowLogin = true;
     stopOpinionNoticePolling();
-    notification.close(OPINION_NOTICE_KEY);
+    notification.close(NOTICE_KEY);
   }
 
   async function handleAuthExpired(options: { refreshUser?: boolean; redirect?: boolean; resetUser?: boolean } = {}) {
@@ -316,42 +316,82 @@
     );
   }
 
-  function openOpinionNotice(data) {
+  function openNoticeSummary(data) {
     if (user.role === 'root') {
-      if (!data.pendingTotal) {
-        notification.close(OPINION_NOTICE_KEY);
+      const opinion = data.opinion || {};
+      const security = data.security || {};
+      const hasOpinionNotice = Number(opinion.pendingTotal || 0) > 0;
+      const hasSecurityNotice = Number(security.unhandledHighRiskCount || 0) > 0;
+      if (!hasOpinionNotice && !hasSecurityNotice) {
+        notification.close(NOTICE_KEY);
         return;
       }
+      const children = [];
+      if (hasOpinionNotice) {
+        children.push(
+          h(
+            'a',
+            {
+              onClick: () => {
+                notification.close(NOTICE_KEY);
+                router.push({ path: bookmark.isMobile ? '/userOpinion' : '/admin/userOpinion', query: { status: 'pending' } });
+              },
+            },
+            `${t('personCenter.opinions.feedbackModule')}：${opinion.pendingTotal}${t('personCenter.opinions.pendingCountSuffix')}`,
+          ),
+        );
+      }
+      if (hasSecurityNotice) {
+        if (children.length > 0) {
+          children.push(h('br'));
+        }
+        const criticalText = security.unhandledCriticalCount
+          ? `，${t('common.noticeCriticalPrefix')}${security.unhandledCriticalCount}${t('personCenter.opinions.noticeCountSuffix')}`
+          : '';
+        children.push(
+          h(
+            'a',
+            {
+              onClick: () => {
+                notification.close(NOTICE_KEY);
+                router.push({
+                  path: bookmark.isMobile ? '/securityEvents' : '/securityCenter/events',
+                  query: { handledStatus: 'unhandled' },
+                });
+              },
+            },
+            `${t('common.securityCenter')}：${security.unhandledHighRiskCount}${t('common.noticeHighRiskSuffix')}${criticalText}`,
+          ),
+        );
+      }
       notification.open({
-        key: OPINION_NOTICE_KEY,
-        message: t('personCenter.opinions.rootNoticeTitle'),
-        description: h(
-          'a',
-          `${t('personCenter.opinions.pendingReply')}${data.pendingTotal}${t('personCenter.opinions.noticeCountSuffix')}`,
-        ),
-        onClick: () => {
-          router.push({ path: '/admin/userOpinion', query: { status: 'pending' } });
-        },
+        key: NOTICE_KEY,
+        message: t('common.pendingNoticeTitle'),
+        description: h('div', children),
+        duration: 8,
       });
       return;
     }
 
-    if (!data.unreadReplyTotal) {
-      notification.close(OPINION_NOTICE_KEY);
+    const opinion = data.opinion || {};
+    if (!opinion.unreadReplyTotal) {
+      notification.close(NOTICE_KEY);
       return;
     }
 
-    const latestReplySummary = data.latestReply?.replyContent || t('personCenter.opinions.userNoticeDesc');
+    const latestReplySummary = opinion.latestReply?.replyContent || t('personCenter.opinions.userNoticeDesc');
     notification.open({
-      key: OPINION_NOTICE_KEY,
+      key: NOTICE_KEY,
       message: t('personCenter.opinions.userNoticeTitle'),
       description: h(
         'a',
-        `${t('personCenter.opinions.replyCountPrefix')}${data.unreadReplyTotal}${t('personCenter.opinions.noticeCountSuffix')} · ${latestReplySummary}`,
+        `${t('personCenter.opinions.replyCountPrefix')}${opinion.unreadReplyTotal}${t('personCenter.opinions.noticeCountSuffix')} · ${latestReplySummary}`,
       ),
       onClick: () => {
+        notification.close(NOTICE_KEY);
         router.push({ path: '/opinions', query: { tab: 'history', markViewed: '1' } });
       },
+      duration: 8,
     });
   }
 
@@ -362,37 +402,40 @@
     }
 
     const now = Date.now();
-    if (now - lastOpinionNoticeRefreshAt < OPINION_NOTICE_MIN_REFRESH_GAP) {
+    if (now - lastNoticeRefreshAt < NOTICE_MIN_REFRESH_GAP) {
       return;
     }
 
-    if (opinionNoticeRequest) {
-      return opinionNoticeRequest;
+    if (noticeRequest) {
+      return noticeRequest;
     }
 
-    opinionNoticeRequest = (async () => {
+    noticeRequest = (async () => {
       try {
-        const res = await opinionApi.getOpinionNotice();
+        const res = await getNoticeSummary();
         if (res.status === 200) {
-          lastOpinionNoticeRefreshAt = Date.now();
-          user.pendingOpinionTotal = res.data.pendingTotal || 0;
-          user.unreadOpinionReplyTotal = res.data.unreadReplyTotal || 0;
-          openOpinionNotice(res.data);
+          const summary = res.data || {};
+          lastNoticeRefreshAt = Date.now();
+          user.pendingOpinionTotal = summary.opinion?.pendingTotal || 0;
+          user.unreadOpinionReplyTotal = summary.opinion?.unreadReplyTotal || 0;
+          user.pendingSecurityTotal = summary.security?.unhandledHighRiskCount || 0;
+          user.criticalSecurityTotal = summary.security?.unhandledCriticalCount || 0;
+          openNoticeSummary(summary);
         }
       } catch (error) {
-        console.error('获取反馈提醒失败', error);
+        console.error('获取提醒汇总失败', error);
       } finally {
-        opinionNoticeRequest = null;
+        noticeRequest = null;
       }
     })();
 
-    return opinionNoticeRequest;
+    return noticeRequest;
   }
 
   function stopOpinionNoticePolling() {
-    if (opinionNoticeTimer !== null) {
-      window.clearInterval(opinionNoticeTimer);
-      opinionNoticeTimer = null;
+    if (noticeTimer !== null) {
+      window.clearInterval(noticeTimer);
+      noticeTimer = null;
     }
   }
 
@@ -401,11 +444,11 @@
     if (!user.id || user.role === RoleEnum.VISITOR) {
       return;
     }
-    opinionNoticeTimer = window.setInterval(() => {
+    noticeTimer = window.setInterval(() => {
       if (!document.hidden) {
         refreshOpinionNotice();
       }
-    }, OPINION_NOTICE_POLLING_INTERVAL);
+    }, NOTICE_POLLING_INTERVAL);
   }
 
   const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
