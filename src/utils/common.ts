@@ -243,3 +243,28 @@ export function formatStorageSize(mb: number): string {
   }
   return `${value.toFixed(1)} MB`;
 }
+
+export function normalizeLocalUploadUrl(url: string): string {
+  const src = (url || '').trim();
+  const uploadIndex = src.search(/uploads\//i);
+  if (uploadIndex < 0) return url;
+
+  const prefix = src.slice(0, uploadIndex);
+  if (!/^(?:\.{1,2}\/|\/)*$/.test(prefix)) return url;
+
+  return `/${src.slice(uploadIndex)}`;
+}
+
+export function normalizeNoteContentResourceUrls(htmlContent: string = ''): string {
+  if (!htmlContent || typeof document === 'undefined') return htmlContent;
+
+  const tempElement = document.createElement('div');
+  tempElement.innerHTML = htmlContent;
+  tempElement.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
+    const src = img.getAttribute('src');
+    if (!src) return;
+    img.setAttribute('src', normalizeLocalUploadUrl(src));
+  });
+
+  return tempElement.innerHTML;
+}

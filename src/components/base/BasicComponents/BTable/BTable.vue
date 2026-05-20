@@ -60,7 +60,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, useSlots, ref, PropType } from 'vue';
+  import { computed, useSlots, ref, PropType, ComputedRef } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
 
   const props = defineProps({
@@ -112,7 +112,9 @@
   const pageSize = ref(props.pageSize);
 
   // 计算当前页数据
-  const currentPageData = computed(() => {
+  const currentPageData: ComputedRef<
+    { alias: string; email?: string; userId?: string; delFlag: number; lastSeenAt?: string }[]
+  > = computed(() => {
     if (!props.pagination) return props.data;
 
     const start = (currentPage.value - 1) * pageSize.value;

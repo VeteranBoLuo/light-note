@@ -51,6 +51,7 @@
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -259,7 +260,10 @@
       })
         .then((res) => {
           if (res.status === 200) {
-            Object.assign(note, res.data);
+            Object.assign(note, {
+              ...res.data,
+              content: normalizeNoteContentResourceUrls(res.data?.content || ''),
+            });
             note.lastTitle = cloneDeep(note.title);
             updateTime.value = res.data?.updateTime ?? res.data?.createTime;
           }

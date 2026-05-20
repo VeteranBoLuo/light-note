@@ -188,6 +188,7 @@
     content_css: false,
     emoticons_database_url: '/tinymce/plugins/emoticons/js/emojis.js',
     paste_data_images: true,
+    convert_urls: false,
     automatic_uploads: props.imageUploadMode !== 'base64',
     ...(props.imageUploadMode === 'base64'
       ? {}
