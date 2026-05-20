@@ -221,6 +221,10 @@
       window.open(hasProtocol ? item.url : `https://${item.url}`, '_blank');
       return;
     }
+    if (item.type === 'file') {
+      router.push({ path: '/cloudSpace', query: { fileName: item.title } });
+      return;
+    }
     if (item.route) router.push(item.route);
   }
 

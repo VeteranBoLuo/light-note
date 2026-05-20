@@ -6,6 +6,7 @@
         @input="onInput"
         @keydown.enter.exact="handleSend"
         @keydown.shift.enter="handleNewLine"
+        @keydown.esc="handleEscape"
         @compositionstart="isComposing = true"
         @compositionend="handleCompositionEnd"
         :placeholder="t('ai.inputPlaceholder')"
@@ -122,6 +123,12 @@
 
   const handleNewLine = () => {
     nextTick(adjustTextareaHeight);
+  };
+
+  const handleEscape = (event: KeyboardEvent) => {
+    if (isComposing.value || event.isComposing || event.keyCode === 229) {
+      event.stopPropagation();
+    }
   };
 
   onMounted(() => {

@@ -21,6 +21,7 @@ export default defineStore('dom', {
           isRename?: boolean;
           fileType: string;
           fileUrl: string;
+          tags?: { id: string; name: string }[];
         }[];
         typeCheckValue: CloudFileCategory[];
         folder?: { id: string; name: string };

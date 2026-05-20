@@ -196,9 +196,12 @@
     schedulePeek();
   };
 
-  // 修改键盘事件处理
+  function shouldIgnoreEscape(event: KeyboardEvent) {
+    return event.defaultPrevented || event.isComposing || event.keyCode === 229;
+  }
+
   const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && isOpen.value) {
+    if (e.key === 'Escape' && isOpen.value && !isMinimized.value && !shouldIgnoreEscape(e)) {
       minimize();
     }
   };

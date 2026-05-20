@@ -32,7 +32,7 @@
         <div v-else class="flex-align-center">
           <div
             style="font-weight: 500; font-size: 20px; position: absolute"
-            @click="initializeCloudSpace"
+            @click="initializeCloudSpace('')"
             v-click-log="{ module: '云空间', operation: '刷新云空间' }"
             class="dom-hover"
             >{{ $t('cloudSpace.title') }}</div
@@ -110,7 +110,7 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon';
-  import { defineAsyncComponent, onMounted, onUnmounted, reactive, ref } from 'vue';
+  import { defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -119,6 +119,7 @@
   import { debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { useRoute } from 'vue-router';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
@@ -127,6 +128,7 @@
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
+  const route = useRoute();
 
   const handleBtnGroup = ref();
   const batchMode = ref(false);
@@ -149,12 +151,17 @@
     cloud.queryFieldList();
   }
 
-  function initializeCloudSpace() {
+  function getRouteFileName() {
+    const value = route.query.fileName;
+    return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+  }
+
+  function initializeCloudSpace(fileName = getRouteFileName()) {
     cloud.folder = {
       name: '全部文件',
       id: 'all',
     };
-    cloud.searchFileName = '';
+    cloud.searchFileName = fileName;
     cloud.queryFieldList();
     clearSelectionKey.value += 1;
     batchMode.value = false;
@@ -313,6 +320,14 @@
   }
 
   initializeCloudSpace();
+
+  watch(
+    () => route.query.fileName,
+    () => {
+      if (!route.path.includes('/cloudSpace')) return;
+      initializeCloudSpace();
+    },
+  );
 
   onMounted(() => {
     if (bookmark.isMobile) {
