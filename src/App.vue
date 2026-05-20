@@ -83,6 +83,7 @@
     '/securityCenter/ips': '/securityIps',
     '/securityCenter/account-bans': '/securityAccountBans',
     '/securityCenter/account-reputation': '/securityAccountReputation',
+    '/securityCenter/whitelist': '/securityWhitelist',
     '/securityCenter/rules': '/securityRules',
     '/trash': '/ptrash',
   };
@@ -99,6 +100,7 @@
     '/securityIps': '/securityCenter/ips',
     '/securityAccountBans': '/securityCenter/account-bans',
     '/securityAccountReputation': '/securityCenter/account-reputation',
+    '/securityWhitelist': '/securityCenter/whitelist',
     '/securityRules': '/securityCenter/rules',
     '/securityCenterMobile': '/securityCenter/overview',
     '/ptrash': '/trash',

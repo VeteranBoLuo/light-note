@@ -39,8 +39,9 @@
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
@@ -92,7 +93,7 @@ function handleAccountSearch() {
 async function handleUnbanAccount(account: any) {
   const userId = typeof account === 'string' ? account : account?.userId;
   if (!userId) return;
-  Modal.confirm({
+  Alert.alert({
     title: '解封账号',
     content: `确认解封账号【${account.alias || userId}】吗？`,
     okText: '确认解封',

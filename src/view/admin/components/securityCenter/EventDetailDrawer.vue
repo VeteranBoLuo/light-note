@@ -68,8 +68,9 @@
 
 <script lang="ts" setup>
 import { inject, reactive, watch } from 'vue';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { apiBaseGet, apiBasePost } from '@/http/request.ts';
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
@@ -127,7 +128,7 @@ async function submitHandle() {
   }
   const riskText = riskParts.length > 0 ? `，并撤销本次事件带来的 ${riskParts.join('、')}影响` : '';
   if (handleForm.handledStatus === 'false_positive' && riskParts.length > 0) {
-    Modal.confirm({
+    Alert.alert({
       title: '标记为误报',
       content: `确认标记为误报？系统会保留攻击日志${riskText}。`,
       okText: '确认误报',

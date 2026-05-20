@@ -5,8 +5,9 @@ export const securityTabs = [
   { key: 'overview', routeName: 'securityCenterOverview', label: '威胁总览' },
   { key: 'events', routeName: 'securityCenterEvents', label: '攻击日志' },
   { key: 'ips', routeName: 'securityCenterIps', label: 'IP画像' },
-  { key: 'accountBans', routeName: 'securityCenterAccountBans', label: '账号封禁' },
   { key: 'accountReputation', routeName: 'securityCenterAccountReputation', label: '账号画像' },
+  { key: 'accountBans', routeName: 'securityCenterAccountBans', label: '封禁名单' },
+  { key: 'whitelist', routeName: 'securityCenterWhitelist', label: '白名单' },
   { key: 'rules', routeName: 'securityCenterRules', label: '规则库' },
 ] as const;
 
@@ -163,6 +164,16 @@ export const ruleColumns = [
   { title: '置信度', key: 'confidence' },
   { title: '动作', key: 'action' },
   { title: '状态', key: 'enabled' },
+];
+
+export const whitelistColumns = [
+  { title: '类型', key: 'targetType', width: '80px' },
+  { title: '白名单对象', key: 'targetLabel' },
+  { title: '备注', key: 'reason' },
+  { title: '状态', key: 'enabled', width: '80px' },
+  { title: '创建人', key: 'createdByLabel', width: '120px' },
+  { title: '更新时间', key: 'updatedAt', width: '180px' },
+  { title: '操作', key: 'action', width: '100px' },
 ];
 
 export const ipRecentColumns = [

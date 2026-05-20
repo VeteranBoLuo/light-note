@@ -57,8 +57,9 @@
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { message, Modal } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
@@ -108,31 +109,51 @@ function handleAcctRepSearch() {
   }, 300);
 }
 
+function isWhitelistConflict(res: any) {
+  return res?.status === 409 && res?.data?.whitelistConflict;
+}
+
+function confirmWhitelistForce(content: string, onOk: () => Promise<void>) {
+  Alert.alert({
+    title: '移出白名单并封禁',
+    content,
+    okText: '移出白名单并封禁',
+    cancelText: '取消',
+    onOk,
+  });
+}
+
 async function handleBanAccount(account: any) {
   const userId = typeof account === 'string' ? account : account?.userId;
   if (!userId) return;
-  Modal.confirm({
+  const submit = async (force = false) => {
+    const res = await apiBasePost('/api/security/accountBan', {
+      userId,
+      reason: '管理员在安全中心手动封禁',
+      force,
+    });
+    if (res.status === 200) {
+      message.success('已封禁账号');
+      searchAccountReputation();
+      return;
+    }
+    if (isWhitelistConflict(res)) {
+      confirmWhitelistForce(`确认将账号【${account.alias || userId}】移出白名单并封禁？`, () => submit(true));
+    }
+  };
+  Alert.alert({
     title: '封禁账号',
     content: `确认封禁账号【${account.alias || userId}】吗？`,
     okText: '确认封禁',
     cancelText: '取消',
-    onOk: async () => {
-      const res = await apiBasePost('/api/security/accountBan', {
-        userId,
-        reason: '管理员在安全中心手动封禁',
-      });
-      if (res.status === 200) {
-        message.success('已封禁账号');
-        searchAccountReputation();
-      }
-    },
+    onOk: () => submit(),
   });
 }
 
 async function handleUnbanAccount(account: any) {
   const userId = typeof account === 'string' ? account : account?.userId;
   if (!userId) return;
-  Modal.confirm({
+  Alert.alert({
     title: '解封账号',
     content: `确认解封账号【${account.alias || userId}】吗？`,
     okText: '确认解封',

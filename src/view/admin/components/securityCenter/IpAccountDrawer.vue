@@ -57,8 +57,9 @@
 
 <script lang="ts" setup>
   import { inject, ref, watch } from 'vue';
-  import { message, Modal } from 'ant-design-vue';
+  import { message } from 'ant-design-vue';
   import { apiBasePost } from '@/http/request.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -95,6 +96,40 @@
     emit('close');
   }
 
+  function isWhitelistConflict(res: any) {
+    return res?.status === 409 && res?.data?.whitelistConflict;
+  }
+
+  async function banAccounts(userIds: string[], force = false) {
+    const results = await Promise.all(
+      userIds.map((userId) =>
+        apiBasePost('/api/security/accountBan', {
+          userId,
+          reason: `管理员按IP ${props.ip} 批量封禁`,
+          force,
+        }),
+      ),
+    );
+    const conflictIds = userIds.filter((_, index) => isWhitelistConflict(results[index]));
+    const successCount = results.filter((item) => item.status === 200).length;
+    if (successCount > 0) {
+      message.success(`已封禁 ${successCount} 个账号`);
+      selectedIpAccountIds.value = [];
+      loadIpAccounts();
+    }
+    if (!force && conflictIds.length > 0) {
+      Alert.alert({
+        title: '移出白名单并封禁',
+        content: `有 ${conflictIds.length} 个账号当前在白名单中，确认后会先移出白名单并执行封禁。`,
+        okText: '移出白名单并封禁',
+        cancelText: '取消',
+        onOk: async () => {
+          await banAccounts(conflictIds, true);
+        },
+      });
+    }
+  }
+
   async function loadIpAccounts() {
     if (!props.visible || !props.ip) return;
     ipAccountLoading.value = true;
@@ -116,20 +151,13 @@
       message.warning('请选择未封禁账号');
       return;
     }
-    Modal.confirm({
+    Alert.alert({
       title: '批量封禁账号',
       content: `确认封禁选中的 ${ids.length} 个账号？这些账号会退出登录并无法访问业务接口。`,
       okText: '确认封禁',
       cancelText: '取消',
       onOk: async () => {
-        await Promise.all(
-          ids.map((userId) =>
-            apiBasePost('/api/security/accountBan', { userId, reason: `管理员按IP ${props.ip} 批量封禁` }),
-          ),
-        );
-        message.success('已封禁选中账号');
-        selectedIpAccountIds.value = [];
-        loadIpAccounts();
+        await banAccounts(ids);
       },
     });
   }

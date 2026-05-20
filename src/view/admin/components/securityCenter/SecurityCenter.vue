@@ -36,8 +36,9 @@
 <script lang="ts" setup>
   import { computed, provide, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { message, Modal } from 'ant-design-vue';
+  import { message } from 'ant-design-vue';
   import { apiBasePost } from '@/http/request.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import EventDetailDrawer from './EventDetailDrawer.vue';
   import IpAccountDrawer from './IpAccountDrawer.vue';
   import {
@@ -71,6 +72,20 @@
 
   function triggerRefresh() {
     refreshCounter.value++;
+  }
+
+  function isWhitelistConflict(res: any) {
+    return res?.status === 409 && res?.data?.whitelistConflict;
+  }
+
+  function confirmWhitelistForce(content: string, onOk: () => Promise<void>) {
+    Alert.alert({
+      title: '移出白名单并封禁',
+      content,
+      okText: '移出白名单并封禁',
+      cancelText: '取消',
+      onOk,
+    });
   }
 
   const eventDetailVisible = ref(false);
@@ -107,25 +122,35 @@
 
   async function banIp(ip: string) {
     if (!ip) return;
-    Modal.confirm({
+    const submit = async (force = false) => {
+      const res = await apiBasePost('/api/security/ipBan', {
+        ip,
+        minutes: 60,
+        reason: '管理员在安全中心手动封禁',
+        force,
+      });
+      if (res.status === 200) {
+        message.success('已封禁IP');
+        currentIpBanned.value = true;
+        triggerRefresh();
+        return;
+      }
+      if (isWhitelistConflict(res)) {
+        confirmWhitelistForce(`确认将 ${ip} 移出白名单并封禁 1 小时？`, () => submit(true));
+      }
+    };
+    Alert.alert({
       title: '封禁IP',
       content: `确认封禁 ${ip} 1小时？封禁期内该IP的普通业务访问会被拦截。`,
       okText: '确认封禁',
       cancelText: '取消',
-      onOk: async () => {
-        const res = await apiBasePost('/api/security/ipBan', { ip, minutes: 60, reason: '管理员在安全中心手动封禁' });
-        if (res.status === 200) {
-          message.success('已封禁IP');
-          currentIpBanned.value = true;
-          triggerRefresh();
-        }
-      },
+      onOk: () => submit(),
     });
   }
 
   async function unbanIp(ip: string) {
     if (!ip) return;
-    Modal.confirm({
+    Alert.alert({
       title: '解封IP',
       content: `确认解封 ${ip}？`,
       okText: '确认解封',
@@ -147,29 +172,35 @@
   async function banAccount(account: any) {
     account = normalizeAccount(account);
     if (!account?.userId) return;
-    Modal.confirm({
+    const submit = async (force = false) => {
+      const res = await apiBasePost('/api/security/accountBan', {
+        userId: account.userId,
+        reason: '管理员在安全中心手动封禁',
+        force,
+      });
+      if (res.status === 200) {
+        message.success('已封禁账号');
+        eventDetailVisible.value = false;
+        triggerRefresh();
+        return;
+      }
+      if (isWhitelistConflict(res)) {
+        confirmWhitelistForce(`确认将账号【${account.alias || account.userId}】移出白名单并封禁？`, () => submit(true));
+      }
+    };
+    Alert.alert({
       title: '封禁账号',
       content: `确认封禁账号【${account.alias || account.userId}】吗？该账号会退出登录并无法访问业务接口。`,
       okText: '确认封禁',
       cancelText: '取消',
-      onOk: async () => {
-        const res = await apiBasePost('/api/security/accountBan', {
-          userId: account.userId,
-          reason: '管理员在安全中心手动封禁',
-        });
-        if (res.status === 200) {
-          message.success('已封禁账号');
-          eventDetailVisible.value = false;
-          triggerRefresh();
-        }
-      },
+      onOk: () => submit(),
     });
   }
 
   async function unbanAccount(account: any) {
     account = normalizeAccount(account);
     if (!account?.userId) return;
-    Modal.confirm({
+    Alert.alert({
       title: '解封账号',
       content: `确认解封账号【${account.alias || account.userId}】吗？`,
       okText: '确认解封',

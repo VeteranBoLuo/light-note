@@ -45,6 +45,11 @@ const securityCenterRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/securityCenter/AccountReputation.vue'),
       },
       {
+        path: 'whitelist',
+        name: 'securityCenterWhitelist',
+        component: () => import('@/view/admin/components/securityCenter/Whitelist.vue'),
+      },
+      {
         path: 'rules',
         name: 'securityCenterRules',
         component: () => import('@/view/admin/components/securityCenter/Rules.vue'),
@@ -93,6 +98,12 @@ const securityCenterRouter: RouteRecordRaw[] = [
     path: '/securityRules',
     name: 'securityRules',
     component: () => import('@/view/admin/components/securityCenter/PRules.vue'),
+  },
+  {
+    meta: securityCenterMeta,
+    path: '/securityWhitelist',
+    name: 'securityWhitelist',
+    component: () => import('@/view/admin/components/securityCenter/PWhitelist.vue'),
   },
 ];
 
