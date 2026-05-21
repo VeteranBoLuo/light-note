@@ -3,16 +3,11 @@
     <CloudStorageBar v-if="!bookmark.isMobile" />
     <!-- 上传按钮及提示 -->
     <div class="upload-container">
-      <b-upload
-        multiple
-        class="upload-btn"
-        @change="handleChange"
-        :max-total-size="100 * 1024 * 1024"
-      >
+      <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
         <b-button type="primary">
           <UploadOutlined />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
-          <div class="upload-tip">
+          <div class="upload-tip" v-if="bookmark.isDesktop">
             <div class="tip-content">{{ $t('cloudSpace.uploadTip') }}</div>
           </div>
         </b-button>
