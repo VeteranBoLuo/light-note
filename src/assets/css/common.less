@@ -129,6 +129,80 @@ h1 {
   }
 }
 
+.tag-detail-chip {
+  display: inline-block;
+  position: relative;
+  overflow: visible !important;
+}
+
+.tag-detail-label {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-detail-corner {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
+  border-radius: 50%;
+  position: absolute;
+  top: -6px;
+  right: -5px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--desc-color) !important;
+  background: color-mix(in srgb, var(--background-color) 92%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--background-color) 70%, transparent),
+    0 3px 8px rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(2px, 2px) scale(0.76);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+
+  svg {
+    width: 10px;
+    height: 10px;
+    display: block;
+  }
+
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--primary-color) 70%, white);
+    color: #ffffff !important;
+    background: var(--primary-color);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--primary-color) 18%, transparent),
+      0 6px 14px color-mix(in srgb, var(--primary-color) 30%, transparent);
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+.tag-detail-chip:hover .tag-detail-corner,
+.tag-detail-chip:focus-within .tag-detail-corner {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, 0) scale(1);
+}
+
 .text-hidden {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -10,8 +10,18 @@
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>
     <div class="footer-tag">
-      <div class="common-tag" @click="handleToTagPage(tag)" v-for="tag in cardInfo.tagList" @click.stop>
-        <span>{{ tag.name }}</span>
+      <div
+        class="common-tag tag-detail-chip"
+        @click.stop="handleToTagPage(tag)"
+        v-for="tag in cardInfo.tagList"
+        :key="tag.id || tag.name"
+      >
+        <span class="tag-detail-label">{{ tag.name }}</span>
+        <button class="tag-detail-corner" type="button" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6 4h6v6M12 4 5 11" />
+          </svg>
+        </button>
       </div>
     </div>
   </div>
@@ -58,6 +68,11 @@
     router.push(`/home/${tag.id}`);
     bookmark.type = 'normal';
     bookmark.refreshTag();
+  }
+
+  function openTagDetail(tag) {
+    if (!tag?.id) return;
+    router.push(`/tag/${tag.id}`);
   }
 
   function getIcon(bookmark: any) {
@@ -147,11 +162,17 @@
 
   .footer-tag {
     position: absolute;
-    bottom: 14px;
+    bottom: 9px;
     display: flex;
     gap: 8px;
-    max-width: calc(100% - 28px);
+    max-width: calc(100% - 21px);
+    padding: 7px 7px 5px 0;
     overflow: hidden;
+
+    .common-tag {
+      max-width: 120px;
+      cursor: pointer;
+    }
   }
 
   @media (max-width: 1023px) {
@@ -171,7 +192,7 @@
     }
 
     .footer-tag {
-      bottom: 12px;
+      bottom: 8px;
     }
     .card-description {
       height: 2.4em;

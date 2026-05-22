@@ -3,7 +3,13 @@
     <!-- 标签头部信息 -->
     <div class="tag-header">
       <div class="tag-header-main">
-        <img v-if="tag.iconUrl" :src="tag.iconUrl" class="tag-icon" alt=" " />
+        <img
+          v-if="tag.iconUrl && !tagIconLoadError"
+          :src="tag.iconUrl"
+          class="tag-icon"
+          alt=" "
+          @error="handleTagIconError"
+        />
         <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="28" />
         <span class="tag-name dom-hover" @click="goToEditTag" v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }">{{ tag.name }}</span>
       </div>
@@ -124,9 +130,10 @@
           >
             <div class="bookmark-card-header">
               <img
-                :src="bm.iconUrl || `https://icon.bqb.cool?url=${bm.url}`"
+                :src="getBookmarkIcon(bm)"
                 class="bookmark-card-icon"
                 alt=" "
+                @error="handleBookmarkIconError"
               />
               <span class="bookmark-card-name text-hidden">{{ bm.name }}</span>
             </div>
@@ -234,6 +241,7 @@
   const { t } = useI18n();
 
   const tag = ref<any>({});
+  const tagIconLoadError = ref(false);
   const relatedTags = ref<any[]>([]);
   const bookmarks = ref<any[]>([]);
   const notes = ref<any[]>([]);
@@ -268,6 +276,7 @@
       if (requestSeq !== tagDetailRequestSeq) return;
       if (tagRes.status === 200) {
         tag.value = tagRes.data || {};
+        tagIconLoadError.value = false;
       }
 
       // 2. 获取相关标签
@@ -339,15 +348,67 @@
       });
       if (requestSeq !== tagGraphRequestSeq) return;
       if (res.status === 200) {
-        graphData.value = res.data;
+        const nextGraphData = enrichGraphData(res.data, tagId);
+        graphData.value = nextGraphData;
         activeGraphNode.value =
-          res.data.nodes.find((node) => node.type === 'tag' && node.rawId === tagId) || res.data.nodes[0] || null;
+          nextGraphData.nodes.find((node) => node.type === 'tag' && node.rawId === tagId) ||
+          nextGraphData.nodes[0] ||
+          null;
       }
     } finally {
       if (requestSeq === tagGraphRequestSeq) {
         graphLoading.value = false;
       }
     }
+  }
+
+  function toCount(value: unknown) {
+    const count = Number(value);
+    return Number.isFinite(count) ? count : 0;
+  }
+
+  function getCurrentTagResourceCount(data?: TagGraphResponse) {
+    const graphStatsCount =
+      toCount(data?.stats?.bookmarkCount) + toCount(data?.stats?.noteCount) + toCount(data?.stats?.fileCount);
+    const detailResourceCount = bookmarks.value.length + notes.value.length + files.value.length;
+    return Math.max(graphStatsCount, detailResourceCount);
+  }
+
+  function countGraphResourceNeighbors(data: TagGraphResponse, nodeId: string) {
+    const nodeTypeMap = new Map(data.nodes.map((node) => [node.id, node.type]));
+    const resourceIds = new Set<string>();
+    data.edges.forEach((edge) => {
+      const targetId = edge.source === nodeId ? edge.target : edge.target === nodeId ? edge.source : '';
+      if (!targetId) return;
+      const targetType = nodeTypeMap.get(targetId);
+      if (targetType && targetType !== 'tag') {
+        resourceIds.add(targetId);
+      }
+    });
+    return resourceIds.size;
+  }
+
+  function enrichGraphData(data: TagGraphResponse, tagId: string): TagGraphResponse {
+    const nodes = data.nodes.map((node) => {
+      if (node.type !== 'tag') return node;
+
+      const edgeResourceCount = countGraphResourceNeighbors(data, node.id);
+      const currentTagCount = String(node.rawId) === String(tagId) ? getCurrentTagResourceCount(data) : 0;
+      const relatedCount = Math.max(toCount(node.meta?.relatedCount), edgeResourceCount, currentTagCount);
+
+      return {
+        ...node,
+        meta: {
+          ...node.meta,
+          relatedCount,
+        },
+      };
+    });
+
+    return {
+      ...data,
+      nodes,
+    };
   }
 
   function reloadGraph() {
@@ -422,6 +483,24 @@
     window.open(url, '_blank');
   }
 
+  function getBookmarkIcon(bookmark: any) {
+    if (bookmark.iconUrl) {
+      return bookmark.iconUrl;
+    }
+    return `https://icon.bqb.cool?url=${bookmark.url || ''}`;
+  }
+
+  function handleBookmarkIconError(event: Event) {
+    const target = event.target as HTMLImageElement | null;
+    if (target) {
+      target.src = icon.nullImg;
+    }
+  }
+
+  function handleTagIconError() {
+    tagIconLoadError.value = true;
+  }
+
   function getNoteDesc(content: string) {
     if (!content) return '';
     const div = document.createElement('div');
@@ -493,7 +572,8 @@
     .tag-icon {
       width: 28px;
       height: 28px;
-      border-radius: 6px;
+      border-radius: 50%;
+      object-fit: cover;
     }
 
     .tag-name {
@@ -751,7 +831,8 @@
     .bookmark-card-icon {
       width: 22px;
       height: 22px;
-      border-radius: 4px;
+      border-radius: 50%;
+      object-fit: cover;
       flex-shrink: 0;
     }
 

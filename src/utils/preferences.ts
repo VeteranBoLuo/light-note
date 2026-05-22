@@ -1,6 +1,6 @@
 export type ThemePreference = 'day' | 'night' | 'system';
 export type LanguagePreference = 'zh-CN' | 'en-US';
-export type HomePagePreference = 'workbench' | 'bookmark' | 'noteLibrary' | 'cloudSpace';
+export type HomePagePreference = 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace';
 
 export interface UserPreferences {
   theme?: ThemePreference | string;
@@ -13,7 +13,7 @@ export const DEFAULT_HOME_PAGE: HomePagePreference = 'workbench';
 
 export function getHomePagePreference(preferences?: UserPreferences | null): HomePagePreference {
   const homePage = preferences?.homePage;
-  if (homePage === 'bookmark' || homePage === 'noteLibrary' || homePage === 'cloudSpace') {
+  if (homePage === 'resourceCenter' || homePage === 'bookmark' || homePage === 'noteLibrary' || homePage === 'cloudSpace') {
     return homePage;
   }
   return DEFAULT_HOME_PAGE;
@@ -21,8 +21,11 @@ export function getHomePagePreference(preferences?: UserPreferences | null): Hom
 
 export function getDesktopHomePath(
   preferences?: UserPreferences | null,
-): '/workbenches' | '/home' | '/noteLibrary' | '/cloudSpace' {
+): '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace' {
   const homePage = getHomePagePreference(preferences);
+  if (homePage === 'resourceCenter') {
+    return '/search';
+  }
   if (homePage === 'bookmark') {
     return '/home';
   }
@@ -38,7 +41,7 @@ export function getDesktopHomePath(
 export function getAppHomePath(
   preferences?: UserPreferences | null,
   isMobile = false,
-): '/workbenches' | '/home' | '/noteLibrary' | '/cloudSpace' {
+): '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace' {
   if (isMobile) {
     return '/home';
   }

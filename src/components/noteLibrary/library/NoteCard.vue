@@ -11,12 +11,18 @@
         <span
           :key="tag.id || tag.name"
           :title="tag.name"
-          class="b-tag text-hidden"
+          class="b-tag tag-detail-chip"
           v-for="tag in visibleTags"
           @click.stop="noteTypeChange(tag)"
           v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
-          >{{ tag.name }}</span
         >
+          <span class="tag-detail-label">{{ tag.name }}</span>
+          <button class="tag-detail-corner" type="button" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M6 4h6v6M12 4 5 11" />
+            </svg>
+          </button>
+        </span>
         <span v-if="hiddenTagCount > 0" class="b-tag tag-more" :title="hiddenTagsLabel" @click.stop
           >+{{ hiddenTagCount }}</span
         >
@@ -79,6 +85,11 @@
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
+
+  function openTagDetail(tag) {
+    if (!tag?.id) return;
+    router.push(`/tag/${tag.id}`);
+  }
 </script>
 
 <style lang="less" scoped>
@@ -169,10 +180,12 @@
     gap: 6px;
     flex-wrap: nowrap;
     width: 100%;
+    padding: 7px 7px 0 0;
+    box-sizing: border-box;
     min-height: 24px;
     overflow: hidden;
     align-items: center;
-    margin-bottom: 6px;
+    margin: -7px 0 6px;
 
     .b-tag {
       background-color: #eeedff;

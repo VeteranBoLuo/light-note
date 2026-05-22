@@ -86,7 +86,12 @@
       :touchStartThreshold="10"
       :delay="100"
     >
-      <note-card v-for="note in visibleDragNoteList" :key="note.id" :note="note" @nodeTypeChange="handleNodeTypeChange" />
+      <note-card
+        v-for="note in visibleDragNoteList"
+        :key="note.id"
+        :note="note"
+        @nodeTypeChange="handleNodeTypeChange"
+      />
     </VueDraggable>
     <div v-if="currentViewMode === 'list'" class="note-library-body-list">
       <div class="tag-sidebar">
@@ -216,7 +221,9 @@
   const searchValue = ref('');
   const debouncedSearch = ref('');
   const searchTimer = ref<number | null>(null);
-  const canDragNote = computed(() => !bookmark.isMobile && !debouncedSearch.value && visibleDragNoteList.value.length > 1);
+  const canDragNote = computed(
+    () => !bookmark.isMobile && !debouncedSearch.value && visibleDragNoteList.value.length > 1,
+  );
 
   const toPlainText = (html: string) =>
     html
@@ -592,6 +599,7 @@
         font-weight: 500;
         transition: all 0.2s ease;
         color: var(--text-color);
+        justify-content: space-between;
         &:hover {
           background-color: var(--hover-bg-color, #f0f0f0);
           color: #161824;

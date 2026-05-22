@@ -31,6 +31,13 @@
             >{{ $t('navigation.workbench') }}</div
           >
           <div
+            :style="{ color: route.path.includes('/search') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
+            @click="router.push('/search')"
+            >{{ $t('navigation.resourceCenter') }}</div
+          >
+          <div
             :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"

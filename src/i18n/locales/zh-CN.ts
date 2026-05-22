@@ -3,6 +3,7 @@ export default {
     title: '轻笺',
     index: '首页',
     workbench: '工作台',
+    resourceCenter: '资源中心',
     bookmark: '书签',
     tag: '标签',
     note: '笔记',

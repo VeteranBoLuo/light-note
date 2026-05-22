@@ -30,7 +30,7 @@ interface UserInfo {
     theme: 'day' | 'night' | 'system' | string; // 主题
     noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
     lang?: 'zh-CN' | 'en-US'; // 语言
-    homePage?: 'workbench' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
+    homePage?: 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
   };
 }
 

@@ -1,10 +1,27 @@
 <template>
-  <div class="note-list-item" @click="router.push(`/noteLibrary/${note.id}`)" v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }">
+  <div
+    class="note-list-item"
+    @click="router.push(`/noteLibrary/${note.id}`)"
+    v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
+  >
     <div class="note-info">
       <div class="note-title">{{ note.title }}</div>
       <div class="note-description" v-html="getDescription(note.content)"></div>
       <div class="note-tags" v-if="getTags(note)">
-        <span class="b-tag" v-for="tag in getTags(note)" @click.stop="noteTypeChange(tag)" v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }">{{ tag.name }}</span>
+        <span
+          class="b-tag tag-detail-chip"
+          v-for="tag in getTags(note)"
+          :key="tag.id || tag.name"
+          @click.stop="noteTypeChange(tag)"
+          v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
+        >
+          <span class="tag-detail-label">{{ tag.name }}</span>
+          <button class="tag-detail-corner" type="button" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M6 4h6v6M12 4 5 11" />
+            </svg>
+          </button>
+        </span>
       </div>
       <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>
@@ -48,6 +65,11 @@
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
+
+  function openTagDetail(tag) {
+    if (!tag?.id) return;
+    router.push(`/tag/${tag.id}`);
+  }
 </script>
 
 <style lang="less" scoped>
@@ -95,6 +117,8 @@
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+        padding-top: 7px;
+        margin-top: -7px;
         .b-tag {
           background-color: var(--tag-bg-color, #eeedff);
           color: var(--tag-color, #8b88f2);
@@ -104,6 +128,7 @@
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s;
+          max-width: 140px;
           &:hover {
             background-color: #605ce5;
             color: white;

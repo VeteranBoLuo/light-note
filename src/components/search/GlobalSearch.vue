@@ -5,6 +5,7 @@
       class="global-search-box"
       :class="{ 'global-search-box--open': suggestVisible }"
       ref="searchBoxRef"
+      @mousedown="handleSearchBoxMouseDown"
     >
       <b-input
         id="global-search-input"
@@ -189,6 +190,21 @@
     ensureData(true);
   }
 
+  function blurDesktopInput() {
+    (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
+  }
+
+  function closeDesktopSuggest() {
+    suggestVisible.value = false;
+    blurDesktopInput();
+  }
+
+  function handleSearchBoxMouseDown(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (target.closest('.suggest-panel')) return;
+    if (!suggestVisible.value) openSuggest();
+  }
+
   function openMobileSearch() {
     mobileVisible.value = true;
     ensureData(true);
@@ -208,13 +224,13 @@
   function goSearch() {
     const q = keyword.value.trim();
     recordOperation({ module: '全局搜索', operation: q ? `进入资源中心搜索【${q}】` : '进入资源中心' });
-    suggestVisible.value = false;
+    closeDesktopSuggest();
     mobileVisible.value = false;
     router.push({ path: '/search', query: q ? { q } : {} });
   }
 
   function openItem(item: SearchResultItem) {
-    suggestVisible.value = false;
+    closeDesktopSuggest();
     mobileVisible.value = false;
     if (item.type === 'bookmark' && item.url) {
       const hasProtocol = /^https?:\/\//i.test(item.url);

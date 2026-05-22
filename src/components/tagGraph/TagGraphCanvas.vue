@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="tag-graph-canvas"
-    :class="{ 'tag-graph-canvas--compact': compact, 'tag-graph-canvas--full': fullHeight }"
-  >
+  <div class="tag-graph-canvas" :class="{ 'tag-graph-canvas--compact': compact, 'tag-graph-canvas--full': fullHeight }">
     <div v-if="loading && !nodes.length" class="graph-state">
       <div class="graph-spinner"></div>
       <span>{{ t('tagGraph.loading') }}</span>
@@ -125,6 +122,37 @@
       );
     }
 
+    // Keep the graph visually centered and avoid bottom clipping.
+    const placedNodes = props.nodes
+      .map((node) => ({
+        node,
+        point: positionMap.get(node.id),
+      }))
+      .filter((item): item is { node: TagGraphNode; point: { x: number; y: number } } => !!item.point);
+    if (placedNodes.length) {
+      const minY = Math.min(...placedNodes.map(({ node, point }) => point.y - getRenderNodeSize(node) / 2 - 16));
+      const maxY = Math.max(...placedNodes.map(({ node, point }) => point.y + getRenderNodeSize(node) / 2 + 30));
+      const safeTop = 36;
+      const safeBottom = 64;
+      const targetMidY = (safeTop + (height - safeBottom)) / 2;
+      const currentMidY = (minY + maxY) / 2;
+      let shiftY = targetMidY - currentMidY;
+
+      const shiftedMinY = minY + shiftY;
+      const shiftedMaxY = maxY + shiftY;
+      if (shiftedMinY < safeTop) {
+        shiftY += safeTop - shiftedMinY;
+      } else if (shiftedMaxY > height - safeBottom) {
+        shiftY -= shiftedMaxY - (height - safeBottom);
+      }
+
+      if (Math.abs(shiftY) > 0.5) {
+        positionMap.forEach((p, id) => {
+          positionMap.set(id, { x: p.x, y: p.y + shiftY });
+        });
+      }
+    }
+
     return { positionMap, centerX, centerY };
   }
 
@@ -150,9 +178,7 @@
         ? { placement: 'right', offsetX: 12, offsetY: 0 }
         : { placement: 'left', offsetX: -12, offsetY: 0 };
     }
-    return dy >= 0
-      ? { placement: 'bottom', offsetX: 0, offsetY: 12 }
-      : { placement: 'top', offsetX: 0, offsetY: -12 };
+    return dy >= 0 ? { placement: 'bottom', offsetX: 0, offsetY: 12 } : { placement: 'top', offsetX: 0, offsetY: -12 };
   }
 
   function getEdgeCurveOffset(edgeId: string) {
@@ -359,8 +385,16 @@
     overflow: hidden;
     border-radius: 8px;
     background:
-      radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--resource-tag-color) 8%, transparent), transparent 34%),
-      radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--resource-file-color) 6%, transparent), transparent 34%),
+      radial-gradient(
+        circle at 20% 15%,
+        color-mix(in srgb, var(--resource-tag-color) 8%, transparent),
+        transparent 34%
+      ),
+      radial-gradient(
+        circle at 85% 80%,
+        color-mix(in srgb, var(--resource-file-color) 6%, transparent),
+        transparent 34%
+      ),
       linear-gradient(135deg, color-mix(in srgb, var(--background-color) 96%, white), var(--background-color));
   }
 

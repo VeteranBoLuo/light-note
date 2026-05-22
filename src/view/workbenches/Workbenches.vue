@@ -789,6 +789,7 @@ import { formatStorageSize } from '@/utils/common';
   ]);
   const homePagePreferenceOptions = computed(() => [
     { value: 'workbench', label: t('navigation.workbench') },
+    { value: 'resourceCenter', label: t('navigation.resourceCenter') },
     { value: 'bookmark', label: t('navigation.bookmark') },
     { value: 'noteLibrary', label: t('navigation.note') },
     { value: 'cloudSpace', label: t('navigation.cloudSpace') },

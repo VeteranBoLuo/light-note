@@ -3,6 +3,7 @@ export default {
     title: 'LightNote',
     index: 'Home',
     workbench: 'Workbench',
+    resourceCenter: 'Resource Center',
     bookmark: 'Bookmark',
     tag: 'Tag',
     note: 'Note',

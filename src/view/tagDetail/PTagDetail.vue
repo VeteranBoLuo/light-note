@@ -4,7 +4,13 @@
       <!-- 标签头部信息 -->
       <div class="p-tag-header">
         <div class="p-tag-header-main">
-          <img v-if="tag.iconUrl" :src="tag.iconUrl" class="p-tag-icon" alt=" " />
+          <img
+            v-if="tag.iconUrl && !tagIconLoadError"
+            :src="tag.iconUrl"
+            class="p-tag-icon"
+            alt=" "
+            @error="handleTagIconError"
+          />
           <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="24" />
           <span class="p-tag-name" @click="goToEditTag" v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }">{{ tag.name }}</span>
         </div>
@@ -69,9 +75,10 @@
               v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
             >
               <img
-                :src="bm.iconUrl || `https://icon.bqb.cool?url=${bm.url}`"
+                :src="getBookmarkIcon(bm)"
                 class="p-bookmark-icon"
                 alt=" "
+                @error="handleBookmarkIconError"
               />
               <span class="p-bookmark-name text-hidden">{{ bm.name }}</span>
             </div>
@@ -160,6 +167,7 @@
   const user = useUserStore();
 
   const tag = ref<any>({});
+  const tagIconLoadError = ref(false);
   const relatedTags = ref<any[]>([]);
   const bookmarks = ref<any[]>([]);
   const notes = ref<any[]>([]);
@@ -178,6 +186,7 @@
     });
     if (tagRes.status === 200) {
       tag.value = tagRes.data || {};
+      tagIconLoadError.value = false;
     }
 
     // 2. 获取相关标签
@@ -234,10 +243,28 @@
 
   function openBookmark(bm: any) {
     let url = bm.url || '';
-    if (['https', 'http'].some((str) => !url.includes(str))) {
+    if (url && !/^https?:\/\//i.test(url)) {
       url = 'https://' + url;
     }
     window.open(url, '_blank');
+  }
+
+  function getBookmarkIcon(bookmark: any) {
+    if (bookmark.iconUrl) {
+      return bookmark.iconUrl;
+    }
+    return `https://icon.bqb.cool?url=${bookmark.url || ''}`;
+  }
+
+  function handleBookmarkIconError(event: Event) {
+    const target = event.target as HTMLImageElement | null;
+    if (target) {
+      target.src = icon.nullImg;
+    }
+  }
+
+  function handleTagIconError() {
+    tagIconLoadError.value = true;
   }
 
   function getFileIcon(file: any) {
@@ -284,7 +311,8 @@
     .p-tag-icon {
       width: 24px;
       height: 24px;
-      border-radius: 6px;
+      border-radius: 50%;
+      object-fit: cover;
     }
 
     .p-tag-name {
@@ -416,7 +444,8 @@
     .p-bookmark-icon {
       width: 20px;
       height: 20px;
-      border-radius: 4px;
+      border-radius: 50%;
+      object-fit: cover;
       flex-shrink: 0;
     }
 
