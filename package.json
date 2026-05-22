@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@antv/g2plot": "^2.4.31",
+    "@antv/g6": "^5.1.1",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lint": "^6.9.2",
     "@codemirror/theme-one-dark": "^6.1.3",

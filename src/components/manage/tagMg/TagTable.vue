@@ -89,6 +89,13 @@
                 <div class="tag-actions">
                   <button
                     class="action-btn"
+                    @click="openTagDetail(tag.id)"
+                    v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+                  >
+                    <span>{{ t('common.detail') }}</span>
+                  </button>
+                  <button
+                    class="action-btn"
                     @click="edit(tag.id)"
                     v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
                   >
@@ -355,6 +362,10 @@
 
   const edit = (id: string) => {
     router.push({ path: `/manage/editTag/${id}` });
+  };
+
+  const openTagDetail = (id: string) => {
+    router.push({ path: `/tag/${id}` });
   };
 
   function openNote(id: string) {

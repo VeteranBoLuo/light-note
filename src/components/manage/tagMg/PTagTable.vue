@@ -10,6 +10,13 @@
       <span>{{ data['name'] }}</span>
       <div class="edit-tag-operation">
         <svg-icon
+          :title="$t('common.detail')"
+          :src="icon.manage_categoryBtn_tag"
+          size="16"
+          @click="openTagDetail(data.id)"
+          class="dom-hover"
+        />
+        <svg-icon
           title="编辑"
           :src="icon.table_edit"
           v-click-log="{ module: '标签管理', operation: `点击编辑图标` }"
@@ -49,6 +56,10 @@
 
   const edit = (id: string) => {
     router.push({ path: `/manage/editTag/${id}` });
+  };
+
+  const openTagDetail = (id: string) => {
+    router.push({ path: `/tag/${id}` });
   };
 
   function handleDeleteTag(tag) {
