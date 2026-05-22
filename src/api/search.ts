@@ -27,6 +27,7 @@ export interface GlobalSearchResponse {
   items: SearchResultItem[];
   groups: SearchGroup[];
   total: number;
+  typeTotals?: Partial<Record<SearchType, number>>;
 }
 
 const emptySearchResult: GlobalSearchResponse = {
@@ -34,6 +35,12 @@ const emptySearchResult: GlobalSearchResponse = {
   items: [],
   groups: [],
   total: 0,
+  typeTotals: {
+    bookmark: 0,
+    note: 0,
+    file: 0,
+    tag: 0,
+  },
 };
 
 const cache = new Map<string, GlobalSearchResponse>();
@@ -60,6 +67,10 @@ export async function fetchGlobalSearch(keyword = '', limitPerType = 12, force =
     groups: Array.isArray(res.data?.groups) ? res.data.groups : [],
     items: Array.isArray(res.data?.items) ? res.data.items : [],
     total: Number(res.data?.total || 0),
+    typeTotals: {
+      ...emptySearchResult.typeTotals,
+      ...(res.data?.typeTotals || {}),
+    },
   };
 
   cache.set(cacheKey, data);

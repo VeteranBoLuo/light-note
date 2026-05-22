@@ -151,8 +151,8 @@
             <div class="result-sk-line result-sk-line--desc"></div>
             <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
             <div class="result-sk-meta">
-              <div class="result-sk-line result-sk-line--tag"></div>
-              <div class="result-sk-line result-sk-line--time"></div>
+              <div class="result-sk-line result-sk-line--meta1"></div>
+              <div class="result-sk-line result-sk-line--meta2"></div>
             </div>
           </div>
         </div>
@@ -221,13 +221,13 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search.ts';
+  import { clearGlobalSearchCache, fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search.ts';
   import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -257,10 +257,16 @@
   const SEARCH_BATCH_STORAGE_KEY = 'resource-center-batch-items';
   const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
   const MIN_SKELETON_MS = 120;
+  const REFRESH_SKELETON_MS = 360;
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
   let requestSeq = 0;
-  let summaryRequestSeq = 0;
+  const summaryTotals = ref<Record<SearchType, number>>({
+    bookmark: 0,
+    note: 0,
+    file: 0,
+    tag: 0,
+  });
 
   const queryState = reactive<{
     keyword: string;
@@ -287,7 +293,6 @@
     loading: false,
     rawItems: [],
   });
-  const summaryRawItems = ref<SearchResultItem[]>([]);
 
   const selectedIds = ref<string[]>([]);
 
@@ -332,13 +337,12 @@
       selectableVisibleItems.value.every((item) => selectedIds.value.includes(getItemSelectionKey(item))),
   );
   const tagOptions = computed(() => collectTagOptions(mappedItems.value));
-  const summaryItems = computed(() => mapDisplayItems(summaryRawItems.value, ''));
 
   const stats = computed(() =>
     SEARCH_TYPE_LIST.map((type) => ({
       type,
       label: getSearchTypeLabel(t, type),
-      count: summaryItems.value.filter((item) => item.type === type).length,
+      count: Number(summaryTotals.value[type] || 0),
     })),
   );
 
@@ -489,14 +493,7 @@
     return rawMergedItems.filter(Boolean) as SearchResultItem[];
   }
 
-  async function loadSummaryData(force = false) {
-    const seq = ++summaryRequestSeq;
-    const summaryRes = await fetchGlobalSearch('', 0, force);
-    if (seq !== summaryRequestSeq) return;
-    summaryRawItems.value = normalizeSearchResultItems(summaryRes);
-  }
-
-  async function loadData(force = false) {
+  async function loadData(force = false, minSkeletonMs = MIN_SKELETON_MS) {
     const seq = ++requestSeq;
     const loadingStart = Date.now();
     viewState.loading = true;
@@ -505,13 +502,21 @@
       if (seq !== requestSeq) return;
       const normalizedItems = normalizeSearchResultItems(res);
       viewState.rawItems = normalizedItems;
+      if (res.typeTotals) {
+        summaryTotals.value = {
+          bookmark: Number(res.typeTotals.bookmark || 0),
+          note: Number(res.typeTotals.note || 0),
+          file: Number(res.typeTotals.file || 0),
+          tag: Number(res.typeTotals.tag || 0),
+        };
+      }
       const validSelection = new Set(normalizedItems.map((item) => getItemSelectionKey(item)));
       selectedIds.value = selectedIds.value.filter((id) => validSelection.has(id));
     } finally {
       if (seq === requestSeq) {
         const elapsed = Date.now() - loadingStart;
-        if (elapsed < MIN_SKELETON_MS) {
-          await new Promise((resolve) => setTimeout(resolve, MIN_SKELETON_MS - elapsed));
+        if (elapsed < minSkeletonMs) {
+          await new Promise((resolve) => setTimeout(resolve, minSkeletonMs - elapsed));
         }
         viewState.loading = false;
       }
@@ -591,8 +596,10 @@
   async function refreshData() {
     selectedIds.value = [];
     clearGlobalSearchCache();
+    viewState.loading = true;
     try {
-      await Promise.all([loadSummaryData(true), loadData(true)]);
+      await nextTick();
+      await loadData(true, REFRESH_SKELETON_MS);
     } catch (error) {
       message.error(t('resourceCenter.refreshFailed'));
     }
@@ -677,8 +684,6 @@
     recordOperation({ module: '资源中心', operation: '进入批量移除标签工作页' });
     openBatchTagWorkspace('remove');
   }
-
-  loadSummaryData(false).catch(() => undefined);
 
   watch(
     () => route.query,
@@ -1103,70 +1108,90 @@
   }
 
   .result-sk-card {
-    height: 168px;
+    min-height: 168px;
     border-radius: 16px;
-    border: 1px solid var(--card-border-color);
-    background: color-mix(in srgb, var(--search-muted-bg) 52%, transparent);
-    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, #7f8aa8 22%);
+    background: color-mix(in srgb, var(--background-color) 96%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent),
+      0 8px 20px color-mix(in srgb, #000000 18%, transparent);
+    padding: 14px;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .result-skeleton--list .result-sk-card {
-    height: 122px;
+    min-height: 132px;
   }
 
   .result-sk-top {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
+    justify-content: flex-start;
+    gap: 10px;
+    margin-bottom: 4px;
   }
 
   .result-sk-dot {
     width: 22px;
     height: 22px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 86%, var(--background-color));
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 76%, var(--background-color));
+    animation: sk-breathe 1.55s ease-in-out infinite alternate;
   }
 
   .result-sk-line {
     height: 12px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 86%, var(--background-color));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 76%, var(--background-color));
+    animation: sk-breathe 1.55s ease-in-out infinite alternate;
   }
 
   .result-sk-line--short {
-    width: 74px;
+    width: 120px;
   }
 
   .result-sk-line--title {
-    height: 16px;
-    width: 72%;
-    margin-bottom: 10px;
+    height: 10px;
+    width: 100%;
   }
 
   .result-sk-line--desc {
-    width: 100%;
-    margin-bottom: 8px;
+    width: 92%;
   }
 
   .result-sk-line--desc2 {
-    width: 88%;
-    margin-bottom: 14px;
+    width: 86%;
   }
 
   .result-sk-meta {
     display: flex;
-    justify-content: space-between;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: auto;
   }
 
-  .result-sk-line--tag {
-    width: 34%;
+  .result-sk-line--meta1 {
+    width: 46%;
+    height: 11px;
+    border-radius: 999px;
   }
 
-  .result-sk-line--time {
-    width: 28%;
+  .result-sk-line--meta2 {
+    width: 58%;
+    height: 11px;
+    border-radius: 999px;
+  }
+
+  @keyframes sk-breathe {
+    0% {
+      opacity: 0.78;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
   .empty-state {
