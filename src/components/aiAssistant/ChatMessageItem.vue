@@ -31,7 +31,7 @@
           </div>
         </div>
         <!-- Markdown 渲染内容 -->
-        <div class="text" v-html="formatMessage(message)"></div>
+        <div class="text" v-html="formatMessage(message)" @click="handleLinkClick"></div>
         <div class="time" v-if="message.role === 'user'">{{ formatTime(message.timestamp) }}</div>
       </div>
       <ReplyLoading v-else />
@@ -49,6 +49,7 @@
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
   import { useI18n } from 'vue-i18n';
+  import router from '@/router';
 
   const { t } = useI18n();
 
@@ -89,7 +90,12 @@
     }
 
     try {
-      const rawHtml = marked.parse(message.content) as string;
+      // 预处理：给裸 URL 加尖括号 < >，避免中文/全角字符被 marked 吞入链接
+      const processedContent = message.content.replace(
+        /([\s\n]|^)(https?:\/\/[^\s<]*?)(?=[）\)】」』」。，、；：\s<]|$)/g,
+        '$1<$2>',
+      );
+      const rawHtml = marked.parse(processedContent) as string;
       const cleanHtml = DOMPurify.sanitize(rawHtml, {
         ALLOWED_TAGS: [
           'h1',
@@ -136,6 +142,32 @@
   };
 
   const hasAnswerStarted = computed(() => props.hasAnswerStarted);
+
+  // 拦截链接点击：站内地址用 router.push SPA 跳转，外部链接新窗口打开
+  const handleLinkClick = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const anchor = target.closest<HTMLAnchorElement>('a');
+    if (!anchor || !anchor.href) return;
+
+    const href = anchor.getAttribute('href') || '';
+    // 只处理 http 链接
+    if (!href.startsWith('http')) return;
+    try {
+      const url = new URL(href);
+      const siteUrl = new URL(window.location.origin);
+      // 判断是否为同一站点
+      if (url.host === siteUrl.host) {
+        event.preventDefault();
+        router.push(url.pathname + url.search + url.hash);
+      } else {
+        // 外部链接在新窗口打开
+        event.preventDefault();
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      // URL 解析失败，不做处理
+    }
+  };
 </script>
 
 <style scoped>
