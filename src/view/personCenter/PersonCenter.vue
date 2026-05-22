@@ -132,7 +132,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
-import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
@@ -262,12 +262,6 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
       icon: icon.table_delete,
     },
     {
-      name: 'resourceCenter',
-      label: t('personCenter.resourceCenter'),
-      path: '/search',
-      icon: icon.navigation.search,
-    },
-    {
       name: 'operationLog',
       label: t('personCenter.feedback'),
       icon: icon.userCenter.operationLog,
@@ -341,11 +335,11 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
     } else {
       Alert.alert({
         title: '提示',
-	        content: '此操作将退出登录, 是否继续?',
-	        async onOk() {
-	          sessionStorage.setItem('manualLogout', '1');
-	          await userApi.logout();
-	          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
+        content: '此操作将退出登录, 是否继续?',
+        async onOk() {
+          sessionStorage.setItem('manualLogout', '1');
+          await userApi.logout();
+          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
         },
       });
     }

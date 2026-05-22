@@ -137,7 +137,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { bookmarkStore } from '@/store';
-  import { fetchGlobalSearch, SearchGroup, SearchResultItem } from '@/api/search.ts';
+  import { fetchGlobalSearch, SearchGroup, SearchResultItem, SearchType } from '@/api/search.ts';
+  import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta.ts';
   import { useI18n } from 'vue-i18n';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -162,7 +163,10 @@
   );
 
   function getGroupLabel(type: string) {
-    return t(`resourceCenter.types.${type}`);
+    if (['bookmark', 'note', 'file', 'tag'].includes(type)) {
+      return getSearchTypeLabel(t, type as SearchType);
+    }
+    return getSearchTypeLabel(t, 'all');
   }
 
   async function ensureData(force = false) {

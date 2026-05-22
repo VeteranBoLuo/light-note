@@ -6,23 +6,6 @@
         <h1>{{ t('resourceCenter.title') }}</h1>
         <p>{{ t('resourceCenter.subtitle') }}</p>
       </div>
-      <div class="hero-search">
-        <b-input
-          id="search-center-input"
-          v-model:value="keyword"
-          :placeholder="t('resourceCenter.searchPlaceholder')"
-          height="46px"
-          @input="syncQuery"
-          @enter="submitSearch"
-        >
-          <template #prefix>
-            <svg-icon :src="icon.navigation.search" size="18" />
-          </template>
-        </b-input>
-        <button class="refresh-btn" @click="refreshData" v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }">
-          {{ t('resourceCenter.refresh') }}
-        </button>
-      </div>
       <div class="hero-stats">
         <div v-for="stat in stats" :key="stat.type" class="stat-card">
           <span class="stat-value">{{ stat.count }}</span>
@@ -37,7 +20,7 @@
           v-for="item in typeFilters"
           :key="item.value"
           class="filter-item"
-          :class="{ active: activeType === item.value }"
+          :class="{ active: queryState.type === item.value }"
           @click="setActiveType(item.value)"
           v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
         >
@@ -53,39 +36,146 @@
             <div class="result-title">{{ t('resourceCenter.results') }}</div>
             <div class="result-subtitle">{{ resultSubtitle }}</div>
           </div>
-          <button class="clear-btn" :disabled="!keyword" @click="clearKeyword" v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }">
-            {{ t('resourceCenter.clear') }}
-          </button>
+          <div class="toolbar-actions">
+            <button
+              class="clear-btn"
+              :disabled="!queryState.keyword"
+              @click="clearKeyword"
+              v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }"
+            >
+              {{ t('resourceCenter.clear') }}
+            </button>
+            <button
+              class="clear-btn"
+              @click="clearAdvancedFilters"
+              v-click-log="{ module: '资源中心', operation: '清空筛选条件' }"
+            >
+              {{ t('resourceCenter.clearFilters') }}
+            </button>
+          </div>
         </div>
 
-        <div v-if="loading" class="result-skeleton">
-          <div v-for="n in 8" :key="n" class="result-sk-card"></div>
+        <section class="query-filter-bar">
+          <b-input
+            id="search-center-input"
+            v-model:value="queryState.keyword"
+            :placeholder="t('resourceCenter.searchPlaceholder')"
+            height="42px"
+            @input="syncQueryDebounced"
+            @enter="submitSearch"
+          >
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="18" />
+            </template>
+          </b-input>
+          <button
+            class="refresh-btn refresh-btn--inline"
+            @click="refreshData"
+            v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+          >
+            {{ t('resourceCenter.refresh') }}
+          </button>
+        </section>
+
+        <section class="advanced-filters">
+          <div class="filter-row">
+            <label class="select-wrap">
+              <span>{{ t('resourceCenter.sort.label') }}</span>
+              <select v-model="queryState.sort" @change="applyQueryState('切换排序')">
+                <option value="relevance">{{ t('resourceCenter.sort.relevance') }}</option>
+                <option value="updated">{{ t('resourceCenter.sort.updated') }}</option>
+                <option value="name">{{ t('resourceCenter.sort.name') }}</option>
+              </select>
+            </label>
+
+            <label class="select-wrap">
+              <span>{{ t('resourceCenter.date.label') }}</span>
+              <select v-model="queryState.date" @change="applyQueryState('筛选时间范围')">
+                <option value="all">{{ t('resourceCenter.date.all') }}</option>
+                <option value="7d">{{ t('resourceCenter.date.day7') }}</option>
+                <option value="30d">{{ t('resourceCenter.date.day30') }}</option>
+                <option value="365d">{{ t('resourceCenter.date.day365') }}</option>
+              </select>
+            </label>
+
+            <div class="view-switch">
+              <button class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
+                {{ t('resourceCenter.view.card') }}
+              </button>
+              <button class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
+                {{ t('resourceCenter.view.list') }}
+              </button>
+            </div>
+
+            <button class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
+              {{ t('resourceCenter.untagged') }}
+            </button>
+          </div>
+
+          <div class="tag-filter-wrap">
+            <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
+            <div class="tag-filter-list">
+              <button
+                v-for="tag in tagOptions"
+                :key="tag"
+                class="tag-chip"
+                :class="{ active: queryState.tags.includes(tag) }"
+                @click="toggleTagFilter(tag)"
+              >
+                {{ tag }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="batch-toolbar">
+          <div class="batch-left">
+            <button class="batch-btn" @click="toggleSelectAllVisible">
+              {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
+            </button>
+            <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
+          </div>
+          <div class="batch-actions">
+            <button class="batch-btn" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</button>
+            <button class="batch-btn" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</button>
+          </div>
+        </section>
+
+        <div v-if="viewState.loading" class="result-skeleton" :class="{ 'result-skeleton--list': queryState.view === 'list' }">
+          <div v-for="n in 8" :key="n" class="result-sk-card">
+            <div class="result-sk-top">
+              <div class="result-sk-dot"></div>
+              <div class="result-sk-line result-sk-line--short"></div>
+            </div>
+            <div class="result-sk-line result-sk-line--title"></div>
+            <div class="result-sk-line result-sk-line--desc"></div>
+            <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
+            <div class="result-sk-meta">
+              <div class="result-sk-line result-sk-line--tag"></div>
+              <div class="result-sk-line result-sk-line--time"></div>
+            </div>
+          </div>
         </div>
 
         <template v-else-if="visibleGroups.length">
           <section v-for="group in visibleGroups" :key="group.type" class="result-group">
             <div class="group-header">
-              <span>{{ labels[group.type] }}</span>
+              <span>{{ getSearchTypeLabel(t, group.type) }}</span>
               <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
             </div>
-            <div class="result-grid">
-              <button
+            <div class="result-grid" :class="{ 'result-grid--list': queryState.view === 'list' }">
+              <SearchResultItem
                 v-for="item in group.items"
                 :key="`${item.type}-${item.id}`"
-                class="result-card"
-                @click="openItem(item)"
-                v-click-log="{ module: '资源中心', operation: `打开搜索结果【${item.type}:${item.title}】` }"
-              >
-                <div class="card-top">
-                  <span class="type-pill" :class="`type-pill--${item.type}`">{{ labels[group.type] }}</span>
-                  <span class="card-extra">{{ item.extra }}</span>
-                </div>
-                <div class="card-title">{{ item.title }}</div>
-                <div class="card-desc">{{ item.description }}</div>
-                <div class="card-action">
-                  {{ item.type === 'bookmark' ? t('resourceCenter.openWebsite') : t('resourceCenter.openItem') }}
-                </div>
-              </button>
+                :item="item"
+                :type-label="getSearchTypeLabel(t, item.type)"
+                :keyword="queryState.keyword"
+                :selected="selectedIds.includes(getItemSelectionKey(item))"
+                :selectable="isBatchSelectable(item)"
+                :view="queryState.view"
+                @open="openItem(item)"
+                @toggle-select="toggleSelect(item)"
+              />
             </div>
           </section>
         </template>
@@ -94,6 +184,36 @@
           <div class="empty-orbit"></div>
           <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
           <p>{{ t('resourceCenter.emptyDesc') }}</p>
+          <div class="empty-actions">
+            <button
+              class="empty-action-btn"
+              @click="router.push('/manage/editBookmark/add')"
+              v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
+            >
+              {{ t('resourceCenter.emptyActionBookmark') }}
+            </button>
+            <button
+              class="empty-action-btn"
+              @click="router.push('/noteLibrary/add')"
+              v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
+            >
+              {{ t('resourceCenter.emptyActionNote') }}
+            </button>
+            <button
+              class="empty-action-btn"
+              @click="router.push('/cloudSpace')"
+              v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
+            >
+              {{ t('resourceCenter.emptyActionFile') }}
+            </button>
+            <button
+              class="empty-action-btn"
+              @click="router.push('/manage/tagMg')"
+              v-click-log="{ module: '资源中心', operation: '空状态进入标签管理' }"
+            >
+              {{ t('resourceCenter.emptyActionTag') }}
+            </button>
+          </div>
         </div>
       </main>
     </section>
@@ -101,155 +221,483 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
+  import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { fetchGlobalSearch, SearchGroup, SearchResultItem, SearchType } from '@/api/search.ts';
+  import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search.ts';
   import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
+  import SearchResultItemComp from '@/components/searchCenter/SearchResultItem.vue';
+  import {
+    buildTypeBuckets,
+    collectTagOptions,
+    filterByDate,
+    filterByTags,
+    filterByUntagged,
+    mapDisplayItems,
+    sortDisplayItems,
+    type DisplaySearchItem,
+    type ResourceDate,
+    type ResourceSort,
+    type ResourceView,
+  } from '@/components/searchCenter/searchUtils.ts';
+  import { getSearchTypeLabel, SEARCH_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
 
+  const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const { t } = useI18n();
-  const keyword = ref('');
-  const activeType = ref<SearchType | 'all'>('all');
-  const loading = ref(false);
-  const sourceItems = ref<SearchResultItem[]>([]);
-  const groups = ref<SearchGroup[]>([]);
-  const queryTimer = ref<number | null>(null);
 
-  const labels: Record<SearchType | 'all', string> = {
-    all: t('resourceCenter.types.all'),
-    bookmark: t('resourceCenter.types.bookmark'),
-    note: t('resourceCenter.types.note'),
-    file: t('resourceCenter.types.file'),
-    tag: t('resourceCenter.types.tag'),
-  };
+  const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
+  const SEARCH_BATCH_STORAGE_KEY = 'resource-center-batch-items';
+  const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
+  const MIN_SKELETON_MS = 120;
+  const syncTimer = ref<number | null>(null);
+  const isRouteApplying = ref(false);
+  let requestSeq = 0;
+  let summaryRequestSeq = 0;
+
+  const queryState = reactive<{
+    keyword: string;
+    type: SearchType | 'all';
+    sort: ResourceSort;
+    view: ResourceView;
+    tags: string[];
+    date: ResourceDate;
+    untagged: boolean;
+  }>({
+    keyword: '',
+    type: 'all',
+    sort: 'relevance',
+    view: (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card',
+    tags: [],
+    date: 'all',
+    untagged: false,
+  });
+
+  const viewState = reactive<{
+    loading: boolean;
+    rawItems: SearchResultItem[];
+  }>({
+    loading: false,
+    rawItems: [],
+  });
+  const summaryRawItems = ref<SearchResultItem[]>([]);
+
+  const selectedIds = ref<string[]>([]);
+
+  const mappedItems = computed(() => mapDisplayItems(viewState.rawItems, queryState.keyword));
+
+  const itemsAfterCommonFilters = computed(() =>
+    mappedItems.value.filter((item) => {
+      if (!filterByDate(item, queryState.date)) return false;
+      if (!filterByTags(item, queryState.tags)) return false;
+      if (!filterByUntagged(item, queryState.untagged)) return false;
+      return true;
+    }),
+  );
+
+  const filteredItems = computed(() =>
+    itemsAfterCommonFilters.value.filter((item) => {
+      if (queryState.type !== 'all' && item.type !== queryState.type) return false;
+      return true;
+    }),
+  );
+
+  const sortedItems = computed(() => sortDisplayItems(filteredItems.value, queryState.sort));
+  const typeBuckets = computed(() => buildTypeBuckets(sortedItems.value));
 
   const visibleGroups = computed(() => {
-    if (activeType.value === 'all') return groups.value;
-    return groups.value.filter((group) => group.type === activeType.value);
+    if (queryState.type === 'all') {
+      return SEARCH_TYPE_LIST.map((type) => ({
+        type,
+        items: typeBuckets.value[type],
+      })).filter((group) => group.items.length);
+    }
+    return [{ type: queryState.type, items: typeBuckets.value[queryState.type] }];
   });
-  const flatResults = computed(() => visibleGroups.value.flatMap((group) => group.items));
-  const resultSubtitle = computed(() => {
-    const q = keyword.value.trim();
-    const prefix = q
-      ? t('resourceCenter.keywordSummary', { keyword: q })
-      : t('resourceCenter.defaultSummary');
-    return `${prefix} · ${t('resourceCenter.totalCount', { count: flatResults.value.length })}`;
-  });
+
+  const allVisibleItems = computed(() => visibleGroups.value.flatMap((group) => group.items));
+  const selectableVisibleItems = computed(() =>
+    allVisibleItems.value.filter((item) => item.type === 'bookmark' || item.type === 'note' || item.type === 'file'),
+  );
+  const allVisibleSelected = computed(
+    () =>
+      selectableVisibleItems.value.length > 0 &&
+      selectableVisibleItems.value.every((item) => selectedIds.value.includes(getItemSelectionKey(item))),
+  );
+  const tagOptions = computed(() => collectTagOptions(mappedItems.value));
+  const summaryItems = computed(() => mapDisplayItems(summaryRawItems.value, ''));
+
   const stats = computed(() =>
-    (['bookmark', 'note', 'file', 'tag'] as SearchType[]).map((type) => ({
+    SEARCH_TYPE_LIST.map((type) => ({
       type,
-      label: labels[type],
-      count: sourceItems.value.filter((item) => item.type === type).length,
+      label: getSearchTypeLabel(t, type),
+      count: summaryItems.value.filter((item) => item.type === type).length,
     })),
   );
+
   const typeFilters = computed(() => [
     {
       value: 'all' as const,
       label: t('resourceCenter.types.allResults'),
-      count: groups.value.reduce((sum, group) => sum + group.items.length, 0),
+      count: itemsAfterCommonFilters.value.length,
     },
-    ...(['bookmark', 'note', 'file', 'tag'] as SearchType[]).map((type) => ({
+    ...SEARCH_TYPE_LIST.map((type) => ({
       value: type,
-      label: labels[type],
-      count: groups.value.find((group) => group.type === type)?.items.length || 0,
+      label: getSearchTypeLabel(t, type),
+      count: itemsAfterCommonFilters.value.filter((item) => item.type === type).length,
     })),
   ]);
 
-  async function loadData(force = false) {
-    loading.value = true;
+  const resultSubtitle = computed(() => {
+    const q = queryState.keyword.trim();
+    const prefix = q ? t('resourceCenter.keywordSummary', { keyword: q }) : t('resourceCenter.defaultSummary');
+    return `${prefix} · ${t('resourceCenter.totalCount', { count: allVisibleItems.value.length })}`;
+  });
+
+  function parseType(value: unknown): SearchType | 'all' {
+    const raw = String(value || 'all');
+    return SEARCH_TYPE_LIST.includes(raw as SearchType) ? (raw as SearchType) : 'all';
+  }
+
+  function parseSort(value: unknown): ResourceSort {
+    const raw = String(value || 'relevance');
+    return ['relevance', 'updated', 'name'].includes(raw) ? (raw as ResourceSort) : 'relevance';
+  }
+
+  function parseView(value: unknown): ResourceView {
+    const raw = String(value || localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) || 'card');
+    return raw === 'list' ? 'list' : 'card';
+  }
+
+  function parseDate(value: unknown): ResourceDate {
+    const raw = String(value || 'all');
+    return ['all', '7d', '30d', '365d'].includes(raw) ? (raw as ResourceDate) : 'all';
+  }
+
+  function parseTags(value: unknown): string[] {
+    const raw = Array.isArray(value) ? String(value[0] || '') : String(value || '');
+    if (!raw) return [];
+    return raw
+      .split(',')
+      .map((tag) => {
+        try {
+          return decodeURIComponent(tag).trim();
+        } catch (error) {
+          return tag.trim();
+        }
+      })
+      .filter(Boolean)
+      .slice(0, 24);
+  }
+
+  function normalizeItemType(input: unknown): SearchType | null {
+    const raw = String(input || '').trim();
+    if (SEARCH_TYPE_LIST.includes(raw as SearchType)) return raw as SearchType;
+    return null;
+  }
+
+  function normalizeSearchItem(rawItem: any): SearchResultItem | null {
+    if (!rawItem || typeof rawItem !== 'object') return null;
+    const type = normalizeItemType(rawItem.type || rawItem.resourceType || rawItem.itemType);
+    const id = String(rawItem.id || rawItem.resourceId || '').trim();
+    if (!type || !id) return null;
+    return {
+      id,
+      type,
+      title: String(rawItem.title || rawItem.name || rawItem.fileName || rawItem.label || '').trim(),
+      description: String(rawItem.description || rawItem.desc || '').trim(),
+      extra: rawItem.extra ? String(rawItem.extra) : '',
+      category: rawItem.category,
+      url: rawItem.url,
+      route: rawItem.route,
+      iconUrl: rawItem.iconUrl,
+      raw: rawItem.raw || rawItem,
+    };
+  }
+
+  function getItemSelectionKey(item: { id: string; type: SearchType }) {
+    return `${item.type}:${item.id}`;
+  }
+
+  function isBatchSelectable(item: { type: SearchType }) {
+    return item.type === 'bookmark' || item.type === 'note' || item.type === 'file';
+  }
+
+  function applyRouteState() {
+    isRouteApplying.value = true;
     try {
-      const res = await fetchGlobalSearch(keyword.value, 0, force);
-      sourceItems.value = res.items;
-      groups.value = res.groups;
+      queryState.keyword = Array.isArray(route.query.q) ? String(route.query.q[0] || '') : String(route.query.q || '');
+      queryState.type = parseType(Array.isArray(route.query.type) ? route.query.type[0] : route.query.type);
+      queryState.sort = parseSort(Array.isArray(route.query.sort) ? route.query.sort[0] : route.query.sort);
+      queryState.view = parseView(Array.isArray(route.query.view) ? route.query.view[0] : route.query.view);
+      queryState.tags = parseTags(route.query.tags);
+      queryState.date = parseDate(Array.isArray(route.query.date) ? route.query.date[0] : route.query.date);
+      const untaggedRaw = Array.isArray(route.query.untagged) ? route.query.untagged[0] : route.query.untagged;
+      queryState.untagged = String(untaggedRaw || '0') === '1';
     } finally {
-      loading.value = false;
+      isRouteApplying.value = false;
     }
   }
 
-  function syncQuery() {
-    if (queryTimer.value) clearTimeout(queryTimer.value);
-    queryTimer.value = window.setTimeout(syncQueryNow, 250);
+  function buildQueryPayload() {
+    const q = queryState.keyword.trim();
+    return {
+      ...(q ? { q } : {}),
+      ...(queryState.type !== 'all' ? { type: queryState.type } : {}),
+      ...(queryState.sort !== 'relevance' ? { sort: queryState.sort } : {}),
+      ...(queryState.view !== 'card' ? { view: queryState.view } : {}),
+      ...(queryState.tags.length ? { tags: queryState.tags.map((tag) => encodeURIComponent(tag)).join(',') } : {}),
+      ...(queryState.date !== 'all' ? { date: queryState.date } : {}),
+      ...(queryState.untagged ? { untagged: '1' } : {}),
+    };
+  }
+
+  function normalizeQueryValue(value: unknown): string {
+    if (Array.isArray(value)) return String(value[0] || '');
+    if (value === undefined || value === null) return '';
+    return String(value);
+  }
+
+  function readCurrentSearchQuery() {
+    const current: Record<string, string> = {};
+    SEARCH_QUERY_KEYS.forEach((key) => {
+      const value = normalizeQueryValue(route.query[key]);
+      if (value) current[key] = value;
+    });
+    return current;
+  }
+
+  function isSameSearchQuery(nextQuery: Record<string, string>) {
+    const current = readCurrentSearchQuery();
+    const nextKeys = Object.keys(nextQuery).sort();
+    const currentKeys = Object.keys(current).sort();
+    if (nextKeys.length !== currentKeys.length) return false;
+    return nextKeys.every((key, index) => key === currentKeys[index] && nextQuery[key] === current[key]);
+  }
+
+  function normalizeSearchResultItems(res: { items?: unknown[]; groups?: unknown[] }) {
+    const directItems = Array.isArray(res.items) ? res.items : [];
+    const groupItems = Array.isArray(res.groups) ? res.groups.flatMap((group: any) => group?.items || []) : [];
+    const rawMergedItems = (directItems.length ? directItems : groupItems).map((item) => normalizeSearchItem(item));
+    return rawMergedItems.filter(Boolean) as SearchResultItem[];
+  }
+
+  async function loadSummaryData(force = false) {
+    const seq = ++summaryRequestSeq;
+    const summaryRes = await fetchGlobalSearch('', 0, force);
+    if (seq !== summaryRequestSeq) return;
+    summaryRawItems.value = normalizeSearchResultItems(summaryRes);
+  }
+
+  async function loadData(force = false) {
+    const seq = ++requestSeq;
+    const loadingStart = Date.now();
+    viewState.loading = true;
+    try {
+      const res = await fetchGlobalSearch(queryState.keyword, 0, force);
+      if (seq !== requestSeq) return;
+      const normalizedItems = normalizeSearchResultItems(res);
+      viewState.rawItems = normalizedItems;
+      const validSelection = new Set(normalizedItems.map((item) => getItemSelectionKey(item)));
+      selectedIds.value = selectedIds.value.filter((id) => validSelection.has(id));
+    } finally {
+      if (seq === requestSeq) {
+        const elapsed = Date.now() - loadingStart;
+        if (elapsed < MIN_SKELETON_MS) {
+          await new Promise((resolve) => setTimeout(resolve, MIN_SKELETON_MS - elapsed));
+        }
+        viewState.loading = false;
+      }
+    }
   }
 
   function syncQueryNow() {
-    const q = keyword.value.trim();
-    const type = activeType.value !== 'all' ? activeType.value : undefined;
-    router.replace({
-      path: '/search',
-      query: {
-        ...(q ? { q } : {}),
-        ...(type ? { type } : {}),
-      },
-    });
+    const query = buildQueryPayload();
+    if (isSameSearchQuery(query)) return;
+    viewState.loading = true;
+    router.replace({ path: '/search', query });
+  }
+
+  function syncQueryDebounced() {
+    if (syncTimer.value) clearTimeout(syncTimer.value);
+    viewState.loading = true;
+    syncTimer.value = window.setTimeout(syncQueryNow, 250);
+  }
+
+  function applyQueryState(operation: string) {
+    recordOperation({ module: '资源中心', operation });
+    syncQueryNow();
   }
 
   function submitSearch() {
-    const q = keyword.value.trim();
+    const q = queryState.keyword.trim();
     if (q) {
       recordOperation({ module: '资源中心', operation: `搜索资源【${q}】` });
     }
     syncQueryNow();
   }
 
+  function setActiveType(type: SearchType | 'all') {
+    queryState.type = type;
+    selectedIds.value = [];
+    applyQueryState(`筛选搜索类型【${getSearchTypeLabel(t, type)}】`);
+  }
+
+  function setView(view: ResourceView) {
+    if (queryState.view === view) return;
+    queryState.view = view;
+    localStorage.setItem(SEARCH_VIEW_STORAGE_KEY, view);
+    applyQueryState('切换视图');
+  }
+
   function clearKeyword() {
-    keyword.value = '';
-    syncQueryNow();
+    queryState.keyword = '';
+    selectedIds.value = [];
+    applyQueryState('清空搜索关键词');
+  }
+
+  function toggleUntagged() {
+    queryState.untagged = !queryState.untagged;
+    selectedIds.value = [];
+    applyQueryState('筛选无标签资源');
+  }
+
+  function toggleTagFilter(tag: string) {
+    if (queryState.tags.includes(tag)) {
+      queryState.tags = queryState.tags.filter((item) => item !== tag);
+    } else {
+      queryState.tags = [...queryState.tags, tag];
+    }
+    selectedIds.value = [];
+    applyQueryState('应用筛选');
+  }
+
+  function clearAdvancedFilters() {
+    queryState.tags = [];
+    queryState.date = 'all';
+    queryState.untagged = false;
+    queryState.sort = 'relevance';
+    selectedIds.value = [];
+    applyQueryState('清空筛选');
   }
 
   async function refreshData() {
-    await loadData(true);
+    selectedIds.value = [];
+    clearGlobalSearchCache();
+    try {
+      await Promise.all([loadSummaryData(true), loadData(true)]);
+    } catch (error) {
+      message.error(t('resourceCenter.refreshFailed'));
+    }
   }
 
-  function openItem(item: SearchResultItem) {
+  function openItem(item: DisplaySearchItem) {
     if (item.type === 'bookmark' && item.url) {
       const hasProtocol = /^https?:\/\//i.test(item.url);
       window.open(hasProtocol ? item.url : `https://${item.url}`, '_blank');
       return;
     }
-    if (item.route) router.push(item.route);
+    if (item.route) {
+      router.push(item.route);
+      return;
+    }
+    if (item.type === 'file') {
+      router.push({ path: '/cloudSpace', query: { fileName: item.title } });
+    }
   }
 
-  function setActiveType(type: SearchType | 'all') {
-    activeType.value = type;
+  function toggleSelect(item: DisplaySearchItem) {
+    if (!isBatchSelectable(item)) return;
+    const key = getItemSelectionKey(item);
+    if (selectedIds.value.includes(key)) {
+      selectedIds.value = selectedIds.value.filter((entry) => entry !== key);
+    } else {
+      selectedIds.value = [...selectedIds.value, key];
+    }
   }
 
-  watch(
-    () => activeType.value,
-    (val) => {
-      const currentType = Array.isArray(route.query.type) ? route.query.type[0] : route.query.type;
-      const normalizedCurrent = currentType && currentType !== 'all' ? String(currentType) : 'all';
-      if (normalizedCurrent === val) return;
-      const q = keyword.value.trim();
-      router.replace({
-        path: '/search',
-        query: {
-          ...(q ? { q } : {}),
-          ...(val !== 'all' ? { type: val } : {}),
-        },
-      });
-    },
-  );
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected.value) {
+      selectedIds.value = selectedIds.value.filter(
+        (id) => !selectableVisibleItems.value.some((item) => getItemSelectionKey(item) === id),
+      );
+      return;
+    }
+    const merged = new Set(selectedIds.value);
+    selectableVisibleItems.value.forEach((item) => merged.add(getItemSelectionKey(item)));
+    selectedIds.value = Array.from(merged);
+  }
+
+  function getSelectedEditableItems() {
+    const editableTypes: SearchType[] = ['bookmark', 'note', 'file'];
+    return allVisibleItems.value
+      .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
+      .filter((item) => editableTypes.includes(item.type))
+      .map((item) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+      }));
+  }
+
+  function openBatchTagWorkspace(mode: 'add' | 'remove') {
+    const selectedItems = getSelectedEditableItems();
+    if (!selectedItems.length) {
+      message.warning(t('resourceCenter.batch.onlyResourceSupported'));
+      return;
+    }
+    sessionStorage.setItem(SEARCH_BATCH_STORAGE_KEY, JSON.stringify(selectedItems));
+    router.push({
+      path: '/search/batch-tags',
+      query: { mode, from: route.fullPath },
+    });
+  }
+
+  function batchAddTag() {
+    if (!selectedIds.value.length) {
+      message.warning(t('resourceCenter.batch.noSelection'));
+      return;
+    }
+    recordOperation({ module: '资源中心', operation: '进入批量加标签工作页' });
+    openBatchTagWorkspace('add');
+  }
+
+  function batchRemoveTag() {
+    if (!selectedIds.value.length) {
+      message.warning(t('resourceCenter.batch.noSelection'));
+      return;
+    }
+    recordOperation({ module: '资源中心', operation: '进入批量移除标签工作页' });
+    openBatchTagWorkspace('remove');
+  }
+
+  loadSummaryData(false).catch(() => undefined);
 
   watch(
-    () => [route.query.q, route.query.type],
-    ([qVal, typeVal]) => {
-      keyword.value = Array.isArray(qVal) ? String(qVal[0] || '') : String(qVal || '');
-      const nextType = Array.isArray(typeVal) ? String(typeVal[0] || 'all') : String(typeVal || 'all');
-      activeType.value = ['bookmark', 'note', 'file', 'tag'].includes(nextType) ? (nextType as SearchType) : 'all';
+    () => route.query,
+    () => {
+      applyRouteState();
       loadData();
     },
     { immediate: true },
   );
 
+  watch(
+    () => queryState.view,
+    (val) => {
+      localStorage.setItem(SEARCH_VIEW_STORAGE_KEY, val);
+    },
+  );
+
   onBeforeUnmount(() => {
-    if (queryTimer.value) clearTimeout(queryTimer.value);
+    if (syncTimer.value) clearTimeout(syncTimer.value);
   });
 </script>
 
@@ -281,29 +729,25 @@
   .hero-card {
     position: relative;
     overflow: hidden;
-    border-radius: 28px;
-    padding: 30px;
+    border-radius: 24px;
+    padding: 24px;
     background:
-      radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--resource-file-color) 22%, transparent), transparent 28%),
-      radial-gradient(circle at 86% 14%, color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent), transparent 30%),
+      radial-gradient(
+        circle at 12% 18%,
+        color-mix(in srgb, var(--resource-file-color) 22%, transparent),
+        transparent 28%
+      ),
+      radial-gradient(
+        circle at 86% 14%,
+        color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent),
+        transparent 30%
+      ),
       var(--search-hero-bg);
     border: 1px solid var(--card-border-color);
     box-shadow: var(--ant-table-boxShadow);
   }
 
-  .hero-card::after {
-    content: '';
-    position: absolute;
-    right: -80px;
-    bottom: -120px;
-    width: 260px;
-    height: 260px;
-    border-radius: 50%;
-    border: 44px solid color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent);
-  }
-
   .hero-copy,
-  .hero-search,
   .hero-stats {
     position: relative;
     z-index: 1;
@@ -319,23 +763,14 @@
 
   h1 {
     margin: 8px 0 10px;
-    font-size: clamp(30px, 5vw, 52px);
+    font-size: 38px;
     line-height: 1;
   }
 
   p {
-    max-width: 720px;
     margin: 0;
     color: var(--desc-color);
-    line-height: 1.8;
-  }
-
-  .hero-search {
-    margin-top: 24px;
-    display: grid;
-    grid-template-columns: minmax(220px, 560px) 110px;
-    gap: 12px;
-    align-items: center;
+    line-height: 1.7;
   }
 
   :deep(.b-input) {
@@ -345,7 +780,11 @@
   .refresh-btn,
   .clear-btn,
   .filter-item,
-  .result-card {
+  .tag-chip,
+  .batch-btn,
+  .tagless-btn,
+  .view-btn,
+  .empty-action-btn {
     border: 0;
     cursor: pointer;
     color: inherit;
@@ -359,9 +798,9 @@
     background: linear-gradient(
       135deg,
       var(--resource-bookmark-color),
-      color-mix(in srgb, var(--resource-bookmark-color) 68%, #ffffff)
+      color-mix(in srgb, var(--resource-bookmark-color) 70%, #ffffff)
     );
-    font-weight: 800;
+    font-weight: 700;
   }
 
   .hero-stats {
@@ -369,12 +808,12 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
-    max-width: 720px;
+    max-width: 760px;
   }
 
   .stat-card {
     padding: 14px;
-    border-radius: 18px;
+    border-radius: 16px;
     background: var(--search-stat-bg);
     border: 1px solid var(--card-border-color);
     display: flex;
@@ -382,25 +821,13 @@
     gap: 4px;
   }
 
-  .search-page--night .stat-card {
-    border-color: #4d5668;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-  }
-
   .stat-value {
     font-size: 24px;
-    font-weight: 850;
-    color: var(--text-color);
-  }
-
-  .search-page--night .stat-value {
-    color: #ffffff;
+    font-weight: 800;
   }
 
   .stat-label,
   .result-subtitle,
-  .card-desc,
-  .card-extra,
   .filter-count {
     color: var(--desc-color);
   }
@@ -415,7 +842,7 @@
 
   .type-filter,
   .result-panel {
-    border-radius: 24px;
+    border-radius: 20px;
     border: 1px solid var(--card-border-color);
     background: var(--search-panel-bg);
     box-shadow: var(--ant-table-boxShadow);
@@ -434,7 +861,7 @@
     align-items: center;
     gap: 10px;
     padding: 12px;
-    border-radius: 14px;
+    border-radius: 12px;
     background: transparent;
     text-align: left;
   }
@@ -454,18 +881,21 @@
   .filter-dot--bookmark {
     background: var(--resource-bookmark-color);
   }
+
   .filter-dot--note {
     background: var(--resource-note-color);
   }
+
   .filter-dot--file {
     background: var(--resource-file-color);
   }
+
   .filter-dot--tag {
     background: var(--resource-tag-color);
   }
 
   .result-panel {
-    padding: 18px;
+    padding: 16px;
     min-height: 420px;
   }
 
@@ -474,18 +904,23 @@
     justify-content: space-between;
     gap: 12px;
     align-items: center;
-    padding-bottom: 16px;
+    padding-bottom: 14px;
     border-bottom: 1px solid var(--card-border-color);
   }
 
   .result-title {
     font-size: 20px;
-    font-weight: 850;
+    font-weight: 800;
+  }
+
+  .toolbar-actions {
+    display: flex;
+    gap: 8px;
   }
 
   .clear-btn {
-    padding: 9px 14px;
-    border-radius: 14px;
+    padding: 8px 12px;
+    border-radius: 12px;
     background: var(--search-muted-bg);
   }
 
@@ -494,97 +929,166 @@
     cursor: not-allowed;
   }
 
+  .advanced-filters {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--card-border-color);
+    background: color-mix(in srgb, var(--background-color) 94%, transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .query-filter-bar {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 110px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .refresh-btn--inline {
+    height: 42px;
+    border-radius: 12px;
+    font-weight: 700;
+  }
+
+  .select-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--desc-color);
+  }
+
+  .select-wrap select {
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border-color);
+    background: var(--background-color);
+    color: var(--text-color);
+    padding: 0 10px;
+    min-width: 120px;
+  }
+
+  .view-switch {
+    display: inline-flex;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .view-btn {
+    padding: 6px 12px;
+    background: transparent;
+  }
+
+  .view-btn.active {
+    background: var(--primary-color);
+    color: #fff;
+  }
+
+  .tagless-btn {
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: var(--search-muted-bg);
+  }
+
+  .tagless-btn.active {
+    background: color-mix(in srgb, var(--resource-file-color) 16%, transparent);
+    color: var(--resource-file-color);
+  }
+
+  .tag-filter-wrap {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+  }
+
+  .tag-filter-label {
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 30px;
+  }
+
+  .tag-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 96px;
+    overflow: auto;
+    padding-right: 2px;
+  }
+
+  .tag-chip {
+    min-height: 28px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: var(--search-muted-bg);
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .tag-chip.active {
+    background: color-mix(in srgb, var(--resource-tag-color) 16%, transparent);
+    color: var(--resource-tag-color);
+  }
+
+  .batch-toolbar {
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .batch-left,
+  .batch-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+
+  .batch-btn {
+    min-height: 30px;
+    border-radius: 10px;
+    padding: 0 10px;
+    background: var(--search-muted-bg);
+  }
+
   .result-group {
-    margin-top: 18px;
+    margin-top: 16px;
   }
 
   .group-header {
     display: flex;
     justify-content: space-between;
     color: var(--desc-color);
-    font-weight: 800;
+    font-weight: 700;
     font-size: 13px;
     margin-bottom: 10px;
   }
 
   .result-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 12px;
   }
 
-  .result-card {
-    min-height: 156px;
-    padding: 16px;
-    border-radius: 18px;
-    text-align: left;
-    background: var(--search-card-bg);
-    border: 1px solid var(--card-border-color);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    transition:
-      transform 0.2s,
-      box-shadow 0.2s,
-      border-color 0.2s;
-  }
-
-  .result-card:hover {
-    transform: translateY(-3px);
-    border-color: var(--primary-h-color);
-    box-shadow: 0 14px 32px var(--search-card-shadow);
-  }
-
-  .card-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: center;
-  }
-
-  .type-pill {
-    min-width: max-content;
-    padding: 4px 9px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 800;
-    background: color-mix(in srgb, var(--resource-bookmark-color) 12%, transparent);
-    color: var(--resource-bookmark-color);
-  }
-
-  .type-pill--note {
-    background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
-    color: var(--resource-note-color);
-  }
-  .type-pill--file {
-    background: color-mix(in srgb, var(--resource-file-color) 14%, transparent);
-    color: var(--resource-file-color);
-  }
-  .type-pill--tag {
-    background: color-mix(in srgb, var(--resource-tag-color) 12%, transparent);
-    color: var(--resource-tag-color);
-  }
-
-  .card-title {
-    font-size: 17px;
-    font-weight: 850;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .card-desc {
-    line-height: 1.7;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .card-action {
-    margin-top: auto;
-    color: var(--resource-bookmark-color);
-    font-weight: 800;
+  .result-grid--list {
+    grid-template-columns: 1fr;
   }
 
   .result-skeleton {
@@ -594,17 +1098,75 @@
     margin-top: 18px;
   }
 
+  .result-skeleton--list {
+    grid-template-columns: 1fr;
+  }
+
   .result-sk-card {
-    height: 156px;
-    border-radius: 18px;
-    background: linear-gradient(
-      90deg,
-      var(--bl-input-noBorder-bg-color),
-      var(--background-color),
-      var(--bl-input-noBorder-bg-color)
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.4s infinite;
+    height: 168px;
+    border-radius: 16px;
+    border: 1px solid var(--card-border-color);
+    background: color-mix(in srgb, var(--search-muted-bg) 52%, transparent);
+    padding: 12px;
+    box-sizing: border-box;
+  }
+
+  .result-skeleton--list .result-sk-card {
+    height: 122px;
+  }
+
+  .result-sk-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .result-sk-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 86%, var(--background-color));
+  }
+
+  .result-sk-line {
+    height: 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 86%, var(--background-color));
+  }
+
+  .result-sk-line--short {
+    width: 74px;
+  }
+
+  .result-sk-line--title {
+    height: 16px;
+    width: 72%;
+    margin-bottom: 10px;
+  }
+
+  .result-sk-line--desc {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .result-sk-line--desc2 {
+    width: 88%;
+    margin-bottom: 14px;
+  }
+
+  .result-sk-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .result-sk-line--tag {
+    width: 34%;
+  }
+
+  .result-sk-line--time {
+    width: 28%;
   }
 
   .empty-state {
@@ -629,27 +1191,40 @@
     border-top-color: var(--resource-bookmark-color);
   }
 
-  @keyframes shimmer {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -200% 0;
-    }
+  .empty-actions {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .empty-action-btn {
+    min-height: 32px;
+    border-radius: 12px;
+    padding: 0 12px;
+    background: var(--search-muted-bg);
   }
 
   @media (max-width: 900px) {
     .search-page {
-      padding: 14px;
+      padding: 12px;
     }
 
     .hero-card {
-      padding: 22px;
-      border-radius: 22px;
+      padding: 18px;
+      border-radius: 16px;
     }
 
-    .hero-search,
+    h1 {
+      font-size: 28px;
+    }
+
     .search-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .query-filter-bar {
       grid-template-columns: 1fr;
     }
 
@@ -661,6 +1236,12 @@
       position: static;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .tag-filter-wrap {
+      grid-template-columns: 1fr;
+      gap: 6px;
     }
   }
 </style>

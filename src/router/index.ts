@@ -13,6 +13,7 @@ import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import searchRouter from '@/router/modules/search.ts';
+import searchBatchRouter from '@/router/modules/searchBatch.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
 import trashRouter from '@/router/modules/trash.ts';
 import { getDesktopHomePath } from '@/utils/preferences.ts';
@@ -36,6 +37,7 @@ const routes: RouteRecordRaw[] = [
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
       searchRouter,
+      searchBatchRouter,
       tagDetailRouter,
       trashRouter,
       ...securityCenterRouter,
