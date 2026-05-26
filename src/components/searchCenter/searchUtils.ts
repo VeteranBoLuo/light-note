@@ -62,17 +62,32 @@ function normalizeTagName(value: string): string {
   return value.replace(/^#\s*/, '').trim();
 }
 
+function formatFileSizeLikeCloudSpace(sizeInput: unknown): string {
+  const size = Number(sizeInput);
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size >= 1024 * 1024) {
+    return (
+      Number(size / (1024 * 1024))
+        .toFixed(1)
+        .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' MB'
+    );
+  }
+  return Number(size / 1024)
+    .toFixed()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' KB';
+}
+
 function extractSelfTagName(item: SearchResultItem): string {
   const rawName = String(item.raw?.name || item.title || '').trim();
   return normalizeTagName(rawName);
 }
 
 function extractFileMeta(raw: any): string {
-  const ext = String(raw?.ext || raw?.suffix || '').trim();
-  const size = raw?.fileSize;
+  const ext = String(raw?.ext || raw?.suffix || raw?.fileType || raw?.file_type || '').trim();
+  const size = formatFileSizeLikeCloudSpace(raw?.fileSize ?? raw?.file_size);
   if (ext && size) return `${ext.toUpperCase()} · ${size}`;
   if (ext) return ext.toUpperCase();
-  if (size) return String(size);
+  if (size) return size;
   return '';
 }
 

@@ -130,14 +130,15 @@
 
         <section class="batch-toolbar">
           <div class="batch-left">
-            <button class="batch-btn" @click="toggleSelectAllVisible">
+            <b-button class="batch-btn" @click="toggleSelectAllVisible">
               {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
-            </button>
+            </b-button>
             <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
           </div>
           <div class="batch-actions">
-            <button class="batch-btn" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</button>
-            <button class="batch-btn" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</button>
+            <b-button type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</b-button>
+            <b-button type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</b-button>
+            <b-button type="danger" @click="batchDelete">{{ t('resourceCenter.batch.delete') }}</b-button>
           </div>
         </section>
 
@@ -164,18 +165,18 @@
               <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
             </div>
             <div class="result-grid" :class="{ 'result-grid--list': queryState.view === 'list' }">
-              <SearchResultItem
-                v-for="item in group.items"
-                :key="`${item.type}-${item.id}`"
-                :item="item"
-                :type-label="getSearchTypeLabel(t, item.type)"
-                :keyword="queryState.keyword"
-                :selected="selectedIds.includes(getItemSelectionKey(item))"
-                :selectable="isBatchSelectable(item)"
-                :view="queryState.view"
-                @open="openItem(item)"
-                @toggle-select="toggleSelect(item)"
-              />
+              <RightMenu :menu="[deleteMenuLabel]" @select="handleItemMenu($event, item)" v-for="item in group.items" :key="`${item.type}-${item.id}`">
+                <SearchResultItem
+                  :item="item"
+                  :type-label="getSearchTypeLabel(t, item.type)"
+                  :keyword="queryState.keyword"
+                  :selected="selectedIds.includes(getItemSelectionKey(item))"
+                  :selectable="true"
+                  :view="queryState.view"
+                  @open="openItem(item)"
+                  @toggle-select="toggleSelect(item)"
+                />
+              </RightMenu>
             </div>
           </section>
         </template>
@@ -224,10 +225,18 @@
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { message } from 'ant-design-vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import RightMenu from '@/components/base/RightMenu.vue';
   import icon from '@/config/icon.ts';
-  import { clearGlobalSearchCache, fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search.ts';
+  import {
+    batchDeleteSearchResources,
+    clearGlobalSearchCache,
+    fetchGlobalSearch,
+    type SearchResultItem,
+    type SearchType,
+  } from '@/api/search.ts';
   import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -246,6 +255,8 @@
     type ResourceView,
   } from '@/components/searchCenter/searchUtils.ts';
   import { getSearchTypeLabel, SEARCH_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { apiBasePost } from '@/http/request.ts';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
@@ -328,9 +339,7 @@
   });
 
   const allVisibleItems = computed(() => visibleGroups.value.flatMap((group) => group.items));
-  const selectableVisibleItems = computed(() =>
-    allVisibleItems.value.filter((item) => item.type === 'bookmark' || item.type === 'note' || item.type === 'file'),
-  );
+  const selectableVisibleItems = computed(() => allVisibleItems.value);
   const allVisibleSelected = computed(
     () =>
       selectableVisibleItems.value.length > 0 &&
@@ -364,6 +373,7 @@
     const prefix = q ? t('resourceCenter.keywordSummary', { keyword: q }) : t('resourceCenter.defaultSummary');
     return `${prefix} · ${t('resourceCenter.totalCount', { count: allVisibleItems.value.length })}`;
   });
+  const deleteMenuLabel = computed(() => t('common.delete'));
 
   function parseType(value: unknown): SearchType | 'all' {
     const raw = String(value || 'all');
@@ -428,10 +438,6 @@
 
   function getItemSelectionKey(item: { id: string; type: SearchType }) {
     return `${item.type}:${item.id}`;
-  }
-
-  function isBatchSelectable(item: { type: SearchType }) {
-    return item.type === 'bookmark' || item.type === 'note' || item.type === 'file';
   }
 
   function applyRouteState() {
@@ -621,7 +627,6 @@
   }
 
   function toggleSelect(item: DisplaySearchItem) {
-    if (!isBatchSelectable(item)) return;
     const key = getItemSelectionKey(item);
     if (selectedIds.value.includes(key)) {
       selectedIds.value = selectedIds.value.filter((entry) => entry !== key);
@@ -642,11 +647,10 @@
     selectedIds.value = Array.from(merged);
   }
 
-  function getSelectedEditableItems() {
-    const editableTypes: SearchType[] = ['bookmark', 'note', 'file'];
+  function getSelectedItemsByTypes(types: SearchType[]) {
     return allVisibleItems.value
       .filter((item) => selectedIds.value.includes(getItemSelectionKey(item)))
-      .filter((item) => editableTypes.includes(item.type))
+      .filter((item) => types.includes(item.type))
       .map((item) => ({
         id: item.id,
         type: item.type,
@@ -655,10 +659,14 @@
   }
 
   function openBatchTagWorkspace(mode: 'add' | 'remove') {
-    const selectedItems = getSelectedEditableItems();
+    const selectedItems = getSelectedItemsByTypes(['bookmark', 'note', 'file']);
+    const selectedTagCount = selectedIds.value.filter((id) => id.startsWith('tag:')).length;
     if (!selectedItems.length) {
       message.warning(t('resourceCenter.batch.onlyResourceSupported'));
       return;
+    }
+    if (selectedTagCount > 0) {
+      message.info(t('resourceCenter.batch.tagIgnoredForTagOps', { count: selectedTagCount }));
     }
     sessionStorage.setItem(SEARCH_BATCH_STORAGE_KEY, JSON.stringify(selectedItems));
     router.push({
@@ -683,6 +691,83 @@
     }
     recordOperation({ module: '资源中心', operation: '进入批量移除标签工作页' });
     openBatchTagWorkspace('remove');
+  }
+
+  function getSingleDeleteApi(type: SearchType) {
+    if (type === 'bookmark') return '/api/bookmark/delBookmark';
+    if (type === 'note') return '/api/note/delNote';
+    if (type === 'file') return '/api/file/deleteFileById';
+    return '/api/bookmark/delTag';
+  }
+
+  function handleItemMenu(menu: string, item: DisplaySearchItem) {
+    if (menu !== deleteMenuLabel.value) return;
+    const typeLabel = getSearchTypeLabel(t, item.type);
+    const name = item.title || '-';
+    Alert.alert({
+      title: t('resourceCenter.batch.deleteConfirmTitle'),
+      content:
+        item.type === 'tag'
+          ? `请确认是否要删除${typeLabel}【${name}】？删除后会解除与资源的绑定。`
+          : `请确认是否要删除${typeLabel}【${name}】？删除后会移入回收站。`,
+      okText: t('resourceCenter.batch.deleteConfirmOk'),
+      cancelText: t('resourceCenter.batch.deleteConfirmCancel'),
+      async onOk() {
+        try {
+          const api = getSingleDeleteApi(item.type);
+          const res = await apiBasePost(api, { id: item.id });
+          if (Number(res?.status) !== 200) {
+            message.error(res?.msg || t('resourceCenter.batch.deleteFailed'));
+            return;
+          }
+          recordOperation({ module: '资源中心', operation: `右键删除${typeLabel}成功【${name}】` });
+          message.success(t('resourceCenter.batch.deleteSuccess', { count: 1 }));
+          selectedIds.value = selectedIds.value.filter((id) => id !== getItemSelectionKey(item));
+          clearGlobalSearchCache();
+          await refreshData();
+        } catch (error) {
+          message.error(t('resourceCenter.batch.deleteFailed'));
+        }
+      },
+    });
+  }
+
+  async function batchDelete() {
+    if (!selectedIds.value.length) {
+      message.warning(t('resourceCenter.batch.noSelection'));
+      return;
+    }
+    const selectedItems = getSelectedItemsByTypes(['bookmark', 'note', 'file', 'tag']);
+    if (!selectedItems.length) {
+      message.warning(t('resourceCenter.batch.noSelection'));
+      return;
+    }
+    Alert.alert({
+      title: t('resourceCenter.batch.deleteConfirmTitle'),
+      content: t('resourceCenter.batch.deleteConfirmContent', { count: selectedItems.length }),
+      okText: t('resourceCenter.batch.deleteConfirmOk'),
+      cancelText: t('resourceCenter.batch.deleteConfirmCancel'),
+      async onOk() {
+        try {
+          const res = await batchDeleteSearchResources(selectedItems.map((item) => ({ id: item.id, type: item.type })));
+          if (Number(res?.status) !== 200) {
+            message.error(res?.msg || t('resourceCenter.batch.deleteFailed'));
+            return;
+          }
+          const affected = Number(res?.data?.affectedItemCount || 0);
+          recordOperation({
+            module: '资源中心',
+            operation: `批量删除资源成功【选中${selectedItems.length}条，删除${affected}条】`,
+          });
+          message.success(t('resourceCenter.batch.deleteSuccess', { count: affected }));
+          selectedIds.value = [];
+          clearGlobalSearchCache();
+          await refreshData();
+        } catch (error) {
+          message.error(t('resourceCenter.batch.deleteFailed'));
+        }
+      },
+    });
   }
 
   watch(

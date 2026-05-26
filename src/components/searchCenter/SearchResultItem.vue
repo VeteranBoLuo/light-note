@@ -127,8 +127,8 @@
 
   .result-checkbox-wrap {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 14px;
+    right: 14px;
     z-index: 3;
   }
 
@@ -191,12 +191,14 @@
   }
 
   .item-extra {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
     color: var(--desc-color);
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 58%;
   }
 
   .item-title {

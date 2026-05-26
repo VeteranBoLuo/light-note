@@ -30,6 +30,11 @@ export interface GlobalSearchResponse {
   typeTotals?: Partial<Record<SearchType, number>>;
 }
 
+export interface BatchResourceItem {
+  id: string;
+  type: SearchType;
+}
+
 const emptySearchResult: GlobalSearchResponse = {
   keyword: '',
   items: [],
@@ -79,4 +84,8 @@ export async function fetchGlobalSearch(keyword = '', limitPerType = 12, force =
 
 export function clearGlobalSearchCache() {
   cache.clear();
+}
+
+export function batchDeleteSearchResources(items: BatchResourceItem[]) {
+  return apiBasePost('/api/search/batchDeleteResources', { items });
 }
