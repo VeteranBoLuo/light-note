@@ -6,7 +6,7 @@
 
 🌐 **在线体验**：[boluo66.top](https://boluo66.top) · 桌面端 + 移动端全适配
 
-<img src="screenshots/hero.png" alt="轻笺工作台总览" width="85%" />
+<img src="screenshots/hero.png" alt="轻笺工作台总览"  />
 
 ---
 
@@ -20,19 +20,19 @@
 - 标签详情聚合页：一键查看某标签关联的所有书签/笔记/文件
 - 批量标签操作：多选资源统一添加/移除标签
 
-<img src="screenshots/resource1.png" alt="资源中心" width="85%" />
-<img src="screenshots/resource2.png" alt="标签详情" width="85%" />
+<img src="screenshots/resource1.png" alt="资源中心"  />
+<img src="screenshots/resource2.png" alt="标签详情"  />
 
 ### 🏠 书签总览
 
-进入轻笺的第一屏。左侧标签树导航，右侧展示选中标签下的书签卡片，边选边看。
+进入书签模块。左侧标签树导航，右侧展示选中标签下的书签卡片，边选边看。
 
 - 标签树检索、拖拽排序，快速筛选书签
 - 卡片墙展示，支持多标签联合过滤
 - 右键快捷操作：编辑、删除、复制链接
 - 书签智能抓取网页标题、描述与图标
 
-<img src="screenshots/bookmark.png" alt="书签总览" width="85%" />
+<img src="screenshots/bookmark.png" alt="书签总览"  />
 
 ### 📝 笔记库
 
@@ -45,7 +45,7 @@
 - 批量删除、拖拽排序
 - 导出 PDF
 
-<img src="screenshots/note1.png" alt="笔记库卡片视图与列表视图" width="85%" />
+<img src="screenshots/note1.png" alt="笔记库卡片视图与列表视图"  />
 
 ### ☁️ 云空间
 
@@ -58,7 +58,7 @@
 - 外部分享下载（生成分享链接）
 - 严格权限隔离，用户仅可访问自己的资源
 
-<img src="screenshots/cloud-spance.png" alt="云空间" width="85%" />
+<img src="screenshots/cloud-spance.png" alt="云空间"  />
 
 ### 🤖 AI 助手
 
@@ -68,7 +68,7 @@
 - 快捷提问模板
 - 流式响应展示
 
-<img src="screenshots/ai-chat.png" alt="AI 助手对话" width="85%" />
+<img src="screenshots/ai-chat.png" alt="AI 助手对话"  />
 
 ### 🔍 全局搜索
 
@@ -78,7 +78,7 @@
 - 批量标签筛选（SearchBatchTags）
 - 搜索结果聚合展示
 
-<img src="screenshots/search.png" alt="全局搜索" width="85%" />
+<img src="screenshots/search.png" alt="全局搜索"  />
 
 ### 📊 工作台
 
@@ -92,6 +92,8 @@
 ### 🗑️ 回收站
 
 统一管理已删除资源，防止误删丢失。
+
+<img src="screenshots/recycle.png" alt="回收站"  />
 
 ### 🔐 安全中心 & 后台管理
 
@@ -111,9 +113,9 @@
 - **拖拽体系**：书签/标签/笔记/文件全模块拖拽排序
 - **埋点追踪**：操作日志 + 点击行为分析
 
-<div style="display: flex; justify-content: space-between;">
-<img src="screenshots/mobile1.png" alt="移动端首页浅色与暗色主题" width="85%" />
-<img src="screenshots/mobile2.png" alt="移动端首页浅色与暗色主题" width="85%" />
+<div style="display: flex; ">
+<img src="screenshots/mobile1.png" alt="移动端首页浅色与暗色主题"  />
+<img src="screenshots/mobile2.png" alt="移动端首页浅色与暗色主题"  />
 </div>
 
 ---
