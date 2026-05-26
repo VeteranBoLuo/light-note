@@ -1,134 +1,195 @@
-# 轻笺 🌊
+# 轻笺 LightNote
 
-![top-language](https://img.shields.io/github/languages/top/VeteranBoLuo/light-note) [![Website](https://img.shields.io/website?up_message=online&url=https%3A%2F%2Fboluo66.top)](https://boluo66.top) ![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/VeteranBoLuo/light-note) ![GitHub last commit](https://img.shields.io/github/last-commit/VeteranBoLuo/light-note)
+> **以标签为纽带，串联你的书签、笔记与文件。**
 
-> **以标签为核心的知识管理工具**
->
-> 轻笺（light-note）是一个围绕“标签网络”构建的云端效率系统，核心覆盖：**书签归档、笔记沉淀、云空间协同**。目标是把网址、笔记、文件统一组织在同一套标签语义下，实现跨设备检索与联动管理。
+轻笺是一个围绕**统一标签体系**构建的知识管理系统。不只是一个书签收藏工具——它将网址、笔记、文件组织在同一套标签语义下，配合 AI 辅助、标签图谱、全局搜索，帮你构建可检索、可关联、可沉淀的个人知识库。
 
-🌐 **在线体验**：[https://boluo66.top/](https://boluo66.top/) 📱 **多端适配**：桌面端 + 移动端
+🌐 **在线体验**：[boluo66.top](https://boluo66.top) · 桌面端 + 移动端全适配
 
-## 📑 目录
+<img src="screenshots/hero.png" alt="轻笺工作台总览" width="85%" />
 
-- [🧭 产品定位](#-产品定位)
-- [🛠 技术栈](#-技术栈)
-- [⚡ 当前功能](#-当前功能)
-- [🚀 快速开始](#-快速开始)
-- [✨ 下一步规划](#-下一步规划)
-- [📢 更新日志](#-更新日志)
-- [⭐ Stargazers](#-stargazers)
+---
 
-## 🧭 产品定位
+## 功能全景
 
-轻笺不是“只收藏网址”的工具，而是书签 × 笔记 × 文件三位一体的知识管理系统：
+### 🏷️ 统一标签体系
 
-- **统一标签体系**：同一标签可以关联多个书签、笔记与文件资源
-- **统一检索入口**：按标题/链接/标签/关键词进行多维查找
-- **统一组织方式**：支持拖拽排序、批量处理、权限隔离与跨端访问
+所有资源（书签、笔记、文件）共享同一套标签。一个标签关联多种资源，一个资源绑定多个标签，形成**跨类型的知识网络**。
 
-## 🛠 技术栈
+- 标签树拖拽排序 · 标签关系图谱可视化（基于 G6）
+- 标签详情聚合页：一键查看某标签关联的所有书签/笔记/文件
+- 批量标签操作：多选资源统一添加/移除标签
 
-| 层级    | 技术选型                                       |
-| ------- | ---------------------------------------------- |
-| 前端    | Vue 3 + TypeScript + Vite + Pinia + Vue Router |
-| UI/编辑 | Ant Design Vue + TinyMCE + Viewer.js           |
-| 后端    | Node.js + Express + MySQL2 + Nginx（部署）     |
-| 其他    | Axios / WebSocket / GitHub Actions             |
+<img src="screenshots/resource1.png" alt="资源中心" width="85%" />
+<img src="screenshots/resource2.png" alt="标签详情" width="85%" />
 
-> Node 版本建议：`20.x`
+### 🏠 书签总览
 
-## ⚡ 当前功能
+进入轻笺的第一屏。左侧标签树导航，右侧展示选中标签下的书签卡片，边选边看。
 
-### 1) 书签模块（核心）
+- 标签树检索、拖拽排序，快速筛选书签
+- 卡片墙展示，支持多标签联合过滤
+- 右键快捷操作：编辑、删除、复制链接
+- 书签智能抓取网页标题、描述与图标
 
-- 智能标签关联：一个书签可绑定多个标签
-- 标签树与书签卡片支持拖拽排序
-- 支持按书签标题、URL、标签进行搜索
-- 右键快捷操作：编辑、删除、复制链接等
-- 首页右上角集成搜索入口，符合常见使用习惯
+<img src="screenshots/bookmark.png" alt="书签总览" width="85%" />
 
-### 2) 笔记模块（知识沉淀）
+### 📝 笔记库
 
-- 富文本编辑（标题、段落、图片、列表、表格等）
-- 支持标签筛选与关键词搜索
-- 笔记卡片/列表双视图（桌面端）
-- 支持目录（TOC）、批量删除、拖拽排序
-- 支持导出 PDF，便于归档与分享
+卡片与列表双视图浏览，支持标签筛选和关键词搜索，快速定位笔记。
 
-### 3) 云空间模块（个人文件中心）
+- 富文本编辑器（TinyMCE），支持图文、表格、代码块、高亮
+- 卡片/列表双视图（桌面端）
+- 目录（TOC）导航
+- 标签筛选 + 关键词搜索
+- 批量删除、拖拽排序
+- 导出 PDF
 
-- 默认配额：**1GB**（已按当前实现统一）
-- 支持多类型文件上传与管理（图片/视频/PDF/Word/Excel/音频等）
+<img src="screenshots/note1.png" alt="笔记库卡片视图与列表视图" width="85%" />
+
+### ☁️ 云空间
+
+个人文件中心，默认 1GB 配额。
+
+- 支持图片/视频/PDF/Word/Excel/音频等多类型文件上传预览
 - 文件夹管理 + 文件移动 + 拖拽排序
 - 类型/文件夹双维度过滤与搜索
-- 文件预览已支持：图片、PDF、音视频，Office 文件支持在线预览链路
-- 严格权限隔离：用户仅可访问自己的资源
+- Office 文件在线预览 · 图片/PDF/音视频原生预览
+- 外部分享下载（生成分享链接）
+- 严格权限隔离，用户仅可访问自己的资源
 
-### 4) 工作台模块（总览入口）
+<img src="screenshots/cloud-spance.png" alt="云空间" width="85%" />
 
-- 已上线统一工作台，聚合展示书签、标签、笔记、云文件的关键状态
-- 支持最近 7 天活跃数据、文件类型分布等可视化看板
-- 提供高频书签、标签热度、近期笔记、近期文件等效率列表
-- 内置快捷操作入口，可快速跳转到新增与管理流程
+### 🤖 AI 助手
 
-### 5) 配套能力
+内置 AI 对话面板，辅助知识处理。
 
-- 登录注册、GitHub OAuth 回调、个人中心、帮助文档、更新日志
-- 管理页支持标签与书签的编辑管理
-- AI 功能扩展预留（按路由与角色策略逐步开放）
+- 上下文问答 · 翻译切换
+- 快捷提问模板
+- 流式响应展示
 
-## 🚀 快速开始
+<img src="screenshots/ai-chat.png" alt="AI 助手对话" width="85%" />
 
-### 前端
+### 🔍 全局搜索
+
+跨模块统一检索入口，一次搜索覆盖书签、笔记、标签和文件。
+
+- 关键词 + 标签联合过滤
+- 批量标签筛选（SearchBatchTags）
+- 搜索结果聚合展示
+
+<img src="screenshots/search.png" alt="全局搜索" width="85%" />
+
+### 📊 工作台
+
+总览面板，聚合展示全局状态。
+
+- 最近 7 天活跃趋势图（G2Plot）
+- 高频书签、标签热度排行
+- 近期笔记、近期文件快捷入口
+- 文件类型分布可视化
+
+### 🗑️ 回收站
+
+统一管理已删除资源，防止误删丢失。
+
+### 🔐 安全中心 & 后台管理
+
+- **安全中心**：账号安全设置
+- **后台管理**（Root 角色）：
+  - API 日志 / 操作日志审计
+  - 用户管理 · 用户反馈处理
+  - 图片管理 · SQL 控制台
+  - 帮助文档管理
+
+### 🧭 更多能力
+
+- **国际化**：完整中英文双语支持（vue-i18n）
+- **多端适配**：桌面 + 移动端响应式布局
+- **主题系统**：基于 CSS 变量的浅色/深色主题
+- **WebSocket**：实时通知推送
+- **拖拽体系**：书签/标签/笔记/文件全模块拖拽排序
+- **埋点追踪**：操作日志 + 点击行为分析
+
+<div style="display: flex; justify-content: space-between;">
+<img src="screenshots/mobile1.png" alt="移动端首页浅色与暗色主题" width="85%" />
+<img src="screenshots/mobile2.png" alt="移动端首页浅色与暗色主题" width="85%" />
+</div>
+
+---
+
+## 技术栈
+
+| 层级      | 技术选型                         |
+| --------- | -------------------------------- |
+| 框架      | Vue 3 + TypeScript + Vite        |
+| 状态/路由 | Pinia + Vue Router               |
+| UI        | Ant Design Vue 4.x               |
+| 图表/图谱 | G2Plot + G6（AntV）              |
+| 编辑器    | TinyMCE + CodeMirror（SQL/JSON） |
+| 文档预览  | @vue-office（docx/xlsx/pdf）     |
+| 拖拽      | vue-draggable-plus               |
+| 国际化    | vue-i18n（zh-CN / en-US）        |
+| HTTP      | Axios                            |
+| 后端      | Node.js + Express + MySQL        |
+| 实时通信  | WebSocket                        |
+| 构建/CI   | GitHub Actions                   |
+
+---
+
+## 快速开始
 
 ```bash
-# 克隆项目
+# 克隆前端
 git clone https://github.com/VeteranBoLuo/light-note
 cd light-note
 
-# 安装依赖（任选其一）
+# 安装依赖
 pnpm install
-# 或
-npm install
 
-# 本地开发
+# 本地开发（默认 http://localhost:5173）
 pnpm dev
-# 或
-npm run dev
 
 # 生产构建
 pnpm build
-# 或
-npm run build
 ```
 
-默认访问地址：`http://localhost:5173`
+需要后端？请同步启动 [light-note-back](https://github.com/VeteranBoLuo/light-note-back)（导入 SQL → 配置数据库连接 → `node app.js`）。
 
-### 后端（按需）
+---
 
-```bash
-git clone https://github.com/VeteranBoLuo/BMS_Back
-```
+## 设计理念
 
-- 将后端仓库中的 SQL 初始化文件导入 MySQL
-- 按后端项目说明配置数据库连接（账号/密码/库名）
-- 启动后端服务后，再启动当前前端项目
+轻笺的核心理念是**以标签为第一公民**：
 
-后端仓库地址：<https://github.com/VeteranBoLuo/BMS_Back>
+- **标签即组织**：不依赖文件夹层级，用标签的交叉覆盖自然组织知识
+- **标签即搜索**：通过标签关联实现跨类型的聚合检索
+- **标签即发现**：标签图谱揭示知识点之间的隐性联系
 
-## ✨ 下一步规划
+---
 
-- 标签关联系统（书签、笔记、文件多端同步）
-- 知识卡片化（链接与笔记联动沉淀）
-- 内容自动分类与标签建议
-- 工作台数据分析增强（趋势分析与效率优化建议）
+## 路线图
 
-## 📢 更新日志
+- **知识联想**：基于标签网络和 AI 推荐相关内容
+- **自动化标签**：新资源入库时 AI 自动建议标签
+- **知识卡片联动**：笔记与书签双向引用，形成知识闭环
+- **开放 API**：为第三方工具提供标签化存取接口
+- **协作共享**：标签级权限控制的知识协作空间
 
-[查看更新日志](https://boluo66.top/updateLogs)
+---
 
-## ⭐ Stargazers
+## 更新日志
 
-感谢每一位关注和支持轻笺的朋友。
+[查看更新日志 →](https://boluo66.top/updateLogs)
+
+---
+
+## 贡献
+
+欢迎提交 Issue 和 PR。项目正处于活跃开发阶段，任何建议和贡献都很有价值。
+
+---
+
+## Stargazers
 
 [![Stargazers for light-note](https://reporoster.com/stars/VeteranBoLuo/light-note)](https://github.com/VeteranBoLuo/light-note/stargazers)
