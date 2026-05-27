@@ -385,7 +385,7 @@
     gap: 10px;
     max-height: 360px;
     overflow: auto;
-    padding-right: 2px;
+    padding: 2px 2px 0;
   }
 
   .tag-row {
