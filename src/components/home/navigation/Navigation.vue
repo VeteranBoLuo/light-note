@@ -52,6 +52,14 @@
             >{{ $t('navigation.note') }}
           </div>
           <div
+            id="nav-tag-entry"
+            :style="{ color: route.path.includes('/manage/tagMg') || route.path.includes('/manage/editTag') || route.path.startsWith('/tag/') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            v-click-log="OPERATION_LOG_MAP.navigation.tag"
+            @click="router.push('/manage/tagMg')"
+            >{{ $t('navigation.tag') }}
+          </div>
+          <div
             :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"

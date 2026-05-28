@@ -8,24 +8,6 @@
     <b-menu
       v-if="!bookmark.isMobile"
       placement="bottom"
-      :menu-options="[{ label: $t('navigation.tagManagement'), function: () => router.push('/manage/tagMg') }]"
-    >
-      <button class="navigation-action-btn" @click="router.push('/manage/tagMg')">
-        <svg-icon size="26" hover :src="icon.manage_categoryBtn_tag" />
-      </button>
-    </b-menu>
-    <b-menu
-      v-if="!bookmark.isMobile"
-      placement="bottom"
-      :menu-options="[{ label: $t('navigation.bookmarkManagement'), function: () => router.push('/manage/bookmarkMg') }]"
-    >
-      <button class="navigation-action-btn" @click="router.push('/manage/bookmarkMg')">
-        <svg-icon size="26" hover :src="icon.manage_categoryBtn_bookmark" />
-      </button>
-    </b-menu>
-    <b-menu
-      v-if="!bookmark.isMobile"
-      placement="bottom"
       :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }]"
     >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />

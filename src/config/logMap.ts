@@ -22,6 +22,7 @@ export const OPERATION_LOG_MAP = {
     home: '书签模块',
     note: '笔记模块',
     cloudSpace: '云空间模块',
+    tag: '标签模块',
     securityCenter: '安全中心',
     aiAssistant: 'AI智能助手模块',
   }),

@@ -28,6 +28,10 @@
               <a-switch title="隐藏空标签" size="small" v-model:checked="hideEmptyTags" />
             </template>
           </b-input>
+          <div ref="manageEntryRef" class="filter-manage-entry" @click="router.push('/manage/bookmarkMg')">
+            <svg-icon size="15" :src="icon.manage_categoryBtn_bookmark" />
+            <span class="filter-manage-text">{{ $t('navigation.bookmarkManagement') }}</span>
+          </div>
         </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
@@ -76,6 +80,7 @@
         </div>
       </template>
     </b-list>
+    <a-tour v-model:open="tourOpen" :steps="tourSteps" @close="handleTourClose" />
   </div>
 </template>
 
@@ -287,6 +292,56 @@
       fallbackTimer = null;
     }
   });
+
+  // ===== 书签管理迁移引导 Tour（仅 v1.x 版本使用，下个版本删除此块）=====
+  const TOUR_STORAGE_KEY = 'light-note:bookmark-mg-tour-dismissed';
+  const manageEntryRef = ref<HTMLElement | null>(null);
+  const tourOpen = ref(false);
+  const tourSteps = [
+    {
+      title: '新增标签模块',
+      description: '顶部导航新增了「标签」入口，点击即可管理所有标签。',
+      target: () => document.getElementById('nav-tag-entry'),
+      placement: 'bottom' as const,
+      nextButtonProps: {
+        children: () => '下一步',
+        type: 'primary' as const,
+        style: {
+          backgroundColor: '#615ced',
+          borderColor: '#615ced',
+        },
+      },
+    },
+    {
+      title: '书签管理入口已迁移',
+      description: '书签管理功能已移动到这里，点击即可进入管理页面。',
+      target: () => manageEntryRef.value as HTMLElement,
+      placement: 'right' as const,
+      prevButtonProps: {
+        children: () => '上一步',
+      },
+      nextButtonProps: {
+        children: () => '我知道了',
+        type: 'primary' as const,
+        style: {
+          backgroundColor: '#615ced',
+          borderColor: '#615ced',
+        },
+      },
+    },
+  ];
+  function handleTourClose() {
+    tourOpen.value = false;
+    localStorage.setItem(TOUR_STORAGE_KEY, '1');
+  }
+  onMounted(() => {
+    if (!localStorage.getItem(TOUR_STORAGE_KEY) && user.role !== 'visitor') {
+      setTimeout(() => {
+        tourOpen.value = true;
+      }, 800);
+    }
+  });
+  // ===== 书签管理迁移引导 Tour 结束 =====
 </script>
 
 <style lang="less" scoped>
@@ -303,6 +358,46 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .filter-manage-entry {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--desc-color);
+    background: linear-gradient(135deg, rgba(97, 92, 237, 0.04) 0%, rgba(97, 92, 237, 0.01) 100%);
+    transition: all 0.25s ease;
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 6px;
+      bottom: 6px;
+      width: 3px;
+      border-radius: 0 2px 2px 0;
+      background: linear-gradient(180deg, #615ced 0%, rgba(97, 92, 237, 0.3) 100%);
+      transition: all 0.25s ease;
+    }
+    &:hover {
+      color: var(--text-color);
+      background: linear-gradient(135deg, rgba(97, 92, 237, 0.08) 0%, rgba(97, 92, 237, 0.03) 100%);
+      box-shadow: 0 2px 8px rgba(97, 92, 237, 0.1);
+      transform: translateX(2px);
+      &::before {
+        width: 4px;
+        top: 4px;
+        bottom: 4px;
+      }
+    }
+  }
+  .filter-manage-text {
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.25s ease;
   }
 
   .empty-tag-toggle {
