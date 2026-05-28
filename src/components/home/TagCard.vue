@@ -65,9 +65,10 @@
   }
 
   function handleToTagPage(tag) {
-    router.push(`/home/${tag.id}`);
     bookmark.type = 'normal';
-    bookmark.refreshTag();
+    router.push(`/home/${tag.id}`).then(() => {
+      bookmark.refreshData();
+    });
   }
 
   function openTagDetail(tag) {

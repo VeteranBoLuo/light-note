@@ -39,7 +39,7 @@
               <span>{{ getFilePreviewLabel(item) }}</span>
             </div>
           </div>
-          <div v-if="!batchMode" class="file-card-overlay">
+<div v-if="!batchMode" class="file-card-overlay">
             <a-tooltip :title="$t('cloudSpace.download')">
               <svg-icon class="overlay-btn" :src="icon.cloudSpace.download" size="18" @click.stop="handleDownloadFile(item)" />
             </a-tooltip>
@@ -123,7 +123,7 @@
       </div>
       <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
     </div>
-    <div v-if="viewMode === 'table'" class="field-header">
+<div v-if="viewMode === 'table' || batchMode" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <a-checkbox
           v-if="batchMode"
@@ -141,7 +141,7 @@
         <div v-if="!bookmark.isMobile"> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div v-if="viewMode === 'table'" class="file-container">
+<div v-if="viewMode === 'table' || batchMode" class="file-container">
       <div
         class="field-item"
         :class="{ 'field-item-draggable': canDragFile(item) }"
@@ -1309,7 +1309,7 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    min-height: calc(1.2em * 2);
+min-height: calc(1.4em * 2);
   }
 
   .file-card-meta {

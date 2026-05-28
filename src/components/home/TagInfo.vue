@@ -53,9 +53,10 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   function handleToTagPage(tag) {
-    router.push({ path: `/home/${tag.id}` });
     bookmark.type = 'normal';
-    bookmark.refreshTag();
+    router.push({ path: `/home/${tag.id}` }).then(() => {
+      bookmark.refreshData();
+    });
   }
 </script>
 

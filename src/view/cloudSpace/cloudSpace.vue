@@ -451,6 +451,13 @@
       width: 100%;
     }
 
+    .mobile-tools {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
     .header-input {
       width: 300px;
     }
