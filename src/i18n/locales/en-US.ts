@@ -691,7 +691,6 @@ export default {
     resultTitle: 'Bookmarks',
     resultSubtitle: '{count} bookmarks',
     resultSubtitleKeyword: 'Search "{keyword}", {count} bookmarks',
-    relatedTag: 'Related Tags',
     noTags: 'No tags',
     emptyTitle: 'No matching bookmarks',
     emptyDesc: 'Try adjusting filters or add new bookmarks',

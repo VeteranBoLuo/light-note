@@ -682,7 +682,6 @@ export default {
     resultTitle: '书签列表',
     resultSubtitle: '共 {count} 个书签',
     resultSubtitleKeyword: '搜索「{keyword}」，共 {count} 个书签',
-    relatedTag: '关联标签',
     noTags: '暂无标签',
     emptyTitle: '暂无匹配的书签',
     emptyDesc: '尝试调整筛选条件或添加新的书签',

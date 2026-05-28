@@ -27,6 +27,7 @@
           >+{{ hiddenTagCount }}</span
         >
       </div>
+      <div v-else class="note-tags note-tags--empty"></div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
     <div v-if="!bookmark.isMobile" class="checkBox" :style="{ visibility: note.isCheck === true ? 'visible' : '' }">
@@ -94,19 +95,20 @@
 
 <style lang="less" scoped>
   .note-card {
+    --note-card-bg: color-mix(in srgb, var(--background-color) 94%, var(--card-bg-color) 6%);
     display: flex;
     flex-direction: column;
-    height: 300px;
+    height: 282px;
     position: relative;
-    border-radius: 10px;
-    border: 1px solid var(--card-border-color);
-    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, var(--desc-color) 18%);
+    padding: 18px 20px 16px;
     box-sizing: border-box;
     cursor: pointer;
-    background: var(--background-color);
+    background: var(--note-card-bg);
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.04),
-      0 1px 2px rgba(0, 0, 0, 0.06);
+      0 1px 0 rgba(255, 255, 255, 0.02) inset,
+      0 8px 18px rgba(0, 0, 0, 0.08);
     transition:
       transform 0.2s ease,
       box-shadow 0.2s ease,
@@ -115,9 +117,9 @@
     &:hover {
       transform: translateY(-2px);
       box-shadow:
-        0 8px 24px rgba(97, 92, 237, 0.1),
-        0 2px 8px rgba(0, 0, 0, 0.08);
-      border-color: #8b88f2;
+        0 1px 0 rgba(255, 255, 255, 0.03) inset,
+        0 12px 28px rgba(0, 0, 0, 0.14);
+      border-color: color-mix(in srgb, var(--primary-color) 36%, var(--card-border-color));
 
       .checkBox {
         visibility: visible;
@@ -134,6 +136,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 0 0 auto;
+    max-width: calc(100% - 32px);
   }
 
   .note-content {
@@ -141,11 +144,12 @@
     box-sizing: border-box;
     color: var(--desc-color);
     font-size: 13px;
-    line-height: 1.6;
+    line-height: 1.58;
     flex: 1 1 auto;
     min-height: 0;
     margin-top: 10px;
     overflow: hidden;
+    max-height: 154px;
 
     // 底部渐变淡出，避免硬截断
     &::after {
@@ -154,8 +158,8 @@
       bottom: 0;
       left: 0;
       right: 0;
-      height: 48px;
-      background: linear-gradient(to bottom, transparent, var(--background-color));
+      height: 42px;
+      background: linear-gradient(to bottom, transparent, var(--note-card-bg));
       pointer-events: none;
     }
 
@@ -172,7 +176,12 @@
 
   .note-footer {
     flex: 0 0 auto;
-    margin-top: 14px;
+    margin-top: auto;
+    padding-top: 12px;
+    min-height: 54px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
   }
 
   .note-tags {
@@ -185,7 +194,7 @@
     min-height: 24px;
     overflow: hidden;
     align-items: center;
-    margin: -7px 0 6px;
+    margin: -7px 0 7px;
 
     .b-tag {
       background-color: #eeedff;
@@ -203,6 +212,12 @@
         background-color: #615ced;
         color: #fff;
       }
+    }
+
+    &--empty {
+      padding-top: 0;
+      margin-top: 0;
+      visibility: hidden;
     }
 
     .tag-more {
@@ -228,8 +243,8 @@
   .checkBox {
     visibility: hidden;
     position: absolute;
-    right: 20px;
-    top: 22px;
+    right: 18px;
+    top: 20px;
   }
 
   @media (max-width: 1023px) {

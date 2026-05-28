@@ -1,5 +1,75 @@
 <template>
   <div class="field-list">
+    <div v-if="viewMode === 'card' && !batchMode" class="file-card-grid">
+      <article v-for="item in cloud.fileList" :key="item.id" class="file-card" @click="emit('previewFile', item)">
+        <div class="file-card-cover">
+          <img
+            v-if="isPreviewableImage(item)"
+            :src="item.fileUrl"
+            class="file-card-thumb"
+            :alt="item.fileName"
+            loading="lazy"
+            decoding="async"
+          />
+          <video
+            v-else-if="isPreviewableVideo(item)"
+            class="file-card-thumb"
+            :src="item.fileUrl"
+            preload="metadata"
+            muted
+            playsinline
+          />
+          <div v-else-if="isTextFile(item)" class="file-card-text-preview">
+            <div class="file-card-text-preview-head">{{ getFileTypeLabel(item) }}</div>
+            <div class="file-card-text-preview-body" :class="{ 'file-card-text-preview-body--loading': getTextPreviewState(item.id).loading }">
+              {{ getTextPreviewState(item.id).text || '正在加载内容预览...' }}
+            </div>
+          </div>
+          <div v-else class="file-card-placeholder" :class="`file-card-placeholder--${getFileCategory(item)}`">
+            <div class="file-card-placeholder-inner">
+              <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="34" />
+              <span>{{ getFilePreviewLabel(item) }}</span>
+            </div>
+          </div>
+          <div class="file-card-overlay">
+            <a-tooltip :title="$t('cloudSpace.download')">
+              <svg-icon class="overlay-btn" :src="icon.cloudSpace.download" size="18" @click.stop="handleDownloadFile(item)" />
+            </a-tooltip>
+            <a-tooltip :title="$t('common.delete')">
+              <svg-icon class="overlay-btn" :src="icon.noteDetail.delete" size="18" @click.stop="handleDelFile(item)" />
+            </a-tooltip>
+            <b-menu
+              class="overlay-menu"
+              v-if="!bookmark.isMobile"
+              :trigger="'click'"
+              :menu-options="[
+                { label: $t('cloudSpace.share'), icon: icon.cloudSpace.share, function: () => handleShareFile(item.id, item.fileName, item.fileType) },
+                { label: $t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile, function: () => emit('moveField', [item]) },
+                { label: $t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag, function: () => openTagDialog(item) },
+              ]"
+            >
+              <svg-icon class="overlay-btn" :src="icon.common.more" size="18" />
+            </b-menu>
+          </div>
+        </div>
+        <div class="file-card-body">
+          <div class="file-card-headline">
+            <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{ getFileTypeLabel(item) }}</span>
+            <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
+          </div>
+          <div class="file-card-name" :title="item.fileName">{{ item.fileName }}</div>
+          <div class="file-card-meta">
+            <span class="meta-label">{{ $t('cloudSpace.uploadTime') }}</span>
+            <span class="text-hidden">{{ item.uploadTime || '-' }}</span>
+          </div>
+          <div class="file-card-meta">
+            <span class="meta-label">{{ $t('cloudSpace.relateTags') }}</span>
+            <span class="text-hidden">{{ item.tags?.length ? item.tags.map((tag) => tag.name).join(' / ') : '-' }}</span>
+          </div>
+        </div>
+      </article>
+    </div>
+
     <div v-if="batchMode" class="batch-actions">
       <b-space :size="10">
         <b-button
@@ -38,7 +108,7 @@
       </div>
       <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
     </div>
-    <div class="field-header">
+    <div v-if="viewMode === 'table' || batchMode" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <a-checkbox
           v-if="batchMode"
@@ -56,7 +126,7 @@
         <div v-if="!bookmark.isMobile"> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div class="file-container">
+    <div v-if="viewMode === 'table' || batchMode" class="file-container">
       <div
         class="field-item"
         :class="{ 'field-item-draggable': canDragFile(item) }"
@@ -225,7 +295,7 @@
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
-  import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
+  import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
 
@@ -234,7 +304,8 @@
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
-  const props = defineProps<{ clearKey?: number; batchMode: boolean }>();
+  const props = defineProps<{ clearKey?: number; batchMode: boolean; viewMode?: 'card' | 'table' }>();
+  const viewMode = computed(() => props.viewMode ?? 'table');
 
   const batchMode = computed(() => props.batchMode ?? false);
   const selectedRows = ref<string[]>([]);
@@ -289,6 +360,103 @@
   });
 
   const getFileCategory = (file: { category?: string }) => getCloudFileCategory(file);
+  const getFileTypeLabel = (file: { category?: string }) => t(CLOUD_FILE_CATEGORY_LABEL_KEY[getFileCategory(file)]);
+  const TEXT_PREVIEW_CHAR_LIMIT = 180;
+  const TEXT_PREVIEW_LOAD_MAX = 32;
+  const textPreviewMap = ref<Record<string, { loading: boolean; text: string }>>({});
+  const textPreviewTaskMap = new Map<string, Promise<void>>();
+
+  function formatFileSize(bytes: number): string {
+    if (!bytes || bytes < 0) return '0 KB';
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / 1024).toFixed(0) + ' KB';
+  }
+
+  function isPreviewableImage(file: any): boolean {
+    return getFileCategory(file) === 'image' && !!file.fileUrl;
+  }
+
+  function isPreviewableVideo(file: any): boolean {
+    return getFileCategory(file) === 'video' && !!file.fileUrl;
+  }
+
+  function isTextFile(file: any): boolean {
+    return getFileCategory(file) === 'text' && !!file?.fileUrl;
+  }
+
+  function getFilePreviewLabel(file: any): string {
+    const ext = getFileExt(String(file?.fileName || '')).toUpperCase();
+    return ext || getFileTypeLabel(file);
+  }
+
+  function normalizePreviewText(raw: string): string {
+    const compact = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!compact) return '（文本内容为空）';
+    if (compact.length <= TEXT_PREVIEW_CHAR_LIMIT) return compact;
+    return compact.slice(0, TEXT_PREVIEW_CHAR_LIMIT) + '...';
+  }
+
+  async function readTextSnippet(url: string): Promise<string> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP_${response.status}`);
+    }
+    if (!response.body) {
+      const text = await response.text();
+      return normalizePreviewText(text);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let content = '';
+    const readLimit = TEXT_PREVIEW_CHAR_LIMIT + 80;
+    while (content.length < readLimit) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      content += decoder.decode(value, { stream: true });
+      if (content.length >= readLimit) {
+        await reader.cancel();
+        break;
+      }
+    }
+    content += decoder.decode();
+    return normalizePreviewText(content);
+  }
+
+  async function ensureTextPreview(file: any) {
+    if (!isTextFile(file)) return;
+    const key = String(file.id || '');
+    if (!key) return;
+    if (textPreviewMap.value[key] && !textPreviewMap.value[key].loading) return;
+    if (textPreviewTaskMap.has(key)) return;
+
+    textPreviewMap.value[key] = { loading: true, text: '' };
+    const task = (async () => {
+      try {
+        const text = await readTextSnippet(String(file.fileUrl || ''));
+        textPreviewMap.value[key] = { loading: false, text };
+      } catch (error) {
+        textPreviewMap.value[key] = { loading: false, text: '内容预览加载失败' };
+      } finally {
+        textPreviewTaskMap.delete(key);
+      }
+    })();
+
+    textPreviewTaskMap.set(key, task);
+    await task;
+  }
+
+  async function warmupTextPreviews() {
+    if (viewMode.value !== 'card' || batchMode.value) return;
+    const targets = cloud.fileList.filter((item) => isTextFile(item)).slice(0, TEXT_PREVIEW_LOAD_MAX);
+    for (const item of targets) {
+      await ensureTextPreview(item);
+    }
+  }
+
+  function getTextPreviewState(fileId: string | number) {
+    return textPreviewMap.value[String(fileId)] || { loading: false, text: '' };
+  }
 
   watch(
     () => cloud.fileList,
@@ -297,8 +465,24 @@
       const ids = list.map((item) => item.id);
       selectedRows.value = selectedRows.value.filter((id) => ids.includes(id));
       selectAll.value = list.length > 0 && selectedRows.value.length === list.length;
+
+      const idSet = new Set(ids.map((id) => String(id)));
+      Object.keys(textPreviewMap.value).forEach((key) => {
+        if (!idSet.has(key)) {
+          delete textPreviewMap.value[key];
+          textPreviewTaskMap.delete(key);
+        }
+      });
     },
     { deep: true },
+  );
+
+  watch(
+    () => [viewMode.value, batchMode.value, cloud.fileList.map((item) => String(item.id)).join(',')],
+    () => {
+      warmupTextPreviews();
+    },
+    { immediate: true },
   );
 
   watch(
@@ -692,6 +876,7 @@
 <style scoped lang="less">
   .field-list {
     flex: 1;
+    min-height: 0;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -875,5 +1060,269 @@
   .file-tags-empty {
     color: var(--desc-color);
     opacity: 0.7;
+  }
+
+  // ── 卡片视图 ──
+  .file-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
+    column-gap: 20px;
+    row-gap: 18px;
+    padding: 12px 6px 16px;
+    overflow-y: auto;
+    height: 100%;
+    align-content: start;
+  }
+
+  .file-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 278px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--folder-list-border-color) 82%, var(--desc-color) 18%);
+    background: color-mix(in srgb, var(--card-bg-color) 94%, var(--bl-input-noBorder-bg-color) 6%);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    overflow: hidden;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.02) inset,
+      0 8px 18px rgba(0, 0, 0, 0.08);
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.03) inset,
+        0 12px 28px rgba(0, 0, 0, 0.14);
+      border-color: color-mix(in srgb, var(--resource-file-color) 26%, var(--folder-list-border-color));
+    }
+  }
+
+  .file-card-cover {
+    position: relative;
+    width: 100%;
+    height: 142px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 92%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--folder-list-border-color) 76%, transparent);
+  }
+
+  .file-card-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .file-card-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: color-mix(in srgb, var(--desc-color) 84%, transparent);
+  }
+
+  .file-card-placeholder-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: inherit;
+    opacity: 0.88;
+  }
+
+  .file-card-placeholder-inner span {
+    max-width: 160px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--desc-color) 92%, transparent);
+    background: color-mix(in srgb, var(--common-tag-bg-color) 78%, transparent);
+  }
+
+  .file-card-placeholder--image    { background: color-mix(in srgb, #f97316 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--video    { background: color-mix(in srgb, #ef4444 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--audio    { background: color-mix(in srgb, #8b5cf6 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--pdf      { background: color-mix(in srgb, #dc2626 8%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--word     { background: color-mix(in srgb, #2563eb 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--excel    { background: color-mix(in srgb, #16a34a 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--ppt      { background: color-mix(in srgb, #ea580c 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--text     { background: color-mix(in srgb, #94a3b8 8%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--compress { background: color-mix(in srgb, #ca8a04 8%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--other    { background: color-mix(in srgb, #6b7280 7%, var(--bl-input-noBorder-bg-color)); }
+
+  .file-card-text-preview {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 90%, #111318 10%);
+    border-top: 1px solid color-mix(in srgb, var(--folder-list-border-color) 80%, transparent);
+  }
+
+  .file-card-text-preview-head {
+    font-size: 11px;
+    font-weight: 700;
+    color: color-mix(in srgb, var(--desc-color) 92%, #7f8794 8%);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .file-card-text-preview-body {
+    flex: 1;
+    min-height: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: color-mix(in srgb, var(--desc-color) 92%, #7f8794 8%);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    line-clamp: 6;
+    -webkit-box-orient: vertical;
+  }
+
+  .file-card-text-preview-body--loading {
+    color: var(--desc-color);
+    opacity: 0.65;
+  }
+
+  [data-theme='night'] .file-card-text-preview {
+    background: color-mix(in srgb, #1a1c22 86%, var(--bl-input-noBorder-bg-color) 14%);
+    border-top-color: color-mix(in srgb, #3b3f4a 78%, transparent);
+  }
+
+  [data-theme='night'] .file-card-text-preview-head {
+    color: #7f8794;
+  }
+
+  [data-theme='night'] .file-card-text-preview-body {
+    color: #8790a0;
+  }
+
+  .file-card-overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  .overlay-btn {
+    color: #fff;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+    cursor: pointer;
+    transition: transform 0.18s ease;
+    pointer-events: auto;
+    &:hover { transform: scale(1.15); }
+  }
+
+  .overlay-menu {
+    pointer-events: auto;
+  }
+
+  .file-card-body {
+    padding: 12px 14px 13px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-height: 136px;
+  }
+
+  .file-card-headline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .file-card-type {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--resource-file-color) 86%, var(--desc-color));
+    background: color-mix(in srgb, var(--resource-file-color) 9%, transparent);
+  }
+
+  .file-card-size {
+    font-size: 12px;
+    color: var(--desc-color);
+    font-weight: 600;
+    opacity: 0.86;
+    max-width: 46%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: calc(1.4em * 2);
+  }
+
+  .file-card-meta {
+    font-size: 12px;
+    color: var(--desc-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.4;
+    min-width: 0;
+    min-height: 18px;
+  }
+
+  .meta-label {
+    flex: 0 0 auto;
+    color: var(--text-color);
+    opacity: 0.78;
+    font-weight: 600;
+  }
+
+  @media (max-width: 1400px) {
+    .file-card-overlay { opacity: 1 !important; }
+  }
+
+  @media (max-width: 720px) {
+    .file-card-grid {
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      column-gap: 12px;
+      row-gap: 12px;
+      padding: 8px 0 12px;
+    }
+
+    .file-card {
+      min-height: 260px;
+    }
+
+    .file-card-cover {
+      height: 128px;
+    }
   }
 </style>

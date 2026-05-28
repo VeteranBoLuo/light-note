@@ -449,8 +449,9 @@
     width: 100%;
     padding: 20px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 30px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    column-gap: 24px;
+    row-gap: 22px;
     overflow: auto;
     box-sizing: border-box;
     align-content: start;
@@ -496,7 +497,7 @@
   }
 
   .note-card-skeleton-wrap {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   }
 
   .note-card-skeleton,
@@ -515,8 +516,8 @@
   }
 
   .note-card-skeleton {
-    height: 300px;
-    border: 1px solid var(--card-border-color);
+    height: 282px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, var(--desc-color) 18%);
   }
 
   .skeleton-line {
@@ -653,7 +654,7 @@
 
   @media (min-width: 2000px) {
     .note-library-body {
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     }
   }
   .back-icon {
@@ -720,6 +721,9 @@
   @media (max-width: 767px) {
     .note-library-body {
       margin-top: 40px;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 12px;
     }
   }
 </style>
