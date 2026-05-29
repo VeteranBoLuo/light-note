@@ -37,21 +37,18 @@
 </template>
 
 <script lang="ts" setup>
-  import { bookmarkStore } from '@/store';
+  import { useUserStore } from '@/store';
   import { ref } from 'vue';
   import { message } from 'ant-design-vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import router from '@/router';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { recordOperation } from '@/api/commonApi.ts';
 
-  const visible = defineModel<boolean>('visible');
-
-  const bookmark = bookmarkStore();
+  const user = useUserStore();
   const loading = ref(false);
 
   const edit = (id: string) => {

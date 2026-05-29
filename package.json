@@ -4,15 +4,6 @@
   "engines": {
     "node": "20.x"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@vue-office/docx",
-      "@vue-office/excel",
-      "@vue-office/pdf",
-      "@vue-office/pptx",
-      "vue-demi"
-    ]
-  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build",
@@ -23,6 +14,7 @@
     "websocket": "node src/http/websocket.ts"
   },
   "dependencies": {
+    "@ant-design/icons-vue": "7.0.1",
     "@antv/g2plot": "^2.4.31",
     "@antv/g6": "^5.1.1",
     "@codemirror/lang-json": "^6.0.2",

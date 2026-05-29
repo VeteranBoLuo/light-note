@@ -28,7 +28,12 @@
               <a-switch title="隐藏空标签" size="small" v-model:checked="hideEmptyTags" />
             </template>
           </b-input>
-          <div ref="manageEntryRef" class="filter-manage-entry" @click="router.push('/manage/bookmarkMg')">
+          <div
+            v-if="!bookmark.isMobile"
+            ref="manageEntryRef"
+            class="filter-manage-entry"
+            @click="router.push('/manage/bookmarkMg')"
+          >
             <svg-icon size="15" :src="icon.manage_categoryBtn_bookmark" />
             <span class="filter-manage-text">{{ $t('navigation.bookmarkManagement') }}</span>
           </div>
@@ -80,7 +85,7 @@
         </div>
       </template>
     </b-list>
-    <a-tour v-model:open="tourOpen" :steps="tourSteps" @close="handleTourClose" />
+    <a-tour v-if="!bookmark.isMobile" v-model:open="tourOpen" :steps="tourSteps" @close="handleTourClose" />
   </div>
 </template>
 
@@ -97,7 +102,6 @@
   import icon from '@/config/icon.ts';
   import BList from '@/components/base/BasicComponents/BList.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { recordOperation } from '@/api/commonApi.ts';
 
   const tagName = ref('');
@@ -335,7 +339,7 @@
     localStorage.setItem(TOUR_STORAGE_KEY, '1');
   }
   onMounted(() => {
-    if (!localStorage.getItem(TOUR_STORAGE_KEY) && user.role !== 'visitor') {
+    if (!bookmark.isMobile && !localStorage.getItem(TOUR_STORAGE_KEY) && user.role !== 'visitor') {
       setTimeout(() => {
         tourOpen.value = true;
       }, 800);

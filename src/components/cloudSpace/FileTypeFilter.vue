@@ -4,8 +4,8 @@
     <div class="filter-dropdown">
       <b-button class="filter-button" :class="{ 'filter-button--active': showFilterMenu }" @click="toggleFilterMenu" v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }">
         <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
-        <span>{{ bookmark.isDesktop ? $t('cloudSpace.fileType') : '' }}</span>
-        <span v-if="selectedCount > 0 && selectedCount < fileTypes.length && bookmark.isDesktop" class="filter-badge">
+        <span class="filter-button-label">{{ $t('cloudSpace.fileType') }}</span>
+        <span v-if="selectedCount > 0 && selectedCount < fileTypes.length" class="filter-badge">
           {{ selectedCount }}
         </span>
         <i :class="['arrow', { 'arrow-up': showFilterMenu }]"></i>
@@ -33,7 +33,7 @@
   import { computed, ref, watch } from 'vue';
   import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
-  import { cloudSpaceStore, bookmarkStore } from '@/store';
+  import { cloudSpaceStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
@@ -54,7 +54,6 @@
     })),
   );
   const cloud = cloudSpaceStore();
-  const bookmark = bookmarkStore();
   const showFilterMenu = ref(false);
   const allTypesSelected = ref(true);
   const indeterminate = ref(false);
@@ -257,8 +256,58 @@
     flex-shrink: 0;
   }
   @media (max-width: 768px) {
+    .filter-container {
+      display: block;
+      min-width: 0;
+    }
+
+    .filter-dropdown {
+      position: static;
+    }
+
+    .filter-button {
+      width: 100%;
+      justify-content: center;
+      padding: 0 10px;
+    }
+
+    .filter-button-label {
+      max-width: 5em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .filter-menu {
-      width: 180px;
+      position: absolute;
+      left: auto;
+      right: 0;
+      width: min(320px, calc(100vw - 32px));
+      max-height: min(420px, calc(100vh - 170px));
+      box-sizing: border-box;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .filter-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+
+    .filter-option {
+      min-width: 0;
+      padding: 0 6px;
+    }
+
+    .filter-option :deep(span:last-child) {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 </style>

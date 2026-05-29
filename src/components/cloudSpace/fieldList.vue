@@ -1284,7 +1284,7 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    min-height: calc(1.4em * 2);
+    min-height: calc(1.2em * 2);
   }
 
   .file-card-meta {

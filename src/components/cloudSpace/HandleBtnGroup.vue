@@ -2,7 +2,7 @@
   <b-space :size="15">
     <CloudStorageBar v-if="!bookmark.isMobile" />
     <!-- 上传按钮及提示 -->
-    <div class="upload-container">
+    <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
       <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
         <b-button type="primary">
           <UploadOutlined />
@@ -358,6 +358,24 @@
         &:hover {
           background: linear-gradient(135deg, #73d13d 0%, #52c41a 100%);
           box-shadow: 0 8px 24px rgba(82, 196, 26, 0.4);
+        }
+      }
+    }
+  }
+
+  .upload-container--mobile {
+    .upload-btn {
+      :deep(.ant-btn) {
+        width: 34px;
+        height: 32px;
+        padding: 0;
+        border-radius: 8px;
+        box-shadow: none;
+        text-shadow: none;
+
+        .anticon {
+          margin-right: 0;
+          font-size: 16px;
         }
       }
     }

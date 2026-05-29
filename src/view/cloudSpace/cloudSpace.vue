@@ -16,28 +16,31 @@
       </div>
 
       <div class="header">
-        <div v-if="bookmark.isMobile" class="mobile-header-left">
-          <b-input
-            v-model:value="cloud.searchFileName"
-            :placeholder="$t('cloudSpace.fileName')"
-            class="header-input"
-            @enter="cloud.queryFieldList"
-          >
-            <template #suffix>
-              <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
-            </template>
-          </b-input>
-            <div class="mobile-tools">
-              <div class="view-toggle mobile-view-toggle">
-                <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
-                  <svg-icon :src="cardViewIcon" size="14" />
-                </button>
-                <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="viewMode = 'table'">
-                  <svg-icon :src="listViewIcon" size="14" />
-                </button>
-              </div>
-              <FileTypeFilter />
+        <div v-if="bookmark.isMobile" class="mobile-header">
+          <div class="mobile-search-row">
+            <b-input
+              v-model:value="cloud.searchFileName"
+              :placeholder="$t('cloudSpace.fileName')"
+              class="header-input"
+              @enter="cloud.queryFieldList"
+            >
+              <template #suffix>
+                <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
+              </template>
+            </b-input>
+            <HandleBtnGroup ref="handleBtnGroup" class="mobile-upload-actions" />
+          </div>
+          <div class="mobile-tools">
+            <div class="view-toggle mobile-view-toggle">
+              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
+                <svg-icon :src="cardViewIcon" size="14" />
+              </button>
+              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="viewMode = 'table'">
+                <svg-icon :src="listViewIcon" size="14" />
+              </button>
             </div>
+            <FileTypeFilter />
+          </div>
         </div>
         <div v-else class="header-pc">
           <div class="flex-align-center" style="flex:1; min-width:0">
@@ -391,7 +394,6 @@
 
   onMounted(() => {
     if (bookmark.isMobile) {
-      batchMode.value = true;
       cloud.queryFolder();
     }
     // 为window添加粘贴事件监听
@@ -424,18 +426,29 @@
     align-items: center;
     flex-shrink: 0;
 
-    .mobile-header-left {
+    .mobile-header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .mobile-search-row {
       display: flex;
       align-items: center;
       gap: 8px;
-      flex: 1;
+      min-width: 0;
+      width: 100%;
     }
 
     .mobile-tools {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 6px;
-      flex-shrink: 0;
+      min-width: 0;
+      width: 100%;
     }
 
     .header-input {
@@ -615,15 +628,17 @@
       padding: unset;
     }
     .header {
-      height: 40px;
+      height: auto;
+      min-height: 40px;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: stretch;
       gap: 10px;
 
       .header-input {
         flex: 1;
         width: auto;
+        min-width: 0;
       }
 
       .batch-toggle-btn {
@@ -633,9 +648,19 @@
     }
 
     .mobile-tools {
-      :deep(.filter-container) {
+      .mobile-view-toggle {
         margin-left: 0;
       }
+
+      :deep(.filter-container) {
+        margin-left: 0;
+        flex: 1;
+        min-width: 0;
+      }
+    }
+
+    .mobile-upload-actions {
+      flex-shrink: 0;
     }
 
     .mobile-folder-filter {

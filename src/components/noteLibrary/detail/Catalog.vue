@@ -21,7 +21,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { nextTick, ref, watch } from 'vue';
+  import { nextTick, onUnmounted, ref, watch } from 'vue';
   import { bookmarkStore, noteStore } from '@/store';
   import { customTimer } from '@/utils/common.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -70,10 +70,16 @@
 
   watch(
     () => props.content,
-    () => {
+    async () => {
+      await nextTick();
       note.generateTOC();
     },
+    { immediate: true, flush: 'post' },
   );
+
+  onUnmounted(() => {
+    document.removeEventListener('click', closeCategory);
+  });
 </script>
 
 <style scoped>
