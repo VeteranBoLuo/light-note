@@ -209,9 +209,9 @@
     getCloudPreviewType,
   } from '@/constants/cloudFileCategory.ts';
 
-  const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx'));
-  const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel'));
-  const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx'));
+  const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
+  const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
+  const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx/lib/v3/vue-office-pptx.mjs'));
 
   // 引入Ant Design Vue图标
   import {
@@ -328,7 +328,7 @@
 
   async function ensureOfficeStylesLoaded() {
     if (officeStyleLoaded) return;
-    await Promise.all([import('@vue-office/docx/lib/index.css'), import('@vue-office/excel/lib/index.css')]);
+    await Promise.all([import('@vue-office/docx/lib/v3/index.css'), import('@vue-office/excel/lib/v3/index.css')]);
     officeStyleLoaded = true;
   }
 
