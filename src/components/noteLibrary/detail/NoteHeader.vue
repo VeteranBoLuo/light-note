@@ -51,6 +51,7 @@
     </div>
     <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="handleTagSaved" />
     <ActionCardModal
+      v-if="exportModalVisible"
       v-model:visible="exportModalVisible"
       maskClosable
       :title="$t('noteDetail.exportNote')"
@@ -65,18 +66,19 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import router from '@/router';
-  import { ref } from 'vue';
-  import NoteTagConfig from '@/components/noteLibrary/detail/NoteTagConfig.vue';
+  import { defineAsyncComponent, ref } from 'vue';
   import { generatePDF } from '@/utils/htmlToPdf.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import TurndownService from 'turndown';
-  import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import { watch } from 'vue';
   import { recordOperation } from '@/api/commonApi.ts';
+
+  const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
+  const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
   const props = defineProps<{
     updateTime: string;

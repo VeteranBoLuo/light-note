@@ -150,6 +150,7 @@ watch(
       Object.assign(eventDetail, { event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
     }
   },
+  { immediate: true },
 );
 </script>
 

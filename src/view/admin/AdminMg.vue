@@ -4,9 +4,12 @@
 </template>
 
 <script lang="ts" setup>
-  import PAdmin from '@/view/admin/admin/PAdmin.vue';
-  import Admin from '@/view/admin/admin/Admin.vue';
+  import { defineAsyncComponent } from 'vue';
   import { bookmarkStore } from '@/store';
+
+  const PAdmin = defineAsyncComponent(() => import('@/view/admin/admin/PAdmin.vue'));
+  const Admin = defineAsyncComponent(() => import('@/view/admin/admin/Admin.vue'));
+
   const bookmark = bookmarkStore();
 </script>
 

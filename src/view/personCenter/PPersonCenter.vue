@@ -183,13 +183,14 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, ref } from 'vue';
+  import { computed, defineAsyncComponent, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
-  import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
   import i18n from '@/i18n';
+
+  const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();

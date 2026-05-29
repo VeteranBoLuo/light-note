@@ -275,29 +275,30 @@
       </div>
     </b-modal>
 
-    <FileTagConfig v-model:visible="tagModalVisible" :file="activeTagFile" @saved="cloud.queryFieldList" />
+    <FileTagConfig v-if="tagModalVisible" v-model:visible="tagModalVisible" :file="activeTagFile" @saved="cloud.queryFieldList" />
   </div>
 </template>
 <script setup lang="ts">
+  import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import FileTagConfig from '@/components/cloudSpace/FileTagConfig.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
   import icon from '@/config/icon.ts';
   import { deleteField, downloadField, shareField } from '@/http/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { nextTick, ref, computed, watch } from 'vue';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
+
+  const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
   const { t } = useI18n();
   const emit = defineEmits(['previewFile', 'moveField']);

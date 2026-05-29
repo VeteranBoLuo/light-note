@@ -215,6 +215,7 @@
       <input type="file" ref="importHTMLFileInput" accept=".html,.htm" style="display: none" @change="handleHTMLFileChange" />
 
       <ActionCardModal
+        v-if="importExportModalVisible"
         v-model:visible="importExportModalVisible"
         :title="$t('bookmarkMg.importExport')"
         :sections="importExportSections"
@@ -226,7 +227,7 @@
 
 <script lang="ts" setup>
 import { bookmarkStore, useUserStore } from '@/store';
-import { computed, ref } from 'vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import { message } from 'ant-design-vue';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -237,10 +238,11 @@ import icon from '@/config/icon.ts';
 import BSpace from '@/components/base/BasicComponents/BSpace.vue';
 import BLoading from '@/components/base/BasicComponents/BLoading.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
-import ActionCardModal from '@/components/base/ActionCardModal.vue';
 import { useI18n } from 'vue-i18n';
 import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
 import { recordOperation } from '@/api/commonApi.ts';
+
+const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
 const user = useUserStore();
 const { t } = useI18n();

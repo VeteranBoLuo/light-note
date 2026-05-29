@@ -4,8 +4,11 @@
 </template>
 
 <script lang="ts" setup>
-import PSecurityCenter from './PSecurityCenter.vue';
-import SecurityCenter from './SecurityCenter.vue';
+import { defineAsyncComponent } from 'vue';
 import { bookmarkStore } from '@/store';
+
+const PSecurityCenter = defineAsyncComponent(() => import('./PSecurityCenter.vue'));
+const SecurityCenter = defineAsyncComponent(() => import('./SecurityCenter.vue'));
+
 const bookmark = bookmarkStore();
 </script>

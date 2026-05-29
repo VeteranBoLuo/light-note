@@ -101,10 +101,11 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted, computed } from 'vue';
-  import ChatContainer from '@/view/aiAssistant/ChatContainer.vue';
+  import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue';
   import { message } from 'ant-design-vue';
   import { useI18n } from 'vue-i18n';
+
+  const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));
 
   const { t } = useI18n();
 

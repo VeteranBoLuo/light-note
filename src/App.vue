@@ -16,15 +16,13 @@
 </template>
 <script setup lang="ts">
   import { bookmarkStore, useUserStore } from '@/store';
-  import { h, nextTick, onMounted, onBeforeUnmount, watch, computed } from 'vue';
-  import Login from '@/view/login/UserAuthModal.vue';
+  import { h, nextTick, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet } from '@/http/request';
   import { getNoticeSummary } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { fingerprint } from '@/utils/common';
   import { message, notification } from 'ant-design-vue';
-  import FloatQuestion from './components/aiAssistant/FloatQuestion.vue';
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
   import { updateNotice } from '@/config/updateNotice';
@@ -32,6 +30,9 @@
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { useI18n } from 'vue-i18n';
   import { getAdminLoginPreviewPreferences, isAdminLoginPreview } from '@/utils/authStorage.ts';
+
+  const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
+  const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
 
   const router = useRouter();
   const user = useUserStore();

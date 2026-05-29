@@ -18,12 +18,14 @@
       </div>
 
       <EventDetailDrawer
+        v-if="eventDetailVisible"
         :visible="eventDetailVisible"
         :event-id="currentEventId"
         @close="eventDetailVisible = false"
         @saved="onEventSaved"
       />
       <IpAccountDrawer
+        v-if="ipAccountVisible"
         :visible="ipAccountVisible"
         :ip="currentIp"
         :ip-banned="currentIpBanned"
@@ -34,13 +36,11 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, provide, ref } from 'vue';
+  import { computed, defineAsyncComponent, provide, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { message } from 'ant-design-vue';
   import { apiBasePost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import EventDetailDrawer from './EventDetailDrawer.vue';
-  import IpAccountDrawer from './IpAccountDrawer.vue';
   import {
     securityTabs,
     getRouteTab,
@@ -54,6 +54,9 @@
     BAN_ACCOUNT,
     UNBAN_ACCOUNT,
   } from './securityShared';
+
+  const EventDetailDrawer = defineAsyncComponent(() => import('./EventDetailDrawer.vue'));
+  const IpAccountDrawer = defineAsyncComponent(() => import('./IpAccountDrawer.vue'));
 
   const route = useRoute();
   const router = useRouter();

@@ -133,13 +133,15 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, onBeforeUnmount, ref } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
-  import MyInfo from '@/components/personCenter/myInfo/MyInfo.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
   import { updateNotice } from '@/config/updateNotice';
+
+  const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
+
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const getPopupContainer = (trigger: HTMLElement) => {

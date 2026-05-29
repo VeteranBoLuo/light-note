@@ -169,6 +169,7 @@
         loadIpAccounts();
       }
     },
+    { immediate: true },
   );
 </script>
 

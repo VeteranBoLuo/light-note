@@ -193,6 +193,7 @@
         fetchData();
       }
     },
+    { immediate: true },
   );
 
   function normalizeTag(raw: any): TagItem {

@@ -4,9 +4,12 @@
 </template>
 
 <script lang="ts" setup>
+  import { defineAsyncComponent } from 'vue';
   import { bookmarkStore } from '@/store';
-  import BookmarkEdit from '@/components/manage/bookmarkEditMg/BookmarkEdit.vue';
-  import PBookmarkEdit from '@/components/manage/bookmarkEditMg/PBookmarkEdit.vue';
+
+  const BookmarkEdit = defineAsyncComponent(() => import('@/components/manage/bookmarkEditMg/BookmarkEdit.vue'));
+  const PBookmarkEdit = defineAsyncComponent(() => import('@/components/manage/bookmarkEditMg/PBookmarkEdit.vue'));
+
   const bookmark = bookmarkStore();
 </script>
 

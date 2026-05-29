@@ -32,11 +32,13 @@
 
 <script lang="ts" setup>
   import { bookmarkStore } from '@/store';
-  import Help from '@/components/personCenter/help/Help.vue';
-  import ChatContainer from '@/view/aiAssistant/ChatContainer.vue';
-  import { ref } from 'vue';
+  import { defineAsyncComponent, ref } from 'vue';
   import { message } from 'ant-design-vue';
   import { useI18n } from 'vue-i18n';
+
+  const Help = defineAsyncComponent(() => import('@/components/personCenter/help/Help.vue'));
+  const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));
+
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const aiAssistantRef = ref(null);

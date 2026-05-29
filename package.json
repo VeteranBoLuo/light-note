@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build",
     "preview": "vite preview",
+    "preview:build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build && vite preview",
     "prettier:comment": "自动格式化当前目录下的所有文件",
     "prettier": "prettier --write",
     "sql": "node src/sql/index.ts",
