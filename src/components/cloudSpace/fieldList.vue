@@ -1,8 +1,16 @@
 <template>
   <div class="field-list">
-    <div v-if="viewMode === 'card' && !batchMode" class="file-card-grid">
-      <article v-for="item in cloud.fileList" :key="item.id" class="file-card" @click="emit('previewFile', item)">
+    <div v-if="viewMode === 'card'" class="file-card-grid">
+      <article v-for="item in cloud.fileList" :key="item.id" class="file-card"
+	        :class="{ 'file-card--batch': batchMode, 'file-card--selected': batchMode && selectedRows.includes(item.id) }"
+	        @click="onCardClick(item)">
         <div class="file-card-cover">
+          <span v-if="batchMode" class="card-checkbox" @click.stop>
+            <b-checkbox
+              :isCheck="selectedRows.includes(item.id)"
+              @update:isCheck="(val: boolean) => toggleRow(item.id, val)"
+            />
+          </span>
           <img
             v-if="isPreviewableImage(item)"
             :src="item.fileUrl"
@@ -31,7 +39,7 @@
               <span>{{ getFilePreviewLabel(item) }}</span>
             </div>
           </div>
-          <div class="file-card-overlay">
+          <div v-if="!batchMode" class="file-card-overlay">
             <a-tooltip :title="$t('cloudSpace.download')">
               <svg-icon class="overlay-btn" :src="icon.cloudSpace.download" size="18" @click.stop="handleDownloadFile(item)" />
             </a-tooltip>
@@ -72,6 +80,14 @@
 
     <div v-if="batchMode" class="batch-actions">
       <b-space :size="10">
+        <a-checkbox
+          v-if="viewMode === 'card'"
+          :indeterminate="indeterminate"
+          :checked="selectAll"
+          @change="onToggleSelectAll"
+          class="batch-select-all"
+        />
+        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
         <b-button
           size="small"
           type="danger"
@@ -93,7 +109,6 @@
         >
           {{ $t('cloudSpace.batchDownload') }}
         </b-button>
-        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
       </b-space>
     </div>
     <div v-if="downloadProgress.visible" class="download-progress-floating">
@@ -108,7 +123,7 @@
       </div>
       <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
     </div>
-    <div v-if="viewMode === 'table' || batchMode" class="field-header">
+    <div v-if="viewMode === 'table'" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <a-checkbox
           v-if="batchMode"
@@ -126,7 +141,7 @@
         <div v-if="!bookmark.isMobile"> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div v-if="viewMode === 'table' || batchMode" class="file-container">
+    <div v-if="viewMode === 'table'" class="file-container">
       <div
         class="field-item"
         :class="{ 'field-item-draggable': canDragFile(item) }"
@@ -137,12 +152,12 @@
         :key="index"
       >
         <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
-          <a-checkbox
-            v-if="batchMode"
-            :checked="selectedRows.includes(item.id)"
-            @change="(e: any) => toggleRow(item.id, e.target.checked)"
-            class="row-checkbox"
-          />
+          <span v-if="batchMode" class="row-checkbox" @click.stop>
+            <b-checkbox
+              :isCheck="selectedRows.includes(item.id)"
+              @update:isCheck="(val: boolean) => toggleRow(item.id, val)"
+            />
+          </span>
           <div
             v-if="!item.isRename"
             class="file-label flex-align-center"
@@ -285,6 +300,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import { message } from 'ant-design-vue';
@@ -329,6 +345,14 @@
       selectedRows.value = selectedRows.value.filter((itemId) => itemId !== id);
     }
     selectAll.value = cloud.fileList.length > 0 && selectedRows.value.length === cloud.fileList.length;
+  };
+
+  const onCardClick = (item: any) => {
+    if (batchMode.value) {
+      toggleRow(item.id, !selectedRows.value.includes(item.id));
+    } else {
+      emit('previewFile', item);
+    }
   };
 
   const goToTagDetail = (tagId: string) => {
@@ -1324,6 +1348,68 @@
 
     .file-card-cover {
       height: 128px;
+    }
+  }
+
+  // ── 卡片批量勾选样式 ──
+  .card-checkbox {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    z-index: 10;
+    line-height: 0;
+  }
+
+  .file-card--batch {
+    cursor: pointer;
+    user-select: none;
+    &.file-card--selected {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 30%, transparent);
+      background: color-mix(in srgb, var(--primary-color) 5%, var(--card-bg-color));
+      &:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 40%, transparent);
+      }
+    }
+  }
+
+  .batch-select-all {
+    margin-right: 2px;
+  }
+
+  // 全选 a-checkbox 覆写：与 b-checkbox 蓝底风格统一
+  .batch-select-all,
+  .header-checkbox {
+    :deep(.ant-checkbox-inner) {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border-color: var(--card-border-color);
+      background: transparent;
+      transition: all 0.1s ease;
+    }
+    &:hover :deep(.ant-checkbox-inner) {
+      border-color: var(--primary-color) !important;
+    }
+    :deep(.ant-checkbox-checked .ant-checkbox-inner) {
+      background-color: var(--primary-color) !important;
+      border-color: var(--primary-color) !important;
+    }
+    :deep(.ant-checkbox-indeterminate .ant-checkbox-inner) {
+      background-color: var(--primary-color) !important;
+      border-color: var(--primary-color) !important;
+    }
+    :deep(.ant-checkbox-indeterminate .ant-checkbox-inner::after) {
+      background-color: #fff !important;
+    }
+  }
+  [data-theme='night'] {
+    .batch-select-all,
+    .header-checkbox {
+      :deep(.ant-checkbox-inner) {
+        border-color: #6e6e77 !important;
+      }
     }
   }
 </style>
