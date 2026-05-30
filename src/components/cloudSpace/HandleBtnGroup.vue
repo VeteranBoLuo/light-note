@@ -396,7 +396,7 @@
 
   .upload-progress {
     position: fixed;
-    top: 20px;
+    top: 70px;
     right: 20px;
     z-index: 1000;
     width: 320px;
@@ -636,6 +636,7 @@
       right: 10px;
       width: auto;
       max-width: none;
+      z-index: 1001;
     }
   }
 </style>

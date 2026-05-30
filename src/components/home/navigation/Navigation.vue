@@ -1,5 +1,12 @@
 <template>
-  <div :class="['navigation', { 'navigation-manage': pagePath === '/manage' }]">
+  <div
+    :class="[
+      'navigation',
+      {
+        'navigation-manage': pagePath === '/manage',
+      },
+    ]"
+  >
     <div id="navigation-container" class="flex-align-center">
       <div class="navigation-title">
         <svg-icon
@@ -24,51 +31,72 @@
       <div class="navigation-tab flex-align-center" style="gap: 30px; width: max-content">
         <template v-if="navigationFucVisible">
           <div
-            :style="{ color: route.path.includes('/workbenches') ? '#615ced' : '' }"
+            :style="{
+              color: route.path.includes('/workbenches') ? '#615ced' : '',
+            }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.work"
             @click="router.push('/workbenches')"
             >{{ $t('navigation.workbench') }}</div
           >
+
           <div
-            :style="{ color: route.path.includes('/search') ? '#615ced' : '' }"
-            style="font-size: 14px; cursor: pointer"
-            v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
-            @click="router.push('/search')"
-            >{{ $t('navigation.resourceCenter') }}</div
-          >
-          <div
-            :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
+            :style="{
+              color: route.path.includes('/home') ? '#615ced' : '',
+            }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"
             @click="handleToBookmark"
             >{{ $t('navigation.bookmark') }}</div
           >
           <div
-            :style="{ color: route.path.includes('/noteLibrary') ? '#615ced' : '' }"
+            :style="{
+              color: route.path.includes('/noteLibrary') ? '#615ced' : '',
+            }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.note"
             @click="router.push('/noteLibrary')"
             >{{ $t('navigation.note') }}
           </div>
           <div
-            id="nav-tag-entry"
-            :style="{ color: route.path.includes('/manage/tagMg') || route.path.includes('/manage/editTag') || route.path.startsWith('/tag/') ? '#615ced' : '' }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            v-click-log="OPERATION_LOG_MAP.navigation.tag"
-            @click="router.push('/manage/tagMg')"
-            >{{ $t('navigation.tag') }}
-          </div>
-          <div
-            :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
+            :style="{
+              color: route.path.includes('/cloudSpace') ? '#615ced' : '',
+            }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
             @click="handleToCloudSpace"
             >{{ $t('navigation.cloudSpace') }}
           </div>
           <div
+            id="nav-tag-entry"
+            :style="{
+              color:
+                route.path.includes('/manage/tagMg') ||
+                route.path.includes('/manage/editTag') ||
+                route.path.startsWith('/tag/')
+                  ? '#615ced'
+                  : '',
+            }"
+            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            v-click-log="OPERATION_LOG_MAP.navigation.tag"
+            @click="router.push('/manage/tagMg')"
+            >{{ $t('navigation.tag') }}
+          </div>
+
+          <div
+            :style="{
+              color: route.path.includes('/search') ? '#615ced' : '',
+            }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
+            @click="router.push('/search')"
+            >{{ $t('navigation.resourceCenter') }}</div
+          >
+          <div
             v-if="user.role === 'root'"
-            :style="{ color: route.path.includes('/securityCenter') ? '#615ced' : '' }"
+            :style="{
+              color: route.path.includes('/securityCenter') ? '#615ced' : '',
+            }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
             v-click-log="OPERATION_LOG_MAP.navigation.securityCenter"
             @click="router.push('/securityCenter')"
@@ -102,7 +130,9 @@
   async function handleToIndex() {
     bookmark.type = 'all';
     bookmark.refreshData();
-    await router.push({ path: `/` });
+    await router.push({
+      path: `/`,
+    });
     bookmark.isFold = true;
   }
 
