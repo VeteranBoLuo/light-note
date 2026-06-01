@@ -1,9 +1,13 @@
 <template>
   <div class="field-list">
     <div v-if="viewMode === 'card'" class="file-card-grid">
-      <article v-for="item in cloud.fileList" :key="item.id" class="file-card"
-	        :class="{ 'file-card--batch': batchMode, 'file-card--selected': batchMode && selectedRows.includes(item.id) }"
-	        @click="onCardClick(item)">
+      <article
+        v-for="item in cloud.fileList"
+        :key="item.id"
+        class="file-card"
+        :class="{ 'file-card--batch': batchMode, 'file-card--selected': batchMode && selectedRows.includes(item.id) }"
+        @click="onCardClick(item)"
+      >
         <div class="file-card-cover">
           <span v-if="batchMode" class="card-checkbox" @click.stop>
             <b-checkbox
@@ -29,7 +33,10 @@
           />
           <div v-else-if="isTextFile(item)" class="file-card-text-preview">
             <div class="file-card-text-preview-head">{{ getFileTypeLabel(item) }}</div>
-            <div class="file-card-text-preview-body" :class="{ 'file-card-text-preview-body--loading': getTextPreviewState(item.id).loading }">
+            <div
+              class="file-card-text-preview-body"
+              :class="{ 'file-card-text-preview-body--loading': getTextPreviewState(item.id).loading }"
+            >
               {{ getTextPreviewState(item.id).text || '正在加载内容预览...' }}
             </div>
           </div>
@@ -41,7 +48,12 @@
           </div>
           <div v-if="!batchMode" class="file-card-overlay">
             <a-tooltip :title="$t('cloudSpace.download')">
-              <svg-icon class="overlay-btn" :src="icon.cloudSpace.download" size="18" @click.stop="handleDownloadFile(item)" />
+              <svg-icon
+                class="overlay-btn"
+                :src="icon.cloudSpace.download"
+                size="18"
+                @click.stop="handleDownloadFile(item)"
+              />
             </a-tooltip>
             <a-tooltip :title="$t('common.delete')">
               <svg-icon class="overlay-btn" :src="icon.noteDetail.delete" size="18" @click.stop="handleDelFile(item)" />
@@ -51,9 +63,21 @@
               v-if="!bookmark.isMobile"
               :trigger="'click'"
               :menu-options="[
-                { label: $t('cloudSpace.share'), icon: icon.cloudSpace.share, function: () => handleShareFile(item.id, item.fileName, item.fileType) },
-                { label: $t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile, function: () => emit('moveField', [item]) },
-                { label: $t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag, function: () => openTagDialog(item) },
+                {
+                  label: $t('cloudSpace.share'),
+                  icon: icon.cloudSpace.share,
+                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
+                },
+                {
+                  label: $t('cloudSpace.moveFile'),
+                  icon: icon.cloudSpace.moveFile,
+                  function: () => emit('moveField', [item]),
+                },
+                {
+                  label: $t('cloudSpace.relateTags'),
+                  icon: icon.manage_categoryBtn_tag,
+                  function: () => openTagDialog(item),
+                },
               ]"
             >
               <svg-icon class="overlay-btn" :src="icon.common.more" size="18" />
@@ -62,7 +86,9 @@
         </div>
         <div class="file-card-body">
           <div class="file-card-headline">
-            <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{ getFileTypeLabel(item) }}</span>
+            <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{
+              getFileTypeLabel(item)
+            }}</span>
             <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
           </div>
           <div class="file-card-name" :title="item.fileName">{{ item.fileName }}</div>
@@ -72,7 +98,9 @@
           </div>
           <div class="file-card-meta">
             <span class="meta-label">{{ $t('cloudSpace.relateTags') }}</span>
-            <span class="text-hidden">{{ item.tags?.length ? item.tags.map((tag) => tag.name).join(' / ') : '-' }}</span>
+            <span class="text-hidden">{{
+              item.tags?.length ? item.tags.map((tag) => tag.name).join(' / ') : '-'
+            }}</span>
           </div>
         </div>
       </article>
@@ -88,12 +116,7 @@
           class="batch-select-all"
         />
         <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-        <b-button
-          size="small"
-          type="danger"
-          @click="handleBatchDelete"
-          >{{ $t('cloudSpace.batchDelete') }}</b-button
-        >
+        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
         <b-button
           size="small"
           type="primary"
@@ -101,12 +124,7 @@
           v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
           >{{ $t('cloudSpace.batchMove') }}</b-button
         >
-        <b-button
-          size="small"
-          type="success"
-          :loading="batchDownloadLoading"
-          @click="handleBatchDownload"
-        >
+        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
           {{ $t('cloudSpace.batchDownload') }}
         </b-button>
       </b-space>
@@ -204,12 +222,7 @@
             </a-tooltip>
             <!-- 删除按钮 -->
             <a-tooltip :title="$t('common.delete')">
-              <svg-icon
-                class="delete-icon"
-                :src="icon.noteDetail.delete"
-                size="20"
-                @click="handleDelFile(item)"
-              />
+              <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item)" />
             </a-tooltip>
             <b-menu
               v-if="!bookmark.isMobile"
@@ -284,13 +297,20 @@
           :placeholder="$t('cloudSpace.shareDescPlaceholder')"
         />
         <div class="share-desc-actions">
-          <b-button :loading="shareSubmitting" type="primary" @click="submitShare">{{ $t('cloudSpace.share') }}</b-button>
+          <b-button :loading="shareSubmitting" type="primary" @click="submitShare">{{
+            $t('cloudSpace.share')
+          }}</b-button>
           <b-button :disabled="shareSubmitting" @click="closeShareDialog">{{ $t('common.cancel') }}</b-button>
         </div>
       </div>
     </b-modal>
 
-    <FileTagConfig v-if="tagModalVisible" v-model:visible="tagModalVisible" :file="activeTagFile" @saved="cloud.queryFieldList" />
+    <FileTagConfig
+      v-if="tagModalVisible"
+      v-model:visible="tagModalVisible"
+      :file="activeTagFile"
+      @saved="cloud.queryFieldList"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -415,7 +435,9 @@
   }
 
   function normalizePreviewText(raw: string): string {
-    const compact = String(raw || '').replace(/\s+/g, ' ').trim();
+    const compact = String(raw || '')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (!compact) return '（文本内容为空）';
     if (compact.length <= TEXT_PREVIEW_CHAR_LIMIT) return compact;
     return compact.slice(0, TEXT_PREVIEW_CHAR_LIMIT) + '...';
@@ -1168,16 +1190,36 @@
     background: color-mix(in srgb, var(--common-tag-bg-color) 78%, transparent);
   }
 
-  .file-card-placeholder--image    { background: color-mix(in srgb, #f97316 7%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--video    { background: color-mix(in srgb, #ef4444 7%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--audio    { background: color-mix(in srgb, #8b5cf6 7%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--pdf      { background: color-mix(in srgb, #dc2626 8%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--word     { background: color-mix(in srgb, #2563eb 7%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--excel    { background: color-mix(in srgb, #16a34a 7%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--ppt      { background: color-mix(in srgb, #ea580c 7%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--text     { background: color-mix(in srgb, #94a3b8 8%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--compress { background: color-mix(in srgb, #ca8a04 8%, var(--bl-input-noBorder-bg-color)); }
-  .file-card-placeholder--other    { background: color-mix(in srgb, #6b7280 7%, var(--bl-input-noBorder-bg-color)); }
+  .file-card-placeholder--image {
+    background: color-mix(in srgb, #f97316 7%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--video {
+    background: color-mix(in srgb, #ef4444 7%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--audio {
+    background: color-mix(in srgb, #8b5cf6 7%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--pdf {
+    background: color-mix(in srgb, #dc2626 8%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--word {
+    background: color-mix(in srgb, #2563eb 7%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--excel {
+    background: color-mix(in srgb, #16a34a 7%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--ppt {
+    background: color-mix(in srgb, #ea580c 7%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--text {
+    background: color-mix(in srgb, #94a3b8 8%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--compress {
+    background: color-mix(in srgb, #ca8a04 8%, var(--bl-input-noBorder-bg-color));
+  }
+  .file-card-placeholder--other {
+    background: color-mix(in srgb, #6b7280 7%, var(--bl-input-noBorder-bg-color));
+  }
 
   .file-card-text-preview {
     width: 100%;
@@ -1245,17 +1287,19 @@
     padding: 8px;
     opacity: 0;
     transition: opacity 0.2s ease;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 40%);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, transparent 40%);
     pointer-events: none;
   }
 
   .overlay-btn {
     color: #fff;
-    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
     cursor: pointer;
     transition: transform 0.18s ease;
     pointer-events: auto;
-    &:hover { transform: scale(1.15); }
+    &:hover {
+      transform: scale(1.15);
+    }
   }
 
   .overlay-menu {
@@ -1331,7 +1375,9 @@
   }
 
   @media (max-width: 1400px) {
-    .file-card-overlay { opacity: 1 !important; }
+    .file-card-overlay {
+      opacity: 1 !important;
+    }
   }
 
   @media (max-width: 720px) {
