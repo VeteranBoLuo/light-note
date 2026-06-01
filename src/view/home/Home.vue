@@ -153,7 +153,11 @@
       bookmark.type = 'search';
       bookmark.bookmarkSearch = Array.isArray(route.params.value) ? route.params.value[0] : route.params.value;
     }
-    queryTagList();
+    if (bookmark.tagList.length) {
+      bookmark.refreshData();
+    } else {
+      queryTagList();
+    }
   });
 </script>
 

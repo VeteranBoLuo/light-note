@@ -83,7 +83,7 @@
     },
   });
 
-  const emits = defineEmits(['update:modelValue', 'setHtml', 'setNoteId', 'saveData']);
+  const emits = defineEmits(['update:modelValue', 'setHtml', 'setNoteId', 'saveData', 'ready']);
   const content = defineModel<string>('content');
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
@@ -445,6 +445,7 @@
         await ensureToolbarRendered();
         window.setTimeout(() => {
           resetUndoHistory(editor);
+          emits('ready');
         }, 0);
       });
     },

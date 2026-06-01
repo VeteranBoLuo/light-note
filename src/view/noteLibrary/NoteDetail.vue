@@ -29,6 +29,7 @@
             v-model:content="note.content"
             :readonly="readonly"
             :note-id="note.id"
+            @ready="refreshCatalog"
           />
         </div>
         <AiReply class="ai-panel" v-if="!bookmark.isMobile" />
@@ -55,11 +56,13 @@
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const DEFAULT_NOTE_TITLE = '未命名文档';
+  const DEFAULT_NOTE_CONTENT = '<p><br></p>';
   const note = reactive({
     id: '',
-    title: '未命名文档',
-    lastTitle: '未命名文档',
-    content: '<p><br></p>',
+    title: DEFAULT_NOTE_TITLE,
+    lastTitle: DEFAULT_NOTE_TITLE,
+    content: DEFAULT_NOTE_CONTENT,
     createBy: '',
   });
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
@@ -132,6 +135,7 @@
   const isStartEdit = ref(false);
   const isCurrentSave = ref(false);
   const updateTime = ref('');
+  const nStore = noteStore();
   async function syncHeaderTitle() {
     if (bookmark.isMobile) return;
     await nextTick();
@@ -152,9 +156,28 @@
     updateTime.value = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
 
+  function isBlankNoteContent(content?: string) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = content || '';
+    const text = (wrap.textContent || '').replace(/\u00a0/g, '').trim();
+    if (text) return false;
+    return !wrap.querySelector('img, video, audio, iframe, table, input, canvas, pre, blockquote');
+  }
+
+  function hasNewNoteDraft() {
+    return note.title.trim() !== DEFAULT_NOTE_TITLE || !isBlankNoteContent(note.content);
+  }
+
+  function refreshCatalog() {
+    nStore.generateTOC();
+  }
+
   async function saveNote(isMsg?: boolean) {
     if (!note.title || !note.title.trim()) {
       message.warning('请输入笔记标题');
+      return;
+    }
+    if (!isMsg && !note.id && !hasNewNoteDraft()) {
       return;
     }
     isStartEdit.value = true;
@@ -175,7 +198,9 @@
       const isFirstSave = !note.id && res.data.id;
       if (res.data.id) {
         note.id = res.data.id;
-        router.push(`/noteLibrary/${note.id}`).then();
+        note.createBy = user.id;
+        nodeType.value = 'edit';
+        router.replace(`/noteLibrary/${note.id}`).then();
       }
       if (isFirstSave) {
         recordOperation({ module: '笔记', operation: `新建笔记成功【${note.title}】` });
@@ -293,7 +318,6 @@
     } else {
       isReady.value = true;
       nodeType.value = 'add';
-      saveFunc();
       watch(
         () => note.content,
         () => {
@@ -302,7 +326,6 @@
       );
     }
   });
-  const nStore = noteStore();
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyDown);
     nStore.headings = [];
