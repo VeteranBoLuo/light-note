@@ -171,9 +171,13 @@
   const cloud = cloudSpaceStore();
   const route = useRoute();
 
+  const CLOUD_SPACE_VIEW_STORAGE_KEY = 'cloud-space-view-mode';
+
   const handleBtnGroup = ref();
   const batchMode = ref(false);
-  const viewMode = ref<'card' | 'table'>('card');
+  const viewMode = ref<'card' | 'table'>(
+    (localStorage.getItem(CLOUD_SPACE_VIEW_STORAGE_KEY) as 'card' | 'table') || 'card',
+  );
   const cardViewIcon =
     '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></g></svg>';
   const listViewIcon = icon.filterPanel.list;
@@ -383,6 +387,10 @@
   }
 
   initializeCloudSpace();
+
+  watch(viewMode, (val) => {
+    localStorage.setItem(CLOUD_SPACE_VIEW_STORAGE_KEY, val);
+  });
 
   watch(
     () => route.query.fileName,
