@@ -53,7 +53,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, h, onMounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -75,6 +75,15 @@
           title: '邮箱',
           dataIndex: 'email',
           ellipsis: true,
+        },
+        {
+          title: '系统',
+          dataIndex: 'system',
+          width: 90,
+          customRender: ({ text }: { text: any }) => {
+            const os = text?.os || '未知';
+            return h('span', { style: { color: os.includes('Windows') ? '#1677ff' : os.includes('Mac') ? '#333' : '#52c41a', fontSize: '11px' } }, os);
+          },
         },
         {
           title: '时间',

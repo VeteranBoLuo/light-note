@@ -86,7 +86,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, h, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -129,6 +129,20 @@
         title: 'ip',
         dataIndex: 'ip',
         ellipsis: true,
+      },
+      {
+        title: '系统',
+        dataIndex: 'system',
+        width: 110,
+        customCell: () => ({ style: { whiteSpace: 'nowrap' } }),
+        customRender: ({ text }: { text: any }) => {
+          const os = text?.os || '未知';
+          let color = '#666';
+          if (os.includes('Windows')) color = '#1677ff';
+          else if (os.includes('Mac')) color = '#333';
+          else if (os.includes('Linux')) color = '#52c41a';
+          return h('span', { style: { color, fontSize: '12px' } }, os);
+        },
       },
       {
         title: 'code',
