@@ -438,5 +438,9 @@
       width: 0;
       min-width: none !important;
     }
+    #editor-toolbar .tox-toolbar {
+      flex-wrap: nowrap !important;
+      overflow-x: auto;
+    }
   }
 </style>

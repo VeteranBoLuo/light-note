@@ -21,7 +21,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { nextTick, onUnmounted, ref, watch } from 'vue';
+  import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { bookmarkStore, noteStore } from '@/store';
   import { customTimer } from '@/utils/common.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -32,10 +32,12 @@
   }>();
   const note = noteStore();
   const activeHeading = ref<number | null>(null);
+  let observer: IntersectionObserver | null = null;
+  let manualScrolling = false;
 
   const scrollToHeading = async (index: number) => {
+    manualScrolling = true;
     activeHeading.value = index;
-    // 平板和手机
     if (bookmark.screenWidth < 1500) {
       await customTimer(100);
     }
@@ -43,6 +45,37 @@
     if (heading) {
       heading.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+    setTimeout(() => { manualScrolling = false; }, 800);
+  };
+
+  const setupScrollSpy = () => {
+    if (observer) observer.disconnect();
+    if (!note.headings.length) return;
+    const scrollContainer = document.querySelector('.note-editor-scroll');
+    if (!scrollContainer) return;
+    const entries = new Map<Element, number>();
+    note.headings.forEach((h, i) => entries.set(h.element, i));
+    observer = new IntersectionObserver(
+      (observed) => {
+        if (manualScrolling) return;
+        const visible: { index: number; ratio: number; top: number }[] = [];
+        observed.forEach((entry) => {
+          if (entry.isIntersecting && entries.has(entry.target)) {
+            visible.push({
+              index: entries.get(entry.target)!,
+              ratio: entry.intersectionRatio,
+              top: entry.boundingClientRect.top,
+            });
+          }
+        });
+        if (!visible.length) return;
+        visible.sort((a, b) => a.top - b.top);
+        const best = visible.find((v) => v.top > 0) || visible[0];
+        activeHeading.value = best.index;
+      },
+      { root: scrollContainer, rootMargin: '-10px 0px -40% 0px', threshold: 0 },
+    );
+    note.headings.forEach((h) => observer!.observe(h.element));
   };
 
   const isShowPhoneCategory = ref(false);
@@ -77,8 +110,20 @@
     { immediate: true, flush: 'post' },
   );
 
+  watch(
+    () => note.headings.length,
+    () => {
+      nextTick(() => setupScrollSpy());
+    },
+  );
+
+  onMounted(() => {
+    setupScrollSpy();
+  });
+
   onUnmounted(() => {
     document.removeEventListener('click', closeCategory);
+    if (observer) observer.disconnect();
   });
 </script>
 
