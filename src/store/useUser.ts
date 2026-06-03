@@ -63,7 +63,7 @@ const createDefaultUserState = (): UserState => ({
     theme: 'day', // 主题
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
     lang: 'zh-CN', // 语言
-    homePage: 'workbench', // 默认首页
+    homePage: 'landing', // 默认首页（未设置时进官网）
   },
 });
 

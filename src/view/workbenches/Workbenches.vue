@@ -777,7 +777,21 @@ import { formatStorageSize } from '@/utils/common';
     return updateLogList.value[activeUpdateLogIndex.value] || null;
   });
 
-  const currentHomePage = computed(() => getHomePagePreference(user.preferences));
+  const currentHomePage = computed(() => {
+    // 引用 user.preferences 作为响应式依赖，确保修改后重新计算
+    void user.preferences;
+
+    // 游客不受接口影响，只读 localStorage
+    if (!user.id || user.role === 'visitor') {
+      try {
+        const stored = localStorage.getItem('preferences');
+        if (stored) return getHomePagePreference(JSON.parse(stored));
+      } catch {}
+      return 'landing';
+    }
+    // 已登录用户以接口返回为准
+    return getHomePagePreference(user.preferences);
+  });
   const themePreferenceOptions = computed(() => [
     { value: 'system', label: t('navigation.followSystem') },
     { value: 'day', label: t('navigation.light') },
@@ -928,7 +942,12 @@ import { formatStorageSize } from '@/utils/common';
     key: 'theme' | 'lang' | 'homePage',
     value: ThemePreference | LanguagePreference | HomePagePreference,
   ) {
-    if (preferenceSaving.value || user.preferences[key] === value) {
+    if (preferenceSaving.value) return;
+
+    // 点击已选中的默认首页 → 取消设置变回官网
+    if (key === 'homePage' && user.preferences.homePage === value) {
+      value = 'landing';
+    } else if (user.preferences[key] === value) {
       return;
     }
 
@@ -950,11 +969,13 @@ import { formatStorageSize } from '@/utils/common';
     }
 
     try {
-      await userApi.updateUserInfo({
-        id: user.id,
-        preferences: JSON.stringify(nextPreferences),
-      });
-      recordOperation({ module: '工作台', operation: `保存偏好设置【${key}】` });
+      if (user.id) {
+        await userApi.updateUserInfo({
+          id: user.id,
+          preferences: JSON.stringify(nextPreferences),
+        });
+        recordOperation({ module: '工作台', operation: `保存偏好设置【${key}】` });
+      }
       message.success(t('workbench.preferences.saved', '偏好设置已更新'));
       if (shouldReloadAfterSave) {
         location.reload();

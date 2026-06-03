@@ -5,6 +5,7 @@
     "node": "20.x"
   },
   "scripts": {
+    "deploy": "bash deploy.sh",
     "dev": "vite",
     "build": "tsc --noEmit --skipLibCheck && rimraf dist && vite build",
     "preview": "vite preview",

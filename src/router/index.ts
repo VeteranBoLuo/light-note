@@ -11,6 +11,7 @@ import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
+import { getDesktopHomePath } from '@/utils/preferences.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import searchRouter from '@/router/modules/search.ts';
 import searchBatchRouter from '@/router/modules/searchBatch.ts';
@@ -52,6 +53,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/view/personCenter/PPersonCenter.vue'),
   },
   loginRouter,
+  {
+    path: '/landing',
+    name: 'landing',
+    component: () => import('@/view/landing/Landing.vue'),
+  },
   ...statusRouter,
   ...phoneRouter,
   {

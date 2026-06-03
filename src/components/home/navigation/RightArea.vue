@@ -8,7 +8,7 @@
     <b-menu
       v-if="!bookmark.isMobile"
       placement="bottom"
-      :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }]"
+      :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }, { label: '官方首页', function: () => router.push('/landing') }]"
     >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
     </b-menu>

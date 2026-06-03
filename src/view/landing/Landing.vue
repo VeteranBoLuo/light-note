@@ -1,0 +1,1045 @@
+<template>
+  <div class="landing" :data-theme="theme">
+    <canvas ref="canvasRef" class="bg-canvas"></canvas>
+
+    <div class="slides" ref="slidesRef" @scroll="onScroll">
+      <!-- ==================== Slide 1: Cover ==================== -->
+      <section class="slide s-cover" data-index="0">
+        <div class="slide-bg">
+          <div class="orb o1"></div>
+          <div class="orb o2"></div>
+          <div class="orb o3"></div>
+          <div class="grid-overlay"></div>
+        </div>
+        <div class="slide-inner center">
+          <div class="float-elements">
+            <span class="float-el el-1">🔖</span>
+            <span class="float-el el-2">📝</span>
+            <span class="float-el el-3">☁️</span>
+            <span class="float-el el-4">🏷️</span>
+          </div>
+          <div class="logo-badge" ref="badgeRef">LIGHT NOTE</div>
+          <h1 class="hero-title" ref="titleRef">
+            <span class="hero-brand">轻 笺</span>
+            <span class="hero-tagline">你的数字生活收纳盒</span>
+          </h1>
+          <div class="hero-actions">
+            <button class="btn-primary" @click="goHome">
+              <span>免费体验</span>
+              <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M5 12h14M13 5l7 7-7 7"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button class="btn-ghost" @click="scrollTo(1)">看看功能</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== Slide 2: 三个核心 ==================== -->
+      <section class="slide s-modules" data-index="1">
+        <div class="slide-bg">
+          <div class="orb o4"></div>
+          <div class="orb o5"></div>
+        </div>
+        <div class="slide-inner center">
+          <div class="section-badge">CORE</div>
+          <h2>三个核心，一个地方</h2>
+          <p class="section-sub">替代浏览器收藏夹 + 笔记软件 + 网盘</p>
+          <div class="core-grid">
+            <div
+              v-for="(c, i) in cores"
+              :key="i"
+              class="core-card"
+              :class="{ visible: visible[1] }"
+              @mousemove="onCardMove($event, i)" @mouseleave="onCardLeave(i)"
+              :ref="
+                (el) => {
+                  if (el) cardRefs[i] = el as HTMLElement;
+                }
+              "
+            >
+              <div class="core-glow" :class="c.color"></div>
+              <div class="core-icon-wrap" :class="c.color">
+                <span class="core-icon">{{ c.icon }}</span>
+              </div>
+              <h3>{{ c.title }}</h3>
+              <p>{{ c.desc }}</p>
+              <div class="core-tags">
+                <span v-for="f in c.tags" :key="f" class="tag">{{ f }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== Slide 3: 功能展示 ==================== -->
+      <section class="slide s-features" data-index="2">
+        <div class="slide-bg">
+          <div class="orb o6"></div>
+        </div>
+        <div class="slide-inner center">
+          <div class="section-badge">FEATURES</div>
+          <h2>更多好用的能力</h2>
+          <p class="section-sub">不止是存储，给你更多</p>
+          <div class="features-grid">
+            <div
+              v-for="(f, i) in features"
+              :key="i"
+              class="feat-card"
+              :class="{ visible: visible[2] }"
+            >
+              <div class="feat-icon">{{ f.icon }}</div>
+              <div class="feat-info">
+                <div class="feat-title">{{ f.title }}</div>
+                <div class="feat-desc">{{ f.desc }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== Slide 4: 为什么选 ==================== -->
+      <section class="slide s-why" data-index="3">
+        <div class="slide-bg">
+          <div class="orb o7"></div>
+          <div class="orb o8"></div>
+        </div>
+        <div class="slide-inner center" style="max-width: 800px">
+          <div class="section-badge">WHY</div>
+          <h2>为什么选轻笺</h2>
+          <div class="reasons-wrap">
+            <div
+              v-for="(r, i) in reasons"
+              :key="i"
+              class="reason-card"
+              :class="{ visible: visible[3] }"
+              :style="{ transitionDelay: `${i * 0.1}s` }"
+            >
+              <div class="reason-icon" :style="{ background: r.bg }">{{ r.icon }}</div>
+              <div>
+                <div class="reason-title">{{ r.title }}</div>
+                <div class="reason-desc">{{ r.desc }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== Slide 5: CTA ==================== -->
+      <section class="slide s-cta" data-index="4">
+        <div class="slide-bg">
+          <div class="orb o9"></div>
+          <div class="orb o10"></div>
+        </div>
+        <div class="slide-inner center">
+          <div class="cta-glass">
+            <div class="cta-particle p1"></div>
+            <div class="cta-particle p2"></div>
+            <div class="cta-particle p3"></div>
+            <div class="cta-emoji">✨</div>
+            <h2 class="cta-title">准备好了吗？</h2>
+            <p class="cta-desc">无需下载，打开浏览器就能用</p>
+            <button class="btn-primary btn-large" @click="goHome">
+              开始使用
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M5 12h14M13 5l7 7-7 7"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="cta-foot">boluo66.top</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Nav -->
+    <div class="nav-dots">
+      <button v-for="(_, i) in 5" :key="i" :class="['nav-dot', { active: current === i }]" @click="goTo(i)">
+        <span class="dot-tooltip">{{ ['封面', '核心', '功能', '理由', '开始'][i] }}</span>
+      </button>
+    </div>
+    <div class="slide-counter" :class="{ pulse: animating }">{{
+      ['cover', 'core', 'features', 'why', 'start'][current]
+    }}</div>
+  </div>
+</template>
+
+<script setup lang="ts">
+  import { ref, onMounted, onBeforeUnmount } from 'vue';
+  import { useRouter } from 'vue-router';
+  import { useUserStore } from '@/store';
+
+  const router = useRouter();
+  const user = useUserStore();
+  const theme = ref(user.preferences?.theme || 'day');
+  const slidesRef = ref<HTMLElement>();
+  const canvasRef = ref<HTMLCanvasElement>();
+  const badgeRef = ref<HTMLElement>();
+  const titleRef = ref<HTMLElement>();
+  const cardRefs = ref<HTMLElement[]>([]);
+  const current = ref(0);
+  const visible = ref({ 1: false, 2: false, 3: false });
+  const animating = ref(false);
+
+  function goTo(i: number) {
+    slidesRef.value?.children[i]?.scrollIntoView({ behavior: 'smooth' });
+  }
+  function scrollTo(i: number) {
+    goTo(i);
+  }
+  function goHome() {
+    router.push('/home');
+  }
+
+  const cores = [
+    {
+      icon: '🔖',
+      title: '书签',
+      color: 'purple',
+      desc: '看到好文章一键收藏，打标签随手搜',
+      tags: ['自动抓取', '标签树', '多标签过滤'],
+    },
+    {
+      icon: '📝',
+      title: '笔记',
+      color: 'green',
+      desc: '富文本编辑器，文件夹归类，目录导航',
+      tags: ['图文表格', '代码高亮', '导出 PDF'],
+    },
+    {
+      icon: '☁️',
+      title: '云空间',
+      color: 'orange',
+      desc: '文件上传预览分享，卡片列表双视图',
+      tags: ['Office 预览', '批量操作', '外部分享'],
+    },
+  ];
+
+  const features = [
+    { icon: '🏷️', title: '统一标签', desc: '书签·笔记·文件共享标签体系，一个标签关联所有' },
+    { icon: '🔍', title: '全局搜索', desc: '跨模块统一检索，关键词+标签联合过滤' },
+    { icon: '🤖', title: 'AI 助手', desc: '内嵌 AI 对话，辅助知识处理，上下文问答' },
+    { icon: '🌙', title: '深色主题', desc: '浅色/深色一键切换，CSS 变量体系，护眼舒适' },
+    { icon: '📱', title: '移动端', desc: '两套独立布局，触控优化，路上也能用' },
+    { icon: '🌐', title: '中英文', desc: '完整双语支持，vue-i18n，切换无感' },
+  ];
+
+  const reasons = [
+    {
+      icon: '🎯',
+      title: '三合一，不分裂',
+      desc: '笔记、书签、文件一个地方，不用在几个 App 之间来回切',
+      bg: 'rgba(99,92,237,.12)',
+    },
+    { icon: '🏠', title: '数据在你手上', desc: '部署在自己服务器，不走第三方云服务', bg: 'rgba(0,168,132,.12)' },
+    { icon: '🌱', title: '越用越聪明', desc: '标签串联内容，知识网络越来越密', bg: 'rgba(255,138,0,.12)' },
+    {
+      icon: '⚡',
+      title: '快，不废话',
+      desc: 'SPA 单页应用，即搜即得，不像大平台那样慢吞吞',
+      bg: 'rgba(236,72,153,.12)',
+    },
+  ];
+
+  // Card 3D tilt
+  function onCardMove(e: MouseEvent, i: number) {
+    const card = cardRefs.value[i];
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const mx = (x / rect.width - 0.5) * 12;
+    const my = (y / rect.height - 0.5) * -12;
+    card.style.transform = `perspective(600px) rotateY(${mx}deg) rotateX(${my}deg) translateY(-8px)`;
+  }
+  function onCardLeave(i: number) {
+    const card = cardRefs.value[i];
+    if (!card) return;
+    card.style.transform = 'perspective(600px) rotateY(0) rotateX(0) translateY(0)';
+  }
+
+  // Canvas particles
+  let animId = 0;
+  function onScroll() {
+    const s = slidesRef.value;
+    if (!s) return;
+    const idx = Math.round(s.scrollTop / s.clientHeight);
+    current.value = idx;
+    // Toggle visibility for each section
+    visible.value = { 1: idx >= 1, 2: idx >= 2, 3: idx >= 3 } as any;
+  }
+
+  onMounted(() => {
+    const canvas = canvasRef.value;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    let w = 0,
+      h = 0;
+
+    const pts: { x: number; y: number; vx: number; vy: number; r: number; a: number }[] = [];
+    const COUNT = 50;
+
+    function resize() {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    for (let i = 0; i < COUNT; i++) {
+      pts.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.3,
+        a: Math.random() * 0.25 + 0.05,
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      for (const p of pts) {
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(150,140,255,${p.a})`;
+        ctx.fill();
+      }
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x,
+            dy = pts[i].y - pts[j].y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < 120) {
+            ctx.beginPath();
+            ctx.moveTo(pts[i].x, pts[i].y);
+            ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.strokeStyle = `rgba(150,140,255,${0.04 * (1 - d / 120)})`;
+            ctx.stroke();
+          }
+        }
+      }
+      animId = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Scroll listener
+    onScroll();
+  });
+
+  onBeforeUnmount(() => {
+    cancelAnimationFrame(animId);
+  });
+</script>
+
+<style scoped>
+  .landing {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    color: #e0e0e0;
+    background: #08080e;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+  }
+  .bg-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Slides */
+  .slides {
+    height: 100vh;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+    position: relative;
+    z-index: 1;
+  }
+  .slides::-webkit-scrollbar {
+    display: none;
+  }
+  .slide {
+    scroll-snap-align: start;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .slide-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  /* Orbs */
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    animation: orbFloat 12s ease-in-out infinite alternate;
+  }
+  @keyframes orbFloat {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0.12;
+    }
+    50% {
+      transform: translate(30px, -30px) scale(1.1);
+      opacity: 0.18;
+    }
+    100% {
+      transform: translate(-20px, 20px) scale(0.95);
+      opacity: 0.1;
+    }
+  }
+  .o1 {
+    width: 500px;
+    height: 500px;
+    top: -200px;
+    right: -120px;
+    background: #615ced;
+  }
+  .o2 {
+    width: 350px;
+    height: 350px;
+    bottom: -80px;
+    left: -80px;
+    background: #00a884;
+    animation-delay: -3s;
+  }
+  .o3 {
+    width: 200px;
+    height: 200px;
+    top: 40%;
+    left: 30%;
+    background: #8a85ff;
+    animation-delay: -6s;
+  }
+  .grid-overlay {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+  .o4 {
+    width: 400px;
+    height: 400px;
+    top: 10%;
+    left: -120px;
+    background: #615ced;
+  }
+  .o5 {
+    width: 250px;
+    height: 250px;
+    bottom: 10%;
+    right: -60px;
+    background: #8a85ff;
+    animation-delay: -4s;
+  }
+  .o6 {
+    width: 350px;
+    height: 350px;
+    bottom: 5%;
+    right: -80px;
+    background: #3ddcbd;
+    animation-delay: -2s;
+  }
+  .o7 {
+    width: 300px;
+    height: 300px;
+    top: 5%;
+    right: -80px;
+    background: #00a884;
+    animation-delay: -5s;
+  }
+  .o8 {
+    width: 400px;
+    height: 400px;
+    bottom: -100px;
+    left: -100px;
+    background: #615ced;
+    animation-delay: -1s;
+  }
+  .o9 {
+    width: 500px;
+    height: 500px;
+    top: -150px;
+    right: -100px;
+    background: #615ced;
+  }
+  .o10 {
+    width: 400px;
+    height: 400px;
+    bottom: -100px;
+    left: -120px;
+    background: #00a884;
+    animation-delay: -3s;
+  }
+
+  .slide-inner {
+    position: relative;
+    z-index: 2;
+    max-width: 1000px;
+    width: 100%;
+  }
+  .center {
+    text-align: center;
+  }
+  .section-badge {
+    display: inline-block;
+    padding: 5px 18px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: #8a85ff;
+    background: rgba(99, 92, 237, 0.1);
+    border: 1px solid rgba(99, 92, 237, 0.2);
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: clamp(26px, 3vw, 40px);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .section-sub {
+    font-size: 15px;
+    color: #777;
+    margin-bottom: 32px;
+  }
+
+  /* ============ Cover ============ */
+  .float-elements {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .float-el {
+    position: absolute;
+    font-size: 32px;
+    animation: floatAround 8s ease-in-out infinite;
+    opacity: 0.15;
+  }
+  .float-el.el-1 {
+    top: 15%;
+    left: 10%;
+    animation-delay: 0s;
+  }
+  .float-el.el-2 {
+    top: 20%;
+    right: 12%;
+    animation-delay: -2s;
+  }
+  .float-el.el-3 {
+    bottom: 25%;
+    left: 15%;
+    animation-delay: -4s;
+  }
+  .float-el.el-4 {
+    bottom: 20%;
+    right: 10%;
+    animation-delay: -6s;
+  }
+  @keyframes floatAround {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-20px) rotate(5deg);
+    }
+  }
+
+  .logo-badge {
+    display: inline-block;
+    padding: 6px 22px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: #615ced;
+    background: rgba(99, 92, 237, 0.08);
+    border: 1px solid rgba(99, 92, 237, 0.15);
+    margin-bottom: 32px;
+  }
+  .hero-title {
+    margin-bottom: 32px;
+  }
+  .hero-brand {
+    display: block;
+    font-size: clamp(56px, 8vw, 110px);
+    font-weight: 900;
+    letter-spacing: 16px;
+    background: linear-gradient(135deg, #615ced 0%, #00a884 30%, #ff8a00 60%, #ec4899 100%);
+    background-size: 300% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 5s ease-in-out infinite;
+    line-height: 1.2;
+    padding: 16px 0;
+  }
+  .hero-tagline {
+    display: block;
+    font-size: clamp(18px, 1.6vw, 24px);
+    font-weight: 400;
+    color: #888;
+    letter-spacing: 8px;
+    margin-bottom: 16px;
+  }
+  @keyframes shimmer {
+    0% {
+      background-position: 0% center;
+    }
+    50% {
+      background-position: 100% center;
+    }
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 32px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #615ced, #7c78ff);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .btn-primary:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 16px 40px rgba(99, 92, 237, 0.4);
+  }
+  .btn-primary:active {
+    transform: scale(0.97);
+  }
+  .btn-arrow {
+    transition: transform 0.3s ease;
+  }
+  .btn-primary:hover .btn-arrow {
+    transform: translateX(4px);
+  }
+  .btn-large {
+    padding: 16px 44px;
+    font-size: 18px;
+    gap: 10px;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 32px;
+    border-radius: 999px;
+    background: transparent;
+    color: #bbb;
+    font-size: 16px;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .btn-ghost:hover {
+    border-color: rgba(99, 92, 237, 0.4);
+    color: #fff;
+    transform: translateY(-2px);
+  }
+
+  /* ============ Core Cards ============ */
+  .core-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .core-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 24px;
+    padding: 40px 24px 28px;
+    text-align: center;
+    overflow: hidden;
+    transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity: 0;
+    transform: translateY(40px) perspective(600px) rotateX(5deg);
+    cursor: default;
+  }
+  .core-card.visible {
+    opacity: 1;
+    transform: translateY(0) perspective(600px) rotateX(0);
+  }
+  .core-glow {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+  .core-card:hover .core-glow {
+    opacity: 0.08;
+  }
+  .core-glow.purple {
+    background: radial-gradient(circle, #615ced, transparent 70%);
+  }
+  .core-glow.green {
+    background: radial-gradient(circle, #00a884, transparent 70%);
+  }
+  .core-glow.orange {
+    background: radial-gradient(circle, #ff8a00, transparent 70%);
+  }
+  .core-icon-wrap {
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 28px;
+    transition: transform 0.3s ease;
+  }
+  .core-card:hover .core-icon-wrap {
+    transform: scale(1.1) rotate(-5deg);
+  }
+  .core-icon-wrap.purple {
+    background: rgba(99, 92, 237, 0.12);
+  }
+  .core-icon-wrap.green {
+    background: rgba(0, 168, 132, 0.12);
+  }
+  .core-icon-wrap.orange {
+    background: rgba(255, 138, 0, 0.12);
+  }
+  .core-card h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .core-card p {
+    font-size: 14px;
+    color: #888;
+    line-height: 1.6;
+    margin: 0 0 14px;
+  }
+  .core-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+  .tag {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #777;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* ============ Features ============ */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .feat-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 20px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    text-align: left;
+    transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  .feat-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .feat-card:hover {
+    border-color: rgba(99, 92, 237, 0.2);
+    background: rgba(255, 255, 255, 0.03);
+    transform: translateY(-3px);
+  }
+  .feat-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    line-height: 1;
+    margin-top: 2px;
+  }
+  .feat-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .feat-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #eee;
+    margin-bottom: 4px;
+  }
+  .feat-desc {
+    font-size: 13px;
+    color: #888;
+    line-height: 1.5;
+  }
+
+  /* ============ Reasons ============ */
+  .reasons-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .reason-card {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    padding: 20px 24px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    text-align: left;
+    transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  .reason-card.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .reason-card:hover {
+    border-color: rgba(99, 92, 237, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .reason-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .reason-title {
+    font-weight: 600;
+    color: #eee;
+    margin-bottom: 3px;
+    font-size: 16px;
+  }
+  .reason-desc {
+    font-size: 14px;
+    color: #888;
+    line-height: 1.5;
+  }
+
+  /* ============ CTA ============ */
+  .cta-glass {
+    position: relative;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 48px 40px;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(20px);
+    overflow: hidden;
+  }
+  .cta-particle {
+    position: absolute;
+    border-radius: 50%;
+    animation: particleFloat 6s ease-in-out infinite;
+  }
+  .p1 {
+    width: 80px;
+    height: 80px;
+    top: -20px;
+    right: -10px;
+    background: radial-gradient(circle, #615ced, transparent);
+    opacity: 0.2;
+    animation-delay: 0s;
+  }
+  .p2 {
+    width: 60px;
+    height: 60px;
+    bottom: -10px;
+    left: -5px;
+    background: radial-gradient(circle, #00a884, transparent);
+    opacity: 0.15;
+    animation-delay: -2s;
+  }
+  .p3 {
+    width: 40px;
+    height: 40px;
+    top: 40%;
+    left: 50%;
+    background: radial-gradient(circle, #8a85ff, transparent);
+    opacity: 0.1;
+    animation-delay: -4s;
+  }
+  @keyframes particleFloat {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(15px, -15px) scale(1.2);
+    }
+  }
+  .cta-emoji {
+    font-size: 48px;
+    margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
+  }
+  .cta-title {
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
+  }
+  .cta-desc {
+    font-size: 16px;
+    color: #888;
+    margin-bottom: 24px;
+    position: relative;
+    z-index: 1;
+  }
+  .cta-foot {
+    margin-top: 28px;
+    font-size: 13px;
+    color: #444;
+    letter-spacing: 2px;
+  }
+
+  /* ============ Nav ============ */
+  .nav-dots {
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 100;
+  }
+  .nav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #333;
+    border: none;
+    cursor: pointer;
+    transition: all 0.4s ease;
+    padding: 0;
+    position: relative;
+  }
+  .nav-dot:hover {
+    background: #555;
+  }
+  .nav-dot.active {
+    background: #615ced;
+    width: 12px;
+    height: 12px;
+    box-shadow: 0 0 16px rgba(99, 92, 237, 0.4);
+  }
+  .dot-tooltip {
+    position: absolute;
+    right: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: #666;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+  .nav-dot:hover .dot-tooltip {
+    opacity: 1;
+  }
+  .slide-counter {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    font-size: 12px;
+    color: #333;
+    z-index: 100;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+  }
+  .slide-counter.pulse {
+    color: #615ced;
+  }
+
+  @media (max-width: 768px) {
+    .slide {
+      padding: 30px 20px;
+    }
+    .core-grid {
+      grid-template-columns: 1fr;
+    }
+    .features-grid {
+      grid-template-columns: 1fr;
+    }
+    .nav-dots {
+      right: 10px;
+    }
+    .float-el {
+      display: none;
+    }
+  }
+</style>

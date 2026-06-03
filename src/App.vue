@@ -149,7 +149,10 @@
     user.preferences.lang = user.preferences?.lang || 'zh-CN';
     user.preferences.noteViewMode = user.preferences?.noteViewMode || 'list';
     user.preferences.homePage = getHomePagePreference(user.preferences);
-    setStoredPreferences(user.preferences);
+    // 有真实偏好时才写入 localStorage（排除游客默认值）
+    if (user.preferences.homePage !== 'landing' && user.id && user.role !== 'visitor') {
+      setStoredPreferences(user.preferences);
+    }
     setLocale(user.preferences.lang || 'zh-CN');
   }
 
@@ -202,7 +205,6 @@
     setTimeout(() => {
       document.documentElement.classList.remove('disable-animations');
     }, 0);
-    setStoredPreferences(user.preferences);
   }
 
   // 设置动画
@@ -452,7 +454,7 @@
     }, NOTICE_POLLING_INTERVAL);
   }
 
-  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role'];
+  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role', 'landing'];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {
