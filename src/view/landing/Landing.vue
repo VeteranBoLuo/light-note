@@ -26,7 +26,7 @@
                 <span class="hero-tagline">你的数字生活收纳盒</span>
               </h1>
               <div class="hero-actions">
-                <button class="btn-primary" @click="goHome">
+                <button class="btn-primary" @click="goHome" v-click-log="{ module: '官网首页', operation: '免费体验' }">
                   <span>免费体验</span>
                   <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
                     <path
@@ -38,7 +38,7 @@
                     />
                   </svg>
                 </button>
-                <button class="btn-ghost" @click="scrollTo(1)">看看功能</button>
+                <button class="btn-ghost" @click="scrollTo(1)" v-click-log="{ module: '官网首页', operation: '看看功能' }">看看功能</button>
               </div>
             </div>
             <div class="cover-mockup">
@@ -66,6 +66,7 @@
                     :key="i"
                     :class="['carousel-dot', { active: previewIndex === i }]"
                     @click="previewIndex = i"
+                    v-click-log="{ module: '官网首页', operation: '切换预览图' }"
                   >
                     <span class="dot-indicator"></span>
                     <span class="dot-label">{{ ['书签', '笔记', '云空间'][i] }}</span>
@@ -181,7 +182,7 @@
             <div class="cta-emoji">✨</div>
             <h2 class="cta-title">准备好了吗？</h2>
             <p class="cta-desc">无需下载，打开浏览器就能用</p>
-            <button class="btn-primary btn-large" @click="goHome">
+            <button class="btn-primary btn-large" @click="goHome" v-click-log="{ module: '官网首页', operation: '开始使用' }">
               开始使用
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path
@@ -210,7 +211,7 @@
 
     <!-- Nav -->
     <div class="nav-dots">
-      <button v-for="(_, i) in 5" :key="i" :class="['nav-dot', { active: current === i }]" @click="goTo(i)">
+      <button v-for="(_, i) in 5" :key="i" :class="['nav-dot', { active: current === i }]" @click="goTo(i)" v-click-log="{ module: '官网首页', operation: '切换幻灯片' }">
         <span class="dot-tooltip">{{ ['封面', '核心', '功能', '理由', '开始'][i] }}</span>
       </button>
     </div>
@@ -406,6 +407,10 @@
     left: 0;
     z-index: 9999;
   }
+  .landing,
+  .landing * {
+    box-sizing: border-box;
+  }
   .bg-canvas {
     position: fixed;
     top: 0;
@@ -420,7 +425,6 @@
   .slides {
     height: 100vh;
     overflow-y: auto;
-    scroll-snap-type: y mandatory;
     scroll-behavior: smooth;
     position: relative;
     z-index: 1;
@@ -429,7 +433,6 @@
     display: none;
   }
   .slide {
-    scroll-snap-align: start;
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -438,6 +441,20 @@
     padding: 40px 60px;
     position: relative;
     overflow: hidden;
+  }
+  .slide::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to bottom, #08080e, transparent);
+    z-index: 3;
+    pointer-events: none;
+  }
+  .slide:first-child::before {
+    display: none;
   }
   .slide-bg {
     position: absolute;
@@ -1083,7 +1100,7 @@
     position: relative;
     max-width: 480px;
     margin: 0 auto;
-    padding: 48px 40px;
+    padding: 32px 36px;
     border-radius: 28px;
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1150,14 +1167,14 @@
     z-index: 1;
   }
   .cta-foot {
-    margin-top: 28px;
+    margin-top: 20px;
     font-size: 13px;
     color: #444;
     letter-spacing: 2px;
   }
   .landing-footer {
-    margin-top: 36px;
-    padding-top: 16px;
+    margin-top: 16px;
+    padding-top: 12px;
     border-top: 1px solid rgba(255,255,255,0.06);
     font-size: 12px;
     color: #555;

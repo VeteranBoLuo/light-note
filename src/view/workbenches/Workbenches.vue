@@ -212,7 +212,16 @@
           </div>
         </div>
         <div class="preference-group preference-group--home">
-          <div class="preference-label">{{ t('workbench.preferences.homePage', '默认首页') }}</div>
+          <div class="preference-label">
+            {{ t('workbench.preferences.homePage', '默认首页') }}
+            <b-tooltip title="设置后，每次打开网站默认进入所选模块。再次点击已选中的模块可取消，恢复为官网首页。">
+              <svg class="homepage-hint-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M9.5 9.5c0-1.5 1-2.5 2.5-2.5s2.5 1 2.5 2.5c0 1.5-2.5 3-2.5 4.5v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <circle cx="12" cy="18" r="0.8" fill="currentColor"/>
+              </svg>
+            </b-tooltip>
+          </div>
           <div class="preference-options">
             <button
               v-for="option in homePagePreferenceOptions"
@@ -386,6 +395,7 @@
   import { getJsonInfo } from '@/config/jsonCfg.ts';
   import { API_TEXTS } from '@/config/constants.ts';
   import { cloudSpaceStore, useUserStore } from '@/store';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import CommonDataTable from '@/components/workbenches/CommonDataTable.vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
@@ -1089,6 +1099,18 @@ import { formatStorageSize } from '@/utils/common';
     font-weight: 600;
     color: color-mix(in srgb, var(--preference-accent) 68%, var(--primary-text));
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+  }
+  .homepage-hint-icon {
+    margin-left: 4px;
+    color: color-mix(in srgb, var(--preference-accent) 50%, var(--desc-color));
+    cursor: help;
+    transition: color 0.2s ease;
+    display: block;
+  }
+  .homepage-hint-icon:hover {
+    color: var(--preference-accent);
   }
 
   .preference-options {
