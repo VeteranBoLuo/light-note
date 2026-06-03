@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+*.rar
+.env
+.env.*
 components.d.ts
 auto-imports.d.ts
 
