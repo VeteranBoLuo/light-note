@@ -38,16 +38,18 @@
                     />
                   </svg>
                 </button>
-                <button class="btn-ghost" @click="scrollTo(1)" v-click-log="{ module: '官网首页', operation: '看看功能' }">看看功能</button>
+                <button
+                  class="btn-ghost"
+                  @click="scrollTo(1)"
+                  v-click-log="{ module: '官网首页', operation: '看看功能' }"
+                  >看看功能</button
+                >
               </div>
             </div>
             <div class="cover-mockup">
               <div class="mockup-wrapper">
                 <div class="mockup-carousel">
-                  <div
-                    class="mockup-slides"
-                    :style="{ transform: `translateX(-${previewIndex * 100}%)` }"
-                  >
+                  <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
                     <div class="mockup-screen">
                       <img src="/eg-bookamrk.png" alt="书签管理" />
                     </div>
@@ -94,7 +96,8 @@
               :key="i"
               class="core-card"
               :class="{ visible: visible[1] }"
-              @mousemove="onCardMove($event, i)" @mouseleave="onCardLeave(i)"
+              @mousemove="onCardMove($event, i)"
+              @mouseleave="onCardLeave(i)"
               :ref="
                 (el) => {
                   if (el) cardRefs[i] = el as HTMLElement;
@@ -125,12 +128,7 @@
           <h2>更多好用的能力</h2>
           <p class="section-sub">不止是存储，给你更多</p>
           <div class="features-grid">
-            <div
-              v-for="(f, i) in features"
-              :key="i"
-              class="feat-card"
-              :class="{ visible: visible[2] }"
-            >
+            <div v-for="(f, i) in features" :key="i" class="feat-card" :class="{ visible: visible[2] }">
               <div class="feat-icon">{{ f.icon }}</div>
               <div class="feat-info">
                 <div class="feat-title">{{ f.title }}</div>
@@ -182,7 +180,11 @@
             <div class="cta-emoji">✨</div>
             <h2 class="cta-title">准备好了吗？</h2>
             <p class="cta-desc">无需下载，打开浏览器就能用</p>
-            <button class="btn-primary btn-large" @click="goHome" v-click-log="{ module: '官网首页', operation: '开始使用' }">
+            <button
+              class="btn-primary btn-large"
+              @click="goHome"
+              v-click-log="{ module: '官网首页', operation: '开始使用' }"
+            >
               开始使用
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path
@@ -211,7 +213,13 @@
 
     <!-- Nav -->
     <div class="nav-dots">
-      <button v-for="(_, i) in 5" :key="i" :class="['nav-dot', { active: current === i }]" @click="goTo(i)" v-click-log="{ module: '官网首页', operation: '切换幻灯片' }">
+      <button
+        v-for="(_, i) in 5"
+        :key="i"
+        :class="['nav-dot', { active: current === i }]"
+        @click="goTo(i)"
+        v-click-log="{ module: '官网首页', operation: '切换幻灯片' }"
+      >
         <span class="dot-tooltip">{{ ['封面', '核心', '功能', '理由', '开始'][i] }}</span>
       </button>
     </div>
@@ -629,11 +637,13 @@
   .mockup-wrapper {
     position: relative;
     width: 100%;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px 14px 0 0;
     overflow: hidden;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset;
+    box-shadow:
+      0 24px 64px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset;
   }
   .mockup-carousel {
     overflow: hidden;
@@ -645,7 +655,7 @@
   }
   .mockup-screen {
     flex: 0 0 100%;
-    aspect-ratio: 16 / 10;
+    aspect-ratio: 16 / 10.3;
     overflow: hidden;
     background: #0a0a14;
   }
@@ -675,7 +685,7 @@
   }
   .carousel-dots {
     position: absolute;
-    bottom: 5%;
+    bottom: 5.5%;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -688,37 +698,37 @@
     gap: 5px;
     padding: 4px 10px;
     border-radius: 999px;
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     cursor: pointer;
     transition: all 0.3s ease;
     backdrop-filter: blur(4px);
   }
   .carousel-dot:hover {
-    background: rgba(0,0,0,0.5);
-    border-color: rgba(255,255,255,0.3);
+    background: rgba(0, 0, 0, 0.5);
+    border-color: rgba(255, 255, 255, 0.3);
   }
   .carousel-dot.active {
-    background: rgba(99,92,237,0.7);
+    background: rgba(99, 92, 237, 0.7);
     border-color: #615ced;
-    box-shadow: 0 0 12px rgba(99,92,237,0.4);
+    box-shadow: 0 0 12px rgba(99, 92, 237, 0.4);
   }
   .dot-indicator {
     display: block;
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.4);
+    background: rgba(255, 255, 255, 0.4);
     transition: all 0.3s ease;
     flex-shrink: 0;
   }
   .carousel-dot.active .dot-indicator {
     background: #fff;
-    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
   }
   .dot-label {
     font-size: 11px;
-    color: rgba(255,255,255,0.6);
+    color: rgba(255, 255, 255, 0.6);
     font-weight: 500;
     transition: color 0.3s ease;
     line-height: 1;
@@ -1175,7 +1185,7 @@
   .landing-footer {
     margin-top: 16px;
     padding-top: 12px;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     font-size: 12px;
     color: #555;
     display: flex;
