@@ -18,25 +18,61 @@
             <span class="float-el el-3">☁️</span>
             <span class="float-el el-4">🏷️</span>
           </div>
-          <div class="logo-badge" ref="badgeRef">LIGHT NOTE</div>
-          <h1 class="hero-title" ref="titleRef">
-            <span class="hero-brand">轻 笺</span>
-            <span class="hero-tagline">你的数字生活收纳盒</span>
-          </h1>
-          <div class="hero-actions">
-            <button class="btn-primary" @click="goHome">
-              <span>免费体验</span>
-              <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M5 12h14M13 5l7 7-7 7"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </button>
-            <button class="btn-ghost" @click="scrollTo(1)">看看功能</button>
+          <div class="cover-layout">
+            <div class="cover-text">
+              <div class="logo-badge" ref="badgeRef">LIGHT NOTE</div>
+              <h1 class="hero-title" ref="titleRef">
+                <span class="hero-brand">轻 笺</span>
+                <span class="hero-tagline">你的数字生活收纳盒</span>
+              </h1>
+              <div class="hero-actions">
+                <button class="btn-primary" @click="goHome">
+                  <span>免费体验</span>
+                  <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M5 12h14M13 5l7 7-7 7"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button class="btn-ghost" @click="scrollTo(1)">看看功能</button>
+              </div>
+            </div>
+            <div class="cover-mockup">
+              <div class="mockup-wrapper">
+                <div class="mockup-carousel">
+                  <div
+                    class="mockup-slides"
+                    :style="{ transform: `translateX(-${previewIndex * 100}%)` }"
+                  >
+                    <div class="mockup-screen">
+                      <img src="/eg-bookamrk.png" alt="书签管理" />
+                    </div>
+                    <div class="mockup-screen">
+                      <img src="/eg-note.png" alt="笔记库" />
+                    </div>
+                    <div class="mockup-screen">
+                      <img src="/eg-cloudSpace.png" alt="云空间" />
+                    </div>
+                  </div>
+                </div>
+                <div class="mockup-notch"></div>
+                <div class="carousel-dots">
+                  <button
+                    v-for="(_, i) in 3"
+                    :key="i"
+                    :class="['carousel-dot', { active: previewIndex === i }]"
+                    @click="previewIndex = i"
+                  >
+                    <span class="dot-indicator"></span>
+                    <span class="dot-label">{{ ['书签', '笔记', '云空间'][i] }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -159,6 +195,15 @@
             </button>
           </div>
           <div class="cta-foot">boluo66.top</div>
+          <div class="landing-footer">
+            <span>© 2024 轻笺</span>
+            <span class="footer-sep">|</span>
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
+            <span class="footer-sep">|</span>
+            <a href="mailto:1902013368@qq.com">联系方式</a>
+            <span class="footer-sep">|</span>
+            <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
+          </div>
         </div>
       </section>
     </div>
@@ -170,7 +215,7 @@
       </button>
     </div>
     <div class="slide-counter" :class="{ pulse: animating }">{{
-      ['cover', 'core', 'features', 'why', 'start'][current]
+      ['封面', '核心', '功能', '理由', '开始'][current]
     }}</div>
   </div>
 </template>
@@ -189,6 +234,7 @@
   const titleRef = ref<HTMLElement>();
   const cardRefs = ref<HTMLElement[]>([]);
   const current = ref(0);
+  const previewIndex = ref(0);
   const visible = ref({ 1: false, 2: false, 3: false });
   const animating = ref(false);
 
@@ -540,6 +586,150 @@
   }
 
   /* ============ Cover ============ */
+  .cover-layout {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 48px;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .cover-text {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+  }
+  .cover-text .hero-actions {
+    justify-content: flex-start;
+  }
+  .cover-mockup {
+    flex: 0 0 auto;
+    width: 58%;
+    max-width: 680px;
+    position: relative;
+  }
+  .mockup-wrapper {
+    position: relative;
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px 14px 0 0;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  }
+  .mockup-carousel {
+    overflow: hidden;
+    width: 100%;
+  }
+  .mockup-slides {
+    display: flex;
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .mockup-screen {
+    flex: 0 0 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: #0a0a14;
+  }
+  .mockup-screen img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+  }
+  .mockup-notch {
+    height: 18px;
+    background: #1a1a2e;
+    border-radius: 0 0 8px 8px;
+    position: relative;
+  }
+  .mockup-notch::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+  }
+  .carousel-dots {
+    position: absolute;
+    bottom: 5%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+  }
+  .carousel-dot {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.15);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(4px);
+  }
+  .carousel-dot:hover {
+    background: rgba(0,0,0,0.5);
+    border-color: rgba(255,255,255,0.3);
+  }
+  .carousel-dot.active {
+    background: rgba(99,92,237,0.7);
+    border-color: #615ced;
+    box-shadow: 0 0 12px rgba(99,92,237,0.4);
+  }
+  .dot-indicator {
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.4);
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+  }
+  .carousel-dot.active .dot-indicator {
+    background: #fff;
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+  }
+  .dot-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    font-weight: 500;
+    transition: color 0.3s ease;
+    line-height: 1;
+  }
+  .carousel-dot.active .dot-label {
+    color: #fff;
+  }
+  @media (max-width: 1024px) {
+    .cover-layout {
+      flex-direction: column;
+      gap: 32px;
+    }
+    .cover-text {
+      text-align: center;
+    }
+    .cover-text .hero-actions {
+      justify-content: center;
+    }
+    .cover-mockup {
+      width: 80%;
+      max-width: 480px;
+    }
+  }
+  @media (max-width: 768px) {
+    .cover-mockup {
+      width: 100%;
+    }
+  }
   .float-elements {
     position: absolute;
     inset: 0;
@@ -558,17 +748,19 @@
   }
   .float-el.el-2 {
     top: 20%;
-    right: 12%;
+    left: 25%;
     animation-delay: -2s;
   }
   .float-el.el-3 {
-    bottom: 25%;
-    left: 15%;
+    bottom: auto;
+    top: 55%;
+    left: 8%;
     animation-delay: -4s;
   }
   .float-el.el-4 {
-    bottom: 20%;
-    right: 10%;
+    bottom: auto;
+    top: 35%;
+    left: 35%;
     animation-delay: -6s;
   }
   @keyframes floatAround {
@@ -963,6 +1155,29 @@
     color: #444;
     letter-spacing: 2px;
   }
+  .landing-footer {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 12px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .landing-footer a {
+    color: #666;
+    text-decoration: none;
+    transition: color 0.3s ease;
+  }
+  .landing-footer a:hover {
+    color: #615ced;
+  }
+  .footer-sep {
+    color: #333;
+  }
 
   /* ============ Nav ============ */
   .nav-dots {
@@ -1040,6 +1255,17 @@
     }
     .float-el {
       display: none;
+    }
+    .dot-tooltip {
+      display: none;
+    }
+  }
+  @media (max-width: 1024px) and (min-width: 769px) {
+    .core-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .features-grid {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 </style>

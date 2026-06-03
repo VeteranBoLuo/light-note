@@ -2,7 +2,12 @@
   <div class="filter-container">
     <!-- 下拉筛选按钮 -->
     <div class="filter-dropdown">
-      <b-button class="filter-button" :class="{ 'filter-button--active': showFilterMenu }" @click="toggleFilterMenu" v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }">
+      <b-button
+        class="filter-button"
+        :class="{ 'filter-button--active': showFilterMenu }"
+        @click="toggleFilterMenu"
+        v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }"
+      >
         <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
         <span class="filter-button-label">{{ $t('cloudSpace.fileType') }}</span>
         <span v-if="selectedCount > 0 && selectedCount < fileTypes.length" class="filter-badge">
@@ -89,7 +94,6 @@
   .filter-container {
     display: inline-block;
     position: relative;
-    margin-left: 10px;
   }
 
   .filter-dropdown {
@@ -166,6 +170,9 @@
     width: 214px;
     padding: 10px;
     background-color: var(--menu-body-bg-color);
+    --ant-primary-color: #606cff;
+    --ant-primary-color-hover: #7b83ff;
+    --ant-primary-color-active: #4a55e0;
   }
 
   .filter-header {
@@ -173,7 +180,7 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
-    padding: 2px 4px 10px;
+    padding: 2px 8px 10px;
     border-bottom: 1px solid var(--noteType-border-color);
   }
 
@@ -280,8 +287,7 @@
 
     .filter-menu {
       position: absolute;
-      left: auto;
-      right: 0;
+      left: -5px;
       width: min(320px, calc(100vw - 32px));
       max-height: min(420px, calc(100vh - 170px));
       box-sizing: border-box;
@@ -309,5 +315,27 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+  }
+
+  /* 复选框选中颜色改为蓝色 */
+  .filter-menu :deep(.ant-checkbox-checked .ant-checkbox-inner) {
+    background-color: #606cff;
+    border-color: #606cff;
+  }
+  .filter-menu :deep(.ant-checkbox-indeterminate .ant-checkbox-inner::after) {
+    background-color: #606cff;
+  }
+  .filter-menu :deep(.ant-checkbox-wrapper:hover .ant-checkbox-inner) {
+    border-color: #606cff;
+  }
+  .filter-menu :deep(.ant-checkbox-indeterminate:hover .ant-checkbox-inner::after) {
+    background-color: #7b83ff;
+  }
+  .filter-menu :deep(.ant-checkbox-wrapper:not(.ant-checkbox-wrapper-disabled):hover .ant-checkbox-checked:not(.ant-checkbox-disabled) .ant-checkbox-inner) {
+    background-color: #606cff !important;
+    border-color: #606cff !important;
+  }
+  .filter-menu :deep(.ant-checkbox-checked:not(.ant-checkbox-disabled)::after) {
+    border-color: #606cff !important;
   }
 </style>

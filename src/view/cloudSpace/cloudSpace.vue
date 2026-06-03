@@ -55,18 +55,7 @@
             >
               {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
             </b-button>
-            <div class="file-type-chips">
-              <button
-                v-for="ft in fileTypeFilters"
-                :key="ft.value"
-                class="file-type-chip"
-                :class="{ active: ft.active }"
-                @click="toggleFileType(ft.value)"
-              >
-                <span class="chip-dot" :class="`chip-dot--${ft.value}`"></span>
-                <span>{{ ft.label }}</span>
-              </button>
-            </div>
+            <FileTypeFilter />
             <HandleBtnGroup ref="handleBtnGroup" class="header-handle-group" />
           </div>
         </div>
@@ -132,7 +121,6 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { CLOUD_FILE_CATEGORY_LABEL_KEY, CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
@@ -154,24 +142,6 @@
   const cardViewIcon =
     '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></g></svg>';
   const listViewIcon = icon.filterPanel.list;
-
-  const fileTypeFilters = computed(() =>
-    CLOUD_FILE_CATEGORY_ORDER.map((value) => ({
-      value,
-      label: t(CLOUD_FILE_CATEGORY_LABEL_KEY[value]),
-      active: cloud.typeCheckValue.includes(value),
-    })),
-  );
-
-  function toggleFileType(value: string) {
-    const idx = cloud.typeCheckValue.indexOf(value as any);
-    if (idx === -1) {
-      cloud.typeCheckValue.push(value as any);
-    } else {
-      cloud.typeCheckValue.splice(idx, 1);
-    }
-    cloud.queryFieldList();
-  }
 
   // 拖拽状态
   const dragActive = ref(false);
@@ -468,68 +438,6 @@
 
   .header-handle-group {
     margin-left: auto;
-  }
-
-  .file-type-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    border: 1px solid var(--folder-list-border-color);
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 12px;
-    background: var(--card-bg-color);
-    color: var(--desc-color);
-    transition: all 0.18s ease;
-    &:hover {
-      color: var(--text-color);
-      border-color: var(--card-border-color);
-    }
-    &.active {
-      color: var(--text-color);
-      border-color: var(--resource-file-color);
-      background: color-mix(in srgb, var(--resource-file-color) 10%, transparent);
-    }
-  }
-
-  .chip-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: var(--resource-file-color);
-  }
-
-  .chip-dot--image {
-    background: #f97316;
-  }
-  .chip-dot--video {
-    background: #ef4444;
-  }
-  .chip-dot--audio {
-    background: #8b5cf6;
-  }
-  .chip-dot--pdf {
-    background: #dc2626;
-  }
-  .chip-dot--word {
-    background: #2563eb;
-  }
-  .chip-dot--excel {
-    background: #16a34a;
-  }
-  .chip-dot--ppt {
-    background: #ea580c;
-  }
-  .chip-dot--text {
-    background: #94a3b8;
-  }
-  .chip-dot--compress {
-    background: #ca8a04;
-  }
-  .chip-dot--other {
-    background: #6b7280;
   }
 
   .view-toggle {
