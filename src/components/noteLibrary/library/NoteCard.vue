@@ -251,11 +251,18 @@
     .note-card {
       border-color: var(--card-border-color) !important;
       box-shadow: none;
+      min-width: 0;
+      overflow: hidden;
 
       &:hover {
         transform: none;
         box-shadow: none;
       }
+    }
+
+    .note-content {
+      word-break: break-word;
+      overflow-wrap: break-word;
     }
 
     .note-content::after {

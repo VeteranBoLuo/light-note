@@ -17,19 +17,6 @@
 
       <div class="header">
         <div v-if="bookmark.isMobile" class="mobile-header">
-          <div class="mobile-search-row">
-            <b-input
-              v-model:value="cloud.searchFileName"
-              :placeholder="$t('cloudSpace.fileName')"
-              class="header-input"
-              @enter="cloud.queryFieldList"
-            >
-              <template #suffix>
-                <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
-              </template>
-            </b-input>
-            <HandleBtnGroup ref="handleBtnGroup" class="mobile-upload-actions" />
-          </div>
           <div class="mobile-tools">
             <div class="view-toggle mobile-view-toggle">
               <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
@@ -40,29 +27,19 @@
               </button>
             </div>
             <FileTypeFilter />
+            <HandleBtnGroup ref="handleBtnGroup" class="mobile-upload-actions" />
           </div>
         </div>
         <div v-else class="header-pc">
-          <div class="flex-align-center" style="flex:1; min-width:0">
-            <div
-              style="font-weight: 500; font-size: 20px; position: absolute"
-              @click="initializeCloudSpace('')"
-              v-click-log="{ module: '云空间', operation: '刷新云空间' }"
-              class="dom-hover"
-              >{{ $t('cloudSpace.title') }}</div
-            >
-            <div style="width: 60px"></div>
-            <div class="search-icon">
-              <b-input
-                @input="inputQueryFieldList"
-                v-model:value="cloud.searchFileName"
-                :placeholder="$t('cloudSpace.fileName')"
-              >
-                <template #suffix>
-                  <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
-                </template>
-              </b-input>
-            </div>
+          <div
+            style="font-weight: 500; font-size: 20px; cursor: pointer; white-space: nowrap"
+            @click="initializeCloudSpace('')"
+            v-click-log="{ module: '云空间', operation: '刷新云空间' }"
+            class="dom-hover"
+            >{{ $t('cloudSpace.title') }}</div
+          >
+          <div class="header-spacer"></div>
+          <div class="header-toolbar">
             <div class="view-toggle">
               <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
                 <svg-icon :src="cardViewIcon" size="14" />
@@ -90,8 +67,8 @@
                 <span>{{ ft.label }}</span>
               </button>
             </div>
+            <HandleBtnGroup ref="handleBtnGroup" class="header-handle-group" />
           </div>
-          <HandleBtnGroup ref="handleBtnGroup" />
         </div>
       </div>
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
@@ -151,15 +128,11 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
-  import { debounce } from '@/utils/common';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import {
-    CLOUD_FILE_CATEGORY_LABEL_KEY,
-    CLOUD_FILE_CATEGORY_ORDER,
-  } from '@/constants/cloudFileCategory.ts';
+  import { CLOUD_FILE_CATEGORY_LABEL_KEY, CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
@@ -202,8 +175,6 @@
 
   // 拖拽状态
   const dragActive = ref(false);
-
-  const inputQueryFieldList = debounce(cloud.queryFieldList, 500);
 
   function selectAllFolder() {
     cloud.folder = {
@@ -442,14 +413,6 @@
       min-width: 0;
     }
 
-    .mobile-search-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      width: 100%;
-    }
-
     .mobile-tools {
       display: flex;
       align-items: center;
@@ -465,14 +428,6 @@
       gap: 6px;
       flex-shrink: 0;
     }
-
-    .header-input {
-      width: 300px;
-    }
-
-    .batch-toggle-btn {
-      margin-left: 10px;
-    }
   }
 
   .content-area {
@@ -487,7 +442,8 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-left: 8px;
+    flex: 1 1 0;
+    min-width: 200px;
   }
 
   .header-pc {
@@ -495,6 +451,23 @@
     align-items: center;
     width: 100%;
     gap: 10px;
+  }
+
+  .header-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-spacer {
+    width: 240px;
+    flex-shrink: 0;
+  }
+
+  .header-handle-group {
+    margin-left: auto;
   }
 
   .file-type-chip {
@@ -528,16 +501,36 @@
     background: var(--resource-file-color);
   }
 
-  .chip-dot--image    { background: #f97316; }
-  .chip-dot--video    { background: #ef4444; }
-  .chip-dot--audio    { background: #8b5cf6; }
-  .chip-dot--pdf      { background: #dc2626; }
-  .chip-dot--word     { background: #2563eb; }
-  .chip-dot--excel    { background: #16a34a; }
-  .chip-dot--ppt      { background: #ea580c; }
-  .chip-dot--text     { background: #94a3b8; }
-  .chip-dot--compress { background: #ca8a04; }
-  .chip-dot--other    { background: #6b7280; }
+  .chip-dot--image {
+    background: #f97316;
+  }
+  .chip-dot--video {
+    background: #ef4444;
+  }
+  .chip-dot--audio {
+    background: #8b5cf6;
+  }
+  .chip-dot--pdf {
+    background: #dc2626;
+  }
+  .chip-dot--word {
+    background: #2563eb;
+  }
+  .chip-dot--excel {
+    background: #16a34a;
+  }
+  .chip-dot--ppt {
+    background: #ea580c;
+  }
+  .chip-dot--text {
+    background: #94a3b8;
+  }
+  .chip-dot--compress {
+    background: #ca8a04;
+  }
+  .chip-dot--other {
+    background: #6b7280;
+  }
 
   .view-toggle {
     display: flex;
@@ -545,7 +538,6 @@
     background: var(--bl-input-noBorder-bg-color);
     border-radius: 8px;
     padding: 3px;
-    margin-left: 8px;
   }
 
   .view-toggle-btn {
@@ -563,9 +555,11 @@
     &.active {
       background: var(--background-color);
       color: var(--text-color);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
-    &:hover:not(.active) { color: var(--text-color); }
+    &:hover:not(.active) {
+      color: var(--text-color);
+    }
   }
 
   .mobile-folder-filter {
@@ -600,13 +594,6 @@
     border-color: var(--primary-color);
     background: var(--category-item-ba-color);
     color: var(--primary-color);
-  }
-
-  .search-icon {
-    height: 32px;
-    width: 200px;
-    margin-left: 250px;
-    border-color: var(--card-border-color) !important;
   }
 
   // 拖拽样式
@@ -650,14 +637,7 @@
       align-items: stretch;
       gap: 10px;
 
-      .header-input {
-        flex: 1;
-        width: auto;
-        min-width: 0;
-      }
-
       .batch-toggle-btn {
-        margin-left: 0;
         white-space: nowrap;
       }
     }

@@ -1,5 +1,12 @@
 <template>
   <div class="field-list">
+    <div v-if="viewMode === 'card'" class="card-search-bar">
+      <b-input v-model:value="cloud.searchFileName" :placeholder="$t('cloudSpace.fileName')" @input="onSearchInput">
+        <template #suffix>
+          <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
+        </template>
+      </b-input>
+    </div>
     <div v-if="viewMode === 'card'" class="file-card-grid">
       <article
         v-for="item in cloud.fileList"
@@ -150,13 +157,24 @@
           @change="onToggleSelectAll"
           class="header-checkbox"
         />
-        {{ $t('cloudSpace.fileName') }}
+        <span class="field-header-label">{{ $t('cloudSpace.fileName') }}</span>
+        <b-input
+          v-model:value="cloud.searchFileName"
+          :placeholder="$t('cloudSpace.fileName')"
+          class="header-search-input"
+          height="28px"
+          @input="onSearchInput"
+        >
+          <template #suffix>
+            <svg-icon class="dom-hover" :src="icon.navigation.search" size="14" @click="cloud.queryFieldList" />
+          </template>
+        </b-input>
       </div>
-      <div class="default-area">
-        <div v-if="!bookmark.isMobile">{{ $t('cloudSpace.folder') }}</div>
-        <div v-if="!bookmark.isMobile">{{ $t('cloudSpace.relateTags') }}</div>
+      <div class="default-area" v-if="!bookmark.isMobile">
+        <div>{{ $t('cloudSpace.folder') }}</div>
+        <div>{{ $t('cloudSpace.relateTags') }}</div>
         <div>{{ $t('cloudSpace.fileSize') }}</div>
-        <div v-if="!bookmark.isMobile"> {{ $t('cloudSpace.uploadTime') }} </div>
+        <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
     <div v-if="viewMode === 'table' || batchMode" class="file-container">
@@ -238,20 +256,15 @@
                   icon: icon.cloudSpace.moveFile,
                   function: () => emit('moveField', [item]),
                 },
-                {
-                  label: $t('cloudSpace.relateTags'),
-                  icon: icon.manage_categoryBtn_tag,
-                  function: () => openTagDialog(item),
-                },
               ]"
             >
               <svg-icon class="download-icon" :src="icon.common.more" size="20" />
             </b-menu>
           </div>
         </div>
-        <div class="default-area">
-          <div v-if="!bookmark.isMobile">{{ item.folderName }}</div>
-          <div v-if="!bookmark.isMobile" class="file-tags-cell">
+        <div class="default-area" v-if="!bookmark.isMobile">
+          <div>{{ item.folderName }}</div>
+          <div class="file-tags-cell">
             <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
             <div v-else class="file-tags-list">
               <span
@@ -328,6 +341,7 @@
   import { deleteField, downloadField, shareField } from '@/http/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
+  import { debounce } from '@/utils/common';
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
@@ -382,7 +396,7 @@
 
   const fieldNameWidth = computed(() => {
     if (bookmark.isMobile) {
-      return '70%';
+      return '100%';
     }
     return '42%';
   });
@@ -405,6 +419,7 @@
   });
 
   const getFileCategory = (file: { category?: string }) => getCloudFileCategory(file);
+  const onSearchInput = debounce(() => cloud.queryFieldList(), 500);
   const getFileTypeLabel = (file: { category?: string }) => t(CLOUD_FILE_CATEGORY_LABEL_KEY[getFileCategory(file)]);
   const TEXT_PREVIEW_CHAR_LIMIT = 180;
   const TEXT_PREVIEW_LOAD_MAX = 32;
@@ -931,11 +946,20 @@
   .field-header {
     display: flex;
     align-items: center;
-    height: 20px;
-    padding: 0 20px 10px 20px;
+    padding: 0 20px 14px 20px;
     border-bottom: 1px solid var(--folder-list-border-color);
     font-weight: bold;
     font-size: 15px;
+  }
+  .field-header-label {
+    flex-shrink: 0;
+    line-height: 28px;
+  }
+  .header-search-input {
+    flex: 1;
+    margin-left: 8px;
+    min-width: 0;
+    max-width: 260px;
   }
   .header-checkbox {
     margin-right: 8px;
@@ -1075,6 +1099,14 @@
     }
     .field-item {
       padding: 0 10px;
+      .flex-align-center:first-child {
+        .file-label {
+          min-width: 0;
+        }
+      }
+      .handle-btn {
+        opacity: 1 !important;
+      }
     }
     .edit-file-input {
       width: calc(100% - 92px);
@@ -1110,6 +1142,11 @@
   }
 
   // ── 卡片视图 ──
+  .card-search-bar {
+    padding: 0 6px 14px;
+    max-width: 420px;
+  }
+
   .file-card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
@@ -1381,6 +1418,9 @@
   }
 
   @media (max-width: 720px) {
+    .field-list {
+      min-width: 0;
+    }
     .file-card-grid {
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       column-gap: 12px;
