@@ -584,19 +584,22 @@
   }
 
   function updateFileName(file, nextName: string) {
-    file.isRename = false;
     if (nextName === originalName.value) {
+      file.isRename = false;
       return;
     }
-    file.fileName = nextName;
     apiBasePost('/api/file/updateFile', {
       id: file.id,
       fileName: nextName,
     }).then((res) => {
       if (res.status === 200) {
+        file.isRename = false;
+        file.fileName = nextName;
         recordOperation({ module: '云空间', operation: `重命名文件成功【${nextName}】` });
         message.success(t('cloudSpace.renameSuccess'));
         cloud.queryFieldList();
+      } else {
+        // 后端返回错误（如已存在同名文件），不做任何 UI 改变，用户直接在输入框继续改
       }
     });
   }

@@ -282,10 +282,19 @@
 
     // 预检查重名
     let dupItems: { fileName: string; exists: boolean }[] = [];
+    let allExistingNames: string[] = [];
     try {
       const checkRes = await apiBasePost('/api/file/checkFileNames', { fileNames });
       if (checkRes.status === 200) {
-        dupItems = checkRes.data.filter((d: any) => d.exists);
+        const data = checkRes.data;
+        if (Array.isArray(data)) {
+          // 旧格式：数组 [{ fileName, exists }]
+          dupItems = data.filter((d: any) => d.exists);
+        } else {
+          // 新格式：{ check: [{ fileName, exists }], allNames: [...] }
+          dupItems = data.check.filter((d: any) => d.exists);
+          allExistingNames = data.allNames || [];
+        }
       }
     } catch {
       // 查重失败就正常上传
@@ -319,6 +328,7 @@
           function() {
             Alert.destroy();
             const existingSet = new Set(fileNames);
+            allExistingNames.forEach((name) => existingSet.add(name));
             const renamedFiles = files.map((f) => {
               const oldName = f instanceof File ? f.name : f.fileName;
               const newName = autoRename(oldName, existingSet);
