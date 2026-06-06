@@ -143,7 +143,7 @@
         </section>
 
         <div v-if="viewState.loading" class="result-skeleton" :class="{ 'result-skeleton--list': queryState.view === 'list' }">
-          <div v-for="n in 8" :key="n" class="result-sk-card">
+          <div v-for="n in 24" :key="n" class="result-sk-card">
             <div class="result-sk-top">
               <div class="result-sk-dot"></div>
               <div class="result-sk-line result-sk-line--short"></div>
