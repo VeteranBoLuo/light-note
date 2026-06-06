@@ -1,6 +1,6 @@
 <template>
   <CommonContainer title="api日志" @backClick="router.push('/admin')">
-    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden">
       <b-space style="width: 100%; flex-shrink: 0">
         <b-input v-model:value="searchValue" placeholder="用户名或ip..." @input="handleSearch">
           <template #prefix>
@@ -9,7 +9,8 @@
         </b-input>
         <b-button @click="clearApiLogs" type="primary">清空</b-button>
       </b-space>
-      <BTable style="flex: 1; min-height: 0"
+      <BTable
+        style="flex: 1; min-height: 0"
         :data="logList"
         :columns="logColumns"
         :row-clickable="true"
@@ -35,7 +36,18 @@
         <div>接口：{{ selectedRecord.url }}</div>
         <div>
           请求参数：
-          <pre style="margin: 4px 0 0; max-height: 120px; overflow: auto; background: var(--menu-item-h-bg-color); padding: 8px; border-radius: 6px; font-size: 12px;">{{ selectedRecord.req }}</pre>
+          <pre
+            style="
+              margin: 4px 0 0;
+              max-height: 120px;
+              overflow: auto;
+              background: var(--menu-item-h-bg-color);
+              padding: 8px;
+              border-radius: 6px;
+              font-size: 12px;
+            "
+            >{{ selectedRecord.req }}</pre
+          >
         </div>
         <div>ip地址：{{ selectedRecord?.ip }}</div>
         <div>指纹：{{ selectedRecord.system?.fingerprint }}</div>
@@ -59,9 +71,9 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import { message } from 'ant-design-vue/es';
   const logList = ref([]);
 
   const logColumns = [
@@ -143,5 +155,4 @@
   });
 </script>
 
-<style lang="less" scoped>
-</style>
+<style lang="less" scoped></style>
