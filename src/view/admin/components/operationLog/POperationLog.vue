@@ -1,7 +1,7 @@
 <template>
   <CommonContainer title="操作日志" @backClick="router.push('/admin')">
-    <div style="overflow: hidden; height: 100%; box-sizing: border-box">
-      <b-space style="width: 100%">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+      <b-space style="width: 100%; flex-shrink: 0">
         <b-input v-model:value="searchValue" placeholder="用户名或接口名..." @input="handleSearch">
           <template #prefix>
             <svg-icon :src="icon.navigation.search" size="16" />
@@ -9,82 +9,62 @@
         </b-input>
         <b-button @click="clearOperationLogs" type="primary">清空</b-button>
       </b-space>
-      <a-table
-        :data-source="logList"
+      <BTable style="flex: 1; min-height: 0"
+        :data="logList"
         :columns="logColumns"
-        row-key="id"
-        style="margin-top: 5px"
-        :scroll="{ y: bookmark.screenHeight - 235 }"
-        :pagination="false"
-      >
-        <template #expandedRowRender="{ record }">
-          <div style="overflow: auto; height: 150px; color: var(--text-color)">
-            <div>昵称：{{ record.alias }}</div>
-            <div>邮箱：{{ record.email }}</div>
-            <div>模块：{{ record.module }}</div>
-            <div>操作：{{ record.operation }}</div>
-            <div>时间：{{ record.createTime }}</div>
-          </div>
-        </template>
-      </a-table>
-      <a-pagination
-        :current="currentPage"
-        :page-size="pageSize"
-        show-size-changer
-        size="small"
-        style="margin-top: 10px"
+        :row-clickable="true"
+        :pagination="true"
         :total="total"
-        :show-total="() => `总计 ${total} 条`"
-        @change="onChange"
-      >
-        <template #buildOptionText="props">
-          <span>{{ props.value }}条/页</span>
-        </template>
-      </a-pagination>
+        :current-page="currentPage"
+        :page-size="pageSize"
+        @page-change="onPageChange"
+        @size-change="onSizeChange"
+        @row-click="onRowClick"
+      />
     </div>
+
+    <BModal v-model:visible="detailVisible" title="操作详情" width="500px" :show-footer="false" :mask-closable="true">
+      <div style="display: flex; flex-direction: column; gap: 10px; color: var(--text-color)" v-if="selectedRecord">
+        <div>昵称：{{ selectedRecord.alias }}</div>
+        <div>邮箱：{{ selectedRecord.email }}</div>
+        <div>模块：{{ selectedRecord.module }}</div>
+        <div>操作：{{ selectedRecord.operation }}</div>
+        <div>时间：{{ selectedRecord.createTime }}</div>
+      </div>
+    </BModal>
   </CommonContainer>
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { onMounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
-  import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
-  const bookmark = bookmarkStore();
   const logList = ref([]);
 
-  const logColumns = computed(() => {
-    return [
-      {
-        title: '邮箱',
-        dataIndex: 'email',
-        ellipsis: true,
-      },
-      {
-        title: '操作名称',
-        dataIndex: 'operation',
-        ellipsis: true,
-      },
-    ];
-  });
+  const logColumns = [
+    { title: '邮箱', key: 'email', width: '1fr' },
+    { title: '操作名称', key: 'operation', width: '1fr' },
+  ];
 
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(20);
-  const onChange = (page: number, newPageSize: number) => {
-    if (newPageSize !== pageSize.value) {
-      currentPage.value = 1;
-    } else {
-      currentPage.value = page;
-    }
+  const onPageChange = (page: number) => {
+    currentPage.value = page;
+    searchApiLog();
+  };
+  const onSizeChange = (_current: number, newPageSize: number) => {
     pageSize.value = newPageSize;
+    currentPage.value = 1;
     searchApiLog();
   };
 
@@ -104,6 +84,13 @@
   }
 
   const timer = ref();
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
+
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
   function handleSearch() {
     if (timer.value) {
       clearTimeout(timer.value);
@@ -135,44 +122,4 @@
 </script>
 
 <style lang="less" scoped>
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-  }
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
-  :deep(.ant-select-dropdown-placement-topLeft) {
-    min-width: 100px !important;
-    transition: none !important;
-  }
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-    transition: none !important;
-  }
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-  /*--分页背景调色--*/
-  :deep(.ant-pagination) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item a) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item-active a) {
-    color: #4e4b46;
-  }
-  :deep(.ant-pagination-item-ellipsis) {
-    color: var(--icon-color) !important;
-  }
 </style>

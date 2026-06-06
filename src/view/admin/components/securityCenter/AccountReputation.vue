@@ -11,9 +11,9 @@
         <b-button type="primary" @click="searchAccountReputation">搜索</b-button>
       </div>
     </div>
-    <div class="admin-table-card">
+    <div class="admin-table-card" ref="tableCardRef">
       <BTable
-        :style="{ height: tableScrollY + 'px' }"
+
         :data="accountRepList"
         :columns="accountRepColumns"
         :rowKey="'userId'"
@@ -65,10 +65,10 @@
 <script lang="ts" setup>
   import { inject, onMounted, reactive, ref, watch } from 'vue';
   import { apiQueryPost } from '@/http/request.ts';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import {
     NAVIGATE_TO_USER_EVENTS,
     REFRESH_TRIGGER,
@@ -82,7 +82,9 @@
   const refreshTrigger = inject(REFRESH_TRIGGER);
   const banAccount = inject(BAN_ACCOUNT);
   const unbanAccount = inject(UNBAN_ACCOUNT);
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 302 });
+
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
 
   const accountRepList = ref<any[]>([]);
   const acctRepTotal = ref(0);

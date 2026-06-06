@@ -143,7 +143,7 @@ const zhOptions = [
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
       <img src="${cloudSpace}" alt="云空间示例" class="bookmark-image"  />
-      <p style="text-align: left;font-size: 14px">云空间是轻笺项目中的文件管理模块，帮助用户在云端存储、组织和分享各类文件。它支持文件夹分类、文件上传下载、批量操作和类型过滤，提供便捷的文件云存储体验。用户可以上传图片、文档、视频等文件，并通过文件夹和标签高效管理。云空间可将文件移动至指定文件夹中，实现跨设备数据存储与访问，兼容移动端与桌面端操作体验，同时完善权限控制逻辑，确保用户仅能访问自身上传的文件资源。引入用户配额管理机制，每位用户默认可使用最大1000MB存储空间，后续会升级容量。同时也提供空间使用状态展示组件。</p>
+      <p style="text-align: left;font-size: 14px">云空间是轻笺项目中的文件管理模块，帮助用户在云端存储、组织和分享各类文件。它支持文件夹分类、文件上传下载、批量操作和类型过滤，提供便捷的文件云存储体验。用户可以上传图片、文档、视频等文件，并通过文件夹和标签高效管理。云空间可将文件移动至指定文件夹中，实现跨设备数据存储与访问，兼容移动端与桌面端操作体验，同时完善权限控制逻辑，确保用户仅能访问自身上传的文件资源。引入用户配额管理机制，每位用户默认可使用最大5GB存储空间，后续会升级容量。同时也提供空间使用状态展示组件。</p>
       <br/>
       <div><b>主要功能</b></div>
       <p style="font-size: 14px">• 文件上传：支持多文件上传（最大100MB/文件），显示实时上传进度和速度，可取消上传。上传后自动关联到当前文件夹，支持批量上传。<br/>
@@ -168,7 +168,7 @@ const zhOptions = [
       10.重命名/删除/下载/分享：右键文件选择操作，确认执行。下载和分享功能便于文件分发。</p>
       <br/>
       <div><b>注意事项</b></div>
-      <p style="font-size: 14px">• 文件大小限制：单个文件最大100MB，总上传大小受1GB存储空间限制。<br/>
+      <p style="font-size: 14px">• 文件大小限制：单个文件最大100MB，总上传大小受5GB存储空间限制。<br/>
       • 支持格式：图片（jpg/png等）、文本、PDF、Word、Excel、音频、视频及其他。<br/>
       • 存储空间：监控使用情况，避免超出限额，后续可升级容量。<br/>
       • 批量操作：仅在批量模式下可用，退出后恢复正常视图。<br/>
@@ -327,7 +327,7 @@ const enOptions = [
     content: `<div class="flex-justify-center">
     <div style="width: 80%; height: 100%">
       <img src="${cloudSpace}" alt="Cloud Space Example" class="bookmark-image"  />
-      <p style="text-align: left;font-size: 14px">Cloud Space is a file management module in the Light Note project that helps users store, organize, and share various files in the cloud. It supports folder classification, file upload and download, batch operations, and type filtering, providing a convenient cloud file storage experience. Users can upload images, documents, videos, and other files, and manage them efficiently through folders and tags. Cloud Space allows moving files to specified folders, enabling cross-device data storage and access, compatible with mobile and desktop operation experiences, while improving permission control logic to ensure users can only access their own uploaded file resources. It introduces a user quota management mechanism, with each user defaulting to a maximum of 1000MB storage space, which will be upgraded in the future. It also provides space usage status display components.</p>
+      <p style="text-align: left;font-size: 14px">Cloud Space is a file management module in the Light Note project that helps users store, organize, and share various files in the cloud. It supports folder classification, file upload and download, batch operations, and type filtering, providing a convenient cloud file storage experience. Users can upload images, documents, videos, and other files, and manage them efficiently through folders and tags. Cloud Space allows moving files to specified folders, enabling cross-device data storage and access, compatible with mobile and desktop operation experiences, while improving permission control logic to ensure users can only access their own uploaded file resources. It introduces a user quota management mechanism, with each user defaulting to a maximum of 5GB storage space, which will be upgraded in the future. It also provides space usage status display components.</p>
       <br/>
       <div><b>Main Features</b></div>
       <p style="font-size: 14px">• File Upload: Supports multi-file upload (max 100MB/file), displays real-time upload progress and speed, can cancel upload. After upload, automatically associates with the current folder, supports batch upload.<br/>
@@ -352,7 +352,7 @@ const enOptions = [
       10. Rename/Delete/Download/Share: Right-click file to select operation, confirm execution. Download and share facilitate file distribution.</p>
       <br/>
       <div><b>Notes</b></div>
-      <p style="font-size: 14px">• File Size Limit: Single file max 100MB, total upload size limited by 1GB storage space.<br/>
+      <p style="font-size: 14px">• File Size Limit: Single file max 100MB, total upload size limited by 5GB storage space.<br/>
       • Supported Formats: Images (jpg/png, etc.), text, PDF, Word, Excel, audio, video, and others.<br/>
       • Storage Space: Monitor usage, avoid exceeding quota, capacity can be upgraded later.<br/>
       • Batch Operations: Only available in batch mode, returns to normal view after exit.<br/>

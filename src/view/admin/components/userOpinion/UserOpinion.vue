@@ -40,106 +40,93 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table
-          :data-source="opinionList"
-          :columns="columns"
-          row-key="id"
-          :scroll="{ y: bookmark.screenHeight - 430 }"
-          :pagination="false"
+        <BTable
+          :data="opinionList"
+          :columns="opinionColumns"
+          rowKey="id"
+          :row-clickable="true"
+          :pagination="true"
+          :total="total"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          @page-change="onPageChange"
+          @size-change="onSizeChange"
+          @row-click="onRowClick"
         >
-          <template #expandedRowRender="{ record }">
-            <div class="opinion-detail">
-              <div class="opinion-detail__grid">
-                <div>
-                  <label>反馈内容</label>
-                  <p>{{ record.content }}</p>
-                </div>
-                <div>
-                  <label>提交时间</label>
-                  <p>{{ record.createTime }}</p>
-                </div>
-                <div>
-                  <label>联系方式</label>
-                  <p>{{ record.phone || '-' }}</p>
-                </div>
-                <div>
-                  <label>查看状态</label>
-                  <p>{{ viewStatusText(record) }}</p>
-                </div>
-              </div>
-
-              <div>
-                <label>反馈图片</label>
-                <div class="opinion-detail__images" v-if="parseImgArray(record.imgArray).length > 0">
-                  <img
-                    v-for="(src, index) in parseImgArray(record.imgArray)"
-                    :key="`${src}-${index}`"
-                    :src="src"
-                    alt=""
-                    @click="bookmark.refreshViewer(src)"
-                  />
-                </div>
-                <p v-else>-</p>
-              </div>
-
-              <div class="opinion-reply-editor">
-                <div class="opinion-reply-editor__header">
-                  <label>管理员回复</label>
-                  <b-button
-                    type="primary"
-                    @click="submitReply(record)"
-                    >保存回复</b-button
-                  >
-                </div>
-                <a-textarea
-                  v-model:value="replyDrafts[record.id]"
-                  :rows="3"
-                  :placeholder="record.replyContent || '请输入回复内容，回复后该条反馈会切换为已回复状态'"
-                />
-                <div class="opinion-reply-editor__footer">
-                  <span v-if="record.replyTime" class="opinion-reply-editor__time">
-                    上次回复时间：{{ record.replyTime }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </template>
-
           <template #bodyCell="{ column, record }">
-            <template v-if="column.dataIndex === 'status'">
+            <template v-if="column.key === 'status'">
               <span class="user-opinion__status-tag" :class="`user-opinion__status-tag--${record.status || 'pending'}`">
                 {{ statusMeta(record.status).label }}
               </span>
             </template>
-            <template v-else-if="column.dataIndex === 'operation'">
+            <template v-else-if="column.key === 'operation'">
               <div class="user-opinion__operation">
                 <svg-icon
                   title="删除"
                   :src="icon.table_delete"
                   size="16"
-                  @click="delOpinion(record)"
+                  @click.stop="delOpinion(record)"
                   class="dom-hover"
                 />
               </div>
             </template>
           </template>
-        </a-table>
+        </BTable>
       </div>
 
-      <footer class="admin-footer">
-        <a-pagination
-          :current="currentPage"
-          :page-size="pageSize"
-          show-size-changer
-          size="small"
-          :total="total"
-          @change="onChange"
-        >
-          <template #buildOptionText="props">
-            <span>{{ props.value }}条/页</span>
-          </template>
-        </a-pagination>
-      </footer>
+      <BModal v-model:visible="detailVisible" title="反馈详情" width="600px" :show-footer="false" :mask-closable="true">
+        <div class="opinion-detail" v-if="selectedRecord">
+          <div class="opinion-detail__grid">
+            <div>
+              <label>反馈内容</label>
+              <p>{{ selectedRecord.content }}</p>
+            </div>
+            <div>
+              <label>提交时间</label>
+              <p>{{ selectedRecord.createTime }}</p>
+            </div>
+            <div>
+              <label>联系方式</label>
+              <p>{{ selectedRecord.phone || '-' }}</p>
+            </div>
+            <div>
+              <label>查看状态</label>
+              <p>{{ viewStatusText(selectedRecord) }}</p>
+            </div>
+          </div>
+
+          <div>
+            <label>反馈图片</label>
+            <div class="opinion-detail__images" v-if="parseImgArray(selectedRecord.imgArray).length > 0">
+              <img
+                v-for="(src, index) in parseImgArray(selectedRecord.imgArray)"
+                :key="`${src}-${index}`"
+                :src="src"
+                alt=""
+                @click="bookmark.refreshViewer(src)"
+              />
+            </div>
+            <p v-else>-</p>
+          </div>
+
+          <div class="opinion-reply-editor">
+            <div class="opinion-reply-editor__header">
+              <label>管理员回复</label>
+              <b-button type="primary" @click="submitReply(selectedRecord)">保存回复</b-button>
+            </div>
+            <a-textarea
+              v-model:value="replyDrafts[selectedRecord.id]"
+              :rows="3"
+              :placeholder="selectedRecord.replyContent || '请输入回复内容，回复后该条反馈会切换为已回复状态'"
+            />
+            <div class="opinion-reply-editor__footer">
+              <span v-if="selectedRecord.replyTime" class="opinion-reply-editor__time">
+                上次回复时间：{{ selectedRecord.replyTime }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </BModal>
     </section>
   </div>
 </template>
@@ -151,6 +138,8 @@
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -160,16 +149,18 @@
   const bookmark = bookmarkStore();
   const opinionList = ref<any[]>([]);
   const replyDrafts = reactive<Record<string, string>>({});
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
 
-  const columns = computed(() => [
-    { title: '用户', dataIndex: 'alias', ellipsis: true },
-    { title: '联系方式', dataIndex: 'phone', ellipsis: true },
-    { title: '反馈类型', dataIndex: 'type', ellipsis: true },
-    { title: '状态', dataIndex: 'status', ellipsis: true, width: 120 },
-    { title: '反馈时间', dataIndex: 'createTime', ellipsis: true, width: 180 },
-    { title: '回复时间', dataIndex: 'replyTime', ellipsis: true, width: 180 },
-    { title: '操作', dataIndex: 'operation', ellipsis: true, width: 90 },
-  ]);
+  const opinionColumns = [
+    { title: '用户', key: 'alias', width: '1fr' },
+    { title: '联系方式', key: 'phone', width: '120px' },
+    { title: '类型', key: 'type', width: '80px' },
+    { title: '状态', key: 'status', width: '80px' },
+    { title: '反馈时间', key: 'createTime', width: '150px' },
+    { title: '回复时间', key: 'replyTime', width: '150px' },
+    { title: '操作', key: 'operation', width: '60px' },
+  ];
 
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(10);
@@ -178,6 +169,20 @@
   const statusFilter = ref((route.query.status as string) || 'all');
   const summary = ref<any>({});
   const timer = ref();
+
+  function onPageChange(page: number) {
+    currentPage.value = page;
+    searchOpinionList();
+  }
+  function onSizeChange(_current: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+    searchOpinionList();
+  }
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
 
   const statusOptions = [
     { label: '全部状态', value: 'all' },
@@ -205,7 +210,7 @@
   ]);
 
   function statusMeta(status: string) {
-    const meta = {
+    const meta: Record<string, { label: string }> = {
       pending: { label: '待回复' },
       replied: { label: '已回复' },
       viewed: { label: '已查看' },
@@ -213,41 +218,25 @@
     return meta[status] || meta.pending;
   }
 
-  function viewStatusText(record) {
-    if (record.status === 'viewed') {
-      return '用户已查看';
-    }
-    if (record.status === 'replied') {
-      return '待用户查看';
-    }
+  function viewStatusText(record: any) {
+    if (record.status === 'viewed') return '用户已查看';
+    if (record.status === 'replied') return '待用户查看';
     return '-';
   }
 
   function parseImgArray(value: string | string[]) {
-    if (Array.isArray(value)) {
-      return value.filter(Boolean);
-    }
-    if (!value) {
-      return [];
-    }
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (!value) return [];
     try {
       const parsed = JSON.parse(value);
       return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-    } catch (error) {
+    } catch {
       return [];
     }
   }
 
-  const onChange = (page: number, newPageSize: number) => {
-    currentPage.value = newPageSize !== pageSize.value ? 1 : page;
-    pageSize.value = newPageSize;
-    searchOpinionList();
-  };
-
   function handleSearch() {
-    if (timer.value) {
-      clearTimeout(timer.value);
-    }
+    if (timer.value) clearTimeout(timer.value);
     timer.value = setTimeout(() => {
       currentPage.value = 1;
       searchOpinionList();
@@ -267,29 +256,26 @@
       opinionList.value = res.data.items || [];
       total.value = res.data.total || 0;
       summary.value = res.data.summary || {};
-      opinionList.value.forEach((item) => {
+      opinionList.value.forEach((item: any) => {
         replyDrafts[item.id] = item.replyContent || '';
       });
     }
   }
 
-  async function submitReply(record) {
+  async function submitReply(record: any) {
     const replyContent = (replyDrafts[record.id] || '').trim();
     if (!replyContent) {
       message.warning('请输入回复内容');
       return;
     }
-    const res = await opinionApi.replyOpinion({
-      id: record.id,
-      replyContent,
-    });
+    const res = await opinionApi.replyOpinion({ id: record.id, replyContent });
     if (res.status === 200) {
       message.success('回复已保存');
       searchOpinionList();
     }
   }
 
-  function delOpinion(record) {
+  function delOpinion(record: any) {
     Alert.alert({
       title: '提示',
       content: '请确认是否要删除这条用户反馈？',
@@ -311,6 +297,10 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-manage.less';
+
+  .admin-table-card {
+    padding: 0;
+  }
 
   .log-search-input {
     flex: 1;
@@ -366,7 +356,6 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding-bottom: 32px;
   }
 
   .opinion-detail__grid {
@@ -420,20 +409,6 @@
     align-items: center;
     justify-content: flex-end;
     gap: 12px;
-    padding-bottom: 20px;
-  }
-
-  :deep(.ant-table-expanded-row-fixed) {
-    width: 100% !important;
-    max-width: none !important;
-  }
-
-  :deep(.ant-table-expanded-row > td) {
-    padding-bottom: 28px !important;
-  }
-
-  :deep(.ant-table-body) {
-    padding-bottom: 16px;
   }
 
   @media (max-width: 960px) {

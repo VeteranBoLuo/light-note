@@ -83,14 +83,14 @@
         <p class="trash-empty-text">{{ $t('trash.noData') }}</p>
       </div>
 
-      <div v-else class="trash-table-wrap">
+      <div v-else class="trash-table-wrap" ref="tableCardRef">
         <BTable
           :data="items"
           :columns="columns"
           :rowKey="'id'"
           :selectable="true"
           :selectedRows="selectedIds"
-          :style="{ height: tableScrollY + 'px' }"
+
           @selection-change="selectedIds = $event"
         >
           <template #bodyCell="{ column, record }">
@@ -161,7 +161,9 @@
   import icon from '@/config/icon';
 
   const { t } = useI18n();
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 290, minHeight: 200 });
+
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef, minHeight: 200 });
 
   const loading = ref(false);
   const emptyingAll = ref(false);

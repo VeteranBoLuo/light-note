@@ -55,6 +55,8 @@
   import { reactive, ref } from 'vue';
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { autoRename } from '@/utils/common.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
@@ -268,7 +270,75 @@
   };
 
   async function handleChange(e) {
-    await uploadFiles(e, null);
+    const files = Array.isArray(e) ? e : [];
+    if (files.length === 0) return;
+
+    // 提取文件名
+    const fileNames = files.map((f) => (f instanceof File ? f.name : f.fileName)).filter(Boolean);
+    if (fileNames.length === 0) {
+      await uploadFiles(files, null);
+      return;
+    }
+
+    // 预检查重名
+    let dupItems: { fileName: string; exists: boolean }[] = [];
+    try {
+      const checkRes = await apiBasePost('/api/file/checkFileNames', { fileNames });
+      if (checkRes.status === 200) {
+        dupItems = checkRes.data.filter((d: any) => d.exists);
+      }
+    } catch {
+      // 查重失败就正常上传
+      await uploadFiles(files, null);
+      return;
+    }
+
+    if (dupItems.length === 0) {
+      await uploadFiles(files, null);
+      return;
+    }
+
+    // 有重名 → 弹框让用户选择
+    const dupNames = dupItems.map((d) => d.fileName);
+    const shortList = dupNames.slice(0, 3).join('、');
+    const more = dupNames.length > 3 ? `等${dupNames.length}个文件` : '';
+    Alert.alert({
+      title: '文件已存在',
+      content: `「${shortList}」${more}已存在，请选择处理方式：`,
+      footer: [
+        {
+          label: '全部覆盖',
+          type: 'primary',
+          function() {
+            Alert.destroy();
+            uploadFiles(files, null);
+          },
+        },
+        {
+          label: '全部自动改名',
+          function() {
+            Alert.destroy();
+            const existingSet = new Set(fileNames);
+            const renamedFiles = files.map((f) => {
+              const oldName = f instanceof File ? f.name : f.fileName;
+              const newName = autoRename(oldName, existingSet);
+              existingSet.add(newName);
+              if (f instanceof File) {
+                return new File([f], newName, { type: f.type });
+              }
+              return { ...f, fileName: newName };
+            });
+            uploadFiles(renamedFiles, null);
+          },
+        },
+        {
+          label: '取消',
+          function() {
+            Alert.destroy();
+          },
+        },
+      ],
+    });
   }
 
   // 取消上传确认

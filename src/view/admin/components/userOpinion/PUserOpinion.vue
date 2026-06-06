@@ -64,20 +64,13 @@
         </article>
       </div>
 
-      <a-pagination
-        style="margin-top: 12px"
+      <BPagination
         :current="currentPage"
         :page-size="pageSize"
-        show-size-changer
-        size="small"
         :total="total"
-        :show-total="() => `总计 ${total} 条`"
-        @change="onChange"
-      >
-        <template #buildOptionText="props">
-          <span>{{ props.value }}条/页</span>
-        </template>
-      </a-pagination>
+        @page-change="onPageChange"
+        @size-change="onSizeChange"
+      />
     </div>
   </CommonContainer>
 </template>
@@ -92,6 +85,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import { useRoute } from 'vue-router';
@@ -148,9 +142,13 @@
     }, 400);
   }
 
-  const onChange = (page: number, newPageSize: number) => {
-    currentPage.value = newPageSize !== pageSize.value ? 1 : page;
+  const onPageChange = (page: number) => {
+    currentPage.value = page;
+    searchOpinionList();
+  };
+  const onSizeChange = (newPageSize: number) => {
     pageSize.value = newPageSize;
+    currentPage.value = 1;
     searchOpinionList();
   };
 

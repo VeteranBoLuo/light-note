@@ -52,7 +52,7 @@
       </span>
     </div>
 
-    <div class="admin-table-card">
+    <div class="admin-table-card" ref="tableCardRef">
       <div class="event-batch-bar" v-if="selectedEventIds.length">
         <span>已选择 {{ selectedEventIds.length }} 条攻击日志</span>
         <div class="event-batch-actions">
@@ -70,7 +70,7 @@
           :row-clickable="true"
           :selectable="true"
           :selected-rows="selectedEventIds"
-          :style="{ height: tableScrollY + 'px' }"
+
           @row-click="onRowClick"
           @selection-change="selectedEventIds = $event"
           class="eventClass"
@@ -124,12 +124,12 @@
   import { useRoute, useRouter } from 'vue-router';
   import { message } from 'ant-design-vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import {
     OPEN_EVENT_DETAIL,
     REFRESH_TRIGGER,
@@ -144,7 +144,9 @@
   const refreshTrigger = inject(REFRESH_TRIGGER);
   const route = useRoute();
   const router = useRouter();
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 330 });
+
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
 
   const events = ref<any[]>([]);
   const eventTotal = ref(0);

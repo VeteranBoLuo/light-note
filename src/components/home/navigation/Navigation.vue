@@ -130,9 +130,11 @@
   async function handleToIndex() {
     bookmark.type = 'all';
     bookmark.refreshData();
-    await router.push({
-      path: `/`,
-    });
+    if (bookmark.isMobile) {
+      await router.push('/home');
+    } else {
+      await router.push('/');
+    }
     bookmark.isFold = true;
   }
 

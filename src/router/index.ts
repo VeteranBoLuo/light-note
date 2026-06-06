@@ -11,7 +11,6 @@ import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
 import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
-import { getDesktopHomePath } from '@/utils/preferences.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import searchRouter from '@/router/modules/search.ts';
 import searchBatchRouter from '@/router/modules/searchBatch.ts';

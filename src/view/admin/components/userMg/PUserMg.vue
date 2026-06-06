@@ -1,30 +1,29 @@
 <template>
   <CommonContainer title="用户管理" @backClick="router.push('/admin')">
-    <a-table
-      :data-source="userList"
+    <BTable
+      :data="userList"
       :columns="userColumns"
-      row-key="id"
-      :scroll="{ y: bookmark.screenHeight - 200 }"
-      :pagination="false"
+      :row-clickable="true"
+      :pagination="true"
+      :total="total"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
+      @row-click="onRowClick"
     >
-      <template #bodyCell="{ column, text, record }">
-        <template v-if="column.dataIndex === 'operation'">
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'operation'">
           <b-space>
-            <svg-icon title="登录此用户" :src="icon.navigation.user" size="16" @click="loginAsUser(record)" class="dom-hover" />
-            <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
-            <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
+            <svg-icon title="登录此用户" :src="icon.navigation.user" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
+            <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
+            <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
           </b-space>
         </template>
       </template>
-    </a-table>
-    <p>
-      总计
-      <a>
-        {{ total }}
-      </a>
-      名用户
-    </p>
-    <b-modal
+    </BTable>
+
+    <BModal
       v-if="editVisible"
       title="编辑用户信息"
       v-model:visible="editVisible"
@@ -35,17 +34,31 @@
       <div>
         <b-form form-id="userEditForm" :form-data="editData" :fields="formFields" />
       </div>
-    </b-modal>
+    </BModal>
     <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
+
+    <BModal v-model:visible="detailVisible" title="用户详情" width="90%" :show-footer="false" :mask-closable="true">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px;" v-if="selectedRecord">
+        <div><div style="font-size:12px;color:var(--desc-color)">昵称</div><div style="color:var(--text-color)">{{ selectedRecord.alias }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">邮箱</div><div style="color:var(--text-color)">{{ selectedRecord.email }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">角色</div><div style="color:var(--text-color)">{{ selectedRecord.role }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">IP</div><div style="color:var(--text-color)">{{ selectedRecord.ip || '-' }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">最近活跃</div><div style="color:var(--text-color)">{{ selectedRecord.lastActiveTime || '-' }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">注册时间</div><div style="color:var(--text-color)">{{ selectedRecord.createTime }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">书签</div><div style="color:var(--text-color)">{{ selectedRecord.bookmarkTotal ?? 0 }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">笔记</div><div style="color:var(--text-color)">{{ selectedRecord.noteTotal ?? 0 }}</div></div>
+        <div><div style="font-size:12px;color:var(--desc-color)">云空间</div><div style="color:var(--text-color)">{{ selectedRecord.storageUsed ?? 0 }} MB</div></div>
+      </div>
+    </BModal>
   </CommonContainer>
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
-  import { bookmarkStore } from '@/store';
+  import { onMounted, ref } from 'vue';
   import { apiQueryPost } from '@/http/request.ts';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
@@ -57,33 +70,38 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
-  const bookmark = bookmarkStore();
   const userList = ref([]);
-  const userColumns = computed(() => {
-    return [
-      {
-        title: '昵称',
-        dataIndex: 'alias',
-        width: 100,
-        ellipsis: true,
-      },
-      {
-        title: '邮箱',
-        dataIndex: 'email',
-        ellipsis: true,
-      },
-      {
-        title: '操作',
-        dataIndex: 'operation',
-        width: 100,
-        ellipsis: true,
-      },
-    ];
-  });
+
+  const userColumns = [
+    { title: '昵称', key: 'alias', width: '1fr' },
+    { title: '邮箱', key: 'email', width: '1fr' },
+    { title: '操作', key: 'operation', width: '90px' },
+  ];
+
+  const currentPage = ref<number>(1);
+  const pageSize = ref<number>(20);
+
+  function onPageChange(page: number) {
+    currentPage.value = page;
+    init();
+  }
+  function onSizeChange(_current: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+    init();
+  }
+
   const editData = ref();
   const editVisible = ref(false);
   const previewVisible = ref(false);
   const previewUser = ref<any>(null);
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
+
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
 
   const editUser = (record) => {
     editData.value = record;
@@ -147,8 +165,8 @@
 
   function init() {
     apiQueryPost('/api/user/getUserList', {
-      currentPage: 1,
-      pageSize: 1000,
+      currentPage: currentPage.value,
+      pageSize: pageSize.value,
       filters: {
         key: '',
       },
@@ -165,25 +183,4 @@
 </script>
 
 <style lang="less" scoped>
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-  }
-
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-  }
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
-
 </style>

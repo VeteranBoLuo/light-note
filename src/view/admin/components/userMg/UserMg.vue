@@ -33,17 +33,22 @@
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
 
-      <div class="admin-table-card">
-        <a-table
-          :data-source="userList"
+      <div class="admin-table-card" ref="tableCardRef">
+        <BTable
+          :data="userList"
           :columns="userColumns"
-          row-key="id"
-          :scroll="{ y: tableScrollY }"
-          :pagination="false"
+          :row-clickable="true"
+          :pagination="true"
+          :total="total"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          @page-change="onPageChange"
+          @size-change="onSizeChange"
+          @row-click="onRowClick"
         >
           <template #bodyCell="{ column, text, record }">
-            <template v-if="column.dataIndex === 'operation'">
-              <b-space>
+            <template v-if="column.key === 'operation'">
+              <BSpace>
                 <svg-icon
                   title="登录此用户"
                   :src="icon.navigation.user"
@@ -65,28 +70,29 @@
                   @click="delUser(record)"
                   class="dom-hover"
                 />
-              </b-space>
+              </BSpace>
             </template>
           </template>
-        </a-table>
+        </BTable>
       </div>
 
-      <footer class="admin-footer">
-        <a-pagination
-          :current="currentPage"
-          :page-size="pageSize"
-          show-size-changer
-          size="small"
-          :total="total"
-          @change="onChange"
-        >
-          <template #buildOptionText="props">
-            <span>{{ props.value }}条/页</span>
-          </template>
-        </a-pagination>
-      </footer>
+      <BModal v-model:visible="detailVisible" title="用户详情" width="500px" :show-footer="false" :mask-closable="true">
+        <div class="user-detail" v-if="selectedRecord">
+          <div class="user-detail__grid">
+            <div><label>昵称</label><p>{{ selectedRecord.alias }}</p></div>
+            <div><label>邮箱</label><p>{{ selectedRecord.email }}</p></div>
+            <div><label>角色</label><p>{{ selectedRecord.role }}</p></div>
+            <div><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div>
+            <div><label>最近活跃</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div>
+            <div><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div>
+            <div><label>书签数</label><p>{{ selectedRecord.bookmarkTotal ?? 0 }}</p></div>
+            <div><label>笔记数</label><p>{{ selectedRecord.noteTotal ?? 0 }}</p></div>
+            <div><label>云空间</label><p>{{ selectedRecord.storageUsed ?? 0 }} MB</p></div>
+          </div>
+        </div>
+      </BModal>
 
-      <b-modal
+      <BModal
         v-if="editVisible"
         title="编辑用户信息"
         width="600px"
@@ -95,9 +101,9 @@
         @ok="saveUserInfo"
       >
         <div>
-          <b-form form-id="userEditForm" :form-data="editData" :fields="formFields" />
+          <BForm form-id="userEditForm" :form-data="editData" :fields="formFields" />
         </div>
-      </b-modal>
+      </BModal>
 
       <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
     </section>
@@ -107,10 +113,12 @@
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
   import { apiQueryPost } from '@/http/request.ts';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import { message } from 'ant-design-vue';
@@ -118,65 +126,50 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
 
   const userList = ref([]);
   const userColumns = computed(() => {
     return [
-      {
-        title: '昵称',
-        dataIndex: 'alias',
-        ellipsis: true,
-      },
-      {
-        title: '邮箱',
-        dataIndex: 'email',
-        ellipsis: true,
-      },
-      {
-        title: '密码',
-        dataIndex: 'password',
-        ellipsis: true,
-      },
-      {
-        title: 'ip',
-        dataIndex: 'ip',
-        ellipsis: true,
-      },
-      {
-        title: '最近活跃时间',
-        dataIndex: 'lastActiveTime',
-        ellipsis: true,
-      },
-      { title: '注册时间', dataIndex: 'createTime' },
-      { title: '书签数', dataIndex: 'bookmarkTotal', width: 80 },
-      { title: '笔记数', dataIndex: 'noteTotal', width: 80 },
-      { title: '云空间使用量 (MB)', dataIndex: 'storageUsed', width: 140 },
-      {
-        title: '操作',
-        dataIndex: 'operation',
-        ellipsis: true,
-      },
+      { title: '昵称', key: 'alias', width: '1fr' },
+      { title: '邮箱', key: 'email', width: '1fr' },
+      { title: '密码', key: 'password', width: '100px' },
+      { title: 'IP', key: 'ip', width: '120px' },
+      { title: '最近活跃', key: 'lastActiveTime', width: '140px' },
+      { title: '注册时间', key: 'createTime', width: '140px' },
+      { title: '书签数', key: 'bookmarkTotal', width: '70px' },
+      { title: '笔记数', key: 'noteTotal', width: '70px' },
+      { title: '云空间(MB)', key: 'storageUsed', width: '110px' },
+      { title: '操作', key: 'operation', width: '120px' },
     ];
   });
 
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(50);
   const searchValue = ref('');
-  const { tableScrollY } = useTableScrollY();
 
-  const onChange = (page: number, newPageSize: number) => {
-    if (newPageSize !== pageSize.value) {
-      currentPage.value = 1;
-    } else {
-      currentPage.value = page;
-    }
-    pageSize.value = newPageSize;
+  const onPageChange = (page: number) => {
+    currentPage.value = page;
+    init();
+  };
+
+  const onSizeChange = (_current: number, size: number) => {
+    currentPage.value = 1;
+    pageSize.value = size;
     init();
   };
 
   const timer = ref();
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
+
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
   function handleSearch() {
     if (timer.value) {
       clearTimeout(timer.value);
@@ -302,10 +295,32 @@
     flex: 1;
   }
 
+  .admin-table-card {
+    padding: 0;
+  }
+
   :deep(.ant-select-selector .ant-select-selection-item) {
     background-color: unset !important;
   }
 
   @media (max-width: 960px) {
+  }
+
+  .user-detail__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 20px;
+  }
+
+  .user-detail__grid label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+
+  .user-detail__grid p {
+    margin: 0;
+    color: var(--text-color);
   }
 </style>

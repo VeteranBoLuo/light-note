@@ -36,67 +36,63 @@
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
 
-      <div class="admin-table-card">
-        <a-table
-          :data-source="logList"
+      <div class="admin-table-card" ref="tableCardRef">
+        <BTable
+          :data="logList"
           :columns="logColumns"
-          row-key="id"
-          :scroll="{ y: tableScrollY }"
-          :pagination="false"
+          :row-clickable="true"
+          :pagination="true"
+          :total="total"
+          :page-size="pageSize"
+          :current-page="currentPage"
+          @page-change="onPageChange"
+          @size-change="onSizeChange"
+          @row-click="onRowClick"
         >
-          <template #expandedRowRender="{ record }">
-            <div class="admin-expand-panel">
-              <div>时间：{{ record.requestTime }}</div>
-              <div>接口：{{ record.url }}</div>
-              <div>
-                请求参数：
-                <pre>{{ record.req }}</pre>
-                <div
-                  >响应结果：
-                  <pre>{{ record.res }}</pre>
-                </div>
-              </div>
-              <div>ip地址：{{ record?.ip }}</div>
-              <div>指纹：{{ record.system?.fingerprint }}</div>
-              <div>省份：{{ record.location?.province }}</div>
-              <div>城市：{{ record.location?.city }}</div>
-              <div>浏览器：{{ record.system?.browser }}</div>
-              <div>操作系统：{{ record.system?.os }}</div>
-            </div>
+          <template #bodyCell="{ text, column }">
+            <template v-if="column.key === 'system'">
+              <span :style="{ color: getOsColor(text?.os), fontSize: '12px' }">{{ text?.os || '未知' }}</span>
+            </template>
           </template>
-        </a-table>
+        </BTable>
       </div>
 
-      <footer class="admin-footer">
-        <a-pagination
-          :current="currentPage"
-          :page-size="pageSize"
-          show-size-changer
-          size="small"
-          :total="total"
-          @change="onChange"
-        >
-          <template #buildOptionText="props">
-            <span>{{ props.value }}条/页</span>
-          </template>
-        </a-pagination>
-      </footer>
+      <BModal v-model:visible="detailVisible" title="API 详情" width="600px" :show-footer="false" :mask-closable="true">
+        <div style="display: flex; flex-direction: column; gap: 10px; color: var(--text-color)" v-if="selectedRecord">
+          <div>时间：{{ selectedRecord.requestTime }}</div>
+          <div>接口：{{ selectedRecord.url }}</div>
+          <div>
+            请求参数：
+            <pre style="margin: 4px 0 0; max-height: 120px; overflow: auto; background: var(--menu-item-h-bg-color); padding: 8px; border-radius: 6px; font-size: 12px;">{{ selectedRecord.req }}</pre>
+          </div>
+          <div>ip地址：{{ selectedRecord?.ip }}</div>
+          <div>指纹：{{ selectedRecord.system?.fingerprint }}</div>
+          <div>省份：{{ selectedRecord.location?.province }}</div>
+          <div>城市：{{ selectedRecord.location?.city }}</div>
+          <div>浏览器：{{ selectedRecord.system?.browser }}</div>
+          <div>操作系统：{{ selectedRecord.system?.os }}</div>
+        </div>
+      </BModal>
     </section>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
   const logList = ref([]);
   const loading = ref(false);
   const hasLoaded = ref(false);
@@ -107,62 +103,63 @@
     return [
       {
         title: '昵称',
-        dataIndex: 'alias',
-        ellipsis: true,
+        key: 'alias',
+        width: '1fr',
       },
       {
         title: '邮箱',
-        dataIndex: 'email',
-        ellipsis: true,
+        key: 'email',
+        width: '1fr',
       },
       {
         title: '时间',
-        dataIndex: 'requestTime',
-        ellipsis: true,
+        key: 'requestTime',
+        width: '1fr',
       },
       {
         title: '接口',
-        dataIndex: 'url',
-        ellipsis: true,
+        key: 'url',
+        width: '1fr',
       },
       {
         title: 'ip',
-        dataIndex: 'ip',
-        ellipsis: true,
+        key: 'ip',
+        width: '1fr',
       },
       {
         title: '系统',
-        dataIndex: 'system',
-        width: 110,
-        customCell: () => ({ style: { whiteSpace: 'nowrap' } }),
-        customRender: ({ text }: { text: any }) => {
-          const os = text?.os || '未知';
-          let color = '#666';
-          if (os.includes('Windows')) color = '#1677ff';
-          else if (os.includes('Mac')) color = '#333';
-          else if (os.includes('Linux')) color = '#52c41a';
-          return h('span', { style: { color, fontSize: '12px' } }, os);
-        },
+        key: 'system',
+        width: '110px',
       },
       {
         title: 'code',
-        dataIndex: 'statusCode',
-        ellipsis: true,
+        key: 'statusCode',
+        width: '1fr',
       },
     ];
   });
 
+  function getOsColor(os?: string): string {
+    if (!os) return '#666';
+    if (os.includes('Windows')) return '#1677ff';
+    if (os.includes('Mac')) return '#333';
+    if (os.includes('Linux')) return '#52c41a';
+    return '#666';
+  }
+
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(10);
-  const onChange = (page: number, newPageSize: number) => {
-    if (newPageSize !== pageSize.value) {
-      currentPage.value = 1;
-    } else {
-      currentPage.value = page;
-    }
-    pageSize.value = newPageSize;
+
+  function onPageChange(page: number) {
+    currentPage.value = page;
     searchApiLog();
-  };
+  }
+
+  function onSizeChange(_current: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+    searchApiLog();
+  }
 
   function clearApiLogs() {
     Alert.alert({
@@ -196,7 +193,6 @@
 
   const total = ref(0);
   const searchValue = ref('');
-  const { tableScrollY } = useTableScrollY();
   const statCards = computed(() => {
     const totalValue = total.value || 0;
     const hasData = totalValue > 0;
@@ -227,6 +223,13 @@
   }
 
   const filterRoot = ref(true);
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
+
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
 
   function searchApiLog(options: { silent?: boolean } = {}) {
     const currentToken = ++requestToken.value;
@@ -300,6 +303,14 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-manage.less';
+
+  .admin-table-card {
+    padding: 0;
+  }
+
+  :deep(.ant-select-selector .ant-select-selection-item) {
+    background-color: unset !important;
+  }
 
   .log-search-input {
     flex: 1;

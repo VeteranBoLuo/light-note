@@ -17,13 +17,13 @@
       <span class="admin-filters-hint">白名单对象仍会记录攻击日志和风险分，但不会触发自动封禁</span>
     </div>
 
-    <div class="admin-table-card security-whitelist-card">
+    <div class="admin-table-card security-whitelist-card" ref="tableCardRef">
       <b-loading :loading="loading">
         <BTable
           :data="whitelist"
           :columns="whitelistColumns"
           :rowKey="'id'"
-          :style="{ height: tableScrollY + 'px' }"
+
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'targetType'">
@@ -132,6 +132,7 @@
   import { onMounted, reactive, ref } from 'vue';
   import { message } from 'ant-design-vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -139,10 +140,8 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import { whitelistColumns } from './securityShared';
 
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 330 });
   const filters = reactive({ key: '', targetType: undefined as string | undefined });
   const whitelist = ref<any[]>([]);
   const loading = ref(false);
@@ -159,6 +158,9 @@
   const selectedUserIds = ref<string[]>([]);
   const selectedUserMap = ref<Record<string, any>>({});
   const userSearchTimer = ref<any>(null);
+
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
 
   const userColumns = [
     { title: '昵称', key: 'alias' },

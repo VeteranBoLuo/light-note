@@ -30,16 +30,15 @@
         <span class="admin-filters-hint">支持文件名搜索 · 选择类型查看不同状态的图片</span>
       </div>
 
-      <div class="admin-table-card">
-        <a-table
-          :data-source="allImg[imgType]"
+      <div class="admin-table-card" style="padding: 0" ref="tableCardRef">
+        <BTable
+          :data="allImg[imgType]"
           :columns="imageColumns"
           row-key="id"
-          :scroll="{ y: tableScrollY }"
           :pagination="false"
         >
           <template #bodyCell="{ column, text, record }">
-            <template v-if="column.dataIndex === 'img'">
+            <template v-if="column.key === 'img'">
               <div
                 style="
                   width: 40px;
@@ -59,7 +58,7 @@
               </div>
             </template>
           </template>
-        </a-table>
+        </BTable>
       </div>
     </section>
   </div>
@@ -69,15 +68,18 @@
   import { computed, onMounted, ref } from 'vue';
   import { apiBaseGet, apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
 
   const imgOptions = [
     { label: '使用中', value: 'usedImages' },
@@ -88,34 +90,21 @@
     return [
       {
         title: '图片',
-        dataIndex: 'img',
-        width: 200,
+        key: 'img',
+        width: '200px',
       },
       {
         title: '名称',
-        dataIndex: 'name',
+        key: 'name',
         ellipsis: true,
       },
       {
         title: '类型',
-        dataIndex: 'extension',
+        key: 'extension',
         ellipsis: true,
       },
     ];
   });
-
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(10);
-  const onChange = (page: number, newPageSize: number) => {
-    if (newPageSize !== pageSize.value) {
-      currentPage.value = 1;
-    } else {
-      currentPage.value = page;
-    }
-    pageSize.value = newPageSize;
-    searchApiImage();
-  };
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 480 });
 
   function clearApiImages() {
     Alert.alert({
@@ -178,12 +167,6 @@
 
   .log-search-input {
     flex: 1;
-  }
-
-  .image-mg__footer {
-    margin-top: 12px;
-    display: flex;
-    justify-content: center;
   }
 
   @media (max-width: 960px) {

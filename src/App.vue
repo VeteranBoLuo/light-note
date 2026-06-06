@@ -149,8 +149,8 @@
     user.preferences.lang = user.preferences?.lang || 'zh-CN';
     user.preferences.noteViewMode = user.preferences?.noteViewMode || 'list';
     user.preferences.homePage = getHomePagePreference(user.preferences);
-    // 有真实偏好时才写入 localStorage（排除游客默认值）
-    if (user.preferences.homePage !== 'landing' && user.id && user.role !== 'visitor') {
+    // 已登录用户同步偏好到 localStorage（游客无 API 偏好，不需处理）
+    if (user.id && user.role !== 'visitor') {
       setStoredPreferences(user.preferences);
     }
     setLocale(user.preferences.lang || 'zh-CN');

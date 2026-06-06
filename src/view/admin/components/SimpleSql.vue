@@ -47,7 +47,7 @@
 
     <div v-if="tableSnippets.length" class="template-row">
       <span class="template-label">数据操作：</span>
-      <button v-for="item in tableSnippets" :key="item.label" type="button" class="chip" @click="appendSql(item.value)">{{ item.label }}</button>
+      <button v-for="item in tableSnippets" :key="item.label" type="button" class="chip" @click="runSqlTemplate(item.value)">{{ item.label }}</button>
     </div>
 
     <section class="result-grid">
@@ -161,6 +161,7 @@ const schemaSummary = computed(() => {
 });
 
 function appendSql(fragment: string) { if (fragment) sql.value = fragment.trim() + ' '; }
+function runSqlTemplate(fragment: string) { sql.value = fragment.trim(); runSql(); }
 function clearSql() { sql.value = ''; }
 
 function getSqlTextarea(): HTMLTextAreaElement | null {

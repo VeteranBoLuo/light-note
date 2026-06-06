@@ -48,15 +48,30 @@
             </div>
             <div class="cover-mockup">
               <div class="mockup-wrapper">
+                <!-- Browser window frame -->
+                <div class="mockup-header">
+                  <div class="win-dots">
+                    <span class="dot d-red"></span>
+                    <span class="dot d-yellow"></span>
+                    <span class="dot d-green"></span>
+                  </div>
+                  <div class="win-url">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+                    <span>轻笺 · {{ ['书签', '笔记', '云空间'][previewIndex] }}</span>
+                  </div>
+                </div>
                 <div class="mockup-carousel">
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
                     <div class="mockup-screen">
+                      <div class="screen-glare"></div>
                       <img src="/eg-bookamrk.png" alt="书签管理" />
                     </div>
                     <div class="mockup-screen">
+                      <div class="screen-glare"></div>
                       <img src="/eg-note.png" alt="笔记库" />
                     </div>
                     <div class="mockup-screen">
+                      <div class="screen-glare"></div>
                       <img src="/eg-cloudSpace.png" alt="云空间" />
                     </div>
                   </div>
@@ -88,8 +103,8 @@
         </div>
         <div class="slide-inner center">
           <div class="section-badge">CORE</div>
-          <h2>三个核心，一个地方</h2>
-          <p class="section-sub">替代浏览器收藏夹 + 笔记软件 + 网盘</p>
+          <h2>一站式收纳</h2>
+          <p class="section-sub">替代浏览器收藏夹 + 笔记软件 + 网盘，三合一的数字生活空间</p>
           <div class="core-grid">
             <div
               v-for="(c, i) in cores"
@@ -145,7 +160,7 @@
           <div class="orb o7"></div>
           <div class="orb o8"></div>
         </div>
-        <div class="slide-inner center" style="max-width: 800px">
+        <div class="slide-inner center" :style="{ maxWidth: 'max(800px, min(42vw, 1050px))' }">
           <div class="section-badge">WHY</div>
           <h2>为什么选轻笺</h2>
           <div class="reasons-wrap">
@@ -203,7 +218,7 @@
             <span class="footer-sep">|</span>
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
             <span class="footer-sep">|</span>
-            <a href="mailto:1902013368@qq.com">联系方式</a>
+            <a href="mailto:1902013368@qq.com">联系我们</a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
@@ -292,12 +307,12 @@
 
   const reasons = [
     {
-      icon: '🎯',
-      title: '三合一，不分裂',
-      desc: '笔记、书签、文件一个地方，不用在几个 App 之间来回切',
+      icon: '💪',
+      title: '持续更新',
+      desc: '功能不断迭代，每次打开都有新惊喜',
       bg: 'rgba(99,92,237,.12)',
     },
-    { icon: '🏠', title: '数据在你手上', desc: '部署在自己服务器，不走第三方云服务', bg: 'rgba(0,168,132,.12)' },
+    { icon: '🆓', title: '完全免费', desc: '无需付费，打开浏览器就能使用所有功能', bg: 'rgba(0,168,132,.12)' },
     { icon: '🌱', title: '越用越聪明', desc: '标签串联内容，知识网络越来越密', bg: 'rgba(255,138,0,.12)' },
     {
       icon: '⚡',
@@ -581,7 +596,7 @@
   .slide-inner {
     position: relative;
     z-index: 2;
-    max-width: 1000px;
+    max-width: max(1000px, min(52vw, 1330px));
     width: 100%;
   }
   .center {
@@ -617,7 +632,7 @@
     justify-content: space-between;
     gap: 48px;
     width: 100%;
-    max-width: 1200px;
+    max-width: max(1200px, min(62.5vw, 1600px));
     margin: 0 auto;
   }
   .cover-text {
@@ -631,7 +646,7 @@
   .cover-mockup {
     flex: 0 0 auto;
     width: 58%;
-    max-width: 680px;
+    max-width: max(680px, min(35vw, 900px));
     position: relative;
   }
   .mockup-wrapper {
@@ -639,11 +654,56 @@
     width: 100%;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px 14px 0 0;
+    border-radius: 14px;
     overflow: hidden;
     box-shadow:
       0 24px 64px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  }
+  .mockup-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: #12121e;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .win-dots {
+    display: flex;
+    gap: 7px;
+    flex-shrink: 0;
+  }
+  .win-dots .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: block;
+  }
+  .dot.d-red {
+    background: #ff5f57;
+  }
+  .dot.d-yellow {
+    background: #ffbd2e;
+  }
+  .dot.d-green {
+    background: #28c840;
+  }
+  .win-url {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    color: #666;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .win-url svg {
+    flex-shrink: 0;
+    color: #555;
   }
   .mockup-carousel {
     overflow: hidden;
@@ -655,16 +715,20 @@
   }
   .mockup-screen {
     flex: 0 0 100%;
-    aspect-ratio: 16 / 10.3;
     overflow: hidden;
     background: #0a0a14;
+    position: relative;
   }
   .mockup-screen img {
     width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
     display: block;
+  }
+  .screen-glare {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 40%, transparent 70%, rgba(255,255,255,0.02) 100%);
+    pointer-events: none;
+    z-index: 2;
   }
   .mockup-notch {
     height: 18px;
@@ -910,7 +974,7 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
-    max-width: 900px;
+    max-width: max(900px, min(47vw, 1200px));
     margin: 0 auto;
   }
   .core-card {
@@ -1008,7 +1072,7 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
-    max-width: 900px;
+    max-width: max(900px, min(47vw, 1200px));
     margin: 0 auto;
   }
   .feat-card {
@@ -1108,7 +1172,7 @@
   /* ============ CTA ============ */
   .cta-glass {
     position: relative;
-    max-width: 480px;
+    max-width: max(480px, min(25vw, 600px));
     margin: 0 auto;
     padding: 32px 36px;
     border-radius: 28px;

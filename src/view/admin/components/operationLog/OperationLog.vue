@@ -35,39 +35,29 @@
       </div>
 
       <div class="admin-table-card">
-        <a-table
-          :data-source="logList"
+        <BTable
+          :data="logList"
           :columns="logColumns"
-          row-key="id"
-          :scroll="{ y: tableScrollY }"
-          :pagination="false"
-        >
-          <template #expandedRowRender="{ record }">
-            <div class="admin-expand-panel">
-              <div>昵称：{{ record.alias }}</div>
-              <div>邮箱：{{ record.email }}</div>
-              <div>模块：{{ record.module }}</div>
-              <div>操作：{{ record.operation }}</div>
-              <div>时间：{{ record.createTime }}</div>
-            </div>
-          </template>
-        </a-table>
+          :row-clickable="true"
+          :pagination="true"
+          :total="total"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          @page-change="onPageChange"
+          @size-change="onSizeChange"
+          @row-click="onRowClick"
+        />
       </div>
 
-      <footer class="admin-footer">
-        <a-pagination
-          :current="currentPage"
-          :page-size="pageSize"
-          show-size-changer
-          size="small"
-          :total="total"
-          @change="onChange"
-        >
-          <template #buildOptionText="props">
-            <span>{{ props.value }}条/页</span>
-          </template>
-        </a-pagination>
-      </footer>
+      <BModal v-model:visible="detailVisible" title="操作详情" width="500px" :show-footer="false" :mask-closable="true">
+        <div style="display: flex; flex-direction: column; gap: 10px; color: var(--text-color)" v-if="selectedRecord">
+          <div>昵称：{{ selectedRecord.alias }}</div>
+          <div>邮箱：{{ selectedRecord.email }}</div>
+          <div>模块：{{ selectedRecord.module }}</div>
+          <div>操作：{{ selectedRecord.operation }}</div>
+          <div>时间：{{ selectedRecord.createTime }}</div>
+        </div>
+      </BModal>
     </section>
   </div>
 </template>
@@ -77,56 +67,46 @@
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { message } from 'ant-design-vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
-  const logColumns = computed(() => {
-    return [
-      {
-        title: '昵称',
-        dataIndex: 'alias',
-        ellipsis: true,
-      },
-      {
-        title: '邮箱',
-        dataIndex: 'email',
-        ellipsis: true,
-      },
-      {
-        title: '模块',
-        dataIndex: 'module',
-        ellipsis: true,
-      },
-      {
-        title: '操作',
-        dataIndex: 'operation',
-        ellipsis: true,
-      },
-      {
-        title: '时间',
-        dataIndex: 'createTime',
-        ellipsis: true,
-      },
-    ];
-  });
+  const logColumns = [
+    { title: '昵称', key: 'alias', width: '1fr' },
+    { title: '邮箱', key: 'email', width: '1fr' },
+    { title: '模块', key: 'module', width: '1fr' },
+    { title: '操作', key: 'operation', width: '1fr' },
+    { title: '时间', key: 'createTime', width: '1fr' },
+  ];
 
   const currentPage = ref<number>(1);
   const pageSize = ref<number>(10);
-  const onChange = (page: number, newPageSize: number) => {
-    if (newPageSize !== pageSize.value) {
-      currentPage.value = 1;
-    } else {
-      currentPage.value = page;
-    }
-    pageSize.value = newPageSize;
+  const total = ref(0);
+  const searchValue = ref('');
+  const timer = ref();
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
+
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
+
+  function onPageChange(page: number) {
+    currentPage.value = page;
     searchApiLog();
-  };
+  }
+  function onSizeChange(_current: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+    searchApiLog();
+  }
 
   function clearOperationLogs() {
     Alert.alert({
@@ -143,7 +123,6 @@
     });
   }
 
-  const timer = ref();
   function handleSearch() {
     if (timer.value) {
       clearTimeout(timer.value);
@@ -152,11 +131,6 @@
       searchApiLog();
     }, 500);
   }
-
-  const total = ref(0);
-  const searchValue = ref('');
-
-  const { tableScrollY } = useTableScrollY();
 
   const statCards = computed(() => {
     const totalValue = total.value || 0;
@@ -205,6 +179,11 @@
   @import '@/assets/css/admin-manage.less';
   .log-search-input {
     flex: 1;
+  }
+
+  .admin-table-card {
+    /* BTable 有自己的 padding，这里取消重复的 */
+    padding: 0;
   }
 
   @media (max-width: 960px) {

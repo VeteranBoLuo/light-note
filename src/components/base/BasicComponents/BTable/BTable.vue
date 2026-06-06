@@ -2,7 +2,6 @@
   <div class="table-container">
     <!-- 表头 -->
     <div class="table-header" :style="gridStyle">
-      <!-- 全选复选框 -->
       <div v-if="props.selectable" class="header-cell" style="width: 50px">
         <a-checkbox
           class="select-checkbox"
@@ -19,14 +18,13 @@
     <!-- 表格内容 -->
     <div class="table-body" :style="{ maxHeight: props.pagination ? 'calc(100% - 100px)' : '100%' }">
       <div
-        v-for="(item, rowIndex) in currentPageData"
+        v-for="(item, rowIndex) in props.data"
         :key="rowIndex"
         class="table-row"
         :class="{ 'is-clickable': props.rowClickable }"
         :style="gridStyle"
         @click="handleRowClick(item, rowIndex)"
       >
-        <!-- 行选择复选框 -->
         <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
           <a-checkbox
             class="select-checkbox"
@@ -36,32 +34,36 @@
         </div>
         <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
           <slot name="bodyCell" :text="item[col.key]" :record="item" :index="rowIndex" :column="col">
-            <!-- 默认渲染（父组件未自定义时生效） -->
             {{ item[col.key] }}
           </slot>
         </div>
+      </div>
+      <!-- 展开行 -->
+      <div
+        v-if="props.expandedRows?.length && item[props.rowKey] != null && props.expandedRows.includes(item[props.rowKey])"
+        class="table-expand-row"
+      >
+        <slot name="expandedRow" :record="item" />
       </div>
     </div>
 
     <!-- 分页器 -->
     <div class="table-pagination" v-if="props.pagination">
-      <a-pagination
-        v-model:current="currentPage"
-        v-model:pageSize="pageSize"
+      <BPagination
+        :current="props.currentPage"
+        :page-size="props.pageSize"
         :total="props.total"
-        show-size-changer
-        show-quick-jumper
-        :page-size-options="['10', '20', '50', '100']"
-        @change="handlePageChange"
-        @showSizeChange="handleSizeChange"
+        @page-change="emit('pageChange', $event)"
+        @size-change="emit('sizeChange', props.currentPage, $event)"
       />
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed, useSlots, ref, PropType, ComputedRef } from 'vue';
+  import { computed, useSlots, PropType } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
+  import BPagination from '@/components/base/BasicComponents/BPagination.vue';
 
   const props = defineProps({
     data: {
@@ -104,23 +106,14 @@
       type: Boolean,
       default: false,
     },
+    expandedRows: {
+      type: Array as PropType<string[]>,
+      default: () => [],
+    },
   });
 
   const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick']);
   const slots = useSlots();
-  const currentPage = ref(props.currentPage);
-  const pageSize = ref(props.pageSize);
-
-  // 计算当前页数据
-  const currentPageData: ComputedRef<
-    { alias: string; email?: string; userId?: string; delFlag: number; lastSeenAt?: string }[]
-  > = computed(() => {
-    if (!props.pagination) return props.data;
-
-    const start = (currentPage.value - 1) * pageSize.value;
-    const end = start + pageSize.value;
-    return props.data.slice(start, end);
-  });
 
   // 生成网格列宽样式
   const gridStyle = computed(() => {
@@ -136,44 +129,30 @@
   // 全选状态
   const isAllSelected = computed(() => {
     return (
-      currentPageData.value.length > 0 &&
-      currentPageData.value.every((item) => props.selectedRows.includes(item[props.rowKey]))
+      props.data.length > 0 &&
+      props.data.every((item) => props.selectedRows.includes(item[props.rowKey]))
     );
   });
 
   // 部分选中状态
   const isIndeterminate = computed(() => {
-    const selectedInPage = currentPageData.value.filter((item) => props.selectedRows.includes(item[props.rowKey]));
-    return selectedInPage.length > 0 && selectedInPage.length < currentPageData.value.length;
+    const selectedInPage = props.data.filter((item) => props.selectedRows.includes(item[props.rowKey]));
+    return selectedInPage.length > 0 && selectedInPage.length < props.data.length;
   });
 
-  // 行是否选中
   const isRowSelected = (item: any) => {
     return props.selectedRows.includes(item[props.rowKey]);
   };
 
-  // 处理全选
   const handleSelectAllChange = (checked: boolean) => {
-    const selectedKeys = checked ? currentPageData.value.map((item) => item[props.rowKey]) : [];
+    const selectedKeys = checked ? props.data.map((item) => item[props.rowKey]) : [];
     emit('selectionChange', selectedKeys);
   };
 
-  // 处理行选择
   const handleRowSelectChange = (item: any, checked: boolean) => {
     const key = item[props.rowKey];
     const newSelected = checked ? [...props.selectedRows, key] : props.selectedRows.filter((k) => k !== key);
     emit('selectionChange', newSelected);
-  };
-
-  // 分页事件处理
-  const handlePageChange = (page) => {
-    currentPage.value = page;
-    emit('pageChange', page);
-  };
-
-  const handleSizeChange = (current, size) => {
-    pageSize.value = size;
-    emit('sizeChange', current, size);
   };
 
   const handleRowClick = (item, rowIndex: number) => {
@@ -244,6 +223,11 @@
     cursor: pointer;
   }
 
+  .table-expand-row {
+    padding: 0 20px 16px;
+    margin-bottom: 4px;
+  }
+
   .table-cell {
     padding: 0 8px;
     box-sizing: border-box;
@@ -261,42 +245,5 @@
     margin-top: auto;
     padding-top: 12px;
     border-top: 1px solid var(--menu-item-h-bg-color);
-
-    :deep(.ant-pagination) {
-      display: flex;
-      justify-content: center;
-
-      .ant-pagination-item,
-      .ant-pagination-prev,
-      .ant-pagination-next {
-        background-color: #27272a;
-        border-color: var(--menu-item-h-bg-color);
-
-        a {
-          color: #d4d4d8;
-        }
-
-        &:hover {
-          border-color: #4e4b46;
-        }
-
-        &-active {
-          background-color: #4e4b46;
-          border-color: #4e4b46;
-        }
-      }
-
-      .ant-pagination-options {
-        .ant-select-selector {
-          background-color: #27272a;
-          border-color: var(--menu-item-h-bg-color);
-          color: #d4d4d8;
-        }
-      }
-
-      .ant-pagination-total-text {
-        color: #a1a1aa;
-      }
-    }
   }
 </style>

@@ -11,9 +11,9 @@
         <b-button type="primary" @click="searchIps">搜索</b-button>
       </div>
     </div>
-    <div class="admin-table-card">
+    <div class="admin-table-card" ref="tableCardRef">
       <BTable
-        :style="{ height: tableScrollY + 'px' }"
+
         :data="ipList"
         :columns="ipColumns"
         :rowKey="'ip'"
@@ -48,15 +48,17 @@
 <script lang="ts" setup>
   import { inject, onMounted, reactive, ref, watch } from 'vue';
   import { apiQueryPost } from '@/http/request.ts';
+  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import { OPEN_IP_ACCOUNTS, REFRESH_TRIGGER, ipColumns, scoreColor } from './securityShared';
 
   const openIpAccounts = inject(OPEN_IP_ACCOUNTS);
   const refreshTrigger = inject(REFRESH_TRIGGER);
-  const { tableScrollY } = useTableScrollY({ reservedHeight: 302 });
+
+  const tableCardRef = ref<HTMLElement | null>(null);
+  useTableScrollY({ ref: tableCardRef });
 
   const ipList = ref<any[]>([]);
   const ipTotal = ref(0);

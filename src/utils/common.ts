@@ -255,6 +255,24 @@ export function normalizeLocalUploadUrl(url: string): string {
   return `/${src.slice(uploadIndex)}`;
 }
 
+/**
+ * 自动生成不重复的文件名：文件.ext → 文件 (1).ext → 文件 (2).ext ...
+ * 跳过已存在的序号，取第一个空缺
+ * @param baseName 原始文件名（含扩展名）
+ * @param existingNames 已存在的文件名集合
+ */
+export function autoRename(baseName: string, existingNames: Set<string>): string {
+  if (!existingNames.has(baseName)) return baseName;
+  const dotIndex = baseName.lastIndexOf('.');
+  const name = dotIndex > 0 ? baseName.slice(0, dotIndex) : baseName;
+  const ext = dotIndex > 0 ? baseName.slice(dotIndex) : '';
+  let i = 1;
+  while (existingNames.has(`${name} (${i})${ext}`)) {
+    i++;
+  }
+  return `${name} (${i})${ext}`;
+}
+
 export function normalizeNoteContentResourceUrls(htmlContent: string = ''): string {
   if (!htmlContent || typeof document === 'undefined') return htmlContent;
 
