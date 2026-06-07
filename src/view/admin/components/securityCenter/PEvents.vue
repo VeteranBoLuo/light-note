@@ -1,6 +1,6 @@
 <template>
   <CommonContainer title="攻击日志" @backClick="router.push('/securityCenterMobile')">
-    <div>
+    <div class="security-page-body">
       <div class="admin-filters security-filters">
         <div class="admin-filters-main security-filters-main">
           <b-input
@@ -42,80 +42,69 @@
               <template v-if="column.key === 'severity'">
                 <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
               </template>
-              <template v-else-if="column.key === 'matchedRule'">
-                <span class="ellipsis-cell">{{ record.matchedRule || record.attackType || '-' }}</span>
-              </template>
-              <template v-else-if="column.key === 'sourceIp'">
-                <a-tooltip :title="record.sourceIp">
-                  <span class="ellipsis-cell">{{ record.sourceIp }}</span>
-                </a-tooltip>
-              </template>
-              <template v-else-if="column.key === 'blocked'">
-                <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{
-                  record.blocked ? '已拦截' : '已放行'
-                }}</span>
-              </template>
-              <template v-else-if="column.key === 'handledStatus'">
-                <span class="security-pill" :class="statusPillClass(record.handledStatus)">{{
-                  statusText(record.handledStatus)
-                }}</span>
+              <template v-else-if="column.key === 'ruleIp'">
+                <div class="rule-ip-cell">
+                  <span class="ellipsis-cell">{{ record.matchedRule || record.attackType || '-' }}</span>
+                  <span class="rule-ip-sub">{{ record.sourceIp }}</span>
+                </div>
               </template>
             </template>
           </BTable>
         </b-loading>
       </div>
 
-      <a-drawer
-        :open="eventDetailVisible"
-        title="攻击事件详情"
-        placement="right"
-        :width="drawerWidth"
-        @close="eventDetailVisible = false"
-      >
-        <div v-if="eventDetail.event" class="security-detail">
-          <section>
-            <h3>事件概览</h3>
-            <div class="detail-grid">
-              <span>规则</span><strong>{{ eventDetail.event.matchedRule || eventDetail.event.attackType }}</strong>
-              <span>类型</span><strong>{{ eventDetail.event.attackType }}</strong>
-              <span>等级</span><strong>{{ eventDetail.event.severity }}</strong>
-              <span>分数</span><strong>{{ eventDetail.event.threatScore }}</strong>
-              <span>IP</span><strong>{{ eventDetail.event.sourceIp }}</strong>
-              <span>账号</span
-              ><strong>{{ eventDetail.event.alias || eventDetail.event.email || eventDetail.event.userId }}</strong>
-              <span>接口</span><strong>{{ eventDetail.event.requestPath }}</strong>
-            </div>
-          </section>
-
-          <section>
-            <h3>命中证据</h3>
-            <a-timeline>
-              <a-timeline-item
-                v-for="item in eventDetail.evidence"
-                :key="item.id"
-                :color="severityColor(item.severity)"
-              >
-                <strong>{{ item.ruleName }}</strong>
-                <p>{{ item.evidenceMessage }}</p>
-              </a-timeline-item>
-            </a-timeline>
-          </section>
-
-          <section>
-            <h3>处置</h3>
-            <div class="quick-actions">
-              <b-button @click="handleBanIp(eventDetail.event.sourceIp)">封禁此IP 1小时</b-button>
-              <b-button @click="handleUnbanIp(eventDetail.event.sourceIp)">解封此IP</b-button>
-              <b-button v-if="eventDetail.event.userId" @click="handleBanAccount(eventDetail.event.userId)"
-                >封禁关联账号</b-button
-              >
-              <b-button v-if="eventDetail.event.userId" @click="handleUnbanAccount(eventDetail.event.userId)"
-                >解封关联账号</b-button
-              >
-            </div>
-          </section>
+      <BModal v-model:visible="detailVisible" title="攻击事件详情" width="90%" :show-footer="false">
+        <div v-if="selectedRecord" class="mobile-detail">
+          <div class="mobile-detail-row">
+            <span class="detail-label">等级</span>
+            <span class="detail-value">
+              <span class="security-pill" :class="`is-${selectedRecord.severity}`">{{ selectedRecord.severity }}</span>
+            </span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">规则</span>
+            <span class="detail-value">{{ selectedRecord.matchedRule || selectedRecord.attackType || '-' }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">类型</span>
+            <span class="detail-value">{{ selectedRecord.attackType || '-' }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">来源IP</span>
+            <span class="detail-value">{{ selectedRecord.sourceIp }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">威胁分</span>
+            <span class="detail-value">{{ selectedRecord.threatScore }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">接口</span>
+            <span class="detail-value">{{ selectedRecord.requestPath || '-' }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">账号</span>
+            <span class="detail-value">{{ selectedRecord.alias || selectedRecord.email || selectedRecord.userId || '-' }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">拦截</span>
+            <span class="detail-value">
+              <span class="security-pill" :class="selectedRecord.blocked ? 'is-high' : 'is-low'">{{ selectedRecord.blocked ? '已拦截' : '已放行' }}</span>
+            </span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">状态</span>
+            <span class="detail-value">
+              <span class="security-pill" :class="statusPillClass(selectedRecord.handledStatus)">{{ statusText(selectedRecord.handledStatus) }}</span>
+            </span>
+          </div>
+          <div class="mobile-detail-actions">
+            <b-button size="small" @click.stop="handleBanIp(selectedRecord.sourceIp)">封禁此IP 1小时</b-button>
+            <b-button size="small" @click.stop="handleUnbanIp(selectedRecord.sourceIp)">解封此IP</b-button>
+            <b-button v-if="selectedRecord.userId" size="small" @click.stop="handleBanAccount(selectedRecord.userId)">封禁关联账号</b-button>
+            <b-button v-if="selectedRecord.userId" size="small" @click.stop="handleUnbanAccount(selectedRecord.userId)">解封关联账号</b-button>
+          </div>
         </div>
-      </a-drawer>
+      </BModal>
     </div>
   </CommonContainer>
 </template>
@@ -124,28 +113,22 @@
 import { onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
-import { apiBaseGet, apiBasePost, apiQueryPost } from '@/http/request.ts';
+import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-import { bookmarkStore } from '@/store';
-import { statusText, statusPillClass, severityColor } from './securityShared';
+import { statusText, statusPillClass } from './securityShared';
 
 const route = useRoute();
 const router = useRouter();
-const bookmark = bookmarkStore();
-
-const drawerWidth = bookmark.isMobile ? '100%' : '720px';
 
 const mobileEventColumns = [
-  { title: '等级', key: 'severity' },
-  { title: '规则', key: 'matchedRule' },
-  { title: 'IP', key: 'sourceIp' },
-  { title: '拦截', key: 'blocked' },
-  { title: '状态', key: 'handledStatus' },
+  { title: '等级', key: 'severity', width: '80px' },
+  { title: '规则-IP', key: 'ruleIp', width: '1fr' },
 ];
 
 const events = ref<any[]>([]);
@@ -164,14 +147,12 @@ const eventSearchTimer = ref<any>(null);
 const selectedEventIds = ref<string[]>([]);
 const batchLoading = ref(false);
 
-const eventDetailVisible = ref(false);
-const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [] });
-const currentEventId = ref<string | null>(null);
+const detailVisible = ref(false);
+const selectedRecord = ref<any>(null);
 
 function onRowClick(record: any) {
-  currentEventId.value = record.eventId;
-  eventDetailVisible.value = true;
-  loadDetail(record.eventId);
+  selectedRecord.value = record;
+  detailVisible.value = true;
 }
 
 async function searchEvents() {
@@ -253,13 +234,6 @@ function confirmBatchHandle(handledStatus: 'processed' | 'false_positive' | 'unh
   });
 }
 
-async function loadDetail(eventId: string) {
-  const res = await apiBaseGet(`/api/security/events/${eventId}`);
-  if (res.status === 200) {
-    Object.assign(eventDetail, res.data);
-  }
-}
-
 function isWhitelistConflict(res: any) {
   return res?.status === 409 && res?.data?.whitelistConflict;
 }
@@ -328,7 +302,7 @@ async function handleBanAccount(userId: string) {
     });
     if (res.status === 200) {
       message.success('已封禁账号');
-      eventDetailVisible.value = false;
+      detailVisible.value = false;
       searchEvents();
       return;
     }
@@ -379,25 +353,84 @@ onMounted(() => {
 
 <style lang="less" scoped>
 @import './securityCenter.less';
-</style>
 
-<style lang="less">
-.ant-drawer-content,
-.ant-drawer-header {
-  background: var(--background-color) !important;
-  color: var(--text-color) !important;
+.security-page-body {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.ant-drawer-title,
-.ant-drawer-close {
-  color: var(--text-color) !important;
+.admin-filters {
+  flex-shrink: 0;
 }
 
-.ant-drawer-header {
-  border-bottom-color: var(--card-border-color) !important;
+.admin-table-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.ant-drawer-body {
-  background: var(--background-color) !important;
+:deep(.loader-container) {
+  flex: 1;
+  min-height: 0;
+}
+
+:deep(.table-container) {
+  flex: 1;
+  min-height: 0;
+}
+
+.mobile-detail {
+  padding: 4px 0;
+}
+
+.mobile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--menu-item-h-bg-color);
+  &:last-child { border-bottom: none; }
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--desc-color);
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.detail-value {
+  font-size: 13px;
+  color: var(--text-color);
+  text-align: right;
+  word-break: break-all;
+}
+
+.mobile-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.rule-ip-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rule-ip-sub {
+  font-size: 11px;
+  color: var(--desc-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

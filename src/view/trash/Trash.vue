@@ -75,57 +75,59 @@
     </div>
 
     <!-- 表格区域 -->
-    <b-loading :loading="loading">
-      <div v-if="!loading && items.length === 0" class="trash-empty-state">
-        <div class="trash-empty-icon">
-          <svg-icon :src="icon.table_delete" size="36" />
+    <b-loading :loading="loading" class="trash-loading-area">
+      <div class="trash-table-scroll">
+        <div v-if="!loading && items.length === 0" class="trash-empty-state">
+          <div class="trash-empty-icon">
+            <svg-icon :src="icon.table_delete" size="36" />
+          </div>
+          <p class="trash-empty-text">{{ $t('trash.noData') }}</p>
         </div>
-        <p class="trash-empty-text">{{ $t('trash.noData') }}</p>
-      </div>
 
-      <div v-else class="trash-table-wrap" ref="tableCardRef">
-        <BTable
-          :data="items"
-          :columns="columns"
-          :rowKey="'id'"
-          :selectable="true"
-          :selectedRows="selectedIds"
+        <div v-else class="trash-table-wrap">
+          <BTable
+            :data="items"
+            :columns="columns"
+            :rowKey="'id'"
+            :selectable="true"
+            :selectedRows="selectedIds"
 
-          @selection-change="selectedIds = $event"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'resourceType'">
-              <span :class="['trash-type-badge', `trash-type-badge--${(record as any).resourceType}`]">
-                <span class="type-dot" />
-                {{ $t(`trash.${(record as any).resourceType}`) }}
-              </span>
-            </template>
-            <template v-if="column.key === 'name'">
-              <div class="trash-name-cell-wrap">
-                <span class="trash-name-cell" :title="(record as any).name">{{ (record as any).name || '-' }}</span>
-                <span
-                  v-if="(record as any).resourceType === 'file' && (record as any).fileSize"
-                  class="trash-name-size"
-                >
-                  {{ formatSize((record as any).fileSize) }}
+            @selection-change="selectedIds = $event"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'resourceType'">
+                <span :class="['trash-type-badge', `trash-type-badge--${(record as any).resourceType}`]">
+                  <span class="type-dot" />
+                  {{ $t(`trash.${(record as any).resourceType}`) }}
                 </span>
-              </div>
-            </template>
-            <template v-if="column.key === 'action'">
-              <a-button type="link" size="small" class="trash-action-btn" @click="handleRestore([record as any])">
-                {{ $t('trash.restore') }}
-              </a-button>
-              <a-popconfirm
-                :title="$t('trash.permanentDeleteConfirm', { count: 1 })"
-                @confirm="handlePermanentDelete([record as any])"
-              >
-                <a-button type="link" size="small" danger class="trash-action-btn">
-                  {{ $t('trash.permanentDelete') }}
+              </template>
+              <template v-if="column.key === 'name'">
+                <div class="trash-name-cell-wrap">
+                  <span class="trash-name-cell" :title="(record as any).name">{{ (record as any).name || '-' }}</span>
+                  <span
+                    v-if="(record as any).resourceType === 'file' && (record as any).fileSize"
+                    class="trash-name-size"
+                  >
+                    {{ formatSize((record as any).fileSize) }}
+                  </span>
+                </div>
+              </template>
+              <template v-if="column.key === 'action'">
+                <a-button type="link" size="small" class="trash-action-btn" @click="handleRestore([record as any])">
+                  {{ $t('trash.restore') }}
                 </a-button>
-              </a-popconfirm>
+                <a-popconfirm
+                  :title="$t('trash.permanentDeleteConfirm', { count: 1 })"
+                  @confirm="handlePermanentDelete([record as any])"
+                >
+                  <a-button type="link" size="small" danger class="trash-action-btn">
+                    {{ $t('trash.permanentDelete') }}
+                  </a-button>
+                </a-popconfirm>
+              </template>
             </template>
-          </template>
-        </BTable>
+          </BTable>
+        </div>
       </div>
     </b-loading>
 
@@ -154,16 +156,12 @@
   import { useI18n } from 'vue-i18n';
   import { message } from 'ant-design-vue';
   import { apiBasePost } from '@/http/request';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon';
 
   const { t } = useI18n();
-
-  const tableCardRef = ref<HTMLElement | null>(null);
-  useTableScrollY({ ref: tableCardRef, minHeight: 200 });
 
   const loading = ref(false);
   const emptyingAll = ref(false);
@@ -324,8 +322,34 @@
 <style lang="less" scoped>
   .trash-page {
     width: 100%;
-    padding: 28px 24px 100px;
+    height: 100%;
+    padding: 28px 24px 24px;
     box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto auto auto auto 1fr;
+  }
+
+  // 固定头部区域
+  .trash-hero,
+  .trash-info-bar,
+  .trash-size-warning,
+  .trash-toolbar {
+    min-height: 0;
+  }
+  .trash-hero { grid-row: 1; }
+  .trash-info-bar { grid-row: 2; }
+  .trash-size-warning { grid-row: 3; }
+  .trash-toolbar { grid-row: 4; }
+
+  // 表格区域撑满剩余高度（grid 1fr 行有确切高度）
+  .trash-loading-area {
+    grid-row: 5;
+    min-height: 0;
+  }
+
+  .trash-table-scroll {
+    height: 100%;
+    overflow-y: auto;
   }
 
   // ---- 头部 ----
@@ -457,9 +481,10 @@
 
   // ---- 表格容器 ----
   .trash-table-wrap {
+    height: 100%;
+
     :deep(.table-container) {
       border-radius: 14px;
-      overflow: hidden;
       padding: 10px;
       box-shadow: none;
       background: var(--table-bg-color);

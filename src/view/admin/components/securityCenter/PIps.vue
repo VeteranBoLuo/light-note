@@ -1,6 +1,6 @@
 <template>
   <CommonContainer title="IP画像" @backClick="router.push('/securityCenterMobile')">
-    <div>
+    <div class="security-page-body">
       <div class="admin-filters security-filters">
         <div class="admin-filters-main security-filters-main">
           <b-input
@@ -22,47 +22,43 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'riskScore'">
-              <a-progress
-                :title="record.riskScore || 0"
-                :percent="record.riskScore || 0"
-                size="small"
-                :stroke-color="scoreColor(record.riskScore || 0)"
-                trail-color="var(--security-progress-trail)"
-                :show-info="false"
-              />
-            </template>
-            <template v-else-if="column.key === 'isBanned'">
-              <span class="security-pill" :class="record.isBanned ? 'is-high' : 'is-low'">{{
-                record.isBanned ? '封禁中' : '正常'
-              }}</span>
+              <span :style="{ color: scoreColor(record.riskScore || 0), fontWeight: 600 }">{{ record.riskScore || 0 }}</span>
             </template>
           </template>
         </BTable>
       </div>
 
-      <a-drawer
-        :open="ipAccountVisible"
-        title="IP关联账号"
-        placement="right"
-        :width="drawerWidth"
-        @close="ipAccountVisible = false"
-      >
-        <div class="security-detail">
-          <section>
-            <h3>{{ currentIp }} 使用过的账号</h3>
-            <div class="ip-account-actions">
-              <span>共 {{ ipAccounts.length }} 个账号</span>
-              <div class="table-actions">
-                <b-button v-if="currentIpBanned" @click="handleUnbanIp(currentIp)">解封此IP</b-button>
-                <b-button v-else @click="handleBanIp(currentIp)">封禁此IP 1小时</b-button>
-              </div>
-            </div>
+      <BModal v-model:visible="detailVisible" title="IP详情" width="90%" :show-footer="false">
+        <div v-if="selectedRecord" class="mobile-detail">
+          <div class="mobile-detail-row">
+            <span class="detail-label">IP</span>
+            <span class="detail-value">{{ selectedRecord.ip }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">来源地</span>
+            <span class="detail-value">{{ selectedRecord.city || '-' }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">风险分</span>
+            <span class="detail-value">{{ selectedRecord.riskScore || 0 }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">状态</span>
+            <span class="detail-value">
+              <span class="security-pill" :class="selectedRecord.isBanned ? 'is-high' : 'is-low'">{{ selectedRecord.isBanned ? '封禁中' : '正常' }}</span>
+            </span>
+          </div>
+          <div class="mobile-detail-actions">
+            <b-button v-if="selectedRecord.isBanned" size="small" @click.stop="handleUnbanIp(selectedRecord.ip)">解封此IP</b-button>
+            <b-button v-else size="small" @click.stop="handleBanIp(selectedRecord.ip)">封禁此IP 1小时</b-button>
+          </div>
+          <div class="ip-accounts-section">
+            <h3>关联账号</h3>
             <b-loading :loading="ipAccountLoading">
               <BTable
                 :data="ipAccounts"
                 :columns="mobileIpAccountColumns"
                 :rowKey="'userId'"
-                @row-click="onIpAccountRowClick"
               >
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key === 'account'">
@@ -72,16 +68,14 @@
                     </div>
                   </template>
                   <template v-else-if="column.key === 'delFlag'">
-                    <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{
-                      Number(record.delFlag) === 1 ? '已封禁' : '正常'
-                    }}</span>
+                    <span class="security-pill" :class="Number(record.delFlag) === 1 ? 'is-high' : 'is-low'">{{ Number(record.delFlag) === 1 ? '已封禁' : '正常' }}</span>
                   </template>
                 </template>
               </BTable>
             </b-loading>
-          </section>
+          </div>
         </div>
-      </a-drawer>
+      </BModal>
     </div>
   </CommonContainer>
 </template>
@@ -96,20 +90,15 @@ import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-import { bookmarkStore } from '@/store';
 import { scoreColor } from './securityShared';
 
 const router = useRouter();
-const bookmark = bookmarkStore();
-
-const drawerWidth = bookmark.isMobile ? '100%' : '720px';
 
 const mobileIpColumns = [
-  { title: 'IP', key: 'ip' },
-  { title: '来源地', key: 'city' },
-  { title: '风险分', key: 'riskScore' },
-  { title: '状态', key: 'isBanned' },
+  { title: 'IP', key: 'ip', width: '1fr' },
+  { title: '风险分', key: 'riskScore', width: '80px' },
 ];
 
 const mobileIpAccountColumns = [
@@ -123,16 +112,14 @@ const ipPage = reactive({ currentPage: 1, pageSize: 100 });
 const ipFilters = reactive<any>({ key: '' });
 const ipSearchTimer = ref<any>(null);
 
-const ipAccountVisible = ref(false);
-const currentIp = ref('');
-const currentIpBanned = ref(false);
+const detailVisible = ref(false);
+const selectedRecord = ref<any>(null);
 const ipAccounts = ref<any[]>([]);
 const ipAccountLoading = ref(false);
 
 function onRowClick(record: any) {
-  currentIp.value = record.ip;
-  currentIpBanned.value = record.isBanned || false;
-  ipAccountVisible.value = true;
+  selectedRecord.value = record;
+  detailVisible.value = true;
   loadIpAccounts(record.ip);
 }
 
@@ -166,15 +153,6 @@ async function loadIpAccounts(ip: string) {
   }
 }
 
-function onIpAccountRowClick(record: any) {
-  const query = new URLSearchParams({
-    userId: record.userId,
-    userLabel: record.alias || record.email || record.userId,
-  }).toString();
-  router.push(`/securityEvents?${query}`);
-  ipAccountVisible.value = false;
-}
-
 function isWhitelistConflict(res: any) {
   return res?.status === 409 && res?.data?.whitelistConflict;
 }
@@ -200,7 +178,7 @@ async function handleBanIp(ip: string) {
     });
     if (res.status === 200) {
       message.success('已封禁IP');
-      currentIpBanned.value = true;
+      if (selectedRecord.value) selectedRecord.value.isBanned = true;
       searchIps();
       return;
     }
@@ -228,7 +206,7 @@ async function handleUnbanIp(ip: string) {
       const res = await apiBasePost('/api/security/ipUnban', { ip });
       if (res.status === 200) {
         message.success('已解封IP');
-        currentIpBanned.value = false;
+        if (selectedRecord.value) selectedRecord.value.isBanned = false;
         searchIps();
       }
     },
@@ -242,25 +220,72 @@ onMounted(() => {
 
 <style lang="less" scoped>
 @import './securityCenter.less';
-</style>
 
-<style lang="less">
-.ant-drawer-content,
-.ant-drawer-header {
-  background: var(--background-color) !important;
-  color: var(--text-color) !important;
+.security-page-body {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.ant-drawer-title,
-.ant-drawer-close {
-  color: var(--text-color) !important;
+.admin-filters {
+  flex-shrink: 0;
 }
 
-.ant-drawer-header {
-  border-bottom-color: var(--card-border-color) !important;
+.admin-table-card {
+  flex: 1;
+  min-height: 0;
 }
 
-.ant-drawer-body {
-  background: var(--background-color) !important;
+:deep(.table-container) {
+  flex: 1;
+  min-height: 0;
+}
+
+.mobile-detail {
+  padding: 4px 0;
+}
+
+.mobile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--menu-item-h-bg-color);
+  &:last-child { border-bottom: none; }
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--desc-color);
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.detail-value {
+  font-size: 13px;
+  color: var(--text-color);
+  text-align: right;
+  word-break: break-all;
+}
+
+.mobile-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.ip-accounts-section {
+  margin-top: 16px;
+  h3 {
+    margin: 0 0 10px;
+    font-size: 15px;
+    color: var(--text-color);
+  }
 }
 </style>

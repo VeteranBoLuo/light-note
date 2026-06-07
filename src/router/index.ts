@@ -25,7 +25,10 @@ const routes: RouteRecordRaw[] = [
     },
     path: '/',
     name: '/',
-    redirect: () => getDesktopHomePath(JSON.parse(localStorage.getItem('preferences') || '{}')),
+    redirect: () => {
+      if (window.innerWidth < 1024) return '/home';
+      return getDesktopHomePath(JSON.parse(localStorage.getItem('preferences') || '{}'));
+    },
     component: () => import('@/view/index.vue'),
     // 放入此处的有顶部导航栏
     children: [

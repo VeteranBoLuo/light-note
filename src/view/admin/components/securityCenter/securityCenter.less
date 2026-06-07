@@ -388,6 +388,24 @@
   min-height: 260px;
 }
 
+/* ── Mobile: 近期安全事件表格高度约束 ── */
+.security-overview-panel.is-mobile {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.security-overview-panel.is-mobile > .admin-stats,
+.security-overview-panel.is-mobile > .overview-layout,
+.security-overview-panel.is-mobile > .overview-grid,
+.security-overview-panel.is-mobile > .recent-section {
+  flex-shrink: 0;
+}
+
 .security-empty {
   display: flex;
   min-height: 120px;

@@ -1,6 +1,6 @@
 <template>
   <CommonContainer title="账号封禁" @backClick="router.push('/securityCenterMobile')">
-    <div>
+    <div class="security-page-body">
       <div class="admin-filters security-filters">
         <div class="admin-filters-main security-filters-main">
           <b-input
@@ -17,6 +17,7 @@
           :data="accountBans"
           :columns="mobileAccountColumns"
           :rowKey="'userId'"
+          :row-clickable="true"
           @row-click="onRowClick"
         >
           <template #bodyCell="{ column, record }">
@@ -26,12 +27,33 @@
                 <span>{{ record.email || record.userId }}</span>
               </div>
             </template>
-            <template v-else-if="column.key === 'action'">
-              <b-button size="small" @click.stop="handleUnbanAccount(record)">解封账号</b-button>
-            </template>
           </template>
         </BTable>
       </div>
+
+      <BModal v-model:visible="detailVisible" title="封禁详情" width="90%" :show-footer="false">
+        <div v-if="selectedRecord" class="mobile-detail">
+          <div class="mobile-detail-row">
+            <span class="detail-label">账号</span>
+            <span class="detail-value">{{ selectedRecord.alias || selectedRecord.email || selectedRecord.userId }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">用户ID</span>
+            <span class="detail-value">{{ selectedRecord.userId }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">封禁原因</span>
+            <span class="detail-value">{{ selectedRecord.banReason || '-' }}</span>
+          </div>
+          <div class="mobile-detail-row">
+            <span class="detail-label">封禁时间</span>
+            <span class="detail-value">{{ selectedRecord.bannedAt || '-' }}</span>
+          </div>
+          <div class="mobile-detail-actions">
+            <b-button size="small" @click.stop="handleUnbanAccount(selectedRecord)">解封账号</b-button>
+          </div>
+        </div>
+      </BModal>
     </div>
   </CommonContainer>
 </template>
@@ -45,15 +67,14 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
 
 const router = useRouter();
 
 const mobileAccountColumns = [
-  { title: '账号', key: 'account' },
-  { title: '封禁原因', key: 'banReason' },
-  { title: '封禁时间', key: 'bannedAt' },
-  { title: '操作', key: 'action' },
+  { title: '账号', key: 'account', width: '1fr' },
+  { title: '封禁原因', key: 'banReason', width: '1fr' },
 ];
 
 const accountBans = ref<any[]>([]);
@@ -62,12 +83,12 @@ const accountPage = reactive({ currentPage: 1, pageSize: 100 });
 const accountFilters = reactive<any>({ key: '' });
 const accountSearchTimer = ref<any>(null);
 
+const detailVisible = ref(false);
+const selectedRecord = ref<any>(null);
+
 function onRowClick(record: any) {
-  const query = new URLSearchParams({
-    userId: record.userId,
-    userLabel: record.alias || record.email || record.userId,
-  }).toString();
-  router.push(`/securityEvents?${query}`);
+  selectedRecord.value = record;
+  detailVisible.value = true;
 }
 
 async function searchAccountBans() {
@@ -115,4 +136,63 @@ onMounted(() => {
 
 <style lang="less" scoped>
 @import './securityCenter.less';
+
+.security-page-body {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-filters {
+  flex-shrink: 0;
+}
+
+.admin-table-card {
+  flex: 1;
+  min-height: 0;
+}
+
+:deep(.table-container) {
+  flex: 1;
+  min-height: 0;
+}
+
+.mobile-detail {
+  padding: 4px 0;
+}
+
+.mobile-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--menu-item-h-bg-color);
+  &:last-child { border-bottom: none; }
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--desc-color);
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.detail-value {
+  font-size: 13px;
+  color: var(--text-color);
+  text-align: right;
+  word-break: break-all;
+}
+
+.mobile-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+}
 </style>
