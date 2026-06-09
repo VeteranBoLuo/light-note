@@ -15,9 +15,10 @@
         <Catalog class="catalog-panel" :content="note.content" />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
-            <a-input
+            <b-input
               :disabled="readonly"
-              v-model:value="note.title"
+              :value="note.title"
+              @input="note.title = $event"
               @change="inputBlur"
               @focusout="focusout"
               placeholder="请输入标题"
@@ -51,6 +52,7 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
