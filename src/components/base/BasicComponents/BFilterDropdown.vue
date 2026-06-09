@@ -226,8 +226,4 @@
     border-radius: 3px;
     flex-shrink: 0;
   }
-
-  :deep(.ant-checkbox-inner) {
-    transition: none !important;
-  }
 </style>

@@ -52,7 +52,7 @@
 
   // 本地状态，乐观更新
   // 优先取 checked（显式绑定），再取 modelValue（v-model 兼容）
-  const localChecked = ref(props.checked);
+  const localChecked = ref(props.checked ?? props.modelValue);
 
   // 外部 prop 变化时同步：分别 watch checked 和 modelValue
   watch(
@@ -60,12 +60,14 @@
     (val) => {
       localChecked.value = val;
     },
+    { immediate: true },
   );
   watch(
     () => props.modelValue,
     (val) => {
       localChecked.value = val;
     },
+    { immediate: true },
   );
 
   function handleClick() {

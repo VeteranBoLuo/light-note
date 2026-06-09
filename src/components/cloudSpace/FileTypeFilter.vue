@@ -323,26 +323,4 @@
       white-space: nowrap;
     }
   }
-
-  /* 复选框选中颜色改为蓝色 */
-  .filter-menu :deep(.ant-checkbox-checked .ant-checkbox-inner) {
-    background-color: #606cff;
-    border-color: #606cff;
-  }
-  .filter-menu :deep(.ant-checkbox-indeterminate .ant-checkbox-inner::after) {
-    background-color: #606cff;
-  }
-  .filter-menu :deep(.ant-checkbox-wrapper:hover .ant-checkbox-inner) {
-    border-color: #606cff;
-  }
-  .filter-menu :deep(.ant-checkbox-indeterminate:hover .ant-checkbox-inner::after) {
-    background-color: #7b83ff;
-  }
-  .filter-menu :deep(.ant-checkbox-wrapper:not(.ant-checkbox-wrapper-disabled):hover .ant-checkbox-checked:not(.ant-checkbox-disabled) .ant-checkbox-inner) {
-    background-color: #606cff !important;
-    border-color: #606cff !important;
-  }
-  .filter-menu :deep(.ant-checkbox-checked:not(.ant-checkbox-disabled)::after) {
-    border-color: #606cff !important;
-  }
 </style>
