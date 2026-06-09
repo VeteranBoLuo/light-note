@@ -156,7 +156,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, watch } from 'vue';
+  import { ref, reactive, computed, watch, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { message } from 'ant-design-vue';
   import { apiBasePost } from '@/http/request';
@@ -389,6 +389,8 @@
       emptyingAll.value = false;
     }
   }
+
+  onMounted(() => fetchList());
 </script>
 
 <style lang="less" scoped>
