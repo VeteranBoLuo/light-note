@@ -4,7 +4,7 @@
     <!-- 上传按钮及提示 -->
     <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
       <b-upload multiple class="upload-btn" @change="handleChange" :max-total-size="100 * 1024 * 1024">
-        <b-button type="primary">
+        <b-button type="primary" :loading="uploadProgress.visible">
           <UploadOutlined />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
           <div class="upload-tip" v-if="bookmark.isDesktop">

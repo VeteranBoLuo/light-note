@@ -112,7 +112,7 @@
           <div class="opinion-reply-editor">
             <div class="opinion-reply-editor__header">
               <label>管理员回复</label>
-              <b-button type="primary" @click="submitReply(selectedRecord)">保存回复</b-button>
+              <b-button type="primary" :loading="replying" @click="submitReply(selectedRecord)">保存回复</b-button>
             </div>
             <a-textarea
               v-model:value="replyDrafts[selectedRecord.id]"
@@ -149,6 +149,7 @@
   const bookmark = bookmarkStore();
   const opinionList = ref<any[]>([]);
   const replyDrafts = reactive<Record<string, string>>({});
+  const replying = ref(false);
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
 
@@ -268,10 +269,15 @@
       message.warning('请输入回复内容');
       return;
     }
-    const res = await opinionApi.replyOpinion({ id: record.id, replyContent });
-    if (res.status === 200) {
-      message.success('回复已保存');
-      searchOpinionList();
+    replying.value = true;
+    try {
+      const res = await opinionApi.replyOpinion({ id: record.id, replyContent });
+      if (res.status === 200) {
+        message.success('回复已保存');
+        searchOpinionList();
+      }
+    } finally {
+      replying.value = false;
     }
   }
 

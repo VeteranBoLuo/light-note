@@ -9,7 +9,7 @@
           </div>
           <div class="sql-header-actions">
             <b-button class="ghost-btn" @click="clearSql">清空</b-button>
-            <b-button class="primary-btn" @click="runSql">运行</b-button>
+            <b-button class="primary-btn" @click="runSql" :loading="executionState === 'running'">运行</b-button>
           </div>
           <span class="status-pill" :class="executionState">{{ statusCopy }}</span>
         </div>

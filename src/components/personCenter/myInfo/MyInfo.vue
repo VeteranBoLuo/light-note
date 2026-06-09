@@ -34,6 +34,7 @@
       <b-button
         style="margin-top: 10px; place-self: center; width: 100%"
         type="primary"
+        :loading="saving"
         @click="saveUserInfo"
         >{{ t('myInfo.save') }}</b-button
       >
@@ -49,7 +50,6 @@
   import userApi from '@/api/userApi.ts';
   import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import { cloneDeep } from 'lodash-es';
   import icon from '@/config/icon.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import PassConfigDlg from '@/components/personCenter/myInfo/PassConfigDlg.vue';
@@ -57,6 +57,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
   const headPicture = ref<string>('');
+  const saving = ref(false);
   const visible = <Ref<boolean>>defineModel('visible');
 
   const bookmark = bookmarkStore();
@@ -89,7 +90,7 @@
     input.click(); // 触发文件选择对话框
   }
 
-  function saveUserInfo() {
+  async function saveUserInfo() {
     if (!['admin', 'root'].includes(user.role)) {
       message.warn(t('myInfo.pleaseLogin'));
       return;
@@ -102,25 +103,26 @@
       message.warning(t('myInfo.invalidEmail'));
       return;
     }
-    userApi
-      .updateUserInfo({
+    saving.value = true;
+    try {
+      const res = await userApi.updateUserInfo({
         id: user.id,
         headPicture: headPicture.value,
         alias: userData.value.alias,
         email: userData.value.email,
-      })
-      .then(async (res) => {
-        if (res.status === 200) {
-          recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
-          message.success(t('myInfo.saveSuccess'));
-          const userPromise = await userApi.getUserInfoById({ id: user.id });
-          user.setUserInfo(userPromise.data);
-          visible.value = false;
-        }
-      })
-      .catch((err) => {
-        console.error('后台错误：' + err);
       });
+      if (res.status === 200) {
+        recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
+        message.success(t('myInfo.saveSuccess'));
+        const userPromise = await userApi.getUserInfoById({ id: user.id });
+        user.setUserInfo(userPromise.data);
+        visible.value = false;
+      }
+    } catch (err) {
+      console.error('后台错误：' + err);
+    } finally {
+      saving.value = false;
+    }
   }
 
   function validateEmail(email) {
@@ -141,13 +143,13 @@
     configPassVisible.value = true;
   }
 
-  const userData = ref(cloneDeep(user));
-  headPicture.value = cloneDeep(user.headPicture);
+  const userData = ref({ alias: user.alias, email: user.email });
+  headPicture.value = user.headPicture || '';
   watch(
-    () => user,
-    () => {
-      headPicture.value = cloneDeep(user.headPicture);
-      userData.value = cloneDeep(user);
+    () => ({ alias: user.alias, email: user.email, pic: user.headPicture }),
+    (val) => {
+      headPicture.value = val.pic || '';
+      userData.value = { alias: val.alias, email: val.email };
     },
     {
       deep: true,

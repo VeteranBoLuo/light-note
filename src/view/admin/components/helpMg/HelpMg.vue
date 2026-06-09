@@ -29,8 +29,8 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <b-button type="success" @click="publishAllDraft">发布全部</b-button>
-          <b-button type="primary" @click="saveCurrentDraft">保存草稿</b-button>
+          <b-button type="success" @click="publishAllDraft" :loading="publishingDraft">发布全部</b-button>
+          <b-button type="primary" @click="saveCurrentDraft" :loading="savingDraft">保存草稿</b-button>
           <b-button type="danger" @click="deleteCurrentDraft">删除草稿</b-button>
           <b-button @click="syncFromPublished">同步帮助中心</b-button>
           <b-button @click="exportCurrentDraft">导出</b-button>
@@ -102,6 +102,7 @@
   const editTitle = ref('');
   const isCreateMode = ref(false);
   const savingDraft = ref(false);
+  const publishingDraft = ref(false);
   const savingSort = ref(false);
   const draftContent = ref('');
   const canDragDraft = computed(() => !isCreateMode.value && !searchValue.value.trim());
@@ -391,25 +392,28 @@
       title: '提示',
       content: '将用草稿内容全量替换帮助中心（会移除帮助中心中未出现在草稿里的条目），是否继续？',
       async onOk() {
-        if (isCreateMode.value) {
-          const saved = await saveDraftInternal();
-          if (!saved) {
-            return;
+        publishingDraft.value = true;
+        try {
+          if (isCreateMode.value) {
+            const saved = await saveDraftInternal();
+            if (!saved) {
+              return;
+            }
+          } else {
+            persistCurrentLocalDraft();
           }
-        } else {
-          persistCurrentLocalDraft();
-        }
-        saveHelpDraftBatch(toBatchPayload()).then((saveRes) => {
+          const saveRes = await saveHelpDraftBatch(toBatchPayload());
           if (saveRes.status !== 200) {
             return;
           }
-          publishAllHelpDraft().then((publishRes) => {
-            if (publishRes.status === 200) {
-              const total = Number(publishRes?.data?.total || 0);
-              message.success(`全量替换成功，已同步 ${total} 条草稿到帮助中心`);
-            }
-          });
-        });
+          const publishRes = await publishAllHelpDraft();
+          if (publishRes.status === 200) {
+            const total = Number(publishRes?.data?.total || 0);
+            message.success(`全量替换成功，已同步 ${total} 条草稿到帮助中心`);
+          }
+        } finally {
+          publishingDraft.value = false;
+        }
       },
     });
   };

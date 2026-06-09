@@ -14,6 +14,7 @@
 
   const props = defineProps<{
     title: string;
+    always?: boolean;
   }>();
 
   const visible = ref(false);
@@ -23,6 +24,7 @@
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function show() {
+    if (!props.always && window.innerWidth < 1024) return;
     if (timer) clearTimeout(timer);
     visible.value = true;
     timer = setTimeout(() => {

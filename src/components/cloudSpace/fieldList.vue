@@ -1,11 +1,34 @@
 <template>
   <div class="field-list">
-    <div v-if="viewMode === 'card'" class="card-search-bar">
-      <b-input v-model:value="cloud.searchFileName" :placeholder="$t('cloudSpace.fileName')" @input="onSearchInput">
+    <div v-if="viewMode === 'card'" class="card-toolbar">
+      <b-input v-model:value="cloud.searchFileName" :placeholder="$t('cloudSpace.fileName')" @input="onSearchInput" class="card-search-input">
         <template #suffix>
           <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
         </template>
       </b-input>
+      <div v-if="batchMode" class="batch-actions">
+      <b-space :size="10">
+        <a-checkbox
+          v-if="viewMode === 'card'"
+          :indeterminate="indeterminate"
+          :checked="selectAll"
+          @change="onToggleSelectAll"
+          class="batch-select-all"
+        />
+        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
+        <b-button
+          size="small"
+          type="primary"
+          @click="handleBatchMove"
+          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
+          >{{ $t('cloudSpace.batchMove') }}</b-button
+        >
+        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+          {{ $t('cloudSpace.batchDownload') }}
+        </b-button>
+      </b-space>
+    </div>
     </div>
     <div v-if="viewMode === 'card'" class="file-card-grid">
       <article
@@ -118,30 +141,6 @@
         </div>
       </article>
     </div>
-
-    <div v-if="batchMode" class="batch-actions">
-      <b-space :size="10">
-        <a-checkbox
-          v-if="viewMode === 'card'"
-          :indeterminate="indeterminate"
-          :checked="selectAll"
-          @change="onToggleSelectAll"
-          class="batch-select-all"
-        />
-        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
-        <b-button
-          size="small"
-          type="primary"
-          @click="handleBatchMove"
-          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-          >{{ $t('cloudSpace.batchMove') }}</b-button
-        >
-        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
-          {{ $t('cloudSpace.batchDownload') }}
-        </b-button>
-      </b-space>
-    </div>
     <div v-if="downloadProgress.visible" class="download-progress-floating">
       <div class="download-progress-header">
         <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
@@ -154,7 +153,7 @@
       </div>
       <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
     </div>
-    <div v-if="viewMode === 'table' || batchMode" class="field-header">
+    <div v-if="viewMode === 'table'" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <a-checkbox
           v-if="batchMode"
@@ -183,7 +182,7 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div v-if="viewMode === 'table' || batchMode" class="file-container">
+    <div v-if="viewMode === 'table'" class="file-container">
       <div
         class="field-item"
         :class="{ 'field-item-draggable': canDragFile(item) }"
@@ -1208,9 +1207,21 @@
   }
 
   // ── 卡片视图 ──
-  .card-search-bar {
+  .card-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     padding: 0 6px 14px;
+  }
+  .card-search-input {
     max-width: 420px;
+    flex: 1;
+  }
+  .card-toolbar .batch-actions {
+    flex-shrink: 0;
+    margin-bottom: 0;
+    padding: 0;
+    border: none;
   }
 
   .file-card-grid {
@@ -1386,8 +1397,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: flex-end;
-    gap: 4px;
-    padding: 8px;
+    gap: 8px;
+    padding: 8px 32px 8px 8px;
     opacity: 0;
     transition: opacity 0.2s ease;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, transparent 40%);

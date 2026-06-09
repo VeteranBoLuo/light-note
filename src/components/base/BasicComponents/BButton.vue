@@ -1,5 +1,6 @@
 <template>
-  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass]">
+  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass, { loading: loading }]">
+    <span v-if="loading" class="btn-spinner"></span>
     <slot></slot>
   </div>
 </template>
@@ -19,6 +20,10 @@
     border: {
       type: String,
       default: '',
+    },
+    loading: {
+      type: Boolean,
+      default: false,
     },
   });
 
@@ -118,5 +123,26 @@
     line-height: 40px;
     padding: 0 20px;
     font-size: 16px;
+  }
+
+  &.loading {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  .btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes btn-spin {
+    to { transform: rotate(360deg); }
   }
 </style>

@@ -44,7 +44,7 @@
     <b-modal
       v-model:visible="visible"
       :title="$t('changelog.editTitle')"
-      top="45%"
+      top="50%"
       :maskClosable="false"
       :showFooter="false"
       @ok="handleUpdate"
@@ -56,7 +56,7 @@
           <div class="editor-actions">
             <BButton size="small" @click="formatJson" v-click-log="{ module: '更新日志', operation: '格式化JSON' }">{{ $t('changelog.format') }}</BButton>
             <BButton size="small" @click="resetJson" style="margin-left: 8px" v-click-log="{ module: '更新日志', operation: '重置JSON' }">{{ $t('changelog.reset') }}</BButton>
-            <BButton size="small" type="primary" class="bo" @click="handleUpdate">
+            <BButton size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating">
               {{ $t('common.save') }}
             </BButton>
           </div>
