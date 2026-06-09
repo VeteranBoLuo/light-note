@@ -34,7 +34,10 @@
         </div>
         <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
           <slot name="bodyCell" :text="item[col.key]" :record="item" :index="rowIndex" :column="col">
-            {{ item[col.key] }}
+            <BTooltip v-if="col.ellipsis !== false" :title="String(item[col.key] ?? '')">
+              <span class="cell-text">{{ item[col.key] }}</span>
+            </BTooltip>
+            <template v-else>{{ item[col.key] }}</template>
           </slot>
         </div>
       </div>
@@ -64,6 +67,7 @@
   import { computed, useSlots, PropType } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
 
   const props = defineProps({
     data: {
@@ -239,6 +243,20 @@
 
   .select-checkbox {
     color: var(--text-color);
+  }
+
+  .cell-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    display: inline-block;
+  }
+
+  /* 表格内 BTooltip 需要约束宽度，否则内层 ellipsis 不生效 */
+  .table-cell :deep(.b-tooltip-wrap) {
+    display: block;
+    overflow: hidden;
   }
 
   .table-pagination {

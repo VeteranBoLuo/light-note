@@ -15,6 +15,7 @@
   const props = defineProps<{
     title: string;
     always?: boolean;
+    delay?: number;
   }>();
 
   const visible = ref(false);
@@ -26,22 +27,24 @@
   function show() {
     if (!props.always && window.innerWidth < 1024) return;
     if (timer) clearTimeout(timer);
-    visible.value = true;
     timer = setTimeout(() => {
-      const wrap = wrapRef.value;
-      const popup = popupRef.value;
-      if (!wrap || !popup) return;
-      const wrapRect = wrap.getBoundingClientRect();
-      const popupRect = popup.getBoundingClientRect();
-      const centerX = wrapRect.left + wrapRect.width / 2 - popupRect.width / 2;
-      // 优先显示在上方，上方不够则显示在下方
-      if (wrapRect.top > popupRect.height + 10) {
-        popupStyle.top = `${wrapRect.top - popupRect.height - 6}px`;
-      } else {
-        popupStyle.top = `${wrapRect.bottom + 6}px`;
-      }
-      popupStyle.left = `${Math.max(4, Math.min(centerX, window.innerWidth - popupRect.width - 4))}px`;
-    }, 10);
+      visible.value = true;
+      // 等待 DOM 更新后计算位置
+      requestAnimationFrame(() => {
+        const wrap = wrapRef.value;
+        const popup = popupRef.value;
+        if (!wrap || !popup) return;
+        const wrapRect = wrap.getBoundingClientRect();
+        const popupRect = popup.getBoundingClientRect();
+        const centerX = wrapRect.left + wrapRect.width / 2 - popupRect.width / 2;
+        if (wrapRect.top > popupRect.height + 10) {
+          popupStyle.top = `${wrapRect.top - popupRect.height - 6}px`;
+        } else {
+          popupStyle.top = `${wrapRect.bottom + 6}px`;
+        }
+        popupStyle.left = `${Math.max(4, Math.min(centerX, window.innerWidth - popupRect.width - 4))}px`;
+      });
+    }, props.delay ?? 0);
   }
   function hide() {
     if (timer) clearTimeout(timer);
