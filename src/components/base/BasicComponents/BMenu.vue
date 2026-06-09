@@ -30,7 +30,7 @@
   withDefaults(
     defineProps<{
       menuOptions: { label: string; icon?: string; function?: () => void }[];
-      trigger: Trigger | Trigger[];
+      trigger?: Trigger | Trigger[];
       overlayClassName?: string;
       getPopupContainer?: (trigger: HTMLElement) => HTMLElement;
     }>(),

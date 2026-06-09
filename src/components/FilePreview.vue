@@ -236,7 +236,7 @@
   const props = defineProps<{
     visible: boolean;
     showNext?: boolean;
-    fileInfo: {
+    fileInfo?: {
       id: string;
       fileName: string;
       fileType: string;

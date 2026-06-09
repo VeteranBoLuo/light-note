@@ -32,7 +32,7 @@
           </template>
           <template v-else-if="column.key === 'riskScore'">
             <a-progress
-              :title="record.riskScore || 0"
+              :title="String(record.riskScore || 0)"
               :percent="record.riskScore || 0"
               size="small"
               :stroke-color="scoreColor(record.riskScore || 0)"
@@ -46,7 +46,7 @@
             }}</span>
           </template>
           <template v-else-if="column.key === 'lastEventAt'">
-            <BTooltip :title="record.lastEventAt">
+            <BTooltip :title="record.lastEventAt || ''">
               <span class="ellipsis-cell">{{ record.lastEventAt || '-' }}</span>
             </BTooltip>
           </template>

@@ -23,7 +23,7 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'riskScore'">
             <a-progress
-              :title="record.riskScore || 0"
+              :title="String(record.riskScore || 0)"
               :percent="record.riskScore || 0"
               size="small"
               :stroke-color="scoreColor(record.riskScore || 0)"

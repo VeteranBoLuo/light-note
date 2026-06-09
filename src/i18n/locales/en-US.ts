@@ -43,6 +43,9 @@ export default {
     },
     panel: {
       weeklyActive: 'This Week Activity',
+      weeklyChanges: 'This Week Changes',
+      activeDays: 'Active Days',
+      weeklyChangesTip: 'This Week Changes = sum of new bookmarks, created/updated notes, and uploaded files this week.',
       newBookmarks: 'New Bookmarks',
       updatedNotes: 'Updated Notes',
       uploadedFiles: 'Uploaded Files',
@@ -78,6 +81,9 @@ export default {
     chart: {
       trend: 'This Week Content Trend',
       fileType: 'File Type Distribution',
+      fileTotal: 'Total Files',
+      count: 'Count',
+      percent: 'Percentage',
       empty: 'No Data',
       bookmark: 'Bookmark',
       note: 'Note',

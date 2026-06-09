@@ -237,7 +237,7 @@
     background-color: var(--modal-input-bg);
   }
 
-  @media (max-width: 1000px) {
+  @media (max-width: 767px) {
     .modal-view {
       top: 50%;
       min-width: 80%;

@@ -12,11 +12,11 @@ const securityCenterRouter: RouteRecordRaw[] = [
   {
     meta: securityCenterMeta,
     path: '/securityCenter',
-    name: 'securityCenter',
     component: () => import('@/view/admin/components/securityCenter/SecurityCenterMg.vue'),
     children: [
       {
         path: '',
+        name: 'securityCenter',
         redirect: { name: 'securityCenterOverview' },
       },
       {

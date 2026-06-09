@@ -301,7 +301,6 @@
     <b-modal
       v-model:visible="shareDescVisible"
       :title="$t('cloudSpace.share')"
-      :footer="null"
       width="450px"
       :show-footer="false"
     >

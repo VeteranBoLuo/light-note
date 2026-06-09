@@ -218,10 +218,6 @@
         }),
     setup: (editor: any) => {
       editorRef.value = editor;
-      editor.options.set(
-        'codesample_languages',
-        CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
-      );
 
       const todoCheckboxHtml = '<input type="checkbox" class="note-todo-checkbox" />';
       const getCurrentBlock = () => {

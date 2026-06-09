@@ -42,6 +42,9 @@ export default {
     },
     panel: {
       weeklyActive: '本周活跃',
+      weeklyChanges: '本周变化',
+      activeDays: '活跃天数',
+      weeklyChangesTip: '本周变化 = 本周新增书签、创建或更新笔记、上传文件的合计。',
       newBookmarks: '新增书签',
       updatedNotes: '更新笔记',
       uploadedFiles: '上传文件',
@@ -76,6 +79,9 @@ export default {
     chart: {
       trend: '本周内容趋势',
       fileType: '文件类型分布',
+      fileTotal: '文件总数',
+      count: '数量',
+      percent: '占比',
       empty: '暂无数据',
       bookmark: '书签',
       note: '笔记',

@@ -202,7 +202,7 @@
     }
   }
 
-  @media (max-width: 1000px) {
+  @media (max-width: 767px) {
     .bAlert {
       width: 70%;
       top: 45%;
