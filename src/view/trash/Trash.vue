@@ -33,26 +33,28 @@
 
     <!-- 工具栏 -->
     <div class="trash-toolbar">
-      <a-radio-group
-        v-model:value="filterType"
-        option-type="button"
-        button-style="solid"
-        size="small"
-        @change="onFilterChange"
-      >
-        <a-radio-button value="">
-          <span class="filter-label">{{ $t('trash.allType') }}</span>
-        </a-radio-button>
-        <a-radio-button value="bookmark">
-          <span class="filter-label">{{ $t('trash.bookmark') }}</span>
-        </a-radio-button>
-        <a-radio-button value="note">
-          <span class="filter-label">{{ $t('trash.note') }}</span>
-        </a-radio-button>
-        <a-radio-button value="file">
-          <span class="filter-label">{{ $t('trash.file') }}</span>
-        </a-radio-button>
-      </a-radio-group>
+      <div class="trash-type-filter">
+        <button
+          class="trash-type-btn"
+          :class="{ active: filterType === '' }"
+          @click="filterType = ''; onFilterChange()"
+        >{{ $t('trash.allType') }}</button>
+        <button
+          class="trash-type-btn"
+          :class="{ active: filterType === 'bookmark' }"
+          @click="filterType = 'bookmark'; onFilterChange()"
+        >{{ $t('trash.bookmark') }}</button>
+        <button
+          class="trash-type-btn"
+          :class="{ active: filterType === 'note' }"
+          @click="filterType = 'note'; onFilterChange()"
+        >{{ $t('trash.note') }}</button>
+        <button
+          class="trash-type-btn"
+          :class="{ active: filterType === 'file' }"
+          @click="filterType = 'file'; onFilterChange()"
+        >{{ $t('trash.file') }}</button>
+      </div>
 
       <div class="trash-toolbar-right">
         <b-input v-model:value="keyword" placeholder="搜索名称…" class="trash-search-input">
@@ -60,17 +62,9 @@
             <svg-icon :src="icon.navigation.search" size="14" />
           </template>
         </b-input>
-        <a-popconfirm
-          :title="$t('trash.emptyAllConfirm')"
-          @confirm="handleEmptyAll"
-          ok-text="确定"
-          cancel-text="取消"
-          :disabled="total === 0"
-        >
-          <b-button type="danger" :loading="emptyingAll" :disabled="total === 0">
-            {{ $t('trash.emptyAll') }}
-          </b-button>
-        </a-popconfirm>
+        <b-button type="danger" :loading="emptyingAll" :disabled="total === 0" @click="confirmEmptyAll">
+          {{ $t('trash.emptyAll') }}
+        </b-button>
       </div>
     </div>
 
@@ -116,14 +110,14 @@
                 <BButton type="link" size="small" class="trash-action-btn" @click="handleRestore([record as any])">
                   {{ $t('trash.restore') }}
                 </BButton>
-                <a-popconfirm
-                  :title="$t('trash.permanentDeleteConfirm', { count: 1 })"
-                  @confirm="handlePermanentDelete([record as any])"
+                <BButton
+                  size="small"
+                  type="danger"
+                  class="trash-action-btn"
+                  @click="confirmDelete(record as any)"
                 >
-                  <BButton size="small" type="danger" class="trash-action-btn">
-                    {{ $t('trash.permanentDelete') }}
-                  </BButton>
-                </a-popconfirm>
+                  {{ $t('trash.permanentDelete') }}
+                </BButton>
               </template>
             </template>
           </BTable>
@@ -139,12 +133,7 @@
           <b-button size="small" @click="handleRestore(selectedItems)">
             {{ $t('trash.restore') }}
           </b-button>
-          <a-popconfirm
-            :title="$t('trash.permanentDeleteConfirm', { count: selectedIds.length })"
-            @confirm="handlePermanentDelete(selectedItems)"
-          >
-            <b-button size="small" type="danger">{{ $t('trash.permanentDelete') }}</b-button>
-          </a-popconfirm>
+          <b-button size="small" type="danger" @click="confirmBatchDelete">{{ $t('trash.permanentDelete') }}</b-button>
         </div>
       </div>
     </transition>
@@ -161,6 +150,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 
   const { t } = useI18n();
 
@@ -209,7 +199,7 @@
     { key: 'resourceType', title: t('trash.resourceType'), width: '120px' },
     { key: 'name', title: '名称' },
     { key: 'deletedAt', title: t('trash.deletedAt'), width: '180px' },
-    { key: 'action', title: '操作', width: '180px' },
+    { key: 'action', title: '操作', width: '220px' },
   ]);
 
   async function fetchTrashFileSize() {
@@ -281,6 +271,36 @@
     } catch (e: any) {
       message.error(e?.message || '恢复失败');
     }
+  }
+
+  function confirmDelete(record: any) {
+    Alert.alert({
+      title: t('trash.permanentDelete'),
+      content: t('trash.permanentDeleteConfirm', { count: 1 }),
+      onOk() {
+        handlePermanentDelete([record]);
+      },
+    });
+  }
+
+  function confirmBatchDelete() {
+    Alert.alert({
+      title: t('trash.permanentDelete'),
+      content: t('trash.permanentDeleteConfirm', { count: selectedIds.length }),
+      onOk() {
+        handlePermanentDelete(selectedItems);
+      },
+    });
+  }
+
+  function confirmEmptyAll() {
+    Alert.alert({
+      title: t('trash.emptyAll'),
+      content: t('trash.emptyAllConfirm'),
+      onOk() {
+        handleEmptyAll();
+      },
+    });
   }
 
   async function handlePermanentDelete(entries: any[]) {
@@ -665,4 +685,36 @@
     opacity: 0;
     transform: translateX(-50%) translateY(12px);
   }
+.trash-type-filter {
+  display: inline-flex;
+  border: 1px solid var(--card-border-color, #6e6e77);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.trash-type-btn {
+  padding: 4px 16px;
+  border: none;
+  border-right: 1px solid var(--card-border-color, #6e6e77);
+  background: transparent;
+  color: var(--text-color);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.trash-type-btn:last-child {
+  border-right: none;
+}
+
+.trash-type-btn:hover {
+  background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent);
+  color: var(--primary-color, #615ced);
+}
+
+.trash-type-btn.active {
+  background: var(--primary-color, #615ced);
+  color: #fff;
+}
 </style>
