@@ -107,7 +107,7 @@
                 </div>
               </template>
               <template v-if="column.key === 'action'">
-                <BButton type="link" size="small" class="trash-action-btn" @click="handleRestore([record as any])">
+                <BButton type="link" size="small" class="trash-action-btn" @click="confirmRestore([record as any])">
                   {{ $t('trash.restore') }}
                 </BButton>
                 <BButton
@@ -130,7 +130,7 @@
       <div v-if="selectedIds.length > 0" class="trash-batch-bar">
         <span class="batch-count">{{ $t('trash.totalCount', { count: selectedIds.length }) }}</span>
         <div class="batch-actions">
-          <b-button size="small" @click="handleRestore(selectedItems)">
+          <b-button size="small" @click="confirmRestore(selectedItems)">
             {{ $t('trash.restore') }}
           </b-button>
           <b-button size="small" type="danger" @click="confirmBatchDelete">{{ $t('trash.permanentDelete') }}</b-button>
@@ -271,6 +271,17 @@
     } catch (e: any) {
       message.error(e?.message || '恢复失败');
     }
+  }
+
+  function confirmRestore(entries: any[]) {
+    const count = entries.length;
+    Alert.alert({
+      title: t('trash.restore'),
+      content: t('trash.restoreConfirm', { count }),
+      onOk() {
+        handleRestore(entries);
+      },
+    });
   }
 
   function confirmDelete(record: any) {

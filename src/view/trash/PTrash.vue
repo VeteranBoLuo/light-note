@@ -99,7 +99,7 @@
           <div class="p-trash-actions">
             <BButton
               size="small"
-              @click="handleRestore([{ id: item.id, resourceType: item.resourceType }])"
+              @click="confirmRestore(item)"
             >
               {{ $t('trash.restore') }}
             </BButton>
@@ -220,6 +220,16 @@
     } catch (e: any) {
       message.error(e?.message || '恢复失败');
     }
+  }
+
+  function confirmRestore(item: any) {
+    Alert.alert({
+      title: t('trash.restore'),
+      content: t('trash.restoreConfirm', { count: 1 }),
+      onOk() {
+        handleRestore([{ id: item.id, resourceType: item.resourceType }]);
+      },
+    });
   }
 
   function confirmDelete(item: any) {
