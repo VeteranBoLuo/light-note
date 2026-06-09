@@ -29,7 +29,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <a-switch v-model:checked="filterRoot" @change="searchApiLog()" />开启管理员过滤
+          <BSwitch v-model:checked="filterRoot" @change="searchApiLog()" />开启管理员过滤
           <b-button @click="handleSearch" type="primary">搜索</b-button>
           <b-button @click="clearApiLogs">清空日志</b-button>
         </div>
@@ -81,7 +81,9 @@
   import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
+  import { message } from 'ant-design-vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -89,7 +91,6 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
   const bookmark = bookmarkStore();
   const tableCardRef = ref<HTMLElement | null>(null);
   useTableScrollY({ ref: tableCardRef });

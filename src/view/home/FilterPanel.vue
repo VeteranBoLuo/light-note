@@ -25,7 +25,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
             <template #suffix>
-              <a-switch title="隐藏空标签" size="small" v-model:checked="hideEmptyTags" />
+              <BSwitch v-model:checked="hideEmptyTags" title="隐藏空标签" />
             </template>
           </b-input>
           <div
@@ -93,6 +93,7 @@
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useRouter } from 'vue-router';
   import RightMenu from '@/components/base/RightMenu.vue';
   import { TagInterface } from '@/config/bookmarkCfg.ts';
