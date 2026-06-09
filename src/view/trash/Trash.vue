@@ -37,23 +37,39 @@
         <button
           class="trash-type-btn"
           :class="{ active: filterType === '' }"
-          @click="filterType = ''; onFilterChange()"
-        >{{ $t('trash.allType') }}</button>
+          @click="
+            filterType = '';
+            onFilterChange();
+          "
+          >{{ $t('trash.allType') }}</button
+        >
         <button
           class="trash-type-btn"
           :class="{ active: filterType === 'bookmark' }"
-          @click="filterType = 'bookmark'; onFilterChange()"
-        >{{ $t('trash.bookmark') }}</button>
+          @click="
+            filterType = 'bookmark';
+            onFilterChange();
+          "
+          >{{ $t('trash.bookmark') }}</button
+        >
         <button
           class="trash-type-btn"
           :class="{ active: filterType === 'note' }"
-          @click="filterType = 'note'; onFilterChange()"
-        >{{ $t('trash.note') }}</button>
+          @click="
+            filterType = 'note';
+            onFilterChange();
+          "
+          >{{ $t('trash.note') }}</button
+        >
         <button
           class="trash-type-btn"
           :class="{ active: filterType === 'file' }"
-          @click="filterType = 'file'; onFilterChange()"
-        >{{ $t('trash.file') }}</button>
+          @click="
+            filterType = 'file';
+            onFilterChange();
+          "
+          >{{ $t('trash.file') }}</button
+        >
       </div>
 
       <div class="trash-toolbar-right">
@@ -62,9 +78,14 @@
             <svg-icon :src="icon.navigation.search" size="14" />
           </template>
         </b-input>
-        <b-button type="danger" :loading="emptyingAll" :disabled="total === 0" @click="confirmEmptyAll">
-          {{ $t('trash.emptyAll') }}
-        </b-button>
+        <div style="display: flex; gap: 6px; flex-shrink: 0">
+          <b-button type="danger" :loading="emptyingAll" :disabled="total === 0" @click="confirmEmptyAll">
+            {{ $t('trash.emptyAll') }}
+          </b-button>
+          <b-button :loading="restoringAll" :disabled="total === 0" @click="confirmRestoreAll">
+            一键恢复
+          </b-button>
+        </div>
       </div>
     </div>
 
@@ -85,7 +106,6 @@
             :rowKey="'id'"
             :selectable="true"
             :selectedRows="selectedIds"
-
             @selection-change="selectedIds = $event"
           >
             <template #bodyCell="{ column, record }">
@@ -107,15 +127,10 @@
                 </div>
               </template>
               <template v-if="column.key === 'action'">
-                <BButton type="link" size="small" class="trash-action-btn" @click="confirmRestore([record as any])">
+                <BButton size="small" class="trash-action-btn" @click="confirmRestore([record as any])">
                   {{ $t('trash.restore') }}
                 </BButton>
-                <BButton
-                  size="small"
-                  type="danger"
-                  class="trash-action-btn"
-                  @click="confirmDelete(record as any)"
-                >
+                <BButton size="small" type="danger" class="trash-action-btn" @click="confirmDelete(record as any)">
                   {{ $t('trash.permanentDelete') }}
                 </BButton>
               </template>
@@ -156,6 +171,7 @@
 
   const loading = ref(false);
   const emptyingAll = ref(false);
+  const restoringAll = ref(false);
   const items = ref<any[]>([]);
   const total = ref(0);
   const filterType = ref('');
@@ -199,7 +215,7 @@
     { key: 'resourceType', title: t('trash.resourceType'), width: '120px' },
     { key: 'name', title: '名称' },
     { key: 'deletedAt', title: t('trash.deletedAt'), width: '180px' },
-    { key: 'action', title: '操作', width: '220px' },
+    { key: 'action', title: '操作', width: '150px' },
   ]);
 
   async function fetchTrashFileSize() {
@@ -332,6 +348,32 @@
     }
   }
 
+  function confirmRestoreAll() {
+    Alert.alert({
+      title: '一键恢复',
+      content: `确认恢复全部 ${total.value} 项？`,
+      onOk() {
+        handleRestoreAll();
+      },
+    });
+  }
+
+  async function handleRestoreAll() {
+    restoringAll.value = true;
+    try {
+      const res = await apiBasePost('/api/trash/restoreAll', {});
+      if (res.status === 200) {
+        message.success(res.msg || '恢复成功');
+        selectedIds.value = [];
+        fetchList();
+      }
+    } catch (e: any) {
+      message.error(e?.message || '恢复失败');
+    } finally {
+      restoringAll.value = false;
+    }
+  }
+
   async function handleEmptyAll() {
     emptyingAll.value = true;
     try {
@@ -347,8 +389,6 @@
       emptyingAll.value = false;
     }
   }
-
-  fetchList();
 </script>
 
 <style lang="less" scoped>
@@ -368,10 +408,18 @@
   .trash-toolbar {
     min-height: 0;
   }
-  .trash-hero { grid-row: 1; }
-  .trash-info-bar { grid-row: 2; }
-  .trash-size-warning { grid-row: 3; }
-  .trash-toolbar { grid-row: 4; }
+  .trash-hero {
+    grid-row: 1;
+  }
+  .trash-info-bar {
+    grid-row: 2;
+  }
+  .trash-size-warning {
+    grid-row: 3;
+  }
+  .trash-toolbar {
+    grid-row: 4;
+  }
 
   // 表格区域撑满剩余高度（grid 1fr 行有确切高度）
   .trash-loading-area {
@@ -696,36 +744,36 @@
     opacity: 0;
     transform: translateX(-50%) translateY(12px);
   }
-.trash-type-filter {
-  display: inline-flex;
-  border: 1px solid var(--card-border-color, #6e6e77);
-  border-radius: 8px;
-  overflow: hidden;
-}
+  .trash-type-filter {
+    display: inline-flex;
+    border: 1px solid var(--card-border-color, #6e6e77);
+    border-radius: 8px;
+    overflow: hidden;
+  }
 
-.trash-type-btn {
-  padding: 4px 16px;
-  border: none;
-  border-right: 1px solid var(--card-border-color, #6e6e77);
-  background: transparent;
-  color: var(--text-color);
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
+  .trash-type-btn {
+    padding: 4px 16px;
+    border: none;
+    border-right: 1px solid var(--card-border-color, #6e6e77);
+    background: transparent;
+    color: var(--text-color);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
 
-.trash-type-btn:last-child {
-  border-right: none;
-}
+  .trash-type-btn:last-child {
+    border-right: none;
+  }
 
-.trash-type-btn:hover {
-  background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent);
-  color: var(--primary-color, #615ced);
-}
+  .trash-type-btn:hover {
+    background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent);
+    color: var(--primary-color, #615ced);
+  }
 
-.trash-type-btn.active {
-  background: var(--primary-color, #615ced);
-  color: #fff;
-}
+  .trash-type-btn.active {
+    background: var(--primary-color, #615ced);
+    color: #fff;
+  }
 </style>

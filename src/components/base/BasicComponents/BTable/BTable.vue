@@ -238,6 +238,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .cell-text {

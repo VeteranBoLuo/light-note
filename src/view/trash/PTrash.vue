@@ -55,9 +55,14 @@
             @click="filterType = 'file'; onFilterChange()"
           >{{ $t('trash.file') }}</button>
         </div>
-        <b-button type="danger" :loading="emptyingAll" :disabled="total === 0" class="p-trash-empty-btn" @click="confirmEmptyAll">
-          {{ $t('trash.emptyAll') }}
-        </b-button>
+        <div style="display: flex; gap: 6px; flex-shrink: 0">
+          <b-button type="danger" :loading="emptyingAll" :disabled="total === 0" class="p-trash-empty-btn" @click="confirmEmptyAll">
+            {{ $t('trash.emptyAll') }}
+          </b-button>
+          <b-button :loading="restoringAll" :disabled="total === 0" class="p-trash-empty-btn" @click="confirmRestoreAll">
+            一键恢复
+          </b-button>
+        </div>
       </div>
 
       <!-- 骨架屏 -->
@@ -126,6 +131,7 @@
 
   const loading = ref(false);
   const emptyingAll = ref(false);
+  const restoringAll = ref(false);
   const items = ref<any[]>([]);
   const filterType = ref('');
   const keyword = ref('');
@@ -240,6 +246,32 @@
         handlePermanentDelete([{ id: item.id, resourceType: item.resourceType }]);
       },
     });
+  }
+
+  function confirmRestoreAll() {
+    Alert.alert({
+      title: '一键恢复',
+      content: `确认恢复全部 ${total.value} 项？`,
+      onOk() {
+        handleRestoreAll();
+      },
+    });
+  }
+
+  async function handleRestoreAll() {
+    restoringAll.value = true;
+    try {
+      const res = await apiBasePost('/api/trash/restoreAll', {});
+      if (res.status === 200) {
+        message.success(res.msg || '恢复成功');
+        selectedIds.value = [];
+        fetchList();
+      }
+    } catch (e: any) {
+      message.error(e?.message || '恢复失败');
+    } finally {
+      restoringAll.value = false;
+    }
   }
 
   function confirmEmptyAll() {
