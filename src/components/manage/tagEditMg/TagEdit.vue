@@ -105,9 +105,9 @@
                 class="resource-card"
                 :class="{ active: section.selectedIds.includes(item.rawId) }"
               >
-                <a-checkbox
+                <BCheckbox
                   :checked="section.selectedIds.includes(item.rawId)"
-                  @change="toggleResource(section.type, item.rawId, $event.target.checked)"
+                  @change="(checked: boolean) => toggleResource(section.type, item.rawId, checked)"
                 />
                 <div class="resource-info">
                   <div class="resource-name text-hidden">{{ item.name }}</div>
@@ -181,6 +181,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import iconifyImg from '@/assets/img/iconify教程.jpg';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';

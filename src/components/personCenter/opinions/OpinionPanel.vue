@@ -139,7 +139,15 @@
             </article>
           </div>
 
-          <a-empty v-else :description="t('personCenter.opinions.noFeedbackHistory')" class="both-center" />
+          <div v-else class="both-center" style="display: flex; flex-direction: column; align-items: center; gap: 16px; transform: translate(-50%, -50%)">
+            <div style="width: 56px; height: 56px; border-radius: 16px; background: color-mix(in srgb, var(--text-color) 6%, transparent); display: flex; align-items: center; justify-content: center; color: var(--text-color); opacity: 0.35">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 12h-5l-2 3H9l-2-3H2" />
+                <path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />
+              </svg>
+            </div>
+            <span style="font-size: 14px; color: var(--sub-text-color)">{{ t('personCenter.opinions.noFeedbackHistory') }}</span>
+          </div>
         </div>
       </div>
     </div>

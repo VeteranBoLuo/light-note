@@ -8,11 +8,11 @@
       </b-input>
       <div v-if="batchMode" class="batch-actions">
       <b-space :size="10">
-        <a-checkbox
+        <BCheckbox
           v-if="viewMode === 'card'"
           :indeterminate="indeterminate"
           :checked="selectAll"
-          @change="onToggleSelectAll"
+          @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
           class="batch-select-all"
         />
         <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
@@ -41,8 +41,8 @@
         <div class="file-card-cover">
           <span v-if="batchMode" class="card-checkbox" @click.stop>
             <b-checkbox
-              :isCheck="selectedRows.includes(item.id)"
-              @update:isCheck="(val: boolean) => toggleRow(item.id, val)"
+              :checked="selectedRows.includes(item.id)"
+              @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
           <img
@@ -116,7 +116,9 @@
                 },
               ]"
             >
-              <svg-icon class="more-icon" :src="icon.common.more" size="20" />
+              <BTooltip :title="$t('common.more')">
+                <svg-icon class="more-icon" :src="icon.common.more" size="20" />
+              </BTooltip>
             </b-menu>
           </div>
         </div>
@@ -155,13 +157,6 @@
     </div>
     <div v-if="viewMode === 'table'" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
-        <a-checkbox
-          v-if="batchMode"
-          :indeterminate="indeterminate"
-          :checked="selectAll"
-          @change="onToggleSelectAll"
-          class="header-checkbox"
-        />
         <span class="field-header-label">{{ $t('cloudSpace.fileName') }}</span>
         <b-input
           v-model:value="cloud.searchFileName"
@@ -182,6 +177,25 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
+    <div v-if="viewMode === 'table' && batchMode" class="batch-actions" style="padding: 8px 20px; background: var(--table-header-bg-color); border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+        <BCheckbox
+          :indeterminate="indeterminate"
+          :checked="selectAll"
+          @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
+        />
+        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
+        <b-button
+          size="small"
+          type="primary"
+          @click="handleBatchMove"
+          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
+          >{{ $t('cloudSpace.batchMove') }}</b-button
+        >
+        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+          {{ $t('cloudSpace.batchDownload') }}
+        </b-button>
+    </div>
     <div v-if="viewMode === 'table'" class="file-container">
       <div
         class="field-item"
@@ -195,8 +209,8 @@
         <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
           <span v-if="batchMode" class="row-checkbox" @click.stop>
             <b-checkbox
-              :isCheck="selectedRows.includes(item.id)"
-              @update:isCheck="(val: boolean) => toggleRow(item.id, val)"
+              :checked="selectedRows.includes(item.id)"
+              @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
           <div
@@ -1387,6 +1401,12 @@
     color: #8790a0;
   }
 
+  .file-card:hover .file-card-overlay,
+  .file-card:hover .file-card-more {
+    opacity: 1 !important;
+    pointer-events: auto;
+  }
+
   .file-card-overlay {
     position: absolute;
     top: 0;
@@ -1420,7 +1440,9 @@
     top: 4px;
     right: 4px;
     z-index: 2;
-    pointer-events: auto;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
   }
   .file-card-more .more-icon {
     color: rgba(255,255,255,.7);
@@ -1531,6 +1553,10 @@
   @media (max-width: 1400px) {
     .file-card-overlay {
       opacity: 1 !important;
+    }
+    .file-card-more {
+      opacity: 1 !important;
+      pointer-events: auto;
     }
   }
 

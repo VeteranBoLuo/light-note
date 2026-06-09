@@ -10,16 +10,9 @@
         <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
         <b-button @click="clearApiImages" type="primary">清空</b-button>
       </b-space>
-      <a-table
-        :data-source="allImg[imgType]"
-        :columns="imageColumns"
-        row-key="id"
-        style="margin-top: 5px"
-        :scroll="{ y: bookmark.screenHeight - 235 }"
-        :pagination="false"
-      >
-        <template #bodyCell="{ column, text, record }">
-          <template v-if="column.dataIndex === 'img'">
+      <BTable :data="allImg[imgType]" :columns="imageColumns" rowKey="id" style="margin-top: 5px">
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'img'">
             <div
               style="
                 width: 40px;
@@ -38,8 +31,11 @@
               <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
             </div>
           </template>
+          <template v-else>
+            {{ record[column.key] }}
+          </template>
         </template>
-      </a-table>
+      </BTable>
       <p>
         总计
         <a>
@@ -64,6 +60,7 @@
   import { message } from 'ant-design-vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   const bookmark = bookmarkStore();
   const imgOptions = [
     { label: '使用中', value: 'usedImages' },
@@ -74,13 +71,11 @@
     return [
       {
         title: '图片',
-        dataIndex: 'img',
-        width: 100,
+        key: 'img',
       },
-      ,
       {
         title: '名称',
-        dataIndex: 'name',
+        key: 'name',
         ellipsis: true,
       },
     ];
@@ -132,22 +127,6 @@
 </script>
 
 <style lang="less" scoped>
-  :deep(.ant-table-wrapper .ant-table) {
-    background-color: var(--background-color);
-    color: var(--text-color);
-  }
-  :deep(.ant-table-cell-ellipsis) {
-    background-color: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-  :deep(.ant-table-cell-scrollbar) {
-    background-color: unset !important;
-    display: none;
-  }
-  :deep(.ant-table-cell) {
-    background-color: var(--background-color) !important;
-    color: black;
-  }
   :deep(.ant-select-dropdown-placement-topLeft) {
     min-width: 100px !important;
     transition: none !important;
@@ -155,21 +134,5 @@
   :deep(.ant-select-selector .ant-select-selection-item) {
     background-color: unset !important;
     transition: none !important;
-  }
-  //:deep(.ant-select-selector) {
-  //  transition: none !important;
-  //}
-  /*--分页背景调色--*/
-  :deep(.ant-pagination) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item a) {
-    color: var(--text-color);
-  }
-  :deep(.ant-pagination-item-active a) {
-    color: #4e4b46;
-  }
-  :deep(.ant-pagination-item-ellipsis) {
-    color: var(--icon-color) !important;
   }
 </style>

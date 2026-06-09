@@ -1,68 +1,147 @@
 <template>
-  <div
-    class="checkbox_container"
-    :data-type="type"
-    @click="checkClick"
-    :style="{
-      backgroundColor: isCheck ? 'var(--primary-color)' : '',
+  <label
+    class="b-checkbox"
+    :class="{
+      'is-checked': localChecked,
+      'is-indeterminate': indeterminate,
+      'is-disabled': disabled,
     }"
+    @click="handleClick"
   >
-    <svg v-show="isCheck" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
-      <g fill="none" fill-rule="evenodd">
-        <path
-          d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"
-        />
-        <path
-          fill="#fff"
-          d="M21.546 5.111a1.5 1.5 0 0 1 0 2.121L10.303 18.475a1.6 1.6 0 0 1-2.263 0L2.454 12.89a1.5 1.5 0 1 1 2.121-2.121l4.596 4.596L19.424 5.111a1.5 1.5 0 0 1 2.122 0"
-        />
-      </g>
-    </svg>
-  </div>
+    <span class="b-checkbox__input">
+      <span class="b-checkbox__inner">
+        <svg v-if="indeterminate" class="b-checkbox__icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        <svg v-else-if="localChecked" class="b-checkbox__icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 12 10 18 20 6" />
+        </svg>
+      </span>
+    </span>
+    <span v-if="$slots.default || label" class="b-checkbox__label">
+      <slot>{{ label }}</slot>
+    </span>
+  </label>
 </template>
 
-<script lang="ts" setup>
-  const isCheck = defineModel('isCheck');
+<script setup lang="ts">
+  import { ref, watch } from 'vue';
 
-  const props = withDefaults(defineProps<{ type?: 'normal' | 'circle' }>(), {
-    type: 'normal',
-  });
-  const emit = defineEmits(['change']);
-  function checkClick() {
-    isCheck.value = !isCheck.value;
-    emit('change', isCheck.value);
+  const props = withDefaults(
+    defineProps<{
+      modelValue?: boolean;
+      checked?: boolean;
+      value?: string | number;
+      label?: string;
+      indeterminate?: boolean;
+      disabled?: boolean;
+    }>(),
+    {
+      modelValue: false,
+      checked: false,
+      indeterminate: false,
+      disabled: false,
+    },
+  );
+
+  const emit = defineEmits<{
+    'update:modelValue': [value: boolean];
+    'update:checked': [value: boolean];
+    change: [value: boolean];
+  }>();
+
+  // 本地状态，乐观更新
+  // 优先取 checked（显式绑定），再取 modelValue（v-model 兼容）
+  const localChecked = ref(props.checked);
+
+  // 外部 prop 变化时同步：分别 watch checked 和 modelValue
+  watch(
+    () => props.checked,
+    (val) => {
+      localChecked.value = val;
+    },
+  );
+  watch(
+    () => props.modelValue,
+    (val) => {
+      localChecked.value = val;
+    },
+  );
+
+  function handleClick() {
+    if (props.disabled) return;
+    const newVal = !localChecked.value;
+    localChecked.value = newVal;
+    emit('update:modelValue', newVal);
+    emit('update:checked', newVal);
+    emit('change', newVal);
   }
 </script>
 
 <style lang="less">
-  .checkbox_container {
-    height: 14px;
-    width: 14px;
-    border: 1px solid var(--card-border-color);
+  .b-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    padding: 4px;
+
+    &.is-disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+  }
+
+  .b-checkbox__input {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .b-checkbox__inner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--card-border-color);
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    transition: all 0.1s ease;
-    background-color: transparent;
-
-    &:hover {
-      border-color: var(--primary-color);
-    }
-
-    &[data-type='circle'] {
-      border-radius: 50%;
-    }
-
-    svg {
-      width: 12px;
-      height: 12px;
-    }
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+    background: transparent;
   }
+
+  .b-checkbox:hover .b-checkbox__inner {
+    border-color: var(--primary-color);
+  }
+
+  .b-checkbox.is-checked .b-checkbox__inner {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+  }
+
+  .b-checkbox.is-indeterminate .b-checkbox__inner {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+  }
+
+  .b-checkbox__icon {
+    color: #fff;
+    display: block;
+  }
+
+  .b-checkbox__label {
+    font-size: 14px;
+    color: var(--text-color);
+    line-height: 1.4;
+  }
+
   [data-theme='night'] {
-    .checkbox_container {
-      border-color: #6e6e77 !important;
+    .b-checkbox__inner {
+      border-color: #6e6e77;
     }
   }
 </style>

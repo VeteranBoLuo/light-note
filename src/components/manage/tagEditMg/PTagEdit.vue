@@ -66,7 +66,7 @@
                 class="resource-card"
                 :class="{ active: section.selectedIds.includes(item.rawId) }"
               >
-                <a-checkbox :checked="section.selectedIds.includes(item.rawId)" @change="toggleResource(section.type, item.rawId, $event.target.checked)" />
+                <BCheckbox :checked="section.selectedIds.includes(item.rawId)" @change="(checked: boolean) => toggleResource(section.type, item.rawId, checked)" />
                 <div class="resource-info">
                   <div class="resource-name text-hidden">{{ item.name }}</div>
                   <div class="resource-meta">{{ section.label }}</div>
@@ -96,6 +96,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { useI18n } from 'vue-i18n';

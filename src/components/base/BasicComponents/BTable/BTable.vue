@@ -3,11 +3,10 @@
     <!-- 表头 -->
     <div class="table-header" :style="gridStyle">
       <div v-if="props.selectable" class="header-cell" style="width: 50px">
-        <a-checkbox
-          class="select-checkbox"
+        <BCheckbox
           :indeterminate="isIndeterminate"
           :checked="isAllSelected"
-          @change="(e) => handleSelectAllChange(e.target.checked)"
+          @change="(checked) => handleSelectAllChange(checked)"
         />
       </div>
       <div v-for="col in columns" :key="col.key" class="header-cell" :style="{ width: col.width || 'auto' }">
@@ -26,10 +25,9 @@
         @click="handleRowClick(item, rowIndex)"
       >
         <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
-          <a-checkbox
-            class="select-checkbox"
+          <BCheckbox
             :checked="isRowSelected(item)"
-            @change="(e) => handleRowSelectChange(item, e.target.checked)"
+            @change="(checked) => handleRowSelectChange(item, checked)"
           />
         </div>
         <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
@@ -68,6 +66,7 @@
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
 
   const props = defineProps({
     data: {
@@ -238,10 +237,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: var(--text-color);
-  }
-
-  .select-checkbox {
     color: var(--text-color);
   }
 

@@ -19,16 +19,22 @@
       <!-- 筛选菜单 -->
       <div v-show="showFilterMenu" class="filter-menu">
         <div class="filter-header">
-          <a-checkbox :indeterminate="indeterminate" v-model:checked="allTypesSelected" @change="toggleSelectAll">
+          <BCheckbox :indeterminate="indeterminate" v-model:checked="allTypesSelected" @change="(checked: boolean) => toggleSelectAll({ target: { checked } })">
             <span class="select-all-label">{{ $t('common.selectAll') }}</span>
-          </a-checkbox>
+          </BCheckbox>
           <span class="selected-info">{{ selectedCount }}/{{ fileTypes.length }}</span>
         </div>
-        <a-checkbox-group class="filter-options" v-model:value="cloud.typeCheckValue">
-          <a-checkbox v-for="type in fileTypes" :key="type.value" :value="type.value" class="filter-option">
+        <div class="filter-options">
+          <BCheckbox
+            v-for="type in fileTypes"
+            :key="type.value"
+            :checked="cloud.typeCheckValue.includes(type.value)"
+            class="filter-option"
+            @change="(checked: boolean) => { if (checked) { if (!cloud.typeCheckValue.includes(type.value)) cloud.typeCheckValue.push(type.value); } else { const idx = cloud.typeCheckValue.indexOf(type.value); if (idx > -1) cloud.typeCheckValue.splice(idx, 1); } }"
+          >
             {{ type.label }}
-          </a-checkbox>
-        </a-checkbox-group>
+          </BCheckbox>
+        </div>
       </div>
     </div>
   </div>
@@ -39,6 +45,7 @@
   import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
   import { cloudSpaceStore } from '@/store';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { useI18n } from 'vue-i18n';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
