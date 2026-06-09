@@ -22,6 +22,7 @@
               @change="inputBlur"
               @focusout="focusout"
               placeholder="请输入标题"
+              class="note-title-input"
             />
           </div>
           <editor
@@ -345,7 +346,7 @@
     flex-direction: column;
   }
   .note-body-title {
-    .ant-input {
+    :deep(.ant-input), :deep(.b-input) {
       height: 50px;
       padding: 0 15px;
       display: flex;
@@ -354,14 +355,14 @@
       box-sizing: border-box;
       outline: none;
       transition: border-color 0.1s linear;
-      background-color: var(--bl-input-bg-color);
+      background-color: transparent !important;
       color: var(--bl-input-color);
       font-weight: 600;
-      border: none;
+      border: none !important;
       box-shadow: unset !important;
       font-size: 25px;
       &:focus {
-        border: none;
+        border: none !important;
       }
     }
   }
