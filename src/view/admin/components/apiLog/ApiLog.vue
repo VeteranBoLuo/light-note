@@ -142,7 +142,7 @@
   function getOsColor(os?: string): string {
     if (!os) return '#666';
     if (os.includes('Windows')) return '#1677ff';
-    if (os.includes('Mac')) return '#333';
+    if (os.includes('Mac')) return '#00a884';
     if (os.includes('Linux')) return '#52c41a';
     return '#666';
   }

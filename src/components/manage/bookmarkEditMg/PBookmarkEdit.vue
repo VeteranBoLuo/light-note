@@ -9,12 +9,12 @@
         <div class="tag-attr-item">
           <div class="tag-attr-head">
             <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
-            <a-tooltip :title="$t('bookmarkMg.generateMetaDesc')">
+            <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
               <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generatingMeta }">
                 <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
                 <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
               </button>
-            </a-tooltip>
+            </BTooltip>
           </div>
           <b-input v-model:value="bookmarkData.url">
           </b-input>
@@ -57,6 +57,7 @@
   import { message } from 'ant-design-vue';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';

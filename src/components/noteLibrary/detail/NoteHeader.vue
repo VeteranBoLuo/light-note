@@ -28,26 +28,26 @@
       </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
-      <a-tooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
+      <BTooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
         <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
         </div>
-      </a-tooltip>
-      <a-tooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
+      </BTooltip>
+      <BTooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
         <div class="note-header-title-icon" @click="openExportModal">
           <SvgIcon :src="icon.noteDetail.export" />
         </div>
-      </a-tooltip>
-      <a-tooltip :title="$t('noteDetail.delete')">
+      </BTooltip>
+      <BTooltip :title="$t('noteDetail.delete')">
         <div class="note-header-title-icon" @click="$emit('del')">
           <SvgIcon :src="icon.noteDetail.delete" />
         </div>
-      </a-tooltip>
-      <a-tooltip :title="$t('noteDetail.save')" v-if="!bookmark.isMobile">
+      </BTooltip>
+      <BTooltip :title="$t('noteDetail.save')" v-if="!bookmark.isMobile">
         <div class="note-header-title-icon" @click="$emit('save', true)">
           <SvgIcon :src="icon.noteDetail.save" />
         </div>
-      </a-tooltip>
+      </BTooltip>
     </div>
     <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="handleTagSaved" />
     <ActionCardModal
@@ -70,6 +70,7 @@
   import { generatePDF } from '@/utils/htmlToPdf.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import TurndownService from 'turndown';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';

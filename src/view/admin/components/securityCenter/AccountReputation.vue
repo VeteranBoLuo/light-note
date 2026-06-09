@@ -46,9 +46,9 @@
             }}</span>
           </template>
           <template v-else-if="column.key === 'lastEventAt'">
-            <a-tooltip :title="record.lastEventAt">
+            <BTooltip :title="record.lastEventAt">
               <span class="ellipsis-cell">{{ record.lastEventAt || '-' }}</span>
-            </a-tooltip>
+            </BTooltip>
           </template>
           <template v-else-if="column.key === 'action'">
             <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount?.(record)"
@@ -69,6 +69,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import {
     NAVIGATE_TO_USER_EVENTS,
     REFRESH_TRIGGER,

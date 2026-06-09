@@ -37,9 +37,9 @@
                 }}</span>
               </template>
               <template v-else-if="column.key === 'lastSeenAt'">
-                <a-tooltip :title="record.lastSeenAt">
+                <BTooltip :title="record.lastSeenAt">
                   <span class="ellipsis-cell">{{ record.lastSeenAt || '-' }}</span>
-                </a-tooltip>
+                </BTooltip>
               </template>
               <template v-else-if="column.key === 'action'">
                 <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount?.(record)"
@@ -63,6 +63,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import {
     BAN_IP,
     UNBAN_IP,

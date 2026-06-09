@@ -471,6 +471,12 @@
 
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
+    // 手机端访问官网 → 跳 /home（根路由 redirect 已处理 /）
+    if (bookmark.isMobile && to.path === '/landing') {
+      next('/home');
+      return;
+    }
+
     if (to.name === 'workbenches') {
       handleRouteChange(bookmark.isMobile, to.path);
     }

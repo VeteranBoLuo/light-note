@@ -113,16 +113,16 @@
                 </div>
               </template>
               <template v-if="column.key === 'action'">
-                <a-button type="link" size="small" class="trash-action-btn" @click="handleRestore([record as any])">
+                <BButton type="link" size="small" class="trash-action-btn" @click="handleRestore([record as any])">
                   {{ $t('trash.restore') }}
-                </a-button>
+                </BButton>
                 <a-popconfirm
                   :title="$t('trash.permanentDeleteConfirm', { count: 1 })"
                   @confirm="handlePermanentDelete([record as any])"
                 >
-                  <a-button type="link" size="small" danger class="trash-action-btn">
+                  <BButton size="small" type="danger" class="trash-action-btn">
                     {{ $t('trash.permanentDelete') }}
-                  </a-button>
+                  </BButton>
                 </a-popconfirm>
               </template>
             </template>
@@ -160,6 +160,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const { t } = useI18n();
 

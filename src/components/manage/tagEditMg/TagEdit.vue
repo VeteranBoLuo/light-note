@@ -16,7 +16,7 @@
                   <svg-icon v-else :src="icon.nullImg" size="16" />
                 </span>
               </div>
-              <a-tooltip :title="$t('tagManage.generateIconDesc')">
+              <BTooltip :title="$t('tagManage.generateIconDesc')">
                 <button
                   type="button"
                   class="generate-icon-action"
@@ -26,7 +26,7 @@
                   <svg-icon :src="icon.common.magicWand" :title="$t('tagManage.generateIconTitle')" />
                   <span>{{ $t('tagManage.generateIconTitle') }}</span>
                 </button>
-              </a-tooltip>
+              </BTooltip>
             </div>
             <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')">
               <template #prefix>
@@ -176,6 +176,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { message } from 'ant-design-vue';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';

@@ -49,9 +49,9 @@
               {{ record.createdByAlias || record.createdBy || '-' }}
             </template>
             <template v-else-if="column.key === 'updatedAt'">
-              <a-tooltip :title="record.updatedAt">
+              <BTooltip :title="record.updatedAt">
                 <span class="ellipsis-cell">{{ record.updatedAt || '-' }}</span>
-              </a-tooltip>
+              </BTooltip>
             </template>
             <template v-else-if="column.key === 'action'">
               <b-button size="small" @click="removeWhitelist(record)">移出</b-button>
@@ -140,6 +140,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { whitelistColumns } from './securityShared';
 
   const filters = reactive({ key: '', targetType: undefined as string | undefined });

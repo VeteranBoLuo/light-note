@@ -54,22 +54,28 @@
             </div>
           </div>
           <div v-if="!batchMode" class="file-card-overlay">
-            <a-tooltip :title="$t('cloudSpace.download')">
+            <BTooltip :title="$t('cloudSpace.download')">
               <svg-icon
                 class="overlay-btn"
                 :src="icon.cloudSpace.download"
                 size="18"
                 @click.stop="handleDownloadFile(item)"
               />
-            </a-tooltip>
-            <a-tooltip :title="$t('common.delete')">
+            </BTooltip>
+            <BTooltip :title="$t('common.delete')">
               <svg-icon class="overlay-btn" :src="icon.noteDetail.delete" size="18" @click.stop="handleDelFile(item)" />
-            </a-tooltip>
+            </BTooltip>
+          </div>
+          <div v-if="!batchMode" class="file-card-more" @click.stop>
             <b-menu
-              class="overlay-menu"
-              v-if="!bookmark.isMobile"
+              class="card-more-menu"
               :trigger="'click'"
               :menu-options="[
+                {
+                  label: $t('common.reName'),
+                  icon: icon.cloudSpace.rename,
+                  function: () => openRenameModal(item),
+                },
                 {
                   label: $t('cloudSpace.share'),
                   icon: icon.cloudSpace.share,
@@ -87,7 +93,7 @@
                 },
               ]"
             >
-              <svg-icon class="overlay-btn" :src="icon.common.more" size="18" />
+              <svg-icon class="more-icon" :src="icon.common.more" size="20" />
             </b-menu>
           </div>
         </div>
@@ -141,9 +147,9 @@
         <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
         <div class="download-progress-ops">
           <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
-          <a-button size="small" type="text" class="download-cancel-btn" @click="cancelBatchDownload">
+          <BButton size="small" type="text" class="download-cancel-btn" @click="cancelBatchDownload">
             {{ $t('common.cancel') }}
-          </a-button>
+          </BButton>
         </div>
       </div>
       <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
@@ -212,15 +218,15 @@
             </template>
           </b-input>
           <div class="flex-align-center handle-btn" v-if="!item.isRename">
-            <a-tooltip :title="$t('cloudSpace.download')">
+            <BTooltip :title="$t('cloudSpace.download')">
               <svg-icon
                 class="download-icon"
                 :src="icon.cloudSpace.download"
                 size="20"
                 @click="handleDownloadFile(item)"
               />
-            </a-tooltip>
-            <a-tooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
+            </BTooltip>
+            <BTooltip :title="$t('common.reName')" v-if="!bookmark.isMobile">
               <svg-icon
                 class="download-icon"
                 :src="icon.cloudSpace.rename"
@@ -228,8 +234,8 @@
                 @click="handleReName(item)"
                 v-click-log="{ module: '云空间', operation: `编辑文件名【${item.fileName}】` }"
               />
-            </a-tooltip>
-            <a-tooltip :title="$t('cloudSpace.relateTags')">
+            </BTooltip>
+            <BTooltip :title="$t('cloudSpace.relateTags')">
               <svg-icon
                 class="download-icon"
                 :src="icon.manage_categoryBtn_tag"
@@ -237,11 +243,11 @@
                 @click="openTagDialog(item)"
                 v-click-log="{ module: '云空间', operation: `打开文件标签配置【${item.fileName}】` }"
               />
-            </a-tooltip>
+            </BTooltip>
             <!-- 删除按钮 -->
-            <a-tooltip :title="$t('common.delete')">
+            <BTooltip :title="$t('common.delete')">
               <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item)" />
-            </a-tooltip>
+            </BTooltip>
             <b-menu
               v-if="!bookmark.isMobile"
               :trigger="'click'"
@@ -324,6 +330,29 @@
       :file="activeTagFile"
       @saved="cloud.queryFieldList"
     />
+
+    <b-modal
+      v-model:visible="renameModalVisible"
+      :title="$t('common.reName')"
+      width="400px"
+      :show-footer="false"
+      :mask-closable="true"
+      @close="renameModalFile = null"
+    >
+      <div class="rename-modal-field">
+        <b-input
+          v-model:value="renameModalValue"
+          class="rename-modal-input"
+          @enter="confirmRename"
+          @click.stop
+        />
+        <span v-if="renameModalFile" class="rename-modal-ext">.{{ originalExt }}</span>
+      </div>
+      <div class="rename-modal-actions">
+        <b-button type="primary" @click="confirmRename">{{ $t('common.confirm') }}</b-button>
+        <b-button @click="renameModalVisible = false">{{ $t('common.cancel') }}</b-button>
+      </div>
+    </b-modal>
   </div>
 </template>
 <script setup lang="ts">
@@ -332,6 +361,7 @@
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
@@ -410,6 +440,9 @@
   const batchDownloadCancelled = ref(false);
   const tagModalVisible = ref(false);
   const activeTagFile = ref<any>(null);
+  const renameModalVisible = ref(false);
+  const renameModalFile = ref<any>(null);
+  const renameModalValue = ref('');
   const downloadProgress = ref({
     visible: false,
     percent: 0,
@@ -586,9 +619,9 @@
   function updateFileName(file, nextName: string) {
     if (nextName === originalName.value) {
       file.isRename = false;
-      return;
+      return Promise.resolve(false);
     }
-    apiBasePost('/api/file/updateFile', {
+    return apiBasePost('/api/file/updateFile', {
       id: file.id,
       fileName: nextName,
     }).then((res) => {
@@ -598,8 +631,10 @@
         recordOperation({ module: '云空间', operation: `重命名文件成功【${nextName}】` });
         message.success(t('cloudSpace.renameSuccess'));
         cloud.queryFieldList();
+        return true;
       } else {
         // 后端返回错误（如已存在同名文件），不做任何 UI 改变，用户直接在输入框继续改
+        return false;
       }
     });
   }
@@ -926,6 +961,34 @@
     }
   }
 
+  function openRenameModal(file) {
+    renameModalFile.value = file;
+    originalName.value = file.fileName || '';
+    originalExt.value = getFileExt(originalName.value);
+    renameModalValue.value = getFileBaseName(originalName.value);
+    renameModalVisible.value = true;
+    nextTick(() => {
+      const input = document.querySelector('.rename-modal-field .b-input') as HTMLInputElement;
+      input?.focus();
+    });
+  }
+  async function confirmRename() {
+    const f = renameModalFile.value;
+    if (!f) return;
+    const baseName = renameModalValue.value.trim();
+    if (!baseName) return;
+    const nextName = originalExt.value ? `${baseName}.${originalExt.value}` : baseName;
+    if (nextName === originalName.value) {
+      renameModalVisible.value = false;
+      renameModalFile.value = null;
+      return;
+    }
+    const success = await updateFileName(f, nextName);
+    if (success) {
+      renameModalVisible.value = false;
+      renameModalFile.value = null;
+    }
+  }
   function handleReName(file) {
     originalName.value = cloneDeep(file.fileName);
     originalExt.value = getFileExt(originalName.value);
@@ -1340,6 +1403,47 @@
     &:hover {
       transform: scale(1.15);
     }
+  }
+
+  .file-card-more {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 2;
+    pointer-events: auto;
+  }
+  .file-card-more .more-icon {
+    color: rgba(255,255,255,.7);
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,.5));
+    cursor: pointer;
+    transition: color .2s;
+  }
+  .file-card-more .more-icon:hover {
+    color: #fff;
+  }
+
+  .rename-modal-input {
+    margin-bottom: 16px;
+  }
+  .rename-modal-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 16px;
+  }
+  .rename-modal-field .rename-modal-input {
+    margin-bottom: 0;
+    flex: 1;
+  }
+  .rename-modal-ext {
+    font-size: 14px;
+    color: #888;
+    white-space: nowrap;
+  }
+  .rename-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
   .overlay-menu {

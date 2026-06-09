@@ -156,9 +156,9 @@
     { title: '用户', key: 'alias', width: '1fr' },
     { title: '联系方式', key: 'phone', width: '120px' },
     { title: '类型', key: 'type', width: '80px' },
-    { title: '状态', key: 'status', width: '80px' },
-    { title: '反馈时间', key: 'createTime', width: '150px' },
-    { title: '回复时间', key: 'replyTime', width: '150px' },
+    { title: '状态', key: 'status', width: '100px' },
+    { title: '反馈时间', key: 'createTime', width: '190px' },
+    { title: '回复时间', key: 'replyTime', width: '190px' },
     { title: '操作', key: 'operation', width: '60px' },
   ];
 

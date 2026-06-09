@@ -54,11 +54,11 @@
         <div class="editor-header">
           <span>{{ $t('changelog.charCount', { count: jsonContent.length }) }}</span>
           <div class="editor-actions">
-            <a-button size="small" @click="formatJson" v-click-log="{ module: '更新日志', operation: '格式化JSON' }">{{ $t('changelog.format') }}</a-button>
-            <a-button size="small" @click="resetJson" style="margin-left: 8px" v-click-log="{ module: '更新日志', operation: '重置JSON' }">{{ $t('changelog.reset') }}</a-button>
-            <a-button size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating">
+            <BButton size="small" @click="formatJson" v-click-log="{ module: '更新日志', operation: '格式化JSON' }">{{ $t('changelog.format') }}</BButton>
+            <BButton size="small" @click="resetJson" style="margin-left: 8px" v-click-log="{ module: '更新日志', operation: '重置JSON' }">{{ $t('changelog.reset') }}</BButton>
+            <BButton size="small" type="primary" class="bo" @click="handleUpdate">
               {{ $t('common.save') }}
-            </a-button>
+            </BButton>
           </div>
         </div>
         <div ref="editorRef" class="code-editor"></div>

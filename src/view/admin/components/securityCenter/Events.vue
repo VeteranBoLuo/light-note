@@ -77,32 +77,32 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'createdAt'">
-              <a-tooltip :title="record.createdAt">
+              <BTooltip :title="record.createdAt">
                 <span class="ellipsis-cell">{{ record.createdAt }}</span>
-              </a-tooltip>
+              </BTooltip>
             </template>
             <template v-else-if="column.key === 'severity'">
               <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
             </template>
             <template v-else-if="column.key === 'matchedRule'">
-              <a-tooltip :title="record.matchedRule || record.attackType">
+              <BTooltip :title="record.matchedRule || record.attackType">
                 <span class="ellipsis-cell">{{ record.matchedRule || record.attackType || '-' }}</span>
-              </a-tooltip>
+              </BTooltip>
             </template>
             <template v-else-if="column.key === 'user'">
-              <a-tooltip :title="eventUserTooltip(record)">
+              <BTooltip :title="eventUserTooltip(record)">
                 <span class="ellipsis-cell">{{ eventUserText(record) }}</span>
-              </a-tooltip>
+              </BTooltip>
             </template>
             <template v-else-if="column.key === 'sourceIp'">
-              <a-tooltip :title="record.sourceIp">
+              <BTooltip :title="record.sourceIp">
                 <span class="ellipsis-cell">{{ record.sourceIp }}</span>
-              </a-tooltip>
+              </BTooltip>
             </template>
             <template v-else-if="column.key === 'requestPath'">
-              <a-tooltip :title="record.requestPath">
+              <BTooltip :title="record.requestPath">
                 <span class="ellipsis-cell">{{ record.requestPath }}</span>
-              </a-tooltip>
+              </BTooltip>
             </template>
             <template v-else-if="column.key === 'blocked'">
               <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{
@@ -130,6 +130,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import {
     OPEN_EVENT_DETAIL,
     REFRESH_TRIGGER,

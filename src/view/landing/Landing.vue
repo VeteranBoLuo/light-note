@@ -218,7 +218,7 @@
             <span class="footer-sep">|</span>
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
             <span class="footer-sep">|</span>
-            <a href="mailto:1902013368@qq.com">联系我们</a>
+            <a href="#" @click.prevent="handleContact">联系我们</a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
@@ -241,6 +241,31 @@
     <div class="slide-counter" :class="{ pulse: animating }">{{
       ['封面', '核心', '功能', '理由', '开始'][current]
     }}</div>
+
+    <!-- Contact Modal -->
+    <div v-if="showContactModal" class="contact-overlay" @click.self="showContactModal = false">
+      <div class="contact-dialog">
+        <button class="contact-dialog__close" @click="showContactModal = false">×</button>
+        <div class="contact-dialog__header">联系我们</div>
+        <div class="contact-dialog__email">邮箱：1902013368@qq.com</div>
+        <div class="contact-dialog__field">
+          <label>写下你的反馈意见</label>
+          <textarea
+            v-model="feedbackContent"
+            class="contact-dialog__input"
+            placeholder="功能建议、问题反馈、任何你想说的…"
+            rows="4"
+          ></textarea>
+        </div>
+        <button
+          class="contact-dialog__submit"
+          :disabled="!feedbackContent.trim() || submitting"
+          @click="submitFeedback"
+        >
+          {{ submitting ? '提交中…' : '提交反馈' }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -248,6 +273,7 @@
   import { ref, onMounted, onBeforeUnmount } from 'vue';
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
+  import { apiBasePost } from '@/http/request';
 
   const router = useRouter();
   const user = useUserStore();
@@ -261,6 +287,9 @@
   const previewIndex = ref(0);
   const visible = ref({ 1: false, 2: false, 3: false });
   const animating = ref(false);
+  const showContactModal = ref(false);
+  const feedbackContent = ref('');
+  const submitting = ref(false);
 
   function goTo(i: number) {
     slidesRef.value?.children[i]?.scrollIntoView({ behavior: 'smooth' });
@@ -270,6 +299,55 @@
   }
   function goHome() {
     router.push('/home');
+  }
+  function handleContact() {
+    showContactModal.value = true;
+    feedbackContent.value = '';
+  }
+  function showToast(msg: string) {
+    const toast = document.createElement('div');
+    toast.textContent = msg;
+    Object.assign(toast.style, {
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      background: 'rgba(0,0,0,.78)',
+      color: '#eee',
+      padding: '14px 28px',
+      borderRadius: '8px',
+      fontSize: '14px',
+      zIndex: '9999',
+      transition: 'opacity .3s',
+    });
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 1800);
+  }
+  async function submitFeedback() {
+    const content = feedbackContent.value.trim();
+    if (!content) return;
+    submitting.value = true;
+    try {
+      const res = await apiBasePost('/api/opinion/recordOpinion', {
+        type: '官网反馈',
+        content,
+        imgArray: '[]',
+      });
+      if (res.status === 200) {
+        showContactModal.value = false;
+        feedbackContent.value = '';
+        showToast('反馈已提交，感谢你的建议');
+      } else {
+        showToast('提交失败，请稍后重试');
+      }
+    } catch {
+      showToast('网络错误，请稍后重试');
+    } finally {
+      submitting.value = false;
+    }
   }
 
   const cores = [
@@ -1358,5 +1436,99 @@
     .features-grid {
       grid-template-columns: repeat(2, 1fr);
     }
+  }
+
+  /* ============ Contact Modal ============ */
+  .contact-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .contact-dialog {
+    background: #1a1a1a;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 14px;
+    padding: 32px;
+    width: min(420px, calc(100vw - 40px));
+    position: relative;
+  }
+  .contact-dialog__close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 22px;
+    cursor: pointer;
+    line-height: 1;
+    transition: color .2s;
+  }
+  .contact-dialog__close:hover {
+    color: #eee;
+  }
+  .contact-dialog__header {
+    font-size: 18px;
+    font-weight: 600;
+    color: #eee;
+    margin-bottom: 6px;
+  }
+  .contact-dialog__email {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .contact-dialog__field label {
+    display: block;
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 8px;
+  }
+  .contact-dialog__input {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #ddd;
+    font-size: 13px;
+    resize: none;
+    outline: none;
+    transition: border-color .2s;
+    font-family: inherit;
+  }
+  .contact-dialog__input:focus {
+    border-color: #615ced;
+  }
+  .contact-dialog__input::placeholder {
+    color: #555;
+  }
+  .contact-dialog__submit {
+    margin-top: 16px;
+    width: 100%;
+    padding: 10px 0;
+    background: #615ced;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  .contact-dialog__submit:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+  }
+  .contact-dialog__submit:not(:disabled):hover {
+    opacity: .85;
   }
 </style>

@@ -28,9 +28,9 @@
             ok-type="danger"
             @confirm="handleCancelConfirm"
           >
-            <a-button size="small" type="text" class="cancel-btn">
-              <template #icon><CloseOutlined /></template>
-            </a-button>
+            <BButton size="small" class="cancel-btn">
+              <CloseOutlined />
+            </BButton>
           </a-popconfirm>
         </div>
       </div>
@@ -57,6 +57,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { autoRename } from '@/utils/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);

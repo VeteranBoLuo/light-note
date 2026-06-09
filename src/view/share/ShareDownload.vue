@@ -49,14 +49,14 @@
           </div>
           <div class="action-buttons">
             <a-space :size="40">
-              <a-button size="large" @click="previewFile" class="preview-btn">
+              <BButton size="large" @click="previewFile" class="preview-btn">
                 <EyeOutlined />
                 {{ $t('common.preview') }}
-              </a-button>
-              <a-button type="primary" size="large" @click="downloadFile" class="download-btn">
+              </BButton>
+              <BButton type="primary" size="large" @click="downloadFile" class="download-btn">
                 <DownloadOutlined />
                 {{ $t('cloudSpace.downloadAgain') }}
-              </a-button>
+              </BButton>
             </a-space>
           </div>
         </div>
@@ -96,14 +96,14 @@
           </div>
           <div class="action-buttons">
             <a-space :size="40">
-              <a-button size="large" @click="previewFile" class="preview-btn">
+              <BButton size="large" @click="previewFile" class="preview-btn">
                 <EyeOutlined />
                 {{ $t('common.preview') }}
-              </a-button>
-              <a-button type="primary" size="large" @click="downloadFile" class="download-btn">
+              </BButton>
+              <BButton type="primary" size="large" @click="downloadFile" class="download-btn">
                 <DownloadOutlined />
                 {{ $t('cloudSpace.download') }}
-              </a-button>
+              </BButton>
             </a-space>
           </div>
         </div>
@@ -134,6 +134,7 @@
   import icon from '@/config/icon.ts';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const route = useRoute();
   const { t } = useI18n();

@@ -4,11 +4,11 @@
       <div class="preview-header">
         <span class="file-name">{{ fileInfo.fileName }}</span>
         <div class="preview-actions">
-          <a-tooltip title="关闭预览">
-            <a-button size="small" @click="handleClose" class="action-btn">
-              <template #icon><CloseOutlined /></template>
-            </a-button>
-          </a-tooltip>
+          <BTooltip title="关闭预览">
+            <BButton size="small" @click="handleClose" class="action-btn">
+              <CloseOutlined />
+            </BButton>
+          </BTooltip>
         </div>
       </div>
       <div class="preview-content" @click.stop>
@@ -22,10 +22,10 @@
           <FileUnknownOutlined class="error-icon" />
           <h3>文件加载失败</h3>
           <p>{{ errorMessage }}</p>
-          <a-button type="primary" @click="retry" class="retry-btn">
+          <BButton type="primary" @click="retry" class="retry-btn">
             <RedoOutlined />
             重新加载
-          </a-button>
+          </BButton>
         </div>
 
         <!-- 文件预览内容 -->
@@ -93,16 +93,16 @@
           <div v-else-if="previewType === 'text'" class="text-preview-container">
             <div class="text-toolbar">
               <a-space>
-                <a-tooltip title="自动换行">
-                  <a-button size="small" @click="toggleWrap" :type="wrapText ? 'primary' : 'default'" class="toolbar-btn">
+                <BTooltip title="自动换行">
+                  <BButton size="small" @click="toggleWrap" :type="wrapText ? 'primary' : 'default'" class="toolbar-btn">
                     <AlignLeftOutlined />
-                  </a-button>
-                </a-tooltip>
-                <a-tooltip title="复制文本">
-                  <a-button size="small" @click="copyText" class="toolbar-btn">
+                  </BButton>
+                </BTooltip>
+                <BTooltip title="复制文本">
+                  <BButton size="small" @click="copyText" class="toolbar-btn">
                     <CopyOutlined />
-                  </a-button>
-                </a-tooltip>
+                  </BButton>
+                </BTooltip>
                 <span class="text-info">字数: {{ textContent.length }} 字符</span>
               </a-space>
             </div>
@@ -144,14 +144,14 @@
             <h3>不支持预览此文件类型</h3>
             <p>当前文件格式暂不支持在线预览，您可以通过下载后查看</p>
             <a-space>
-              <a-button type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
-                <DownloadOutlined />
-                下载文件
-              </a-button>
-              <a-button @click="tryOnlinePreview" v-if="canTryOnlinePreview">
-                <GlobalOutlined />
-                尝试在线预览
-              </a-button>
+            <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
+              <DownloadOutlined />
+              下载文件
+            </BButton>
+            <BButton @click="tryOnlinePreview" v-if="canTryOnlinePreview">
+              <GlobalOutlined />
+              尝试在线预览
+            </BButton>
             </a-space>
           </div>
         </div>
@@ -162,36 +162,36 @@
         <a-space>
           <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
           <a-space size="small" gap="8">
-            <a-tooltip title="上一个文件" v-if="showNext">
-              <a-button size="small" @click="handlePrev" class="action-btn">
-                <template #icon><LeftOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-tooltip title="下一个文件" v-if="showNext">
-              <a-button size="small" @click="handleNext" class="action-btn">
-                <template #icon><RightOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-tooltip title="下载文件">
-              <a-button size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
-                <template #icon><DownloadOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-tooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
-              <a-button size="small" @click="zoomIn" class="action-btn">
-                <template #icon><ZoomInOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-tooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
-              <a-button size="small" @click="zoomOut" class="action-btn">
-                <template #icon><ZoomOutOutlined /></template>
-              </a-button>
-            </a-tooltip>
-            <a-tooltip title="旋转图片" v-if="previewType === 'image'">
-              <a-button size="small" @click="rotateImage" class="action-btn">
-                <template #icon><RotateRightOutlined /></template>
-              </a-button>
-            </a-tooltip>
+            <BTooltip title="上一个文件" v-if="showNext">
+                  <BButton size="small" @click="handlePrev" class="action-btn">
+                    <LeftOutlined />
+                  </BButton>
+            </BTooltip>
+            <BTooltip title="下一个文件" v-if="showNext">
+                  <BButton size="small" @click="handleNext" class="action-btn">
+                    <RightOutlined />
+                  </BButton>
+            </BTooltip>
+            <BTooltip title="下载文件">
+                  <BButton size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
+                    <DownloadOutlined />
+                  </BButton>
+            </BTooltip>
+            <BTooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
+                  <BButton size="small" @click="zoomIn" class="action-btn">
+                    <ZoomInOutlined />
+                  </BButton>
+            </BTooltip>
+            <BTooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
+                  <BButton size="small" @click="zoomOut" class="action-btn">
+                    <ZoomOutOutlined />
+                  </BButton>
+            </BTooltip>
+            <BTooltip title="旋转图片" v-if="previewType === 'image'">
+                  <BButton size="small" @click="rotateImage" class="action-btn">
+                    <RotateRightOutlined />
+                  </BButton>
+            </BTooltip>
           </a-space>
         </a-space>
       </div>
@@ -203,6 +203,8 @@
   import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import VideoPreview from '@/components/base/VideoPreview.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,

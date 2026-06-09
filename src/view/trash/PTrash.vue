@@ -89,18 +89,17 @@
             }}</span>
           </div>
           <div class="p-trash-actions">
-            <a-button
-              type="link"
+            <BButton
               size="small"
               @click="handleRestore([{ id: item.id, resourceType: item.resourceType }])"
             >
               {{ $t('trash.restore') }}
-            </a-button>
+            </BButton>
             <a-popconfirm
               :title="$t('trash.permanentDeleteConfirm', { count: 1 })"
               @confirm="handlePermanentDelete([{ id: item.id, resourceType: item.resourceType }])"
             >
-              <a-button type="link" size="small" danger>{{ $t('trash.permanentDelete') }}</a-button>
+              <BButton size="small" type="danger">{{ $t('trash.permanentDelete') }}</BButton>
             </a-popconfirm>
           </div>
         </div>
@@ -117,6 +116,7 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const { t } = useI18n();
 
