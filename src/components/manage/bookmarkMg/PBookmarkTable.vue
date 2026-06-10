@@ -23,13 +23,7 @@
           v-click-log="{ module: '书签管理', operation: `点击编辑图标` }"
           class="dom-hover"
         />
-        <svg-icon
-          title="删除"
-          :src="icon.table_delete"
-          size="16"
-          @click="handleDeleteTag(data)"
-          class="dom-hover"
-        />
+        <svg-icon title="删除" :src="icon.table_delete" size="16" @click="handleDeleteTag(data)" class="dom-hover" />
       </div>
     </template>
   </PhoneListMg>
@@ -145,7 +139,7 @@
     if (bookmark.iconUrl) {
       return bookmark.iconUrl;
     } else {
-      return 'https://icon.bqb.cool?url=' + bookmark.url;
+      return 'https://ico.kucat.cn/get.php?url=' + bookmark.url;
     }
   }
 

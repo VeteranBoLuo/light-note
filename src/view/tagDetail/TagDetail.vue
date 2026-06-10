@@ -11,7 +11,12 @@
           @error="handleTagIconError"
         />
         <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="28" />
-        <span class="tag-name dom-hover" @click="goToEditTag" v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }">{{ tag.name }}</span>
+        <span
+          class="tag-name dom-hover"
+          @click="goToEditTag"
+          v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }"
+          >{{ tag.name }}</span
+        >
       </div>
       <div v-if="relatedTags.length" class="tag-related">
         <span class="related-label">{{ $t('tagManage.relatedTag') }}:</span>
@@ -48,18 +53,10 @@
       </div>
 
       <div class="view-switch">
-        <button
-          class="view-switch-btn"
-          :class="{ active: viewMode === 'card' }"
-          @click="setViewMode('card')"
-        >
+        <button class="view-switch-btn" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
           {{ t('tagGraph.viewMode.card') }}
         </button>
-        <button
-          class="view-switch-btn"
-          :class="{ active: viewMode === 'graph' }"
-          @click="setViewMode('graph')"
-        >
+        <button class="view-switch-btn" :class="{ active: viewMode === 'graph' }" @click="setViewMode('graph')">
           {{ t('tagGraph.viewMode.graph') }}
         </button>
       </div>
@@ -95,10 +92,7 @@
             @node-dblclick="handleGraphNodeDoubleClick"
             @canvas-click="activeGraphNode = null"
           />
-          <TagGraphPanel
-            :node="activeGraphNode"
-            @explore-tag="handlePanelExploreTag"
-          />
+          <TagGraphPanel :node="activeGraphNode" @explore-tag="handlePanelExploreTag" />
         </div>
       </section>
 
@@ -108,7 +102,13 @@
           {{ $t('tagManage.relatedTag') }} ({{ relatedTags.length }})
         </div>
         <div class="related-tag-grid">
-          <div v-for="rt in relatedTags" :key="rt.id" class="related-tag-card dom-hover" @click="goToTag(rt.id)" v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }">
+          <div
+            v-for="rt in relatedTags"
+            :key="rt.id"
+            class="related-tag-card dom-hover"
+            @click="goToTag(rt.id)"
+            v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
+          >
             <div class="related-tag-name">{{ rt.name }}</div>
           </div>
         </div>
@@ -129,12 +129,7 @@
             v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
           >
             <div class="bookmark-card-header">
-              <img
-                :src="getBookmarkIcon(bm)"
-                class="bookmark-card-icon"
-                alt=" "
-                @error="handleBookmarkIconError"
-              />
+              <img :src="getBookmarkIcon(bm)" class="bookmark-card-icon" alt=" " @error="handleBookmarkIconError" />
               <span class="bookmark-card-name text-hidden">{{ bm.name }}</span>
             </div>
             <div class="bookmark-card-desc text-hidden">{{ bm.description || bm.url }}</div>
@@ -223,12 +218,7 @@
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import TagGraphPanel from '@/components/tagGraph/TagGraphPanel.vue';
-  import {
-    fetchTagGraph,
-    type GraphResourceType,
-    type TagGraphNode,
-    type TagGraphResponse,
-  } from '@/api/tagGraph.ts';
+  import { fetchTagGraph, type GraphResourceType, type TagGraphNode, type TagGraphResponse } from '@/api/tagGraph.ts';
   import { useI18n } from 'vue-i18n';
   import { message } from 'ant-design-vue';
 
@@ -303,25 +293,22 @@
       if (noteRes.status === 200) {
         notes.value = (noteRes.data || []).map((n: any) => ({
           ...n,
-          tags:
-            n.tags && Array.isArray(n.tags) && n.tags.every((t: any) => t && t.id !== null)
-              ? n.tags
-              : [],
+          tags: n.tags && Array.isArray(n.tags) && n.tags.every((t: any) => t && t.id !== null) ? n.tags : [],
         }));
       }
 
       // 5. 获取关联文件
       const fileRes = await apiBasePost('/api/file/queryFiles', {
-        filters: { tagId, category: ['image', 'video', 'audio', 'pdf', 'word', 'excel', 'ppt', 'text', 'compress', 'other'] },
+        filters: {
+          tagId,
+          category: ['image', 'video', 'audio', 'pdf', 'word', 'excel', 'ppt', 'text', 'compress', 'other'],
+        },
       });
       if (requestSeq !== tagDetailRequestSeq) return;
       if (fileRes.status === 200) {
         files.value = (fileRes.data || []).map((f: any) => ({
           ...f,
-          tags:
-            f.tags && Array.isArray(f.tags) && f.tags.every((t: any) => t && t.id !== null)
-              ? f.tags
-            : [],
+          tags: f.tags && Array.isArray(f.tags) && f.tags.every((t: any) => t && t.id !== null) ? f.tags : [],
         }));
       }
 
@@ -487,7 +474,7 @@
     if (bookmark.iconUrl) {
       return bookmark.iconUrl;
     }
-    return `https://icon.bqb.cool?url=${bookmark.url || ''}`;
+    return `https://ico.kucat.cn/get.php?url=${bookmark.url || ''}`;
   }
 
   function handleBookmarkIconError(event: Event) {

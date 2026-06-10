@@ -86,7 +86,7 @@
           bookmark.refreshData();
         }
         scrollToTop();
-        await cacheImages();
+        cacheImages();
       } finally {
         const elapsed = Date.now() - loadingStart;
         if (elapsed < MIN_SKELETON_MS) {

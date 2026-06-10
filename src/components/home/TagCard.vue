@@ -80,7 +80,8 @@
     if (bookmark.iconUrl) {
       return bookmark.iconUrl;
     } else {
-      return 'https://icon.bqb.cool?url=' + bookmark.url;
+      bookmark.iconUrl = 'https://ico.kucat.cn/get.php?url=' + bookmark.url;
+      return bookmark.iconUrl;
     }
   }
 

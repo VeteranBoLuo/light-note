@@ -12,7 +12,12 @@
             @error="handleTagIconError"
           />
           <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="24" />
-          <span class="p-tag-name" @click="goToEditTag" v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }">{{ tag.name }}</span>
+          <span
+            class="p-tag-name"
+            @click="goToEditTag"
+            v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }"
+            >{{ tag.name }}</span
+          >
         </div>
         <div v-if="relatedTags.length" class="p-tag-related">
           <span class="p-related-label">{{ $t('tagManage.relatedTag') }}:</span>
@@ -54,7 +59,13 @@
             {{ $t('tagManage.relatedTag') }} ({{ relatedTags.length }})
           </div>
           <div class="p-related-tag-list">
-            <div v-for="rt in relatedTags" :key="rt.id" class="p-related-tag-card" @click="goToTag(rt.id)" v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }">
+            <div
+              v-for="rt in relatedTags"
+              :key="rt.id"
+              class="p-related-tag-card"
+              @click="goToTag(rt.id)"
+              v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
+            >
               {{ rt.name }}
             </div>
           </div>
@@ -74,12 +85,7 @@
               @click="openBookmark(bm)"
               v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
             >
-              <img
-                :src="getBookmarkIcon(bm)"
-                class="p-bookmark-icon"
-                alt=" "
-                @error="handleBookmarkIconError"
-              />
+              <img :src="getBookmarkIcon(bm)" class="p-bookmark-icon" alt=" " @error="handleBookmarkIconError" />
               <span class="p-bookmark-name text-hidden">{{ bm.name }}</span>
             </div>
           </div>
@@ -210,24 +216,21 @@
     if (noteRes.status === 200) {
       notes.value = (noteRes.data || []).map((n: any) => ({
         ...n,
-        tags:
-          n.tags && Array.isArray(n.tags) && n.tags.every((t: any) => t && t.id !== null)
-            ? n.tags
-            : [],
+        tags: n.tags && Array.isArray(n.tags) && n.tags.every((t: any) => t && t.id !== null) ? n.tags : [],
       }));
     }
 
     // 5. 获取关联文件
     const fileRes = await apiBasePost('/api/file/queryFiles', {
-      filters: { tagId, category: ['image', 'video', 'audio', 'pdf', 'word', 'excel', 'ppt', 'text', 'compress', 'other'] },
+      filters: {
+        tagId,
+        category: ['image', 'video', 'audio', 'pdf', 'word', 'excel', 'ppt', 'text', 'compress', 'other'],
+      },
     });
     if (fileRes.status === 200) {
       files.value = (fileRes.data || []).map((f: any) => ({
         ...f,
-        tags:
-          f.tags && Array.isArray(f.tags) && f.tags.every((t: any) => t && t.id !== null)
-            ? f.tags
-            : [],
+        tags: f.tags && Array.isArray(f.tags) && f.tags.every((t: any) => t && t.id !== null) ? f.tags : [],
       }));
     }
   }
@@ -253,7 +256,7 @@
     if (bookmark.iconUrl) {
       return bookmark.iconUrl;
     }
-    return `https://icon.bqb.cool?url=${bookmark.url || ''}`;
+    return `https://ico.kucat.cn/get.php?url=${bookmark.url || ''}`;
   }
 
   function handleBookmarkIconError(event: Event) {

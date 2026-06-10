@@ -15,14 +15,12 @@
         <Catalog class="catalog-panel" :content="note.content" />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
-            <b-input
+            <a-input
               :disabled="readonly"
-              :value="note.title"
-              @input="note.title = $event"
+              v-model:value="note.title"
               @change="inputBlur"
               @focusout="focusout"
               placeholder="请输入标题"
-              class="note-title-input"
             />
           </div>
           <editor
@@ -53,7 +51,6 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
@@ -346,7 +343,7 @@
     flex-direction: column;
   }
   .note-body-title {
-    :deep(.ant-input), :deep(.b-input) {
+    .ant-input {
       height: 50px;
       padding: 0 15px;
       display: flex;
@@ -355,14 +352,14 @@
       box-sizing: border-box;
       outline: none;
       transition: border-color 0.1s linear;
-      background-color: transparent !important;
+      background-color: var(--bl-input-bg-color);
       color: var(--bl-input-color);
       font-weight: 600;
-      border: none !important;
+      border: none;
       box-shadow: unset !important;
       font-size: 25px;
       &:focus {
-        border: none !important;
+        border: none;
       }
     }
   }
