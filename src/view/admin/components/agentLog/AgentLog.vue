@@ -9,6 +9,29 @@
         </div>
       </header>
 
+      <ul class="admin-stats">
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">总请求</span>
+          <strong class="admin-stat-value">{{ total }}</strong>
+          <span class="admin-stat-hint">累计</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">今日请求</span>
+          <strong class="admin-stat-value">{{ todayCount }}</strong>
+          <span class="admin-stat-hint">次</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">今日 Token</span>
+          <strong class="admin-stat-value">{{ formatNumber(todayTokens) }}</strong>
+          <span class="admin-stat-hint">tk</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">今日费用</span>
+          <strong class="admin-stat-value">¥{{ todayCost }}</strong>
+          <span class="admin-stat-hint">累计</span>
+        </li>
+      </ul>
+
       <div class="admin-filters">
         <div class="admin-filters-main">
           <b-input
@@ -22,6 +45,7 @@
             </template>
           </b-input>
         </div>
+        <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
 
       <div class="admin-table-card">
@@ -87,6 +111,9 @@
   const currentPage = ref(1);
   const pageSize = ref(20);
   const total = ref(0);
+  const todayCount = ref(0);
+  const todayTokens = ref(0);
+  const todayCost = ref('0');
   const searchValue = ref('');
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
@@ -123,6 +150,19 @@
     });
   }
 
+  function fetchTodaySummary() {
+    apiBasePost('/api/common/getAgentLogsSummary', {}).then((res: any) => {
+      if (res.status === 200) {
+        const d = res.data;
+        todayCount.value = d.today?.count ?? 0;
+        todayTokens.value = d.today?.tokens ?? 0;
+        todayCost.value = d.today?.cost ?? '0';
+        // 累计也更新
+        total.value = d.total?.count ?? 0;
+      }
+    });
+  }
+
   function formatTime(t: string) {
     if (!t) return '';
     return new Date(t).toLocaleString('zh-CN');
@@ -133,7 +173,10 @@
     return n.toLocaleString();
   }
 
-  onMounted(() => { fetchLogs(); });
+  onMounted(() => {
+    fetchLogs();
+    fetchTodaySummary();
+  });
 </script>
 
 <style lang="less" scoped>
