@@ -157,9 +157,9 @@
         todayCount.value = d.today?.count ?? 0;
         todayTokens.value = d.today?.tokens ?? 0;
         todayCost.value = d.today?.cost ?? '0';
-        // 累计也更新
-        total.value = d.total?.count ?? 0;
       }
+    }).catch((err: any) => {
+      console.warn('获取今日汇总失败:', err);
     });
   }
 
