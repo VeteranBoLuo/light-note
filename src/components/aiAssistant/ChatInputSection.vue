@@ -10,7 +10,6 @@
         @compositionstart="isComposing = true"
         @compositionend="handleCompositionEnd"
         :placeholder="t('ai.inputPlaceholder')"
-        :disabled="isLoading"
         rows="1"
         ref="textInput"
         class="text-input"
@@ -112,13 +111,16 @@
       return;
     }
     event.preventDefault();
-    if (props.enableTranslation) {
-      nextTick(() => {
-        props.sendFn();
-      });
-    } else {
-      props.sendFn();
+
+    // 如果输入为空，仅中断（不发送）
+    if (!props.modelValue.trim()) {
+      if (props.isLoading) props.stopFn();
+      return;
     }
+
+    // 中断当前回复（如果有），然后发送新消息
+    props.stopFn();
+    props.sendFn();
   };
 
   const handleNewLine = () => {

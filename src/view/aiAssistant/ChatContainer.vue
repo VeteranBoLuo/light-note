@@ -334,10 +334,21 @@
       abortController.value.abort();
       abortController.value = null;
     }
+    // 给正在生成的 AI 回复追加终止标记
+    const lastMsg = messages.value[messages.value.length - 1];
+    if (lastMsg?.role === 'assistant') {
+      const suffix = t('ai.responsePaused');
+      if (!lastMsg.content || lastMsg.content === '') {
+        lastMsg.content = suffix;
+      } else if (!lastMsg.content.endsWith(suffix)) {
+        lastMsg.content += suffix;
+      }
+    }
     isLoading.value = false;
   };
 
   let sessionId = '';
+  let activeRequestId = 0; // 请求计数器，防止旧请求的 finally 干扰新请求
   // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
     showRecommendation.value = false;
@@ -349,7 +360,16 @@
     hasAnswerStarted.value = false;
     thinkingTyping = false;
     const inputText = userInput.value.trim();
-    if (!inputText || isLoading.value) return;
+    if (!inputText) return;
+
+    // 标记当前请求序号，防止旧请求的 finally 提前关闭 loading
+    const thisRequestId = ++activeRequestId;
+
+    // 如果上一个请求未完全清理，补刀（stopFn 已处理大部分情况）
+    if (abortController.value) {
+      abortController.value.abort();
+      abortController.value = null;
+    }
 
     // 添加用户消息
     const userMessage: ChatMessage = {
@@ -403,6 +423,8 @@
         if (!textToType) continue;
 
         for (let i = 0; i < textToType.length; i++) {
+          // 被新请求取代时立即停止
+          if (activeRequestId !== thisRequestId) break;
           if (!isLoading.value) break; // 如果响应被停止，退出打字
 
           displayedContent.value += textToType[i];
@@ -426,6 +448,8 @@
     // 处理新内容的函数
     const handleNewContent = (content: string) => {
       if (!content) return;
+      // 被新请求取代时丢弃数据
+      if (activeRequestId !== thisRequestId) return;
 
       accumulatedContent.value += content;
       typewriterQueue.push(content);
@@ -511,16 +535,17 @@
         }
       };
 
+      // Agent 模式：统一走 DeepSeek，不再区分 DashScope
       await apiBasePost(
-        '/api/chat/receiveMessage',
+        '/api/chat/agent',
         {
           message: inputText,
           stream: true,
           sessionId: sessionId,
-          useInternetSearch: useInternetSearch.value, // 是否开启联网搜索
-          enableThinking: enableThinking.value, // 是否开启深度思考
-          enableTranslation: enableTranslation.value, // 是否开启翻译
-          translationConfig: translationConfig.value, // 翻译配置
+          // useInternetSearch: 暂不支持（DeepSeek Flash 无内置联网搜索）
+          enableThinking: enableThinking.value,
+          enableTranslation: enableTranslation.value,
+          translationConfig: translationConfig.value,
         },
         {
           headers: {
@@ -574,21 +599,26 @@
 
       await waitForTypewriter();
 
+      // 被新请求取代时跳过最终同步
+      if (activeRequestId !== thisRequestId) return;
+
       // 最终检查，确保显示完整内容
       if (displayedContent.value !== accumulatedContent.value) {
         messages.value[currentMessageIndex].content = accumulatedContent.value;
         displayedContent.value = accumulatedContent.value;
       }
     } catch (error: any) {
+      // 清理旧请求的定时器（无论是否被取代）
+      if (typingTimer) {
+        clearTimeout(typingTimer);
+        typingTimer = null;
+      }
+
+      // 旧请求的异常，不再修改当前消息
+      if (thisRequestId !== activeRequestId) return;
+
       if (axios.isCancel(error)) {
-        // 清理打字机定时器
-        if (typingTimer) {
-          clearTimeout(typingTimer);
-          typingTimer = null;
-        }
-        if (messages.value[currentMessageIndex]) {
-          messages.value[currentMessageIndex].content += t('ai.responsePaused');
-        }
+        // stopResponse 已处理消息标记，这里只需清理
       } else {
         console.error('请求失败:', error);
         messages.value[currentMessageIndex].content = t('ai.errorMessage');
@@ -599,6 +629,9 @@
         clearTimeout(typingTimer);
         typingTimer = null;
       }
+
+      // 仅最新请求才能更新状态，防止旧请求的 finally 提前关闭 loading
+      if (thisRequestId !== activeRequestId) return;
 
       isLoading.value = false;
       abortController.value = null;
