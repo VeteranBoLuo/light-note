@@ -19,7 +19,11 @@
       <!-- 筛选菜单 -->
       <div v-show="showFilterMenu" class="filter-menu">
         <div class="filter-header">
-          <BCheckbox :indeterminate="indeterminate" v-model:checked="allTypesSelected" @change="(checked: boolean) => toggleSelectAll({ target: { checked } })">
+          <BCheckbox
+            :indeterminate="indeterminate"
+            v-model:checked="allTypesSelected"
+            @change="(checked: boolean) => toggleSelectAll({ target: { checked } })"
+          >
             <span class="select-all-label">{{ $t('common.selectAll') }}</span>
           </BCheckbox>
           <span class="selected-info">{{ selectedCount }}/{{ fileTypes.length }}</span>
@@ -30,7 +34,16 @@
             :key="type.value"
             :checked="cloud.typeCheckValue.includes(type.value)"
             class="filter-option"
-            @change="(checked: boolean) => { if (checked) { if (!cloud.typeCheckValue.includes(type.value)) cloud.typeCheckValue.push(type.value); } else { const idx = cloud.typeCheckValue.indexOf(type.value); if (idx > -1) cloud.typeCheckValue.splice(idx, 1); } }"
+            @change="
+              (checked: boolean) => {
+                if (checked) {
+                  if (!cloud.typeCheckValue.includes(type.value))
+                    cloud.typeCheckValue = [...cloud.typeCheckValue, type.value];
+                } else {
+                  cloud.typeCheckValue = cloud.typeCheckValue.filter((v) => v !== type.value);
+                }
+              }
+            "
           >
             {{ type.label }}
           </BCheckbox>

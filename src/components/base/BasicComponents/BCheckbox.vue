@@ -67,7 +67,6 @@
     (val) => {
       localChecked.value = val;
     },
-    { immediate: true },
   );
 
   function handleClick() {

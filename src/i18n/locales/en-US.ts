@@ -12,7 +12,7 @@ export default {
     newTag: 'New Tag',
     tagManagement: 'Tag Management',
     newBookmark: 'New Bookmark',
-    bookmarkManagement: 'Bookmark Management',
+    bookmarkManagement: 'Bookmark Mgmt',
     followSystem: 'Follow System',
     light: 'Light',
     dark: 'Dark',

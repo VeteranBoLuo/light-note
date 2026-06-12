@@ -126,8 +126,8 @@
   const newName = ref('');
   function handleTagMenu(menu, folder: any) {
     recordOperation({ module: '云空间', operation: `右键${menu}文件夹${folder.name}` });
-    const actions = {
-      重命名: () => {
+    const actions = [
+      () => {
         if (cloud.folderList.find((i) => !i.id || i.isRename)) {
           return;
         }
@@ -137,10 +137,11 @@
           (document.querySelector('.edit-input .b-input') as HTMLElement | null)?.focus();
         });
       },
-      删除: () => handleDeleteFolder(folder),
-      上传文件: () => handleUploadToFolder(folder),
-    };
-    actions[menu]?.();
+      () => handleDeleteFolder(folder),
+      () => handleUploadToFolder(folder),
+    ];
+    const idx = [t('common.reName'), t('common.delete'), t('cloudSpace.uploadFile')].indexOf(menu);
+    if (idx !== -1) actions[idx]();
   }
 
   const currentFolderId = ref('');
