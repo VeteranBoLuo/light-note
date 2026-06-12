@@ -48,6 +48,12 @@
         icon: icon.userCenter.imgMg,
         url: '/imageMg',
       },
+      {
+        id: 'agentLog',
+        title: 'AI 监控',
+        icon: icon.userCenter.log,
+        url: '/agentLog',
+      },
     ],
     [
       {

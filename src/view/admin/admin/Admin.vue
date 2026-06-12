@@ -59,6 +59,11 @@
       title: '帮助中心',
       icon: icon.help_document,
     },
+    {
+      id: 'agentLog',
+      title: 'AI 监控',
+      icon: icon.userCenter.log,
+    },
   ]);
 
   function nodeClick(menu: any) {

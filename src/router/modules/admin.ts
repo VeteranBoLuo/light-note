@@ -42,6 +42,10 @@ const adminRouter: RouteRecordRaw[] = [
         path: 'helpMg',
         component: () => import('@/view/admin/components/helpMg/HelpMg.vue'),
       },
+      {
+        path: 'agentLog',
+        component: () => import('@/view/admin/components/agentLog/AgentLog.vue'),
+      },
     ],
   },
   {
@@ -63,6 +67,10 @@ const adminRouter: RouteRecordRaw[] = [
   {
     path: 'imageMg',
     component: () => import('@/view/admin/components/imageMg/PImageMg.vue'),
+  },
+  {
+    path: 'agentLog',
+    component: () => import('@/view/admin/components/agentLog/PAgentLog.vue'),
   },
 ];
 
