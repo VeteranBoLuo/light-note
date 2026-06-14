@@ -200,7 +200,7 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
-    padding: 2px 8px 10px;
+    padding: 2px 8px 10px 4px;
     border-bottom: 1px solid var(--noteType-border-color);
   }
 

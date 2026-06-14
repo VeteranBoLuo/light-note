@@ -1256,11 +1256,13 @@
     border: 1px solid color-mix(in srgb, var(--folder-list-border-color) 82%, var(--desc-color) 18%);
     background: color-mix(in srgb, var(--card-bg-color) 94%, var(--bl-input-noBorder-bg-color) 6%);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
     overflow: hidden;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.02) inset,
       0 8px 18px rgba(0, 0, 0, 0.08);
+    content-visibility: auto;
+    contain: layout style paint;
     &:hover {
       transform: translateY(-2px);
       box-shadow:

@@ -2,11 +2,14 @@
   <div
     v-if="!isClosed"
     class="float-question-container"
-    :class="{ 'container-peek': isPeeked, 'float-question-container--open': isOpen && !isMinimized }"
+    :class="{ 'container-peek': isPeeked, 'float-question-container--open': isOpen || containerActive }"
   >
     <!-- 问答弹窗 -->
-    <transition name="modal-slide">
-      <div v-if="isOpen" v-show="!isMinimized" class="question-modal glassmorphism">
+    <transition
+      name="modal-slide"
+      @after-leave="onModalLeave"
+    >
+      <div v-if="isOpen" class="question-modal glassmorphism">
         <!-- 拖拽手柄区域 -->
         <div class="modal-header drag-handle">
           <div class="header-content">
@@ -44,8 +47,8 @@
     <div
       class="float-button"
       :class="{
-        'button-active': !isMinimized,
-        'button-minimized': isMinimized,
+        'button-active': isOpen,
+        'button-minimized': !isOpen,
       }"
       @click="toggleModal"
       v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
@@ -112,8 +115,9 @@
   // 状态管理
   const isOpen = ref(false);
   const isClosed = ref(false);
-  const isMinimized = ref(true);
   const isPeeked = ref(true);
+  /** 容器保持激活状态直到动画播完（防止动画期间 z-index 掉落） */
+  const containerActive = ref(false);
   let peekTimer: number | null = null;
 
   const aiAssistantRef = ref(null);
@@ -127,28 +131,27 @@
     left: `${20 + index * 20}%`,
   });
 
-  // 修改后的切换弹窗逻辑
+  // 切换弹窗
   const toggleModal = () => {
-    if (isMinimized.value) {
-      // 如果是最小化状态，则打开弹窗
-      isMinimized.value = false;
-      isOpen.value = true;
-      isPeeked.value = false;
-    } else if (isOpen.value) {
-      // 如果弹窗是打开的，则最小化（而不是关闭）
+    if (isOpen.value) {
       minimize();
     } else {
-      // 如果弹窗是关闭的，则打开
       isOpen.value = true;
-      isMinimized.value = false;
+      containerActive.value = true;
       isPeeked.value = false;
     }
   };
 
-  // 最小化方法（原来关闭按钮的功能）
+  // 关闭弹窗（缩小到图标）
   const minimize = () => {
-    isMinimized.value = true;
+    isOpen.value = false;
+    isPeeked.value = false;
     schedulePeek();
+  };
+
+  // 缩小动画播完后清理容器状态
+  const onModalLeave = () => {
+    containerActive.value = false;
   };
 
   // 新增：清空对话方法
@@ -177,10 +180,10 @@
   };
 
   const schedulePeek = () => {
-    if (!isMinimized.value) return;
+    if (isOpen.value) return;
     clearPeekTimer();
     peekTimer = window.setTimeout(() => {
-      if (isMinimized.value) {
+      if (!isOpen.value) {
         isPeeked.value = true;
       }
     }, 2000);
@@ -202,7 +205,7 @@
   }
 
   const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && isOpen.value && !isMinimized.value && !shouldIgnoreEscape(e)) {
+    if (e.key === 'Escape' && isOpen.value && !shouldIgnoreEscape(e)) {
       minimize();
     }
   };
@@ -637,17 +640,22 @@
   }
 
   /* 动画效果 */
-  .modal-slide-enter-active,
+  .modal-slide-enter-active {
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
   .modal-slide-leave-active {
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: all 0.2s ease-out;
   }
 
   .modal-slide-enter-from {
     opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
   }
 
   .modal-slide-leave-to {
     opacity: 0;
+    transform: translate(-50%, -50%) scale(0.97);
   }
 
   /* 响应式设计 */

@@ -334,14 +334,18 @@
       abortController.value.abort();
       abortController.value = null;
     }
-    // 给正在生成的 AI 回复追加终止标记
-    const lastMsg = messages.value[messages.value.length - 1];
-    if (lastMsg?.role === 'assistant') {
+    // 只给正在生成的 AI 回复加终止标记（currentMessageIndex 指向的），不影响之前的消息
+    if (currentMessageIndex < 0) {
+      isLoading.value = false;
+      return;
+    }
+    const currentMsg = messages.value[currentMessageIndex];
+    if (currentMsg?.role === 'assistant') {
       const suffix = t('ai.responsePaused');
-      if (!lastMsg.content || lastMsg.content === '') {
-        lastMsg.content = suffix;
-      } else if (!lastMsg.content.endsWith(suffix)) {
-        lastMsg.content += suffix;
+      if (!currentMsg.content || currentMsg.content === '') {
+        currentMsg.content = suffix;
+      } else if (!currentMsg.content.endsWith(suffix)) {
+        currentMsg.content += suffix;
       }
     }
     isLoading.value = false;
