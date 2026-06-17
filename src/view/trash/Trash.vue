@@ -158,7 +158,7 @@
 <script setup lang="ts">
   import { ref, reactive, computed, watch, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';

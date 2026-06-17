@@ -8,39 +8,30 @@
           class="security-search-input"
           @input="handleEventSearch"
         />
-        <a-select
+        <BSelect
           v-model:value="eventFilters.severity"
-          allow-clear
+          allowClear
           placeholder="威胁等级"
           class="security-select"
+          :options="severityOptions"
           @change="searchEvents"
-        >
-          <a-select-option value="low">low</a-select-option>
-          <a-select-option value="medium">medium</a-select-option>
-          <a-select-option value="high">high</a-select-option>
-          <a-select-option value="critical">critical</a-select-option>
-        </a-select>
-        <a-select
+        />
+        <BSelect
           v-model:value="eventFilters.actionTaken"
-          allow-clear
+          allowClear
           placeholder="处置动作"
           class="security-select"
+          :options="actionOptions"
           @change="searchEvents"
-        >
-          <a-select-option value="log">记录</a-select-option>
-          <a-select-option value="block">拦截</a-select-option>
-        </a-select>
-        <a-select
+        />
+        <BSelect
           v-model:value="eventFilters.handledStatus"
-          allow-clear
+          allowClear
           placeholder="处理状态"
           class="security-select"
+          :options="statusOptions"
           @change="searchEvents"
-        >
-          <a-select-option value="unhandled">未处理</a-select-option>
-          <a-select-option value="processed">已处理</a-select-option>
-          <a-select-option value="false_positive">误报</a-select-option>
-        </a-select>
+        />
         <b-button type="primary" @click="searchEvents">搜索</b-button>
       </div>
       <span class="admin-filters-hint flex-align-center">
@@ -122,7 +113,7 @@
 <script lang="ts" setup>
   import { inject, onMounted, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -131,6 +122,7 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import {
     OPEN_EVENT_DETAIL,
     REFRESH_TRIGGER,
@@ -152,7 +144,7 @@
   const events = ref<any[]>([]);
   const eventTotal = ref(0);
   const eventLoading = ref(false);
-  const eventPage = reactive({ currentPage: 1, pageSize: 100 });
+  const eventPage = reactive({ currentPage: 1, pageSize: 20 });
   const eventFilters = reactive<any>({
     key: '',
     severity: undefined,
@@ -161,6 +153,21 @@
     userId: undefined,
     userLabel: '',
   });
+  const severityOptions = [
+    { value: 'low', label: 'low' },
+    { value: 'medium', label: 'medium' },
+    { value: 'high', label: 'high' },
+    { value: 'critical', label: 'critical' },
+  ];
+  const actionOptions = [
+    { value: 'log', label: '记录' },
+    { value: 'block', label: '拦截' },
+  ];
+  const statusOptions = [
+    { value: 'unhandled', label: '未处理' },
+    { value: 'processed', label: '已处理' },
+    { value: 'false_positive', label: '误报' },
+  ];
   const eventSearchTimer = ref<any>(null);
   const selectedEventIds = ref<string[]>([]);
   const batchLoading = ref(false);

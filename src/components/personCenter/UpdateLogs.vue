@@ -48,7 +48,7 @@
       :maskClosable="false"
       :showFooter="false"
       @ok="handleUpdate"
-      @cancel="visible = false"
+      @close="visible = false"
     >
       <div class="json-editor-wrapper">
         <div class="editor-header">
@@ -80,7 +80,7 @@
   import { getJsonInfo, updateConfig } from '@/config/jsonCfg.ts';
   import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
   import { API_TEXTS } from '@/config/constants.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { CloseCircleOutlined } from '@ant-design/icons-vue';
   import { EditorView, basicSetup } from 'codemirror';
   import { json, jsonParseLinter } from '@codemirror/lang-json';

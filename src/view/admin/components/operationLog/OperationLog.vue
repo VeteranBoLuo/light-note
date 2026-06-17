@@ -73,7 +73,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   const bookmark = bookmarkStore();
   const logList = ref([]);
 
@@ -86,7 +86,7 @@
   ];
 
   const currentPage = ref<number>(1);
-  const pageSize = ref<number>(10);
+  const pageSize = ref<number>(20);
   const total = ref(0);
   const searchValue = ref('');
   const timer = ref();

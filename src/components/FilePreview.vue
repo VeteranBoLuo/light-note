@@ -14,7 +14,10 @@
       <div class="preview-content" @click.stop>
         <!-- 加载状态 -->
         <div v-if="loading" class="preview-loading">
-          <a-spin size="large" tip="文件加载中..." />
+          <div class="b-spin">
+            <div class="b-spin-indicator"></div>
+            <div class="b-spin-tip">文件加载中...</div>
+          </div>
         </div>
 
         <!-- 错误状态 -->
@@ -92,7 +95,7 @@
           <!-- 7. 文本文件预览 -->
           <div v-else-if="previewType === 'text'" class="text-preview-container">
             <div class="text-toolbar">
-              <a-space>
+              <BSpace>
                 <BTooltip title="自动换行">
                   <BButton size="small" @click="toggleWrap" :type="wrapText ? 'primary' : 'default'" class="toolbar-btn">
                     <AlignLeftOutlined />
@@ -104,7 +107,7 @@
                   </BButton>
                 </BTooltip>
                 <span class="text-info">字数: {{ textContent.length }} 字符</span>
-              </a-space>
+              </BSpace>
             </div>
             <template v-if="isHtmlText">
               <div v-html="textContent" class="html-container"></div>
@@ -143,7 +146,7 @@
             </div>
             <h3>不支持预览此文件类型</h3>
             <p>当前文件格式暂不支持在线预览，您可以通过下载后查看</p>
-            <a-space>
+            <BSpace>
             <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
               <DownloadOutlined />
               下载文件
@@ -152,16 +155,16 @@
               <GlobalOutlined />
               尝试在线预览
             </BButton>
-            </a-space>
+            </BSpace>
           </div>
         </div>
       </div>
 
       <!-- 预览控制栏 -->
       <div class="preview-controls">
-        <a-space>
+        <BSpace>
           <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
-          <a-space size="small" gap="8">
+          <BSpace :size="8">
             <BTooltip title="上一个文件" v-if="showNext">
                   <BButton size="small" @click="handlePrev" class="action-btn">
                     <LeftOutlined />
@@ -192,8 +195,8 @@
                     <RotateRightOutlined />
                   </BButton>
             </BTooltip>
-          </a-space>
-        </a-space>
+          </BSpace>
+        </BSpace>
       </div>
     </div>
   </Teleport>
@@ -205,6 +208,7 @@
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,
@@ -837,9 +841,26 @@
         z-index: 10;
         text-align: center;
         padding: 40px;
-        :deep(.ant-spin-text) {
-          margin-top: 16px;
-          color: #666;
+
+        .b-spin {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .b-spin-indicator {
+          width: 32px;
+          height: 32px;
+          border: 3px solid var(--card-border-color);
+          border-top-color: var(--primary-color);
+          border-radius: 50%;
+          animation: b-spin-rotate 0.8s linear infinite;
+        }
+
+        .b-spin-tip {
+          color: var(--desc-color, #666);
+          font-size: 14px;
         }
       }
 
@@ -1105,5 +1126,9 @@
       max-width: 100%;
       height: auto;
     }
+  }
+
+  @keyframes b-spin-rotate {
+    to { transform: rotate(360deg); }
   }
 </style>

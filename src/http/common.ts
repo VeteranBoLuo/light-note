@@ -1,4 +1,4 @@
-import { message } from 'ant-design-vue';
+import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
 const cloud = cloudSpaceStore();

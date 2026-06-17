@@ -21,7 +21,7 @@
   import { onMounted, ref } from 'vue';
   import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const router = useRouter();
   const status = ref(200);

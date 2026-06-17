@@ -49,7 +49,8 @@
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
-  import { message, Popconfirm } from 'ant-design-vue';
+  import { Popconfirm } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { CloseOutlined, UploadOutlined } from '@ant-design/icons-vue';
   import axios from 'axios';
   import { reactive, ref } from 'vue';

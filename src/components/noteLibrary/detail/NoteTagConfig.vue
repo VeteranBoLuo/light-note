@@ -113,7 +113,7 @@
   import icon from '@/config/icon.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';

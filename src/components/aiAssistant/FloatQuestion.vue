@@ -105,7 +105,7 @@
 
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
 
   const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));

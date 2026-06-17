@@ -51,14 +51,24 @@
             </BTooltip>
           </template>
           <template v-else-if="column.key === 'action'">
-            <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="banAccount?.(record)"
+            <b-button v-if="Number(record.delFlag) !== 1" size="small" @click.stop="handleBanAction(record)"
               >封禁账号</b-button
             >
-            <b-button v-else size="small" @click.stop="unbanAccount?.(record)">解封账号</b-button>
+            <b-button v-else size="small" @click.stop="handleUnbanAction(record)">解封账号</b-button>
           </template>
         </template>
       </BTable>
     </div>
+
+    <AccountDetailDrawer
+      v-if="detailVisible"
+      :visible="detailVisible"
+      :account="selectedRecord"
+      @close="detailVisible = false"
+      @ban="handleBanAction"
+      @unban="handleUnbanAction"
+      @view-events="handleViewEvents"
+    />
   </div>
 </template>
 
@@ -70,6 +80,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import AccountDetailDrawer from './AccountDetailDrawer.vue';
   import {
     NAVIGATE_TO_USER_EVENTS,
     REFRESH_TRIGGER,
@@ -89,12 +100,29 @@
 
   const accountRepList = ref<any[]>([]);
   const acctRepTotal = ref(0);
-  const acctRepPage = reactive({ currentPage: 1, pageSize: 100 });
+  const acctRepPage = reactive({ currentPage: 1, pageSize: 20 });
   const acctRepFilters = reactive<any>({ key: '' });
   const acctRepSearchTimer = ref<any>(null);
 
+  const detailVisible = ref(false);
+  const selectedRecord = ref<any>(null);
+
   function onRowClick(record: any) {
-    navigateToUserEvents?.(record.userId, record.alias || record.email || record.userId);
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
+
+  function handleBanAction(account: any) {
+    banAccount?.(account);
+  }
+
+  function handleUnbanAction(account: any) {
+    unbanAccount?.(account);
+  }
+
+  function handleViewEvents(userId: string, label: string) {
+    detailVisible.value = false;
+    navigateToUserEvents?.(userId, label);
   }
 
   async function searchAccountReputation() {

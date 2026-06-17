@@ -119,7 +119,7 @@
 <script setup lang="ts">
   import { ref, computed, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';

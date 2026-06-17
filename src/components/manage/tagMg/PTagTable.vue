@@ -39,7 +39,7 @@
 <script lang="ts" setup>
   import { useUserStore } from '@/store';
   import { ref } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import router from '@/router';

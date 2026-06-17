@@ -51,7 +51,7 @@
 
 <script setup lang="ts">
   import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { EditorView, basicSetup } from 'codemirror';
   import { json, jsonParseLinter } from '@codemirror/lang-json';
   import { linter } from '@codemirror/lint';

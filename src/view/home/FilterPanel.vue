@@ -97,7 +97,7 @@
   import { useRouter } from 'vue-router';
   import RightMenu from '@/components/base/RightMenu.vue';
   import { TagInterface } from '@/config/bookmarkCfg.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';

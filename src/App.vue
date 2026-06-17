@@ -22,7 +22,8 @@
   import { getNoticeSummary } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { fingerprint } from '@/utils/common';
-  import { message, notification } from 'ant-design-vue';
+  import { notification } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
   import { updateNotice } from '@/config/updateNotice';
@@ -82,7 +83,6 @@
     '/securityCenter/overview': '/securityOverview',
     '/securityCenter/events': '/securityEvents',
     '/securityCenter/ips': '/securityIps',
-    '/securityCenter/account-bans': '/securityAccountBans',
     '/securityCenter/account-reputation': '/securityAccountReputation',
     '/securityCenter/whitelist': '/securityWhitelist',
     '/securityCenter/rules': '/securityRules',
@@ -99,7 +99,6 @@
     '/securityOverview': '/securityCenter/overview',
     '/securityEvents': '/securityCenter/events',
     '/securityIps': '/securityCenter/ips',
-    '/securityAccountBans': '/securityCenter/account-bans',
     '/securityAccountReputation': '/securityCenter/account-reputation',
     '/securityWhitelist': '/securityCenter/whitelist',
     '/securityRules': '/securityCenter/rules',

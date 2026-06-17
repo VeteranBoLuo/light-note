@@ -1,32 +1,64 @@
 <template>
   <div class="flex-align-center-gap tab-container">
-    <div style="font-size: 14px" class="dom-hover tab" v-for="tab in options" :key="tab" @click="tabChange(tab)">
-      {{ tab }}
+    <div
+      class="dom-hover tab"
+      v-for="tab in resolvedOptions"
+      :key="tab.key ?? tab.label"
+      :class="{ 'is-active': activeValue === (tab.key ?? tab.label) }"
+      @click="tabChange(tab)"
+    >
+      {{ tab.label }}
     </div>
     <div class="underline"></div>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { nextTick, watch } from 'vue';
+  import { computed, nextTick, watch } from 'vue';
+
+  export interface TabItem {
+    label: string;
+    key?: string;
+  }
 
   const emit = defineEmits(['change']);
-  const props = withDefaults(defineProps<{ options: string[] }>(), {
-    options: () => [],
+  const props = withDefaults(
+    defineProps<{
+      options: (string | TabItem)[];
+    }>(),
+    {
+      options: () => [],
+    },
+  );
+
+  const activeTab = defineModel<string>('activeTab');
+
+  const resolvedOptions = computed<TabItem[]>(() =>
+    props.options.map((opt) => (typeof opt === 'string' ? { label: opt } : opt)),
+  );
+
+  const activeValue = computed(() => {
+    const active = activeTab.value;
+    if (active == null) return '';
+    const matched = resolvedOptions.value.find(
+      (t) => t.key === active || t.label === active,
+    );
+    return matched ? (matched.key ?? matched.label) : active;
   });
 
-  const activeTab = defineModel('activeTab');
-  function tabChange(tab) {
-    activeTab.value = tab;
+  function tabChange(tab: TabItem) {
+    const value = tab.key ?? tab.label;
+    activeTab.value = value;
     const tabs = document.querySelectorAll('.tab');
     const underline: HTMLElement = document.querySelector('.underline');
-    const index = props.options.indexOf(tab);
-    // 根据选中的tab更新下划线的位置和宽度
-    const tabWidth = tabs[index].offsetWidth;
-    const tabPosition = tabs[index].offsetLeft;
-    underline.style.width = `${tabWidth}px`;
-    underline.style.left = `${tabPosition}px`;
-    emit('change', tab);
+    const index = resolvedOptions.value.indexOf(tab);
+    if (tabs[index]) {
+      const tabWidth = tabs[index].offsetWidth;
+      const tabPosition = tabs[index].offsetLeft;
+      underline.style.width = `${tabWidth}px`;
+      underline.style.left = `${tabPosition}px`;
+    }
+    emit('change', value);
   }
 
   watch(
@@ -47,9 +79,25 @@
 <style scoped lang="less">
   .tab-container {
     position: relative;
-    border-bottom: 1px solid var(--phone-menu-item-border-color);
+    border-bottom: 1px solid var(--card-border-color);
     padding-bottom: 5px;
     margin-bottom: 10px;
+    display: flex;
+    gap: 24px;
+  }
+
+  .tab {
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 0;
+    color: var(--desc-color);
+    transition: color 0.2s;
+    white-space: nowrap;
+
+    &.is-active {
+      color: var(--text-color);
+      font-weight: 500;
+    }
   }
   .underline {
     position: absolute;

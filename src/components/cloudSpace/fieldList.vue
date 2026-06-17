@@ -148,7 +148,7 @@
         <div class="download-progress-title">{{ downloadProgress.phaseText }}</div>
         <div class="download-progress-ops">
           <span>{{ downloadProgress.current }}/{{ downloadProgress.total }}</span>
-          <BButton size="small" type="text" class="download-cancel-btn" @click="cancelBatchDownload">
+          <BButton size="small" class="download-cancel-btn" @click="cancelBatchDownload">
             {{ $t('common.cancel') }}
           </BButton>
         </div>
@@ -323,8 +323,7 @@
         <b-input
           type="textarea"
           v-model:value="shareDescValue"
-          :max-length="200"
-          :auto-size="{ minRows: 3, maxRows: 6 }"
+          :maxlength="200"
           :placeholder="$t('cloudSpace.shareDescPlaceholder')"
         />
         <div class="share-desc-actions">
@@ -378,7 +377,7 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import icon from '@/config/icon.ts';
   import { deleteField, downloadField, shareField } from '@/http/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';

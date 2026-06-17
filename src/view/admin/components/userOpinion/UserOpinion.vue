@@ -29,7 +29,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <a-select
+          <BSelect
             v-model:value="statusFilter"
             class="user-opinion__status-filter"
             :options="statusOptions"
@@ -142,8 +142,9 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
@@ -164,7 +165,7 @@
   ];
 
   const currentPage = ref<number>(1);
-  const pageSize = ref<number>(10);
+  const pageSize = ref<number>(20);
   const total = ref(0);
   const searchValue = ref('');
   const statusFilter = ref((route.query.status as string) || 'all');

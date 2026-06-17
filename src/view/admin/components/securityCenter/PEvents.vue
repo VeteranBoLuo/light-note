@@ -112,7 +112,7 @@
 <script lang="ts" setup>
 import { onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { message } from 'ant-design-vue';
+import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';

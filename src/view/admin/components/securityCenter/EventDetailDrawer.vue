@@ -1,5 +1,5 @@
 <template>
-  <a-drawer :open="visible" title="攻击事件详情" placement="right" width="720" @close="$emit('close')">
+  <b-drawer :open="visible" title="攻击事件详情" width="720" @close="$emit('close')">
     <div v-if="eventDetail.event" class="security-detail">
       <section>
         <h3>事件概览</h3>
@@ -54,26 +54,23 @@
           >
         </div>
         <div class="handle-row">
-          <a-select v-model:value="handleForm.handledStatus" class="security-select">
-            <a-select-option value="unhandled">未处理</a-select-option>
-            <a-select-option value="processed">已处理</a-select-option>
-            <a-select-option value="false_positive">误报</a-select-option>
-          </a-select>
+          <BSelect v-model:value="handleForm.handledStatus" :options="handleStatusOptions" class="security-select" />
           <b-input v-model:value="handleForm.remark" placeholder="处理备注" class="handle-input" />
           <b-button type="primary" @click="submitHandle">保存</b-button>
         </div>
       </section>
     </div>
-  </a-drawer>
+  </b-drawer>
 </template>
 
 <script lang="ts" setup>
 import { inject, reactive, watch } from 'vue';
-import { message } from 'ant-design-vue';
+import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
+import BSelect from '@/components/base/BasicComponents/BSelect.vue';
 import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 import { BAN_IP, UNBAN_IP, BAN_ACCOUNT, UNBAN_ACCOUNT, severityColor, ipRecentColumns } from './securityShared';
 
@@ -90,6 +87,11 @@ const unbanAccount = inject(UNBAN_ACCOUNT);
 
 const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
 const handleForm = reactive({ handledStatus: 'processed', remark: '' });
+const handleStatusOptions = [
+  { value: 'unhandled', label: '未处理' },
+  { value: 'processed', label: '已处理' },
+  { value: 'false_positive', label: '误报' },
+];
 
 async function loadDetail() {
   if (!props.eventId) return;
@@ -158,23 +160,3 @@ watch(
 @import './securityCenter.less';
 </style>
 
-<style lang="less">
-.ant-drawer-content,
-.ant-drawer-header {
-  background: var(--background-color) !important;
-  color: var(--text-color) !important;
-}
-
-.ant-drawer-title,
-.ant-drawer-close {
-  color: var(--text-color) !important;
-}
-
-.ant-drawer-header {
-  border-bottom-color: var(--card-border-color) !important;
-}
-
-.ant-drawer-body {
-  background: var(--background-color) !important;
-}
-</style>

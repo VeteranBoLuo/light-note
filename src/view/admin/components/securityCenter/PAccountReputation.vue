@@ -57,6 +57,7 @@
           <div class="mobile-detail-actions">
             <b-button v-if="Number(selectedRecord.delFlag) !== 1" size="small" @click.stop="handleBanAccount(selectedRecord)">封禁账号</b-button>
             <b-button v-else size="small" @click.stop="handleUnbanAccount(selectedRecord)">解封账号</b-button>
+            <b-button size="small" @click.stop="handleViewEvents">查看攻击日志 →</b-button>
           </div>
         </div>
       </BModal>
@@ -67,7 +68,7 @@
 <script lang="ts" setup>
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { message } from 'ant-design-vue';
+import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -175,6 +176,15 @@ async function handleUnbanAccount(account: any) {
       }
     },
   });
+}
+
+function handleViewEvents() {
+  const record = selectedRecord.value;
+  if (!record) return;
+  const userId = typeof record === 'string' ? record : record?.userId;
+  const label = record?.alias || record?.email || userId;
+  detailVisible.value = false;
+  router.push(`/securityEvents?userId=${encodeURIComponent(userId)}&userLabel=${encodeURIComponent(label)}`);
 }
 
 onMounted(() => {

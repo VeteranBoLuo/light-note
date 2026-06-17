@@ -46,7 +46,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore, noteStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';

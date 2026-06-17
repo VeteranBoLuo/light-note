@@ -56,10 +56,10 @@
           </div>
           <div class="tag-attr-item">
             <span class="tag-attr-label">{{ $t('tagManage.relatedTag') }}</span>
-            <a-select
+            <b-select
               v-model:value="tag.relatedTagIds"
               mode="multiple"
-              show-search
+              :show-search="true"
               :max-tag-count="4"
               :options="tagOptions"
               :filter-option="SelectionSearch"
@@ -174,7 +174,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';

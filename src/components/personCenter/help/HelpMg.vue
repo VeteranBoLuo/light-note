@@ -33,7 +33,7 @@
 <script lang="ts" setup>
   import { bookmarkStore } from '@/store';
   import { defineAsyncComponent, ref } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
 
   const Help = defineAsyncComponent(() => import('@/components/personCenter/help/Help.vue'));

@@ -178,7 +178,7 @@
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';

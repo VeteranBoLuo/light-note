@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { message } from 'ant-design-vue';
+import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import useUserStore from '@/store/useUser';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 import {

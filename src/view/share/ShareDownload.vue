@@ -48,7 +48,7 @@
             </div>
           </div>
           <div class="action-buttons">
-            <a-space :size="40">
+            <BSpace :size="40">
               <BButton size="large" @click="previewFile" class="preview-btn">
                 <EyeOutlined />
                 {{ $t('common.preview') }}
@@ -57,7 +57,7 @@
                 <DownloadOutlined />
                 {{ $t('cloudSpace.downloadAgain') }}
               </BButton>
-            </a-space>
+            </BSpace>
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@
             </div>
           </div>
           <div class="action-buttons">
-            <a-space :size="40">
+            <BSpace :size="40">
               <BButton size="large" @click="previewFile" class="preview-btn">
                 <EyeOutlined />
                 {{ $t('common.preview') }}
@@ -104,7 +104,7 @@
                 <DownloadOutlined />
                 {{ $t('cloudSpace.download') }}
               </BButton>
-            </a-space>
+            </BSpace>
           </div>
         </div>
       </div>
@@ -134,6 +134,7 @@
   import icon from '@/config/icon.ts';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const route = useRoute();

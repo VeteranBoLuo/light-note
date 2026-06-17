@@ -1,6 +1,6 @@
 // noinspection JSUnusedGlobalSymbols
 
-import { message as AntMessage } from 'ant-design-vue/es/components';
+import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
 export interface EndCondition {
   endCondition: boolean | (() => boolean);
@@ -21,7 +21,7 @@ export function checkEndCondition(conditions: EndCondition[]): boolean {
     if (isEnd) {
       if (condition.message) {
         const type = condition.type ?? 'warning';
-        AntMessage[type](condition.message);
+        message[type](condition.message);
       }
       return true;
     }

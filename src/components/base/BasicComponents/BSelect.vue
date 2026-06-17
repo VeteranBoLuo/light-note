@@ -1,110 +1,545 @@
 <template>
-  <div class="select-container">
-    <BInput
-      v-model:value="value"
-      placeholder="请选择"
-      :class="{ isOpen: isOpen }"
-      class="select-input"
-      @click="clickSelect"
-    />
-    <div class="options-body" v-if="options.length > 0" v-show="isOpen" :class="{ in: isOpen }">
-      <div
-        class="select-option"
-        :style="{ backgroundColor: value === item.value ? '#e8f5ff' : '' }"
-        v-for="(item, index) in options"
-        :key="index"
-        @click="select(item)"
-        >{{ item.label }}
-      </div>
+  <div class="b-select" ref="containerRef" :class="{ 'is-multiple': isMultiple, 'is-open': isOpen }">
+    <div
+      class="select-trigger"
+      @click="toggleOpen"
+      @mouseenter="isHovering = true"
+      @mouseleave="isHovering = false"
+      ref="triggerRef"
+    >
+      <!-- 单选：显示文字 -->
+      <template v-if="!isMultiple">
+        <input
+          v-if="showSearch"
+          v-model="searchText"
+          class="select-search-inline"
+          :placeholder="displayText || placeholder"
+          @click.stop
+          @input="isOpen = true"
+          @focus="isOpen = true"
+        />
+        <span v-else class="select-text" :class="{ 'is-placeholder': !displayText }">
+          {{ displayText || placeholder }}
+        </span>
+      </template>
+
+      <!-- 多选：显示标签 -->
+      <template v-else>
+        <span
+          v-for="tag in visibleTags"
+          :key="tag.value"
+          class="select-tag"
+          :title="tag.label"
+        >
+          <span class="select-tag-label">{{ tag.label }}</span>
+          <span class="select-tag-remove" @click.stop="removeTag(tag.value)">&times;</span>
+        </span>
+        <span v-if="overflowCount > 0" class="select-tag is-overflow">+{{ overflowCount }}</span>
+        <span v-if="selectedTags.length === 0" class="select-text is-placeholder">{{ placeholder }}</span>
+      </template>
+
+      <!-- 后缀 -->
+      <span class="select-suffix">
+        <span v-if="showClear" class="select-clear" @click.stop="handleClear">&times;</span>
+        <span v-else class="select-arrow">&#9662;</span>
+      </span>
     </div>
+
+    <Teleport to="body">
+      <div class="select-dropdown" v-show="isOpen" :style="dropdownStyle" @click.stop>
+        <div v-if="showSearch && isMultiple" class="select-search-bar">
+          <input
+            v-model="searchText"
+            class="select-search-input"
+            placeholder="搜索..."
+            @click.stop
+            @input="keepOpen"
+          />
+        </div>
+        <div
+          v-for="item in filteredOptions"
+          :key="item.value"
+          class="select-option"
+          :class="{
+            'is-selected': isSelected(item.value),
+            'is-disabled': item.disabled,
+          }"
+          @click="selectOption(item)"
+        >
+          <span v-if="isMultiple" class="select-option-check">
+            <span v-if="isSelected(item.value)" class="check-icon">&#10003;</span>
+          </span>
+          <span class="select-option-label">{{ item.label }}</span>
+        </div>
+        <div v-if="filteredOptions.length === 0" class="select-no-data">无匹配项</div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
-<script lang="ts" setup>
-  import { BaseOptions } from '@/config/bookmarkCfg.ts';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import { ref } from 'vue';
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import type { BaseOptions } from '@/config/bookmarkCfg.ts';
 
-  const props = withDefaults(defineProps<{ options: BaseOptions[] }>(), {
-    options: () => [],
-  });
-  const value = defineModel('value');
-  const isOpen = ref(false);
+const props = withDefaults(defineProps<{
+  options: BaseOptions[];
+  placeholder?: string;
+  allowClear?: boolean;
+  mode?: 'single' | 'multiple';
+  showSearch?: boolean;
+  filterOption?: (value: string, option: BaseOptions) => boolean;
+  maxTagCount?: number;
+}>(), {
+  options: () => [],
+  placeholder: '请选择',
+  allowClear: false,
+  mode: 'single',
+  showSearch: false,
+  maxTagCount: 0,
+});
 
-  function clickSelect() {
-    isOpen.value = !isOpen.value;
+const emit = defineEmits<{
+  change: [value: any];
+}>();
+
+const modelValue = defineModel('value');
+
+const isMultiple = computed(() => props.mode === 'multiple');
+const isOpen = ref(false);
+const isHovering = ref(false);
+const searchText = ref('');
+const containerRef = ref<HTMLElement>();
+const triggerRef = ref<HTMLElement>();
+const dropdownStyle = ref({ top: '0px', left: '0px', width: '0px' });
+
+// 当前选中值（标准化为数组）
+const currentValues = computed<any[]>(() => {
+  const v = modelValue.value;
+  if (isMultiple.value) {
+    return Array.isArray(v) ? v : [];
   }
+  return v != null && v !== '' ? [v] : [];
+});
 
-  function select(item) {
-    value.value = item.value;
+// 选中项标签
+const selectedTags = computed(() => {
+  return props.options.filter((opt) => currentValues.value.includes(opt.value));
+});
+
+// 可见标签（受 maxTagCount 限制）
+const visibleTags = computed(() => {
+  if (props.maxTagCount > 0 && selectedTags.value.length > props.maxTagCount) {
+    return selectedTags.value.slice(0, props.maxTagCount);
+  }
+  return selectedTags.value;
+});
+
+// 溢出数量
+const overflowCount = computed(() => {
+  if (props.maxTagCount > 0 && selectedTags.value.length > props.maxTagCount) {
+    return selectedTags.value.length - props.maxTagCount;
+  }
+  return 0;
+});
+
+// 是否可清除
+const showClear = computed(() => {
+  if (!props.allowClear) return false;
+  if (isMultiple.value) return currentValues.value.length > 0;
+  return modelValue.value != null && modelValue.value !== '';
+});
+
+// 单选显示文本
+const displayText = computed(() => {
+  if (isMultiple.value) return '';
+  const v = modelValue.value;
+  if (v == null || v === '') return '';
+  const matched = props.options.find((opt) => opt.value === v);
+  return matched ? matched.label : String(v);
+});
+
+// 过滤后的选项
+const filteredOptions = computed(() => {
+  if (!searchText.value) return props.options;
+  const kw = searchText.value;
+  if (props.filterOption) {
+    return props.options.filter((opt) => props.filterOption!(kw, opt));
+  }
+  // 默认：不区分大小写搜索 label 和 value
+  const upper = kw.toUpperCase();
+  return props.options.filter(
+    (opt) =>
+      String(opt.label).toUpperCase().includes(upper) ||
+      String(opt.value).toUpperCase().includes(upper),
+  );
+});
+
+function isSelected(value: any): boolean {
+  return currentValues.value.includes(value);
+}
+
+function selectOption(item: BaseOptions) {
+  if (item.disabled) return;
+  if (isMultiple.value) {
+    const arr = [...currentValues.value];
+    const idx = arr.indexOf(item.value);
+    if (idx > -1) {
+      arr.splice(idx, 1);
+    } else {
+      arr.push(item.value);
+    }
+    modelValue.value = arr;
+    emit('change', arr);
+    searchText.value = '';
+  } else {
+    modelValue.value = item.value;
+    emit('change', item.value);
+    searchText.value = '';
     isOpen.value = false;
   }
+}
+
+function removeTag(value: any) {
+  if (!isMultiple.value) return;
+  const arr = currentValues.value.filter((v: any) => v !== value);
+  modelValue.value = arr;
+  emit('change', arr);
+}
+
+function handleClear() {
+  if (isMultiple.value) {
+    modelValue.value = [];
+    emit('change', []);
+  } else {
+    modelValue.value = '';
+    emit('change', '');
+  }
+  searchText.value = '';
+  isOpen.value = false;
+}
+
+function toggleOpen() {
+  isOpen.value = !isOpen.value;
+  if (isOpen.value) {
+    searchText.value = '';
+    nextTick(() => updateDropdownPosition());
+  }
+}
+
+function keepOpen() {
+  if (!isOpen.value) isOpen.value = true;
+}
+
+function updateDropdownPosition() {
+  if (!triggerRef.value) return;
+  const rect = triggerRef.value.getBoundingClientRect();
+  dropdownStyle.value = {
+    top: `${rect.bottom + 4}px`,
+    left: `${rect.left}px`,
+    width: `${Math.max(rect.width, 180)}px`,
+  };
+}
+
+// 点击外部关闭
+function handleClickOutside(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (containerRef.value?.contains(target) || target.closest('.select-dropdown')) {
+    return;
+  }
+  isOpen.value = false;
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+  if (isMultiple.value) {
+    searchText.value = '';
+  }
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
+
+// 窗口滚动/缩放时更新位置
+watch(isOpen, (val) => {
+  if (val) {
+    window.addEventListener('scroll', updateDropdownPosition, true);
+    window.addEventListener('resize', updateDropdownPosition);
+  } else {
+    window.removeEventListener('scroll', updateDropdownPosition, true);
+    window.removeEventListener('resize', updateDropdownPosition);
+  }
+});
 </script>
 
 <style lang="less" scoped>
-  .select-container {
-    font-size: 13px;
-    width: 100%;
-    :deep(.select-input) {
-      width: 100% !important;
-      min-width: 100px !important;
-      cursor: pointer;
-      .b-input {
-        pointer-events: none;
-      }
-      &:hover {
-        .b-input {
-          border: 1px solid #4096ff !important;
-        }
-      }
+.b-select {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+
+  &.is-multiple {
+    .select-trigger {
+      height: auto;
+      min-height: 32px;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 2px 30px 2px 4px;
     }
   }
 
-  .options-body {
-    position: absolute;
-    border-radius: 6px;
-    z-index: 99999;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 2px;
-    background-color: white;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
-    margin-top: 2px;
+  &.is-open {
+    .select-trigger {
+      border-color: var(--primary-color);
+    }
+    .select-arrow {
+      transform: rotate(180deg);
+    }
+  }
+}
+
+.select-trigger {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--card-border-color, #d9d9d9);
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--background-color);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+  user-select: none;
+  position: relative;
+
+  &:hover {
+    border-color: var(--primary-color);
+  }
+}
+
+.select-search-inline {
+  flex: 1;
+  min-width: 30px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--text-color);
+  padding: 0;
+  margin: 0;
+
+  &::placeholder {
+    color: var(--desc-color, #999);
+  }
+}
+
+.select-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.is-placeholder {
+    color: var(--desc-color, #999);
+  }
+}
+
+.select-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-color);
+  background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
+  max-width: 160px;
+  cursor: default;
+
+  &.is-overflow {
+    background: transparent;
+    border-color: transparent;
+    color: var(--desc-color, #999);
+    font-weight: 500;
+  }
+}
+
+.select-tag-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-tag-remove {
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--desc-color);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+
+  &:hover {
+    color: var(--text-color);
+  }
+}
+
+.select-suffix {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  justify-content: center;
+}
+
+.select-clear {
+  font-size: 16px;
+  color: var(--desc-color, #999);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+
+  &:hover {
+    color: var(--text-color);
+  }
+}
+
+.select-arrow {
+  font-size: 10px;
+  color: var(--desc-color, #999);
+  transition: transform 0.2s;
+  line-height: 1;
+}
+
+.select-dropdown {
+  position: fixed;
+  z-index: 200000;
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--ant-select-dropdown-bg-color, #fff);
+  border: 1px solid var(--card-border-color, #d9d9d9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.select-search-bar {
+  padding: 4px 4px 8px;
+  border-bottom: 1px solid var(--card-border-color, #eee);
+  margin-bottom: 4px;
+}
+
+.select-search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--card-border-color, #d9d9d9);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-color);
+  background: var(--background-color);
+  outline: none;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: var(--primary-color);
   }
 
+  &::placeholder {
+    color: var(--desc-color, #999);
+  }
+}
+
+.select-option {
+  height: 32px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+
+  &.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.select-option-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1.5px solid var(--card-border-color, #d9d9d9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+
+  .is-selected & {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+  }
+}
+
+.check-icon {
+  font-size: 11px;
+  color: #fff;
+  line-height: 1;
+}
+
+.select-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-no-data {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--desc-color, #999);
+}
+
+[data-theme='night'] {
   .select-option {
-    width: 100%;
-    height: 33px;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    padding-left: 0.75rem;
-    border-radius: 6px;
-    color: black;
-    cursor: pointer;
-
     &:hover {
-      background-color: #f5f5f5;
+      background: color-mix(in srgb, var(--primary-color) 18%, transparent);
+    }
+    &.is-selected {
+      background: color-mix(in srgb, var(--primary-color) 28%, transparent);
     }
   }
 
-  .isOpen {
-    :deep(.b-input) {
-      border: 1px solid #4096ff !important;
-      box-shadow: 0 0 0 2px rgba(5, 145, 255, 0.1);
-    }
+  .select-tag {
+    background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+    border-color: color-mix(in srgb, var(--primary-color) 26%, transparent);
   }
-
-  .in {
-    animation: in-animation 0.3s ease;
-  }
-  @keyframes in-animation {
-    0% {
-      opacity: 0;
-    }
-    100% {
-      opacity: 1;
-    }
-  }
+}
 </style>

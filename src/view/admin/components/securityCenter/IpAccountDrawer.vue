@@ -1,5 +1,5 @@
 <template>
-  <a-drawer :open="visible" title="IP关联账号" placement="right" width="1000" @close="$emit('close')">
+  <b-drawer :open="visible" title="IP关联账号" width="1000" @close="$emit('close')">
     <div class="security-detail">
       <section>
         <h3>{{ ip }} 使用过的账号</h3>
@@ -52,12 +52,12 @@
         </b-loading>
       </section>
     </div>
-  </a-drawer>
+  </b-drawer>
 </template>
 
 <script lang="ts" setup>
   import { inject, ref, watch } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -178,23 +178,3 @@
   @import './securityCenter.less';
 </style>
 
-<style lang="less">
-  .ant-drawer-content,
-  .ant-drawer-header {
-    background: var(--background-color) !important;
-    color: var(--text-color) !important;
-  }
-
-  .ant-drawer-title,
-  .ant-drawer-close {
-    color: var(--text-color) !important;
-  }
-
-  .ant-drawer-header {
-    border-bottom-color: var(--card-border-color) !important;
-  }
-
-  .ant-drawer-body {
-    background: var(--background-color) !important;
-  }
-</style>

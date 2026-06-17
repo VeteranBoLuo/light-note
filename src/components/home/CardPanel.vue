@@ -53,7 +53,7 @@
   import router from '@/router';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useI18n } from 'vue-i18n';
   const bookmark = bookmarkStore();

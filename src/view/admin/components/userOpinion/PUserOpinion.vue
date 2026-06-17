@@ -7,7 +7,7 @@
             <svg-icon :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
-        <a-select v-model:value="statusFilter" :options="statusOptions" @change="searchOpinionList" />
+        <BSelect v-model:value="statusFilter" :options="statusOptions" @change="searchOpinionList" />
       </div>
 
       <div class="p-user-opinion__list">
@@ -86,8 +86,9 @@
   import router from '@/router';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useRoute } from 'vue-router';
 
   const route = useRoute();

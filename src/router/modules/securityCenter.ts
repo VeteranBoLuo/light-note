@@ -35,11 +35,6 @@ const securityCenterRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/securityCenter/Ips.vue'),
       },
       {
-        path: 'account-bans',
-        name: 'securityCenterAccountBans',
-        component: () => import('@/view/admin/components/securityCenter/AccountBans.vue'),
-      },
-      {
         path: 'account-reputation',
         name: 'securityCenterAccountReputation',
         component: () => import('@/view/admin/components/securityCenter/AccountReputation.vue'),
@@ -80,12 +75,6 @@ const securityCenterRouter: RouteRecordRaw[] = [
     path: '/securityIps',
     name: 'securityIps',
     component: () => import('@/view/admin/components/securityCenter/PIps.vue'),
-  },
-  {
-    meta: securityCenterMeta,
-    path: '/securityAccountBans',
-    name: 'securityAccountBans',
-    component: () => import('@/view/admin/components/securityCenter/PAccountBans.vue'),
   },
   {
     meta: securityCenterMeta,

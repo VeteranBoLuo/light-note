@@ -72,7 +72,7 @@
         </a-form-item>
         <a-form-item>
           <div class="login-tips-text">
-            <span class="remember-text"><b-checkbox type="circle" v-model:isCheck="isCheck" />记住账号</span>
+            <span class="remember-text"><b-checkbox type="circle" v-model:checked="isCheck" />记住账号</span>
             <a class="dom-hover-click" @click="loginWithGitHub">GitHub快捷登录</a>
           </div>
         </a-form-item>
@@ -111,7 +111,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { computed, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';

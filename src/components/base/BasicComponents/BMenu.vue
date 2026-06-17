@@ -21,7 +21,8 @@
 
 <script lang="ts" setup>
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { Trigger } from 'ant-design-vue/es/dropdown/props';
+
+  type BMenuTrigger = 'hover' | 'click' | 'contextmenu' | 'focus';
 
   const emit = defineEmits<{
     openChange: [open: boolean];
@@ -30,7 +31,7 @@
   withDefaults(
     defineProps<{
       menuOptions: { label: string; icon?: string; function?: () => void }[];
-      trigger?: Trigger | Trigger[];
+      trigger?: BMenuTrigger | BMenuTrigger[];
       overlayClassName?: string;
       getPopupContainer?: (trigger: HTMLElement) => HTMLElement;
     }>(),

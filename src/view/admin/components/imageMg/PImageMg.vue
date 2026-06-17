@@ -7,7 +7,7 @@
             <svg-icon :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
-        <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
+        <BSelect style="width: 100px" :options="imgOptions" v-model:value="imgType" />
         <b-button @click="clearApiImages" type="primary">清空</b-button>
       </b-space>
       <BTable :data="allImg[imgType]" :columns="imageColumns" rowKey="id" style="margin-top: 5px">
@@ -57,7 +57,8 @@
   import router from '@/router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';

@@ -164,7 +164,7 @@
   import opinionApi from '@/api/opinionApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, onMounted, reactive, ref, watch } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';

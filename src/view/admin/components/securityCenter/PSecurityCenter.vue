@@ -44,12 +44,6 @@
         url: '/securityAccountReputation',
       },
       {
-        id: 'securityAccountBans',
-        title: '封禁名单',
-        icon: icon.navigation.user,
-        url: '/securityAccountBans',
-      },
-      {
         id: 'securityWhitelist',
         title: '白名单',
         icon: icon.navigation.permissions,

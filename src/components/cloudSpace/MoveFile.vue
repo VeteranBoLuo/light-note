@@ -27,7 +27,7 @@
   import icon from '@/config/icon.ts';
   import { ref, watch } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   const cloud = cloudSpaceStore();

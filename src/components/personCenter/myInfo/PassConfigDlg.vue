@@ -16,7 +16,7 @@
   import { computed, ref, watch } from 'vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { apiBasePost } from '@/http/request.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { checkEndCondition, EndCondition } from '@/utils/validator.ts';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';

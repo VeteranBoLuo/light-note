@@ -63,7 +63,7 @@
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import userApi from '@/api/userApi.ts';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';

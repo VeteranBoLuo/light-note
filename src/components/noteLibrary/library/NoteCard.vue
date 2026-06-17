@@ -31,7 +31,7 @@
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
     <div v-if="!bookmark.isMobile" class="checkBox" :style="{ visibility: note.isCheck === true ? 'visible' : '' }">
-      <b-checkbox v-model:isCheck="note.isCheck" @click.stop />
+      <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
   </div>
 </template>

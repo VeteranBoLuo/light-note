@@ -25,10 +25,7 @@
         @click="handleRowClick(item, rowIndex)"
       >
         <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
-          <BCheckbox
-            :checked="isRowSelected(item)"
-            @change="(checked) => handleRowSelectChange(item, checked)"
-          />
+          <BCheckbox :checked="isRowSelected(item)" @change="(checked) => handleRowSelectChange(item, checked)" />
         </div>
         <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
           <slot name="bodyCell" :text="item[col.key]" :record="item" :index="rowIndex" :column="col">
@@ -41,7 +38,9 @@
       </div>
       <!-- 展开行 -->
       <div
-        v-if="props.expandedRows?.length && item[props.rowKey] != null && props.expandedRows.includes(item[props.rowKey])"
+        v-if="
+          props.expandedRows?.length && item[props.rowKey] != null && props.expandedRows.includes(item[props.rowKey])
+        "
         class="table-expand-row"
       >
         <slot name="expandedRow" :record="item" />
@@ -131,10 +130,7 @@
 
   // 全选状态
   const isAllSelected = computed(() => {
-    return (
-      props.data.length > 0 &&
-      props.data.every((item) => props.selectedRows.includes(item[props.rowKey]))
-    );
+    return props.data.length > 0 && props.data.every((item) => props.selectedRows.includes(item[props.rowKey]));
   });
 
   // 部分选中状态
@@ -207,6 +203,7 @@
     flex-direction: column;
     gap: 8px;
     overflow-y: auto;
+    min-height: 100px;
   }
 
   .table-row {

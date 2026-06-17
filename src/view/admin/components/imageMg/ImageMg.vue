@@ -24,7 +24,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <a-select style="width: 100px" :options="imgOptions" v-model:value="imgType" />
+          <BSelect style="width: 100px" :options="imgOptions" v-model:value="imgType" />
           <b-button @click="clearApiImages" type="primary">清理</b-button>
         </div>
         <span class="admin-filters-hint">支持文件名搜索 · 选择类型查看不同状态的图片</span>
@@ -74,8 +74,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   const bookmark = bookmarkStore();
   const tableCardRef = ref<HTMLElement | null>(null);

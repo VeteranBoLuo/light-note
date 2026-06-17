@@ -25,14 +25,12 @@
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
-          <a-select
-            :listHeight="350"
-            :dropdownMatchSelectWidth="false"
+          <b-select
             mode="multiple"
             :max-tag-count="3"
             :options="tagOptions"
             :placeholder="$t('placeholder.selectPlaceholder')"
-            show-search
+            :show-search="true"
             :filter-option="SelectionSearch"
             v-model:value="bookmarkData.relatedTags"
           />
@@ -55,7 +53,7 @@
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useRouter } from 'vue-router';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';

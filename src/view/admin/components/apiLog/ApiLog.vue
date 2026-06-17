@@ -83,7 +83,7 @@
   import { bookmarkStore } from '@/store';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useTableScrollY } from '@/composables/useTableScrollY';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -149,7 +149,7 @@
   }
 
   const currentPage = ref<number>(1);
-  const pageSize = ref<number>(10);
+  const pageSize = ref<number>(20);
 
   function onPageChange(page: number) {
     currentPage.value = page;

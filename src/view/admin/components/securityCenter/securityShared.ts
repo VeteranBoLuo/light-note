@@ -6,7 +6,6 @@ export const securityTabs = [
   { key: 'events', routeName: 'securityCenterEvents', label: '攻击日志' },
   { key: 'ips', routeName: 'securityCenterIps', label: 'IP画像' },
   { key: 'accountReputation', routeName: 'securityCenterAccountReputation', label: '账号画像' },
-  { key: 'accountBans', routeName: 'securityCenterAccountBans', label: '封禁名单' },
   { key: 'whitelist', routeName: 'securityCenterWhitelist', label: '白名单' },
   { key: 'rules', routeName: 'securityCenterRules', label: '规则库' },
 ] as const;

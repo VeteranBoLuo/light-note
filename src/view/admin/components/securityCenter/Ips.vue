@@ -62,7 +62,7 @@
 
   const ipList = ref<any[]>([]);
   const ipTotal = ref(0);
-  const ipPage = reactive({ currentPage: 1, pageSize: 100 });
+  const ipPage = reactive({ currentPage: 1, pageSize: 20 });
   const ipFilters = reactive<any>({ key: '' });
   const ipSearchTimer = ref<any>(null);
 

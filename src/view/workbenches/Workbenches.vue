@@ -403,7 +403,7 @@
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
 import { formatStorageSize } from '@/utils/common';
   import userApi from '@/api/userApi.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { setLocale } from '@/i18n';
   import {
     getHomePagePreference,

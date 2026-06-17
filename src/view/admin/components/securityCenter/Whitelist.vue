@@ -8,10 +8,7 @@
           class="security-search-input"
           @input="handleSearch"
         />
-        <a-select v-model:value="filters.targetType" allow-clear placeholder="白名单类型" class="security-select" @change="queryWhitelist">
-          <a-select-option value="ip">IP</a-select-option>
-          <a-select-option value="user">用户</a-select-option>
-        </a-select>
+        <BSelect v-model:value="filters.targetType" allowClear placeholder="白名单类型" :options="whitelistTypeOptions" class="security-select" @change="queryWhitelist" />
         <b-button type="primary" @click="openWhitelistModal">添加白名单</b-button>
       </div>
       <span class="admin-filters-hint">白名单对象仍会记录攻击日志和风险分，但不会触发自动封禁</span>
@@ -130,7 +127,7 @@
 
 <script lang="ts" setup>
   import { onMounted, reactive, ref } from 'vue';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -141,9 +138,14 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import { whitelistColumns } from './securityShared';
 
   const filters = reactive({ key: '', targetType: undefined as string | undefined });
+  const whitelistTypeOptions = [
+    { value: 'ip', label: 'IP' },
+    { value: 'user', label: '用户' },
+  ];
   const whitelist = ref<any[]>([]);
   const loading = ref(false);
   const saving = ref(false);
@@ -179,7 +181,7 @@
     loading.value = true;
     try {
       const res = await apiQueryPost('/api/security/whitelist', {
-        pageSize: 100,
+        pageSize: 20,
         currentPage: 1,
         filters: {
           key: filters.key,
@@ -254,7 +256,7 @@
     userLoading.value = true;
     try {
       const res = await apiQueryPost('/api/user/getUserList', {
-        pageSize: 50,
+        pageSize: 20,
         currentPage: 1,
         filters: { key: userSearchKey.value },
       });

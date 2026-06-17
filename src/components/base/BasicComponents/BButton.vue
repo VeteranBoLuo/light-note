@@ -1,5 +1,5 @@
 <template>
-  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass, { loading: loading }]">
+  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass, { loading: loading, disabled: disabled }]">
     <span v-if="loading" class="btn-spinner"></span>
     <slot></slot>
   </div>
@@ -22,6 +22,10 @@
       default: '',
     },
     loading: {
+      type: Boolean,
+      default: false,
+    },
+    disabled: {
       type: Boolean,
       default: false,
     },
@@ -127,6 +131,11 @@
 
   &.loading {
     opacity: 0.6;
+    pointer-events: none;
+  }
+  &.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
     pointer-events: none;
   }
 

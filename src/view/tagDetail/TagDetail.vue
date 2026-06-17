@@ -220,7 +220,7 @@
   import TagGraphPanel from '@/components/tagGraph/TagGraphPanel.vue';
   import { fetchTagGraph, type GraphResourceType, type TagGraphNode, type TagGraphResponse } from '@/api/tagGraph.ts';
   import { useI18n } from 'vue-i18n';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));

@@ -48,7 +48,7 @@
   import { Ref, ref, watch } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import userApi from '@/api/userApi.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';

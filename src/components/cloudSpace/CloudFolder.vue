@@ -74,7 +74,7 @@
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { nextTick, ref } from 'vue';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { useI18n } from 'vue-i18n';

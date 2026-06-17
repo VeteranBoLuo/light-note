@@ -124,7 +124,7 @@
   import { bookmarkStore } from '@/store';
   import { computed, reactive, ref } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { checkEndCondition } from '@/utils/validator.ts';
 
   const title = defineModel('title');

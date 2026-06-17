@@ -73,7 +73,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import { message } from 'ant-design-vue/es';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   const logList = ref([]);
 
   const logColumns = [

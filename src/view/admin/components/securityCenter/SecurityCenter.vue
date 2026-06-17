@@ -9,9 +9,7 @@
         </div>
       </header>
 
-      <a-tabs :active-key="activeKey" class="security-tab-bar" @change="onTabChange">
-        <a-tab-pane v-for="tab in securityTabs" :key="tab.key" :tab="tab.label" />
-      </a-tabs>
+      <b-tabs :options="securityTabs" :activeTab="activeKey" @change="onTabChange" class="security-tab-bar" />
 
       <div class="security-tab-content">
         <RouterView />
@@ -38,7 +36,7 @@
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, provide, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { message } from 'ant-design-vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import {
@@ -226,9 +224,8 @@
 @import './securityCenter.less';
 
 .security-tab-bar {
-  :deep(.ant-tabs-content-holder) {
-    display: none;
-  }
+  padding-top: 8px;
+  margin-bottom: 16px;
 }
 
 .security-tab-content {
@@ -262,18 +259,6 @@
 
   .clickable-row {
     cursor: pointer;
-  }
-
-  .ant-tabs-tab {
-    color: var(--desc-color);
-  }
-
-  .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
-    color: var(--text-color);
-  }
-
-  .ant-tabs-ink-bar {
-    background: var(--primary-color, var(--text-color));
   }
 }
 
