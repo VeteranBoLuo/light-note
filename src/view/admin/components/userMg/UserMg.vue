@@ -136,7 +136,6 @@
     return [
       { title: '昵称', key: 'alias', width: '1fr' },
       { title: '邮箱', key: 'email', width: '1fr' },
-      { title: '密码', key: 'password', width: '100px' },
       { title: 'IP', key: 'ip', width: '120px' },
       { title: '最近活跃', key: 'lastActiveTime', width: '140px' },
       { title: '注册时间', key: 'createTime', width: '140px' },
