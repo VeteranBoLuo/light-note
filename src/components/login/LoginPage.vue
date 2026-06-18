@@ -139,8 +139,12 @@
       if (res.status === 200) {
         if (isCheck.value) {
           localStorage.setItem(REMEMBERED_EMAIL_KEY, formData.value.email || '');
+          if (res.data?.sid) {
+            localStorage.setItem('rememberedSid', res.data.sid);
+          }
         } else {
           localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+          localStorage.removeItem('rememberedSid');
         }
         user.setUserInfo(res.data);
         user.preferences.theme = res.data?.preferences?.theme || 'day';

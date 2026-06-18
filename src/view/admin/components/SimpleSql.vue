@@ -98,7 +98,7 @@ const schemaResult = ref('');
 const schemaUpdatedAt = ref('');
 const errorSignatures = ['error', 'exception', 'unknown column', 'denied', 'syntax', "doesn't exist", 'duplicate'];
 
-const tables = ['api_logs','bookmark','config_json','files','folders','help_config','help_config_draft','note','note_images','operation_logs','opinion','resource_tag_relations','tag','tag_bookmark_relations','tag_relations','user'];
+const tables = ['agent_logs','api_logs','bookmark','config_json','files','folders','help_config','help_config_draft','note','note_images','note_tag_relations','note_tags','operation_logs','opinion','resource_tag_relations','security_account_bans','security_account_reputation','security_event_evidence','security_events','security_ip_reputation','security_rules','security_whitelist','tag','tag_relations','user','user_sessions'];
 
 const keyWords = ['SELECT','FROM','INSERT INTO','UPDATE','DELETE','WHERE','GROUP BY','ORDER BY','LIMIT','INNER JOIN','LEFT JOIN','RIGHT JOIN','COUNT(*)','SUM()','MAX()','MIN()','LIKE','BETWEEN','AND','OR','NOT','IN','IS NULL','IS NOT NULL','DESC','ASC'];
 

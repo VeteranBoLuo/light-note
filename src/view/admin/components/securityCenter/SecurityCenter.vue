@@ -235,36 +235,3 @@
 }
 </style>
 
-<style lang="less">
-.security-panel {
-  .ant-table {
-    background: var(--background-color);
-    color: var(--text-color);
-  }
-
-  .ant-table-thead > tr > th {
-    background: var(--table-header-bg-color);
-    color: var(--text-color);
-    border-bottom-color: var(--card-border-color);
-  }
-
-  .ant-table-tbody > tr > td {
-    border-bottom-color: color-mix(in srgb, var(--card-border-color) 18%, transparent);
-    color: var(--text-color);
-  }
-
-  .ant-table-tbody > tr.ant-table-row:hover > td {
-    background: var(--menu-item-bg-color);
-  }
-
-  .clickable-row {
-    cursor: pointer;
-  }
-}
-
-[data-theme="dark"] .security-panel {
-  .ant-table-tbody > tr > td {
-    border-bottom-color: color-mix(in srgb, var(--card-border-color) 8%, transparent);
-  }
-}
-</style>

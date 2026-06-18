@@ -137,6 +137,10 @@ request.interceptors.request.use(
         return Promise.reject(new Error(`接口 ${config.url} 没有操作权限`));
       }
       config.headers['fingerprint'] = (window as any)['fingerprint'];
+      const rememberedSid = localStorage.getItem('rememberedSid');
+      if (rememberedSid) {
+        config.headers['X-Session-Id'] = rememberedSid;
+      }
     }
     return config;
   },

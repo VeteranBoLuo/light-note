@@ -259,6 +259,7 @@
     bookmark.isShowLogin = true;
     stopOpinionNoticePolling();
     notification.close(NOTICE_KEY);
+    localStorage.removeItem('rememberedSid');
   }
 
   async function handleAuthExpired(options: { refreshUser?: boolean; redirect?: boolean; resetUser?: boolean } = {}) {
