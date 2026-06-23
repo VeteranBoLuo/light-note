@@ -5,10 +5,18 @@
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
     <GlobalSearch />
+    <BTooltip title="工具箱" always>
+      <div v-if="!bookmark.isMobile" @click="toolkitClick" class="toolkit-link">
+        <svg-icon size="26" hover :src="icon.toolkit" />
+      </div>
+    </BTooltip>
     <b-menu
       v-if="!bookmark.isMobile"
       placement="bottom"
-      :menu-options="[{ label: $t('navigation.projectAddress'), function: () => githubClick() }, { label: '官方首页', function: () => router.push('/landing') }]"
+      :menu-options="[
+        { label: $t('navigation.projectAddress'), function: () => githubClick() },
+        { label: '官方首页', function: () => router.push('/landing') },
+      ]"
     >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
     </b-menu>
@@ -44,11 +52,14 @@
     recordOperation({ module: '导航栏', operation: `点击书签卡片Github` });
   }
 
+  function toolkitClick() {
+    window.open('https://boluo66.top/toolkit/');
+  }
+
   function handleToPhoneUserCenter() {
     bookmark.isFold = true;
     router.push('/personCenter');
   }
-
 </script>
 
 <style lang="less" scoped>
@@ -96,5 +107,8 @@
     align-items: center;
     cursor: pointer;
     flex: 0 0 auto;
+  }
+  .toolkit-link {
+    text-decoration: none;
   }
 </style>
