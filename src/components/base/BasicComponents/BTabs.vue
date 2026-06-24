@@ -46,12 +46,16 @@
     return matched ? (matched.key ?? matched.label) : active;
   });
 
-  function tabChange(tab: TabItem) {
-    const value = tab.key ?? tab.label;
+  function tabChange(tab: string | TabItem) {
+    const resolved = typeof tab === 'string'
+      ? resolvedOptions.value.find((t) => (t.key ?? t.label) === tab)
+      : tab;
+    if (!resolved) return;
+    const value = resolved.key ?? resolved.label;
     activeTab.value = value;
     const tabs = document.querySelectorAll('.tab');
     const underline: HTMLElement = document.querySelector('.underline');
-    const index = resolvedOptions.value.indexOf(tab);
+    const index = resolvedOptions.value.indexOf(resolved);
     if (tabs[index]) {
       const tabWidth = tabs[index].offsetWidth;
       const tabPosition = tabs[index].offsetLeft;
