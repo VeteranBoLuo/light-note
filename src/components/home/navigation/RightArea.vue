@@ -6,7 +6,7 @@
   >
     <GlobalSearch />
     <BTooltip title="工具箱" always>
-      <div v-if="!bookmark.isMobile" @click="toolkitClick" class="toolkit-link">
+      <div v-if="!bookmark.isMobile" @click="toolkitClick" v-click-log="OPERATION_LOG_MAP.navigation.toolkit" class="toolkit-link">
         <svg-icon size="26" hover :src="icon.toolkit" />
       </div>
     </BTooltip>
@@ -41,6 +41,7 @@
   import router from '@/router';
   import { useRoute } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
   const bookmark = bookmarkStore();
 

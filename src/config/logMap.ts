@@ -17,6 +17,7 @@ function createModule<T extends Record<string, string>>(module: string, operatio
 }
 export const OPERATION_LOG_MAP = {
   navigation: createModule('导航栏', {
+    toolkit: '工具箱',
     work: '工作台模块',
     resourceCenter: '资源中心模块',
     home: '书签模块',
