@@ -14,7 +14,7 @@
       <span class="admin-filters-hint">白名单对象仍会记录攻击日志和风险分，但不会触发自动封禁</span>
     </div>
 
-    <div class="admin-table-card security-whitelist-card" ref="tableCardRef">
+    <div class="admin-table-card security-whitelist-card">
       <b-loading :loading="loading">
         <BTable
           :data="whitelist"
@@ -129,7 +129,6 @@
   import { onMounted, reactive, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -161,9 +160,6 @@
   const selectedUserIds = ref<string[]>([]);
   const selectedUserMap = ref<Record<string, any>>({});
   const userSearchTimer = ref<any>(null);
-
-  const tableCardRef = ref<HTMLElement | null>(null);
-  useTableScrollY({ ref: tableCardRef });
 
   const userColumns = [
     { title: '昵称', key: 'alias' },
@@ -352,6 +348,9 @@
 
   .security-whitelist {
     min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .whitelist-modal {
@@ -386,7 +385,6 @@
   }
 
   .security-whitelist-card {
-    max-height: calc(100vh - 260px);
   }
 
   .whitelist-user-modal {

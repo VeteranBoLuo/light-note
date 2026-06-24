@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="tab-content">
     <div class="admin-filters security-filters">
       <div class="admin-filters-main security-filters-main">
         <b-input
@@ -11,7 +11,7 @@
         <b-button type="primary" @click="searchIps">搜索</b-button>
       </div>
     </div>
-    <div class="admin-table-card" ref="tableCardRef">
+    <div class="admin-table-card">
       <BTable
 
         :data="ipList"
@@ -48,7 +48,6 @@
 <script lang="ts" setup>
   import { inject, onMounted, reactive, ref, watch } from 'vue';
   import { apiQueryPost } from '@/http/request.ts';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
@@ -56,9 +55,6 @@
 
   const openIpAccounts = inject(OPEN_IP_ACCOUNTS);
   const refreshTrigger = inject(REFRESH_TRIGGER);
-
-  const tableCardRef = ref<HTMLElement | null>(null);
-  useTableScrollY({ ref: tableCardRef });
 
   const ipList = ref<any[]>([]);
   const ipTotal = ref(0);
@@ -104,4 +100,10 @@
 
 <style lang="less" scoped>
   @import './securityCenter.less';
+
+  .tab-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 </style>

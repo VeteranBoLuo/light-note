@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="tab-content">
     <div class="admin-filters security-filters">
       <div class="admin-filters-main security-filters-main">
         <b-input
@@ -43,7 +43,7 @@
       </span>
     </div>
 
-    <div class="admin-table-card" ref="tableCardRef">
+    <div class="admin-table-card">
       <div class="event-batch-bar" v-if="selectedEventIds.length">
         <span>已选择 {{ selectedEventIds.length }} 条攻击日志</span>
         <div class="event-batch-actions">
@@ -115,7 +115,6 @@
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -137,9 +136,6 @@
   const refreshTrigger = inject(REFRESH_TRIGGER);
   const route = useRoute();
   const router = useRouter();
-
-  const tableCardRef = ref<HTMLElement | null>(null);
-  useTableScrollY({ ref: tableCardRef });
 
   const events = ref<any[]>([]);
   const eventTotal = ref(0);
@@ -279,4 +275,10 @@
 
 <style lang="less" scoped>
   @import './securityCenter.less';
+
+  .tab-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 </style>
