@@ -10,7 +10,7 @@ export type UpdateNoticeConfig = {
 export const updateNotice: UpdateNoticeConfig = {
   version: '3.2', // 正式版本号
   title: '发现新版本',
-  description: '资源中心升级，新增高级筛选与批量标签整理能力；新增回收站，支持书签、笔记、文件30天内恢复。',
+  description: 'AI 智能助手升级为 Agent & 官网首页上线 & 多项体验优化',
   actionText: '查看更新日志',
   logRoute: '/updateLogs',
   storageKey: 'appUpdateVersion',
