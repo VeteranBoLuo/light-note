@@ -16,22 +16,11 @@
       ></textarea>
       <div class="input-actions">
         <TranslationToggle
-          v-if="!useInternetSearch"
           :enableTranslation="enableTranslation"
           :translationConfig="translationConfig"
           @update:enableTranslation="$emit('update:enableTranslation', $event)"
           @update:translationConfig="$emit('update:translationConfig', $event)"
         />
-        <button
-          v-if="!enableTranslation"
-          class="search-btn"
-          @click="toggleInternetSearch"
-          :class="{ active: useInternetSearch }"
-          :title="t('ai.internetSearch')"
-        >
-          <svg-icon size="14" :src="icon.ai.internet" />
-          {{ t('ai.internetSearch') }}
-        </button>
         <button
           @click="isLoading ? stopFn() : sendFn()"
           v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
@@ -58,13 +47,11 @@
   const props = defineProps<{
     modelValue: string;
     isLoading: boolean;
-    useInternetSearch: boolean;
     enableTranslation: boolean;
     translationConfig: { source: string; target: string };
     isMobile: boolean;
     sendFn: () => void;
     stopFn: () => void;
-    toggleInternetSearch: () => void;
   }>();
 
   const emit = defineEmits<{

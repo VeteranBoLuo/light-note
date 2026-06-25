@@ -32,13 +32,11 @@
       <ChatInputSection
         v-model="userInput"
         :is-loading="isLoading"
-        :use-internet-search="useInternetSearch"
         :enable-translation="enableTranslation"
         :translation-config="translationConfig"
         :is-mobile="bookmark.isMobile"
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
-        :toggle-internet-search="toggleInternetSearch"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
       />
@@ -81,7 +79,6 @@
   const messages = ref<ChatMessage[]>([]);
   const isLoading = ref(false);
   const messagesContainer = ref<HTMLElement | null>(null);
-  const useInternetSearch = ref(false);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
 
@@ -170,25 +167,6 @@
     nextTick(() => {
       scrollToBottom('auto');
     });
-  });
-
-  // 切换联网搜索
-  const toggleInternetSearch = () => {
-    useInternetSearch.value = !useInternetSearch.value;
-  };
-
-  // 监听翻译状态，当启用翻译时禁用联网
-  watch(enableTranslation, (newVal) => {
-    if (newVal) {
-      useInternetSearch.value = false;
-    }
-  });
-
-  // 监听联网和深度思考状态，当启用时禁用翻译
-  watch(useInternetSearch, (newVal) => {
-    if (newVal) {
-      enableTranslation.value = false;
-    }
   });
 
   // 清空对话
@@ -546,7 +524,6 @@
           message: inputText,
           stream: true,
           sessionId: sessionId,
-          // useInternetSearch: 暂不支持（DeepSeek Flash 无内置联网搜索）
           enableTranslation: enableTranslation.value,
           translationConfig: translationConfig.value,
         },
