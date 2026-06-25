@@ -28,15 +28,6 @@
         <MainQuestionPrompt v-if="showRecommendation" @recommendation-click="handleRecommendationClick" />
       </main>
 
-      <!-- 确认操作栏 -->
-      <div v-if="confirmAction" class="confirm-bar">
-        <div class="confirm-message">{{ confirmAction.confirmMessage }}</div>
-        <div class="confirm-actions">
-          <button class="confirm-btn confirm-yes" @click="confirmActionFn">确认删除</button>
-          <button class="confirm-btn confirm-no" @click="cancelActionFn">取消</button>
-        </div>
-      </div>
-
       <!-- 输入区域 -->
       <ChatInputSection
         v-model="userInput"
@@ -96,7 +87,6 @@
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
   const showScrollToBottom = ref(false);
   const showRecommendation = ref(true);
-  const confirmAction = ref<any>(null);
 
   // 新增：是否为程序触发的滚动
   const isProgrammaticScroll = ref(false);
@@ -509,11 +499,6 @@
           if (data.output?.session_id) {
             sessionId = data.output.session_id;
           }
-
-          // 检测确认操作
-          if (data.confirmAction) {
-            confirmAction.value = data.confirmAction;
-          }
         } catch (e) {
           console.warn('解析数据失败，跳过数据块:', dataStr);
         }
@@ -648,21 +633,6 @@
     nextTick(() => {
       sendMessage();
     });
-  };
-
-  // 确认/取消操作
-  const confirmActionFn = async () => {
-    confirmAction.value = null;
-    userInput.value = '确认';
-    await nextTick();
-    sendMessage();
-  };
-
-  const cancelActionFn = async () => {
-    confirmAction.value = null;
-    userInput.value = '取消';
-    await nextTick();
-    sendMessage();
   };
 
   // 简化消息监听逻辑，避免冲突
@@ -876,54 +846,5 @@
       bottom: 70px;
       right: 10px;
     }
-  }
-
-  .confirm-bar {
-    padding: 0.75rem 1rem;
-    background: var(--bl-input-noBorder-bg-color);
-    border-top: 1px solid var(--card-border-color);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    flex-shrink: 0;
-  }
-
-  .confirm-message {
-    font-size: 0.8125rem;
-    color: var(--text-color);
-    line-height: 1.4;
-    flex: 1;
-  }
-
-  .confirm-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-shrink: 0;
-  }
-
-  .confirm-btn {
-    padding: 0.375rem 0.875rem;
-    border: none;
-    border-radius: 0.5rem;
-    font-size: 0.8125rem;
-    cursor: pointer;
-    font-weight: 600;
-    transition: opacity 0.2s;
-  }
-
-  .confirm-btn:hover {
-    opacity: 0.85;
-  }
-
-  .confirm-yes {
-    background: #dc2626;
-    color: #fff;
-  }
-
-  .confirm-no {
-    background: var(--background-color);
-    color: var(--text-color);
-    border: 1px solid var(--card-border-color);
   }
 </style>
