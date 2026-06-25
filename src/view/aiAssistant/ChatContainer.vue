@@ -411,27 +411,25 @@
     const accumulatedContent = ref(''); // 累积的完整内容
     const displayedContent = ref(''); // 当前显示的内容（逐字增加）
     let typingTimer: number | null = null;
-    let typewriterQueue: string[] = []; // 打字队列
     let isTyping = false; // 是否正在打字
 
-    // 打字机效果函数
+    // 打字机效果函数（差额驱动：持续比较 accumulated vs displayed 的差额，从不停止重启）
     const startTypewriter = async () => {
-      if (isTyping) {
-        return; // 如果正在打字，等待当前打字完成
-      }
+      if (isTyping) return;
 
       isTyping = true;
 
-      while (typewriterQueue.length > 0) {
-        const textToType = typewriterQueue.shift();
-        if (!textToType) continue;
+      while (true) {
+        // 被新请求取代时立即停止
+        if (activeRequestId !== thisRequestId) break;
+        if (!isLoading.value) break; // 如果响应被停止，退出打字
 
-        for (let i = 0; i < textToType.length; i++) {
-          // 被新请求取代时立即停止
-          if (activeRequestId !== thisRequestId) break;
-          if (!isLoading.value) break; // 如果响应被停止，退出打字
+        const disLen = displayedContent.value.length;
+        const accLen = accumulatedContent.value.length;
 
-          displayedContent.value += textToType[i];
+        if (disLen < accLen) {
+          // 有差额：打下一个字符
+          displayedContent.value = accumulatedContent.value.slice(0, disLen + 1);
           messages.value[currentMessageIndex].content = displayedContent.value;
 
           // 只有在用户没有干预时才自动滚动
@@ -443,6 +441,11 @@
           // 控制打字速度
           await new Promise((resolve) => {
             typingTimer = window.setTimeout(resolve, TYPING_SPEED);
+          });
+        } else {
+          // 没有差额：短暂休眠再检查（不停止循环，避免 chunk 间重启间隙）
+          await new Promise((resolve) => {
+            typingTimer = window.setTimeout(resolve, 50);
           });
         }
       }
@@ -456,9 +459,8 @@
       if (activeRequestId !== thisRequestId) return;
 
       accumulatedContent.value += content;
-      typewriterQueue.push(content);
 
-      // 如果没有正在打字，启动打字机
+      // 如果没有正在打字，启动打字机（仅首次启动，之后持续运行不停止）
       if (!isTyping) {
         startTypewriter();
       }
@@ -587,7 +589,7 @@
       const waitForTypewriter = () => {
         return new Promise((resolve) => {
           const checkInterval = setInterval(() => {
-            if (!isTyping && typewriterQueue.length === 0) {
+            if (displayedContent.value.length >= accumulatedContent.value.length) {
               clearInterval(checkInterval);
               resolve(true);
             }
