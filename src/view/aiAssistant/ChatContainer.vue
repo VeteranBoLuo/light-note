@@ -296,6 +296,7 @@
 
   // 暂停响应
   const stopResponse = () => {
+    if (!isLoading.value) return; // 已完成的消息不加暂停标记
     if (abortController.value) {
       abortController.value.abort();
       abortController.value = null;
