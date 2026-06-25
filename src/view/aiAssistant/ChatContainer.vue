@@ -650,19 +650,37 @@
     });
   };
 
-  // 确认/取消操作
+  // 确认/取消操作（非流式，直接发 API）
   const confirmActionFn = async () => {
+    const action = confirmAction.value;
     confirmAction.value = null;
-    userInput.value = '确认';
-    await nextTick();
-    sendMessage();
+    try {
+      const { data } = await apiBasePost('/api/chat/agent', {
+        message: '确认',
+        sessionId,
+        stream: false,
+      });
+      if (data?.data?.response) {
+        messages.value.push({ role: 'assistant', content: data.data.response, timestamp: new Date() });
+        await nextTick();
+        scrollToBottom('smooth');
+      }
+    } catch (e) {
+      console.warn('确认操作失败:', e);
+    }
   };
 
   const cancelActionFn = async () => {
     confirmAction.value = null;
-    userInput.value = '取消';
-    await nextTick();
-    sendMessage();
+    try {
+      await apiBasePost('/api/chat/agent', {
+        message: '取消',
+        sessionId,
+        stream: false,
+      });
+    } catch (e) {
+      console.warn('取消操作失败:', e);
+    }
   };
 
   // 简化消息监听逻辑，避免冲突
