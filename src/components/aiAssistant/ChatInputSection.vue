@@ -16,6 +16,7 @@
       ></textarea>
       <div class="input-actions">
         <TranslationToggle
+          v-if="showTranslation"
           :enableTranslation="enableTranslation"
           :translationConfig="translationConfig"
           @update:enableTranslation="$emit('update:enableTranslation', $event)"
@@ -47,6 +48,7 @@
   const props = defineProps<{
     modelValue: string;
     isLoading: boolean;
+    showTranslation: boolean;
     enableTranslation: boolean;
     translationConfig: { source: string; target: string };
     isMobile: boolean;

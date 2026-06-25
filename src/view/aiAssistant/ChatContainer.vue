@@ -32,6 +32,7 @@
       <ChatInputSection
         v-model="userInput"
         :is-loading="isLoading"
+        :show-translation="user.role === 'root'"
         :enable-translation="enableTranslation"
         :translation-config="translationConfig"
         :is-mobile="bookmark.isMobile"
