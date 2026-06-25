@@ -412,6 +412,7 @@
     const displayedContent = ref(''); // 当前显示的内容（逐字增加）
     let typingTimer: number | null = null;
     let isTyping = false; // 是否正在打字
+    let wakeResolver: (() => void) | null = null; // 唤醒休眠中的打字机
 
     // 打字机效果函数（差额驱动：持续比较 accumulated vs displayed 的差额，从不停止重启）
     const startTypewriter = async () => {
@@ -443,9 +444,13 @@
             typingTimer = window.setTimeout(resolve, TYPING_SPEED);
           });
         } else {
-          // 没有差额：短暂休眠再检查（不停止循环，避免 chunk 间重启间隙）
-          await new Promise((resolve) => {
-            typingTimer = window.setTimeout(resolve, 50);
+          // 没有差额：等待新内容到达或超时后重新检查
+          await new Promise<void>((resolve) => {
+            wakeResolver = resolve;
+            typingTimer = window.setTimeout(() => {
+              if (wakeResolver === resolve) wakeResolver = null;
+              resolve();
+            }, 50);
           });
         }
       }
@@ -463,6 +468,12 @@
       // 如果没有正在打字，启动打字机（仅首次启动，之后持续运行不停止）
       if (!isTyping) {
         startTypewriter();
+      }
+
+      // 新内容到了，唤醒睡眠中的打字机，不必等 50ms 超时
+      if (wakeResolver) {
+        wakeResolver();
+        wakeResolver = null;
       }
     };
 
