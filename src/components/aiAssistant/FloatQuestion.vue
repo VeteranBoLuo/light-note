@@ -212,6 +212,8 @@
 
   // 生命周期（保持不变）
   onMounted(() => {
+    // 预热智能助手 chunk，减少首次点击打开延迟
+    import('@/view/aiAssistant/ChatContainer.vue').catch(() => {});
     document.addEventListener('keydown', handleKeydown);
     schedulePeek();
   });
