@@ -9,7 +9,7 @@
       name="modal-slide"
       @after-leave="onModalLeave"
     >
-      <div v-if="isOpen" class="question-modal glassmorphism">
+      <div v-show="isOpen" class="question-modal glassmorphism">
         <!-- 拖拽手柄区域 -->
         <div class="modal-header drag-handle">
           <div class="header-content">
