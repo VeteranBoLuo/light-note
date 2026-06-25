@@ -190,6 +190,7 @@
   }
 
   function openSuggest() {
+    if (suggestVisible.value) return;
     suggestVisible.value = true;
     ensureData(true);
   }
