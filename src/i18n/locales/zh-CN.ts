@@ -537,7 +537,7 @@ export default {
     trashContent: '回收站里有什么？',
     storageUsage: '我的云空间用了多少？',
     quickNote: '帮我记个笔记：明天十点开会',
-    addTag: '帮我把"AI规范"笔记加上重要标签',
+    addTag: '帮我创建一个叫"示例"的标签',
     restoreTrash: '帮我恢复昨天删掉的书签',
     crossSearch: '查一下关于"设计"的书签和笔记',
     bookmarkTagUsage: '书签和标签怎么用？',
