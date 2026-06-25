@@ -227,6 +227,8 @@
   // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
   const handleScroll = () => {
     if (!messagesContainer.value) return;
+    // 程序触发的平滑滚动动画帧不处理，防止误判为用户行为
+    if (isProgrammaticScroll.value) return;
 
     const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
     const scrollPosition = scrollHeight - scrollTop - clientHeight;
