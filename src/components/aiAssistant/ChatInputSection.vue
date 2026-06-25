@@ -16,7 +16,7 @@
       ></textarea>
       <div class="input-actions">
         <TranslationToggle
-          v-if="!useInternetSearch && !enableThinking"
+          v-if="!useInternetSearch"
           :enableTranslation="enableTranslation"
           :translationConfig="translationConfig"
           @update:enableTranslation="$emit('update:enableTranslation', $event)"
@@ -31,16 +31,6 @@
         >
           <svg-icon size="14" :src="icon.ai.internet" />
           {{ t('ai.internetSearch') }}
-        </button>
-        <button
-          v-if="!enableTranslation"
-          class="search-btn"
-          @click="toggleThinking"
-          :class="{ active: enableThinking }"
-          :title="t('ai.deepThinking')"
-        >
-          <svg-icon size="14" :src="icon.ai.thinking" />
-          {{ t('ai.deepThinking') }}
         </button>
         <button
           @click="isLoading ? stopFn() : sendFn()"
@@ -69,14 +59,12 @@
     modelValue: string;
     isLoading: boolean;
     useInternetSearch: boolean;
-    enableThinking: boolean;
     enableTranslation: boolean;
     translationConfig: { source: string; target: string };
     isMobile: boolean;
     sendFn: () => void;
     stopFn: () => void;
     toggleInternetSearch: () => void;
-    toggleThinking: () => void;
   }>();
 
   const emit = defineEmits<{

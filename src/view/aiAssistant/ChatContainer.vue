@@ -33,14 +33,12 @@
         v-model="userInput"
         :is-loading="isLoading"
         :use-internet-search="useInternetSearch"
-        :enable-thinking="enableThinking"
         :enable-translation="enableTranslation"
         :translation-config="translationConfig"
         :is-mobile="bookmark.isMobile"
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
         :toggle-internet-search="toggleInternetSearch"
-        :toggle-thinking="toggleThinking"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
       />
@@ -84,7 +82,6 @@
   const isLoading = ref(false);
   const messagesContainer = ref<HTMLElement | null>(null);
   const useInternetSearch = ref(false);
-  const enableThinking = ref(false);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
 
@@ -180,27 +177,15 @@
     useInternetSearch.value = !useInternetSearch.value;
   };
 
-  // 切换深度思考
-  const toggleThinking = () => {
-    enableThinking.value = !enableThinking.value;
-  };
-
-  // 监听翻译状态，当启用翻译时禁用联网和深度思考
+  // 监听翻译状态，当启用翻译时禁用联网
   watch(enableTranslation, (newVal) => {
     if (newVal) {
       useInternetSearch.value = false;
-      enableThinking.value = false;
     }
   });
 
   // 监听联网和深度思考状态，当启用时禁用翻译
   watch(useInternetSearch, (newVal) => {
-    if (newVal) {
-      enableTranslation.value = false;
-    }
-  });
-
-  watch(enableThinking, (newVal) => {
     if (newVal) {
       enableTranslation.value = false;
     }
@@ -562,7 +547,6 @@
           stream: true,
           sessionId: sessionId,
           // useInternetSearch: 暂不支持（DeepSeek Flash 无内置联网搜索）
-          enableThinking: enableThinking.value,
           enableTranslation: enableTranslation.value,
           translationConfig: translationConfig.value,
         },
