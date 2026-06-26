@@ -6,6 +6,7 @@
           v-model:value="searchValue"
           :placeholder="t('help.searchPlaceholder')"
           class="help-search-input"
+          clearable
           id="ref2"
         >
           <template #prefix>
@@ -25,15 +26,51 @@
         </BList>
       </div>
 
+      <!-- 搜索模式：展示搜索结果列表（未从结果中选具体文章时） -->
+      <div v-if="isSearching && !selectedFromSearch" class="help-editor search-results-panel">
+        <div class="search-results-header">
+          <span class="search-results-count">{{ t('help.searchResults', { count: searchResults.length }) }}</span>
+          <span class="search-results-hint" v-if="searchResults.length === 0">{{ t('help.searchEmpty') }}</span>
+        </div>
+        <div
+          v-for="result in searchResults"
+          :key="result.id"
+          class="search-result-card"
+          @click="selectSearchResult(result)"
+        >
+          <div class="search-result-icon">📄</div>
+          <div class="search-result-body">
+            <div class="search-result-title" v-html="highlightText(result.title, searchValue)"></div>
+            <div class="search-result-snippets">
+              <div
+                v-for="(snippet, si) in result.snippets"
+                :key="si"
+                class="search-result-snippet"
+                v-html="highlightText(snippet, searchValue)"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 正常文章浏览模式 -->
       <div
+        v-else
         id="view-body"
         class="help-editor"
-        :class="{ 'help-editor--with-outline': !bookmark.isMobile && helpOutline.length }"
-        @scroll="syncActiveOutline"
-        v-html="renderedContent"
+        :class="{
+          'help-editor--with-outline': !bookmark.isMobile && helpOutline.length && !selectedFromSearch,
+          'help-editor--search-active': selectedFromSearch,
+        }"
+        @scroll="!selectedFromSearch ? syncActiveOutline : undefined"
       >
+        <div v-if="selectedFromSearch" class="search-back-bar" @click="backToSearchResults">
+          <span class="search-back-icon">←</span>
+          <span class="search-back-text">{{ t('help.backToResults') }}</span>
+        </div>
+        <div v-if="selectedFromSearch" class="search-content-scroll" v-html="renderedContent"></div>
+        <div v-else v-html="renderedContent"></div>
       </div>
-      <div v-if="helpOutline.length" :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']">
+      <div v-if="!isSearching && helpOutline.length" :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']">
         <div class="help-outline-title">{{ t('help.outline') }}</div>
         <button
           v-for="heading in helpOutline"
@@ -52,7 +89,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BList from '@/components/base/BasicComponents/BList.vue';
   import icon from '@/config/icon.ts';
@@ -74,14 +111,16 @@
 
 <h3>✨ 核心功能</h3>
 <ul>
-  <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述，支持 Excel / HTML 格式导入导出</li>
+  <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述；支持 Excel / HTML 格式导入导出，批量编辑标签</li>
   <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
-  <li><strong>笔记库</strong>：富文本编辑器支持多级标题与代码块；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；支持导出为 PDF / HTML / Markdown</li>
+  <li><strong>笔记库</strong>：支持 HTML 富文本 / Markdown 双模式编辑器；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；可导出为 PDF / HTML / Markdown</li>
   <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
   <li><strong>资源中心</strong>：导航栏全局搜索，一键检索书签、笔记、文件和标签，支持按类型筛选；按 <code>/</code> 键可快速唤起搜索</li>
-  <li><strong>轻笺智域</strong>：内置 AI 对话助手，支持联网搜索、深度思考、多语言翻译，以及常见功能问题快捷问答</li>
+  <li><strong>回收站</strong>：删除的书签、笔记、文件统一进入回收站，30 天内可随时恢复，过期自动清理</li>
+  <li><strong>轻笺智域</strong>：内置 AI 对话助手，可查询书签/笔记/文件数据、搜索帮助文档、多语言翻译，以及常见功能问题快捷问答</li>
   <li><strong>工作台</strong>：聚合书签/笔记/文件总数、7 天活跃趋势、高频书签与标签热度排行，快捷操作一步直达</li>
 </ul>
+<p>更多功能：<b>键盘快捷键</b>（<code>/</code> 快速搜索、拖拽排序等）、<b>移动端</b>专属界面、<b>GitHub 快捷登录</b>，助你高效管理知识。</p>
 
 <h3>🖥 多端体验</h3>
 <p>轻笺全面适配<b>PC、手机和平板</b>，各端界面与交互均做了针对性优化，数据云端同步，随时随地访问您的知识库。</p>
@@ -96,7 +135,7 @@
 <ol>
   <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
   <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
-  <li>打开<b>笔记库</b>新建笔记，用标签关联相关知识</li>
+  <li>打开<b>笔记库</b>新建笔记（支持 HTML 或 Markdown），用标签关联相关知识</li>
   <li>使用<b>云空间</b>上传文件，为文件关联标签实现分类</li>
   <li>在导航栏搜索框输入关键词，一键定位任何资源</li>
 </ol>
@@ -117,14 +156,16 @@
 
 <h3>✨ Core Features</h3>
 <ul>
-  <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats</li>
+  <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats; batch tag editing</li>
   <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
-  <li><strong>Note Library</strong>: Rich text editor with multi-level headings and code blocks; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
+  <li><strong>Note Library</strong>: Dual-mode editor supporting HTML rich text and Markdown; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
   <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
   <li><strong>Resource Center</strong>: Global search from the navigation bar — find bookmarks, notes, files, and tags in one place; filter by type; press <code>/</code> to quickly activate search</li>
-  <li><strong>Light Note AI</strong>: Built-in AI chat assistant with web search, deep thinking, multi-language translation, and quick answers to common feature questions</li>
+  <li><strong>Trash</strong>: Deleted bookmarks, notes, and files go to the trash for 30 days — recover anytime before automatic cleanup</li>
+  <li><strong>Light Note AI</strong>: Built-in AI chat assistant for querying bookmarks/notes/files, searching help docs, multi-language translation, and quick answers to common feature questions</li>
   <li><strong>Workbench</strong>: Aggregate bookmark/note/file totals, 7-day activity trends, top bookmarks and tag popularity rankings, and one-click quick actions</li>
 </ul>
+<p>More features: <b>Keyboard shortcuts</b> (<code>/</code> quick search, drag & drop sorting, etc.), <b>mobile</b> optimized interface, <b>GitHub quick login</b>.</p>
 
 <h3>🖥 Multi-Device Experience</h3>
 <p>Light Note is fully optimized for <b>PC, mobile, and tablet</b>, with tailored interfaces and interactions for each device. Your data syncs via the cloud, so you can access your knowledge base anytime, anywhere.</p>
@@ -239,6 +280,94 @@
       });
     }
     return serverOptions.value;
+  });
+
+  /** 是否处于搜索模式 */
+  const isSearching = computed(() => searchValue.value.trim().length > 0);
+
+  /** 是否从搜索结果中选中了具体文章 */
+  const selectedFromSearch = ref(false);
+
+  /** 从 HTML 中提取纯文本 */
+  function stripHtml(html: string): string {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+  }
+
+  /** 在文本中高亮关键词（返回安全 HTML） */
+  function highlightText(text: string, keyword: string): string {
+    if (!keyword?.trim()) return text;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+  }
+
+  /** 从纯文本中提取匹配关键词的上下文片段 */
+  function findSnippets(text: string, keyword: string, contextChars = 80, maxSnippets = 2): string[] {
+    if (!keyword?.trim()) return [];
+    const lower = text.toLowerCase();
+    const kw = keyword.toLowerCase();
+    const snippets: string[] = [];
+    let pos = 0;
+    while ((pos = lower.indexOf(kw, pos)) !== -1 && snippets.length < maxSnippets) {
+      const start = Math.max(0, pos - contextChars);
+      const end = Math.min(text.length, pos + kw.length + contextChars);
+      let snippet = text.slice(start, end);
+      if (start > 0) snippet = '…' + snippet;
+      if (end < text.length) snippet = snippet + '…';
+      snippets.push(snippet);
+      pos = pos + kw.length;
+    }
+    return snippets;
+  }
+
+  /** 全文搜索结果（标题+正文匹配，按分数排序） */
+  const searchResults = computed(() => {
+    const kw = searchValue.value.trim();
+    if (!kw) return [];
+    return serverOptions.value
+      .map((item) => {
+        const titleText = item.title || '';
+        const contentText = stripHtml(item.content || '');
+        const titleLower = titleText.toLowerCase();
+        const contentLower = contentText.toLowerCase();
+        const kwLower = kw.toLowerCase();
+
+        const titleMatch = titleLower.includes(kwLower);
+        const snippets = titleMatch ? [] : findSnippets(contentLower, kwLower);
+        const contentMatch = snippets.length > 0;
+
+        if (!titleMatch && !contentMatch) return null;
+
+        // 分数：标题命中 10 分，正文每段 3 分
+        const score = (titleMatch ? 10 : 0) + snippets.length * 3;
+        return {
+          ...item,
+          score,
+          snippets: titleMatch ? [findSnippets(contentLower, kwLower, 120, 1).pop() || ''] : snippets,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+      .sort((a, b) => b.score - a.score);
+  });
+
+  /** 点击搜索结果 → 加载文章，保持搜索词 */
+  function selectSearchResult(result: any) {
+    selectedFromSearch.value = true;
+    logItem(result);
+  }
+
+  /** 返回搜索结果列表 */
+  function backToSearchResults() {
+    selectedFromSearch.value = false;
+  }
+
+  /** 搜索词变化时重置选中状态 */
+  watch(searchValue, () => {
+    if (!searchValue.value.trim()) {
+      selectedFromSearch.value = false;
+    }
   });
 
   function setupClickListener() {
@@ -446,4 +575,112 @@
       flex: 1 1 auto;
     }
   }
+
+  /* ===== 搜索结果面板 ===== */
+  .search-results-panel {
+    padding: 20px;
+    overflow-y: auto;
+  }
+  .search-results-header {
+    font-size: 14px;
+    color: var(--desc-color);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--card-border-color);
+  }
+  .search-results-hint {
+    margin-left: 8px;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+  .search-result-card {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 8px;
+    border: 1px solid var(--card-border-color);
+  }
+  .search-result-card:hover {
+    background: var(--bl-input-noBorder-bg-color);
+    border-color: var(--primary-color);
+  }
+  .search-result-icon {
+    flex: 0 0 auto;
+    font-size: 20px;
+    line-height: 1.4;
+  }
+  .search-result-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .search-result-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 6px;
+    line-height: 1.5;
+  }
+  .search-result-snippets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .search-result-snippet {
+    font-size: 13px;
+    color: var(--desc-color);
+    line-height: 1.6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  mark.search-highlight {
+    background: color-mix(in srgb, var(--primary-color) 30%, transparent);
+    color: var(--text-color);
+    padding: 1px 2px;
+    border-radius: 2px;
+  }
+  .search-result-title mark.search-highlight {
+    background: color-mix(in srgb, var(--primary-color) 35%, transparent);
+    font-weight: 700;
+  }
+
+  /* ===== 搜索结果 → 文章 → 返回按钮 ===== */
+  .help-editor--search-active {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+  }
+  .search-back-bar {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    cursor: pointer;
+    color: var(--primary-color);
+    font-size: 14px;
+    transition: background 0.15s;
+    user-select: none;
+    border-bottom: 1px solid var(--card-border-color);
+  }
+  .search-back-bar:hover {
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  }
+  .search-back-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+  .search-content-scroll {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+  }
+
+  /* ===== 搜索框清除按钮 ===== */
 </style>

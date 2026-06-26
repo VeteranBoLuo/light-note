@@ -714,6 +714,9 @@ export default {
   },
   help: {
     searchPlaceholder: 'Please search for questions',
+    searchResults: 'Found {count} results',
+    searchEmpty: 'No results found, try different keywords',
+    backToResults: 'Back to results',
     title: 'Help Center',
     outline: 'Outline',
     introTitle: 'Welcome to Help Center',

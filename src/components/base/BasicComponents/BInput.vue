@@ -41,9 +41,10 @@
     <div v-if="hasPrefixSlot" class="prefix-icon">
       <slot name="prefix"> </slot>
     </div>
-    <div v-if="hasSuffixSlot" class="suffix-icon">
+    <div v-if="hasSuffixSlot && !showClearBtn" class="suffix-icon">
       <slot name="suffix"> </slot>
     </div>
+    <div v-if="showClearBtn" class="input-clear-btn" @click.stop="handleClear">✕</div>
   </div>
 </template>
 
@@ -63,6 +64,7 @@
       theme?: 'al-day' | '';
       rows?: number;
       maxlength?: number | string;
+      clearable?: boolean;
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),
@@ -72,6 +74,7 @@
       height: '32px',
       theme: '',
       maxlength: '',
+      clearable: false,
       rows: 4,
     },
   );
@@ -112,6 +115,13 @@
     }
     return '';
   });
+
+  const showClearBtn = computed(() => props.clearable && !!value.value);
+
+  function handleClear() {
+    value.value = '';
+    emit('input', '');
+  }
 </script>
 <style lang="less" scoped>
   .input-container {
@@ -189,5 +199,28 @@
     border: 1px solid var(--card-border-color) !important;
     background-color: var(--background-color) !important;
     color: var(--text-color) !important;
+  }
+
+  .input-clear-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--desc-color);
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
+    z-index: 1;
+  }
+  .input-clear-btn:hover {
+    background: var(--bl-input-noBorder-hover-bg-color);
+    color: var(--text-color);
   }
 </style>

@@ -705,6 +705,9 @@ export default {
   },
   help: {
     searchPlaceholder: '请搜索问题',
+    searchResults: '找到 {count} 条结果',
+    searchEmpty: '未找到相关内容，试试其他关键词',
+    backToResults: '返回搜索结果',
     title: '帮助中心',
     outline: '内容大纲',
     introTitle: '欢迎来到帮助中心',
