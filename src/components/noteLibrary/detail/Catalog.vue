@@ -21,7 +21,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { bookmarkStore, noteStore } from '@/store';
   import { customTimer } from '@/utils/common.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -29,13 +29,40 @@
   const bookmark = bookmarkStore();
   const props = defineProps<{
     content: string;
+    noteType?: string;
   }>();
+  const isMdMode = computed(() => props.noteType === 'markdown');
   const note = noteStore();
   const activeHeading = ref<number | null>(null);
   let observer: IntersectionObserver | null = null;
   let manualScrolling = false;
 
   const scrollToHeading = async (index: number) => {
+    if (isMdMode.value) {
+      // MD 模式：聚焦到 textarea 对应位置（粗略定位到标题行）
+      const mdTextarea = document.querySelector<HTMLTextAreaElement>('.md-textarea');
+      if (!mdTextarea) return;
+      const headings = note.headings;
+      if (!headings[index]) return;
+      activeHeading.value = index;
+      // 在 textarea 中搜索第 index 个标题，移动到附近
+      const lines = mdTextarea.value.split('\n');
+      let lineCount = 0;
+      let hCount = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^#{1,6}\s/.test(lines[i])) {
+          if (hCount === index) {
+            lineCount = i;
+            break;
+          }
+          hCount++;
+        }
+      }
+      const lineHeight = 20;
+      mdTextarea.focus();
+      mdTextarea.scrollTop = Math.max(0, lineCount * lineHeight - 100);
+      return;
+    }
     manualScrolling = true;
     activeHeading.value = index;
     if (bookmark.screenWidth < 1500) {
@@ -51,6 +78,53 @@
   const setupScrollSpy = () => {
     if (observer) observer.disconnect();
     if (!note.headings.length) return;
+
+    // MD 模式：监听预览区
+    if (isMdMode.value) {
+      const previewPane = document.querySelector('.md-preview');
+      if (!previewPane) return;
+      const hTags = previewPane.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      if (!hTags.length) return;
+      const entries = new Map<Element, number>();
+      // 把预览区的 h 标签和目录的 heading 索引对应起来
+      let hIdx = 0;
+      hTags.forEach((el) => {
+        // 找第 hIdx 个有文本的头部
+        while (hIdx < note.headings.length) {
+          const mdText = note.headings[hIdx].text;
+          const domText = (el.textContent || '').trim();
+          if (domText.includes(mdText) || mdText.includes(domText)) {
+            entries.set(el, hIdx);
+            hIdx++;
+            return;
+          }
+          hIdx++;
+        }
+      });
+      observer = new IntersectionObserver(
+        (observed) => {
+          if (manualScrolling) return;
+          const visible: { index: number; top: number }[] = [];
+          observed.forEach((entry) => {
+            if (entry.isIntersecting && entries.has(entry.target)) {
+              visible.push({
+                index: entries.get(entry.target)!,
+                top: entry.boundingClientRect.top,
+              });
+            }
+          });
+          if (!visible.length) return;
+          visible.sort((a, b) => a.top - b.top);
+          const best = visible.find((v) => v.top > 0) || visible[0];
+          activeHeading.value = best.index;
+        },
+        { root: previewPane, rootMargin: '-10px 0px -40% 0px', threshold: 0 },
+      );
+      hTags.forEach((el) => observer!.observe(el));
+      return;
+    }
+
+    // HTML 模式：原有逻辑
     const scrollContainer = document.querySelector('.note-editor-scroll');
     if (!scrollContainer) return;
     const entries = new Map<Element, number>();

@@ -8,11 +8,15 @@
         :isStartEdit="isStartEdit"
         @focusout="titleBlur"
         :note="note"
+        :note-type="note.type"
+        :has-backup="hasSwitchBackup"
         @del="delNote"
         @save="clickSaveNote"
+        @switch-mode="triggerEditorSwitch"
+        @undo-switch="triggerEditorUndo"
       />
       <div class="note-body">
-        <Catalog class="catalog-panel" :content="note.content" />
+        <Catalog class="catalog-panel" :content="note.content" :note-type="note.type" />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
             <a-input
@@ -27,6 +31,9 @@
             ref="editorRef"
             class="editor-component"
             v-model:content="note.content"
+            :type="note.type"
+            @update:type="note.type = $event"
+            @switch-backup-change="hasSwitchBackup = $event"
             :readonly="readonly"
             :note-id="note.id"
             @ready="refreshCatalog"
@@ -64,8 +71,23 @@
     lastTitle: DEFAULT_NOTE_TITLE,
     content: DEFAULT_NOTE_CONTENT,
     createBy: '',
+    type: 'html',
   });
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
+  const hasSwitchBackup = ref(false);
+
+  function triggerEditorSwitch() {
+    // Editor.vue 的 triggerModeSwitch 会自己处理 Alert 确认
+    if (editorRef.value?.triggerModeSwitch) {
+      editorRef.value.triggerModeSwitch();
+    }
+  }
+
+  function triggerEditorUndo() {
+    if (editorRef.value?.triggerUndoSwitch) {
+      editorRef.value.triggerUndoSwitch();
+    }
+  }
 
   provide('note', note);
   provide('triggerSave', () => saveFunc());
@@ -169,7 +191,7 @@
   }
 
   function refreshCatalog() {
-    nStore.generateTOC();
+    nStore.generateTOC(note.content, note.type);
   }
 
   async function saveNote(isMsg?: boolean) {
@@ -274,7 +296,7 @@
       router.back();
     }
   }
-  const isReady = ref(router.currentRoute.value.params.id === 'add');
+  const isReady = ref(false);
   const a = ref();
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -316,8 +338,14 @@
           );
         });
     } else {
-      isReady.value = true;
       nodeType.value = 'add';
+      // 从 query 读取类型，默认 html
+      const qType = router.currentRoute.value.query.type;
+      note.type = qType === 'markdown' ? 'markdown' : 'html';
+      if (note.type === 'markdown') {
+        note.content = '';
+      }
+      isReady.value = true;
       watch(
         () => note.content,
         () => {
@@ -430,6 +458,9 @@
   }
 
   @media (max-width: 1024px) {
+    .note-body {
+      padding: 0;
+    }
     .note-body-header {
       width: calc(100% - 40px);
     }

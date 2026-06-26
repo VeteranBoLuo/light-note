@@ -57,9 +57,16 @@
 
   // 提取<h>和<p>标签等并转换为<p>标签
   const extractAndConvertTags = (htmlContent: string) => {
+    // Markdown 笔记先转换为 HTML
+    let content = htmlContent || '';
+    if (props.note?.type === 'markdown' && !content.includes('<')) {
+      // 简单处理：纯 MD 文本，只取前 200 字作为预览
+      const text = content.replace(/[#*`~>\[\]()_-]/g, ' ').replace(/\s+/g, ' ').trim();
+      return text.length > 200 ? text.substring(0, 200) + '...' : text;
+    }
     // 创建一个临时的DOM元素
     const tempElement = document.createElement('div');
-    tempElement.innerHTML = htmlContent;
+    tempElement.innerHTML = content;
 
     // 获取所有的<h>和<p>标签
     const allowedTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'span', 'div', 'pre', 'table', 'tr', 'td'];

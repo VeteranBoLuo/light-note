@@ -21,12 +21,19 @@ export default defineStore('note', {
     /**
      * 生成目录（Table of Contents）
      */
-    async generateTOC(retryCount = 6): Promise<void> {
+    async generateTOC(content?: string, type?: string): Promise<void> {
+      // Markdown 模式：从文本提取标题
+      if (type === 'markdown' && content) {
+        this.headings = extractMdHeadings(content);
+        return;
+      }
+
+      // HTML 模式：从 DOM 提取标题（原有逻辑）
       await nextTick();
       const collectHeadings = (attempt = 0) => {
         const container = document.getElementById('editor-container');
         if (!container) {
-          if (attempt < retryCount) {
+          if (attempt < 6) {
             setTimeout(() => collectHeadings(attempt + 1), 120);
             return;
           }
@@ -35,7 +42,7 @@ export default defineStore('note', {
         }
         try {
           const hTags = container.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6');
-          if (hTags.length === 0 && attempt < retryCount) {
+          if (hTags.length === 0 && attempt < 6) {
             setTimeout(() => collectHeadings(attempt + 1), 120);
             return;
           }
@@ -58,3 +65,24 @@ export default defineStore('note', {
     },
   },
 });
+
+function extractMdHeadings(md: string): Heading[] {
+  if (!md) return [];
+  const lines = md.split('\n');
+  const headings: Heading[] = [];
+  lines.forEach((line) => {
+    const match = line.match(/^(#{1,6})\s+(.+)/);
+    if (match) {
+      const level = match[1].length;
+      const text = match[2].trim();
+      // 跳过纯图片/链接的标题
+      if (!text || text.startsWith('[')) return;
+      headings.push({
+        element: document.createElement('div'), // dummy element so Catalog can read .textContent
+        text,
+        level,
+      });
+    }
+  });
+  return headings;
+}

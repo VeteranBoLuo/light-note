@@ -1,6 +1,7 @@
 <template>
-  <div class="note-library-container">
-    <div class="note-library-header" v-if="bookmark.isMobile">
+  <div class="note-library-wrapper">
+    <div class="note-library-container">
+      <div class="note-library-header" v-if="bookmark.isMobile">
       <div class="header-content">
         <div class="back-icon" @click="backRouterPage">
           <SvgIcon :src="icon.noteDetail.back" />
@@ -12,7 +13,7 @@
         <b-button
           type="primary"
           style="border-radius: 20px"
-          @click="router.push('/noteLibrary/add')"
+          @click="showNewNotePicker"
           v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
         >
           + {{ $t('note.newNote') }}
@@ -51,7 +52,7 @@
           <b-button
             type="primary"
             style="border-radius: 20px"
-            @click="router.push('/noteLibrary/add')"
+            @click="showNewNotePicker"
             v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
           >
             + {{ $t('note.newNote') }}
@@ -162,6 +163,16 @@
       </VueDraggable>
     </div>
   </div>
+
+  <!-- 新建笔记类型选择 -->
+  <ActionCardModal
+    v-model:visible="showTypePicker"
+    :mask-closable="false"
+    title="选择笔记编辑器"
+    :sections="typePickerSections"
+    :note="'后续可在编辑器右上角随时切换模式，切换时内容会自动转换格式。'"
+  />
+</div>
 </template>
 
 <script lang="ts" setup>
@@ -185,10 +196,42 @@
   import { backRouterPage } from '@/utils/common';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import ActionCardModal from '@/components/base/ActionCardModal.vue';
   const bookmark = bookmarkStore();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
+  const showTypePicker = ref(false);
+  const typePickerSections = [
+    {
+      key: 'type',
+      title: '请选择编辑模式',
+      actions: [
+        {
+          key: 'html',
+          label: 'HTML 富文本',
+          description: '所见即所得编辑器，支持表格、待办复选框、颜色等丰富样式',
+          onClick: () => {
+            showTypePicker.value = false;
+            router.push('/noteLibrary/add?type=html');
+          },
+        },
+        {
+          key: 'markdown',
+          label: 'Markdown',
+          description: '纯文本编辑器，支持实时预览，适合编写带代码块的技术文档',
+          onClick: () => {
+            showTypePicker.value = false;
+            router.push('/noteLibrary/add?type=markdown');
+          },
+        },
+      ],
+    },
+  ];
+
+  function showNewNotePicker() {
+    showTypePicker.value = true;
+  }
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
@@ -235,7 +278,9 @@
     list.map((note: any) => ({
       ...note,
       __searchTitle: (note.title || '').toLowerCase(),
-      __searchContent: toPlainText(note.content || '').toLowerCase(),
+      __searchContent: note.type === 'markdown'
+        ? (note.content || '').toLowerCase()
+        : toPlainText(note.content || '').toLowerCase(),
     }));
 
   watch(
@@ -416,6 +461,12 @@
 </script>
 
 <style lang="less" scoped>
+  .note-library-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
   .note-library-container {
     padding: 20px;
     width: 100%;

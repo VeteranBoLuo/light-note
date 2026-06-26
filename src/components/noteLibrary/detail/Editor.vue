@@ -1,17 +1,64 @@
 <template>
   <div id="editor-container" class="note-editor">
-    <div id="editor-toolbar" class="note-editor-toolbar"></div>
-    <div class="note-editor-scroll">
-      <TinyMceEditor
-        v-if="editorReady"
-        :key="editorKey"
-        v-model="content"
-        tag-name="div"
-        class="note-editor-body"
-        :init="editorInit"
-        license-key="gpl"
-      />
-    </div>
+    <!-- HTML 模式：TinyMCE -->
+    <template v-if="currentType === 'html'">
+      <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly"></div>
+      <div class="note-editor-scroll">
+        <TinyMceEditor
+          v-if="editorReady"
+          :key="editorKey"
+          v-model="content"
+          tag-name="div"
+          class="note-editor-body"
+          :init="editorInit"
+          license-key="gpl"
+        />
+      </div>
+    </template>
+
+    <!-- Markdown 模式：textarea + 预览 -->
+    <template v-else>
+      <div class="md-editor-container">
+        <div class="md-editor-toolbar" v-if="!readonly">
+          <span class="md-view-toggle">
+            <button
+              class="md-view-btn"
+              :class="{ active: mdView === 'edit' }"
+              @click="mdView = 'edit'"
+              title="仅编辑器"
+            >编辑</button>
+            <button
+              class="md-view-btn"
+              :class="{ active: mdView === 'split' }"
+              @click="mdView = 'split'"
+              title="分栏"
+            >编辑+预览</button>
+            <button
+              class="md-view-btn"
+              :class="{ active: mdView === 'preview' }"
+              @click="mdView = 'preview'"
+              title="仅预览"
+            >预览</button>
+          </span>
+        </div>
+        <div class="md-editor-body" :class="`md-view-${mdView}`">
+          <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
+            <div class="md-editor-label">编辑</div>
+            <textarea
+              class="md-textarea"
+              :value="mdContent"
+              @input="onMdInput"
+              :readonly="readonly"
+              placeholder="写 Markdown..."
+            ></textarea>
+          </div>
+          <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
+            <div class="md-editor-label">预览</div>
+            <div class="md-preview" v-html="renderedMd"></div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -39,7 +86,10 @@
   import i18n from '@/i18n';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
+  import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import TurndownService from 'turndown';
 
   const CODE_LANGUAGES = [
     { value: 'plaintext', text: 'Plain Text' },
@@ -60,11 +110,8 @@
   const props = defineProps({
     value: {
       type: String,
-      default: () => {
-        return '';
-      },
+      default: () => '',
     },
-    // 编辑器初始可编辑状态
     editable_root: {
       type: Boolean,
       default: true,
@@ -81,16 +128,204 @@
       type: String as () => 'api' | 'base64',
       default: 'api',
     },
+    type: {
+      type: String as () => 'html' | 'markdown',
+      default: 'html',
+    },
   });
 
-  const emits = defineEmits(['update:modelValue', 'setHtml', 'setNoteId', 'saveData', 'ready']);
+  const emits = defineEmits(['update:modelValue', 'setHtml', 'setNoteId', 'saveData', 'ready', 'update:type', 'switch-backup-change']);
   const content = defineModel<string>('content');
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
   const editorKey = ref(0);
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const { t } = useI18n();
+  const isMobile = computed(() => bookmark.isMobile);
+  // MD 编辑器视图：edit / split / preview
+  const mdView = ref(isMobile.value ? 'edit' : 'split');
   let visibilityObserver: IntersectionObserver | null = null;
+
+  const currentType = ref(props.type);
+  const switchBackup = ref<{ content: string; type: string } | null>(null);
+
+  // 备份状态变化时通知父组件
+  watch(switchBackup, (val) => {
+    emits('switch-backup-change', !!val);
+  }, { immediate: true });
+
+  watch(() => props.type, (val) => {
+    currentType.value = val;
+  });
+
+  // Markdown 编辑器状态
+  const mdContent = ref('');
+  let markedLib: any = null;
+  let dompurifyLib: any = null;
+
+  // Markdown 模式下初始化内容
+  watch([() => props.type, content], async ([type]) => {
+    if (type === 'markdown' && content.value && !mdContent.value) {
+      mdContent.value = content.value;
+      if (!markedLib) await ensureMdLib();
+      renderMd();
+    }
+  }, { immediate: true });
+
+  // 懒加载 marked + dompurify
+  async function ensureMdLib() {
+    if (markedLib) return;
+    const mods = await Promise.all([import('marked'), import('dompurify')]);
+    markedLib = mods[0].marked;
+    dompurifyLib = mods[1].default;
+  }
+
+  const renderedMd = ref('');
+  let mdRenderTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onMdInput(e: Event) {
+    const val = (e.target as HTMLTextAreaElement).value;
+    mdContent.value = val;
+    content.value = val;
+    debounceRenderMd();
+  }
+
+  function debounceRenderMd() {
+    if (mdRenderTimer) clearTimeout(mdRenderTimer);
+    mdRenderTimer = setTimeout(() => {
+      renderMd();
+    }, 200);
+  }
+
+  async function renderMd() {
+    if (!markedLib) await ensureMdLib();
+    try {
+      const raw = markedLib.parse(mdContent.value || '');
+      renderedMd.value = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
+    } catch {
+      renderedMd.value = '<p>渲染错误</p>';
+    }
+  }
+
+  // 切换模式
+  async function handleModeSwitch() {
+    const targetType = currentType.value === 'html' ? 'markdown' : 'html';
+    const backup = { content: content.value || '', type: currentType.value };
+
+    // 移动端直接切，不弹框、不备份
+    if (isMobile.value) {
+      await doDirectSwitch(targetType, backup);
+      return;
+    }
+
+    Alert.alert({
+      title: targetType === 'markdown' ? '切换为 Markdown 模式' : '切换为 HTML 模式',
+      content:
+        targetType === 'markdown'
+          ? '当前内容将自动转换为 Markdown 格式。\n部分富文本样式（文字颜色、待办复选框、表格样式等）可能无法完整保留。\n切换后可点击「 ↩ 撤回切换」恢复。'
+          : 'Markdown 内容将渲染为富文本格式，一般不会丢失内容。\n切换后可点击「 ↩ 撤回切换」恢复。',
+      okText: '确认切换',
+      cancelText: '取消',
+      onOk: () => doSwitch(targetType, backup),
+    });
+  }
+
+  async function doDirectSwitch(targetType: string, backup: { content: string; type: string }) {
+    currentType.value = targetType;
+    if (targetType === 'markdown') {
+      await ensureMdLib();
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced',
+      });
+      mdContent.value = turndownService.turndown(backup.content || '');
+      content.value = mdContent.value;
+      await nextTick();
+      renderMd();
+    } else {
+      await ensureMdLib();
+      const mdText = backup.content || '';
+      if (mdText.trim()) {
+        try {
+          const html = markedLib.parse(mdText);
+          content.value = dompurifyLib ? dompurifyLib.sanitize(html) : html;
+        } catch {
+          content.value = mdText;
+        }
+      } else {
+        content.value = '';
+      }
+      forceReinit();
+    }
+    emits('update:type', targetType);
+  }
+
+  async function doSwitch(targetType: string, backup: { content: string; type: string }) {
+    switchBackup.value = backup;
+    currentType.value = targetType;
+
+    if (targetType === 'markdown') {
+      // HTML → MD：用 turndown 转换
+      await ensureMdLib();
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced',
+      });
+      mdContent.value = turndownService.turndown(backup.content || '');
+      content.value = mdContent.value;
+      await nextTick();
+      renderMd();
+    } else {
+      // MD → HTML：用 marked 转换
+      await ensureMdLib();
+      const mdText = backup.content || '';
+      if (mdText.trim()) {
+        try {
+          const html = markedLib.parse(mdText);
+          content.value = dompurifyLib ? dompurifyLib.sanitize(html) : html;
+        } catch {
+          content.value = mdText;
+        }
+      } else {
+        content.value = '';
+      }
+      // 重建 TinyMCE
+      forceReinit();
+    }
+
+    emits('update:type', targetType);
+  }
+
+  function undoSwitch() {
+    if (!switchBackup.value) return;
+    const backup = switchBackup.value;
+    const targetLabel = backup.type === 'html' ? 'HTML' : 'Markdown';
+    Alert.alert({
+      title: '撤回模式切换',
+      content: `确认撤回为 ${targetLabel} 模式？撤回后会丢失当前模式下的编辑内容。`,
+      okText: '确认撤回',
+      cancelText: '取消',
+      onOk: () => doUndo(backup),
+    });
+  }
+
+  function doUndo(backup: { content: string; type: string }) {
+    switchBackup.value = null;
+
+    currentType.value = backup.type;
+
+    if (backup.type === 'html') {
+      content.value = backup.content;
+      forceReinit();
+    } else {
+      mdContent.value = backup.content;
+      content.value = backup.content;
+      if (markedLib) renderMd();
+    }
+
+    emits('update:type', backup.type);
+  }
 
   const ensureToolbar = async () => {
     await nextTick();
@@ -119,6 +354,7 @@
   const isNightTheme = computed(() => user.currentTheme === 'night');
 
   const forceReinit = async () => {
+    if (currentType.value !== 'html') return;
     editorKey.value += 1;
     editorReady.value = false;
     await nextTick();
@@ -133,6 +369,7 @@
 
   const focusToEnd = async () => {
     await nextTick();
+    if (currentType.value === 'markdown') return;
     const editor = editorRef.value;
     if (!editor) return;
     editor.focus();
@@ -147,6 +384,18 @@
 
   const replaceContentWithUndo = async (html: string) => {
     await nextTick();
+    if (currentType.value === 'markdown') {
+      // AI 返回的是 HTML，转成 MD 再插入
+      const turndownService = new TurndownService({
+        headingStyle: 'atx',
+        codeBlockStyle: 'fenced',
+      });
+      const md = turndownService.turndown(html || '');
+      mdContent.value = md;
+      content.value = md;
+      if (markedLib) renderMd();
+      return true;
+    }
     const editor = editorRef.value;
     if (!editor) return false;
     editor.undoManager?.transact(() => {
@@ -159,6 +408,9 @@
   defineExpose({
     focusToEnd,
     replaceContentWithUndo,
+    hasSwitchBackup: switchBackup,
+    triggerModeSwitch: () => handleModeSwitch(),
+    triggerUndoSwitch: () => undoSwitch(),
   });
 
   const editorInit = computed(() => ({
@@ -356,7 +608,7 @@
         onAction: () => editor.execCommand('FormatBlock', false, 'pre'),
       });
       editor.ui.registry.addMenuButton('myHeadingMenu', {
-        text: t('noteDetail.editor.headingMenu'), // 在快捷工具栏上显示的文字
+        text: t('noteDetail.editor.headingMenu'),
         fetch: function (callback) {
           const items = [
             {
@@ -518,6 +770,197 @@
     padding: 5px 10px 20px;
     min-height: 100%;
   }
+
+  /* 模式切换栏 */
+  .editor-mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--card-border-color, #e8eaf2);
+    background: var(--background-color);
+  }
+  .mode-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    height: 22px;
+    border-radius: 11px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: background 0.15s;
+    user-select: none;
+    background: var(--common-tag-bg-color, #f0f0f0);
+    color: var(--desc-color, #666);
+    &.is-markdown {
+      background: #615ced20;
+      color: #615ced;
+    }
+    &.is-html {
+      background: #00a88420;
+      color: #00a884;
+    }
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+  .undo-switch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    height: 22px;
+    border: 1px solid var(--card-border-color, #e8eaf2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    &:hover {
+      background: var(--common-tag-bg-color, #f0f0f0);
+      border-color: var(--primary-color, #615ced);
+      color: var(--primary-color, #615ced);
+    }
+  }
+
+  /* Markdown 编辑器工具栏 */
+  .md-editor-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--card-border-color, #e8eaf2);
+    background: var(--background-color);
+    flex-shrink: 0;
+  }
+  .md-view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--card-border-color, #e8eaf2);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .md-view-btn {
+    padding: 2px 10px;
+    border: none;
+    border-right: 1px solid var(--card-border-color, #e8eaf2);
+    background: transparent;
+    color: var(--desc-color, #888);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    &:last-child { border-right: none; }
+    &:hover { color: var(--text-color); background: var(--common-tag-bg-color, #f0f0f0); }
+    &.active { background: var(--primary-color, #615ced); color: #fff; }
+  }
+
+  /* Markdown 编辑器 */
+  .md-editor-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .md-editor-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
+    &.md-view-edit .md-preview-pane,
+    &.md-view-preview .md-editor-pane {
+      display: none;
+    }
+  }
+  .md-editor-pane,
+  .md-preview-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .md-editor-pane {
+    border-right: 1px solid var(--card-border-color, #e8eaf2);
+  }
+  .md-editor-label {
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--desc-color, #888);
+    border-bottom: 1px solid var(--card-border-color, #e8eaf2);
+    flex-shrink: 0;
+  }
+  .md-textarea {
+    flex: 1;
+    min-height: 0;
+    resize: none;
+    border: none;
+    outline: none;
+    padding: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    background: var(--background-color);
+    color: var(--text-color);
+    &::placeholder {
+      color: var(--desc-color, #999);
+    }
+  }
+  .md-preview {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px;
+    background: var(--background-color);
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.7;
+    h1, h2, h3, h4, h5, h6 {
+      margin: 0.6em 0 0.4em;
+    }
+    pre {
+      background: var(--common-tag-bg-color, #f6f8fa);
+      border: 1px solid var(--card-border-color, #e5e7eb);
+      border-radius: 8px;
+      padding: 10px 12px;
+      overflow: auto;
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+        font-size: 13px;
+      }
+    }
+    code {
+      background: var(--common-tag-bg-color, #f0f0f0);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      th, td {
+        border: 1px solid var(--card-border-color, #d9d9d9);
+        padding: 6px 10px;
+      }
+    }
+    blockquote {
+      border-left: 3px solid var(--primary-color, #615ced);
+      margin: 0;
+      padding: 4px 12px;
+      color: var(--desc-color, #666);
+      background: var(--common-tag-bg-color, #f9f9f9);
+      border-radius: 0 6px 6px 0;
+    }
+    img {
+      max-width: 100%;
+    }
+    ul, ol {
+      padding-left: 20px;
+    }
+  }
+
   .note-editor .tox .tox-toolbar,
   .note-editor .tox .tox-toolbar__primary,
   .note-editor .tox .tox-toolbar__overflow {
@@ -743,6 +1186,13 @@
       background-color: transparent !important;
       border: none !important;
       overflow: hidden !important;
+    }
+  }
+
+  /* 移动端 MD 视图：隐藏分栏按钮，用简单 tab */
+  @media (max-width: 1024px) {
+    .md-view-toggle .md-view-btn:nth-child(2) {
+      display: none;
     }
   }
 </style>

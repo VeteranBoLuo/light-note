@@ -48,6 +48,11 @@
   };
 
   const getDescription = (htmlContent: string) => {
+    // Markdown 笔记
+    if (props.note?.type === 'markdown' && !(htmlContent || '').includes('<')) {
+      const text = (htmlContent || '').replace(/[#*`~>\[\]()_-]/g, ' ').replace(/\s+/g, ' ').trim();
+      return text.length > 150 ? text.substring(0, 150) + '...' : text;
+    }
     // 提取文本内容作为描述
     const tempElement = document.createElement('div');
     tempElement.innerHTML = htmlContent;

@@ -28,6 +28,18 @@
       </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
+      <span class="mode-pill-group" v-if="!readonly">
+        <BTooltip title="切换编辑器模式">
+          <span class="mode-pill" :class="`is-${noteType}`" @click.stop="$emit('switchMode')">
+            {{ noteType === 'html' ? 'HTML' : 'MD' }}
+          </span>
+        </BTooltip>
+        <span v-if="hasBackup && !bookmark.isMobile" style="margin-left: 5px">
+          <BTooltip title="撤回模式切换">
+            <span class="undo-switch-btn" @click.stop="$emit('undoSwitch')">↩</span>
+          </BTooltip>
+        </span>
+      </span>
       <BTooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
         <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
@@ -87,10 +99,12 @@
     readonly: boolean;
     isStartEdit: boolean;
     note: any;
+    noteType?: string;
+    hasBackup?: boolean;
   }>();
 
   const { t } = useI18n();
-  const emit = defineEmits(['focusout', 'del', 'save']);
+  const emit = defineEmits(['focusout', 'del', 'save', 'switchMode', 'undoSwitch']);
 
   const bookmark = bookmarkStore();
 

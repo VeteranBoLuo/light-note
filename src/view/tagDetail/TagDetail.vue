@@ -152,7 +152,7 @@
             v-click-log="{ module: '标签详情', operation: `打开笔记【${note.title || '未命名文档'}】` }"
           >
             <div class="note-item-title">{{ note.title || $t('noteDetail.unnamedDoc', '未命名文档') }}</div>
-            <div class="note-item-desc" v-html="getNoteDesc(note.content)" />
+            <div class="note-item-desc" v-html="getNoteDesc(note.content, note.type)" />
             <div v-if="note.tags?.length" class="note-item-tags">
               <span
                 v-for="noteTag in note.tags"
@@ -488,8 +488,13 @@
     tagIconLoadError.value = true;
   }
 
-  function getNoteDesc(content: string) {
+  function getNoteDesc(content: string, type?: string) {
     if (!content) return '';
+    // Markdown 笔记
+    if (type === 'markdown' && !content.includes('<')) {
+      const text = content.replace(/[#*`~>\[\]()_-]/g, ' ').replace(/\s+/g, ' ').trim();
+      return text.length > 120 ? text.substring(0, 120) + '...' : text;
+    }
     const div = document.createElement('div');
     div.innerHTML = content;
     const text = div.textContent || div.innerText || '';
