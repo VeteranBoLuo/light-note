@@ -45,16 +45,18 @@
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
             <div class="md-editor-label">编辑</div>
             <textarea
+              ref="mdTextareaRef"
               class="md-textarea"
               :value="mdContent"
               @input="onMdInput"
+              @scroll="syncMdScroll('edit')"
               :readonly="readonly"
               placeholder="写 Markdown..."
             ></textarea>
           </div>
           <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
             <div class="md-editor-label">预览</div>
-            <div class="md-preview" v-html="renderedMd"></div>
+            <div ref="mdPreviewRef" class="md-preview" @scroll="syncMdScroll('preview')" v-html="renderedMd"></div>
           </div>
         </div>
       </div>
@@ -164,10 +166,43 @@
   let markedLib: any = null;
   let dompurifyLib: any = null;
 
-  // Markdown 模式下初始化内容
+  // 滚动同步
+  const mdTextareaRef = ref<HTMLTextAreaElement | null>(null);
+  const mdPreviewRef = ref<HTMLElement | null>(null);
+  let isSyncingMdScroll = false;
+
+  function syncMdScroll(source: 'edit' | 'preview') {
+    if (isSyncingMdScroll) return;
+    isSyncingMdScroll = true;
+
+    const textarea = mdTextareaRef.value;
+    const preview = mdPreviewRef.value;
+    if (!textarea || !preview) {
+      isSyncingMdScroll = false;
+      return;
+    }
+
+    if (source === 'edit') {
+      // textarea → preview：按百分比同步
+      const ratio = textarea.scrollHeight - textarea.clientHeight;
+      if (ratio > 0) {
+        preview.scrollTop = (textarea.scrollTop / ratio) * (preview.scrollHeight - preview.clientHeight);
+      }
+    } else {
+      // preview → textarea：按百分比同步
+      const ratio = preview.scrollHeight - preview.clientHeight;
+      if (ratio > 0) {
+        textarea.scrollTop = (preview.scrollTop / ratio) * (textarea.scrollHeight - textarea.clientHeight);
+      }
+    }
+
+    requestAnimationFrame(() => { isSyncingMdScroll = false; });
+  }
+
+  // Markdown 模式下同步外部内容
   watch([() => props.type, content], async ([type]) => {
-    if (type === 'markdown' && content.value && !mdContent.value) {
-      mdContent.value = content.value;
+    if (type === 'markdown' && content.value !== mdContent.value) {
+      mdContent.value = content.value || '';
       if (!markedLib) await ensureMdLib();
       renderMd();
     }
