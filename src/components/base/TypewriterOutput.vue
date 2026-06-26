@@ -162,6 +162,17 @@
     overflow: auto;
   }
 
+  .typewriter-content h1,
+  .typewriter-content h2,
+  .typewriter-content h3,
+  .typewriter-content h4,
+  .typewriter-content h5,
+  .typewriter-content h6 {
+    font-size: 1em;
+    margin: 0.5em 0 0.2em;
+    font-weight: 600;
+  }
+
   .empty {
     color: #9aa0a6;
     font-size: 12px;
