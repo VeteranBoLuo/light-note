@@ -9,6 +9,7 @@ export default {
     note: 'Note',
     cloudSpace: 'Cloud Space',
     securityCenter: 'Security Center',
+    knowledgeBase: 'Knowledge Base',
     newTag: 'New Tag',
     tagManagement: 'Tag Management',
     newBookmark: 'New Bookmark',
@@ -711,6 +712,14 @@ export default {
     statWithTagDesc: 'Bookmarks with tags',
     statNoTag: 'Uncategorized',
     statNoTagDesc: 'Bookmarks without tags',
+  },
+  knowledgeBase: {
+    searchPlaceholder: 'Search knowledge base',
+    searchResults: 'Found {count} results',
+    searchEmpty: 'No results found',
+    clearSearch: 'Clear search',
+    backToResults: 'Back to results',
+    selectHint: 'Select an item from the left to start editing',
   },
   help: {
     searchPlaceholder: 'Please search for questions',

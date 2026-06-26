@@ -39,10 +39,6 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/SimpleSql.vue'),
       },
       {
-        path: 'helpMg',
-        component: () => import('@/view/admin/components/helpMg/HelpMg.vue'),
-      },
-      {
         path: 'agentLog',
         component: () => import('@/view/admin/components/agentLog/AgentLog.vue'),
       },

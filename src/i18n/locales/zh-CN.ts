@@ -9,6 +9,7 @@ export default {
     note: '笔记',
     cloudSpace: '云空间',
     securityCenter: '安全中心',
+    knowledgeBase: '知识库',
     newTag: '新增标签',
     tagManagement: '标签管理',
     newBookmark: '新增书签',
@@ -702,6 +703,14 @@ export default {
     statWithTagDesc: '有关联标签的书签',
     statNoTag: '未分类',
     statNoTagDesc: '无关联标签的书签',
+  },
+  knowledgeBase: {
+    searchPlaceholder: '搜索知识库',
+    searchResults: '找到 {count} 条结果',
+    searchEmpty: '未找到相关内容',
+    clearSearch: '清除搜索',
+    backToResults: '返回搜索结果',
+    selectHint: '从左侧选择一个条目开始编辑',
   },
   help: {
     searchPlaceholder: '请搜索问题',

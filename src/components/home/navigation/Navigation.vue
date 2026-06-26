@@ -102,6 +102,15 @@
             @click="router.push('/securityCenter')"
             >{{ $t('navigation.securityCenter') }}
           </div>
+          <div
+            v-if="user.role === 'root'"
+            :style="{
+              color: route.path.includes('/knowledgeBase') ? '#615ced' : '',
+            }"
+            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            @click="router.push('/knowledgeBase')"
+            >{{ $t('navigation.knowledgeBase') }}
+          </div>
         </template>
       </div>
       <RightArea />
