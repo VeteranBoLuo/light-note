@@ -329,7 +329,7 @@ function getSearchSnippet(item: any, keyword: string): string {
   return highlightText(text, keyword);
 }
 
-/** 点击搜索结果 → 加载文章，清空搜索 */
+/** 点击搜索结果 → 加载文章，保留搜索状态以便返回 */
 function selectSearchResult(result: any) {
   // Auto save current editing item
   if (currentId.value && editTitle.value?.trim()) {
@@ -344,7 +344,9 @@ function selectSearchResult(result: any) {
   }
   savedSearchKeyword.value = searchKeyword.value;
   returnToSearch.value = true;
-  selectItem(item);
+  // 直接加载，不经过 selectItem（selectItem 会清空搜索）
+  currentId.value = result.id;
+  loadItem(result.id);
 }
 
 function goBackToSearch() {
