@@ -5,8 +5,8 @@
       <h2 class="kb-title">知识库</h2>
     </div>
 
-    <!-- Main body -->
-    <div class="kb-body" v-if="!isSearchMode">
+    <!-- Main body: 左栏始终显示，右栏在搜索时显示结果、不搜时显示编辑器 -->
+    <div class="kb-body">
       <!-- Left panel -->
       <div class="kb-left">
         <div class="kb-left-top">
@@ -19,31 +19,27 @@
         </div>
 
         <div class="kb-filters">
-          <select v-model="filterCategory" class="kb-filter-select" @change="loadList">
-            <option value="">全部</option>
-            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-          </select>
-          <select v-model="filterStatus" class="kb-filter-select" @change="loadList">
-            <option value="">全部状态</option>
-            <option value="public">● 公开</option>
-            <option value="internal">🔒 内部</option>
-          </select>
+          <BSelect v-model:value="filterCategory" :options="categoryFilterOptions" placeholder="全部分类" @change="loadList" class="kb-filter-select" />
+          <BSelect v-model:value="filterStatus" :options="statusFilterOptions" placeholder="全部状态" @change="loadList" class="kb-filter-select" />
         </div>
 
         <div class="kb-list">
-          <div v-for="item in listItems" :key="item.id" class="kb-list-item" :class="{ active: currentId === item.id }" @click="selectItem(item)">
-            <div class="kb-list-item-left">
-              <input type="checkbox" :checked="selectedIds.includes(item.id)" @click.stop @change="toggleSelect(item.id)" class="kb-checkbox" />
-              <div class="kb-list-item-info" @click="selectItem(item)">
-                <div class="kb-list-item-title">{{ item.title }}</div>
-                <div class="kb-list-item-meta">
-                  <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
-                  <span class="kb-category-label">{{ item.category }}</span>
+          <div v-if="isSearchMode" class="kb-search-hint">搜索中，请在右侧结果中选择</div>
+          <template v-else>
+            <div v-for="item in listItems" :key="item.id" class="kb-list-item" :class="{ active: currentId === item.id }" @click="selectItem(item)">
+              <div class="kb-list-item-left">
+                <input type="checkbox" :checked="selectedIds.includes(item.id)" @click.stop @change="toggleSelect(item.id)" class="kb-checkbox" />
+                <div class="kb-list-item-info" @click="selectItem(item)">
+                  <div class="kb-list-item-title">{{ item.title }}</div>
+                  <div class="kb-list-item-meta">
+                    <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
+                    <span class="kb-category-label">{{ item.category }}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div v-if="listItems.length === 0" class="kb-empty">暂无条目</div>
+          </template>
+          <div v-if="!isSearchMode && listItems.length === 0" class="kb-empty">暂无条目</div>
         </div>
 
         <!-- Batch action bar -->
@@ -56,66 +52,54 @@
         </div>
       </div>
 
-      <!-- Right panel -->
+      <!-- Right panel: 搜索时显示结果卡片，否则显示编辑器 -->
       <div class="kb-right">
-        <div v-if="returnToSearch" class="kb-return-bar">
-          <button class="kb-return-btn" @click="goBackToSearch">← {{ t('knowledgeBase.backToResults') }}</button>
-        </div>
-
-        <div v-if="currentItem" class="kb-editor">
-          <div class="kb-editor-top">
-            <b-input v-model:value="editTitle" placeholder="标题" class="kb-title-input" />
-            <div class="kb-editor-meta">
-              <label>分类：<select v-model="editCategory" class="kb-meta-select"><option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option></select></label>
-              <label>状态：
-                <select v-model="editStatus" class="kb-meta-select">
-                  <option value="public">● 公开</option>
-                  <option value="internal">🔒 内部</option>
-                </select>
-              </label>
-              <label>类型：
-                <select v-model="editType" class="kb-meta-select">
-                  <option value="html">HTML</option>
-                  <option value="markdown">Markdown</option>
-                </select>
-              </label>
+        <!-- 搜索结果 -->
+        <template v-if="isSearchMode && !returnToSearch">
+          <div class="kb-search-results">
+            <div class="kb-search-results-header">
+              <span class="kb-search-results-count">{{ t('knowledgeBase.searchResults', { count: searchResults.length }) }}</span>
+              <button class="kb-search-clear" @click="clearSearch">✕ {{ t('knowledgeBase.clearSearch') }}</button>
+            </div>
+            <div v-if="searchResults.length === 0" class="kb-search-empty">{{ t('knowledgeBase.searchEmpty') }}</div>
+            <div v-for="item in searchResults" :key="item.id" class="kb-search-card" @click="selectSearchResult(item)">
+              <div class="kb-search-card-icon">📄</div>
+              <div class="kb-search-card-body">
+                <div class="kb-search-card-title" v-html="highlightText(item.title, searchKeyword)"></div>
+                <div class="kb-search-card-meta">
+                  <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
+                  <span class="kb-category-label">{{ item.category }}</span>
+                </div>
+                <div class="kb-search-card-snippet" v-html="getSearchSnippet(item, searchKeyword)"></div>
+              </div>
             </div>
           </div>
-
-          <Editor v-model:content="editContent" v-model:type="editType" class="kb-editor-area" />
-
-          <div class="kb-editor-actions">
-            <b-button type="primary" @click="saveItem" :loading="saving">💾 保存</b-button>
-            <b-button type="danger" @click="deleteItem">🗑 删除</b-button>
-            <span class="kb-editor-time" v-if="currentItem.updated_at">更新于 {{ currentItem.updated_at }}</span>
+        </template>
+        <!-- 编辑器 -->
+        <template v-else>
+          <div v-if="returnToSearch" class="kb-return-bar">
+            <button class="kb-return-btn" @click="goBackToSearch">← {{ t('knowledgeBase.backToResults') }}</button>
           </div>
-        </div>
-
-        <div v-else class="kb-editor-empty">
-          <p>{{ t('knowledgeBase.selectHint') }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Search results view -->
-    <div v-else class="kb-search-results">
-      <div class="kb-search-results-header">
-        <span class="kb-search-results-count">{{ t('knowledgeBase.searchResults', { count: searchResults.length }) }}</span>
-        <button class="kb-search-clear" @click="clearSearch">✕ {{ t('knowledgeBase.clearSearch') }}</button>
-      </div>
-
-      <div v-if="searchResults.length === 0" class="kb-search-empty">{{ t('knowledgeBase.searchEmpty') }}</div>
-
-      <div v-for="item in searchResults" :key="item.id" class="kb-search-card" @click="selectSearchResult(item)">
-        <div class="kb-search-card-icon">📄</div>
-        <div class="kb-search-card-body">
-          <div class="kb-search-card-title" v-html="highlightText(item.title, searchKeyword)"></div>
-          <div class="kb-search-card-meta">
-            <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
-            <span class="kb-category-label">{{ item.category }}</span>
+          <div v-if="currentItem" class="kb-editor">
+            <div class="kb-editor-top">
+              <b-input v-model:value="editTitle" placeholder="标题" class="kb-title-input" />
+              <div class="kb-editor-meta">
+                <label class="kb-meta-label">分类：<b-input v-model:value="editCategory" placeholder="输入分类名称" class="kb-category-input" /></label>
+                <label class="kb-meta-label">状态：<BSelect v-model:value="editStatus" :options="statusOptions" class="kb-meta-select" /></label>
+                <label class="kb-meta-label">类型：<BSelect v-model:value="editType" :options="typeOptions" class="kb-meta-select" /></label>
+              </div>
+            </div>
+            <Editor v-model:content="editContent" v-model:type="editType" class="kb-editor-area" />
+            <div class="kb-editor-actions">
+              <b-button type="primary" @click="saveItem" :loading="saving">💾 保存</b-button>
+              <b-button type="danger" @click="deleteItem">🗑 删除</b-button>
+              <span class="kb-editor-time" v-if="currentItem.updated_at">更新于 {{ currentItem.updated_at }}</span>
+            </div>
           </div>
-          <div class="kb-search-card-snippet" v-html="highlightText(item.content_preview || '', searchKeyword)"></div>
-        </div>
+          <div v-else class="kb-editor-empty">
+            <p>{{ t('knowledgeBase.selectHint') }}</p>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -123,9 +107,7 @@
     <div v-if="showBatchCategory" class="kb-modal-overlay" @click.self="showBatchCategory = false">
       <div class="kb-modal">
         <h3>修改分类</h3>
-        <select v-model="batchCategoryValue" class="kb-meta-select" style="width:100%;margin:12px 0">
-          <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-        </select>
+        <BSelect v-model:value="batchCategoryValue" :options="categoryOptions" style="width:100%;margin:12px 0" />
         <div class="kb-modal-actions">
           <b-button @click="showBatchCategory = false">取消</b-button>
           <b-button type="primary" @click="confirmBatchCategory">确定</b-button>
@@ -142,6 +124,7 @@ import { useRouter, useRoute } from 'vue-router';
 import icon from '@/config/icon';
 import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
+import BSelect from '@/components/base/BasicComponents/BSelect.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import Editor from '@/components/noteLibrary/detail/Editor.vue';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -173,7 +156,32 @@ const showBatchCategory = ref(false);
 const batchCategoryValue = ref('帮助中心');
 const saving = ref(false);
 
-const categories = ['帮助中心', '内部知识', 'FAQ', '系统行为'];
+const categories = ref<string[]>(['帮助中心']);
+
+const categoryOptions = computed(() => categories.value.map(c => ({ value: c, label: c })));
+
+async function loadCategories() {
+  const res = await apiBasePost('/api/knowledgeBase/categories');
+  if (res.status === 200 && Array.isArray(res.data)) {
+    categories.value = res.data;
+  }
+}
+const statusOptions = computed(() => [
+  { value: 'public', label: '● 公开' },
+  { value: 'internal', label: '🔒 内部' },
+]);
+const typeOptions = computed(() => [
+  { value: 'html', label: 'HTML' },
+  { value: 'markdown', label: 'Markdown' },
+]);
+const categoryFilterOptions = computed(() => [
+  { value: '', label: '全部分类' },
+  ...categoryOptions.value,
+]);
+const statusFilterOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...statusOptions.value,
+]);
 
 // Load list
 async function loadList() {
@@ -197,6 +205,11 @@ async function loadList() {
 function selectItem(item: any) {
   currentId.value = item.id;
   returnToSearch.value = false;
+  // 搜索模式下点左栏条目 → 退出搜索显示编辑器
+  if (isSearchMode.value) {
+    searchKeyword.value = '';
+    isSearchMode.value = false;
+  }
   loadItem(item.id);
 }
 
@@ -309,8 +322,15 @@ function clearSearch() {
   isSearchMode.value = false;
   returnToSearch.value = false;
 }
+/** 后端已返回关键字上下文片段，直接高亮展示 */
+function getSearchSnippet(item: any, keyword: string): string {
+  const text = item.contentPreview || item.content_preview || '';
+  if (!keyword?.trim() || !text) return '';
+  return highlightText(text, keyword);
+}
 
-function selectSearchResult(item: any) {
+/** 点击搜索结果 → 加载文章，清空搜索 */
+function selectSearchResult(result: any) {
   // Auto save current editing item
   if (currentId.value && editTitle.value?.trim()) {
     apiBasePost('/api/knowledgeBase/update', {
@@ -381,6 +401,7 @@ function highlightText(text: string, keyword: string): string {
 
 onMounted(() => {
   loadList();
+  loadCategories();
 });
 </script>
 
@@ -436,14 +457,7 @@ onMounted(() => {
 }
 .kb-filter-select {
   flex: 1;
-  height: 32px;
-  border: 1px solid var(--card-border-color);
-  border-radius: 6px;
-  background: var(--background-color);
-  color: var(--text-color);
-  padding: 0 8px;
-  font-size: 13px;
-  cursor: pointer;
+  min-width: 0;
 }
 .kb-list {
   flex: 1;
@@ -596,17 +610,42 @@ onMounted(() => {
   font-size: 13px;
   color: var(--text-color);
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+.kb-meta-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+/* 去掉 BSelect 的外边框 */
+:deep(.kb-meta-select .select-trigger) {
+  border: none;
+  background: var(--bl-input-noBorder-bg-color);
+  border-radius: 6px;
+  height: 28px;
+}
+/* 分类输入框 */
+.kb-category-input {
+  width: 120px !important;
+}
+.kb-category-input .input-container {
+  height: 28px !important;
+  min-width: 0 !important;
+}
+:deep(.kb-filter-select .select-trigger) {
+  border: none;
+  background: var(--bl-input-noBorder-bg-color);
+  border-radius: 6px;
+  height: 32px;
 }
 .kb-meta-select {
-  height: 28px;
-  border: 1px solid var(--card-border-color);
-  border-radius: 4px;
-  background: var(--background-color);
-  color: var(--text-color);
-  padding: 0 6px;
-  font-size: 12px;
-  cursor: pointer;
+  min-width: 110px;
+  vertical-align: middle;
+}
+.kb-filter-select {
+  flex: 1;
+  min-width: 0;
 }
 .kb-editor-area {
   flex: 1;
@@ -633,11 +672,12 @@ onMounted(() => {
 }
 
 /* Search results */
+/* Search results (inside right panel) */
 .kb-search-results {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 4px;
+  padding: 16px;
 }
 .kb-search-results-header {
   display: flex;
@@ -666,11 +706,11 @@ onMounted(() => {
 }
 .kb-search-card {
   display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 8px;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 6px;
   border: 1px solid var(--card-border-color);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
@@ -688,18 +728,18 @@ onMounted(() => {
   min-width: 0;
 }
 .kb-search-card-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-color);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .kb-search-card-meta {
   display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 .kb-search-card-snippet {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--desc-color);
   line-height: 1.6;
   overflow: hidden;
@@ -749,5 +789,12 @@ mark.kb-highlight {
   padding: 20px;
   color: var(--desc-color);
   font-size: 13px;
+}
+.kb-search-hint {
+  text-align: center;
+  padding: 30px 10px;
+  color: var(--desc-color);
+  font-size: 13px;
+  line-height: 1.6;
 }
 </style>

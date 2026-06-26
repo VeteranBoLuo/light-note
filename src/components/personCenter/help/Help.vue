@@ -13,7 +13,9 @@
             <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
+        <div v-if="isSearching" class="help-search-hint">搜索中，请在右侧结果中选择</div>
         <BList
+          v-else
           class="help-menu-list"
           style="font-size: 12px"
           :listOptions="viewOptions"
@@ -648,7 +650,16 @@
     background: color-mix(in srgb, var(--primary-color) 35%, transparent);
     font-weight: 700;
   }
-
+  .help-search-hint {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--desc-color);
+    font-size: 13px;
+    padding: 20px;
+    text-align: center;
+  }
   /* ===== 搜索结果 → 文章 → 返回按钮 ===== */
   .help-editor--search-active {
     display: flex;
