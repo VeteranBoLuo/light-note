@@ -30,6 +30,11 @@
           <strong class="admin-stat-value">¥{{ todayCost }}</strong>
           <span class="admin-stat-hint">累计</span>
         </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">总费用</span>
+          <strong class="admin-stat-value">¥{{ totalCost }}</strong>
+          <span class="admin-stat-hint">累计</span>
+        </li>
       </ul>
 
       <div class="admin-filters">
@@ -114,6 +119,7 @@
   const todayCount = ref(0);
   const todayTokens = ref(0);
   const todayCost = ref('0');
+  const totalCost = ref('0');
   const searchValue = ref('');
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
@@ -157,9 +163,10 @@
         todayCount.value = d.today?.count ?? 0;
         todayTokens.value = d.today?.tokens ?? 0;
         todayCost.value = d.today?.cost ?? '0';
+        totalCost.value = d.total?.cost ?? '0';
       }
     }).catch((err: any) => {
-      console.warn('获取今日汇总失败:', err);
+      console.warn('获取汇总失败:', err);
     });
   }
 
