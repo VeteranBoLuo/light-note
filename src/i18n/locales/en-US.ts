@@ -521,7 +521,7 @@ export default {
   ai: {
     title: 'Light Note Wisdom Realm',
     greeting:
-      'Hello! I am Light Note AI, your assistant for bookmarks, notes, files, and cloud storage. How can I help?',
+      'Hello! I am Light Note AI, your assistant for bookmarks, notes, files, help docs, translation, and cloud storage. Admins can also query security events and users. How can I help?',
     newChart: 'A new conversation has begun',
     howToCreateBookmark: 'How to create a bookmark?',
     cloudSpaceUsage: 'What is the cloud space module used for?',

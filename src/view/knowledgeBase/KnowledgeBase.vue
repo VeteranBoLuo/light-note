@@ -305,6 +305,8 @@ async function doSearch() {
     isSearchMode.value = false;
     return;
   }
+  // 搜索内容变化时，退出文章详情回到搜索结果
+  returnToSearch.value = false;
   const res = await apiBasePost('/api/knowledgeBase/search', {
     keyword: kw,
     category: filterCategory.value || undefined,

@@ -369,6 +369,9 @@
   watch(searchValue, () => {
     if (!searchValue.value.trim()) {
       selectedFromSearch.value = false;
+    } else if (selectedFromSearch.value) {
+      // 搜索内容变化（未清空）→ 返回搜索结果，更新新关键词
+      selectedFromSearch.value = false;
     }
   });
 
