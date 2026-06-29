@@ -65,7 +65,7 @@
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
 
   function rightMenuClick(type, item) {
-    recordOperation({ module: '首页', operation: `右键${type}书签${item.name}` });
+    recordOperation({ module: '首页', operation: `右键${type}书签【${item.name}】` });
     if (type === t('common.edit')) {
       router.push({ path: `/manage/editBookmark/${item.id}` });
     } else {

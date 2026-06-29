@@ -61,7 +61,7 @@
       props.cardInfo.url = 'https://' + props.cardInfo.url;
     }
     window.open(props.cardInfo.url, '_blank');
-    recordOperation({ module: '首页', operation: `点击书签卡片${props.cardInfo.name}` });
+    recordOperation({ module: '首页', operation: `点击书签卡片【${props.cardInfo.name}】` });
   }
 
   function handleToTagPage(tag) {

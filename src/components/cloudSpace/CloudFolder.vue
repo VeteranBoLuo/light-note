@@ -125,7 +125,7 @@
 
   const newName = ref('');
   function handleTagMenu(menu, folder: any) {
-    recordOperation({ module: '云空间', operation: `右键${menu}文件夹${folder.name}` });
+    recordOperation({ module: '云空间', operation: `右键${menu}文件夹【${folder.name}】` });
     const actions = [
       () => {
         if (cloud.folderList.find((i) => !i.id || i.isRename)) {

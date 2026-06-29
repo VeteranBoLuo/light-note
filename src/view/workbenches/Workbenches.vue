@@ -25,7 +25,7 @@
         :key="item.key"
         :class="['summary-card', 'dom-hover', `summary-card--${item.key}`]"
         @click="router.push(item.to)"
-        v-click-log="{ module: '工作台', operation: `查看${item.label}` }"
+        v-click-log="{ module: '工作台', operation: `查看【${item.label}】` }"
       >
         <div class="summary-top">
           <div class="summary-label">{{ item.label }}</div>

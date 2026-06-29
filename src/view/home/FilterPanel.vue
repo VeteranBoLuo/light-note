@@ -130,7 +130,7 @@
   let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   function handleTagMenu(menu, tag: TagInterface) {
-    recordOperation({ module: '首页', operation: `右键${menu}标签${tag.name}` });
+    recordOperation({ module: '首页', operation: `右键${menu}标签【${tag.name}】` });
     rightTagData.value = tag;
     const actions = {
       重命名: () => {
