@@ -38,42 +38,43 @@
 
 ## 功能一瞥
 
-<!-- 2 行 x 3 列截图网格 -->
+**📌 书签管理**  
+粘贴链接自动抓取标题、描述、图标。左侧标签树导航，右侧卡片墙，多标签联合过滤。
 
-<table>
-  <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/bookmark.png" alt="书签管理" width="95%" style="border-radius:8px" /><br>
-      <sub>📌 书签管理 — 贴链接自动抓取，标签树 + 卡片墙</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/note1.png" alt="笔记库" width="95%" style="border-radius:8px" /><br>
-      <sub>📝 笔记库 — 富文本编辑，文件夹归类，双视图</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/cloud-spance.png" alt="云空间" width="95%" style="border-radius:8px" /><br>
-      <sub>☁️ 云空间 — 云端存储，在线预览 Office/图片</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/search.png" alt="全局搜索" width="95%" style="border-radius:8px" /><br>
-      <sub>🔍 全局搜索 — 跨模块统一检索，几秒定位</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/ai-chat.png" alt="AI助手" width="95%" style="border-radius:8px" /><br>
-      <sub>🤖 AI 助手 — 上下文问答，辅助知识处理</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/resource1.png" alt="标签关系图" width="95%" style="border-radius:8px" /><br>
-      <sub>🏷️ 统一标签 — 跨类型知识网络，关系可视化</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="screenshots/bookmark.png" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
 
-<br>
+---
 
-**更多能力** 🌙 深色/浅色主题 · 📱 移动端适配 · 🌐 中英文双语 · 🗑️ 回收站 · 🛡️ 安全中心
+**📝 笔记库**  
+富文本编辑，图文表格代码块都支持。多级文件夹归类，卡片/列表双视图，导出 PDF。移动端也能记。
+
+<p align="center">
+  <img src="screenshots/note1.png" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**🔍 全局搜索**  
+书签、笔记、标签、文件跨模块统一搜，关键词 + 标签联合过滤，几秒定位。
+
+<p align="center">
+  <img src="screenshots/search.png" alt="全局搜索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**🤖 AI 助手**  
+内置对话式 AI，辅助知识处理。上下文问答、快捷提问模板、流式响应。
+
+<p align="center">
+  <img src="screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**更多能力** 🌙 深色/浅色主题 · 📱 移动端适配 · 🌐 中英文双语 · 🗑️ 回收站 · ☁️ 云空间 · 🏷️ 统一标签 · 🛡️ 安全中心
 
 ---
 
