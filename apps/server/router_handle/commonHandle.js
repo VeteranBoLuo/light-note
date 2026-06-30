@@ -18,6 +18,26 @@ export const recordConversion = (req, res) => {
   res.send(resultData(null));
 };
 
+// 转化漏斗看板数据(root 专属):各事件去重访客数 + 撞墙热点
+export const getConversionFunnel = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  try {
+    const [rows] = await pool.query(
+      'SELECT event, COUNT(DISTINCT fingerprint) AS visitors, COUNT(*) AS total FROM conversion_events GROUP BY event',
+    );
+    const byEvent = {};
+    rows.forEach((r) => {
+      byEvent[r.event] = { visitors: Number(r.visitors), total: Number(r.total) };
+    });
+    const [hotspots] = await pool.query(
+      "SELECT context, COUNT(*) AS cnt FROM conversion_events WHERE event = 'wall_hit' AND context <> '' GROUP BY context ORDER BY cnt DESC LIMIT 20",
+    );
+    res.send(resultData({ byEvent, hotspots }));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
+};
+
 const ensureRootRole = async (req, res) => {
   try {
     const userId = req.user?.id;

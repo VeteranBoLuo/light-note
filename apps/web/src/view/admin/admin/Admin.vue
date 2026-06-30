@@ -59,6 +59,11 @@
       title: 'AI 监控',
       icon: icon.userCenter.log,
     },
+    {
+      id: 'conversion',
+      title: '转化漏斗',
+      icon: icon.userCenter.log,
+    },
   ]);
 
   function nodeClick(menu: any) {

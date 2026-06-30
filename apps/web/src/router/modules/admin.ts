@@ -42,6 +42,10 @@ const adminRouter: RouteRecordRaw[] = [
         path: 'agentLog',
         component: () => import('@/view/admin/components/agentLog/AgentLog.vue'),
       },
+      {
+        path: 'conversion',
+        component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
+      },
     ],
   },
   {
@@ -67,6 +71,10 @@ const adminRouter: RouteRecordRaw[] = [
   {
     path: 'agentLog',
     component: () => import('@/view/admin/components/agentLog/PAgentLog.vue'),
+  },
+  {
+    path: 'conversion',
+    component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
   },
 ];
 

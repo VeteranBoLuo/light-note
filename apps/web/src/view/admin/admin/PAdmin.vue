@@ -54,6 +54,12 @@
         icon: icon.userCenter.log,
         url: '/agentLog',
       },
+      {
+        id: 'conversion',
+        title: '转化漏斗',
+        icon: icon.userCenter.log,
+        url: '/conversion',
+      },
     ],
     [
       {
