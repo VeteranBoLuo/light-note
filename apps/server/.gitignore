@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.development
+.env.production
+pnpm-lock.yaml
+package-lock.json
+scripts/clean-test-data.js
+dbq.cjs

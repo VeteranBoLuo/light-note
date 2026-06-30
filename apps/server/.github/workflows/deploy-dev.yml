@@ -1,0 +1,47 @@
+name: 部署Node.js项目到服务器
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 读取仓库内容
+        uses: actions/checkout@master
+
+      - name: 安装Node.js
+        uses: actions/setup-node@master
+
+      # 安装 pnpm
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      # 使用 pnpm 安装依赖
+      - name: 安装依赖
+        run: pnpm install
+
+      # 删除了打包步骤，因为不需要构建
+      - name: 将项目同步到服务器
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          # 源目录改为项目根目录
+          source: './*'
+          # 目标目录根据你的服务器路径修改
+          target: '/www/wwwroot/light-note-back'
+
+      # 通过SSH连接到服务器并重启服务
+      - name: 重启Node.js服务
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            pm2 restart app
