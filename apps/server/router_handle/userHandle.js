@@ -235,7 +235,7 @@ export const registerUser = async (req, res) => {
     // 注册即登录:签发会话,前端直接进应用(激活预置示例数据的即时价值)
     const userInfo = await queryUserInfoById(userId);
     const sid = await issueLoginSession(req, res, userInfo, Boolean(req.body.rememberMe));
-    recordConversionEvent(req, 'register', '');
+    recordConversionEvent(req, 'register', '', { userId, visitorType: 'admin' });
     res.send(resultData({ ...sanitizeUser(userInfo), sid }));
   } catch (err) {
     console.error('注册过程中发生错误:', err);

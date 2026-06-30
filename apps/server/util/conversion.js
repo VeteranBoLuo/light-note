@@ -7,10 +7,10 @@ import pool from '../db/index.js';
  * @param {string} event 事件名
  * @param {string} [context] 上下文(如撞墙的接口路径、CTA 来源)
  */
-export const recordConversionEvent = (req, event, context = '') => {
+export const recordConversionEvent = (req, event, context = '', overrides = {}) => {
   try {
-    const userId = req?.user?.id || null;
-    const visitorType = req?.user?.role || 'visitor';
+    const userId = overrides.userId ?? (req?.user?.id || null);
+    const visitorType = overrides.visitorType ?? (req?.user?.role || 'visitor');
     const fingerprint = String(req?.headers?.['fingerprint'] || '').slice(0, 128);
     pool
       .query(

@@ -10,7 +10,7 @@
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
     "dev:server": "pnpm --filter server start",
-    "deploy": "bash scripts/deploy.sh",
+    "deploy:all": "bash scripts/deploy.sh",
     "deploy:web": "bash scripts/deploy-web.sh",
     "deploy:server": "bash scripts/deploy-server.sh"
   }
