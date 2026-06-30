@@ -5,6 +5,18 @@ import fsP from 'fs/promises';
 import path from 'path';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
+import { recordConversionEvent } from '../util/conversion.js';
+
+// 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
+export const recordConversion = (req, res) => {
+  const ALLOWED = ['cta_click', 'page_view'];
+  const event = String(req.body?.event || '');
+  if (!ALLOWED.includes(event)) {
+    return res.send(resultData(null, 400, '不支持的事件'));
+  }
+  recordConversionEvent(req, event, req.body?.source || '');
+  res.send(resultData(null));
+};
 
 const ensureRootRole = async (req, res) => {
   try {

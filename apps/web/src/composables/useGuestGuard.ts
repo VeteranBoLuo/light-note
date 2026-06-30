@@ -1,6 +1,7 @@
 import { computed } from 'vue';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
 import { bookmarkStore, useUserStore } from '@/store';
+import { apiBasePost } from '@/http/request';
 
 let previewGuideLocked = false;
 
@@ -32,6 +33,8 @@ export function showPreviewGuide(content?: string): void {
         type: 'primary',
         function: () => {
           Alert.destroy();
+          // 转化埋点:点击「立即注册」(fire-and-forget,不阻塞)
+          apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'preview-guide' }).catch(() => {});
           bookmark.openAuthModal('注册');
         },
       },

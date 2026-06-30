@@ -9,6 +9,8 @@ router.get('/clearApiLogs', commonHandle.clearApiLogs);
 
 router.post('/recordOperationLogs', commonHandle.recordOperationLogs);
 
+router.post('/recordConversion', commonHandle.recordConversion);
+
 router.post('/getOperationLogs', commonHandle.getOperationLogs);
 
 router.get('/clearOperationLogs', commonHandle.clearOperationLogs);

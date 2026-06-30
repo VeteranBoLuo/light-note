@@ -116,11 +116,15 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { checkEndCondition } from '@/utils/validator.ts';
   import { cloneDeep } from 'lodash-es';
+  import router from '@/router';
+  import { markLoggedIn } from '@/utils/authStorage';
+  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { setLocale } from '@/i18n';
   const title = defineModel('title');
   const formData = reactive({
     password: '',
@@ -129,6 +133,7 @@
     role: 'admin',
   });
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const disable = computed(() => {
     return !formData.rPassword || !formData.password || !formData.email;
   });
@@ -161,8 +166,20 @@
     delete params.rPassword;
     apiBasePost('/api/user/registerUser', params).then((res: any) => {
       if (res.status === 200) {
-        message.success('注册成功');
-        title.value = '登录';
+        // 注册即登录:复用登录成功的入应用流程,直接进应用看到预置示例数据
+        markLoggedIn();
+        user.setUserInfo(res.data);
+        user.preferences.theme = res.data?.preferences?.theme || 'day';
+        user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
+        user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+        user.preferences.homePage = getHomePagePreference(res.data?.preferences);
+        localStorage.setItem('preferences', JSON.stringify(user.preferences));
+        router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+        message.success('注册成功，已为你自动登录');
+        setLocale(user.preferences.lang || 'zh-CN');
+        bookmark.isShowLogin = false;
+        bookmark.type = 'all';
+        bookmark.refreshTag();
         emit('update:success', formData);
       }
     });

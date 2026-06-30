@@ -506,4 +506,20 @@ CREATE PROCEDURE `quick_uuid_triggers`()
 ;;
 delimiter ;
 
+-- ----------------------------
+-- Table structure for conversion_events (游客转化漏斗事件)
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `conversion_events` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `fingerprint` varchar(128) DEFAULT NULL,
+  `user_id` varchar(64) DEFAULT NULL,
+  `visitor_type` varchar(20) DEFAULT NULL,
+  `event` varchar(64) NOT NULL,
+  `context` varchar(255) DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_event_time` (`event`, `create_time`),
+  KEY `idx_fingerprint` (`fingerprint`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='游客转化漏斗事件';
+
 SET FOREIGN_KEY_CHECKS = 1;

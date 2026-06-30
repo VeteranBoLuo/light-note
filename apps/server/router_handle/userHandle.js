@@ -6,6 +6,7 @@ import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
 import { verifyPassword, hashPassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor } from '../util/auth.js';
+import { recordConversionEvent } from '../util/conversion.js';
 import { removeUserSessions } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
@@ -231,7 +232,11 @@ export const registerUser = async (req, res) => {
       console.error('注册日志更新错误:', err.message);
     }
 
-    res.send(resultData(null, 200, '注册成功'));
+    // 注册即登录:签发会话,前端直接进应用(激活预置示例数据的即时价值)
+    const userInfo = await queryUserInfoById(userId);
+    const sid = await issueLoginSession(req, res, userInfo, Boolean(req.body.rememberMe));
+    recordConversionEvent(req, 'register', '');
+    res.send(resultData({ ...sanitizeUser(userInfo), sid }));
   } catch (err) {
     console.error('注册过程中发生错误:', err);
     if (err.message.includes('邮箱') || err.message.includes('账号')) {
