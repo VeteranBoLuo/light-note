@@ -21,24 +21,19 @@
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
           <span class="md-view-toggle">
-            <button
-              class="md-view-btn"
-              :class="{ active: mdView === 'edit' }"
-              @click="mdView = 'edit'"
-              title="仅编辑器"
-            >编辑</button>
-            <button
-              class="md-view-btn"
-              :class="{ active: mdView === 'split' }"
-              @click="mdView = 'split'"
-              title="分栏"
-            >编辑+预览</button>
+            <button class="md-view-btn" :class="{ active: mdView === 'edit' }" @click="mdView = 'edit'" title="仅编辑器"
+              >编辑</button
+            >
+            <button class="md-view-btn" :class="{ active: mdView === 'split' }" @click="mdView = 'split'" title="分栏"
+              >编辑+预览</button
+            >
             <button
               class="md-view-btn"
               :class="{ active: mdView === 'preview' }"
               @click="mdView = 'preview'"
               title="仅预览"
-            >预览</button>
+              >预览</button
+            >
           </span>
         </div>
         <div class="md-editor-body" :class="`md-view-${mdView}`">
@@ -136,7 +131,15 @@
     },
   });
 
-  const emits = defineEmits(['update:modelValue', 'setHtml', 'setNoteId', 'saveData', 'ready', 'update:type', 'switch-backup-change']);
+  const emits = defineEmits([
+    'update:modelValue',
+    'setHtml',
+    'setNoteId',
+    'saveData',
+    'ready',
+    'update:type',
+    'switch-backup-change',
+  ]);
   const content = defineModel<string>('content');
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
@@ -153,13 +156,20 @@
   const switchBackup = ref<{ content: string; type: string } | null>(null);
 
   // 备份状态变化时通知父组件
-  watch(switchBackup, (val) => {
-    emits('switch-backup-change', !!val);
-  }, { immediate: true });
+  watch(
+    switchBackup,
+    (val) => {
+      emits('switch-backup-change', !!val);
+    },
+    { immediate: true },
+  );
 
-  watch(() => props.type, (val) => {
-    currentType.value = val;
-  });
+  watch(
+    () => props.type,
+    (val) => {
+      currentType.value = val;
+    },
+  );
 
   // Markdown 编辑器状态
   const mdContent = ref('');
@@ -196,17 +206,23 @@
       }
     }
 
-    requestAnimationFrame(() => { isSyncingMdScroll = false; });
+    requestAnimationFrame(() => {
+      isSyncingMdScroll = false;
+    });
   }
 
   // Markdown 模式下同步外部内容
-  watch([() => props.type, content], async ([type]) => {
-    if (type === 'markdown' && content.value !== mdContent.value) {
-      mdContent.value = content.value || '';
-      if (!markedLib) await ensureMdLib();
-      renderMd();
-    }
-  }, { immediate: true });
+  watch(
+    [() => props.type, content],
+    async ([type]) => {
+      if (type === 'markdown' && content.value !== mdContent.value) {
+        mdContent.value = content.value || '';
+        if (!markedLib) await ensureMdLib();
+        renderMd();
+      }
+    },
+    { immediate: true },
+  );
 
   // 懒加载 marked + dompurify
   async function ensureMdLib() {
@@ -886,9 +902,17 @@
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
-    &:last-child { border-right: none; }
-    &:hover { color: var(--text-color); background: var(--common-tag-bg-color, #f0f0f0); }
-    &.active { background: var(--primary-color, #615ced); color: #fff; }
+    &:last-child {
+      border-right: none;
+    }
+    &:hover {
+      color: var(--text-color);
+      background: var(--common-tag-bg-color, #f0f0f0);
+    }
+    &.active {
+      background: var(--primary-color, #615ced);
+      color: #fff;
+    }
   }
 
   /* Markdown 编辑器 */
@@ -934,7 +958,7 @@
     border: none;
     outline: none;
     padding: 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.6;
     background: var(--background-color);
@@ -948,26 +972,28 @@
     min-height: 0;
     overflow: auto;
     padding: 10px;
-    background: var(--background-color);
     color: var(--text-color);
     font-size: 14px;
     line-height: 1.7;
-    h1, h2, h3, h4, h5, h6 {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
       margin: 0.6em 0 0.4em;
     }
     pre {
-      background: var(--common-tag-bg-color, #f6f8fa);
       border: 1px solid var(--card-border-color, #e5e7eb);
       border-radius: 8px;
       padding: 10px 12px;
       overflow: auto;
       code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
         font-size: 13px;
       }
     }
     code {
-      background: var(--common-tag-bg-color, #f0f0f0);
       padding: 1px 4px;
       border-radius: 3px;
       font-size: 0.9em;
@@ -975,7 +1001,8 @@
     table {
       border-collapse: collapse;
       width: 100%;
-      th, td {
+      th,
+      td {
         border: 1px solid var(--card-border-color, #d9d9d9);
         padding: 6px 10px;
       }
@@ -991,7 +1018,8 @@
     img {
       max-width: 100%;
     }
-    ul, ol {
+    ul,
+    ol {
       padding-left: 20px;
     }
   }
