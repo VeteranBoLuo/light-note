@@ -56,7 +56,11 @@
                     <span class="dot d-green"></span>
                   </div>
                   <div class="win-url">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M3.5 9h17M3.5 15h17" />
+                      <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z" />
+                    </svg>
                     <span>轻笺 · {{ ['书签', '笔记', '云空间'][previewIndex] }}</span>
                   </div>
                 </div>
@@ -64,7 +68,7 @@
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-bookamrk.png" alt="书签管理" />
+                      <img src="/eg-bookmark.png" alt="书签管理" />
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
@@ -804,7 +808,13 @@
   .screen-glare {
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 40%, transparent 70%, rgba(255,255,255,0.02) 100%);
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      transparent 40%,
+      transparent 70%,
+      rgba(255, 255, 255, 0.02) 100%
+    );
     pointer-events: none;
     z-index: 2;
   }
@@ -1442,7 +1452,7 @@
   .contact-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,.6);
+    background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -1451,7 +1461,7 @@
   }
   .contact-dialog {
     background: #1a1a1a;
-    border: 1px solid rgba(255,255,255,.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 14px;
     padding: 32px;
     width: min(420px, calc(100vw - 40px));
@@ -1467,7 +1477,7 @@
     font-size: 22px;
     cursor: pointer;
     line-height: 1;
-    transition: color .2s;
+    transition: color 0.2s;
   }
   .contact-dialog__close:hover {
     color: #eee;
@@ -1483,7 +1493,7 @@
     color: #888;
     margin-bottom: 20px;
     padding-bottom: 16px;
-    border-bottom: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
   .contact-dialog__field label {
     display: block;
@@ -1494,15 +1504,15 @@
   .contact-dialog__input {
     width: 100%;
     box-sizing: border-box;
-    background: rgba(255,255,255,.04);
-    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     padding: 10px 12px;
     color: #ddd;
     font-size: 13px;
     resize: none;
     outline: none;
-    transition: border-color .2s;
+    transition: border-color 0.2s;
     font-family: inherit;
   }
   .contact-dialog__input:focus {
@@ -1522,13 +1532,13 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: opacity .2s;
+    transition: opacity 0.2s;
   }
   .contact-dialog__submit:disabled {
-    opacity: .35;
+    opacity: 0.35;
     cursor: not-allowed;
   }
   .contact-dialog__submit:not(:disabled):hover {
-    opacity: .85;
+    opacity: 0.85;
   }
 </style>
