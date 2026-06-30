@@ -24,7 +24,7 @@ export function showPreviewGuide(content?: string): void {
   const bookmark = bookmarkStore();
   Alert.alert({
     title: '预览模式',
-    content: content || '当前是预览模式，注册后即可拥有你自己的轻笺，免费保存你的书签、笔记和文件。',
+    content: content || '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册后即可拥有你自己的轻笺，免费收藏书签、记笔记、存文件。',
     footer: [
       { label: '继续浏览', type: 'dashed', function: () => Alert.destroy() },
       {
