@@ -1,55 +1,51 @@
-name: 打包前端并部署到服务器
+name: 手动部署前端到服务器（兜底，日常用本地 scripts/deploy*.sh）
 
+# 已从「push 自动部署」降级为「仅手动触发」：
+# 日常部署走本地脚本(更快);此工作流仅在不便用本机时,去 Actions 页手动跑。
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: # 允许手动部署
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-dev-${{ github.ref }}
+  group: deploy-web-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build-and-deploy-web:
     runs-on: ubuntu-latest
     steps:
       - name: 读取仓库内容
         uses: actions/checkout@v4
-
-      - name: 读取 Node 版本（来自 package.json）
-        id: node_version
-        run: echo "version=$(jq -r '.engines.node // "20.x"' package.json)" >> $GITHUB_OUTPUT
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10.25.0
 
-      - name: 安装nodejs
+      - name: 安装 nodejs
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ steps.node_version.outputs.version }}
+          node-version: '20'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: 安装依赖
+      - name: 安装依赖(workspace)
         run: pnpm install --frozen-lockfile
 
-      - name: 打包
-        run: pnpm run build
+      - name: 构建前端
+        run: pnpm --filter web build
 
-      - name: 备份旧 dist 并部署新版本
+      - name: 部署 dist 到服务器
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.PORT }}
-          source: 'dist'
+          # strip_components 去掉 apps/web,使 dist 落到 /www/wwwroot/dist(与旧版一致)
+          # 兜底路径,首次手动触发时确认落点
+          source: 'apps/web/dist'
+          strip_components: 2
           target: '/www/wwwroot'
-          # SCP 自动覆盖同名文件，无需额外备份动作
-          # 如需备份可后续在服务器脚本中实现

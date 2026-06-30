@@ -2,7 +2,7 @@
   "name": "web",
   "version": "0.0.0",
   "engines": {
-    "node": "20.x"
+    "node": ">=18"
   },
   "scripts": {
     "deploy": "bash deploy.sh",
