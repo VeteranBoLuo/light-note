@@ -22,5 +22,15 @@ rsync -az --no-owner --no-group --delete \
 echo "♻️  pm2 restart $PM2…"
 ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env"
 
-echo -n "✅  后端健康检查 HTTP "
-curl -s -o /dev/null -w '%{http_code}\n' -m 10 https://boluo66.top/api/user/me || echo "(curl 失败,手动确认)"
+echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
+code=000
+for i in 1 2 3 4 5 6; do
+  sleep 2
+  code="$(curl -s -o /dev/null -w '%{http_code}' -m 10 https://boluo66.top/api/user/me || echo 000)"
+  [ "$code" = "200" ] && break
+done
+if [ "$code" = "200" ]; then
+  echo "✅  后端健康检查 HTTP 200"
+else
+  echo "⚠️  后端健康检查 HTTP $code —— 请查 pm2 logs app;必要时回滚"
+fi
