@@ -42,7 +42,7 @@
 粘贴链接自动抓取标题、描述、图标。左侧标签树导航，右侧卡片墙，多标签联合过滤。
 
 <p align="center">
-  <img src="screenshots/bookmark.png" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/screenshots/bookmark.png" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -51,7 +51,7 @@
 富文本编辑，图文表格代码块都支持。多级文件夹归类，卡片/列表双视图，导出 PDF。移动端也能记。
 
 <p align="center">
-  <img src="screenshots/note1.png" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/screenshots/note1.png" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -60,7 +60,7 @@
 书签、笔记、标签、文件跨模块统一搜，关键词 + 标签联合过滤，几秒定位。
 
 <p align="center">
-  <img src="screenshots/search.png" alt="全局搜索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/screenshots/search.png" alt="全局搜索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -69,7 +69,7 @@
 内置对话式 AI，辅助知识处理。上下文问答、快捷提问模板、流式响应。
 
 <p align="center">
-  <img src="screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -102,8 +102,8 @@
 支持桌面端 + 移动端，数据云端同步，走到哪跟到哪。
 
 <p align="center">
-  <img src="screenshots/mobile1.png" alt="移动端" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="screenshots/mobile2.png" alt="移动端深色" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/screenshots/mobile1.png" alt="移动端" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/screenshots/mobile2.png" alt="移动端深色" height="320" style="border-radius:12px;margin:0 4px" />
 </p>
 
 ---

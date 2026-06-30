@@ -111,7 +111,7 @@
 
 # 后端
 
-- 后端路径：`light-note-back`
+- 后端路径：`apps/server`
 - 数据库连接：`db/index.js`
 - 工具函数：`util/common.js`
 

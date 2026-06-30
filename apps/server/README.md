@@ -4,6 +4,8 @@
 
 基于 Node.js + Express + MySQL 构建，为前端提供书签、笔记、云空间、AI 助手、标签图谱、后台管理等功能接口。
 
+所属 monorepo：[VeteranBoLuo/light-note](https://github.com/VeteranBoLuo/light-note)
+
 ---
 
 ## 技术栈
@@ -71,24 +73,25 @@
 
 - Node.js 20.x
 - MySQL 8.0+
+- pnpm
 
 ### 安装
 
 ```bash
-git clone https://github.com/VeteranBoLuo/light-note-back
-cd light-note-back
+git clone https://github.com/VeteranBoLuo/light-note
+cd light-note
+
+# 安装依赖（根目录）
+pnpm install
 
 # 导入数据库
-mysql -u root -p < init.sql
+mysql -u root -p < apps/server/init.sql
 
-# 安装依赖
-npm install
-
-# 配置数据库连接（编辑 app.js 中的 pool 配置）
+# 配置数据库连接（编辑 apps/server/app.js 中的 pool 配置）
 # host / port / user / password / database
 
 # 启动服务
-node app.js
+node apps/server/app.js
 ```
 
 ---
@@ -105,30 +108,29 @@ node app.js
 ## 项目结构
 
 ```
-├── app.js              # 入口文件
-├── db/index.js         # 数据库连接池
-├── util/
-│   ├── common.js       # 工具函数（insertData / snakeCaseKeys / generateUUID 等）
-│   ├── auth.js         # 认证中间件
-│   ├── resourceTags.js # 资源标签关联工具
-│   └── ...
-├── api/                # 路由与处理器
-│   ├── bookmarkHandle.js
-│   ├── noteHandle.js
-│   ├── tagHandle.js
-│   ├── fileHandle.js
-│   ├── aiHandle.js
-│   ├── admin/          # 后台管理接口
-│   └── ...
-└── websocket/          # WebSocket 服务
+light-note/
+├── apps/
+│   ├── web/               # Vue 3 前端
+│   └── server/            # Express 后端（本包）
+│       ├── app.js              # 入口文件
+│       ├── db/index.js         # 数据库连接池
+│       ├── util/
+│       │   ├── common.js       # 工具函数
+│       │   ├── auth.js         # 认证中间件
+│       │   ├── resourceTags.js # 资源标签关联工具
+│       │   └── ...
+│       ├── api/                # 路由与处理器
+│       │   ├── bookmarkHandle.js
+│       │   ├── noteHandle.js
+│       │   ├── tagHandle.js
+│       │   ├── fileHandle.js
+│       │   ├── aiHandle.js
+│       │   ├── admin/          # 后台管理接口
+│       │   └── ...
+│       └── websocket/          # WebSocket 服务
+└── packages/
+    └── shared/             # 共享工具包
 ```
-
----
-
-## 相关项目
-
-- [轻笺前端](https://github.com/VeteranBoLuo/light-note)——Vue 3 + TypeScript 前端
-- [轻笺后端](https://github.com/VeteranBoLuo/light-note-back)——本仓库
 
 ---
 

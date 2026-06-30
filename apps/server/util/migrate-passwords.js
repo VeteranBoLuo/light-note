@@ -2,7 +2,7 @@
  * 密码明文 → scrypt 哈希迁移脚本
  * 
  * 用法:
- *   cd /Users/boluo/project/light-note-back
+ *   cd /Users/boluo/project/light-note/apps/server
  *   node --env-file .env util/migrate-passwords.js
  *
  * 安全:
