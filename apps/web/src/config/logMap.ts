@@ -25,6 +25,7 @@ export const OPERATION_LOG_MAP = {
     cloudSpace: '云空间模块',
     tag: '标签模块',
     securityCenter: '安全中心',
+    admin: '后台管理',
     aiAssistant: 'AI智能助手模块',
   }),
   login: createModule('登录', {

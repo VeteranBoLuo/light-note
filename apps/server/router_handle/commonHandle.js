@@ -25,14 +25,25 @@ export const getConversionFunnel = async (req, res) => {
     const [rows] = await pool.query(
       'SELECT event, COUNT(DISTINCT fingerprint) AS visitors, COUNT(*) AS total FROM conversion_events GROUP BY event',
     );
-    const byEvent = {};
-    rows.forEach((r) => {
-      byEvent[r.event] = { visitors: Number(r.visitors), total: Number(r.total) };
-    });
+    // 用显式 camelCase 标量字段返回,避免 resultData 的 camelCaseKeys 把 wall_hit/cta_click 等带下划线的 key 改名(register 无下划线幸免,曾导致只有它显示)
+    const visitorsOf = (ev) => {
+      const r = rows.find((x) => x.event === ev);
+      return r ? Number(r.visitors) : 0;
+    };
     const [hotspots] = await pool.query(
       "SELECT context, COUNT(*) AS cnt FROM conversion_events WHERE event = 'wall_hit' AND context <> '' GROUP BY context ORDER BY cnt DESC LIMIT 20",
     );
-    res.send(resultData({ byEvent, hotspots }));
+    const [ipRow] = await pool.query("SELECT COUNT(DISTINCT ip) AS ips FROM conversion_events WHERE ip <> ''");
+    res.send(
+      resultData({
+        pageViewVisitors: visitorsOf('page_view'),
+        wallHitVisitors: visitorsOf('wall_hit'),
+        ctaClickVisitors: visitorsOf('cta_click'),
+        registerVisitors: visitorsOf('register'),
+        uniqueIps: Number(ipRow[0]?.ips || 0),
+        hotspots,
+      }),
+    );
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
   }

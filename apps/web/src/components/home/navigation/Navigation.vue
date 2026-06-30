@@ -105,6 +105,16 @@
           <div
             v-if="user.role === 'root'"
             :style="{
+              color: route.path.includes('/admin') ? '#615ced' : '',
+            }"
+            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            v-click-log="OPERATION_LOG_MAP.navigation.admin"
+            @click="router.push('/admin')"
+            >{{ $t('navigation.admin') }}
+          </div>
+          <div
+            v-if="user.role === 'root'"
+            :style="{
               color: route.path.includes('/knowledgeBase') ? '#615ced' : '',
             }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"

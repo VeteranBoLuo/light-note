@@ -10,6 +10,7 @@ export default {
     cloudSpace: 'Cloud Space',
     securityCenter: 'Security Center',
     knowledgeBase: 'Knowledge Base',
+    admin: 'Admin',
     newTag: 'New Tag',
     tagManagement: 'Tag Management',
     newBookmark: 'New Bookmark',
