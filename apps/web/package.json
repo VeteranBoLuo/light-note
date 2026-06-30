@@ -1,5 +1,5 @@
 {
-  "name": "componet-collection",
+  "name": "web",
   "version": "0.0.0",
   "engines": {
     "node": "20.x"
@@ -16,6 +16,7 @@
     "websocket": "node src/http/websocket.ts"
   },
   "dependencies": {
+    "@lightnote/shared": "workspace:*",
     "@ant-design/icons-vue": "7.0.1",
     "@antv/g2plot": "^2.4.31",
     "@antv/g6": "^5.1.1",

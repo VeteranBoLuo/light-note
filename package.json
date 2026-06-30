@@ -1,0 +1,17 @@
+{
+  "name": "light-note",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.25.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "build:web": "pnpm --filter web build",
+    "dev:server": "pnpm --filter server start",
+    "deploy": "bash scripts/deploy.sh",
+    "deploy:web": "bash scripts/deploy-web.sh",
+    "deploy:server": "bash scripts/deploy-server.sh"
+  }
+}

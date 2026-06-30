@@ -1,0 +1,14 @@
+{
+  "name": "@lightnote/shared",
+  "version": "0.0.0",
+  "description": "轻笺前后端共享契约(状态码 / 响应信封等)",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}
