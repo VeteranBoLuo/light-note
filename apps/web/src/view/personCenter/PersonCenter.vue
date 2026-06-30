@@ -245,13 +245,6 @@
 
   const options = ref<menuItemInterface[]>([
     {
-      name: 'admin',
-      label: t('personCenter.admin'),
-      path: '/admin',
-      role: 'root',
-      icon: icon.user_admin,
-    },
-    {
       name: 'help',
       label: t('personCenter.help'),
       path: '/help',
