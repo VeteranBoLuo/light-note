@@ -20,7 +20,7 @@
   import RegisterPage from '@/components/login/RegisterPage.vue';
 
   // Modal title, supports: '登录' | '注册' | '重置'
-  const title = ref<'登录' | '注册' | '重置'>('登录');
+  const title = ref<'登录' | '注册' | '重置'>(bookmarkStore().authModalTab);
 
   const user = useUserStore();
   const bookmark = bookmarkStore();
@@ -80,6 +80,8 @@
   // Mount/unmount event listeners
   onMounted(() => {
     document.addEventListener('keydown', clickEvent);
+    // 消费一次性 tab：本次已按 authModalTab 初始化 title，重置以免影响下次普通打开（如点头像登录）
+    bookmark.authModalTab = '登录';
   });
 
   onUnmounted(() => {

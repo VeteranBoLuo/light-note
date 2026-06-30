@@ -22,6 +22,7 @@
   import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { markLoggedIn } from '@/utils/authStorage';
 
   const router = useRouter();
   const status = ref(200);
@@ -36,6 +37,7 @@
       const cRes = await apiBasePost('/api/user/github', { code });
       status.value = cRes.status;
       if (cRes.status === 200) {
+        markLoggedIn();
         toHome();
       } else {
         setInterval(() => {

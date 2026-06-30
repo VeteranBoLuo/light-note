@@ -23,6 +23,7 @@ interface BookmarkState {
   isFold: boolean;
   theme: 'day' | 'night' | 'system' | string;
   isShowLogin: boolean;
+  authModalTab: '登录' | '注册' | '重置';
   viewerKey: string;
   bookmarkLoading: boolean;
   viewer: {
@@ -51,6 +52,7 @@ export default defineStore('bookmark', {
     isFold: true,
     theme: 'day',
     isShowLogin: false,
+    authModalTab: '登录' as '登录' | '注册' | '重置',
     viewerKey: '',
     bookmarkLoading: false,
     tagLoading: false,
@@ -155,6 +157,13 @@ export default defineStore('bookmark', {
       this.type = 'all';
       this.bookmarkSearch = '';
       this.isShowLogin = false;
+    },
+    /**
+     * 打开登录/注册弹窗，并指定初始展示的标签页（默认登录）
+     */
+    openAuthModal(tab: '登录' | '注册' | '重置' = '登录'): void {
+      this.authModalTab = tab;
+      this.isShowLogin = true;
     },
   },
 });

@@ -60,9 +60,11 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
+  import { useGuestGuard } from '@/composables/useGuestGuard';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const { guardWrite } = useGuestGuard();
   const DEFAULT_NOTE_TITLE = '未命名文档';
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
   const note = reactive({
@@ -249,8 +251,7 @@
 
   const timer: any = ref(null);
   function saveFunc(isMsg?: boolean) {
-    if (!['admin', 'root'].includes(user.role)) {
-      message.warn('没有操作权限.请登录！！！');
+    if (!guardWrite()) {
       return;
     }
     if (timer.value) {

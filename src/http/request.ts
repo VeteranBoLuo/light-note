@@ -9,8 +9,6 @@ import {
 
 // 常量定义
 const TIMEOUT = 120000;
-const ROLES_ADMIN = ['admin', 'root'];
-const NO_AUTH_ENDPOINTS = ['del'];
 const ERROR_MESSAGES: { [key: number]: string } = {
   500: '服务器错误',
   403: '服务器拒绝请求',
@@ -123,18 +121,12 @@ request.interceptors.request.use(
       config.headers['OS'] = getUserOsInfo();
       config.headers['Browser'] = getBrowserType();
       config.headers['X-Lang'] = currentLang;
-      const user = useUserStore();
       const previewUserId = getAdminLoginPreviewUserId();
       if (previewUserId) {
         config.headers['X-Admin-Preview-User-Id'] = previewUserId;
         if (config.data?.filters && Object.prototype.hasOwnProperty.call(config.data.filters, 'userId')) {
           config.data.filters.userId = previewUserId;
         }
-      }
-      const notNeedAuth = NO_AUTH_ENDPOINTS.some((key) => config.url?.includes(key));
-      if (!ROLES_ADMIN.includes(user.role) && notNeedAuth) {
-        message.warn('没有操作权限，请登录！！！');
-        return Promise.reject(new Error(`接口 ${config.url} 没有操作权限`));
       }
       config.headers['fingerprint'] = (window as any)['fingerprint'];
       const rememberedSid = localStorage.getItem('rememberedSid');
@@ -255,6 +247,14 @@ export const apiBaseGet = async (url: string, params?: any, options?: AxiosReque
 export function handleErrorResponse(res: AxiosResponse['data']): ApiResponse {
   // 如果状态码在映射中，则显示错误消息
   if (authExpiredFlow && (res.status === 'visitor' || res.status === 401 || res.status === 403)) {
+    return res;
+  }
+  if (res.status === 'preview') {
+    // 游客写操作被后端拦截：派发事件，由 App 统一弹「预览模式」注册引导（用事件而非直接 import，避免循环依赖）。
+    // 若正处于会话过期流程，让「重新登录」提示优先，不叠加预览弹窗，避免双弹。
+    if (!authExpiredFlow) {
+      window.dispatchEvent(new CustomEvent('light-note:preview-blocked', { detail: { msg: res.msg } }));
+    }
     return res;
   }
   if (res.status === 423) {

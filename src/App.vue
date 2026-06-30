@@ -30,7 +30,8 @@
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { useI18n } from 'vue-i18n';
-  import { getAdminLoginPreviewPreferences, isAdminLoginPreview } from '@/utils/authStorage.ts';
+  import { getAdminLoginPreviewPreferences, isAdminLoginPreview, hasLoggedInBefore } from '@/utils/authStorage.ts';
+  import { showPreviewGuide } from '@/composables/useGuestGuard';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -172,7 +173,8 @@
           bookmark.isShowLogin = false;
           await refreshOpinionNotice();
         } else {
-          bookmark.isShowLogin = true;
+          // 仅对「曾登录过、会话过期」的老用户弹登录框；始终是游客的新访客不弹
+          bookmark.isShowLogin = hasLoggedInBefore();
           stopOpinionNoticePolling();
           notification.close(NOTICE_KEY);
         }
@@ -256,7 +258,8 @@
       user.resetUserInfo();
     }
     setStoredPreferences(user.preferences);
-    bookmark.isShowLogin = true;
+    // 退出/会话失效后是否弹登录框：仅对曾登录过的老用户弹，纯游客不弹
+    bookmark.isShowLogin = hasLoggedInBefore();
     stopOpinionNoticePolling();
     notification.close(NOTICE_KEY);
     localStorage.removeItem('rememberedSid');
@@ -282,6 +285,10 @@
     bookmark.refreshTag();
     if (redirect) {
       await redirectToGuestHome();
+    }
+    // 手动登出当次不再弹登录框（hasLoggedInBefore 标记仍保留，下次会话自然过期时才弹）
+    if (isManualLogout) {
+      bookmark.isShowLogin = false;
     }
     isHandlingAuthExpired = false;
   }
@@ -317,6 +324,11 @@
       },
       Math.max(0, expiresIn * 1000 + 300),
     );
+  }
+
+  function handlePreviewBlocked(event: Event) {
+    const msg = (event as CustomEvent<{ msg?: string }>).detail?.msg;
+    showPreviewGuide(msg);
   }
 
   function openNoticeSummary(data) {
@@ -516,6 +528,7 @@
     window.addEventListener('light-note:auth-expired', handleAuthExpired);
     window.addEventListener('light-note:user-banned', handleUserBanned);
     window.addEventListener('light-note:auth-session', handleAuthSession);
+    window.addEventListener('light-note:preview-blocked', handlePreviewBlocked);
     router.isReady().then(async () => {
       await getUserInfo();
       handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);

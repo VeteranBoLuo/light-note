@@ -118,6 +118,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { setLocale } from '@/i18n';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { markLoggedIn } from '@/utils/authStorage';
   const title = defineModel('title');
   const formData: any = defineModel('formData');
   const REMEMBERED_EMAIL_KEY = 'rememberedLoginEmail';
@@ -137,6 +138,7 @@
 
     apiBasePost('/api/user/login', { ...formData.value, rememberMe: isCheck.value }).then((res: any) => {
       if (res.status === 200) {
+        markLoggedIn();
         if (isCheck.value) {
           localStorage.setItem(REMEMBERED_EMAIL_KEY, formData.value.email || '');
           if (res.data?.sid) {
