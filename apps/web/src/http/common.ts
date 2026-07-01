@@ -2,10 +2,10 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
 const cloud = cloudSpaceStore();
-export async function downloadField(id: number | string) {
+export async function downloadField(id: number | string, token?: string) {
   try {
     cloud.loading = true;
-    const res = await apiBasePost('/api/file/downloadFileById', { id });
+    const res = await apiBasePost('/api/file/downloadFileById', { id, token });
     if (res.status === 200 && res.data?.downloadUrl) {
       const { downloadUrl, fileName } = res.data;
       const a = document.createElement('a');
@@ -45,13 +45,19 @@ export async function deleteField(id: number | string) {
 }
 
 // 分享文件
-export async function shareField(id: number | string, fileName?: string, fileType?: string, description?: string) {
+export async function shareField(
+  id: number | string,
+  token: string,
+  fileName?: string,
+  fileType?: string,
+  description?: string,
+) {
   try {
-    // 生成分享页面链接，通过前端页面处理下载
+    // 生成分享页面链接(带不可猜 token,分享页凭 token 访问,防按自增 id 枚举越权)
     const encodedFileName = fileName ? encodeURIComponent(fileName) : '';
     const encodedFileType = fileType ? encodeURIComponent(fileType) : '';
     const encodedDesc = description ? encodeURIComponent(description) : '';
-    const shareUrl = `${window.location.origin}/share/${id}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}${encodedDesc ? `/${encodedDesc}` : ''}`;
+    const shareUrl = `${window.location.origin}/share/${id}/${token}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}${encodedDesc ? `/${encodedDesc}` : ''}`;
     await navigator.clipboard.writeText(shareUrl);
     message.success('分享链接已复制到剪贴板');
     return shareUrl;

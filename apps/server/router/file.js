@@ -15,6 +15,7 @@ import { FILE_CATEGORY_ORDER, getFileExtension, resolveFileCategory } from '../u
 import * as fileHandle from '../router_handle/fileHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
+import crypto from 'crypto';
 const router = express.Router();
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
@@ -133,6 +134,7 @@ router.post('/confirmUpload', async (req, res) => {
         directory,
         obs_key: objectKey,
         folder_id: folderId || null,
+        share_token: crypto.randomBytes(16).toString('hex'), // 不可猜分享令牌,分享按 token 而非自增 id 访问
       };
 
       const selectSql = 'SELECT * FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0';
@@ -236,6 +238,15 @@ router.post('/downloadFileById', async (req, res) => {
     }
 
     const file = results[0];
+    // 访问校验:本人(凭会话)/ 分享(凭 token)/ root 三者之一放行,防按自增 id 枚举越权下载他人文件
+    const uid = req.user?.id;
+    const canAccess =
+      (uid && uid === file.create_by) ||
+      req.user?.role === 'root' ||
+      (req.body.token && file.share_token && req.body.token === file.share_token);
+    if (!canAccess) {
+      return res.send(resultData(null, 403, '无权访问该文件'));
+    }
     const objectKey = file.obs_key || buildObjectKey(file.create_by, file.file_name);
     const { url, expiresIn } = createDownloadSignedUrl({ objectKey, expires: 600 });
 

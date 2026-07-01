@@ -102,7 +102,7 @@
                 {
                   label: $t('cloudSpace.share'),
                   icon: icon.cloudSpace.share,
-                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
+                  function: () => handleShareFile(item.id, item.fileName, item.fileType, item.shareToken),
                 },
                 {
                   label: $t('cloudSpace.moveFile'),
@@ -268,7 +268,7 @@
                 {
                   label: $t('cloudSpace.share'),
                   icon: icon.cloudSpace.share,
-                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
+                  function: () => handleShareFile(item.id, item.fileName, item.fileType, item.shareToken),
                 },
                 {
                   label: $t('cloudSpace.moveFile'),
@@ -898,9 +898,9 @@
     }
   };
 
-  async function handleShareFile(id, fileName, fileType) {
+  async function handleShareFile(id, fileName, fileType, shareToken) {
     recordOperation({ module: '云空间', operation: `打开文件分享弹窗【${fileName}】` });
-    shareTarget.value = { id, fileName, fileType };
+    shareTarget.value = { id, fileName, fileType, shareToken };
     shareDescValue.value = '';
     shareDescVisible.value = true;
   }
@@ -917,7 +917,13 @@
     try {
       shareSubmitting.value = true;
       const desc = shareDescValue.value.trim();
-      await shareField(shareTarget.value.id, shareTarget.value.fileName, shareTarget.value.fileType, desc);
+      await shareField(
+        shareTarget.value.id,
+        shareTarget.value.shareToken,
+        shareTarget.value.fileName,
+        shareTarget.value.fileType,
+        desc,
+      );
       recordOperation({ module: '云空间', operation: `分享文件成功【${shareTarget.value.fileName}】` });
       shareDescVisible.value = false;
       shareTarget.value = null;

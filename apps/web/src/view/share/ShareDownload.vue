@@ -206,7 +206,7 @@
 
   // 从路由参数中获取文件名 and 文件类型
   const initFileInfo = () => {
-    apiBasePost('/api//file/getFileInfo', { id: route.params.id as string }).then((res) => {
+    apiBasePost('/api/file/getFileInfo', { id: route.params.id as string, token: route.params.token as string }).then((res) => {
       if (res.status === 200) {
         Object.assign(file, res.data);
       }
@@ -218,7 +218,7 @@
     if (id) {
       loading.value = true;
       try {
-        const success = await downloadField(id);
+        const success = await downloadField(id, route.params.token as string);
         loading.value = false;
         if (success) {
           downloadSuccess.value = true;

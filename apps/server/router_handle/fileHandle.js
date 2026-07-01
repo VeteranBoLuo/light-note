@@ -18,6 +18,15 @@ export const getFileInfo = async (req, res) => {
       return res.send(resultData(null, 404, '数据库中未找到文件'));
     }
     const file = results[0];
+    // 访问校验:本人(凭会话)/ 分享(凭 token)/ root,防按自增 id 枚举越权读取他人文件元数据
+    const uid = req.user?.id;
+    const canAccess =
+      (uid && uid === file.create_by) ||
+      req.user?.role === 'root' ||
+      (req.body.token && file.share_token && req.body.token === file.share_token);
+    if (!canAccess) {
+      return res.send(resultData(null, 403, '无权访问该文件'));
+    }
     const category = resolveFileCategory({
       fileName: file.file_name,
       fileType: file.file_type,
