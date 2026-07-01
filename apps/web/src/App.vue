@@ -319,9 +319,10 @@
     try {
       userInfoLoaded = true;
       handleUserLogout(true);
+      bookmark.isShowLogin = false; // 被封禁走专属申诉页,不弹登录框
       bookmark.type = 'all';
-      if (!['login'].includes(String(router.currentRoute.value.name || ''))) {
-        await redirectToGuestHome();
+      if (String(router.currentRoute.value.name || '') !== 'banned') {
+        await router.push('/banned');
       }
     } finally {
       isHandlingUserBanned = false;
@@ -484,7 +485,7 @@
     }, NOTICE_POLLING_INTERVAL);
   }
 
-  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role', 'landing'];
+  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role', 'landing', 'banned'];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {

@@ -62,6 +62,11 @@ const routes: RouteRecordRaw[] = [
     name: 'landing',
     component: () => import('@/view/landing/Landing.vue'),
   },
+  {
+    path: '/banned',
+    name: 'banned',
+    component: () => import('@/view/banned/BannedAppeal.vue'),
+  },
   ...statusRouter,
   ...phoneRouter,
   {

@@ -90,6 +90,10 @@ function notifyAuthExpired(response?: any) {
 }
 
 function notifyUserBanned(response?: any) {
+  // 申诉接口豁免:被封用户提交申诉的响应也带 x-user-banned 头,若触发登出/跳转会导致申诉页无法提交
+  if ((response?.config?.url || '').includes('/user/appeal')) {
+    return false;
+  }
   const status = response?.status || response?.data?.status;
   const headerBanned = response?.headers?.['x-user-banned'] === '1';
   if (status !== 423 && !headerBanned) {
