@@ -243,4 +243,22 @@
     color: var(--sub-text-color, #888);
     font-weight: 500;
   }
+
+  /* 本面板内容较多(统计卡 + 撞墙热点表 + 按天趋势表),覆盖 admin-manage.less 的
+     「固定视口高 + flex 平分 + overflow:hidden」布局:改为整面板纵向滚动、内容按自然高度排布,
+     避免卡片换行挤占后两个表格空间导致看不清、且整体没有滚动条 */
+  .admin-panel {
+    overflow-y: auto;
+  }
+  .admin-table-card {
+    flex: none;
+    overflow: visible;
+    margin-bottom: 16px;
+  }
+  /* 撞墙热点表(ant-table)原本靠 flex:1 撑满 + 内部滚动,现改为自然高度随面板一起滚 */
+  :deep(.ant-table-wrapper),
+  :deep(.ant-table-body) {
+    flex: none;
+    overflow: visible !important;
+  }
 </style>
