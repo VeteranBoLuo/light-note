@@ -127,6 +127,43 @@ export const login = async (req, res) => {
   }
 };
 
+// 被封禁用户提交申诉(白名单接口 /user/appeal):服务端强制 type='封禁申诉',只取 content/phone 并限长,
+// 复用 opinion(意见反馈)表 → 申诉即反馈的一类,root 在反馈历史里可见并回复。
+// 不给通用反馈接口 recordOpinion 开白名单,避免被封用户获得任意写入口(越权)。
+export const submitAppeal = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId || req.user?.role === 'visitor') {
+      return res.send(resultData(null, 403, '请先登录'));
+    }
+    const content = String(req.body?.content || '').trim().slice(0, 500);
+    const phone = String(req.body?.phone || '').trim().slice(0, 50);
+    if (!content) {
+      return res.send(resultData(null, 400, '请填写申诉内容'));
+    }
+    // 防刷:同一用户未处理(pending)的申诉不超过 5 条
+    const [pendingRows] = await pool.query(
+      "SELECT COUNT(*) AS c FROM opinion WHERE user_id = ? AND type = '封禁申诉' AND status = 'pending' AND del_flag = '0'",
+      [userId],
+    );
+    if (Number(pendingRows[0]?.c || 0) >= 5) {
+      return res.send(resultData(null, 429, '已有多条申诉待处理，请耐心等待管理员回复'));
+    }
+    const params = insertData({
+      userId,
+      type: '封禁申诉', // 服务端强制,作为「申诉」类型标记,与普通反馈区分
+      content,
+      phone,
+      status: 'pending',
+      replyViewed: 0,
+    });
+    await pool.query('INSERT INTO opinion SET ?', [params]);
+    res.send(resultData('申诉已提交，我们会尽快处理'));
+  } catch (err) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+  }
+};
+
 export const registerUser = async (req, res) => {
   try {
     // 检查邮箱是否已存在

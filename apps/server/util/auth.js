@@ -184,6 +184,7 @@ const ACCOUNT_BAN_ALLOWED_PATHS = [
   '/user/registerUser',
   '/user/sendEmail',
   '/user/verifyCode',
+  '/user/appeal', // 被封禁用户提交申诉(仅此窄接口放行,不开放通用反馈)
 ];
 
 export const accountBanMiddleware = (req, res, next) => {

@@ -34,4 +34,6 @@ router.post('/sendEmail', userHandle.sendEmail);
 
 router.post('/verifyCode', userHandle.verifyCode);
 
+router.post('/appeal', userHandle.submitAppeal);
+
 export default router;
