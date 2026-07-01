@@ -62,10 +62,27 @@ function notifyAuthExpired(response?: any) {
     (serverRole === 'visitor' || status === 'visitor' || status === 401);
   if (status === 200 && serverRole && serverRole !== 'visitor') {
     authExpiredFlow = false;
+    // 收到有效登录响应 → 重新登录成功,解除一次性抑制,下次真过期还能正常提示
+    try {
+      sessionStorage.removeItem('ln_auth_ended');
+    } catch {}
     return false;
   }
   if (headerExpired || lostLoginState) {
     authExpiredFlow = true;
+    // 一次性:同一浏览器标签内只提示 + 重定向一次。之后残留 sid(httpOnly cookie / rememberedSid)
+    // 反复触发的过期信号静默降级为游客(App 已按 /me 返回的 visitor 渲染),
+    // 避免账号被删/僵尸会话导致「登录已过期 → landing」每次刷新都循环。
+    let alreadyEnded = false;
+    try {
+      alreadyEnded = sessionStorage.getItem('ln_auth_ended') === '1';
+    } catch {}
+    if (alreadyEnded) {
+      return true;
+    }
+    try {
+      sessionStorage.setItem('ln_auth_ended', '1');
+    } catch {}
     window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
     return true;
   }
@@ -130,7 +147,8 @@ request.interceptors.request.use(
       }
       config.headers['fingerprint'] = (window as any)['fingerprint'];
       const rememberedSid = localStorage.getItem('rememberedSid');
-      if (rememberedSid) {
+      // 过期流程中不再重放旧 sid,避免带着失效凭证继续触发过期
+      if (rememberedSid && !authExpiredFlow) {
         config.headers['X-Session-Id'] = rememberedSid;
       }
     }
