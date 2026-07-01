@@ -310,6 +310,20 @@
         </div>
       </div>
     </div>
+    <div
+      v-if="!cloud.loading && !cloud.fileList.length"
+      style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
+    >
+      <div style="font-size: 44px; opacity: 0.7">📁</div>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">还没有文件</p>
+      <p style="margin: 0; font-size: 13px">点下方按钮上传，或直接把文件拖拽到这里</p>
+      <button
+        @click="triggerUpload"
+        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
+      >
+        上传文件
+      </button>
+    </div>
     <b-loading :loading="cloud.loading" class="both-center" />
 
     <b-modal
@@ -393,6 +407,12 @@
 
   const { t } = useI18n();
   const emit = defineEmits(['previewFile', 'moveField']);
+
+  // 首屏空状态引导:复用 CloudFolder 的隐藏上传 input(桌面端);移动端则靠拖拽/上方入口
+  function triggerUpload() {
+    const el = document.getElementById('folder-upload-input') as HTMLInputElement | null;
+    if (el) el.click();
+  }
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
   const router = useRouter();

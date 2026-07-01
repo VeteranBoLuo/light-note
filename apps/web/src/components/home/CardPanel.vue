@@ -14,6 +14,20 @@
         </div>
       </div>
     </div>
+    <div
+      v-else-if="!getBookList.length"
+      style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
+    >
+      <div style="font-size: 44px; opacity: 0.7">🔖</div>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">这里还没有书签</p>
+      <p style="margin: 0; font-size: 13px">把常用网站收进来，一处收纳、随处可开</p>
+      <button
+        @click="goAddBookmark"
+        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
+      >
+        + 添加书签
+      </button>
+    </div>
     <VueDraggable
       v-else
       :animation="200"
@@ -63,6 +77,11 @@
     return bookmark.bookmarkList;
   });
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
+
+  // 首屏空状态引导:书签为空(含 seed 失败兜底)时引导添加第一个,而非一片空白
+  function goAddBookmark() {
+    router.push('/manage/editBookmark/add');
+  }
 
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签【${item.name}】` });
