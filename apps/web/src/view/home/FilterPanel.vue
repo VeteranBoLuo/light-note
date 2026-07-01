@@ -25,7 +25,9 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
             <template #suffix>
-              <BSwitch v-model:checked="hideEmptyTags" title="隐藏空标签" />
+              <b-tooltip title="隐藏空标签">
+                <BSwitch v-model:checked="hideEmptyTags" />
+              </b-tooltip>
             </template>
           </b-input>
           <div
