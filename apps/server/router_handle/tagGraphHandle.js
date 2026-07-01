@@ -300,3 +300,83 @@ export const getTagGraph = async (req, res) => {
     res.send(resultData(null, 500, '获取标签图谱失败: ' + error.message));
   }
 };
+
+const MAX_GLOBAL_TAGS = 300;
+const MAX_GLOBAL_EDGES = 800;
+
+// 全局知识图谱(root 专属):本人全部标签为节点 + 标签共现边(俯瞰知识全貌,区别于按单标签展开的 getTagGraph)
+export const getGlobalGraph = async (req, res) => {
+  try {
+    if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+    const userId = req.user.id;
+    const minCo = Math.max(1, Math.min(Number(req.body?.minCoOccurrence) || 1, 10));
+
+    // 1. 全部标签作为节点,size/weight 由挂载资源数决定
+    const [tagRows] = await pool.query(
+      `SELECT t.id, t.name, t.icon_url,
+         (SELECT COUNT(*) FROM resource_tag_relations r WHERE r.tag_id = t.id AND r.user_id = ?) AS resource_count
+       FROM tag t
+       WHERE t.user_id = ? AND t.del_flag = 0
+       ORDER BY resource_count DESC, t.sort, t.create_time DESC
+       LIMIT ?`,
+      [userId, userId, MAX_GLOBAL_TAGS],
+    );
+
+    const nodes = new Map();
+    tagRows.forEach((t) => {
+      const count = Number(t.resource_count || 0);
+      pushNode(nodes, {
+        id: toNodeId('tag', t.id),
+        rawId: t.id,
+        type: 'tag',
+        label: t.name,
+        size: getNodeSize('tag', count),
+        weight: count,
+        iconUrl: t.icon_url,
+        meta: { resourceCount: count },
+      });
+    });
+
+    // 2. 标签共现边:两个标签被打在同一批资源上,共现越多边越粗
+    const [coRows] = await pool.query(
+      `SELECT a.tag_id AS t1, b.tag_id AS t2, COUNT(*) AS co
+       FROM resource_tag_relations a
+       INNER JOIN resource_tag_relations b
+         ON a.resource_type = b.resource_type AND a.resource_id = b.resource_id AND a.tag_id < b.tag_id
+       WHERE a.user_id = ? AND b.user_id = ?
+       GROUP BY a.tag_id, b.tag_id
+       HAVING co >= ?
+       ORDER BY co DESC
+       LIMIT ?`,
+      [userId, userId, minCo, MAX_GLOBAL_EDGES],
+    );
+
+    const edges = new Map();
+    coRows.forEach((r) => {
+      const source = toNodeId('tag', r.t1);
+      const target = toNodeId('tag', r.t2);
+      if (!nodes.has(source) || !nodes.has(target)) return; // 两端都要在节点集内(被 LIMIT 截掉的不连)
+      pushEdge(edges, {
+        id: `edge:tag-tag:${r.t1}:${r.t2}`,
+        source,
+        target,
+        type: 'tag-tag',
+        weight: Math.min(6, 1 + Number(r.co || 1)),
+      });
+    });
+
+    res.send(
+      resultData({
+        nodes: Array.from(nodes.values()),
+        edges: Array.from(edges.values()),
+        stats: {
+          tagCount: nodes.size,
+          edgeCount: edges.size,
+          truncated: tagRows.length >= MAX_GLOBAL_TAGS,
+        },
+      }),
+    );
+  } catch (error) {
+    res.send(resultData(null, 500, '获取全局图谱失败: ' + error.message));
+  }
+};

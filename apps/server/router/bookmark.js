@@ -18,6 +18,8 @@ router.post('/getRelatedTag', bookmarkHandle.getRelatedTag);
 
 router.post('/getTagGraph', tagGraphHandle.getTagGraph);
 
+router.post('/getGlobalGraph', tagGraphHandle.getGlobalGraph);
+
 router.post('/getBookmarkList', bookmarkHandle.getBookmarkList);
 
 router.post('/addTag', bookmarkHandle.addTag);
