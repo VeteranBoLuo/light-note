@@ -71,6 +71,14 @@
             >注册
           </b-button>
         </a-form-item>
+        <a-form-item>
+          <a
+            class="dom-hover-click"
+            style="display: block; text-align: center; color: #3b82f6; cursor: pointer"
+            @click="registerWithGitHub"
+            >GitHub 一键注册 / 登录</a
+          >
+        </a-form-item>
       </a-form>
       <span class="tips-text"
         >已有账号？前往<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '登录'"
@@ -125,6 +133,16 @@
   }
   const registerRef = ref();
   const emit = defineEmits(['update:success']);
+
+  // GitHub 一键注册/登录:与登录页同一 OAuth 流程(已有账号→登录,新账号→创建);多数 CTA 直开注册 Tab,补上最省事的入口
+  const registerWithGitHub = () => {
+    const clientId = 'Ov23liuOPhDka7KkXrpQ';
+    const redirectUri = 'https://boluo66.top/auth/callback';
+    const scope = 'user:email';
+    const state = Math.random().toString(36).substring(7);
+    const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
+    window.location.href = authUrl;
+  };
   async function handleRegister() {
     const condition = [
       {
