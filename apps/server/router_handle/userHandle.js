@@ -3,7 +3,7 @@ import { resultData, snakeCaseKeys, mergeExistingProperties, insertData, generat
 import { RESOURCE_TYPE, insertResourceTagRelations } from '../util/resourceTags.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
-import { verifyPassword, hashPassword } from '../util/password.js';
+import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor } from '../util/auth.js';
 import { recordConversionEvent } from '../util/conversion.js';
@@ -181,6 +181,11 @@ export const registerUser = async (req, res) => {
     const [existingUser] = await pool.query('SELECT * FROM user WHERE email = ?', [req.body.email]);
     if (existingUser?.length > 0) {
       return res.send(resultData(null, 500, '账号已存在'));
+    }
+    // 后端密码校验(前端规则可绕过,后端为准):非空、6-64 位
+    const pwdCheck = validatePassword(req.body.password);
+    if (!pwdCheck.ok) {
+      return res.send(resultData(null, 400, pwdCheck.msg));
     }
 
     // 准备用户数据(字段白名单:绝不接受客户端传入的 role/del_flag/github_id 等,
@@ -739,6 +744,10 @@ export const configPassword = async (req, res) => {
       return res.send(resultData(null, 401, '请先登录'));
     }
     const { password, type } = req.body;
+    const pwdCheck = validatePassword(password);
+    if (!pwdCheck.ok) {
+      return res.send(resultData(null, 400, pwdCheck.msg));
+    }
     const [oldUser] = await pool.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [id]);
     if (type === 'update') {
       const { oldPassword } = req.body;
@@ -799,6 +808,10 @@ export const sendEmail = async (req, res) => {
 export const verifyCode = async (req, res) => {
   try {
     const { email, code, password } = req.body;
+    const pwdCheck = validatePassword(password);
+    if (!pwdCheck.ok) {
+      return res.send(resultData(null, 400, pwdCheck.msg));
+    }
 
     // 1. 从Redis获取存储的验证码
     const storedCode = await redisClient.get(`email:code:${email}`);

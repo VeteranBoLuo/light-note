@@ -10,6 +10,13 @@ const loginLimiter = rateLimit({
   message: { data: null, status: 429, msg: '登录尝试过于频繁，请5分钟后再试' },
 });
 
+// 注册限流:注册本该很少见,按 IP 每小时最多 10 次,防脚本批量刷号(每次注册还写 seed 数据)
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { data: null, status: 429, msg: '注册过于频繁，请稍后再试' },
+});
+
 router.post('/login', loginLimiter, userHandle.login);
 
 router.get('/getUserInfo', userHandle.getUserInfo);
@@ -18,7 +25,7 @@ router.get('/me', userHandle.me);
 
 router.post('/getUserList', userHandle.getUserList);
 
-router.post('/registerUser', userHandle.registerUser);
+router.post('/registerUser', registerLimiter, userHandle.registerUser);
 
 router.post('/saveUserInfo', userHandle.saveUserInfo);
 

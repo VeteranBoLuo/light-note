@@ -40,3 +40,15 @@ export function isHashed(storedPassword) {
   if (!storedPassword) return false;
   return storedPassword.split(SEPARATOR).length === 2;
 }
+
+/**
+ * 后端密码规则校验(前端规则可被绕过,后端为准)。各页 UI 均要求 6-16 位,
+ * 这里取更宽松的安全下限(非空、6-64 位),绝不拒绝任何 UI 能提交的密码,只挡直连接口的空/超短/超长。
+ * @returns {{ok: boolean, msg?: string}}
+ */
+export function validatePassword(plainPassword) {
+  if (!plainPassword || typeof plainPassword !== 'string') return { ok: false, msg: '密码不能为空' };
+  if (plainPassword.length < 6) return { ok: false, msg: '密码长度不能小于6位' };
+  if (plainPassword.length > 64) return { ok: false, msg: '密码长度不能超过64位' };
+  return { ok: true };
+}
