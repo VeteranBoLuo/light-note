@@ -152,6 +152,8 @@
         user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
         user.preferences.homePage = getHomePagePreference(res.data?.preferences);
         localStorage.setItem('preferences', JSON.stringify(user.preferences));
+        // 标记「刚注册」,进入首页后由 HomeDefaultHint 引导设置默认首页
+        localStorage.setItem('ln_just_registered', '1');
         router.push(getAppHomePath(user.preferences, bookmark.isMobile));
         message.success('注册成功，已为你自动登录');
         setLocale(user.preferences.lang || 'zh-CN');

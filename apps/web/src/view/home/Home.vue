@@ -3,6 +3,7 @@
     <FilterPanel id="phone-filter-panel" class="phone-filter-panel" />
     <ViewPanel />
     <GuestBrowseNudge />
+    <HomeDefaultHint />
   </div>
 </template>
 
@@ -10,6 +11,7 @@
   import FilterPanel from '@/view/home/FilterPanel.vue';
   import ViewPanel from '@/view/home/ViewPanel.vue';
   import GuestBrowseNudge from '@/components/home/GuestBrowseNudge.vue';
+  import HomeDefaultHint from '@/components/home/HomeDefaultHint.vue';
   import { computed, nextTick, onMounted, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
