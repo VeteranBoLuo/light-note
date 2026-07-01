@@ -183,8 +183,13 @@ export const registerUser = async (req, res) => {
       return res.send(resultData(null, 500, '账号已存在'));
     }
 
-    // 准备用户数据
-    const params = req.body;
+    // 准备用户数据(字段白名单:绝不接受客户端传入的 role/del_flag/github_id 等,
+    // 否则 POST {role:'root'} 就能自助注册成管理员越权提权)
+    const params = {
+      email: req.body.email,
+      password: req.body.password,
+      role: 'admin', // 角色服务端强制写死,不信任客户端
+    };
     // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
     params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark' });
     if (params.password) {
