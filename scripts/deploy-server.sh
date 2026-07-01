@@ -19,7 +19,7 @@ rsync -az --no-owner --no-group --delete \
   --exclude 'sql/' \
   -e "ssh -i $KEY" "$OUT"/ "$HOST:$REMOTE/"
 
-echo "♻️  pm2 restart $PM2…"
+echo "♻️  pm2 restart ${PM2}…"
 ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env"
 
 echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
