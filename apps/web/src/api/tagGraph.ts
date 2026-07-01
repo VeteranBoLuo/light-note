@@ -29,6 +29,7 @@ export interface TagGraphNode {
     updateTime?: string;
     description?: string;
     relatedCount?: number;
+    resourceCount?: number;
     isCenter?: boolean;
   };
 }
@@ -61,6 +62,21 @@ export function fetchTagGraph(params: TagGraphRequest) {
   return apiBasePost('/api/bookmark/getTagGraph', params) as Promise<{
     status: number;
     data: TagGraphResponse;
+    msg: string;
+  }>;
+}
+
+export interface GlobalGraphResponse {
+  nodes: TagGraphNode[];
+  edges: TagGraphEdge[];
+  stats: { tagCount: number; edgeCount: number; truncated: boolean };
+}
+
+// 全局知识图谱(root 专属):本人全部标签 + 标签共现边
+export function fetchGlobalGraph(params?: { minCoOccurrence?: number }) {
+  return apiBasePost('/api/bookmark/getGlobalGraph', params || {}) as Promise<{
+    status: number;
+    data: GlobalGraphResponse;
     msg: string;
   }>;
 }
