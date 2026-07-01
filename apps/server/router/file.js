@@ -14,6 +14,7 @@ import {
 import { FILE_CATEGORY_ORDER, getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
 import * as fileHandle from '../router_handle/fileHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { recordFirstOwnResource } from '../util/conversion.js';
 const router = express.Router();
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
@@ -154,6 +155,7 @@ router.post('/confirmUpload', async (req, res) => {
 
     await connection.commit();
     res.send(resultData(results));
+    recordFirstOwnResource(req, 'file'); // 激活里程碑:首次自建文件(直传回调写库成功)
   } catch (error) {
     await connection.rollback();
     res.send(resultData(null, 500, '服务器内部错误: ' + error.message));

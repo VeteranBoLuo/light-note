@@ -92,4 +92,32 @@ describe('getConversionFunnel', () => {
     });
     expect(arg.data.hotspots).toEqual([{ context: 'add-bookmark', cnt: 5 }]);
   });
+
+  it('返回分享/激活字段,且时间窗参数下推到查询', async () => {
+    const calls = [];
+    query.mockImplementation((sql, params) => {
+      calls.push({ sql, params });
+      if (/GROUP BY event/.test(sql)) {
+        return Promise.resolve([
+          [
+            { event: 'page_view', visitors: 10 },
+            { event: 'share_view', visitors: 7 },
+            { event: 'share_cta_click', visitors: 2 },
+          ],
+        ]);
+      }
+      if (/DISTINCT ip/.test(sql)) return Promise.resolve([[{ ips: 4 }]]);
+      if (/first_own_resource/.test(sql)) return Promise.resolve([[{ activated: 5 }]]);
+      if (/DATE_FORMAT/.test(sql)) return Promise.resolve([[{ d: '2026-07-01', pv: 10, cta: 3, reg: 1 }]]);
+      return Promise.resolve([[]]); // hotspots
+    });
+    const res = mockRes();
+    await getConversionFunnel({ user: { role: 'root' }, body: { startDate: '2026-06-01', endDate: '2026-06-30' } }, res);
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.data).toMatchObject({ shareViewVisitors: 7, shareCtaClickVisitors: 2, activatedUsers: 5 });
+    expect(arg.data.trend).toEqual([{ d: '2026-07-01', pv: 10, cta: 3, reg: 1 }]);
+    const funnelCall = calls.find((c) => /GROUP BY event/.test(c.sql));
+    expect(funnelCall.sql).toContain('create_time');
+    expect(funnelCall.params).toEqual(['2026-06-01 00:00:00', '2026-06-30']);
+  });
 });

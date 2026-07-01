@@ -22,23 +22,57 @@ export const recordConversion = (req, res) => {
   res.send(resultData(null));
 };
 
-// 转化漏斗看板数据(root 专属):各事件去重访客数 + 撞墙热点
+// 转化漏斗看板数据(root 专属):各事件去重访客数 + 撞墙热点 + 分享/激活 + 按天趋势;支持时间窗
 export const getConversionFunnel = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
-    // 漏斗只算游客:page_view/wall_hit/cta_click 限 visitor;register(转化那一刻)按 fingerprint 全算
+    // 时间窗(可选):startDate/endDate 为 'YYYY-MM-DD',用于「改一版看效果」的版本前后对比;不传则全期
+    const { startDate, endDate } = req.body || {};
+    const timeCond = [];
+    const timeParams = [];
+    if (startDate) {
+      timeCond.push('create_time >= ?');
+      timeParams.push(String(startDate) + ' 00:00:00');
+    }
+    if (endDate) {
+      timeCond.push('create_time < DATE_ADD(?, INTERVAL 1 DAY)');
+      timeParams.push(String(endDate));
+    }
+    const andTime = timeCond.length ? ' AND ' + timeCond.join(' AND ') : '';
+
+    // 漏斗只算游客:page_view/wall_hit/cta_click/share_* 限 visitor;register(转化那一刻)按 fingerprint 全算
     const [rows] = await pool.query(
-      "SELECT event, COUNT(DISTINCT fingerprint) AS visitors FROM conversion_events WHERE event = 'register' OR visitor_type = 'visitor' GROUP BY event",
+      `SELECT event, COUNT(DISTINCT fingerprint) AS visitors FROM conversion_events WHERE (event = 'register' OR visitor_type = 'visitor')${andTime} GROUP BY event`,
+      timeParams,
     );
-    // 用显式 camelCase 标量字段返回,避免 resultData 的 camelCaseKeys 把 wall_hit/cta_click 等带下划线的 key 改名(register 无下划线幸免,曾导致只有它显示)
+    // 用显式 camelCase 标量字段返回,避免 resultData 的 camelCaseKeys 把 wall_hit/cta_click 等带下划线的 key 改名
     const visitorsOf = (ev) => {
       const r = rows.find((x) => x.event === ev);
       return r ? Number(r.visitors) : 0;
     };
     const [hotspots] = await pool.query(
-      "SELECT context, COUNT(*) AS cnt FROM conversion_events WHERE event = 'wall_hit' AND context <> '' GROUP BY context ORDER BY cnt DESC LIMIT 20",
+      `SELECT context, COUNT(*) AS cnt FROM conversion_events WHERE event = 'wall_hit' AND context <> ''${andTime} GROUP BY context ORDER BY cnt DESC LIMIT 20`,
+      timeParams,
     );
-    const [ipRow] = await pool.query("SELECT COUNT(DISTINCT ip) AS ips FROM conversion_events WHERE visitor_type = 'visitor' AND ip <> ''");
+    const [ipRow] = await pool.query(
+      `SELECT COUNT(DISTINCT ip) AS ips FROM conversion_events WHERE visitor_type = 'visitor' AND ip <> ''${andTime}`,
+      timeParams,
+    );
+    // 激活里程碑:首次自建资源的去重用户数(登录用户,按 user_id)
+    const [actRow] = await pool.query(
+      `SELECT COUNT(DISTINCT user_id) AS activated FROM conversion_events WHERE event = 'first_own_resource' AND user_id IS NOT NULL${andTime}`,
+      timeParams,
+    );
+    // 按天趋势(访问 / 点击注册 / 注册成功),用 DATE_FORMAT 直接出字符串避免时区偏移
+    const [trend] = await pool.query(
+      `SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d,
+         COUNT(DISTINCT CASE WHEN visitor_type = 'visitor' AND event = 'page_view' THEN fingerprint END) AS pv,
+         COUNT(DISTINCT CASE WHEN visitor_type = 'visitor' AND event = 'cta_click' THEN fingerprint END) AS cta,
+         COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS reg
+       FROM conversion_events WHERE 1 = 1${andTime}
+       GROUP BY d ORDER BY d`,
+      timeParams,
+    );
     res.send(
       resultData({
         pageViewVisitors: visitorsOf('page_view'),
@@ -46,8 +80,12 @@ export const getConversionFunnel = async (req, res) => {
         ctaClickVisitors: visitorsOf('cta_click'),
         registerViewVisitors: visitorsOf('register_view'),
         registerVisitors: visitorsOf('register'),
+        shareViewVisitors: visitorsOf('share_view'),
+        shareCtaClickVisitors: visitorsOf('share_cta_click'),
+        activatedUsers: Number(actRow[0]?.activated || 0),
         uniqueIps: Number(ipRow[0]?.ips || 0),
         hotspots,
+        trend: (trend || []).map((t) => ({ d: t.d, pv: Number(t.pv || 0), cta: Number(t.cta || 0), reg: Number(t.reg || 0) })),
       }),
     );
   } catch (e) {

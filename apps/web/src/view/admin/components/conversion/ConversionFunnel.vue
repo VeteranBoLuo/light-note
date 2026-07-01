@@ -9,6 +9,14 @@
         </div>
       </header>
 
+      <div class="funnel-filter">
+        <label>起始 <input type="date" v-model="startDate" /></label>
+        <label>结束 <input type="date" v-model="endDate" /></label>
+        <button class="funnel-btn" @click="query">查询</button>
+        <button class="funnel-btn ghost" @click="reset">全期</button>
+        <span class="funnel-range-hint">当前:{{ rangeHint }}</span>
+      </div>
+
       <ul class="admin-stats">
         <li class="admin-stat-card">
           <span class="admin-stat-label">访问量</span>
@@ -40,6 +48,21 @@
           <strong class="admin-stat-value">{{ visitToReg }}%</strong>
           <span class="admin-stat-hint">访问→注册</span>
         </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">分享页曝光</span>
+          <strong class="admin-stat-value">{{ shareView }}</strong>
+          <span class="admin-stat-hint">独立访客</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">分享页点击</span>
+          <strong class="admin-stat-value">{{ shareCta }}</strong>
+          <span class="admin-stat-hint">曝光→点击 {{ shareViewToCta }}%</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">激活用户</span>
+          <strong class="admin-stat-value">{{ activated }}</strong>
+          <span class="admin-stat-hint">注册→激活 {{ regToActivated }}%(近似)</span>
+        </li>
       </ul>
 
       <div class="admin-table-card">
@@ -53,6 +76,22 @@
           @page-change="onPageChange"
           @size-change="onSizeChange"
         />
+      </div>
+
+      <div class="admin-table-card" v-if="trend.length">
+        <p class="funnel-section-title">按天趋势(游客访问 / 点击注册 / 注册成功)</p>
+        <div class="funnel-trend-wrap">
+          <table class="funnel-trend">
+            <thead>
+              <tr><th>日期</th><th>访问</th><th>点击注册</th><th>注册成功</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in trend" :key="t.d">
+                <td>{{ t.d }}</td><td>{{ t.pv }}</td><td>{{ t.cta }}</td><td>{{ t.reg }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </div>
@@ -73,6 +112,12 @@
   const currentPage = ref(1);
   const pageSize = ref(20);
   const total = ref(0);
+  const shareView = ref(0);
+  const shareCta = ref(0);
+  const activated = ref(0);
+  const trend = ref<any[]>([]);
+  const startDate = ref('');
+  const endDate = ref('');
 
   const paginatedHotspots = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
@@ -98,9 +143,15 @@
   const ctaToView = computed(() => rate(registerView.value, cta.value));
   const viewToReg = computed(() => rate(reg.value, registerView.value));
   const visitToReg = computed(() => rate(reg.value, pageView.value));
+  const shareViewToCta = computed(() => rate(shareCta.value, shareView.value));
+  const regToActivated = computed(() => rate(activated.value, reg.value));
+  const rangeHint = computed(() => (startDate.value || endDate.value ? `${startDate.value || '起'} ~ ${endDate.value || '今'}` : '全期'));
 
   function fetchData() {
-    apiBasePost('/api/common/getConversionFunnel', {}).then((res: any) => {
+    apiBasePost('/api/common/getConversionFunnel', {
+      startDate: startDate.value || undefined,
+      endDate: endDate.value || undefined,
+    }).then((res: any) => {
       if (res.status === 200) {
         const d = res.data || {};
         pageView.value = d.pageViewVisitors || 0;
@@ -108,11 +159,24 @@
         cta.value = d.ctaClickVisitors || 0;
         registerView.value = d.registerViewVisitors || 0;
         reg.value = d.registerVisitors || 0;
+        shareView.value = d.shareViewVisitors || 0;
+        shareCta.value = d.shareCtaClickVisitors || 0;
+        activated.value = d.activatedUsers || 0;
         uniqueIps.value = d.uniqueIps || 0;
         hotspots.value = d.hotspots || [];
+        trend.value = d.trend || [];
         total.value = hotspots.value.length;
+        currentPage.value = 1;
       }
     });
+  }
+  function query() {
+    fetchData();
+  }
+  function reset() {
+    startDate.value = '';
+    endDate.value = '';
+    fetchData();
   }
 
   onMounted(fetchData);
@@ -124,5 +188,59 @@
     margin: 0 0 12px;
     font-size: 14px;
     color: var(--text-color);
+  }
+  .funnel-filter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--text-color);
+  }
+  .funnel-filter input[type='date'] {
+    padding: 5px 8px;
+    border: 1px solid var(--card-border-color, #ddd);
+    border-radius: 6px;
+    background: var(--background-color);
+    color: var(--text-color);
+  }
+  .funnel-btn {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 6px;
+    background: #615ced;
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .funnel-btn.ghost {
+    background: transparent;
+    border: 1px solid var(--card-border-color, #ddd);
+    color: var(--text-color);
+  }
+  .funnel-range-hint {
+    color: var(--sub-text-color, #888);
+    font-size: 12px;
+  }
+  .funnel-trend-wrap {
+    overflow-x: auto;
+  }
+  .funnel-trend {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    color: var(--text-color);
+  }
+  .funnel-trend th,
+  .funnel-trend td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--card-border-color, #eee);
+    font-variant-numeric: tabular-nums;
+  }
+  .funnel-trend th {
+    color: var(--sub-text-color, #888);
+    font-weight: 500;
   }
 </style>

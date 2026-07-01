@@ -11,6 +11,7 @@ import {
 import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
+import { recordFirstOwnResource } from '../util/conversion.js';
 export const queryTagList = (req, res) => {
   const userId = req.user.id;
   try {
@@ -471,6 +472,7 @@ export const addBookmark = async (req, res) => {
     }
     await connection.commit();
     res.send(resultData(result));
+    recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
   } catch (err) {
     await connection.rollback();
     res.send(resultData(null, 500, err.message));

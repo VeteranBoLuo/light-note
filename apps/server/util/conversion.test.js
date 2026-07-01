@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const query = vi.fn().mockResolvedValue([[]]);
 vi.mock('../db/index.js', () => ({ default: { query } }));
 
-const { recordConversionEvent } = await import('./conversion.js');
+const { recordConversionEvent, recordFirstOwnResource } = await import('./conversion.js');
 
 describe('recordConversionEvent', () => {
   beforeEach(() => query.mockClear());
@@ -45,5 +45,31 @@ describe('recordConversionEvent', () => {
     const [, params] = query.mock.calls[0];
     expect(params[2]).toBe('visitor');
     expect(params[1]).toBe(null);
+  });
+});
+
+describe('recordFirstOwnResource(激活里程碑)', () => {
+  beforeEach(() => query.mockReset());
+
+  it('未激活过 → 查存在性 + 写一次 first_own_resource(context=type)', async () => {
+    query.mockResolvedValueOnce([[]]); // SELECT 存在性:空
+    query.mockResolvedValueOnce([[]]); // INSERT
+    await recordFirstOwnResource({ user: { id: 'u1', role: 'admin' }, headers: {} }, 'bookmark');
+    expect(query).toHaveBeenCalledTimes(2);
+    const [sql, params] = query.mock.calls[1];
+    expect(sql).toContain('INSERT INTO conversion_events');
+    expect(params[3]).toBe('first_own_resource'); // event
+    expect(params[4]).toBe('bookmark'); // context = type
+  });
+
+  it('已激活过 → 不重复写(只有存在性查询)', async () => {
+    query.mockResolvedValueOnce([[{ '1': 1 }]]); // SELECT 存在性:已有记录
+    await recordFirstOwnResource({ user: { id: 'u1', role: 'admin' }, headers: {} }, 'note');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('无 userId → 直接返回,不查库', async () => {
+    await recordFirstOwnResource({ user: {}, headers: {} }, 'file');
+    expect(query).not.toHaveBeenCalled();
   });
 });

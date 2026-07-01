@@ -30,3 +30,20 @@ export const recordConversionEvent = (req, event, context = '', overrides = {}) 
     console.error('[conversion] 异常:', e.message);
   }
 };
+
+// 激活里程碑:用户「首次自建资源」(书签/笔记/文件),每人只记一次。
+// 注册时的示例数据走直插、不经过这些 handler,故首次调用即真实自建;仅登录用户触发,不走游客白名单接口,由 handler 直接调用。
+export const recordFirstOwnResource = async (req, type) => {
+  try {
+    const userId = req?.user?.id;
+    if (!userId) return;
+    const [rows] = await pool.query(
+      "SELECT 1 FROM conversion_events WHERE user_id = ? AND event = 'first_own_resource' LIMIT 1",
+      [userId],
+    );
+    if (rows.length) return; // 已激活过,不重复记
+    recordConversionEvent(req, 'first_own_resource', String(type || ''));
+  } catch (e) {
+    console.error('[conversion] first_own_resource 失败:', e.message);
+  }
+};
