@@ -251,7 +251,7 @@
 
   const timer: any = ref(null);
   function saveFunc(isMsg?: boolean) {
-    if (!guardWrite()) {
+    if (!guardWrite(undefined, 'save-note')) {
       return;
     }
     if (timer.value) {

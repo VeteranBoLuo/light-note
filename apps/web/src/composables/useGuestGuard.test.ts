@@ -1,0 +1,78 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const apiBasePost = vi.fn().mockResolvedValue({});
+vi.mock('@/http/request', () => ({ apiBasePost: (...a: any[]) => apiBasePost(...a) }));
+const alertAlert = vi.fn();
+vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
+  default: { alert: (...a: any[]) => alertAlert(...a), destroy: vi.fn() },
+}));
+vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
+  default: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+// 可变的登录态,供各用例切换游客/登录
+const userState = { id: '', role: 'visitor' };
+vi.mock('@/store', () => ({
+  useUserStore: () => userState,
+  bookmarkStore: () => ({ openAuthModal: vi.fn() }),
+}));
+
+const { blockGuestWrite, recordWallHit } = await import('@/composables/useGuestGuard');
+
+describe('blockGuestWrite', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    apiBasePost.mockClear();
+    alertAlert.mockClear();
+    userState.id = '';
+    userState.role = 'visitor';
+  });
+  afterEach(() => {
+    vi.runAllTimers(); // 释放 wall_hit / 引导的 1.5s 锁,避免污染下一个用例
+    vi.useRealTimers();
+  });
+
+  it('游客:记 wall_hit + 弹注册引导,返回 true', () => {
+    const blocked = blockGuestWrite('add-bookmark');
+    expect(blocked).toBe(true);
+    expect(alertAlert).toHaveBeenCalledTimes(1);
+    expect(apiBasePost).toHaveBeenCalledWith(
+      '/api/common/recordConversion',
+      expect.objectContaining({ event: 'wall_hit', source: 'add-bookmark' }),
+    );
+  });
+
+  it('已登录用户:放行,返回 false,不弹不记', () => {
+    userState.id = 'u1';
+    userState.role = 'admin';
+    const blocked = blockGuestWrite('add-bookmark');
+    expect(blocked).toBe(false);
+    expect(alertAlert).not.toHaveBeenCalled();
+    expect(apiBasePost).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordWallHit 节流', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    apiBasePost.mockClear();
+  });
+  afterEach(() => {
+    vi.runAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('1.5s 内重复调用只上报一次', () => {
+    recordWallHit('a');
+    recordWallHit('a');
+    recordWallHit('a');
+    expect(apiBasePost).toHaveBeenCalledTimes(1);
+  });
+
+  it('超过 1.5s 后可再次上报', () => {
+    recordWallHit('a');
+    expect(apiBasePost).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1600);
+    recordWallHit('a');
+    expect(apiBasePost).toHaveBeenCalledTimes(2);
+  });
+});

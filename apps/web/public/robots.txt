@@ -1,6 +1,8 @@
 User-agent: *
 Allow: /
-Disallow: /#/admin
-Disallow: /#/share/download
+Disallow: /admin
+Disallow: /securityCenter
+Disallow: /personCenter
+Disallow: /share/download
 
 Sitemap: https://boluo66.top/sitemap.xml

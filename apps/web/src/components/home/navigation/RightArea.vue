@@ -23,6 +23,7 @@
     <button v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
     </button>
+    <span v-if="user.role === 'visitor'" class="guest-register-link" @click="registerClick">免费注册</span>
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
@@ -41,6 +42,7 @@
   import router from '@/router';
   import { useRoute } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { apiBasePost } from '@/http/request.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
   const bookmark = bookmarkStore();
@@ -55,6 +57,12 @@
 
   function toolkitClick() {
     window.open('https://boluo66.top/toolkit/');
+  }
+
+  // 游客点导航栏「免费注册」:记 cta_click 转化埋点 + 打开注册弹窗
+  function registerClick() {
+    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'nav' }).catch(() => {});
+    bookmark.openAuthModal('注册');
   }
 
   function handleToPhoneUserCenter() {
@@ -111,5 +119,23 @@
   }
   .toolkit-link {
     text-decoration: none;
+  }
+  .guest-register-link {
+    font-size: 13px;
+    font-weight: 500;
+    color: #fff;
+    background: #615ced;
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 5px 14px;
+    border-radius: 999px;
+    transition:
+      opacity 0.2s,
+      box-shadow 0.2s;
+    box-shadow: 0 2px 8px rgba(97, 92, 237, 0.28);
+  }
+  .guest-register-link:hover {
+    opacity: 0.9;
+    box-shadow: 0 3px 12px rgba(97, 92, 237, 0.4);
   }
 </style>

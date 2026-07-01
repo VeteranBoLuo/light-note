@@ -28,6 +28,9 @@
             </template>
             <template v-else> Total {{ user.tagTotal }} tags, {{ user.bookmarkTotal }} bookmarks </template>
           </div>
+          <div v-if="isGuest" class="guest-own-hint">
+            你正在浏览<b>示例内容</b>，<span class="guest-own-link" @click="guestRegister">注册</span>即可拥有你自己的轻笺（免费 · 注册即用）
+          </div>
         </div>
       </div>
       <div class="category-tag-item" style="opacity: 0; height: 1px">占位块</div>
@@ -48,10 +51,18 @@
 </template>
 
 <script lang="ts" setup>
+  import { computed } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { apiBasePost } from '@/http/request';
   import router from '@/router';
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const isGuest = computed(() => !user.id || user.role === 'visitor');
+  // 游客点首页「注册拥有」:记 cta_click 转化埋点 + 打开注册弹窗
+  function guestRegister() {
+    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'home-demo-hint' }).catch(() => {});
+    bookmark.openAuthModal('注册');
+  }
   function handleToTagPage(tag) {
     bookmark.type = 'normal';
     router.push({ path: `/home/${tag.id}` }).then(() => {
@@ -102,5 +113,18 @@
     text-decoration-line: underline;
     text-underline-offset: 3px;
     font-weight: 550;
+  }
+  .guest-own-hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--desc-color);
+  }
+  .guest-own-link {
+    color: #615ced;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .guest-own-link:hover {
+    text-decoration: underline;
   }
 </style>

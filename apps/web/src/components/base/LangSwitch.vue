@@ -17,11 +17,19 @@
   import { useUserStore } from '@/store';
   import userApi from '@/api/userApi.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   const user = useUserStore();
 
   const handleLangChange = ({ key }: { key: string }) => {
     const lang = key as 'zh-CN' | 'en-US';
     document.documentElement.lang = lang;
+    // 游客:本地切换语言 + 持久化,不调后端、不触发注册墙
+    if (isGuestUser()) {
+      applyPreferenceLocally({ lang });
+      setLocale(lang);
+      return;
+    }
+    // 登录用户:同步到服务器,再刷新应用新语言
     userApi
       .updateUserInfo({
         id: user.id,
@@ -33,7 +41,6 @@
       .then(() => {
         recordOperation({ module: '导航栏', operation: `切换语言【${lang}】` });
         if (i18n.global.locale.value !== lang) {
-          location.reload();
           localStorage.setItem(
             'preferences',
             JSON.stringify({
@@ -41,6 +48,7 @@
               lang: lang,
             }),
           );
+          location.reload();
         }
       })
       .catch((err) => {

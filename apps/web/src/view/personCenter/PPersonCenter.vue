@@ -185,10 +185,11 @@
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
+  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
-  import i18n from '@/i18n';
+  import i18n, { setLocale } from '@/i18n';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -210,7 +211,10 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   ]);
 
   function changeTheme(theme: string) {
-    user.preferences.theme = theme;
+    // 本地立即生效 + 持久化(App.vue watch 应用主题)
+    applyPreferenceLocally({ theme });
+    // 游客本地化即可,不调后端、不触发注册墙;仅登录用户同步服务器
+    if (isGuestUser()) return;
     userApi
       .updateUserInfo({
         id: user.id,
@@ -219,9 +223,6 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
           theme,
         }),
       })
-      .then(() => {
-        localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      })
       .catch((err) => {
         console.error('后台错误：' + err);
       });
@@ -229,6 +230,12 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 
   function changeLanguage(lang: 'zh-CN' | 'en-US') {
     document.documentElement.lang = lang;
+    // 游客:本地切换语言 + 持久化,不调后端、不触发注册墙
+    if (isGuestUser()) {
+      applyPreferenceLocally({ lang });
+      setLocale(lang);
+      return;
+    }
     user.preferences.lang = lang;
     userApi
       .updateUserInfo({

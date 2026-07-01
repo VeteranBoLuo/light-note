@@ -135,6 +135,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
+  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
@@ -353,7 +354,10 @@
 
   function changeTheme(theme: string) {
     closeSettingMenuAndSyncPopover();
-    user.preferences.theme = theme;
+    // 本地立即生效 + 持久化(App.vue watch 应用主题)
+    applyPreferenceLocally({ theme });
+    // 游客本地化即可,不调后端、不触发注册墙;仅登录用户同步服务器
+    if (isGuestUser()) return;
     userApi
       .updateUserInfo({
         id: user.id,
@@ -361,9 +365,6 @@
           ...user.preferences,
           theme,
         }),
-      })
-      .then(() => {
-        localStorage.setItem('preferences', JSON.stringify(user.preferences));
       })
       .catch((err) => {
         console.error('后台错误：' + err);
@@ -373,6 +374,12 @@
   function changeLanguage(lang: 'zh-CN' | 'en-US') {
     closeSettingMenuAndSyncPopover();
     document.documentElement.lang = lang;
+    // 游客:本地切换语言 + 持久化,不调后端、不触发注册墙
+    if (isGuestUser()) {
+      applyPreferenceLocally({ lang });
+      setLocale(lang);
+      return;
+    }
     user.preferences.lang = lang;
     userApi
       .updateUserInfo({

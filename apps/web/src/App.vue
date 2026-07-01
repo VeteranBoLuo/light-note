@@ -18,7 +18,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { h, nextTick, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
-  import { apiBaseGet } from '@/http/request';
+  import { apiBaseGet, apiBasePost } from '@/http/request';
   import { getNoticeSummary } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { fingerprint } from '@/utils/common';
@@ -133,6 +133,16 @@
     // 设置指纹
     window['fingerprint'] = fingerprint();
 
+    // 游客访问量埋点:fingerprint 就绪后再上报,每浏览器会话一次(后端只对游客落库,已登录不计)
+    try {
+      if (!sessionStorage.getItem('ln_pv_sent')) {
+        sessionStorage.setItem('ln_pv_sent', '1');
+        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: location.pathname }).catch(() => {});
+      }
+    } catch (e) {
+      /* 隐私模式 sessionStorage 不可用时忽略 */
+    }
+
     mq = window.matchMedia('(prefers-color-scheme: dark)');
     mqListener = (e) => {
       user.preferences.theme = e.matches ? 'night' : 'day';
@@ -145,6 +155,14 @@
   // const isAppReady = ref(false); // 已移除，不再需要loading界面
   function applyUserInfo(data) {
     user.setUserInfo(data || {});
+    // 游客:/me 返回的是共用「游客」账号的偏好,应让本地(localStorage)选择优先,
+    // 否则刷新后游客自己切的主题/语言会被服务器默认值覆盖(配合 savePreference.ts 的本地持久化)
+    if (!user.id || user.role === 'visitor') {
+      const storedPreferences = getStoredPreferences();
+      if (storedPreferences && Object.keys(storedPreferences).length > 0) {
+        user.preferences = { ...user.preferences, ...storedPreferences };
+      }
+    }
     user.preferences.theme = user.preferences?.theme || 'day';
     user.preferences.lang = user.preferences?.lang || 'zh-CN';
     user.preferences.noteViewMode = user.preferences?.noteViewMode || 'list';

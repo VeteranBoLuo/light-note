@@ -60,6 +60,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -113,6 +114,8 @@
   }
 
   function submit() {
+    // 游客:即时拦截 + 上下文邀请文案(不发无效请求);后端 addBookmark 仍有 ensureNotVisitor 兜底
+    if (blockGuestWrite('add-bookmark', '把整理好的书签存进你自己的轻笺？注册即用、自动登录,免费收藏书签、记笔记、存文件。')) return;
     if (loading.value) {
       message.warning('请等待数据请求完毕');
       return;

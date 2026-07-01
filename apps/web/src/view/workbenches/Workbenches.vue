@@ -979,7 +979,8 @@ import { formatStorageSize } from '@/utils/common';
     }
 
     try {
-      if (user.id) {
+      // 游客不同步到服务器(共用游客账号,写接口会被拦成 preview 而误弹注册墙);偏好已本地生效 + 持久化
+      if (user.id && user.role !== 'visitor') {
         await userApi.updateUserInfo({
           id: user.id,
           preferences: JSON.stringify(nextPreferences),

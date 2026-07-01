@@ -5,7 +5,7 @@
         <div class="admin-title-block">
           <p class="admin-eyebrow">Admin / 增长</p>
           <h2 class="admin-title">游客转化漏斗</h2>
-          <p class="admin-subtitle">访问 → 撞墙 → 点注册 → 注册成功(按独立访客 fingerprint 去重)</p>
+          <p class="admin-subtitle">访问 → 撞墙 → 点注册 → 到达注册页 → 注册成功(按独立访客 fingerprint 去重)</p>
         </div>
       </header>
 
@@ -26,9 +26,14 @@
           <span class="admin-stat-hint">撞墙→点击 {{ wallToCta }}%</span>
         </li>
         <li class="admin-stat-card">
+          <span class="admin-stat-label">到达注册页</span>
+          <strong class="admin-stat-value">{{ registerView }}</strong>
+          <span class="admin-stat-hint">点击→到达 {{ ctaToView }}%</span>
+        </li>
+        <li class="admin-stat-card">
           <span class="admin-stat-label">注册成功</span>
           <strong class="admin-stat-value">{{ reg }}</strong>
-          <span class="admin-stat-hint">点击→注册 {{ ctaToReg }}%</span>
+          <span class="admin-stat-hint">到达→注册 {{ viewToReg }}%</span>
         </li>
         <li class="admin-stat-card">
           <span class="admin-stat-label">整体转化</span>
@@ -61,6 +66,7 @@
   const pageView = ref(0);
   const wall = ref(0);
   const cta = ref(0);
+  const registerView = ref(0);
   const reg = ref(0);
   const uniqueIps = ref(0);
   const hotspots = ref<any[]>([]);
@@ -89,7 +95,8 @@
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
   const visitToWall = computed(() => rate(wall.value, pageView.value));
   const wallToCta = computed(() => rate(cta.value, wall.value));
-  const ctaToReg = computed(() => rate(reg.value, cta.value));
+  const ctaToView = computed(() => rate(registerView.value, cta.value));
+  const viewToReg = computed(() => rate(reg.value, registerView.value));
   const visitToReg = computed(() => rate(reg.value, pageView.value));
 
   function fetchData() {
@@ -99,6 +106,7 @@
         pageView.value = d.pageViewVisitors || 0;
         wall.value = d.wallHitVisitors || 0;
         cta.value = d.ctaClickVisitors || 0;
+        registerView.value = d.registerViewVisitors || 0;
         reg.value = d.registerVisitors || 0;
         uniqueIps.value = d.uniqueIps || 0;
         hotspots.value = d.hotspots || [];

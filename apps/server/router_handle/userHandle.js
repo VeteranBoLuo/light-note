@@ -137,7 +137,8 @@ export const registerUser = async (req, res) => {
 
     // 准备用户数据
     const params = req.body;
-    params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card' });
+    // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
+    params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark' });
     if (params.password) {
       params.password = hashPassword(params.password);
       params.password_method = 'scrypt';

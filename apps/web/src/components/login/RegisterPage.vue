@@ -1,10 +1,11 @@
 <template>
   <div class="view-body" :class="title !== '注册' ? 'hide' : ''">
     <span @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(--primary-text)">
-      游客体验
+      稍后再说
     </span>
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: var(--text-color)">注册</b>
+      <p class="register-benefits">秒注册 · 自动登录 · 已备好示例数据 · 永久免费</p>
       <a-form
         :label-col="{
           span: 4,
@@ -60,36 +61,6 @@
             </b-input>
           </span>
         </a-form-item>
-        <a-form-item
-          label=""
-          name="rPassword"
-          :rules="[
-            {
-              max: 16,
-              message: '密码长度不能超过16个字符',
-            },
-            {
-              min: 6,
-              message: '密码长度不能少于6个字符',
-            },
-          ]"
-        >
-          <span class="flex-center">
-            <b-input
-              theme="al-day"
-              height="40px"
-              maxlength="20"
-              type="password"
-              placeholder="确认密码"
-              @blur="validateFun('rPassword')"
-              v-model:value="formData.rPassword"
-            >
-              <template #prefix>
-                <svg-icon :src="icon.login.password" size="16" />
-              </template>
-            </b-input>
-          </span>
-        </a-form-item>
         <a-form-item>
           <b-button
             type="primary"
@@ -111,7 +82,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, reactive, ref } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import userApi from '@/api/userApi.ts';
@@ -128,15 +99,27 @@
   const title = defineModel('title');
   const formData = reactive({
     password: '',
-    rPassword: '',
     email: '',
     role: 'admin',
   });
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const disable = computed(() => {
-    return !formData.rPassword || !formData.password || !formData.email;
+    return !formData.password || !formData.email;
   });
+
+  // 转化埋点:游客到达注册表单(register_view),补齐 cta_click→register_view→register 分段漏斗
+  let registerViewSent = false;
+  watch(
+    () => title.value,
+    (val) => {
+      if (val === '注册' && !registerViewSent && (!user.id || user.role === 'visitor')) {
+        registerViewSent = true;
+        apiBasePost('/api/common/recordConversion', { event: 'register_view', source: 'register-page' }).catch(() => {});
+      }
+    },
+    { immediate: true },
+  );
   async function validateFun(names?: any) {
     await registerRef.value.validate(names);
   }
@@ -144,10 +127,6 @@
   const emit = defineEmits(['update:success']);
   async function handleRegister() {
     const condition = [
-      {
-        endCondition: formData.rPassword !== formData.password,
-        message: '两次密码输入不一致',
-      },
       {
         endCondition: formData.password.length > 16,
         message: '密码长度不能大于16位',
@@ -163,7 +142,6 @@
     await validateFun();
     formData.role = 'admin';
     const params = cloneDeep(formData);
-    delete params.rPassword;
     apiBasePost('/api/user/registerUser', params).then((res: any) => {
       if (res.status === 200) {
         // 注册即登录:复用登录成功的入应用流程,直接进应用看到预置示例数据
@@ -191,6 +169,15 @@
 </script>
 
 <style lang="less" scoped>
+  .register-benefits {
+    justify-self: center;
+    margin: 6px 0 14px;
+    font-size: 12px;
+    color: var(--text-color);
+    opacity: 0.7;
+    text-align: center;
+  }
+
   :deep(:-webkit-autofill) {
     -webkit-text-fill-color: var(--text-color) !important;
   }

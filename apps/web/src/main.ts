@@ -19,16 +19,5 @@ globalDirect(app);
 // 挂载实例
 app.mount('#app');
 
-// 游客访问量埋点:每个浏览器会话上报一次 page_view(后端按登录态打 visitor_type,漏斗只算 visitor)
-try {
-  if (!sessionStorage.getItem('ln_pv_sent')) {
-    sessionStorage.setItem('ln_pv_sent', '1');
-    import('@/http/request').then(({ apiBasePost }) => {
-      setTimeout(() => {
-        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: location.pathname }).catch(() => {});
-      }, 1500);
-    });
-  }
-} catch (e) {
-  /* 隐私模式 sessionStorage 不可用时忽略 */
-}
+// 游客访问量埋点(page_view)已移至 App.vue initApp():需等 window.fingerprint 生成后再上报,
+// 否则 fingerprint 为空会导致漏斗按 DISTINCT fingerprint 统计失真。

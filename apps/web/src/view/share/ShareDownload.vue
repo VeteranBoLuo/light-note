@@ -108,6 +108,10 @@
           </div>
         </div>
       </div>
+      <div class="brand-cta">
+        <span class="brand-cta__text">用<b>轻笺</b>管理你的书签 · 笔记 · 文件,免费</span>
+        <button class="brand-cta__btn" @click="goRegister">免费创建你自己的</button>
+      </div>
     </div>
     <!-- 文件预览组件 -->
     <FilePreview v-model:visible="previewVisible" :file-info="previewFileInfo" @close="previewVisible = false" />
@@ -134,6 +138,7 @@
   import icon from '@/config/icon.ts';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { bookmarkStore } from '@/store';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
@@ -230,6 +235,16 @@
     recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName || route.params.id}】` });
     previewVisible.value = true;
   };
+
+  const bookmark = bookmarkStore();
+
+  // 分享页曝光埋点(后端只对游客落库)
+  apiBasePost('/api/common/recordConversion', { event: 'share_view', source: 'share-download' }).catch(() => {});
+  // 品牌注册引导:把站外分享流量转成注册
+  function goRegister() {
+    apiBasePost('/api/common/recordConversion', { event: 'share_cta_click', source: 'share-download' }).catch(() => {});
+    bookmark.openAuthModal('注册');
+  }
 
   // 初始化文件信息
   initFileInfo();
@@ -502,6 +517,38 @@
         }
       }
     }
+  }
+
+  .brand-cta {
+    margin: 20px auto 0;
+    max-width: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .brand-cta__text {
+    color: #fff;
+    font-size: 14px;
+  }
+  .brand-cta__btn {
+    border: 0;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 8px 18px;
+    border-radius: 999px;
+  }
+  .brand-cta__btn:hover {
+    opacity: 0.92;
   }
 
   @keyframes pulse {

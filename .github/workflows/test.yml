@@ -1,0 +1,40 @@
+name: 测试(类型检查 + 单元测试)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 读取仓库内容
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - name: 安装 nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装依赖(workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: 前端类型检查
+        run: pnpm --filter web typecheck
+
+      - name: 单元测试(前端 + 后端)
+        run: pnpm -r test

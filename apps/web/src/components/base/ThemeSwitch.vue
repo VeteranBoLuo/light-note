@@ -22,21 +22,19 @@
 <script setup lang="ts">
   import { bookmarkStore, useUserStore } from '@/store';
   import userApi from '@/api/userApi.ts';
+  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   const bookmark = bookmarkStore();
   const user = useUserStore();
   function changed(e) {
-    if (e.target.checked) {
-      user.preferences.theme = 'night';
-    } else {
-      user.preferences.theme = 'day';
-    }
+    const theme = e.target.checked ? 'night' : 'day';
+    // 本地立即生效 + 持久化(App.vue 的 watch 会应用主题)
+    applyPreferenceLocally({ theme });
+    // 游客本地化即可,不调后端、不触发注册墙;仅登录用户同步服务器
+    if (isGuestUser()) return;
     userApi
       .updateUserInfo({
         id: user.id,
-        theme: user.preferences.theme,
-      })
-      .then(() => {
-        localStorage.setItem('preferences', JSON.stringify(user.preferences));
+        theme,
       })
       .catch((err) => {
         console.error('后台错误：' + err);

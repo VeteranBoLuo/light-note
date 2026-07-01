@@ -9,7 +9,7 @@ import { recordConversionEvent } from '../util/conversion.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
-  const ALLOWED = ['cta_click', 'page_view'];
+  const ALLOWED = ['cta_click', 'page_view', 'wall_hit', 'register_view', 'share_view', 'share_cta_click'];
   const event = String(req.body?.event || '');
   if (!ALLOWED.includes(event)) {
     return res.send(resultData(null, 400, '不支持的事件'));
@@ -44,6 +44,7 @@ export const getConversionFunnel = async (req, res) => {
         pageViewVisitors: visitorsOf('page_view'),
         wallHitVisitors: visitorsOf('wall_hit'),
         ctaClickVisitors: visitorsOf('cta_click'),
+        registerViewVisitors: visitorsOf('register_view'),
         registerVisitors: visitorsOf('register'),
         uniqueIps: Number(ipRow[0]?.ips || 0),
         hotspots,

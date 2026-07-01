@@ -25,16 +25,13 @@
   const { t } = useI18n();
   import userApi from '@/api/userApi.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   const user = useUserStore();
   const setMode = (mode: any) => {
-    user.preferences.noteViewMode = mode;
-    localStorage.setItem(
-      'preferences',
-      JSON.stringify({
-        ...user.preferences,
-        noteViewMode: mode,
-      }),
-    );
+    // 本地立即生效 + 持久化
+    applyPreferenceLocally({ noteViewMode: mode });
+    // 游客本地化即可,不调后端、不触发注册墙;仅登录用户同步服务器
+    if (isGuestUser()) return;
     userApi
       .updateUserInfo({
         id: user.id,
