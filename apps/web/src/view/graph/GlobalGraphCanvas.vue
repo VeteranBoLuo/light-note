@@ -33,18 +33,95 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
-  // 圆形初始坐标兜底:即使 d3-force 布局未生效,节点也不会堆在原点(退化成一圈标签仍可读)
-  function seedPositions() {
+  // 自己算力导向布局(不依赖 g6 内置 layout,结果完全可控):节点两两排斥 + 边弹簧拉近 + 轻微向心,
+  // 迭代后归一化铺满画布。这样节点必然散开、连线清晰,避免 d3-force 默认参数把节点全吸成一团。
+  function computeLayout() {
+    const list = props.nodes;
+    const N = list.length;
     const w = Math.max(containerRef.value?.clientWidth || 900, 520);
     const h = Math.max(containerRef.value?.clientHeight || 560, 460);
-    const cx = w / 2;
-    const cy = h / 2;
-    const radius = Math.min(w, h) * 0.38;
-    const total = props.nodes.length || 1;
     const map = new Map<string, { x: number; y: number }>();
-    props.nodes.forEach((node, i) => {
-      const angle = (Math.PI * 2 * i) / total - Math.PI / 2;
-      map.set(node.id, { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius });
+    if (!N) return map;
+
+    const idx = new Map<string, number>();
+    list.forEach((n, i) => idx.set(n.id, i));
+    const px: number[] = [];
+    const py: number[] = [];
+    const initR = Math.min(w, h) * 0.42;
+    list.forEach((n, i) => {
+      const a = (Math.PI * 2 * i) / N;
+      px[i] = Math.cos(a) * initR + (i % 3) * 8;
+      py[i] = Math.sin(a) * initR + (i % 2) * 8;
+    });
+    const links: Array<[number, number]> = [];
+    props.edges.forEach((e) => {
+      const a = idx.get(e.source);
+      const b = idx.get(e.target);
+      if (a !== undefined && b !== undefined) links.push([a, b]);
+    });
+
+    const ITER = 320;
+    const repulse = 11000; // 排斥强度(越大越散)
+    const ideal = 140; // 边理想长度
+    const spring = 0.02; // 弹簧系数
+    const gravity = 0.01; // 向心(防止游离到无穷远)
+    for (let it = 0; it < ITER; it += 1) {
+      const cool = 1 - it / ITER;
+      const dxs = new Array(N).fill(0);
+      const dys = new Array(N).fill(0);
+      for (let i = 0; i < N; i += 1) {
+        for (let j = i + 1; j < N; j += 1) {
+          const dx = px[i] - px[j];
+          const dy = py[i] - py[j];
+          const d2 = dx * dx + dy * dy || 1;
+          const d = Math.sqrt(d2);
+          const f = repulse / d2;
+          const fx = (dx / d) * f;
+          const fy = (dy / d) * f;
+          dxs[i] += fx;
+          dys[i] += fy;
+          dxs[j] -= fx;
+          dys[j] -= fy;
+        }
+      }
+      links.forEach(([a, b]) => {
+        const dx = px[b] - px[a];
+        const dy = py[b] - py[a];
+        const d = Math.sqrt(dx * dx + dy * dy) || 1;
+        const f = (d - ideal) * spring;
+        const fx = (dx / d) * f;
+        const fy = (dy / d) * f;
+        dxs[a] += fx;
+        dys[a] += fy;
+        dxs[b] -= fx;
+        dys[b] -= fy;
+      });
+      const maxStep = 26 * cool + 2;
+      for (let i = 0; i < N; i += 1) {
+        let mvx = dxs[i] - px[i] * gravity;
+        let mvy = dys[i] - py[i] * gravity;
+        const m = Math.sqrt(mvx * mvx + mvy * mvy) || 1;
+        if (m > maxStep) {
+          mvx = (mvx / m) * maxStep;
+          mvy = (mvy / m) * maxStep;
+        }
+        px[i] += mvx;
+        py[i] += mvy;
+      }
+    }
+
+    const minX = Math.min(...px);
+    const maxX = Math.max(...px);
+    const minY = Math.min(...py);
+    const maxY = Math.max(...py);
+    const pad = 80;
+    const spanX = maxX - minX || 1;
+    const spanY = maxY - minY || 1;
+    const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY, 1.5);
+    const offsetX = (w - spanX * scale) / 2;
+    const offsetY = (h - spanY * scale) / 2;
+    list.forEach((n, i) => {
+      map.set(n.id, { x: offsetX + (px[i] - minX) * scale, y: offsetY + (py[i] - minY) * scale });
     });
     return map;
   }
@@ -62,7 +139,7 @@
   function buildData() {
     const labelFill = themeVar('--text-color', '#222222');
     const labelBg = themeVar('--background-color', '#ffffff');
-    const pos = seedPositions();
+    const pos = computeLayout();
     return {
       nodes: props.nodes.map((node) => {
         const p = pos.get(node.id);
@@ -99,8 +176,8 @@
         data: edge as unknown as Record<string, unknown>,
         style: {
           stroke: getEdgeColor(edge.type),
-          lineWidth: Math.max(1, Number(edge.weight || 1)),
-          opacity: 0.3,
+          lineWidth: Math.max(1.4, Number(edge.weight || 1)),
+          opacity: 0.5,
         },
       })),
     };
@@ -114,7 +191,6 @@
         container: containerRef.value,
         data: buildData(),
         animation: false,
-        layout: { type: 'd3-force' }, // 力导向:相关标签自动聚拢(seedPositions 已给初始位置兜底)
         behaviors: [
           { type: 'drag-canvas' },
           { type: 'zoom-canvas' },
