@@ -108,6 +108,9 @@ export const login = async (req, res) => {
       return;
     }
     if (Number(result[0].del_flag) === 1 && !isRootLogin) {
+      // 被封账号(凭据正确)仍签发会话:仅用于「封禁申诉」身份识别 —— 业务接口照样被 accountBanMiddleware 拦成 423,
+      // 仅 /user/appeal 等白名单可用。否则被封用户无会话身份,申诉接口会 403「请先登录」。
+      await issueLoginSession(req, res, result[0], Boolean(rememberMe));
       res.send(resultData(null, 423, '账号已被封禁，请登录其他账号或联系管理员'));
       return;
     }

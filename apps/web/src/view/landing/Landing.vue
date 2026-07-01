@@ -40,12 +40,6 @@
                 </button>
                 <button
                   class="btn-ghost"
-                  @click="goRegister('landing-hero')"
-                  v-click-log="{ module: '官网首页', operation: '直接注册' }"
-                  >直接注册</button
-                >
-                <button
-                  class="btn-ghost"
                   @click="scrollTo(1)"
                   v-click-log="{ module: '官网首页', operation: '看看功能' }"
                   >看看功能</button
@@ -282,12 +276,11 @@
 <script setup lang="ts">
   import { ref, onMounted, onBeforeUnmount } from 'vue';
   import { useRouter } from 'vue-router';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { useUserStore } from '@/store';
   import { apiBasePost } from '@/http/request';
 
   const router = useRouter();
   const user = useUserStore();
-  const bookmark = bookmarkStore();
   const theme = ref(user.preferences?.theme || 'day');
   const slidesRef = ref<HTMLElement>();
   const canvasRef = ref<HTMLCanvasElement>();
@@ -310,11 +303,6 @@
   }
   function goHome() {
     router.push('/home');
-  }
-  // 落地页「直接注册」:记 cta_click 转化埋点(后端只对游客落库)+ 打开注册弹窗
-  function goRegister(source = 'landing') {
-    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source }).catch(() => {});
-    bookmark.openAuthModal('注册');
   }
   function handleContact() {
     showContactModal.value = true;

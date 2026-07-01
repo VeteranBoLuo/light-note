@@ -246,14 +246,18 @@ export const apiQueryPost = async (
   return handleErrorResponse(res.data);
 };
 
-export const apiBasePost = async (url: string, data?: any, options?: AxiosRequestConfig): Promise<ApiResponse> => {
+export const apiBasePost = async (
+  url: string,
+  data?: any,
+  options?: AxiosRequestConfig & { silent?: boolean },
+): Promise<ApiResponse> => {
   const res = await request({
     url,
     method: 'post',
     data,
     ...options,
   });
-  return handleErrorResponse(res.data);
+  return handleErrorResponse(res.data, options?.silent);
 };
 
 export const apiBaseGet = async (url: string, params?: any, options?: AxiosRequestConfig): Promise<ApiResponse> => {
@@ -266,7 +270,7 @@ export const apiBaseGet = async (url: string, params?: any, options?: AxiosReque
   return handleErrorResponse(res.data);
 };
 
-export function handleErrorResponse(res: AxiosResponse['data']): ApiResponse {
+export function handleErrorResponse(res: AxiosResponse['data'], silent = false): ApiResponse {
   // 如果状态码在映射中，则显示错误消息
   if (authExpiredFlow && (res.status === 'visitor' || res.status === 401 || res.status === 403)) {
     return res;
@@ -283,7 +287,7 @@ export function handleErrorResponse(res: AxiosResponse['data']): ApiResponse {
     notifyUserBanned({ data: res, status: 423, headers: { 'x-user-banned': '1' } });
     return res;
   }
-  if (ERROR_MESSAGES[res.status]) {
+  if (!silent && ERROR_MESSAGES[res.status]) {
     const errorMsg = res.msg ?? ERROR_MESSAGES[res.status];
     message.error(errorMsg);
   }

@@ -40,10 +40,11 @@
     if (submitting.value || !content.value.trim()) return;
     submitting.value = true;
     try {
-      const res = await apiBasePost('/api/user/appeal', {
-        content: content.value.trim(),
-        phone: phone.value.trim(),
-      });
+      const res = await apiBasePost(
+        '/api/user/appeal',
+        { content: content.value.trim(), phone: phone.value.trim() },
+        { silent: true }, // 由本组件统一提示,避免与全局错误提示重复弹两次
+      );
       if (res.status === 200) {
         submitted.value = true;
       } else {

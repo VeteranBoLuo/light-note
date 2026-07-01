@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue';
+  import { ref, onMounted, watch } from 'vue';
   import { useUserStore } from '@/store';
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -69,20 +69,27 @@
     dismiss();
   }
 
-  onMounted(() => {
+  function maybeShow() {
+    if (show.value) return;
     let flagged = false;
     try {
       flagged = localStorage.getItem(FLAG) === '1';
     } catch {
       flagged = false;
     }
-    // 仅新注册的登录用户展示一次
+    // 仅新注册的登录用户展示一次(显示即清标记)
     if (flagged && user.id && user.role !== 'visitor') {
       show.value = true;
-    } else if (flagged) {
       clearFlag();
     }
-  });
+  }
+
+  onMounted(maybeShow);
+  // 注册成功后 role 由 visitor→已登录:即使 Home 已挂载(onMounted 不再触发)也能弹出
+  watch(
+    () => user.role,
+    () => maybeShow(),
+  );
 </script>
 
 <style lang="less" scoped>
