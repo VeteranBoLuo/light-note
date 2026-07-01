@@ -19,18 +19,17 @@
       </template>
       <div v-else class="banned-success">✅ 申诉已提交，我们会尽快处理。</div>
 
-      <a class="banned-back" @click="goLanding">返回首页</a>
+      <a class="banned-back" @click="logoutToGuest">退出登录</a>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
   import { ref } from 'vue';
-  import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request';
+  import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
-  const router = useRouter();
   const content = ref('');
   const phone = ref('');
   const submitting = ref(false);
@@ -56,8 +55,15 @@
       submitting.value = false;
     }
   }
-  function goLanding() {
-    router.push('/landing');
+  // 退出登录:清掉「被封会话」→ 变回游客,否则申诉后仍被 banned 会话粘住、进首页又被踹回 /banned
+  async function logoutToGuest() {
+    try {
+      sessionStorage.setItem('manualLogout', '1'); // 抑制「登录已过期」提示
+      await userApi.logout();
+    } catch {
+      /* 登出失败也强制回到游客态 */
+    }
+    window.location.href = '/landing'; // 整页刷新确保干净游客态
   }
 </script>
 
