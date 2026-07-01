@@ -139,7 +139,12 @@ export const getSession = async (sid) => {
 export const removeSession = async (sid) => {
   if (!sid) return;
   await pool.query('DELETE FROM user_sessions WHERE sid = ?', [sid]);
-  redisClient.del(CACHE_PREFIX + sid).catch(() => {});
+  // await 确保返回前 Redis 缓存已清,避免残留缓存在 TTL 内仍被判为有效会话
+  try {
+    await redisClient.del(CACHE_PREFIX + sid);
+  } catch (e) {
+    console.error('[session] 清除 Redis 会话缓存失败:', e.message);
+  }
 };
 
 export const removeUserSessions = async (userId) => {
@@ -152,7 +157,12 @@ export const removeUserSessions = async (userId) => {
   // 清除 Redis 缓存
   const keys = rows.map((r) => CACHE_PREFIX + r.sid);
   if (keys.length > 0) {
-    redisClient.del(keys).catch(() => {});
+    // await 确保封号/删号返回前 Redis 缓存已清,关闭最长 CACHE_TTL(15 分钟)的失效延迟窗口
+    try {
+      await redisClient.del(keys);
+    } catch (e) {
+      console.error('[session] 清除用户 Redis 会话缓存失败:', e.message);
+    }
   }
 };
 

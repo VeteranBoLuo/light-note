@@ -184,7 +184,6 @@ const ACCOUNT_BAN_ALLOWED_PATHS = [
   '/user/registerUser',
   '/user/sendEmail',
   '/user/verifyCode',
-  '/user/configPassword',
 ];
 
 export const accountBanMiddleware = (req, res, next) => {
