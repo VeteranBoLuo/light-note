@@ -85,7 +85,6 @@
         </div>
       </template>
     </b-list>
-    <a-tour v-if="!bookmark.isMobile" v-model:open="tourOpen" :steps="tourSteps" @close="handleTourClose" />
   </div>
 </template>
 
@@ -117,7 +116,9 @@
     });
   });
   const visibleDragTagList = ref<TagInterface[]>([]);
-  const tagDraggable = computed(() => !bookmark.isMobile && !tagName.value.trim() && visibleDragTagList.value.length > 1);
+  const tagDraggable = computed(
+    () => !bookmark.isMobile && !tagName.value.trim() && visibleDragTagList.value.length > 1,
+  );
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -297,56 +298,6 @@
       fallbackTimer = null;
     }
   });
-
-  // ===== 书签管理迁移引导 Tour（仅 v1.x 版本使用，下个版本删除此块）=====
-  const TOUR_STORAGE_KEY = 'light-note:bookmark-mg-tour-dismissed';
-  const manageEntryRef = ref<HTMLElement | null>(null);
-  const tourOpen = ref(false);
-  const tourSteps = [
-    {
-      title: '新增标签模块',
-      description: '顶部导航新增了「标签」入口，点击即可管理所有标签。',
-      target: () => document.getElementById('nav-tag-entry'),
-      placement: 'bottom' as const,
-      nextButtonProps: {
-        children: () => '下一步',
-        type: 'primary' as const,
-        style: {
-          backgroundColor: '#615ced',
-          borderColor: '#615ced',
-        },
-      },
-    },
-    {
-      title: '书签管理入口已迁移',
-      description: '书签管理功能已移动到这里，点击即可进入管理页面。',
-      target: () => manageEntryRef.value as HTMLElement,
-      placement: 'right' as const,
-      prevButtonProps: {
-        children: () => '上一步',
-      },
-      nextButtonProps: {
-        children: () => '我知道了',
-        type: 'primary' as const,
-        style: {
-          backgroundColor: '#615ced',
-          borderColor: '#615ced',
-        },
-      },
-    },
-  ];
-  function handleTourClose() {
-    tourOpen.value = false;
-    localStorage.setItem(TOUR_STORAGE_KEY, '1');
-  }
-  onMounted(() => {
-    if (!bookmark.isMobile && !localStorage.getItem(TOUR_STORAGE_KEY) && user.role !== 'visitor') {
-      setTimeout(() => {
-        tourOpen.value = true;
-      }, 800);
-    }
-  });
-  // ===== 书签管理迁移引导 Tour 结束 =====
 </script>
 
 <style lang="less" scoped>
