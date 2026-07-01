@@ -90,10 +90,15 @@ function notifyAuthExpired(response?: any) {
 }
 
 function notifyUserBanned(response?: any) {
-  // 申诉/登出接口豁免:被封用户调这些接口的响应也带 x-user-banned 头,不能触发跳转 ——
-  // 申诉:否则一提交就被踹走;登出:否则登出请求把人又踹回 /banned,无法退成游客
-  const bannedExemptUrl = response?.config?.url || '';
-  if (bannedExemptUrl.includes('/user/appeal') || bannedExemptUrl.includes('/user/logout')) {
+  // 被封登录响应里带的短期申诉令牌(不是登录 cookie):存起来供封禁页提交申诉时识别身份
+  const appealToken = response?.data?.data?.appealToken;
+  if (appealToken) {
+    try {
+      sessionStorage.setItem('ln_appeal_token', appealToken);
+    } catch {}
+  }
+  // 申诉接口豁免:被封用户提交申诉的响应也带 x-user-banned 头,若触发跳转会导致申诉页无法提交
+  if ((response?.config?.url || '').includes('/user/appeal')) {
     return false;
   }
   const status = response?.status || response?.data?.status;

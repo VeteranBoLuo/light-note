@@ -19,7 +19,7 @@
       </template>
       <div v-else class="banned-success">✅ 申诉已提交，我们会尽快处理。</div>
 
-      <a class="banned-back" @click="logoutToGuest">退出登录</a>
+      <a class="banned-back" @click="backToLanding">返回首页</a>
     </div>
   </div>
 </template>
@@ -27,25 +27,44 @@
 <script setup lang="ts">
   import { ref } from 'vue';
   import { apiBasePost } from '@/http/request';
-  import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
+  const APPEAL_TOKEN = 'ln_appeal_token';
   const content = ref('');
   const phone = ref('');
   const submitting = ref(false);
   const submitted = ref(false);
 
+  function readAppealToken(): string {
+    try {
+      return sessionStorage.getItem(APPEAL_TOKEN) || '';
+    } catch {
+      return '';
+    }
+  }
+
   async function submit() {
     if (submitting.value || !content.value.trim()) return;
+    const token = readAppealToken();
+    if (!token) {
+      message.error('身份已失效,请重新登录后再提交申诉');
+      return;
+    }
     submitting.value = true;
     try {
       const res = await apiBasePost(
         '/api/user/appeal',
         { content: content.value.trim(), phone: phone.value.trim() },
-        { silent: true }, // 由本组件统一提示,避免与全局错误提示重复弹两次
+        // 被封账号无登录 cookie:用登录时下发的短期申诉令牌识别身份;silent 由本组件统一提示避免双弹
+        { silent: true, headers: { 'X-Session-Id': token } },
       );
       if (res.status === 200) {
         submitted.value = true;
+        try {
+          sessionStorage.removeItem(APPEAL_TOKEN);
+        } catch {
+          /* 隐私模式忽略 */
+        }
       } else {
         message.error(res.msg || '提交失败，请稍后再试');
       }
@@ -55,15 +74,15 @@
       submitting.value = false;
     }
   }
-  // 退出登录:清掉「被封会话」→ 变回游客,否则申诉后仍被 banned 会话粘住、进首页又被踹回 /banned
-  async function logoutToGuest() {
+
+  // 被封账号本就没有登录态(无 cookie),返回首页只需清掉申诉令牌 + 整页刷新回落地页(游客)
+  function backToLanding() {
     try {
-      sessionStorage.setItem('manualLogout', '1'); // 抑制「登录已过期」提示
-      await userApi.logout();
+      sessionStorage.removeItem(APPEAL_TOKEN);
     } catch {
-      /* 登出失败也强制回到游客态 */
+      /* 忽略 */
     }
-    window.location.href = '/landing'; // 整页刷新确保干净游客态
+    window.location.href = '/landing';
   }
 </script>
 
