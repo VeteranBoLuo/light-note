@@ -162,6 +162,20 @@
         />
       </VueDraggable>
     </div>
+    <div
+      v-if="!loading && !visibleDragNoteList.length"
+      style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
+    >
+      <div style="font-size: 44px; opacity: 0.7">📝</div>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">还没有笔记</p>
+      <p style="margin: 0; font-size: 13px">记点什么吧，想法、清单、代码片段都行</p>
+      <button
+        @click="showNewNotePicker"
+        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
+      >
+        + 新建笔记
+      </button>
+    </div>
   </div>
 
   <!-- 新建笔记类型选择 -->
