@@ -38,13 +38,17 @@
       </ul>
 
       <div class="admin-table-card">
-        <h3 class="funnel-section-title">撞墙热点 · 游客最想用却被挡的功能(优先优化这些)</h3>
-        <BTable :data="hotspots" :columns="columns" :pagination="false" />
+        <BTable
+          :data="paginatedHotspots"
+          :columns="columns"
+          :pagination="true"
+          :total="total"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          @page-change="onPageChange"
+          @size-change="onSizeChange"
+        />
       </div>
-
-      <p class="admin-subtitle" style="margin-top: 14px">
-        数据随真实游客积累;访问量(page_view)在游客打开站点时记录,撞墙率 = 撞墙 / 访问。
-      </p>
     </section>
   </div>
 </template>
@@ -60,6 +64,22 @@
   const reg = ref(0);
   const uniqueIps = ref(0);
   const hotspots = ref<any[]>([]);
+  const currentPage = ref(1);
+  const pageSize = ref(20);
+  const total = ref(0);
+
+  const paginatedHotspots = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return hotspots.value.slice(start, start + pageSize.value);
+  });
+
+  function onPageChange(page: number) {
+    currentPage.value = page;
+  }
+  function onSizeChange(page: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+  }
 
   const columns = [
     { title: '功能接口', key: 'context', width: '2fr', ellipsis: true },
@@ -82,6 +102,7 @@
         reg.value = d.registerVisitors || 0;
         uniqueIps.value = d.uniqueIps || 0;
         hotspots.value = d.hotspots || [];
+        total.value = hotspots.value.length;
       }
     });
   }

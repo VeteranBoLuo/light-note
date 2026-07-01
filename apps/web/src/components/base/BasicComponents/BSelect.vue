@@ -46,7 +46,7 @@
     </div>
 
     <Teleport to="body">
-      <div class="select-dropdown" v-show="isOpen" :style="dropdownStyle" @click.stop>
+      <div ref="dropdownRef" class="select-dropdown" v-show="isOpen" :style="dropdownStyle" @click.stop>
         <div v-if="showSearch && isMultiple" class="select-search-bar">
           <input
             v-model="searchText"
@@ -111,6 +111,8 @@ const searchText = ref('');
 const containerRef = ref<HTMLElement>();
 const triggerRef = ref<HTMLElement>();
 const dropdownStyle = ref({ top: '0px', left: '0px', width: '0px' });
+const dropdownRef = ref<HTMLElement>();
+let placementAbove = false;
 
 // 当前选中值（标准化为数组）
 const currentValues = computed<any[]>(() => {
@@ -221,6 +223,7 @@ function handleClear() {
 function toggleOpen() {
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
+    placementAbove = false;
     searchText.value = '';
     nextTick(() => updateDropdownPosition());
   }
@@ -233,11 +236,45 @@ function keepOpen() {
 function updateDropdownPosition() {
   if (!triggerRef.value) return;
   const rect = triggerRef.value.getBoundingClientRect();
+  const dropdownWidth = Math.max(rect.width, 180);
+
+  if (placementAbove) {
+    // 已翻到上面，保持上方，重新计算高度
+    requestAnimationFrame(() => {
+      if (!dropdownRef.value) return;
+      const dh = dropdownRef.value.offsetHeight;
+      dropdownStyle.value = {
+        top: `${rect.top - dh - 4}px`,
+        left: `${rect.left}px`,
+        width: `${dropdownWidth}px`,
+      };
+    });
+    return;
+  }
+
+  // 先放下面
   dropdownStyle.value = {
     top: `${rect.bottom + 4}px`,
     left: `${rect.left}px`,
-    width: `${Math.max(rect.width, 180)}px`,
+    width: `${dropdownWidth}px`,
   };
+
+  // 等渲染完成后测量实际高度，空间不够就翻到上面
+  requestAnimationFrame(() => {
+    if (!dropdownRef.value) return;
+    const dh = dropdownRef.value.offsetHeight;
+    const spaceBelow = window.innerHeight - rect.bottom - 4;
+    if (spaceBelow < dh && rect.top - 4 > dh) {
+      placementAbove = true;
+      dropdownStyle.value = {
+        top: `${rect.top - dh - 4}px`,
+        left: `${rect.left}px`,
+        width: `${dropdownWidth}px`,
+      };
+    } else {
+      placementAbove = false;
+    }
+  });
 }
 
 // 点击外部关闭

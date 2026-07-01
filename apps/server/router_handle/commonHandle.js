@@ -14,6 +14,10 @@ export const recordConversion = (req, res) => {
   if (!ALLOWED.includes(event)) {
     return res.send(resultData(null, 400, '不支持的事件'));
   }
+  // 转化漏斗只统计游客:已登录用户的访问/点击不计入(他们不在游客转化路径上)
+  if ((req.user?.role || 'visitor') !== 'visitor') {
+    return res.send(resultData(null));
+  }
   recordConversionEvent(req, event, req.body?.source || '');
   res.send(resultData(null));
 };
@@ -22,8 +26,9 @@ export const recordConversion = (req, res) => {
 export const getConversionFunnel = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
+    // 漏斗只算游客:page_view/wall_hit/cta_click 限 visitor;register(转化那一刻)按 fingerprint 全算
     const [rows] = await pool.query(
-      'SELECT event, COUNT(DISTINCT fingerprint) AS visitors, COUNT(*) AS total FROM conversion_events GROUP BY event',
+      "SELECT event, COUNT(DISTINCT fingerprint) AS visitors FROM conversion_events WHERE event = 'register' OR visitor_type = 'visitor' GROUP BY event",
     );
     // 用显式 camelCase 标量字段返回,避免 resultData 的 camelCaseKeys 把 wall_hit/cta_click 等带下划线的 key 改名(register 无下划线幸免,曾导致只有它显示)
     const visitorsOf = (ev) => {
@@ -33,7 +38,7 @@ export const getConversionFunnel = async (req, res) => {
     const [hotspots] = await pool.query(
       "SELECT context, COUNT(*) AS cnt FROM conversion_events WHERE event = 'wall_hit' AND context <> '' GROUP BY context ORDER BY cnt DESC LIMIT 20",
     );
-    const [ipRow] = await pool.query("SELECT COUNT(DISTINCT ip) AS ips FROM conversion_events WHERE ip <> ''");
+    const [ipRow] = await pool.query("SELECT COUNT(DISTINCT ip) AS ips FROM conversion_events WHERE visitor_type = 'visitor' AND ip <> ''");
     res.send(
       resultData({
         pageViewVisitors: visitorsOf('page_view'),

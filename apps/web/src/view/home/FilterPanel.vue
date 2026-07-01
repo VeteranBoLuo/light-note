@@ -358,6 +358,9 @@
   .header-input {
     width: 180px;
   }
+  .header-input :deep(.category-body) {
+    height: calc(100% - 88px) !important;
+  }
 
   .filter-tools {
     display: flex;

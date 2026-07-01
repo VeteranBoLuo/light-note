@@ -752,8 +752,8 @@ onMounted(() => {
   -webkit-box-orient: vertical;
 }
 mark.kb-highlight {
-  background: color-mix(in srgb, var(--primary-color) 30%, transparent);
-  color: var(--text-color);
+  background: color-mix(in srgb, #facc15 72%, transparent);
+  color: #171717;
   padding: 1px 2px;
   border-radius: 2px;
 }
