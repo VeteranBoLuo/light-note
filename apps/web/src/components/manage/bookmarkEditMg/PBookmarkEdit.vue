@@ -10,7 +10,7 @@
           <div class="tag-attr-head">
             <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
             <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
-              <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generatingMeta }">
+              <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generating }">
                 <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
                 <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
               </button>
@@ -59,11 +59,10 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const generatingMeta = ref(false);
 
   const bookmarkData = ref<any>({
     id: '',
@@ -135,70 +134,11 @@
     });
   }
 
-  const generateBookmarkMeta = async () => {
-    if (!bookmarkData.value.url) {
-      message.warning('请先填写书签地址');
-      return;
-    }
-    generatingMeta.value = true;
-    try {
-      const res = await apiBasePost('/api/chat/generateBookmarkMeta', {
-        url: bookmarkData.value.url,
-      });
-      if (res.status === 200) {
-        if (res.data.name) {
-          bookmarkData.value.name = res.data.name;
-        }
-        if (res.data.description) {
-          bookmarkData.value.description = res.data.description;
-        }
-        // 自动勾选 AI 匹配到的已有标签(仅预选,点保存才关联)
-        const matched = res.data.matchedTagIds || [];
-        if (matched.length) {
-          const cur = bookmarkData.value.relatedTags || [];
-          bookmarkData.value.relatedTags = Array.from(new Set([...cur, ...matched]));
-        }
-        recordOperation({ module: '书签详情', operation: `生成书签信息成功【${bookmarkData.value.url}】` });
-        const newTags = res.data.newTags || [];
-        if (matched.length) {
-          message.success(`已生成名称、描述,并推荐了 ${matched.length} 个标签`);
-        } else if (newTags.length) {
-          message.success('已生成名称和描述;暂无合适的现有标签');
-          confirmCreateTags(newTags);
-        } else {
-          message.success('已生成名称和描述');
-        }
-      }
-    } finally {
-      generatingMeta.value = false;
-    }
-  };
-
-  // AI 没有合适的现有标签时,弹框确认是否创建它建议的新标签
-  function confirmCreateTags(names: string[]) {
-    Alert.alert({
-      title: 'AI 建议新增标签',
-      content: `没有合适的现有标签。AI 建议新增:「${names.join('」「')}」。是否创建并关联?`,
-      footer: [
-        { label: '暂不', type: 'dashed', function: () => Alert.destroy() },
-        {
-          label: '创建并关联',
-          type: 'primary',
-          function: async () => {
-            Alert.destroy();
-            for (const name of names) {
-              await apiBasePost('/api/bookmark/addTag', { name }).catch(() => {});
-            }
-            await getTagSelect();
-            const ids = tagOptions.value.filter((o: any) => names.includes(o.label)).map((o: any) => o.value);
-            const cur = bookmarkData.value.relatedTags || [];
-            bookmarkData.value.relatedTags = Array.from(new Set([...cur, ...ids]));
-            message.success(`已创建并选中 ${ids.length} 个标签`);
-          },
-        },
-      ],
-    });
-  }
+  const { generating, generateBookmarkMeta } = useBookmarkMeta({
+    bookmarkData,
+    tagOptions,
+    refreshTags: getTagSelect,
+  });
 
   const handleType = computed(() => {
     if (router.currentRoute.value.params.id === 'add' || router.currentRoute.value.params.tagId) {
