@@ -59,6 +59,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -151,13 +152,53 @@
         if (res.data.description) {
           bookmarkData.value.description = res.data.description;
         }
+        // 自动勾选 AI 匹配到的已有标签(仅预选,点保存才关联)
+        const matched = res.data.matchedTagIds || [];
+        if (matched.length) {
+          const cur = bookmarkData.value.relatedTags || [];
+          bookmarkData.value.relatedTags = Array.from(new Set([...cur, ...matched]));
+        }
         recordOperation({ module: '书签详情', operation: `生成书签信息成功【${bookmarkData.value.url}】` });
-        message.success('已生成名称和描述');
+        const newTags = res.data.newTags || [];
+        if (matched.length) {
+          message.success(`已生成名称、描述,并推荐了 ${matched.length} 个标签`);
+        } else if (newTags.length) {
+          message.success('已生成名称和描述;暂无合适的现有标签');
+          confirmCreateTags(newTags);
+        } else {
+          message.success('已生成名称和描述');
+        }
       }
     } finally {
       generatingMeta.value = false;
     }
   };
+
+  // AI 没有合适的现有标签时,弹框确认是否创建它建议的新标签
+  function confirmCreateTags(names: string[]) {
+    Alert.alert({
+      title: 'AI 建议新增标签',
+      content: `没有合适的现有标签。AI 建议新增:「${names.join('」「')}」。是否创建并关联?`,
+      footer: [
+        { label: '暂不', type: 'dashed', function: () => Alert.destroy() },
+        {
+          label: '创建并关联',
+          type: 'primary',
+          function: async () => {
+            Alert.destroy();
+            for (const name of names) {
+              await apiBasePost('/api/bookmark/addTag', { name }).catch(() => {});
+            }
+            await getTagSelect();
+            const ids = tagOptions.value.filter((o: any) => names.includes(o.label)).map((o: any) => o.value);
+            const cur = bookmarkData.value.relatedTags || [];
+            bookmarkData.value.relatedTags = Array.from(new Set([...cur, ...ids]));
+            message.success(`已创建并选中 ${ids.length} 个标签`);
+          },
+        },
+      ],
+    });
+  }
 
   const handleType = computed(() => {
     if (router.currentRoute.value.params.id === 'add' || router.currentRoute.value.params.tagId) {
