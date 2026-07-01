@@ -302,6 +302,8 @@
     goTo(i);
   }
   function goHome() {
+    // 落地页唯一公域 CTA:记 cta_click 转化埋点(source: landing-hero,后端只对游客落库)
+    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'landing-hero' }).catch(() => {});
     router.push('/home');
   }
   function handleContact() {
