@@ -91,6 +91,20 @@ function stripHtml(value) {
     .trim();
 }
 
+// 摘要:优先展示命中关键词附近的一段(而非从头截),对齐知识库搜索体验
+function buildSnippet(text, keyword, len = 140) {
+  const plain = toText(text);
+  const kw = toText(keyword);
+  if (!kw) return plain.slice(0, len);
+  const idx = plain.toLowerCase().indexOf(kw.toLowerCase());
+  if (idx < 0) return plain.slice(0, len);
+  const start = Math.max(0, idx - Math.floor(len / 3));
+  let snip = plain.slice(start, start + len);
+  if (start > 0) snip = '…' + snip;
+  if (start + len < plain.length) snip = snip + '…';
+  return snip;
+}
+
 function normalizeDate(value) {
   if (!value) return '';
   if (value instanceof Date) return value.toISOString().slice(0, 10);
@@ -289,8 +303,9 @@ async function queryBookmarks(userId, keyword, limit, lang) {
     id: toText(item.id),
     type: 'bookmark',
     title: toText(item.name) || text.unnamedBookmark,
-    description: toText(item.description) || toText(item.url),
+    description: buildSnippet(toText(item.description) || toText(item.url), keyword),
     extra: Array.isArray(item.tag_list) ? item.tag_list.map((tag) => `#${tag.name}`).join(' ') : '',
+    tags: Array.isArray(item.tag_list) ? item.tag_list : [],
     url: toText(item.url),
     route: '/home',
     iconUrl: item.icon_url || (item.url ? `https://ico.kucat.cn/get.php?url=${item.url}` : ''),
@@ -327,8 +342,9 @@ async function queryNotes(userId, keyword, limit, lang) {
     id: toText(item.id),
     type: 'note',
     title: toText(item.title) || text.unnamedNote,
-    description: stripHtml(item.content).slice(0, 140) || text.openNote,
+    description: buildSnippet(stripHtml(item.content), keyword) || text.openNote,
     extra: normalizeDate(item.update_time || item.create_time),
+    tags: Array.isArray(item.tags) ? item.tags : [],
     route: `/noteLibrary/${item.id}`,
     raw: item,
   }));
@@ -339,7 +355,13 @@ async function queryFiles(userId, keyword, limit, lang) {
   const like = buildLike(keyword);
   const hasKeyword = keyword.length > 0;
   const sql = `
-    SELECT files.*, folders.name AS folder_name
+    SELECT files.*, folders.name AS folder_name,
+      (
+        SELECT JSON_ARRAYAGG(JSON_OBJECT('id', ft.id, 'name', ft.name))
+        FROM resource_tag_relations ftr
+        INNER JOIN tag ft ON ftr.tag_id = ft.id
+        WHERE ftr.resource_type = 'file' AND ftr.resource_id = files.id AND ft.del_flag = 0
+      ) AS tags
     FROM files
     LEFT JOIN folders ON files.folder_id = folders.id
     WHERE files.create_by = ?
@@ -360,6 +382,7 @@ async function queryFiles(userId, keyword, limit, lang) {
       fileName: item.file_name,
       fileType: item.file_type,
     }),
+    tags: Array.isArray(item.tags) ? item.tags : [],
     extra: formatFileSearchExtra(item, lang),
     route: '/cloudSpace',
     raw: item,

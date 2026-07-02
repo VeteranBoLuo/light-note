@@ -13,6 +13,7 @@ export interface SearchResultItem {
   url?: string;
   route?: string;
   iconUrl?: string;
+  tags?: Array<{ id: string; name: string }>;
   raw?: any;
 }
 

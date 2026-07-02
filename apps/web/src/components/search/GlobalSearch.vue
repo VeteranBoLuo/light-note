@@ -51,8 +51,19 @@
             >
               <span class="type-dot" :class="`type-dot--${item.type}`"></span>
               <span class="item-main">
-                <span class="item-title">{{ item.title }}</span>
-                <span class="item-desc">{{ item.description || item.extra }}</span>
+                <span class="item-title-row">
+                  <span class="item-title" v-html="highlightText(item.title, keyword)"></span>
+                  <span v-if="item.tags && item.tags.length" class="item-tags">
+                    <span
+                      v-for="tg in item.tags"
+                      :key="tg.id"
+                      class="item-tag"
+                      :class="{ 'item-tag--hit': isTagHit(tg.name) }"
+                      >{{ tg.name }}</span
+                    >
+                  </span>
+                </span>
+                <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
               </span>
               <span class="item-extra">{{ item.extra }}</span>
             </button>
@@ -111,8 +122,19 @@
               >
                 <span class="type-dot" :class="`type-dot--${item.type}`"></span>
                 <span class="item-main">
-                  <span class="item-title">{{ item.title }}</span>
-                  <span class="item-desc">{{ item.description || item.extra }}</span>
+                  <span class="item-title-row">
+                    <span class="item-title" v-html="highlightText(item.title, keyword)"></span>
+                    <span v-if="item.tags && item.tags.length" class="item-tags">
+                      <span
+                        v-for="tg in item.tags"
+                        :key="tg.id"
+                        class="item-tag"
+                        :class="{ 'item-tag--hit': isTagHit(tg.name) }"
+                        >{{ tg.name }}</span
+                      >
+                    </span>
+                  </span>
+                  <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
                 </span>
               </button>
             </div>
@@ -145,6 +167,27 @@
 
   const router = useRouter();
   const route = useRoute();
+
+  // 命中词高亮:先转义防 XSS,再把命中词包 <mark>
+  function escapeHtml(input: string): string {
+    return String(input ?? '').replace(
+      /[&<>"']/g,
+      (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }) as Record<string, string>)[c],
+    );
+  }
+  function highlightText(text: string, kw: string): string {
+    const safe = escapeHtml(text);
+    const k = String(kw || '').trim();
+    if (!k) return safe;
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return safe.replace(new RegExp(`(${escaped})`, 'gi'), '<mark class="gs-hl">$1</mark>');
+  }
+  function isTagHit(name: string): boolean {
+    const k = String(keyword.value || '')
+      .trim()
+      .toLowerCase();
+    return !!k && String(name || '').toLowerCase().includes(k);
+  }
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const keyword = ref('');
@@ -466,6 +509,55 @@
     color: var(--text-color);
     font-size: 13px;
     font-weight: 650;
+  }
+
+  .item-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .item-title-row .item-title {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .item-tags {
+    display: flex;
+    gap: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    flex-wrap: nowrap;
+  }
+  .item-tag {
+    flex: 0 0 auto;
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 0 6px;
+    border-radius: 999px;
+    color: var(--sub-text-color, #888);
+    background: color-mix(in srgb, var(--text-color) 8%, transparent);
+    white-space: nowrap;
+  }
+  .item-tag--hit {
+    color: #fff;
+    background: #615ced;
+    font-weight: 600;
+  }
+  /* 描述改 2 行,配合"命中处摘要"能露出命中词而不被一行省略号切掉 */
+  .item-desc {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  mark.gs-hl {
+    background: color-mix(in srgb, #615ced 26%, transparent);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 1px;
   }
 
   .view-all {
