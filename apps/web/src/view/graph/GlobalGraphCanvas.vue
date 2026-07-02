@@ -33,73 +33,97 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
 
-  // 自己算力导向布局(不依赖 g6 内置 layout,结果完全可控):节点两两排斥 + 边弹簧拉近 + 轻微向心,
-  // 迭代后归一化铺满画布。这样节点必然散开、连线清晰,避免 d3-force 默认参数把节点全吸成一团。
+  // 聚簇布局(可控、必不重叠):① 带"硬碰撞"的力导向把标签铺开(每个标签按资源数占一块地,互不压);
+  // ② 每个标签的资源在其周围成环卫星排布;③ 整体归一化铺满画布。解决 170+ 节点全局力导向压成一团的问题。
   function computeLayout() {
-    const list = props.nodes;
-    const N = list.length;
-    const w = Math.max(containerRef.value?.clientWidth || 900, 520);
-    const h = Math.max(containerRef.value?.clientHeight || 560, 460);
+    const w = Math.max(containerRef.value?.clientWidth || 1000, 520);
+    const h = Math.max(containerRef.value?.clientHeight || 620, 460);
     const map = new Map<string, { x: number; y: number }>();
-    if (!N) return map;
+    const tags = props.nodes.filter((n) => n.type === 'tag');
+    const resources = props.nodes.filter((n) => n.type !== 'tag');
+    if (!tags.length) {
+      props.nodes.forEach((n, i) => map.set(n.id, { x: w / 2 + (i % 12) * 20, y: h / 2 + Math.floor(i / 12) * 20 }));
+      return map;
+    }
 
-    const idx = new Map<string, number>();
-    list.forEach((n, i) => idx.set(n.id, i));
+    // 资源归属:挂到它第一条标签边对应的标签
+    const parentOf = new Map<string, string>();
+    props.edges.forEach((e) => {
+      if (e.type !== 'tag-tag' && !parentOf.has(e.target)) parentOf.set(e.target, e.source);
+    });
+    const childrenOf = new Map<string, TagGraphNode[]>();
+    resources.forEach((r) => {
+      const p = parentOf.get(r.id);
+      if (!p) return;
+      if (!childrenOf.has(p)) childrenOf.set(p, []);
+      (childrenOf.get(p) as TagGraphNode[]).push(r);
+    });
+
+    // 每个标签的"势力半径":资源越多占地越大(碰撞避让 + 卫星环用)
+    const clusterR = new Map<string, number>();
+    tags.forEach((t) => {
+      const cnt = (childrenOf.get(t.id) || []).length;
+      clusterR.set(t.id, 46 + Math.min(150, Math.ceil(cnt / 9) * 26));
+    });
+    const cr = (id: string) => clusterR.get(id) || 46;
+
+    // ① 标签中心:带硬碰撞的力导向
+    const N = tags.length;
     const px: number[] = [];
     const py: number[] = [];
-    const initR = Math.min(w, h) * 0.42;
-    list.forEach((n, i) => {
+    const initR = Math.min(w, h) * 0.4;
+    tags.forEach((t, i) => {
       const a = (Math.PI * 2 * i) / N;
-      px[i] = Math.cos(a) * initR + (i % 3) * 8;
-      py[i] = Math.sin(a) * initR + (i % 2) * 8;
+      px[i] = Math.cos(a) * initR + (i % 3) * 6;
+      py[i] = Math.sin(a) * initR + (i % 2) * 6;
     });
-    const links: Array<[number, number, number]> = [];
+    const idx = new Map<string, number>();
+    tags.forEach((t, i) => idx.set(t.id, i));
+    const tagLinks: Array<[number, number]> = [];
     props.edges.forEach((e) => {
+      if (e.type !== 'tag-tag') return;
       const a = idx.get(e.source);
       const b = idx.get(e.target);
-      // 标签-资源边拉短(资源贴着标签成卫星簇),标签之间的边拉长(把不同主题团彼此拉开)
-      if (a !== undefined && b !== undefined) links.push([a, b, e.type === 'tag-tag' ? 175 : 50]);
+      if (a !== undefined && b !== undefined) tagLinks.push([a, b]);
     });
-
-    const ITER = 320;
-    const repulse = 7000; // 排斥强度(节点变多了适当调小)
-    const spring = 0.025; // 弹簧系数
-    const gravity = 0.012; // 向心(防止游离到无穷远)
+    const ITER = 420;
     for (let it = 0; it < ITER; it += 1) {
       const cool = 1 - it / ITER;
       const dxs = new Array(N).fill(0);
       const dys = new Array(N).fill(0);
       for (let i = 0; i < N; i += 1) {
         for (let j = i + 1; j < N; j += 1) {
-          const dx = px[i] - px[j];
-          const dy = py[i] - py[j];
-          const d2 = dx * dx + dy * dy || 1;
-          const d = Math.sqrt(d2);
-          const f = repulse / d2;
-          const fx = (dx / d) * f;
-          const fy = (dy / d) * f;
+          const ddx = px[i] - px[j];
+          const ddy = py[i] - py[j];
+          const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+          const minD = cr(tags[i].id) + cr(tags[j].id) + 30;
+          let f = 3000 / (d * d); // 远程轻微排斥
+          if (d < minD) f += (minD - d) * 0.6; // 硬碰撞:势力范围重叠就强推开
+          const fx = (ddx / d) * f;
+          const fy = (ddy / d) * f;
           dxs[i] += fx;
           dys[i] += fy;
           dxs[j] -= fx;
           dys[j] -= fy;
         }
       }
-      links.forEach(([a, b, ideal]) => {
-        const dx = px[b] - px[a];
-        const dy = py[b] - py[a];
-        const d = Math.sqrt(dx * dx + dy * dy) || 1;
-        const f = (d - ideal) * spring;
-        const fx = (dx / d) * f;
-        const fy = (dy / d) * f;
+      tagLinks.forEach(([a, b]) => {
+        const ddx = px[b] - px[a];
+        const ddy = py[b] - py[a];
+        const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        const ideal = cr(tags[a].id) + cr(tags[b].id) + 60;
+        const f = (d - ideal) * 0.012; // 相关标签互相靠拢(碰撞保证不重叠)
+        const fx = (ddx / d) * f;
+        const fy = (ddy / d) * f;
         dxs[a] += fx;
         dys[a] += fy;
         dxs[b] -= fx;
         dys[b] -= fy;
       });
-      const maxStep = 26 * cool + 2;
+      const maxStep = 44 * cool + 3;
       for (let i = 0; i < N; i += 1) {
-        let mvx = dxs[i] - px[i] * gravity;
-        let mvy = dys[i] - py[i] * gravity;
+        let mvx = dxs[i] - px[i] * 0.004;
+        let mvy = dys[i] - py[i] * 0.004;
         const m = Math.sqrt(mvx * mvx + mvy * mvy) || 1;
         if (m > maxStep) {
           mvx = (mvx / m) * maxStep;
@@ -109,20 +133,41 @@
         py[i] += mvy;
       }
     }
+    tags.forEach((t, i) => map.set(t.id, { x: px[i], y: py[i] }));
 
-    const minX = Math.min(...px);
-    const maxX = Math.max(...px);
-    const minY = Math.min(...py);
-    const maxY = Math.max(...py);
-    const pad = 80;
+    // ② 资源:围绕父标签成环卫星
+    childrenOf.forEach((kids, tagId) => {
+      const c = map.get(tagId);
+      if (!c) return;
+      const perRing = 9;
+      kids.forEach((r, k) => {
+        const ring = Math.floor(k / perRing);
+        const inRing = k % perRing;
+        const countThisRing = Math.min(perRing, kids.length - ring * perRing);
+        const rad = 40 + ring * 24;
+        const ang = (Math.PI * 2 * inRing) / countThisRing + ring * 0.5;
+        map.set(r.id, { x: c.x + Math.cos(ang) * rad, y: c.y + Math.sin(ang) * rad });
+      });
+    });
+    resources.forEach((r, i) => {
+      if (!map.has(r.id)) map.set(r.id, { x: (i % 12) * 14, y: Math.floor(i / 12) * 14 });
+    });
+
+    // ③ 归一化铺满画布
+    const pts = props.nodes.map((n) => map.get(n.id)).filter(Boolean) as Array<{ x: number; y: number }>;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const pad = 70;
     const spanX = maxX - minX || 1;
     const spanY = maxY - minY || 1;
-    const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY, 1.5);
-    const offsetX = (w - spanX * scale) / 2;
-    const offsetY = (h - spanY * scale) / 2;
-    list.forEach((n, i) => {
-      map.set(n.id, { x: offsetX + (px[i] - minX) * scale, y: offsetY + (py[i] - minY) * scale });
-    });
+    const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanY, 1.4);
+    const offX = (w - spanX * scale) / 2;
+    const offY = (h - spanY * scale) / 2;
+    map.forEach((p, id) => map.set(id, { x: (p.x - minX) * scale + offX, y: (p.y - minY) * scale + offY }));
     return map;
   }
 
