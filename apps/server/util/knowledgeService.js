@@ -23,12 +23,18 @@ function stripHtml(html) {
 /**
  * 从文本中提取有意义的词条（中文按字/词拆分，英文按空格拆分）
  * 简单分词：对中文按单字+二字组合，对英文按单词
+ *
+ * 单字信息量太低：像"怎""么"这类高频字会跟大量不相关标题撞车打分（如"怎么联系官方"
+ * 会被"忘记密码怎么办""文件上传失败怎么办"这类同样含"怎么"的无关 FAQ 分走权重，
+ * 把真正该命中的结果挤出结果集），因此优先只用二字词/整句/英文单词打分；仅当查询
+ * 确实太短、提不出任何多字 token 时（如纯单字查询）才兜底用单字。
  */
-function extractTokens(text) {
+export function extractTokens(text) {
   const cleaned = text.replace(/[^\w\u4e00-\u9fff]/g, ' ').trim();
   if (!cleaned) return [];
 
-  const tokens = [];
+  const wordTokens = []; // 二字词/整句/英文单词——真正有信息量的 token
+  const charTokens = []; // 单字——仅在 wordTokens 为空时兜底使用
 
   // 匹配中文/英文/数字
   const chineseChars = cleaned.match(/[\u4e00-\u9fff]+/g) || [];
@@ -36,7 +42,7 @@ function extractTokens(text) {
 
   // 英文单词直接加入
   for (const word of englishWords) {
-    if (word.length >= 2) tokens.push(word.toLowerCase());
+    if (word.length >= 2) wordTokens.push(word.toLowerCase());
   }
 
   // 中文：提取有意义的二字词（相邻字组合）
@@ -45,19 +51,20 @@ function extractTokens(text) {
       // 单字（过滤常见停用字）
       const char = cn[i];
       if (!'的了是在有我有着不就这那和也与而但或及被把对'.includes(char)) {
-        tokens.push(char);
+        charTokens.push(char);
       }
       // 二字词
       if (i < cn.length - 1) {
-        tokens.push(cn.substring(i, i + 2));
+        wordTokens.push(cn.substring(i, i + 2));
       }
     }
     // 如果整句较短，整句作为一个 token
     if (cn.length <= 8 && cn.length >= 3) {
-      tokens.push(cn);
+      wordTokens.push(cn);
     }
   }
 
+  const tokens = wordTokens.length > 0 ? wordTokens : charTokens;
   return [...new Set(tokens)]; // 去重
 }
 
