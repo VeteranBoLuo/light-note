@@ -351,7 +351,7 @@ export const generateBookmarkMeta = async (req, res) => {
       'name 要简洁自然,像用户自己会给书签起的标题,不超过 20 个字。',
       'description 用一句简短自然的中文概括网站内容或用途,不超过 50 个字。',
       `用户已有的标签(JSON 数组):${JSON.stringify(tagNameList)}。`,
-      '从"已有标签"里挑选与该网址最相关的标签放进 matchedTags(0-2 个,必须与列表中的文字完全一致);若已有标签都不合适,matchedTags 返回空数组,并最多建议 1 个新标签放进 newTags(2-6 个字)。',
+      '从"已有标签"里挑选与该网址最相关的标签放进 matchedTags(0-4 个,必须与列表中的文字完全一致,只挑最相关的,宁缺毋滥);若已有标签都不合适,matchedTags 返回空数组,并在 newTags 里给出 1-3 个建议新增的简短标签名(2-6 个字),只有确实需要才建议,不要为了推荐而推荐。',
       '输出 JSON 对象,格式必须是 {"name":"...","description":"...","matchedTags":["..."],"newTags":["..."]}。',
       '不要输出 markdown,不要输出代码块,不要输出多余解释。',
     ].join('');
@@ -407,7 +407,7 @@ export const generateBookmarkMeta = async (req, res) => {
     const newTags = (Array.isArray(parsed.newTags) ? parsed.newTags : [])
       .map((s) => String(s || '').trim())
       .filter((n) => n && !userTags.some((t) => norm(t.name) === norm(n)))
-      .slice(0, 1);
+      .slice(0, 3);
     res.send(
       resultData({
         name: String(parsed.name || '').trim(),
