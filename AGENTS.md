@@ -261,6 +261,28 @@ await insertResourceTagRelations(connection, { tagIds, resourceType: 'bookmark',
 await insertBookmarkLegacyRelations(connection, { tagIds, bookmarkId: resourceId, userId });
 ```
 
+## Agent LLM 供应商（DeepSeek 主 / 千问备用）
+
+- 轻笺智域（`/api/chat/agent`，`agentHandle.js` + `util/agent/deepseekClient.js`）**主力供应商是 DeepSeek**，千问（qwen3.5-flash）只是应急备用，由 `AGENT_LLM_PROVIDER` 环境变量选择（`deepseek` 默认 / `qwen`）。
+- **不要**把默认值改成 `qwen`，不要删掉 `deepseek` 分支，不要在代码里硬编码切到千问——这是给人在 DeepSeek 出故障时手动切换用的应急开关，不是常态。
+- 供应商配置集中在 `deepseekClient.js` 的 `PROVIDERS` 表（baseUrl / 密钥环境变量 / 默认模型 / 单价 / `extraBody`），新增字段时两边都要补，不要只改一边导致行为不对称。
+- 千问那边**必须**保留 `extraBody: { enable_thinking: false }`：`qwen3.5-flash` 默认开深度思考，实测一句简单问答就产生 97% 是思考 token，又慢又贵，直接违背备用模型"优先保证速度"的定位。以后换/加千问系列模型，先实测默认是否开思考，不要假设关闭。
+- 千问复用项目已有的 `DASHSCOPE_API_KEY`（`chatHandle.js` 的 App Completion 接口也用它），**不要**为它单独申请/新增一个 key。
+- 两家单价不同，`agentHandle.js` 的 `logAgentRequest` 必须按 `getActiveProviderPricing()` 取当前生效供应商的价格算成本，不要写死某一家的单价。
+- 切换只需要改 `.env` 的 `AGENT_LLM_PROVIDER` + `pm2 restart app --update-env`，**不要**做成代码里自动检测故障并切换——低频问题，自动判断容易误判，还可能在用户不知情时在备用账号上产生费用。
+
+```javascript
+// ✅ 正确：新增/修改 provider 配置
+const PROVIDERS = {
+  deepseek: { baseUrl, apiKeyEnv: 'DEEPSEEK_API_KEY', modelEnv: 'DEEPSEEK_MODEL', defaultModel, price },
+  qwen: { baseUrl, apiKeyEnv: 'DASHSCOPE_API_KEY', modelEnv: 'QWEN_MODEL', defaultModel: 'qwen3.5-flash', price, extraBody: { enable_thinking: false } },
+};
+
+// ❌ 错误：改默认值、丢 enable_thinking、写死价格
+const name = process.env.AGENT_LLM_PROVIDER || 'qwen'; // 默认不能是 qwen
+const cost = (promptTokens / 1e6) * 1 + (completionTokens / 1e6) * 2; // 没按供应商区分单价
+```
+
 ## SQL 安全
 
 - **所有**用户输入必须通过参数化占位符 `?` 传入，永远不要字符串拼接。
