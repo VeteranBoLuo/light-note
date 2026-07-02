@@ -307,8 +307,8 @@ const MAX_GLOBAL_EDGES = 800;
 // 全局知识图谱(root 专属):本人全部标签为节点 + 标签共现边(俯瞰知识全貌,区别于按单标签展开的 getTagGraph)
 export const getGlobalGraph = async (req, res) => {
   try {
-    if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    if (!userId) return res.send(resultData(null, 401, '请先登录'));
     const minCo = Math.max(1, Math.min(Number(req.body?.minCoOccurrence) || 1, 10));
 
     // 1. 全部标签作为节点,size/weight 由挂载资源数决定

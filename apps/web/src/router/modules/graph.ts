@@ -6,7 +6,7 @@ const graphRouter: RouteRecordRaw = {
   meta: {
     title: '知识图谱',
     requireAuth: true,
-    roles: [RoleEnum.Root],
+    roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
   },
   path: '/graph',
   name: 'globalGraph',

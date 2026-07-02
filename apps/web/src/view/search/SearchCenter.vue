@@ -5,6 +5,25 @@
         <div class="eyebrow">{{ t('resourceCenter.eyebrow') }}</div>
         <h1>{{ t('resourceCenter.title') }}</h1>
         <p>{{ t('resourceCenter.subtitle') }}</p>
+        <button
+          style="
+            margin-top: 12px;
+            border: 0;
+            cursor: pointer;
+            color: #fff;
+            background: #615ced;
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+          "
+          @click="$router.push('/graph')"
+          v-click-log="{ module: '资源中心', operation: '进入知识图谱' }"
+        >
+          🌐 知识图谱
+        </button>
       </div>
       <div class="hero-stats">
         <div v-for="stat in stats" :key="stat.type" class="stat-card">

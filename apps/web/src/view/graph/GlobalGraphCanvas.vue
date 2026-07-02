@@ -255,7 +255,7 @@
       graph = new Graph({
         container: containerRef.value,
         data: buildData(),
-        animation: false,
+        animation: true,
         behaviors: [
           { type: 'drag-canvas' },
           { type: 'zoom-canvas' },
@@ -308,15 +308,53 @@
     background:
       radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--resource-tag-color, #615ced) 8%, transparent), transparent 34%),
       linear-gradient(135deg, color-mix(in srgb, var(--background-color) 96%, white), var(--background-color));
+    animation: gg-fade 0.8s ease both;
+  }
+  /* 环境光:缓慢漂移的极光,给暗底一点"活着"的氛围(在画布之下) */
+  .global-graph-canvas::after {
+    content: '';
+    position: absolute;
+    inset: -30%;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 30% 38%, color-mix(in srgb, #615ced 16%, transparent), transparent 42%),
+      radial-gradient(circle at 72% 62%, color-mix(in srgb, #ec4899 12%, transparent), transparent 42%);
+    animation: gg-drift 20s ease-in-out infinite alternate;
   }
   .gg-stage {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
     min-height: 480px;
   }
+  @keyframes gg-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes gg-drift {
+    from {
+      transform: translate(-4%, -3%) rotate(0deg) scale(1);
+    }
+    to {
+      transform: translate(4%, 3%) rotate(6deg) scale(1.06);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .global-graph-canvas,
+    .global-graph-canvas::after {
+      animation: none;
+    }
+  }
   .gg-state {
     position: absolute;
     inset: 0;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
