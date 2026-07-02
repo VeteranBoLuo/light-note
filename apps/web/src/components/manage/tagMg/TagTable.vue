@@ -23,6 +23,13 @@
             >
               {{ $t('common.add') }}
             </b-button>
+            <b-button
+              v-if="user.role === 'root'"
+              @click="$router.push('/graph')"
+              v-click-log="{ module: '标签管理', operation: '进入全局知识图谱' }"
+            >
+              全局图谱
+            </b-button>
             <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: `返回` }">
               {{ $t('common.back') }}
             </b-button>

@@ -121,15 +121,6 @@
             @click="router.push('/knowledgeBase')"
             >{{ $t('navigation.knowledgeBase') }}
           </div>
-          <div
-            v-if="user.role === 'root'"
-            :style="{
-              color: route.path.includes('/graph') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            @click="router.push('/graph')"
-            >知识图谱
-          </div>
         </template>
       </div>
       <RightArea />

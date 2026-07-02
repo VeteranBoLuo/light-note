@@ -133,6 +133,23 @@
         py[i] += mvy;
       }
     }
+    // 横向铺开:图谱容器通常很宽,按宽高比把标签星座横向拉伸,填满左右空间(卫星环随后按圆形排布,不受拉伸影响)
+    let sMinX = Infinity;
+    let sMaxX = -Infinity;
+    let sMinY = Infinity;
+    let sMaxY = -Infinity;
+    for (let i = 0; i < N; i += 1) {
+      sMinX = Math.min(sMinX, px[i]);
+      sMaxX = Math.max(sMaxX, px[i]);
+      sMinY = Math.min(sMinY, py[i]);
+      sMaxY = Math.max(sMaxY, py[i]);
+    }
+    const tSpanX = sMaxX - sMinX || 1;
+    const tSpanY = sMaxY - sMinY || 1;
+    const stretchX = Math.max(1, Math.min(2.6, ((w / h) * tSpanY) / tSpanX));
+    const tcx = (sMinX + sMaxX) / 2;
+    for (let i = 0; i < N; i += 1) px[i] = tcx + (px[i] - tcx) * stretchX;
+
     tags.forEach((t, i) => map.set(t.id, { x: px[i], y: py[i] }));
 
     // ② 资源:围绕父标签成环卫星
