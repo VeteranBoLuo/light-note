@@ -52,14 +52,4 @@ export default {
     if (!raw?.total) return '标签查询：无结果';
     return `标签查询：共 ${raw.total} 个标签`;
   },
-  // 命中标签作为可点击「来源卡片」返回前端(标签点击进 /tag/:id 详情)
-  sources(raw) {
-    return (raw?.items || []).map((r) => ({
-      id: String(r.id),
-      type: 'tag',
-      title: r.name || '无标题',
-      route: `/tag/${r.id}`,
-      snippet: r.resource_count > 0 ? `${r.resource_count} 个关联资源` : '',
-    }));
-  },
 };

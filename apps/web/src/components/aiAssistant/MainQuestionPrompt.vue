@@ -22,36 +22,33 @@
 
   const emit = defineEmits(['recommendation-click']);
 
-  // 「问我的库」类问题:直接检索/总结用户自己存的书签/笔记/文件,是轻笺智域最高价值的用法,优先展示
-  const myLibraryQuestions = [
-    t('ai.savedAbout'),
-    t('ai.crossSearch'),
-    t('ai.recentBookmarks'),
-    t('ai.myBookmarks'),
-    t('ai.myNotes'),
-    t('ai.myTags'),
-    t('ai.trashContent'),
-    t('ai.storageUsage'),
-  ];
-
-  // 「怎么用」类帮助问题:次要
-  const helpQuestions = [
+  // 定义一个大的常见问题列表
+  const allQuestions = [
     t('ai.howToCreateBookmark'),
     t('ai.cloudSpaceUsage'),
     t('ai.howToCreateTag'),
     t('ai.howToManageBookmarks'),
     t('ai.howToEditNote'),
     t('ai.howToImportExportBookmarks'),
+    t('ai.myBookmarks'),
+    t('ai.recentBookmarks'),
+    t('ai.myNotes'),
+    t('ai.myTags'),
+    t('ai.trashContent'),
+    t('ai.storageUsage'),
+    t('ai.quickNote'),
+    t('ai.addTag'),
+    t('ai.restoreTrash'),
+    t('ai.crossSearch'),
     t('ai.bookmarkTagUsage'),
   ];
 
   const recommendationItems = ref<string[]>([]);
 
-  const pickRandom = (arr: string[], n: number) => [...arr].sort(() => 0.5 - Math.random()).slice(0, n);
-
-  // 优先「问我的库」(2 条) + 帮助类(1 条),强化「能问你自己存的东西」这一心智
+  // 随机选择三个问题
   function selectRandomQuestions() {
-    recommendationItems.value = [...pickRandom(myLibraryQuestions, 2), ...pickRandom(helpQuestions, 1)];
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    recommendationItems.value = shuffled.slice(0, 3);
   }
 
   onMounted(() => {

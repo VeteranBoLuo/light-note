@@ -106,8 +106,6 @@ async function executeTool(name, args, ctx) {
       summary,
       dataSummary,
       params: args,
-      // 结构化命中资源(供前端渲染可点击来源卡片);工具未实现 sources 则为 undefined
-      sources: typeof tool.sources === 'function' ? tool.sources(raw, args) : undefined,
     };
   } catch (err) {
     console.error(`[Agent] 工具 ${name} 执行失败:`, err.message);
@@ -190,9 +188,6 @@ export async function agentChat(req, res) {
   req.setTimeout(0);
 
   let stream = false;
-  // 声明在 try 外层，使 catch 块也能安全访问（此前用 const 声明在 try 内，
-  // catch 块引用会抛 ReferenceError，掩盖真正的错误信息）
-  let onClientClose;
 
   try {
     const {
@@ -241,7 +236,7 @@ export async function agentChat(req, res) {
 
     // 流式模式：提前设置 SSE headers + 客户端断开时 abort DeepSeek 流
     const agentAbortController = new AbortController();
-    onClientClose = () => {
+    const onClientClose = () => {
       if (!agentAbortController.signal.aborted) {
         agentAbortController.abort();
       }
@@ -263,8 +258,6 @@ export async function agentChat(req, res) {
     /** @type {Array<{ name: string, status: string, params?: object, error?: string, dataSummary?: string }>} */
     const usedTools = [];
     let finalContent = '';
-    // 本轮各工具命中的资源,去重后作为「来源卡片」下发前端
-    let sourceCards = [];
     const startTime = Date.now();
     let apiCalls = 0;
     // 累计所有 DeepSeek 调用的 token 用量
@@ -317,19 +310,6 @@ export async function agentChat(req, res) {
           content: r.result.summary,
         });
       }
-
-      // 汇总各工具命中的资源为「来源卡片」(按 type+id 去重、限量 12),供前端渲染可点击来源
-      const seenSource = new Set();
-      for (const r of results) {
-        if (!Array.isArray(r.result?.sources)) continue;
-        for (const s of r.result.sources) {
-          const key = `${s.type}:${s.id}`;
-          if (seenSource.has(key)) continue;
-          seenSource.add(key);
-          sourceCards.push(s);
-        }
-      }
-      sourceCards = sourceCards.slice(0, 12);
 
       // ---- 第2步：Final Reply ----
       messages.push({
@@ -392,16 +372,12 @@ export async function agentChat(req, res) {
       if (!usedTools.length) {
         res.write(`data: ${JSON.stringify({ output: { text: finalContent, session_id: getSessionId(session) } })}\n\n`);
       }
-      // 下发来源卡片(前端按 type+id 挂到当前回答消息)
-      if (sourceCards.length) {
-        res.write(`data: ${JSON.stringify({ sources: sourceCards })}\n\n`);
-      }
       res.write('data: [DONE]\n\n');
       res.end();
-      if (onClientClose) res.removeListener('close', onClientClose);
+      res.removeListener('close', onClientClose);
     } else {
-      res.send(resultData({ response: finalContent, sessionId: getSessionId(session), sources: sourceCards }));
-      if (onClientClose) res.removeListener('close', onClientClose);
+      res.send(resultData({ response: finalContent, sessionId: getSessionId(session) }));
+      res.removeListener('close', onClientClose);
     }
 
     // 记录本轮对话
@@ -428,6 +404,6 @@ export async function agentChat(req, res) {
     } else {
       res.status(500).send(resultData(null, 500, 'AI 服务异常: ' + error.message));
     }
-    if (onClientClose) res.removeListener('close', onClientClose);
+    res.removeListener('close', onClientClose);
   }
 }

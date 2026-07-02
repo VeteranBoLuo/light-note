@@ -15,10 +15,7 @@
           <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
         </div>
       </div>
-      <div
-        class="bubble"
-        v-if="message.content || (message.thoughts && message.thoughts.length) || (message.sources && message.sources.length)"
-      >
+      <div class="bubble" v-if="message.content || (message.thoughts && message.thoughts.length)">
         <!-- 深度思考过程 -->
         <div v-if="message.thoughts && message.thoughts.length" class="thoughts">
           <div class="thoughts-header">{{
@@ -34,26 +31,7 @@
           </div>
         </div>
         <!-- Markdown 渲染内容 -->
-        <div v-if="message.content" class="text" v-html="formatMessage(message)" @click="handleLinkClick"></div>
-        <!-- 来源卡片:Agent 命中的书签/笔记/文件,可点击跳转 -->
-        <div v-if="message.role === 'assistant' && message.sources && message.sources.length" class="sources">
-          <div class="sources-title">📎 来源 · {{ message.sources.length }}</div>
-          <div class="sources-list">
-            <button
-              v-for="s in message.sources"
-              :key="`${s.type}-${s.id}`"
-              class="source-card"
-              @click="openSource(s)"
-              v-click-log="{ module: 'AI助手', operation: `点击来源【${s.type}:${s.title}】` }"
-            >
-              <span class="source-type" :class="`source-type--${s.type}`">{{ sourceTypeLabel(s.type) }}</span>
-              <span class="source-body">
-                <span class="source-name">{{ s.title }}</span>
-                <span v-if="s.snippet" class="source-snippet">{{ s.snippet }}</span>
-              </span>
-            </button>
-          </div>
-        </div>
+        <div class="text" v-html="formatMessage(message)" @click="handleLinkClick"></div>
         <div class="time" v-if="message.role === 'user'">{{ formatTime(message.timestamp) }}</div>
       </div>
       <ReplyLoading v-else />
@@ -78,16 +56,6 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
 
-  interface SourceItem {
-    id: string;
-    type: 'bookmark' | 'note' | 'file' | 'tag';
-    title: string;
-    url?: string;
-    route?: string;
-    fileType?: string;
-    snippet?: string;
-  }
-
   interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
@@ -95,7 +63,6 @@
     thoughts?: any[];
     thinkingText?: string;
     thinkingDisplay?: string;
-    sources?: SourceItem[];
   }
 
   const props = defineProps<{
@@ -175,23 +142,6 @@
   };
 
   const hasAnswerStarted = computed(() => props.hasAnswerStarted);
-
-  const sourceTypeLabel = (type: string): string =>
-    (({ bookmark: '书签', note: '笔记', file: '文件', tag: '标签' }) as Record<string, string>)[type] || type;
-
-  // 点击来源卡片:复用全局搜索的跳转交互(书签开外链 / 笔记进详情 / 文件进云空间预览 / 标签进详情)
-  const openSource = (s: SourceItem) => {
-    if (s.type === 'bookmark' && s.url) {
-      const hasProtocol = /^https?:\/\//i.test(s.url);
-      window.open(hasProtocol ? s.url : `https://${s.url}`, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    if (s.type === 'file') {
-      router.push({ path: '/cloudSpace', query: { fileName: s.title } });
-      return;
-    }
-    if (s.route) router.push(s.route);
-  };
 
   // 拦截链接点击：站内地址用 router.push SPA 跳转，外部链接新窗口打开
   const handleLinkClick = (event: MouseEvent) => {
@@ -407,96 +357,6 @@
     margin-top: 0.25rem;
     font-size: 0.8rem;
     color: #888;
-  }
-
-  /* 来源卡片 */
-  .sources {
-    margin-top: 0.75rem;
-    padding-top: 0.6rem;
-    border-top: 1px dashed var(--card-border-color, #e2e8f0);
-  }
-
-  .sources-title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--desc-color, #888);
-    margin-bottom: 0.5rem;
-  }
-
-  .sources-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
-  .source-card {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    text-align: left;
-    padding: 0.5rem 0.6rem;
-    border: 1px solid var(--card-border-color, #e2e8f0);
-    border-radius: 0.6rem;
-    background: var(--background-color, #fff);
-    cursor: pointer;
-    transition:
-      border-color 0.18s,
-      transform 0.18s,
-      box-shadow 0.18s;
-  }
-
-  .source-card:hover {
-    border-color: #7b79d3;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(123, 121, 211, 0.18);
-  }
-
-  .source-type {
-    flex: 0 0 auto;
-    font-size: 0.68rem;
-    line-height: 1.6;
-    padding: 0 0.45rem;
-    border-radius: 999px;
-    color: #fff;
-    background: #9aa0aa;
-  }
-
-  .source-type--bookmark {
-    background: #4f8cff;
-  }
-  .source-type--note {
-    background: #22b07d;
-  }
-  .source-type--file {
-    background: #f0883e;
-  }
-  .source-type--tag {
-    background: #7b79d3;
-  }
-
-  .source-body {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 1px;
-  }
-
-  .source-name {
-    font-size: 0.8rem;
-    color: var(--text-color, #2d3748);
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .source-snippet {
-    font-size: 0.7rem;
-    color: var(--desc-color, #999);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   @keyframes fadeIn {

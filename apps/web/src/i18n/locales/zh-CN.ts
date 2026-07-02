@@ -542,7 +542,6 @@ export default {
     addTag: '帮我创建一个新标签',
     restoreTrash: '告诉我回收站怎么用',
     crossSearch: '帮我搜索书签和笔记里的内容',
-    savedAbout: '我之前存过关于 AI 的东西吗？',
     bookmarkTagUsage: '书签和标签怎么用？',
     workbenchUsage: '工作台有什么用？',
     internetSearch: '联网搜索',

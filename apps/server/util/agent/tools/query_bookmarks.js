@@ -24,8 +24,8 @@ export default {
     const baseParams = [ctx.userId];
 
     if (keyword) {
-      where += ` AND (b.name LIKE ? OR b.url LIKE ? OR b.description LIKE ?)`;
-      baseParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+      where += ` AND (b.name LIKE ? OR b.url LIKE ?)`;
+      baseParams.push(`%${keyword}%`, `%${keyword}%`);
     }
     if (tag) {
       where += ` AND b.id IN (
@@ -41,7 +41,7 @@ export default {
 
     const [[rows], [countRes]] = await Promise.all([
       pool.query(
-        `SELECT b.id, b.name, b.url, b.description, b.create_time FROM bookmark b WHERE ${where} ORDER BY b.create_time DESC LIMIT ?`,
+        `SELECT b.id, b.name, b.url, b.create_time FROM bookmark b WHERE ${where} ORDER BY b.create_time DESC LIMIT ?`,
         [...baseParams, take],
       ),
       pool.query(
@@ -72,15 +72,5 @@ export default {
     if (!raw?.total) return `书签查询：无结果`;
     const keyword = args.keyword ? `关键词"${args.keyword}"` : '';
     return `书签查询${keyword ? `（${keyword}）` : ''}：共 ${raw.total} 条`;
-  },
-  // 命中书签作为可点击「来源卡片」返回前端(书签点击开外链)
-  sources(raw) {
-    return (raw?.items || []).map((r) => ({
-      id: String(r.id),
-      type: 'bookmark',
-      title: r.name || '无标题',
-      url: r.url || '',
-      snippet: String(r.description || '').replace(/\s+/g, ' ').trim().slice(0, 80),
-    }));
   },
 };

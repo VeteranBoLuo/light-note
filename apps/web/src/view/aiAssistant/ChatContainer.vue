@@ -73,7 +73,6 @@
     thoughts?: any[];
     thinkingText?: string; // 当前消息完整的思考过程文本
     thinkingDisplay?: string; // 当前消息用于展示的思考文本（打字机效果）
-    sources?: any[]; // Agent 命中的书签/笔记/文件来源卡片
   }
 
   // 响应式数据
@@ -500,12 +499,6 @@
 
           if (data.output?.session_id) {
             sessionId = data.output.session_id;
-          }
-
-          // 来源卡片(Agent 命中的书签/笔记/文件),挂到当前回答消息;旧请求已被取代则不写入
-          if (Array.isArray(data.sources) && data.sources.length && activeRequestId === thisRequestId) {
-            const curMsg = messages.value[currentMessageIndex];
-            if (curMsg) curMsg.sources = data.sources;
           }
         } catch (e) {
           console.warn('解析数据失败，跳过数据块:', dataStr);
