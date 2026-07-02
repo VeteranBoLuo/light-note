@@ -63,7 +63,16 @@
           <div>接口：{{ selectedRecord.url }}</div>
           <div>
             请求参数：
-            <pre style="margin: 4px 0 0; max-height: 120px; overflow: auto; background: var(--menu-item-h-bg-color); padding: 8px; border-radius: 6px; font-size: 12px;">{{ selectedRecord.req }}</pre>
+            <pre
+              style="
+                margin: 4px 0 0;
+                max-height: 120px;
+                overflow: auto;
+                padding: 8px;
+                border-radius: 6px;
+                font-size: 12px;
+              "
+              >{{ selectedRecord.req }}</pre>
           </div>
           <div>ip地址：{{ selectedRecord?.ip }}</div>
           <div>指纹：{{ selectedRecord.system?.fingerprint }}</div>
