@@ -551,6 +551,7 @@ export default {
     addTag: 'Create a new tag for me',
     restoreTrash: 'How does the recycle bin work?',
     crossSearch: 'Search bookmarks and notes for content',
+    savedAbout: 'Have I saved anything about AI?',
     bookmarkTagUsage: 'How do bookmarks and tags work?',
     workbenchUsage: 'What is the workbench used for?',
     internetSearch: 'Internet Search',

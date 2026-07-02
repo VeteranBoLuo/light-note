@@ -69,4 +69,20 @@ export default {
     if (!raw?.total) return `文件查询：无结果`;
     return `文件查询：共 ${raw.total} 个文件`;
   },
+  // 命中文件作为可点击「来源卡片」返回前端(文件点击跳云空间预览)
+  sources(raw) {
+    const fmtSize = (bytes) => {
+      if (!bytes) return '';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
+    };
+    return (raw?.items || []).map((r) => ({
+      id: String(r.id),
+      type: 'file',
+      title: r.file_name || '未知',
+      fileType: r.file_type || '',
+      snippet: fmtSize(r.file_size),
+    }));
+  },
 };

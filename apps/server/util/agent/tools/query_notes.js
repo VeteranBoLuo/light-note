@@ -32,7 +32,7 @@ export default {
     }
 
     const [[rows], [countRes]] = await Promise.all([
-      pool.query(`SELECT n.id, n.title, n.create_time FROM note n WHERE ${where} ORDER BY n.create_time DESC LIMIT ?`, [...baseParams, take]),
+      pool.query(`SELECT n.id, n.title, SUBSTRING(n.content, 1, 400) AS content_snippet, n.create_time FROM note n WHERE ${where} ORDER BY n.create_time DESC LIMIT ?`, [...baseParams, take]),
       pool.query(`SELECT COUNT(*) as total FROM note n WHERE ${where}`, baseParams),
     ]);
 
@@ -55,5 +55,19 @@ export default {
     if (!raw?.total) return `笔记查询：无结果`;
     const keyword = args.keyword ? `关键词"${args.keyword}"` : '';
     return `笔记查询${keyword ? `（${keyword}）` : ''}：共 ${raw.total} 条`;
+  },
+  // 命中笔记作为可点击「来源卡片」返回前端(笔记点击进 /noteLibrary/:id 详情)
+  sources(raw) {
+    return (raw?.items || []).map((r) => ({
+      id: String(r.id),
+      type: 'note',
+      title: r.title || '无标题',
+      route: `/noteLibrary/${r.id}`,
+      snippet: String(r.content_snippet || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 80),
+    }));
   },
 };
