@@ -92,4 +92,21 @@ const router = createRouter({
   routes,
 });
 
+// 兜底:部分懒加载 chunk 请求失败不会经过 vite:preloadError(见 main.ts),
+// 而是直接以路由导航错误的形式出现,这里按错误信息匹配后自动刷新自愈。
+// 用 sessionStorage 打标防止死循环刷新(比如目标 chunk 在新版本里也确实不存在了)。
+const CHUNK_ERROR_PATTERN = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+const CHUNK_RELOAD_FLAG = 'ln-chunk-reload-attempted';
+
+router.onError((error, to) => {
+  if (!CHUNK_ERROR_PATTERN.test(error?.message || '')) return;
+  if (sessionStorage.getItem(CHUNK_RELOAD_FLAG)) return; // 已重试过一次,避免死循环
+  sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1');
+  window.location.href = to.fullPath;
+});
+
+router.afterEach(() => {
+  sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
+});
+
 export default router;
