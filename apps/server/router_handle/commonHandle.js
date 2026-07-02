@@ -297,13 +297,17 @@ export const clearApiLogs = (req, res) => {
 export const recordOperationLogs = (req, res) => {
   try {
     const userId = req.user?.id;
-    // 本地/回环请求(本地调试)不记操作日志(operation_logs 无 ip 列,靠 req.ip 判断)
+    // 本地/回环请求(本地调试)不记操作日志
     if (isLocalIp(req.ip)) return res.send(resultData(null));
+    // 服务端受控字段一律放在 ...req.body 之后,防止客户端 body 伪造 create_by / id / ip
     const log = {
-      createBy: userId,
       ...req.body,
+      create_by: userId,
+      ip: req.ip || '',
       del_flag: 0,
     };
+    delete log.createBy; // 防客户端用驼峰键绕过覆盖(snakeCaseKeys 会与 create_by 合流)
+    delete log.id; // 防客户端指定主键(交由 insertData 生成 UUID)
     pool
       .query('INSERT INTO operation_logs SET ?', [insertData(log)])
       .then(() => {
@@ -370,6 +374,65 @@ export const clearOperationLogs = (req, res) => {
     .catch((err) => {
       res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
     });
+};
+
+// ── 按 IP 清理日志(root 专属的后台清理模块用)──────────────────────────
+// 三张带 ip 列的日志表;operation_logs 的 ip 列由 20260702 迁移补齐,历史行 ip 为 NULL
+// key 显式用驼峰:resultData 会对返回 data 递归 camelCaseKeys,直接用驼峰避免蛇形被改名(见本文件顶部同类坑)
+const IP_LOG_TABLES = [
+  { table: 'api_logs', key: 'apiLogs' },
+  { table: 'conversion_events', key: 'conversionEvents' },
+  { table: 'operation_logs', key: 'operationLogs' },
+];
+// 构造按 IP 过滤的 WHERE:mode='local' 匹配本地/回环(等价 isLocalIp),否则按精确 IP
+const buildIpLogWhere = (mode, ip) => {
+  if (mode === 'local') {
+    return {
+      where: "(LOWER(ip)='::1' OR LOWER(ip)='localhost' OR ip LIKE '127.%' OR LOWER(ip) LIKE '::ffff:127.%')",
+      params: [],
+    };
+  }
+  return { where: 'ip = ?', params: [ip] };
+};
+
+// 统计某 IP(或本地回环)在各日志表的命中行数(清理前预览,不改数据)
+export const getIpLogStats = async (req, res) => {
+  const userId = await ensureRootRole(req, res);
+  if (!userId) return;
+  try {
+    const mode = req.body?.mode === 'local' ? 'local' : 'exact';
+    const ip = String(req.body?.ip || '').trim();
+    if (mode === 'exact' && !ip) return res.send(resultData(null, 400, '请输入要查询的 IP'));
+    const { where, params } = buildIpLogWhere(mode, ip);
+    const stats = {};
+    for (const { table, key } of IP_LOG_TABLES) {
+      const [rows] = await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`, params);
+      stats[key] = rows[0].n;
+    }
+    res.send(resultData(stats));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
+};
+
+// 物理删除某 IP(或本地回环)在各日志表的全部记录(root 专属;转化漏斗表无 del_flag,统一用物理删除)
+export const clearLogsByIp = async (req, res) => {
+  const userId = await ensureRootRole(req, res);
+  if (!userId) return;
+  try {
+    const mode = req.body?.mode === 'local' ? 'local' : 'exact';
+    const ip = String(req.body?.ip || '').trim();
+    if (mode === 'exact' && !ip) return res.send(resultData(null, 400, '请输入要清理的 IP'));
+    const { where, params } = buildIpLogWhere(mode, ip);
+    const deleted = {};
+    for (const { table, key } of IP_LOG_TABLES) {
+      const [result] = await pool.query(`DELETE FROM ${table} WHERE ${where}`, params);
+      deleted[key] = result.affectedRows || 0;
+    }
+    res.send(resultData(deleted));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
 };
 
 // 定义支持的图片类型及其对应的扩展名

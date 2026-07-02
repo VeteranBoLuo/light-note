@@ -199,6 +199,7 @@ CREATE TABLE `operation_logs` (
   `module` varchar(255) CHARACTER SET utf8 DEFAULT NULL,
   `operation` varchar(255) CHARACTER SET utf8 DEFAULT NULL,
   `create_by` varchar(255) CHARACTER SET utf8 DEFAULT NULL COMMENT '创建人员',
+  `ip` varchar(255) CHARACTER SET utf8 DEFAULT NULL COMMENT 'ip地址',
   `create_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `del_flag` varchar(255) CHARACTER SET utf8 NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`) USING BTREE

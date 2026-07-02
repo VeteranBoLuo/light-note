@@ -8,7 +8,7 @@ vi.mock('../db/index.js', () => ({ default: { query, getConnection: vi.fn() } })
 // 直接首个 import commonHandle.js 会拿到未初始化的导出而报错。
 // 先按应用真实顺序 import common.js,让 commonHandle.js 作为叶子完成初始化,规避循环。
 await import('../util/common.js');
-const { recordConversion, getConversionFunnel } = await import('./commonHandle.js');
+const { recordConversion, getConversionFunnel, clearLogsByIp, getIpLogStats } = await import('./commonHandle.js');
 
 function mockRes() {
   const res = {};
@@ -119,5 +119,96 @@ describe('getConversionFunnel', () => {
     const funnelCall = calls.find((c) => /GROUP BY event/.test(c.sql));
     expect(funnelCall.sql).toContain('create_time');
     expect(funnelCall.params).toEqual(['2026-06-01 00:00:00', '2026-06-30']);
+  });
+});
+
+describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {
+  beforeEach(() => query.mockReset());
+
+  it('非 root → 403,不执行任何删除', async () => {
+    const res = mockRes();
+    await clearLogsByIp({ user: { id: 'u', role: 'visitor' }, body: { mode: 'local' } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('root + exact 模式空 ip → 400,不执行删除(防 WHERE 恒真全表删)', async () => {
+    query.mockImplementation((sql) => {
+      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: { ip: '   ' } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query.mock.calls.every((c) => !/DELETE/.test(c[0]))).toBe(true);
+  });
+
+  it('root + local 模式 → 三表 DELETE,WHERE 为常量、params 为空(不含用户输入)', async () => {
+    query.mockImplementation((sql) => {
+      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
+      if (/DELETE FROM/.test(sql)) return Promise.resolve([{ affectedRows: 2 }]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: { mode: 'local' } }, res);
+    const deletes = query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
+    expect(deletes).toHaveLength(3);
+    deletes.forEach((c) => {
+      expect(c[0]).toContain("LOWER(ip)='::1'");
+      expect(c[1]).toEqual([]);
+    });
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.status).toBe(200);
+    expect(arg.data).toMatchObject({ apiLogs: 2, conversionEvents: 2, operationLogs: 2 });
+  });
+
+  it('root + exact 模式 → 三表 DELETE 均以 ip=? 参数化绑定该 IP', async () => {
+    query.mockImplementation((sql) => {
+      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
+      if (/DELETE FROM/.test(sql)) return Promise.resolve([{ affectedRows: 1 }]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: { ip: '1.2.3.4' } }, res);
+    const deletes = query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
+    expect(deletes).toHaveLength(3);
+    deletes.forEach((c) => {
+      expect(c[0]).toContain('ip = ?');
+      expect(c[1]).toEqual(['1.2.3.4']);
+    });
+  });
+});
+
+describe('getIpLogStats 统计', () => {
+  beforeEach(() => query.mockReset());
+
+  it('非 root → 403', async () => {
+    const res = mockRes();
+    await getIpLogStats({ user: { role: 'visitor' }, body: { mode: 'local' } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('root + local → 返回驼峰统计字段(对齐 resultData 的 camelCaseKeys)', async () => {
+    query.mockImplementation((sql) => {
+      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
+      if (/COUNT\(\*\)/.test(sql)) return Promise.resolve([[{ n: 5 }]]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getIpLogStats({ user: { id: 'r', role: 'root' }, body: { mode: 'local' } }, res);
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.status).toBe(200);
+    expect(arg.data).toMatchObject({ apiLogs: 5, conversionEvents: 5, operationLogs: 5 });
+  });
+
+  it('root + exact 空 ip → 400', async () => {
+    query.mockImplementation((sql) => {
+      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getIpLogStats({ user: { id: 'r', role: 'root' }, body: {} }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
   });
 });

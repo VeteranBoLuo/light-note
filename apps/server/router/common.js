@@ -17,6 +17,10 @@ router.post('/getOperationLogs', commonHandle.getOperationLogs);
 
 router.get('/clearOperationLogs', commonHandle.clearOperationLogs);
 
+router.post('/getIpLogStats', commonHandle.getIpLogStats);
+
+router.post('/clearLogsByIp', commonHandle.clearLogsByIp);
+
 router.post('/analyzeImgUrl', commonHandle.analyzeImgUrl);
 
 router.post('/getImages', commonHandle.getImages);

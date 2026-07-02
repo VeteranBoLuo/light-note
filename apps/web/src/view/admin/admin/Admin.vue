@@ -64,6 +64,11 @@
       title: '转化漏斗',
       icon: icon.userCenter.log,
     },
+    {
+      id: 'logCleanup',
+      title: '日志清理',
+      icon: icon.userCenter.sql,
+    },
   ]);
 
   function nodeClick(menu: any) {

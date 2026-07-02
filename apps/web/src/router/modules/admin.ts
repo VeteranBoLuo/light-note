@@ -46,6 +46,10 @@ const adminRouter: RouteRecordRaw[] = [
         path: 'conversion',
         component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
       },
+      {
+        path: 'logCleanup',
+        component: () => import('@/view/admin/components/logCleanup/LogCleanup.vue'),
+      },
     ],
   },
   {
@@ -75,6 +79,10 @@ const adminRouter: RouteRecordRaw[] = [
   {
     path: 'conversion',
     component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
+  },
+  {
+    path: 'logCleanup',
+    component: () => import('@/view/admin/components/logCleanup/LogCleanup.vue'),
   },
 ];
 

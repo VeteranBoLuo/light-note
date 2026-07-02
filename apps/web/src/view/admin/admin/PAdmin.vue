@@ -60,6 +60,12 @@
         icon: icon.userCenter.log,
         url: '/conversion',
       },
+      {
+        id: 'logCleanup',
+        title: '日志清理',
+        icon: icon.userCenter.sql,
+        url: '/logCleanup',
+      },
     ],
     [
       {
