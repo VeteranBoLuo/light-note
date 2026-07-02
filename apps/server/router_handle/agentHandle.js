@@ -11,7 +11,7 @@
 
 import pool from '../db/index.js';
 import { resultData, generateUUID } from '../util/common.js';
-import { requestDeepSeek, requestDeepSeekStream } from '../util/agent/deepseekClient.js';
+import { requestDeepSeek, requestDeepSeekStream, getActiveProviderPricing } from '../util/agent/deepseekClient.js';
 import { parseTimeRange } from '../util/agent/timeRange.js';
 import { getOrCreateSession, recordTurn, buildContext, getSessionId } from '../util/agent/sessionStore.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
@@ -144,12 +144,14 @@ async function resolveUser(keyword) {
 
 /**
  * 写入 agent_logs 表
- * DeepSeek Flash 定价（人民币）：输入 ¥1/M tokens，输出 ¥2/M tokens
+ * 成本按当前生效的 AGENT_LLM_PROVIDER 计价(见 deepseekClient.js 的 PROVIDERS 单价表),
+ * 不同供应商单价不同,切换后新请求会自动按新供应商计费。
  */
 async function logAgentRequest({ userId, userAlias, question, toolsUsed, iterations, totalUsage, durationMs, status, errorMsg }) {
+  const { price } = getActiveProviderPricing();
   const cost = (
-    (totalUsage.promptTokens / 1_000_000) * 1 +
-    (totalUsage.completionTokens / 1_000_000) * 2
+    (totalUsage.promptTokens / 1_000_000) * price.input +
+    (totalUsage.completionTokens / 1_000_000) * price.output
   );
   const toolsStr = toolsUsed.map(t => t.name).join(',') || null;
   try {
