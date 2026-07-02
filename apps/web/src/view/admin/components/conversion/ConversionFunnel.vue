@@ -87,7 +87,10 @@
             </thead>
             <tbody>
               <tr v-for="t in trend" :key="t.d">
-                <td>{{ t.d }}</td><td>{{ t.pv }}</td><td>{{ t.cta }}</td><td>{{ t.reg }}</td>
+                <td>{{ t.d }}</td
+                ><td>{{ t.pv }}</td
+                ><td>{{ t.cta }}</td
+                ><td>{{ t.reg }}</td>
               </tr>
             </tbody>
           </table>
@@ -145,7 +148,9 @@
   const visitToReg = computed(() => rate(reg.value, pageView.value));
   const shareViewToCta = computed(() => rate(shareCta.value, shareView.value));
   const regToActivated = computed(() => rate(activated.value, reg.value));
-  const rangeHint = computed(() => (startDate.value || endDate.value ? `${startDate.value || '起'} ~ ${endDate.value || '今'}` : '全期'));
+  const rangeHint = computed(() =>
+    startDate.value || endDate.value ? `${startDate.value || '起'} ~ ${endDate.value || '今'}` : '全期',
+  );
 
   function fetchData() {
     apiBasePost('/api/common/getConversionFunnel', {
@@ -194,7 +199,7 @@
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    margin: 0 0 16px;
+    margin-top: 12px;
     font-size: 13px;
     color: var(--text-color);
   }

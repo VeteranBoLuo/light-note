@@ -53,11 +53,11 @@
                   title="登录此用户"
                   :src="icon.navigation.user"
                   size="16"
-                  @click="loginAsUser(record)"
+                  @click.stop="loginAsUser(record)"
                   class="dom-hover"
                 />
-                <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
-                <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
+                <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
+                <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
               </BSpace>
             </template>
           </template>
