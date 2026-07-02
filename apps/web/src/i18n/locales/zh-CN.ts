@@ -629,7 +629,6 @@ export default {
   },
   tagGraph: {
     title: '标签关系图谱',
-    subtitle: '从当前标签出发，查看相关标签和关联资源。',
     loading: '加载图谱中...',
     empty: '暂无图谱数据',
     reset: '重置视图',

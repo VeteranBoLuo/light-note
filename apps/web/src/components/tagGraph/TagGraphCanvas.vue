@@ -13,6 +13,9 @@
       <span>{{ t('tagGraph.loading') }}</span>
     </div>
     <div v-if="nodes.length" class="graph-zoom-hint">{{ t('tagGraph.zoomHint') }}</div>
+    <div class="graph-actions" :class="{ 'graph-actions--loading': loading }">
+      <slot name="actions" />
+    </div>
   </div>
 </template>
 
@@ -375,6 +378,14 @@
     },
     { immediate: true },
   );
+
+  function resetView() {
+    if (!graph) return;
+    graph.zoomTo(1);
+    graph.translateTo([0, 0]);
+  }
+
+  defineExpose({ resetView });
 </script>
 
 <style scoped lang="less">
@@ -474,6 +485,21 @@
     color: var(--desc-color);
     opacity: 0.7;
     pointer-events: none;
+  }
+
+  .graph-actions {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    z-index: 3;
+    display: flex;
+    gap: 6px;
+    pointer-events: auto;
+
+    &.graph-actions--loading {
+      opacity: 0.5;
+      pointer-events: none;
+    }
   }
 
   .graph-state--empty {

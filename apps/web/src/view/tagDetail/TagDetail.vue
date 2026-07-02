@@ -62,26 +62,10 @@
       </div>
 
       <section v-if="viewMode === 'graph'" class="tag-graph-section tag-graph-section--full">
-        <div class="tag-graph-header">
-          <div>
-            <div class="tag-graph-title">{{ t('tagGraph.title') }}</div>
-            <div class="tag-graph-subtitle">{{ t('tagGraph.subtitle') }}</div>
-            <div v-if="tag.name" class="tag-graph-current">
-              <span class="tag-graph-current-dot" />
-              <span class="tag-graph-current-text">{{ tag.name }}</span>
-            </div>
-          </div>
-          <div class="tag-graph-actions">
-            <b-button size="small" @click="toggleGraphResources">
-              {{ graphFilters.includeResources ? t('tagGraph.hideResource') : t('tagGraph.showResource') }}
-            </b-button>
-            <b-button size="small" type="primary" @click="reloadGraph">
-              {{ t('tagGraph.reset') }}
-            </b-button>
-          </div>
-        </div>
         <div class="tag-graph-layout">
           <TagGraphCanvas
+            ref="tagGraphRef"
+            style="position: relative"
             :nodes="graphData?.nodes || []"
             :edges="graphData?.edges || []"
             :loading="graphLoading"
@@ -91,8 +75,22 @@
             @node-click="handleGraphNodeClick"
             @node-dblclick="handleGraphNodeDoubleClick"
             @canvas-click="activeGraphNode = null"
+          >
+            <template #actions>
+              <b-button size="small" @click="toggleGraphResources">
+                {{ graphFilters.includeResources ? t('tagGraph.hideResource') : t('tagGraph.showResource') }}
+              </b-button>
+              <b-button size="small" type="primary" @click="reloadGraph">
+                {{ t('tagGraph.reset') }}
+              </b-button>
+            </template>
+          </TagGraphCanvas>
+          <TagGraphPanel
+            :node="activeGraphNode"
+            :connected-resources="graphConnectedResources"
+            @explore-tag="handlePanelExploreTag"
+            @open-resource="openGraphNode"
           />
-          <TagGraphPanel :node="activeGraphNode" @explore-tag="handlePanelExploreTag" />
         </div>
       </section>
 
@@ -207,7 +205,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { reactive, ref, onMounted, watch } from 'vue';
+  import { reactive, ref, computed, onMounted, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useUserStore } from '@/store';
@@ -243,6 +241,7 @@
   const graphLoading = ref(false);
   const graphData = ref<TagGraphResponse | null>(null);
   const activeGraphNode = ref<TagGraphNode | null>(null);
+  const tagGraphRef = ref<InstanceType<typeof TagGraphCanvas> | null>(null);
   const TAG_DETAIL_VIEW_MODE_KEY = 'tag-detail-view-mode';
   const viewMode = ref<'graph' | 'card'>('card');
   let tagDetailRequestSeq = 0;
@@ -250,6 +249,20 @@
   const graphFilters = reactive({
     includeResources: true,
     resourceTypes: ['bookmark', 'note', 'file'] as GraphResourceType[],
+  });
+
+  const graphConnectedResources = computed(() => {
+    if (!activeGraphNode.value || !graphData.value) return [];
+    if (activeGraphNode.value.type === 'tag') {
+      const { nodes, edges } = graphData.value;
+      const connectedIds = new Set<string>();
+      edges.forEach((edge) => {
+        if (edge.source === activeGraphNode.value!.id) connectedIds.add(edge.target);
+        if (edge.target === activeGraphNode.value!.id) connectedIds.add(edge.source);
+      });
+      return nodes.filter((n) => connectedIds.has(n.id) && n.type !== 'tag');
+    }
+    return [];
   });
 
   async function loadTagDetail() {
@@ -400,6 +413,7 @@
 
   function reloadGraph() {
     activeGraphNode.value = null;
+    tagGraphRef.value?.resetView();
     loadTagGraph();
   }
 
@@ -492,7 +506,10 @@
     if (!content) return '';
     // Markdown 笔记
     if (type === 'markdown' && !content.includes('<')) {
-      const text = content.replace(/[#*`~>\[\]()_-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const text = content
+        .replace(/[#*`~>\[\]()_-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       return text.length > 120 ? text.substring(0, 120) + '...' : text;
     }
     const div = document.createElement('div');
@@ -735,13 +752,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .tag-graph-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
   }
 
   .tag-graph-layout {
@@ -993,11 +1003,6 @@
     .tag-graph-header {
       align-items: flex-start;
       flex-direction: column;
-    }
-
-    .tag-graph-actions {
-      width: 100%;
-      justify-content: flex-start;
     }
 
     .tag-graph-layout {

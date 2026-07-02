@@ -259,7 +259,6 @@
         behaviors: [
           { type: 'drag-canvas' },
           { type: 'zoom-canvas' },
-          { type: 'drag-element' },
           { type: 'hover-activate', degree: 1 },
         ],
         zoomRange: [0.12, 2.4],

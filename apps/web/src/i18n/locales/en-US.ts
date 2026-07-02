@@ -47,7 +47,8 @@ export default {
       weeklyActive: 'This Week Activity',
       weeklyChanges: 'This Week Changes',
       activeDays: 'Active Days',
-      weeklyChangesTip: 'This Week Changes = sum of new bookmarks, created/updated notes, and uploaded files this week.',
+      weeklyChangesTip:
+        'This Week Changes = sum of new bookmarks, created/updated notes, and uploaded files this week.',
       newBookmarks: 'New Bookmarks',
       updatedNotes: 'Updated Notes',
       uploadedFiles: 'Uploaded Files',
@@ -638,7 +639,6 @@ export default {
   },
   tagGraph: {
     title: 'Tag Graph',
-    subtitle: 'Explore related tags and linked resources from the current tag.',
     loading: 'Loading graph...',
     empty: 'No graph data',
     reset: 'Reset View',
@@ -679,7 +679,8 @@ export default {
     description: 'Description',
     generateDescriptionTitle: 'Generate Description',
     generateMetaTitle: 'Smart Generate',
-    generateMetaDesc: 'AI generates the bookmark name, description, and recommends tags from your existing tags (tags are pre-selected only; linked after you save)',
+    generateMetaDesc:
+      'AI generates the bookmark name, description, and recommends tags from your existing tags (tags are pre-selected only; linked after you save)',
     importExport: 'Import/Export',
     exportSection: 'Export',
     importSection: 'Import',
