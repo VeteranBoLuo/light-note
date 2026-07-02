@@ -324,9 +324,14 @@ export const generateBookmarkMeta = async (req, res) => {
       return res.status(500).send(resultData(null, 500, '未配置 DASHSCOPE_API_KEY，请检查 .env 文件'));
     }
 
-    // 验证URL格式
-    const urlRegex = /^https?:\/\/.+/;
-    if (!urlRegex.test(url)) {
+    // 自动补协议 + URL 解析校验（能 parse 就算合法，不要求协议前缀）
+    let normalizedUrl = url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      normalizedUrl = 'https://' + url;
+    }
+    try {
+      new URL(normalizedUrl);
+    } catch {
       return res.send(resultData(null, 400, '请输入正确的书签地址'));
     }
 
@@ -342,7 +347,7 @@ export const generateBookmarkMeta = async (req, res) => {
     const tagNameList = userTags.map((t) => t.name);
 
     const prompt = [
-      `请根据这个网址生成一个适合书签保存的名称、描述,并推荐关联标签：${url}`,
+      `请根据这个网址生成一个适合书签保存的名称、描述,并推荐关联标签：${normalizedUrl}`,
       'name 要简洁自然,像用户自己会给书签起的标题,不超过 20 个字。',
       'description 用一句简短自然的中文概括网站内容或用途,不超过 50 个字。',
       `用户已有的标签(JSON 数组):${JSON.stringify(tagNameList)}。`,
