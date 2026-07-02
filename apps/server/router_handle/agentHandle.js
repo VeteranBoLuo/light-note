@@ -190,6 +190,9 @@ export async function agentChat(req, res) {
   req.setTimeout(0);
 
   let stream = false;
+  // 声明在 try 外层，使 catch 块也能安全访问（此前用 const 声明在 try 内，
+  // catch 块引用会抛 ReferenceError，掩盖真正的错误信息）
+  let onClientClose;
 
   try {
     const {
@@ -238,7 +241,7 @@ export async function agentChat(req, res) {
 
     // 流式模式：提前设置 SSE headers + 客户端断开时 abort DeepSeek 流
     const agentAbortController = new AbortController();
-    const onClientClose = () => {
+    onClientClose = () => {
       if (!agentAbortController.signal.aborted) {
         agentAbortController.abort();
       }
@@ -395,10 +398,10 @@ export async function agentChat(req, res) {
       }
       res.write('data: [DONE]\n\n');
       res.end();
-      res.removeListener('close', onClientClose);
+      if (onClientClose) res.removeListener('close', onClientClose);
     } else {
       res.send(resultData({ response: finalContent, sessionId: getSessionId(session), sources: sourceCards }));
-      res.removeListener('close', onClientClose);
+      if (onClientClose) res.removeListener('close', onClientClose);
     }
 
     // 记录本轮对话
@@ -425,6 +428,6 @@ export async function agentChat(req, res) {
     } else {
       res.status(500).send(resultData(null, 500, 'AI 服务异常: ' + error.message));
     }
-    res.removeListener('close', onClientClose);
+    if (onClientClose) res.removeListener('close', onClientClose);
   }
 }
