@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
 import { resultData, formatDateTime, insertData } from './common.js';
+import { isLocalIp } from './ipFilter.js';
 
 export async function logFunction(req, res, next) {
   try {
@@ -24,6 +25,11 @@ export async function logFunction(req, res, next) {
     ].some((key) => req.originalUrl.includes(key));
 
     if (skipApi) {
+      next();
+      return;
+    }
+    // 本地/回环 IP(健康检查 / SSR / 本地调试)不记 API 日志
+    if (isLocalIp(req.ip)) {
       next();
       return;
     }

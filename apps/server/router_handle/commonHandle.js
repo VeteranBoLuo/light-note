@@ -1,4 +1,5 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID } from '../util/common.js';
+import { isLocalIp } from '../util/ipFilter.js';
 import https from 'https';
 import fs from 'fs';
 import fsP from 'fs/promises';
@@ -296,6 +297,8 @@ export const clearApiLogs = (req, res) => {
 export const recordOperationLogs = (req, res) => {
   try {
     const userId = req.user?.id;
+    // 本地/回环请求(本地调试)不记操作日志(operation_logs 无 ip 列,靠 req.ip 判断)
+    if (isLocalIp(req.ip)) return res.send(resultData(null));
     const log = {
       createBy: userId,
       ...req.body,

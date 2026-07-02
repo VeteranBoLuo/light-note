@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { isLocalIp } from './ipFilter.js';
 
 // 取真实客户端 IP(服务在 nginx 后,优先 X-Forwarded-For 首段)
 const clientIp = (req) => {
@@ -20,6 +21,7 @@ export const recordConversionEvent = (req, event, context = '', overrides = {}) 
     const visitorType = overrides.visitorType ?? (req?.user?.role || 'visitor');
     const fingerprint = String(req?.headers?.['fingerprint'] || '').slice(0, 128);
     const ip = String(clientIp(req) || '').slice(0, 64);
+    if (isLocalIp(ip)) return; // 本地/回环请求(本地调试)不计入转化漏斗
     pool
       .query(
         'INSERT INTO conversion_events (fingerprint, user_id, visitor_type, event, context, ip) VALUES (?,?,?,?,?,?)',
