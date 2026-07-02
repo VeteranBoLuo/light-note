@@ -53,18 +53,18 @@
       px[i] = Math.cos(a) * initR + (i % 3) * 8;
       py[i] = Math.sin(a) * initR + (i % 2) * 8;
     });
-    const links: Array<[number, number]> = [];
+    const links: Array<[number, number, number]> = [];
     props.edges.forEach((e) => {
       const a = idx.get(e.source);
       const b = idx.get(e.target);
-      if (a !== undefined && b !== undefined) links.push([a, b]);
+      // 标签-资源边拉短(资源贴着标签成卫星簇),标签之间的边拉长(把不同主题团彼此拉开)
+      if (a !== undefined && b !== undefined) links.push([a, b, e.type === 'tag-tag' ? 175 : 50]);
     });
 
     const ITER = 320;
-    const repulse = 11000; // 排斥强度(越大越散)
-    const ideal = 140; // 边理想长度
-    const spring = 0.02; // 弹簧系数
-    const gravity = 0.01; // 向心(防止游离到无穷远)
+    const repulse = 7000; // 排斥强度(节点变多了适当调小)
+    const spring = 0.025; // 弹簧系数
+    const gravity = 0.012; // 向心(防止游离到无穷远)
     for (let it = 0; it < ITER; it += 1) {
       const cool = 1 - it / ITER;
       const dxs = new Array(N).fill(0);
@@ -84,7 +84,7 @@
           dys[j] -= fy;
         }
       }
-      links.forEach(([a, b]) => {
+      links.forEach(([a, b, ideal]) => {
         const dx = px[b] - px[a];
         const dy = py[b] - py[a];
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -150,11 +150,14 @@
           style: {
             x: p?.x,
             y: p?.y,
-            size: Math.max(16, Math.min(46, Number(node.size || 24))),
+            size: Math.max(12, Math.min(54, Number(node.size || 20))),
             fill: GRAPH_NODE_COLOR[node.type],
-            stroke: 'rgba(255,255,255,0.78)',
-            lineWidth: 1.2,
-            labelText: getNodeLabel(node),
+            fillOpacity: node.type === 'tag' ? 1 : 0.92,
+            stroke: node.type === 'tag' ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.45)',
+            lineWidth: node.type === 'tag' ? 1.5 : 0.8,
+            shadowColor: GRAPH_NODE_COLOR[node.type],
+            shadowBlur: node.type === 'tag' ? 18 : 6,
+            labelText: node.type === 'tag' ? getNodeLabel(node) : '',
             labelFill,
             labelFontSize: 11,
             labelFontWeight: 600,
@@ -176,8 +179,8 @@
         data: edge as unknown as Record<string, unknown>,
         style: {
           stroke: getEdgeColor(edge.type),
-          lineWidth: Math.max(1.4, Number(edge.weight || 1)),
-          opacity: 0.5,
+          lineWidth: edge.type === 'tag-tag' ? Math.max(1.4, Number(edge.weight || 1)) : 0.9,
+          opacity: edge.type === 'tag-tag' ? 0.55 : 0.2,
         },
       })),
     };

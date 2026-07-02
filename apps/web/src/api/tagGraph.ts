@@ -69,7 +69,7 @@ export function fetchTagGraph(params: TagGraphRequest) {
 export interface GlobalGraphResponse {
   nodes: TagGraphNode[];
   edges: TagGraphEdge[];
-  stats: { tagCount: number; edgeCount: number; truncated: boolean };
+  stats: { tagCount: number; resourceCount: number; edgeCount: number; truncated: boolean };
 }
 
 // 全局知识图谱(root 专属):本人全部标签 + 标签共现边

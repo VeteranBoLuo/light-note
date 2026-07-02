@@ -365,12 +365,66 @@ export const getGlobalGraph = async (req, res) => {
       });
     });
 
+    const tagCount = nodes.size;
+
+    // 3. 资源节点 + 标签-资源边(只取有标签的资源):让图从"只有标签"变成丰满的多彩知识网
+    const RES_LINK_CAP = 100;
+    const resourceQueries = [
+      {
+        type: 'bookmark',
+        sql: `SELECT b.id, b.name AS label, b.icon_url AS iconUrl, r.tag_id AS tagId
+              FROM resource_tag_relations r
+              INNER JOIN bookmark b ON r.resource_id = b.id AND r.resource_type = 'bookmark'
+              WHERE b.user_id = ? AND b.del_flag = 0 LIMIT ?`,
+      },
+      {
+        type: 'note',
+        sql: `SELECT n.id, n.title AS label, NULL AS iconUrl, r.tag_id AS tagId
+              FROM resource_tag_relations r
+              INNER JOIN note n ON r.resource_id = n.id AND r.resource_type = 'note'
+              WHERE n.create_by = ? AND n.del_flag = 0 LIMIT ?`,
+      },
+      {
+        type: 'file',
+        sql: `SELECT f.id, f.file_name AS label, NULL AS iconUrl, r.tag_id AS tagId
+              FROM resource_tag_relations r
+              INNER JOIN files f ON r.resource_id = f.id AND r.resource_type = 'file'
+              WHERE f.create_by = ? AND f.del_flag = 0 LIMIT ?`,
+      },
+    ];
+    for (const q of resourceQueries) {
+      const [rows] = await pool.query(q.sql, [userId, RES_LINK_CAP]);
+      rows.forEach((row) => {
+        const tagNodeId = toNodeId('tag', row.tagId);
+        if (!nodes.has(tagNodeId)) return;
+        const nodeId = toNodeId(q.type, row.id);
+        pushNode(nodes, {
+          id: nodeId,
+          rawId: row.id,
+          type: q.type,
+          label: row.label || '未命名',
+          size: q.type === 'note' ? 18 : 16,
+          weight: 1,
+          iconUrl: row.iconUrl || undefined,
+          meta: {},
+        });
+        pushEdge(edges, {
+          id: `edge:tag-${q.type}:${row.tagId}:${row.id}`,
+          source: tagNodeId,
+          target: nodeId,
+          type: `tag-${q.type}`,
+          weight: 1.4,
+        });
+      });
+    }
+
     res.send(
       resultData({
         nodes: Array.from(nodes.values()),
         edges: Array.from(edges.values()),
         stats: {
-          tagCount: nodes.size,
+          tagCount,
+          resourceCount: nodes.size - tagCount,
           edgeCount: edges.size,
           truncated: tagRows.length >= MAX_GLOBAL_TAGS,
         },

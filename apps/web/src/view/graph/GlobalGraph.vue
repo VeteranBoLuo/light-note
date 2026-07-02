@@ -4,7 +4,7 @@
       <div class="gg-eyebrow">Root · 知识图谱</div>
       <h2 class="gg-title">我的知识全貌</h2>
       <p class="gg-sub">
-        {{ stats.tagCount }} 个标签 · {{ stats.edgeCount }} 条关联 —— 单击看详情,双击标签进入它的主题图
+        {{ stats.tagCount }} 个标签 · {{ stats.resourceCount }} 个资源 · {{ stats.edgeCount }} 条关联 —— 单击看详情,双击标签进入它的主题图
         <span v-if="stats.truncated" class="gg-trunc">(标签较多,已截断展示)</span>
       </p>
     </div>
@@ -36,7 +36,7 @@
 
   const nodes = ref<TagGraphNode[]>([]);
   const edges = ref<TagGraphEdge[]>([]);
-  const stats = ref({ tagCount: 0, edgeCount: 0, truncated: false });
+  const stats = ref({ tagCount: 0, resourceCount: 0, edgeCount: 0, truncated: false });
   const loading = ref(true);
   const active = ref<TagGraphNode | null>(null);
 
