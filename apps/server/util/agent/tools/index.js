@@ -16,6 +16,7 @@ import restoreTrash from './restore_trash.js';
 import addTag from './add_tag.js';
 import queryTags from './query_tags.js';
 import writeKnowledgeBase from './write_knowledge_base.js';
+import getUserInfo from './get_user_info.js';
 
 export default [
   searchKnowledgeBase,
@@ -36,4 +37,5 @@ export default [
   addTag,
   queryTags,
   writeKnowledgeBase,
+  getUserInfo,
 ];
