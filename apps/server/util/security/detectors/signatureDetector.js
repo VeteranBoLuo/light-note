@@ -48,6 +48,10 @@ const detectPayloadSignatures = (context) => {
       if (!isRuleApplicableToField(rule, item.field)) {
         continue;
       }
+      // 管理员预览模式下，跳过 XSS 规则检测（预览时请求参数携带的可能是用户数据而非攻击 payload）
+      if (context.isAdminPreview && rule.attackType === 'XSS') {
+        continue;
+      }
       if (rule.regex.test(String(item.value))) {
         evidence.push(
           createEvidence({
