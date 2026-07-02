@@ -1,6 +1,6 @@
 import { createApp } from 'vue';
 import App from '@/App.vue';
-import router from '@/router';
+import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
 import '@/assets/css/index.less';
 import { Icon } from '@iconify/vue';
 import globalDirect from '@/config/globalDirect';
@@ -25,6 +25,8 @@ app.mount('#app');
 // 部署会用新构建产物整体替换旧文件(哈希文件名不同),已打开页面若不刷新,
 // 懒加载路由时会去请求已被删除的旧 chunk 导致 404。Vite 官方推荐:监听
 // preload 失败事件自动刷新页面拉取最新版本,避免用户手动强制刷新。
+// 跳转目标用 router.beforeEach 记录的"用户正要去哪"(见 router/index.ts),
+// 而不是简单 reload 当前页——否则可能刷新回点击前的旧页面,还得用户再点一次。
 window.addEventListener('vite:preloadError', () => {
-  window.location.reload();
+  reloadOnceTo(getPendingNavigationTarget());
 });
