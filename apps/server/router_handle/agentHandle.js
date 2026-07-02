@@ -54,6 +54,13 @@ function getToolDefinitions() {
   return defs;
 }
 
+// 工具调用协议偶发未被正确解析成结构化 tool_calls，原始特殊 token 泄漏进 content
+// (如 "<｜｜xxx｜｜tool_calls><｜｜invoke name=...>" 这类)。全角竖线"｜"在正常回答中
+// 不会出现，用它做特征检测，避免把协议泄漏内容原样展示给用户。
+export function looksLikeLeakedToolCallSyntax(text) {
+  return typeof text === 'string' && /｜/.test(text) && /tool_call|invoke/i.test(text);
+}
+
 /**
  * 执行工具
  * @param {string} name
@@ -266,11 +273,26 @@ export async function agentChat(req, res) {
     const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     // ---- 第1步：Planner（带工具定义，让 LLM 决定是否调工具） ----
-    const plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
+    let plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
     apiCalls++;
     totalUsage.promptTokens += plannerResponse.usage.promptTokens;
     totalUsage.completionTokens += plannerResponse.usage.completionTokens;
     totalUsage.totalTokens += plannerResponse.usage.totalTokens;
+
+    // 疑似工具调用协议泄漏(未解析成 tool_calls、原始 token 混进 content)→ 重试一次；
+    // 重试后仍异常就给出干净提示，绝不把泄漏内容原样透出给用户
+    if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCallSyntax(plannerResponse.content)) {
+      console.error('[Agent] Planner 疑似工具调用协议泄漏，重试一次:', plannerResponse.content.slice(0, 200));
+      const retryResponse = await requestDeepSeek(messages, { tools: toolDefs });
+      apiCalls++;
+      totalUsage.promptTokens += retryResponse.usage.promptTokens;
+      totalUsage.completionTokens += retryResponse.usage.completionTokens;
+      totalUsage.totalTokens += retryResponse.usage.totalTokens;
+      const retryStillLeaked = !retryResponse.toolCalls?.length && looksLikeLeakedToolCallSyntax(retryResponse.content);
+      plannerResponse = retryStillLeaked
+        ? { ...retryResponse, content: '抱歉，刚才处理这个请求时出了点问题，请重新描述一下你的问题。', toolCalls: [] }
+        : retryResponse;
+    }
 
     if (!plannerResponse.toolCalls?.length) {
       // 无工具调用 → 直接当作回答，跳过 Final Reply
