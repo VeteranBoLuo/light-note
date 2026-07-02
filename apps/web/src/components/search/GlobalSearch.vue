@@ -59,7 +59,7 @@
                       :key="tg.id"
                       class="item-tag"
                       :class="{ 'item-tag--hit': isTagHit(tg.name) }"
-                      >{{ tg.name }}</span
+                      >#{{ tg.name }}</span
                     >
                   </span>
                 </span>
@@ -130,7 +130,7 @@
                         :key="tg.id"
                         class="item-tag"
                         :class="{ 'item-tag--hit': isTagHit(tg.name) }"
-                        >{{ tg.name }}</span
+                        >#{{ tg.name }}</span
                       >
                     </span>
                   </span>

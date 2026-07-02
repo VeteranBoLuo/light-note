@@ -304,7 +304,7 @@ async function queryBookmarks(userId, keyword, limit, lang) {
     type: 'bookmark',
     title: toText(item.name) || text.unnamedBookmark,
     description: buildSnippet(toText(item.description) || toText(item.url), keyword),
-    extra: Array.isArray(item.tag_list) ? item.tag_list.map((tag) => `#${tag.name}`).join(' ') : '',
+    extra: '',
     tags: Array.isArray(item.tag_list) ? item.tag_list : [],
     url: toText(item.url),
     route: '/home',
@@ -410,7 +410,7 @@ async function queryTags(userId, keyword, limit, lang) {
   return rows.map((item) => ({
     id: toText(item.id),
     type: 'tag',
-    title: `#${toText(item.name) || text.unnamedTag}`,
+    title: toText(item.name) || text.unnamedTag,
     description: text.tagDescription,
     extra: formatText(text.relatedBookmarks, { count: Number(item.resource_count || 0) }),
     route: `/tag/${item.id}`,
