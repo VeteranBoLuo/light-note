@@ -80,7 +80,7 @@ export const UNBAN_ACCOUNT: InjectionKey<(account: any) => void> = Symbol('unban
 
 // Table columns
 export const eventColumns = [
-  { title: '时间', key: 'createdAt' },
+  { title: '时间', key: 'createdAt', sortable: true },
   { title: '等级', key: 'severity' },
   { title: '分数', key: 'threatScore' },
   { title: '规则', key: 'matchedRule' },
@@ -130,7 +130,7 @@ export const ipColumns = [
   { title: '高危', key: 'highRiskCount' },
   { title: '严重', key: 'criticalCount' },
   { title: '状态', key: 'isBanned' },
-  { title: '最近攻击', key: 'lastAttackTime' },
+  { title: '最近攻击', key: 'lastAttackTime', sortable: true },
   { title: '操作', key: 'action' },
 ];
 
@@ -151,7 +151,7 @@ export const accountRepColumns = [
   { title: '高危', key: 'highRiskCount' },
   { title: '严重', key: 'criticalCount' },
   { title: '状态', key: 'delFlag' },
-  { title: '最近事件', key: 'lastEventAt' },
+  { title: '最近事件', key: 'lastEventAt', sortable: true },
   { title: '操作', key: 'action' },
 ];
 
@@ -171,7 +171,7 @@ export const whitelistColumns = [
   { title: '备注', key: 'reason' },
   { title: '状态', key: 'enabled', width: '80px' },
   { title: '创建人', key: 'createdByLabel', width: '120px' },
-  { title: '更新时间', key: 'updatedAt', width: '180px' },
+  { title: '更新时间', key: 'updatedAt', width: '180px', sortable: true },
   { title: '操作', key: 'action', width: '100px' },
 ];
 
