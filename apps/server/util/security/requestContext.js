@@ -19,7 +19,6 @@ export const buildRequestContext = (req) => {
     userAgent: req.headers['user-agent'] || '',
     userId: req.user?.id || req.headers['x-user-id'] || '',
     role: req.user?.role || req.headers.role || '',
-    isAdminPreview: !!req.isAdminPreview,
     query: req.query || {},
     body: req.body || {},
     params: req.params || {},

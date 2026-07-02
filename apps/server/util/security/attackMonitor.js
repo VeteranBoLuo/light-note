@@ -30,6 +30,10 @@ export const attackMonitor = async (req, res, next) => {
   if (shouldSkipSecurity(req)) {
     return next();
   }
+  // 管理员预览模式是 root 主动发起的受信操作，跳过所有安全检测防止误报
+  if (req.isAdminPreview) {
+    return next();
+  }
 
   const context = buildRequestContext(req);
   recordIpRequest(context.sourceIp);

@@ -10,14 +10,53 @@
         />
       </div>
       <div v-for="col in columns" :key="col.key" class="header-cell" :style="{ width: col.width || 'auto' }">
-        {{ col.title }}
+        <span class="header-cell-title">{{ col.title }}</span>
+        <span
+          v-if="col.sortable"
+          class="sort-icons"
+          @click="col.sortable && handleSortToggle(col.key)"
+          :class="{ 'is-sortable': col.sortable }"
+        >
+          <svg
+            class="sort-arrow"
+            :class="{ active: sortState.key === col.key && sortState.order === 'asc' }"
+            viewBox="0 0 10 6"
+            width="10"
+            height="6"
+          >
+            <path
+              d="M1 5l4-4 4 4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <svg
+            class="sort-arrow"
+            :class="{ active: sortState.key === col.key && sortState.order === 'desc' }"
+            viewBox="0 0 10 6"
+            width="10"
+            height="6"
+          >
+            <path
+              d="M1 1l4 4 4-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
       </div>
     </div>
 
     <!-- 表格内容 -->
     <div class="table-body" :style="{ maxHeight: props.pagination ? 'calc(100% - 100px)' : '100%' }">
       <div
-        v-for="(item, rowIndex) in props.data"
+        v-for="(item, rowIndex) in sortedData"
         :key="rowIndex"
         class="table-row"
         :class="{ 'is-clickable': props.rowClickable }"
@@ -61,7 +100,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, useSlots, PropType } from 'vue';
+  import { computed, useSlots, PropType, ref } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -128,6 +167,39 @@
     };
   });
 
+  // 排序状态
+  const sortState = ref<{ key: string | null; order: 'asc' | 'desc' | null }>({ key: null, order: null });
+
+  const handleSortToggle = (key: string) => {
+    if (sortState.value.key !== key) {
+      sortState.value = { key, order: 'desc' };
+    } else if (sortState.value.order === 'desc') {
+      sortState.value = { key, order: 'asc' };
+    } else {
+      sortState.value = { key: null, order: null };
+    }
+  };
+
+  // 排序后的数据
+  const sortedData = computed(() => {
+    const { key, order } = sortState.value;
+    if (!key || !order) return props.data;
+    const data = [...props.data];
+    data.sort((a, b) => {
+      const va = a[key] ?? '';
+      const vb = b[key] ?? '';
+      // 尝试数值排序
+      const na = Number(va);
+      const nb = Number(vb);
+      if (!isNaN(na) && !isNaN(nb)) {
+        return order === 'asc' ? na - nb : nb - na;
+      }
+      // 字符串排序（兼容时间字符串）
+      return order === 'asc' ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+    return data;
+  });
+
   // 全选状态
   const isAllSelected = computed(() => {
     return props.data.length > 0 && props.data.every((item) => props.selectedRows.includes(item[props.rowKey]));
@@ -189,13 +261,48 @@
   }
 
   .header-cell {
-    padding: 0 8px;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 500;
     color: var(--desc-color);
     font-size: 14px;
+  }
+
+  .is-sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .header-cell-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sort-icons {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    margin-left: 4px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+
+  .sort-arrow {
+    color: var(--desc-color);
+    opacity: 0.3;
+    transition:
+      opacity 0.15s,
+      color 0.15s;
+  }
+
+  .sort-arrow.active {
+    opacity: 1;
+    color: var(--primary-color, #615ced);
   }
 
   .table-body {

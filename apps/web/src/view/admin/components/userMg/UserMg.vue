@@ -56,20 +56,8 @@
                   @click="loginAsUser(record)"
                   class="dom-hover"
                 />
-                <svg-icon
-                  title="编辑"
-                  :src="icon.table_edit"
-                  size="16"
-                  @click="editUser(record)"
-                  class="dom-hover"
-                />
-                <svg-icon
-                  title="删除"
-                  :src="icon.table_delete"
-                  size="16"
-                  @click="delUser(record)"
-                  class="dom-hover"
-                />
+                <svg-icon title="编辑" :src="icon.table_edit" size="16" @click="editUser(record)" class="dom-hover" />
+                <svg-icon title="删除" :src="icon.table_delete" size="16" @click="delUser(record)" class="dom-hover" />
               </BSpace>
             </template>
           </template>
@@ -79,15 +67,33 @@
       <BModal v-model:visible="detailVisible" title="用户详情" width="500px" :show-footer="false" :mask-closable="true">
         <div class="user-detail" v-if="selectedRecord">
           <div class="user-detail__grid">
-            <div><label>昵称</label><p>{{ selectedRecord.alias }}</p></div>
-            <div><label>邮箱</label><p>{{ selectedRecord.email }}</p></div>
-            <div><label>角色</label><p>{{ selectedRecord.role }}</p></div>
-            <div><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div>
-            <div><label>最近活跃</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div>
-            <div><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div>
-            <div><label>书签数</label><p>{{ selectedRecord.bookmarkTotal ?? 0 }}</p></div>
-            <div><label>笔记数</label><p>{{ selectedRecord.noteTotal ?? 0 }}</p></div>
-            <div><label>云空间</label><p>{{ selectedRecord.storageUsed ?? 0 }} MB</p></div>
+            <div
+              ><label>昵称</label><p>{{ selectedRecord.alias }}</p></div
+            >
+            <div
+              ><label>邮箱</label><p>{{ selectedRecord.email }}</p></div
+            >
+            <div
+              ><label>角色</label><p>{{ selectedRecord.role }}</p></div
+            >
+            <div
+              ><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div
+            >
+            <div
+              ><label>最近活跃</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div
+            >
+            <div
+              ><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div
+            >
+            <div
+              ><label>书签数</label><p>{{ selectedRecord.bookmarkTotal ?? 0 }}</p></div
+            >
+            <div
+              ><label>笔记数</label><p>{{ selectedRecord.noteTotal ?? 0 }}</p></div
+            >
+            <div
+              ><label>云空间</label><p>{{ selectedRecord.storageUsed ?? 0 }} MB</p></div
+            >
           </div>
         </div>
       </BModal>
@@ -137,9 +143,9 @@
       { title: '昵称', key: 'alias', width: '1fr' },
       { title: '邮箱', key: 'email', width: '1fr' },
       { title: 'IP', key: 'ip', width: '120px' },
-      { title: '最近活跃', key: 'lastActiveTime', width: '140px' },
+      { title: '最近活跃', key: 'lastActiveTime', width: '140px', sortable: true },
       { title: '注册时间', key: 'createTime', width: '140px' },
-      { title: '书签数', key: 'bookmarkTotal', width: '70px' },
+      { title: '书签数', key: 'bookmarkTotal', width: '50px' },
       { title: '笔记数', key: 'noteTotal', width: '70px' },
       { title: '云空间(MB)', key: 'storageUsed', width: '110px' },
       { title: '操作', key: 'operation', width: '120px' },
