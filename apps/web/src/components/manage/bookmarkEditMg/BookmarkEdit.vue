@@ -15,6 +15,7 @@
                 class="generate-meta-action"
                 @click="generateBookmarkMeta"
                 :class="{ loading: generating }"
+                v-click-log="{ module: '书签详情', operation: '点击智能生成' }"
               >
                 <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
                 <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>

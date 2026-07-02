@@ -10,7 +10,7 @@
           <div class="tag-attr-head">
             <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
             <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
-              <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generating }">
+              <button type="button" class="generate-meta-action" @click="generateBookmarkMeta" :class="{ loading: generating }" v-click-log="{ module: '书签详情', operation: '点击智能生成' }">
                 <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
                 <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
               </button>
