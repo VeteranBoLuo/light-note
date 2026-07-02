@@ -448,6 +448,10 @@ export const addBookmark = async (req, res) => {
       ...req.body,
       userId: userId,
     };
+    // 自动补协议，避免相对路径跳转
+    if (params.url && !params.url.startsWith('http://') && !params.url.startsWith('https://')) {
+      params.url = 'https://' + params.url;
+    }
     const sqlCheck = 'SELECT * FROM bookmark WHERE user_id=? AND name = ? AND del_flag = 0';
     const [checkRes] = await connection.query(sqlCheck, [userId, params.name]);
     if (checkRes.length > 0) {
@@ -498,6 +502,10 @@ export const updateBookmark = async (req, res) => {
     if (own.length === 0) {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
+    }
+    // 自动补协议，避免相对路径跳转
+    if (req.body.url && !req.body.url.startsWith('http://') && !req.body.url.startsWith('https://')) {
+      req.body.url = 'https://' + req.body.url;
     }
     req.body.iconUrl = null;
     const sql = `update bookmark set ? where id=?`;
@@ -741,10 +749,15 @@ export const importBookmarksHtml = async (req, res) => {
       }
       let bookmarkId = bookmarkMap.get(item.name);
       if (!bookmarkId) {
+        // 自动补协议，避免相对路径跳转
+        let url = item.url;
+        if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+          url = 'https://' + url;
+        }
         const bookmarkPayload = insertData({
           name: item.name,
           userId,
-          url: item.url,
+          url,
           description: '',
         });
         await connection.query('INSERT INTO bookmark SET ?', [bookmarkPayload]);
