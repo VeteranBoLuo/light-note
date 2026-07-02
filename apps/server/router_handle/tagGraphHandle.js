@@ -372,21 +372,21 @@ export const getGlobalGraph = async (req, res) => {
     const resourceQueries = [
       {
         type: 'bookmark',
-        sql: `SELECT b.id, b.name AS label, b.icon_url AS iconUrl, r.tag_id AS tagId
+        sql: `SELECT b.id, b.name AS label, b.icon_url AS iconUrl, b.url AS url, NULL AS fileType, r.tag_id AS tagId
               FROM resource_tag_relations r
               INNER JOIN bookmark b ON r.resource_id = b.id AND r.resource_type = 'bookmark'
               WHERE b.user_id = ? AND b.del_flag = 0 LIMIT ?`,
       },
       {
         type: 'note',
-        sql: `SELECT n.id, n.title AS label, NULL AS iconUrl, r.tag_id AS tagId
+        sql: `SELECT n.id, n.title AS label, NULL AS iconUrl, NULL AS url, NULL AS fileType, r.tag_id AS tagId
               FROM resource_tag_relations r
               INNER JOIN note n ON r.resource_id = n.id AND r.resource_type = 'note'
               WHERE n.create_by = ? AND n.del_flag = 0 LIMIT ?`,
       },
       {
         type: 'file',
-        sql: `SELECT f.id, f.file_name AS label, NULL AS iconUrl, r.tag_id AS tagId
+        sql: `SELECT f.id, f.file_name AS label, NULL AS iconUrl, NULL AS url, f.file_type AS fileType, r.tag_id AS tagId
               FROM resource_tag_relations r
               INNER JOIN files f ON r.resource_id = f.id AND r.resource_type = 'file'
               WHERE f.create_by = ? AND f.del_flag = 0 LIMIT ?`,
@@ -406,7 +406,7 @@ export const getGlobalGraph = async (req, res) => {
           size: q.type === 'note' ? 18 : 16,
           weight: 1,
           iconUrl: row.iconUrl || undefined,
-          meta: {},
+          meta: { url: row.url || undefined, fileType: row.fileType || undefined },
         });
         pushEdge(edges, {
           id: `edge:tag-${q.type}:${row.tagId}:${row.id}`,
