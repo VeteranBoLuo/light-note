@@ -194,7 +194,7 @@
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    margin: 0 0 16px;
+    margin-top: 12px;
     font-size: 13px;
     color: var(--text-color);
   }

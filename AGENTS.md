@@ -246,21 +246,6 @@ const [countRes] = await pool.query(`SELECT COUNT(*) as total FROM bookmark WHER
 res.send(resultData({ items: rows, total: countRes[0].total }));
 ```
 
-## 资源标签关联
-
-- 书签、笔记、文件关联标签时**必须同时写入两套关联表**：
-  - 统一表 `resource_tag_relations`（通过 `insertResourceTagRelations` / `replaceResourceTagRelations`）
-  - 书签遗留表 `tag_bookmark_relations`（通过 `insertBookmarkLegacyRelations` / `replaceBookmarkLegacyRelations`）
-- 新增资源标签关联入口时，参照 `bookmarkHandle.js` 的 `addBookmark` / `addTag` 方法，**两套函数都要调用**。
-
-```javascript
-import { insertResourceTagRelations, insertBookmarkLegacyRelations } from '../util/resourceTags.js';
-
-// ✅ 正确：两套都要写
-await insertResourceTagRelations(connection, { tagIds, resourceType: 'bookmark', resourceId, userId });
-await insertBookmarkLegacyRelations(connection, { tagIds, bookmarkId: resourceId, userId });
-```
-
 ## Agent LLM 供应商（DeepSeek 主 / 千问备用）
 
 - 轻笺智域（`/api/chat/agent`，`agentHandle.js` + `util/agent/deepseekClient.js`）**主力供应商是 DeepSeek**，千问（qwen3.5-flash）只是应急备用，由 `AGENT_LLM_PROVIDER` 环境变量选择（`deepseek` 默认 / `qwen`）。
