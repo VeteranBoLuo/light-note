@@ -6,6 +6,12 @@
   "engines": {
     "node": ">=18"
   },
+  "pnpm": {
+    "overrides": {
+      "qs@<6.15.2": "6.15.3",
+      "cookie@<0.7.0": "0.7.2"
+    }
+  },
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
