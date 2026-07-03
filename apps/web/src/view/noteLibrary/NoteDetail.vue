@@ -263,6 +263,9 @@
   }
 
   function delNote() {
+    if (!guardWrite(undefined, 'delete-note')) {
+      return;
+    }
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除此笔记？`,

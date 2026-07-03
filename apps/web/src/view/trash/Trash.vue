@@ -166,6 +166,7 @@
   import icon from '@/config/icon';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const { t } = useI18n();
 
@@ -272,6 +273,7 @@
   }
 
   async function handleRestore(entries: any[]) {
+    if (blockGuestWrite('restore-trash')) return;
     if (!entries.length) return;
     try {
       let success = 0;
@@ -331,6 +333,7 @@
   }
 
   async function handlePermanentDelete(entries: any[]) {
+    if (blockGuestWrite('delete-trash')) return;
     if (!entries.length) return;
     try {
       let success = 0;
@@ -359,6 +362,7 @@
   }
 
   async function handleRestoreAll() {
+    if (blockGuestWrite('restore-trash')) return;
     restoringAll.value = true;
     try {
       const res = await apiBasePost('/api/trash/restoreAll', {});
@@ -375,6 +379,7 @@
   }
 
   async function handleEmptyAll() {
+    if (blockGuestWrite('delete-trash')) return;
     emptyingAll.value = true;
     try {
       const res = await apiBasePost('/api/trash/emptyAll', {});

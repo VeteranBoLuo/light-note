@@ -59,6 +59,7 @@
   import { autoRename } from '@/utils/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const emit = defineEmits(['addFolder']);
@@ -87,6 +88,7 @@
   let uploadController = ref<AbortController | null>(null);
 
   const uploadFiles = async (files, folderId = null) => {
+    if (blockGuestWrite('upload-file')) return;
     uploadProgress.visible = true;
     uploadProgress.overall = 0;
     uploadProgress.speed = 0;

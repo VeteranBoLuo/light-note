@@ -250,6 +250,7 @@
   import { useI18n } from 'vue-i18n';
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -406,6 +407,7 @@
   };
 
   function handleDeleteTag(bookmarkItem: BookmarkInterface) {
+    if (blockGuestWrite('delete-bookmark')) return;
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除书签【${bookmarkItem.name}】？`,
@@ -431,6 +433,7 @@
 
   // ── 批量删除 ──
   const handleBatchDelete = () => {
+    if (blockGuestWrite('delete-bookmark')) return;
     if (selectedRows.value.length === 0) {
       message.warning('请选择要删除的书签');
       return;
@@ -594,12 +597,14 @@
 
   const importFileInput = ref<HTMLInputElement | null>(null);
   const handleImport = () => {
+    if (blockGuestWrite('import-bookmark')) return;
     importFileInput.value?.click();
     importExportModalVisible.value = false;
   };
 
   const importHTMLFileInput = ref<HTMLInputElement | null>(null);
   const handleImportHTML = () => {
+    if (blockGuestWrite('import-bookmark')) return;
     importHTMLFileInput.value?.click();
     importExportModalVisible.value = false;
   };

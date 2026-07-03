@@ -78,6 +78,7 @@
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { useI18n } from 'vue-i18n';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
@@ -94,6 +95,7 @@
   }
 
   async function moveSingleFileToFolder(fileId: string, sourceFolderId: string, targetFolderId: string) {
+    if (blockGuestWrite('move-file')) return;
     if (!fileId || sourceFolderId === targetFolderId) {
       return;
     }
@@ -159,6 +161,7 @@
   }
 
   function handleDeleteFolder(folder: any) {
+    if (blockGuestWrite('delete-folder')) return;
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除文件夹【${folder.name}】？`,
@@ -192,6 +195,7 @@
   }
 
   function handleRename(folder: any) {
+    if (blockGuestWrite('manage-folder')) return;
     const trimmed = (newName.value || '').trim();
     if (!trimmed) {
       message.warning('请输入文件夹名称');
@@ -220,6 +224,10 @@
   }
 
   async function onDragEnd() {
+    if (blockGuestWrite('reorder-folder')) {
+      cloud.queryFolder(); // b-list 已就地改了 cloud.folderList 顺序,游客态重新拉取复位
+      return;
+    }
     try {
       const sortedTags =
         cloud.folderList?.map((folder: any, index: number) => ({

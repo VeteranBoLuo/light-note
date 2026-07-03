@@ -30,6 +30,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   const cloud = cloudSpaceStore();
   const checkValue = ref('');
   const { t } = useI18n();
@@ -46,6 +47,7 @@
     checkValue.value = folder.id;
   }
   function moveFile() {
+    if (blockGuestWrite('move-file')) return;
     if (!checkValue.value || checkValue.value === '') {
       message.warning('请选择目标文件夹');
       return;

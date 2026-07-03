@@ -75,6 +75,7 @@
   };
 
   function handleDeleteTag(bookmark) {
+    if (blockGuestWrite('delete-bookmark')) return;
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除标签【${bookmark.name}】？`,
@@ -107,6 +108,7 @@
   import { cloneDeep } from 'lodash-es';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   function exportBookmark() {
     // 随便声明一个结果
     const exportData = bookmarkList.value?.map((item: any) => {

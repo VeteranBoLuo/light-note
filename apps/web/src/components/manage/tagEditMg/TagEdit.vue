@@ -188,6 +188,7 @@
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   type ResourceItem = { rawId: string; name: string; type: ResourceType };
 
@@ -420,6 +421,7 @@
   }
 
   async function submit() {
+    if (blockGuestWrite('add-tag')) return;
     if (loading.value) {
       message.warning('请等待数据请求完毕');
       return;

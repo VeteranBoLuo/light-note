@@ -222,6 +222,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   interface RelatedItem {
     id: string;
@@ -389,6 +390,7 @@
   }
 
   function handleDeleteTag(tag: TagRecord) {
+    if (blockGuestWrite('delete-tag')) return;
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除标签【${tag.name}】？`,
