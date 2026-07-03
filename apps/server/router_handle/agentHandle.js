@@ -11,7 +11,12 @@
 
 import pool from '../db/index.js';
 import { resultData, generateUUID } from '../util/common.js';
-import { requestDeepSeek, requestDeepSeekStream, getActiveProviderPricing } from '../util/agent/deepseekClient.js';
+import {
+  requestDeepSeek,
+  requestDeepSeekStream,
+  getActiveProviderPricing,
+  looksLikeLeakedToolCall,
+} from '../util/agent/deepseekClient.js';
 import { parseTimeRange } from '../util/agent/timeRange.js';
 import { getOrCreateSession, recordTurn, buildContext, getSessionId } from '../util/agent/sessionStore.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
@@ -269,15 +274,29 @@ export async function agentChat(req, res) {
     const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
     // ---- 第1步：Planner（带工具定义，让 LLM 决定是否调工具） ----
-    const plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
+    let plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
     apiCalls++;
     totalUsage.promptTokens += plannerResponse.usage.promptTokens;
     totalUsage.completionTokens += plannerResponse.usage.completionTokens;
     totalUsage.totalTokens += plannerResponse.usage.totalTokens;
 
+    // 兜底:DeepSeek 偶发把工具调用以特殊 token 文本吐进 content(而非标准 tool_calls 字段),
+    // 导致 toolCalls 为空、content 是一段调用标记原文。检测到就重试一次 Planner(大概率恢复正常)。
+    if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCall(plannerResponse.content)) {
+      console.warn('[Agent] 检测到工具调用泄漏进 content，重试一次 Planner');
+      plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
+      apiCalls++;
+      totalUsage.promptTokens += plannerResponse.usage.promptTokens;
+      totalUsage.completionTokens += plannerResponse.usage.completionTokens;
+      totalUsage.totalTokens += plannerResponse.usage.totalTokens;
+    }
+
     if (!plannerResponse.toolCalls?.length) {
-      // 无工具调用 → 直接当作回答，跳过 Final Reply
-      finalContent = plannerResponse.content || '';
+      // 无工具调用 → 直接当作回答，跳过 Final Reply。
+      // 若重试后仍是泄漏的调用标记,不把原文暴露给用户,改回友好提示。
+      finalContent = looksLikeLeakedToolCall(plannerResponse.content)
+        ? '抱歉，我刚才没能正确处理这个请求，请换个说法或稍后再试一次。'
+        : plannerResponse.content || '';
     } else {
       // 兜底:只取前 MAX_PARALLEL_TOOLS 个 tool_calls,防 LLM 极端情况一次吐一堆
       // (含重复查询)并发打满 DB 连接池。assistant 消息与实际执行必须用同一批——

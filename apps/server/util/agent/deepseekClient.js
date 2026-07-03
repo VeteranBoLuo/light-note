@@ -256,3 +256,16 @@ export async function requestDeepSeekStream(messages, options) {
 
   return { content: fullContent };
 }
+
+/**
+ * 检测 content 是否是"泄漏的工具调用标记"。
+ * DeepSeek 偶发不把工具调用放进标准 tool_calls 字段,而是把内部特殊 token 以文本吐进 content,
+ * 例如: <｜｜DSML｜｜tool_calls> ... <｜｜DSML｜｜invoke name="query_users"> ...,
+ * 或标准的 <｜tool▁calls▁begin｜> 系列。这类内容绝不能当作回答返回给用户。
+ * @param {string|null|undefined} content
+ * @returns {boolean}
+ */
+export function looksLikeLeakedToolCall(content) {
+  if (!content || typeof content !== 'string') return false;
+  return /｜DSML｜|<｜tool|tool▁call|tool_calls?>|invoke name\s*=/i.test(content);
+}
