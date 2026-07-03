@@ -593,6 +593,8 @@
   onMounted(async () => {
     initApp();
     await init();
+    // /landing 是纯官网展示页(游客默认首页),不应该出现任何账号相关的通知/弹窗
+    if (router.currentRoute.value.name === 'landing') return;
     startOpinionNoticePolling();
     checkUpdateNotice();
   });
