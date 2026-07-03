@@ -3,13 +3,20 @@
  *
  * 背景：整站是 SPA，百度等不渲染 JS 的爬虫读不到正文。knowledge_base 表里
  * status='public' 的帮助文章是现成的内容库，这里用模板字符串直出完整 HTML：
- *   GET /help          帮助中心索引页（按分类列出全部公开文章，爬虫的发现入口）
- *   GET /help/:id      文章详情页（title/description/canonical/JSON-LD/正文）
- *   GET /sitemap.xml   动态 sitemap（首页/landing/help + 全部公开文章，lastmod 取 updated_at）
+ *   GET /helpCenter          帮助中心索引页（按分类列出全部公开文章，爬虫的发现入口）
+ *   GET /helpCenter/:id      文章详情页（title/description/canonical/JSON-LD/正文）
+ *   GET /sitemap.xml         动态 sitemap（首页/landing/helpCenter + 全部公开文章，lastmod 取 updated_at）
+ *
+ * ⚠️ 路径踩坑记录：最初这三个路由挂在 /help，结果和项目里已有的
+ * router/modules/common.ts 的 `path: '/help'`（HelpMg.vue，AI 助手/帮助文档入口，
+ * requireAuth: true）撞了。App 内 `$router.push('/help')` 走客户端路由不受影响，
+ * 但用户在 /help 页面硬刷新、或直接打开/收藏 /help 链接时，nginx 的精确匹配
+ * location 会抢在 SPA 之前把请求转发到这里，导致原有功能被顶掉。改名 /helpCenter
+ * 彻底避开碰撞，不动原有路由。
  *
  * nginx 侧配套（部署时改）：
  *   location = /sitemap.xml  → proxy_pass http://127.0.0.1:9001/sitemap.xml
- *   location = /help 与 ^~ /help/ → proxy_pass http://127.0.0.1:9001
+ *   location = /helpCenter 与 ^~ /helpCenter/ → proxy_pass http://127.0.0.1:9001
  *
  * 安全：文章 content 是 root 在知识库管理后台写的富文本（可信），直出；
  * title/category/description 等短字段一律 escapeHtml；:id 走参数化查询。
@@ -20,6 +27,7 @@ import { marked } from 'marked';
 
 const SITE = 'https://boluo66.top';
 const BRAND = '轻笺';
+const HELP_PATH = '/helpCenter'; // 单一来源，避免路径散落在各处手改漏改
 
 const escapeHtml = (s) =>
   String(s ?? '')
@@ -91,7 +99,7 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
 <div class="wrap">
 <header class="site">
   <a href="/landing">${BRAND}</a>
-  <nav><a href="/help">帮助中心</a><a href="/landing">产品介绍</a></nav>
+  <nav><a href="${HELP_PATH}">帮助中心</a><a href="/landing">产品介绍</a></nav>
 </header>
 ${body}
 <footer class="site">${BRAND} —— 轻量级知识管理工具：书签 · 笔记 · 云空间 · <a href="/landing">了解更多</a></footer>
@@ -99,7 +107,7 @@ ${body}
 </body>
 </html>`;
 
-/** GET /help —— 帮助中心索引页 */
+/** GET /helpCenter —— 帮助中心索引页 */
 export const helpIndexPage = async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -125,7 +133,7 @@ ${[...groups.entries()]
 ${arts
   .map(
     (a) =>
-      `<li><a href="/help/${encodeURIComponent(a.id)}">${escapeHtml(a.title)}</a><span class="t">${formatDate(a.updated_at)}</span></li>`,
+      `<li><a href="${HELP_PATH}/${encodeURIComponent(a.id)}">${escapeHtml(a.title)}</a><span class="t">${formatDate(a.updated_at)}</span></li>`,
   )
   .join('\n')}
 </ul>`,
@@ -139,12 +147,12 @@ ${arts
         pageShell({
           title: `帮助中心 - ${BRAND}`,
           description: `${BRAND}帮助中心：${rows.length} 篇使用指南与常见问题，覆盖书签管理、云笔记、云空间、标签分类与数据同步。`,
-          canonical: `${SITE}/help`,
+          canonical: `${SITE}${HELP_PATH}`,
           jsonLd: {
             '@context': 'https://schema.org',
             '@type': 'CollectionPage',
             name: `${BRAND}帮助中心`,
-            url: `${SITE}/help`,
+            url: `${SITE}${HELP_PATH}`,
             isPartOf: { '@type': 'WebSite', name: BRAND, url: SITE },
           },
           body,
@@ -156,7 +164,7 @@ ${arts
   }
 };
 
-/** GET /help/:id —— 文章详情页 */
+/** GET /helpCenter/:id —— 文章详情页 */
 export const helpArticlePage = async (req, res) => {
   try {
     const { id } = req.params;
@@ -174,16 +182,16 @@ export const helpArticlePage = async (req, res) => {
           pageShell({
             title: `文章不存在 - ${BRAND}帮助中心`,
             description: '该帮助文章不存在或未公开。',
-            canonical: `${SITE}/help`,
+            canonical: `${SITE}${HELP_PATH}`,
             jsonLd: null,
-            body: `<h1>文章不存在</h1><p>该文章不存在或未公开，<a href="/help">返回帮助中心</a>。</p>`,
+            body: `<h1>文章不存在</h1><p>该文章不存在或未公开，<a href="${HELP_PATH}">返回帮助中心</a>。</p>`,
           }),
         );
     }
 
     const contentHtml = art.type === 'markdown' ? marked.parse(String(art.content || '')) : String(art.content || '');
     const description = toPlainText(contentHtml, 150) || `${BRAND}帮助中心文章：${art.title}`;
-    const canonical = `${SITE}/help/${encodeURIComponent(art.id)}`;
+    const canonical = `${SITE}${HELP_PATH}/${encodeURIComponent(art.id)}`;
 
     const body = `
 <article>
@@ -193,7 +201,7 @@ export const helpArticlePage = async (req, res) => {
 ${contentHtml}
 </div>
 </article>
-<p style="margin-top:32px"><a href="/help" style="color:#615ced;text-decoration:none">← 返回帮助中心</a></p>`;
+<p style="margin-top:32px"><a href="${HELP_PATH}" style="color:#615ced;text-decoration:none">← 返回帮助中心</a></p>`;
 
     res
       .set('Content-Type', 'text/html; charset=utf-8')
@@ -232,10 +240,10 @@ export const sitemapXml = async (req, res) => {
     const staticUrls = [
       { loc: `${SITE}/`, priority: '1.0', changefreq: 'weekly' },
       { loc: `${SITE}/landing`, priority: '0.9', changefreq: 'weekly' },
-      { loc: `${SITE}/help`, priority: '0.8', changefreq: 'weekly' },
+      { loc: `${SITE}${HELP_PATH}`, priority: '0.8', changefreq: 'weekly' },
     ];
     const articleUrls = rows.map((r) => ({
-      loc: `${SITE}/help/${encodeURIComponent(r.id)}`,
+      loc: `${SITE}${HELP_PATH}/${encodeURIComponent(r.id)}`,
       priority: '0.6',
       changefreq: 'monthly',
       lastmod: formatDate(r.updated_at),
