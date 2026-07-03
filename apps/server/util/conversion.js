@@ -1,11 +1,11 @@
 import pool from '../db/index.js';
 import { isLocalIp } from './ipFilter.js';
 
-// 取真实客户端 IP(服务在 nginx 后,优先 X-Forwarded-For 首段)
+// 取真实客户端 IP：用 req.ip(trust proxy=1 下由 nginx 追加的 X-Forwarded-For 链末尾解析出的真实客户端 IP)，
+// 不取 XFF 首段——首段可被客户端任意伪造，会让 uniqueIps 等统计被刷虚高(与安全模块 requestContext.js 的修复同理)
 const clientIp = (req) => {
-  const xff = req?.headers?.['x-forwarded-for'];
-  if (xff) return String(xff).split(',')[0].trim();
-  return req?.ip || req?.socket?.remoteAddress || '';
+  const ip = req?.ip || req?.socket?.remoteAddress || '';
+  return ip.replace(/^::ffff:/, '');
 };
 
 /**
