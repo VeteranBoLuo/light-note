@@ -3,7 +3,8 @@ import { resultData } from '../util/common.js';
 import pool from '../db/index.js';
 import { Transform } from 'stream';
 import { Agent as HttpAgent } from 'http';
-import { retrieve } from '../util/knowledgeService.js';
+import { fetchWebMeta } from '../util/fetchWebMeta.js';
+import { requestDeepSeek } from '../util/agent/deepseekClient.js';
 
 // 创建自定义转换流优化数据处理
 class SSETransform extends Transform {
@@ -60,190 +61,6 @@ const encodeSvgToDataUrl = (svg) => {
   const normalized = String(svg || '').replace(/\r?\n|\r/g, '').trim();
   const encoded = Buffer.from(normalized, 'utf8').toString('base64');
   return `data:image/svg+xml;base64,${encoded}`;
-};
-
-export const receiveMessage = async (req, res) => {
-  req.setTimeout(0);
-
-  // 在函数作用域顶部声明变量，确保catch块可以访问
-  let stream = false;
-
-  try {
-    const {
-      message,
-      sessionId = '',
-      useInternetSearch = false,
-      enableThinking = false,
-      enableTranslation = false,
-      translationConfig = {},
-    } = req.body;
-    stream = req.body.stream ?? false; // 提取到外层作用域
-    const APP_ID = process.env.DASHSCOPE_APP_ID 
-
-    // 语言映射
-    const langMap = {
-      auto: '自动识别',
-      zh: '中文',
-      en: '英文',
-      ja: '日文',
-      ko: '韩文',
-      fr: '法文',
-      de: '德文',
-      es: '西班牙文',
-    };
-
-    // 构建 prompt
-    let prompt = message;
-    if (enableTranslation) {
-      const { source = 'auto', target = 'en' } = translationConfig;
-      const sourceLang = source === 'auto' ? '' : langMap[source] || source;
-      const targetLang = langMap[target] || target;
-      const prefix = sourceLang ? `将以下${sourceLang}内容翻译成${targetLang}：` : `将以下内容翻译成${targetLang}：`;
-      prompt = prefix + message;
-    }
-
-    // 非翻译模式下检索帮助中心数据作为参考
-    if (!enableTranslation) {
-      // 告知 AI 是否开启了联网搜索
-      const webSearchHint = useInternetSearch
-        ? '注意：本次对话已开启联网搜索能力，对于实时信息（天气、新闻、股价等）请在回答后主动联网查询获取最新数据。'
-        : '注意：本次对话未开启联网搜索。如果用户询问实时信息（天气、新闻、股价等），请告知用户可以开启联网搜索功能来获取最新信息。';
-
-      try {
-        const knowledge = await retrieve(req.user.id, message, 3);
-        if (knowledge.length > 0) {
-          const context = knowledge
-            .map((k) => `【${k.title}】\n${k.content}`)
-            .join('\n\n---\n\n');
-          prompt =
-            `以下是与用户问题相关的内容可供参考：\n\n${context}\n\n---\n\n` +
-            `请优先基于上述参考资料回答用户的问题。如果参考资料中不包含答案或用户问的是具体的访问地址、功能路径等信息，请直接说不知道或建议用户查阅帮助中心，不要自行编造。\n${webSearchHint}\n\n用户问题：${message}`;
-        } else {
-          prompt = `请根据你的知识回答用户的问题。注意：如果不知道确切答案（特别是具体的功能路径、访问地址等信息），请直接告诉用户你不确定，建议查阅帮助中心或联系管理员，不要自行编造。\n${webSearchHint}\n\n用户问题：${message}`;
-        }
-      } catch (err) {
-        console.error('帮助中心检索失败，不影响正常回答:', err.message);
-      }
-    }
-
-    if (stream) {
-      // 🔧 优化响应头设置
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'X-Accel-Buffering': 'no',
-        'Content-Encoding': 'identity', // 防止压缩缓冲
-      });
-      res.flushHeaders?.();
-    }
-
-    const requestData = {
-      input: { prompt: prompt, session_id: sessionId },
-      parameters: {
-        incremental_output: true,
-        model: 'qwen-plus', // 显式指定模型名称
-        stream_interval: 100,
-        max_tokens: 4096,
-        enable_web_search: useInternetSearch,
-        has_thoughts: enableThinking,
-        enable_thinking: enableThinking,
-      },
-    };
-
-    const config = {
-      method: 'post',
-      url: `https://dashscope.aliyuncs.com/api/v1/apps/${APP_ID}/completion`,
-      headers: {
-        Authorization: `Bearer ${process.env.DASHSCOPE_API_KEY}`,
-        'Content-Type': 'application/json',
-        'X-DashScope-SSE': stream ? 'enable' : 'disable',
-        Accept: 'text/event-stream', // 明确接受流式响应
-      },
-      data: requestData,
-      responseType: stream ? 'stream' : 'json',
-      timeout: 30000, // 设置30秒超时
-      // 🔧 重要：禁用axios的响应转换
-      transformResponse: [(data) => data],
-      // 优化http客户端设置
-      httpAgent: new HttpAgent({
-        keepAlive: true,
-        maxSockets: 1, // 限制连接数避免竞争
-      }),
-    };
-
-    // 添加超时处理
-    const response = await Promise.race([
-      axios(config),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('请求超时，请稍后重试')), 30000)),
-    ]);
-
-    if (stream) {
-      const sseTransform = new SSETransform();
-
-      // 管道式处理，避免数据堆积
-      response.data.pipe(sseTransform);
-
-      let lastFlushTime = Date.now();
-      const FLUSH_INTERVAL = 50; // 50ms刷新间隔
-
-      sseTransform.on('data', (chunk) => {
-        const now = Date.now();
-
-        // 立即写入基础数据
-        res.write(chunk);
-
-        // 控制flush频率，平衡实时性和性能
-        if (now - lastFlushTime >= FLUSH_INTERVAL) {
-          if (typeof res.flush === 'function') {
-            res.flush();
-          } else {
-            res.socket?.cork(); // 收集数据
-            process.nextTick(() => res.socket?.uncork()); // 下一Tick统一发送
-          }
-          lastFlushTime = now;
-        }
-      });
-
-      sseTransform.on('end', () => {
-        // 发送结束前强制flush
-        if (typeof res.flush === 'function') res.flush();
-        res.write('data: [DONE]\n\n');
-        res.end();
-      });
-
-      sseTransform.on('error', (error) => {
-        console.error('SSE转换错误:', error);
-        try {
-          res.write('data: {"error": "流处理异常"}\n\n');
-          res.end();
-        } catch (e) {}
-      });
-
-      req.on('close', () => {
-        sseTransform.destroy();
-        response.data.destroy();
-      });
-    } else {
-      const aiReply = extractTextFromProvider(response?.data);
-      if (!aiReply) {
-        return res.status(500).send(resultData(null, 500, 'AI 返回内容为空'));
-      }
-      res.send(resultData({ response: aiReply }));
-    }
-  } catch (error) {
-    console.error('AI 请求错误:', error.message);
-    if (stream) {
-      try {
-        // 发送格式化错误信息
-        res.write(`data: ${JSON.stringify({ error: '服务异常', message: error.message })}\n\n`);
-        res.end();
-      } catch (e) {}
-    } else {
-      res.status(500).send(resultData(null, 500, 'AI 服务异常: ' + error.message));
-    }
-  }
 };
 
 export const generateTagIcon = async (req, res) => {
@@ -320,17 +137,15 @@ export const generateBookmarkMeta = async (req, res) => {
       return res.status(400).send(resultData(null, 400, '缺少URL参数'));
     }
 
-    if (!process.env.DASHSCOPE_API_KEY) {
-      return res.status(500).send(resultData(null, 500, '未配置 DASHSCOPE_API_KEY，请检查 .env 文件'));
-    }
-
     // 验证URL格式
     const urlRegex = /^https?:\/\/.+/;
     if (!urlRegex.test(url)) {
       return res.send(resultData(null, 400, '请输入正确的书签地址'));
     }
 
-    const APP_ID = process.env.DASHSCOPE_APP_ID || 'ff8422dbcc784e8ba170b8ed0408c19b';
+    // 抓取网页真实内容：LLM(DeepSeek/千问)本身无联网能力,由后端抓取后再交给模型总结,
+    // 避免模型仅凭域名瞎猜(抓取失败则降级为让模型基于网址谨慎推测)
+    const meta = await fetchWebMeta(url);
 
     // 拉取用户已有标签,让 AI 从中推荐关联标签(不够再建议新标签)
     const metaUserId = req.user?.id;
@@ -341,43 +156,40 @@ export const generateBookmarkMeta = async (req, res) => {
     }
     const tagNameList = userTags.map((t) => t.name);
 
-    const prompt = [
-      `请根据这个网址生成一个适合书签保存的名称、描述,并推荐关联标签：${url}`,
-      'name 要简洁自然,像用户自己会给书签起的标题,不超过 20 个字。',
-      'description 用一句简短自然的中文概括网站内容或用途,不超过 50 个字。',
-      `用户已有的标签(JSON 数组):${JSON.stringify(tagNameList)}。`,
-      '从"已有标签"里挑选与该网址最相关的标签放进 matchedTags(0-4 个,必须与列表中的文字完全一致);若已有标签都不合适,matchedTags 返回空数组,并在 newTags 里给出 1-3 个建议新增的简短标签名(2-6 个字)。',
-      '输出 JSON 对象,格式必须是 {"name":"...","description":"...","matchedTags":["..."],"newTags":["..."]}。',
-      '不要输出 markdown,不要输出代码块,不要输出多余解释。',
-    ].join('');
+    const pageInfo = meta.ok
+      ? [
+          `网页标题：${meta.title || '（无）'}`,
+          `网页描述：${meta.description || '（无）'}`,
+          meta.siteName ? `站点名称：${meta.siteName}` : '',
+          meta.keywords ? `关键词：${meta.keywords}` : '',
+          meta.bodyText ? `正文摘录：${meta.bodyText}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : '（未能读取到该网页的内容，请仅根据网址本身合理推测，不要编造具体功能或名称。）';
 
-    const requestData = {
-      input: { prompt: prompt },
-      parameters: {
-        incremental_output: false,
-        model: 'qwen-plus', // 显式指定模型名称
-        max_tokens: 512,
-        enable_web_search: true,
-        has_thoughts: false,
-        enable_thinking: false,
-      },
-    };
+    const userPrompt = [
+      '请为下面这个网页生成适合书签保存的名称、描述,并推荐关联标签。',
+      '',
+      `网址：${url}`,
+      pageInfo,
+      '',
+      '要求：',
+      '- name:简洁自然,像用户自己会给书签起的标题,不超过 20 个字。',
+      '- description:用一句简短自然的中文概括网站内容或用途,不超过 50 个字。',
+      `- 已有标签(JSON 数组):${JSON.stringify(
+        tagNameList,
+      )}。从"已有标签"里挑选与该网页最相关的标签放进 matchedTags(0-4 个,必须与列表中的文字完全一致);若都不合适,matchedTags 返回空数组,并在 newTags 里给出 1-3 个建议新增的简短标签名(2-6 个字)。`,
+      '- 只输出 JSON 对象,格式必须是 {"name":"...","description":"...","matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
+    ].join('\n');
 
-    const config = {
-      method: 'post',
-      url: `https://dashscope.aliyuncs.com/api/v1/apps/${APP_ID}/completion`,
-      headers: {
-        Authorization: `Bearer ${process.env.DASHSCOPE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      data: requestData,
-      responseType: 'json',
-      timeout: 30000,
-    };
-
-    const response = await axios(config);
-    const rawText = String(response.data.output.text || '').trim();
-    const cleanText = rawText.replace(/```json|```/g, '').trim();
+    const { content } = await requestDeepSeek([
+      { role: 'system', content: '你是书签整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
+      { role: 'user', content: userPrompt },
+    ]);
+    const cleanText = String(content || '')
+      .replace(/```json|```/g, '')
+      .trim();
 
     let parsed = null;
     try {
@@ -412,14 +224,8 @@ export const generateBookmarkMeta = async (req, res) => {
       }),
     );
   } catch (error) {
-    const statusCode = error?.response?.status;
-    const providerMsg = error?.response?.data?.message || error?.response?.data?.code || error.message;
+    const providerMsg = error?.message || String(error);
     console.error('生成书签元信息错误:', providerMsg);
-    if (statusCode === 401) {
-      return res
-        .status(500)
-        .send(resultData(null, 500, '生成名称和描述失败：DashScope 鉴权失败，请检查 DASHSCOPE_API_KEY 或应用权限配置'));
-    }
     res.status(500).send(resultData(null, 500, '生成名称和描述失败: ' + providerMsg));
   }
 };
