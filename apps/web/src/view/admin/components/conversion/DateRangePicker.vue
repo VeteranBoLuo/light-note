@@ -64,7 +64,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, computed } from 'vue';
+  import { ref, computed, onMounted } from 'vue';
 
   const emit = defineEmits<{
     change: [start?: string, end?: string];
@@ -276,6 +276,13 @@
   function close() {
     opened.value = false;
   }
+
+  onMounted(() => {
+    const p = presets.find(p => p.key === 'today')!;
+    startDate.value = p.start();
+    endDate.value = p.end();
+    emit('change', startDate.value, endDate.value);
+  });
 
   // click-outside directive
   const vClickOutside = {
