@@ -13,8 +13,9 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, onUnmounted, ref, Ref } from 'vue';
+  import { onMounted, onUnmounted, ref, Ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { apiBasePost } from '@/http/request.ts';
   import LoginPage from '@/components/login/LoginPage.vue';
   import ResetPage from '@/components/login/ResetPage.vue';
   import RegisterPage from '@/components/login/RegisterPage.vue';
@@ -77,11 +78,30 @@
     }
   }
 
+  // 转化埋点：游客真正看到注册表单(register_view)时上报一次，补齐 cta_click→register_view→register 分段漏斗。
+  // 放在父组件是因为 title 在这里是权威、且弹窗每次打开都全新挂载(标记自然重置)，能可靠覆盖两条路径：
+  //   1) CTA 直开注册：挂载时 title 初值即 '注册' → onMounted 触发
+  //   2) 先登录后切注册：title 变为 '注册' → watch 触发
+  let registerViewSent = false;
+  function reportRegisterView() {
+    if (registerViewSent || title.value !== '注册') return;
+    if (user.id && user.role !== 'visitor') return; // 仅游客计入注册转化
+    registerViewSent = true;
+    apiBasePost('/api/common/recordConversion', { event: 'register_view', source: 'register-page' }).catch(() => {});
+  }
+  watch(
+    () => title.value,
+    (val) => {
+      if (val === '注册') reportRegisterView();
+    },
+  );
+
   // Mount/unmount event listeners
   onMounted(() => {
     document.addEventListener('keydown', clickEvent);
     // 消费一次性 tab：本次已按 authModalTab 初始化 title，重置以免影响下次普通打开（如点头像登录）
     bookmark.authModalTab = '登录';
+    reportRegisterView(); // CTA 直开注册：此时 title 初值已是 '注册'
   });
 
   onUnmounted(() => {

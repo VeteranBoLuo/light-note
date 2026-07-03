@@ -90,7 +90,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, reactive, ref } from 'vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import userApi from '@/api/userApi.ts';
@@ -116,18 +116,9 @@
     return !formData.password || !formData.email;
   });
 
-  // 转化埋点:游客到达注册表单(register_view),补齐 cta_click→register_view→register 分段漏斗
-  let registerViewSent = false;
-  watch(
-    () => title.value,
-    (val) => {
-      if (val === '注册' && !registerViewSent && (!user.id || user.role === 'visitor')) {
-        registerViewSent = true;
-        apiBasePost('/api/common/recordConversion', { event: 'register_view', source: 'register-page' }).catch(() => {});
-      }
-    },
-    { immediate: true },
-  );
+  // register_view(到达注册表单)埋点已上移到父组件 UserAuthModal.vue：
+  // 那里 title 是权威、且弹窗每次打开都全新挂载(标记自然重置)，能可靠覆盖"CTA直开注册"与"登录切注册"两条路径，
+  // 避免此处 immediate watch 挂在常驻子组件上导致的时序不可靠(原先此埋点恒记不上，漏斗到达数恒为0)。
   async function validateFun(names?: any) {
     await registerRef.value.validate(names);
   }
