@@ -100,7 +100,7 @@
                   <div class="bookmark-meta">
                     <div class="bookmark-name">{{ bookmarkItem.name }}</div>
                     <div class="bookmark-url" :title="bookmarkItem.url">
-                      <a :href="bookmarkItem.url" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
+                      <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
                     </div>
                   </div>
                 </div>
@@ -180,7 +180,7 @@
               </template>
               <template v-else-if="column.key === 'url'">
                 <div class="text-hidden">
-                  <a :href="text" target="_blank">{{ text }}</a>
+                  <a :href="withProtocol(text)" target="_blank">{{ text }}</a>
                 </div>
               </template>
               <template v-else-if="column.key === 'operation'">
@@ -572,6 +572,14 @@
     importExportModalVisible.value = false;
     message.success('HTML书签导出成功');
     loading.value = false;
+  }
+
+  // 兜底展示层:新增/编辑书签时后端已统一补协议头,但存量数据可能是补全前存的裸域名;
+  // <a :href> 遇到裸域名会当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
+  function withProtocol(url: string) {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return trimmed;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   }
 
   function getIcon(bookmarkItem: BookmarkInterface) {

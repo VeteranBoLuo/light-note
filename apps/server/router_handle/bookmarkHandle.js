@@ -12,6 +12,15 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
+
+// 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
+// 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
+export const normalizeBookmarkUrl = (url) => {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return trimmed;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
 export const queryTagList = (req, res) => {
   const userId = req.user.id;
   try {
@@ -447,6 +456,7 @@ export const addBookmark = async (req, res) => {
     const params = {
       ...req.body,
       userId: userId,
+      url: normalizeBookmarkUrl(req.body.url),
     };
     const sqlCheck = 'SELECT * FROM bookmark WHERE user_id=? AND name = ? AND del_flag = 0';
     const [checkRes] = await connection.query(sqlCheck, [userId, params.name]);
@@ -498,6 +508,10 @@ export const updateBookmark = async (req, res) => {
     if (own.length === 0) {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
+    }
+    // 只在调用方确实传了 url 时才补协议头;不能无条件赋值,否则 url 缺省时会把 SET 子句里的 url 覆盖成空
+    if (req.body.url) {
+      req.body.url = normalizeBookmarkUrl(req.body.url);
     }
     req.body.iconUrl = null;
     const sql = `update bookmark set ? where id=?`;
@@ -744,7 +758,7 @@ export const importBookmarksHtml = async (req, res) => {
         const bookmarkPayload = insertData({
           name: item.name,
           userId,
-          url: item.url,
+          url: normalizeBookmarkUrl(item.url),
           description: '',
         });
         await connection.query('INSERT INTO bookmark SET ?', [bookmarkPayload]);
