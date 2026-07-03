@@ -116,9 +116,6 @@
     return !formData.password || !formData.email;
   });
 
-  // register_view(到达注册表单)埋点已上移到父组件 UserAuthModal.vue：
-  // 那里 title 是权威、且弹窗每次打开都全新挂载(标记自然重置)，能可靠覆盖"CTA直开注册"与"登录切注册"两条路径，
-  // 避免此处 immediate watch 挂在常驻子组件上导致的时序不可靠(原先此埋点恒记不上，漏斗到达数恒为0)。
   async function validateFun(names?: any) {
     await registerRef.value.validate(names);
   }

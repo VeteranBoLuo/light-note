@@ -10,7 +10,7 @@ const clientIp = (req) => {
 
 /**
  * 记录游客转化漏斗事件(旁路、fire-and-forget,绝不阻塞/抛错影响主流程)。
- * 事件枚举:page_view / wall_hit(撞写操作墙) / cta_click(点立即注册) / register_view(到达注册页) / register(注册成功) / share_view(分享页曝光) / share_cta_click(分享页点注册)。
+ * 事件枚举:page_view / wall_hit(撞写操作墙) / cta_click(点立即注册) / register(注册成功) / share_view(分享页曝光) / share_cta_click(分享页点注册)。
  * @param {object} req Express 请求(读 req.user 与 fingerprint 头)
  * @param {string} event 事件名
  * @param {string} [context] 上下文(如撞墙的接口路径、CTA 来源)

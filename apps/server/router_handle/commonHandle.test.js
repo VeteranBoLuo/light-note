@@ -44,13 +44,6 @@ describe('recordConversion 白名单', () => {
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][0]).toContain('INSERT INTO conversion_events');
   });
-
-  it('新增事件 register_view 已在白名单内', () => {
-    query.mockResolvedValue([[]]);
-    const res = mockRes();
-    recordConversion({ user: { role: 'visitor' }, headers: {}, body: { event: 'register_view' } }, res);
-    expect(query).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe('getConversionFunnel', () => {
@@ -62,7 +55,7 @@ describe('getConversionFunnel', () => {
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
   });
 
-  it('root 返回五段漏斗,含 registerViewVisitors(回归:register_view 已被看板消费)', async () => {
+  it('root 返回漏斗各段访客数(按 fingerprint 去重)', async () => {
     query.mockImplementation((sql) => {
       if (/GROUP BY event/.test(sql)) {
         return Promise.resolve([
@@ -70,7 +63,6 @@ describe('getConversionFunnel', () => {
             { event: 'page_view', visitors: 10 },
             { event: 'wall_hit', visitors: 6 },
             { event: 'cta_click', visitors: 3 },
-            { event: 'register_view', visitors: 2 },
             { event: 'register', visitors: 1 },
           ],
         ]);
@@ -86,7 +78,6 @@ describe('getConversionFunnel', () => {
       pageViewVisitors: 10,
       wallHitVisitors: 6,
       ctaClickVisitors: 3,
-      registerViewVisitors: 2,
       registerVisitors: 1,
       uniqueIps: 4,
     });
