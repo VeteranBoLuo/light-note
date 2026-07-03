@@ -11,7 +11,8 @@ echo "🏗  构建前端(增量)…"
 pnpm --filter web build
 
 echo "📦  打包 dist…"
-tar czf /tmp/ln-web-dist.tgz -C apps/web dist
+# COPYFILE_DISABLE=1:阻止 macOS tar 往包里塞 ._* AppleDouble 元数据文件(服务器上是纯垃圾)
+COPYFILE_DISABLE=1 tar czf /tmp/ln-web-dist.tgz -C apps/web dist
 
 echo "🚀  上传 + 原子切换(滚动保留最近 1 个旧 dist 备份)…"
 scp -i "$KEY" /tmp/ln-web-dist.tgz "$HOST:/tmp/ln-web-dist.tgz"
