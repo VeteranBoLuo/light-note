@@ -157,12 +157,14 @@ export const updateTagSort = async (req, res) => {
 
 export const getTagDetail = (req, res) => {
   try {
+    const userId = req.user.id;
     const { filters } = req.body;
+    // 归属校验:只能读自己的标签,防止传他人 tag id 越权读取;越权/不存在统一 404
     pool
-      .query(`SELECT * FROM tag WHERE  id=? AND del_flag=0`, [filters.id])
+      .query(`SELECT * FROM tag WHERE id=? AND user_id=? AND del_flag=0`, [filters.id, userId])
       .then(([result]) => {
         if (result.length === 0) {
-          throw '标签不存在';
+          return res.send(resultData(null, 404, '标签不存在'));
         }
         res.send(resultData(result[0]));
       })
@@ -550,12 +552,14 @@ export const updateBookmark = async (req, res) => {
 
 export const getBookmarkDetail = (req, res) => {
   try {
-    let sql = `SELECT * FROM bookmark WHERE  id=? AND del_flag=0`;
+    const userId = req.user.id;
+    // 归属校验:只能读自己的书签,防止传他人 bookmark id 越权读取;越权/不存在统一 404
+    let sql = `SELECT * FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`;
     pool
-      .query(sql, [req.body.filters.id])
+      .query(sql, [req.body.filters.id, userId])
       .then(([result]) => {
         if (result.length === 0) {
-          throw new Error('书签不存在');
+          return res.send(resultData(null, 404, '书签不存在'));
         }
         res.send(resultData(result[0]));
       })
