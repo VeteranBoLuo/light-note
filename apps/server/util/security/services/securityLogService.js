@@ -3,6 +3,7 @@ import pool from '../../../db/index.js';
 import { safeJsonStringify } from '../payloadSanitizer.js';
 import { updateIpReputation, ensureIpLocation } from './ipReputation.js';
 import { updateAccountReputation } from './accountReputation.js';
+import { SECURITY_CONFIG } from '../rules.js';
 
 const countIpAttacks = async (ip, intervalExpr) => {
   const [rows] = await pool.query(
@@ -116,4 +117,37 @@ export const writeSecurityEvent = async ({ context, evidenceList, threat, decisi
     }
   }
   return eventId;
+};
+
+// 删除超过保留期的安全事件与证据(分批，避免大表一次性 DELETE 锁表 / 吃内存)。
+// 只清攻击日志(events + evidence)，IP 信誉/账号封禁等状态数据不受影响。
+// days 与 BATCH 均为可信数值(config 常量，非用户输入)，内联安全；沿用本文件 countIpAttacks 的 INTERVAL 内联惯例。
+export const cleanupExpiredSecurityEvents = async () => {
+  const days = Number(SECURITY_CONFIG.eventRetentionDays) || 0;
+  if (days <= 0) return { events: 0, evidence: 0 }; // 0/未配置 = 不清理
+  const BATCH = 2000;
+  let events = 0;
+  let evidence = 0;
+  try {
+    for (;;) {
+      const [r] = await pool.query(
+        `DELETE FROM security_event_evidence WHERE created_at < DATE_SUB(NOW(), INTERVAL ${days} DAY) LIMIT ${BATCH}`,
+      );
+      evidence += r.affectedRows;
+      if (r.affectedRows < BATCH) break;
+    }
+    for (;;) {
+      const [r] = await pool.query(
+        `DELETE FROM security_events WHERE created_at < DATE_SUB(NOW(), INTERVAL ${days} DAY) LIMIT ${BATCH}`,
+      );
+      events += r.affectedRows;
+      if (r.affectedRows < BATCH) break;
+    }
+    if (events || evidence) {
+      console.log(`[security] 清理过期安全事件：events=${events}, evidence=${evidence}（保留 ${days} 天）`);
+    }
+  } catch (e) {
+    console.error('[security] 清理过期安全事件失败:', e.message);
+  }
+  return { events, evidence };
 };

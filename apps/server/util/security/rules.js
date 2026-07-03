@@ -7,6 +7,12 @@ export const SECURITY_CONFIG = {
   loginFailFiveMinutes: Number(process.env.SECURITY_LOGIN_FAIL_FIVE_MINUTES || 8),
   ipAutoBanRiskScore: Number(process.env.SECURITY_IP_AUTO_BAN_RISK_SCORE || 80),
   blockEnabled: process.env.SECURITY_BLOCK_ENABLED !== 'false',
+  // 决策阈值：threatScore >= blockThreshold 拦截，>= logThreshold 记录观察
+  // (原先硬编码在 decisionEngine，提到这里便于按环境调整；默认值与原硬编码一致)
+  blockThreshold: Number(process.env.SECURITY_BLOCK_THRESHOLD || 50),
+  logThreshold: Number(process.env.SECURITY_LOG_THRESHOLD || 20),
+  // 安全事件(攻击日志)保留天数，超期定时清理；0/负数 = 不清理。IP 信誉/封禁等状态数据不受影响
+  eventRetentionDays: Number(process.env.SECURITY_EVENT_RETENTION_DAYS || 90),
 };
 
 export const SENSITIVE_KEYS = [
@@ -73,7 +79,9 @@ export const SIGNATURE_RULES = [
     severity: 'high',
     baseScore: 58,
     confidence: 86,
-    regex: /<\s*script\b|javascript\s*:|on[a-z]+\s*=|data\s*:\s*text\/html|<\s*iframe\b/i,
+    // on... 从"任意字母"收窄为已知事件处理器白名单 + 左边界(空白/引号/斜杠/<)，
+    // 避免 only=/online=/condition=/session= 这类正常参数误报为 XSS(仍命中 onerror=/onload=/<script> 等真实攻击)
+    regex: /<\s*script\b|javascript\s*:|data\s*:\s*text\/html|<\s*iframe\b|(?:^|[\s"'`\/<])on(?:error|load|click|mouseover|mouseout|focus|blur|submit|change|input|keydown|keyup|keypress|abort|contextmenu|dblclick|drag|drop|scroll|wheel|copy|paste|cut|pointerdown|pointerup|touchstart|touchend)\s*=/i,
     excludedContexts: ['freeText'],
   },
   {
@@ -114,8 +122,10 @@ export const SIGNATURE_RULES = [
     severity: 'medium',
     baseScore: 35,
     confidence: 78,
-    regex: /(?:\r|\n|%0d|%0a)/i,
-    excludedContexts: ['freeText'],
+    // 只作用于 url 上下文：CRLF 注入的攻击面是响应头/重定向 URL；body 字段里的换行是正常数据
+    // (多行文本/JSON)，对其查裸 \r\n 是纯误报源。请求头 CRLF 注入由独立的 detectHeaderInjection 覆盖
+    regex: /%0d%0a|%0d|%0a|\r\n|[\r\n]/i,
+    includedContexts: ['url'],
   },
 ];
 

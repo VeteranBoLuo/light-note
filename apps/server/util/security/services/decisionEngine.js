@@ -8,16 +8,10 @@ export const decideSecurityAction = ({ threatScore, ipReputation = {} }) => {
   if (!SECURITY_CONFIG.blockEnabled) {
     return { actionTaken: threatScore > 0 ? 'log' : 'allow', blocked: false, shouldBan: false, reason: '防护拦截未启用' };
   }
-  if (threatScore >= 90) {
-    return { actionTaken: 'block', blocked: true, shouldBan: false, reason: '严重威胁，已拦截' };
-  }
-  if (threatScore >= 80) {
-    return { actionTaken: 'block', blocked: true, shouldBan: false, reason: '严重威胁，已拦截' };
-  }
-  if (threatScore >= 50) {
+  if (threatScore >= SECURITY_CONFIG.blockThreshold) {
     return { actionTaken: 'block', blocked: true, shouldBan: false, reason: '高风险请求，已拦截' };
   }
-  if (threatScore >= 20) {
+  if (threatScore >= SECURITY_CONFIG.logThreshold) {
     return { actionTaken: 'log', blocked: false, shouldBan: false, reason: '中等威胁，记录观察' };
   }
   if (threatScore > 0) {
