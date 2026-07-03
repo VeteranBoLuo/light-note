@@ -33,6 +33,26 @@ const SITE_ORIGIN = 'https://boluo66.top';
 const ROUTE = '/landing';
 const WAIT_SELECTOR = '.hero-title'; // Landing.vue 首屏 H1，渲染完成的判据
 const TIMEOUT = 60_000;
+const UPDATE_NOTICE_CONFIG = path.resolve(__dirname, '../src/config/updateNotice.ts');
+
+/**
+ * App.vue 的 onMounted 不分路由,每次挂载都会检查 localStorage[storageKey] 是否
+ * 等于当前版本号,不等就弹一个 duration:0(永不自动消失)的"发现新版本"通知。
+ * puppeteer 用的是全新无痕上下文,localStorage 是空的,必然触发这条通知——
+ * 而这条通知会在我们截取 page.content() 时被冻结进静态 HTML,导致真实用户
+ * 打开页面时先看见这条早该消失的公告残影一闪,再被 Vue 重新挂载后的真实状态覆盖掉。
+ * 用正则从配置文件里取 storageKey/version(不额外引入 TS loader),在 puppeteer
+ * 导航前把 localStorage 预置成"已看过当前版本公告",从根上不让它在渲染期间弹出。
+ */
+async function readUpdateNoticeSeed() {
+  const src = await readFile(UPDATE_NOTICE_CONFIG, 'utf8');
+  const storageKey = src.match(/storageKey:\s*'([^']+)'/)?.[1];
+  const version = src.match(/version:\s*'([^']+)'/)?.[1];
+  if (!storageKey || !version) {
+    throw new Error(`未能从 ${UPDATE_NOTICE_CONFIG} 解析出 storageKey/version`);
+  }
+  return { storageKey, version };
+}
 
 if (process.env.SKIP_PRERENDER === '1') {
   console.log('⏭  SKIP_PRERENDER=1，跳过预渲染');
@@ -131,6 +151,22 @@ async function main() {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
+
+    // 必须用 evaluateOnNewDocument(在页面自身脚本执行前跑),普通 page.evaluate
+    // 要等 goto 完成后才执行,那时 App.vue 的 onMounted 早已检查过 localStorage
+    const { storageKey, version } = await readUpdateNoticeSeed();
+    await page.evaluateOnNewDocument(
+      (key, value) => {
+        try {
+          window.localStorage.setItem(key, value);
+        } catch {
+          /* 隐私模式等场景 localStorage 不可用,忽略即可,顶多通知照常弹出 */
+        }
+      },
+      storageKey,
+      version,
+    );
+
     console.log(`🌐  渲染 ${url} …`);
     await page.goto(url, { waitUntil: 'networkidle0', timeout: TIMEOUT });
     await page.waitForSelector(WAIT_SELECTOR, { timeout: TIMEOUT });
