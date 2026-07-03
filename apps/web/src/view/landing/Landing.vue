@@ -222,6 +222,9 @@
             <span class="footer-sep">|</span>
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
             <span class="footer-sep">|</span>
+            <!-- 后端直出的 SEO 内容页,不走 SPA 路由;爬虫由此发现帮助中心 -->
+            <a href="/help">帮助中心</a>
+            <span class="footer-sep">|</span>
             <a href="#" @click.prevent="handleContact">联系我们</a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>

@@ -11,6 +11,7 @@ import workbenchRouter from '../router/workbench.js';
 import knowledgeBaseRouter from '../router/knowledgeBase.js';
 import securityRouter from '../router/security.js';
 import trashRouter from '../router/trash.js';
+import seoRouter from '../router/seo.js';
 
 export const resultData = function (data = null, status = 200, msg = '') {
   if (status !== 200 && status !== 'visitor' && status !== 'preview') {
@@ -209,5 +210,11 @@ export const baseRouter = [
   {
     path: '/knowledgeBase',
     router: knowledgeBaseRouter,
+  },
+  {
+    // SEO 内容页(/help、/help/:id、/sitemap.xml)：挂根路径，只注册 GET，
+    // 未匹配的请求穿透到后续路由，不影响其他接口
+    path: '/',
+    router: seoRouter,
   },
 ];
