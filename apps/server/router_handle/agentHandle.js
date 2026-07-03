@@ -190,6 +190,14 @@ export async function agentChat(req, res) {
   req.setTimeout(0);
 
   let stream = false;
+  // 下面两个声明放在 try 外:catch 块要 removeListener(onClientClose),而 catch 是 try 的
+  // 兄弟作用域,访问不到 try 内声明的 const —— 否则一进 catch 就二次抛 ReferenceError
+  const agentAbortController = new AbortController();
+  const onClientClose = () => {
+    if (!agentAbortController.signal.aborted) {
+      agentAbortController.abort();
+    }
+  };
 
   try {
     const {
@@ -237,12 +245,7 @@ export async function agentChat(req, res) {
     ];
 
     // 流式模式：提前设置 SSE headers + 客户端断开时 abort DeepSeek 流
-    const agentAbortController = new AbortController();
-    const onClientClose = () => {
-      if (!agentAbortController.signal.aborted) {
-        agentAbortController.abort();
-      }
-    };
+    // (agentAbortController / onClientClose 已在 try 外声明,便于 catch 中 removeListener)
     req.on('close', onClientClose);
 
     if (stream) {
@@ -276,16 +279,22 @@ export async function agentChat(req, res) {
       // 无工具调用 → 直接当作回答，跳过 Final Reply
       finalContent = plannerResponse.content || '';
     } else {
+      // 兜底:只取前 MAX_PARALLEL_TOOLS 个 tool_calls,防 LLM 极端情况一次吐一堆
+      // (含重复查询)并发打满 DB 连接池。assistant 消息与实际执行必须用同一批——
+      // OpenAI 协议要求每个 tool_call 都有对应的 tool 结果,否则下一轮请求会报错。
+      const MAX_PARALLEL_TOOLS = 8;
+      const toolCalls = plannerResponse.toolCalls.slice(0, MAX_PARALLEL_TOOLS);
+
       // 追加 assistant 消息（含 tool_calls）
       messages.push({
         role: 'assistant',
         content: null,
-        tool_calls: plannerResponse.toolCalls,
+        tool_calls: toolCalls,
       });
 
       // 并行执行所有工具
       const results = await Promise.all(
-        plannerResponse.toolCalls.map(async (tc) => {
+        toolCalls.map(async (tc) => {
           let args = {};
           try {
             args = JSON.parse(tc.function.arguments || '{}');

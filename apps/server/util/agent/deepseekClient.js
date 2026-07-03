@@ -82,6 +82,31 @@ export function getActiveProviderPricing() {
   return { provider: cfg.name, price: cfg.price };
 }
 
+// ---- 超时控制 ----
+// Planner(同步)用整体超时;流式用"空闲超时"(见 requestDeepSeekStream),
+// 避免正常的长回答被绝对超时误杀,只拦截"连上却不吐字"的挂死。
+const PLANNER_TIMEOUT_MS = 90_000;
+const STREAM_IDLE_MS = 60_000;
+
+/**
+ * 合并多个 AbortSignal:任一 abort,结果即 abort。
+ * 手写而非用 AbortSignal.any——后者需 Node 20.3+,本项目 engines 仅要求 >=18,手写兼容更稳。
+ * @param {(AbortSignal|undefined|null)[]} signals
+ * @returns {AbortSignal}
+ */
+function combineSignals(signals) {
+  const controller = new AbortController();
+  for (const s of signals) {
+    if (!s) continue;
+    if (s.aborted) {
+      controller.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', () => controller.abort(s.reason), { once: true });
+  }
+  return controller.signal;
+}
+
 // ---- 同步请求 ----
 
 /**
@@ -115,7 +140,8 @@ export async function requestDeepSeek(messages, options = {}) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${getApiKey(cfg)}`,
     },
-    signal: options.signal,
+    // 客户端断开(options.signal)与 90s 整体超时,任一触发即中止
+    signal: combineSignals([options.signal, AbortSignal.timeout(PLANNER_TIMEOUT_MS)]),
     body: JSON.stringify(body),
   });
 
@@ -153,13 +179,25 @@ export async function requestDeepSeek(messages, options = {}) {
  */
 export async function requestDeepSeekStream(messages, options) {
   const cfg = getProviderConfig();
+
+  // 空闲超时:每收到一段数据就重置计时,连续 STREAM_IDLE_MS 无新数据视为挂死。
+  // 只拦"连上却不吐字",正常持续输出的长回答不受影响(绝对超时会误杀长回答)。
+  const idleController = new AbortController();
+  const abortIdle = () => idleController.abort(new DOMException('流式响应空闲超时', 'TimeoutError'));
+  let idleTimer = setTimeout(abortIdle, STREAM_IDLE_MS);
+  const resetIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(abortIdle, STREAM_IDLE_MS);
+  };
+
   const res = await fetch(cfg.baseUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${getApiKey(cfg)}`,
     },
-    signal: options.signal,
+    // 客户端断开(options.signal)与空闲超时,任一触发即中止
+    signal: combineSignals([options.signal, idleController.signal]),
     body: JSON.stringify({
       model: getModel(cfg),
       messages,
@@ -169,6 +207,7 @@ export async function requestDeepSeekStream(messages, options) {
   });
 
   if (!res.ok) {
+    clearTimeout(idleTimer);
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error?.message || `${cfg.name} 流式请求失败：${res.status}`);
   }
@@ -178,36 +217,41 @@ export async function requestDeepSeekStream(messages, options) {
   let buffer = '';
   let fullContent = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      resetIdle(); // 收到新数据,重置空闲计时
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line.startsWith('data:')) continue;
-      const dataStr = line.slice(5).trim();
-      if (!dataStr || dataStr === '[DONE]') continue;
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith('data:')) continue;
+        const dataStr = line.slice(5).trim();
+        if (!dataStr || dataStr === '[DONE]') continue;
 
-      let chunk;
-      try {
-        chunk = JSON.parse(dataStr);
-      } catch {
-        continue; // 忽略无法解析的行
+        let chunk;
+        try {
+          chunk = JSON.parse(dataStr);
+        } catch {
+          continue; // 忽略无法解析的行
+        }
+
+        if (chunk.error?.message) {
+          throw new Error(chunk.error.message);
+        }
+
+        const delta = chunk.choices?.[0]?.delta?.content || '';
+        if (!delta) continue;
+        fullContent += delta;
+        options.onDelta(delta);
       }
-
-      if (chunk.error?.message) {
-        throw new Error(chunk.error.message);
-      }
-
-      const delta = chunk.choices?.[0]?.delta?.content || '';
-      if (!delta) continue;
-      fullContent += delta;
-      options.onDelta(delta);
     }
+  } finally {
+    clearTimeout(idleTimer); // 正常结束/异常/abort 都清掉计时器,防泄漏
   }
 
   return { content: fullContent };

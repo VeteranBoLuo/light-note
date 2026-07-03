@@ -378,6 +378,7 @@
     const accumulatedContent = ref(''); // 累积的完整内容
     const displayedContent = ref(''); // 当前显示的内容（逐字增加）
     let typingTimer: number | null = null;
+    let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
     let isTyping = false; // 是否正在打字
     let wakeResolver: (() => void) | null = null; // 唤醒休眠中的打字机
 
@@ -470,6 +471,14 @@
         try {
           const data = parseJSONSafely(dataStr);
           if (!data) return;
+
+          // 后端流式出错时会推送 { error, message } 帧：记下来、标记已开始(停思考流)，
+          // 交给流结束后统一显示 —— 不在此直接改内容，避免与打字机争用当前消息
+          if (data.error) {
+            streamError = data.message || data.error || t('ai.errorMessage');
+            hasAnswerStarted.value = true;
+            return;
+          }
 
           const content = data.output?.text || data.text || data.content || '';
 
@@ -578,6 +587,19 @@
           }, 10000);
         });
       };
+
+      // 后端流式返回错误帧：停打字机，把错误提示落到当前消息(已有半截内容则保留并追加)
+      if (streamError && thisRequestId === activeRequestId) {
+        if (typingTimer) {
+          clearTimeout(typingTimer);
+          typingTimer = null;
+        }
+        const errText = t('ai.errorMessage');
+        const full = accumulatedContent.value ? `${accumulatedContent.value}\n\n${errText}` : errText;
+        accumulatedContent.value = full;
+        displayedContent.value = full;
+        messages.value[currentMessageIndex].content = full;
+      }
 
       await waitForTypewriter();
 
