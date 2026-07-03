@@ -212,8 +212,18 @@
 
   // 生命周期（保持不变）
   onMounted(() => {
-    // 预热智能助手 chunk，减少首次点击打开延迟
-    import('@/view/aiAssistant/ChatContainer.vue').catch(() => {});
+    // 预热智能助手 chunk，减少首次点击打开延迟;放到浏览器空闲时再拉,避免抢占首屏关键路径
+    // (否则预渲染的 networkidle 会等它下载完并把这个大 chunk 烘焙进首屏 modulepreload)
+    const warmChat = () => import('@/view/aiAssistant/ChatContainer.vue').catch(() => {});
+    // 预渲染(无头浏览器 navigator.webdriver=true)时跳过预热:否则 networkidle 会等这次 import 完成,
+    // 把 gzip 300KB+ 的 ChatContainer 烘焙进静态 landing 首屏 preload,拖累真实访客的 TBT/LCP。真实用户照常空闲预热。
+    if (!(window as any).__PRERENDER__ && !navigator.webdriver) {
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(warmChat);
+      } else {
+        setTimeout(warmChat, 2000);
+      }
+    }
     document.addEventListener('keydown', handleKeydown);
     schedulePeek();
   });

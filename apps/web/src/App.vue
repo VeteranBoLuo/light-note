@@ -53,7 +53,9 @@
   );
 
   const aiVisible = computed(() => {
-    return !bookmark.isMobile && !bookmark.isShowLogin;
+    // landing 落地页不挂 AI 悬浮球:FloatQuestion 挂载时会预热 ChatContainer chunk(gzip 300KB+),
+    // 预渲染会把它烘焙进 landing 首屏 modulepreload,拖累 TBT/未使用JS;落地页访客也用不到 AI 助手。
+    return !bookmark.isMobile && !bookmark.isShowLogin && router.currentRoute.value.name !== 'landing';
   });
   function getStoredPreferences() {
     if (isAdminLoginPreview()) {

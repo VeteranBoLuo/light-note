@@ -157,6 +157,8 @@ async function main() {
     const { storageKey, version } = await readUpdateNoticeSeed();
     await page.evaluateOnNewDocument(
       (key, value) => {
+        // 预渲染标志:前端据此跳过 ChatContainer 等首屏无关 chunk 的预热,避免被烘焙进静态首屏 preload
+        window.__PRERENDER__ = true;
         try {
           window.localStorage.setItem(key, value);
         } catch {
@@ -183,6 +185,15 @@ async function main() {
         /(<meta[^>]*property="og:url"[^>]*content=")[^"]*(")/i,
         `$1${SITE_ORIGIN}${ROUTE}$2`,
       );
+
+    // 删掉 landing 首屏里 AI 相关 chunk 的所有 <link> 预载(preload/modulepreload/stylesheet):
+    // App.vue 挂载瞬间 router 未 ready、aiVisible 短暂为 true,会触发 FloatQuestion 挂载并预热 ChatContainer,
+    // Vite __vitePreload 遂把它们(尤其 ChatContainer gzip 300KB+)烘焙进静态首屏,纯拖累 landing 的 TBT/未使用JS。
+    // 前端运行时的 __PRERENDER__/route 判断因时序不可靠,这里在产物层确定性移除。真实用户 JS 接管后按需动态加载,不受影响。
+    const aiLinkRe = /<link\b[^>]*(?:ChatContainer|FloatQuestion)[^>]*>/gi;
+    const removed = (html.match(aiLinkRe) || []).length;
+    html = html.replace(aiLinkRe, '');
+    console.log(`🧹  移除 landing 首屏 AI chunk 预载 ${removed} 条`);
 
     // 质量断言：预渲染产物必须包含真实正文，否则宁可失败也不上线空壳
     const textLen = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, '').trim().length;
