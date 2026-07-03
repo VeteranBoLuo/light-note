@@ -237,9 +237,10 @@ export const sitemapXml = async (req, res) => {
     const [rows] = await pool.query(
       `SELECT id, updated_at FROM knowledge_base WHERE status = 'public' ORDER BY updated_at DESC`,
     );
+    // 根路径 / 不收录:它是纯客户端重定向,canonical 已指向 /landing,
+    // sitemap 里同时列出 / 会跟 canonical 信号打架(一边喊来收录,一边喊别收录去别处)
     const staticUrls = [
-      { loc: `${SITE}/`, priority: '1.0', changefreq: 'weekly' },
-      { loc: `${SITE}/landing`, priority: '0.9', changefreq: 'weekly' },
+      { loc: `${SITE}/landing`, priority: '1.0', changefreq: 'weekly' },
       { loc: `${SITE}${HELP_PATH}`, priority: '0.8', changefreq: 'weekly' },
     ];
     const articleUrls = rows.map((r) => ({
