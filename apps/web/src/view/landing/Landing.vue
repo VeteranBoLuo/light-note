@@ -68,15 +68,24 @@
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-bookmark.png" alt="书签管理" />
+                      <picture>
+                        <source srcset="/eg-bookmark.webp" type="image/webp" />
+                        <img src="/eg-bookmark.png" alt="书签管理" />
+                      </picture>
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-note.png" alt="笔记库" />
+                      <picture>
+                        <source srcset="/eg-note.webp" type="image/webp" />
+                        <img src="/eg-note.png" alt="笔记库" />
+                      </picture>
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-cloudSpace.png" alt="云空间" />
+                      <picture>
+                        <source srcset="/eg-cloudSpace.webp" type="image/webp" />
+                        <img src="/eg-cloudSpace.png" alt="云空间" />
+                      </picture>
                     </div>
                   </div>
                 </div>
