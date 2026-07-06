@@ -307,6 +307,8 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
     border-radius: 12px;
     overflow: hidden;
     margin-top: 20px;
+    display: flex;
+    flex-direction: column;
   }
 
   .person-menu-item {

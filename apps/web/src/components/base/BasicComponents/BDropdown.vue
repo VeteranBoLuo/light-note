@@ -4,6 +4,7 @@
     ref="wrapRef"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
+    @click="onClick"
   >
     <slot />
     <Teleport to="body">
@@ -33,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive } from 'vue';
+  import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
   export type BDropdownTrigger = 'hover' | 'click';
@@ -56,43 +57,97 @@
     openChange: [open: boolean];
   }>();
 
+  const isClickTrigger = computed(() => {
+    const t = props.trigger;
+    return Array.isArray(t) ? t.includes('click') : t === 'click';
+  });
+
+  const isHoverTrigger = computed(() => {
+    const t = props.trigger;
+    return Array.isArray(t) ? t.includes('hover') : t !== 'click';
+  });
+
   const visible = ref(false);
   const wrapRef = ref<HTMLElement>();
   const popupRef = ref<HTMLElement>();
   const popupStyle = reactive({ top: '0px', left: '0px' });
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  function onEnter() {
+  function show() {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      visible.value = true;
-      emit('openChange', true);
-      requestAnimationFrame(() => {
-        const wrap = wrapRef.value;
-        const popup = popupRef.value;
-        if (!wrap || !popup) return;
-        const wrapRect = wrap.getBoundingClientRect();
-        const popupRect = popup.getBoundingClientRect();
-        const centerX = wrapRect.left + wrapRect.width / 2 - popupRect.width / 2;
-        popupStyle.top = `${wrapRect.bottom + 6}px`;
-        popupStyle.left = `${Math.max(8, Math.min(centerX, window.innerWidth - popupRect.width - 8))}px`;
-      });
-    }, 50);
+    visible.value = true;
+    emit('openChange', true);
+    requestAnimationFrame(() => {
+      positionPopup();
+    });
+  }
+
+  function hide() {
+    if (timer) clearTimeout(timer);
+    visible.value = false;
+    emit('openChange', false);
+  }
+
+  function positionPopup() {
+    const wrap = wrapRef.value;
+    const popup = popupRef.value;
+    if (!wrap || !popup) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+    const centerX = wrapRect.left + wrapRect.width / 2 - popupRect.width / 2;
+    popupStyle.top = `${wrapRect.bottom + 6}px`;
+    popupStyle.left = `${Math.max(8, Math.min(centerX, window.innerWidth - popupRect.width - 8))}px`;
+  }
+
+  function onEnter() {
+    if (!isHoverTrigger.value) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(show, 50);
   }
 
   function onLeave() {
+    if (!isHoverTrigger.value) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      visible.value = false;
-      emit('openChange', false);
-    }, 200);
+    timer = setTimeout(hide, 200);
+  }
+
+  function onClick(e: MouseEvent) {
+    if (!isClickTrigger.value) return;
+    e.stopPropagation();
+    if (visible.value) {
+      hide();
+    } else {
+      show();
+    }
+  }
+
+  function onDocumentClick(e: MouseEvent) {
+    if (!isClickTrigger.value || !visible.value) return;
+    const target = e.target as Node;
+    const wrap = wrapRef.value;
+    const popup = popupRef.value;
+    if (
+      wrap &&
+      !wrap.contains(target) &&
+      popup &&
+      !popup.contains(target)
+    ) {
+      hide();
+    }
   }
 
   function itemClick(item: { label: string; icon?: string; function?: () => void }) {
     item.function?.();
-    visible.value = false;
-    emit('openChange', false);
+    hide();
   }
+
+  onMounted(() => {
+    document.addEventListener('click', onDocumentClick, true);
+  });
+
+  onUnmounted(() => {
+    document.removeEventListener('click', onDocumentClick, true);
+  });
 </script>
 
 <style scoped>
@@ -109,6 +164,7 @@
     padding: 6px 0;
     border-radius: 10px;
     background: var(--menu-body-bg-color);
+    border: 1px solid var(--card-border-color);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
     overflow: hidden;
   }
