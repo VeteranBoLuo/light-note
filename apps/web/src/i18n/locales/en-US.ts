@@ -411,7 +411,7 @@ export default {
     uploading: 'Uploading',
     dropFiles: 'Drop files here to upload',
     uploadTip:
-      'File upload methods:\n1. Click the upload button to select files\n2. Paste files directly (supports all file types)\n3. Drag and drop files from your computer to cloud space',
+      'File upload methods:\n1. Click the upload button to select files\n2. Paste files directly (supports all file types)\n3. Drag and drop files from your computer to cloud space\nMax 500MB per batch, 5GB total',
     dropFilesToFolder: 'Drop files here to upload to current folder',
   },
   personCenter: {

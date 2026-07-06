@@ -404,7 +404,7 @@ export default {
     uploading: '正在上传',
     dropFiles: '拖拽文件到此处上传',
     uploadTip:
-      '上传方式：\n1. 点击上传按钮选择文件\n2. 复制文件后，云空间任意区域直接Ctrl+V\n3.从本地直接拖拽到云空间任意区域',
+      '上传方式：\n1. 点击上传按钮选择文件\n2. 复制文件后，云空间任意区域直接Ctrl+V\n3.从本地直接拖拽到云空间任意区域\n单次上传最大 500MB，总量 5GB',
     dropFilesToFolder: '拖拽文件到此处上传到当前文件夹',
   },
   personCenter: {
