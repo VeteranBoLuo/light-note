@@ -161,6 +161,7 @@
   import { bookmarkStore } from '@/store';
   import { fetchGlobalSearch, SearchGroup, SearchResultItem, SearchType } from '@/api/search.ts';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta.ts';
+  import { rankByRelevance } from '@/components/searchCenter/searchUtils.ts';
   import { useI18n } from 'vue-i18n';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -216,9 +217,14 @@
     const seq = ++requestSeq;
     loading.value = true;
     try {
-      const res = await fetchGlobalSearch(keyword.value, 3, force);
+      // 每类多取 10 条,前端按匹配度重排后切前 3——精确/前缀匹配才能稳定进前排
+      // (后端按 sort/时间排,只取 3 条会把精确匹配挤掉)
+      const res = await fetchGlobalSearch(keyword.value, 10, force);
       if (seq === requestSeq) {
-        suggestGroups.value = res.groups;
+        suggestGroups.value = res.groups.map((group) => ({
+          ...group,
+          items: rankByRelevance(group.items, keyword.value).slice(0, 3),
+        }));
       }
     } finally {
       if (seq === requestSeq) {

@@ -113,6 +113,16 @@ function calcScore(item: SearchResultItem, keyword: string): number {
   return 0;
 }
 
+// 顶栏下拉用:后端按 sort/时间返回,精确匹配可能排不进前几条。
+// 复用结果页同一套 calcScore 按匹配度重排(分数相同保持后端原顺序,稳定)。
+export function rankByRelevance(items: SearchResultItem[], keyword: string): SearchResultItem[] {
+  if (!keyword.trim()) return items;
+  return items
+    .map((item, index) => ({ item, index, score: calcScore(item, keyword) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((entry) => entry.item);
+}
+
 export function mapDisplayItems(items: SearchResultItem[], keyword: string): DisplaySearchItem[] {
   return items.map((item, index) => {
     const rawTime = getRawTime(item.raw);
