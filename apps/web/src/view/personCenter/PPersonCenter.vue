@@ -43,22 +43,22 @@
       </div>
     </div>
     <div class="person-menu">
-      <b-dropdown :trigger="['click']" :menu-options="themeMenuOptions">
+      <b-menu :trigger="['click']" :menu-options="themeMenuOptions">
         <div class="person-menu-item">
           <span class="person-menu-item-title">{{ $t('personCenter.themeMode') }}</span>
           <span class="person-menu-item-des"
             >{{ ThemeName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
           /></span>
         </div>
-      </b-dropdown>
-      <b-dropdown :trigger="['click']" :menu-options="langMenuOptions">
+      </b-menu>
+      <b-menu :trigger="['click']" :menu-options="langMenuOptions">
         <div class="person-menu-item">
           <span class="person-menu-item-title">{{ $t('personCenter.language') }}</span>
           <span class="person-menu-item-des"
             >{{ LanguageName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
           /></span>
         </div>
-      </b-dropdown>
+      </b-menu>
       <div
         v-if="user.role === 'root'"
         class="person-menu-item"
@@ -187,7 +187,7 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import userApi from '@/api/userApi.ts';
   import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
+  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
 
@@ -307,8 +307,6 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
     border-radius: 12px;
     overflow: hidden;
     margin-top: 20px;
-    display: flex;
-    flex-direction: column;
   }
 
   .person-menu-item {
