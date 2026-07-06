@@ -11,6 +11,7 @@
   >
     <template #content>
       <div
+        :key="popoverKey"
         class="user-card"
         :style="{ color: user.iconColor }"
         @mouseenter="handleCardMouseEnter"
@@ -133,7 +134,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, defineAsyncComponent, onBeforeUnmount, ref } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
   import userApi from '@/api/userApi.ts';
   import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
@@ -149,9 +150,10 @@
     return document.getElementById('tag-container');
   };
   const menuVisible = ref(false);
+  const isSettingMenuOpen = ref(false);
+  const popoverKey = ref(0);
   const isHoveringTrigger = ref(false);
   const isHoveringCard = ref(false);
-  const isSettingMenuOpen = ref(false);
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
   const userVisible = ref(false);
 
@@ -165,7 +167,7 @@
   }
 
   function hasActivePopoverSource() {
-    return isHoveringTrigger.value || isHoveringCard.value || isSettingMenuOpen.value;
+    return isHoveringTrigger.value || isHoveringCard.value;
   }
 
   function syncPopoverVisible() {
@@ -224,6 +226,14 @@
   function getSettingPopupContainer(trigger: HTMLElement) {
     return (trigger.closest('.user-card') as HTMLElement) || getPopupContainer(trigger);
   }
+
+  watch(menuVisible, (val) => {
+    if (val) {
+      popoverKey.value++;
+    } else {
+      isSettingMenuOpen.value = false;
+    }
+  });
 
   const themeMenuOptions = computed(() => [
     { label: t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },
@@ -487,6 +497,7 @@
     border-radius: 14px;
     padding: 14px;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+    position: relative;
   }
 
   .user-top {
