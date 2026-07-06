@@ -1,38 +1,50 @@
 <template>
-  <a-dropdown
-    :trigger="trigger"
-    :overlay-class-name="overlayClassName"
-    :get-popup-container="getPopupContainer"
-    @openChange="handleOpenChange"
+  <span
+    class="b-menu-wrap"
+    ref="wrapRef"
+    @mouseenter="onEnter"
+    @mouseleave="onLeave"
   >
     <slot />
-    <template #overlay>
-      <a-menu>
-        <a-menu-item v-for="item in menuOptions" :key="item.label" @click="item.function">
-          <div class="flex-align-center-gap">
-            <svg-icon v-if="item.icon" :src="item.icon" />
+    <Teleport to="body">
+      <Transition name="b-menu-fade">
+        <div
+          v-show="visible"
+          class="b-menu-popup"
+          :class="overlayClassName"
+          ref="popupRef"
+          :style="popupStyle"
+          @mouseenter="onEnter"
+          @mouseleave="onLeave"
+        >
+          <div
+            v-for="item in menuOptions"
+            :key="item.label"
+            class="b-menu-item"
+            @click="itemClick(item)"
+          >
+            <svg-icon v-if="item.icon" :src="item.icon" size="16" />
             <span>{{ item.label }}</span>
           </div>
-        </a-menu-item>
-      </a-menu>
-    </template>
-  </a-dropdown>
+        </div>
+      </Transition>
+    </Teleport>
+  </span>
 </template>
 
-<script lang="ts" setup>
+<script setup lang="ts">
+  import { ref, reactive } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
-  type BMenuTrigger = 'hover' | 'click' | 'contextmenu' | 'focus';
+  export type BMenuTrigger = 'hover' | 'click';
 
-  const emit = defineEmits<{
-    openChange: [open: boolean];
-  }>();
-
-  withDefaults(
+  const props = withDefaults(
     defineProps<{
       menuOptions: { label: string; icon?: string; function?: () => void }[];
       trigger?: BMenuTrigger | BMenuTrigger[];
+      placement?: string;
       overlayClassName?: string;
+      /** @deprecated 自定义实现始终 Teleport 到 body，此 prop 保留兼容但无效 */
       getPopupContainer?: (trigger: HTMLElement) => HTMLElement;
     }>(),
     {
@@ -40,9 +52,98 @@
     },
   );
 
-  function handleOpenChange(open: boolean) {
-    emit('openChange', open);
+  const emit = defineEmits<{
+    openChange: [open: boolean];
+  }>();
+
+  const visible = ref(false);
+  const wrapRef = ref<HTMLElement>();
+  const popupRef = ref<HTMLElement>();
+  const popupStyle = reactive({ top: '0px', left: '0px' });
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  function onEnter() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      visible.value = true;
+      emit('openChange', true);
+      requestAnimationFrame(() => {
+        const wrap = wrapRef.value;
+        const popup = popupRef.value;
+        if (!wrap || !popup) return;
+        const wrapRect = wrap.getBoundingClientRect();
+        const popupRect = popup.getBoundingClientRect();
+        const centerX = wrapRect.left + wrapRect.width / 2 - popupRect.width / 2;
+        popupStyle.top = `${wrapRect.bottom + 6}px`;
+        popupStyle.left = `${Math.max(8, Math.min(centerX, window.innerWidth - popupRect.width - 8))}px`;
+      });
+    }, 50);
+  }
+
+  function onLeave() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      visible.value = false;
+      emit('openChange', false);
+    }, 200);
+  }
+
+  function itemClick(item: { label: string; icon?: string; function?: () => void }) {
+    item.function?.();
+    visible.value = false;
+    emit('openChange', false);
   }
 </script>
 
-<style lang="less" scoped></style>
+<style scoped>
+  .b-menu-wrap {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .b-menu-popup {
+    position: fixed;
+    z-index: 9999;
+    min-width: 120px;
+    padding: 6px 0;
+    border-radius: 10px;
+    background: var(--menu-body-bg-color);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+  }
+
+  .b-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 24px;
+    font-size: 14px;
+    line-height: 1.5;
+    cursor: pointer;
+    color: var(--text-color);
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+
+  .b-menu-item:hover {
+    background: var(--menu-item-h-bg-color);
+  }
+
+  .b-menu-fade-enter-active,
+  .b-menu-fade-leave-active {
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .b-menu-fade-enter-from,
+  .b-menu-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  .b-menu-fade-enter-to,
+  .b-menu-fade-leave-from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
