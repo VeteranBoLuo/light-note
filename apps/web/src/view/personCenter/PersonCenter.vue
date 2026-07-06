@@ -223,7 +223,7 @@
   }
 
   function getSettingPopupContainer(trigger: HTMLElement) {
-    return (trigger.closest('.settings-grid') as HTMLElement) || getPopupContainer(trigger);
+    return (trigger.closest('.user-card') as HTMLElement) || getPopupContainer(trigger);
   }
 
   const themeMenuOptions = computed(() => [
@@ -599,7 +599,6 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 8px;
-    position: relative;
   }
 
   .setting-card {
