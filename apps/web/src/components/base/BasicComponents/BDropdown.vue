@@ -113,7 +113,6 @@
 
   function onClick(e: MouseEvent) {
     if (!isClickTrigger.value) return;
-    e.stopPropagation();
     if (visible.value) {
       hide();
     } else {
@@ -142,11 +141,11 @@
   }
 
   onMounted(() => {
-    document.addEventListener('click', onDocumentClick, true);
+    document.addEventListener('click', onDocumentClick);
   });
 
   onUnmounted(() => {
-    document.removeEventListener('click', onDocumentClick, true);
+    document.removeEventListener('click', onDocumentClick);
   });
 </script>
 
