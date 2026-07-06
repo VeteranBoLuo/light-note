@@ -11,6 +11,7 @@ export default {
     securityCenter: 'Security Center',
     knowledgeBase: 'Knowledge Base',
     admin: 'Admin',
+    management: 'Management',
     newTag: 'New Tag',
     tagManagement: 'Tag Management',
     newBookmark: 'New Bookmark',

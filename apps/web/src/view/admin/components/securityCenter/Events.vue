@@ -61,7 +61,6 @@
           :row-clickable="true"
           :selectable="true"
           :selected-rows="selectedEventIds"
-
           @row-click="onRowClick"
           @selection-change="selectedEventIds = $event"
           class="eventClass"
@@ -101,7 +100,9 @@
               }}</span>
             </template>
             <template v-else-if="column.key === 'handledStatus'">
-              <span class="security-pill" :class="statusPillClass(record.handledStatus)">{{ statusText(record.handledStatus) }}</span>
+              <span class="security-pill" :class="statusPillClass(record.handledStatus)">{{
+                statusText(record.handledStatus)
+              }}</span>
             </template>
           </template>
         </BTable>
@@ -140,7 +141,7 @@
   const events = ref<any[]>([]);
   const eventTotal = ref(0);
   const eventLoading = ref(false);
-  const eventPage = reactive({ currentPage: 1, pageSize: 20 });
+  const eventPage = reactive({ currentPage: 1, pageSize: 100 });
   const eventFilters = reactive<any>({
     key: '',
     severity: undefined,
@@ -190,7 +191,9 @@
     if (res.status === 200) {
       events.value = res.data.items;
       eventTotal.value = res.data.total;
-      selectedEventIds.value = selectedEventIds.value.filter((id) => events.value.some((event) => event.eventId === id));
+      selectedEventIds.value = selectedEventIds.value.filter((id) =>
+        events.value.some((event) => event.eventId === id),
+      );
     }
   }
 
@@ -213,7 +216,9 @@
   function applyRouteFilters() {
     eventFilters.userId = route.query.userId ? String(route.query.userId) : undefined;
     eventFilters.userLabel = route.query.userLabel ? String(route.query.userLabel) : '';
-    eventFilters.handledStatus = route.query.handledStatus ? String(route.query.handledStatus) : eventFilters.handledStatus;
+    eventFilters.handledStatus = route.query.handledStatus
+      ? String(route.query.handledStatus)
+      : eventFilters.handledStatus;
     eventFilters.severity = route.query.severity ? String(route.query.severity) : eventFilters.severity;
   }
 

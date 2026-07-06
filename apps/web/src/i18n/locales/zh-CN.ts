@@ -11,6 +11,7 @@ export default {
     securityCenter: '安全中心',
     knowledgeBase: '知识库',
     admin: '后台管理',
+    management: '管理',
     newTag: '新增标签',
     tagManagement: '标签管理',
     newBookmark: '新增书签',

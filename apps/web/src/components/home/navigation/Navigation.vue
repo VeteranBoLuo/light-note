@@ -92,35 +92,12 @@
             @click="router.push('/search')"
             >{{ $t('navigation.resourceCenter') }}</div
           >
-          <div
-            v-if="user.role === 'root'"
-            :style="{
-              color: route.path.includes('/securityCenter') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            v-click-log="OPERATION_LOG_MAP.navigation.securityCenter"
-            @click="router.push('/securityCenter')"
-            >{{ $t('navigation.securityCenter') }}
-          </div>
-          <div
-            v-if="user.role === 'root'"
-            :style="{
-              color: route.path.includes('/admin') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            v-click-log="OPERATION_LOG_MAP.navigation.admin"
-            @click="router.push('/admin')"
-            >{{ $t('navigation.admin') }}
-          </div>
-          <div
-            v-if="user.role === 'root'"
-            :style="{
-              color: route.path.includes('/knowledgeBase') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            @click="router.push('/knowledgeBase')"
-            >{{ $t('navigation.knowledgeBase') }}
-          </div>
+          <b-menu v-if="user.role === 'root'" :menu-options="adminMenuOptions">
+            <div
+              :style="{ color: adminRouteActive ? '#615ced' : '' }"
+              style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            >{{ $t('navigation.management') }}</div>
+          </b-menu>
         </template>
       </div>
       <RightArea />
@@ -129,19 +106,35 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, useUserStore } from '@/store';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useRoute } from 'vue-router';
+  import { useI18n } from 'vue-i18n';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import RightArea from '@/components/home/navigation/RightArea.vue';
+  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
+  import { recordOperation } from '@/api/commonApi';
 
   const route = useRoute();
   const user = useUserStore();
 
   const navigationFucVisible = computed(() => !bookmark.isMobile);
+  const { t } = useI18n();
+
+  const adminRouteActive = computed(() =>
+    route.path.includes('/knowledgeBase') ||
+    route.path.includes('/admin') ||
+    route.path.includes('/securityCenter')
+  );
+
+  const adminMenuOptions = computed(() => [
+    { label: t('navigation.knowledgeBase'), function: () => { recordOperation({ module: '导航栏', operation: '知识库' }); router.push('/knowledgeBase'); } },
+    { label: t('navigation.admin'), function: () => { recordOperation({ module: '导航栏', operation: '后台管理' }); router.push('/admin'); } },
+    { label: t('navigation.securityCenter'), function: () => { recordOperation({ module: '导航栏', operation: '安全中心' }); router.push('/securityCenter'); } },
+  ]);
 
   const bookmark = bookmarkStore();
   const isHomeDrawerLayout = computed(() => route.path.includes('home') && bookmark.isMobile);
