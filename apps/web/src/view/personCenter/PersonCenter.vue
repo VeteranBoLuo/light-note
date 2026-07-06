@@ -4,7 +4,7 @@
     :overlay-style="{ maxWidth: 'calc(100vw - 24px)' }"
     overlay-class-name="user-center-popover"
     :get-popup-container="getPopupContainer"
-    v-model:open="menuVisible"
+    :open="menuVisible"
     trigger="hover"
     :arrow="false"
     @openChange="handlePopoverOpenChange"
@@ -214,9 +214,8 @@
 
   function handlePopoverOpenChange(open: boolean) {
     if (open) {
-      if (hasActivePopoverSource()) {
-        menuVisible.value = true;
-      }
+      clearCloseTimer();
+      menuVisible.value = true;
       return;
     }
     delayClosePopover();
