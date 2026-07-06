@@ -57,6 +57,7 @@
             placement="bottom"
             overlay-class-name="user-setting-dropdown"
             :menu-options="themeMenuOptions"
+            :get-popup-container="getSettingPopupContainer"
             @open-change="handleSettingMenuChange"
           >
             <button class="setting-card">
@@ -72,6 +73,7 @@
             placement="bottom"
             overlay-class-name="user-setting-dropdown"
             :menu-options="langMenuOptions"
+            :get-popup-container="getSettingPopupContainer"
             @open-change="handleSettingMenuChange"
           >
             <button class="setting-card">
