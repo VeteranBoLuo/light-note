@@ -52,7 +52,7 @@
         </div>
 
         <div class="settings-grid">
-          <b-menu
+          <b-dropdown
             :trigger="['click']"
             placement="bottom"
             overlay-class-name="user-setting-dropdown"
@@ -67,8 +67,8 @@
               </span>
               <span class="setting-right">{{ ThemeName }}</span>
             </button>
-          </b-menu>
-          <b-menu
+          </b-dropdown>
+          <b-dropdown
             :trigger="['click']"
             placement="bottom"
             overlay-class-name="user-setting-dropdown"
@@ -83,7 +83,7 @@
               </span>
               <span class="setting-right">{{ LanguageName }}</span>
             </button>
-          </b-menu>
+          </b-dropdown>
         </div>
 
         <div class="menu-divider" />
@@ -136,7 +136,7 @@
   import { computed, defineAsyncComponent, onBeforeUnmount, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
-  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { useI18n } from 'vue-i18n';
   import i18n, { setLocale } from '@/i18n';
   import { updateNotice } from '@/config/updateNotice';

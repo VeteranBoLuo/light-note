@@ -1,16 +1,16 @@
 <template>
   <span
-    class="b-menu-wrap"
+    class="b-dropdown-wrap"
     ref="wrapRef"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
   >
     <slot />
     <Teleport to="body">
-      <Transition name="b-menu-fade">
+      <Transition name="b-dropdown-fade">
         <div
           v-show="visible"
-          class="b-menu-popup"
+          class="b-dropdown-popup"
           :class="overlayClassName"
           ref="popupRef"
           :style="popupStyle"
@@ -20,7 +20,7 @@
           <div
             v-for="item in menuOptions"
             :key="item.label"
-            class="b-menu-item"
+            class="b-dropdown-item"
             @click="itemClick(item)"
           >
             <svg-icon v-if="item.icon" :src="item.icon" size="16" />
@@ -36,12 +36,12 @@
   import { ref, reactive } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
-  export type BMenuTrigger = 'hover' | 'click';
+  export type BDropdownTrigger = 'hover' | 'click';
 
   const props = withDefaults(
     defineProps<{
       menuOptions: { label: string; icon?: string; function?: () => void }[];
-      trigger?: BMenuTrigger | BMenuTrigger[];
+      trigger?: BDropdownTrigger | BDropdownTrigger[];
       placement?: string;
       overlayClassName?: string;
       /** @deprecated 自定义实现始终 Teleport 到 body，此 prop 保留兼容但无效 */
@@ -96,13 +96,13 @@
 </script>
 
 <style scoped>
-  .b-menu-wrap {
+  .b-dropdown-wrap {
     display: inline-flex;
     align-items: center;
     position: relative;
   }
 
-  .b-menu-popup {
+  .b-dropdown-popup {
     position: fixed;
     z-index: 9999;
     min-width: 120px;
@@ -113,7 +113,7 @@
     overflow: hidden;
   }
 
-  .b-menu-item {
+  .b-dropdown-item {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -126,23 +126,23 @@
     transition: background 0.15s;
   }
 
-  .b-menu-item:hover {
+  .b-dropdown-item:hover {
     background: var(--menu-item-h-bg-color);
   }
 
-  .b-menu-fade-enter-active,
-  .b-menu-fade-leave-active {
+  .b-dropdown-fade-enter-active,
+  .b-dropdown-fade-leave-active {
     transition: opacity 0.15s ease, transform 0.15s ease;
   }
 
-  .b-menu-fade-enter-from,
-  .b-menu-fade-leave-to {
+  .b-dropdown-fade-enter-from,
+  .b-dropdown-fade-leave-to {
     opacity: 0;
     transform: translateY(-4px);
   }
 
-  .b-menu-fade-enter-to,
-  .b-menu-fade-leave-from {
+  .b-dropdown-fade-enter-to,
+  .b-dropdown-fade-leave-from {
     opacity: 1;
     transform: translateY(0);
   }

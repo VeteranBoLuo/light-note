@@ -90,7 +90,7 @@
             </BTooltip>
           </div>
           <div v-if="!batchMode" class="file-card-more" @click.stop>
-            <b-menu
+            <b-dropdown
               class="card-more-menu"
               :trigger="'click'"
               :menu-options="[
@@ -119,7 +119,7 @@
               <BTooltip :title="$t('common.more')">
                 <svg-icon class="more-icon" :src="icon.common.more" size="20" />
               </BTooltip>
-            </b-menu>
+            </b-dropdown>
           </div>
         </div>
         <div class="file-card-body">
@@ -261,7 +261,7 @@
             <BTooltip :title="$t('common.delete')">
               <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item)" />
             </BTooltip>
-            <b-menu
+            <b-dropdown
               v-if="!bookmark.isMobile"
               :trigger="'click'"
               :menu-options="[
@@ -278,7 +278,7 @@
               ]"
             >
               <svg-icon class="download-icon" :src="icon.common.more" size="20" />
-            </b-menu>
+            </b-dropdown>
           </div>
         </div>
         <div class="default-area" v-if="!bookmark.isMobile">
@@ -384,7 +384,7 @@
   import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';

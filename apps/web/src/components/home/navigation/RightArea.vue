@@ -10,7 +10,7 @@
         <svg-icon size="26" hover :src="icon.toolkit" />
       </div>
     </BTooltip>
-    <b-menu
+    <b-dropdown
       v-if="!bookmark.isMobile"
       placement="bottom"
       :menu-options="[
@@ -19,7 +19,7 @@
       ]"
     >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
-    </b-menu>
+    </b-dropdown>
     <button v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
     </button>
@@ -35,7 +35,7 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
-  import BMenu from '@/components/base/BasicComponents/BMenu.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import PersonCenter from '@/view/personCenter/PersonCenter.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
