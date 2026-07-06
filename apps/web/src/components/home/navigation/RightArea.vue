@@ -12,7 +12,7 @@
     </BTooltip>
     <b-dropdown
       v-if="!bookmark.isMobile"
-      placement="bottom"
+      align="center"
       :menu-options="[
         { label: $t('navigation.projectAddress'), function: () => githubClick() },
         { label: '官方首页', function: () => router.push('/landing') },

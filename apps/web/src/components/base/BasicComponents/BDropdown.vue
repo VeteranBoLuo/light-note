@@ -50,12 +50,15 @@
       menuOptions: BDropdownOption[];
       trigger?: BDropdownTrigger | BDropdownTrigger[];
       overlayClassName?: string;
+      // 浮层相对触发元素的水平对齐:left(默认,左边对齐)/ center(居中)/ right(右边对齐)
+      align?: 'left' | 'center' | 'right';
       // 与 antd 一致:返回浮层挂载的容器(默认 body)。用于把浮层挂进某个定位容器,
       // 例如个人中心把设置下拉挂进 .user-card,使「鼠标移到下拉上」仍算在卡片内、悬浮卡不关闭。
       getPopupContainer?: (trigger: HTMLElement) => HTMLElement | null;
     }>(),
     {
       trigger: 'hover',
+      align: 'left',
     },
   );
 
@@ -81,16 +84,21 @@
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const panelW = panelRef.value?.offsetWidth ?? 0;
+    // 按 align 算浮层期望的视口左边界:left 对齐触发元素左边,center 居中,right 对齐右边
+    let vLeft = rect.left;
+    if (props.align === 'center') vLeft = rect.left + rect.width / 2 - panelW / 2;
+    else if (props.align === 'right') vLeft = rect.right - panelW;
     const container = teleportTarget.value;
     if (container instanceof HTMLElement && container !== document.body) {
       const cRect = container.getBoundingClientRect();
-      let left = rect.left - cRect.left + container.scrollLeft;
-      if (panelW && left + panelW > container.clientWidth - 8) left = Math.max(8, container.clientWidth - panelW - 8);
+      let left = vLeft - cRect.left + container.scrollLeft;
+      if (panelW && left + panelW > container.clientWidth - 8) left = container.clientWidth - panelW - 8;
+      if (left < 8) left = 8;
       panelStyle.position = 'absolute';
       panelStyle.top = `${rect.bottom - cRect.top + container.scrollTop + 6}px`;
       panelStyle.left = `${left}px`;
     } else {
-      let left = rect.left;
+      let left = vLeft;
       if (panelW && left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
       if (left < 8) left = 8;
       panelStyle.position = 'fixed';
