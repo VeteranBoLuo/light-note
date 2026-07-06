@@ -241,6 +241,7 @@ export const sitemapXml = async (req, res) => {
     // sitemap 里同时列出 / 会跟 canonical 信号打架(一边喊来收录,一边喊别收录去别处)
     const staticUrls = [
       { loc: `${SITE}/landing`, priority: '1.0', changefreq: 'weekly' },
+      { loc: `${SITE}/updateLogs`, priority: '0.8', changefreq: 'weekly' },
       { loc: `${SITE}${HELP_PATH}`, priority: '0.8', changefreq: 'weekly' },
     ];
     const articleUrls = rows.map((r) => ({
