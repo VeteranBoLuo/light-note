@@ -74,20 +74,7 @@
     relatedTags: [],
   });
 
-  getAllBookmarkList();
   getTagSelect();
-  const mockData = ref<any[]>([]);
-  async function getAllBookmarkList() {
-    const allRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
-      filters: {
-        userId: user.id,
-        type: 'all',
-      },
-    });
-    if (allRes.status === 200) {
-      mockData.value = allRes.data.items;
-    }
-  }
 
   const tagOptions = ref([]);
 
