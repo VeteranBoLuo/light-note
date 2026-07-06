@@ -79,7 +79,7 @@
           >
             <button class="setting-card">
               <span class="setting-left">
-                <svg-icon size="14" :src="icon.nullImg" />
+                <svg-icon size="14" :src="icon.language" />
                 {{ $t('personCenter.language') }}
               </span>
               <span class="setting-right">{{ LanguageName }}</span>
