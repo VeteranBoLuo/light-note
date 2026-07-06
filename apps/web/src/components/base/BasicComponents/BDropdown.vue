@@ -7,30 +7,30 @@
     @click="onTriggerClick"
   >
     <slot />
-  </span>
-  <Teleport to="body">
-    <transition name="b-dropdown-fade">
-      <div
-        v-if="visible"
-        ref="panelRef"
-        class="b-dropdown-panel"
-        :class="overlayClassName"
-        :style="panelStyle"
-        @mouseenter="onPanelEnter"
-        @mouseleave="onLeave"
-      >
+    <Teleport :to="teleportTarget">
+      <transition name="b-dropdown-fade">
         <div
-          v-for="item in menuOptions"
-          :key="item.label"
-          class="b-dropdown-item"
-          @click="onItemClick(item)"
+          v-if="visible"
+          ref="panelRef"
+          class="b-dropdown-panel"
+          :class="overlayClassName"
+          :style="panelStyle"
+          @mouseenter="onPanelEnter"
+          @mouseleave="onLeave"
         >
-          <svg-icon v-if="item.icon" :src="item.icon" />
-          <span>{{ item.label }}</span>
+          <div
+            v-for="item in menuOptions"
+            :key="item.label"
+            class="b-dropdown-item"
+            @click="onItemClick(item)"
+          >
+            <svg-icon v-if="item.icon" :src="item.icon" />
+            <span>{{ item.label }}</span>
+          </div>
         </div>
-      </div>
-    </transition>
-  </Teleport>
+      </transition>
+    </Teleport>
+  </span>
 </template>
 
 <script lang="ts" setup>
@@ -50,6 +50,9 @@
       menuOptions: BDropdownOption[];
       trigger?: BDropdownTrigger | BDropdownTrigger[];
       overlayClassName?: string;
+      // 与 antd 一致:返回浮层挂载的容器(默认 body)。用于把浮层挂进某个定位容器,
+      // 例如个人中心把设置下拉挂进 .user-card,使「鼠标移到下拉上」仍算在卡片内、悬浮卡不关闭。
+      getPopupContainer?: (trigger: HTMLElement) => HTMLElement | null;
     }>(),
     {
       trigger: 'hover',
@@ -63,30 +66,38 @@
   const triggerRef = ref<HTMLElement | null>(null);
   const panelRef = ref<HTMLElement | null>(null);
   const visible = ref(false);
-  const panelStyle = reactive<Record<string, string>>({ top: '0px', left: '0px', minWidth: '0px' });
+  const teleportTarget = ref<HTMLElement | string>('body');
+  const panelStyle = reactive<Record<string, string>>({ position: 'fixed', top: '0px', left: '0px', minWidth: '0px' });
   let closeTimer: number | null = null;
 
   const triggerModes = computed(() => (Array.isArray(props.trigger) ? props.trigger : [props.trigger]));
   const isHover = computed(() => triggerModes.value.includes('hover'));
   const isClick = computed(() => triggerModes.value.includes('click'));
 
-  // 定位:与 antd 默认 bottomLeft 一致——面板贴在触发元素正下方、左对齐;宽度不小于触发元素;越界则回收
+  // 定位:贴触发元素正下方、左对齐(同 antd 默认 bottomLeft)。
+  // 挂在 body 用 fixed(视口坐标);挂在自定义定位容器用相对容器的 absolute(规避容器 transform 破坏 fixed)。
   function computePosition() {
     const el = triggerRef.value;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    panelStyle.top = `${rect.bottom + 6}px`;
-    panelStyle.left = `${rect.left}px`;
-    panelStyle.minWidth = `${Math.ceil(rect.width)}px`;
-    nextTick(() => {
-      const panel = panelRef.value;
-      if (!panel) return;
-      const w = panel.offsetWidth;
-      let left = rect.left;
-      if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
-      if (left < 8) left = 8;
+    const panelW = panelRef.value?.offsetWidth ?? 0;
+    const container = teleportTarget.value;
+    if (container instanceof HTMLElement && container !== document.body) {
+      const cRect = container.getBoundingClientRect();
+      let left = rect.left - cRect.left + container.scrollLeft;
+      if (panelW && left + panelW > container.clientWidth - 8) left = Math.max(8, container.clientWidth - panelW - 8);
+      panelStyle.position = 'absolute';
+      panelStyle.top = `${rect.bottom - cRect.top + container.scrollTop + 6}px`;
       panelStyle.left = `${left}px`;
-    });
+    } else {
+      let left = rect.left;
+      if (panelW && left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
+      if (left < 8) left = 8;
+      panelStyle.position = 'fixed';
+      panelStyle.top = `${rect.bottom + 6}px`;
+      panelStyle.left = `${left}px`;
+    }
+    panelStyle.minWidth = `${Math.ceil(rect.width)}px`;
   }
 
   function clearCloseTimer() {
@@ -99,9 +110,10 @@
   function open() {
     clearCloseTimer();
     if (visible.value) return;
-    computePosition();
+    teleportTarget.value = (props.getPopupContainer?.(triggerRef.value as HTMLElement) as HTMLElement | null) || 'body';
     visible.value = true;
     emit('openChange', true);
+    nextTick(computePosition);
     window.addEventListener('scroll', computePosition, true);
     window.addEventListener('resize', computePosition);
     if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
@@ -122,7 +134,7 @@
     closeTimer = window.setTimeout(close, 150);
   }
 
-  // hover 触发:移入触发元素/面板保持打开,移出后延时关闭(留出鼠标从触发元素滑到面板的时间)
+  // hover:移入触发元素/面板保持打开,移出延时关闭(留出从触发元素滑到面板的时间)
   function onTriggerEnter() {
     if (isHover.value) open();
   }
@@ -133,7 +145,7 @@
     if (isHover.value) scheduleClose();
   }
 
-  // click 触发:点击切换;点击外部关闭
+  // click:点击切换;点击外部关闭
   function onTriggerClick() {
     if (!isClick.value) return;
     visible.value ? close() : open();
@@ -165,9 +177,8 @@
 </style>
 
 <style lang="less">
-  /* 非 scoped:面板 Teleport 到 body,scoped 选择器命不中 */
+  /* 非 scoped:面板 Teleport 到 body/自定义容器,scoped 选择器命不中 */
   .b-dropdown-panel {
-    position: fixed;
     z-index: 100050; /* 高于导航栏 */
     padding: 4px;
     border-radius: 8px;
