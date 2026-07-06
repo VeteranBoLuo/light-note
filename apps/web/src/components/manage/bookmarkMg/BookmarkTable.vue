@@ -100,7 +100,7 @@
                   <div class="bookmark-meta">
                     <div class="bookmark-name">{{ bookmarkItem.name }}</div>
                     <div class="bookmark-url" :title="bookmarkItem.url">
-                      <a :href="bookmarkItem.url" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
+                      <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
                     </div>
                   </div>
                 </div>
@@ -180,7 +180,7 @@
               </template>
               <template v-else-if="column.key === 'url'">
                 <div class="text-hidden">
-                  <a :href="text" target="_blank">{{ text }}</a>
+                  <a :href="withProtocol(text)" target="_blank">{{ text }}</a>
                 </div>
               </template>
               <template v-else-if="column.key === 'operation'">
@@ -250,6 +250,7 @@
   import { useI18n } from 'vue-i18n';
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -406,6 +407,7 @@
   };
 
   function handleDeleteTag(bookmarkItem: BookmarkInterface) {
+    if (blockGuestWrite('delete-bookmark')) return;
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除书签【${bookmarkItem.name}】？`,
@@ -431,6 +433,7 @@
 
   // ── 批量删除 ──
   const handleBatchDelete = () => {
+    if (blockGuestWrite('delete-bookmark')) return;
     if (selectedRows.value.length === 0) {
       message.warning('请选择要删除的书签');
       return;
@@ -574,6 +577,14 @@
     loading.value = false;
   }
 
+  // 兜底展示层:新增/编辑书签时后端已统一补协议头,但存量数据可能是补全前存的裸域名;
+  // <a :href> 遇到裸域名会当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
+  function withProtocol(url: string) {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return trimmed;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }
+
   function getIcon(bookmarkItem: BookmarkInterface) {
     if (bookmarkItem.iconUrl) return bookmarkItem.iconUrl;
     return 'https://ico.kucat.cn/get.php?url=' + bookmarkItem.url;
@@ -586,12 +597,14 @@
 
   const importFileInput = ref<HTMLInputElement | null>(null);
   const handleImport = () => {
+    if (blockGuestWrite('import-bookmark')) return;
     importFileInput.value?.click();
     importExportModalVisible.value = false;
   };
 
   const importHTMLFileInput = ref<HTMLInputElement | null>(null);
   const handleImportHTML = () => {
+    if (blockGuestWrite('import-bookmark')) return;
     importHTMLFileInput.value?.click();
     importExportModalVisible.value = false;
   };

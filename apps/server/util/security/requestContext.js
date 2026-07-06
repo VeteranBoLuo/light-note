@@ -1,11 +1,11 @@
 import { sanitizeObject } from './payloadSanitizer.js';
 
 export const getClientIp = (req) => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return String(forwarded).split(',')[0].trim();
-  }
-  return req.ip || req.socket?.remoteAddress || '';
+  // 用 req.ip(trust proxy=1 下由 nginx 追加的 X-Forwarded-For 链末尾解析出的真实客户端 IP)，
+  // 不再取 XFF 首段——首段是客户端可任意伪造的，会被用来污染 IP 信誉、绕过滑窗计数、或栽赃误封他人 IP。
+  // 已实测：C/D 场景(伪造 XFF + nginx 追加真实 IP)下 req.ip 稳定取到真实客户端 IP。
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  return ip.replace(/^::ffff:/, ''); // 去 IPv4-mapped IPv6 前缀，保证滑窗 key 与落库 IP 归一
 };
 
 export const buildRequestContext = (req) => {
@@ -42,7 +42,19 @@ export const buildRequestContext = (req) => {
   };
 };
 
+const STATIC_READ_METHODS = new Set(['GET', 'HEAD']);
+
 export const shouldSkipSecurity = (req) => {
   const path = req.path || req.originalUrl || '';
-  return path.startsWith('/security');
+  // OPTIONS 预检无 body、无攻击面
+  if (req.method === 'OPTIONS') return true;
+  if (path === '/favicon.ico') return true;
+  // /security 管理接口(原有行为)
+  if (path.startsWith('/security')) return true;
+  // 静态只读目录：仅对 GET/HEAD 跳过(静态路由本就不处理写方法，真实文件上传走 /file 仍全程检测)，
+  // 既省 1 核机器上对静态资源的无谓检测，又避免加载大量静态资源被计入高频窗口误判为攻击
+  if (STATIC_READ_METHODS.has(req.method) && (path.startsWith('/files') || path.startsWith('/uploads'))) {
+    return true;
+  }
+  return false;
 };

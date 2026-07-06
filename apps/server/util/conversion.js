@@ -1,16 +1,16 @@
 import pool from '../db/index.js';
 import { isLocalIp } from './ipFilter.js';
 
-// 取真实客户端 IP(服务在 nginx 后,优先 X-Forwarded-For 首段)
+// 取真实客户端 IP：用 req.ip(trust proxy=1 下由 nginx 追加的 X-Forwarded-For 链末尾解析出的真实客户端 IP)，
+// 不取 XFF 首段——首段可被客户端任意伪造，会让 uniqueIps 等统计被刷虚高(与安全模块 requestContext.js 的修复同理)
 const clientIp = (req) => {
-  const xff = req?.headers?.['x-forwarded-for'];
-  if (xff) return String(xff).split(',')[0].trim();
-  return req?.ip || req?.socket?.remoteAddress || '';
+  const ip = req?.ip || req?.socket?.remoteAddress || '';
+  return ip.replace(/^::ffff:/, '');
 };
 
 /**
  * 记录游客转化漏斗事件(旁路、fire-and-forget,绝不阻塞/抛错影响主流程)。
- * 事件枚举:page_view / wall_hit(撞写操作墙) / cta_click(点立即注册) / register_view(到达注册页) / register(注册成功) / share_view(分享页曝光) / share_cta_click(分享页点注册)。
+ * 事件枚举:page_view / wall_hit(撞写操作墙) / cta_click(点立即注册) / register(注册成功) / share_view(分享页曝光) / share_cta_click(分享页点注册)。
  * @param {object} req Express 请求(读 req.user 与 fingerprint 头)
  * @param {string} event 事件名
  * @param {string} [context] 上下文(如撞墙的接口路径、CTA 来源)

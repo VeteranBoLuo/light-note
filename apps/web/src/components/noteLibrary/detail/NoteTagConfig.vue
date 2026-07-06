@@ -117,6 +117,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   interface TagItem {
     id: string;
@@ -231,6 +232,7 @@
   }
 
   async function handleOk() {
+    if (blockGuestWrite('update-note-tags')) return;
     if (!note?.id) {
       message.warning(t('note.tagConfig.noteNotSaved'));
       return;

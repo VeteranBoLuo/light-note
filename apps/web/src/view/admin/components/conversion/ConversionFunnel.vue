@@ -5,16 +5,12 @@
         <div class="admin-title-block">
           <p class="admin-eyebrow">Admin / 增长</p>
           <h2 class="admin-title">游客转化漏斗</h2>
-          <p class="admin-subtitle">访问 → 撞墙 → 点注册 → 到达注册页 → 注册成功(按独立访客 fingerprint 去重)</p>
+          <p class="admin-subtitle">访问 → 撞墙 → 点注册 → 注册成功(按独立访客 fingerprint 去重)</p>
         </div>
       </header>
 
       <div class="funnel-filter">
-        <label>起始 <input type="date" v-model="startDate" /></label>
-        <label>结束 <input type="date" v-model="endDate" /></label>
-        <button class="funnel-btn" @click="query">查询</button>
-        <button class="funnel-btn ghost" @click="reset">全期</button>
-        <span class="funnel-range-hint">当前:{{ rangeHint }}</span>
+        <DateRangePicker @change="onDateChange" ref="drpRef" />
       </div>
 
       <ul class="admin-stats">
@@ -34,14 +30,9 @@
           <span class="admin-stat-hint">撞墙→点击 {{ wallToCta }}%</span>
         </li>
         <li class="admin-stat-card">
-          <span class="admin-stat-label">到达注册页</span>
-          <strong class="admin-stat-value">{{ registerView }}</strong>
-          <span class="admin-stat-hint">点击→到达 {{ ctaToView }}%</span>
-        </li>
-        <li class="admin-stat-card">
           <span class="admin-stat-label">注册成功</span>
           <strong class="admin-stat-value">{{ reg }}</strong>
-          <span class="admin-stat-hint">到达→注册 {{ viewToReg }}%</span>
+          <span class="admin-stat-hint">点击→注册 {{ ctaToReg }}%</span>
         </li>
         <li class="admin-stat-card">
           <span class="admin-stat-label">整体转化</span>
@@ -101,14 +92,14 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, ref, computed } from 'vue';
+  import { ref, computed } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import DateRangePicker from './DateRangePicker.vue';
 
   const pageView = ref(0);
   const wall = ref(0);
   const cta = ref(0);
-  const registerView = ref(0);
   const reg = ref(0);
   const uniqueIps = ref(0);
   const hotspots = ref<any[]>([]);
@@ -119,8 +110,6 @@
   const shareCta = ref(0);
   const activated = ref(0);
   const trend = ref<any[]>([]);
-  const startDate = ref('');
-  const endDate = ref('');
 
   const paginatedHotspots = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
@@ -143,26 +132,21 @@
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
   const visitToWall = computed(() => rate(wall.value, pageView.value));
   const wallToCta = computed(() => rate(cta.value, wall.value));
-  const ctaToView = computed(() => rate(registerView.value, cta.value));
-  const viewToReg = computed(() => rate(reg.value, registerView.value));
+  const ctaToReg = computed(() => rate(reg.value, cta.value));
   const visitToReg = computed(() => rate(reg.value, pageView.value));
   const shareViewToCta = computed(() => rate(shareCta.value, shareView.value));
   const regToActivated = computed(() => rate(activated.value, reg.value));
-  const rangeHint = computed(() =>
-    startDate.value || endDate.value ? `${startDate.value || '起'} ~ ${endDate.value || '今'}` : '全期',
-  );
 
-  function fetchData() {
+  function fetchData(start?: string, end?: string) {
     apiBasePost('/api/common/getConversionFunnel', {
-      startDate: startDate.value || undefined,
-      endDate: endDate.value || undefined,
+      startDate: start || undefined,
+      endDate: end || undefined,
     }).then((res: any) => {
       if (res.status === 200) {
         const d = res.data || {};
         pageView.value = d.pageViewVisitors || 0;
         wall.value = d.wallHitVisitors || 0;
         cta.value = d.ctaClickVisitors || 0;
-        registerView.value = d.registerViewVisitors || 0;
         reg.value = d.registerVisitors || 0;
         shareView.value = d.shareViewVisitors || 0;
         shareCta.value = d.shareCtaClickVisitors || 0;
@@ -175,16 +159,10 @@
       }
     });
   }
-  function query() {
-    fetchData();
-  }
-  function reset() {
-    startDate.value = '';
-    endDate.value = '';
-    fetchData();
-  }
 
-  onMounted(fetchData);
+  function onDateChange(start?: string, end?: string) {
+    fetchData(start, end);
+  }
 </script>
 
 <style lang="less" scoped>
@@ -197,36 +175,10 @@
   .funnel-filter {
     display: flex;
     align-items: center;
-    gap: 12px;
     flex-wrap: wrap;
     margin-top: 12px;
     font-size: 13px;
     color: var(--text-color);
-  }
-  .funnel-filter input[type='date'] {
-    padding: 5px 8px;
-    border: 1px solid var(--card-border-color, #ddd);
-    border-radius: 6px;
-    background: var(--background-color);
-    color: var(--text-color);
-  }
-  .funnel-btn {
-    padding: 6px 14px;
-    border: 0;
-    border-radius: 6px;
-    background: #615ced;
-    color: #fff;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  .funnel-btn.ghost {
-    background: transparent;
-    border: 1px solid var(--card-border-color, #ddd);
-    color: var(--text-color);
-  }
-  .funnel-range-hint {
-    color: var(--sub-text-color, #888);
-    font-size: 12px;
   }
   .funnel-trend-wrap {
     overflow-x: auto;

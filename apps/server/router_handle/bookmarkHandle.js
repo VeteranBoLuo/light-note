@@ -12,6 +12,15 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
+
+// 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
+// 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
+export const normalizeBookmarkUrl = (url) => {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return trimmed;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
 export const queryTagList = (req, res) => {
   const userId = req.user.id;
   try {
@@ -148,12 +157,14 @@ export const updateTagSort = async (req, res) => {
 
 export const getTagDetail = (req, res) => {
   try {
+    const userId = req.user.id;
     const { filters } = req.body;
+    // 归属校验:只能读自己的标签,防止传他人 tag id 越权读取;越权/不存在统一 404
     pool
-      .query(`SELECT * FROM tag WHERE  id=? AND del_flag=0`, [filters.id])
+      .query(`SELECT * FROM tag WHERE id=? AND user_id=? AND del_flag=0`, [filters.id, userId])
       .then(([result]) => {
         if (result.length === 0) {
-          throw '标签不存在';
+          return res.send(resultData(null, 404, '标签不存在'));
         }
         res.send(resultData(result[0]));
       })
@@ -447,6 +458,7 @@ export const addBookmark = async (req, res) => {
     const params = {
       ...req.body,
       userId: userId,
+      url: normalizeBookmarkUrl(req.body.url),
     };
     // 自动补协议，避免相对路径跳转
     if (params.url && !params.url.startsWith('http://') && !params.url.startsWith('https://')) {
@@ -503,9 +515,9 @@ export const updateBookmark = async (req, res) => {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
     }
-    // 自动补协议，避免相对路径跳转
-    if (req.body.url && !req.body.url.startsWith('http://') && !req.body.url.startsWith('https://')) {
-      req.body.url = 'https://' + req.body.url;
+    // 只在调用方确实传了 url 时才补协议头;不能无条件赋值,否则 url 缺省时会把 SET 子句里的 url 覆盖成空
+    if (req.body.url) {
+      req.body.url = normalizeBookmarkUrl(req.body.url);
     }
     req.body.iconUrl = null;
     const sql = `update bookmark set ? where id=?`;
@@ -544,12 +556,14 @@ export const updateBookmark = async (req, res) => {
 
 export const getBookmarkDetail = (req, res) => {
   try {
-    let sql = `SELECT * FROM bookmark WHERE  id=? AND del_flag=0`;
+    const userId = req.user.id;
+    // 归属校验:只能读自己的书签,防止传他人 bookmark id 越权读取;越权/不存在统一 404
+    let sql = `SELECT * FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`;
     pool
-      .query(sql, [req.body.filters.id])
+      .query(sql, [req.body.filters.id, userId])
       .then(([result]) => {
         if (result.length === 0) {
-          throw new Error('书签不存在');
+          return res.send(resultData(null, 404, '书签不存在'));
         }
         res.send(resultData(result[0]));
       })
@@ -749,15 +763,10 @@ export const importBookmarksHtml = async (req, res) => {
       }
       let bookmarkId = bookmarkMap.get(item.name);
       if (!bookmarkId) {
-        // 自动补协议，避免相对路径跳转
-        let url = item.url;
-        if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
-          url = 'https://' + url;
-        }
         const bookmarkPayload = insertData({
           name: item.name,
           userId,
-          url,
+          url: normalizeBookmarkUrl(item.url),
           description: '',
         });
         await connection.query('INSERT INTO bookmark SET ?', [bookmarkPayload]);

@@ -41,10 +41,13 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   }
 
   async function generateBookmarkMeta() {
-    if (!bookmarkData.value.url) {
+    const rawUrl = String(bookmarkData.value.url || '').trim();
+    if (!rawUrl) {
       message.warning('请先填写书签地址');
       return;
     }
+    // 自动补协议头,和首页书签卡片"点击打开"的既有约定一致,允许用户只填 example.com
+    bookmarkData.value.url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
     generating.value = true;
     try {
       const res = await apiBasePost('/api/chat/generateBookmarkMeta', {

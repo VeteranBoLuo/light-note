@@ -211,6 +211,7 @@
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   const bookmark = bookmarkStore();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
@@ -227,6 +228,7 @@
           description: '所见即所得编辑器，支持表格、待办复选框、颜色等丰富样式',
           onClick: () => {
             showTypePicker.value = false;
+            if (blockGuestWrite('add-note')) return;
             router.push('/noteLibrary/add?type=html');
           },
         },
@@ -236,6 +238,7 @@
           description: '纯文本编辑器，支持实时预览，适合编写带代码块的技术文档',
           onClick: () => {
             showTypePicker.value = false;
+            if (blockGuestWrite('add-note')) return;
             router.push('/noteLibrary/add?type=markdown');
           },
         },
@@ -361,6 +364,7 @@
   }
 
   function batchDeleteNote() {
+    if (blockGuestWrite('delete-note')) return;
     const delIds = viewNoteList.value.filter((data) => data.isCheck).map((item) => item.id) || [];
     Alert.alert({
       title: '提示',
@@ -446,6 +450,10 @@
 
   async function onEnd(event?: { oldIndex?: number; newIndex?: number }) {
     document.body.style.userSelect = '';
+    if (blockGuestWrite('reorder-note')) {
+      visibleDragNoteList.value = [...viewNoteList.value]; // 拖拽库已就地改了 DOM 顺序,游客态复位视觉
+      return;
+    }
     const sourceNotes = [...noteList.value];
     try {
       const mergedNotes = moveVisibleNoteInAllNotes(sourceNotes, visibleDragNoteList.value, event);

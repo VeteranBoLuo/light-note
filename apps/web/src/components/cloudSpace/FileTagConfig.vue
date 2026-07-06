@@ -151,6 +151,7 @@
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   interface TagItem {
     id: string;
@@ -265,6 +266,7 @@
   }
 
   async function submitFileTags() {
+    if (blockGuestWrite('update-file-tags')) return;
     if (!props.file?.id || saving.value) return;
     saving.value = true;
     try {

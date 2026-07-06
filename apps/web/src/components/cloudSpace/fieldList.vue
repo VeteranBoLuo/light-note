@@ -382,6 +382,7 @@
 </template>
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BMenu from '@/components/base/BasicComponents/BMenu.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
@@ -648,6 +649,7 @@
   }
 
   function updateFileName(file, nextName: string) {
+    if (blockGuestWrite('rename-file')) return Promise.resolve(false);
     if (nextName === originalName.value) {
       file.isRename = false;
       return Promise.resolve(false);
@@ -670,6 +672,7 @@
     });
   }
   function handleDelFile(file) {
+    if (blockGuestWrite('delete-file')) return;
     Alert.alert({
       title: t('cloudSpace.alertTitle'),
       content: t('cloudSpace.confirmDelete'),
@@ -697,6 +700,7 @@
   }
 
   const handleBatchDelete = () => {
+    if (blockGuestWrite('delete-file')) return;
     if (!hasSelection.value) {
       message.warning(t('cloudSpace.selectFilesToDelete'));
       return;
@@ -913,6 +917,7 @@
   };
 
   const submitShare = async () => {
+    if (blockGuestWrite('share-file')) return;
     if (!shareTarget.value) return;
     try {
       shareSubmitting.value = true;

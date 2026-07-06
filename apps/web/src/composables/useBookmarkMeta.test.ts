@@ -71,4 +71,16 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     await t.generateBookmarkMeta();
     expect(apiBasePost).not.toHaveBeenCalled();
   });
+
+  it('url 未带协议头时自动补 https:// 再请求(允许用户只填 keep.com)', async () => {
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { name: '', description: '', matchedTagIds: [], newTags: [] },
+    });
+    const t = setup([]);
+    t.bookmarkData.value.url = 'keep.com';
+    await t.generateBookmarkMeta();
+    expect(t.bookmarkData.value.url).toBe('https://keep.com');
+    expect(apiBasePost).toHaveBeenCalledWith('/api/chat/generateBookmarkMeta', { url: 'https://keep.com' });
+  });
 });

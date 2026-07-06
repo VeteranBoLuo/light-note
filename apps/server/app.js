@@ -3,7 +3,7 @@ import bodyParser from 'body-parser';
 import { logFunction } from './util/log.js';
 import { baseRouter } from './util/common.js';
 import { accountBanMiddleware, authMiddleware, startSessionMaintenance } from './util/auth.js';
-import { attackMonitor, ensureSecurityTables } from './util/security/index.js';
+import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } from './util/security/index.js';
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
 import rateLimit from 'express-rate-limit';
 
@@ -73,6 +73,23 @@ function scheduleTrashCleanup() {
   console.log(`[回收站] 定时清理已注册，首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleTrashCleanup();
+
+// 安全事件保留期清理（每天凌晨 4:00，错开回收站清理的 3:00，避免同机同时跑）
+function scheduleSecurityEventsCleanup() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setDate(next.getDate() + 1);
+  next.setHours(4, 0, 0, 0);
+  const delay = next.getTime() - now.getTime();
+
+  setTimeout(() => {
+    cleanupExpiredSecurityEvents();
+    setInterval(cleanupExpiredSecurityEvents, 24 * 60 * 60 * 1000);
+  }, delay);
+
+  console.log(`[安全] 事件保留期清理已注册，首次执行: ${next.toLocaleString('zh-CN')}`);
+}
+scheduleSecurityEventsCleanup();
 
 // 启动 Express 服务器
 app.listen(9001, () => {

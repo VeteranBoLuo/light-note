@@ -47,6 +47,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const user = useUserStore();
   const loading = ref(false);
@@ -60,6 +61,7 @@
   };
 
   function handleDeleteTag(tag) {
+    if (blockGuestWrite('delete-tag')) return;
     Alert.alert({
       title: '提示',
       content: `请确认是否要删除标签【${tag.name}】？`,

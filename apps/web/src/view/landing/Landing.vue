@@ -68,15 +68,24 @@
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-bookmark.png" alt="书签管理" />
+                      <picture>
+                        <source srcset="/eg-bookmark.webp" type="image/webp" />
+                        <img src="/eg-bookmark.png" alt="书签管理" />
+                      </picture>
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-note.png" alt="笔记库" />
+                      <picture>
+                        <source srcset="/eg-note.webp" type="image/webp" />
+                        <img src="/eg-note.png" alt="笔记库" />
+                      </picture>
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <img src="/eg-cloudSpace.png" alt="云空间" />
+                      <picture>
+                        <source srcset="/eg-cloudSpace.webp" type="image/webp" />
+                        <img src="/eg-cloudSpace.png" alt="云空间" />
+                      </picture>
                     </div>
                   </div>
                 </div>
@@ -221,6 +230,11 @@
             <span>© 2024 轻笺</span>
             <span class="footer-sep">|</span>
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
+            <span class="footer-sep">|</span>
+            <!-- 后端直出的 SEO 内容页,不走 SPA 路由;爬虫由此发现帮助中心。
+                 注意:路径是 /helpCenter 不是 /help —— /help 是 App 内已有的
+                 AI 助手/帮助文档路由(router/modules/common.ts),不能撞 -->
+            <a href="/helpCenter">帮助中心</a>
             <span class="footer-sep">|</span>
             <a href="#" @click.prevent="handleContact">联系我们</a>
             <span class="footer-sep">|</span>

@@ -104,9 +104,14 @@ export const queryNoteList = (req, res) => {
 
 export const getNoteDetail = (req, res) => {
   try {
+    const userId = req.user.id;
+    // 归属校验:只能读自己的笔记(游客=共享 visitor 账号),防止传他人 note id 越权读取;越权/不存在统一 404 不泄露存在性
     pool
-      .query('select * from note where id=?', [req.body.id])
+      .query('select * from note where id=? and create_by=? and del_flag=?', [req.body.id, userId, '0'])
       .then(([result]) => {
+        if (result.length === 0) {
+          return res.send(resultData(null, 404, '笔记不存在'));
+        }
         res.send(resultData(result[0]));
       })
       .catch((err) => {
@@ -268,26 +273,26 @@ export const queryNoteTagList = (req, res) => {
   }
 };
 
-export const getNoteTags = (req, res) => {
+export const getNoteTags = async (req, res) => {
   try {
+    const userId = req.user.id;
     const noteId = req.body.id;
-    pool
-      .query(
-        `SELECT t.*
-         FROM tag t
-         JOIN resource_tag_relations r ON t.id = r.tag_id
-         WHERE r.resource_type = 'note' AND r.resource_id = ? AND t.del_flag = 0
-         ORDER BY t.sort, t.create_time DESC`,
-        [noteId],
-      )
-      .then(([result]) => {
-        res.send(resultData(result));
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
-      });
+    // 归属校验:先确认该笔记属于当前用户,防止传他人 note id 枚举其标签
+    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [noteId, userId, '0']);
+    if (own.length === 0) {
+      return res.send(resultData(null, 404, '笔记不存在'));
+    }
+    const [result] = await pool.query(
+      `SELECT t.*
+       FROM tag t
+       JOIN resource_tag_relations r ON t.id = r.tag_id
+       WHERE r.resource_type = 'note' AND r.resource_id = ? AND t.del_flag = 0
+       ORDER BY t.sort, t.create_time DESC`,
+      [noteId],
+    );
+    res.send(resultData(result));
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
   }
 };
 

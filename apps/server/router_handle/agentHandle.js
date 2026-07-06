@@ -11,7 +11,12 @@
 
 import pool from '../db/index.js';
 import { resultData, generateUUID } from '../util/common.js';
-import { requestDeepSeek, requestDeepSeekStream, getActiveProviderPricing } from '../util/agent/deepseekClient.js';
+import {
+  requestDeepSeek,
+  requestDeepSeekStream,
+  getActiveProviderPricing,
+  looksLikeLeakedToolCall,
+} from '../util/agent/deepseekClient.js';
 import { parseTimeRange } from '../util/agent/timeRange.js';
 import { getOrCreateSession, recordTurn, buildContext, getSessionId } from '../util/agent/sessionStore.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
@@ -52,13 +57,6 @@ function getToolDefinitions() {
     });
   }
   return defs;
-}
-
-// 工具调用协议偶发未被正确解析成结构化 tool_calls，原始特殊 token 泄漏进 content
-// (如 "<｜｜xxx｜｜tool_calls><｜｜invoke name=...>" 这类)。全角竖线"｜"在正常回答中
-// 不会出现，用它做特征检测，避免把协议泄漏内容原样展示给用户。
-export function looksLikeLeakedToolCallSyntax(text) {
-  return typeof text === 'string' && /｜/.test(text) && /tool_call|invoke/i.test(text);
 }
 
 /**
@@ -197,6 +195,14 @@ export async function agentChat(req, res) {
   req.setTimeout(0);
 
   let stream = false;
+  // 下面两个声明放在 try 外:catch 块要 removeListener(onClientClose),而 catch 是 try 的
+  // 兄弟作用域,访问不到 try 内声明的 const —— 否则一进 catch 就二次抛 ReferenceError
+  const agentAbortController = new AbortController();
+  const onClientClose = () => {
+    if (!agentAbortController.signal.aborted) {
+      agentAbortController.abort();
+    }
+  };
 
   try {
     const {
@@ -244,12 +250,7 @@ export async function agentChat(req, res) {
     ];
 
     // 流式模式：提前设置 SSE headers + 客户端断开时 abort DeepSeek 流
-    const agentAbortController = new AbortController();
-    const onClientClose = () => {
-      if (!agentAbortController.signal.aborted) {
-        agentAbortController.abort();
-      }
-    };
+    // (agentAbortController / onClientClose 已在 try 外声明,便于 catch 中 removeListener)
     req.on('close', onClientClose);
 
     if (stream) {
@@ -279,35 +280,41 @@ export async function agentChat(req, res) {
     totalUsage.completionTokens += plannerResponse.usage.completionTokens;
     totalUsage.totalTokens += plannerResponse.usage.totalTokens;
 
-    // 疑似工具调用协议泄漏(未解析成 tool_calls、原始 token 混进 content)→ 重试一次；
-    // 重试后仍异常就给出干净提示，绝不把泄漏内容原样透出给用户
-    if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCallSyntax(plannerResponse.content)) {
-      console.error('[Agent] Planner 疑似工具调用协议泄漏，重试一次:', plannerResponse.content.slice(0, 200));
-      const retryResponse = await requestDeepSeek(messages, { tools: toolDefs });
+    // 兜底:DeepSeek 偶发把工具调用以特殊 token 文本吐进 content(而非标准 tool_calls 字段),
+    // 导致 toolCalls 为空、content 是一段调用标记原文。检测到就重试一次 Planner(大概率恢复正常);
+    // 若重试后仍是泄漏的调用标记,下面的 finalContent 判断会换成友好提示,不会原样透出给用户。
+    if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCall(plannerResponse.content)) {
+      console.warn('[Agent] 检测到工具调用泄漏进 content，重试一次 Planner');
+      plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
       apiCalls++;
-      totalUsage.promptTokens += retryResponse.usage.promptTokens;
-      totalUsage.completionTokens += retryResponse.usage.completionTokens;
-      totalUsage.totalTokens += retryResponse.usage.totalTokens;
-      const retryStillLeaked = !retryResponse.toolCalls?.length && looksLikeLeakedToolCallSyntax(retryResponse.content);
-      plannerResponse = retryStillLeaked
-        ? { ...retryResponse, content: '抱歉，刚才处理这个请求时出了点问题，请重新描述一下你的问题。', toolCalls: [] }
-        : retryResponse;
+      totalUsage.promptTokens += plannerResponse.usage.promptTokens;
+      totalUsage.completionTokens += plannerResponse.usage.completionTokens;
+      totalUsage.totalTokens += plannerResponse.usage.totalTokens;
     }
 
     if (!plannerResponse.toolCalls?.length) {
-      // 无工具调用 → 直接当作回答，跳过 Final Reply
-      finalContent = plannerResponse.content || '';
+      // 无工具调用 → 直接当作回答，跳过 Final Reply。
+      // 若重试后仍是泄漏的调用标记,不把原文暴露给用户,改回友好提示。
+      finalContent = looksLikeLeakedToolCall(plannerResponse.content)
+        ? '抱歉，我刚才没能正确处理这个请求，请换个说法或稍后再试一次。'
+        : plannerResponse.content || '';
     } else {
+      // 兜底:只取前 MAX_PARALLEL_TOOLS 个 tool_calls,防 LLM 极端情况一次吐一堆
+      // (含重复查询)并发打满 DB 连接池。assistant 消息与实际执行必须用同一批——
+      // OpenAI 协议要求每个 tool_call 都有对应的 tool 结果,否则下一轮请求会报错。
+      const MAX_PARALLEL_TOOLS = 8;
+      const toolCalls = plannerResponse.toolCalls.slice(0, MAX_PARALLEL_TOOLS);
+
       // 追加 assistant 消息（含 tool_calls）
       messages.push({
         role: 'assistant',
         content: null,
-        tool_calls: plannerResponse.toolCalls,
+        tool_calls: toolCalls,
       });
 
       // 并行执行所有工具
       const results = await Promise.all(
-        plannerResponse.toolCalls.map(async (tc) => {
+        toolCalls.map(async (tc) => {
           let args = {};
           try {
             args = JSON.parse(tc.function.arguments || '{}');

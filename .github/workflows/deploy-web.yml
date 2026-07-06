@@ -1,0 +1,48 @@
+name: 部署前端到服务器（手动触发）
+
+# 日常部署走本地 scripts/deploy-web.sh（需本机有 ~/.ssh/hermes_server 私钥）。
+# 本机没有私钥时，来 Actions 页点「Run workflow」，由 runner 用仓库 Secret 里的私钥部署。
+#
+# 需要的仓库 Secret（Settings → Secrets and variables → Actions）：
+#   SSH_PRIVATE_KEY —— 能登录 root@139.9.83.16 的私钥（与后端 deploy 工作流共用同一个）
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: false # 部署不中途取消，避免 scp / 原子切换半途中断
+
+jobs:
+  deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 读取仓库内容
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - name: 安装 nodejs
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装依赖(workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: 准备 SSH 私钥与 known_hosts
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/hermes_server
+          chmod 600 ~/.ssh/hermes_server
+          ssh-keyscan -H 139.9.83.16 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: 部署前端(复用 scripts/deploy-web.sh)
+        run: pnpm deploy:web

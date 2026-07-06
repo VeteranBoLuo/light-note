@@ -90,7 +90,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, reactive, ref } from 'vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import userApi from '@/api/userApi.ts';
@@ -116,18 +116,6 @@
     return !formData.password || !formData.email;
   });
 
-  // 转化埋点:游客到达注册表单(register_view),补齐 cta_click→register_view→register 分段漏斗
-  let registerViewSent = false;
-  watch(
-    () => title.value,
-    (val) => {
-      if (val === '注册' && !registerViewSent && (!user.id || user.role === 'visitor')) {
-        registerViewSent = true;
-        apiBasePost('/api/common/recordConversion', { event: 'register_view', source: 'register-page' }).catch(() => {});
-      }
-    },
-    { immediate: true },
-  );
   async function validateFun(names?: any) {
     await registerRef.value.validate(names);
   }

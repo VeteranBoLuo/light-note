@@ -34,6 +34,5 @@ build/
 .github/copilot-instructions.md
 
 .github/agents/轻笺助手.agent.md
-docs/
 .codex/environments/environment.toml
 vite.config.ts

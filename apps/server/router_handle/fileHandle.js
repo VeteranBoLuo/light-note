@@ -266,9 +266,15 @@ export const updateFolderSort = async (req, res) => {
 
 export const getFileTags = async (req, res) => {
   try {
+    const userId = req.user.id;
     const { id } = req.body;
     if (!id) {
       return res.send(resultData(null, 400, '缺少文件ID'));
+    }
+    // 归属校验:先确认该文件属于当前用户,防止传他人 file id 枚举其标签
+    const [own] = await pool.query('SELECT id FROM files WHERE id=? AND create_by=?', [id, userId]);
+    if (own.length === 0) {
+      return res.send(resultData(null, 404, '数据库中未找到文件'));
     }
     const tags = await queryTagsForResource({
       resourceType: RESOURCE_TYPE.FILE,
