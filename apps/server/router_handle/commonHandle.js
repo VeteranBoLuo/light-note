@@ -493,25 +493,25 @@ export const analyzeImgUrl = async (req, res) => {
                   const insertIconUrlSql = `UPDATE bookmark SET icon_url=? WHERE id=?`;
                   await connection.query(insertIconUrlSql, [imageUrl, bookmark.id]);
 
-                  // 返回图片的 URL
-                  resolve(imageUrl);
+                  // 返回 {id, iconUrl},供前端把新图标回填到当前列表项(不必刷新页面)
+                  resolve({ id: bookmark.id, iconUrl: imageUrl });
                 } catch (err) {
                   console.error('处理过程中出错:', err);
-                  // 返回默认图片的 URL
-                  resolve(`${req.protocol}://${req.get('host')}${defaultImagePath}`);
+                  resolve({ id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` });
                 }
               });
             })
             .on('error', (err) => {
+              // 单个图标下载失败不能 reject——否则整批 Promise.all 失败、所有图标都白抓;降级为默认图
               console.error('Error downloading file:', err);
-              // 返回默认图片的 URL
-              reject(`${req.protocol}://${req.get('host')}${defaultImagePath}`);
+              resolve({ id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` });
             });
         });
       }
     });
 
-    const results = await Promise.all(promises);
+    // 过滤掉非 noCache 项(map 未 return 的 undefined),只回结构化的已更新图标
+    const results = (await Promise.all(promises)).filter(Boolean);
     res.send(resultData(results, 200, '所有图标已更新成功'));
   } catch (err) {
     res.send(resultData(null, 500, '服务器内部错误: ' + err.message));

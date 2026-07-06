@@ -89,6 +89,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { watch } from 'vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -229,7 +230,17 @@
       content: t('noteDetail.confirmExportPdf'),
       async onOk() {
         exportModalVisible.value = false;
-        await generatePDF(props.note.title, '.note-editor-body');
+        // 富文本(html)导出编辑器 DOM .note-editor-body;Markdown 导出渲染后的 .md-preview。
+        // 原来写死 .note-editor-body,MD 笔记该元素根本不存在 → 导出空白。
+        // 另:MD 纯编辑视图下 .md-preview 被 v-show 隐藏(offsetHeight=0,html2canvas 截不到),提示用户切视图。
+        const isMd = props.noteType === 'markdown';
+        const selector = isMd ? '.md-preview' : '.note-editor-body';
+        const el = document.querySelector(selector) as HTMLElement | null;
+        if (!el || el.offsetHeight === 0) {
+          message.warning(isMd ? '请先切换到「预览」或「分栏」视图再导出 PDF' : '未找到可导出的笔记内容');
+          return;
+        }
+        await generatePDF(props.note.title, selector);
         recordOperation({ module: '笔记', operation: `导出PDF成功【${props.note.title || t('noteDetail.unnamedDoc')}】` });
       },
     });

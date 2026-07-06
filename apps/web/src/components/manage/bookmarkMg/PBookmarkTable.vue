@@ -166,8 +166,8 @@
         bookmark.iconUrl = getIcon(bookmark);
       });
       loading.value = false;
-      // 缓存图片
-      await apiBasePost(
+      // 缓存图片 + 把抓取到的图标当次回填(不必刷新页面)
+      const imgRes = await apiBasePost(
         '/api/common/analyzeImgUrl',
         allRes.data.items?.map((data: any) => {
           return {
@@ -177,6 +177,12 @@
           };
         }),
       );
+      if (imgRes.status === 200 && Array.isArray(imgRes.data) && imgRes.data.length) {
+        const iconMap = new Map(imgRes.data.map((r: any) => [r.id, r.iconUrl]));
+        tableData.value.forEach((bookmark: any) => {
+          if (iconMap.has(bookmark.id)) bookmark.iconUrl = iconMap.get(bookmark.id);
+        });
+      }
     }
   }
 </script>

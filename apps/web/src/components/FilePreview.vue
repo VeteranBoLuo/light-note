@@ -50,6 +50,11 @@
             @play="onRendered"
           />
 
+          <!-- 2.5 音频预览 -->
+          <div v-else-if="previewType === 'audio'" class="preview-audio-container">
+            <audio :src="effectiveFileUrl" class="preview-audio" controls preload="metadata" @canplay="onRendered" @error="onError" />
+          </div>
+
           <!-- 3. 图片预览 -->
           <div v-else-if="previewType === 'image'" class="preview-image-container">
             <img
@@ -911,6 +916,18 @@
           display: flex;
           justify-content: center;
           align-items: center;
+        }
+
+        .preview-audio-container {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+
+          .preview-audio {
+            width: min(560px, 90%);
+          }
         }
 
         .preview-image-container {

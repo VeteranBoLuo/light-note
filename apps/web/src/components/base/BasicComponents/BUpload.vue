@@ -28,11 +28,15 @@
       accept?: string;
       multiple: boolean;
       maxTotalSize?: number;
+      // 直传场景(如云空间→OBS)开启:图片也按原始 File 透传,不转 Base64。
+      // 默认 false 保持旧行为({isImg, file: base64}),避免影响依赖 Base64 预览的调用方(如意见反馈)。
+      rawFile?: boolean;
     }>(),
     {
       accept: '*',
       multiple: false,
       maxTotalSize: 10 * 1024 * 1024,
+      rawFile: false,
     }, // 默认总大小限制为10MB
   );
   const bookmark = bookmarkStore();
@@ -53,6 +57,11 @@
       if (totalSize > props.maxTotalSize) {
         message.warning('总文件大小不能超过' + props.maxTotalSize / (1024 * 1024) + 'MB');
         return; // 如果总文件大小过大，终止函数执行
+      }
+      // 直传模式:直接透传原始 File,不走 FileReader/Base64(大图/多图不再卡顿)
+      if (props.rawFile) {
+        emit('change', Array.from(files));
+        return;
       }
       for (let i = 0; i < files.length; i++) {
         const file = files[i];

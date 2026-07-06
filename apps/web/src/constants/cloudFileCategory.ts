@@ -10,7 +10,7 @@ export type CloudFileCategory =
   | 'compress'
   | 'other';
 
-export type CloudPreviewType = 'image' | 'video' | 'pdf' | 'word' | 'excel' | 'ppt' | 'text' | 'unsupported';
+export type CloudPreviewType = 'image' | 'video' | 'audio' | 'pdf' | 'word' | 'excel' | 'ppt' | 'text' | 'unsupported';
 
 export const CLOUD_FILE_CATEGORY_ORDER: CloudFileCategory[] = [
   'image',
@@ -41,7 +41,7 @@ export const CLOUD_FILE_CATEGORY_LABEL_KEY: Record<CloudFileCategory, string> = 
 export const CLOUD_FILE_PREVIEW_TYPE_MAP: Record<CloudFileCategory, CloudPreviewType> = {
   image: 'image',
   video: 'video',
-  audio: 'unsupported',
+  audio: 'audio',
   pdf: 'pdf',
   word: 'word',
   excel: 'excel',

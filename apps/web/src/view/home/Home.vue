@@ -47,16 +47,22 @@
     }
   };
 
-  // 缓存图片
+  // 缓存图片:抓取无图标书签的 favicon 落库,并把返回的新图标当次回填到列表,
+  // 不必等下次进页面(否则这一屏一直用 TagCard 里 ico.kucat.cn 的临时兜底图)
   const cacheImages = async () => {
-    if (bookmark.bookmarkList) {
-      await apiBasePost(
-        '/api/common/analyzeImgUrl',
-        bookmark.bookmarkList?.map((data: any) => ({
-          url: data.url,
-          id: data.id,
-          noCache: !data.iconUrl,
-        })),
+    if (!bookmark.bookmarkList?.length) return;
+    const res = await apiBasePost(
+      '/api/common/analyzeImgUrl',
+      bookmark.bookmarkList.map((data: any) => ({
+        url: data.url,
+        id: data.id,
+        noCache: !data.iconUrl,
+      })),
+    );
+    if (res.status === 200 && Array.isArray(res.data) && res.data.length) {
+      const iconMap = new Map(res.data.map((r: any) => [r.id, r.iconUrl]));
+      bookmark.bookmarkList = bookmark.bookmarkList.map((b: any) =>
+        iconMap.has(b.id) ? { ...b, iconUrl: iconMap.get(b.id) } : b,
       );
     }
   };

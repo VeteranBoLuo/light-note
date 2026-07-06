@@ -20,7 +20,10 @@ const router = express.Router();
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
 
-export const buildSignedDownloadUrl = (objectKey, expires = 600) => {
+// 列表/预览/分享页会把这个签名 URL 烤进页面并在整个浏览会话里复用(缩略图、预览、拖拽下载),
+// 原 600s(10 分钟)太短——用户停留稍久再点预览/下载就拿到过期 URL,表现为图裂/预览失败/下载报错。
+// 拉长到 2 小时覆盖正常会话;真正"点击即下载"的 downloadFileById 另走 600s、点了立即用,不受影响。
+export const buildSignedDownloadUrl = (objectKey, expires = 7200) => {
   if (!objectKey) return null;
   const { url } = createDownloadSignedUrl({ objectKey, expires });
   return url || buildObjectUrl(objectKey);

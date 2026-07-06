@@ -722,7 +722,15 @@
           apiBasePost(
             '/api/common/analyzeImgUrl',
             res.data.items?.map((data: any) => ({ url: data.url, id: data.id, noCache: !data.iconUrl })),
-          );
+          ).then((imgRes) => {
+            // 把抓取到的图标当次回填,不必刷新页面
+            if (imgRes.status === 200 && Array.isArray(imgRes.data) && imgRes.data.length) {
+              const iconMap = new Map(imgRes.data.map((r: any) => [r.id, r.iconUrl]));
+              tableData.value.forEach((item: BookmarkInterface) => {
+                if (iconMap.has(item.id)) item.iconUrl = iconMap.get(item.id);
+              });
+            }
+          });
         }
       })
       .finally(() => {

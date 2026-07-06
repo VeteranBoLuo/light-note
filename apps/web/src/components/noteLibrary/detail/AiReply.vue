@@ -117,8 +117,13 @@
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
   import { apiBasePost } from '@/http/request';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const { t } = useI18n();
+
+  // 后端输出封顶 4096 token(约 2500~3000 中文字)。对"输出≈输入长度"的动作(润色全文/自定义产出正文),
+  // 笔记正文超过此阈值时结果会被静默截断——生成前给一次非阻断提醒,让用户对残缺结果有预期。
+  const LONG_CONTENT_THRESHOLD = 2500;
 
   const note = inject<any>('note', null);
   const applyTitleFromAi = inject<((title: string) => void) | null>('applyTitleFromAi', null);
@@ -191,6 +196,13 @@
   const generate = async (mode: 'custom' | 'action' = 'action') => {
     if (isLoading.value) return;
     if (mode === 'custom' && !prompt.value.trim()) return;
+    // "输出≈输入长度"的动作(润色全文/纠错/自定义)+ 长笔记:提醒结果可能被输出上限截断(不阻断)。
+    // 生成摘要/优化标题输出很短,不会截断,不提醒。
+    const action = mode === 'action' ? lastAction.value || 'custom' : 'custom';
+    const FULL_OUTPUT_ACTIONS = ['polishFull', 'correctErrors', 'custom'];
+    if (FULL_OUTPUT_ACTIONS.includes(action) && textLength.value > LONG_CONTENT_THRESHOLD) {
+      message.warning(`笔记较长(约 ${textLength.value} 字),AI 输出可能被截断,建议分段处理或改用「生成摘要」`);
+    }
     outputFull.value = '';
     isLoading.value = true;
     abortController.value = new AbortController();

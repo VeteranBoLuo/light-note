@@ -400,19 +400,24 @@ export async function agentChat(req, res) {
 
     // ---- 输出 ----
     if (stream) {
-      if (!usedTools.length) {
-        res.write(`data: ${JSON.stringify({ output: { text: finalContent, session_id: getSessionId(session) } })}\n\n`);
+      // 客户端已断开则响应流已结束,继续 write 会对已关闭 socket 抛 EPIPE
+      if (!res.writableEnded) {
+        if (!usedTools.length) {
+          res.write(`data: ${JSON.stringify({ output: { text: finalContent, session_id: getSessionId(session) } })}\n\n`);
+        }
+        res.write('data: [DONE]\n\n');
+        res.end();
       }
-      res.write('data: [DONE]\n\n');
-      res.end();
       res.removeListener('close', onClientClose);
     } else {
       res.send(resultData({ response: finalContent, sessionId: getSessionId(session) }));
       res.removeListener('close', onClientClose);
     }
 
-    // 记录本轮对话
-    recordTurn(session, message, finalContent, usedTools);
+    // 记录本轮对话(客户端中途断开时 finalContent 只是半截,不写入会话记忆,避免污染后续上下文)
+    if (!agentAbortController.signal.aborted) {
+      recordTurn(session, message, finalContent, usedTools);
+    }
 
     // 异步写日志（不阻塞响应）
 
@@ -427,12 +432,16 @@ export async function agentChat(req, res) {
     });
   } catch (error) {
     console.error('[Agent] 请求错误:', error.message);
+    // 客户端主动断开(abort)或响应已结束时不要再写——对已关闭的 socket 写入会抛 EPIPE;
+    // 断开导致的 abort 本就不是"服务异常",无需向已离开的用户回错误帧
     if (stream) {
-      try {
-        res.write(`data: ${JSON.stringify({ error: '服务异常', message: error.message })}\n\n`);
-        res.end();
-      } catch (_) { /* ignore */ }
-    } else {
+      if (!agentAbortController.signal.aborted && !res.writableEnded) {
+        try {
+          res.write(`data: ${JSON.stringify({ error: '服务异常', message: error.message })}\n\n`);
+          res.end();
+        } catch (_) { /* ignore */ }
+      }
+    } else if (!res.headersSent) {
       res.status(500).send(resultData(null, 500, 'AI 服务异常: ' + error.message));
     }
     res.removeListener('close', onClientClose);
