@@ -2,6 +2,30 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { deleteObjectFromObs, buildObjectKey } from '../util/obsClient.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { promises as fsP } from 'node:fs';
+import path from 'node:path';
+
+const NOTE_IMAGE_DIR = '/www/wwwroot/images';
+
+// 彻底删除笔记时:删 note_images 行,返回其图片 URL(供事务提交后删磁盘文件)。
+// note_images 原本只增不删,笔记永久删除后图片文件会残留成孤儿。
+async function purgeNoteImages(connection, noteIds) {
+  if (!noteIds || noteIds.length === 0) return [];
+  const ph = noteIds.map(() => '?').join(',');
+  const [imgs] = await connection.query(`SELECT url FROM note_images WHERE note_id IN (${ph})`, noteIds);
+  if (imgs.length) await connection.query(`DELETE FROM note_images WHERE note_id IN (${ph})`, noteIds);
+  return imgs.map((r) => r.url).filter(Boolean);
+}
+
+// 按 URL 删磁盘图片文件(不阻塞、失败忽略),与 OBS 清理同款 fire-and-forget
+function unlinkImageUrls(urls) {
+  for (const u of urls) {
+    try {
+      const fileName = new URL(u).pathname.split('/').pop();
+      if (fileName) fsP.unlink(path.join(NOTE_IMAGE_DIR, fileName)).catch(() => {});
+    } catch {}
+  }
+}
 
 const RESOURCE_TYPES = ['bookmark', 'note', 'file'];
 const TRASH_EXPIRY_DAYS = 30;
@@ -42,7 +66,13 @@ async function cleanupExpiredFiles(connection, userId = null) {
 
 async function cleanupExpiredNotes(connection, userId = null) {
   const userCond = userId ? ` AND create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('create_by')}`;
-  const [result] = await connection.query(`DELETE FROM note WHERE ${EXPIRY_CONDITION}${userCond}`);
+  const [notes] = await connection.query(`SELECT id FROM note WHERE ${EXPIRY_CONDITION}${userCond}`);
+  if (notes.length === 0) return 0;
+  const ids = notes.map((n) => n.id);
+  const ph = ids.map(() => '?').join(',');
+  const urls = await purgeNoteImages(connection, ids);
+  const [result] = await connection.query(`DELETE FROM note WHERE id IN (${ph})`, ids);
+  unlinkImageUrls(urls);
   return result.affectedRows;
 }
 
@@ -246,6 +276,7 @@ export const permanentDelete = async (req, res) => {
     );
 
     let objsToDelete = [];
+    let noteImageUrls = [];
     if (resourceType === 'file') {
       const [files] = await connection.query(
         `SELECT id, obs_key, create_by, file_name FROM \`${cfg.table}\`
@@ -253,6 +284,12 @@ export const permanentDelete = async (req, res) => {
         [...ids, userId],
       );
       objsToDelete = files;
+    } else if (resourceType === 'note') {
+      const [validNotes] = await connection.query(
+        `SELECT id FROM note WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
+        [...ids, userId],
+      );
+      noteImageUrls = await purgeNoteImages(connection, validNotes.map((n) => n.id));
     }
 
     const [result] = await connection.query(
@@ -266,6 +303,7 @@ export const permanentDelete = async (req, res) => {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
       deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 删除失败: ${e.message}`));
     }
+    unlinkImageUrls(noteImageUrls);
 
     res.send(resultData({ deleted: result.affectedRows }, 200, '彻底删除成功'));
   } catch (e) {
@@ -320,6 +358,9 @@ export const emptyTrash = async (req, res) => {
       `SELECT id, obs_key, create_by, file_name FROM files WHERE create_by = ? AND del_flag = 1`,
       [userId],
     );
+    // 笔记图片:先拿待清笔记的图片 URL 并删 note_images 行(下面循环会删 note 行)
+    const [delNotes] = await connection.query(`SELECT id FROM note WHERE create_by = ? AND del_flag = 1`, [userId]);
+    const noteImageUrls = await purgeNoteImages(connection, delNotes.map((n) => n.id));
 
     let total = 0;
     for (const type of RESOURCE_TYPES) {
@@ -346,6 +387,7 @@ export const emptyTrash = async (req, res) => {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
       deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 删除失败: ${e.message}`));
     }
+    unlinkImageUrls(noteImageUrls);
 
     res.send(resultData({ deleted: total }, 200, '回收站已清空'));
   } catch (e) {

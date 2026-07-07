@@ -482,6 +482,13 @@ export const analyzeImgUrl = async (req, res) => {
                   // 确保目录存在
                   await fsP.mkdir(uploadDir, { recursive: true });
 
+                  // 先清掉该书签所有旧扩展名的图标,避免换扩展名后旧文件残留成孤儿
+                  await Promise.all(
+                    ['png', 'svg', 'jpeg', 'jpg', 'gif'].map((e) =>
+                      fsP.unlink(path.join(uploadDir, `bookmark-${bookmark.id}.${e}`)).catch(() => {}),
+                    ),
+                  );
+
                   // 写入文件
                   const imagePath = path.join(uploadDir, fileName);
                   await fsP.writeFile(imagePath, buffer);
@@ -553,31 +560,26 @@ export const getImages = async (req, res) => {
     const bookmarkImages = bookmarkResult.map((bookmark) => bookmark.icon_url);
     const noteImages = noteResult.map((note) => note.url);
     const images = bookmarkImages.concat(noteImages);
+
+    // 从引用 URL 精确提取「文件名(不含扩展)」建 Set 精确比对——
+    // 避免子串误判(如 bookmark-5 命中 bookmark-50),真正无引用的孤儿才算失效
+    const usedNames = new Set();
+    for (const url of images) {
+      if (typeof url !== 'string' || !url) continue;
+      const seg = url.split('?')[0].split('/').pop() || '';
+      const base = seg.replace(/\.[^.]+$/, '');
+      if (base) usedNames.add(base);
+    }
+
     if (req.body.name) {
-      fileList = fileList.filter((file) => {
-        return file.name.includes(req.body.name);
-      });
+      fileList = fileList.filter((file) => file.name.includes(req.body.name));
     }
     res.send(
       resultData({
         items: {
           images: images,
-          usedImages: fileList.filter((file) => {
-            return images.some((data) => {
-              if (typeof data === 'string') {
-                return data.includes(file.name);
-              }
-              return false;
-            });
-          }),
-          unUsedImages: fileList.filter((file) => {
-            return !images.some((data) => {
-              if (typeof data === 'string') {
-                return data.includes(file.name);
-              }
-              return false;
-            });
-          }),
+          usedImages: fileList.filter((file) => usedNames.has(file.name)),
+          unUsedImages: fileList.filter((file) => !usedNames.has(file.name)),
         },
         total: fileList.length,
       }),

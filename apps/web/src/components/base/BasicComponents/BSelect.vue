@@ -46,7 +46,7 @@
     </div>
 
     <Teleport to="body">
-      <div ref="dropdownRef" class="select-dropdown" v-show="isOpen" :style="dropdownStyle" @click.stop>
+      <div ref="dropdownRef" class="select-dropdown" :class="{ 'has-footer': $slots['dropdown-footer'] }" v-show="isOpen" :style="dropdownStyle" @click.stop>
         <div v-if="showSearch && isMultiple" class="select-search-bar">
           <input
             v-model="searchText"
@@ -72,6 +72,9 @@
           <span class="select-option-label">{{ item.label }}</span>
         </div>
         <div v-if="filteredOptions.length === 0" class="select-no-data">无匹配项</div>
+        <div v-if="$slots['dropdown-footer']" class="select-dropdown-footer">
+          <slot name="dropdown-footer" />
+        </div>
       </div>
     </Teleport>
   </div>
@@ -562,6 +565,21 @@ watch(isOpen, (val) => {
   justify-content: center;
   font-size: 13px;
   color: var(--desc-color, #999);
+}
+
+/* 有底部插槽时去掉下拉的下内边距,让 footer 贴合底边(否则会留一条缝) */
+.select-dropdown.has-footer {
+  padding-bottom: 0;
+}
+
+/* 下拉底部插槽:粘在底部,与选项列表用分隔线隔开(如"新增标签"入口) */
+.select-dropdown-footer {
+  position: sticky;
+  bottom: 0;
+  margin: 4px -4px 0;
+  padding: 4px;
+  border-top: 1px solid var(--card-border-color, #eee);
+  background: var(--ant-select-dropdown-bg-color, #fff);
 }
 
 [data-theme='night'] {

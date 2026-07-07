@@ -563,6 +563,22 @@ export const logout = async (req, res) => {
 };
 
 // --- 工具函数 ---
+// 国内服务器连 GitHub(github.com / api.github.com)经常抖动/超时。
+// 对网络错误与超时重试(带小退避);HTTP 错误状态由 fetchWithTimeout 正常返回、不会进入重试。
+const retry = async (fn, attempts = 3, label = '') => {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[GitHub] ${label} 第 ${i + 1}/${attempts} 次失败: ${e.message}`);
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
+  throw lastErr;
+};
+
 const fetchGitHubToken = async (code) => {
   const params = new URLSearchParams();
   params.append('client_id', process.env.GITHUB_CLIENT_ID); // 改用环境变量
@@ -570,14 +586,19 @@ const fetchGitHubToken = async (code) => {
   params.append('code', code);
 
   try {
-    const response = await fetchWithTimeout(
-      'https://github.com/login/oauth/access_token',
-      {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: params,
-      },
-      8000, // 8秒超时
+    const response = await retry(
+      () =>
+        fetchWithTimeout(
+          'https://github.com/login/oauth/access_token',
+          {
+            method: 'POST',
+            headers: { Accept: 'application/json' },
+            body: params,
+          },
+          10000, // 10秒超时
+        ),
+      3,
+      'token',
     );
 
     if (!response.ok) {
@@ -592,12 +613,21 @@ const fetchGitHubToken = async (code) => {
 };
 
 const getGitHubUser = async (accessToken) => {
-  const response = await fetch('https://api.github.com/user', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'User-Agent': 'MyApp',
-    },
-  });
+  const response = await retry(
+    () =>
+      fetchWithTimeout(
+        'https://api.github.com/user',
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'User-Agent': 'MyApp',
+          },
+        },
+        8000, // 原来是裸 fetch,无超时会挂死
+      ),
+    3,
+    'user',
+  );
 
   if (!response.ok) {
     throw new Error(`GitHub API error: ${response.statusText}`);

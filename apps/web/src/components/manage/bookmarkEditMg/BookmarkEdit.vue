@@ -34,7 +34,14 @@
             :show-search="true"
             :filter-option="SelectionSearch"
             v-model:value="bookmarkData.relatedTags"
-          />
+          >
+            <template #dropdown-footer>
+              <div class="add-tag-entry" @click="goAddTag" v-click-log="{ module: '书签详情', operation: '下拉里新增标签' }">
+                <span class="add-tag-plus">+</span>
+                <span>{{ $t('navigation.newTag') }}</span>
+              </div>
+            </template>
+          </b-select>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.description') }}</span>
@@ -135,6 +142,11 @@
         router.back();
       }
     });
+  }
+
+  // 下拉里「新增标签」:跳转到新增标签页(注:会离开当前书签编辑页)
+  function goAddTag() {
+    router.push('/manage/editTag/add');
   }
 
   const { generating, generateBookmarkMeta } = useBookmarkMeta({
@@ -331,5 +343,28 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+  }
+
+  /* 下拉底部「新增标签」入口:样式对齐选项行,主色强调 */
+  .add-tag-entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    color: var(--primary-color);
+    cursor: pointer;
+    transition: background 0.15s;
+
+    &:hover {
+      background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    }
+  }
+  .add-tag-plus {
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 600;
   }
 </style>
