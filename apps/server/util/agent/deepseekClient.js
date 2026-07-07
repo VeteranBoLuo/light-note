@@ -269,3 +269,34 @@ export function looksLikeLeakedToolCall(content) {
   if (!content || typeof content !== 'string') return false;
   return /｜DSML｜|<｜tool|tool▁call|tool_calls?>|invoke name\s*=/i.test(content);
 }
+
+/**
+ * 从"泄漏成文本的工具调用"里把真实调用解析出来。
+ * DeepSeek 偶发把调用以 <｜｜DSML｜｜invoke name="X"><｜｜DSML｜｜parameter name="k">v</...> 文本吐进 content
+ * (工具名和参数其实都对),直接解析出来当标准 tool_calls 执行,比重试更稳、更省一次调用。
+ * @param {string|null|undefined} content
+ * @returns {Array<{id:string,type:'function',function:{name:string,arguments:string}}>}
+ */
+export function parseLeakedToolCalls(content) {
+  if (!content || typeof content !== 'string') return [];
+  const calls = [];
+  const invokeRe = /invoke\s+name\s*=\s*["']([^"']+)["']([\s\S]*?)<\/[^>]*?invoke\s*>/gi;
+  let m;
+  while ((m = invokeRe.exec(content)) !== null) {
+    const name = m[1].trim();
+    if (!name) continue;
+    const body = m[2] || '';
+    const args = {};
+    const paramRe = /parameter\s+name\s*=\s*["']([^"']+)["'][^>]*?>([\s\S]*?)<\/[^>]*?parameter\s*>/gi;
+    let p;
+    while ((p = paramRe.exec(body)) !== null) {
+      args[p[1].trim()] = (p[2] || '').trim();
+    }
+    calls.push({
+      id: `leaked_${calls.length}`,
+      type: 'function',
+      function: { name, arguments: JSON.stringify(args) },
+    });
+  }
+  return calls;
+}

@@ -16,6 +16,7 @@ import {
   requestDeepSeekStream,
   getActiveProviderPricing,
   looksLikeLeakedToolCall,
+  parseLeakedToolCalls,
 } from '../util/agent/deepseekClient.js';
 import { parseTimeRange } from '../util/agent/timeRange.js';
 import { getOrCreateSession, recordTurn, buildContext, getSessionId } from '../util/agent/sessionStore.js';
@@ -284,12 +285,28 @@ export async function agentChat(req, res) {
     // 导致 toolCalls 为空、content 是一段调用标记原文。检测到就重试一次 Planner(大概率恢复正常);
     // 若重试后仍是泄漏的调用标记,下面的 finalContent 判断会换成友好提示,不会原样透出给用户。
     if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCall(plannerResponse.content)) {
-      console.warn('[Agent] 检测到工具调用泄漏进 content，重试一次 Planner');
-      plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
-      apiCalls++;
-      totalUsage.promptTokens += plannerResponse.usage.promptTokens;
-      totalUsage.completionTokens += plannerResponse.usage.completionTokens;
-      totalUsage.totalTokens += plannerResponse.usage.totalTokens;
+      // 优先直接解析泄漏的调用(模型选对了工具、参数,只是走错通道)——比重试更稳、省一次调用
+      const leaked = parseLeakedToolCalls(plannerResponse.content);
+      if (leaked.length) {
+        console.warn('[Agent] 工具调用泄漏进 content，已解析为标准调用直接执行');
+        plannerResponse = { ...plannerResponse, toolCalls: leaked, content: '' };
+      } else {
+        // 解析不出来,重试一次 Planner(大概率恢复正常)
+        console.warn('[Agent] 检测到工具调用泄漏进 content，重试一次 Planner');
+        plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
+        apiCalls++;
+        totalUsage.promptTokens += plannerResponse.usage.promptTokens;
+        totalUsage.completionTokens += plannerResponse.usage.completionTokens;
+        totalUsage.totalTokens += plannerResponse.usage.totalTokens;
+        // 重试后仍泄漏,再尝试解析一次
+        if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCall(plannerResponse.content)) {
+          const leaked2 = parseLeakedToolCalls(plannerResponse.content);
+          if (leaked2.length) {
+            console.warn('[Agent] 重试后仍泄漏，解析为标准调用执行');
+            plannerResponse = { ...plannerResponse, toolCalls: leaked2, content: '' };
+          }
+        }
+      }
     }
 
     if (!plannerResponse.toolCalls?.length) {
