@@ -17,6 +17,9 @@ import addTag from './add_tag.js';
 import queryTags from './query_tags.js';
 import writeKnowledgeBase from './write_knowledge_base.js';
 import getUserInfo from './get_user_info.js';
+import createBookmark from './create_bookmark.js';
+import tagResource from './tag_resource.js';
+import readUrl from './read_url.js';
 
 export default [
   searchKnowledgeBase,
@@ -38,4 +41,7 @@ export default [
   queryTags,
   writeKnowledgeBase,
   getUserInfo,
+  createBookmark,
+  tagResource,
+  readUrl,
 ];
