@@ -636,12 +636,14 @@
       window.open(hasProtocol ? item.url : `https://${item.url}`, '_blank');
       return;
     }
+    // 文件先于 route 判断：云空间需要带上 fileName 搜索过滤
+    if (item.type === 'file') {
+      router.push({ path: '/cloudSpace', query: { fileName: item.title } });
+      return;
+    }
     if (item.route) {
       router.push(item.route);
       return;
-    }
-    if (item.type === 'file') {
-      router.push({ path: '/cloudSpace', query: { fileName: item.title } });
     }
   }
 

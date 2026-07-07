@@ -92,7 +92,7 @@
             @click="router.push('/search')"
             >{{ $t('navigation.resourceCenter') }}</div
           >
-          <b-dropdown v-if="user.role === 'root'" :menu-options="adminMenuOptions">
+          <b-dropdown v-if="user.role === 'root'" align="center" :menu-options="adminMenuOptions">
             <div
               :style="{ color: adminRouteActive ? '#615ced' : '' }"
               style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"

@@ -178,9 +178,11 @@
 </script>
 
 <style lang="less" scoped>
+  /* 用 block 而非 inline-flex:antd 原来不加包裹层,触发元素直接参与父布局。
+     block 在弹性/网格容器里是内容宽度的项(导航、文件菜单不受影响),
+     在块级列表里是整行(个人中心主题/语言恢复各占一行,不再挤成一行)。 */
   .b-dropdown-trigger {
-    display: inline-flex;
-    align-items: center;
+    display: block;
   }
 </style>
 
