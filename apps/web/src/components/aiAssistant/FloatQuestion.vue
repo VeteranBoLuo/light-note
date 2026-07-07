@@ -525,7 +525,7 @@
 
   /* 头部样式 */
   .modal-header {
-    padding: 20px 25px;
+    padding: 12px 25px;
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
     backdrop-filter: blur(10px);
     color: white;

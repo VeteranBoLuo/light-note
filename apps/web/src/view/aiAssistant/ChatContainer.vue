@@ -16,6 +16,7 @@
           :key="index"
           :message="message"
           :has-answer-started="hasAnswerStarted"
+          @edit="handleEditMessage"
         />
         <!-- 智能滚动提示  -->
         <ScrollPrompt
@@ -30,6 +31,7 @@
 
       <!-- 输入区域 -->
       <ChatInputSection
+        ref="chatInputRef"
         v-model="userInput"
         :is-loading="isLoading"
         :show-translation="user.role === 'root'"
@@ -80,6 +82,7 @@
   const messages = ref<ChatMessage[]>([]);
   const isLoading = ref(false);
   const messagesContainer = ref<HTMLElement | null>(null);
+  const chatInputRef = ref<{ focus: () => void } | null>(null);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
 
@@ -658,6 +661,14 @@
     });
   };
 
+  // 编辑用户消息：把该条内容回填到输入框并聚焦，不自动发送（让用户改完再发）
+  const handleEditMessage = (content: string) => {
+    userInput.value = content;
+    nextTick(() => {
+      chatInputRef.value?.focus();
+    });
+  };
+
   // 简化消息监听逻辑，避免冲突
   watch(
     () => messages.value,
@@ -693,7 +704,7 @@
       system-ui,
       -apple-system,
       sans-serif;
-    padding: 20px;
+    padding: 0;
     box-sizing: border-box;
   }
 
@@ -711,7 +722,7 @@
   .messages-container {
     flex: 1;
     overflow-y: auto;
-    padding: 1.5rem;
+    padding: 0.75rem 1.5rem;
     position: relative;
     color: var(--text-color);
     scroll-behavior: smooth;

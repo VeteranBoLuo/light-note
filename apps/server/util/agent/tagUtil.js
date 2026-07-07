@@ -3,7 +3,7 @@ import { insertData } from '../common.js';
 
 /**
  * 找到用户名下的标签,不存在则创建,返回 tagId。
- * 供 Agent 的 create_bookmark / tag_resource 复用(与 add_tag 语义一致)。
+ * 供 Agent 的 create_bookmark 复用(与 add_tag 语义一致)。
  */
 export async function ensureTag(userId, tagName) {
   const name = String(tagName || '').trim();

@@ -15,26 +15,66 @@
           <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
         </div>
       </div>
-      <div class="bubble" v-if="message.content || (message.thoughts && message.thoughts.length)">
-        <!-- 深度思考过程 -->
-        <div v-if="message.thoughts && message.thoughts.length" class="thoughts">
-          <div class="thoughts-header">{{
-            message.thinkingText && hasAnswerStarted ? '思考完毕' : '深度思考中...'
-          }}</div>
-          <div v-if="message.thoughts.some((t) => t.action_type === 'reasoning')" class="reasoning">
-            <strong>思考：</strong>{{ message.thinkingDisplay || message.thinkingText || '' }}
-          </div>
-          <div v-for="(thought, index) in message.thoughts" :key="index" class="thought">
-            <div v-if="thought.action_type === 'agentRag'" class="rag">
-              <strong>知识检索</strong>
+      <div class="bubble-col">
+        <div class="bubble" v-if="message.content || (message.thoughts && message.thoughts.length)">
+          <!-- 深度思考过程 -->
+          <div v-if="message.thoughts && message.thoughts.length" class="thoughts">
+            <div class="thoughts-header">{{
+              message.thinkingText && hasAnswerStarted ? '思考完毕' : '深度思考中...'
+            }}</div>
+            <div v-if="message.thoughts.some((t) => t.action_type === 'reasoning')" class="reasoning">
+              <strong>思考：</strong>{{ message.thinkingDisplay || message.thinkingText || '' }}
+            </div>
+            <div v-for="(thought, index) in message.thoughts" :key="index" class="thought">
+              <div v-if="thought.action_type === 'agentRag'" class="rag">
+                <strong>知识检索</strong>
+              </div>
             </div>
           </div>
+          <!-- Markdown 渲染内容 -->
+          <div class="text" v-html="formatMessage(message)" @click="handleLinkClick"></div>
         </div>
-        <!-- Markdown 渲染内容 -->
-        <div class="text" v-html="formatMessage(message)" @click="handleLinkClick"></div>
-        <div class="time" v-if="message.role === 'user'">{{ formatTime(message.timestamp) }}</div>
+        <ReplyLoading v-else />
+        <!-- 用户消息：操作条移到气泡外下方（纯图标 + 时间），整体右对齐，
+             气泡因此只需包住文字即可自适应收窄，不再被这一行撑宽 -->
+        <div class="msg-footer" v-if="message.role === 'user' && message.content">
+          <div class="msg-actions">
+            <button type="button" class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+            <button type="button" class="msg-action-btn" :title="t('ai.edit')" @click="handleEdit">
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+              </svg>
+            </button>
+          </div>
+          <span class="time">{{ formatTime(message.timestamp) }}</span>
+        </div>
       </div>
-      <ReplyLoading v-else />
     </div>
   </div>
 </template>
@@ -50,6 +90,10 @@
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
+  import { copyTextToClipboard } from '@/utils/common';
+  // 注意：本组件有名为 message 的 prop，这里必须改名，否则导入会遮蔽 prop，
+  // 导致模板里的 message.content/role 全部指向该工具对象而恒为 undefined（消息一直转圈不显示）
+  import bMessage from '@/components/base/BasicComponents/BMessage/BMessage';
 
   const { t } = useI18n();
 
@@ -69,6 +113,23 @@
     message: ChatMessage;
     hasAnswerStarted: boolean;
   }>();
+
+  // 点“编辑”把这条用户消息内容抛给容器，回填到输入框
+  const emit = defineEmits<{
+    (e: 'edit', content: string): void;
+  }>();
+
+  // 复制这条消息内容到剪贴板
+  const handleCopy = () => {
+    const ok = copyTextToClipboard(props.message.content);
+    if (ok) bMessage.success(t('ai.copied'));
+    else bMessage.warning(t('ai.copyFailed'));
+  };
+
+  // 编辑：把内容回填到输入框（由 ChatContainer 处理并聚焦）
+  const handleEdit = () => {
+    emit('edit', props.message.content);
+  };
 
   // 配置 Markdown 解析器（保持与原组件一致，忽略类型检查约束）
   const markedOptions: any = {
@@ -320,8 +381,79 @@
 
   .time {
     font-size: 0.75rem;
-    opacity: 0.7;
-    margin-top: 0.5rem;
+    opacity: 0.6;
+  }
+
+  /* 气泡列：气泡与操作条上下排列；操作条移到气泡外，气泡才能收窄贴合内容 */
+  .bubble-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .message.user .bubble-col {
+    align-items: flex-end;
+  }
+
+  .message.assistant .bubble-col {
+    align-items: flex-start;
+  }
+
+  /* 用户消息：气泡外下方的操作条（图标在前、时间在后），整体右对齐 */
+  .msg-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.3rem;
+    padding: 0 0.15rem;
+  }
+
+  .msg-actions {
+    display: inline-flex;
+    gap: 0.15rem;
+  }
+
+  .msg-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    opacity: 0.55;
+    cursor: pointer;
+    border-radius: 6px;
+    transition:
+      opacity 0.15s,
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .msg-action-btn:hover {
+    opacity: 1;
+    color: var(--primary-color);
+    /* 灰阶半透明，暗色/亮色主题下都可见 */
+    background: rgba(127, 127, 127, 0.15);
+  }
+
+  .msg-action-btn svg {
+    display: block;
+  }
+
+  /* 桌面端（可 hover）图标默认隐藏，鼠标移到该条消息才淡入，减少干扰；
+     触摸设备无 hover，保持常显方便点按。时间始终显示。 */
+  @media (hover: hover) {
+    .msg-actions {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .message:hover .msg-actions {
+      opacity: 1;
+    }
   }
 
   .thoughts {

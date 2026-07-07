@@ -492,6 +492,7 @@ export default {
     preview: '预览',
     select: '选择',
     saveSuccess: '保存成功',
+    more: '更多',
   },
   changelog: {
     title: '更新日志',
@@ -522,6 +523,10 @@ export default {
     inputHint: '按 Enter 发送，Shift + Enter 换行',
     pause: '暂停',
     send: '发送',
+    copy: '复制',
+    edit: '编辑',
+    copied: '已复制到剪贴板',
+    copyFailed: '复制失败，请手动选择复制',
     responsePaused: '（响应已暂停）',
     errorMessage: '抱歉，暂时无法回应，请稍后重试',
     homeTitle: '首页',

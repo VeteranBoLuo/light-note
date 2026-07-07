@@ -120,13 +120,27 @@
       nextTick(adjustTextareaHeight);
     },
   );
+
+  // 供父组件调用：编辑消息回填内容后，聚焦输入框并把光标移到末尾
+  function focus() {
+    nextTick(() => {
+      const el = textInput.value;
+      if (!el) return;
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+      adjustTextareaHeight();
+    });
+  }
+
+  defineExpose({ focus });
 </script>
 
 <style scoped>
   .input-section {
     background: var(--background-color);
     border-top: 1px solid #e1e5e9;
-    padding: 1.5rem;
+    padding: 0.5rem 1.25rem;
     flex-shrink: 0;
   }
 
@@ -136,7 +150,7 @@
     border-radius: 0.75rem;
     background-color: var(--menu-container-bg-color);
     padding: 0.75rem 0.75rem 2rem 0.75rem;
-    min-height: 60px;
+    min-height: 48px;
   }
 
   .text-input {
@@ -238,7 +252,7 @@
 
   @media (max-width: 600px) {
     .input-section {
-      padding: 1rem;
+      padding: 0.5rem 1rem;
     }
   }
 </style>

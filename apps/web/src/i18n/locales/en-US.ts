@@ -500,6 +500,7 @@ export default {
     preview: 'Preview',
     select: 'Select',
     saveSuccess: 'Save Successful',
+    more: 'More',
   },
   changelog: {
     title: 'Update Logs',
@@ -533,6 +534,10 @@ export default {
     inputHint: 'Press Enter to send, Shift + Enter for new line',
     pause: 'Pause',
     send: 'Send',
+    copy: 'Copy',
+    edit: 'Edit',
+    copied: 'Copied to clipboard',
+    copyFailed: 'Copy failed, please select and copy manually',
     responsePaused: '(Response paused)',
     errorMessage: 'Sorry, unable to respond temporarily, please try again later',
     homeTitle: 'Home',
