@@ -120,10 +120,29 @@
         </div>
       </section>
 
-      <!-- 成长 / 账号:占位,随成长体系上线 -->
+      <!-- 成长 -->
+      <section class="settings-card">
+        <div class="card-head">
+          <span class="card-icon card-icon--growth">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l2.1 4.6L19 8.3l-3.5 3.3.9 4.9L12 14.2 7.6 16.5l.9-4.9L5 8.3l4.9-.7z" />
+            </svg>
+          </span>
+          <div class="card-head-text">
+            <h2 class="card-title">{{ t('settings.growth') }}</h2>
+            <p class="card-sub">{{ t('settings.growthDesc') }}</p>
+          </div>
+        </div>
+        <div class="growth-wrap">
+          <GrowthCard />
+        </div>
+      </section>
+
+      <!-- 账号等后续 -->
       <div class="settings-coming">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3l2.1 4.6L19 8.3l-3.5 3.3.9 4.9L12 14.2 7.6 16.5l.9-4.9L5 8.3l4.9-.7z" />
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
         <span>{{ t('settings.moreComing') }}</span>
       </div>
@@ -138,6 +157,7 @@
   import { useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import GrowthCard from '@/components/growth/GrowthCard.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
@@ -279,6 +299,13 @@
   .card-icon--general {
     color: var(--resource-note-color);
     background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
+  }
+  .card-icon--growth {
+    color: var(--resource-file-color);
+    background: color-mix(in srgb, var(--resource-file-color) 14%, transparent);
+  }
+  .growth-wrap {
+    padding-top: 16px;
   }
   .card-head-text {
     display: flex;

@@ -185,6 +185,9 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   }
   const rank = rankOf(level);
   const { nextExp, need } = nextLevelInfo(exp, level);
+  const isMax = level >= MAX_LEVEL;
+  const span = nextExp ? nextExp - rank.cumExp : 0; // 本级跨度
+  const progress = isMax ? 100 : span > 0 ? Math.max(0, Math.min(100, Math.round(((exp - rank.cumExp) / span) * 100))) : 0;
   return {
     exp,
     level,
@@ -193,9 +196,11 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     aiTokenDaily: rank.aiTokenDaily,
     streak,
     checkedInToday: lastCheckin === dayKey(),
+    levelStartExp: rank.cumExp,
     nextLevelExp: nextExp,
     expToNext: need,
-    isMax: level >= MAX_LEVEL,
+    progress, // 本级内进度 0-100(前端进度条直接用)
+    isMax,
   };
 }
 

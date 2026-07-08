@@ -32,6 +32,13 @@
               <span class="user-name">{{
                 user.userName ? user.alias || t('personCenter.defaultNickname') : t('personCenter.pleaseLogin')
               }}</span>
+              <span
+                v-if="user.role !== 'visitor' && growthInfo"
+                class="lv-badge"
+                :class="`tier-${badgeTier}`"
+                :title="growthInfo.name"
+                >Lv.{{ growthInfo.level }}</span
+              >
               <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
             </div>
             <div class="user-sub">
@@ -132,9 +139,10 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { useGrowth } from '@/composables/useGrowth.ts';
   import { formatStorageSize } from '@/utils/common';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import userApi from '@/api/userApi.ts';
   import { updatePreference } from '@/utils/savePreference';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
@@ -157,6 +165,16 @@
   const userVisible = ref(false);
 
   const user = useUserStore();
+
+  // 成长徽章:登录用户在头像旁展示当前等级(纯展示,管理成长走「设置」菜单入口)
+  const { growth: growthInfo, load: loadGrowth } = useGrowth();
+  const badgeTier = computed(() => {
+    const l = growthInfo.value?.level || 1;
+    return l >= 13 ? 5 : l >= 10 ? 4 : l >= 7 ? 3 : l >= 4 ? 2 : 1;
+  });
+  onMounted(() => {
+    if (user.role && user.role !== 'visitor') loadGrowth();
+  });
 
   function clearCloseTimer() {
     if (closeTimer) {
@@ -515,6 +533,32 @@
   .user-name {
     font-weight: 700;
     font-size: 14px;
+  }
+
+  .lv-badge {
+    flex: 0 0 auto;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.01em;
+
+    &.tier-1 {
+      background: linear-gradient(135deg, #6b7280, #9ca3af);
+    }
+    &.tier-2 {
+      background: linear-gradient(135deg, #2563eb, #38bdf8);
+    }
+    &.tier-3 {
+      background: linear-gradient(135deg, #7c3aed, #a855f7);
+    }
+    &.tier-4 {
+      background: linear-gradient(135deg, #d97706, #fbbf24);
+    }
+    &.tier-5 {
+      background: linear-gradient(135deg, #db2777, #f43f5e, #fb923c);
+    }
   }
 
   .user-sub {
