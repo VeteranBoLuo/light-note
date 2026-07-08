@@ -52,7 +52,14 @@
 
           <!-- 2.5 音频预览 -->
           <div v-else-if="previewType === 'audio'" class="preview-audio-container">
-            <audio :src="effectiveFileUrl" class="preview-audio" controls preload="metadata" @canplay="onRendered" @error="onError" />
+            <audio
+              :src="effectiveFileUrl"
+              class="preview-audio"
+              controls
+              preload="metadata"
+              @canplay="onRendered"
+              @error="onError"
+            />
           </div>
 
           <!-- 3. 图片预览 -->
@@ -79,7 +86,12 @@
 
           <!-- 4. Word文档预览 -->
           <div v-else-if="previewType === 'word'" class="office-preview-container">
-            <VueOfficeDocx :src="effectiveFileUrl" @rendered="onRendered" @error="onOfficeError" class="office-preview" />
+            <VueOfficeDocx
+              :src="effectiveFileUrl"
+              @rendered="onRendered"
+              @error="onOfficeError"
+              class="office-preview"
+            />
           </div>
 
           <!-- 5. Excel预览 -->
@@ -94,7 +106,12 @@
 
           <!-- 6. PPT预览 -->
           <div v-else-if="previewType === 'ppt'" class="office-preview-container">
-            <VueOfficePptx :src="effectiveFileUrl" @rendered="onRendered" @error="onOfficeError" class="office-preview" />
+            <VueOfficePptx
+              :src="effectiveFileUrl"
+              @rendered="onRendered"
+              @error="onOfficeError"
+              class="office-preview"
+            />
           </div>
 
           <!-- 7. 文本文件预览 -->
@@ -102,7 +119,12 @@
             <div class="text-toolbar">
               <BSpace>
                 <BTooltip title="自动换行">
-                  <BButton size="small" @click="toggleWrap" :type="wrapText ? 'primary' : 'default'" class="toolbar-btn">
+                  <BButton
+                    size="small"
+                    @click="toggleWrap"
+                    :type="wrapText ? 'primary' : 'default'"
+                    class="toolbar-btn"
+                  >
                     <AlignLeftOutlined />
                   </BButton>
                 </BTooltip>
@@ -151,16 +173,16 @@
             </div>
             <h3>不支持预览此文件类型</h3>
             <p>当前文件格式暂不支持在线预览，您可以通过下载后查看</p>
-            <BSpace>
-            <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
-              <DownloadOutlined />
-              下载文件
-            </BButton>
-            <BButton @click="tryOnlinePreview" v-if="canTryOnlinePreview">
-              <GlobalOutlined />
-              尝试在线预览
-            </BButton>
-            </BSpace>
+            <div class="flex-center" style="gap: 8px">
+              <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
+                <DownloadOutlined />
+                下载文件
+              </BButton>
+              <BButton @click="tryOnlinePreview" v-if="canTryOnlinePreview">
+                <GlobalOutlined />
+                尝试在线预览
+              </BButton>
+            </div>
           </div>
         </div>
       </div>
@@ -171,34 +193,34 @@
           <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
           <BSpace :size="8">
             <BTooltip title="上一个文件" v-if="showNext">
-                  <BButton size="small" @click="handlePrev" class="action-btn">
-                    <LeftOutlined />
-                  </BButton>
+              <BButton size="small" @click="handlePrev" class="action-btn">
+                <LeftOutlined />
+              </BButton>
             </BTooltip>
             <BTooltip title="下一个文件" v-if="showNext">
-                  <BButton size="small" @click="handleNext" class="action-btn">
-                    <RightOutlined />
-                  </BButton>
+              <BButton size="small" @click="handleNext" class="action-btn">
+                <RightOutlined />
+              </BButton>
             </BTooltip>
             <BTooltip title="下载文件">
-                  <BButton size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
-                    <DownloadOutlined />
-                  </BButton>
+              <BButton size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
+                <DownloadOutlined />
+              </BButton>
             </BTooltip>
             <BTooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
-                  <BButton size="small" @click="zoomIn" class="action-btn">
-                    <ZoomInOutlined />
-                  </BButton>
+              <BButton size="small" @click="zoomIn" class="action-btn">
+                <ZoomInOutlined />
+              </BButton>
             </BTooltip>
             <BTooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
-                  <BButton size="small" @click="zoomOut" class="action-btn">
-                    <ZoomOutOutlined />
-                  </BButton>
+              <BButton size="small" @click="zoomOut" class="action-btn">
+                <ZoomOutOutlined />
+              </BButton>
             </BTooltip>
             <BTooltip title="旋转图片" v-if="previewType === 'image'">
-                  <BButton size="small" @click="rotateImage" class="action-btn">
-                    <RotateRightOutlined />
-                  </BButton>
+              <BButton size="small" @click="rotateImage" class="action-btn">
+                <RotateRightOutlined />
+              </BButton>
             </BTooltip>
           </BSpace>
         </BSpace>
@@ -1146,6 +1168,8 @@
   }
 
   @keyframes b-spin-rotate {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>
