@@ -331,11 +331,24 @@ async function queryNotes(userId, keyword, limit, lang) {
     FROM note n
     WHERE n.create_by = ?
       AND n.del_flag = 0
-      AND (? = 0 OR n.title LIKE ? OR n.content LIKE ?)
+      AND (
+        ? = 0
+        OR n.title LIKE ?
+        OR n.content LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM resource_tag_relations ntr2
+          INNER JOIN tag nt2 ON ntr2.tag_id = nt2.id
+          WHERE ntr2.resource_id = n.id
+            AND ntr2.resource_type = 'note'
+            AND nt2.del_flag = 0
+            AND nt2.name LIKE ?
+        )
+      )
     ORDER BY n.sort, n.update_time DESC
     ${limit ? 'LIMIT ?' : ''}
   `;
-  const params = [userId, hasKeyword ? 1 : 0, like, like];
+  const params = [userId, hasKeyword ? 1 : 0, like, like, like];
   if (limit) params.push(limit);
   const [rows] = await pool.query(sql, params);
   return rows.map((item) => ({
@@ -366,11 +379,25 @@ async function queryFiles(userId, keyword, limit, lang) {
     LEFT JOIN folders ON files.folder_id = folders.id
     WHERE files.create_by = ?
       AND files.del_flag = 0
-      AND (? = 0 OR files.file_name LIKE ? OR files.file_type LIKE ? OR folders.name LIKE ?)
+      AND (
+        ? = 0
+        OR files.file_name LIKE ?
+        OR files.file_type LIKE ?
+        OR folders.name LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM resource_tag_relations ftr2
+          INNER JOIN tag ft2 ON ftr2.tag_id = ft2.id
+          WHERE ftr2.resource_id = files.id
+            AND ftr2.resource_type = 'file'
+            AND ft2.del_flag = 0
+            AND ft2.name LIKE ?
+        )
+      )
     ORDER BY files.create_time DESC
     ${limit ? 'LIMIT ?' : ''}
   `;
-  const params = [userId, hasKeyword ? 1 : 0, like, like, like];
+  const params = [userId, hasKeyword ? 1 : 0, like, like, like, like];
   if (limit) params.push(limit);
   const [rows] = await pool.query(sql, params);
   return rows.map((item) => ({
