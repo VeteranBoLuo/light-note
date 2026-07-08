@@ -12,6 +12,7 @@ import knowledgeBaseRouter from '../router/knowledgeBase.js';
 import securityRouter from '../router/security.js';
 import trashRouter from '../router/trash.js';
 import seoRouter from '../router/seo.js';
+import growthRouter from '../router/growth.js';
 
 export const resultData = function (data = null, status = 200, msg = '') {
   if (status !== 200 && status !== 'visitor' && status !== 'preview') {
@@ -210,6 +211,10 @@ export const baseRouter = [
   {
     path: '/knowledgeBase',
     router: knowledgeBaseRouter,
+  },
+  {
+    path: '/growth',
+    router: growthRouter,
   },
   {
     // SEO 内容页(/help、/help/:id、/sitemap.xml)：挂根路径，只注册 GET，
