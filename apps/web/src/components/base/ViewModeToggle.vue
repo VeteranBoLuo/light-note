@@ -23,29 +23,17 @@
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
   const { t } = useI18n();
-  import userApi from '@/api/userApi.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
+  import { updatePreference, isGuestUser } from '@/utils/savePreference';
   const user = useUserStore();
-  const setMode = (mode: any) => {
-    // 本地立即生效 + 持久化
-    applyPreferenceLocally({ noteViewMode: mode });
-    // 游客本地化即可,不调后端、不触发注册墙;仅登录用户同步服务器
-    if (isGuestUser()) return;
-    userApi
-      .updateUserInfo({
-        id: user.id,
-        preferences: JSON.stringify({
-          ...user.preferences,
-          noteViewMode: mode,
-        }),
-      })
-      .then(() => {
-        recordOperation({ module: '笔记库', operation: `保存视图模式成功【${mode}】` });
-      })
-      .catch((err) => {
-        console.error('后台错误：' + err);
-      });
+  const setMode = async (mode: any) => {
+    // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
+    try {
+      await updatePreference({ noteViewMode: mode });
+      if (!isGuestUser()) recordOperation({ module: '笔记库', operation: `保存视图模式成功【${mode}】` });
+    } catch (err) {
+      console.error('后台错误：' + err);
+    }
   };
 </script>
 

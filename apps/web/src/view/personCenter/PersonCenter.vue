@@ -255,6 +255,12 @@
 
   const options = ref<menuItemInterface[]>([
     {
+      name: 'settings',
+      label: t('settings.title'),
+      path: '/settings',
+      icon: icon.navigation.system,
+    },
+    {
       name: 'help',
       label: t('personCenter.help'),
       path: '/help',

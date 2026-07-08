@@ -146,8 +146,12 @@
     }
 
     mq = window.matchMedia('(prefers-color-scheme: dark)');
-    mqListener = (e) => {
-      user.preferences.theme = e.matches ? 'night' : 'day';
+    mqListener = () => {
+      // 仅当用户选择「跟随系统」时,OS 配色变化才重新应用主题——只切 DOM,不回写 preferences.theme,
+      // 保留 'system' 语义(旧实现会把 theme 覆盖成具体 night/day,破坏语义且是隐藏写入口)
+      if (user.preferences.theme === 'system') {
+        applyTheme();
+      }
     };
     mq.addEventListener('change', mqListener);
     console.log('初始屏幕尺寸：', user.preferences);

@@ -23,6 +23,17 @@ const commonRouter: RouteRecordRaw[] = [
     name: 'updateLogs',
     component: () => import('@/components/personCenter/UpdateLogs.vue'),
   },
+  {
+    meta: {
+      title: '设置',
+      keepAlive: true,
+      requireAuth: true,
+      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+    },
+    path: '/settings',
+    name: 'settings',
+    component: () => import('@/view/settings/Settings.vue'),
+  },
 ];
 
 export default commonRouter;
