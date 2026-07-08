@@ -134,7 +134,8 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
-  import { updatePreference } from '@/utils/savePreference';
+  import { updatePreference, isGuestUser } from '@/utils/savePreference';
+  import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -170,6 +171,7 @@
     if ((user.preferences as any)[key] === value) return;
     try {
       await updatePreference({ [key]: value });
+      if (!isGuestUser()) recordOperation({ module: '设置', operation: `修改偏好【${key}=${value}】` });
     } catch {
       message.warning(t('settings.saveFailed'));
     }

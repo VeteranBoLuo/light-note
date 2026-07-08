@@ -3,6 +3,7 @@ import { snakeCaseKeys, resultData, mergeExistingProperties, insertData } from '
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
+import { awardCreate } from '../util/growth.js';
 
 export const addNote = (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
@@ -18,6 +19,7 @@ export const addNote = (req, res) => {
       .then(() => {
         res.send(resultData({ id: noteData.id }));
         recordFirstOwnResource(req, 'note'); // 激活里程碑:首次自建笔记
+        awardCreate(userId, 'note', noteData.id, { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减)
       })
       .catch((err) => {
         res.send(resultData(null, 500, '服务器内部错误: ' + err.message));

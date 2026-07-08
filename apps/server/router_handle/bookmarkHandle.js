@@ -11,6 +11,7 @@ import {
 import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
+import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -489,6 +490,7 @@ export const addBookmark = async (req, res) => {
     await connection.commit();
     res.send(resultData(result));
     recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
+    awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
   } catch (err) {
     await connection.rollback();
     res.send(resultData(null, 500, err.message));
@@ -797,6 +799,10 @@ export const importBookmarksHtml = async (req, res) => {
         boundRelations,
       }),
     );
+    // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)
+    if (createdBookmarks > 0) {
+      grantExp(userId, 'bookmark_import', { refId: `import_${userId}_${Date.now()}`, amount: 15, userRole: req.user.role }).catch(() => {});
+    }
   } catch (e) {
     await connection.rollback();
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));

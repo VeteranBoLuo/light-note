@@ -3,6 +3,7 @@ import multer from 'multer';
 import os from 'os';
 import { resultData, snakeCaseKeys } from '../util/common.js';
 import pool from '../db/index.js';
+import { awardCreate } from '../util/growth.js';
 import {
   bucketBaseUrl,
   buildObjectKey,
@@ -202,6 +203,10 @@ router.post('/confirmUpload', async (req, res) => {
     await connection.commit();
     res.send(resultData(results));
     recordFirstOwnResource(req, 'file'); // 激活里程碑:首次自建文件(直传回调写库成功)
+    // 创造类发经验:仅对新增(非覆盖)文件,逐个按当日衰减发放(grantExp 内日顶 200 兜底)
+    results
+      .filter((r) => r.status === '已上传')
+      .forEach((r) => awardCreate(req.user.id, 'file', r.fileId, { userRole: req.user.role }).catch(() => {}));
   } catch (error) {
     await connection.rollback();
     res.send(resultData(null, 500, '服务器内部错误: ' + error.message));

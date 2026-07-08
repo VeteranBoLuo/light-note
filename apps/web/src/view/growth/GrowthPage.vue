@@ -18,14 +18,20 @@
 </template>
 
 <script setup lang="ts">
+  import { onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
   const router = useRouter();
+
+  onMounted(() => {
+    recordOperation({ module: '成长', operation: '查看我的成长' });
+  });
 
   function goBack() {
     if (window.history.length > 1) router.back();

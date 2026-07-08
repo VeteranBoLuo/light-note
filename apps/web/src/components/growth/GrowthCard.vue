@@ -57,6 +57,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import RankLadder from '@/components/growth/RankLadder.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
   const { growth: g, load, doCheckin } = useGrowth();
@@ -86,8 +87,10 @@
           message.info(t('growth.alreadyChecked'));
         } else {
           message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
+          recordOperation({ module: '成长', operation: `每日签到（连续 ${res.data.streak} 天，+${res.data.expGained}）` });
           if (res.data.leveledUp && res.data.growth) {
             message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
+            recordOperation({ module: '成长', operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}` });
           }
         }
       }
