@@ -66,7 +66,10 @@ export const updateIpReputation = async ({ ip, attackType, severity, threatScore
   const highRisk = ['high', 'critical'].includes(severity) ? 1 : 0;
   const critical = severity === 'critical' ? 1 : 0;
   const currentRiskScore = Number(current.risk_score || 0);
-  const theoreticalRiskDelta = Math.max(3, Math.ceil(Number(threatScore || 0) / 10));
+  // 纯高频(FLOOD)不累积到自动封禁:正常用户刷新页面也会高频,只在 app 层限流(429)+ 记录即可,
+  // 不应因此封 IP。自动封禁留给有明确攻击特征的类型(注入/XSS/扫描/爆破/IP信誉)。
+  const theoreticalRiskDelta =
+    attackType === 'FLOOD' ? 0 : Math.max(3, Math.ceil(Number(threatScore || 0) / 10));
   const predictedScore = Math.min(100, currentRiskScore + theoreticalRiskDelta);
 
   const currentBanActive =

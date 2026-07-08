@@ -1,7 +1,7 @@
 export const SECURITY_CONFIG = {
   maxPreviewLength: 240,
   maxPayloadLength: 12000,
-  highFrequencyPerMinute: Number(process.env.SECURITY_HIGH_FREQUENCY_PER_MINUTE || 120),
+  highFrequencyPerMinute: Number(process.env.SECURITY_HIGH_FREQUENCY_PER_MINUTE || 300),
   pathEnumerationPerMinute: Number(process.env.SECURITY_PATH_ENUMERATION_PER_MINUTE || 40),
   scanner404FiveMinutes: Number(process.env.SECURITY_404_FIVE_MINUTES || 20),
   loginFailFiveMinutes: Number(process.env.SECURITY_LOGIN_FAIL_FIVE_MINUTES || 8),
