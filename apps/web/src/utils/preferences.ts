@@ -5,6 +5,8 @@ export type HomePagePreference = 'landing' | 'workbench' | 'resourceCenter' | 'b
 export interface UserPreferences {
   theme?: ThemePreference | string;
   noteViewMode?: 'card' | 'list';
+  resourceView?: 'card' | 'list';
+  tagView?: 'card' | 'graph';
   lang?: LanguagePreference;
   homePage?: HomePagePreference;
 }

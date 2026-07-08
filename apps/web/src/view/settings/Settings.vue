@@ -121,6 +121,42 @@
               </button>
             </div>
           </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label">{{ t('settings.resourceView') }}</span>
+              <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
+            </div>
+            <div class="seg">
+              <button
+                v-for="o in resourceViewOpts"
+                :key="o.v"
+                class="seg-btn"
+                :class="{ active: (user.preferences.resourceView || 'card') === o.v }"
+                @click="set('resourceView', o.v)"
+              >
+                {{ o.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label">{{ t('settings.tagView') }}</span>
+              <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
+            </div>
+            <div class="seg">
+              <button
+                v-for="o in tagViewOpts"
+                :key="o.v"
+                class="seg-btn"
+                :class="{ active: (user.preferences.tagView || 'card') === o.v }"
+                @click="set('tagView', o.v)"
+              >
+                {{ o.label }}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
         </div>
@@ -165,6 +201,14 @@
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'list', label: t('settings.listView') },
+  ]);
+  const resourceViewOpts = computed(() => [
+    { v: 'card', label: t('resourceCenter.view.card') },
+    { v: 'list', label: t('resourceCenter.view.list') },
+  ]);
+  const tagViewOpts = computed(() => [
+    { v: 'card', label: t('tagGraph.viewMode.card') },
+    { v: 'graph', label: t('tagGraph.viewMode.graph') },
   ]);
 
   async function set(key: string, value: string) {

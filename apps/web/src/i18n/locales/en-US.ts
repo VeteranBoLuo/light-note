@@ -540,6 +540,10 @@ export default {
     defaultHomeDesc: 'The page shown each time you open the site',
     noteView: 'Note view',
     noteViewDesc: 'How the note library list is displayed',
+    resourceView: 'Resource center view',
+    resourceViewDesc: 'Default layout of resource center results',
+    tagView: 'Tag detail view',
+    tagViewDesc: 'Default view when opening a tag detail',
     cardView: 'Card',
     listView: 'List',
     home: {

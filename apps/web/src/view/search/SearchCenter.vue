@@ -257,6 +257,7 @@
     type SearchType,
   } from '@/api/search.ts';
   import { useUserStore } from '@/store';
+  import { updatePreference } from '@/utils/savePreference';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import SearchResultItemComp from '@/components/searchCenter/SearchResultItem.vue';
@@ -310,7 +311,7 @@
     keyword: '',
     type: 'all',
     sort: 'relevance',
-    view: (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card',
+    view: (user.preferences.resourceView as ResourceView) || (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card',
     tags: [],
     date: 'all',
     untagged: false,
@@ -584,6 +585,7 @@
     if (queryState.view === view) return;
     queryState.view = view;
     localStorage.setItem(SEARCH_VIEW_STORAGE_KEY, view);
+    updatePreference({ resourceView: view }).catch(() => {}); // 记忆到偏好:跨设备 + 设置页可改
     applyQueryState('切换视图');
   }
 

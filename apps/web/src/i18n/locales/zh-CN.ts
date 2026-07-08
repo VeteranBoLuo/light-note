@@ -531,6 +531,10 @@ export default {
     defaultHomeDesc: '每次打开网站默认进入的页面',
     noteView: '笔记视图',
     noteViewDesc: '笔记库列表的展示方式',
+    resourceView: '资源中心视图',
+    resourceViewDesc: '资源中心搜索结果的默认展示',
+    tagView: '标签详情视图',
+    tagViewDesc: '打开标签详情时的默认视图',
     cardView: '卡片',
     listView: '列表',
     home: {

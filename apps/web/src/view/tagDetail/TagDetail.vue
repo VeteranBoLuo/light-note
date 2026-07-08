@@ -209,6 +209,7 @@
   import { useRoute, useRouter } from 'vue-router';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useUserStore } from '@/store';
+  import { updatePreference } from '@/utils/savePreference';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { RESOURCE_COLOR_HEX } from '@/config/resourceColor.ts';
@@ -420,6 +421,7 @@
   function setViewMode(mode: 'graph' | 'card') {
     viewMode.value = mode;
     localStorage.setItem(TAG_DETAIL_VIEW_MODE_KEY, mode);
+    updatePreference({ tagView: mode }).catch(() => {}); // 记忆到偏好:跨设备 + 设置页可改
   }
 
   function toggleGraphResources() {
@@ -542,9 +544,9 @@
   );
 
   onMounted(() => {
-    const savedViewMode = localStorage.getItem(TAG_DETAIL_VIEW_MODE_KEY);
-    if (savedViewMode === 'graph' || savedViewMode === 'card') {
-      viewMode.value = savedViewMode;
+    const saved = user.preferences.tagView || localStorage.getItem(TAG_DETAIL_VIEW_MODE_KEY);
+    if (saved === 'graph' || saved === 'card') {
+      viewMode.value = saved;
     }
     loadTagDetail();
   });
