@@ -60,10 +60,17 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
-  const { growth: g, load, doCheckin } = useGrowth();
+  const { growth: g, load, doCheckin, markRead } = useGrowth();
   const checking = ref(false);
 
-  onMounted(() => load());
+  onMounted(async () => {
+    await load();
+    // 进成长页即视为查看升级通知:提示 + 标记已读(清红点)
+    if (g.value?.hasUnreadLevelUp) {
+      message.success(t('growth.leveledUp', { lv: g.value.level, name: g.value.name }));
+      markRead();
+    }
+  });
 
   // 段位分 5 档配色,越高越"贵重"(荣誉感)
   const tier = computed(() => {

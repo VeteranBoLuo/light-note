@@ -9,4 +9,7 @@ export const checkin = () => apiBasePost('/api/growth/checkin');
 // 段位表(「段位路线」总览用,公开只读)
 export const getRanks = () => apiBaseGet('/api/growth/ranks');
 
-export default { getMyGrowth, checkin, getRanks };
+// 标记升级通知已读(查看成长页后)
+export const markNoticesRead = () => apiBasePost('/api/growth/notices/read');
+
+export default { getMyGrowth, checkin, getRanks, markNoticesRead };

@@ -14,6 +14,8 @@ export interface Growth {
   nextLevelExp: number | null;
   expToNext: number;
   progress: number;
+  hasUnreadLevelUp?: boolean;
+  unreadLevel?: number | null;
   isMax: boolean;
 }
 
@@ -90,5 +92,15 @@ export function useGrowth() {
     return res;
   }
 
-  return { growth, ranks, loading, load, loadRanks, doCheckin };
+  // 标记升级通知已读(查看成长页后):清后端 + 本地未读标记
+  async function markRead() {
+    try {
+      await growthApi.markNoticesRead();
+    } catch {
+      /* 忽略 */
+    }
+    if (growth.value) growth.value.hasUnreadLevelUp = false;
+  }
+
+  return { growth, ranks, loading, load, loadRanks, doCheckin, markRead };
 }

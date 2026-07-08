@@ -35,7 +35,7 @@
               <span
                 v-if="growthInfo"
                 class="lv-badge"
-                :class="`tier-${badgeTier}`"
+                :class="[`tier-${badgeTier}`, { 'has-unread': growthInfo.hasUnreadLevelUp }]"
                 :title="growthInfo.name"
                 role="button"
                 @click="goGrowth"
@@ -549,6 +549,7 @@
   }
 
   .lv-badge {
+    position: relative;
     flex: 0 0 auto;
     padding: 1px 8px;
     border-radius: 999px;
@@ -561,6 +562,18 @@
 
     &:hover {
       transform: translateY(-1px);
+    }
+
+    &.has-unread::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ff4d4f;
+      border: 1.5px solid var(--menu-body-bg-color, #fff);
     }
 
     &.tier-1 {

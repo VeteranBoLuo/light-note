@@ -1,4 +1,4 @@
-import { getGrowth, checkin, RANKS } from '../util/growth.js';
+import { getGrowth, checkin, RANKS, markNoticesRead } from '../util/growth.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 
@@ -41,5 +41,17 @@ export const getRanks = async (req, res) => {
   } catch (error) {
     console.error('获取段位表失败:', error);
     res.send(resultData(null, 500, '获取段位表失败: ' + error.message));
+  }
+};
+
+// POST /growth/notices/read —— 标记升级通知已读(查看成长页后)
+export const readNotices = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    await markNoticesRead(req.user.id);
+    res.send(resultData({ ok: true }));
+  } catch (error) {
+    console.error('标记升级通知已读失败:', error);
+    res.send(resultData(null, 500, '标记已读失败: ' + error.message));
   }
 };

@@ -204,12 +204,17 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let exp = 0;
   let streak = 0;
   let lastCheckin = null;
+  let lastNotifiedLevel = 1;
   if (userId && userId !== 'visitor') {
-    const [rows] = await pool.query('SELECT exp, streak, last_checkin_date FROM user_growth WHERE user_id = ?', [userId]);
+    const [rows] = await pool.query(
+      'SELECT exp, streak, last_checkin_date, last_notified_level FROM user_growth WHERE user_id = ?',
+      [userId],
+    );
     if (rows[0]) {
       exp = Number(rows[0].exp || 0);
       streak = Number(rows[0].streak || 0);
       lastCheckin = rows[0].last_checkin_date || null;
+      lastNotifiedLevel = Number(rows[0].last_notified_level || 1);
     }
   }
   let level = levelForExp(exp);
@@ -222,6 +227,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   const isMax = level >= MAX_LEVEL;
   const span = nextExp ? nextExp - rank.cumExp : 0; // 本级跨度
   const progress = isMax ? 100 : span > 0 ? Math.max(0, Math.min(100, Math.round(((exp - rank.cumExp) / span) * 100))) : 0;
+  const hasUnreadLevelUp = userRole !== 'root' && level > lastNotifiedLevel; // 升级通知未读(通知中心随 level_up)
   return {
     exp,
     level,
@@ -234,8 +240,16 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     nextLevelExp: nextExp,
     expToNext: need,
     progress, // 本级内进度 0-100(前端进度条直接用)
+    hasUnreadLevelUp,
+    unreadLevel: hasUnreadLevelUp ? level : null,
     isMax,
   };
+}
+
+// 标记升级通知已读(用户查看成长页后调用):把"已知晓等级"抬到当前等级
+export async function markNoticesRead(userId) {
+  if (!userId || userId === 'visitor') return;
+  await pool.query('UPDATE user_growth SET last_notified_level = level WHERE user_id = ?', [userId]);
 }
 
 /**
