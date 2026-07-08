@@ -32,7 +32,7 @@ export default defineStore('dom', {
       }
     >{
       usedSpace: 0,
-      maxSpace: 5120,
+      maxSpace: 500, // 兜底基础配额(MB);真实配额由后端 /queryTotalFileSize 下发 quotaMB 覆盖(按角色/等级)
       folderList: [],
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],
@@ -68,6 +68,7 @@ export default defineStore('dom', {
       apiBasePost('/api/file/queryTotalFileSize').then((res) => {
         if (res.status === 200) {
           this.usedSpace = res.data.totalSizeMB;
+          if (res.data.quotaMB) this.maxSpace = res.data.quotaMB;
         }
       });
     },

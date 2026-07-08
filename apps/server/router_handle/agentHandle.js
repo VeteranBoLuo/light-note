@@ -22,6 +22,7 @@ import { parseTimeRange } from '../util/agent/timeRange.js';
 import { getOrCreateSession, recordTurn, buildContext, getSessionId } from '../util/agent/sessionStore.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
+import * as aiQuota from '../util/aiQuota.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -205,6 +206,10 @@ export async function agentChat(req, res) {
     }
   };
 
+  // AI token 限流:handle 与 token 累计放 try 外,finally 里统一回写(正常/异常/abort 都执行)
+  let quotaHandle = null;
+  const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
   try {
     const {
       message,
@@ -222,6 +227,28 @@ export async function agentChat(req, res) {
     const userId = req.user?.id || 'visitor';
     const userRole = req.user?.role || 'visitor';
     const userAlias = req.user?.alias || '访客';
+
+    // ---- AI token 前置 gate ----
+    // P0-A 灰度:dry-run 只记录用量、永不拦截(AI_GATE_ENFORCE=true 时才拦,P1 开启)。
+    // 此处早于 req.on('close') 挂载、响应也未开始,blocked 时可安全直接 return。
+    quotaHandle = await aiQuota.reserve(req, { userId, userRole });
+    if (quotaHandle.blocked) {
+      const tip = 'AI 今日额度已用完,请明天再来,或提升等级获取更多额度';
+      if (stream) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
+        res.write(`data: ${JSON.stringify({ output: { text: tip }, preview: userRole === 'visitor', quotaExceeded: true })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      } else {
+        res.send(resultData({ preview: userRole === 'visitor', quotaExceeded: true }, 429, tip));
+      }
+      return;
+    }
 
     // 会话
     const session = await getOrCreateSession(sessionId);
@@ -271,8 +298,7 @@ export async function agentChat(req, res) {
     let finalContent = '';
     const startTime = Date.now();
     let apiCalls = 0;
-    // 累计所有 DeepSeek 调用的 token 用量
-    const totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    // 累计所有 DeepSeek 调用的 token 用量(totalUsage 已在 try 外声明,供 finally 回写额度)
 
     // ---- 第1步：Planner（带工具定义，让 LLM 决定是否调工具） ----
     let plannerResponse = await requestDeepSeek(messages, { tools: toolDefs });
@@ -462,5 +488,14 @@ export async function agentChat(req, res) {
       res.status(500).send(resultData(null, 500, 'AI 服务异常: ' + error.message));
     }
     res.removeListener('close', onClientClose);
+  } finally {
+    // AI token 额度回写:正常/异常/abort 都执行。abort 按已消耗结算、不退还占位(见 aiQuota.reconcile)。
+    try {
+      await aiQuota.reconcile(quotaHandle, totalUsage.totalTokens, {
+        aborted: agentAbortController.signal.aborted,
+      });
+    } catch (e) {
+      console.warn('[Agent] AI 额度回写异常(忽略):', e.message);
+    }
   }
 }
