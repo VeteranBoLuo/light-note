@@ -188,6 +188,10 @@ export function hashRef(str) {
 export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
   if (!userId || userId === 'visitor' || userRole === 'root') return { granted: 0, skipped: true };
   if (!refId) return { granted: 0, skipped: 'no-ref' };
+  // 首次创建该类资源 +30(一次性成就,uk_resource(user,'first_own_resource',kind) 幂等)
+  // await 让首次与衰减顺序到账(awardCreate 整体已在 handler 里 fire-and-forget,不阻塞创建响应)
+  await grantExp(userId, 'first_own_resource', { refId: kind, amount: 30, userRole }).catch(() => {});
+  // 当日第 N 条衰减
   const [[row]] = await pool.query(
     `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND DATE(create_time)=CURDATE()`,
     [userId, kind],
