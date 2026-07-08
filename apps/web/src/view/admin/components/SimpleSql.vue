@@ -20,13 +20,15 @@
           </div>
           <div class="sql-input-wrapper">
             <BInput ref="sqlInputRef" class="sql-input" type="textarea" v-model:value="sql" :rows="18" placeholder="SELECT * FROM user WHERE id = ?;" @input="handleSqlInput" @focus="handleSqlFocus" @focusout="handleSqlBlur" />
-            <div v-if="showSuggest" class="sql-suggest">
+          </div>
+          <Teleport to="body">
+            <div v-if="showSuggest" class="sql-suggest" :style="{ position: 'fixed', left: cursorX + 'px', top: cursorY + 'px', minWidth: '160px', zIndex: 3000 }">
               <div class="sql-suggest-header"><span>智能提示</span><small>↑↓ 选择 · Enter/Tab 确认 · Esc 关闭</small></div>
               <div class="sql-suggest-list">
                 <button v-for="(item, index) in filteredSuggestions" :key="item" type="button" class="sql-suggest-item" :class="{ active: index === activeSuggestIndex }" @mousedown.prevent="applySuggestion(item)">{{ item }}</button>
               </div>
             </div>
-          </div>
+          </Teleport>
           <div class="editor-meta">
             <span>字符数：{{ sql.length }}</span>
             <span>最后执行：{{ lastExecutedAt || '——' }}</span>
@@ -106,6 +108,8 @@ const sqlInputRef = ref<InstanceType<typeof BInput> | null>(null);
 const isSqlFocused = ref(false);
 const tokenInfo = ref<{ token: string; start: number; end: number } | null>(null);
 const activeSuggestIndex = ref(0);
+const cursorX = ref(0);
+const cursorY = ref(0);
 
 const suggestionSource = computed(() => {
   const merged = [...keyWords, ...tables];
@@ -175,6 +179,40 @@ function updateTokenInfo() {
   const match = textarea.value.slice(0, cursor).match(/[A-Za-z_][\w]*$/);
   if (!match) { tokenInfo.value = null; return; }
   tokenInfo.value = { token: match[0], start: cursor - match[0].length, end: cursor };
+  nextTick(() => updateCursorPos(textarea, cursor));
+}
+
+function updateCursorPos(textarea: HTMLTextAreaElement, cursor: number) {
+  const val = textarea.value;
+  const before = val.slice(0, cursor);
+  const lines = before.split('\n');
+  const currentLine = lines[lines.length - 1];
+  const style = getComputedStyle(textarea);
+
+  // 用 mirror 测量光标前文字的精确宽度
+  const mirror = document.createElement('span');
+  mirror.style.cssText = `
+    position: fixed; top: -9999px; left: 0;
+    font: ${style.font};
+    font-size: ${style.fontSize};
+    font-family: ${style.fontFamily};
+    letter-spacing: ${style.letterSpacing || 'normal'};
+    white-space: pre;
+    padding: 0;
+  `;
+  mirror.textContent = currentLine;
+  document.body.appendChild(mirror);
+  const textWidth = mirror.offsetWidth;
+  document.body.removeChild(mirror);
+
+  const lineHeight = parseFloat(style.lineHeight) || 22;
+  const pt = parseFloat(style.paddingTop) || 12;
+  const pl = parseFloat(style.paddingLeft) || 16;
+  const rect = textarea.getBoundingClientRect();
+
+  // 减去 textarea 内部滚动偏移，长语句/多行滚动时光标位置才准
+  cursorX.value = rect.left + pl + textWidth - textarea.scrollLeft - 4;
+  cursorY.value = rect.top + pt + lines.length * lineHeight - textarea.scrollTop + 2;
 }
 
 function handleSqlInput() { updateTokenInfo(); }
@@ -206,11 +244,16 @@ function handleSuggestKeydown(event: KeyboardEvent) {
   else if (event.key === 'Escape') { event.preventDefault(); tokenInfo.value = null; }
 }
 
+const handleKeyup = (e: KeyboardEvent) => {
+  if (e.key === 'Escape') return;  // Escape 松手不重新读取光标词，防止弹窗马上又开
+  updateTokenInfo();
+};
+
 function bindSqlEvents() {
   const textarea = getSqlTextarea();
   if (!textarea) return;
   textarea.addEventListener('keydown', handleSuggestKeydown);
-  textarea.addEventListener('keyup', updateTokenInfo);
+  textarea.addEventListener('keyup', handleKeyup);
   textarea.addEventListener('mouseup', updateTokenInfo);
 }
 
@@ -218,7 +261,7 @@ function unbindSqlEvents() {
   const textarea = getSqlTextarea();
   if (!textarea) return;
   textarea.removeEventListener('keydown', handleSuggestKeydown);
-  textarea.removeEventListener('keyup', updateTokenInfo);
+  textarea.removeEventListener('keyup', handleKeyup);
   textarea.removeEventListener('mouseup', updateTokenInfo);
 }
 
@@ -312,7 +355,7 @@ async function runSql() {
 .sql-input { flex: 1; display: flex; }
 .sql-input-wrapper { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; }
 .sql-input :deep(textarea) { flex: 1; min-height: 0; font-family: 'JetBrains Mono','Fira Code',Consolas,monospace; }
-.sql-suggest { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 5; background: color-mix(in srgb, var(--background-color) 96%, transparent); border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent); border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08); backdrop-filter: blur(10px); overflow: hidden; }
+.sql-suggest { flex-shrink: 0; background: color-mix(in srgb, var(--background-color) 96%, transparent); border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent); border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08); backdrop-filter: blur(10px); overflow: hidden; }
 .sql-suggest-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; color: var(--desc-color); background: color-mix(in srgb, var(--background-color) 90%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent); }
 .sql-suggest-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; }
 .sql-suggest-item { border: none; background: transparent; color: var(--text-color); text-align: left; padding: 8px 12px; font-size: 12px; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease; }
