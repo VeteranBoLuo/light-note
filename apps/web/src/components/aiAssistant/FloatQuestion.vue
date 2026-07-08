@@ -139,6 +139,7 @@
       isOpen.value = true;
       containerActive.value = true;
       isPeeked.value = false;
+      window.dispatchEvent(new CustomEvent('light-note:close-search')); // 打开 AI 时互斥收起全局搜索下拉
     }
   };
 
@@ -225,11 +226,13 @@
       }
     }
     document.addEventListener('keydown', handleKeydown);
+    window.addEventListener('light-note:close-ai', minimize); // 全局搜索下拉打开时互斥收起 AI 面板
     schedulePeek();
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('light-note:close-ai', minimize);
     clearPeekTimer();
   });
 </script>

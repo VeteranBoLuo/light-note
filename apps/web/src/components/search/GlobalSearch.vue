@@ -241,8 +241,15 @@
   function openSuggest() {
     if (suggestVisible.value) return;
     suggestVisible.value = true;
+    window.dispatchEvent(new CustomEvent('light-note:close-ai')); // 与 AI 助手互斥:展开搜索下拉即收起 AI 面板
     ensureData(true);
   }
+
+  // 打开 AI 助手时收起本搜索下拉(双向互斥,避免两个大浮层重叠遮挡)
+  const handleCloseSearch = () => {
+    suggestVisible.value = false;
+    blurDesktopInput();
+  };
 
   function blurDesktopInput() {
     (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
@@ -340,11 +347,13 @@
   onMounted(() => {
     document.addEventListener('mousedown', handleDocumentMouseDown);
     document.addEventListener('keydown', handleShortcut);
+    window.addEventListener('light-note:close-search', handleCloseSearch);
   });
 
   onBeforeUnmount(() => {
     document.removeEventListener('mousedown', handleDocumentMouseDown);
     document.removeEventListener('keydown', handleShortcut);
+    window.removeEventListener('light-note:close-search', handleCloseSearch);
     syncNavigationLayer(false);
     if (searchTimer.value) clearTimeout(searchTimer.value);
   });
