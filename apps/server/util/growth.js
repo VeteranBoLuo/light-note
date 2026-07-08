@@ -10,6 +10,7 @@
  * EXP 只用于升级、不是货币。所有发放都走本文件,不在业务处各写一套。
  */
 import pool from '../db/index.js';
+import crypto from 'crypto';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 数值取自《总方案》二节权益对照表(已定稿,勿擅改)。容量:Lv1–3 直给 MB,Lv4+ 由展示 GB×1024 取整。
@@ -160,6 +161,39 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
   } finally {
     if (ownConn) c.release();
   }
+}
+
+// —— 创造类发经验(书签/笔记/文件):按当日第 N 条衰减(方案 3.1 终版) ——
+const CREATE_TIERS = {
+  bookmark: [[3, 10], [8, 5], [15, 2]],
+  note: [[3, 15], [8, 8], [15, 3]],
+  file: [[3, 12], [8, 6], [15, 3]],
+};
+function createAmount(kind, nth) {
+  for (const [maxN, amt] of CREATE_TIERS[kind] || []) if (nth <= maxN) return amt;
+  return 1; // 第 16 条起 +1(衰减不归零)
+}
+
+// 内容判重键:对 url 等取 sha256 hex,落 growth_events.ref_id 做永久判重(删了重建也不再发)
+export function hashRef(str) {
+  return crypto.createHash('sha256').update(String(str || '')).digest('hex');
+}
+
+/**
+ * 创造类发经验:按用户当日该类已发条数决定衰减档位,再走 grantExp(幂等 + 日顶 + root 跳过)。
+ * 必须 fire-and-forget 调用,且不要传创建资源用的事务连接(它 commit 后即释放)。
+ * @param {string} kind 'bookmark' | 'note' | 'file'
+ * @param {string} refId 判重键:书签传 url 的 hashRef,笔记/文件传各自主键
+ */
+export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
+  if (!userId || userId === 'visitor' || userRole === 'root') return { granted: 0, skipped: true };
+  if (!refId) return { granted: 0, skipped: 'no-ref' };
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND DATE(create_time)=CURDATE()`,
+    [userId, kind],
+  );
+  const nth = Number(row?.c || 0) + 1;
+  return grantExp(userId, kind, { refId: String(refId), amount: createAmount(kind, nth), userRole });
 }
 
 /**

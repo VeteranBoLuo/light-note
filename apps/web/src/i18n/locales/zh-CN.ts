@@ -558,6 +558,9 @@ export default {
     daysVal: '{n} 天',
     toNext: '还差 {n} EXP 升级',
     rankLadder: '段位路线',
+    pageTitle: '我的成长',
+    pageSubtitle: '等级、签到与权益，记录你在轻笺的沉淀',
+    entry: '我的成长',
   },
   ai: {
     title: '轻笺智域',

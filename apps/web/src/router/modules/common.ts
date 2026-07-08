@@ -34,6 +34,17 @@ const commonRouter: RouteRecordRaw[] = [
     name: 'settings',
     component: () => import('@/view/settings/Settings.vue'),
   },
+  {
+    meta: {
+      title: '我的成长',
+      keepAlive: true,
+      requireAuth: true,
+      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+    },
+    path: '/growth',
+    name: 'growth',
+    component: () => import('@/view/growth/GrowthPage.vue'),
+  },
 ];
 
 export default commonRouter;

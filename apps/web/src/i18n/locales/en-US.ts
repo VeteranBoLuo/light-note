@@ -567,6 +567,9 @@ export default {
     daysVal: '{n} d',
     toNext: '{n} EXP to next level',
     rankLadder: 'Rank ladder',
+    pageTitle: 'My Growth',
+    pageSubtitle: 'Level, check-in and perks — your footprint in Light Note',
+    entry: 'My Growth',
   },
   ai: {
     title: 'Light Note Wisdom Realm',

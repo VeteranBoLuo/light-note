@@ -33,10 +33,12 @@
                 user.userName ? user.alias || t('personCenter.defaultNickname') : t('personCenter.pleaseLogin')
               }}</span>
               <span
-                v-if="user.role !== 'visitor' && growthInfo"
+                v-if="growthInfo"
                 class="lv-badge"
                 :class="`tier-${badgeTier}`"
                 :title="growthInfo.name"
+                role="button"
+                @click="goGrowth"
                 >Lv.{{ growthInfo.level }}</span
               >
               <svg-icon class="dom-hover" :src="icon.card_edit" size="16" @click="editUser" />
@@ -173,8 +175,13 @@
     return l >= 13 ? 5 : l >= 10 ? 4 : l >= 7 ? 3 : l >= 4 ? 2 : 1;
   });
   onMounted(() => {
-    if (user.role && user.role !== 'visitor') loadGrowth();
+    loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
   });
+  function goGrowth() {
+    closeSettingMenuAndSyncPopover();
+    menuVisible.value = false;
+    router.push('/growth');
+  }
 
   function clearCloseTimer() {
     if (closeTimer) {
@@ -271,6 +278,12 @@
   }
 
   const options = ref<menuItemInterface[]>([
+    {
+      name: 'growth',
+      label: t('growth.entry'),
+      path: '/growth',
+      icon: icon.navigation.permissions,
+    },
     {
       name: 'settings',
       label: t('settings.title'),
@@ -543,6 +556,12 @@
     font-weight: 700;
     color: #fff;
     letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+    }
 
     &.tier-1 {
       background: linear-gradient(135deg, #6b7280, #9ca3af);
