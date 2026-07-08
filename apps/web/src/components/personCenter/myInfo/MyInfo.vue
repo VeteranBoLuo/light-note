@@ -31,13 +31,11 @@
       </div>
     </div>
     <template #footer>
-      <b-button
-        style="margin-top: 10px; place-self: center; width: 100%"
-        type="primary"
-        :loading="saving"
-        @click="saveUserInfo"
-        >{{ t('myInfo.save') }}</b-button
-      >
+      <div style="padding: 0 20px 16px; display: flex; justify-content: center">
+        <b-button style="margin-top: 10px; width: 100%" type="primary" :loading="saving" @click="saveUserInfo">{{
+          t('myInfo.save')
+        }}</b-button>
+      </div>
     </template>
   </b-modal>
 </template>
