@@ -177,6 +177,13 @@
   onMounted(() => {
     loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
   });
+  // 每次展开个人中心面板都强制拉最新成长:升级是后端异步发生的,确保徽章等级/红点及时刷新
+  watch(
+    () => menuVisible.value,
+    (open) => {
+      if (open) loadGrowth(true);
+    },
+  );
   function goGrowth() {
     closeSettingMenuAndSyncPopover();
     menuVisible.value = false;

@@ -111,13 +111,19 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     const eventId = ins.insertId;
 
     // 2. 日 EXP 硬顶:当日已发放合计(含刚插入的 0)→ 截断本次发放量
-    const [[sumRow]] = await c.query(
-      `SELECT COALESCE(SUM(amount), 0) AS used FROM growth_events
-       WHERE user_id = ? AND status = 'granted' AND DATE(create_time) = CURDATE()`,
-      [userId],
-    );
-    const used = Number(sumRow.used || 0);
-    const grantAmount = Math.max(0, Math.min(amount, DAILY_EXP_CAP - used));
+    // 里程碑/一次性来源豁免日顶(一次性、幂等、非刷点):首次成就、升级里程碑、手动。
+    // 日顶只压可重复的日常/创造来源(签到、书签/笔记/文件衰减、批量导入)。
+    const capExempt = source === 'first_own_resource' || source === 'milestone' || source === 'manual';
+    let used = 0;
+    if (!capExempt) {
+      const [[sumRow]] = await c.query(
+        `SELECT COALESCE(SUM(amount), 0) AS used FROM growth_events
+         WHERE user_id = ? AND status = 'granted' AND DATE(create_time) = CURDATE()`,
+        [userId],
+      );
+      used = Number(sumRow.used || 0);
+    }
+    const grantAmount = capExempt ? amount : Math.max(0, Math.min(amount, DAILY_EXP_CAP - used));
     if (grantAmount > 0) {
       await c.query('UPDATE growth_events SET amount = ? WHERE id = ?', [grantAmount, eventId]);
     }

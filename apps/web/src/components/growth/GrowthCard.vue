@@ -64,7 +64,7 @@
   const checking = ref(false);
 
   onMounted(async () => {
-    await load();
+    await load(true); // 强制拉最新(升级是后端异步发生,不 force 会读到升级前的缓存)
     // 进成长页即视为查看升级通知:提示 + 标记已读(清红点)
     if (g.value?.hasUnreadLevelUp) {
       message.success(t('growth.leveledUp', { lv: g.value.level, name: g.value.name }));
