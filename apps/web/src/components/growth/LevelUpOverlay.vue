@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <transition name="lvup-fade" appear>
     <div v-if="visible" class="lvup-mask" @click="close">
       <div class="lvup-stage" @click.stop>
@@ -25,6 +26,7 @@
       </div>
     </div>
   </transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -77,7 +79,7 @@
   .lvup-mask {
     position: fixed;
     inset: 0;
-    z-index: 3000;
+    z-index: 999999; /* 高于全局搜索下拉(300001)与 AI 助手(200000),庆祝动画盖住一切 */
     display: flex;
     align-items: center;
     justify-content: center;

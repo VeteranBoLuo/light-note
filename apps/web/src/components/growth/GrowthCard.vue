@@ -101,6 +101,7 @@
           recordOperation({ module: '成长', operation: `每日签到（连续 ${res.data.streak} 天，+${res.data.expGained}）` });
           if (res.data.leveledUp && res.data.growth) {
             lvUp.value = { level: res.data.growth.level, name: res.data.growth.name }; // 触发升级庆祝动画
+            markRead(); // 签到升级当场已看动画 → 立即标记已读,避免刷新页面重复弹
             recordOperation({ module: '成长', operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}` });
           }
         }
