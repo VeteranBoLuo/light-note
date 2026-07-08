@@ -402,9 +402,8 @@
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
 import { formatStorageSize } from '@/utils/common';
-  import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { setLocale } from '@/i18n';
+  import { updatePreference as commitPreference } from '@/utils/savePreference';
   import {
     getHomePagePreference,
     type HomePagePreference,
@@ -961,43 +960,15 @@ import { formatStorageSize } from '@/utils/common';
       return;
     }
 
-    const previousPreferences = { ...user.preferences };
-    const shouldReloadAfterSave = key === 'lang' && previousPreferences.lang !== value;
-    const nextPreferences = {
-      ...user.preferences,
-      [key]: value,
-      homePage: key === 'homePage' ? value : getHomePagePreference(user.preferences),
-    };
-
     preferenceSaving.value = true;
-    user.preferences = nextPreferences;
-    localStorage.setItem('preferences', JSON.stringify(user.preferences));
-
-    if (key === 'lang') {
-      document.documentElement.lang = value as LanguagePreference;
-      setLocale(value as LanguagePreference);
-    }
-
     try {
-      // 游客不同步到服务器(共用游客账号,写接口会被拦成 preview 而误弹注册墙);偏好已本地生效 + 持久化
+      // 统一走 updatePreference(本地生效 + lang 即时切换不刷新 + 游客只本地 + 登录同步后端并失败回滚)
+      await commitPreference({ [key]: value });
       if (user.id && user.role !== 'visitor') {
-        await userApi.updateUserInfo({
-          id: user.id,
-          preferences: JSON.stringify(nextPreferences),
-        });
         recordOperation({ module: '工作台', operation: `保存偏好设置【${key}】` });
       }
       message.success(t('workbench.preferences.saved', '偏好设置已更新'));
-      if (shouldReloadAfterSave) {
-        location.reload();
-      }
     } catch (error) {
-      user.preferences = previousPreferences;
-      localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      if (key === 'lang') {
-        document.documentElement.lang = (previousPreferences.lang || 'zh-CN') as string;
-        setLocale((previousPreferences.lang || 'zh-CN') as LanguagePreference);
-      }
       console.error('update preference failed', error);
       message.error(t('workbench.preferences.saveFailed', '偏好设置更新失败'));
     } finally {

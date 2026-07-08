@@ -136,10 +136,9 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
   import userApi from '@/api/userApi.ts';
-  import { applyPreferenceLocally, isGuestUser } from '@/utils/savePreference';
+  import { updatePreference } from '@/utils/savePreference';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { useI18n } from 'vue-i18n';
-  import i18n, { setLocale } from '@/i18n';
   import { updateNotice } from '@/config/updateNotice';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
@@ -369,50 +368,18 @@
 
   function changeTheme(theme: string) {
     closeSettingMenuAndSyncPopover();
-    // 本地立即生效 + 持久化(App.vue watch 应用主题)
-    applyPreferenceLocally({ theme });
-    // 游客本地化即可,不调后端、不触发注册墙;仅登录用户同步服务器
-    if (isGuestUser()) return;
-    userApi
-      .updateUserInfo({
-        id: user.id,
-        preferences: JSON.stringify({
-          ...user.preferences,
-          theme,
-        }),
-      })
-      .catch((err) => {
-        console.error('后台错误：' + err);
-      });
+    // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
+    updatePreference({ theme }).catch((err) => {
+      console.error('后台错误：' + err);
+    });
   }
 
   function changeLanguage(lang: 'zh-CN' | 'en-US') {
     closeSettingMenuAndSyncPopover();
-    document.documentElement.lang = lang;
-    // 游客:本地切换语言 + 持久化,不调后端、不触发注册墙
-    if (isGuestUser()) {
-      applyPreferenceLocally({ lang });
-      setLocale(lang);
-      return;
-    }
-    user.preferences.lang = lang;
-    userApi
-      .updateUserInfo({
-        id: user.id,
-        preferences: JSON.stringify({
-          ...user.preferences,
-          lang,
-        }),
-      })
-      .then(() => {
-        localStorage.setItem('preferences', JSON.stringify(user.preferences));
-        if (i18n.global.locale.value !== lang) {
-          location.reload();
-        }
-      })
-      .catch((err) => {
-        console.error('后台错误：' + err);
-      });
+    // 统一走 updatePreference:语言即时切换(不刷新页面),与设置中心行为一致
+    updatePreference({ lang }).catch((err) => {
+      console.error('后台错误：' + err);
+    });
   }
 
   function zoomImage() {

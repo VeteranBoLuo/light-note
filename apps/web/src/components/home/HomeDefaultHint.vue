@@ -21,7 +21,7 @@
 <script setup lang="ts">
   import { ref, onMounted, watch } from 'vue';
   import { useUserStore } from '@/store';
-  import userApi from '@/api/userApi.ts';
+  import { updatePreference } from '@/utils/savePreference';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import type { HomePagePreference } from '@/utils/preferences.ts';
@@ -51,21 +51,18 @@
     clearFlag();
   }
 
-  function pick(value: HomePagePreference, label: string) {
-    user.preferences.homePage = value;
+  async function pick(value: HomePagePreference, label: string) {
+    // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
     try {
-      localStorage.setItem('preferences', JSON.stringify(user.preferences));
-    } catch {
-      /* 忽略 */
+      await updatePreference({ homePage: value });
+      if (user.id && user.role !== 'visitor') {
+        recordOperation({ module: '个人偏好', operation: `设置默认首页【${label}】` });
+      }
+      message.success(`已设为默认首页：${label}`);
+    } catch (err) {
+      console.error('后台错误：' + err);
+      message.error('设置失败，请重试');
     }
-    // 登录用户同步到服务器
-    if (user.id && user.role !== 'visitor') {
-      userApi
-        .updateUserInfo({ id: user.id, preferences: JSON.stringify(user.preferences) })
-        .then(() => recordOperation({ module: '个人偏好', operation: `设置默认首页【${label}】` }))
-        .catch((err) => console.error('后台错误：' + err));
-    }
-    message.success(`已设为默认首页：${label}`);
     dismiss();
   }
 
