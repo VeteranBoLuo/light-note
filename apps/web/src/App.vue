@@ -61,6 +61,13 @@
     },
   );
 
+  // 用户切换页面时节流刷新成长:升级为后端异步事件,让右上角头像红点在正常使用中较快出现,不必主动点头像
+  const throttledGrowthRefresh = throttle(() => useGrowth().load(true), 30000);
+  watch(
+    () => router.currentRoute.value.fullPath,
+    () => throttledGrowthRefresh(),
+  );
+
   const aiVisible = computed(() => {
     // landing 落地页不挂 AI 悬浮球:FloatQuestion 挂载时会预热 ChatContainer chunk(gzip 300KB+),
     // 预渲染会把它烘焙进 landing 首屏 modulepreload,拖累 TBT/未使用JS;落地页访客也用不到 AI 助手。

@@ -35,7 +35,7 @@
               <span
                 v-if="growthInfo"
                 class="lv-badge"
-                :class="[`tier-${badgeTier}`, { 'has-unread': growthInfo.hasUnreadLevelUp }]"
+                :class="`tier-${badgeTier}`"
                 :title="growthInfo.name"
                 role="button"
                 @click="goGrowth"
@@ -109,6 +109,7 @@
             <svg-icon size="14" :src="menuItem.icon" />
             {{ menuItem.label }}
             <div v-if="getVersionIsNew(menuItem)" class="update-point" />
+            <div v-if="menuItem.name === 'growth' && growthInfo?.hasUnreadLevelUp" class="update-point" />
           </div>
           <div
             class="flex-center li logout"
@@ -126,11 +127,12 @@
     </template>
     <div
       class="navigation-icon"
-      style="margin-left: 5px"
+      style="margin-left: 5px; position: relative"
       @mouseenter="handleTriggerMouseEnter"
       @mouseleave="handleTriggerMouseLeave"
     >
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
   </a-popover>
@@ -598,6 +600,18 @@
     &.tier-5 {
       background: linear-gradient(135deg, #db2777, #f43f5e, #fb923c);
     }
+  }
+
+  .nav-avatar-dot {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ff4d4f;
+    border: 2px solid var(--background-color, #fff);
+    pointer-events: none;
   }
 
   .user-sub {
