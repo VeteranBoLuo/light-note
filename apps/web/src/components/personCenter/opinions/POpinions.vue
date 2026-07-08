@@ -12,8 +12,7 @@
           <span>{{ t('common.back') }}</span>
         </button>
         <div class="opinion-page__hero-main">
-          <div class="opinion-page__eyebrow">{{ t('personCenter.feedback') }}</div>
-          <h1 class="opinion-page__title">{{ t('personCenter.opinions.pageTitle') }}</h1>
+          <h1 class="opinion-page__title">{{ t('personCenter.feedback') }}</h1>
           <p class="opinion-page__desc">{{ t('personCenter.opinions.pageDesc') }}</p>
         </div>
       </header>
@@ -83,10 +82,13 @@
 
 <style scoped lang="less">
   .opinion-page {
-    min-height: 100vh;
+    height: 100vh;
     position: relative;
-    padding: 32px 24px 40px;
+    padding: 20px 24px 20px;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     background:
       radial-gradient(
         circle at top left,
@@ -115,17 +117,19 @@
   .opinion-page__container {
     position: relative;
     max-width: 1180px;
+    width: 100%;
     margin: 0 auto;
-    padding-bottom: 88px;
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 16px;
   }
 
   .opinion-page__hero {
     border: 1px solid color-mix(in srgb, var(--border-color) 92%, transparent);
-    border-radius: 24px;
-    padding: 24px 28px;
+    border-radius: 18px;
+    padding: 16px 22px;
     background:
       linear-gradient(
         135deg,
@@ -133,10 +137,11 @@
         transparent 60%
       ),
       var(--background-color);
-    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 10px;
+    flex: none;
   }
 
   .opinion-page__back {
@@ -160,21 +165,26 @@
   }
 
   .opinion-page__title {
-    margin: 6px 0 10px;
-    font-size: 32px;
-    line-height: 1.15;
+    margin: 0 0 6px;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
     color: var(--text-color);
   }
 
   .opinion-page__desc {
     margin: 0;
     max-width: 700px;
-    line-height: 1.7;
+    font-size: 13px;
+    line-height: 1.6;
     color: var(--sub-text-color);
   }
 
   .opinion-page__body {
-    min-height: calc(100vh - 290px);
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .opinion-page__side {
@@ -213,27 +223,30 @@
   .opinion-page__main {
     padding: 20px;
     min-width: 0;
-    height: min(720px, calc(100vh - 290px));
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
 
   @media (max-width: 960px) {
     .opinion-page {
+      height: auto;
       min-height: 100vh;
+      overflow: visible;
       padding: 18px 14px 24px;
     }
 
     .opinion-page__hero {
-      padding: 18px;
-      border-radius: 20px;
+      padding: 14px 16px;
+      border-radius: 16px;
     }
 
     .opinion-page__title {
-      font-size: 26px;
+      font-size: 20px;
     }
 
     .opinion-page__body {
-      grid-template-columns: 1fr;
+      flex: none;
       min-height: auto;
     }
 

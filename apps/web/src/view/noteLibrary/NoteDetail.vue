@@ -36,6 +36,8 @@
             @switch-backup-change="hasSwitchBackup = $event"
             :readonly="readonly"
             :note-id="note.id"
+            :ensure-note-id="ensureNoteId"
+            @set-note-id="onEditorSetNoteId"
             @ready="refreshCatalog"
           />
         </div>
@@ -196,6 +198,53 @@
     nStore.generateTOC(note.content, note.type);
   }
 
+  // 守卫式创建：同一时刻只允许一次"新建笔记"请求在途。
+  // 新建笔记时若并发触发（自动保存 + 粘贴图片同时想建），都复用这一个 Promise，绝不会建出多条。
+  // 建成后写回 note.id，之后一律走 updateNote。
+  let createPromise: Promise<string> | null = null;
+  function createNote(): Promise<string> {
+    if (note.id) return Promise.resolve(note.id);
+    if (createPromise) return createPromise;
+    const params: any = cloneDeep(note);
+    delete params.lastTitle;
+    if (!params.title || !params.title.trim()) {
+      params.title = '未命名文档';
+    }
+    createPromise = apiBasePost('/api/note/addNote', params)
+      .then((res) => {
+        if (res.status === 200 && res.data?.id) {
+          note.id = res.data.id;
+          note.createBy = user.id;
+          if (!note.title || !note.title.trim()) {
+            note.title = params.title;
+          }
+          nodeType.value = 'edit';
+          router.replace(`/noteLibrary/${note.id}`).then();
+          recordOperation({ module: '笔记', operation: `新建笔记成功【${note.title}】` });
+          return note.id as string;
+        }
+        throw new Error('创建笔记失败');
+      })
+      .finally(() => {
+        createPromise = null;
+      });
+    return createPromise;
+  }
+  // 供编辑器在“新建笔记还没 id 就粘贴图片”时调用：先确保笔记已创建，返回其 id，让图片带真实 noteId 上传
+  async function ensureNoteId(): Promise<string> {
+    if (note.id) return note.id;
+    return await createNote();
+  }
+  // 兜底：编辑器若从后端拿回 noteId（历史自动建笔记逻辑），本地还没 id 时采纳它，避免各建各的
+  function onEditorSetNoteId(id: string) {
+    if (id && !note.id) {
+      note.id = id;
+      note.createBy = user.id;
+      nodeType.value = 'edit';
+      router.replace(`/noteLibrary/${note.id}`).then();
+    }
+  }
+
   async function saveNote(isMsg?: boolean) {
     if (!note.title || !note.title.trim()) {
       message.warning('请输入笔记标题');
@@ -206,31 +255,30 @@
     }
     isStartEdit.value = true;
     isCurrentSave.value = true;
-    const params: any = cloneDeep(note);
-    delete params.lastTitle;
-    let res;
     const startTime = Date.now();
+    let ok = false;
 
-    if (params.id) {
+    if (note.id) {
+      const params: any = cloneDeep(note);
+      delete params.lastTitle;
       delete params.createBy;
       delete params.updateTime;
-      res = await apiBasePost('/api/note/updateNote', params);
-    } else {
-      res = await apiBasePost('/api/note/addNote', params);
-    }
-    if (res.status === 200) {
-      const isFirstSave = !note.id && res.data.id;
-      if (res.data.id) {
-        note.id = res.data.id;
-        note.createBy = user.id;
-        nodeType.value = 'edit';
-        router.replace(`/noteLibrary/${note.id}`).then();
-      }
-      if (isFirstSave) {
-        recordOperation({ module: '笔记', operation: `新建笔记成功【${note.title}】` });
-      } else if (isMsg) {
+      const res = await apiBasePost('/api/note/updateNote', params);
+      ok = res.status === 200;
+      if (ok && isMsg) {
         recordOperation({ module: '笔记', operation: `保存笔记成功【${note.title}】` });
       }
+    } else {
+      // 新建统一走守卫式创建（与粘贴图片共用同一个在途 Promise，绝不并发建多条）
+      try {
+        await createNote();
+        ok = !!note.id;
+      } catch {
+        ok = false;
+      }
+    }
+
+    if (ok) {
       const elapsedTime = Date.now() - startTime;
       const delay = Math.max(500 - elapsedTime, 0);
       setTimeout(() => {

@@ -121,6 +121,11 @@
       type: String,
       default: '',
     },
+    // 父组件传入：新建笔记还没 id 时，先确保笔记已创建并返回其 id（守卫式，防重复建）
+    ensureNoteId: {
+      type: Function,
+      default: null,
+    },
     imageUploadMode: {
       type: String as () => 'api' | 'base64',
       default: 'api',
@@ -497,26 +502,33 @@
       ? {}
       : {
           images_upload_handler: (blobInfo: any) =>
-            new Promise((resolve, reject) => {
-              const formData = new FormData();
-              formData.append('file', blobInfo.blob(), blobInfo.filename());
-              formData.append('noteId', props.noteId);
-              apiBasePost('/api/note/uploadImage', formData, {
-                headers: {
-                  'Content-Type': 'multipart/form-data',
-                },
-              })
-                .then((res) => {
-                  if (res.data?.noteId) {
-                    emits('setNoteId', res.data.noteId);
-                  }
-                  if (res.data?.url) {
-                    resolve(res.data.url);
-                    return;
-                  }
-                  reject('上传失败');
-                })
-                .catch(() => reject('上传失败'));
+            new Promise(async (resolve, reject) => {
+              try {
+                // 新建笔记还没 id 就粘贴图片时：先确保笔记已创建，拿到真实 noteId 再上传，
+                // 后端因此不会走"noteId 为空就自动建一条笔记"的分支，避免建出多条笔记
+                let nid = props.noteId;
+                if (!nid && typeof props.ensureNoteId === 'function') {
+                  nid = await (props.ensureNoteId as () => Promise<string>)();
+                }
+                const formData = new FormData();
+                formData.append('file', blobInfo.blob(), blobInfo.filename());
+                formData.append('noteId', nid || '');
+                const res = await apiBasePost('/api/note/uploadImage', formData, {
+                  headers: {
+                    'Content-Type': 'multipart/form-data',
+                  },
+                });
+                if (res.data?.noteId) {
+                  emits('setNoteId', res.data.noteId);
+                }
+                if (res.data?.url) {
+                  resolve(res.data.url);
+                  return;
+                }
+                reject('上传失败');
+              } catch {
+                reject('上传失败');
+              }
             }),
         }),
     setup: (editor: any) => {
@@ -583,18 +595,32 @@
           block.insertBefore(checkboxEl, spacer);
         });
       };
-      const insertTodoLineAfter = (block: HTMLElement | null) => {
+      const splitTodoLineAtCursor = (block: HTMLElement | null) => {
         if (!block || !block.parentNode) return;
+        const rng = editor.selection.getRng();
+        // 有选区时先删掉选中内容，光标落到删除点
+        if (!rng.collapsed) rng.deleteContents();
+        // 取「光标 → 本行末尾」的内容（勾选框在光标之前，不会被带走）
+        const tailRange = editor.dom.createRng();
+        tailRange.selectNodeContents(block);
+        tailRange.setStart(rng.startContainer, rng.startOffset);
+        const tail = tailRange.extractContents();
+        // 新建一行：勾选框 + 空格 + 光标之后的文字（光标在行中间时把后半段带过去）
         const tagName = block.tagName || 'P';
-        const newBlock = editor.dom.create(tagName, {});
-        newBlock.innerHTML = `${todoCheckboxHtml}&nbsp;`;
-        editor.dom.insertAfter(newBlock, block);
-        const textNode = newBlock.lastChild;
-        if (textNode) {
-          editor.selection.setCursorLocation(textNode, textNode.textContent?.length || 0);
-        } else {
-          editor.selection.setCursorLocation(newBlock, 0);
+        const newBlock = editor.dom.create(tagName, {}) as HTMLElement;
+        const checkboxEl = editor.dom.create('input', {
+          type: 'checkbox',
+          class: 'note-todo-checkbox',
+        });
+        const spacer = editor.dom.doc.createTextNode(' ');
+        newBlock.appendChild(checkboxEl);
+        newBlock.appendChild(spacer);
+        if (tail && tail.childNodes.length) {
+          newBlock.appendChild(tail);
         }
+        editor.dom.insertAfter(newBlock, block);
+        // 光标落到新行的文字开头（勾选框和空格之后、被带过来的文字之前）
+        editor.selection.setCursorLocation(spacer, spacer.length);
       };
 
       editor.ui.registry.addIcon('todo-checkbox', icon.noteDetail.toolbar.todo);
@@ -732,7 +758,7 @@
         if (!getLeadingCheckbox(block)) return;
         event.preventDefault();
         editor.undoManager.transact(() => {
-          insertTodoLineAfter(block);
+          splitTodoLineAtCursor(block);
         });
       });
       editor.on('init', async () => {
