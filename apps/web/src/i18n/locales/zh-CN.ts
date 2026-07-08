@@ -547,6 +547,7 @@ export default {
   growth: {
     max: '满级',
     exp: 'EXP',
+    totalExp: '累计 {n} EXP',
     checkin: '签到',
     checkedIn: '已签到',
     alreadyChecked: '今天已经签到过啦',
@@ -561,6 +562,12 @@ export default {
     pageTitle: '我的成长',
     pageSubtitle: '等级、签到与权益，记录你在轻笺的沉淀',
     entry: '我的成长',
+    earnTitle: '怎么获取经验',
+    earnCheckin: '每日签到（连续更多）',
+    earnCreate: '建书签 / 笔记 / 文件',
+    earnFirst: '首次创建某类资源',
+    earnProfile: '完善个人资料',
+    earnTag: '给资源打标签',
   },
   ai: {
     title: '轻笺智域',

@@ -556,6 +556,7 @@ export default {
   growth: {
     max: 'MAX',
     exp: 'EXP',
+    totalExp: 'Total {n} EXP',
     checkin: 'Check in',
     checkedIn: 'Checked in',
     alreadyChecked: "You've already checked in today",
@@ -570,6 +571,12 @@ export default {
     pageTitle: 'My Growth',
     pageSubtitle: 'Level, check-in and perks — your footprint in Light Note',
     entry: 'My Growth',
+    earnTitle: 'How to earn EXP',
+    earnCheckin: 'Daily check-in (more in a streak)',
+    earnCreate: 'Create bookmark / note / file',
+    earnFirst: 'First of each resource type',
+    earnProfile: 'Complete your profile',
+    earnTag: 'Tag a resource',
   },
   ai: {
     title: 'Light Note Wisdom Realm',

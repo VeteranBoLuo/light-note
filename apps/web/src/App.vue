@@ -16,6 +16,7 @@
 </template>
 <script setup lang="ts">
   import { bookmarkStore, useUserStore } from '@/store';
+  import { useGrowth } from '@/composables/useGrowth';
   import { h, nextTick, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
@@ -49,6 +50,14 @@
     () => user.preferences?.theme,
     () => {
       applyTheme();
+    },
+  );
+
+  // 账号切换(登录/登出/换号)→ 刷新成长缓存,防个人中心徽章/成长页显示上一个账号的等级数据
+  watch(
+    () => user.id,
+    () => {
+      useGrowth().load(true);
     },
   );
 

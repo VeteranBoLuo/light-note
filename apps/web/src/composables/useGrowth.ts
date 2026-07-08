@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import growthApi from '@/api/growthApi.ts';
+import { useUserStore } from '@/store';
 
 export interface Growth {
   exp: number;
@@ -30,9 +31,24 @@ const ranks = ref<Rank[]>([]);
 const loading = ref(false);
 let loadedOnce = false;
 let ranksLoaded = false;
+let ownerId: string | null = null; // 成长缓存归属的账号,切号即作废
+
+// 登出/切换账号时作废用户成长缓存(ranks 段位表全局通用,与账号无关,不清)
+export function resetGrowth() {
+  growth.value = null;
+  loadedOnce = false;
+  ownerId = null;
+}
 
 export function useGrowth() {
   async function load(force = false) {
+    const uid = useUserStore().id || 'visitor';
+    if (ownerId !== uid) {
+      // 账号变了(登出→游客 / 换号):旧缓存立即作废,防止显示上一个账号的等级/经验
+      growth.value = null;
+      loadedOnce = false;
+      ownerId = uid;
+    }
     if (loadedOnce && !force) return growth.value;
     loading.value = true;
     try {

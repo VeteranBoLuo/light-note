@@ -282,13 +282,13 @@
       name: 'growth',
       label: t('growth.entry'),
       path: '/growth',
-      icon: icon.navigation.permissions,
+      icon: icon.userCenter.growth,
     },
     {
       name: 'settings',
       label: t('settings.title'),
       path: '/settings',
-      icon: icon.navigation.system,
+      icon: icon.userCenter.settingsGear,
     },
     {
       name: 'help',

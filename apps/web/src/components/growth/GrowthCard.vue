@@ -9,9 +9,7 @@
           {{ g.name }}
           <span v-if="g.isMax" class="gc-max">{{ t('growth.max') }}</span>
         </div>
-        <div class="gc-exp">
-          {{ g.exp }}<template v-if="!g.isMax"> / {{ g.nextLevelExp }}</template> {{ t('growth.exp') }}
-        </div>
+        <div class="gc-exp">{{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}</div>
       </div>
       <button class="gc-checkin" :class="{ done: g.checkedInToday }" :disabled="g.checkedInToday || checking" @click="onCheckin">
         {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
@@ -22,9 +20,6 @@
       <div class="gc-progress-fill" :style="{ width: g.progress + '%' }"></div>
     </div>
     <div v-if="!g.isMax" class="gc-tonext">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</div>
-
-    <RankLadder />
-
 
     <div class="gc-perks">
       <div class="gc-perk">
@@ -40,6 +35,19 @@
         <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.streak }) }}</b>
       </div>
     </div>
+
+    <div class="gc-earn">
+      <div class="gc-earn-head">{{ t('growth.earnTitle') }}</div>
+      <div class="gc-earn-list">
+        <div class="gc-earn-item"><span>{{ t('growth.earnCheckin') }}</span><b>+5~10</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.earnCreate') }}</span><b>+10~15</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.earnFirst') }}</span><b>+30</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.earnProfile') }}</span><b>+20</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.earnTag') }}</span><b>+2</b></div>
+      </div>
+    </div>
+
+    <RankLadder />
   </div>
 </template>
 
@@ -226,6 +234,42 @@
     font-size: 14px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+  }
+  .gc-earn {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .gc-earn-head {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--desc-color);
+    letter-spacing: 0.03em;
+  }
+  .gc-earn-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 16px;
+  }
+  .gc-earn-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    padding: 6px 0;
+    border-bottom: 1px dashed color-mix(in srgb, var(--card-border-color) 30%, transparent);
+  }
+  .gc-earn-item b {
+    color: var(--primary-color);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  @media (max-width: 560px) {
+    .gc-earn-list {
+      grid-template-columns: 1fr;
+    }
   }
   @media (max-width: 560px) {
     .gc-perks {
