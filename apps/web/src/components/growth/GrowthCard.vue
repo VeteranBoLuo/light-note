@@ -49,6 +49,8 @@
 
     <RankLadder />
   </div>
+
+  <LevelUpOverlay v-if="lvUp" :level="lvUp.level" :name="lvUp.name" @close="lvUp = null" />
 </template>
 
 <script setup lang="ts">
@@ -56,18 +58,20 @@
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import RankLadder from '@/components/growth/RankLadder.vue';
+  import LevelUpOverlay from '@/components/growth/LevelUpOverlay.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
   const { growth: g, load, doCheckin, markRead } = useGrowth();
   const checking = ref(false);
+  const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
 
   onMounted(async () => {
     await load(true); // 强制拉最新(升级是后端异步发生,不 force 会读到升级前的缓存)
     // 进成长页即视为查看升级通知:提示 + 标记已读(清红点)
     if (g.value?.hasUnreadLevelUp) {
-      message.success(t('growth.leveledUp', { lv: g.value.level, name: g.value.name }));
+      lvUp.value = { level: g.value.level, name: g.value.name }; // 之前升级未看过 → 进页补一次庆祝动画
       markRead();
     }
   });
@@ -96,7 +100,7 @@
           message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
           recordOperation({ module: '成长', operation: `每日签到（连续 ${res.data.streak} 天，+${res.data.expGained}）` });
           if (res.data.leveledUp && res.data.growth) {
-            message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
+            lvUp.value = { level: res.data.growth.level, name: res.data.growth.name }; // 触发升级庆祝动画
             recordOperation({ module: '成长', operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}` });
           }
         }
