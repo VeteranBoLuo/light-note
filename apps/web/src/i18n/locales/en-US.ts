@@ -565,6 +565,8 @@ export default {
     aiQuota: 'AI quota/day',
     streak: 'Streak',
     daysVal: '{n} d',
+    toNext: '{n} EXP to next level',
+    rankLadder: 'Rank ladder',
   },
   ai: {
     title: 'Light Note Wisdom Realm',

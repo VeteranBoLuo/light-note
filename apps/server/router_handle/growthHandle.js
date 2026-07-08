@@ -1,4 +1,4 @@
-import { getGrowth, checkin } from '../util/growth.js';
+import { getGrowth, checkin, RANKS } from '../util/growth.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 
@@ -24,5 +24,22 @@ export const doCheckin = async (req, res) => {
   } catch (error) {
     console.error('签到失败:', error);
     res.send(resultData(null, 500, '签到失败: ' + error.message));
+  }
+};
+
+// GET /growth/ranks —— 段位表(前端「段位路线」总览用;公开只读,单一事实源)
+export const getRanks = async (req, res) => {
+  try {
+    const ranks = RANKS.map((r) => ({
+      level: r.level,
+      name: r.name,
+      cumExp: r.cumExp,
+      spaceMb: r.spaceMb,
+      aiTokenDaily: r.aiTokenDaily,
+    }));
+    res.send(resultData(ranks));
+  } catch (error) {
+    console.error('获取段位表失败:', error);
+    res.send(resultData(null, 500, '获取段位表失败: ' + error.message));
   }
 };

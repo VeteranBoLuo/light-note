@@ -6,4 +6,7 @@ export const getMyGrowth = () => apiBaseGet('/api/growth/me');
 // 签到(游客后端返回 status 'preview',由 request 拦截统一弹注册引导)
 export const checkin = () => apiBasePost('/api/growth/checkin');
 
-export default { getMyGrowth, checkin };
+// 段位表(「段位路线」总览用,公开只读)
+export const getRanks = () => apiBaseGet('/api/growth/ranks');
+
+export default { getMyGrowth, checkin, getRanks };

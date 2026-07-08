@@ -21,6 +21,10 @@
     <div v-if="!g.isMax" class="gc-progress" :title="`${g.progress}%`">
       <div class="gc-progress-fill" :style="{ width: g.progress + '%' }"></div>
     </div>
+    <div v-if="!g.isMax" class="gc-tonext">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</div>
+
+    <RankLadder />
+
 
     <div class="gc-perks">
       <div class="gc-perk">
@@ -43,6 +47,7 @@
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import RankLadder from '@/components/growth/RankLadder.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
   const { t } = useI18n();
@@ -193,6 +198,11 @@
     border-radius: 999px;
     background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 60%, #22d3ee));
     transition: width 0.4s ease;
+  }
+  .gc-tonext {
+    font-size: 12px;
+    color: var(--desc-color);
+    margin-top: -6px;
   }
   .gc-perks {
     display: flex;

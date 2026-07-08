@@ -10,6 +10,8 @@
         <p class="settings-subtitle">{{ t('settings.subtitle') }}</p>
       </header>
 
+      <div class="settings-body">
+        <div class="settings-col">
       <!-- 外观 -->
       <section class="settings-card">
         <div class="card-head">
@@ -119,7 +121,9 @@
           </div>
         </div>
       </section>
+        </div>
 
+        <div class="settings-col">
       <!-- 成长 -->
       <section class="settings-card">
         <div class="card-head">
@@ -145,6 +149,8 @@
           <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
         </svg>
         <span>{{ t('settings.moreComing') }}</span>
+      </div>
+        </div>
       </div>
     </div>
   </div>
@@ -218,11 +224,29 @@
   }
 
   .settings-container {
-    max-width: 600px;
+    max-width: 1040px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 18px;
+  }
+  /* 大屏两栏:外观/通用 左、成长 右,减少两侧留白、成长上移到首屏 */
+  .settings-body {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+  }
+  .settings-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  @media (max-width: 880px) {
+    .settings-body {
+      flex-direction: column;
+    }
   }
 
   /* ---- hero ---- */

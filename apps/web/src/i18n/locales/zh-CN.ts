@@ -556,6 +556,8 @@ export default {
     aiQuota: 'AI 额度/日',
     streak: '连续签到',
     daysVal: '{n} 天',
+    toNext: '还差 {n} EXP 升级',
+    rankLadder: '段位路线',
   },
   ai: {
     title: '轻笺智域',
