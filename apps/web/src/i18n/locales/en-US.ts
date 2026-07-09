@@ -714,7 +714,7 @@ export default {
     levelUpTitle: 'Leveled up to Lv.{level} · {name}',
     opinionReplyTitle: 'Your feedback got a reply',
     tabAll: 'All',
-    tabLevelUp: 'Level up',
+    tabLevelUp: 'Level',
     tabReply: 'Replies',
     tabSystem: 'System',
     tabOther: 'Other',

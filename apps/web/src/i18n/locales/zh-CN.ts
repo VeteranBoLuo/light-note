@@ -705,7 +705,7 @@ export default {
     levelUpTitle: '升级到 Lv.{level} · {name}',
     opinionReplyTitle: '你的反馈收到新回复',
     tabAll: '全部',
-    tabLevelUp: '升级',
+    tabLevelUp: '等级',
     tabReply: '反馈回复',
     tabSystem: '系统',
     tabOther: '其他',

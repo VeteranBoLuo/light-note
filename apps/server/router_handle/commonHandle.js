@@ -307,6 +307,13 @@ export const recordOperationLogs = (req, res) => {
     };
     delete log.createBy; // 防客户端用驼峰键绕过覆盖(snakeCaseKeys 会与 create_by 合流)
     delete log.id; // 防客户端指定主键(交由 insertData 生成 UUID)
+    // operation_logs 为 latin1 表,operation/module 等列不支持 4 字节字符(emoji):
+    // 写入前剥离星芒面字符,避免含 emoji 的操作(如撤回带 🎉 标题的通知)整条 500,
+    // 进而被前端拦截器弹成「报错通知」(实际业务操作已成功)。
+    const stripAstral = (v) => (typeof v === 'string' ? v.replace(/[\u{10000}-\u{10FFFF}]/gu, '') : v);
+    Object.keys(log).forEach((k) => {
+      log[k] = stripAstral(log[k]);
+    });
     pool
       .query('INSERT INTO operation_logs SET ?', [insertData(log)])
       .then(() => {
