@@ -8,6 +8,7 @@ export interface Growth {
   name: string;
   spaceMb: number;
   aiTokenDaily: number;
+  trashDays?: number;
   streak: number;
   checkedInToday: boolean;
   levelStartExp: number;
@@ -28,6 +29,7 @@ export interface Rank {
   cumExp: number;
   spaceMb: number;
   aiTokenDaily: number;
+  trashDays: number;
 }
 
 export interface Achievement {

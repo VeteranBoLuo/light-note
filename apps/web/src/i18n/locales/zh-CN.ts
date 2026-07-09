@@ -1012,7 +1012,7 @@ export default {
     emptyAllSuccess: '回收站已清空',
     noData: '回收站为空',
     totalCount: '共 {count} 项',
-    autoCleanTip: '已删除超过 30 天的内容将被自动清理',
+    autoCleanTip: '已删除超过 {days} 天的内容将被自动清理;等级越高,回收站保留越久',
     trashFileSize: '其中文件占用',
     trashSizeWarning200: '回收站中文件已占用 {size} MB，建议及时清理以释放存储空间',
     trashSizeWarning500: '回收站中文件占用过大（{size} MB），可能影响存储空间，请尽快清理',

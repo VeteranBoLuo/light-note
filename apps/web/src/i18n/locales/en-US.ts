@@ -1023,7 +1023,7 @@ export default {
     emptyAllSuccess: 'Trash emptied',
     noData: 'Trash is empty',
     totalCount: '{count} item(s)',
-    autoCleanTip: 'Items older than 30 days will be automatically removed',
+    autoCleanTip: 'Items older than {days} days are auto-removed; higher levels keep them longer',
     trashFileSize: 'files use',
     trashSizeWarning200: 'Files in trash use {size} MB, consider cleaning up to free storage',
     trashSizeWarning500: 'Files in trash use too much space ({size} MB), please clean up soon',

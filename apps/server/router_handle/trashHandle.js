@@ -28,7 +28,6 @@ function unlinkImageUrls(urls) {
 }
 
 const RESOURCE_TYPES = ['bookmark', 'note', 'file'];
-const TRASH_EXPIRY_DAYS = 30;
 
 const TABLE_CONFIG = {
   bookmark: { table: 'bookmark', userIdField: 'user_id', nameField: 'name' },
@@ -38,14 +37,25 @@ const TABLE_CONFIG = {
 
 // ---- 清理过期数据 ----
 
-const EXPIRY_CONDITION = `del_flag = 1 AND deleted_at < DATE_SUB(NOW(), INTERVAL ${TRASH_EXPIRY_DAYS} DAY)`;
+// 回收站保留天数按成长等级(低级维持 30 天,高级递增到满级 90 天):引用连接的 user_growth g.exp。
+// 阈值 = RANKS 的 cumExp(Lv5=2700 / Lv10=14500 / Lv15=50000),与 growth.js 单一事实源保持一致。
+const RETAIN_DAYS_CASE = `CASE
+  WHEN COALESCE(g.exp, 0) >= 50000 THEN 90
+  WHEN COALESCE(g.exp, 0) >= 14500 THEN 60
+  WHEN COALESCE(g.exp, 0) >= 2700 THEN 45
+  ELSE 30 END`;
+// 过期条件:资源表用别名 alias,调用方须 LEFT JOIN user_growth g;按所有者等级算保留天数
+const expiryWhere = (alias) =>
+  `${alias}.del_flag = 1 AND ${alias}.deleted_at < DATE_SUB(NOW(), INTERVAL (${RETAIN_DAYS_CASE}) DAY)`;
 const NOT_ROOT_CONDITION = (idField) =>
   `${idField} NOT IN (SELECT id FROM \`user\` WHERE role = 'root')`;
 
 async function cleanupExpiredFiles(connection, userId = null) {
-  const userCond = userId ? ` AND create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('create_by')}`;
+  const userCond = userId ? ` AND f.create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('f.create_by')}`;
   const [rows] = await connection.query(
-    `SELECT id, obs_key, create_by, file_name FROM files WHERE ${EXPIRY_CONDITION}${userCond}`,
+    `SELECT f.id, f.obs_key, f.create_by, f.file_name FROM files f
+     LEFT JOIN user_growth g ON g.user_id = f.create_by
+     WHERE ${expiryWhere('f')}${userCond}`,
   );
 
   if (rows.length === 0) return 0;
@@ -65,8 +75,10 @@ async function cleanupExpiredFiles(connection, userId = null) {
 }
 
 async function cleanupExpiredNotes(connection, userId = null) {
-  const userCond = userId ? ` AND create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('create_by')}`;
-  const [notes] = await connection.query(`SELECT id FROM note WHERE ${EXPIRY_CONDITION}${userCond}`);
+  const userCond = userId ? ` AND n.create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('n.create_by')}`;
+  const [notes] = await connection.query(
+    `SELECT n.id FROM note n LEFT JOIN user_growth g ON g.user_id = n.create_by WHERE ${expiryWhere('n')}${userCond}`,
+  );
   if (notes.length === 0) return 0;
   const ids = notes.map((n) => n.id);
   const ph = ids.map(() => '?').join(',');
@@ -77,16 +89,19 @@ async function cleanupExpiredNotes(connection, userId = null) {
 }
 
 async function cleanupExpiredBookmarks(connection, userId = null) {
-  const userCond = userId ? ` AND user_id = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('user_id')}`;
+  const userCond = userId ? ` AND b.user_id = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('b.user_id')}`;
 
   // 先清 resource_tag_relations（bookmark 的多态字段无 FK CASCADE）
   await connection.query(
     `DELETE rtr FROM resource_tag_relations rtr
      INNER JOIN bookmark b ON rtr.resource_id = b.id AND rtr.resource_type = 'bookmark'
-     WHERE b.${EXPIRY_CONDITION}${userCond ? ` AND b.user_id = ${pool.escape(userId)}` : ''}`,
+     LEFT JOIN user_growth g ON g.user_id = b.user_id
+     WHERE ${expiryWhere('b')}${userCond}`,
   );
 
-  const [result] = await connection.query(`DELETE FROM bookmark WHERE ${EXPIRY_CONDITION}${userCond}`);
+  const [result] = await connection.query(
+    `DELETE b FROM bookmark b LEFT JOIN user_growth g ON g.user_id = b.user_id WHERE ${expiryWhere('b')}${userCond}`,
+  );
   return result.affectedRows;
 }
 

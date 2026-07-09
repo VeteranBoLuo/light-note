@@ -20,7 +20,7 @@
     <!-- 提示区 -->
     <div v-if="total > 0 || trashFileSize > 0" class="trash-info-bar">
       <svg-icon :src="icon.common.important" size="14" color="red" />
-      <span>{{ $t('trash.autoCleanTip') }}</span>
+      <span>{{ $t('trash.autoCleanTip', { days: retainDays }) }}</span>
     </div>
 
     <div v-if="trashFileSizeWarnLevel" :class="['trash-size-warning', `is-${trashFileSizeWarnLevel}`]">
@@ -167,8 +167,12 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useGrowth } from '@/composables/useGrowth.ts';
 
   const { t } = useI18n();
+  const { growth, load: loadGrowth } = useGrowth();
+  // 回收站保留天数按成长等级(缺省 30;升级后延长,提示随之更新)
+  const retainDays = computed(() => growth.value?.trashDays || 30);
 
   const loading = ref(false);
   const emptyingAll = ref(false);
@@ -395,7 +399,10 @@
     }
   }
 
-  onMounted(() => fetchList());
+  onMounted(() => {
+    fetchList();
+    loadGrowth(); // 拉取成长数据,让回收站保留天数按等级显示
+  });
 </script>
 
 <style lang="less" scoped>

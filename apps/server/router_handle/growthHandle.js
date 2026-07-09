@@ -61,6 +61,7 @@ export const getRanks = async (req, res) => {
       cumExp: r.cumExp,
       spaceMb: r.spaceMb,
       aiTokenDaily: r.aiTokenDaily,
+      trashDays: r.trashDays,
     }));
     res.send(resultData(ranks));
   } catch (error) {
