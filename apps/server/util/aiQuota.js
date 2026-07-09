@@ -34,17 +34,11 @@ function dayKey(d = new Date()) {
   return `${y}${m}${day}`;
 }
 
-// 站长自测/本机流量:不计数、不受限(记忆:自测=14.155.x 动态段 + 127.0.0.1 + ::1)
-function isSelfTest(ip) {
-  if (!ip) return true;
-  return ip.includes('127.0.0.1') || ip === '::1' || ip.startsWith('14.155.');
-}
-
 function resolveSubject(req, { userId, userRole }) {
-  // root(站长)与本机自测:豁免
-  if (userRole === 'root' || isSelfTest(req.ip)) return { exempt: true };
+  // 按站长要求去掉所有豁免(含 root 与本机自测):额度对所有人真实生效。
+  // root 无经验账本但视为满级,配额在 userDailyQuota 里按满级下发。
   if (userRole === 'visitor' || !userId || userId === 'visitor') {
-    // 游客:指纹为主、IP 为辅(P0-A 只观测,取到啥用啥;P1 补 visitor_global 成本硬顶)
+    // 游客:指纹为主、IP 为辅(每个指纹/IP 各自独立的当日额度,互不共享)
     const fp = req.headers['x-fingerprint'] || req.body?.fingerprint || req.ip || 'unknown';
     return { exempt: false, type: 'fingerprint', key: String(fp).slice(0, 128), quota: DAILY_QUOTA.visitor };
   }
@@ -53,7 +47,9 @@ function resolveSubject(req, { userId, userRole }) {
 
 // 注册用户每日额度按成长等级下发(aiTokenDaily,单一事实源 = growth.RANKS,满级 800k);查不到按 Lv.1 兜底。
 // 替代早期「所有注册用户硬编码 100k」——那与成长权益页展示的按等级额度对不上。
-async function userDailyQuota(userId) {
+async function userDailyQuota(userId, userRole) {
+  // root 免账本、无经验记录,但等级视为满级 → 取满级额度(否则会掉到 Lv.1)
+  if (userRole === 'root') return RANKS[RANKS.length - 1].aiTokenDaily;
   try {
     const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
     return rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
@@ -89,7 +85,7 @@ export async function reserve(req, ctx) {
     const s = resolveSubject(req, ctx);
     if (s.exempt) return { exempt: true };
     // 注册用户额度按等级(替换早期硬编码 100k);游客沿用固定配额
-    if (s.type === 'user') s.quota = await userDailyQuota(s.key);
+    if (s.type === 'user') s.quota = await userDailyQuota(s.key, ctx.userRole);
     const pk = dayKey();
     const used = await getDayUsed(s.type, s.key, pk);
     if (ENFORCE && used >= s.quota) {
@@ -130,7 +126,7 @@ export async function getStatus(req, ctx) {
   try {
     const s = resolveSubject(req, ctx);
     if (s.exempt) return { exempt: true, role: ctx?.userRole, enforcing: ENFORCE };
-    const quota = s.type === 'user' ? await userDailyQuota(s.key) : s.quota;
+    const quota = s.type === 'user' ? await userDailyQuota(s.key, ctx.userRole) : s.quota;
     const used = await getDayUsed(s.type, s.key, dayKey());
     return { exempt: false, type: s.type, used, quota, remaining: Math.max(0, quota - used), enforcing: ENFORCE };
   } catch (e) {
