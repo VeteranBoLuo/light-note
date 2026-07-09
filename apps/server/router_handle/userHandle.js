@@ -3,6 +3,7 @@ import { resultData, snakeCaseKeys, mergeExistingProperties, insertData, generat
 import { grantExp } from '../util/growth.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
+import { fetchGitHubTokenRacing } from '../util/githubOAuth.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor } from '../util/auth.js';
@@ -530,26 +531,9 @@ const fetchGitHubToken = async (code) => {
   params.append('code', code);
 
   try {
-    const response = await retry(
-      () =>
-        fetchWithTimeout(
-          'https://github.com/login/oauth/access_token',
-          {
-            method: 'POST',
-            headers: { Accept: 'application/json' },
-            body: params,
-          },
-          10000, // 10秒超时
-        ),
-      3,
-      'token',
-    );
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`GitHub token request failed: ${response.status} - ${errorBody}`);
-    }
-    return response.json();
+    // 多 IP 竞速换 token:绕过 GFW 对 github.com 单个 DNS IP 的间歇性 TCP 封锁(详见 util/githubOAuth.js)。
+    // 只要一组 github.com 官方 IP 里当下有任一可达即成功;api.github.com(取用户/邮箱)另走、通常正常。
+    return await fetchGitHubTokenRacing(params.toString());
   } catch (error) {
     console.error('fetchGitHubToken Error:', error.message);
     throw error;
