@@ -308,7 +308,7 @@ async function queryBookmarks(userId, keyword, limit, lang) {
     tags: Array.isArray(item.tag_list) ? item.tag_list : [],
     url: toText(item.url),
     route: '/home',
-    iconUrl: item.icon_url || (item.url ? `https://ico.kucat.cn/get.php?url=${item.url}` : ''),
+    iconUrl: item.icon_url || '', // 不再兜底第三方 ico.kucat.cn 直链;前端拿到空值统一用站内默认图
     raw: item,
   }));
 }

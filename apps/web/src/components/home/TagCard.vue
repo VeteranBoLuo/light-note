@@ -75,12 +75,10 @@
   }
 
   function getIcon(bookmark: any) {
-    if (bookmark.iconUrl) {
-      return bookmark.iconUrl;
-    } else {
-      bookmark.iconUrl = 'https://ico.kucat.cn/get.php?url=' + bookmark.url;
-      return bookmark.iconUrl;
-    }
+    // 无图标时用站内默认图(地球),不再实时直连第三方 ico.kucat.cn:
+    // 本地网络访问它不稳会破图,线上也不该押注第三方的实时可用性。
+    // 真实 favicon 由后端异步抓取(analyzeImgUrl)存到站内并写回 iconUrl,抓到后自动显示。
+    return bookmark.iconUrl || icon.nullImg;
   }
 
   const user = useUserStore();

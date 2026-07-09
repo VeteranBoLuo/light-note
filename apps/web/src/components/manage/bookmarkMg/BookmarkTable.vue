@@ -586,8 +586,8 @@
   }
 
   function getIcon(bookmarkItem: BookmarkInterface) {
-    if (bookmarkItem.iconUrl) return bookmarkItem.iconUrl;
-    return 'https://ico.kucat.cn/get.php?url=' + bookmarkItem.url;
+    // 无图标用站内默认图,不再直连第三方 ico.kucat.cn(真实 favicon 由后端抓取写回 iconUrl)
+    return bookmarkItem.iconUrl || icon.nullImg;
   }
 
   function onErrorImg(event: Event) {
