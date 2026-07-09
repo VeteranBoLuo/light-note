@@ -1,5 +1,5 @@
 <template>
-  <div class="cal">
+  <div class="cal" :class="{ 'cal-wide': wide }">
     <div class="cal-head">
       <span class="cal-title">{{ t('growth.calTitle') }}</span>
       <div class="cal-nav">
@@ -34,7 +34,7 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
 
-  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number }>();
+  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number; wide?: boolean }>();
   const { t, locale } = useI18n();
 
   const now = new Date();
@@ -115,6 +115,14 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  /* 宽版(满级卡内):撑满左栏宽度、格子加高,填满留白并与右侧段位路线视觉对齐 */
+  .cal-wide {
+    max-width: none;
+  }
+  .cal-wide .cal-cell {
+    aspect-ratio: auto;
+    min-height: 48px;
   }
   .cal-head {
     display: flex;

@@ -53,6 +53,7 @@
     <SigninCalendar
       v-if="g.isMax"
       class="gc-calendar"
+      wide
       :checkin-days="stats?.checkinDays || []"
       :checked-in-today="g.checkedInToday"
       :streak="g.streak"
@@ -86,7 +87,7 @@
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
 
   const { t } = useI18n();
-  const { growth: g, dashboard, load, doCheckin, markRead } = useGrowth();
+  const { growth: g, dashboard, load, loadDashboard, doCheckin, markRead } = useGrowth();
   const checking = ref(false);
   const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
 
@@ -133,6 +134,8 @@
             recordOperation({ module: '成长', operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}` });
           }
         }
+        // 签到后刷新看板:同页的「今日任务」签到项、签到日历、数据统计随之更新,无需手动刷新
+        loadDashboard();
       }
       // 游客:后端返回 status 'preview',request 拦截已统一弹注册引导,这里无需处理
     } catch (err) {
