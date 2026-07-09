@@ -700,17 +700,25 @@ export const getAgentLogsSummary = async (req, res) => {
   }
 };
 
-// POST /common/getAdminOverview —— 后台总览看板:全站用户/内容/存储/AI/转化/待办聚合(仅 root)
-// 复用现成查询思路(转化漏斗、AI 摘要、待办 noticeSummary),新写全站资源 count;AI 段单独兜底,agent_logs 缺表也不拖垮整体
+// POST /common/getAdminOverview —— 后台总览看板:用户/内容/存储/AI/活跃/系统/转化/待办 + 近7天趋势(仅 root)
+// 口径统一:累计量与今日增量成对返回,前端统一「累计为主 + 今日 +N」呈现;高风险表(security/user_sessions/api_logs/agent_logs)各自兜底,缺表不拖垮整体
 export const getAdminOverview = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
   try {
-    // 用 Node 本地时间算今日(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
+    // 用 Node 本地时间算今日与近7天序列(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
     const now = new Date();
     const pad = (nn) => String(nn).padStart(2, '0');
-    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const dstr = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+    const today = dstr(now);
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      days.push(dstr(d));
+    }
+    const weekAgo = days[0];
 
-    const [userAgg, resAgg, convAgg, opinionAgg, securityAgg] = await Promise.all([
+    const [userAgg, resAgg, convAgg, opinionAgg, securityAgg, activeAgg, sysAgg, userTrendRows, contentTrendRows] = await Promise.all([
       pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0', [today]),
       pool.query(
         `SELECT
@@ -720,7 +728,9 @@ export const getAdminOverview = async (req, res) => {
            COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0), 0) AS storageMb,
            (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?) AS bookmarkToday,
            (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?) AS noteToday,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?) AS fileToday`,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?) AS fileToday,
+           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1), 0) AS trashMb,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 1) AS trashCount`,
         [today, today, today],
       ),
       pool.query(
@@ -733,6 +743,41 @@ export const getAdminOverview = async (req, res) => {
       pool
         .query("SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')")
         .catch(() => [[{ unhandled: 0 }]]),
+      // 活跃用户(会话表 last_active_time;排除游客会话)
+      pool
+        .query(
+          `SELECT
+             COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS activeToday,
+             COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS active7d
+           FROM user_sessions WHERE role != 'visitor'`,
+          [today, weekAgo],
+        )
+        .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
+      // 系统健康(今日 API 请求 / 错误;status_code 为 varchar,用 LIKE 判 4xx/5xx)
+      pool
+        .query(
+          "SELECT COUNT(*) AS total, COALESCE(SUM(status_code LIKE '4%' OR status_code LIKE '5%'), 0) AS errors FROM api_logs WHERE request_time >= ?",
+          [today],
+        )
+        .catch(() => [[{ total: 0, errors: 0 }]]),
+      // 近7天新增用户按天
+      pool
+        .query(
+          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ? GROUP BY d",
+          [weekAgo],
+        )
+        .catch(() => [[]]),
+      // 近7天新增内容(书签+笔记+文件合并)按天
+      pool
+        .query(
+          `SELECT d, SUM(c) AS c FROM (
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ? GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ? GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ? GROUP BY d
+           ) t GROUP BY d`,
+          [weekAgo, weekAgo, weekAgo],
+        )
+        .catch(() => [[]]),
     ]);
 
     // AI 消耗单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)
@@ -753,18 +798,26 @@ export const getAdminOverview = async (req, res) => {
       console.error('[AdminOverview] AI 统计失败(忽略):', aiErr.message);
     }
 
-    const u = userAgg[0][0], r = resAgg[0][0], c = convAgg[0][0], o = opinionAgg[0][0], s = securityAgg[0][0];
+    // 趋势按天补零成 7 天序列(展示 MM-DD)
+    const userMap = Object.fromEntries((userTrendRows[0] || []).map((x) => [x.d, Number(x.c)]));
+    const contentMap = Object.fromEntries((contentTrendRows[0] || []).map((x) => [x.d, Number(x.c)]));
+    const trend = days.map((d) => ({ d: d.slice(5), users: userMap[d] || 0, content: contentMap[d] || 0 }));
+
+    const u = userAgg[0][0], r = resAgg[0][0], c = convAgg[0][0], o = opinionAgg[0][0], s = securityAgg[0][0], a = activeAgg[0][0], sys = sysAgg[0][0];
     res.send(
       resultData({
         users: { total: Number(u.total || 0), today: Number(u.today || 0) },
+        active: { today: Number(a.activeToday || 0), week: Number(a.active7d || 0) },
         resources: {
           bookmarkTotal: Number(r.bookmarkTotal || 0), noteTotal: Number(r.noteTotal || 0), fileTotal: Number(r.fileTotal || 0),
           bookmarkToday: Number(r.bookmarkToday || 0), noteToday: Number(r.noteToday || 0), fileToday: Number(r.fileToday || 0),
-          storageMb: Number(r.storageMb || 0),
+          storageMb: Number(r.storageMb || 0), trashMb: Number(r.trashMb || 0), trashCount: Number(r.trashCount || 0),
         },
         ai,
         conversion: { visitors: Number(c.visitors || 0), registers: Number(c.registers || 0) },
+        system: { apiToday: Number(sys.total || 0), apiErrorsToday: Number(sys.errors || 0) },
         pending: { opinion: Number(o.pending || 0), security: Number(s.unhandled || 0) },
+        trend,
         generatedAt: `${today} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
       }),
     );
