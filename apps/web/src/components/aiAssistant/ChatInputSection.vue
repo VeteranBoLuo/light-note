@@ -1,5 +1,12 @@
 <template>
   <footer class="input-section">
+    <div v-if="quota && !quota.exempt && quota.quota" class="ai-quota" :title="t('ai.quotaTip')">
+      <span class="ai-quota-txt">{{ t('ai.quotaToday') }} {{ fmtTokens(quota.used) }} / {{ fmtTokens(quota.quota) }}</span>
+      <div class="ai-quota-bar"><div class="ai-quota-fill" :style="{ width: quotaPercent + '%' }"></div></div>
+    </div>
+    <div v-else-if="quota && quota.exempt && quota.role === 'root'" class="ai-quota ai-quota--free">
+      {{ t('ai.quotaUnlimited') }}
+    </div>
     <div class="input-container">
       <textarea
         :value="modelValue"
@@ -38,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, ref, nextTick, watch } from 'vue';
+  import { onMounted, ref, nextTick, watch, computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
   import TranslationToggle from './TranslationToggle.vue';
@@ -48,6 +55,7 @@
   const props = defineProps<{
     modelValue: string;
     isLoading: boolean;
+    quota?: { exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null;
     showTranslation: boolean;
     enableTranslation: boolean;
     translationConfig: { source: string; target: string };
@@ -64,6 +72,17 @@
 
   const textInput = ref<HTMLTextAreaElement | null>(null);
   const isComposing = ref(false);
+
+  // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
+  const quotaPercent = computed(() => {
+    const q = props.quota;
+    if (!q || !q.quota) return 0;
+    return Math.min(100, Math.round(((q.used || 0) / q.quota) * 100));
+  });
+  function fmtTokens(n?: number) {
+    const v = Number(n || 0);
+    return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(v);
+  }
 
   const adjustTextareaHeight = () => {
     if (textInput.value) {
@@ -243,6 +262,35 @@
     cursor: not-allowed;
   }
 
+  .ai-quota {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 2px 7px;
+    font-size: 11.5px;
+    color: var(--desc-color);
+  }
+  .ai-quota-txt {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .ai-quota-bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 13%, transparent);
+    overflow: hidden;
+  }
+  .ai-quota-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 68%, #22d3ee));
+    transition: width 0.3s ease;
+  }
+  .ai-quota--free {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
   .input-hint {
     text-align: center;
     font-size: 0.75rem;

@@ -34,6 +34,7 @@
         ref="chatInputRef"
         v-model="userInput"
         :is-loading="isLoading"
+        :quota="aiQuota"
         :show-translation="user.role === 'root'"
         :enable-translation="enableTranslation"
         :translation-config="translationConfig"
@@ -85,6 +86,19 @@
   const chatInputRef = ref<{ focus: () => void } | null>(null);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
+
+  // AI 今日额度(按成长等级下发;root/本机自测豁免返回 exempt)。进页与每轮回复结束后刷新,展示「已用 / 剩余」
+  const aiQuota = ref<{ exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null>(
+    null,
+  );
+  async function fetchAiQuota() {
+    try {
+      const res = await apiBasePost('/api/chat/aiQuota');
+      if (res?.status === 200) aiQuota.value = res.data;
+    } catch {
+      /* 额度展示失败不影响主流程 */
+    }
+  }
 
   // 智能滚动相关状态 - 简化状态管理
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
@@ -171,6 +185,11 @@
     nextTick(() => {
       scrollToBottom('auto');
     });
+    fetchAiQuota();
+  });
+  // 每轮回复结束(isLoading 落定)后刷新额度,数字实时反映本次消耗
+  watch(isLoading, (v) => {
+    if (!v) fetchAiQuota();
   });
 
   // 清空对话
