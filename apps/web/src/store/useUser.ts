@@ -36,6 +36,10 @@ interface UserInfo {
     resourceView?: 'card' | 'list'; // 资源中心视图
     tagView?: 'card' | 'graph'; // 标签详情视图
     openBookmarkIn?: 'newTab' | 'current'; // 书签打开方式:新标签页/当前标签页
+    resourceSort?: 'relevance' | 'updated' | 'name'; // 资源中心默认排序
+    weeklyReport?: boolean; // 每周成长周报推送
+    notifyLevelUp?: boolean; // 升级提醒通知推送
+    notifyOpinionReply?: boolean; // 反馈回复通知推送
   };
 }
 

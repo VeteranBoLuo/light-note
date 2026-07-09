@@ -150,6 +150,12 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     let leveledUp = false;
     if (toLevel > fromLevel) {
       leveledUp = true;
+      // 尊重用户「升级提醒」开关(preferences.notifyLevelUp === 'false' 时不发升级通知,但里程碑账本照记)
+      const [[nluRow]] = await c.query(
+        "SELECT COALESCE(JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.notifyLevelUp')), 'true') AS v FROM `user` WHERE id = ?",
+        [userId],
+      );
+      const notifyLevelUp = nluRow?.v !== 'false';
       // 每升 1 级奖励 1 张补签卡(上限 2)
       await c.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + ?) WHERE user_id = ?', [toLevel - fromLevel, userId]);
       for (let L = fromLevel + 1; L <= toLevel; L++) {
@@ -162,11 +168,13 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
         // 通知中心:同事务写一条升级通知(裸 SQL,避免 growth→notification→common 的循环 import)。
         // 前端按 type=level_up + meta 渲染 i18n 文案;通知表未就绪时吞错,绝不回滚已发经验。
         try {
-          await c.query(
-            `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
-             VALUES (?, ?, 'level_up', ?, NULL, '/growth', ?, 0)`,
-            [crypto.randomUUID(), userId, `升级到 Lv.${L} ${rankName}`, JSON.stringify({ level: L, name: rankName })],
-          );
+          if (notifyLevelUp) {
+            await c.query(
+              `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
+               VALUES (?, ?, 'level_up', ?, NULL, '/growth', ?, 0)`,
+              [crypto.randomUUID(), userId, `升级到 Lv.${L} ${rankName}`, JSON.stringify({ level: L, name: rankName })],
+            );
+          }
         } catch (notifyErr) {
           console.error('写升级通知失败(不影响升级):', notifyErr.message);
         }

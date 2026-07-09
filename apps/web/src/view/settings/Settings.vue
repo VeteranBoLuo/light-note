@@ -175,6 +175,24 @@
 
             <div class="field">
               <div class="field-head">
+                <span class="field-label">{{ t('settings.resourceSort') }}</span>
+                <span class="field-desc">{{ t('settings.resourceSortDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in resourceSortOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.resourceSort || 'relevance') === o.v }"
+                  @click="set('resourceSort', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
                 <span class="field-label">{{ t('settings.tagView') }}</span>
                 <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
               </div>
@@ -191,6 +209,25 @@
               </div>
             </div>
 
+          </div>
+        </section>
+
+        <!-- 通知 -->
+        <section class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--general">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+              </svg>
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.notification') }}</h2>
+              <p class="card-sub">{{ t('settings.notificationDesc') }}</p>
+            </div>
+          </div>
+
+          <div class="fields">
             <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.weeklyReport') }}</span>
@@ -198,11 +235,47 @@
               </div>
               <div class="seg">
                 <button
-                  v-for="o in weeklyReportOpts"
+                  v-for="o in onOffOpts"
                   :key="String(o.v)"
                   class="seg-btn"
                   :class="{ active: (user.preferences.weeklyReport !== false) === o.v }"
                   @click="set('weeklyReport', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notifyLevelUp') }}</span>
+                <span class="field-desc">{{ t('settings.notifyLevelUpDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in onOffOpts"
+                  :key="String(o.v)"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.notifyLevelUp !== false) === o.v }"
+                  @click="set('notifyLevelUp', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notifyOpinionReply') }}</span>
+                <span class="field-desc">{{ t('settings.notifyOpinionReplyDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in onOffOpts"
+                  :key="String(o.v)"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.notifyOpinionReply !== false) === o.v }"
+                  @click="set('notifyOpinionReply', o.v)"
                 >
                   {{ o.label }}
                 </button>
@@ -271,9 +344,14 @@
     { v: 'card', label: t('tagGraph.viewMode.card') },
     { v: 'graph', label: t('tagGraph.viewMode.graph') },
   ]);
-  const weeklyReportOpts = computed(() => [
+  const onOffOpts = computed(() => [
     { v: true, label: t('settings.switchOn') },
     { v: false, label: t('settings.switchOff') },
+  ]);
+  const resourceSortOpts = computed(() => [
+    { v: 'relevance', label: t('resourceCenter.sort.relevance') },
+    { v: 'updated', label: t('resourceCenter.sort.updated') },
+    { v: 'name', label: t('resourceCenter.sort.name') },
   ]);
 
   async function set(key: string, value: string | boolean) {

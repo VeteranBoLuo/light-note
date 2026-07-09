@@ -161,8 +161,13 @@ export const replyOpinion = async (req, res) => {
     const [result] = await pool.query(sql, [replyContent.trim(), OPINION_STATUS.REPLIED, id]);
     // 通知中心:给反馈者发一条"收到回复"通知(fire-and-forget,失败不影响回复本身)
     try {
-      const [[opinion]] = await pool.query('SELECT user_id FROM opinion WHERE id = ? AND del_flag = 0', [id]);
-      if (opinion?.user_id) {
+      const [[opinion]] = await pool.query(
+        `SELECT o.user_id, COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.notifyOpinionReply')), 'true') AS notifyPref
+         FROM opinion o JOIN \`user\` u ON u.id = o.user_id WHERE o.id = ? AND o.del_flag = 0`,
+        [id],
+      );
+      // 尊重用户「反馈回复」通知开关(preferences.notifyOpinionReply === 'false' 时不推送)
+      if (opinion?.user_id && opinion.notifyPref !== 'false') {
         createNotification(opinion.user_id, {
           type: 'opinion_reply',
           title: '你的反馈收到新回复',

@@ -311,7 +311,7 @@
   }>({
     keyword: '',
     type: 'all',
-    sort: 'relevance',
+    sort: (user.preferences.resourceSort as ResourceSort) || 'relevance',
     view: (user.preferences.resourceView as ResourceView) || (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card',
     tags: [],
     date: 'all',
@@ -402,8 +402,10 @@
   }
 
   function parseSort(value: unknown): ResourceSort {
-    const raw = String(value || 'relevance');
-    return ['relevance', 'updated', 'name'].includes(raw) ? (raw as ResourceSort) : 'relevance';
+    // URL 未带 sort 时回退到用户偏好的默认排序(设置页「资源中心排序」),而非写死相关度
+    const fallback = (user.preferences.resourceSort as ResourceSort) || 'relevance';
+    const raw = String(value || fallback);
+    return ['relevance', 'updated', 'name'].includes(raw) ? (raw as ResourceSort) : fallback;
   }
 
   function parseView(value: unknown): ResourceView {
@@ -616,7 +618,7 @@
     queryState.tags = [];
     queryState.date = 'all';
     queryState.untagged = false;
-    queryState.sort = 'relevance';
+    queryState.sort = (user.preferences.resourceSort as ResourceSort) || 'relevance';
     selectedIds.value = [];
     applyQueryState('清空筛选');
   }
