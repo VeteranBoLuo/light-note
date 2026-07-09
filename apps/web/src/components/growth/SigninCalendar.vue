@@ -34,7 +34,7 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
 
-  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean }>();
+  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number }>();
   const { t, locale } = useI18n();
 
   const now = new Date();
@@ -76,8 +76,15 @@
   }
   function isChecked(d: number) {
     if (checkedSet.value.has(dayStr(d))) return true;
-    // 今日已签但账本尚未落库(如 root 免账本 / 时序),也据 checkedInToday 高亮
-    return !!props.checkedInToday && isToday(d);
+    // 免账本用户(如 root)历史签到无逐日记录,但有当前连续签到数:
+    // 今日已签则「今日往前 streak-1 天」视为连续签到日,与「连续签到 N 天」保持一致。
+    if (props.checkedInToday) {
+      const cell = new Date(viewYear.value, viewMonth.value, d).getTime();
+      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const diff = Math.round((today0 - cell) / 86_400_000);
+      if (diff >= 0 && diff <= Math.max(1, props.streak || 1) - 1) return true;
+    }
+    return false;
   }
   const monthCheckinCount = computed(
     () => cells.value.filter((c): c is number => c !== null && isChecked(c)).length,

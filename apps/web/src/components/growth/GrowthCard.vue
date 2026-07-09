@@ -49,16 +49,14 @@
       <div v-if="g.dailyCapReached" class="gc-daily-tip">{{ t('growth.dailyReached') }}</div>
     </div>
 
-    <!-- 满级:不再获取经验,「怎么获取经验」换成数据统计摘要,顺带填充满级时左栏的留白 -->
-    <div v-if="g.isMax && stats" class="gc-earn">
-      <div class="gc-earn-head">{{ t('growth.dashStats') }}</div>
-      <div class="gc-earn-list">
-        <div class="gc-earn-item"><span>{{ t('growth.statJoinDays') }}</span><b>{{ t('growth.daysVal', { n: stats.joinDays }) }}</b></div>
-        <div class="gc-earn-item"><span>{{ t('growth.statTotalCheckins') }}</span><b>{{ t('growth.daysVal', { n: stats.totalCheckins }) }}</b></div>
-        <div class="gc-earn-item"><span>{{ t('growth.statMaxStreak') }}</span><b>{{ t('growth.daysVal', { n: stats.maxStreak }) }}</b></div>
-        <div class="gc-earn-item"><span>{{ t('growth.statWeekExp') }}</span><b>{{ stats.weekExp }}</b></div>
-      </div>
-    </div>
+    <!-- 满级:不再获取经验,左栏改放签到日历,撑满留白且不与下方「数据统计」重复 -->
+    <SigninCalendar
+      v-if="g.isMax"
+      class="gc-calendar"
+      :checkin-days="stats?.checkinDays || []"
+      :checked-in-today="g.checkedInToday"
+      :streak="g.streak"
+    />
     <div v-else class="gc-earn">
       <div class="gc-earn-head">{{ t('growth.earnTitle') }}</div>
       <div class="gc-earn-list">
@@ -82,6 +80,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import RankLadder from '@/components/growth/RankLadder.vue';
   import LevelUpOverlay from '@/components/growth/LevelUpOverlay.vue';
+  import SigninCalendar from '@/components/growth/SigninCalendar.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';

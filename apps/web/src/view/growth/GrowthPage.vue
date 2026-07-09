@@ -23,8 +23,8 @@
         </section>
       </div>
 
-      <section class="growth-panel">
-        <SigninCalendar :checkin-days="stats.checkinDays" :checked-in-today="growth?.checkedInToday" />
+      <section v-if="!growth?.isMax" class="growth-panel">
+        <SigninCalendar :checkin-days="stats.checkinDays" :checked-in-today="growth?.checkedInToday" :streak="growth?.streak" />
       </section>
 
       <section class="growth-panel">
