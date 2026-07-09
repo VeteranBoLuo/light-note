@@ -24,6 +24,10 @@
       </div>
 
       <section class="growth-panel">
+        <SigninCalendar :checkin-days="stats.checkinDays" :checked-in-today="growth?.checkedInToday" />
+      </section>
+
+      <section class="growth-panel">
         <AchievementWall
           :achievements="achievements"
           :unlocked-count="dashboard?.unlockedCount || 0"
@@ -47,6 +51,7 @@
   import GrowthStats from '@/components/growth/GrowthStats.vue';
   import AchievementWall from '@/components/growth/AchievementWall.vue';
   import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
+  import SigninCalendar from '@/components/growth/SigninCalendar.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -55,7 +60,7 @@
 
   const { t } = useI18n();
   const router = useRouter();
-  const { dashboard, loadDashboard, claimDailyBonus } = useGrowth();
+  const { growth, dashboard, loadDashboard, claimDailyBonus } = useGrowth();
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
   const EMPTY_STATS = {
@@ -68,6 +73,7 @@
     fileCount: 0,
     tagCount: 0,
     weekExp: 0,
+    checkinDays: [] as string[],
   };
   const EMPTY_BONUS = { exp: 0, claimed: false, claimable: false };
   const stats = computed(() => dashboard.value?.stats || EMPTY_STATS);

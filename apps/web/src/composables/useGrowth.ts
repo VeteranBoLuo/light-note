@@ -48,6 +48,7 @@ export interface GrowthStats {
   fileCount: number;
   tagCount: number;
   weekExp: number;
+  checkinDays: string[];
 }
 
 export interface Quest {

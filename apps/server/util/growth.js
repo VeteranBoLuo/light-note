@@ -358,6 +358,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     fileCount: 0,
     tagCount: 0,
     weekExp: 0,
+    checkinDays: [],
   };
   let timeline = [];
 
@@ -400,6 +401,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     // 累计签到与最长连签至少不小于当前连签(root 免账本、无 checkin 事件,靠 streak 保证口径自洽)
     stats.totalCheckins = Math.max(days.length, stats.currentStreak);
     stats.maxStreak = Math.max(longestConsecutiveRun(days), stats.currentStreak);
+    stats.checkinDays = days; // 签到日期(YYYYMMDD)数组,供前端签到日历高亮
 
     // 近 7 天获得经验
     const [[wk]] = await pool.query(

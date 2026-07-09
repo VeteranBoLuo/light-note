@@ -49,7 +49,17 @@
       <div v-if="g.dailyCapReached" class="gc-daily-tip">{{ t('growth.dailyReached') }}</div>
     </div>
 
-    <div class="gc-earn">
+    <!-- 满级:不再获取经验,「怎么获取经验」换成数据统计摘要,顺带填充满级时左栏的留白 -->
+    <div v-if="g.isMax && stats" class="gc-earn">
+      <div class="gc-earn-head">{{ t('growth.dashStats') }}</div>
+      <div class="gc-earn-list">
+        <div class="gc-earn-item"><span>{{ t('growth.statJoinDays') }}</span><b>{{ t('growth.daysVal', { n: stats.joinDays }) }}</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.statTotalCheckins') }}</span><b>{{ t('growth.daysVal', { n: stats.totalCheckins }) }}</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.statMaxStreak') }}</span><b>{{ t('growth.daysVal', { n: stats.maxStreak }) }}</b></div>
+        <div class="gc-earn-item"><span>{{ t('growth.statWeekExp') }}</span><b>{{ stats.weekExp }}</b></div>
+      </div>
+    </div>
+    <div v-else class="gc-earn">
       <div class="gc-earn-head">{{ t('growth.earnTitle') }}</div>
       <div class="gc-earn-list">
         <div class="gc-earn-item"><span>{{ t('growth.earnCheckin') }}</span><b>+5~10</b></div>
@@ -77,7 +87,7 @@
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
 
   const { t } = useI18n();
-  const { growth: g, load, doCheckin, markRead } = useGrowth();
+  const { growth: g, dashboard, load, doCheckin, markRead } = useGrowth();
   const checking = ref(false);
   const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
 
@@ -92,6 +102,8 @@
 
   // 段位分档:tier 计算收口在 config/growthTier
   const tier = computed(() => tierOf(g.value?.level || 1));
+  // 满级时用数据统计摘要替代「怎么获取经验」;数据取自成长页已加载的共享看板(useGrowth 单例)
+  const stats = computed(() => dashboard.value?.stats || null);
 
   const spaceLabel = computed(() => {
     const mb = g.value?.spaceMb || 0;
