@@ -225,8 +225,14 @@ export const generateBookmarkMeta = async (req, res) => {
     );
   } catch (error) {
     const providerMsg = error?.message || String(error);
-    console.error('生成书签元信息错误:', providerMsg);
-    res.status(500).send(resultData(null, 500, '生成名称和描述失败: ' + providerMsg));
+    console.error('生成书签元信息错误:', providerMsg); // 完整错误(可能含供应商原文 / API key 片段)只进服务器日志
+    // 不把供应商原始报错透传前端(曾把 API key 尾号暴露到界面):鉴权/额度类给管理员可辨识的提示,其余归为通用失败
+    const isAuthOrQuota =
+      /auth|api[\s_-]*key|invalid|unauthor|401|403|余额|balance|insufficient|quota|欠费|expired|过期/i.test(providerMsg);
+    const friendly = isAuthOrQuota
+      ? 'AI 生成服务暂不可用(鉴权或额度异常),请联系管理员检查配置'
+      : 'AI 生成失败,请稍后重试';
+    res.status(500).send(resultData(null, 500, friendly));
   }
 };
 
