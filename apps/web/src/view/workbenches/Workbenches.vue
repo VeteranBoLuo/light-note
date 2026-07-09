@@ -415,9 +415,14 @@ import { formatStorageSize } from '@/utils/common';
     type ThemePreference,
   } from '@/utils/preferences.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { useGrowth } from '@/composables/useGrowth.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const cloud = cloudSpaceStore();
+  const { growth } = useGrowth();
+  // 云空间配额按等级下发(满级 20G):优先取成长数据里的 spaceMb,回退 store 兜底值,
+  // 避免工作台没触发 /queryTotalFileSize 时恒显默认 500MB(见 cloudSpace.ts maxSpace 兜底)
+  const maxSpaceMb = computed(() => growth.value?.spaceMb || cloud.maxSpace || 500);
   const user = useUserStore();
   const router = useRouter();
   const { t } = useI18n();
@@ -666,7 +671,7 @@ import { formatStorageSize } from '@/utils/common';
         'workbench.summary.cloudOverviewExtra',
         {
           used: formatStorageSize(cloud.usedSpace),
-          total: formatStorageSize(cloud.maxSpace),
+          total: formatStorageSize(maxSpaceMb.value),
           percent: storagePercent.value,
         },
         '{used} / {total} · 使用率 {percent}%',
@@ -761,8 +766,8 @@ import { formatStorageSize } from '@/utils/common';
   ]);
 
   const storagePercent = computed(() => {
-    if (!cloud.maxSpace) return 0;
-    return Math.min(100, Number(((cloud.usedSpace / cloud.maxSpace) * 100).toFixed(1)));
+    if (!maxSpaceMb.value) return 0;
+    return Math.min(100, Number(((cloud.usedSpace / maxSpaceMb.value) * 100).toFixed(1)));
   });
 
   const trendChartData = computed(() => {
