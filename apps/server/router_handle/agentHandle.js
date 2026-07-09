@@ -233,7 +233,11 @@ export async function agentChat(req, res) {
     // 此处早于 req.on('close') 挂载、响应也未开始,blocked 时可安全直接 return。
     quotaHandle = await aiQuota.reserve(req, { userId, userRole });
     if (quotaHandle.blocked) {
-      const tip = 'AI 今日额度已用完,请明天再来,或提升等级获取更多额度';
+      // 额度用完的提示按身份区分:登录用户引导「升级涨额度」,游客引导「注册得更多」
+      const tip =
+        quotaHandle.type === 'user'
+          ? '今日 AI 额度已用完啦～ 明天 0 点自动重置。想要更多?提升等级即可解锁更高额度,段位越高额度越多(满级 200 万 token/日)。'
+          : '访客今日 AI 额度已用完啦～ 明天 0 点重置。登录注册后额度立涨,还能随等级成长持续提升,一路解锁到满级 200 万 token/日 😉';
       if (stream) {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
