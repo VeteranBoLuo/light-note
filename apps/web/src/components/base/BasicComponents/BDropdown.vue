@@ -36,6 +36,7 @@
 <script lang="ts" setup>
   import { computed, onBeforeUnmount, nextTick, reactive, ref } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { getRootZoom } from '@/utils/zoom';
 
   type BDropdownTrigger = 'hover' | 'click';
 
@@ -82,30 +83,37 @@
   function computePosition() {
     const el = triggerRef.value;
     if (!el) return;
+    const zoom = getRootZoom();
     const rect = el.getBoundingClientRect();
+    const rTop = rect.top / zoom;
+    const rBottom = rect.bottom / zoom;
+    const rLeft = rect.left / zoom;
+    const rRight = rect.right / zoom;
+    const rWidth = rect.width / zoom;
     const panelW = panelRef.value?.offsetWidth ?? 0;
     // 按 align 算浮层期望的视口左边界:left 对齐触发元素左边,center 居中,right 对齐右边
-    let vLeft = rect.left;
-    if (props.align === 'center') vLeft = rect.left + rect.width / 2 - panelW / 2;
-    else if (props.align === 'right') vLeft = rect.right - panelW;
+    let vLeft = rLeft;
+    if (props.align === 'center') vLeft = rLeft + rWidth / 2 - panelW / 2;
+    else if (props.align === 'right') vLeft = rRight - panelW;
     const container = teleportTarget.value;
     if (container instanceof HTMLElement && container !== document.body) {
       const cRect = container.getBoundingClientRect();
-      let left = vLeft - cRect.left + container.scrollLeft;
+      let left = vLeft - cRect.left / zoom + container.scrollLeft;
       if (panelW && left + panelW > container.clientWidth - 8) left = container.clientWidth - panelW - 8;
       if (left < 8) left = 8;
       panelStyle.position = 'absolute';
-      panelStyle.top = `${rect.bottom - cRect.top + container.scrollTop + 6}px`;
+      panelStyle.top = `${rBottom - cRect.top / zoom + container.scrollTop + 6}px`;
       panelStyle.left = `${left}px`;
     } else {
       let left = vLeft;
-      if (panelW && left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
+      const vw = document.documentElement.clientWidth;
+      if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
       if (left < 8) left = 8;
       panelStyle.position = 'fixed';
-      panelStyle.top = `${rect.bottom + 6}px`;
+      panelStyle.top = `${rBottom + 6}px`;
       panelStyle.left = `${left}px`;
     }
-    panelStyle.minWidth = `${Math.ceil(rect.width)}px`;
+    panelStyle.minWidth = `${Math.ceil(rWidth)}px`;
   }
 
   function clearCloseTimer() {

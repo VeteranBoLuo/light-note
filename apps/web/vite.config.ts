@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => {
     // 根据mode加载不同的.env文件
     envDir: './',
     server: {
+      // 读 PORT 环境变量(便于 CI / 多实例 / 预览工具用分配端口);缺省仍用 vite 默认端口
+      port: process.env.PORT ? Number(process.env.PORT) : undefined,
       proxy: {
         '/api':
           env.VITE_ENV === 'local'

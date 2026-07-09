@@ -11,6 +11,7 @@
 
 <script setup lang="ts">
   import { ref, reactive } from 'vue';
+  import { getRootZoom } from '@/utils/zoom';
 
   const props = defineProps<{
     title: string;
@@ -34,15 +35,22 @@
         const wrap = wrapRef.value;
         const popup = popupRef.value;
         if (!wrap || !popup) return;
+        // 界面缩放(html zoom):gBCR 含 zoom → ÷ zoom 换布局坐标;popup 尺寸用 offsetWidth/Height(布局像素)
+        const zoom = getRootZoom();
         const wrapRect = wrap.getBoundingClientRect();
-        const popupRect = popup.getBoundingClientRect();
-        const centerX = wrapRect.left + wrapRect.width / 2 - popupRect.width / 2;
-        if (wrapRect.top > popupRect.height + 10) {
-          popupStyle.top = `${wrapRect.top - popupRect.height - 6}px`;
+        const wTop = wrapRect.top / zoom;
+        const wBottom = wrapRect.bottom / zoom;
+        const wLeft = wrapRect.left / zoom;
+        const wWidth = wrapRect.width / zoom;
+        const pW = popup.offsetWidth;
+        const pH = popup.offsetHeight;
+        const centerX = wLeft + wWidth / 2 - pW / 2;
+        if (wTop > pH + 10) {
+          popupStyle.top = `${wTop - pH - 6}px`;
         } else {
-          popupStyle.top = `${wrapRect.bottom + 6}px`;
+          popupStyle.top = `${wBottom + 6}px`;
         }
-        popupStyle.left = `${Math.max(4, Math.min(centerX, window.innerWidth - popupRect.width - 4))}px`;
+        popupStyle.left = `${Math.max(4, Math.min(centerX, document.documentElement.clientWidth - pW - 4))}px`;
       });
     }, props.delay ?? 0);
   }

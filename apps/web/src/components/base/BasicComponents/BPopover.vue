@@ -28,6 +28,7 @@
 
 <script lang="ts" setup>
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+  import { getRootZoom } from '@/utils/zoom';
 
   // 项目自研通用浮层(替代 ant a-popover):任意内容(content 插槽),按实时 getBoundingClientRect 定位。
   // 关键:定位与 fixed 都基于同一视口坐标系,与 <html> zoom(界面缩放)自洽,不会像 a-popover 那样在缩放下错位。
@@ -63,23 +64,28 @@
   function computePosition() {
     const el = triggerRef.value;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
+    const zoom = getRootZoom();
+    const r = el.getBoundingClientRect();
+    const rBottom = r.bottom / zoom;
+    const rLeft = r.left / zoom;
+    const rRight = r.right / zoom;
     const panelW = panelRef.value?.offsetWidth ?? 0;
-    const vLeft = props.placement === 'bottom-right' ? rect.right - panelW : rect.left;
+    const vLeft = props.placement === 'bottom-right' ? rRight - panelW : rLeft;
     const container = teleportTarget.value;
     if (container instanceof HTMLElement && container !== document.body) {
-      const cRect = container.getBoundingClientRect();
-      let left = vLeft - cRect.left + container.scrollLeft;
+      const c = container.getBoundingClientRect();
+      let left = vLeft - c.left / zoom + container.scrollLeft;
       if (left < 8) left = 8;
       panelStyle.position = 'absolute';
-      panelStyle.top = `${rect.bottom - cRect.top + container.scrollTop + 6}px`;
+      panelStyle.top = `${rBottom - c.top / zoom + container.scrollTop + 6}px`;
       panelStyle.left = `${left}px`;
     } else {
       let left = vLeft;
-      if (panelW && left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
+      const vw = document.documentElement.clientWidth;
+      if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
       if (left < 8) left = 8;
       panelStyle.position = 'fixed';
-      panelStyle.top = `${rect.bottom + 6}px`;
+      panelStyle.top = `${rBottom + 6}px`;
       panelStyle.left = `${left}px`;
     }
   }

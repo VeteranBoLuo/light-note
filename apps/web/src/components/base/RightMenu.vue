@@ -28,6 +28,7 @@
 <script setup>
   import bookmarkStore from '@/store/bookmark';
   import { ref, onMounted, onUnmounted } from 'vue';
+  import { getRootZoom } from '@/utils/zoom';
   const bookmark = bookmarkStore();
   const showMenu = ref(false);
   const props = defineProps({
@@ -79,8 +80,10 @@
       // Prevent nested context-menu wrappers from all opening at once.
       e.stopPropagation();
       e.preventDefault(); // 阻止浏览器的默认行为
-      mouseX.value = e.x;
-      mouseY.value = e.y + 5;
+      // 界面缩放(html zoom)下 e.x/e.y 是视觉坐标,写进 zoom 子树的 fixed 会二次缩放 → ÷ zoom 换布局坐标
+      const zoom = getRootZoom();
+      mouseX.value = e.x / zoom;
+      mouseY.value = e.y / zoom + 5;
       showMenu.value = true;
       window.addEventListener('click', clickListener, true);
       window.addEventListener('contextmenu', handleClose, true);

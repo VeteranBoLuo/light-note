@@ -64,6 +64,7 @@
 
 <script lang="ts" setup>
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+  import { getRootZoom } from '@/utils/zoom';
 
   const props = defineProps({
     current: { type: Number, default: 1 },
@@ -98,17 +99,23 @@
 
   function openDropdown() {
     if (!sizerRef.value) return;
+    // 界面缩放(html zoom):gBCR 含 zoom → ÷ zoom 换布局坐标;clientHeight 是布局像素、不换算
+    const zoom = getRootZoom();
     const rect = sizerRef.value.getBoundingClientRect();
+    const rTop = rect.top / zoom;
+    const rBottom = rect.bottom / zoom;
+    const rLeft = rect.left / zoom;
+    const rWidth = rect.width / zoom;
     const estimatedHeight = 140; // 4 个选项预估高度
     const gap = 4;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const showAbove = spaceBelow < estimatedHeight && rect.top > estimatedHeight;
+    const spaceBelow = document.documentElement.clientHeight - rBottom;
+    const showAbove = spaceBelow < estimatedHeight && rTop > estimatedHeight;
 
     dropdownStyle.value = {
       position: 'fixed',
-      left: `${rect.left}px`,
-      top: showAbove ? `${rect.top - gap - estimatedHeight}px` : `${rect.bottom + gap}px`,
-      minWidth: `${rect.width}px`,
+      left: `${rLeft}px`,
+      top: showAbove ? `${rTop - gap - estimatedHeight}px` : `${rBottom + gap}px`,
+      minWidth: `${rWidth}px`,
     };
     dropdownOpen.value = true;
   }

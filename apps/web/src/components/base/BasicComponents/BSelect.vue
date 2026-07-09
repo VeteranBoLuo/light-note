@@ -83,6 +83,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import type { BaseOptions } from '@/config/bookmarkCfg.ts';
+import { getRootZoom } from '@/utils/zoom';
 
 const props = withDefaults(defineProps<{
   options: BaseOptions[];
@@ -235,8 +236,14 @@ function keepOpen() {
 
 function updateDropdownPosition() {
   if (!triggerRef.value) return;
+  // 界面缩放(html zoom)下,gBCR 是视觉坐标、fixed 会被二次缩放,坐标 ÷ zoom 换算回布局坐标;
+  // clientHeight/offsetHeight 本就是布局像素、不换算(见 utils/zoom.ts)。
+  const zoom = getRootZoom();
   const rect = triggerRef.value.getBoundingClientRect();
-  const dropdownWidth = Math.max(rect.width, 180);
+  const rTop = rect.top / zoom;
+  const rBottom = rect.bottom / zoom;
+  const rLeft = rect.left / zoom;
+  const dropdownWidth = Math.max(rect.width / zoom, 180);
 
   if (placementAbove) {
     // 已翻到上面，保持上方，重新计算高度
@@ -244,8 +251,8 @@ function updateDropdownPosition() {
       if (!dropdownRef.value) return;
       const dh = dropdownRef.value.offsetHeight;
       dropdownStyle.value = {
-        top: `${rect.top - dh - 4}px`,
-        left: `${rect.left}px`,
+        top: `${rTop - dh - 4}px`,
+        left: `${rLeft}px`,
         width: `${dropdownWidth}px`,
       };
     });
@@ -254,8 +261,8 @@ function updateDropdownPosition() {
 
   // 先放下面
   dropdownStyle.value = {
-    top: `${rect.bottom + 4}px`,
-    left: `${rect.left}px`,
+    top: `${rBottom + 4}px`,
+    left: `${rLeft}px`,
     width: `${dropdownWidth}px`,
   };
 
@@ -263,12 +270,12 @@ function updateDropdownPosition() {
   requestAnimationFrame(() => {
     if (!dropdownRef.value) return;
     const dh = dropdownRef.value.offsetHeight;
-    const spaceBelow = window.innerHeight - rect.bottom - 4;
-    if (spaceBelow < dh && rect.top - 4 > dh) {
+    const spaceBelow = document.documentElement.clientHeight - rBottom - 4;
+    if (spaceBelow < dh && rTop - 4 > dh) {
       placementAbove = true;
       dropdownStyle.value = {
-        top: `${rect.top - dh - 4}px`,
-        left: `${rect.left}px`,
+        top: `${rTop - dh - 4}px`,
+        left: `${rLeft}px`,
         width: `${dropdownWidth}px`,
       };
     } else {
