@@ -3,7 +3,7 @@
     <div class="home-container">
       <div style="width: 100%" class="flex-justify-center">
         <div class="user_icon" @click="uploadImg" v-click-log="{ module: '我的信息', operation: `上传头像` }">
-          <AvatarFrame :src="headPicture" :level="growth?.level" :size="bookmark.isMobile ? 80 : 100" />
+          <svg-icon :src="headPicture || icon.navigation.user" :size="bookmark.isMobile ? 80 : 100" />
         </div>
       </div>
       <div class="home-user-body">
@@ -38,8 +38,6 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { Ref, ref, watch } from 'vue';
-  import AvatarFrame from '@/components/growth/AvatarFrame.vue';
-  import { useGrowth } from '@/composables/useGrowth.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -50,7 +48,6 @@
   import { backRouterPage } from '@/utils/common';
   import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
-  const { growth } = useGrowth();
   const headPicture = ref<string>('');
   const saving = ref(false);
   const visible = <Ref<boolean>>defineModel('visible');

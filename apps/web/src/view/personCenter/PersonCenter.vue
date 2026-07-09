@@ -127,7 +127,7 @@
       @mouseenter="handleTriggerMouseEnter"
       @mouseleave="handleTriggerMouseLeave"
     >
-      <AvatarFrame :src="user.headPicture" :level="growthInfo?.level" :size="32" class="dom-hover" />
+      <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
@@ -138,7 +138,6 @@
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import AvatarFrame from '@/components/growth/AvatarFrame.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
