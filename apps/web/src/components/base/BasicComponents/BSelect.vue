@@ -270,7 +270,8 @@ function updateDropdownPosition() {
   requestAnimationFrame(() => {
     if (!dropdownRef.value) return;
     const dh = dropdownRef.value.offsetHeight;
-    const spaceBelow = document.documentElement.clientHeight - rBottom - 4;
+    // documentElement.clientHeight 是视口高度(视觉像素),需 ÷zoom 换布局坐标再与 rBottom(布局)比较
+    const spaceBelow = document.documentElement.clientHeight / zoom - rBottom - 4;
     if (spaceBelow < dh && rTop - 4 > dh) {
       placementAbove = true;
       dropdownStyle.value = {

@@ -50,7 +50,8 @@
         } else {
           popupStyle.top = `${wBottom + 6}px`;
         }
-        popupStyle.left = `${Math.max(4, Math.min(centerX, document.documentElement.clientWidth - pW - 4))}px`;
+        // documentElement.clientWidth 是视口宽(视觉像素),÷zoom 换布局坐标再与 centerX/pW(布局)比较
+        popupStyle.left = `${Math.max(4, Math.min(centerX, document.documentElement.clientWidth / zoom - pW - 4))}px`;
       });
     }, props.delay ?? 0);
   }

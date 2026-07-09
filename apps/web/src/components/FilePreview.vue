@@ -819,9 +819,8 @@
 <style lang="less" scoped>
   .fullscreen-preview {
     position: fixed;
+    /* inset:0 已铺满可视视口;去掉 100vw/100vh —— 缩放(zoom)下 vw/vh 会算小、反而露白。 */
     inset: 0;
-    width: 100vw;
-    height: 100vh;
     background: white;
     z-index: 200000;
     isolation: isolate;

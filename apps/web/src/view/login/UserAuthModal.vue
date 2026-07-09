@@ -95,9 +95,10 @@
 
 <style scoped>
   .index-container {
-    position: absolute;
-    height: 100vh;
-    width: 100vw;
+    /* fixed + inset:0:界面缩放(html zoom)下遮罩始终铺满可视视口;
+       原 absolute + 100vw/100vh 在缩放时会露白、定位漂移。 */
+    position: fixed;
+    inset: 0;
     background-color: rgba(0, 0, 0, 0.8);
     z-index: 1000;
     animation: in-animation 0.3s ease;

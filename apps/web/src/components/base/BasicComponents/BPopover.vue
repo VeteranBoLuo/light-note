@@ -71,23 +71,17 @@
     const rRight = r.right / zoom;
     const panelW = panelRef.value?.offsetWidth ?? 0;
     const vLeft = props.placement === 'bottom-right' ? rRight - panelW : rLeft;
-    const container = teleportTarget.value;
-    if (container instanceof HTMLElement && container !== document.body) {
-      const c = container.getBoundingClientRect();
-      let left = vLeft - c.left / zoom + container.scrollLeft;
-      if (left < 8) left = 8;
-      panelStyle.position = 'absolute';
-      panelStyle.top = `${rBottom - c.top / zoom + container.scrollTop + 6}px`;
-      panelStyle.left = `${left}px`;
-    } else {
-      let left = vLeft;
-      const vw = document.documentElement.clientWidth;
-      if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
-      if (left < 8) left = 8;
-      panelStyle.position = 'fixed';
-      panelStyle.top = `${rBottom + 6}px`;
-      panelStyle.left = `${left}px`;
-    }
+    // 统一用 fixed(视口坐标):无论 teleport 到 body 还是某容器,fixed 都相对视口定位,
+    // 不依赖容器是否为定位元素 —— 原 absolute 分支在静态容器(如 #tag-container)下会把面板顶到页首(缩放时 c.top≠0 尤甚)。
+    // 坐标口径:getBoundingClientRect=视觉像素(÷zoom 得布局);offsetWidth=布局像素;
+    // documentElement.clientWidth=视觉像素(÷zoom 得布局);style.top/left=布局像素(渲染再 ×zoom)。
+    let left = vLeft;
+    const vw = document.documentElement.clientWidth / zoom; // 视口宽(布局像素),与 left/panelW 同口径
+    if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
+    if (left < 8) left = 8;
+    panelStyle.position = 'fixed';
+    panelStyle.top = `${rBottom + 6}px`;
+    panelStyle.left = `${left}px`;
   }
 
   function clearCloseTimer() {

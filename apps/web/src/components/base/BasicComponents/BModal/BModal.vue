@@ -120,8 +120,9 @@
 <style lang="less" scoped>
   .mask-container {
     position: fixed;
-    height: 100vh;
-    width: 100vw;
+    /* 用 inset:0 而非 100vw/100vh:界面缩放(html zoom)下 vw/vh 会算出比可视视口更小的尺寸,
+       导致遮罩盖不满、右/下露白;inset:0 由固定定位的包含块(视口)约束,缩放下始终铺满。 */
+    inset: 0;
     background-color: rgba(0, 0, 0, 0.5);
     z-index: 1000;
     animation: mask-in 0.2s ease;
@@ -139,7 +140,7 @@
     min-width: max-content;
     min-height: 100px;
     max-width: 90%;
-    max-height: calc(100vh - 32px);
+    max-height: calc(100% - 32px);
     width: max-content;
     display: flex;
     flex-direction: column;
@@ -240,7 +241,7 @@
     .modal-view {
       top: 50%;
       min-width: 80%;
-      max-height: calc(100vh - 20px);
+      max-height: calc(100% - 20px);
     }
     .modal-content {
       padding: 12px 16px 16px;

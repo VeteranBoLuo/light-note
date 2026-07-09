@@ -54,11 +54,22 @@
     },
   );
 
-  // 监听界面缩放变化 → 重设 <html> zoom
+  // 缩放只作用于登录后的应用内页面;landing/帮助/更新日志等入口页(skipRouter)一律不缩放,
+  // 避免营销页/预渲染页的固定排版被 zoom 拉变形。
+  function applyScaleForRoute(routeName?: string) {
+    const name = String(routeName ?? router.currentRoute.value.name ?? '');
+    if (skipRouter.includes(name)) {
+      document.documentElement.style.zoom = '';
+    } else {
+      applyDisplaySettings();
+    }
+  }
+
+  // 监听界面缩放变化 → 按当前路由重设 <html> zoom
   watch(
     () => user.preferences?.uiScale,
     () => {
-      applyDisplaySettings();
+      applyScaleForRoute();
     },
   );
 
@@ -157,7 +168,7 @@
     }
 
     applyTheme();
-    applyDisplaySettings(); // 启动即应用字号/密度,避免默认→用户偏好的跳变
+    applyScaleForRoute(); // 启动即应用缩放(仅应用内页;landing 等入口页不缩放)
     // 设置指纹
     window['fingerprint'] = fingerprint();
 
@@ -571,6 +582,11 @@
     }
 
     next();
+  });
+
+  // 每次路由切换后按目标页决定是否缩放:入口页(skipRouter)清零、应用内页按 uiScale
+  router.afterEach((to) => {
+    applyScaleForRoute(<string>to.name);
   });
 
   // 只有第一次进入页面或者刷新页面才触发（简化）

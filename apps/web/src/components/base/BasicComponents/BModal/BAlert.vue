@@ -160,9 +160,10 @@
 
 <style scoped lang="less">
   .bAlert-bg {
-    position: absolute;
-    height: 100vh;
-    width: 100vw;
+    /* fixed + inset:0:界面缩放(html zoom)下始终铺满可视视口;
+       原 absolute + 100vw/100vh 在缩放时会露白、且定位随滚动漂移。 */
+    position: fixed;
+    inset: 0;
     background-color: rgba(0, 0, 0, 0.8);
     z-index: 99999999;
   }

@@ -108,7 +108,8 @@
     const rWidth = rect.width / zoom;
     const estimatedHeight = 140; // 4 个选项预估高度
     const gap = 4;
-    const spaceBelow = document.documentElement.clientHeight - rBottom;
+    // documentElement.clientHeight 是视口高度(视觉像素),÷zoom 换布局坐标再与 rBottom(布局)比较
+    const spaceBelow = document.documentElement.clientHeight / zoom - rBottom;
     const showAbove = spaceBelow < estimatedHeight && rTop > estimatedHeight;
 
     dropdownStyle.value = {

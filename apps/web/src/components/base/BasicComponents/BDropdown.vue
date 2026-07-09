@@ -95,24 +95,15 @@
     let vLeft = rLeft;
     if (props.align === 'center') vLeft = rLeft + rWidth / 2 - panelW / 2;
     else if (props.align === 'right') vLeft = rRight - panelW;
-    const container = teleportTarget.value;
-    if (container instanceof HTMLElement && container !== document.body) {
-      const cRect = container.getBoundingClientRect();
-      let left = vLeft - cRect.left / zoom + container.scrollLeft;
-      if (panelW && left + panelW > container.clientWidth - 8) left = container.clientWidth - panelW - 8;
-      if (left < 8) left = 8;
-      panelStyle.position = 'absolute';
-      panelStyle.top = `${rBottom - cRect.top / zoom + container.scrollTop + 6}px`;
-      panelStyle.left = `${left}px`;
-    } else {
-      let left = vLeft;
-      const vw = document.documentElement.clientWidth;
-      if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
-      if (left < 8) left = 8;
-      panelStyle.position = 'fixed';
-      panelStyle.top = `${rBottom + 6}px`;
-      panelStyle.left = `${left}px`;
-    }
+    // 统一用 fixed(视口坐标),不依赖容器是否为定位元素 —— 原 absolute 分支在静态容器下会错位(缩放尤甚)。
+    // 口径:getBoundingClientRect=视觉(÷zoom 得布局);offsetWidth=布局;clientWidth=视觉(÷zoom 得布局);style=布局。
+    let left = vLeft;
+    const vw = document.documentElement.clientWidth / zoom; // 视口宽(布局像素)
+    if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
+    if (left < 8) left = 8;
+    panelStyle.position = 'fixed';
+    panelStyle.top = `${rBottom + 6}px`;
+    panelStyle.left = `${left}px`;
     panelStyle.minWidth = `${Math.ceil(rWidth)}px`;
   }
 
