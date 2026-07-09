@@ -700,6 +700,80 @@ export const getAgentLogsSummary = async (req, res) => {
   }
 };
 
+// POST /common/getAdminOverview —— 后台总览看板:全站用户/内容/存储/AI/转化/待办聚合(仅 root)
+// 复用现成查询思路(转化漏斗、AI 摘要、待办 noticeSummary),新写全站资源 count;AI 段单独兜底,agent_logs 缺表也不拖垮整体
+export const getAdminOverview = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
+  try {
+    // 用 Node 本地时间算今日(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
+    const now = new Date();
+    const pad = (nn) => String(nn).padStart(2, '0');
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    const [userAgg, resAgg, convAgg, opinionAgg, securityAgg] = await Promise.all([
+      pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0', [today]),
+      pool.query(
+        `SELECT
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0) AS bookmarkTotal,
+           (SELECT COUNT(*) FROM note WHERE del_flag = 0) AS noteTotal,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0) AS fileTotal,
+           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0), 0) AS storageMb,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?) AS bookmarkToday,
+           (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?) AS noteToday,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?) AS fileToday`,
+        [today, today, today],
+      ),
+      pool.query(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
+           COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
+         FROM conversion_events`,
+      ),
+      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?', [OPINION_STATUS.PENDING]),
+      pool
+        .query("SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')")
+        .catch(() => [[{ unhandled: 0 }]]),
+    ]);
+
+    // AI 消耗单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)
+    let ai = { todayCount: 0, todayTokens: 0, todayCost: '0.0000', totalCount: 0, totalTokens: 0, totalCost: '0.0000' };
+    try {
+      const [[aiToday], [aiTotal]] = await Promise.all([
+        pool.query(
+          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)',
+          [today, today],
+        ),
+        pool.query('SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs'),
+      ]);
+      ai = {
+        todayCount: Number(aiToday[0].count), todayTokens: Number(aiToday[0].tokens), todayCost: Number(aiToday[0].cost).toFixed(4),
+        totalCount: Number(aiTotal[0].count), totalTokens: Number(aiTotal[0].tokens), totalCost: Number(aiTotal[0].cost).toFixed(4),
+      };
+    } catch (aiErr) {
+      console.error('[AdminOverview] AI 统计失败(忽略):', aiErr.message);
+    }
+
+    const u = userAgg[0][0], r = resAgg[0][0], c = convAgg[0][0], o = opinionAgg[0][0], s = securityAgg[0][0];
+    res.send(
+      resultData({
+        users: { total: Number(u.total || 0), today: Number(u.today || 0) },
+        resources: {
+          bookmarkTotal: Number(r.bookmarkTotal || 0), noteTotal: Number(r.noteTotal || 0), fileTotal: Number(r.fileTotal || 0),
+          bookmarkToday: Number(r.bookmarkToday || 0), noteToday: Number(r.noteToday || 0), fileToday: Number(r.fileToday || 0),
+          storageMb: Number(r.storageMb || 0),
+        },
+        ai,
+        conversion: { visitors: Number(c.visitors || 0), registers: Number(c.registers || 0) },
+        pending: { opinion: Number(o.pending || 0), security: Number(s.unhandled || 0) },
+        generatedAt: `${today} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
+      }),
+    );
+  } catch (e) {
+    console.error('获取后台总览失败:', e.message);
+    res.send(resultData(null, 500, '获取后台总览失败: ' + e.message));
+  }
+};
+
 export const getAgentLogs = async (req, res) => {
   try {
     const userRole = req.user?.role;

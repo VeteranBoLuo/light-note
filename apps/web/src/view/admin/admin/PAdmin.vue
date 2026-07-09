@@ -19,6 +19,12 @@
   const menuList = [
     [
       {
+        id: 'overview',
+        title: '总览',
+        icon: icon.userCenter.log,
+        url: '/overview',
+      },
+      {
         id: 'operationLog',
         title: '操作日志',
         icon: icon.userCenter.operationLog,

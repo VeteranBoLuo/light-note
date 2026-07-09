@@ -15,6 +15,10 @@ const adminRouter: RouteRecordRaw[] = [
     component: () => import('@/view/admin/AdminMg.vue'),
     children: [
       {
+        path: 'overview',
+        component: () => import('@/view/admin/components/overview/AdminOverview.vue'),
+      },
+      {
         path: 'apiLog',
         component: () => import('@/view/admin/components/apiLog/ApiLog.vue'),
       },
@@ -51,6 +55,10 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/logCleanup/LogCleanup.vue'),
       },
     ],
+  },
+  {
+    path: 'overview',
+    component: () => import('@/view/admin/components/overview/AdminOverview.vue'),
   },
   {
     path: 'apiLog',
