@@ -9,6 +9,8 @@ router.get('/ranks', growthHandle.getRanks);
 router.post('/checkin', growthHandle.doCheckin);
 router.post('/useProtectCard', growthHandle.doUseProtectCard);
 router.get('/weeklyReport', growthHandle.getWeeklyReport);
+router.post('/admin/userGrowth', growthHandle.getUserGrowthForAdmin);
+router.post('/admin/adjust', growthHandle.doAdminAdjustGrowth);
 router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
 router.post('/notices/read', growthHandle.readNotices);
 

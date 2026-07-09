@@ -21,7 +21,23 @@ export const getDashboard = () => apiBaseGet('/api/growth/dashboard');
 // 实时本周成长周报(前端「查看大图」用)
 export const getWeeklyReport = () => apiBaseGet('/api/growth/weeklyReport');
 
+// 后台成长运营(root):查目标用户成长 + 调整(发经验/设等级/送补签卡)
+export const adminGetUserGrowth = (userId: string) => apiBasePost('/api/growth/admin/userGrowth', { userId });
+export const adminAdjustGrowth = (payload: { userId: string; expDelta?: number; setLevel?: number | null; cardDelta?: number }) =>
+  apiBasePost('/api/growth/admin/adjust', payload);
+
 // 标记升级通知已读(查看成长页后)
 export const markNoticesRead = () => apiBasePost('/api/growth/notices/read');
 
-export default { getMyGrowth, checkin, claimDailyBonus, useProtectCard, getRanks, getDashboard, getWeeklyReport, markNoticesRead };
+export default {
+  getMyGrowth,
+  checkin,
+  claimDailyBonus,
+  useProtectCard,
+  getRanks,
+  getDashboard,
+  getWeeklyReport,
+  adminGetUserGrowth,
+  adminAdjustGrowth,
+  markNoticesRead,
+};

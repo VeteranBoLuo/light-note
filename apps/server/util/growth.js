@@ -669,3 +669,49 @@ export async function useProtectCard(userId, { userRole = null } = {}) {
     conn.release();
   }
 }
+
+// 管理员运营:直接调整目标用户成长(发/扣经验、设等级、增减补签卡)。
+// root 专用,绕过日顶与账本,直接改成长快照;设等级优先于发经验。
+export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null, cardDelta = 0 } = {}) {
+  if (!userId || userId === 'visitor') return { ok: false, reason: 'no_user' };
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query(
+      'SELECT exp, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
+      [userId],
+    );
+    let g = rows[0];
+    if (!g) {
+      await conn.query('INSERT INTO user_growth (user_id) VALUES (?)', [userId]);
+      g = { exp: 0, streak_protect_cards: 0 };
+    }
+    let exp = Number(g.exp || 0);
+    let cards = Number(g.streak_protect_cards || 0);
+    if (setLevel != null && setLevel !== '') {
+      const lv = Math.max(1, Math.min(MAX_LEVEL, Number(setLevel)));
+      exp = RANKS[lv - 1].cumExp; // 设到该等级的起始经验
+    } else if (expDelta) {
+      exp = Math.max(0, exp + Number(expDelta)); // 发/扣经验(不低于 0)
+    }
+    if (cardDelta) cards = Math.max(0, Math.min(99, cards + Number(cardDelta)));
+    const level = levelForExp(exp);
+    await conn.query('UPDATE user_growth SET exp = ?, level = ?, streak_protect_cards = ? WHERE user_id = ?', [
+      exp,
+      level,
+      cards,
+      userId,
+    ]);
+    await conn.commit();
+    return { ok: true, exp, level, name: rankOf(level).name, cards };
+  } catch (e) {
+    try {
+      await conn.rollback();
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, reason: 'error', error: e.message };
+  } finally {
+    conn.release();
+  }
+}

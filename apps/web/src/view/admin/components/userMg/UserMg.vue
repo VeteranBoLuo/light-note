@@ -58,6 +58,13 @@
                 />
                 <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
                 <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
+                <span
+                  title="成长运营(发经验/调等级/送补签卡)"
+                  class="dom-hover"
+                  style="cursor: pointer; font-size: 15px; line-height: 1"
+                  @click.stop="openGrowthAdmin(record)"
+                  >🎖️</span
+                >
               </BSpace>
             </template>
           </template>
@@ -112,6 +119,7 @@
       </BModal>
 
       <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
+      <GrowthAdminModal v-model:visible="growthAdminVisible" :user-id="growthAdminUser.id" :user-name="growthAdminUser.alias" />
     </section>
   </div>
 </template>
@@ -133,6 +141,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
 
   const tableCardRef = ref<HTMLElement | null>(null);
   useTableScrollY({ ref: tableCardRef });
@@ -213,6 +222,12 @@
   const editVisible = ref(false);
   const previewVisible = ref(false);
   const previewUser = ref<any>(null);
+  const growthAdminVisible = ref(false);
+  const growthAdminUser = ref<{ id: string; alias: string }>({ id: '', alias: '' });
+  const openGrowthAdmin = (record) => {
+    growthAdminUser.value = { id: record.id, alias: record.alias || record.userName || '' };
+    growthAdminVisible.value = true;
+  };
 
   const editUser = (record) => {
     editData.value = record;

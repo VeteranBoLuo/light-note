@@ -1,4 +1,4 @@
-import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, useProtectCard, RANKS, markNoticesRead } from '../util/growth.js';
+import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, useProtectCard, adminAdjustGrowth, RANKS, markNoticesRead } from '../util/growth.js';
 import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -49,6 +49,34 @@ export const getWeeklyReport = async (req, res) => {
   } catch (error) {
     console.error('获取周报失败:', error);
     res.send(resultData(null, 500, '获取周报失败: ' + error.message));
+  }
+};
+
+// POST /growth/admin/userGrowth —— 查目标用户当前成长(root 专用,供运营弹窗显示)
+export const getUserGrowthForAdmin = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  try {
+    const { userId } = req.body || {};
+    if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
+    const g = await getGrowth(userId);
+    res.send(resultData(g));
+  } catch (error) {
+    console.error('查询用户成长失败:', error);
+    res.send(resultData(null, 500, '查询失败: ' + error.message));
+  }
+};
+
+// POST /growth/admin/adjust —— 管理员运营调整用户成长(发/扣经验、设等级、增减补签卡;root 专用)
+export const doAdminAdjustGrowth = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  try {
+    const { userId, expDelta, setLevel, cardDelta } = req.body || {};
+    if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
+    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('成长运营调整失败:', error);
+    res.send(resultData(null, 500, '调整失败: ' + error.message));
   }
 };
 
