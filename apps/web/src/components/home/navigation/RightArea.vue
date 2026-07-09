@@ -27,7 +27,7 @@
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
-      <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      <AvatarFrame :src="user.headPicture" :level="growth?.level" :size="32" class="dom-hover" />
     </div>
     <!--pc端个人中心       -->
     <PersonCenter v-else />
@@ -47,10 +47,15 @@
   import { apiBasePost } from '@/http/request.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
+  import AvatarFrame from '@/components/growth/AvatarFrame.vue';
+  import { useGrowth } from '@/composables/useGrowth.ts';
+  import { onMounted } from 'vue';
   const bookmark = bookmarkStore();
 
   const user = useUserStore();
   const route = useRoute();
+  const { growth, load: loadGrowth } = useGrowth();
+  onMounted(() => loadGrowth()); // 移动端顶栏头像的段位框需要成长等级
 
   function githubClick() {
     window.open('https://github.com/VeteranBoLuo/light-note');
