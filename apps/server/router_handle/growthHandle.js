@@ -1,4 +1,5 @@
 import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, useProtectCard, RANKS, markNoticesRead } from '../util/growth.js';
+import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 
@@ -36,6 +37,18 @@ export const doUseProtectCard = async (req, res) => {
   } catch (error) {
     console.error('补签失败:', error);
     res.send(resultData(null, 500, '补签失败: ' + error.message));
+  }
+};
+
+// GET /growth/weeklyReport —— 实时生成当前用户本周周报(供前端随时「查看大图」,不发通知)
+export const getWeeklyReport = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const report = await buildWeeklyReport(req.user.id);
+    res.send(resultData(report));
+  } catch (error) {
+    console.error('获取周报失败:', error);
+    res.send(resultData(null, 500, '获取周报失败: ' + error.message));
   }
 };
 

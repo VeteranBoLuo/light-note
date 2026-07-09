@@ -11,8 +11,8 @@ import pool from '../db/index.js';
 import { getGrowth } from './growth.js';
 import crypto from 'crypto';
 
-// 汇总单个用户近 7 天的成长数据
-async function buildWeeklyReport(userId) {
+// 汇总单个用户近 7 天的成长数据(供定时任务发通知 + 前端实时「本周周报」预览复用)
+export async function buildWeeklyReport(userId) {
   const [[row]] = await pool.query(
     `SELECT
       (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS bookmarks,
