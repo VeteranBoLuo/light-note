@@ -44,7 +44,7 @@ export const doUseProtectCard = async (req, res) => {
 export const getWeeklyReport = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const report = await buildWeeklyReport(req.user.id);
+    const report = await buildWeeklyReport(req.user.id, req.user.role);
     res.send(resultData(report));
   } catch (error) {
     console.error('获取周报失败:', error);
