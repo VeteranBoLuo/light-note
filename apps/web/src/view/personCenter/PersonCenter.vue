@@ -105,7 +105,6 @@
           >
             <svg-icon size="14" :src="menuItem.icon" />
             {{ menuItem.label }}
-            <div v-if="getVersionIsNew(menuItem)" class="update-point" />
             <div v-if="menuItem.name === 'growth' && growthInfo?.hasUnreadLevelUp" class="update-point" />
           </div>
           <div
@@ -150,7 +149,6 @@
   import { updatePreference } from '@/utils/savePreference';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { useI18n } from 'vue-i18n';
-  import { updateNotice } from '@/config/updateNotice';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -317,19 +315,8 @@
       label: t('personCenter.changelog'),
       path: '/updateLogs',
       icon: icon.userCenter.log,
-      version: updateNotice.version,
-      versionKey: updateNotice.storageKey,
     },
   ]);
-  function getVersionIsNew(menu: any) {
-    if (menu.version) {
-      const versionKey = menu.versionKey || `${menu.name}Version`;
-      const version = localStorage.getItem(versionKey);
-      return version !== menu.version;
-    }
-    return false;
-  }
-
   const menuOptions = computed(() => {
     if (user.role === 'root') {
       return options.value;

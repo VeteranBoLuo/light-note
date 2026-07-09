@@ -28,7 +28,6 @@
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
   import { applyDisplaySettings } from '@/utils/savePreference';
-  import { updateNotice } from '@/config/updateNotice';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { useI18n } from 'vue-i18n';
@@ -605,17 +604,12 @@
     });
   }
 
-  function checkUpdateNotice() {
-    // 版本更新公告已统一进通知中心(由管理员群发 system 通知),不再弹右上角弹窗;此处仅标记当前版本已读。
-    localStorage.setItem(updateNotice.storageKey, updateNotice.version);
-  }
   onMounted(async () => {
     initApp();
     await init();
     // /landing 是纯官网展示页(游客默认首页),不应该出现任何账号相关的通知/弹窗
     if (router.currentRoute.value.name === 'landing') return;
     startOpinionNoticePolling();
-    checkUpdateNotice();
   });
 
   // 解绑媒体查询监听，防止内存泄漏
