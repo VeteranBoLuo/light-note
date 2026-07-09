@@ -387,7 +387,13 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
       .filter((n) => !Number.isNaN(n));
     if (joinTimes.length) {
       const earliest = Math.min(...joinTimes);
-      stats.joinDays = Math.max(1, Math.floor((Date.now() - earliest) / 86_400_000) + 1); // 含当天,至少 1 天
+      // 按自然日计(注册当天=第 1 天),与签到口径一致,避免「连签 2 天却陪伴 1 天」的割裂:
+      // 旧算法用「经过的整 24 小时数」,昨晚注册今天看还不满 24h 就只算 1 天。
+      const startDay = new Date(earliest);
+      startDay.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      stats.joinDays = Math.max(1, Math.round((today.getTime() - startDay.getTime()) / 86_400_000) + 1);
     }
 
     // 签到天集合 → 累计签到 + 最长连签(从账本派生,无需新列)
