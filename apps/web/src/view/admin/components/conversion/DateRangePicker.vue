@@ -100,7 +100,9 @@
   function dayjsStr(offset = 0) {
     const d = new Date();
     d.setDate(d.getDate() + offset);
-    return d.toISOString().slice(0, 10);
+    // 用本地时区格式化(复用下方 fmt):toISOString 取的是 UTC 日期,
+    // 北京凌晨 0~8 点时 UTC 仍停在前一天,会把「今日」算成昨天
+    return fmt(d);
   }
 
   function fmt(d: Date) {
