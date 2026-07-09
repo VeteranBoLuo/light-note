@@ -19,8 +19,12 @@ export async function buildWeeklyReport(userId, userRole = null) {
       (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS notes,
       (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS files,
       (SELECT COALESCE(SUM(amount), 0) FROM growth_events WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS exp,
-      (SELECT COUNT(*) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS checkinDays`,
-    [userId, userId, userId, userId, userId],
+      (SELECT COUNT(*) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS checkinDays,
+      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevBookmarks,
+      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevNotes,
+      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevFiles,
+      (SELECT COALESCE(SUM(amount), 0) FROM growth_events WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevExp`,
+    [userId, userId, userId, userId, userId, userId, userId, userId, userId],
   );
   const g = await getGrowth(userId, { userRole });
   // 免账本用户(如 root)不写每日签到流水,从账本数出来的 checkinDays 会是 0;
@@ -36,6 +40,12 @@ export async function buildWeeklyReport(userId, userRole = null) {
     level: g.level,
     levelName: g.name,
     generatedAt: new Date().toISOString().slice(0, 10),
+    prev: {
+      bookmarks: Number(row.prevBookmarks || 0),
+      notes: Number(row.prevNotes || 0),
+      files: Number(row.prevFiles || 0),
+      exp: Number(row.prevExp || 0),
+    },
   };
 }
 

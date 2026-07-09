@@ -2,7 +2,7 @@
   <Teleport to="body">
     <transition name="wr-pop">
       <div v-if="visible" class="wr-overlay" @click.self="close">
-        <div class="wr-card">
+        <div ref="cardRef" class="wr-card">
           <button class="wr-close" @click="close" aria-label="close">×</button>
 
           <!-- 星空 + 渐变头图 -->
@@ -17,37 +17,42 @@
           </div>
 
           <div class="wr-body">
-            <!-- 称号 + 评语(核心)-->
+            <!-- 称号 + 评语 -->
             <div class="wr-verdict">
               <div class="wr-verdict-badge">{{ verdict.emoji }}</div>
               <div class="wr-verdict-title">{{ verdict.title }}</div>
               <div class="wr-verdict-quote">{{ verdict.quote }}</div>
             </div>
 
-            <!-- 三大核心数字:经验 / 签到 / 总产出 -->
+            <!-- 三大核心数字 + 较上周对比 -->
             <div class="wr-stats">
               <div class="wr-stat">
                 <b class="wr-stat-num wr-c-exp">+{{ animExp }}</b>
                 <span>{{ t('growth.wrExp') }}</span>
+                <em class="wr-cmp" :class="cmpExp.dir">{{ cmpText(cmpExp) }}</em>
               </div>
               <div class="wr-stat">
-                <b class="wr-stat-num wr-c-fire">{{ animCheckin }}<i class="wr-fire">🔥</i></b>
+                <b class="wr-stat-num wr-c-fire">{{ animCheckin }}<i v-if="(report?.checkinDays || 0) > 0" class="wr-fire">🔥</i></b>
                 <span>{{ t('growth.wrCheckin') }}</span>
+                <em class="wr-cmp flat">{{ t('growth.wrKeepUp') }}</em>
               </div>
               <div class="wr-stat">
                 <b class="wr-stat-num wr-c-total">{{ animTotal }}</b>
                 <span>{{ t('growth.wrTotal') }}</span>
+                <em class="wr-cmp" :class="cmpTotal.dir">{{ cmpText(cmpTotal) }}</em>
               </div>
             </div>
 
-            <!-- 资源条形图 -->
+            <!-- 资源条形图 + 各自较上周 -->
             <div class="wr-bars">
               <div v-for="b in bars" :key="b.key" class="wr-bar-row">
                 <span class="wr-bar-label">{{ b.label }}</span>
                 <div class="wr-bar-track">
                   <div class="wr-bar-fill" :style="{ width: (barsReady ? b.pct : 0) + '%', background: b.color }"></div>
                 </div>
-                <span class="wr-bar-val">{{ b.val }}</span>
+                <span class="wr-bar-val">
+                  {{ b.val }}<em class="wr-bar-cmp" :class="b.dir">{{ b.cmp }}</em>
+                </span>
               </div>
             </div>
 
@@ -56,6 +61,10 @@
               <span class="wr-level-badge" :style="{ background: levelGradient }">Lv.{{ report?.level }}</span>
               <span class="wr-level-name">{{ report?.levelName }}</span>
             </div>
+
+            <button class="wr-export" @click="exportImage" :disabled="exporting">
+              📸 {{ exporting ? t('growth.wrExporting') : t('growth.wrExport') }}
+            </button>
           </div>
         </div>
       </div>
@@ -75,8 +84,9 @@
   const animCheckin = ref(0);
   const animTotal = ref(0);
   const barsReady = ref(false);
+  const cardRef = ref<HTMLElement | null>(null);
+  const exporting = ref(false);
 
-  // 头图星点(固定伪随机,不用 Math.random 以免每帧抖动)
   const stars = Array.from({ length: 9 }, (_, i) => {
     const top = (i * 37) % 90;
     const left = (i * 53 + 7) % 96;
@@ -99,16 +109,39 @@
     requestAnimationFrame(tick);
   }
 
+  // 较上周对比
+  function delta(cur: number, prev: number) {
+    const d = (cur || 0) - (prev || 0);
+    return { d, dir: d > 0 ? 'up' : d < 0 ? 'down' : 'flat' };
+  }
+  function cmpText(c: { d: number; dir: string }) {
+    if (c.dir === 'up') return `↑ ${c.d}`;
+    if (c.dir === 'down') return `↓ ${-c.d}`;
+    return t('growth.wrFlat');
+  }
+  const cmpExp = computed(() => delta(props.report?.exp, props.report?.prev?.exp));
+  const cmpTotal = computed(() => {
+    const r = props.report;
+    if (!r) return delta(0, 0);
+    const cur = (r.bookmarks || 0) + (r.notes || 0) + (r.files || 0);
+    const prev = (r.prev?.bookmarks || 0) + (r.prev?.notes || 0) + (r.prev?.files || 0);
+    return delta(cur, prev);
+  });
+
   const bars = computed(() => {
     const r = props.report;
     if (!r) return [];
+    const p = r.prev || {};
     const items = [
-      { key: 'bookmark', label: t('growth.wrBookmark'), val: r.bookmarks || 0, color: 'linear-gradient(90deg, #a855f7, #6366f1)' },
-      { key: 'note', label: t('growth.wrNote'), val: r.notes || 0, color: 'linear-gradient(90deg, #f472b6, #f43f5e)' },
-      { key: 'file', label: t('growth.wrFile'), val: r.files || 0, color: 'linear-gradient(90deg, #22d3ee, #3b82f6)' },
+      { key: 'bookmark', label: t('growth.wrBookmark'), val: r.bookmarks || 0, prev: p.bookmarks || 0, color: 'linear-gradient(90deg, #a855f7, #6366f1)' },
+      { key: 'note', label: t('growth.wrNote'), val: r.notes || 0, prev: p.notes || 0, color: 'linear-gradient(90deg, #f472b6, #f43f5e)' },
+      { key: 'file', label: t('growth.wrFile'), val: r.files || 0, prev: p.files || 0, color: 'linear-gradient(90deg, #22d3ee, #3b82f6)' },
     ];
     const max = Math.max(1, ...items.map((i) => i.val));
-    return items.map((i) => ({ ...i, pct: Math.round((i.val / max) * 100) }));
+    return items.map((i) => {
+      const c = delta(i.val, i.prev);
+      return { ...i, pct: Math.round((i.val / max) * 100), dir: c.dir, cmp: c.dir === 'flat' ? '' : c.dir === 'up' ? ` ↑${c.d}` : ` ↓${-c.d}` };
+    });
   });
 
   const levelGradient = computed(() => {
@@ -120,7 +153,6 @@
     return 'linear-gradient(135deg, #94a3b8, #cbd5e1)';
   });
 
-  // 动态称号 + 评语:按数据优先级判定,给个性化点评(9 档)
   const verdict = computed(() => {
     const r = props.report || {};
     const b = r.bookmarks || 0;
@@ -139,6 +171,28 @@
     if (c >= 3) return { emoji: '📅', title: '节奏大师', quote: `本周签到 ${c} 天,好习惯正在养成!` };
     return { emoji: '🌱', title: '成长新芽', quote: '每一次记录都是成长的种子,继续加油!' };
   });
+
+  async function exportImage() {
+    if (!cardRef.value || exporting.value) return;
+    exporting.value = true;
+    try {
+      const html2canvas = (await import('html2canvas')).default; // 懒加载:仅点导出时拉取 ~48kB
+      const canvas = await html2canvas(cardRef.value, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        ignoreElements: (el) => el.classList?.contains('wr-close') || el.classList?.contains('wr-export'),
+      });
+      const link = document.createElement('a');
+      link.download = `轻笺周报-${props.report?.generatedAt || ''}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (e) {
+      console.error('导出周报失败:', e);
+    } finally {
+      exporting.value = false;
+    }
+  }
 
   watch(
     () => props.visible,
@@ -172,7 +226,6 @@
     background: rgba(8, 10, 25, 0.66);
     backdrop-filter: blur(7px);
   }
-  /* 深色沉浸卡片(不跟随主题,周报是特殊时刻) */
   .wr-card {
     position: relative;
     width: 100%;
@@ -205,7 +258,6 @@
     background: rgba(255, 255, 255, 0.32);
   }
 
-  /* 头图 */
   .wr-banner {
     position: relative;
     padding: 26px 24px 20px;
@@ -269,13 +321,12 @@
   }
 
   .wr-body {
-    padding: 8px 24px 26px;
+    padding: 8px 24px 24px;
     display: flex;
     flex-direction: column;
     gap: 20px;
   }
 
-  /* 称号 + 评语 */
   .wr-verdict {
     text-align: center;
     padding: 6px 0 2px;
@@ -307,7 +358,6 @@
     margin-top: 12px;
     font-size: 24px;
     font-weight: 900;
-    letter-spacing: 0.01em;
     background: linear-gradient(100deg, #c4b5fd, #a5b4fc 40%, #67e8f9);
     -webkit-background-clip: text;
     background-clip: text;
@@ -321,10 +371,8 @@
     padding: 0 8px;
   }
 
-  /* 三大数字 */
   .wr-stats {
     display: flex;
-    align-items: stretch;
     justify-content: space-between;
     padding: 14px 4px;
     border-radius: 16px;
@@ -368,13 +416,36 @@
     font-size: 15px;
     margin-left: 2px;
     -webkit-text-fill-color: initial;
+    animation: wr-flame 0.85s ease-in-out infinite alternate;
+    filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.85));
+  }
+  @keyframes wr-flame {
+    from {
+      transform: scale(1) rotate(-4deg);
+    }
+    to {
+      transform: scale(1.22) rotate(4deg);
+    }
   }
   .wr-stat span {
     font-size: 11.5px;
     color: rgba(255, 255, 255, 0.6);
   }
+  .wr-cmp {
+    font-size: 10.5px;
+    font-weight: 700;
+    font-style: normal;
+  }
+  .wr-cmp.up {
+    color: #4ade80;
+  }
+  .wr-cmp.down {
+    color: #f87171;
+  }
+  .wr-cmp.flat {
+    color: rgba(255, 255, 255, 0.42);
+  }
 
-  /* 条形图 */
   .wr-bars {
     display: flex;
     flex-direction: column;
@@ -382,7 +453,7 @@
   }
   .wr-bar-row {
     display: grid;
-    grid-template-columns: 48px 1fr 30px;
+    grid-template-columns: 48px 1fr 62px;
     align-items: center;
     gap: 10px;
   }
@@ -409,14 +480,24 @@
     color: #fff;
     font-variant-numeric: tabular-nums;
   }
+  .wr-bar-cmp {
+    font-size: 10px;
+    font-weight: 700;
+    font-style: normal;
+    margin-left: 3px;
+  }
+  .wr-bar-cmp.up {
+    color: #4ade80;
+  }
+  .wr-bar-cmp.down {
+    color: #f87171;
+  }
 
-  /* 段位 */
   .wr-level {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    padding-top: 2px;
   }
   .wr-level-badge {
     padding: 4px 13px;
@@ -432,7 +513,27 @@
     color: rgba(255, 255, 255, 0.92);
   }
 
-  /* 入场动画 */
+  .wr-export {
+    align-self: center;
+    margin-top: 2px;
+    padding: 9px 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .wr-export:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  .wr-export:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   .wr-pop-enter-active {
     transition: opacity 0.25s ease;
   }
