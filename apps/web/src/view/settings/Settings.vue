@@ -11,173 +11,189 @@
       </header>
 
       <div class="settings-body">
-        <div class="settings-col">
-      <!-- 外观 -->
-      <section class="settings-card">
-        <div class="card-head">
-          <span class="card-icon card-icon--appearance">
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6" />
-              <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" />
-            </svg>
-          </span>
-          <div class="card-head-text">
-            <h2 class="card-title">{{ t('settings.appearance') }}</h2>
-            <p class="card-sub">{{ t('settings.appearanceDesc') }}</p>
-          </div>
-        </div>
-
-        <div class="fields">
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.theme') }}</span>
-              <span class="field-desc">{{ t('settings.themeDesc') }}</span>
-            </div>
-            <div class="seg">
-              <button
-                v-for="o in themeOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: (user.preferences.theme || 'system') === o.v }"
-                @click="set('theme', o.v)"
-              >
-                {{ o.label }}
-              </button>
+        <!-- 外观 -->
+        <section class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--appearance">
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6" />
+                <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" />
+              </svg>
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.appearance') }}</h2>
+              <p class="card-sub">{{ t('settings.appearanceDesc') }}</p>
             </div>
           </div>
 
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.language') }}</span>
-              <span class="field-desc">{{ t('settings.languageDesc') }}</span>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.theme') }}</span>
+                <span class="field-desc">{{ t('settings.themeDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in themeOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.theme || 'system') === o.v }"
+                  @click="set('theme', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
             </div>
-            <div class="seg">
-              <button
-                v-for="o in langOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: (user.preferences.lang || 'zh-CN') === o.v }"
-                @click="set('lang', o.v)"
-              >
-                {{ o.label }}
-              </button>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.language') }}</span>
+                <span class="field-desc">{{ t('settings.languageDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in langOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.lang || 'zh-CN') === o.v }"
+                  @click="set('lang', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.uiScale') }}</span>
+                <span class="field-desc">{{ t('settings.uiScaleDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in uiScaleOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.uiScale || 'medium') === o.v }"
+                  @click="set('uiScale', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 通用 -->
+        <section class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--general">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                <path d="M5 7h14M5 12h14M5 17h14" />
+                <circle cx="10" cy="7" r="1.7" fill="currentColor" stroke="none" />
+                <circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none" />
+                <circle cx="8" cy="17" r="1.7" fill="currentColor" stroke="none" />
+              </svg>
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.general') }}</h2>
+              <p class="card-sub">{{ t('settings.generalDesc') }}</p>
             </div>
           </div>
 
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.uiScale') }}</span>
-              <span class="field-desc">{{ t('settings.uiScaleDesc') }}</span>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.defaultHome') }}</span>
+                <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in homeOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.homePage || 'landing') === o.v }"
+                  @click="set('homePage', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
             </div>
-            <div class="seg">
-              <button
-                v-for="o in uiScaleOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: ((user.preferences as any).uiScale || 'medium') === o.v }"
-                @click="set('uiScale', o.v)"
-              >
-                {{ o.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-        </div>
 
-        <div class="settings-col">
-      <!-- 通用 -->
-      <section class="settings-card">
-        <div class="card-head">
-          <span class="card-icon card-icon--general">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-              <path d="M5 7h14M5 12h14M5 17h14" />
-              <circle cx="10" cy="7" r="1.7" fill="currentColor" stroke="none" />
-              <circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none" />
-              <circle cx="8" cy="17" r="1.7" fill="currentColor" stroke="none" />
-            </svg>
-          </span>
-          <div class="card-head-text">
-            <h2 class="card-title">{{ t('settings.general') }}</h2>
-            <p class="card-sub">{{ t('settings.generalDesc') }}</p>
-          </div>
-        </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.bookmarkOpen') }}</span>
+                <span class="field-desc">{{ t('settings.bookmarkOpenDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in bookmarkOpenOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.openBookmarkIn || 'newTab') === o.v }"
+                  @click="set('openBookmarkIn', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
 
-        <div class="fields">
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.defaultHome') }}</span>
-              <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.noteView') }}</span>
+                <span class="field-desc">{{ t('settings.noteViewDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in viewOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.noteViewMode || 'list') === o.v }"
+                  @click="set('noteViewMode', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
             </div>
-            <div class="seg seg--wrap">
-              <button
-                v-for="o in homeOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: (user.preferences.homePage || 'landing') === o.v }"
-                @click="set('homePage', o.v)"
-              >
-                {{ o.label }}
-              </button>
-            </div>
-          </div>
 
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.noteView') }}</span>
-              <span class="field-desc">{{ t('settings.noteViewDesc') }}</span>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.resourceView') }}</span>
+                <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in resourceViewOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.resourceView || 'card') === o.v }"
+                  @click="set('resourceView', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
             </div>
-            <div class="seg">
-              <button
-                v-for="o in viewOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: (user.preferences.noteViewMode || 'list') === o.v }"
-                @click="set('noteViewMode', o.v)"
-              >
-                {{ o.label }}
-              </button>
-            </div>
-          </div>
 
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.resourceView') }}</span>
-              <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
-            </div>
-            <div class="seg">
-              <button
-                v-for="o in resourceViewOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: (user.preferences.resourceView || 'card') === o.v }"
-                @click="set('resourceView', o.v)"
-              >
-                {{ o.label }}
-              </button>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.tagView') }}</span>
+                <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in tagViewOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.tagView || 'card') === o.v }"
+                  @click="set('tagView', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
             </div>
           </div>
+        </section>
 
-          <div class="field">
-            <div class="field-head">
-              <span class="field-label">{{ t('settings.tagView') }}</span>
-              <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
-            </div>
-            <div class="seg">
-              <button
-                v-for="o in tagViewOpts"
-                :key="o.v"
-                class="seg-btn"
-                :class="{ active: (user.preferences.tagView || 'card') === o.v }"
-                @click="set('tagView', o.v)"
-              >
-                {{ o.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-        </div>
+        <p class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
   </div>
@@ -220,6 +236,10 @@
     { v: 'bookmark', label: t('settings.home.bookmark') },
     { v: 'noteLibrary', label: t('settings.home.noteLibrary') },
     { v: 'cloudSpace', label: t('settings.home.cloudSpace') },
+  ]);
+  const bookmarkOpenOpts = computed(() => [
+    { v: 'newTab', label: t('settings.bookmarkOpenNew') },
+    { v: 'current', label: t('settings.bookmarkOpenCurrent') },
   ]);
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
@@ -264,30 +284,20 @@
     color: var(--text-color);
   }
 
+  /* 单列居中:设置项聚焦"偏好"本身;账号/帮助等入口不再重复(已在个人中心),布局更清爽。 */
   .settings-container {
-    max-width: 1040px;
+    max-width: 680px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 18px;
   }
-  /* 大屏两栏:外观 左、通用 右,减少两侧留白 */
+  /* 卡片设为 container:字段按"卡片宽"而非"视口宽"决定是否堆叠,缩放/窄窗下不错位。 */
   .settings-body {
-    display: flex;
-    gap: 18px;
-    align-items: flex-start;
-  }
-  .settings-col {
-    flex: 1 1 0;
-    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 18px;
-  }
-  @media (max-width: 880px) {
-    .settings-body {
-      flex-direction: column;
-    }
+    container-type: inline-size;
   }
 
   /* ---- hero ---- */
@@ -369,6 +379,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
   .card-title {
     margin: 0;
@@ -392,14 +403,13 @@
     justify-content: space-between;
     gap: 20px;
     padding: 15px 0;
-    flex-wrap: wrap;
   }
   .field + .field {
     border-top: 1px solid color-mix(in srgb, var(--card-border-color) 34%, transparent);
   }
   .field-head {
-    flex: 1 1 180px;
-    min-width: 140px;
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -416,14 +426,11 @@
 
   /* ---- segmented chips ---- */
   .seg {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
     justify-content: flex-end;
-  }
-  .seg--wrap {
-    max-width: 340px;
   }
   .seg-btn {
     padding: 7px 15px;
@@ -434,6 +441,7 @@
     font-size: 13px;
     font-weight: 500;
     line-height: 1.2;
+    white-space: nowrap;
     cursor: pointer;
     transition:
       transform 0.18s ease,
@@ -454,43 +462,29 @@
     box-shadow: 0 10px 22px -14px color-mix(in srgb, var(--primary-color) 70%, transparent);
   }
 
-  /* ---- coming-soon footer ---- */
-  .settings-coming {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 16px;
-    border-radius: 14px;
-    border: 1px dashed color-mix(in srgb, var(--card-border-color) 55%, transparent);
-    color: var(--desc-color);
-    font-size: 12.5px;
-    text-align: center;
-  }
-  .settings-coming svg {
-    flex: 0 0 auto;
-    color: color-mix(in srgb, var(--primary-color) 60%, var(--desc-color));
-  }
-
-  @media (max-width: 560px) {
-    .settings-page {
-      padding: 20px 16px 48px;
-    }
-    /* 窄屏统一竖排:标签在上、选项在下并左对齐,避免短选项与标签同行、长选项换行的不一致 */
+  /* 关键修复:当卡片窄到装不下 标签+选项 一行时(缩放/窄窗),字段改竖排、选项左对齐,
+     避免选项浮右与标签错位。用 @container 按卡片宽判断,而非 @media 按视口宽。 */
+  @container (max-width: 460px) {
     .field {
       flex-direction: column;
       align-items: stretch;
       gap: 10px;
     }
-    /* 竖排下 flex-basis 会变成高度,须复位,否则标签区被撑高留下大空隙 */
-    .field-head {
-      flex: 0 0 auto;
-    }
     .seg {
       justify-content: flex-start;
     }
-    .seg--wrap {
-      max-width: none;
+  }
+
+  .settings-foot {
+    margin: 2px 0 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+
+  @media (max-width: 560px) {
+    .settings-page {
+      padding: 20px 16px 48px;
     }
   }
 </style>

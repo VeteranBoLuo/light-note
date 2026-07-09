@@ -31,6 +31,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import router from '@/router';
   import { onMounted } from 'vue';
+  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import icon from '@/config/icon.ts';
 
@@ -57,10 +58,7 @@
   });
 
   function toNewPage() {
-    if (['https', 'http'].some((str) => !props.cardInfo.url.includes(str))) {
-      props.cardInfo.url = 'https://' + props.cardInfo.url;
-    }
-    window.open(props.cardInfo.url, '_blank');
+    openBookmarkUrl(props.cardInfo.url);
     recordOperation({ module: '首页', operation: `点击书签卡片【${props.cardInfo.name}】` });
   }
 

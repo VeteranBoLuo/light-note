@@ -39,6 +39,7 @@
 <script setup lang="ts">
   import { onMounted, ref } from 'vue';
   import router from '@/router';
+  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { fetchGlobalGraph, type TagGraphEdge, type TagGraphNode } from '@/api/tagGraph.ts';
   import { GRAPH_NODE_COLOR } from '@/components/tagGraph/shared.ts';
   import GlobalGraphCanvas from './GlobalGraphCanvas.vue';
@@ -71,7 +72,7 @@
     if (!node) return;
     if (node.type === 'tag') router.push(`/tag/${node.rawId}`);
     else if (node.type === 'note') router.push(`/noteLibrary/${node.rawId}`);
-    else if (node.type === 'bookmark' && node.meta?.url) window.open(node.meta.url, '_blank');
+    else if (node.type === 'bookmark' && node.meta?.url) openBookmarkUrl(node.meta.url);
     else if (node.type === 'file') router.push('/cloudSpace');
   }
 

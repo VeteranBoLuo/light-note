@@ -30,6 +30,7 @@
             @click="switchTab(tb.v)"
           >
             {{ tb.label }}
+            <span v-if="tabUnread(tb.v) > 0" class="nt-tab-badge">{{ tabUnread(tb.v) > 99 ? '99+' : tabUnread(tb.v) }}</span>
           </button>
         </div>
 
@@ -53,6 +54,11 @@
                 <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{ renderContent(n) }}</div>
                 <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
               </div>
+              <button class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                </svg>
+              </button>
             </div>
             <button v-if="items.length < total" class="nt-more" :disabled="loading" @click="loadMore">
               {{ loading ? t('notification.loading') : t('notification.loadMore') }}
@@ -75,7 +81,7 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
-  const { unreadTotal, refreshUnread, fetchList, markRead, markAllRead } = useNotification();
+  const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } = useNotification();
 
   const open = ref(false);
   const items = ref<NotificationItem[]>([]);
@@ -92,6 +98,10 @@
     { v: 'system', label: t('notification.tabSystem') },
     { v: 'other', label: t('notification.tabOther') },
   ]);
+  // 各 tab 未读角标:全部=总数,其余=该类型未读数
+  function tabUnread(v: string): number {
+    return v === 'all' ? unreadTotal.value : unreadByType.value[v] || 0;
+  }
 
   function parseMeta(meta: any): any {
     if (!meta) return {};
@@ -172,6 +182,12 @@
       n._expanded = !n._expanded;
     }
   }
+  // 删除单条:本地即时移除 + 后端软删(未读的会由 refreshUnread 同步角标)
+  function onDelete(n: NotificationItem) {
+    items.value = items.value.filter((x) => x.id !== n.id);
+    total.value = Math.max(0, total.value - 1);
+    deleteNotifications([n.id]);
+  }
 
   // 未读数:进来拉一次 + 定时轮询(2 分钟) + 切号刷新
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -247,6 +263,9 @@
     flex-wrap: wrap;
   }
   .notification-popover .nt-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     padding: 4px 10px;
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent);
@@ -260,6 +279,22 @@
     border-color: transparent;
     background: var(--primary-color);
     color: #fff;
+  }
+  .notification-popover .nt-tab-badge {
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ff4d4f;
+    color: #fff;
+    font-size: 10px;
+    line-height: 15px;
+    text-align: center;
+    box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+  }
+  .notification-popover .nt-tab.active .nt-tab-badge {
+    background: rgba(255, 255, 255, 0.28);
   }
   .notification-popover .nt-list {
     max-height: 380px;
@@ -278,6 +313,7 @@
     opacity: 0.7;
   }
   .notification-popover .nt-item {
+    position: relative;
     display: flex;
     gap: 10px;
     padding: 10px;
@@ -286,6 +322,33 @@
   }
   .notification-popover .nt-item:hover {
     background: color-mix(in srgb, var(--primary-color) 7%, transparent);
+  }
+  .notification-popover .nt-del {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--desc-color);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity 0.15s,
+      color 0.15s,
+      background 0.15s;
+  }
+  .notification-popover .nt-item:hover .nt-del {
+    opacity: 1;
+  }
+  .notification-popover .nt-del:hover {
+    color: #ef4444;
+    background: color-mix(in srgb, #ef4444 12%, transparent);
   }
   .notification-popover .nt-item.unread {
     background: color-mix(in srgb, var(--primary-color) 5%, transparent);
@@ -318,6 +381,7 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--text-color);
+    padding-right: 22px; /* 预留删除按钮位,悬停出现时不遮挡标题 */
   }
   .notification-popover .nt-item-content {
     margin-top: 2px;

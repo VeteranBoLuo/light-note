@@ -1,4 +1,4 @@
-import { getGrowth, checkin, RANKS, markNoticesRead } from '../util/growth.js';
+import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, RANKS, markNoticesRead } from '../util/growth.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 
@@ -24,6 +24,31 @@ export const doCheckin = async (req, res) => {
   } catch (error) {
     console.error('签到失败:', error);
     res.send(resultData(null, 500, '签到失败: ' + error.message));
+  }
+};
+
+// GET /growth/dashboard —— 成长看板(成就墙/统计/今日任务/时间线;游客返回全零展示引导)
+export const getDashboard = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    const userRole = req.user?.role || 'visitor';
+    const data = await getGrowthDashboard(userId, { userRole });
+    res.send(resultData(data));
+  } catch (error) {
+    console.error('获取成长看板失败:', error);
+    res.send(resultData(null, 500, '获取成长看板失败: ' + error.message));
+  }
+};
+
+// POST /growth/claimDailyBonus —— 领取今日任务全完成奖励(游客走注册引导)
+export const claimDailyBonus = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await claimDailyQuestBonus(req.user.id, { userRole: req.user.role });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('领取每日奖励失败:', error);
+    res.send(resultData(null, 500, '领取失败: ' + error.message));
   }
 };
 

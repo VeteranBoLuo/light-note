@@ -13,24 +13,97 @@
       <section class="growth-panel">
         <GrowthCard />
       </section>
+
+      <div class="growth-row">
+        <section v-if="questsEnabled" class="growth-panel growth-panel--flex">
+          <DailyQuests :quests="quests" :bonus="questBonus" :claiming="claiming" @claim="onClaim" />
+        </section>
+        <section class="growth-panel growth-panel--flex">
+          <GrowthStats :stats="stats" />
+        </section>
+      </div>
+
+      <section class="growth-panel">
+        <AchievementWall
+          :achievements="achievements"
+          :unlocked-count="dashboard?.unlockedCount || 0"
+          :total-achievements="dashboard?.totalAchievements || achievements.length"
+        />
+      </section>
+
+      <section class="growth-panel">
+        <GrowthTimeline :items="timeline" />
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { onMounted } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
+  import DailyQuests from '@/components/growth/DailyQuests.vue';
+  import GrowthStats from '@/components/growth/GrowthStats.vue';
+  import AchievementWall from '@/components/growth/AchievementWall.vue';
+  import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { useGrowth } from '@/composables/useGrowth.ts';
 
   const { t } = useI18n();
   const router = useRouter();
+  const { dashboard, loadDashboard, claimDailyBonus } = useGrowth();
+
+  // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
+  const EMPTY_STATS = {
+    joinDays: 0,
+    currentStreak: 0,
+    maxStreak: 0,
+    totalCheckins: 0,
+    bookmarkCount: 0,
+    noteCount: 0,
+    fileCount: 0,
+    tagCount: 0,
+    weekExp: 0,
+  };
+  const EMPTY_BONUS = { exp: 0, claimed: false, claimable: false };
+  const stats = computed(() => dashboard.value?.stats || EMPTY_STATS);
+  const achievements = computed(() => dashboard.value?.achievements || []);
+  const quests = computed(() => dashboard.value?.quests || []);
+  const timeline = computed(() => dashboard.value?.timeline || []);
+  // 仅在后端明确 questsEnabled===false(满级/root)时隐藏任务卡;游客/加载中默认展示
+  const questsEnabled = computed(() => dashboard.value?.questsEnabled !== false);
+  const questBonus = computed(() => dashboard.value?.questBonus || EMPTY_BONUS);
+
+  const claiming = ref(false);
+  async function onClaim() {
+    if (claiming.value) return;
+    claiming.value = true;
+    try {
+      const res = await claimDailyBonus();
+      if (res?.status === 200 && res.data?.ok) {
+        if (res.data.already) {
+          message.info(t('growth.questClaimedAlready'));
+        } else if (res.data.capped) {
+          message.info(t('growth.questCapped'));
+        } else {
+          message.success(t('growth.questClaimOk', { n: res.data.expGained }));
+          recordOperation({ module: '成长', operation: `领取每日任务奖励（+${res.data.expGained}）` });
+        }
+      }
+    } catch (err) {
+      console.error('领取每日奖励失败:', err);
+    } finally {
+      claiming.value = false;
+    }
+  }
 
   onMounted(() => {
     recordOperation({ module: '成长', operation: '查看我的成长' });
+    loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
   });
 
   function goBack() {
@@ -110,5 +183,20 @@
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.03),
       0 12px 28px -22px rgba(30, 35, 70, 0.35);
+  }
+  /* 今日任务 + 数据统计:大屏并排,窄屏堆叠 */
+  .growth-row {
+    display: flex;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .growth-panel--flex {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  @media (max-width: 720px) {
+    .growth-row {
+      flex-direction: column;
+    }
   }
 </style>

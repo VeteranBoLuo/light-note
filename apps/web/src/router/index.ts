@@ -12,6 +12,7 @@ import { RoleEnum } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
+import notificationCenterRouter from '@/router/modules/notificationCenter.ts';
 import searchRouter from '@/router/modules/search.ts';
 import searchBatchRouter from '@/router/modules/searchBatch.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
@@ -48,6 +49,7 @@ const routes: RouteRecordRaw[] = [
       knowledgeBaseRouter,
       graphRouter,
       ...securityCenterRouter,
+      notificationCenterRouter,
     ],
   },
   {

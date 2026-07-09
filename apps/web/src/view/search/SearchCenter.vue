@@ -243,6 +243,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
+  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -634,8 +635,7 @@
 
   function openItem(item: DisplaySearchItem) {
     if (item.type === 'bookmark' && item.url) {
-      const hasProtocol = /^https?:\/\//i.test(item.url);
-      window.open(hasProtocol ? item.url : `https://${item.url}`, '_blank');
+      openBookmarkUrl(item.url);
       return;
     }
     // 文件先于 route 判断：云空间需要带上 fileName 搜索过滤

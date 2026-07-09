@@ -9,6 +9,8 @@ export interface UserPreferences {
   tagView?: 'card' | 'graph';
   lang?: LanguagePreference;
   homePage?: HomePagePreference;
+  uiScale?: 'small' | 'medium' | 'large';
+  openBookmarkIn?: 'newTab' | 'current';
 }
 
 export const DEFAULT_HOME_PAGE: HomePagePreference = 'landing';

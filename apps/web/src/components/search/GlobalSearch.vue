@@ -155,6 +155,7 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
+  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -294,8 +295,7 @@
     closeDesktopSuggest();
     mobileVisible.value = false;
     if (item.type === 'bookmark' && item.url) {
-      const hasProtocol = /^https?:\/\//i.test(item.url);
-      window.open(hasProtocol ? item.url : `https://${item.url}`, '_blank');
+      openBookmarkUrl(item.url);
       return;
     }
     if (item.type === 'file') {

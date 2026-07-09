@@ -158,6 +158,7 @@
   import { ref, onMounted, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -245,11 +246,7 @@
   }
 
   function openBookmark(bm: any) {
-    let url = bm.url || '';
-    if (url && !/^https?:\/\//i.test(url)) {
-      url = 'https://' + url;
-    }
-    window.open(url, '_blank');
+    openBookmarkUrl(bm.url || '');
   }
 
   function getBookmarkIcon(bookmark: any) {

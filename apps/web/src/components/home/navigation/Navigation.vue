@@ -127,13 +127,15 @@
   const adminRouteActive = computed(() =>
     route.path.includes('/knowledgeBase') ||
     route.path.includes('/admin') ||
-    route.path.includes('/securityCenter')
+    route.path.includes('/securityCenter') ||
+    route.path.includes('/notificationCenter')
   );
 
   const adminMenuOptions = computed(() => [
     { label: t('navigation.knowledgeBase'), function: () => { recordOperation({ module: '导航栏', operation: '知识库' }); router.push('/knowledgeBase'); } },
     { label: t('navigation.admin'), function: () => { recordOperation({ module: '导航栏', operation: '后台管理' }); router.push('/admin'); } },
     { label: t('navigation.securityCenter'), function: () => { recordOperation({ module: '导航栏', operation: '安全中心' }); router.push('/securityCenter'); } },
+    { label: t('navigation.notificationCenter'), function: () => { recordOperation({ module: '导航栏', operation: '通知中心' }); router.push('/notificationCenter'); } },
   ]);
 
   const bookmark = bookmarkStore();

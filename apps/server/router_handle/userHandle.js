@@ -714,8 +714,10 @@ export const sendEmail = async (req, res) => {
     await nodeMail.sendMail(mailOptions);
     res.send(resultData('验证码发送成功'));
   } catch (e) {
-    console.error('邮件发送异常:', e);
-    res.send(resultData(null, 500, '邮件发送失败:' + e.message)); // 设置状态码为400
+    // 原样把 SMTP 内部错误(如 QQ 535 Login fail)抛给用户既不友好也泄露实现;
+    // 面向用户给稳定文案,真实错误只进服务端日志便于排查。
+    console.error('邮件发送异常:', e?.message || e);
+    res.send(resultData(null, 500, '验证码发送失败,请稍后重试'));
   }
 };
 

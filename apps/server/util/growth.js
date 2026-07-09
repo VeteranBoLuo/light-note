@@ -35,6 +35,7 @@ export const RANKS = [
 
 export const MAX_LEVEL = 15;
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
+const DAILY_QUEST_BONUS = 15; // 今日任务全部完成的一次性奖励(每日一次;计入并受日顶 200 约束,不超上限)
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
 // 连续加成:第 N 天 +min(N,5),第 5 天起固定 +5 → 单日签到 ≤ 10
@@ -115,6 +116,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     // 里程碑/一次性来源豁免日顶(一次性、幂等、非刷点):首次成就、升级里程碑、手动。
     // 日顶只压可重复的日常/创造来源(签到、书签/笔记/文件衰减、批量导入)。
     // profile_done 与 first_own_resource 同属一次性成就(幂等、非刷点),一并豁免日顶,保证必得
+    // daily_quest(今日任务奖励)不豁免日顶:与日上限口径一致,达 200/日后不再增发(用户反馈:不应超上限)
     const capExempt =
       source === 'first_own_resource' || source === 'milestone' || source === 'manual' || source === 'profile_done';
     let used = 0;
@@ -282,6 +284,245 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     dailyExp, // 今日已获经验(计入日顶部分)
     dailyCap: DAILY_EXP_CAP, // 每日经验上限
     dailyCapReached: dailyExp >= DAILY_EXP_CAP, // 今日是否已到顶
+  };
+}
+
+// ============================================================================
+// 成长看板(派生层) —— 成就墙 / 统计 / 每日任务 / 时间线
+// 全部从既有数据(user_growth / growth_events / 资源表 / user.create_time)派生,
+// 不新增表、不改 schema,零风险叠加在现有增长引擎之上。前端按 key 映射图标与 i18n 文案。
+// ============================================================================
+
+// 成就定义:阈值单一事实源。group=分类;metric=进度所依据的统计字段;target=解锁阈值。
+export const ACHIEVEMENTS = [
+  { key: 'first_checkin', group: 'checkin', metric: 'totalCheckins', target: 1 },
+  { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7 },
+  { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30 },
+  { key: 'checkin_50', group: 'checkin', metric: 'totalCheckins', target: 50 },
+  { key: 'checkin_100', group: 'checkin', metric: 'totalCheckins', target: 100 },
+  { key: 'first_bookmark', group: 'create', metric: 'bookmarkCount', target: 1 },
+  { key: 'bookmark_50', group: 'create', metric: 'bookmarkCount', target: 50 },
+  { key: 'bookmark_200', group: 'create', metric: 'bookmarkCount', target: 200 },
+  { key: 'first_note', group: 'create', metric: 'noteCount', target: 1 },
+  { key: 'note_20', group: 'create', metric: 'noteCount', target: 20 },
+  { key: 'note_50', group: 'create', metric: 'noteCount', target: 50 },
+  { key: 'first_file', group: 'create', metric: 'fileCount', target: 1 },
+  { key: 'level_5', group: 'level', metric: 'level', target: 5 },
+  { key: 'level_10', group: 'level', metric: 'level', target: 10 },
+  { key: 'level_15', group: 'level', metric: 'level', target: 15 },
+  { key: 'join_7', group: 'tenure', metric: 'joinDays', target: 7 },
+  { key: 'join_30', group: 'tenure', metric: 'joinDays', target: 30 },
+  { key: 'join_100', group: 'tenure', metric: 'joinDays', target: 100 },
+  { key: 'join_365', group: 'tenure', metric: 'joinDays', target: 365 },
+];
+
+function safeParseMeta(m) {
+  if (!m) return null;
+  if (typeof m === 'object') return m;
+  try {
+    return JSON.parse(m);
+  } catch {
+    return null;
+  }
+}
+
+// 给一组升序去重的 YYYYMMDD,求最长连续天数(签到最长连签)
+function longestConsecutiveRun(days) {
+  if (!days.length) return 0;
+  let best = 1;
+  let cur = 1;
+  for (let i = 1; i < days.length; i++) {
+    const gap = daysBetween(days[i], days[i - 1]);
+    if (gap === 1) cur++;
+    else if (gap > 1) cur = 1; // gap===0(重复)理论上已去重,忽略
+    if (cur > best) best = cur;
+  }
+  return best;
+}
+
+/**
+ * 成长看板聚合:统计 + 成就(解锁/进度) + 今日任务 + 近期时间线。
+ * 游客返回全零/全未解锁(仍可展示"待收集"引导)。root 统计真实、等级满级。
+ */
+export async function getGrowthDashboard(userId, { userRole = null } = {}) {
+  const isGuest = !userId || userId === 'visitor';
+  const growth = await getGrowth(userId, { userRole });
+
+  const stats = {
+    joinDays: 0,
+    currentStreak: growth.streak || 0,
+    maxStreak: 0,
+    totalCheckins: 0,
+    bookmarkCount: 0,
+    noteCount: 0,
+    fileCount: 0,
+    tagCount: 0,
+    weekExp: 0,
+  };
+  let timeline = [];
+
+  if (!isGuest) {
+    // 资源计数 + 注册时间(合并成一条查询)。
+    // 注册时间兜底:部分早期/root 账号 user.create_time 为 NULL,退而用最早的书签/笔记时间作为"入驻"起点,
+    // 避免"陪伴 0 天"。
+    const [[row]] = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0) AS bookmarkCount,
+        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0) AS noteCount,
+        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0) AS fileCount,
+        (SELECT COUNT(*) FROM tag WHERE user_id = ? AND del_flag = 0) AS tagCount,
+        (SELECT create_time FROM user WHERE id = ?) AS createTime,
+        (SELECT MIN(create_time) FROM bookmark WHERE user_id = ? AND del_flag = 0) AS firstBookmark,
+        (SELECT MIN(create_time) FROM note WHERE create_by = ? AND del_flag = 0) AS firstNote`,
+      [userId, userId, userId, userId, userId, userId, userId],
+    );
+    stats.bookmarkCount = Number(row.bookmarkCount || 0);
+    stats.noteCount = Number(row.noteCount || 0);
+    stats.fileCount = Number(row.fileCount || 0);
+    stats.tagCount = Number(row.tagCount || 0);
+    const joinTimes = [row.createTime, row.firstBookmark, row.firstNote]
+      .filter(Boolean)
+      .map((d) => new Date(d).getTime())
+      .filter((n) => !Number.isNaN(n));
+    if (joinTimes.length) {
+      const earliest = Math.min(...joinTimes);
+      stats.joinDays = Math.max(1, Math.floor((Date.now() - earliest) / 86_400_000) + 1); // 含当天,至少 1 天
+    }
+
+    // 签到天集合 → 累计签到 + 最长连签(从账本派生,无需新列)
+    const [ckRows] = await pool.query(
+      `SELECT DISTINCT day FROM growth_events
+       WHERE user_id = ? AND source = 'checkin' AND day IS NOT NULL
+       ORDER BY day ASC`,
+      [userId],
+    );
+    const days = ckRows.map((r) => String(r.day)).filter((d) => d && d !== 'null');
+    // 累计签到与最长连签至少不小于当前连签(root 免账本、无 checkin 事件,靠 streak 保证口径自洽)
+    stats.totalCheckins = Math.max(days.length, stats.currentStreak);
+    stats.maxStreak = Math.max(longestConsecutiveRun(days), stats.currentStreak);
+
+    // 近 7 天获得经验
+    const [[wk]] = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
+       WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+      [userId],
+    );
+    stats.weekExp = Number(wk.s || 0);
+
+    // 成长足迹:从真实活动派生(书签/笔记/文件 + 升级里程碑),合并按时间倒序取 15。
+    // 不再只读 growth_events —— root/免账本用户没有账本记录,否则足迹恒空(用户反馈)。
+    const [[bmRows], [ntRows], [flRows], [msRows]] = await Promise.all([
+      pool.query('SELECT name, create_time FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12', [userId]),
+      pool.query('SELECT title, create_time FROM note WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12', [userId]),
+      pool.query('SELECT file_name, create_time FROM files WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12', [userId]),
+      pool.query("SELECT meta, create_time FROM growth_events WHERE user_id = ? AND source = 'milestone' ORDER BY create_time DESC LIMIT 12", [userId]),
+    ]);
+    timeline = [
+      ...bmRows.map((r) => ({ source: 'bookmark', name: r.name, meta: null, time: r.create_time })),
+      ...ntRows.map((r) => ({ source: 'note', name: r.title, meta: null, time: r.create_time })),
+      ...flRows.map((r) => ({ source: 'file', name: r.file_name, meta: null, time: r.create_time })),
+      ...msRows.map((r) => ({ source: 'milestone', name: null, meta: safeParseMeta(r.meta), time: r.create_time })),
+    ]
+      .filter((x) => x.time)
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+      .slice(0, 15)
+      .map((x) => ({ source: x.source, name: x.name || null, amount: 0, meta: x.meta, time: x.time }));
+  }
+
+  // 成就进度:统一用 stats + 当前等级派生(root 等级=满级,资源统计真实)
+  const metrics = { ...stats, level: growth.level };
+  const achievements = ACHIEVEMENTS.map((a) => {
+    const cur = Number(metrics[a.metric] || 0);
+    return {
+      key: a.key,
+      group: a.group,
+      target: a.target,
+      cur,
+      unlocked: cur >= a.target,
+    };
+  });
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+
+  // 今日任务(派生):签到 / 记录一条内容 / 今日获得 30 经验。
+  // "记录内容"按真实资源当日创建判定(不依赖 growth_events),root 也能完成。
+  let createdToday = 0;
+  if (!isGuest) {
+    const [[c]] = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
+        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
+        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) AS c`,
+      [userId, userId, userId],
+    );
+    createdToday = Number(c.c || 0);
+  }
+  const dailyExp = Number(growth.dailyExp || 0);
+  const quests = [
+    { key: 'checkin', done: !!growth.checkedInToday },
+    { key: 'create', done: createdToday > 0 },
+    { key: 'exp30', done: dailyExp >= 30, cur: Math.min(dailyExp, 30), target: 30 },
+  ];
+  // 满级(含 root)不再需要每日经验养成,前端据此隐藏任务卡
+  const questsEnabled = !growth.isMax;
+  const allQuestsDone = quests.every((q) => q.done);
+  let bonusClaimed = false;
+  if (!isGuest && questsEnabled) {
+    const [[bq]] = await pool.query(
+      `SELECT COUNT(*) AS c FROM growth_events WHERE user_id = ? AND source = 'daily_quest' AND day = ? AND status = 'granted'`,
+      [userId, dayKey()],
+    );
+    bonusClaimed = Number(bq.c || 0) > 0;
+  }
+  // 全部完成 → 可领每日奖励(一次性 EXP,豁免日顶)
+  const questBonus = {
+    exp: DAILY_QUEST_BONUS,
+    claimed: bonusClaimed,
+    claimable: questsEnabled && allQuestsDone && !bonusClaimed,
+  };
+
+  return {
+    stats,
+    achievements,
+    unlockedCount,
+    totalAchievements: ACHIEVEMENTS.length,
+    quests,
+    questsEnabled,
+    questBonus,
+    timeline,
+  };
+}
+
+/**
+ * 领取今日任务奖励(全部完成后一次性 EXP;每日一次,幂等)。
+ * 后端二次核算任务完成状态,防前端伪造;满级/root/游客不发。
+ */
+export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
+  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  const g = await getGrowth(userId, { userRole });
+  if (g.isMax) return { ok: false, reason: 'max' };
+
+  const today = dayKey();
+  const [[c]] = await pool.query(
+    `SELECT
+      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
+      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
+      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) AS c`,
+    [userId, userId, userId],
+  );
+  const createdToday = Number(c.c || 0);
+  const dailyExp = Number(g.dailyExp || 0);
+  const allDone = g.checkedInToday && createdToday > 0 && dailyExp >= 30;
+  if (!allDone) return { ok: false, reason: 'incomplete' };
+
+  const grant = await grantExp(userId, 'daily_quest', { day: today, amount: DAILY_QUEST_BONUS, userRole });
+  if (grant.duplicated) return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+  // granted 为 0 = 今日经验已达上限被截断(奖励入账为 0,但已标记领取,不重复)
+  return {
+    ok: true,
+    expGained: grant.granted || 0,
+    capped: (grant.granted || 0) === 0,
+    leveledUp: !!grant.leveledUp,
+    growth: await getGrowth(userId, { userRole }),
   };
 }
 

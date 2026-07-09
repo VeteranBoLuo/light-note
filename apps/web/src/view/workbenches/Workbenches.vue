@@ -392,6 +392,7 @@
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { getJsonInfo } from '@/config/jsonCfg.ts';
   import { API_TEXTS } from '@/config/constants.ts';
   import { cloudSpaceStore, useUserStore } from '@/store';
@@ -823,7 +824,7 @@ import { formatStorageSize } from '@/utils/common';
       recordOperation({ module: '工作台', operation: `点击书签卡片${record.name}` });
     }
     if (record?.url) {
-      window.open(record.url, '_blank');
+      openBookmarkUrl(record.url);
       return;
     }
     router.push('/home');
