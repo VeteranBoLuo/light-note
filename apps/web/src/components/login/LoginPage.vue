@@ -73,7 +73,9 @@
         <a-form-item>
           <div class="login-tips-text">
             <span class="remember-text"><b-checkbox type="circle" v-model:checked="isCheck" />记住账号</span>
-            <a class="dom-hover-click" @click="loginWithGitHub">GitHub快捷登录</a>
+            <a class="dom-hover-click" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub"
+              >GitHub快捷登录</a
+            >
           </div>
         </a-form-item>
         <a-form-item>

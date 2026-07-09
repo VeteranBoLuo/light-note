@@ -22,6 +22,21 @@ export function isGuestUser(): boolean {
   return !user.id || user.role === 'visitor';
 }
 
+// 界面缩放:把"字号+密度"合并为单一"界面风格"(小/标准/大),用 <html> zoom 整体等比缩放
+// (px 项目下 font-size/行距生效面太窄、几乎看不出;zoom 才直观)。
+// 浮层(通知中心/个人中心)一律改用自研 BPopover——它按实时 getBoundingClientRect 定位、与 zoom 自洽,
+// 不再出现之前 a-popover 在缩放下错位的问题。
+const UI_SCALE: Record<string, number> = { small: 0.9, medium: 1, large: 1.1 };
+export function applyDisplaySettings(): void {
+  const user = useUserStore();
+  const root = document.documentElement;
+  const scale = UI_SCALE[(user.preferences as any).uiScale] ?? 1;
+  (root.style as any).zoom = scale === 1 ? '' : String(scale);
+  // 清掉上一版"字号+密度"分离实现的残留
+  root.style.fontSize = '';
+  root.removeAttribute('data-density');
+}
+
 /**
  * 统一偏好写入口 —— 收口原先散落多套的 theme / lang / noteViewMode / homePage 写逻辑。
  * 顺序:本地立即生效 + localStorage → lang 变化同步 i18n → 游客到此为止(只本地)→

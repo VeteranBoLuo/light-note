@@ -1,6 +1,6 @@
 import pool from '../db/index.js';
 import { resultData, snakeCaseKeys, mergeExistingProperties, insertData, generateUUID } from '../util/common.js';
-import { RESOURCE_TYPE, insertResourceTagRelations } from '../util/resourceTags.js';
+import { grantExp } from '../util/growth.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
@@ -207,68 +207,6 @@ export const registerUser = async (req, res) => {
     await pool.query('INSERT INTO user SET ?', [userData]);
     const userId = userData.id;
 
-    // 创建示例数据（非关键操作，失败不影响注册）
-    try {
-      // 默认书签
-      const bookmarkData = {
-        name: 'iconify',
-        userId: userId,
-        url: 'https://icon-sets.iconify.design/',
-        description: '全球最大的免费图标网站之一',
-      };
-      const bmData = insertData(bookmarkData);
-      await pool.query('INSERT INTO bookmark SET ?', [bmData]);
-      const bookmarkId = bmData.id;
-
-      // 示例标签
-      const tagData = {
-        name: '示例标签',
-        userId: userId,
-        iconUrl:
-          'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPjxwYXRoIGZpbGw9IiM2YzgyZmYiIGQ9Ik02LjkyMyAxLjM3OGEzIDMgMCAwIDEgMi4xNTQgMGw0Ljk2MiAxLjkwOGExLjUgMS41IDAgMCAxIC45NjEgMS40djYuNjI2YTEuNSAxLjUgMCAwIDEtLjk2MSAxLjRsLTQuOTYyIDEuOTA5YTMgMyAwIDAgMS0yLjE1NCAwbC00Ljk2MS0xLjkwOWExLjUgMS41IDAgMCAxLS45NjItMS40VjQuNjg2YTEuNSAxLjUgMCAwIDEgLjk2Mi0xLjR6bTEuNzk1LjkzM2EyIDIgMCAwIDAtMS40MzYgMGwtMS4zODQuNTMzbDUuNTkgMi4xMTZsMS45NDgtLjgzNHpNMTQgNC45NzFMOC41IDcuMzN2Ni40MjhxLjExLS4wMjguMjE4LS4wN2w0Ljk2Mi0xLjkwOGEuNS41IDAgMCAwIC4zMi0uNDY3em0tNi41IDguNzg2VjcuMzNMMiA0Ljk3MnY2LjM0YS41LjUgMCAwIDAgLjMyLjQ2N2w0Ljk2MiAxLjkwOHEuMTA3LjA0Mi4yMTguMDdNMi41NjQgNC4xMjZMOCA2LjQ1NmwyLjE2NC0uOTI4bC01LjY2Ny0yLjE0NnoiLz48L3N2Zz4=',
-        sort: 0,
-      };
-      const tgData = insertData(tagData);
-      await pool.query('INSERT INTO tag SET ?', [tgData]);
-      const tagId = tgData.id;
-
-      await insertResourceTagRelations(pool, {
-        tagIds: [tagId],
-        resourceType: RESOURCE_TYPE.BOOKMARK,
-        resourceId: bookmarkId,
-        userId,
-      });
-
-      // 无标签书签
-      const bookmarkData2 = {
-        name: '示例书签',
-        userId: userId,
-        url: 'https://example.com',
-        description: '这是一个示例书签，没有关联标签',
-      };
-      await pool.query('INSERT INTO bookmark SET ?', [insertData(bookmarkData2)]);
-
-      // 无书签标签
-      const tagData2 = {
-        name: '示例标签2',
-        userId: userId,
-        iconUrl:
-          'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPjxwYXRoIGZpbGw9IiM2YzgyZmYiIGQ9Ik02LjkyMyAxLjM3OGEzIDMgMCAwIDEgMi4xNTQgMGw0Ljk2MiAxLjkwOGExLjUgMS41IDAgMCAxIC45NjEgMS40djYuNjI2YTEuNSAxLjUgMCAwIDEtLjk2MSAxLjRsLTQuOTYyIDEuOTA5YTMgMyAwIDAgMS0yLjE1NCAwbC00Ljk2MS0xLjkwOWExLjUgMS41IDAgMCAxLS45NjItMS40VjQuNjg2YTEuNSAxLjUgMCAwIDEgLjk2Mi0xLjR6bTEuNzk1LjkzM2EyIDIgMCAwIDAtMS40MzYgMGwtMS4zODQuNTMzbDUuNTkgMi4xMTZsMS45NDgtLjgzNHpNMTQgNC45NzFMOC41IDcuMzN2Ni40MjhxLjExLS4wMjguMjE4LS4wN2w0Ljk2Mi0xLjkwOGEuNS41IDAgMCAwIC4zMi0uNDY3em0tNi41IDguNzg2VjcuMzNMMiA0Ljk3MnY2LjM0YS41LjUgMCAwIDAgLjMyLjQ2N2w0Ljk2MiAxLjkwOHEuMTA3LjA0Mi4yMTguMDdNMi41NjQgNC4xMjZMOCA2LjQ1NmwyLjE2NC0uOTI4bC01LjY2Ny0yLjE0NnoiLz48L3N2Zz4=',
-        sort: 1,
-      };
-      await pool.query('INSERT INTO tag SET ?', [insertData(tagData2)]);
-
-      // 示例笔记
-      const noteData = {
-        title: '示例笔记',
-        content: '<p>这是您的第一条笔记，欢迎使用轻笺！</p>',
-        createBy: userId,
-      };
-      await pool.query('INSERT INTO note SET ?', [insertData(noteData)]);
-    } catch (err) {
-      console.error('创建示例数据失败，但不影响注册:', err.message);
-    }
-
     // 记录日志（非关键，失败不影响注册）
     try {
       const system = JSON.stringify({
@@ -291,7 +229,7 @@ export const registerUser = async (req, res) => {
       console.error('注册日志更新错误:', err.message);
     }
 
-    // 注册即登录:签发会话,前端直接进应用(激活预置示例数据的即时价值)
+    // 注册即登录:签发会话,前端直接进应用(新用户从空状态开始,由前端空态引导上手)
     const userInfo = await queryUserInfoById(userId);
     const sid = await issueLoginSession(req, res, userInfo, Boolean(req.body.rememberMe));
     recordConversionEvent(req, 'register', '', { userId, visitorType: 'admin' });
@@ -467,7 +405,8 @@ export const saveUserInfo = (req, res) => {
     ];
     const rootAllowedFields = [
       ...selfAllowedFields,
-      'password',
+      // 注:不含 password —— 编辑弹框直接改 password 会明文写库、绕过 scrypt,导致该用户登录失败。
+      // 改密码请走 configPassword(scrypt 加密),不在此表单改。
       'role',
       'ip',
       'del_flag',
@@ -487,6 +426,11 @@ export const saveUserInfo = (req, res) => {
       .query('update user set ? where id=?', [finalBody, id])
       .then(([result]) => {
         res.send(resultData(result));
+        // 完善个人资料激励:本次更新涉及昵称或头像时一次性 +20(profile_done 幂等,只发一次)。
+        // 响应之后 fire-and-forget,不阻塞、不影响保存结果。
+        if (!isRoot && (finalBody.alias || finalBody.head_picture)) {
+          grantExp(id, 'profile_done', { refId: 'profile', amount: 20, userRole: req.user?.role }).catch(() => {});
+        }
       })
       .catch((err) => {
         res.send(resultData(null, 500, '服务器内部错误: ' + err.message)); // 设置状态码为500
@@ -532,7 +476,7 @@ export const github = async (req, res) => {
     const githubUser = { ...baseUser, email: safeEmail };
 
     // 3. 数据库操作（查找/创建用户）
-    const user = await handleUserDatabaseOperation(githubUser);
+    const user = await handleUserDatabaseOperation(githubUser, req);
     const sid = await issueLoginSession(req, res, user, true);
 
     res.send(
@@ -664,7 +608,7 @@ const getGitHubEmail = async (accessToken, retries = 2) => {
   }
 };
 
-const handleUserDatabaseOperation = async (githubUser) => {
+const handleUserDatabaseOperation = async (githubUser, req) => {
   // 邮箱降级策略：使用GitHub提供的备用邮箱格式
   const safeEmail = githubUser.email || `${githubUser.login}@users.noreply.github.com`;
   // 1. 优先使用github_id查询
@@ -689,77 +633,18 @@ const handleUserDatabaseOperation = async (githubUser) => {
   // 3. 创建新用户
   const githubUserId = generateUUID();
   const githubHashedPassword = hashPassword('123456');
+  // 与邮箱注册对齐:role 服务端写死 'admin'(缺失会让新用户 role=null → 全站 403 无权限),并给默认 preferences
+  const defaultPreferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark' });
   await pool.query(
     `INSERT INTO user
-      (id, email, github_id, login_type, head_picture, password, password_method, alias)
-     VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?)`,
-    [githubUserId, safeEmail, githubUser.id, githubUser.avatar_url, githubHashedPassword, githubUser.login],
+      (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
+     VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'admin', ?)`,
+    [githubUserId, safeEmail, githubUser.id, githubUser.avatar_url, githubHashedPassword, githubUser.login, defaultPreferences],
   );
   const [result] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
 
-  // 创建示例数据（非关键操作，失败不影响注册）
-  try {
-    const userId = result[0].id;
-
-    // 默认书签
-    const bookmarkData = {
-      name: 'iconify',
-      userId: userId,
-      url: 'https://icon-sites.iconify.design/',
-      description: '全球最大的免费图标网站之一',
-    };
-    const bmData = insertData(bookmarkData);
-    await pool.query('INSERT INTO bookmark SET ?', [bmData]);
-    const bookmarkId = bmData.id;
-
-    // 示例标签
-    const tagData = {
-      name: '示例标签',
-      userId: userId,
-      iconUrl:
-        'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPjxwYXRoIGZpbGw9IiM2YzgyZmYiIGQ9Ik02LjkyMyAxLjM3OGEzIDMgMCAwIDEgMi4xNTQgMGw0Ljk2MiAxLjkwOGExLjUgMS41IDAgMCAxIC45NjEgMS40djYuNjI2YTEuNSAxLjUgMCAwIDEtLjk2MSAxLjRsLTQuOTYyIDEuOTA5YTMgMyAwIDAgMS0yLjE1NCAwbC00Ljk2MS0xLjkwOWExLjUgMS41IDAgMCAxLS45NjItMS40VjQuNjg2YTEuNSAxLjUgMCAwIDEgLjk2Mi0xLjR6bTEuNzk1LjkzM2EyIDIgMCAwIDAtMS40MzYgMGwtMS4zODQuNTMzbDUuNTkgMi4xMTZsMS45NDgtLjgzNHpNMTQgNC45NzFMOC41IDcuMzN2Ni40MjhxLjExLS4wMjguMjE4LS4wN2w0Ljk2Mi0xLjkwOGEuNS41IDAgMCAwIC4zMi0uNDY3em0tNi41IDguNzg2VjcuMzNMMiA0Ljk3MnY2LjM0YS41LjUgMCAwIDAgLjMyLjQ2N2w0Ljk2MiAxLjkwOHEuMTA3LjA0Mi4yMTguMDdNMi41NjQgNC4xMjZMOCA2LjQ1NmwyLjE2NC0uOTI4bC01LjY2Ny0yLjE0NnoiLz48L3N2Zz4=',
-      sort: 0,
-    };
-    const tgData = insertData(tagData);
-    await pool.query('INSERT INTO tag SET ?', [tgData]);
-    const tagId = tgData.id;
-
-    await insertResourceTagRelations(pool, {
-      tagIds: [tagId],
-      resourceType: RESOURCE_TYPE.BOOKMARK,
-      resourceId: bookmarkId,
-      userId,
-    });
-
-    // 无标签书签
-    const bookmarkData2 = {
-      name: '示例书签',
-      userId: userId,
-      url: 'https://example.com',
-      description: '这是一个示例书签，没有关联标签',
-    };
-    await pool.query('INSERT INTO bookmark SET ?', [insertData(bookmarkData2)]);
-
-    // 无书签标签
-    const tagData2 = {
-      name: '示例标签2',
-      userId: userId,
-      iconUrl:
-        'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMTYgMTYiPjxwYXRoIGZpbGw9IiM2YzgyZmYiIGQ9Ik02LjkyMyAxLjM3OGEzIDMgMCAwIDEgMi4xNTQgMGw0Ljk2MiAxLjkwOGExLjUgMS41IDAgMCAxIC45NjEgMS40djYuNjI2YTEuNSAxLjUgMCAwIDEtLjk2MSAxLjRsLTQuOTYyIDEuOTA5YTMgMyAwIDAgMS0yLjE1NCAwbC00Ljk2MS0xLjkwOWExLjUgMS41IDAgMCAxLS45NjItMS40VjQuNjg2YTEuNSAxLjUgMCAwIDEgLjk2Mi0xLjR6bTEuNzk1LjkzM2EyIDIgMCAwIDAtMS40MzYgMGwtMS4zODQuNTMzbDUuNTkgMi4xMTZsMS45NDgtLjgzNHpNMTQgNC45NzFMOC41IDcuMzN2Ni40MjhxLjExLS4wMjguMjE4LS4wN2w0Ljk2Mi0xLjkwOGEuNS41IDAgMCAwIC4zMi0uNDY3em0tNi41IDguNzg2VjcuMzNMMiA0Ljk3MnY2LjM0YS41LjUgMCAwIDAgLjMyLjQ2N2w0Ljk2MiAxLjkwOHEuMTA3LjA0Mi4yMTguMDdNMi41NjQgNC4xMjZMOCA2LjQ1NmwyLjE2NC0uOTI4bC01LjY2Ny0yLjE0NnoiLz48L3N2Zz4=',
-      sort: 1,
-    };
-    await pool.query('INSERT INTO tag SET ?', [insertData(tagData2)]);
-
-    // 示例笔记
-    const noteData = {
-      title: '示例笔记',
-      content: '<p>这是您的第一条笔记，欢迎使用轻笺！</p>',
-      createBy: userId,
-    };
-    await pool.query('INSERT INTO note SET ?', [insertData(noteData)]);
-  } catch (err) {
-    console.error('创建示例数据失败，但不影响注册:', err.message);
-  }
+  // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
+  recordConversionEvent(req, 'register', '', { userId: githubUserId, visitorType: 'admin' });
 
   // 返回新插入的完整用户数据
   return result[0];

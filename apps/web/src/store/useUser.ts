@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import icon from '@/config/icon.ts';
+import bookmarkStore from './bookmark.ts';
 
 // 接口定义
 interface UserLocation {
@@ -31,6 +32,7 @@ interface UserInfo {
     noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
     lang?: 'zh-CN' | 'en-US'; // 语言
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
+    uiScale?: 'small' | 'medium' | 'large'; // 界面缩放(整体风格:小/标准/大,用 zoom 实现)
   };
 }
 
@@ -113,15 +115,23 @@ export default defineStore('user', {
      * 设置用户信息
      */
     setUserInfo(val: Partial<UserInfo>): void {
+      const prevId = this.id;
       const nextUser = { ...createDefaultUserState(), ...val };
       nextUser.preferences = normalizePreferences(val.preferences);
       Object.assign(this, nextUser);
+      // 账号发生切换时,作废上一账号的书签/标签缓存,
+      // 避免游客浏览后注册自动登录、左侧标签仍显示上一账号(游客)的旧数据。
+      if (prevId !== this.id) {
+        bookmarkStore().reset();
+      }
     },
     /**
      * 重置用户信息
      */
     resetUserInfo(): void {
       Object.assign(this, createDefaultUserState());
+      // 登出时一并清空资源缓存,避免下一个账号看到上一个账号残留的标签/书签。
+      bookmarkStore().reset();
     },
     /**
      * 获取用户信息（敏感信息除外）

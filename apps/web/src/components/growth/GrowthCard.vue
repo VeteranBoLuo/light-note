@@ -1,7 +1,8 @@
 <template>
   <div v-if="g" class="growth-card">
+    <div class="gc-main">
     <div class="gc-top">
-      <div class="gc-badge" :class="`tier-${tier}`">
+      <div class="gc-badge" :style="{ background: TIER_GRADIENTS[tier] }">
         <span class="gc-lv">Lv.{{ g.level }}</span>
       </div>
       <div class="gc-meta">
@@ -36,6 +37,18 @@
       </div>
     </div>
 
+    <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->
+    <div v-if="!g.isMax" class="gc-daily">
+      <div class="gc-daily-head">
+        <span>{{ t('growth.dailyTitle') }}</span>
+        <span class="gc-daily-num" :class="{ full: g.dailyCapReached }">{{ g.dailyExp }} / {{ g.dailyCap }}</span>
+      </div>
+      <div class="gc-daily-bar">
+        <div class="gc-daily-fill" :class="{ full: g.dailyCapReached }" :style="{ width: dailyPercent + '%' }"></div>
+      </div>
+      <div v-if="g.dailyCapReached" class="gc-daily-tip">{{ t('growth.dailyReached') }}</div>
+    </div>
+
     <div class="gc-earn">
       <div class="gc-earn-head">{{ t('growth.earnTitle') }}</div>
       <div class="gc-earn-list">
@@ -43,11 +56,11 @@
         <div class="gc-earn-item"><span>{{ t('growth.earnCreate') }}</span><b>+10~15</b></div>
         <div class="gc-earn-item"><span>{{ t('growth.earnFirst') }}</span><b>+30</b></div>
         <div class="gc-earn-item"><span>{{ t('growth.earnProfile') }}</span><b>+20</b></div>
-        <div class="gc-earn-item"><span>{{ t('growth.earnTag') }}</span><b>+2</b></div>
       </div>
     </div>
+    </div>
 
-    <RankLadder />
+    <RankLadder class="gc-ladder" />
   </div>
 
   <LevelUpOverlay v-if="lvUp" :level="lvUp.level" :name="lvUp.name" @close="lvUp = null" />
@@ -61,6 +74,7 @@
   import LevelUpOverlay from '@/components/growth/LevelUpOverlay.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
 
   const { t } = useI18n();
   const { growth: g, load, doCheckin, markRead } = useGrowth();
@@ -76,17 +90,20 @@
     }
   });
 
-  // 段位分 5 档配色,越高越"贵重"(荣誉感)
-  const tier = computed(() => {
-    const l = g.value?.level || 1;
-    return l >= 13 ? 5 : l >= 10 ? 4 : l >= 7 ? 3 : l >= 4 ? 2 : 1;
-  });
+  // 段位分档:tier 计算收口在 config/growthTier
+  const tier = computed(() => tierOf(g.value?.level || 1));
 
   const spaceLabel = computed(() => {
     const mb = g.value?.spaceMb || 0;
     return mb >= 1024 ? `${+(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
   });
   const tokenLabel = computed(() => (g.value?.aiTokenDaily || 0).toLocaleString('en-US'));
+  // 今日经验进度百分比(0-100)
+  const dailyPercent = computed(() => {
+    const cap = g.value?.dailyCap || 0;
+    if (!cap) return 0;
+    return Math.min(100, Math.round(((g.value?.dailyExp || 0) / cap) * 100));
+  });
 
   async function onCheckin() {
     if (checking.value || g.value?.checkedInToday) return;
@@ -121,6 +138,33 @@
     flex-direction: column;
     gap: 14px;
   }
+  .gc-main {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  /* 大屏两栏:左信息 + 右段位路线,消除单列居中的两侧留白 */
+  @media (min-width: 900px) {
+    .growth-card {
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 28px;
+    }
+    .gc-main {
+      flex: 1 1 auto;
+    }
+    .gc-ladder {
+      flex: 0 0 320px;
+      width: 320px;
+    }
+    .gc-ladder :deep(.rank-ladder) {
+      margin-top: 0;
+    }
+    .gc-ladder :deep(.rl-list) {
+      max-height: 460px;
+    }
+  }
   .gc-top {
     display: flex;
     align-items: center;
@@ -141,22 +185,6 @@
     font-size: 15px;
     font-weight: 800;
     letter-spacing: -0.02em;
-  }
-  /* 段位分档配色 */
-  .tier-1 {
-    background: linear-gradient(135deg, #6b7280, #9ca3af);
-  }
-  .tier-2 {
-    background: linear-gradient(135deg, #2563eb, #38bdf8);
-  }
-  .tier-3 {
-    background: linear-gradient(135deg, #7c3aed, #a855f7);
-  }
-  .tier-4 {
-    background: linear-gradient(135deg, #d97706, #fbbf24);
-  }
-  .tier-5 {
-    background: linear-gradient(135deg, #db2777, #f43f5e, #fb923c);
   }
   .gc-meta {
     flex: 1 1 auto;
@@ -250,6 +278,46 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
   }
+  /* 每日经验 */
+  .gc-daily {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .gc-daily-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .gc-daily-num {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+  .gc-daily-num.full {
+    color: var(--primary-color);
+  }
+  .gc-daily-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card-border-color) 45%, transparent);
+    overflow: hidden;
+  }
+  .gc-daily-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #34d399, #22d3ee);
+    transition: width 0.4s ease;
+  }
+  .gc-daily-fill.full {
+    background: linear-gradient(90deg, var(--primary-color), #f43f5e);
+  }
+  .gc-daily-tip {
+    font-size: 11.5px;
+    color: var(--primary-color);
+  }
   .gc-earn {
     display: flex;
     flex-direction: column;
@@ -285,8 +353,6 @@
     .gc-earn-list {
       grid-template-columns: 1fr;
     }
-  }
-  @media (max-width: 560px) {
     .gc-perks {
       flex-direction: column;
     }

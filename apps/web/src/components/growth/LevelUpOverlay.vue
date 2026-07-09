@@ -3,9 +3,16 @@
   <transition name="lvup-fade" appear>
     <div v-if="visible" class="lvup-mask" @click="close">
       <div class="lvup-stage" @click.stop>
-        <div class="lvup-rays"></div>
-        <div class="lvup-ring lvup-ring--1"></div>
-        <div class="lvup-ring lvup-ring--2"></div>
+        <div class="lvup-rays" :class="`tier-${tier}`"></div>
+        <div v-if="tier >= 5" class="lvup-aura"></div>
+        <div
+          v-for="r in ringCount"
+          :key="r"
+          class="lvup-ring"
+          :style="{ animationDelay: `${(r - 1) * 0.5}s` }"
+        ></div>
+
+        <div v-if="tier >= 4" class="lvup-crown" :class="{ 'crown-gold': tier >= 5 }" aria-hidden="true">👑</div>
 
         <div class="lvup-badge" :class="`tier-${tier}`">
           <span class="lvup-badge-shine"></span>
@@ -30,49 +37,50 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { tierOf } from '@/config/growthTier';
 
   const props = defineProps<{ level: number; name: string }>();
   const emit = defineEmits<{ (e: 'close'): void }>();
   const { t } = useI18n();
 
   const visible = ref(true);
-  const tier = computed(() => (props.level >= 13 ? 5 : props.level >= 10 ? 4 : props.level >= 7 ? 3 : props.level >= 4 ? 2 : 1));
+  // tier 越高越隆重(1~5)。阈值收口在 config/growthTier。
+  const tier = computed(() => tierOf(props.level));
 
-  // 彩带:从中心爆发,随机角度/距离/颜色/延迟
+  // 光环层数随 tier 递增:tier1-2 两环、tier3-4 三环、tier5 四环
+  const ringCount = computed(() => (tier.value >= 5 ? 4 : tier.value >= 3 ? 3 : 2));
+
+  // 彩带:数量随 tier 递增(tier1≈22 → tier5≈54),从中心爆发,随机角度/距离/颜色/延迟
   const COLORS = ['#615ced', '#22d3ee', '#fbbf24', '#f43f5e', '#34d399', '#fb923c', '#a855f7'];
-  const pieces = Array.from({ length: 28 }).map((_, i) => {
-    const angle = (360 / 28) * i + (i % 3) * 7;
-    const dist = 120 + (i % 5) * 26;
-    const rad = (angle * Math.PI) / 180;
-    return {
-      i,
-      style: {
-        '--tx': `${Math.cos(rad) * dist}px`,
-        '--ty': `${Math.sin(rad) * dist}px`,
-        '--rot': `${(i % 2 ? 1 : -1) * (180 + (i % 6) * 60)}deg`,
-        '--delay': `${(i % 7) * 40}ms`,
-        background: COLORS[i % COLORS.length],
-        width: i % 3 === 0 ? '7px' : '9px',
-        height: i % 3 === 0 ? '12px' : '9px',
-      } as Record<string, string>,
-    };
+  const pieces = computed(() => {
+    const count = 14 + tier.value * 8;
+    return Array.from({ length: count }).map((_, i) => {
+      const angle = (360 / count) * i + (i % 3) * 7;
+      const dist = 120 + (i % 5) * 26 + tier.value * 8;
+      const rad = (angle * Math.PI) / 180;
+      return {
+        i,
+        style: {
+          '--tx': `${Math.cos(rad) * dist}px`,
+          '--ty': `${Math.sin(rad) * dist}px`,
+          '--rot': `${(i % 2 ? 1 : -1) * (180 + (i % 6) * 60)}deg`,
+          '--delay': `${(i % 7) * 40}ms`,
+          background: COLORS[i % COLORS.length],
+          width: i % 3 === 0 ? '7px' : '9px',
+          height: i % 3 === 0 ? '12px' : '9px',
+        } as Record<string, string>,
+      };
+    });
   });
 
-  let timer: ReturnType<typeof setTimeout> | null = null;
   function close() {
     if (!visible.value) return;
     visible.value = false;
-    if (timer) clearTimeout(timer);
     setTimeout(() => emit('close'), 260); // 等淡出过渡结束
   }
-  onMounted(() => {
-    timer = setTimeout(close, 4200); // 自动关闭
-  });
-  onBeforeUnmount(() => {
-    if (timer) clearTimeout(timer);
-  });
+  // 注意:不再设自动关闭定时器。庆祝动画常驻,直到用户点击遮罩或刷新页面(方便截图/展示)。
 </script>
 
 <style scoped lang="less">
@@ -117,8 +125,44 @@
     -webkit-mask: radial-gradient(circle, transparent 34px, #000 36px 120px, transparent 150px);
     mask: radial-gradient(circle, transparent 34px, #000 36px 120px, transparent 150px);
   }
+  /* 放射光强度随 tier 递增,tier5 转为金色 */
+  .lvup-rays.tier-1 {
+    opacity: 0.4;
+  }
+  .lvup-rays.tier-2 {
+    opacity: 0.6;
+  }
+  .lvup-rays.tier-3 {
+    opacity: 0.8;
+  }
+  .lvup-rays.tier-4 {
+    opacity: 0.95;
+    filter: brightness(1.15);
+  }
+  .lvup-rays.tier-5 {
+    opacity: 1;
+    filter: brightness(1.4) saturate(1.3);
+    background: conic-gradient(
+      from 0deg,
+      transparent 0 7deg,
+      rgba(255, 214, 130, 0.32) 7deg 15deg,
+      transparent 15deg 22deg
+    );
+  }
 
-  /* 光环脉冲 */
+  /* tier5 专属金色光晕 */
+  .lvup-aura {
+    position: absolute;
+    top: 92px;
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 196, 92, 0.5), rgba(255, 150, 60, 0.12) 55%, transparent 72%);
+    animation: lvup-aura 2.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  /* 光环脉冲(数量随 tier) */
   .lvup-ring {
     position: absolute;
     top: 92px;
@@ -126,12 +170,22 @@
     height: 96px;
     border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.5);
+    animation: lvup-ring 1.7s ease-out infinite;
   }
-  .lvup-ring--1 {
-    animation: lvup-ring 1.6s ease-out infinite;
+
+  /* 皇冠(tier4 起,tier5 镀金) */
+  .lvup-crown {
+    position: absolute;
+    top: 58px;
+    left: 50%;
+    z-index: 3;
+    font-size: 30px;
+    line-height: 1;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
+    animation: lvup-crown-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
   }
-  .lvup-ring--2 {
-    animation: lvup-ring 1.6s ease-out infinite 0.8s;
+  .lvup-crown.crown-gold {
+    filter: drop-shadow(0 0 12px rgba(255, 200, 80, 0.95));
   }
 
   /* 徽章 */
@@ -169,20 +223,29 @@
     transform: skewX(-18deg);
     animation: lvup-shine 1.8s ease-in-out 0.7s infinite;
   }
-  .tier-1 {
+  /* 徽章配色随 tier(用 .lvup-badge 前缀,避免误套到 .lvup-rays.tier-N) */
+  .lvup-badge.tier-1 {
     background: linear-gradient(135deg, #6b7280, #9ca3af);
   }
-  .tier-2 {
+  .lvup-badge.tier-2 {
     background: linear-gradient(135deg, #2563eb, #38bdf8);
   }
-  .tier-3 {
+  .lvup-badge.tier-3 {
     background: linear-gradient(135deg, #7c3aed, #a855f7);
   }
-  .tier-4 {
+  .lvup-badge.tier-4 {
     background: linear-gradient(135deg, #d97706, #fbbf24);
+    box-shadow:
+      0 18px 40px -12px rgba(0, 0, 0, 0.6),
+      0 0 0 6px rgba(255, 255, 255, 0.08),
+      0 0 28px rgba(251, 191, 36, 0.55);
   }
-  .tier-5 {
+  .lvup-badge.tier-5 {
     background: linear-gradient(135deg, #db2777, #f43f5e, #fb923c);
+    box-shadow:
+      0 18px 40px -12px rgba(0, 0, 0, 0.6),
+      0 0 0 6px rgba(255, 255, 255, 0.12),
+      0 0 42px rgba(244, 63, 94, 0.65);
   }
 
   /* 彩带 */
@@ -273,6 +336,27 @@
       opacity: 0;
     }
   }
+  @keyframes lvup-aura {
+    0%,
+    100% {
+      transform: scale(0.9);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scale(1.18);
+      opacity: 0.9;
+    }
+  }
+  @keyframes lvup-crown-in {
+    0% {
+      transform: translate(-50%, 8px) scale(0);
+      opacity: 0;
+    }
+    100% {
+      transform: translate(-50%, 0) scale(1);
+      opacity: 1;
+    }
+  }
   @keyframes lvup-ray-in {
     from {
       transform: scale(0.4);
@@ -321,7 +405,8 @@
     .lvup-rays,
     .lvup-ring,
     .lvup-badge-shine,
-    .lvup-confetti li {
+    .lvup-confetti li,
+    .lvup-aura {
       animation: none;
     }
     .lvup-badge {
@@ -329,6 +414,9 @@
     }
     .lvup-ring {
       display: none;
+    }
+    .lvup-crown {
+      animation: none;
     }
   }
 </style>

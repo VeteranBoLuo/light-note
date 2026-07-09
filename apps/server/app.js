@@ -5,6 +5,7 @@ import { baseRouter } from './util/common.js';
 import { accountBanMiddleware, authMiddleware, startSessionMaintenance } from './util/auth.js';
 import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } from './util/security/index.js';
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
+import { ensureNotificationTable } from './util/notification.js';
 import rateLimit from 'express-rate-limit';
 
 import dotenv from 'dotenv';
@@ -56,6 +57,7 @@ allRouter.forEach((item) => {
 
 startSessionMaintenance();
 ensureSecurityTables().catch((err) => console.error('安全模块初始化失败:', err.message));
+ensureNotificationTable().catch((err) => console.error('通知表初始化失败:', err.message));
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

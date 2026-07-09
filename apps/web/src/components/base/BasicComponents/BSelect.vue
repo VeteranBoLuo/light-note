@@ -225,11 +225,8 @@ function handleClear() {
 
 function toggleOpen() {
   isOpen.value = !isOpen.value;
-  if (isOpen.value) {
-    placementAbove = false;
-    searchText.value = '';
-    nextTick(() => updateDropdownPosition());
-  }
+  // 打开时的定位统一交给 watch(isOpen),覆盖 toggleOpen / 内联搜索框 @focus @input / keepOpen 所有打开路径
+  if (isOpen.value) searchText.value = '';
 }
 
 function keepOpen() {
@@ -303,6 +300,10 @@ onUnmounted(() => {
 // 窗口滚动/缩放时更新位置
 watch(isOpen, (val) => {
   if (val) {
+    // 无论从哪条路径打开(点击 / 单选可搜索时内联 input 的 focus·input / keepOpen),都在此统一算定位。
+    // 修复:「单选+可搜索」的内联 input 带 @click.stop 绕过了 toggleOpen,导致面板从未计算位置、停在左上角(0,0)。
+    placementAbove = false;
+    nextTick(() => updateDropdownPosition());
     window.addEventListener('scroll', updateDropdownPosition, true);
     window.addEventListener('resize', updateDropdownPosition);
   } else {

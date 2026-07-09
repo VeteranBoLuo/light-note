@@ -13,23 +13,24 @@ import pool from '../db/index.js';
 import crypto from 'crypto';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
-// 数值取自《总方案》二节权益对照表(已定稿,勿擅改)。容量:Lv1–3 直给 MB,Lv4+ 由展示 GB×1024 取整。
+// 容量曲线(方案A,前期平缓、后期陡增,凸显高等级价值):Lv1 0.5G → Lv10 5G → Lv15 20G,
+// 11 级起明显加速(5→7→9→12→16→20G)。数值 = 展示 GB×1024 取整;后端按 level 下发真实配额。
 export const RANKS = [
-  { level: 1, name: '蒙童', cumExp: 0, spaceMb: 500, aiTokenDaily: 100_000 },
-  { level: 2, name: '书生', cumExp: 500, spaceMb: 700, aiTokenDaily: 120_000 },
-  { level: 3, name: '秀才', cumExp: 1000, spaceMb: 900, aiTokenDaily: 150_000 },
-  { level: 4, name: '举人', cumExp: 1700, spaceMb: 1229, aiTokenDaily: 180_000 },
-  { level: 5, name: '贡士', cumExp: 2700, spaceMb: 1536, aiTokenDaily: 220_000 },
-  { level: 6, name: '进士', cumExp: 4000, spaceMb: 1843, aiTokenDaily: 260_000 },
-  { level: 7, name: '探花', cumExp: 5800, spaceMb: 2253, aiTokenDaily: 300_000 },
-  { level: 8, name: '榜眼', cumExp: 8000, spaceMb: 2662, aiTokenDaily: 350_000 },
-  { level: 9, name: '状元', cumExp: 10800, spaceMb: 3072, aiTokenDaily: 400_000 },
-  { level: 10, name: '翰林', cumExp: 14500, spaceMb: 3482, aiTokenDaily: 460_000 },
-  { level: 11, name: '学士', cumExp: 19000, spaceMb: 3891, aiTokenDaily: 520_000 },
-  { level: 12, name: '大学士', cumExp: 25000, spaceMb: 4301, aiTokenDaily: 590_000 },
-  { level: 13, name: '文豪', cumExp: 32000, spaceMb: 4608, aiTokenDaily: 660_000 },
-  { level: 14, name: '文宗', cumExp: 40000, spaceMb: 4915, aiTokenDaily: 730_000 },
-  { level: 15, name: '文圣', cumExp: 50000, spaceMb: 5120, aiTokenDaily: 800_000 },
+  { level: 1, name: '蒙童', cumExp: 0, spaceMb: 512, aiTokenDaily: 100_000 },
+  { level: 2, name: '书生', cumExp: 500, spaceMb: 768, aiTokenDaily: 120_000 },
+  { level: 3, name: '秀才', cumExp: 1000, spaceMb: 1024, aiTokenDaily: 150_000 },
+  { level: 4, name: '举人', cumExp: 1700, spaceMb: 1536, aiTokenDaily: 180_000 },
+  { level: 5, name: '贡士', cumExp: 2700, spaceMb: 2048, aiTokenDaily: 220_000 },
+  { level: 6, name: '进士', cumExp: 4000, spaceMb: 2560, aiTokenDaily: 260_000 },
+  { level: 7, name: '探花', cumExp: 5800, spaceMb: 3072, aiTokenDaily: 300_000 },
+  { level: 8, name: '榜眼', cumExp: 8000, spaceMb: 3584, aiTokenDaily: 350_000 },
+  { level: 9, name: '状元', cumExp: 10800, spaceMb: 4352, aiTokenDaily: 400_000 },
+  { level: 10, name: '翰林', cumExp: 14500, spaceMb: 5120, aiTokenDaily: 460_000 },
+  { level: 11, name: '学士', cumExp: 19000, spaceMb: 7168, aiTokenDaily: 520_000 },
+  { level: 12, name: '大学士', cumExp: 25000, spaceMb: 9216, aiTokenDaily: 590_000 },
+  { level: 13, name: '文豪', cumExp: 32000, spaceMb: 12288, aiTokenDaily: 660_000 },
+  { level: 14, name: '文宗', cumExp: 40000, spaceMb: 16384, aiTokenDaily: 730_000 },
+  { level: 15, name: '文圣', cumExp: 50000, spaceMb: 20480, aiTokenDaily: 800_000 },
 ];
 
 export const MAX_LEVEL = 15;
@@ -113,7 +114,9 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     // 2. 日 EXP 硬顶:当日已发放合计(含刚插入的 0)→ 截断本次发放量
     // 里程碑/一次性来源豁免日顶(一次性、幂等、非刷点):首次成就、升级里程碑、手动。
     // 日顶只压可重复的日常/创造来源(签到、书签/笔记/文件衰减、批量导入)。
-    const capExempt = source === 'first_own_resource' || source === 'milestone' || source === 'manual';
+    // profile_done 与 first_own_resource 同属一次性成就(幂等、非刷点),一并豁免日顶,保证必得
+    const capExempt =
+      source === 'first_own_resource' || source === 'milestone' || source === 'manual' || source === 'profile_done';
     let used = 0;
     if (!capExempt) {
       const [[sumRow]] = await c.query(
@@ -145,11 +148,23 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     if (toLevel > fromLevel) {
       leveledUp = true;
       for (let L = fromLevel + 1; L <= toLevel; L++) {
+        const rankName = rankOf(L).name;
         await c.query(
           `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
            VALUES (?, 'milestone', ?, NULL, 0, 'granted', ?)`,
-          [userId, `level_up_L${L}`, JSON.stringify({ from: L - 1, to: L, rank: rankOf(L).name })],
+          [userId, `level_up_L${L}`, JSON.stringify({ from: L - 1, to: L, rank: rankName })],
         );
+        // 通知中心:同事务写一条升级通知(裸 SQL,避免 growth→notification→common 的循环 import)。
+        // 前端按 type=level_up + meta 渲染 i18n 文案;通知表未就绪时吞错,绝不回滚已发经验。
+        try {
+          await c.query(
+            `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
+             VALUES (?, ?, 'level_up', ?, NULL, '/growth', ?, 0)`,
+            [crypto.randomUUID(), userId, `升级到 Lv.${L} ${rankName}`, JSON.stringify({ level: L, name: rankName })],
+          );
+        } catch (notifyErr) {
+          console.error('写升级通知失败(不影响升级):', notifyErr.message);
+        }
       }
     }
 
@@ -238,6 +253,17 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   const span = nextExp ? nextExp - rank.cumExp : 0; // 本级跨度
   const progress = isMax ? 100 : span > 0 ? Math.max(0, Math.min(100, Math.round(((exp - rank.cumExp) / span) * 100))) : 0;
   const hasUnreadLevelUp = userRole !== 'root' && level > lastNotifiedLevel; // 升级通知未读(通知中心随 level_up)
+  // 今日已获经验(仅计入受日顶约束的来源,口径与 grantExp 日顶一致),供前端展示"每日上限"进度
+  let dailyExp = 0;
+  if (userId && userId !== 'visitor' && userRole !== 'root') {
+    const [[dRow]] = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
+       WHERE user_id = ? AND status = 'granted' AND DATE(create_time) = CURDATE()
+         AND source NOT IN ('first_own_resource', 'milestone', 'manual', 'profile_done')`,
+      [userId],
+    );
+    dailyExp = Number(dRow.s || 0);
+  }
   return {
     exp,
     level,
@@ -253,7 +279,24 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     hasUnreadLevelUp,
     unreadLevel: hasUnreadLevelUp ? level : null,
     isMax,
+    dailyExp, // 今日已获经验(计入日顶部分)
+    dailyCap: DAILY_EXP_CAP, // 每日经验上限
+    dailyCapReached: dailyExp >= DAILY_EXP_CAP, // 今日是否已到顶
   };
+}
+
+/**
+ * 用户当前等级对应的云空间配额(MB)。root=满级;无成长账本(新用户)=Lv1。
+ * 供文件上传配额校验按等级下发,替代原先"非 root 一律 500MB"。
+ */
+export async function getUserSpaceMb(userId, userRole = null) {
+  if (userRole === 'root') return RANKS[MAX_LEVEL - 1].spaceMb;
+  let exp = 0;
+  if (userId && userId !== 'visitor') {
+    const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
+    if (rows[0]) exp = Number(rows[0].exp || 0);
+  }
+  return rankOf(levelForExp(exp)).spaceMb;
 }
 
 // 标记升级通知已读(用户查看成长页后调用):把"已知晓等级"抬到当前等级

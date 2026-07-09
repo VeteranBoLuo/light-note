@@ -30,9 +30,11 @@ export const OPERATION_LOG_MAP = {
   }),
   login: createModule('登录', {
     previewMobile: '移动端预览',
+    githubLogin: 'GitHub快捷登录',
   }),
   register: createModule('注册', {
     register: '注册',
+    githubRegister: 'GitHub一键注册/登录',
   }),
   bookmarkMg: createModule('书签管理', {
     toAddBtn: '添加书签',

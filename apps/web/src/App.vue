@@ -27,6 +27,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
+  import { applyDisplaySettings } from '@/utils/savePreference';
   import { updateNotice } from '@/config/updateNotice';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
@@ -50,6 +51,14 @@
     () => user.preferences?.theme,
     () => {
       applyTheme();
+    },
+  );
+
+  // 监听界面缩放变化 → 重设 <html> zoom
+  watch(
+    () => user.preferences?.uiScale,
+    () => {
+      applyDisplaySettings();
     },
   );
 
@@ -148,6 +157,7 @@
     }
 
     applyTheme();
+    applyDisplaySettings(); // 启动即应用字号/密度,避免默认→用户偏好的跳变
     // 设置指纹
     window['fingerprint'] = fingerprint();
 
@@ -476,7 +486,7 @@
           user.unreadOpinionReplyTotal = summary.opinion?.unreadReplyTotal || 0;
           user.pendingSecurityTotal = summary.security?.unhandledHighRiskCount || 0;
           user.criticalSecurityTotal = summary.security?.unhandledCriticalCount || 0;
-          openNoticeSummary(summary);
+          // 反馈回复/安全提醒已统一进通知中心(收件箱),这里只保留计数(驱动菜单红点),不再弹右上角 toast
         }
       } catch (error) {
         console.error('获取提醒汇总失败', error);
@@ -580,37 +590,8 @@
   }
 
   function checkUpdateNotice() {
-    const lastSeen = localStorage.getItem(updateNotice.storageKey);
-    if (lastSeen === updateNotice.version) {
-      return;
-    }
-    const noticeKey = `update-notice-${updateNotice.version}`;
-    const markAsSeen = () => {
-      localStorage.setItem(updateNotice.storageKey, updateNotice.version);
-    };
-    notification.open({
-      key: noticeKey,
-      placement: 'topRight',
-      message: updateNotice.title,
-      description: updateNotice.description,
-      duration: 0,
-      btn: () =>
-        h(
-          'a',
-          {
-            onClick: () => {
-              markAsSeen();
-              notification.close(noticeKey);
-              router.push(updateNotice.logRoute);
-            },
-            style: { color: 'var(--primary-color)' },
-          },
-          { default: () => updateNotice.actionText },
-        ),
-      onClose: () => {
-        markAsSeen();
-      },
-    });
+    // 版本更新公告已统一进通知中心(由管理员群发 system 通知),不再弹右上角弹窗;此处仅标记当前版本已读。
+    localStorage.setItem(updateNotice.storageKey, updateNotice.version);
   }
   onMounted(async () => {
     initApp();

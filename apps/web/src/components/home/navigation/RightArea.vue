@@ -24,6 +24,7 @@
       <svg-icon size="24" hover :src="icon.github" />
     </button>
     <span v-if="user.role === 'visitor'" class="guest-register-link" @click="registerClick">免费注册</span>
+    <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
       <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
@@ -37,6 +38,7 @@
   import icon from '@/config/icon.ts';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import PersonCenter from '@/view/personCenter/PersonCenter.vue';
+  import NotificationBell from '@/components/notification/NotificationBell.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import router from '@/router';

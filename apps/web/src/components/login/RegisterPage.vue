@@ -5,7 +5,7 @@
     </span>
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: var(--text-color)">注册</b>
-      <p class="register-benefits">秒注册 · 自动登录 · 已备好示例数据 · 永久免费</p>
+      <p class="register-benefits">秒注册 · 自动登录 · 云端同步 · 永久免费</p>
       <a-form
         :label-col="{
           span: 4,
@@ -65,9 +65,8 @@
           <b-button
             type="primary"
             class="handle-btn"
-            :class="{ 'disable-btn': disable }"
+            :class="{ 'disable-btn': disable || submitting }"
             @click="handleRegister"
-            v-click-log="OPERATION_LOG_MAP.register.register"
             >注册
           </b-button>
         </a-form-item>
@@ -75,6 +74,7 @@
           <a
             class="dom-hover-click"
             style="display: block; text-align: center; color: #3b82f6; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.register.githubRegister"
             @click="registerWithGitHub"
             >GitHub 一键注册 / 登录</a
           >
@@ -97,6 +97,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { checkEndCondition } from '@/utils/validator.ts';
   import { cloneDeep } from 'lodash-es';
@@ -115,6 +116,7 @@
   const disable = computed(() => {
     return !formData.password || !formData.email;
   });
+  const submitting = ref(false); // 防重复提交:请求在途时禁止再次提交
 
   async function validateFun(names?: any) {
     await registerRef.value.validate(names);
@@ -142,15 +144,19 @@
         message: '密码长度不能小于6位',
       },
     ];
-    if (checkEndCondition(condition) || disable.value) {
+    if (submitting.value || checkEndCondition(condition) || disable.value) {
       return;
     }
     await validateFun();
+    submitting.value = true;
     formData.role = 'admin';
     const params = cloneDeep(formData);
-    apiBasePost('/api/user/registerUser', params).then((res: any) => {
+    apiBasePost('/api/user/registerUser', params)
+      .then((res: any) => {
       if (res.status === 200) {
-        // 注册即登录:复用登录成功的入应用流程,直接进应用看到预置示例数据
+        // 注册成功埋点:从按钮 v-click-log 移到这里,代表"一次真实注册",双击也只记一条
+        recordOperation(OPERATION_LOG_MAP.register.register);
+        // 注册即登录:复用登录成功的入应用流程,直接进应用(新用户为空状态,由空态引导上手)
         markLoggedIn();
         user.setUserInfo(res.data);
         user.preferences.theme = res.data?.preferences?.theme || 'day';
@@ -168,7 +174,10 @@
         bookmark.refreshTag();
         emit('update:success', formData);
       }
-    });
+    })
+      .finally(() => {
+        submitting.value = false;
+      });
   }
 
   defineExpose({

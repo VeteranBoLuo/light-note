@@ -8,7 +8,7 @@
         class="rl-row"
         :class="{ cur: r.level === curLevel, done: r.level < curLevel }"
       >
-        <span class="rl-lv" :class="`tier-${tierOf(r.level)}`">{{ r.level }}</span>
+        <span class="rl-lv" :style="{ background: TIER_GRADIENTS[tierOf(r.level)] }">{{ r.level }}</span>
         <span class="rl-name">
           {{ r.name }}
           <span v-if="r.level === maxLevel" class="rl-max">{{ t('growth.max') }}</span>
@@ -24,6 +24,7 @@
   import { computed, nextTick, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
 
   const { t } = useI18n();
   const { growth, ranks, load, loadRanks } = useGrowth();
@@ -36,9 +37,6 @@
   const curLevel = computed(() => growth.value?.level || 1);
   const maxLevel = computed(() => ranks.value.length || 15);
 
-  function tierOf(l: number) {
-    return l >= 13 ? 5 : l >= 10 ? 4 : l >= 7 ? 3 : l >= 4 ? 2 : 1;
-  }
   function fmtMb(mb: number) {
     return mb >= 1024 ? `${+(mb / 1024).toFixed(1)}G` : `${mb}M`;
   }
@@ -106,21 +104,6 @@
     color: #fff;
     font-size: 11px;
     font-weight: 700;
-  }
-  .tier-1 {
-    background: linear-gradient(135deg, #6b7280, #9ca3af);
-  }
-  .tier-2 {
-    background: linear-gradient(135deg, #2563eb, #38bdf8);
-  }
-  .tier-3 {
-    background: linear-gradient(135deg, #7c3aed, #a855f7);
-  }
-  .tier-4 {
-    background: linear-gradient(135deg, #d97706, #fbbf24);
-  }
-  .tier-5 {
-    background: linear-gradient(135deg, #db2777, #f43f5e, #fb923c);
   }
   .rl-name {
     font-weight: 600;

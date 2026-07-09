@@ -21,7 +21,11 @@
             <div class="title">{{ t('cloudSpace.fileTagConfig.selectedTags') }}</div>
             <div class="panel-subtitle">{{ t('cloudSpace.fileTagConfig.selectedDesc') }}</div>
           </div>
-          <b-button size="small" @click="resetTags" v-click-log="{ module: '云空间-文件标签配置', operation: '重置标签' }">
+          <b-button
+            size="small"
+            @click="resetTags"
+            v-click-log="{ module: '云空间-文件标签配置', operation: '重置标签' }"
+          >
             {{ t('cloudSpace.fileTagConfig.reset') }}
           </b-button>
         </div>
@@ -98,11 +102,7 @@
               <div class="tag-text">
                 <div class="tag-name">{{ tag.name }}</div>
                 <div class="tag-state">
-                  {{
-                    isTagBound(tag.id)
-                      ? t('cloudSpace.fileTagConfig.bound')
-                      : t('cloudSpace.fileTagConfig.unbound')
-                  }}
+                  {{ isTagBound(tag.id) ? t('cloudSpace.fileTagConfig.bound') : t('cloudSpace.fileTagConfig.unbound') }}
                 </div>
               </div>
             </div>
@@ -550,9 +550,9 @@
   }
 
   .modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 12px;
+    padding: 0 20px 16px;
+    place-self: end;
+    flex-shrink: 0;
   }
 
   @media (max-width: 900px) {

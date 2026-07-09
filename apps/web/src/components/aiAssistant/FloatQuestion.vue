@@ -150,6 +150,16 @@
     schedulePeek();
   };
 
+  // 全局搜索打开时的互斥收起:仅当 AI 面板确实展开时才收拢。
+  // 不复用 minimize —— minimize 无条件 isPeeked=false(先露圆形再定时收),
+  // 在 AI 只是半隐藏(未展开)时反而把它唤出成圆形图标,这正是"点搜索框误触发 AI"的根因。
+  const handleCloseAi = () => {
+    if (!isOpen.value) return; // 未展开(半隐藏/图标态)→ 保持原状,绝不唤出
+    isOpen.value = false;
+    isPeeked.value = true; // 直接回半隐藏,不经圆形
+    clearPeekTimer();
+  };
+
   // 缩小动画播完后清理容器状态
   const onModalLeave = () => {
     containerActive.value = false;
@@ -226,13 +236,13 @@
       }
     }
     document.addEventListener('keydown', handleKeydown);
-    window.addEventListener('light-note:close-ai', minimize); // 全局搜索下拉打开时互斥收起 AI 面板
+    window.addEventListener('light-note:close-ai', handleCloseAi); // 全局搜索下拉打开时互斥收起 AI 面板(仅在已展开时)
     schedulePeek();
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
-    window.removeEventListener('light-note:close-ai', minimize);
+    window.removeEventListener('light-note:close-ai', handleCloseAi);
     clearPeekTimer();
   });
 </script>

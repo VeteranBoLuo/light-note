@@ -57,6 +57,11 @@
                   class="dom-hover"
                 />
                 <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
+                <span title="发通知" @click.stop="openSendNotify(record)" class="dom-hover" style="display: inline-flex">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                </span>
                 <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
               </BSpace>
             </template>
@@ -111,6 +116,35 @@
         </div>
       </BModal>
 
+      <BModal v-if="sendVisible" title="发送通知" width="520px" v-model:visible="sendVisible" @ok="submitSend">
+        <div style="display: flex; flex-direction: column; gap: 14px; width: 480px; max-width: 100%">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <label style="width: 64px; color: var(--desc-color); font-size: 13px">接收人</label>
+            <span>{{ sendToAll ? '全体用户' : sendTarget?.alias || '-' }}</span>
+            <label style="font-size: 13px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer">
+              <input type="checkbox" v-model="sendToAll" />发给全体
+            </label>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <label style="width: 64px; color: var(--desc-color); font-size: 13px">类型</label>
+            <b-select v-model:value="sendForm.type" :options="notifyTypeOptions" mode="single" style="width: 200px" />
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <label style="width: 64px; color: var(--desc-color); font-size: 13px">标题</label>
+            <b-input v-model:value="sendForm.title" placeholder="通知标题" style="flex: 1" />
+          </div>
+          <div style="display: flex; gap: 12px">
+            <label style="width: 64px; color: var(--desc-color); font-size: 13px; padding-top: 8px">内容</label>
+            <textarea
+              v-model="sendForm.content"
+              rows="4"
+              placeholder="通知内容(可选)"
+              style="flex: 1; border-radius: 8px; padding: 8px; border: 1px solid var(--card-border-color); background: var(--background-color); color: var(--text-color); font-family: inherit; resize: vertical"
+            ></textarea>
+          </div>
+        </div>
+      </BModal>
+
       <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
     </section>
   </div>
@@ -133,6 +167,8 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  import notificationApi from '@/api/notificationApi.ts';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
 
   const tableCardRef = ref<HTMLElement | null>(null);
   useTableScrollY({ ref: tableCardRef });
@@ -253,10 +289,6 @@
       name: 'email',
     },
     {
-      label: '密码',
-      name: 'password',
-    },
-    {
       label: '权限',
       name: 'role',
       render: formRenders.roleSelector(),
@@ -271,6 +303,48 @@
         init();
       }
     });
+  }
+
+  // ===== 发通知(root 给指定用户 / 全体) =====
+  const sendVisible = ref(false);
+  const sendTarget = ref<any>(null);
+  const sendToAll = ref(false);
+  const sendForm = ref<{ type: string; title: string; content: string }>({ type: 'system', title: '', content: '' });
+  const notifyTypeOptions = [
+    { value: 'system', label: '系统通知' },
+    { value: 'other', label: '其他' },
+  ];
+
+  function openSendNotify(record: any) {
+    sendTarget.value = record;
+    sendToAll.value = false;
+    sendForm.value = { type: 'system', title: '', content: '' };
+    sendVisible.value = true;
+  }
+
+  function submitSend() {
+    if (!sendForm.value.title.trim()) {
+      message.warning('请填写通知标题');
+      return;
+    }
+    if (!sendToAll.value && !sendTarget.value?.id) {
+      message.warning('缺少接收用户');
+      return;
+    }
+    notificationApi
+      .sendNotification({
+        toAll: sendToAll.value,
+        userId: sendTarget.value?.id,
+        type: sendForm.value.type,
+        title: sendForm.value.title,
+        content: sendForm.value.content,
+      })
+      .then((res) => {
+        if (res.status === 200) {
+          message.success(sendToAll.value ? `已群发给 ${res.data?.sent ?? 0} 人` : '通知已发送');
+          sendVisible.value = false;
+        }
+      });
   }
 
   function init() {

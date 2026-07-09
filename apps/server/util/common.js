@@ -13,6 +13,7 @@ import securityRouter from '../router/security.js';
 import trashRouter from '../router/trash.js';
 import seoRouter from '../router/seo.js';
 import growthRouter from '../router/growth.js';
+import notificationRouter from '../router/notification.js';
 
 export const resultData = function (data = null, status = 200, msg = '') {
   if (status !== 200 && status !== 'visitor' && status !== 'preview') {
@@ -163,6 +164,10 @@ export const baseRouter = [
   {
     path: '/user',
     router: userRouter,
+  },
+  {
+    path: '/notification',
+    router: notificationRouter,
   },
   {
     path: '/json',

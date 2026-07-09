@@ -76,7 +76,7 @@
           </template>
         </b-input>
       </template>
-      <template #empty v-if="isReady">
+      <template #empty>
         <div class="empty-tag-prompt">
           <div class="empty-card">
             <h3>暂无标签</h3>
@@ -91,7 +91,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
@@ -128,9 +128,6 @@
 
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
-  const isReady = ref(false);
-  const loadingStartAt = ref(Date.now());
-  let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   function handleTagMenu(menu, tag: TagInterface) {
     recordOperation({ module: '首页', operation: `右键${menu}标签【${tag.name}】` });
@@ -272,34 +269,12 @@
   }
 
   watch(
-    () => bookmark.tagList.length,
-    (val) => {
-      isReady.value = val === 0;
-    },
-  );
-
-  watch(
     filterTagList,
     (val) => {
       visibleDragTagList.value = [...val];
     },
     { immediate: true },
   );
-
-  watch(
-    () => bookmark.refreshTagKey,
-    () => {
-      loadingStartAt.value = Date.now();
-      isReady.value = false;
-    },
-  );
-
-  onUnmounted(() => {
-    if (fallbackTimer) {
-      clearTimeout(fallbackTimer);
-      fallbackTimer = null;
-    }
-  });
 </script>
 
 <style lang="less" scoped>

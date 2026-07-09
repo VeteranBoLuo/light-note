@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { snakeCaseKeys, resultData, insertData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { createNotification } from '../util/notification.js';
 
 const OPINION_STATUS = {
   PENDING: 'pending',
@@ -158,6 +159,21 @@ export const replyOpinion = async (req, res) => {
       WHERE id = ? AND del_flag = 0
     `;
     const [result] = await pool.query(sql, [replyContent.trim(), OPINION_STATUS.REPLIED, id]);
+    // 通知中心:给反馈者发一条"收到回复"通知(fire-and-forget,失败不影响回复本身)
+    try {
+      const [[opinion]] = await pool.query('SELECT user_id FROM opinion WHERE id = ? AND del_flag = 0', [id]);
+      if (opinion?.user_id) {
+        createNotification(opinion.user_id, {
+          type: 'opinion_reply',
+          title: '你的反馈收到新回复',
+          content: replyContent.trim(),
+          link: '/opinions?tab=history&markViewed=1',
+          meta: { opinionId: id },
+        }).catch((err) => console.error('写反馈回复通知失败:', err.message));
+      }
+    } catch (err) {
+      console.error('查询反馈用户失败:', err.message);
+    }
     res.send(resultData(result));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));

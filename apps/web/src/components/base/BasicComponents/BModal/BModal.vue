@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="mask-container" @click.stop>
+    <div v-if="visible" class="mask-container" @click.self="handleMaskClick">
       <div
         class="modal-view"
         :class="{ out: isOut }"
@@ -78,8 +78,11 @@
       clearTimeout(timer);
     }, 200);
   }
-  function closeMask(e) {
-    if (props.maskClosable && !e.target.closest('.modal-view')) {
+  // 点遮罩背景关闭:用 @click.self,只在点到遮罩本身(而非弹框内容)时触发。
+  // 不再用 document mouseup + closest('.modal-view') 判定 —— 那会把 Teleport 到 body 的浮层
+  // (如 BSelect 下拉面板)误判成"弹框外部"而关掉整个弹框;@click.self 天然不受这类浮层影响。
+  function handleMaskClick() {
+    if (props.maskClosable) {
       handleClose();
     }
   }
@@ -92,7 +95,6 @@
 
   onMounted(() => {
     if (visible.value) {
-      document.addEventListener('mouseup', closeMask);
       document.addEventListener('keydown', clickEsc);
     }
   });
@@ -100,17 +102,14 @@
     () => visible.value,
     (val) => {
       if (val) {
-        document.addEventListener('mouseup', closeMask);
         document.addEventListener('keydown', clickEsc);
       } else {
-        document.removeEventListener('mouseup', closeMask);
         document.removeEventListener('keydown', clickEsc);
       }
     },
   );
 
   onBeforeUnmount(() => {
-    document.removeEventListener('mouseup', closeMask);
     document.removeEventListener('keydown', clickEsc);
   });
   const cssTop = computed(() => {

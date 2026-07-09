@@ -57,6 +57,12 @@
     flex-direction: column;
     gap: 18px;
   }
+  /* 大屏放宽容器,容纳 GrowthCard 的左右两栏,消除 PC 两侧大片留白 */
+  @media (min-width: 900px) {
+    .growth-container {
+      max-width: 960px;
+    }
+  }
   .growth-hero {
     display: flex;
     flex-direction: column;

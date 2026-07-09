@@ -31,8 +31,25 @@
     router.push('/');
   }
   onMounted(async () => {
+    const code = router.currentRoute.value.query.code;
+    // 空 code 直接回首页,避免拿空 code 打后端
+    if (!code) {
+      status.value = 500;
+      toHome();
+      return;
+    }
+    // 一次性锁:GitHub 的 authorization code 只能用一次,重发第二次必在换 token 处失败报 500,
+    // 造成"其实已注册/登录成功却显示登录失败",还会多出一条 /api/user/github 的 api 日志。
+    // 用 sessionStorage 按 code 去重,刷新 / 浏览器后退 / dev HMR 重进都不再重发。
+    const lockKey = `gh_oauth_handled:${code}`;
+    if (sessionStorage.getItem(lockKey)) {
+      toHome();
+      return;
+    }
+    sessionStorage.setItem(lockKey, '1');
+    // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
+    router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
-      let code = router.currentRoute.value.query.code;
       // 发送 code 给后端换取 Token
       const cRes = await apiBasePost('/api/user/github', { code });
       status.value = cRes.status;

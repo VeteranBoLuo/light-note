@@ -63,6 +63,24 @@
               </button>
             </div>
           </div>
+
+          <div class="field">
+            <div class="field-head">
+              <span class="field-label">{{ t('settings.uiScale') }}</span>
+              <span class="field-desc">{{ t('settings.uiScaleDesc') }}</span>
+            </div>
+            <div class="seg">
+              <button
+                v-for="o in uiScaleOpts"
+                :key="o.v"
+                class="seg-btn"
+                :class="{ active: ((user.preferences as any).uiScale || 'medium') === o.v }"
+                @click="set('uiScale', o.v)"
+              >
+                {{ o.label }}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
         </div>
@@ -190,6 +208,11 @@
     { v: 'zh-CN', label: '中文' },
     { v: 'en-US', label: 'English' },
   ];
+  const uiScaleOpts = computed(() => [
+    { v: 'small', label: t('settings.uiScaleSmall') },
+    { v: 'medium', label: t('settings.uiScaleMedium') },
+    { v: 'large', label: t('settings.uiScaleLarge') },
+  ]);
   const homeOpts = computed(() => [
     { v: 'landing', label: t('settings.home.landing') },
     { v: 'workbench', label: t('settings.home.workbench') },
@@ -248,7 +271,7 @@
     flex-direction: column;
     gap: 18px;
   }
-  /* 大屏两栏:外观/通用 左、成长 右,减少两侧留白、成长上移到首屏 */
+  /* 大屏两栏:外观 左、通用 右,减少两侧留白 */
   .settings-body {
     display: flex;
     gap: 18px;
@@ -341,13 +364,6 @@
   .card-icon--general {
     color: var(--resource-note-color);
     background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
-  }
-  .card-icon--growth {
-    color: var(--resource-file-color);
-    background: color-mix(in srgb, var(--resource-file-color) 14%, transparent);
-  }
-  .growth-wrap {
-    padding-top: 16px;
   }
   .card-head-text {
     display: flex;

@@ -1,13 +1,10 @@
 <template>
-  <a-popover
-    placement="bottomRight"
-    :overlay-style="{ maxWidth: 'calc(100vw - 24px)' }"
+  <BPopover
+    trigger="manual"
+    placement="bottom-right"
     overlay-class-name="user-center-popover"
     :get-popup-container="getPopupContainer"
-    :open="menuVisible"
-    trigger="hover"
-    :arrow="false"
-    @openChange="handlePopoverOpenChange"
+    v-model:open="menuVisible"
   >
     <template #content>
       <div
@@ -35,7 +32,7 @@
               <span
                 v-if="growthInfo"
                 class="lv-badge"
-                :class="`tier-${badgeTier}`"
+                :style="{ background: TIER_GRADIENTS[badgeTier] }"
                 :title="growthInfo.name"
                 role="button"
                 @click="goGrowth"
@@ -135,7 +132,7 @@
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
-  </a-popover>
+  </BPopover>
 </template>
 
 <script setup lang="ts">
@@ -144,6 +141,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { formatStorageSize } from '@/utils/common';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -172,10 +171,7 @@
 
   // 成长徽章:登录用户在头像旁展示当前等级(纯展示,管理成长走「设置」菜单入口)
   const { growth: growthInfo, load: loadGrowth } = useGrowth();
-  const badgeTier = computed(() => {
-    const l = growthInfo.value?.level || 1;
-    return l >= 13 ? 5 : l >= 10 ? 4 : l >= 7 ? 3 : l >= 4 ? 2 : 1;
-  });
+  const badgeTier = computed(() => tierOf(growthInfo.value?.level || 1));
   onMounted(() => {
     loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
   });
@@ -573,33 +569,6 @@
       transform: translateY(-1px);
     }
 
-    &.has-unread::after {
-      content: '';
-      position: absolute;
-      top: -2px;
-      right: -2px;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #ff4d4f;
-      border: 1.5px solid var(--menu-body-bg-color, #fff);
-    }
-
-    &.tier-1 {
-      background: linear-gradient(135deg, #6b7280, #9ca3af);
-    }
-    &.tier-2 {
-      background: linear-gradient(135deg, #2563eb, #38bdf8);
-    }
-    &.tier-3 {
-      background: linear-gradient(135deg, #7c3aed, #a855f7);
-    }
-    &.tier-4 {
-      background: linear-gradient(135deg, #d97706, #fbbf24);
-    }
-    &.tier-5 {
-      background: linear-gradient(135deg, #db2777, #f43f5e, #fb923c);
-    }
   }
 
   .nav-avatar-dot {
