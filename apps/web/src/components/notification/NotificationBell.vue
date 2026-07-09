@@ -92,6 +92,7 @@
       </div>
     </template>
   </BPopover>
+  <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
 </template>
 
 <script setup lang="ts">
@@ -101,6 +102,7 @@
   import { useUserStore } from '@/store';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
+  import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -109,6 +111,8 @@
     useNotification();
 
   const open = ref(false);
+  const wrVisible = ref(false);
+  const wrData = ref<any>(null);
   const items = ref<NotificationItem[]>([]);
   const total = ref(0);
   const loading = ref(false);
@@ -197,6 +201,14 @@
     if (!n.isRead) {
       n.isRead = 1;
       markRead([n.id]);
+    }
+    // 周报通知:点击弹出周报大图,不跳转
+    const m = parseMeta(n.meta);
+    if (m?.weeklyReport) {
+      wrData.value = m.weeklyReport;
+      wrVisible.value = true;
+      open.value = false;
+      return;
     }
     if (n.link) {
       // 升级/反馈等带跳转链接的通知:关闭面板并跳转

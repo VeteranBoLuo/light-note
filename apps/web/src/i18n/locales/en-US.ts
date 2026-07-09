@@ -553,6 +553,10 @@ export default {
     resourceViewDesc: 'Default layout of resource center results',
     tagView: 'Tag detail view',
     tagViewDesc: 'Default view when opening a tag detail',
+    weeklyReport: 'Weekly report',
+    weeklyReportDesc: "Push last week's recap every Monday; turn off to stop",
+    switchOn: 'On',
+    switchOff: 'Off',
     cardView: 'Card',
     listView: 'List',
     home: {

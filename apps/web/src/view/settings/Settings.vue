@@ -190,6 +190,24 @@
                 </button>
               </div>
             </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.weeklyReport') }}</span>
+                <span class="field-desc">{{ t('settings.weeklyReportDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in weeklyReportOpts"
+                  :key="String(o.v)"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.weeklyReport !== false) === o.v }"
+                  @click="set('weeklyReport', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -253,8 +271,12 @@
     { v: 'card', label: t('tagGraph.viewMode.card') },
     { v: 'graph', label: t('tagGraph.viewMode.graph') },
   ]);
+  const weeklyReportOpts = computed(() => [
+    { v: true, label: t('settings.switchOn') },
+    { v: false, label: t('settings.switchOff') },
+  ]);
 
-  async function set(key: string, value: string) {
+  async function set(key: string, value: string | boolean) {
     if ((user.preferences as any)[key] === value) return;
     try {
       await updatePreference({ [key]: value });

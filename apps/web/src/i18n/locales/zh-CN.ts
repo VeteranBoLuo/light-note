@@ -544,6 +544,10 @@ export default {
     resourceViewDesc: '资源中心搜索结果的默认展示',
     tagView: '标签详情视图',
     tagViewDesc: '打开标签详情时的默认视图',
+    weeklyReport: '每周成长周报',
+    weeklyReportDesc: '每周一推送上周成长回顾通知;关闭后不再收到',
+    switchOn: '开启',
+    switchOff: '关闭',
     cardView: '卡片',
     listView: '列表',
     home: {
