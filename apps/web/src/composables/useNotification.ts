@@ -4,13 +4,14 @@ import { useUserStore } from '@/store';
 
 export interface NotificationItem {
   id: string;
-  type: string; // level_up | opinion_reply | system
+  type: string; // level_up | opinion_reply | system | other
   title: string;
   content: string | null;
   link: string | null;
   meta: any;
   isRead: number;
   createTime: string;
+  _expanded?: boolean; // 前端态:系统/其他类无跳转通知点击就地展开全文
 }
 
 export interface NotificationPage {

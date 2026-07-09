@@ -309,7 +309,7 @@
   const sendVisible = ref(false);
   const sendTarget = ref<any>(null);
   const sendToAll = ref(false);
-  const sendForm = ref<{ type: string; title: string; content: string }>({ type: 'system', title: '', content: '' });
+  const sendForm = ref<{ type: string; title: string; content: string }>({ type: 'other', title: '', content: '' });
   const notifyTypeOptions = [
     { value: 'system', label: '系统通知' },
     { value: 'other', label: '其他' },
@@ -318,7 +318,7 @@
   function openSendNotify(record: any) {
     sendTarget.value = record;
     sendToAll.value = false;
-    sendForm.value = { type: 'system', title: '', content: '' };
+    sendForm.value = { type: 'other', title: '', content: '' };
     sendVisible.value = true;
   }
 

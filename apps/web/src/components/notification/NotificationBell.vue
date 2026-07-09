@@ -50,7 +50,7 @@
               <span class="nt-dot" :class="`type-${n.type}`"></span>
               <div class="nt-item-main">
                 <div class="nt-item-title">{{ renderTitle(n) }}</div>
-                <div v-if="renderContent(n)" class="nt-item-content">{{ renderContent(n) }}</div>
+                <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{ renderContent(n) }}</div>
                 <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
               </div>
             </div>
@@ -163,8 +163,14 @@
       n.isRead = 1;
       markRead([n.id]);
     }
-    open.value = false;
-    if (n.link) router.push(n.link).catch(() => {});
+    if (n.link) {
+      // 升级/反馈等带跳转链接的通知:关闭面板并跳转
+      open.value = false;
+      router.push(n.link).catch(() => {});
+    } else {
+      // 系统/其他等无跳转链接的通知:就地展开/收起全文(避免内容被截断、点击无反应)
+      n._expanded = !n._expanded;
+    }
   }
 
   // 未读数:进来拉一次 + 定时轮询(2 分钟) + 切号刷新
@@ -322,6 +328,12 @@
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
+    white-space: pre-wrap;
+  }
+  /* 点击展开:去掉两行截断,显示全文 */
+  .notification-popover .nt-item-content.expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
   }
   .notification-popover .nt-item-time {
     margin-top: 4px;
