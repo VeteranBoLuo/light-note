@@ -5,6 +5,7 @@ import { baseRouter } from './util/common.js';
 import { accountBanMiddleware, authMiddleware, startSessionMaintenance } from './util/auth.js';
 import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } from './util/security/index.js';
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
+import { generateWeeklyReports } from './util/weeklyReport.js';
 import { ensureNotificationTable } from './util/notification.js';
 import rateLimit from 'express-rate-limit';
 
@@ -92,6 +93,24 @@ function scheduleSecurityEventsCleanup() {
   console.log(`[安全] 事件保留期清理已注册，首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleSecurityEventsCleanup();
+
+// 成长周报（每周一凌晨 5:00 生成上周报告并推送「系统」通知,错开清理任务的 3:00/4:00）
+function scheduleWeeklyReport() {
+  const now = new Date();
+  const next = new Date(now);
+  const daysUntilMonday = (8 - next.getDay()) % 7 || 7; // 下一个周一(getDay: 0=周日,1=周一)
+  next.setDate(next.getDate() + daysUntilMonday);
+  next.setHours(5, 0, 0, 0);
+  const delay = next.getTime() - now.getTime();
+
+  setTimeout(() => {
+    generateWeeklyReports();
+    setInterval(generateWeeklyReports, 7 * 24 * 60 * 60 * 1000);
+  }, delay);
+
+  console.log(`[周报] 定时已注册，首次执行: ${next.toLocaleString('zh-CN')}`);
+}
+scheduleWeeklyReport();
 
 // 启动 Express 服务器
 app.listen(9001, () => {
