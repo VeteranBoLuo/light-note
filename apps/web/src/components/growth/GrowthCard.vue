@@ -33,7 +33,7 @@
       </div>
       <div class="gc-perk">
         <span class="gc-perk-label">{{ t('growth.trashRetain') }}</span>
-        <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.trashDays || 30 }) }}</b>
+        <b class="gc-perk-val">{{ (g.trashDays || 30) >= 3650 ? t('growth.trashForever') : t('growth.daysVal', { n: g.trashDays || 30 }) }}</b>
       </div>
       <div class="gc-perk">
         <span class="gc-perk-label">{{ t('growth.streak') }}</span>

@@ -20,7 +20,8 @@
     <!-- 提示区 -->
     <div v-if="total > 0 || trashFileSize > 0" class="trash-info-bar">
       <svg-icon :src="icon.common.important" size="14" color="red" />
-      <span>{{ $t('trash.autoCleanTip', { days: retainDays }) }}</span>
+      <span v-if="retainDays >= 3650">{{ $t('trash.autoCleanForever') }}</span>
+      <span v-else>{{ $t('trash.autoCleanTip', { days: retainDays }) }}</span>
     </div>
 
     <div v-if="trashFileSizeWarnLevel" :class="['trash-size-warning', `is-${trashFileSizeWarnLevel}`]">

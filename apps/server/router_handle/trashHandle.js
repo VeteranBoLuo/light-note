@@ -40,9 +40,9 @@ const TABLE_CONFIG = {
 // 回收站保留天数按成长等级(低级维持 30 天,高级递增到满级 90 天):引用连接的 user_growth g.exp。
 // 阈值 = RANKS 的 cumExp(Lv5=2700 / Lv10=14500 / Lv15=50000),与 growth.js 单一事实源保持一致。
 const RETAIN_DAYS_CASE = `CASE
-  WHEN COALESCE(g.exp, 0) >= 50000 THEN 90
-  WHEN COALESCE(g.exp, 0) >= 14500 THEN 60
-  WHEN COALESCE(g.exp, 0) >= 2700 THEN 45
+  WHEN COALESCE(g.exp, 0) >= 50000 THEN 36500
+  WHEN COALESCE(g.exp, 0) >= 14500 THEN 180
+  WHEN COALESCE(g.exp, 0) >= 2700 THEN 60
   ELSE 30 END`;
 // 过期条件:资源表用别名 alias,调用方须 LEFT JOIN user_growth g;按所有者等级算保留天数
 const expiryWhere = (alias) =>
