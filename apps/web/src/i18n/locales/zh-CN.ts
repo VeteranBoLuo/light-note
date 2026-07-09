@@ -622,6 +622,7 @@ export default {
     wrBookmark: '新增书签',
     wrNote: '新增笔记',
     wrFile: '新增文件',
+    wrTotal: '本周产出',
     wrSummary: '本周你新增了 {n} 项内容、收获 {exp} 点经验,继续加油!',
     wrEmpty: '本周还没有新动态,记录一条开始你的一周吧~',
     pageTitle: '我的成长',

@@ -5,28 +5,38 @@
         <div class="wr-card">
           <button class="wr-close" @click="close" aria-label="close">×</button>
 
-          <!-- 渐变头图 -->
+          <!-- 星空 + 渐变头图 -->
           <div class="wr-banner">
+            <span v-for="s in stars" :key="s.i" class="wr-star" :style="s.style">✦</span>
             <div class="wr-orb wr-orb-1"></div>
             <div class="wr-orb wr-orb-2"></div>
             <div class="wr-banner-inner">
-              <div class="wr-banner-emoji">📊</div>
+              <div class="wr-banner-kicker">{{ report?.generatedAt || '' }} · {{ t('growth.weeklyReportSub') }}</div>
               <div class="wr-banner-title">{{ t('growth.weeklyReportTitle') }}</div>
-              <div class="wr-banner-date">{{ report?.generatedAt || '' }} · {{ t('growth.weeklyReportSub') }}</div>
             </div>
           </div>
 
           <div class="wr-body">
-            <!-- 两个大数字:经验 + 签到 -->
-            <div class="wr-hero">
-              <div class="wr-hero-num">
-                <b class="wr-hero-exp">+{{ animExp }}</b>
+            <!-- 称号 + 评语(核心)-->
+            <div class="wr-verdict">
+              <div class="wr-verdict-badge">{{ verdict.emoji }}</div>
+              <div class="wr-verdict-title">{{ verdict.title }}</div>
+              <div class="wr-verdict-quote">{{ verdict.quote }}</div>
+            </div>
+
+            <!-- 三大核心数字:经验 / 签到 / 总产出 -->
+            <div class="wr-stats">
+              <div class="wr-stat">
+                <b class="wr-stat-num wr-c-exp">+{{ animExp }}</b>
                 <span>{{ t('growth.wrExp') }}</span>
               </div>
-              <div class="wr-hero-divider"></div>
-              <div class="wr-hero-num">
-                <b class="wr-hero-checkin">{{ animCheckin }}</b>
+              <div class="wr-stat">
+                <b class="wr-stat-num wr-c-fire">{{ animCheckin }}<i class="wr-fire">🔥</i></b>
                 <span>{{ t('growth.wrCheckin') }}</span>
+              </div>
+              <div class="wr-stat">
+                <b class="wr-stat-num wr-c-total">{{ animTotal }}</b>
+                <span>{{ t('growth.wrTotal') }}</span>
               </div>
             </div>
 
@@ -41,12 +51,11 @@
               </div>
             </div>
 
-            <!-- 段位徽章 + 金句 -->
+            <!-- 段位 -->
             <div class="wr-level">
               <span class="wr-level-badge" :style="{ background: levelGradient }">Lv.{{ report?.level }}</span>
               <span class="wr-level-name">{{ report?.levelName }}</span>
             </div>
-            <div class="wr-quote">{{ summary }}</div>
           </div>
         </div>
       </div>
@@ -64,14 +73,23 @@
 
   const animExp = ref(0);
   const animCheckin = ref(0);
+  const animTotal = ref(0);
   const barsReady = ref(false);
+
+  // 头图星点(固定伪随机,不用 Math.random 以免每帧抖动)
+  const stars = Array.from({ length: 9 }, (_, i) => {
+    const top = (i * 37) % 90;
+    const left = (i * 53 + 7) % 96;
+    const size = 8 + ((i * 5) % 8);
+    const op = 0.3 + ((i * 3) % 5) / 10;
+    return { i, style: `top:${top}%;left:${left}%;font-size:${size}px;opacity:${op};animation-delay:${i * 0.2}s` };
+  });
 
   function close() {
     emit('update:visible', false);
   }
 
-  // 数字滚动(easeOutCubic),让大数字有「涨上去」的动感
-  function countUp(target: number, setter: (v: number) => void, dur = 900) {
+  function countUp(target: number, setter: (v: number) => void, dur = 950) {
     const t0 = performance.now();
     function tick(now: number) {
       const p = Math.min(1, (now - t0) / dur);
@@ -86,7 +104,7 @@
     if (!r) return [];
     const items = [
       { key: 'bookmark', label: t('growth.wrBookmark'), val: r.bookmarks || 0, color: 'linear-gradient(90deg, #a855f7, #6366f1)' },
-      { key: 'note', label: t('growth.wrNote'), val: r.notes || 0, color: 'linear-gradient(90deg, #ec4899, #f43f5e)' },
+      { key: 'note', label: t('growth.wrNote'), val: r.notes || 0, color: 'linear-gradient(90deg, #f472b6, #f43f5e)' },
       { key: 'file', label: t('growth.wrFile'), val: r.files || 0, color: 'linear-gradient(90deg, #22d3ee, #3b82f6)' },
     ];
     const max = Math.max(1, ...items.map((i) => i.val));
@@ -102,25 +120,40 @@
     return 'linear-gradient(135deg, #94a3b8, #cbd5e1)';
   });
 
-  const summary = computed(() => {
-    const r = props.report;
-    if (!r) return '';
-    const total = (r.bookmarks || 0) + (r.notes || 0) + (r.files || 0);
-    if (total === 0 && !r.exp && !r.checkinDays) return t('growth.wrEmpty');
-    return t('growth.wrSummary', { n: total, exp: r.exp });
+  // 动态称号 + 评语:按数据优先级判定,给个性化点评(9 档)
+  const verdict = computed(() => {
+    const r = props.report || {};
+    const b = r.bookmarks || 0;
+    const n = r.notes || 0;
+    const f = r.files || 0;
+    const e = r.exp || 0;
+    const c = r.checkinDays || 0;
+    const total = b + n + f;
+    if (c >= 7) return { emoji: '🔥', title: '全勤标兵', quote: '连续 7 天从未缺席,自律就是你的超能力!' };
+    if (total === 0 && !e && !c) return { emoji: '🌊', title: '静水流深', quote: '本周小憩了一下,新的一周,期待你的第一条记录~' };
+    if (b >= 20) return { emoji: '📚', title: '收藏家', quote: `一周收入 ${b} 条书签,你的知识库正在疯狂生长!` };
+    if (n >= 10) return { emoji: '✍️', title: '笔耕不辍', quote: `${n} 篇笔记落笔,思考的深度令人佩服!` };
+    if (f >= 10) return { emoji: '🗂️', title: '归档大师', quote: `${f} 个文件收纳有序,整理力拉满!` };
+    if (e >= 200) return { emoji: '🚀', title: '成长飞速', quote: `本周狂揽 ${e} 点经验,火箭般的上升势头!` };
+    if (total >= 10) return { emoji: '⭐', title: '稳步前行', quote: `新增 ${total} 项内容,积累的力量不可小觑!` };
+    if (c >= 3) return { emoji: '📅', title: '节奏大师', quote: `本周签到 ${c} 天,好习惯正在养成!` };
+    return { emoji: '🌱', title: '成长新芽', quote: '每一次记录都是成长的种子,继续加油!' };
   });
 
-  // 每次打开:数字从 0 滚动、条形从 0 长出
   watch(
     () => props.visible,
     (v) => {
       if (v && props.report) {
+        const r = props.report;
+        const total = (r.bookmarks || 0) + (r.notes || 0) + (r.files || 0);
         animExp.value = 0;
         animCheckin.value = 0;
+        animTotal.value = 0;
         barsReady.value = false;
-        countUp(props.report.exp || 0, (n) => (animExp.value = n));
-        countUp(props.report.checkinDays || 0, (n) => (animCheckin.value = n));
-        nextTick(() => setTimeout(() => (barsReady.value = true), 120));
+        countUp(r.exp || 0, (x) => (animExp.value = x));
+        countUp(r.checkinDays || 0, (x) => (animCheckin.value = x));
+        countUp(total, (x) => (animTotal.value = x));
+        nextTick(() => setTimeout(() => (barsReady.value = true), 150));
       }
     },
     { immediate: true },
@@ -136,28 +169,32 @@
     align-items: center;
     justify-content: center;
     padding: 20px;
-    background: rgba(15, 18, 40, 0.55);
-    backdrop-filter: blur(6px);
+    background: rgba(8, 10, 25, 0.66);
+    backdrop-filter: blur(7px);
   }
+  /* 深色沉浸卡片(不跟随主题,周报是特殊时刻) */
   .wr-card {
     position: relative;
     width: 100%;
-    max-width: 460px;
-    border-radius: 24px;
+    max-width: 468px;
+    border-radius: 26px;
     overflow: hidden;
-    background: var(--background-color);
-    box-shadow: 0 30px 80px -24px rgba(20, 20, 60, 0.6);
+    background: linear-gradient(168deg, #221a4d 0%, #14132e 46%, #0c1024 100%);
+    box-shadow:
+      0 34px 90px -26px rgba(10, 8, 40, 0.85),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    color: #fff;
   }
   .wr-close {
     position: absolute;
     top: 12px;
     right: 14px;
-    z-index: 3;
+    z-index: 4;
     width: 30px;
     height: 30px;
     border: none;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.16);
     color: #fff;
     font-size: 20px;
     line-height: 1;
@@ -165,168 +202,234 @@
     transition: background 0.15s;
   }
   .wr-close:hover {
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.32);
   }
 
-  /* 渐变头图 */
+  /* 头图 */
   .wr-banner {
     position: relative;
-    padding: 30px 24px 26px;
-    background: linear-gradient(135deg, #7c3aed 0%, #2563eb 55%, #06b6d4 100%);
+    padding: 26px 24px 20px;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(37, 99, 235, 0.4) 55%, rgba(6, 182, 212, 0.35));
     overflow: hidden;
     text-align: center;
+  }
+  .wr-star {
+    position: absolute;
     color: #fff;
+    animation: wr-twinkle 2.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes wr-twinkle {
+    0%,
+    100% {
+      opacity: 0.25;
+      transform: scale(0.8);
+    }
+    50% {
+      opacity: 0.9;
+      transform: scale(1.15);
+    }
   }
   .wr-orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(6px);
-    opacity: 0.5;
+    filter: blur(10px);
+    opacity: 0.55;
     pointer-events: none;
   }
   .wr-orb-1 {
-    width: 130px;
-    height: 130px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.5), transparent 70%);
-    top: -40px;
-    right: -20px;
+    width: 150px;
+    height: 150px;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.7), transparent 70%);
+    top: -54px;
+    right: -30px;
   }
   .wr-orb-2 {
-    width: 100px;
-    height: 100px;
-    background: radial-gradient(circle, rgba(236, 72, 153, 0.6), transparent 70%);
-    bottom: -30px;
-    left: -10px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(34, 211, 238, 0.6), transparent 70%);
+    bottom: -46px;
+    left: -20px;
   }
   .wr-banner-inner {
     position: relative;
     z-index: 1;
   }
-  .wr-banner-emoji {
-    font-size: 40px;
-    line-height: 1;
+  .wr-banner-kicker {
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.78);
   }
   .wr-banner-title {
-    margin-top: 8px;
-    font-size: 20px;
+    margin-top: 4px;
+    font-size: 21px;
     font-weight: 800;
     letter-spacing: 0.02em;
-  }
-  .wr-banner-date {
-    margin-top: 5px;
-    font-size: 12.5px;
-    opacity: 0.85;
+    text-shadow: 0 2px 14px rgba(124, 58, 237, 0.6);
   }
 
   .wr-body {
-    padding: 24px 24px 26px;
+    padding: 8px 24px 26px;
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 20px;
   }
 
-  /* 两个大数字 */
-  .wr-hero {
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
+  /* 称号 + 评语 */
+  .wr-verdict {
+    text-align: center;
+    padding: 6px 0 2px;
   }
-  .wr-hero-num {
+  .wr-verdict-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 76px;
+    height: 76px;
+    border-radius: 24px;
+    font-size: 42px;
+    background: radial-gradient(circle at 30% 25%, rgba(168, 85, 247, 0.45), rgba(37, 99, 235, 0.25));
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 12px 30px -8px rgba(124, 58, 237, 0.7);
+    animation: wr-float 3s ease-in-out infinite;
+  }
+  @keyframes wr-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  .wr-verdict-title {
+    margin-top: 12px;
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 0.01em;
+    background: linear-gradient(100deg, #c4b5fd, #a5b4fc 40%, #67e8f9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .wr-verdict-quote {
+    margin-top: 8px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.72);
+    padding: 0 8px;
+  }
+
+  /* 三大数字 */
+  .wr-stats {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    padding: 14px 4px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .wr-stat {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    flex: 1;
+    gap: 3px;
   }
-  .wr-hero-num b {
-    font-size: 44px;
+  .wr-stat-num {
+    font-size: 30px;
     font-weight: 800;
     line-height: 1;
     font-variant-numeric: tabular-nums;
+    display: inline-flex;
+    align-items: baseline;
   }
-  .wr-hero-exp {
-    background: linear-gradient(135deg, #7c3aed, #2563eb);
+  .wr-c-exp {
+    background: linear-gradient(135deg, #c4b5fd, #818cf8);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  .wr-hero-checkin {
-    background: linear-gradient(135deg, #f43f5e, #fb923c);
+  .wr-c-fire {
+    background: linear-gradient(135deg, #fb923c, #f43f5e);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  .wr-hero-num span {
-    font-size: 12.5px;
-    color: var(--desc-color);
+  .wr-c-total {
+    background: linear-gradient(135deg, #67e8f9, #38bdf8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
-  .wr-hero-divider {
-    width: 1px;
-    height: 44px;
-    background: color-mix(in srgb, var(--card-border-color) 60%, transparent);
+  .wr-fire {
+    font-size: 15px;
+    margin-left: 2px;
+    -webkit-text-fill-color: initial;
+  }
+  .wr-stat span {
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.6);
   }
 
-  /* 资源条形图 */
+  /* 条形图 */
   .wr-bars {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 11px;
   }
   .wr-bar-row {
     display: grid;
-    grid-template-columns: 52px 1fr 32px;
+    grid-template-columns: 48px 1fr 30px;
     align-items: center;
     gap: 10px;
   }
   .wr-bar-label {
-    font-size: 12.5px;
-    color: var(--desc-color);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.62);
   }
   .wr-bar-track {
-    height: 12px;
+    height: 11px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--card-border-color) 35%, transparent);
+    background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
   }
   .wr-bar-fill {
     height: 100%;
     border-radius: 999px;
-    transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 0 12px -2px currentColor;
+    transition: width 0.95s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .wr-bar-val {
     font-size: 13px;
     font-weight: 700;
     text-align: right;
-    color: var(--text-color);
+    color: #fff;
     font-variant-numeric: tabular-nums;
   }
 
-  /* 段位徽章 + 金句 */
+  /* 段位 */
   .wr-level {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
+    padding-top: 2px;
   }
   .wr-level-badge {
-    padding: 4px 12px;
+    padding: 4px 13px;
     border-radius: 999px;
     color: #fff;
     font-size: 13px;
     font-weight: 800;
-    box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6);
   }
   .wr-level-name {
     font-size: 15px;
     font-weight: 700;
-    color: var(--text-color);
-  }
-  .wr-quote {
-    text-align: center;
-    font-size: 13.5px;
-    line-height: 1.7;
-    color: var(--desc-color);
-    padding: 0 6px;
+    color: rgba(255, 255, 255, 0.92);
   }
 
   /* 入场动画 */
@@ -341,11 +444,11 @@
     opacity: 0;
   }
   .wr-pop-enter-active .wr-card {
-    animation: wr-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: wr-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   }
   @keyframes wr-in {
     from {
-      transform: translateY(24px) scale(0.94);
+      transform: translateY(28px) scale(0.92);
       opacity: 0;
     }
     to {
@@ -355,8 +458,11 @@
   }
 
   @media (max-width: 520px) {
-    .wr-hero-num b {
-      font-size: 38px;
+    .wr-stat-num {
+      font-size: 25px;
+    }
+    .wr-verdict-title {
+      font-size: 21px;
     }
   }
 </style>

@@ -631,6 +631,7 @@ export default {
     wrBookmark: 'New bookmarks',
     wrNote: 'New notes',
     wrFile: 'New files',
+    wrTotal: 'Total',
     wrSummary: 'You added {n} items and earned {exp} EXP this week. Keep going!',
     wrEmpty: 'No activity yet this week — start with one entry!',
     pageTitle: 'My Growth',
