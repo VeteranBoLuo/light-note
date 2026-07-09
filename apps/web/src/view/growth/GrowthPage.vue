@@ -8,6 +8,7 @@
         </button>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
+        <button class="growth-report-btn" @click="openWeeklyReport">📊 {{ t('growth.weeklyReportEntry') }}</button>
       </header>
 
       <section class="growth-panel">
@@ -24,7 +25,11 @@
       </div>
 
       <section v-if="!growth?.isMax" class="growth-panel">
-        <SigninCalendar :checkin-days="stats.checkinDays" :checked-in-today="growth?.checkedInToday" :streak="growth?.streak" />
+        <SigninCalendar
+          :checkin-days="stats.checkinDays"
+          :checked-in-today="growth?.checkedInToday"
+          :streak="growth?.streak"
+        />
       </section>
 
       <section class="growth-panel">
@@ -39,6 +44,8 @@
         <GrowthTimeline :items="timeline" />
       </section>
     </div>
+
+    <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
   </div>
 </template>
 
@@ -57,6 +64,8 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
+  import growthApi from '@/api/growthApi.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -104,6 +113,21 @@
       console.error('领取每日奖励失败:', err);
     } finally {
       claiming.value = false;
+    }
+  }
+
+  const wrVisible = ref(false);
+  const wrData = ref<any>(null);
+  async function openWeeklyReport() {
+    try {
+      const res = await growthApi.getWeeklyReport();
+      if (res?.status === 200) {
+        wrData.value = res.data;
+        wrVisible.value = true;
+        recordOperation({ module: '成长', operation: '查看本周周报' });
+      }
+    } catch (err) {
+      console.error('获取周报失败:', err);
     }
   }
 
@@ -181,6 +205,22 @@
     font-size: 13px;
     color: var(--desc-color);
   }
+  .growth-report-btn {
+    align-self: flex-start;
+    margin-top: 10px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+    color: var(--primary-color);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .growth-report-btn:hover {
+    background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+  }
   .growth-panel {
     border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
     border-radius: 16px;
@@ -189,6 +229,10 @@
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.03),
       0 12px 28px -22px rgba(30, 35, 70, 0.35);
+    .cal {
+      margin: 0 auto;
+      width: 50%;
+    }
   }
   /* 今日任务 + 数据统计:大屏并排,窄屏堆叠 */
   .growth-row {

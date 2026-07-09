@@ -18,7 +18,10 @@ export const getRanks = () => apiBaseGet('/api/growth/ranks');
 // 成长看板(成就墙/统计/今日任务/时间线)
 export const getDashboard = () => apiBaseGet('/api/growth/dashboard');
 
+// 实时本周成长周报(前端「查看大图」用)
+export const getWeeklyReport = () => apiBaseGet('/api/growth/weeklyReport');
+
 // 标记升级通知已读(查看成长页后)
 export const markNoticesRead = () => apiBasePost('/api/growth/notices/read');
 
-export default { getMyGrowth, checkin, claimDailyBonus, useProtectCard, getRanks, getDashboard, markNoticesRead };
+export default { getMyGrowth, checkin, claimDailyBonus, useProtectCard, getRanks, getDashboard, getWeeklyReport, markNoticesRead };
