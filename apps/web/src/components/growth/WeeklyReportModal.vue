@@ -182,6 +182,25 @@
         scale: 2,
         useCORS: true,
         ignoreElements: (el) => el.classList?.contains('wr-close') || el.classList?.contains('wr-export'),
+        onclone: (doc: Document) => {
+          // html2canvas 不支持 background-clip:text,渐变字会被渲染成矩形色块;
+          // 导出时把这些渐变文字降级为对应纯色,避免数字背后出现色块。
+          const map: [string, string][] = [
+            ['.wr-c-exp', '#a5b4fc'],
+            ['.wr-c-fire', '#fb923c'],
+            ['.wr-c-total', '#38bdf8'],
+            ['.wr-verdict-title', '#c4b5fd'],
+          ];
+          map.forEach(([sel, color]) => {
+            doc.querySelectorAll<HTMLElement>(sel).forEach((el) => {
+              el.style.background = 'none';
+              el.style.backgroundClip = 'border-box';
+              el.style.webkitBackgroundClip = 'border-box';
+              el.style.webkitTextFillColor = color;
+              el.style.color = color;
+            });
+          });
+        },
       });
       const link = document.createElement('a');
       link.download = `轻笺周报-${props.report?.generatedAt || ''}.png`;
