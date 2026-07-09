@@ -7,7 +7,16 @@
     @openChange="onOpenChange"
   >
     <div class="nt-bell dom-hover" :title="t('notification.title')">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
         <path d="M13.73 21a2 2 0 0 1-3.46 0" />
       </svg>
@@ -18,7 +27,9 @@
       <div class="nt-panel">
         <div class="nt-head">
           <span class="nt-title">{{ t('notification.title') }}</span>
-          <span v-if="unreadTotal > 0" class="nt-markall dom-hover" @click="onMarkAll">{{ t('notification.markAllRead') }}</span>
+          <span v-if="unreadTotal > 0" class="nt-markall dom-hover" @click="onMarkAll">{{
+            t('notification.markAllRead')
+          }}</span>
         </div>
 
         <div class="nt-tabs">
@@ -30,7 +41,9 @@
             @click="switchTab(tb.v)"
           >
             {{ tb.label }}
-            <span v-if="tabUnread(tb.v) > 0" class="nt-tab-badge">{{ tabUnread(tb.v) > 99 ? '99+' : tabUnread(tb.v) }}</span>
+            <span v-if="tabUnread(tb.v) > 0" class="nt-tab-badge">{{
+              tabUnread(tb.v) > 99 ? '99+' : tabUnread(tb.v)
+            }}</span>
           </button>
         </div>
 
@@ -51,11 +64,22 @@
               <span class="nt-dot" :class="`type-${n.type}`"></span>
               <div class="nt-item-main">
                 <div class="nt-item-title">{{ renderTitle(n) }}</div>
-                <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{ renderContent(n) }}</div>
+                <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{
+                  renderContent(n)
+                }}</div>
                 <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
               </div>
               <button class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
                 </svg>
               </button>
@@ -81,7 +105,8 @@
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
-  const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } = useNotification();
+  const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } =
+    useNotification();
 
   const open = ref(false);
   const items = ref<NotificationItem[]>([]);
@@ -235,7 +260,7 @@
 <!-- 面板样式不 scoped:BPopover 内容 teleport 到 body,scoped 命不中 -->
 <style lang="less">
   .notification-popover {
-    width: 340px;
+    width: 350px;
     max-width: calc(100vw - 24px);
     padding: 0;
     overflow: hidden;

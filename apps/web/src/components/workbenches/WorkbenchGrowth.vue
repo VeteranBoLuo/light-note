@@ -25,10 +25,14 @@
     </div>
 
     <div class="wg-right">
-      <button class="wg-checkin" :class="{ done: g.checkedInToday }" :disabled="g.checkedInToday || checking" @click.stop="onCheckin">
+      <button
+        class="wg-checkin"
+        :class="{ done: g.checkedInToday }"
+        :disabled="g.checkedInToday || checking"
+        @click.stop="onCheckin"
+      >
         {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
       </button>
-      <span class="wg-more">{{ t('growth.entry') }} ›</span>
     </div>
   </div>
 </template>
@@ -65,7 +69,10 @@
           message.info(t('growth.alreadyChecked'));
         } else {
           message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
-          recordOperation({ module: '工作台', operation: `每日签到（连续 ${res.data.streak} 天,+${res.data.expGained}）` });
+          recordOperation({
+            module: '工作台',
+            operation: `每日签到（连续 ${res.data.streak} 天,+${res.data.expGained}）`,
+          });
           if (res.data.leveledUp && res.data.growth) {
             message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
           }
