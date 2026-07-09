@@ -31,6 +31,9 @@ export default {
   workbench: {
     title: 'Workbench',
     subtitle: 'Aggregate bookmark, note, and cloud space states for faster daily actions.',
+    growth: {
+      maxHint: 'Max level reached · thanks for coming along',
+    },
     summary: {
       bookmarkTotal: 'Total Bookmarks',
       tagTotal: 'Total Tags',

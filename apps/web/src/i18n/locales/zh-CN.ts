@@ -30,6 +30,9 @@ export default {
   workbench: {
     title: '工作台',
     subtitle: '聚合查看书签、笔记和云空间状态，快速完成常用操作。',
+    growth: {
+      maxHint: '已达满级 · 感谢一路同行',
+    },
     summary: {
       bookmarkTotal: '书签总数',
       tagTotal: '标签总数',

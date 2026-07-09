@@ -39,6 +39,8 @@
       </div>
     </div>
 
+    <WorkbenchGrowth />
+
     <div class="insight-grid">
       <div class="panel-card activity-panel">
         <div class="panel-title">{{ t('workbench.panel.weeklyActive', '本周活跃') }}</div>
@@ -401,6 +403,7 @@
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
+  import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
 import { formatStorageSize } from '@/utils/common';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
