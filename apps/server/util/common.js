@@ -104,15 +104,6 @@ export const snakeCaseKeys = function (input) {
   return toSnakeCase(JSON.parse(JSON.stringify(input)));
 };
 
-// 函数用于将 ISO 8601 格式转换为数据库存储的格式
-export const convertISOToDatabaseFormat = function (isoDate) {
-  // 创建一个 Date 对象
-  const date = new Date(isoDate);
-  // 将 Date 对象转换为数据库存储的格式
-  const databaseFormat = date.toISOString().replace('T', ' ').replace('.000Z', '');
-  return databaseFormat;
-};
-
 // 前端没有传但后端定义了的参数过滤掉
 export const mergeExistingProperties = function (source, outValue = [undefined], outKey = []) {
   let target = {};

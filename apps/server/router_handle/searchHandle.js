@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { resultData } from '../util/common.js';
+import { resultData, formatDateTime } from '../util/common.js';
 import { resolveFileCategory } from '../util/fileCategory.js';
 import { normalizeTagIds, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -107,7 +107,7 @@ function buildSnippet(text, keyword, len = 140) {
 
 function normalizeDate(value) {
   if (!value) return '';
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return formatDateTime(value).slice(0, 10); // 本地时区,避免 UTC 差一天
   const text = toText(value);
   return text.length > 10 ? text.slice(0, 10) : text;
 }

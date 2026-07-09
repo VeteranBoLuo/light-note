@@ -24,6 +24,7 @@
 
 import pool from '../db/index.js';
 import { marked } from 'marked';
+import { formatDateTime } from '../util/common.js';
 
 const SITE = 'https://boluo66.top';
 const BRAND = '轻笺';
@@ -52,7 +53,8 @@ const toPlainText = (html, limit = 150) =>
 
 const formatDate = (d) => {
   const t = d ? new Date(d) : new Date();
-  return isNaN(t.getTime()) ? new Date().toISOString().slice(0, 10) : t.toISOString().slice(0, 10);
+  // 本地时区(复用 formatDateTime),避免凌晨 toISOString 取 UTC 把 lastmod/日期算成昨天
+  return formatDateTime(isNaN(t.getTime()) ? new Date() : t).slice(0, 10);
 };
 
 /** 公共页面骨架：极简内联样式，兼容移动端，不依赖前端资源 */

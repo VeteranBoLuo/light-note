@@ -873,7 +873,8 @@
         throw new Error('BATCH_DOWNLOAD_CANCELLED');
       }
 
-      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+      const _now = new Date();
+      const timestamp = `${_now.getFullYear()}.${String(_now.getMonth() + 1).padStart(2, '0')}.${String(_now.getDate()).padStart(2, '0')}`;
       const zipName = `file-${timestamp}.zip`;
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');

@@ -8,6 +8,7 @@
  * - 定时任务异常绝不影响主流程(整体 try/catch 吞错)。
  */
 import pool from '../db/index.js';
+import { formatDateTime } from './common.js';
 import { getGrowth } from './growth.js';
 import crypto from 'crypto';
 
@@ -39,7 +40,7 @@ export async function buildWeeklyReport(userId, userRole = null) {
     checkinDays,
     level: g.level,
     levelName: g.name,
-    generatedAt: new Date().toISOString().slice(0, 10),
+    generatedAt: formatDateTime(new Date()).slice(0, 10), // 本地时区,避免凌晨 toISOString 取 UTC 差一天
     prev: {
       bookmarks: Number(row.prevBookmarks || 0),
       notes: Number(row.prevNotes || 0),
