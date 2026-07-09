@@ -7,6 +7,7 @@ router.get('/me', growthHandle.getMyGrowth);
 router.get('/dashboard', growthHandle.getDashboard);
 router.get('/ranks', growthHandle.getRanks);
 router.post('/checkin', growthHandle.doCheckin);
+router.post('/useProtectCard', growthHandle.doUseProtectCard);
 router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
 router.post('/notices/read', growthHandle.readNotices);
 

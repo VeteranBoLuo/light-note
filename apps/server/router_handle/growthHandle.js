@@ -1,4 +1,4 @@
-import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, RANKS, markNoticesRead } from '../util/growth.js';
+import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, useProtectCard, RANKS, markNoticesRead } from '../util/growth.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 
@@ -24,6 +24,18 @@ export const doCheckin = async (req, res) => {
   } catch (error) {
     console.error('签到失败:', error);
     res.send(resultData(null, 500, '签到失败: ' + error.message));
+  }
+};
+
+// POST /growth/useProtectCard —— 使用补签卡补回昨天漏签、续连签(消耗 1 张卡)
+export const doUseProtectCard = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await useProtectCard(req.user.id, { userRole: req.user.role });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('补签失败:', error);
+    res.send(resultData(null, 500, '补签失败: ' + error.message));
   }
 };
 

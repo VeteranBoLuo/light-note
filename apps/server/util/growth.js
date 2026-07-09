@@ -149,6 +149,8 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     let leveledUp = false;
     if (toLevel > fromLevel) {
       leveledUp = true;
+      // 每升 1 级奖励 1 张补签卡(上限 2)
+      await c.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + ?) WHERE user_id = ?', [toLevel - fromLevel, userId]);
       for (let L = fromLevel + 1; L <= toLevel; L++) {
         const rankName = rankOf(L).name;
         await c.query(
@@ -232,9 +234,10 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let streak = 0;
   let lastCheckin = null;
   let lastNotifiedLevel = 1;
+  let protectCards = 0;
   if (userId && userId !== 'visitor') {
     const [rows] = await pool.query(
-      'SELECT exp, streak, last_checkin_date, last_notified_level FROM user_growth WHERE user_id = ?',
+      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards FROM user_growth WHERE user_id = ?',
       [userId],
     );
     if (rows[0]) {
@@ -242,6 +245,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
       streak = Number(rows[0].streak || 0);
       lastCheckin = rows[0].last_checkin_date || null;
       lastNotifiedLevel = Number(rows[0].last_notified_level || 1);
+      protectCards = Number(rows[0].streak_protect_cards || 0);
     }
   }
   let level = levelForExp(exp);
@@ -274,6 +278,8 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     aiTokenDaily: rank.aiTokenDaily,
     trashDays: rank.trashDays,
     streak,
+    protectCards, // 补签卡数量(上限 2)
+    canUseProtectCard: protectCards > 0 && lastCheckin === dayKey(new Date(Date.now() - 2 * 86_400_000)), // 昨天漏签且有卡 → 可补签续连签
     checkedInToday: lastCheckin === dayKey(),
     levelStartExp: rank.cumExp,
     nextLevelExp: nextExp,
@@ -588,6 +594,10 @@ export async function checkin(userId, { userRole = null } = {}) {
     const amount = CHECKIN_BASE + checkinBonus(streak); // 5 + min(streak,5),单日 ≤10
 
     await conn.query('UPDATE user_growth SET streak = ?, last_checkin_date = ? WHERE user_id = ?', [streak, today, userId]);
+    // 连签满 7 天奖励 1 张补签卡(上限 2)
+    if (streak > 0 && streak % 7 === 0) {
+      await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + 1) WHERE user_id = ?', [userId]);
+    }
     const grant = await grantExp(userId, 'checkin', { day: today, amount, meta: { streak }, userRole }, conn);
     await conn.commit();
 
@@ -606,6 +616,54 @@ export async function checkin(userId, { userRole = null } = {}) {
       /* ignore */
     }
     throw e;
+  } finally {
+    conn.release();
+  }
+}
+
+// 使用补签卡:补回昨天漏签、连签续上。仅「最后签到停在前天(昨天正好漏 1 天)」可补,消耗 1 张卡。
+// 补昨天后用户再正常签到今天(gap=1),连签得以延续,不被断签回退。
+export async function useProtectCard(userId, { userRole = null } = {}) {
+  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  const yesterday = dayKey(new Date(Date.now() - 86_400_000));
+  const dayBefore = dayKey(new Date(Date.now() - 2 * 86_400_000));
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [rows] = await conn.query(
+      'SELECT streak, last_checkin_date, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
+      [userId],
+    );
+    const g = rows[0];
+    if (!g || Number(g.streak_protect_cards) < 1) {
+      await conn.rollback();
+      return { ok: false, reason: 'no_card' };
+    }
+    // 仅当「昨天漏签」(最后签到停在前天)可补;已签今天或没断签则无需补
+    if (g.last_checkin_date !== dayBefore) {
+      await conn.rollback();
+      return { ok: false, reason: 'not_applicable' };
+    }
+    const newStreak = Number(g.streak) + 1; // 补上昨天,连签 +1
+    await conn.query(
+      'UPDATE user_growth SET streak = ?, last_checkin_date = ?, streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
+      [newStreak, yesterday, userId],
+    );
+    // 补一条昨天的签到账本(不发经验,只续连签;唯一键去重防重复补)
+    await conn.query(
+      `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
+       VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)`,
+      [userId, yesterday, JSON.stringify({ protectCard: true })],
+    );
+    await conn.commit();
+    return { ok: true, streak: newStreak, growth: await getGrowth(userId, { userRole }) };
+  } catch (e) {
+    try {
+      await conn.rollback();
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, reason: 'error', error: e.message };
   } finally {
     conn.release();
   }

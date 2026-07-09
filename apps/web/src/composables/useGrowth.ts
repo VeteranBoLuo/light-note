@@ -10,6 +10,8 @@ export interface Growth {
   aiTokenDaily: number;
   trashDays?: number;
   streak: number;
+  protectCards?: number;
+  canUseProtectCard?: boolean;
   checkedInToday: boolean;
   levelStartExp: number;
   nextLevelExp: number | null;
@@ -169,6 +171,16 @@ export function useGrowth() {
     return res;
   }
 
+  // 使用补签卡:成功则刷新成长快照(卡数/连签/可补签态更新)
+  async function useProtectCard() {
+    const res = await growthApi.useProtectCard();
+    if (res?.status === 200 && res.data?.growth) {
+      growth.value = res.data.growth as Growth;
+      loadedOnce = true;
+    }
+    return res;
+  }
+
   // 领取今日任务奖励:成功则刷新成长快照 + 看板(经验/等级/领取态实时更新)
   async function claimDailyBonus() {
     const res = await growthApi.claimDailyBonus();
@@ -201,6 +213,7 @@ export function useGrowth() {
     loadDashboard,
     doCheckin,
     claimDailyBonus,
+    useProtectCard,
     markRead,
   };
 }

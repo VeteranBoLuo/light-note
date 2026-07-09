@@ -1,6 +1,12 @@
 <template>
   <div v-if="ranks.length" class="rank-ladder">
     <div class="rl-head">{{ t('growth.rankLadder') }}</div>
+    <div class="rl-colhead">
+      <span></span>
+      <span>{{ t('growth.colRank') }}</span>
+      <span class="rl-colhead-r">{{ t('growth.colExp') }}</span>
+      <span class="rl-colhead-r">{{ t('growth.colPerks') }}</span>
+    </div>
     <div ref="listEl" class="rl-list">
       <div
         v-for="r in ranks"
@@ -75,6 +81,22 @@
     max-height: 264px;
     overflow-y: auto;
     padding-right: 4px;
+  }
+  .rl-colhead {
+    display: grid;
+    grid-template-columns: 24px 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--desc-color);
+    opacity: 0.75;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 45%, transparent);
+    margin-bottom: 4px;
+  }
+  .rl-colhead-r {
+    text-align: right;
   }
   .rl-row {
     display: grid;

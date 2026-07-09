@@ -32,9 +32,22 @@
         <b class="gc-perk-val">{{ tokenLabel }}</b>
       </div>
       <div class="gc-perk">
+        <span class="gc-perk-label">{{ t('growth.trashRetain') }}</span>
+        <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.trashDays || 30 }) }}</b>
+      </div>
+      <div class="gc-perk">
         <span class="gc-perk-label">{{ t('growth.streak') }}</span>
         <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.streak }) }}</b>
       </div>
+    </div>
+
+    <!-- 补签卡:有卡或可补签时展示;可补签(昨天漏签)时给「续连签」按钮 -->
+    <div v-if="(g.protectCards || 0) > 0 || g.canUseProtectCard" class="gc-protect">
+      <span class="gc-protect-info">🎫 {{ t('growth.protectCard') }} × {{ g.protectCards || 0 }}</span>
+      <button v-if="g.canUseProtectCard" class="gc-protect-btn" :disabled="usingCard" @click="onUseCard">
+        {{ t('growth.useProtectCard') }}
+      </button>
+      <span v-else class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
     </div>
 
     <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->
@@ -87,7 +100,7 @@
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
 
   const { t } = useI18n();
-  const { growth: g, dashboard, load, loadDashboard, doCheckin, markRead } = useGrowth();
+  const { growth: g, dashboard, load, loadDashboard, doCheckin, useProtectCard, markRead } = useGrowth();
   const checking = ref(false);
   const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
 
@@ -142,6 +155,26 @@
       console.error('签到失败:', err);
     } finally {
       checking.value = false;
+    }
+  }
+
+  const usingCard = ref(false);
+  async function onUseCard() {
+    if (usingCard.value) return;
+    usingCard.value = true;
+    try {
+      const res = await useProtectCard();
+      if (res?.status === 200 && res.data?.ok) {
+        message.success(t('growth.protectCardOk', { n: res.data.streak }));
+        recordOperation({ module: '成长', operation: `使用补签卡（连签续至 ${res.data.streak} 天）` });
+        loadDashboard();
+      } else {
+        message.info(t('growth.protectCardFail'));
+      }
+    } catch (err) {
+      console.error('补签失败:', err);
+    } finally {
+      usingCard.value = false;
     }
   }
 </script>
@@ -271,10 +304,12 @@
   }
   .gc-perks {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
   }
   .gc-perk {
-    flex: 1 1 0;
+    flex: 1 1 calc(25% - 8px);
+    min-width: 88px;
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -282,6 +317,39 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
     border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
+  }
+  .gc-protect {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, #f59e0b 8%, var(--background-color));
+    border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+    font-size: 12.5px;
+  }
+  .gc-protect-info {
+    font-weight: 600;
+  }
+  .gc-protect-btn {
+    margin-left: auto;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .gc-protect-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .gc-protect-hint {
+    margin-left: auto;
+    color: var(--desc-color);
+    font-size: 11px;
   }
   .gc-perk-label {
     font-size: 11.5px;
