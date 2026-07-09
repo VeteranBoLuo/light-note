@@ -729,6 +729,7 @@ export default {
     quotaToday: '今日额度',
     quotaUnlimited: '站长 · 不限额度',
     quotaTip: '每日 AI token 额度,随成长等级提升(满级 80 万/日)',
+    quotaExempt: '当前环境不计入额度',
     pause: '暂停',
     send: '发送',
     copy: '复制',

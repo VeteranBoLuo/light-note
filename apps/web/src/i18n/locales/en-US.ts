@@ -740,6 +740,7 @@ export default {
     quotaToday: 'Today',
     quotaUnlimited: 'Owner · Unlimited',
     quotaTip: 'Daily AI token quota, grows with your level (800k/day at max)',
+    quotaExempt: 'Not counted in this environment',
     pause: 'Pause',
     send: 'Send',
     copy: 'Copy',

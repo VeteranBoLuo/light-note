@@ -4,8 +4,8 @@
       <span class="ai-quota-txt">{{ t('ai.quotaToday') }} {{ fmtTokens(quota.used) }} / {{ fmtTokens(quota.quota) }}</span>
       <div class="ai-quota-bar"><div class="ai-quota-fill" :style="{ width: quotaPercent + '%' }"></div></div>
     </div>
-    <div v-else-if="quota && quota.exempt && quota.role === 'root'" class="ai-quota ai-quota--free">
-      {{ t('ai.quotaUnlimited') }}
+    <div v-else-if="quota && quota.exempt" class="ai-quota ai-quota--free">
+      {{ quota.role === 'root' ? t('ai.quotaUnlimited') : t('ai.quotaExempt') }}
     </div>
     <div class="input-container">
       <textarea
