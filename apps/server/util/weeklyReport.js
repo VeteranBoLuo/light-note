@@ -23,12 +23,16 @@ export async function buildWeeklyReport(userId, userRole = null) {
     [userId, userId, userId, userId, userId],
   );
   const g = await getGrowth(userId, { userRole });
+  // 免账本用户(如 root)不写每日签到流水,从账本数出来的 checkinDays 会是 0;
+  // 用当前连签数兜底(至多 7 天,近似本周),避免「连签中却显示签到 0」。
+  let checkinDays = Number(row.checkinDays || 0);
+  if (checkinDays === 0 && Number(g.streak) > 0) checkinDays = Math.min(Number(g.streak), 7);
   return {
     bookmarks: Number(row.bookmarks || 0),
     notes: Number(row.notes || 0),
     files: Number(row.files || 0),
     exp: Number(row.exp || 0),
-    checkinDays: Number(row.checkinDays || 0),
+    checkinDays,
     level: g.level,
     levelName: g.name,
     generatedAt: new Date().toISOString().slice(0, 10),
