@@ -28,6 +28,7 @@ export default {
     tagSearch: '请输入标签名',
   },
   workbench: {
+    tableEmpty: '暂无数据 · 开始使用后这里会显示',
     title: '工作台',
     subtitle: '聚合查看书签、笔记和云空间状态，快速完成常用操作。',
     growth: {
@@ -477,6 +478,8 @@ export default {
   common: {
     detail: '详情',
     edit: '编辑',
+    copyLink: '复制链接',
+    linkCopied: '链接已复制',
     delete: '删除',
     refresh: '刷新',
     export: '导出',
@@ -746,6 +749,9 @@ export default {
     empty: '暂无通知',
     loading: '加载中…',
     loadMore: '加载更多',
+    groupToday: '今天',
+    groupWeek: '本周',
+    groupEarlier: '更早',
     levelUpTitle: '升级到 Lv.{level} · {name}',
     opinionReplyTitle: '你的反馈收到新回复',
     tabAll: '全部',

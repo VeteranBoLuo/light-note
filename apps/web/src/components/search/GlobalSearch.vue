@@ -6,6 +6,7 @@
       :class="{ 'global-search-box--open': suggestVisible }"
       ref="searchBoxRef"
       @mousedown="handleSearchBoxMouseDown"
+      @keydown="onKeydown"
     >
       <b-input
         id="global-search-input"
@@ -14,7 +15,7 @@
         height="36px"
         @focus="openSuggest"
         @input="handleInput"
-        @enter="goSearch"
+        @enter="onEnter"
       >
         <template #prefix>
           <svg-icon :src="icon.navigation.search" size="16" />
@@ -46,6 +47,7 @@
               v-for="item in group.items"
               :key="`${item.type}-${item.id}`"
               class="suggest-item"
+              :class="{ 'suggest-item--active': isActiveItem(item) }"
               @mousedown.prevent="openItem(item)"
               v-click-log="{ module: '全局搜索', operation: `打开搜索建议【${item.type}:${item.title}】` }"
             >
@@ -305,6 +307,39 @@
     if (item.route) router.push(item.route);
   }
 
+  // ── 下拉键盘操作:↑↓ 选中候选、回车打开选中项(未选中则进资源中心)、Esc 收起 ──
+  const activeIndex = ref(-1);
+  const flatItems = computed(() => suggestGroups.value.flatMap((g) => g.items));
+  function isActiveItem(item: SearchResultItem) {
+    return activeIndex.value >= 0 && flatItems.value[activeIndex.value] === item;
+  }
+  function moveActive(delta: number) {
+    const len = flatItems.value.length;
+    if (!len) return;
+    activeIndex.value = (activeIndex.value + delta + len) % len;
+  }
+  function onKeydown(e: KeyboardEvent) {
+    if (!suggestVisible.value) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveActive(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveActive(-1);
+    } else if (e.key === 'Escape') {
+      closeDesktopSuggest();
+    }
+  }
+  function onEnter() {
+    const list = flatItems.value;
+    if (activeIndex.value >= 0 && list[activeIndex.value]) openItem(list[activeIndex.value]);
+    else goSearch();
+  }
+  // 结果刷新即重置高亮,避免指向错位
+  watch(suggestGroups, () => {
+    activeIndex.value = -1;
+  });
+
   function handleDocumentMouseDown(event: MouseEvent) {
     if (!searchBoxRef.value) return;
     if (!searchBoxRef.value.contains(event.target as Node)) {
@@ -482,6 +517,9 @@
       transform 0.2s;
   }
 
+  .suggest-item--active {
+    background: rgba(97, 92, 237, 0.12);
+  }
   .suggest-item:hover {
     background: var(--bl-input-noBorder-bg-color);
     transform: translateY(-1px);

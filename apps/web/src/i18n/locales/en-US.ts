@@ -29,6 +29,7 @@ export default {
     alreadyIncluded: 'Already included',
   },
   workbench: {
+    tableEmpty: 'Nothing here yet · it shows up once you start',
     title: 'Workbench',
     subtitle: 'Aggregate bookmark, note, and cloud space states for faster daily actions.',
     growth: {
@@ -485,6 +486,8 @@ export default {
   common: {
     detail: 'Detail',
     edit: 'Edit',
+    copyLink: 'Copy link',
+    linkCopied: 'Link copied',
     delete: 'Delete',
     refresh: 'Refresh',
     export: 'Export',
@@ -755,6 +758,9 @@ export default {
     empty: 'No notifications',
     loading: 'Loading…',
     loadMore: 'Load more',
+    groupToday: 'Today',
+    groupWeek: 'This week',
+    groupEarlier: 'Earlier',
     levelUpTitle: 'Leveled up to Lv.{level} · {name}',
     opinionReplyTitle: 'Your feedback got a reply',
     tabAll: 'All',

@@ -43,7 +43,7 @@
       :delay="50"
     >
       <div v-for="item in getBookList" :key="item.id">
-        <RightMenu :menu="[$t('common.edit'), $t('common.delete')]" @select="rightMenuClick($event, item)">
+        <RightMenu :menu="[$t('common.edit'), $t('common.copyLink'), $t('common.delete')]" @select="rightMenuClick($event, item)">
           <TagCard :cardInfo="item" />
         </RightMenu>
       </div>
@@ -69,6 +69,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { copyTextToClipboard } from '@/utils/common.ts';
   import { useI18n } from 'vue-i18n';
   const bookmark = bookmarkStore();
   const { t } = useI18n();
@@ -85,6 +86,11 @@
 
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签【${item.name}】` });
+    if (type === t('common.copyLink')) {
+      copyTextToClipboard(item.url);
+      message.success(t('common.linkCopied'));
+      return;
+    }
     if (type === t('common.edit')) {
       router.push({ path: `/manage/editBookmark/${item.id}` });
     } else {

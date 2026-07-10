@@ -1,6 +1,11 @@
 <template>
   <WorkbenchesCard :title="title" :titleType="titleType" style="height: 100%">
+    <div v-if="!tableData.length" class="cdt-empty">
+      <span class="cdt-empty-icon">📭</span>
+      <span>{{ t('workbench.tableEmpty') }}</span>
+    </div>
     <BTable
+      v-else
       :data="tableData"
       :columns="columns"
       :rowClickable="rowClickable"
@@ -29,7 +34,9 @@
   import WorkbenchesCard from '@/components/workbenches/WorkbenchesCard.vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import icon from '@/config/icon.ts';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const emit = defineEmits(['rowClick']);
 
   defineProps({
@@ -57,6 +64,22 @@
 </script>
 
 <style lang="less" scoped>
+  .cdt-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 100%;
+    min-height: 120px;
+    color: var(--desc-color, #888);
+    font-size: 13px;
+  }
+  .cdt-empty-icon {
+    font-size: 30px;
+    opacity: 0.6;
+  }
+
   :deep(.table-container) {
     background-color: unset;
     box-shadow: unset;

@@ -54,35 +54,38 @@
             <div>{{ t('notification.empty') }}</div>
           </div>
           <template v-else>
-            <div
-              v-for="n in items"
-              :key="n.id"
-              class="nt-item dom-hover"
-              :class="{ unread: !n.isRead }"
-              @click="onItemClick(n)"
-            >
-              <span class="nt-dot" :class="`type-${n.type}`"></span>
-              <div class="nt-item-main">
-                <div class="nt-item-title">{{ renderTitle(n) }}</div>
-                <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{
-                  renderContent(n)
-                }}</div>
-                <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
+            <div v-for="grp in groupedItems" :key="grp.key" class="nt-group">
+              <div class="nt-group-label">{{ grp.label }}</div>
+              <div
+                v-for="n in grp.items"
+                :key="n.id"
+                class="nt-item dom-hover"
+                :class="{ unread: !n.isRead }"
+                @click="onItemClick(n)"
+              >
+                <span class="nt-dot" :class="`type-${n.type}`"></span>
+                <div class="nt-item-main">
+                  <div class="nt-item-title">{{ renderTitle(n) }}</div>
+                  <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{
+                    renderContent(n)
+                  }}</div>
+                  <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
+                </div>
+                <button class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                  </svg>
+                </button>
               </div>
-              <button class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
-                <svg
-                  viewBox="0 0 24 24"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                </svg>
-              </button>
             </div>
             <button v-if="items.length < total" class="nt-more" :disabled="loading" @click="loadMore">
               {{ loading ? t('notification.loading') : t('notification.loadMore') }}
@@ -131,6 +134,25 @@
   function tabUnread(v: string): number {
     return v === 'all' ? unreadTotal.value : unreadByType.value[v] || 0;
   }
+
+  // 按时间把当前列表分「今天 / 本周 / 更早」三组(纯前端,不改后端返回顺序)
+  const groupedItems = computed(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const weekStart = todayStart - 6 * 86400000;
+    const buckets: Record<string, NotificationItem[]> = { today: [], week: [], earlier: [] };
+    for (const it of items.value) {
+      const ts = new Date(String(it.createTime).replace(/-/g, '/')).getTime();
+      if (Number.isNaN(ts) || ts >= todayStart) buckets.today.push(it);
+      else if (ts >= weekStart) buckets.week.push(it);
+      else buckets.earlier.push(it);
+    }
+    return [
+      { key: 'today', label: t('notification.groupToday'), items: buckets.today },
+      { key: 'week', label: t('notification.groupWeek'), items: buckets.week },
+      { key: 'earlier', label: t('notification.groupEarlier'), items: buckets.earlier },
+    ].filter((g) => g.items.length);
+  });
 
   function parseMeta(meta: any): any {
     if (!meta) return {};
@@ -348,6 +370,12 @@
     font-size: 30px;
     margin-bottom: 8px;
     opacity: 0.7;
+  }
+  .notification-popover .nt-group-label {
+    padding: 10px 4px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--desc-color, #888);
   }
   .notification-popover .nt-item {
     position: relative;
