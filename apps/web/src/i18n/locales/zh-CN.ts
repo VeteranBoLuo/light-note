@@ -781,6 +781,7 @@ export default {
     send: '发送',
     copy: '复制',
     edit: '编辑',
+    regenerate: '重新生成',
     copied: '已复制到剪贴板',
     copyFailed: '复制失败，请手动选择复制',
     responsePaused: '（响应已暂停）',

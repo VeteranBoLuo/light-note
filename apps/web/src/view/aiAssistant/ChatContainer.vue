@@ -17,6 +17,7 @@
           :message="message"
           :has-answer-started="hasAnswerStarted"
           @edit="handleEditMessage"
+          @regenerate="() => handleRegenerate(index)"
         />
         <!-- 智能滚动提示  -->
         <ScrollPrompt
@@ -686,6 +687,18 @@
     nextTick(() => {
       chatInputRef.value?.focus();
     });
+  };
+
+  // 重新生成：回到该 AI 回答对应的那轮提问，截断后用原问题重发（复用完整发送流程）
+  const handleRegenerate = (index: number) => {
+    if (isLoading.value) return; // 生成中不打断
+    let userIdx = index - 1;
+    while (userIdx >= 0 && messages.value[userIdx].role !== 'user') userIdx--;
+    if (userIdx < 0) return;
+    const userContent = messages.value[userIdx].content;
+    messages.value.splice(userIdx); // 移除这轮 user + 其后所有消息，再用原问题重发
+    userInput.value = userContent;
+    sendMessage();
   };
 
   // 简化消息监听逻辑，避免冲突

@@ -74,6 +74,23 @@
           </div>
           <span class="time">{{ formatTime(message.timestamp) }}</span>
         </div>
+        <!-- AI 回答:操作条(复制 + 重新生成),左对齐;用户消息的复制/编辑另在上方 -->
+        <div class="msg-footer" style="justify-content: flex-start" v-if="message.role === 'assistant' && message.content">
+          <div class="msg-actions">
+            <button type="button" class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+            <button type="button" class="msg-action-btn" :title="t('ai.regenerate')" @click="handleRegenerate">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M23 4v6h-6"></path>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -117,6 +134,7 @@
   // 点“编辑”把这条用户消息内容抛给容器，回填到输入框
   const emit = defineEmits<{
     (e: 'edit', content: string): void;
+    (e: 'regenerate'): void;
   }>();
 
   // 复制这条消息内容到剪贴板
@@ -129,6 +147,11 @@
   // 编辑：把内容回填到输入框（由 ChatContainer 处理并聚焦）
   const handleEdit = () => {
     emit('edit', props.message.content);
+  };
+
+  // 重新生成：请求容器用上一条用户消息重发本轮（仅 AI 回答用）
+  const handleRegenerate = () => {
+    emit('regenerate');
   };
 
   // 配置 Markdown 解析器（保持与原组件一致，忽略类型检查约束）

@@ -792,6 +792,7 @@ export default {
     send: 'Send',
     copy: 'Copy',
     edit: 'Edit',
+    regenerate: 'Regenerate',
     copied: 'Copied to clipboard',
     copyFailed: 'Copy failed, please select and copy manually',
     responsePaused: '(Response paused)',
