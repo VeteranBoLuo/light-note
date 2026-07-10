@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 import {
@@ -9,16 +10,21 @@ import {
 
 // 常量定义
 const TIMEOUT = 120000;
-const ERROR_MESSAGES: { [key: number]: string } = {
-  500: '服务器错误',
-  403: '服务器拒绝请求',
-  423: '账号已被封禁',
-  401: '无权限，请登录',
-  400: '客户端请求异常',
-  404: '请求资源不存在',
-  504: '服务器异常',
-  505: 'HTTP 版本不受支持',
+const HTTP_STATUS_KEYS: { [key: number]: string } = {
+  500: 'http.status500',
+  403: 'http.status403',
+  423: 'http.status423',
+  401: 'http.status401',
+  400: 'http.status400',
+  404: 'http.status404',
+  504: 'http.status504',
+  505: 'http.status505',
 };
+// 组件外用 i18n.global.t 取当前语言的状态码提示;未登记的 status 返回 undefined(保持原「有映射才提示」的逻辑)
+function statusMessage(status: number): string | undefined {
+  const key = HTTP_STATUS_KEYS[status];
+  return key ? i18n.global.t(key) : undefined;
+}
 
 // 接口定义
 interface ApiResponse {
@@ -106,7 +112,7 @@ function notifyUserBanned(response?: any) {
   if (status !== 423 && !headerBanned) {
     return false;
   }
-  const msg = response?.data?.msg || '账号已被封禁，请登录其他账号或联系管理员';
+  const msg = response?.data?.msg || i18n.global.t('http.banned');
   if (!userBannedNotifyLocked) {
     userBannedNotifyLocked = true;
     message.error(msg);
@@ -192,14 +198,14 @@ request.interceptors.response.use(
       if (notifyUserBanned(error.response)) {
         return Promise.reject({
           code: 'USER_BANNED',
-          message: error.response.data?.msg || '账号已被封禁',
+          message: error.response.data?.msg || i18n.global.t('http.bannedShort'),
           status: 423,
         });
       }
       notifyAuthExpired(error.response);
       const status = error.response.status;
       if (status === 429) {
-        const msg = error.response.data?.msg || '请求过于频繁，请稍后再试';
+        const msg = error.response.data?.msg || i18n.global.t('http.tooFrequent');
         message.error(msg);
         return Promise.reject({
           code: 'HTTP_429',
@@ -208,7 +214,7 @@ request.interceptors.response.use(
         });
       }
       if (status >= 500) {
-        const msg = error.response.data?.msg || '服务器开小差了，请稍后重试';
+        const msg = error.response.data?.msg || i18n.global.t('http.serverBusy');
         message.error(msg);
         return Promise.reject({
           code: 'HTTP_' + status,
@@ -224,7 +230,7 @@ request.interceptors.response.use(
       // 返回一个自定义错误对象，避免原生的技术错误暴露给用户
       return Promise.reject({
         code: 'NETWORK_ERROR',
-        message: '网络连接不稳定，请检查网络后重试',
+        message: i18n.global.t('http.networkUnstable'),
         originalError: error,
       });
     }
@@ -294,8 +300,9 @@ export function handleErrorResponse(res: AxiosResponse['data'], silent = false):
     notifyUserBanned({ data: res, status: 423, headers: { 'x-user-banned': '1' } });
     return res;
   }
-  if (!silent && ERROR_MESSAGES[res.status]) {
-    const errorMsg = res.msg ?? ERROR_MESSAGES[res.status];
+  const statusMsg = statusMessage(res.status);
+  if (!silent && statusMsg) {
+    const errorMsg = res.msg ?? statusMsg;
     message.error(errorMsg);
   }
   return res;

@@ -5,7 +5,7 @@
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
     <GlobalSearch />
-    <BTooltip title="工具箱" always>
+    <BTooltip :title="$t('home.toolbox')" always>
       <div v-if="!bookmark.isMobile" @click="toolkitClick" v-click-log="OPERATION_LOG_MAP.navigation.toolkit" class="toolkit-link">
         <svg-icon size="26" hover :src="icon.toolkit" />
       </div>
@@ -15,7 +15,7 @@
       align="center"
       :menu-options="[
         { label: $t('navigation.projectAddress'), function: () => githubClick() },
-        { label: '官方首页', function: () => router.push('/landing') },
+        { label: $t('home.officialSite'), function: () => router.push('/landing') },
       ]"
     >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
@@ -23,7 +23,7 @@
     <button v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
     </button>
-    <span v-if="user.role === 'visitor'" class="guest-register-link" @click="registerClick">免费注册</span>
+    <span v-if="user.role === 'visitor'" class="guest-register-link" @click="registerClick">{{ $t('home.freeRegister') }}</span>
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">

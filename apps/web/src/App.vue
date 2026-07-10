@@ -241,7 +241,7 @@
         return res;
       } catch (error) {
         userInfoLoaded = true;
-        message.error('获取用户信息失败：', error);
+        message.error(t('app.loadUserFailed'), error);
         handleUserLogout();
         return null;
       } finally {
@@ -334,7 +334,7 @@
     const isManualLogout = sessionStorage.getItem('manualLogout') === '1';
     sessionStorage.removeItem('manualLogout');
     if (!isManualLogout) {
-      message.warning('登录已过期，请重新登录');
+      message.warning(t('app.sessionExpired'));
     }
     userInfoLoaded = true;
     handleUserLogout(resetUser);

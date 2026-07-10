@@ -17,8 +17,8 @@
     >
       404
     </div>
-    <b style="color: #ccc"> 温馨提示：您访问的地址不存在！</b>
-    <a @click="goBack" style="cursor: pointer"> 返回</a>
+    <b style="color: #ccc"> {{ $t('common.pageNotFound') }}</b>
+    <a @click="goBack" style="cursor: pointer"> {{ $t('common.back') }}</a>
   </div>
 </template>
 

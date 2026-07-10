@@ -15,8 +15,8 @@
       >
         403
       </div>
-      <b style="color: orange">无访问权限</b>
-      <a @click="goBack" style="cursor: pointer">返回</a>
+      <b style="color: orange">{{ $t('common.noPermission') }}</b>
+      <a @click="goBack" style="cursor: pointer">{{ $t('common.back') }}</a>
     </div>
   </div>
 </template>

@@ -1,6 +1,6 @@
 <template>
   <div class="card-body" @click="toNewPage">
-    <span v-if="isTop" class="card-top-badge">置顶</span>
+    <span v-if="isTop" class="card-top-badge">{{ $t('common.pin') }}</span>
     <div class="card-title">
       <div style="display: flex; align-items: center; gap: 10px">
         <div class="card-img-container">

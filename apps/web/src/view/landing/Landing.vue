@@ -22,12 +22,12 @@
             <div class="cover-text">
               <div class="logo-badge" ref="badgeRef">LIGHT NOTE</div>
               <h1 class="hero-title" ref="titleRef">
-                <span class="hero-brand">轻 笺</span>
-                <span class="hero-tagline">你的数字生活收纳盒</span>
+                <span class="hero-brand">{{ t('landing.heroBrand') }}</span>
+                <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
               </h1>
               <div class="hero-actions">
                 <button class="btn-primary" @click="goHome" v-click-log="{ module: '官网首页', operation: '免费体验' }">
-                  <span>免费体验</span>
+                  <span>{{ t('landing.tryFree') }}</span>
                   <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M5 12h14M13 5l7 7-7 7"
@@ -42,7 +42,7 @@
                   class="btn-ghost"
                   @click="scrollTo(1)"
                   v-click-log="{ module: '官网首页', operation: '看看功能' }"
-                  >看看功能</button
+                  >{{ t('landing.seeFeatures') }}</button
                 >
               </div>
             </div>
@@ -61,7 +61,7 @@
                       <path d="M3.5 9h17M3.5 15h17" />
                       <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z" />
                     </svg>
-                    <span>轻笺 · {{ ['书签', '笔记', '云空间'][previewIndex] }}</span>
+                    <span>{{ t('landing.brandShort') }} · {{ previewTabs[previewIndex] }}</span>
                   </div>
                 </div>
                 <div class="mockup-carousel">
@@ -70,21 +70,21 @@
                       <div class="screen-glare"></div>
                       <picture>
                         <source srcset="/eg-bookmark.webp" type="image/webp" />
-                        <img src="/eg-bookmark.png" alt="书签管理" />
+                        <img src="/eg-bookmark.png" :alt="t('landing.tabBookmark')" />
                       </picture>
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
                       <picture>
                         <source srcset="/eg-note.webp" type="image/webp" />
-                        <img src="/eg-note.png" alt="笔记库" />
+                        <img src="/eg-note.png" :alt="t('landing.tabNote')" />
                       </picture>
                     </div>
                     <div class="mockup-screen">
                       <div class="screen-glare"></div>
                       <picture>
                         <source srcset="/eg-cloudSpace.webp" type="image/webp" />
-                        <img src="/eg-cloudSpace.png" alt="云空间" />
+                        <img src="/eg-cloudSpace.png" :alt="t('landing.tabCloud')" />
                       </picture>
                     </div>
                   </div>
@@ -99,7 +99,7 @@
                     v-click-log="{ module: '官网首页', operation: '切换预览图' }"
                   >
                     <span class="dot-indicator"></span>
-                    <span class="dot-label">{{ ['书签', '笔记', '云空间'][i] }}</span>
+                    <span class="dot-label">{{ previewTabs[i] }}</span>
                   </button>
                 </div>
               </div>
@@ -116,8 +116,8 @@
         </div>
         <div class="slide-inner center">
           <div class="section-badge">CORE</div>
-          <h2>一站式收纳</h2>
-          <p class="section-sub">替代浏览器收藏夹 + 笔记软件 + 网盘，三合一的数字生活空间</p>
+          <h2>{{ t('landing.modulesTitle') }}</h2>
+          <p class="section-sub">{{ t('landing.modulesSub') }}</p>
           <div class="core-grid">
             <div
               v-for="(c, i) in cores"
@@ -153,8 +153,8 @@
         </div>
         <div class="slide-inner center">
           <div class="section-badge">FEATURES</div>
-          <h2>更多好用的能力</h2>
-          <p class="section-sub">不止是存储，给你更多</p>
+          <h2>{{ t('landing.featuresTitle') }}</h2>
+          <p class="section-sub">{{ t('landing.featuresSub') }}</p>
           <div class="features-grid">
             <div v-for="(f, i) in features" :key="i" class="feat-card" :class="{ visible: visible[2] }">
               <div class="feat-icon">{{ f.icon }}</div>
@@ -175,7 +175,7 @@
         </div>
         <div class="slide-inner center" :style="{ maxWidth: 'max(800px, min(42vw, 1050px))' }">
           <div class="section-badge">WHY</div>
-          <h2>为什么选轻笺</h2>
+          <h2>{{ t('landing.whyTitle') }}</h2>
           <div class="reasons-wrap">
             <div
               v-for="(r, i) in reasons"
@@ -206,14 +206,14 @@
             <div class="cta-particle p2"></div>
             <div class="cta-particle p3"></div>
             <div class="cta-emoji">✨</div>
-            <h2 class="cta-title">准备好了吗？</h2>
-            <p class="cta-desc">无需下载，打开浏览器就能用</p>
+            <h2 class="cta-title">{{ t('landing.ctaTitle') }}</h2>
+            <p class="cta-desc">{{ t('landing.ctaDesc') }}</p>
             <button
               class="btn-primary btn-large"
               @click="goHome"
               v-click-log="{ module: '官网首页', operation: '开始使用' }"
             >
-              开始使用
+              {{ t('landing.startNow') }}
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path
                   d="M5 12h14M13 5l7 7-7 7"
@@ -227,16 +227,16 @@
           </div>
           <div class="cta-foot">boluo66.top</div>
           <div class="landing-footer">
-            <span>© 2024 轻笺</span>
+            <span>{{ t('landing.copyright') }}</span>
             <span class="footer-sep">|</span>
             <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
             <span class="footer-sep">|</span>
             <!-- 后端直出的 SEO 内容页,不走 SPA 路由;爬虫由此发现帮助中心。
                  注意:路径是 /helpCenter 不是 /help —— /help 是 App 内已有的
                  AI 助手/帮助文档路由(router/modules/common.ts),不能撞 -->
-            <a href="/helpCenter">帮助中心</a>
+            <a href="/helpCenter">{{ t('landing.helpCenter') }}</a>
             <span class="footer-sep">|</span>
-            <a href="#" @click.prevent="handleContact">联系我们</a>
+            <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
@@ -253,25 +253,23 @@
         @click="goTo(i)"
         v-click-log="{ module: '官网首页', operation: '切换幻灯片' }"
       >
-        <span class="dot-tooltip">{{ ['封面', '核心', '功能', '理由', '开始'][i] }}</span>
+        <span class="dot-tooltip">{{ navLabels[i] }}</span>
       </button>
     </div>
-    <div class="slide-counter" :class="{ pulse: animating }">{{
-      ['封面', '核心', '功能', '理由', '开始'][current]
-    }}</div>
+    <div class="slide-counter" :class="{ pulse: animating }">{{ navLabels[current] }}</div>
 
     <!-- Contact Modal -->
     <div v-if="showContactModal" class="contact-overlay" @click.self="showContactModal = false">
       <div class="contact-dialog">
         <button class="contact-dialog__close" @click="showContactModal = false">×</button>
-        <div class="contact-dialog__header">联系我们</div>
-        <div class="contact-dialog__email">邮箱：1902013368@qq.com</div>
+        <div class="contact-dialog__header">{{ t('landing.contactUs') }}</div>
+        <div class="contact-dialog__email">{{ t('landing.contactEmail') }}</div>
         <div class="contact-dialog__field">
-          <label>写下你的反馈意见</label>
+          <label>{{ t('landing.feedbackLabel') }}</label>
           <textarea
             v-model="feedbackContent"
             class="contact-dialog__input"
-            placeholder="功能建议、问题反馈、任何你想说的…"
+            :placeholder="t('landing.feedbackPlaceholder')"
             rows="4"
           ></textarea>
         </div>
@@ -280,7 +278,7 @@
           :disabled="!feedbackContent.trim() || submitting"
           @click="submitFeedback"
         >
-          {{ submitting ? '提交中…' : '提交反馈' }}
+          {{ submitting ? t('landing.submitting') : t('landing.submitFeedback') }}
         </button>
       </div>
     </div>
@@ -288,11 +286,13 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onBeforeUnmount } from 'vue';
+  import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
   import { apiBasePost } from '@/http/request';
 
+  const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const theme = ref(user.preferences?.theme || 'day');
@@ -308,6 +308,15 @@
   const showContactModal = ref(false);
   const feedbackContent = ref('');
   const submitting = ref(false);
+
+  const previewTabs = computed(() => [t('landing.tabBookmark'), t('landing.tabNote'), t('landing.tabCloud')]);
+  const navLabels = computed(() => [
+    t('landing.navCover'),
+    t('landing.navCore'),
+    t('landing.navFeatures'),
+    t('landing.navWhy'),
+    t('landing.navStart'),
+  ]);
 
   function goTo(i: number) {
     slidesRef.value?.children[i]?.scrollIntoView({ behavior: 'smooth' });
@@ -359,66 +368,66 @@
       if (res.status === 200) {
         showContactModal.value = false;
         feedbackContent.value = '';
-        showToast('反馈已提交，感谢你的建议');
+        showToast(t('landing.feedbackOk'));
       } else {
-        showToast('提交失败，请稍后重试');
+        showToast(t('landing.feedbackFail'));
       }
     } catch {
-      showToast('网络错误，请稍后重试');
+      showToast(t('landing.networkErr'));
     } finally {
       submitting.value = false;
     }
   }
 
-  const cores = [
+  const cores = computed(() => [
     {
       icon: '🔖',
-      title: '书签',
+      title: t('landing.coreBookmarkTitle'),
       color: 'purple',
-      desc: '看到好文章一键收藏，打标签随手搜',
-      tags: ['自动抓取', '标签树', '多标签过滤'],
+      desc: t('landing.coreBookmarkDesc'),
+      tags: [t('landing.coreBookmarkTag1'), t('landing.coreBookmarkTag2'), t('landing.coreBookmarkTag3')],
     },
     {
       icon: '📝',
-      title: '笔记',
+      title: t('landing.coreNoteTitle'),
       color: 'green',
-      desc: '富文本编辑器，文件夹归类，目录导航',
-      tags: ['图文表格', '代码高亮', '导出 PDF'],
+      desc: t('landing.coreNoteDesc'),
+      tags: [t('landing.coreNoteTag1'), t('landing.coreNoteTag2'), t('landing.coreNoteTag3')],
     },
     {
       icon: '☁️',
-      title: '云空间',
+      title: t('landing.coreCloudTitle'),
       color: 'orange',
-      desc: '文件上传预览分享，卡片列表双视图',
-      tags: ['Office 预览', '批量操作', '外部分享'],
+      desc: t('landing.coreCloudDesc'),
+      tags: [t('landing.coreCloudTag1'), t('landing.coreCloudTag2'), t('landing.coreCloudTag3')],
     },
-  ];
+  ]);
 
-  const features = [
-    { icon: '🏷️', title: '统一标签', desc: '书签·笔记·文件共享标签体系，一个标签关联所有' },
-    { icon: '🔍', title: '全局搜索', desc: '跨模块统一检索，关键词+标签联合过滤' },
-    { icon: '🤖', title: 'AI 助手', desc: '内嵌 AI 对话，辅助知识处理，上下文问答' },
-    { icon: '🌙', title: '深色主题', desc: '浅色/深色一键切换，CSS 变量体系，护眼舒适' },
-    { icon: '📱', title: '移动端', desc: '两套独立布局，触控优化，路上也能用' },
-    { icon: '🌐', title: '中英文', desc: '完整双语支持，vue-i18n，切换无感' },
-  ];
+  const features = computed(() => [
+    { icon: '🏷️', title: t('landing.featTagTitle'), desc: t('landing.featTagDesc') },
+    { icon: '🔍', title: t('landing.featSearchTitle'), desc: t('landing.featSearchDesc') },
+    { icon: '🤖', title: t('landing.featAiTitle'), desc: t('landing.featAiDesc') },
+    { icon: '🌙', title: t('landing.featThemeTitle'), desc: t('landing.featThemeDesc') },
+    { icon: '📱', title: t('landing.featMobileTitle'), desc: t('landing.featMobileDesc') },
+    { icon: '🌐', title: t('landing.featI18nTitle'), desc: t('landing.featI18nDesc') },
+  ]);
 
-  const reasons = [
+  const reasons = computed(() => [
     {
       icon: '💪',
-      title: '持续更新',
-      desc: '功能不断迭代，每次打开都有新惊喜',
+      title: t('landing.reasonUpdateTitle'),
+      desc: t('landing.reasonUpdateDesc'),
       bg: 'rgba(99,92,237,.12)',
     },
-    { icon: '🆓', title: '完全免费', desc: '无需付费，打开浏览器就能使用所有功能', bg: 'rgba(0,168,132,.12)' },
-    { icon: '🌱', title: '越用越聪明', desc: '标签串联内容，知识网络越来越密', bg: 'rgba(255,138,0,.12)' },
+    { icon: '🆓', title: t('landing.reasonFreeTitle'), desc: t('landing.reasonFreeDesc'), bg: 'rgba(0,168,132,.12)' },
+    { icon: '🌱', title: t('landing.reasonSmartTitle'), desc: t('landing.reasonSmartDesc'), bg: 'rgba(255,138,0,.12)' },
     {
       icon: '⚡',
-      title: '快，不废话',
-      desc: 'SPA 单页应用，即搜即得，不像大平台那样慢吞吞',
+      title: t('landing.reasonFastTitle'),
+      desc: t('landing.reasonFastDesc'),
       bg: 'rgba(236,72,153,.12)',
     },
-  ];
+  ]);
 
   // Card 3D tilt
   function onCardMove(e: MouseEvent, i: number) {

@@ -1,4 +1,5 @@
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
 const cloud = cloudSpaceStore();
@@ -16,12 +17,12 @@ export async function downloadField(id: number | string, token?: string) {
       a.remove();
       return true;
     } else {
-      message.error('获取下载链接失败');
+      message.error(i18n.global.t('common.downloadLinkFailed'));
       return false;
     }
   } catch (error) {
     console.error('下载失败:', error);
-    message.error('下载失败，请重试');
+    message.error(i18n.global.t('common.downloadFailed'));
     return false;
   } finally {
     cloud.loading = false;
@@ -33,13 +34,13 @@ export async function deleteField(id: number | string) {
   try {
     const res = await apiBasePost('/api/file/deleteFileById', { id });
     if (res.status === 200) {
-      message.success('删除成功');
+      message.success(i18n.global.t('common.deleteSuccess'));
       return true;
     }
-    message.error(res.msg || '删除失败');
+    message.error(res.msg || i18n.global.t('common.deleteFailed'));
     return false;
   } catch (error) {
-    message.error('删除失败，请重试');
+    message.error(i18n.global.t('common.deleteFailedRetry'));
     return false;
   }
 }
@@ -59,11 +60,11 @@ export async function shareField(
     const encodedDesc = description ? encodeURIComponent(description) : '';
     const shareUrl = `${window.location.origin}/share/${id}/${token}${encodedFileName ? `/${encodedFileName}` : ''}${encodedFileType ? `/${encodedFileType}` : ''}${encodedDesc ? `/${encodedDesc}` : ''}`;
     await navigator.clipboard.writeText(shareUrl);
-    message.success('分享链接已复制到剪贴板');
+    message.success(i18n.global.t('common.shareLinkCopied'));
     return shareUrl;
   } catch (error) {
     console.error('分享失败:', error);
-    message.error('生成分享链接失败');
+    message.error(i18n.global.t('common.shareLinkFailed'));
     throw error;
   }
 }

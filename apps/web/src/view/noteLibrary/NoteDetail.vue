@@ -25,7 +25,7 @@
               v-model:value="note.title"
               @change="inputBlur"
               @focusout="focusout"
-              placeholder="请输入标题"
+              :placeholder="$t('noteDetail.titlePlaceholder')"
             />
           </div>
           <editor
@@ -58,6 +58,7 @@
 
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
@@ -74,6 +75,7 @@
   import { useGuestGuard } from '@/composables/useGuestGuard';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
   const user = useUserStore();
   const { guardWrite } = useGuestGuard();
   const DEFAULT_NOTE_TITLE = '未命名文档';
@@ -281,7 +283,7 @@
 
   async function saveNote(isMsg?: boolean) {
     if (!note.title || !note.title.trim()) {
-      message.warning('请输入笔记标题');
+      message.warning(t('noteDetail.titleRequired'));
       return;
     }
     if (!isMsg && !note.id && !hasNewNoteDraft()) {
@@ -319,7 +321,7 @@
         isStartEdit.value = false;
         timer.value = null;
         if (isMsg) {
-          message.success('保存成功');
+          message.success(t('common.saveSuccess'));
         }
         setUpdateTime();
         clearTimeout(timer.value);
@@ -349,14 +351,14 @@
       return;
     }
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除此笔记？`,
+      title: t('common.defaultTitle'),
+      content: t('noteDetail.deleteConfirm'),
       onOk() {
         apiBasePost('/api/note/delNote', {
           ids: [note.id],
         }).then((res) => {
           if (res.status) {
-            message.success('删除成功');
+            message.success(t('common.deleteSuccess'));
             recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}】` });
             router.push('/noteLibrary');
           }

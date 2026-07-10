@@ -167,13 +167,13 @@
       style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
     >
       <div style="font-size: 44px; opacity: 0.7">📝</div>
-      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">还没有笔记</p>
-      <p style="margin: 0; font-size: 13px">记点什么吧，想法、清单、代码片段都行</p>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('note.empty') }}</p>
+      <p style="margin: 0; font-size: 13px">{{ $t('note.emptyHint') }}</p>
       <button
         @click="showNewNotePicker"
         style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
       >
-        + 新建笔记
+        {{ $t('note.newNote') }}
       </button>
     </div>
   </div>
@@ -182,9 +182,9 @@
   <ActionCardModal
     v-model:visible="showTypePicker"
     :mask-closable="false"
-    title="选择笔记编辑器"
+    :title="$t('note.pickEditor')"
     :sections="typePickerSections"
-    :note="'后续可在编辑器右上角随时切换模式，切换时内容会自动转换格式。'"
+    :note="$t('note.pickEditorTip')"
   />
 </div>
 </template>
@@ -195,6 +195,7 @@
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
   import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
@@ -212,20 +213,21 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
   const showTypePicker = ref(false);
-  const typePickerSections = [
+  const typePickerSections = computed(() => [
     {
       key: 'type',
-      title: '请选择编辑模式',
+      title: t('note.pickMode'),
       actions: [
         {
           key: 'html',
-          label: 'HTML 富文本',
-          description: '所见即所得编辑器，支持表格、待办复选框、颜色等丰富样式',
+          label: t('note.htmlLabel'),
+          description: t('note.htmlDesc'),
           onClick: () => {
             showTypePicker.value = false;
             if (blockGuestWrite('add-note')) return;
@@ -234,8 +236,8 @@
         },
         {
           key: 'markdown',
-          label: 'Markdown',
-          description: '纯文本编辑器，支持实时预览，适合编写带代码块的技术文档',
+          label: t('note.mdLabel'),
+          description: t('note.mdDesc'),
           onClick: () => {
             showTypePicker.value = false;
             if (blockGuestWrite('add-note')) return;
@@ -244,7 +246,7 @@
         },
       ],
     },
-  ];
+  ]);
 
   function showNewNotePicker() {
     showTypePicker.value = true;
@@ -367,15 +369,15 @@
     if (blockGuestWrite('delete-note')) return;
     const delIds = viewNoteList.value.filter((data) => data.isCheck).map((item) => item.id) || [];
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除所选笔记？`,
+      title: t('common.defaultTitle'),
+      content: t('note.deleteSelectedConfirm'),
       onOk() {
         apiBasePost('/api/note/delNote', {
           ids: delIds,
         }).then((res) => {
           if (res.status === 200) {
             recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${delIds.length}篇】` });
-            message.success('删除成功');
+            message.success(t('common.deleteSuccess'));
             init();
           }
         });

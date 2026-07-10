@@ -2,7 +2,7 @@
   <b-loading :loading="loading">
     <CommonContainer :title="title">
       <div class="edit-list-container">
-        <b-input v-model:value="searchValue" class="table-search-input" :placeholder="placeholder">
+        <b-input v-model:value="searchValue" class="table-search-input" :placeholder="placeholder || $t('common.searchContent')">
           <template #prefix>
             <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
           </template>
@@ -18,7 +18,7 @@
           type="primary"
           @click="$emit('add')"
           v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
-          >新增</b-button
+          >{{ $t('common.add') }}</b-button
         >
       </div>
     </CommonContainer>
@@ -48,7 +48,7 @@
     },
     placeholder: {
       type: String,
-      default: '请输入搜索内容',
+      default: '',
     },
     listData: {
       type: Array,

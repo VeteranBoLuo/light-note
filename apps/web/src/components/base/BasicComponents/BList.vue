@@ -1,7 +1,7 @@
 <template>
   <div class="list-container">
     <slot name="input">
-      <b-input v-model:value="searchValue" :placeholder="placeholder" v-if="searchFilter" />
+      <b-input v-model:value="searchValue" :placeholder="placeholder || $t('common.pleaseInput')" v-if="searchFilter" />
     </slot>
     <div
       class="category-body"
@@ -84,7 +84,7 @@
         id: 'id',
         title: 'title',
       }),
-      placeholder: '请输入',
+      placeholder: '',
       checkId: '',
       searchFilter: false,
       draggable: false,

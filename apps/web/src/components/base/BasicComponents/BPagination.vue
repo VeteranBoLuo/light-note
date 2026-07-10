@@ -1,6 +1,6 @@
 <template>
   <div class="bpagination">
-    <span class="bpagination__total">共 {{ total }} 条</span>
+    <span class="bpagination__total">{{ t('common.totalItems', { n: total }) }}</span>
 
     <!-- 页码 -->
     <div class="bpagination__pages">
@@ -8,7 +8,7 @@
         class="bpagination__btn bpagination__btn--nav"
         :disabled="current === 1"
         @click="goTo(current - 1)"
-        title="上一页"
+        :title="t('common.prevPage')"
       >‹</button>
 
       <template v-for="p in visiblePages" :key="p">
@@ -25,7 +25,7 @@
         class="bpagination__btn bpagination__btn--nav"
         :disabled="current >= totalPages"
         @click="goTo(current + 1)"
-        title="下一页"
+        :title="t('common.nextPage')"
       >›</button>
     </div>
 
@@ -36,7 +36,7 @@
         :class="{ 'bpagination__sizer-trigger--open': dropdownOpen }"
         @click="toggleDropdown"
       >
-        <span>{{ pageSize }} 条/页</span>
+        <span>{{ t('common.perPage', { n: pageSize }) }}</span>
         <svg
           class="bpagination__sizer-arrow"
           :class="{ 'bpagination__sizer-arrow--open': dropdownOpen }"
@@ -65,6 +65,9 @@
 <script lang="ts" setup>
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { getRootZoom } from '@/utils/zoom';
+  import { useI18n } from 'vue-i18n';
+
+  const { t } = useI18n();
 
   const props = defineProps({
     current: { type: Number, default: 1 },
@@ -77,12 +80,12 @@
     sizeChange: [size: number];
   }>();
 
-  const sizeOptions = [
-    { label: '10 条/页', value: 10 },
-    { label: '20 条/页', value: 20 },
-    { label: '50 条/页', value: 50 },
-    { label: '100 条/页', value: 100 },
-  ];
+  const sizeOptions = computed(() => [
+    { label: t('common.perPage', { n: 10 }), value: 10 },
+    { label: t('common.perPage', { n: 20 }), value: 20 },
+    { label: t('common.perPage', { n: 50 }), value: 50 },
+    { label: t('common.perPage', { n: 100 }), value: 100 },
+  ]);
 
   // 下拉状态
   const dropdownOpen = ref(false);

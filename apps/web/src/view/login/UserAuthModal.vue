@@ -8,7 +8,7 @@
         <!------------重置------------->
         <ResetPage ref="reset" v-model:title="title" @update:success="registerSuccess"/>
         <!-- 关闭按钮:放在卡片外层,不随登录/注册翻转动画翻面;点空白 + Esc 仍可用 -->
-        <button class="auth-close-btn" :class="{ 'is-flipping': flipping }" title="关闭 (Esc)" @click="handleMaskClick">
+        <button class="auth-close-btn" :class="{ 'is-flipping': flipping }" :title="t('auth.closeEsc')" @click="handleMaskClick">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
@@ -20,6 +20,7 @@
 
 <script lang="ts" setup>
   import { onMounted, onUnmounted, ref, Ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import LoginPage from '@/components/login/LoginPage.vue';
   import ResetPage from '@/components/login/ResetPage.vue';
@@ -37,6 +38,7 @@
     flipTimer = window.setTimeout(() => (flipping.value = false), 650);
   });
 
+  const { t } = useI18n();
   const user = useUserStore();
   const bookmark = bookmarkStore();
 

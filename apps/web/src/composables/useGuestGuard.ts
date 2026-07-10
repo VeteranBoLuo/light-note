@@ -1,5 +1,6 @@
 import { computed } from 'vue';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
+import i18n from '@/i18n';
 import { bookmarkStore, useUserStore } from '@/store';
 import { apiBasePost } from '@/http/request';
 
@@ -45,14 +46,12 @@ export function showPreviewGuide(content?: string): void {
 
   const bookmark = bookmarkStore();
   Alert.alert({
-    title: '注册后即可动手',
-    content:
-      content ||
-      '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册即用、自动登录、已备好示例数据，免费收藏书签、记笔记、存文件。',
+    title: i18n.global.t('guest.previewTitle'),
+    content: content || i18n.global.t('guest.previewContent'),
     footer: [
-      { label: '继续浏览', type: 'dashed', function: () => Alert.destroy() },
+      { label: i18n.global.t('guest.keepBrowsing'), type: 'dashed', function: () => Alert.destroy() },
       {
-        label: '免费注册，立即拥有',
+        label: i18n.global.t('guest.registerNow'),
         type: 'primary',
         function: () => {
           Alert.destroy();

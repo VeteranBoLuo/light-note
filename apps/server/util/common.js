@@ -26,6 +26,20 @@ export const resultData = function (data = null, status = 200, msg = '') {
   };
 };
 
+// 读请求语言:前端每次请求都带 X-Lang 头(见 web/src/http/request.ts),缺失时退回 accept-language。返回 'zh-CN' | 'en-US'
+export function reqLang(req) {
+  const xl = String(req?.headers?.['x-lang'] || '').toLowerCase();
+  if (xl.startsWith('zh')) return 'zh-CN';
+  if (xl.startsWith('en')) return 'en-US';
+  const al = String(req?.headers?.['accept-language'] || '').split(',')[0].trim().toLowerCase();
+  return al.startsWith('en') ? 'en-US' : 'zh-CN';
+}
+
+// 后端无独立 i18n 系统,面向用户的错误提示就近双语:L(req, '中文', 'English')
+export function L(req, zh, en) {
+  return reqLang(req) === 'en-US' ? en : zh;
+}
+
 export const formatDateTime = function (date) {
   const pad = (v) => v.toString().padStart(2, '0');
   const year = date.getFullYear();

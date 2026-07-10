@@ -3,8 +3,7 @@
     <template v-if="bookmark.type === 'normal' && bookmark.tagData">
       <div class="category-title">{{ bookmark.tagData?.name || $t('navigation.title') }}</div>
       <div class="category-content">
-        {{ bookmark.tagData.relatedTagList?.length }} 个相关书签，{{ bookmark.tagData.bookmarkList?.length }}
-        个关联标签
+        {{ $t('home.relatedInfo', { bookmarks: bookmark.tagData.relatedTagList?.length || 0, tags: bookmark.tagData.bookmarkList?.length || 0 }) }}
       </div>
       <div class="category-tag">
         <div
@@ -23,26 +22,23 @@
         <div style="text-align: center">
           <div>{{ $t('home.allCard') }}</div>
           <div style="margin-top: 10px">
-            <template v-if="user.preferences.lang === 'zh-CN'">
-              已收录 {{ user.tagTotal }} 个标签，共 {{ user.bookmarkTotal }} 个书签
-            </template>
-            <template v-else> Total {{ user.tagTotal }} tags, {{ user.bookmarkTotal }} bookmarks </template>
+            {{ $t('home.recorded', { tags: user.tagTotal, bookmarks: user.bookmarkTotal }) }}
           </div>
           <div v-if="isGuest" class="guest-own-hint">
-            你正在浏览<b>示例内容</b>，<span class="guest-own-link" @click="guestRegister">注册</span>即可拥有你自己的轻笺（免费 · 注册即用）
+            {{ $t('home.guestDemoPre') }}<span class="guest-own-link" @click="guestRegister">{{ $t('home.guestDemoLink') }}</span>{{ $t('home.guestDemoPost') }}
           </div>
         </div>
       </div>
       <div class="category-tag-item" style="opacity: 0; height: 1px">占位块</div>
     </template>
     <template v-else>
-      <div class="category-title">搜索结果</div>
+      <div class="category-title">{{ $t('home.searchResult') }}</div>
       <div class="category-content">
         <div style="text-align: center">
           <div
-            >关键词：<b class="custom-underline">{{ bookmark.bookmarkSearch }}</b></div
+            >{{ $t('home.keyword') }}<b class="custom-underline">{{ bookmark.bookmarkSearch }}</b></div
           >
-          <div style="margin-top: 10px">已获取 {{ bookmark.bookmarkList.length }} 个相关书签</div>
+          <div style="margin-top: 10px">{{ $t('home.gotBookmarks', { n: bookmark.bookmarkList.length }) }}</div>
         </div>
       </div>
       <div class="category-tag-item" style="opacity: 0; height: 1px">占位块</div>

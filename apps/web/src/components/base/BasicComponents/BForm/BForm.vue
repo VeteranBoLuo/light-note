@@ -29,7 +29,7 @@
           @focusout="inputFocusout(field)"
         >
         </b-input>
-        <span class="require-tip" :class="{ showReqMsg: field.showRequire }">{{ field.label }}必填！</span>
+        <span class="require-tip" :class="{ showReqMsg: field.showRequire }">{{ $t('common.required', { label: field.label }) }}</span>
       </div>
     </div>
   </div>

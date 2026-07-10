@@ -2,9 +2,9 @@
   <div class="view-body" :class="title !== '重置' ? 'hide' : ''">
     <div class="view-page">
       <span>
-        <span class="dom-hover" style="color: var(--primary-text)" @click="title = '登录'">返回</span>
+        <span class="dom-hover" style="color: var(--primary-text)" @click="title = '登录'">{{ t('common.back') }}</span>
         <b style="font-size: 30px; color: var(--text-color); position: absolute; left: 50%; transform: translateX(-50%)"
-          >重置密码</b
+          >{{ t('auth.resetPassword') }}</b
         >
       </span>
       <a-form
@@ -21,7 +21,7 @@
           :rules="[
             {
               type: 'email',
-              message: '请输入正确的邮箱格式',
+              message: t('auth.emailInvalid'),
             },
           ]"
         >
@@ -30,7 +30,7 @@
             theme="al-day"
             height="40px"
             v-model:value="formData.email"
-            placeholder="邮箱"
+            :placeholder="t('auth.email')"
           >
             <template #prefix>
               <svg-icon :src="icon.login.email" size="16" />
@@ -44,11 +44,11 @@
           :rules="[
             {
               max: 15,
-              message: '密码长度不能超过15个字符',
+              message: t('auth.pwdMax15'),
             },
             {
               min: 6,
-              message: '密码长度不能少于6个字符',
+              message: t('auth.pwdMin6'),
             },
           ]"
         >
@@ -59,7 +59,7 @@
             autocomplete="new-password"
             @blur="validateFun('password')"
             v-model:value="formData.password"
-            placeholder="新密码"
+            :placeholder="t('auth.newPassword')"
           >
             <template #prefix>
               <svg-icon :src="icon.login.password" size="16" />
@@ -70,8 +70,8 @@
           label=""
           name="rPassword"
           :rules="[
-            { required: true, message: '请确认密码' },
-            { validator: validatePasswordMatch, message: '两次密码输入不一致' },
+            { required: true, message: t('auth.confirmPasswordRequired') },
+            { validator: validatePasswordMatch, message: t('auth.passwordMismatch') },
           ]"
         >
           <b-input
@@ -80,22 +80,22 @@
             type="password"
             autocomplete="new-password"
             v-model:value="formData.rPassword"
-            placeholder="密码确认"
+            :placeholder="t('auth.confirmPassword')"
           >
             <template #prefix>
               <svg-icon :src="icon.login.password" size="16" />
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item label="" name="code" :rules="[{ required: true, message: '请输入验证码' }]">
+        <a-form-item label="" name="code" :rules="[{ required: true, message: t('auth.codeRequired') }]">
           <span class="flex-center">
-            <b-input :maxlength="6" theme="al-day" height="40px" placeholder="验证码" v-model:value="formData.code">
+            <b-input :maxlength="6" theme="al-day" height="40px" :placeholder="t('auth.code')" v-model:value="formData.code">
               <template #prefix>
                 <svg-icon :src="icon.login.code" size="16" />
               </template>
               <template #suffix>
                 <span style="color: var(--primary-text)" class="dom-hover" @click="sendEmail">{{
-                  codeTime == 0 ? '获取验证码' : codeTime + 's'
+                  codeTime == 0 ? t('auth.getCode') : codeTime + 's'
                 }}</span>
               </template>
             </b-input>
@@ -103,7 +103,7 @@
         </a-form-item>
         <a-form-item>
           <b-button class="handle-btn" type="primary" @click="verifyCode" :class="{ 'disable-btn': disable }"
-            >提交</b-button
+            >{{ t('auth.submit') }}</b-button
           >
         </a-form-item>
       </a-form>
@@ -116,6 +116,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import { computed, reactive, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { checkEndCondition } from '@/utils/validator.ts';
@@ -130,11 +131,12 @@
 
   const validatePasswordMatch = (_rule: any, value: string) => {
     if (value && value !== formData.password) {
-      return Promise.reject('两次密码输入不一致');
+      return Promise.reject(t('auth.passwordMismatch'));
     }
     return Promise.resolve();
   };
 
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const disable = computed(() => {
     return !formData.password || !formData.rPassword || !formData.email || !formData.code;
@@ -156,12 +158,12 @@
       return;
     }
     if (!formData.email) {
-      message.warning('请填写邮箱');
+      message.warning(t('auth.fillEmail'));
       return;
     }
     apiBasePost('/api/user/sendEmail', { email: formData.email }).then((res) => {
       if (res.status === 200) {
-        message.success('验证码发送成功！');
+        message.success(t('auth.codeSent'));
         codeTime.value = 60;
         const timer = setInterval(() => {
           codeTime.value--;
@@ -178,15 +180,15 @@
     const condition = [
       {
         endCondition: formData.password !== formData.rPassword,
-        message: '两次密码输入不一致',
+        message: t('auth.passwordMismatch'),
       },
       {
         endCondition: formData.password.length > 16,
-        message: '密码长度不能大于16位',
+        message: t('auth.pwdMax16'),
       },
       {
         endCondition: formData.password.length < 6,
-        message: '密码长度不能小于6位',
+        message: t('auth.pwdMin6'),
       },
     ];
     if (checkEndCondition(condition)) {
@@ -195,7 +197,7 @@
     apiBasePost('/api/user/verifyCode', formData).then((res) => {
       if (res.status === 200) {
         title.value = '登录';
-        message.success('验证通过,密码重置成功');
+        message.success(t('auth.resetSuccess'));
         emit('update:success', formData);
       }
     });

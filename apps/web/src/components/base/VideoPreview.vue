@@ -1,14 +1,16 @@
 <template>
   <div class="video-preview">
     <video ref="videoPlayer" controls :src="videoUrl" type="video/mp4" @loadedmetadata="handleLoaded"></video>
-    <p v-if="loading">加载中...</p>
+    <p v-if="loading">{{ $t('common.loading') }}</p>
     <p v-if="error">{{ error }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
   import { ref, onMounted } from 'vue';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const props = defineProps<{ videoUrl: string }>();
   const videoPlayer = ref<HTMLVideoElement | null>(null);
   const loading = ref(true);
@@ -18,7 +20,7 @@
     loading.value = false;
     // 自动播放（需要静音）
     videoPlayer.value?.play().catch((e) => {
-      error.value = '自动播放失败: ' + e.message;
+      error.value = t('common.autoplayFailed') + e.message;
     });
     emit('play');
   };

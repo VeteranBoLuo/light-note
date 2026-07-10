@@ -6,7 +6,7 @@
         <slot name="filterBtn">
           <div class="filter-button">
             <svg-icon :src="icon.cloudSpace.filter" />
-            <span>{{ title }}</span>
+            <span>{{ title || $t('common.filter') }}</span>
             <i :class="['arrow', { 'arrow-up': showFilterMenu }]"></i>
           </div>
         </slot>
@@ -15,7 +15,7 @@
       <div v-show="showFilterMenu" class="filter-menu">
         <div class="filter-header">
           <BCheckbox :indeterminate="indeterminate" v-model:checked="allTypesSelected" @change="(checked: boolean) => toggleSelectAll({ target: { checked } })">
-            <span style="color: var(--text-color)">全选</span>
+            <span style="color: var(--text-color)">{{ $t('common.selectAll') }}</span>
           </BCheckbox>
         </div>
         <div class="filter-options">
@@ -26,7 +26,7 @@
             class="filter-option"
             @change="(checked: boolean) => { if (checked) { if (!checkValue.includes(type.value)) checkValue.push(type.value); } else { const idx = checkValue.indexOf(type.value); if (idx > -1) checkValue.splice(idx, 1); } }"
           >
-            {{ type.label }}
+            {{ $t(type.label) }}
           </BCheckbox>
         </div>
       </div>
@@ -43,17 +43,17 @@
   const props = defineProps({
     title: {
       type: String,
-      default: '筛选',
+      default: '',
     },
     filterOptions: {
       type: Array as PropType<FilterTypeOption[]>,
       default: () => [
-        { value: 'image', label: '图片' },
+        { value: 'image', label: 'common.typeImage' },
         { value: 'pdf', label: 'PDF' },
         { value: 'word', label: 'Word' },
-        { value: 'audio', label: '音频' },
-        { value: 'video', label: '视频' },
-        { value: 'other', label: '其他' },
+        { value: 'audio', label: 'common.typeAudio' },
+        { value: 'video', label: 'common.typeVideo' },
+        { value: 'other', label: 'common.typeOther' },
       ],
     },
   });

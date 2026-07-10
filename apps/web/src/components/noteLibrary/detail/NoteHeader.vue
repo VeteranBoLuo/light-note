@@ -29,13 +29,13 @@
     </div>
     <div class="flex-align-center" style="gap: 20px">
       <span class="mode-pill-group" v-if="!readonly">
-        <BTooltip title="切换编辑器模式">
+        <BTooltip :title="$t('note.switchModeTooltip')">
           <span class="mode-pill" :class="`is-${noteType}`" @click.stop="$emit('switchMode')">
             {{ noteType === 'html' ? 'HTML' : 'MD' }}
           </span>
         </BTooltip>
         <span v-if="hasBackup && !bookmark.isMobile" style="margin-left: 5px">
-          <BTooltip title="撤回模式切换">
+          <BTooltip :title="$t('note.undoSwitchTitle')">
             <span class="undo-switch-btn" @click.stop="$emit('undoSwitch')">↩</span>
           </BTooltip>
         </span>
@@ -242,7 +242,7 @@
         const selector = isMd ? '.md-preview' : '.note-editor-body';
         const el = document.querySelector(selector) as HTMLElement | null;
         if (!el || el.offsetHeight === 0) {
-          message.warning(isMd ? '请先切换到「预览」或「分栏」视图再导出 PDF' : '未找到可导出的笔记内容');
+          message.warning(isMd ? t('noteDetail.exportPdfTip') : t('noteDetail.noExportContent'));
           return;
         }
         await generatePDF(props.note.title, selector);

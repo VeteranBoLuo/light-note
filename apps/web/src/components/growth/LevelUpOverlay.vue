@@ -25,7 +25,7 @@
 
         <div class="lvup-text">
           <div class="lvup-title">{{ t('growth.levelUpTitle') }}</div>
-          <div class="lvup-name">{{ name }}</div>
+          <div class="lvup-name">{{ t('growth.ranks.' + level) }}</div>
           <div class="lvup-sub">{{ t('growth.levelUpSub', { lv: level }) }}</div>
         </div>
 

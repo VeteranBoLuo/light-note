@@ -25,7 +25,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
             <template #suffix>
-              <b-tooltip title="隐藏空标签">
+              <b-tooltip :title="$t('home.hideEmptyTags')">
                 <BSwitch v-model:checked="hideEmptyTags" />
               </b-tooltip>
             </template>
@@ -43,7 +43,7 @@
       </template>
       <template #item="{ item }: { item: TagInterface }">
         <RightMenu
-          :menu="['添加书签', '重命名', '编辑', '删除']"
+          :menu="[$t('home.menuAddBookmark'), $t('common.reName'), $t('common.edit'), $t('common.delete')]"
           @select="handleTagMenu($event, item)"
           v-if="!item.isRename"
         >
@@ -79,10 +79,10 @@
       <template #empty>
         <div class="empty-tag-prompt">
           <div class="empty-card">
-            <h3>暂无标签</h3>
-            <div>开始创建您的第一个标签吧</div>
+            <h3>{{ $t('home.noTags') }}</h3>
+            <div>{{ $t('home.createFirstTag') }}</div>
             <br />
-            <b-button size="small" type="primary" @click="router.push('/manage/editTag/add')">新增标签</b-button>
+            <b-button size="small" type="primary" @click="router.push('/manage/editTag/add')">{{ $t('home.addTag') }}</b-button>
           </div>
         </div>
       </template>
@@ -92,6 +92,7 @@
 
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
@@ -122,6 +123,7 @@
     () => !bookmark.isMobile && !tagName.value.trim() && visibleDragTagList.value.length > 1,
   );
 
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
@@ -133,25 +135,25 @@
     recordOperation({ module: '首页', operation: `右键${menu}标签【${tag.name}】` });
     rightTagData.value = tag;
     const actions = {
-      重命名: () => {
+      [t('common.reName')]: () => {
         tag.isRename = true;
         newName.value = tag.name;
       },
-      编辑: () => router.push(`/manage/editTag/${tag.id}`),
-      删除: () => handleDeleteTag(tag),
-      添加书签: () => router.push(`/manage/editBookmark/add/${tag.id}`),
+      [t('common.edit')]: () => router.push(`/manage/editTag/${tag.id}`),
+      [t('common.delete')]: () => handleDeleteTag(tag),
+      [t('home.menuAddBookmark')]: () => router.push(`/manage/editBookmark/add/${tag.id}`),
     };
     actions[menu]?.();
   }
 
   const handleDeleteTag = (tag: TagInterface) => {
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除标签【${tag.name}】？`,
+      title: t('common.defaultTitle'),
+      content: t('home.delTagConfirm', { name: tag.name }),
       onOk() {
         apiBasePost('/api/bookmark/delTag', { id: tag.id }).then((res) => {
           if (res.status === 200) {
-            message.success('删除成功');
+            message.success(t('common.deleteSuccess'));
             if (tag.id === router.currentRoute.value.params?.id) {
               bookmark.type = 'all';
             }
@@ -170,7 +172,7 @@
       }).then((res) => {
         if (res.status == 200) {
           tag.isRename = !tag.isRename;
-          message.success('重命名成功');
+          message.success(t('home.renameSuccess'));
           bookmark.refreshTag();
         }
       });

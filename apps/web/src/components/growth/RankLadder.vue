@@ -16,11 +16,11 @@
       >
         <span class="rl-lv" :style="{ background: TIER_GRADIENTS[tierOf(r.level)] }">{{ r.level }}</span>
         <span class="rl-name">
-          {{ r.name }}
+          {{ t('growth.ranks.' + r.level) }}
           <span v-if="r.level === maxLevel" class="rl-max">{{ t('growth.max') }}</span>
         </span>
         <span class="rl-exp">{{ r.cumExp.toLocaleString('en-US') }}</span>
-        <span class="rl-perk">{{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} · {{ r.trashDays >= 3650 ? t('growth.trashForever') : '留' + r.trashDays + '天' }}</span>
+        <span class="rl-perk">{{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} · {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays }) }}</span>
       </div>
     </div>
   </div>

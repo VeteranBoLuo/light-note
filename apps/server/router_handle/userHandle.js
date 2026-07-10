@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { resultData, snakeCaseKeys, mergeExistingProperties, insertData, generateUUID } from '../util/common.js';
+import { resultData, snakeCaseKeys, mergeExistingProperties, insertData, generateUUID, L, reqLang } from '../util/common.js';
 import { grantExp } from '../util/growth.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
@@ -101,7 +101,17 @@ export const login = async (req, res) => {
         res.send(resultData(null, 403, 'IP 已处于封禁期，禁止登录'));
         return;
       }
-      res.send(resultData(null, 401, '邮箱密码错误或已过期，请重新输入正确信息或者注册新账号'));
+      res.send(
+        resultData(
+          null,
+          401,
+          L(
+            req,
+            '邮箱密码错误或已过期，请重新输入正确信息或者注册新账号',
+            'Incorrect or expired email or password. Please re-enter the correct details or register a new account.',
+          ),
+        ),
+      );
       return;
     }
     const isRootLogin = result[0].role === 'root';
@@ -121,7 +131,7 @@ export const login = async (req, res) => {
         ip: req.ip || '',
         userAgent: req.headers['user-agent'] || '',
       });
-      res.send(resultData({ appealToken }, 423, '账号已被封禁，请登录其他账号或联系管理员'));
+      res.send(resultData({ appealToken }, 423, L(req, '账号已被封禁，请登录其他账号或联系管理员', 'This account has been banned. Please sign in with another account or contact an administrator.')));
       return;
     }
     // 透明升级：老明文密码 → scrypt 哈希
@@ -136,7 +146,7 @@ export const login = async (req, res) => {
     const userInfo = await queryUserInfoById(result[0].id);
     res.send(resultData({ ...sanitizeUser(userInfo), sid }));
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常：' + e.message));
+    res.send(resultData(null, 400, L(req, '客户端请求异常：', 'Bad request: ') + e.message));
   }
 };
 
@@ -147,12 +157,12 @@ export const submitAppeal = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId || req.user?.role === 'visitor') {
-      return res.send(resultData(null, 403, '请先登录'));
+      return res.send(resultData(null, 403, L(req, '请先登录', 'Please sign in first.')));
     }
     const content = String(req.body?.content || '').trim().slice(0, 500);
     const phone = String(req.body?.phone || '').trim().slice(0, 50);
     if (!content) {
-      return res.send(resultData(null, 400, '请填写申诉内容'));
+      return res.send(resultData(null, 400, L(req, '请填写申诉内容', 'Please enter your appeal details.')));
     }
     // 防刷:同一用户未处理(pending)的申诉不超过 5 条
     const [pendingRows] = await pool.query(
@@ -160,7 +170,13 @@ export const submitAppeal = async (req, res) => {
       [userId],
     );
     if (Number(pendingRows[0]?.c || 0) >= 5) {
-      return res.send(resultData(null, 429, '已有多条申诉待处理，请耐心等待管理员回复'));
+      return res.send(
+        resultData(
+          null,
+          429,
+          L(req, '已有多条申诉待处理，请耐心等待管理员回复', 'You already have several pending appeals. Please wait for an administrator to reply.'),
+        ),
+      );
     }
     const params = insertData({
       userId,
@@ -171,9 +187,9 @@ export const submitAppeal = async (req, res) => {
       replyViewed: 0,
     });
     await pool.query('INSERT INTO opinion SET ?', [params]);
-    res.send(resultData('申诉已提交，我们会尽快处理'));
+    res.send(resultData(L(req, '申诉已提交，我们会尽快处理', 'Your appeal has been submitted. We will handle it as soon as possible.')));
   } catch (err) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+    res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message));
   }
 };
 
@@ -184,22 +200,32 @@ function detectLangFromReq(req) {
 }
 
 // 注册欢迎通知:全员群发通知只发给存量用户,后期注册的用户收不到历史通知,靠这条兜底给新用户一条起始通知
-const WELCOME_NOTIFICATION = {
-  type: 'welcome',
-  title: '欢迎加入轻笺 🎉',
-  content:
-    '很高兴见到你!在这里可以收藏书签、记录笔记、上传文件,并用标签把它们串起来,还有 AI 助手随时帮忙。点开左侧菜单,从第一条资源开始整理吧~',
-};
+function buildWelcomeNotification(lang) {
+  if (lang === 'en-US') {
+    return {
+      type: 'welcome',
+      title: 'Welcome to Light Note 🎉',
+      content:
+        'Great to have you here! Save bookmarks, jot down notes, upload files, and tie them together with tags — with an AI assistant always on hand. Open the menu on the left and start with your very first item ~',
+    };
+  }
+  return {
+    type: 'welcome',
+    title: '欢迎加入轻笺 🎉',
+    content:
+      '很高兴见到你!在这里可以收藏书签、记录笔记、上传文件,并用标签把它们串起来,还有 AI 助手随时帮忙。点开左侧菜单,从第一条资源开始整理吧~',
+  };
+}
 
 export const registerUser = async (req, res) => {
   try {
     // 检查邮箱是否已存在
     const [existingUser] = await pool.query('SELECT * FROM user WHERE email = ?', [req.body.email]);
     if (existingUser?.length > 0) {
-      return res.send(resultData(null, 500, '账号已存在'));
+      return res.send(resultData(null, 500, L(req, '账号已存在', 'Account already exists.')));
     }
     // 后端密码校验(前端规则可绕过,后端为准):非空、6-64 位
-    const pwdCheck = validatePassword(req.body.password);
+    const pwdCheck = validatePassword(req.body.password, reqLang(req));
     if (!pwdCheck.ok) {
       return res.send(resultData(null, 400, pwdCheck.msg));
     }
@@ -224,7 +250,7 @@ export const registerUser = async (req, res) => {
     const userId = userData.id;
 
     // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
-    createNotification(userId, WELCOME_NOTIFICATION).catch(() => {});
+    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});
 
     // 记录日志（非关键，失败不影响注册）
     try {
@@ -258,7 +284,7 @@ export const registerUser = async (req, res) => {
     if (err.message.includes('邮箱') || err.message.includes('账号')) {
       res.send(resultData(null, 500, err.message));
     } else {
-      res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+      res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message));
     }
   }
 };
@@ -267,12 +293,12 @@ export const getUserInfo = async (req, res) => {
     const requestedId = req.query?.id || req.query?.params?.id;
     const id = req.user?.role === 'root' && requestedId ? requestedId : req.user?.id;
     if (!id) {
-      res.send(resultData(null, 401, '请先登录'));
+      res.send(resultData(null, 401, L(req, '请先登录', 'Please sign in first.')));
       return;
     }
     const [userRes] = await pool.query('SELECT * FROM user WHERE id = ?', [id]);
     if (!userRes[0]) {
-      res.send(resultData(null, 401, '用户不存在,请重新登录！'));
+      res.send(resultData(null, 401, L(req, '用户不存在,请重新登录！', 'User not found. Please sign in again.')));
       return;
     }
     // 没有储存ip或者ip地址改变，则更新用户ip相关信息
@@ -299,11 +325,11 @@ export const getUserInfo = async (req, res) => {
     }
     const result = await queryUserInfoById(id);
     if (!result) {
-      res.send(resultData(null, 401, '用户不存在,请重新登录！'));
+      res.send(resultData(null, 401, L(req, '用户不存在,请重新登录！', 'User not found. Please sign in again.')));
       return;
     }
     if (Number(result.del_flag) === 1 && result.role !== 'root') {
-      res.send(resultData(null, 423, '账号已被封禁，请登录其他账号或联系管理员'));
+      res.send(resultData(null, 423, L(req, '账号已被封禁，请登录其他账号或联系管理员', 'This account has been banned. Please sign in with another account or contact an administrator.')));
       return;
     }
     const safeUser = sanitizeUser(result);
@@ -313,7 +339,7 @@ export const getUserInfo = async (req, res) => {
       res.send(resultData(safeUser));
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
+    res.send(resultData(null, 400, L(req, '客户端请求异常', 'Bad request: ') + e)); // 设置状态码为400
   }
 };
 
@@ -321,7 +347,7 @@ export const me = getUserInfo;
 export const getUserList = (req, res) => {
   try {
     if (req.user?.role !== 'root') {
-      return res.send(resultData(null, 403, '没有操作权限'));
+      return res.send(resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')));
     }
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const key = filters.key;
@@ -397,10 +423,10 @@ export const getUserList = (req, res) => {
         );
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误' + err)); // 设置状态码为500
+        res.send(resultData(null, 500, L(req, '服务器内部错误', 'Server error: ') + err)); // 设置状态码为500
       });
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
+    res.send(resultData(null, 400, L(req, '客户端请求异常', 'Bad request: ') + e)); // 设置状态码为400
   }
 };
 
@@ -411,7 +437,7 @@ export const saveUserInfo = (req, res) => {
     const isRoot = req.user?.role === 'root';
     const id = isRoot ? targetId : req.user?.id;
     if (!id || (!isRoot && req.body.id && req.body.id !== req.user?.id)) {
-      return res.send(resultData(null, 403, '没有操作权限'));
+      return res.send(resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')));
     }
     // 定义允许更新的字段列表
     const selfAllowedFields = [
@@ -452,17 +478,17 @@ export const saveUserInfo = (req, res) => {
         }
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message)); // 设置状态码为500
+        res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)); // 设置状态码为500
       });
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常：' + e)); // 设置状态码为400
+    res.send(resultData(null, 400, L(req, '客户端请求异常：', 'Bad request: ') + e)); // 设置状态码为400
   }
 };
 
 export const deleteUserById = (req, res) => {
   try {
     if (req.user?.role !== 'root') {
-      return res.send(resultData(null, 403, '没有操作权限'));
+      return res.send(resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')));
     }
     pool
       .query('update user set del_flag=1 where id=?', [req.query.id])
@@ -470,9 +496,9 @@ export const deleteUserById = (req, res) => {
         await removeUserSessions(req.query.id);
         res.send(resultData(result));
       })
-      .catch((err) => res.send(resultData(null, 500, '服务器内部错误: ' + err.message)));
+      .catch((err) => res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)));
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常：' + e)); // 设置状态码为400
+    res.send(resultData(null, 400, L(req, '客户端请求异常：', 'Bad request: ') + e)); // 设置状态码为400
   }
 };
 
@@ -512,16 +538,16 @@ export const github = async (req, res) => {
     );
   } catch (error) {
     console.error('GitHub Auth Error:', error);
-    res.send(resultData(null, 500, 'GitHub认证失败：' + error));
+    res.send(resultData(null, 500, L(req, 'GitHub认证失败：', 'GitHub authentication failed: ') + error));
   }
 };
 
 export const logout = async (req, res) => {
   try {
     await logoutCurrentSession(req, res);
-    res.send(resultData(null, 200, '退出成功'));
+    res.send(resultData(null, 200, L(req, '退出成功', 'Signed out successfully.')));
   } catch (e) {
-    res.send(resultData(null, 500, '退出登录失败：' + e.message));
+    res.send(resultData(null, 500, L(req, '退出登录失败：', 'Logout failed: ') + e.message));
   }
 };
 
@@ -649,7 +675,7 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   recordConversionEvent(req, 'register', '', { userId: githubUserId, visitorType: 'admin' });
 
   // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
-  createNotification(githubUserId, WELCOME_NOTIFICATION).catch(() => {});
+  createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});
 
   // 返回新插入的完整用户数据
   return result[0];
@@ -661,10 +687,10 @@ export const configPassword = async (req, res) => {
   try {
     const id = req.user?.id; // 获取用户ID
     if (!id || req.user?.role === 'visitor') {
-      return res.send(resultData(null, 401, '请先登录'));
+      return res.send(resultData(null, 401, L(req, '请先登录', 'Please sign in first.')));
     }
     const { password, type } = req.body;
-    const pwdCheck = validatePassword(password);
+    const pwdCheck = validatePassword(password, reqLang(req));
     if (!pwdCheck.ok) {
       return res.send(resultData(null, 400, pwdCheck.msg));
     }
@@ -687,7 +713,7 @@ export const configPassword = async (req, res) => {
         res.send(resultData(result));
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message)); // 设置状态码为500
+        res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)); // 设置状态码为500
       });
   } catch (e) {
     res.send(resultData(null, 400, e.message)); // 设置状态码为400
@@ -717,12 +743,12 @@ export const sendEmail = async (req, res) => {
     };
 
     await nodeMail.sendMail(mailOptions);
-    res.send(resultData('验证码发送成功'));
+    res.send(resultData(L(req, '验证码发送成功', 'Verification code sent.')));
   } catch (e) {
     // 原样把 SMTP 内部错误(如 QQ 535 Login fail)抛给用户既不友好也泄露实现;
     // 面向用户给稳定文案,真实错误只进服务端日志便于排查。
     console.error('邮件发送异常:', e?.message || e);
-    res.send(resultData(null, 500, '验证码发送失败,请稍后重试'));
+    res.send(resultData(null, 500, L(req, '验证码发送失败,请稍后重试', 'Failed to send the code. Please try again later.')));
   }
 };
 
@@ -730,7 +756,7 @@ export const sendEmail = async (req, res) => {
 export const verifyCode = async (req, res) => {
   try {
     const { email, code, password } = req.body;
-    const pwdCheck = validatePassword(password);
+    const pwdCheck = validatePassword(password, reqLang(req));
     if (!pwdCheck.ok) {
       return res.send(resultData(null, 400, pwdCheck.msg));
     }
@@ -740,11 +766,11 @@ export const verifyCode = async (req, res) => {
 
     // 2. 验证逻辑
     if (!storedCode) {
-      res.send(resultData(null, 400, '验证码已过期或未发送'));
+      res.send(resultData(null, 400, L(req, '验证码已过期或未发送', 'The verification code has expired or was never sent.')));
       return;
     }
     if (storedCode !== code) {
-      res.send(resultData(null, 400, '验证码错误'));
+      res.send(resultData(null, 400, L(req, '验证码错误', 'Incorrect verification code.')));
       return;
     }
     // 3. 验证成功后，删除已用验证码并且设置新密码
@@ -753,12 +779,12 @@ export const verifyCode = async (req, res) => {
     pool
       .query('update user set password=?, password_method=? where email=?', [hashedPassword, 'scrypt', email])
       .then(() => {
-        res.send(resultData('重置密码成功'));
+        res.send(resultData(L(req, '重置密码成功', 'Password reset successfully.')));
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message)); // 设置状态码为500
+        res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)); // 设置状态码为500
       });
   } catch (e) {
-    res.send(resultData(null, 500, '验证服务异常:' + e.message)); // 设置状态码为400
+    res.send(resultData(null, 500, L(req, '验证服务异常:', 'Verification service error: ') + e.message)); // 设置状态码为400
   }
 };

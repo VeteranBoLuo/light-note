@@ -1,8 +1,8 @@
 <template>
   <div class="view-body" :class="title !== '注册' ? 'hide' : ''">
     <div class="view-page">
-      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">注册</b>
-      <p class="register-benefits">秒注册 · 自动登录 · 云端同步 · 永久免费</p>
+      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">{{ t('auth.register') }}</b>
+      <p class="register-benefits">{{ t('auth.registerBenefits') }}</p>
       <a-form
         :label-col="{
           span: 4,
@@ -17,11 +17,11 @@
           :rules="[
             {
               type: 'email',
-              message: '请输入正确的邮箱格式',
+              message: t('auth.emailInvalid'),
             },
           ]"
         >
-          <b-input height="40px" theme="al-day" v-model:value="formData.email" placeholder="邮箱" @blur="validateFun">
+          <b-input height="40px" theme="al-day" v-model:value="formData.email" :placeholder="t('auth.email')" @blur="validateFun">
             <template #prefix>
               <svg-icon :src="icon.login.email" size="16" />
             </template>
@@ -33,11 +33,11 @@
           :rules="[
             {
               max: 16,
-              message: '密码长度不能超过16个字符',
+              message: t('auth.pwdMax16'),
             },
             {
               min: 6,
-              message: '密码长度不能少于6个字符',
+              message: t('auth.pwdMin6'),
             },
           ]"
         >
@@ -48,7 +48,7 @@
               maxlength="20"
               type="password"
               autocomplete="new-password"
-              placeholder="密码"
+              :placeholder="t('auth.password')"
               @blur="validateFun('password')"
               v-model:value="formData.password"
             >
@@ -64,7 +64,7 @@
             class="handle-btn"
             :class="{ 'disable-btn': disable || submitting }"
             @click="handleRegister"
-            >注册
+            >{{ t('auth.register') }}
           </b-button>
         </a-form-item>
         <a-form-item>
@@ -73,13 +73,13 @@
             style="display: block; text-align: center; color: #3b82f6; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.register.githubRegister"
             @click="registerWithGitHub"
-            >GitHub 一键注册 / 登录</a
+            >{{ t('auth.githubRegister') }}</a
           >
         </a-form-item>
       </a-form>
       <span class="tips-text"
-        >已有账号？前往<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '登录'"
-          >登录</a
+        >{{ t('auth.hasAccount') }}<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '登录'"
+          >{{ t('auth.goLogin') }}</a
         ></span
       >
     </div>
@@ -88,6 +88,7 @@
 
 <script lang="ts" setup>
   import { computed, reactive, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import userApi from '@/api/userApi.ts';
@@ -108,6 +109,7 @@
     email: '',
     role: 'admin',
   });
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const disable = computed(() => {
@@ -134,11 +136,11 @@
     const condition = [
       {
         endCondition: formData.password.length > 16,
-        message: '密码长度不能大于16位',
+        message: t('auth.pwdMax16'),
       },
       {
         endCondition: formData.password.length < 6,
-        message: '密码长度不能小于6位',
+        message: t('auth.pwdMin6'),
       },
     ];
     if (submitting.value || checkEndCondition(condition) || disable.value) {
@@ -164,7 +166,7 @@
           // 标记「刚注册」,进入首页后由 HomeDefaultHint 引导设置默认首页
           localStorage.setItem('ln_just_registered', '1');
           router.push(getAppHomePath(user.preferences, bookmark.isMobile));
-          message.success('注册成功，已为你自动登录');
+          message.success(t('auth.registerSuccess'));
           setLocale(user.preferences.lang || 'zh-CN');
           bookmark.isShowLogin = false;
           bookmark.type = 'all';

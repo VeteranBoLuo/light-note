@@ -57,9 +57,9 @@
             </div>
           </slot>
           <div v-else style="width: 100%" class="flex-align-center">
-            <div class="btn dom-hover" @click="obClose(200)">{{ cancelText }}</div>
+            <div class="btn dom-hover" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</div>
             <div class="btn dom-hover" style="color: var(--primary-color)" type="primary" @click="onOk">{{
-              okText
+              okText || $t('common.confirm')
             }}</div>
           </div>
         </div>
@@ -100,8 +100,8 @@
             </b-space>
           </slot>
           <b-space v-else>
-            <b-button class="btn" @click="obClose(200)">{{ cancelText }}</b-button>
-            <b-button class="btn" type="primary" @click="onOk">{{ okText }}</b-button>
+            <b-button class="btn" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</b-button>
+            <b-button class="btn" type="primary" @click="onOk">{{ okText || $t('common.confirm') }}</b-button>
           </b-space>
         </div>
       </div>
@@ -133,9 +133,9 @@
     }>(),
     {
       title: '',
-      okText: '确认',
-      cancelText: '取消',
-      content: '取消',
+      okText: '',
+      cancelText: '',
+      content: '',
       footer: () => [],
     },
   );

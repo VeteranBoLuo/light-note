@@ -13,13 +13,13 @@
           v-if="showSearch"
           v-model="searchText"
           class="select-search-inline"
-          :placeholder="displayText || placeholder"
+          :placeholder="displayText || placeholderText"
           @click.stop
           @input="isOpen = true"
           @focus="isOpen = true"
         />
         <span v-else class="select-text" :class="{ 'is-placeholder': !displayText }">
-          {{ displayText || placeholder }}
+          {{ displayText || placeholderText }}
         </span>
       </template>
 
@@ -35,7 +35,7 @@
           <span class="select-tag-remove" @click.stop="removeTag(tag.value)">&times;</span>
         </span>
         <span v-if="overflowCount > 0" class="select-tag is-overflow">+{{ overflowCount }}</span>
-        <span v-if="selectedTags.length === 0" class="select-text is-placeholder">{{ placeholder }}</span>
+        <span v-if="selectedTags.length === 0" class="select-text is-placeholder">{{ placeholderText }}</span>
       </template>
 
       <!-- 后缀 -->
@@ -51,7 +51,7 @@
           <input
             v-model="searchText"
             class="select-search-input"
-            placeholder="搜索..."
+            :placeholder="t('common.searchPlaceholder')"
             @click.stop
             @input="keepOpen"
           />
@@ -71,7 +71,7 @@
           </span>
           <span class="select-option-label">{{ item.label }}</span>
         </div>
-        <div v-if="filteredOptions.length === 0" class="select-no-data">无匹配项</div>
+        <div v-if="filteredOptions.length === 0" class="select-no-data">{{ t('common.noMatch') }}</div>
         <div v-if="$slots['dropdown-footer']" class="select-dropdown-footer">
           <slot name="dropdown-footer" />
         </div>
@@ -84,6 +84,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import type { BaseOptions } from '@/config/bookmarkCfg.ts';
 import { getRootZoom } from '@/utils/zoom';
+import { useI18n } from 'vue-i18n';
 
 const props = withDefaults(defineProps<{
   options: BaseOptions[];
@@ -95,7 +96,7 @@ const props = withDefaults(defineProps<{
   maxTagCount?: number;
 }>(), {
   options: () => [],
-  placeholder: '请选择',
+  placeholder: '',
   allowClear: false,
   mode: 'single',
   showSearch: false,
@@ -107,6 +108,9 @@ const emit = defineEmits<{
 }>();
 
 const modelValue = defineModel('value');
+
+const { t } = useI18n();
+const placeholderText = computed(() => props.placeholder || t('common.pleaseSelect'));
 
 const isMultiple = computed(() => props.mode === 'multiple');
 const isOpen = ref(false);

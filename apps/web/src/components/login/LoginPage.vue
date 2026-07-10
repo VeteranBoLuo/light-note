@@ -8,7 +8,7 @@
   />
   <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
     <div class="view-page">
-      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">登录</b>
+      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">{{ t('auth.login') }}</b>
       <span
         style="
           font-size: 12px;
@@ -20,7 +20,7 @@
           width: 100%;
           text-align: center;
         "
-        >欢迎使用轻笺</span
+        >{{ t('auth.welcome') }}</span
       >
       <a-form
         :label-col="{
@@ -33,17 +33,17 @@
           label=""
           name="email"
           :rules="[
-            { required: true, message: '请输入邮箱' },
-            { type: 'email', message: '请输入正确的邮箱格式' },
+            { required: true, message: t('auth.emailRequired') },
+            { type: 'email', message: t('auth.emailInvalid') },
           ]"
         >
-          <b-input theme="al-day" height="40px" v-model:value="formData.email" placeholder="邮箱">
+          <b-input theme="al-day" height="40px" v-model:value="formData.email" :placeholder="t('auth.email')">
             <template #prefix>
               <svg-icon :src="icon.login.email" size="16" />
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item label="" name="password" :rules="[{ required: true, message: '请输入密码' }]">
+        <a-form-item label="" name="password" :rules="[{ required: true, message: t('auth.passwordRequired') }]">
           <span class="flex-center">
             <b-input
               theme="al-day"
@@ -51,29 +51,29 @@
               maxlength="20"
               type="password"
               autocomplete="new-password"
-              placeholder="密码"
+              :placeholder="t('auth.password')"
               v-model:value="formData.password"
             >
               <template #prefix>
                 <svg-icon :src="icon.login.password" size="16" />
               </template>
               <template #suffix>
-                <span class="dom-hover forget-text" @click="title = '重置'">Forget Password?</span>
+                <span class="dom-hover forget-text" @click="title = '重置'">{{ t('auth.forgotPassword') }}</span>
               </template>
             </b-input>
           </span>
         </a-form-item>
         <a-form-item>
           <div class="login-tips-text">
-            <span class="remember-text"><b-checkbox type="circle" v-model:checked="isCheck" />记住账号</span>
+            <span class="remember-text"><b-checkbox type="circle" v-model:checked="isCheck" />{{ t('auth.rememberMe') }}</span>
             <a class="dom-hover-click" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub"
-              >GitHub快捷登录</a
+              >{{ t('auth.githubLogin') }}</a
             >
           </div>
         </a-form-item>
         <a-form-item>
           <b-button type="primary" class="handle-btn" :class="{ 'disable-btn': disable }" @click="handleLogin"
-            >登录
+            >{{ t('auth.login') }}
           </b-button>
         </a-form-item>
       </a-form>
@@ -83,11 +83,11 @@
         style="left: 20px; font-size: 12px; width: max-content"
         v-if="!bookmark.isMobile"
         @click="viewPhoneVisible = true"
-        >移动端预览</a
+        >{{ t('auth.previewMobile') }}</a
       >
       <span class="tips-text"
-        >还没有账号？前往<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '注册'"
-          >注册</a
+        >{{ t('auth.noAccount') }}<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '注册'"
+          >{{ t('auth.goRegister') }}</a
         ></span
       >
     </div>
@@ -108,6 +108,7 @@
   import router from '@/router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { computed, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
@@ -122,6 +123,7 @@
     return !formData.value.email || !formData.value.password;
   });
   const formDataRef = ref();
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const viewPhoneVisible = ref(false);
@@ -150,7 +152,7 @@
         user.preferences.homePage = getHomePagePreference(res.data?.preferences);
         localStorage.setItem('preferences', JSON.stringify(user.preferences));
         router.push(getAppHomePath(user.preferences, bookmark.isMobile));
-        message.success('登录成功');
+        message.success(t('auth.loginSuccess'));
         setLocale(user.preferences.lang || 'zh-CN');
         bookmark.isShowLogin = false;
         bookmark.type = 'all';

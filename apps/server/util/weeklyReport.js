@@ -55,24 +55,30 @@ export async function generateWeeklyReports() {
   try {
     // 上周有成长活动、非 root、未在设置里关闭周报(preferences.weeklyReport !== false)的用户
     const [users] = await pool.query(
-      `SELECT DISTINCT ge.user_id
+      `SELECT ge.user_id,
+              COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.lang')), 'zh-CN') AS lang
        FROM growth_events ge
        JOIN \`user\` u ON u.id = ge.user_id
        WHERE ge.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
          AND u.role != 'root' AND u.del_flag = 0
-         AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.weeklyReport')), 'true') != 'false'`,
+         AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(u.preferences, '$.weeklyReport')), 'true') != 'false'
+       GROUP BY ge.user_id, lang`,
     );
     let count = 0;
-    for (const { user_id: userId } of users) {
+    for (const { user_id: userId, lang } of users) {
       try {
         const report = await buildWeeklyReport(userId);
         // 无实质活动不发空周报
         if (report.bookmarks + report.notes + report.files + report.exp + report.checkinDays === 0) continue;
-        const content = `本周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 签到 ${report.checkinDays} 天`;
+        const isEn = lang === 'en-US';
+        const content = isEn
+          ? `This week +${report.exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files added · ${report.checkinDays} check-in days`
+          : `本周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 签到 ${report.checkinDays} 天`;
+        const title = isEn ? '📊 Your weekly growth report' : '📊 你的本周成长周报';
         await pool.query(
           `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
            VALUES (?, ?, 'system', ?, ?, '/growth', ?, 0)`,
-          [crypto.randomUUID(), userId, '📊 你的本周成长周报', content, JSON.stringify({ weeklyReport: report })],
+          [crypto.randomUUID(), userId, title, content, JSON.stringify({ weeklyReport: report })],
         );
         count++;
       } catch (e) {

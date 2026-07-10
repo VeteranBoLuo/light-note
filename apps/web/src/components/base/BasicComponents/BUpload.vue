@@ -20,7 +20,9 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const emit = defineEmits(['change']);
 
   const props = withDefaults(
@@ -55,7 +57,7 @@
       }
       // 检查总文件大小是否超过指定限制
       if (totalSize > props.maxTotalSize) {
-        message.warning('总文件大小不能超过' + props.maxTotalSize / (1024 * 1024) + 'MB');
+        message.warning(t('common.maxTotalSize', { n: props.maxTotalSize / (1024 * 1024) }));
         return; // 如果总文件大小过大，终止函数执行
       }
       // 直传模式:直接透传原始 File,不走 FileReader/Base64(大图/多图不再卡顿)

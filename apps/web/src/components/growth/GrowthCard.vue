@@ -7,7 +7,7 @@
       </div>
       <div class="gc-meta">
         <div class="gc-name">
-          {{ g.name }}
+          {{ t('growth.ranks.' + g.level) }}
           <span v-if="g.isMax" class="gc-max">{{ t('growth.max') }}</span>
         </div>
         <div class="gc-exp">{{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}</div>

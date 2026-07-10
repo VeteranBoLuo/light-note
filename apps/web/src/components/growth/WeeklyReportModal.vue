@@ -59,7 +59,7 @@
             <!-- 段位 -->
             <div class="wr-level">
               <span class="wr-level-badge" :style="{ background: levelGradient }">Lv.{{ report?.level }}</span>
-              <span class="wr-level-name">{{ report?.levelName }}</span>
+              <span class="wr-level-name">{{ t('growth.ranks.' + (report?.level || 1)) }}</span>
             </div>
 
             <button class="wr-export" @click="exportImage" :disabled="exporting">

@@ -1,9 +1,9 @@
 <template>
   <transition name="nudge-slide">
     <div v-if="show" class="guest-browse-nudge">
-      <span class="guest-browse-nudge__text">喜欢这些整理？注册后即可拥有你自己的轻笺</span>
-      <button class="guest-browse-nudge__cta" @click="register">免费注册</button>
-      <button class="guest-browse-nudge__close" aria-label="关闭" @click="dismiss">×</button>
+      <span class="guest-browse-nudge__text">{{ $t('home.guestNudgeText') }}</span>
+      <button class="guest-browse-nudge__cta" @click="register">{{ $t('home.freeRegister') }}</button>
+      <button class="guest-browse-nudge__close" :aria-label="$t('common.close')" @click="dismiss">×</button>
     </div>
   </transition>
 </template>

@@ -167,7 +167,7 @@
   function renderTitle(n: NotificationItem): string {
     if (n.type === 'level_up') {
       const m = parseMeta(n.meta);
-      return t('notification.levelUpTitle', { level: m.level, name: m.name });
+      return t('notification.levelUpTitle', { level: m.level, name: t('growth.ranks.' + m.level) });
     }
     if (n.type === 'opinion_reply') return t('notification.opinionReplyTitle');
     return n.title;

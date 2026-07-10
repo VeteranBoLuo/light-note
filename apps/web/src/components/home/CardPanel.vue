@@ -19,13 +19,13 @@
       style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
     >
       <div style="font-size: 44px; opacity: 0.7">🔖</div>
-      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">这里还没有书签</p>
-      <p style="margin: 0; font-size: 13px">把常用网站收进来，一处收纳、随处可开</p>
+      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('home.noBookmarks') }}</p>
+      <p style="margin: 0; font-size: 13px">{{ $t('home.noBookmarksHint') }}</p>
       <button
         @click="goAddBookmark"
         style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
       >
-        + 添加书签
+        {{ $t('home.addBookmark') }}
       </button>
     </div>
     <VueDraggable
@@ -54,7 +54,7 @@
       </div>
     </VueDraggable>
     <div class="beian-wrap">
-      <span class="beian-copy">© 2024轻笺</span>
+      <span class="beian-copy">{{ $t('landing.copyright') }}</span>
       <span class="beian-separator">|</span>
       <a class="icp-beian-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
         网站备案号：蜀ICP备2026017699号-1
@@ -124,14 +124,14 @@
       router.push({ path: `/manage/editBookmark/${item.id}` });
     } else {
       Alert.alert({
-        title: '提示',
-        content: `请确认是否要删除书签【${item.name}】？`,
+        title: t('common.defaultTitle'),
+        content: t('home.delBookmarkConfirm', { name: item.name }),
         onOk() {
           apiBasePost('/api/bookmark/delBookmark', {
             id: item.id,
           }).then((res) => {
             if (res.status == 200) {
-              message.success('删除成功');
+              message.success(t('common.deleteSuccess'));
               bookmark.refreshData();
             }
           });

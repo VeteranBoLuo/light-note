@@ -3,6 +3,7 @@ import { apiBasePost } from '@/http/request';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
+import i18n from '@/i18n';
 
 interface TagOption {
   label: string;
@@ -43,7 +44,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   async function generateBookmarkMeta() {
     const rawUrl = String(bookmarkData.value.url || '').trim();
     if (!rawUrl) {
-      message.warning('请先填写书签地址');
+      message.warning(i18n.global.t('bookmarkMeta.fillUrlFirst'));
       return;
     }
     // 自动补协议头,和首页书签卡片"点击打开"的既有约定一致,允许用户只填 example.com
@@ -73,13 +74,13 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
 
       const newTags: string[] = res.data.newTags || [];
       if (matched.length) {
-        message.success('已生成名称、描述，并自动关联标签');
+        message.success(i18n.global.t('bookmarkMeta.genWithTags'));
       } else if (newTags.length) {
         // 已有标签都不合适：只建议第一个新标签，问用户是否新建
-        message.success('已生成名称和描述；暂无合适的现有标签');
+        message.success(i18n.global.t('bookmarkMeta.genNoTags'));
         confirmCreateTag(newTags[0]);
       } else {
-        message.success('已生成名称和描述');
+        message.success(i18n.global.t('bookmarkMeta.genOnly'));
       }
     } finally {
       generating.value = false;
@@ -89,12 +90,12 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   // 已有标签都不合适时，确认是否新建 AI 建议的标签，创建成功后插入候选并勾选
   function confirmCreateTag(name: string) {
     Alert.alert({
-      title: 'AI 建议新增标签',
-      content: `没有合适的现有标签，AI 建议新增「${name}」。是否创建并关联？`,
+      title: i18n.global.t('bookmarkMeta.suggestTagTitle'),
+      content: i18n.global.t('bookmarkMeta.suggestTagContent', { name }),
       footer: [
-        { label: '暂不', type: 'dashed', function: () => Alert.destroy() },
+        { label: i18n.global.t('bookmarkMeta.notNow'), type: 'dashed', function: () => Alert.destroy() },
         {
-          label: '创建并关联',
+          label: i18n.global.t('bookmarkMeta.createAndLink'),
           type: 'primary',
           function: async () => {
             Alert.destroy();
@@ -104,7 +105,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
               return;
             }
             if (!res || res.status !== 200) {
-              message.error('标签创建失败');
+              message.error(i18n.global.t('bookmarkMeta.createTagFailed'));
               return;
             }
             // 刷新候选，拿到后端生成的标签 id（时间戳 UUID）后再勾选
@@ -114,7 +115,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
               selectTags([created.value]);
             }
             recordOperation({ module: '标签详情', operation: `新增标签成功【${name}】` });
-            message.success('已创建并选中标签');
+            message.success(i18n.global.t('bookmarkMeta.tagCreatedSelected'));
           },
         },
       ],

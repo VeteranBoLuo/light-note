@@ -1,7 +1,7 @@
 <template>
   <transition name="home-hint-slide">
     <div v-if="show" class="home-default-hint">
-      <span class="home-default-hint__text">要把登录后的默认首页设为哪个？</span>
+      <span class="home-default-hint__text">{{ $t('home.defaultHintText') }}</span>
       <div class="home-default-hint__opts">
         <button
           v-for="o in options"
@@ -13,13 +13,14 @@
           {{ o.label }}
         </button>
       </div>
-      <button class="home-default-hint__close" aria-label="关闭" @click="dismiss">×</button>
+      <button class="home-default-hint__close" :aria-label="$t('common.close')" @click="dismiss">×</button>
     </div>
   </transition>
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, watch } from 'vue';
+  import { ref, computed, onMounted, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -28,15 +29,16 @@
 
   // 新用户注册后:引导设置登录后默认首页(注册成功由 RegisterPage 打上 ln_just_registered 标记)
   const FLAG = 'ln_just_registered';
+  const { t } = useI18n();
   const user = useUserStore();
   const show = ref(false);
 
-  const options: { label: string; value: HomePagePreference }[] = [
-    { label: '书签', value: 'bookmark' },
-    { label: '笔记', value: 'noteLibrary' },
-    { label: '云空间', value: 'cloudSpace' },
-    { label: '工作台', value: 'workbench' },
-  ];
+  const options = computed<{ label: string; value: HomePagePreference }[]>(() => [
+    { label: t('home.pageBookmark'), value: 'bookmark' },
+    { label: t('home.pageNote'), value: 'noteLibrary' },
+    { label: t('home.pageCloud'), value: 'cloudSpace' },
+    { label: t('home.pageWorkbench'), value: 'workbench' },
+  ]);
 
   function clearFlag() {
     try {
@@ -58,10 +60,10 @@
       if (user.id && user.role !== 'visitor') {
         recordOperation({ module: '个人偏好', operation: `设置默认首页【${label}】` });
       }
-      message.success(`已设为默认首页：${label}`);
+      message.success(t('home.defaultHintSet', { label }));
     } catch (err) {
       console.error('后台错误：' + err);
-      message.error('设置失败，请重试');
+      message.error(t('home.setFailed'));
     }
     dismiss();
   }

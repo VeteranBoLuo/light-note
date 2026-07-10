@@ -41,7 +41,7 @@
     if (it.source === 'milestone') {
       const to = it.meta?.to ?? it.meta?.level;
       const rank = it.meta?.rank ?? it.meta?.name ?? '';
-      return t('growth.timelineLevelUp', { level: to, name: rank });
+      return t('growth.timelineLevelUp', { level: to, name: to ? t('growth.ranks.' + to) : rank });
     }
     const key = `growth.timelineSrc.${it.source}`;
     return te(key) ? t(key) : t('growth.timelineSrc.default');

@@ -22,7 +22,7 @@
           @click="$router.push('/graph')"
           v-click-log="{ module: '资源中心', operation: '进入知识图谱' }"
         >
-          🌐 知识图谱
+          🌐 {{ t('resourceCenter.knowledgeGraph') }}
         </button>
       </div>
       <div class="hero-stats">
@@ -751,8 +751,8 @@
       title: t('resourceCenter.batch.deleteConfirmTitle'),
       content:
         item.type === 'tag'
-          ? `请确认是否要删除${typeLabel}【${name}】？删除后会解除与资源的绑定。`
-          : `请确认是否要删除${typeLabel}【${name}】？删除后会移入回收站。`,
+          ? t('resourceCenter.deleteConfirmUnbind', { type: typeLabel, name })
+          : t('resourceCenter.deleteConfirmTrash', { type: typeLabel, name }),
       okText: t('resourceCenter.batch.deleteConfirmOk'),
       cancelText: t('resourceCenter.batch.deleteConfirmCancel'),
       async onOk() {

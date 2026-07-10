@@ -21,24 +21,24 @@
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
           <span class="md-view-toggle">
-            <button class="md-view-btn" :class="{ active: mdView === 'edit' }" @click="mdView = 'edit'" title="仅编辑器"
-              >编辑</button
+            <button class="md-view-btn" :class="{ active: mdView === 'edit' }" @click="mdView = 'edit'" :title="$t('note.mdEditOnly')"
+              >{{ $t('note.mdEdit') }}</button
             >
-            <button class="md-view-btn" :class="{ active: mdView === 'split' }" @click="mdView = 'split'" title="分栏"
-              >编辑+预览</button
+            <button class="md-view-btn" :class="{ active: mdView === 'split' }" @click="mdView = 'split'" :title="$t('note.mdSplit')"
+              >{{ $t('note.mdEditPreview') }}</button
             >
             <button
               class="md-view-btn"
               :class="{ active: mdView === 'preview' }"
               @click="mdView = 'preview'"
-              title="仅预览"
-              >预览</button
+              :title="$t('note.mdPreviewOnly')"
+              >{{ $t('note.mdPreview') }}</button
             >
           </span>
         </div>
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
-            <div class="md-editor-label">编辑</div>
+            <div class="md-editor-label">{{ $t('note.mdEdit') }}</div>
             <textarea
               ref="mdTextareaRef"
               class="md-textarea"
@@ -46,11 +46,11 @@
               @input="onMdInput"
               @scroll="syncMdScroll('edit')"
               :readonly="readonly"
-              placeholder="写 Markdown..."
+              :placeholder="$t('note.mdPlaceholder')"
             ></textarea>
           </div>
           <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
-            <div class="md-editor-label">预览</div>
+            <div class="md-editor-label">{{ $t('note.mdPreview') }}</div>
             <div ref="mdPreviewRef" class="md-preview" @scroll="syncMdScroll('preview')" v-html="renderedMd"></div>
           </div>
         </div>
@@ -260,7 +260,7 @@
       const raw = markedLib.parse(mdContent.value || '');
       renderedMd.value = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
     } catch {
-      renderedMd.value = '<p>渲染错误</p>';
+      renderedMd.value = '<p>' + t('note.renderError') + '</p>';
     }
   }
 
@@ -276,13 +276,10 @@
     }
 
     Alert.alert({
-      title: targetType === 'markdown' ? '切换为 Markdown 模式' : '切换为 HTML 模式',
-      content:
-        targetType === 'markdown'
-          ? '当前内容将自动转换为 Markdown 格式。\n部分富文本样式（文字颜色、待办复选框、表格样式等）可能无法完整保留。\n切换后可点击「 ↩ 撤回切换」恢复。'
-          : 'Markdown 内容将渲染为富文本格式，一般不会丢失内容。\n切换后可点击「 ↩ 撤回切换」恢复。',
-      okText: '确认切换',
-      cancelText: '取消',
+      title: targetType === 'markdown' ? t('note.switchToMd') : t('note.switchToHtml'),
+      content: targetType === 'markdown' ? t('note.switchToMdTip') : t('note.switchToHtmlTip'),
+      okText: t('note.confirmSwitch'),
+      cancelText: t('common.cancel'),
       onOk: () => doSwitch(targetType, backup),
     });
   }
@@ -358,10 +355,10 @@
     const backup = switchBackup.value;
     const targetLabel = backup.type === 'html' ? 'HTML' : 'Markdown';
     Alert.alert({
-      title: '撤回模式切换',
-      content: `确认撤回为 ${targetLabel} 模式？撤回后会丢失当前模式下的编辑内容。`,
-      okText: '确认撤回',
-      cancelText: '取消',
+      title: t('note.undoSwitchTitle'),
+      content: t('note.undoSwitchConfirm', { mode: targetLabel }),
+      okText: t('note.confirmUndo'),
+      cancelText: t('common.cancel'),
       onOk: () => doUndo(backup),
     });
   }
@@ -491,7 +488,7 @@
     fixed_toolbar_container: '#editor-toolbar',
     toolbar_persist: true,
     toolbar_mode: 'wrap',
-    placeholder: '请输入内容...',
+    placeholder: t('note.contentPlaceholder'),
     readonly: false,
     content_css: false,
     emoticons_database_url: '/tinymce/plugins/emoticons/js/emojis.js',
@@ -525,9 +522,9 @@
                   resolve(res.data.url);
                   return;
                 }
-                reject('上传失败');
+                reject(t('note.uploadFailed'));
               } catch {
-                reject('上传失败');
+                reject(t('note.uploadFailed'));
               }
             }),
         }),
