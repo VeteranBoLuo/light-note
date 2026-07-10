@@ -111,13 +111,14 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, inject, ref } from 'vue';
+  import { computed, inject, ref, watchEffect } from 'vue';
   import { parse, Allow } from 'partial-json';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { noteDisplayText } from '@/utils/common.ts';
 
   const { t } = useI18n();
 
@@ -137,15 +138,11 @@
   const sessionId = ref('');
   const abortController = ref<AbortController | null>(null);
 
-  const getPlainContent = () => {
-    const raw = note?.content || '';
-    return raw
-      .replace(/<[^>]*>/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  const textLength = computed(() => getPlainContent().length);
+  // 字数按"渲染后页面展示文本"计(html: DOM textContent; md: marked 渲染后取文本),与历史版本口径一致
+  const textLength = ref(0);
+  watchEffect(async () => {
+    textLength.value = (await noteDisplayText(note?.content || '', note?.type)).length;
+  });
 
   const actionConfig: Record<string, { format: 'title' | 'body' | 'both' }> = {
     polishFull: { format: 'body' },

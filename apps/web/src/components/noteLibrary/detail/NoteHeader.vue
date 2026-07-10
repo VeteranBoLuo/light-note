@@ -40,6 +40,11 @@
           </BTooltip>
         </span>
       </span>
+      <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && bookmark.isDesktop && note?.id">
+        <div class="note-header-title-icon" @click="$emit('history')">
+          <SvgIcon :src="icon.noteDetail.history" />
+        </div>
+      </BTooltip>
       <BTooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
         <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
@@ -105,7 +110,7 @@
   }>();
 
   const { t } = useI18n();
-  const emit = defineEmits(['focusout', 'del', 'save', 'switchMode', 'undoSwitch']);
+  const emit = defineEmits(['focusout', 'del', 'save', 'switchMode', 'undoSwitch', 'history']);
 
   const bookmark = bookmarkStore();
 

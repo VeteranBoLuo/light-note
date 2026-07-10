@@ -36,3 +36,6 @@ build/
 .github/agents/轻笺助手.agent.md
 .codex/environments/environment.toml
 vite.config.ts
+.claude/launch.json
+HANDOFF.md
+ln-ai-intro.md

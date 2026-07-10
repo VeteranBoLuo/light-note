@@ -4,6 +4,7 @@ import { grantExp } from '../util/growth.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
 import { fetchGitHubTokenRacing } from '../util/githubOAuth.js';
+import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor } from '../util/auth.js';
@@ -176,6 +177,14 @@ export const submitAppeal = async (req, res) => {
   }
 };
 
+// 注册欢迎通知:全员群发通知只发给存量用户,后期注册的用户收不到历史通知,靠这条兜底给新用户一条起始通知
+const WELCOME_NOTIFICATION = {
+  type: 'welcome',
+  title: '欢迎加入轻笺 🎉',
+  content:
+    '很高兴见到你!在这里可以收藏书签、记录笔记、上传文件,并用标签把它们串起来,还有 AI 助手随时帮忙。点开左侧菜单,从第一条资源开始整理吧~',
+};
+
 export const registerUser = async (req, res) => {
   try {
     // 检查邮箱是否已存在
@@ -207,6 +216,9 @@ export const registerUser = async (req, res) => {
     const userData = insertData(params);
     await pool.query('INSERT INTO user SET ?', [userData]);
     const userId = userData.id;
+
+    // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
+    createNotification(userId, WELCOME_NOTIFICATION).catch(() => {});
 
     // 记录日志（非关键，失败不影响注册）
     try {
@@ -629,6 +641,9 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
 
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
   recordConversionEvent(req, 'register', '', { userId: githubUserId, visitorType: 'admin' });
+
+  // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
+  createNotification(githubUserId, WELCOME_NOTIFICATION).catch(() => {});
 
   // 返回新插入的完整用户数据
   return result[0];

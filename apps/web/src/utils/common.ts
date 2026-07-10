@@ -286,3 +286,62 @@ export function normalizeNoteContentResourceUrls(htmlContent: string = ''): stri
 
   return tempElement.innerHTML;
 }
+
+// marked / DOMPurify 动态加载单例(与 Editor/FilePreview 一致,按需加载,首次后复用)
+let _markedPromise: Promise<(md: string) => string> | null = null;
+function loadMarked(): Promise<(md: string) => string> {
+  if (!_markedPromise) _markedPromise = import('marked').then((m: any) => m.marked || m.default || m);
+  return _markedPromise;
+}
+let _purifyPromise: Promise<{ sanitize: (html: string) => string }> | null = null;
+function loadDompurify(): Promise<{ sanitize: (html: string) => string }> {
+  if (!_purifyPromise) _purifyPromise = import('dompurify').then((m: any) => m.default || m);
+  return _purifyPromise;
+}
+
+/**
+ * 笔记内容 → 可安全渲染的 HTML(预览用)。Markdown 经 marked 渲染;统一过 DOMPurify 消毒后再交给 v-html。
+ */
+export async function noteContentToHtml(content: string = '', type?: string): Promise<string> {
+  if (!content) return '';
+  let html = content;
+  if (type === 'markdown') {
+    try {
+      const marked = await loadMarked();
+      html = marked(content) || '';
+    } catch {
+      html = content;
+    }
+  }
+  try {
+    const DOMPurify = await loadDompurify();
+    return DOMPurify.sanitize(html);
+  } catch {
+    return html;
+  }
+}
+
+/**
+ * 笔记"页面实际展示"的纯文本(字数统计用):
+ * - HTML → 取渲染后 DOM 的 textContent(不含标签/样式)
+ * - Markdown → 先 marked 渲染成 HTML,再取 textContent(不含 md 语法符号)
+ * AI 助手与历史版本共用此口径,只算"渲染后看得见的文字",两处必然一致。
+ */
+export async function noteDisplayText(content: string = '', type?: string): Promise<string> {
+  if (!content) return '';
+  let html = content;
+  if (type === 'markdown') {
+    try {
+      const marked = await loadMarked();
+      html = marked(content) || '';
+    } catch {
+      html = content;
+    }
+  }
+  if (typeof document === 'undefined') {
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(); // 无 DOM 兜底
+  }
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return (div.textContent || '').replace(/\s+/g, ' ').trim();
+}

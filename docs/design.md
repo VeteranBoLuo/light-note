@@ -73,13 +73,17 @@
 
 ### UI 组件库
 
-基于 Ant Design Vue 3.x，但有以下约束：
+**以自研 B 系列组件为主，Ant Design Vue 正在逐步淘汰（不新增 `a-*`，存量改到哪替到哪，最终完全移除）。**
+**有 B 组件的场景禁止使用原生 HTML 控件。** 常用映射：
 
-- 表格使用 `BTable`，不用 `a-table`
-- 普通按钮使用 `b-button`，不用 `a-button`
-- 确认弹窗使用 `Alert.alert()`，不用 `Modal.confirm`
-- 业务弹窗使用 `BModal`，不用 ant-design-vue 的 `Modal`
-- 例外情况需说明原因
+- 表格 `BTable`（禁 `a-table`）
+- 按钮 `b-button`（禁原生 `<button>`、`a-button`）
+- 下拉选择 `BSelect`（禁原生 `<select>`、`a-select`）
+- 输入框 `BInput`（禁原生 `<input>`、`a-input`）
+- 确认弹窗 `Alert.alert()`（禁 `Modal.confirm`）
+- 业务弹窗 `BModal`（禁 ant-design-vue 的 `Modal`）
+- 气泡 `BPopover` / 提示 `BTooltip` / 消息 `BMessage` / 加载 `BLoading`
+- 确无对应 B 组件才用原生，并在自检说明里注明原因
 
 ### 空状态与加载态
 

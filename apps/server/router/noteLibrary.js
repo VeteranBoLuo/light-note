@@ -88,6 +88,10 @@ router.post('/getNoteTags', noteLibraryHandle.getNoteTags);
 router.post('/delNoteTag', noteLibraryHandle.delNoteTag);
 router.post('/updateNoteTags', noteLibraryHandle.updateNoteTags);
 
+router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);
+router.post('/getNoteVersionDetail', noteLibraryHandle.getNoteVersionDetail);
+router.post('/restoreNoteVersion', noteLibraryHandle.restoreNoteVersion);
+
 import { assistNote } from '../router_handle/chatHandle.js';
 
 // 笔记组手 —— AI 辅助编辑

@@ -1,5 +1,6 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
+import crypto from 'crypto';
 import https from 'https';
 import http from 'http';
 import fs from 'fs';
@@ -456,6 +457,10 @@ const imageMimeTypes = {
 // 默认图片路径（可选）
 const defaultImagePath = '/uploads/default-icon.png';
 
+// ico.kucat.cn 抓不到目标站图标时,不返回 404,而是回一张固定的 Chrome 图标占位(HTTP 200 + image/png)。
+// 该占位内容固定,按 sha256 精确识别 → 视为"未抓到",好让流程继续走 favimg 兜底(favimg 解析网页 + 聚合源,能拿到强反爬站真图)。
+const KUCAT_PLACEHOLDER_SHA256 = 'c7980ea0d2d98db0b14cb7cd3d321620891dba152d1a0cea821a1e4a643f98e2';
+
 // 图标主源:第三方 ico.kucat.cn(快)。返回 {buffer, contentType} 或 null(失败不抛,交由兜底)
 function fetchIconFromKucat(url) {
   return new Promise((resolve) => {
@@ -475,7 +480,12 @@ function fetchIconFromKucat(url) {
         response.on('data', (c) => chunks.push(c));
         response.on('end', () => {
           const buffer = Buffer.concat(chunks);
-          resolve(buffer.length ? { buffer, contentType } : null);
+          if (!buffer.length) return resolve(null);
+          // 命中 ico.kucat 固定占位图 → 视为未抓到,交由 favimg 兜底
+          if (crypto.createHash('sha256').update(buffer).digest('hex') === KUCAT_PLACEHOLDER_SHA256) {
+            return resolve(null);
+          }
+          resolve({ buffer, contentType });
         });
       },
     );

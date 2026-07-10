@@ -29,6 +29,51 @@ export const addNote = (req, res) => {
   }
 };
 
+// —— 笔记历史版本快照配置 ——
+// 正文自动保存是高频操作(停敲 500ms 即存),无脑存快照会撑爆版本表,故加三重闸门:
+// 1) 内容去重:正文无变化不存 2) 时间合并:距上一条版本不足窗口则并入 3) 每篇保留上限,超出删最旧
+const NOTE_VERSION_MERGE_WINDOW_MS = 3 * 60 * 1000; // 连续编辑每 3 分钟落一个还原点
+const NOTE_VERSION_KEEP = 20; // 每篇笔记最多保留的历史版本数
+
+// 历史版本字数改由前端按"渲染后展示文本"计算(html: DOM textContent; md: marked 渲染后取 textContent),
+// 后端只回传 content + type,不再在 SQL/JS 层估算(见前端 utils/common.ts 的 noteDisplayText)。
+
+// 删除超出保留上限的最旧版本(须在事务连接上执行)
+async function pruneNoteVersions(connection, noteId) {
+  const [cntRows] = await connection.query('SELECT COUNT(*) AS n FROM note_versions WHERE note_id=?', [noteId]);
+  const overflow = cntRows[0].n - NOTE_VERSION_KEEP;
+  if (overflow <= 0) return;
+  const [oldRows] = await connection.query(
+    'SELECT id FROM note_versions WHERE note_id=? ORDER BY create_time ASC, id ASC LIMIT ?',
+    [noteId, overflow],
+  );
+  if (oldRows.length === 0) return;
+  const ids = oldRows.map((r) => r.id);
+  const placeholders = ids.map(() => '?').join(',');
+  await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, ids);
+}
+
+// 覆盖笔记前,把"改动前"的旧内容存为一个历史版本(按闸门策略决定是否真正落库)
+async function snapshotNoteVersion(connection, { noteId, userId, newContent }) {
+  // 本次未提交正文(仅改标题/标签等)则不快照
+  if (newContent === undefined || newContent === null) return;
+  const [rows] = await connection.query('SELECT title, content, type FROM note WHERE id=? AND create_by=?', [noteId, userId]);
+  if (rows.length === 0) return; // 笔记不存在或非本人,交由后续 update 的 where 兜底
+  const oldContent = rows[0].content ?? '';
+  if (oldContent === newContent) return; // 正文无变化,去重
+  // 时间合并:距该笔记上一条版本不足窗口则并入,不新增
+  const [lastRows] = await connection.query(
+    'SELECT create_time FROM note_versions WHERE note_id=? ORDER BY create_time DESC, id DESC LIMIT 1',
+    [noteId],
+  );
+  if (lastRows.length > 0 && Date.now() - new Date(lastRows[0].create_time).getTime() < NOTE_VERSION_MERGE_WINDOW_MS) {
+    return;
+  }
+  const versionData = insertData({ noteId, title: rows[0].title, content: oldContent, type: rows[0].type, createBy: userId });
+  await connection.query('INSERT INTO note_versions SET ?', [versionData]);
+  await pruneNoteVersions(connection, noteId);
+}
+
 export const updateNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
@@ -40,6 +85,8 @@ export const updateNote = async (req, res) => {
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      // 覆盖前先存历史版本快照(改动前旧内容;含去重/时间合并/保留上限)
+      await snapshotNoteVersion(connection, { noteId: req.body.id, userId, newContent: req.body.content });
       // 更新 note 表，排除 tags
       const updateParams = mergeExistingProperties(params, [], ['id', 'tags']);
       await connection.query('update note set ? where id=? and create_by=?', [snakeCaseKeys(updateParams), req.body.id, userId]);
@@ -348,6 +395,122 @@ export const updateNoteTags = async (req, res) => {
       });
       await connection.commit();
       res.send(resultData('更新标签成功'));
+    } catch (error) {
+      await connection.rollback();
+      res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    res.send(resultData(null, 400, '客户端请求异常' + e));
+  }
+};
+
+// 历史版本列表(轻量:不含 content,只回标题/时间/字数,避免一次拉回大字段)
+export const getNoteVersions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const noteId = req.body.id;
+    if (!noteId) {
+      return res.send(resultData(null, 400, '参数错误'));
+    }
+    // 归属校验:只能看自己笔记的版本
+    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [noteId, userId, '0']);
+    if (own.length === 0) {
+      return res.send(resultData(null, 404, '笔记不存在'));
+    }
+    const [rows] = await pool.query(
+      `SELECT id, title, type, content, create_by, create_time
+       FROM note_versions
+       WHERE note_id = ?
+       ORDER BY create_time DESC, id DESC`,
+      [noteId],
+    );
+    // 回传 content + type,字数与预览渲染都交给前端(按渲染后展示文本计,html/md 口径一致)
+    res.send(resultData(rows));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
+};
+
+// 单个版本内容(预览用)
+export const getNoteVersionDetail = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const versionId = req.body.id;
+    if (!versionId) {
+      return res.send(resultData(null, 400, '参数错误'));
+    }
+    const [rows] = await pool.query('SELECT id, note_id, title, content, create_time FROM note_versions WHERE id=?', [
+      versionId,
+    ]);
+    if (rows.length === 0) {
+      return res.send(resultData(null, 404, '版本不存在'));
+    }
+    // 归属校验:该版本所属笔记须属于当前用户(两步查询,规避跨表字符集比较)
+    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=?', [rows[0].note_id, userId]);
+    if (own.length === 0) {
+      return res.send(resultData(null, 404, '版本不存在'));
+    }
+    res.send(resultData(rows[0]));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
+};
+
+// 恢复到指定版本:先把当前内容存为一版(后悔药),再覆盖为目标版本
+export const restoreNoteVersion = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const versionId = req.body.id;
+    if (!versionId) {
+      return res.send(resultData(null, 400, '参数错误'));
+    }
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [verRows] = await connection.query('SELECT note_id, title, content, type FROM note_versions WHERE id=?', [
+        versionId,
+      ]);
+      if (verRows.length === 0) {
+        await connection.rollback();
+        return res.send(resultData(null, 404, '版本不存在'));
+      }
+      const noteId = verRows[0].note_id;
+      const verTitle = verRows[0].title;
+      const verContent = verRows[0].content ?? '';
+      const verType = verRows[0].type || 'html';
+      // 归属校验 + 取当前值(未删除的、属于自己的笔记)
+      const [curRows] = await connection.query(
+        'SELECT title, content, type FROM note WHERE id=? AND create_by=? AND del_flag=?',
+        [noteId, userId, '0'],
+      );
+      if (curRows.length === 0) {
+        await connection.rollback();
+        return res.send(resultData(null, 404, '笔记不存在'));
+      }
+      // 后悔药:恢复前把当前内容强制存为一版(不受时间合并限制),恢复错了还能回来
+      const curSnap = insertData({
+        noteId,
+        title: curRows[0].title,
+        content: curRows[0].content ?? '',
+        type: curRows[0].type,
+        createBy: userId,
+      });
+      await connection.query('INSERT INTO note_versions SET ?', [curSnap]);
+      // 覆盖为目标版本(含 type:恢复时 md/html 模式一并回到该版本)
+      await connection.query('UPDATE note SET title=?, content=?, type=?, update_by=? WHERE id=? AND create_by=?', [
+        verTitle,
+        verContent,
+        verType,
+        userId,
+        noteId,
+        userId,
+      ]);
+      await pruneNoteVersions(connection, noteId);
+      await connection.commit();
+      res.send(resultData({ id: noteId, title: verTitle, content: verContent, type: verType }));
     } catch (error) {
       await connection.rollback();
       res.send(resultData(null, 500, '服务器内部错误: ' + error.message));

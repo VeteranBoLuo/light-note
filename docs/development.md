@@ -116,14 +116,20 @@ try {
 
 ### 前端规范
 
-**组件选择：**
+**组件选择（铁律：有 B 组件必用 B 组件，禁原生控件，不新增 Ant Design）：**
 
 | 场景 | 使用 | 不要使用 |
 |------|------|---------|
 | 表格 | `BTable` | `a-table` |
-| 按钮 | `b-button` | 原生 `<button>` |
+| 按钮 | `b-button` | 原生 `<button>`、`a-button` |
+| 下拉选择 | `BSelect` | 原生 `<select>`、`a-select` |
+| 输入框 | `BInput` | 原生 `<input>`、`a-input` |
 | 确认弹窗 | `Alert.alert()` | `Modal.confirm` |
 | 业务弹窗 | `BModal` | ant-design-vue 的 Modal |
+| 气泡卡片 | `BPopover` | `a-popover` |
+| 文字提示 | `BTooltip` | `a-tooltip` |
+
+- 存量 Ant Design（`a-*`）逐步替换为自研 B 组件，不新增；确无对应 B 组件才用原生，并注明原因。
 
 **国际化：**
 

@@ -14,6 +14,7 @@
         @save="clickSaveNote"
         @switch-mode="triggerEditorSwitch"
         @undo-switch="triggerEditorUndo"
+        @history="versionHistoryVisible = true"
       />
       <div class="note-body">
         <Catalog class="catalog-panel" :content="note.content" :note-type="note.type" />
@@ -45,6 +46,13 @@
       </div>
     </div>
     <b-loading :loading="!isReady" style="z-index: -1" />
+    <NoteVersionHistory
+      v-if="versionHistoryVisible"
+      v-model:visible="versionHistoryVisible"
+      :note-id="note.id"
+      :note-type="note.type"
+      @restored="onVersionRestored"
+    />
   </div>
 </template>
 
@@ -59,6 +67,7 @@
   import { bookmarkStore, noteStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
+  import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
@@ -79,6 +88,31 @@
   });
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
   const hasSwitchBackup = ref(false);
+  const versionHistoryVisible = ref(false);
+
+  // 历史版本恢复后:回写标题/正文并刷新编辑器与目录
+  async function onVersionRestored(data: any) {
+    if (!data) return;
+    // 恢复的版本可能是不同编辑模式(md/html):模式变了直接重载,保证编辑器与内容一致(罕见路径)
+    if (data.type && data.type !== note.type) {
+      window.location.reload();
+      return;
+    }
+    if (typeof data.title === 'string') {
+      note.title = data.title;
+      note.lastTitle = cloneDeep(note.title);
+      syncHeaderTitle();
+    }
+    if (typeof data.content === 'string') {
+      const html = normalizeNoteContentResourceUrls(data.content);
+      const applied = await editorRef.value?.replaceContentWithUndo?.(html);
+      if (!applied) {
+        note.content = html;
+      }
+    }
+    setUpdateTime();
+    nextTick(() => refreshCatalog());
+  }
 
   function triggerEditorSwitch() {
     // Editor.vue 的 triggerModeSwitch 会自己处理 Alert 确认

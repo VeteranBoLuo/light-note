@@ -14,6 +14,13 @@
 - build 也需要用户明确说"build"、"构建"、"打包"才算
 - 即使 deploy.sh 已有确认保护，也不代表可以擅自执行
 
+## 组件使用铁律（不可违反）
+
+- **凡有自研 B 系列组件的场景,一律用 B 组件,禁止原生 HTML 控件**:下拉 `BSelect`(禁 `<select>`)、输入 `BInput`(禁 `<input>`)、表格 `BTable`、业务弹窗 `BModal`、确认框 `Alert.alert()`、气泡 `BPopover`、提示 `BTooltip`、全局消息 `BMessage`、加载 `BLoading` 等。
+- **不再新增 Ant Design Vue(`a-*`)组件**;存量 `a-*` 逐步替换为自研 B 组件(改到哪替到哪),最终目标是完全移除 Ant Design。
+- 仅当确实没有对应 B 组件时才用原生控件,并在自检说明里注明原因。
+- B 组件清单见 `apps/web/src/components/base/BasicComponents/`。
+
 ## 开发工作流
 
 ### 新增/修改文件自检

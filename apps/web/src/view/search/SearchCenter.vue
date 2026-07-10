@@ -100,24 +100,25 @@
           <div class="filter-row">
             <label class="select-wrap">
               <span>{{ t('resourceCenter.sort.label') }}</span>
-              <select v-model="queryState.sort" @change="applyQueryState('切换排序')">
-                <option value="relevance">{{ t('resourceCenter.sort.relevance') }}</option>
-                <option value="updated">{{ t('resourceCenter.sort.updated') }}</option>
-                <option value="name">{{ t('resourceCenter.sort.name') }}</option>
-              </select>
+              <BSelect
+                class="filter-select"
+                :options="sortOptions"
+                v-model:value="queryState.sort"
+                @change="applyQueryState('切换排序')"
+              />
             </label>
 
             <label class="select-wrap">
               <span>{{ t('resourceCenter.date.label') }}</span>
-              <select v-model="queryState.date" @change="applyQueryState('筛选时间范围')">
-                <option value="all">{{ t('resourceCenter.date.all') }}</option>
-                <option value="7d">{{ t('resourceCenter.date.day7') }}</option>
-                <option value="30d">{{ t('resourceCenter.date.day30') }}</option>
-                <option value="365d">{{ t('resourceCenter.date.day365') }}</option>
-              </select>
+              <BSelect
+                class="filter-select"
+                :options="dateOptions"
+                v-model:value="queryState.date"
+                @change="applyQueryState('筛选时间范围')"
+              />
             </label>
 
-            <div class="view-switch">
+            <div class="view-switch" v-if="!bookmark.isMobile">
               <button class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
                 {{ t('resourceCenter.view.card') }}
               </button>
@@ -161,7 +162,7 @@
           </div>
         </section>
 
-        <div v-if="viewState.loading" class="result-skeleton" :class="{ 'result-skeleton--list': queryState.view === 'list' }">
+        <div v-if="viewState.loading" class="result-skeleton" :class="{ 'result-skeleton--list': effectiveView === 'list' }">
           <div v-for="n in 24" :key="n" class="result-sk-card">
             <div class="result-sk-top">
               <div class="result-sk-dot"></div>
@@ -183,7 +184,7 @@
               <span>{{ getSearchTypeLabel(t, group.type) }}</span>
               <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
             </div>
-            <div class="result-grid" :class="{ 'result-grid--list': queryState.view === 'list' }">
+            <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
               <RightMenu :menu="[deleteMenuLabel]" @select="handleItemMenu($event, item)" v-for="item in group.items" :key="`${item.type}-${item.id}`">
                 <SearchResultItem
                   :item="item"
@@ -191,7 +192,7 @@
                   :keyword="queryState.keyword"
                   :selected="selectedIds.includes(getItemSelectionKey(item))"
                   :selectable="true"
-                  :view="queryState.view"
+                  :view="effectiveView"
                   @open="openItem(item)"
                   @toggle-select="toggleSelect(item)"
                 />
@@ -247,6 +248,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import icon from '@/config/icon.ts';
@@ -257,7 +259,7 @@
     type SearchResultItem,
     type SearchType,
   } from '@/api/search.ts';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -283,6 +285,7 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const { t } = useI18n();
 
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
@@ -327,6 +330,21 @@
   });
 
   const selectedIds = ref<string[]>([]);
+
+  // 移动端强制卡片视图:列表视图会把卡片撑得很宽导致横向滚动,且移动端列表/卡片无实质差异
+  const effectiveView = computed<ResourceView>(() => (bookmark.isMobile ? 'card' : queryState.view));
+
+  const sortOptions = computed(() => [
+    { value: 'relevance', label: t('resourceCenter.sort.relevance') },
+    { value: 'updated', label: t('resourceCenter.sort.updated') },
+    { value: 'name', label: t('resourceCenter.sort.name') },
+  ]);
+  const dateOptions = computed(() => [
+    { value: 'all', label: t('resourceCenter.date.all') },
+    { value: '7d', label: t('resourceCenter.date.day7') },
+    { value: '30d', label: t('resourceCenter.date.day30') },
+    { value: '365d', label: t('resourceCenter.date.day365') },
+  ]);
 
   const mappedItems = computed(() => mapDisplayItems(viewState.rawItems, queryState.keyword));
 
@@ -1092,6 +1110,10 @@
     color: var(--text-color);
     padding: 0 10px;
     min-width: 120px;
+  }
+
+  .filter-select {
+    min-width: 140px;
   }
 
   .view-switch {

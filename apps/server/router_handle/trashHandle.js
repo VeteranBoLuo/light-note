@@ -17,6 +17,13 @@ async function purgeNoteImages(connection, noteIds) {
   return imgs.map((r) => r.url).filter(Boolean);
 }
 
+// 彻底删除笔记时连带清理其历史版本,避免 note_versions 残留孤儿
+async function purgeNoteVersions(connection, noteIds) {
+  if (!noteIds || noteIds.length === 0) return;
+  const ph = noteIds.map(() => '?').join(',');
+  await connection.query(`DELETE FROM note_versions WHERE note_id IN (${ph})`, noteIds);
+}
+
 // 按 URL 删磁盘图片文件(不阻塞、失败忽略),与 OBS 清理同款 fire-and-forget
 function unlinkImageUrls(urls) {
   for (const u of urls) {
@@ -83,6 +90,7 @@ async function cleanupExpiredNotes(connection, userId = null) {
   const ids = notes.map((n) => n.id);
   const ph = ids.map(() => '?').join(',');
   const urls = await purgeNoteImages(connection, ids);
+  await purgeNoteVersions(connection, ids);
   const [result] = await connection.query(`DELETE FROM note WHERE id IN (${ph})`, ids);
   unlinkImageUrls(urls);
   return result.affectedRows;
@@ -304,7 +312,9 @@ export const permanentDelete = async (req, res) => {
         `SELECT id FROM note WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
         [...ids, userId],
       );
-      noteImageUrls = await purgeNoteImages(connection, validNotes.map((n) => n.id));
+      const validNoteIds = validNotes.map((n) => n.id);
+      noteImageUrls = await purgeNoteImages(connection, validNoteIds);
+      await purgeNoteVersions(connection, validNoteIds);
     }
 
     const [result] = await connection.query(
@@ -375,7 +385,9 @@ export const emptyTrash = async (req, res) => {
     );
     // 笔记图片:先拿待清笔记的图片 URL 并删 note_images 行(下面循环会删 note 行)
     const [delNotes] = await connection.query(`SELECT id FROM note WHERE create_by = ? AND del_flag = 1`, [userId]);
-    const noteImageUrls = await purgeNoteImages(connection, delNotes.map((n) => n.id));
+    const delNoteIds = delNotes.map((n) => n.id);
+    const noteImageUrls = await purgeNoteImages(connection, delNoteIds);
+    await purgeNoteVersions(connection, delNoteIds);
 
     let total = 0;
     for (const type of RESOURCE_TYPES) {

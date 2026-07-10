@@ -308,6 +308,22 @@ export default {
     exportAsMd: 'Export as Markdown',
     exportAsMdDesc: 'Export the note as Markdown format',
     unnamedDoc: 'Untitled Document',
+    history: {
+      entry: 'Version History',
+      title: 'Version History',
+      empty: 'No history versions yet',
+      emptyHint: 'After you edit and save, the pre-edit content is archived automatically',
+      current: 'Current content',
+      selectHint: 'Select a version on the left to preview',
+      preview: 'Version preview',
+      restore: 'Restore this version',
+      restoreConfirmTitle: 'Restore Version',
+      restoreConfirm:
+        'Restore the note to this version? The current content will first be saved as a new history version so you can restore it again.',
+      restoreSuccess: 'Restored to this version',
+      loadFailed: 'Failed to load version content',
+      chars: '{count} chars',
+    },
     editor: {
       codeBlock: 'Code Block',
       headingMenu: 'Heading',
