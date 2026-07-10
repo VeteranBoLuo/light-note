@@ -1112,8 +1112,7 @@
     justify-content: center;
     flex-shrink: 0;
     padding: 4px;
-    background: color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--bm-muted-bg));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
     img {
       border-radius: 6px;
     }

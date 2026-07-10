@@ -491,7 +491,11 @@
       width: 220px;
       height: 220px;
       border-radius: 50%;
-      background: radial-gradient(circle, color-mix(in srgb, var(--resource-tag-color) 8%, transparent) 0%, transparent 70%);
+      background: radial-gradient(
+        circle,
+        color-mix(in srgb, var(--resource-tag-color) 8%, transparent) 0%,
+        transparent 70%
+      );
       pointer-events: none;
     }
   }
@@ -556,7 +560,9 @@
     padding: 14px 16px;
     background: var(--tag-stat-bg);
     border: 1px solid var(--workbench-border-color);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
 
@@ -575,10 +581,18 @@
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
   }
 
-  .stat-card--tag::before    { background: var(--resource-tag-color); }
-  .stat-card--bookmark::before { background: var(--resource-bookmark-color); }
-  .stat-card--note::before   { background: var(--resource-note-color); }
-  .stat-card--file::before   { background: var(--resource-file-color); }
+  .stat-card--tag::before {
+    background: var(--resource-tag-color);
+  }
+  .stat-card--bookmark::before {
+    background: var(--resource-bookmark-color);
+  }
+  .stat-card--note::before {
+    background: var(--resource-note-color);
+  }
+  .stat-card--file::before {
+    background: var(--resource-file-color);
+  }
 
   .stat-label {
     font-size: 12px;
@@ -673,10 +687,18 @@
     background: var(--resource-tag-color);
   }
 
-  .filter-dot--bookmark { background: var(--resource-bookmark-color); }
-  .filter-dot--note    { background: var(--resource-note-color); }
-  .filter-dot--file    { background: var(--resource-file-color); }
-  .filter-dot--empty   { background: #94a3b8; }
+  .filter-dot--bookmark {
+    background: var(--resource-bookmark-color);
+  }
+  .filter-dot--note {
+    background: var(--resource-note-color);
+  }
+  .filter-dot--file {
+    background: var(--resource-file-color);
+  }
+  .filter-dot--empty {
+    background: #94a3b8;
+  }
 
   .filter-count {
     font-size: 12px;
@@ -730,7 +752,10 @@
     flex-direction: column;
     min-width: 0;
     overflow: hidden;
-    transition: box-shadow 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+    transition:
+      box-shadow 0.3s ease,
+      border-color 0.3s ease,
+      transform 0.3s ease;
 
     // 顶部渐变光晕
     &::before {
@@ -740,7 +765,11 @@
       left: 0;
       right: 0;
       height: 3px;
-      background: linear-gradient(90deg, var(--resource-tag-color), color-mix(in srgb, var(--resource-tag-color) 50%, transparent));
+      background: linear-gradient(
+        90deg,
+        var(--resource-tag-color),
+        color-mix(in srgb, var(--resource-tag-color) 50%, transparent)
+      );
       opacity: 0.6;
       transition: opacity 0.3s ease;
     }
@@ -779,17 +808,17 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, var(--resource-tag-color) 12%, var(--tag-muted-bg));
     color: var(--resource-tag-color);
     font-size: 22px;
     flex-shrink: 0;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
-    transition: transform 0.3s ease, background 0.3s ease;
+    transition:
+      transform 0.3s ease,
+      background 0.3s ease;
   }
 
   .tag-card:hover .tag-icon-wrap {
     transform: scale(1.05);
-    background: color-mix(in srgb, var(--resource-tag-color) 18%, var(--tag-muted-bg));
   }
 
   .tag-meta {
@@ -879,9 +908,15 @@
     }
   }
 
-  .resource-stat--bookmark::before { background: var(--resource-bookmark-color); }
-  .resource-stat--note::before    { background: var(--resource-note-color); }
-  .resource-stat--file::before    { background: var(--resource-file-color); }
+  .resource-stat--bookmark::before {
+    background: var(--resource-bookmark-color);
+  }
+  .resource-stat--note::before {
+    background: var(--resource-note-color);
+  }
+  .resource-stat--file::before {
+    background: var(--resource-file-color);
+  }
 
   .resource-stat__label {
     font-size: 11px;
@@ -890,9 +925,15 @@
     letter-spacing: 0.06em;
   }
 
-  .resource-stat--bookmark .resource-stat__label { color: var(--resource-bookmark-color); }
-  .resource-stat--note    .resource-stat__label { color: var(--resource-note-color); }
-  .resource-stat--file    .resource-stat__label { color: var(--resource-file-color); }
+  .resource-stat--bookmark .resource-stat__label {
+    color: var(--resource-bookmark-color);
+  }
+  .resource-stat--note .resource-stat__label {
+    color: var(--resource-note-color);
+  }
+  .resource-stat--file .resource-stat__label {
+    color: var(--resource-file-color);
+  }
 
   .resource-stat__value {
     font-size: 24px;
@@ -982,9 +1023,15 @@
     letter-spacing: 0.06em;
   }
 
-  .resource-row__label--bookmark { color: var(--resource-bookmark-color); }
-  .resource-row__label--note    { color: var(--resource-note-color); }
-  .resource-row__label--file    { color: var(--resource-file-color); }
+  .resource-row__label--bookmark {
+    color: var(--resource-bookmark-color);
+  }
+  .resource-row__label--note {
+    color: var(--resource-note-color);
+  }
+  .resource-row__label--file {
+    color: var(--resource-file-color);
+  }
 
   .resource-chip {
     border: 1px solid transparent;
@@ -1062,7 +1109,9 @@
   }
 
   @keyframes empty-spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   // ═══════════════════════════════════════

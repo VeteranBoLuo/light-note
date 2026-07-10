@@ -17,7 +17,11 @@
         v-for="(cell, i) in cells"
         :key="i"
         class="cal-cell"
-        :class="{ blank: cell === null, checked: cell !== null && isChecked(cell), today: cell !== null && isToday(cell) }"
+        :class="{
+          blank: cell === null,
+          checked: cell !== null && isChecked(cell),
+          today: cell !== null && isToday(cell),
+        }"
       >
         <template v-if="cell !== null">{{ cell }}</template>
       </span>
@@ -86,13 +90,9 @@
     }
     return false;
   }
-  const monthCheckinCount = computed(
-    () => cells.value.filter((c): c is number => c !== null && isChecked(c)).length,
-  );
+  const monthCheckinCount = computed(() => cells.value.filter((c): c is number => c !== null && isChecked(c)).length);
 
-  const atCurrentMonth = computed(
-    () => viewYear.value === now.getFullYear() && viewMonth.value === now.getMonth(),
-  );
+  const atCurrentMonth = computed(() => viewYear.value === now.getFullYear() && viewMonth.value === now.getMonth());
   function prevMonth() {
     if (viewMonth.value === 0) {
       viewMonth.value = 11;
@@ -110,8 +110,6 @@
 
 <style scoped lang="less">
   .cal {
-    max-width: 380px;
-    margin: 0 auto;
     display: flex;
     flex-direction: column;
     gap: 12px;

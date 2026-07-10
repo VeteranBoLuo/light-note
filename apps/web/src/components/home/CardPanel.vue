@@ -130,12 +130,10 @@
   async function onEnd() {
     document.body.classList.remove('drag-active');
     try {
-      const sortedTags =
-        bookmark.bookmarkList.map((bookmark: any, index: number) => ({
-          sort: index,
-          id: bookmark.id,
-        })) || [];
-
+      // 拖拽即时归位:置顶书签始终浮回顶部(按 isTop 稳定排序,组内保持拖拽后的顺序),再持久化 sort
+      const reordered = [...bookmark.bookmarkList].sort((a: any, b: any) => (b.isTop ? 1 : 0) - (a.isTop ? 1 : 0));
+      bookmark.bookmarkList = reordered;
+      const sortedTags = reordered.map((bm: any, index: number) => ({ sort: index, id: bm.id }));
       await apiBasePost('/api/bookmark/updateBookmarkSort', { bookmarks: sortedTags });
     } catch (error) {
       console.error('Error updating bookmark sort:', error);

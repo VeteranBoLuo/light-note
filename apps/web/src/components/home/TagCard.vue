@@ -1,11 +1,12 @@
 <template>
   <div class="card-body" @click="toNewPage">
+    <span v-if="isTop" class="card-top-badge">置顶</span>
     <div class="card-title">
       <div style="display: flex; align-items: center; gap: 10px">
         <div class="card-img-container">
           <img :id="cardInfo.id" :src="getIcon(cardInfo)" width="22" height="22" alt=" " />
         </div>
-        <span class="card-title-text"><span v-if="(cardInfo as any).isTop" class="card-pin" title="已置顶">📌 </span>{{ cardInfo.name }}</span></div
+        <span class="card-title-text">{{ cardInfo.name }}</span></div
       >
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>
@@ -30,7 +31,7 @@
 <script lang="ts" setup>
   import { bookmarkStore, useUserStore } from '@/store';
   import router from '@/router';
-  import { onMounted } from 'vue';
+  import { computed, onMounted } from 'vue';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import icon from '@/config/icon.ts';
@@ -56,6 +57,8 @@
       }),
     },
   });
+
+  const isTop = computed(() => !!(props.cardInfo as any).isTop);
 
   function toNewPage() {
     openBookmarkUrl(props.cardInfo.url);
@@ -116,6 +119,22 @@
     &:active {
       transform: translateY(0);
     }
+  }
+
+  /* 置顶:仅右上角徽章标识,不加描边(保持卡片干净) */
+  .card-top-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    padding: 1px 7px;
+    font-size: 10px;
+    line-height: 1.6;
+    border-radius: 6px;
+    color: #fff;
+    background: var(--primary-color);
+    font-weight: 600;
+    letter-spacing: 1px;
   }
 
   .card-title {

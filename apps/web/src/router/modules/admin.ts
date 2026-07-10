@@ -11,7 +11,7 @@ const adminRouter: RouteRecordRaw[] = [
     },
     path: '/admin',
     name: 'admin',
-    redirect: '/admin/operationLog',
+    redirect: '/admin/overview',
     component: () => import('@/view/admin/AdminMg.vue'),
     children: [
       {
