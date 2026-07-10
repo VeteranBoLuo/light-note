@@ -1,8 +1,5 @@
 <template>
   <div class="view-body" :class="title !== '注册' ? 'hide' : ''">
-    <span @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(--primary-text)">
-      稍后再说
-    </span>
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: var(--text-color)">注册</b>
       <p class="register-benefits">秒注册 · 自动登录 · 云端同步 · 永久免费</p>
@@ -153,28 +150,28 @@
     const params = cloneDeep(formData);
     apiBasePost('/api/user/registerUser', params)
       .then((res: any) => {
-      if (res.status === 200) {
-        // 注册成功埋点:从按钮 v-click-log 移到这里,代表"一次真实注册",双击也只记一条
-        recordOperation(OPERATION_LOG_MAP.register.register);
-        // 注册即登录:复用登录成功的入应用流程,直接进应用(新用户为空状态,由空态引导上手)
-        markLoggedIn();
-        user.setUserInfo(res.data);
-        user.preferences.theme = res.data?.preferences?.theme || 'day';
-        user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
-        user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
-        user.preferences.homePage = getHomePagePreference(res.data?.preferences);
-        localStorage.setItem('preferences', JSON.stringify(user.preferences));
-        // 标记「刚注册」,进入首页后由 HomeDefaultHint 引导设置默认首页
-        localStorage.setItem('ln_just_registered', '1');
-        router.push(getAppHomePath(user.preferences, bookmark.isMobile));
-        message.success('注册成功，已为你自动登录');
-        setLocale(user.preferences.lang || 'zh-CN');
-        bookmark.isShowLogin = false;
-        bookmark.type = 'all';
-        bookmark.refreshTag();
-        emit('update:success', formData);
-      }
-    })
+        if (res.status === 200) {
+          // 注册成功埋点:从按钮 v-click-log 移到这里,代表"一次真实注册",双击也只记一条
+          recordOperation(OPERATION_LOG_MAP.register.register);
+          // 注册即登录:复用登录成功的入应用流程,直接进应用(新用户为空状态,由空态引导上手)
+          markLoggedIn();
+          user.setUserInfo(res.data);
+          user.preferences.theme = res.data?.preferences?.theme || 'day';
+          user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
+          user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+          user.preferences.homePage = getHomePagePreference(res.data?.preferences);
+          localStorage.setItem('preferences', JSON.stringify(user.preferences));
+          // 标记「刚注册」,进入首页后由 HomeDefaultHint 引导设置默认首页
+          localStorage.setItem('ln_just_registered', '1');
+          router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+          message.success('注册成功，已为你自动登录');
+          setLocale(user.preferences.lang || 'zh-CN');
+          bookmark.isShowLogin = false;
+          bookmark.type = 'all';
+          bookmark.refreshTag();
+          emit('update:success', formData);
+        }
+      })
       .finally(() => {
         submitting.value = false;
       });

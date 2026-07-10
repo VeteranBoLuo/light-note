@@ -7,13 +7,19 @@
         <RegisterPage ref="register" v-model:title="title" @update:success="registerSuccess" />
         <!------------重置------------->
         <ResetPage ref="reset" v-model:title="title" @update:success="registerSuccess"/>
+        <!-- 关闭按钮:放在卡片外层,不随登录/注册翻转动画翻面;点空白 + Esc 仍可用 -->
+        <button class="auth-close-btn" :class="{ 'is-flipping': flipping }" title="关闭 (Esc)" @click="handleMaskClick">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
       </div>
     </div>
   </teleport>
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, onUnmounted, ref, Ref } from 'vue';
+  import { onMounted, onUnmounted, ref, Ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import LoginPage from '@/components/login/LoginPage.vue';
   import ResetPage from '@/components/login/ResetPage.vue';
@@ -21,6 +27,15 @@
 
   // Modal title, supports: '登录' | '注册' | '重置'
   const title = ref<'登录' | '注册' | '重置'>(bookmarkStore().authModalTab);
+
+  // 登录/注册/重置切换时卡片有 0.6s 翻转动画,期间隐藏关闭按钮,避免 × 悬在翻转卡片外显得脱节
+  const flipping = ref(false);
+  let flipTimer = 0;
+  watch(title, () => {
+    flipping.value = true;
+    clearTimeout(flipTimer);
+    flipTimer = window.setTimeout(() => (flipping.value = false), 650);
+  });
 
   const user = useUserStore();
   const bookmark = bookmarkStore();
@@ -117,6 +132,36 @@
     transform: translate(-50%, -50%);
     display: grid;
     place-items: center;
+  }
+  /* 关闭按钮:克制风格——平时淡灰,hover 才加背景加深;定位在卡片右上角 */
+  .auth-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 100;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--desc-color);
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      opacity 0.2s ease;
+  }
+  .auth-close-btn.is-flipping {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .auth-close-btn:hover {
+    background: color-mix(in srgb, var(--text-color) 12%, transparent);
+    color: var(--text-color);
   }
   :deep(.ant-form-item .ant-form-item-label) {
     display: flex;

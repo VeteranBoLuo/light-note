@@ -22,7 +22,8 @@ export async function logFunction(req, res, next) {
       'getRelatedTag',
       'getOpinionNotice',
       'noticeSummary',
-      '/growth/me',
+      'aiQuota',
+      '/me',
       'unreadCount', // 通知未读数:铃铛角标每 120s 轮询,高频且无操作审计价值,不记 API 日志
     ].some((key) => req.originalUrl.includes(key));
 
