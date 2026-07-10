@@ -1,8 +1,5 @@
 <template>
   <div class="view-body" :class="title !== '重置' ? 'hide' : ''">
-    <span @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(--primary-text)">
-      游客体验
-    </span>
     <div class="view-page">
       <span>
         <span class="dom-hover" style="color: var(--primary-text)" @click="title = '登录'">返回</span>
@@ -90,11 +87,7 @@
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item
-          label=""
-          name="code"
-          :rules="[{ required: true, message: '请输入验证码' }]"
-        >
+        <a-form-item label="" name="code" :rules="[{ required: true, message: '请输入验证码' }]">
           <span class="flex-center">
             <b-input :maxlength="6" theme="al-day" height="40px" placeholder="验证码" v-model:value="formData.code">
               <template #prefix>

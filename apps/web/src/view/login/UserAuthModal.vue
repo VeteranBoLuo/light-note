@@ -1,6 +1,6 @@
 <template>
   <teleport to="body">
-    <div class="index-container">
+    <div class="index-container" @click.self="handleMaskClick">
       <div class="index-view">
         <LoginPage ref="login" v-model:title="title" v-model:formData="formData" />
         <!------------注册------------->
@@ -63,6 +63,11 @@
     [HANDLER_KEY.REGISTER]: { ref: register, method: 'handleRegister' },
     [HANDLER_KEY.RESET]: { ref: reset, method: 'handleReset' },
   };
+
+  // 点击弹框外部(遮罩层本身)关闭:@click.self 确保只在点到遮罩、而非点弹框内容时触发
+  function handleMaskClick() {
+    bookmark.isShowLogin = false;
+  }
 
   // Keyboard event handler
   function clickEvent(e: KeyboardEvent) {

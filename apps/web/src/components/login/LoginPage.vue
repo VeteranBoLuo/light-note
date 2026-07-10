@@ -7,9 +7,6 @@
     v-if="viewPhoneVisible"
   />
   <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
-    <a @click="bookmark.isShowLogin = false" class="dom-hover login-close-icon" style="color: var(--primary-text)">
-      游客体验
-    </a>
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: var(--text-color)">登录</b>
       <span
@@ -46,11 +43,7 @@
             </template>
           </b-input>
         </a-form-item>
-        <a-form-item
-          label=""
-          name="password"
-          :rules="[{ required: true, message: '请输入密码' }]"
-        >
+        <a-form-item label="" name="password" :rules="[{ required: true, message: '请输入密码' }]">
           <span class="flex-center">
             <b-input
               theme="al-day"
