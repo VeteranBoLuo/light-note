@@ -121,12 +121,43 @@
           <span class="ov-lg ov-lg-user">● 新增用户</span>
           <span class="ov-lg ov-lg-content">● 新增内容(书签+笔记+文件)</span>
         </div>
-        <svg class="ov-trend-svg" viewBox="0 0 100 42" preserveAspectRatio="none">
-          <polyline :points="linePoints('content')" class="ov-line ov-line-content" vector-effect="non-scaling-stroke" />
-          <polyline :points="linePoints('users')" class="ov-line ov-line-user" vector-effect="non-scaling-stroke" />
-        </svg>
+        <div class="ov-trend-chart" @mouseleave="hoverIdx = null">
+          <svg class="ov-trend-svg" viewBox="0 0 100 42" preserveAspectRatio="none">
+            <line
+              v-if="hoverPoint"
+              class="ov-trend-hover-line"
+              :x1="hoverPoint.x"
+              :x2="hoverPoint.x"
+              y1="0"
+              y2="42"
+              vector-effect="non-scaling-stroke"
+            />
+            <polyline :points="linePoints('content')" class="ov-line ov-line-content" vector-effect="non-scaling-stroke" />
+            <polyline :points="linePoints('users')" class="ov-line ov-line-user" vector-effect="non-scaling-stroke" />
+            <rect
+              v-for="(p, i) in trendPoints"
+              :key="i"
+              class="ov-trend-hit"
+              :x="p.hitX"
+              y="0"
+              :width="p.hitWidth"
+              height="42"
+              @mouseenter="hoverIdx = i"
+            />
+          </svg>
+          <!-- 高亮圆点用 HTML 层,避免 SVG 非等比拉伸把圆压成椭圆 -->
+          <template v-if="hoverPoint">
+            <span class="ov-trend-dot ov-dot-content" :style="dotStyle(hoverPoint.yContent)"></span>
+            <span class="ov-trend-dot ov-dot-user" :style="dotStyle(hoverPoint.yUser)"></span>
+          </template>
+          <div v-if="hoverPoint" class="ov-trend-tooltip" :style="tooltipStyle">
+            <strong>{{ hoverPoint.d }}</strong>
+            <span class="ov-tt-row"><i class="ov-tt-dot ov-dot-user"></i>新增用户 <b>{{ n(hoverPoint.users) }}</b></span>
+            <span class="ov-tt-row"><i class="ov-tt-dot ov-dot-content"></i>新增内容 <b>{{ n(hoverPoint.content) }}</b></span>
+          </div>
+        </div>
         <div class="ov-trend-x">
-          <span v-for="(p, i) in data.trend" :key="i">{{ p.d }}</span>
+          <span v-for="(p, i) in data.trend" :key="i" :class="{ 'is-active': hoverIdx === i }">{{ p.d }}</span>
         </div>
       </div>
     </section>
@@ -155,24 +186,51 @@
   });
 
   // 趋势双线迷你图:归一化到 viewBox 高度(顶部留 2、底部到 40)
+  const VB_W = 100;
+  const VB_H = 42;
+  const TOP = 2;
+  const CH = 38;
   const trendMax = computed(() => {
     const t = data.value?.trend || [];
     return Math.max(1, ...t.map((p: any) => Math.max(p.users, p.content)));
   });
-  function linePoints(key: string) {
+  const pointY = (v: any) => TOP + (CH - (Number(v) / trendMax.value) * CH);
+  // 每个数据点的绘制坐标 + 透明命中区(hover 用)
+  const trendPoints = computed(() => {
     const t = data.value?.trend || [];
-    if (!t.length) return '';
-    const w = 100;
-    const top = 2;
-    const h = 38;
-    return t
-      .map((p: any, i: number) => {
-        const x = t.length > 1 ? (i / (t.length - 1)) * w : 0;
-        const y = top + (h - (Number(p[key]) / trendMax.value) * h);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(' ');
+    const n = t.length;
+    return t.map((p: any, i: number) => {
+      const x = n > 1 ? (i / (n - 1)) * VB_W : 50;
+      const hitWidth = n > 1 ? VB_W / (n - 1) : VB_W;
+      const hitX = Math.min(VB_W - hitWidth, Math.max(0, x - hitWidth / 2));
+      return {
+        d: p.d,
+        users: Number(p.users),
+        content: Number(p.content),
+        x,
+        yUser: pointY(p.users),
+        yContent: pointY(p.content),
+        hitX,
+        hitWidth,
+      };
+    });
+  });
+  function linePoints(key: string) {
+    const yk = key === 'users' ? 'yUser' : 'yContent';
+    return trendPoints.value.map((p: any) => `${p.x.toFixed(1)},${p[yk].toFixed(1)}`).join(' ');
   }
+  // hover 交互:悬停某天时显示参考线 + 高亮点 + 数值气泡
+  const hoverIdx = ref<number | null>(null);
+  const hoverPoint = computed(() => (hoverIdx.value == null ? null : trendPoints.value[hoverIdx.value] || null));
+  function dotStyle(y: number) {
+    return { left: `${hoverPoint.value?.x ?? 0}%`, top: `${(y / VB_H) * 100}%` };
+  }
+  const tooltipStyle = computed(() => {
+    if (!hoverPoint.value) return {};
+    // 贴近数据点,两端 clamp 避免气泡溢出图表容器
+    const x = Math.min(85, Math.max(15, hoverPoint.value.x));
+    return { left: `${x}%` };
+  });
 
   function go(id: string) {
     router.push('/admin/' + id);
@@ -299,11 +357,83 @@
   .ov-line-content {
     stroke: #22c55e;
   }
+  .ov-trend-chart {
+    position: relative;
+  }
+  .ov-trend-hover-line {
+    stroke: var(--sub-text-color, #888);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0.5;
+  }
+  .ov-trend-hit {
+    fill: transparent;
+    cursor: pointer;
+  }
+  /* hover 高亮圆点(HTML 绝对定位,尺寸恒定不受 SVG 拉伸影响) */
+  .ov-trend-dot {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--background-color);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .ov-dot-user {
+    background: #615ced;
+  }
+  .ov-dot-content {
+    background: #22c55e;
+  }
+  .ov-trend-tooltip {
+    position: absolute;
+    top: 2px;
+    transform: translateX(-50%);
+    z-index: 3;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--background-color);
+    border: 1px solid var(--card-border-color, #eee);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    font-size: 12px;
+    color: var(--text-color);
+    white-space: nowrap;
+  }
+  .ov-trend-tooltip strong {
+    font-size: 12px;
+  }
+  .ov-tt-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--sub-text-color, #888);
+  }
+  .ov-tt-row b {
+    color: var(--text-color);
+    margin-left: 2px;
+  }
+  .ov-tt-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
   .ov-trend-x {
     display: flex;
     justify-content: space-between;
     margin-top: 8px;
     font-size: 10px;
     color: var(--sub-text-color, #888);
+  }
+  .ov-trend-x span.is-active {
+    color: var(--text-color);
+    font-weight: 600;
   }
 </style>

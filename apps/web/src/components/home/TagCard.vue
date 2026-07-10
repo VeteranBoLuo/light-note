@@ -1,13 +1,11 @@
 <template>
-  <div class="card-body" @click="toNewPage">
+  <div class="card-body" :class="{ 'has-top-badge': isTop }" @click="toNewPage">
     <span v-if="isTop" class="card-top-badge">{{ $t('common.pin') }}</span>
     <div class="card-title">
-      <div style="display: flex; align-items: center; gap: 10px">
-        <div class="card-img-container">
-          <img :id="cardInfo.id" :src="getIcon(cardInfo)" width="22" height="22" alt=" " />
-        </div>
-        <span class="card-title-text">{{ cardInfo.name }}</span></div
-      >
+      <div class="card-img-container">
+        <img :id="cardInfo.id" :src="getIcon(cardInfo)" width="22" height="22" alt=" " />
+      </div>
+      <span class="card-title-text">{{ cardInfo.name }}</span>
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>
     <div class="footer-tag">
@@ -140,14 +138,20 @@
   .card-title {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 10px;
 
     .card-title-text {
-      width: 200px;
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+  }
+
+  /* 置顶徽章浮在右上角(absolute 不占宽),给标题右侧留出空间,避免长标题被徽章遮住 */
+  .card-body.has-top-badge .card-title {
+    padding-right: 46px;
   }
 
   .card-img-container {
@@ -199,12 +203,6 @@
         box-shadow: none; /* 移除 :hover 状态下的阴影 */
         border: 1px solid var(--card-border-color);
         transform: none;
-      }
-    }
-
-    .card-title {
-      .card-title-text {
-        width: calc(100% - 44px);
       }
     }
 

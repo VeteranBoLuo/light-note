@@ -1,11 +1,56 @@
 <template>
-  <iframe
-    style="position: fixed; z-index: 99999"
-    src="https://boluo66.top"
-    width="430"
-    height="900"
+  <div
     v-if="viewPhoneVisible"
-  />
+    class="phone-preview-mask"
+    @click="viewPhoneVisible = false"
+    style="
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.45);
+    "
+  >
+    <div
+      class="phone-preview-frame"
+      @click.stop
+      style="position: relative; width: 390px; max-width: 92vw; height: 844px; max-height: 88vh"
+    >
+      <iframe
+        src="https://boluo66.top"
+        title="移动端预览"
+        style="
+          display: block;
+          width: 100%;
+          height: 100%;
+          border: none;
+          border-radius: 14px;
+          background: #fff;
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        "
+      />
+      <img
+        src="../../assets/icons/close.svg"
+        class="dom-hover"
+        width="14"
+        height="14"
+        alt=""
+        @click="viewPhoneVisible = false"
+        style="
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          padding: 4px;
+          border-radius: 50%;
+          background: var(--background-color, #fff);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          cursor: pointer;
+        "
+      />
+    </div>
+  </div>
   <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
     <div class="view-page">
       <b style="font-size: 30px; justify-self: center; color: var(--text-color)">{{ t('auth.login') }}</b>
@@ -65,10 +110,12 @@
         </a-form-item>
         <a-form-item>
           <div class="login-tips-text">
-            <span class="remember-text"><b-checkbox type="circle" v-model:checked="isCheck" />{{ t('auth.rememberMe') }}</span>
-            <a class="dom-hover-click" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub"
-              >{{ t('auth.githubLogin') }}</a
+            <span class="remember-text"
+              ><b-checkbox type="circle" v-model:checked="isCheck" />{{ t('auth.rememberMe') }}</span
             >
+            <a class="dom-hover-click" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub">{{
+              t('auth.githubLogin')
+            }}</a>
           </div>
         </a-form-item>
         <a-form-item>
@@ -86,20 +133,13 @@
         >{{ t('auth.previewMobile') }}</a
       >
       <span class="tips-text"
-        >{{ t('auth.noAccount') }}<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '注册'"
-          >{{ t('auth.goRegister') }}</a
-        ></span
+        >{{ t('auth.noAccount')
+        }}<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '注册'">{{
+          t('auth.goRegister')
+        }}</a></span
       >
     </div>
   </div>
-  <div
-    @click="viewPhoneVisible = false"
-    v-if="viewPhoneVisible"
-    class="dom-hover"
-    style="position: fixed; left: 50%; transform: translate(220px, -440px)"
-  >
-    <img src="../../assets/icons/close.svg" width="20" height="20" alt=""
-  /></div>
 </template>
 
 <script lang="ts" setup>

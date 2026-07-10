@@ -1280,5 +1280,21 @@
     .md-view-toggle .md-view-btn:nth-child(2) {
       display: none;
     }
+    /* 富文本工具栏(TinyMCE inline + fixed_toolbar_container):窄屏下默认会把 9 个按钮组挤压,
+       组内按钮再竖向堆叠,呈现"网格状"多行错乱(真机移动端亦如此)。这里强制单行 + 横向滚动:
+       组不收缩(flex-shrink:0)、组内不换行(nowrap),整条工具栏超宽时横向滚动。
+       用 @media 按视口宽度即时生效,切换尺寸/真机都无需刷新。 */
+    .note-editor .tox-editor-header {
+      grid-template-columns: 100% !important;
+      grid-template-rows: auto !important;
+    }
+    .note-editor .tox-toolbar {
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+    }
+    .note-editor .tox-toolbar__group {
+      flex-wrap: nowrap !important;
+      flex-shrink: 0 !important;
+    }
   }
 </style>
