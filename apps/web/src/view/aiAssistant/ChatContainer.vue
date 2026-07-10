@@ -174,15 +174,52 @@
   };
 
   // 初始化
+  // 对话历史本地持久化:刷新 / 重进不丢当前会话(多会话切换是后续更大的功能,暂不含)
+  const CHAT_HISTORY_KEY = 'ai-chat-history';
+  function persistHistory() {
+    try {
+      const toSave = messages.value
+        .filter((m) => m.content) // 跳过生成中的空占位
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: (m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).toISOString(),
+        }));
+      // 只有产生过真实对话(不止开场白一条)才存
+      if (toSave.length > 1) {
+        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify({ messages: toSave, sessionId }));
+      }
+    } catch {
+      /* 隐私模式 / 超额写入失败不影响主流程 */
+    }
+  }
+  function restoreHistory() {
+    try {
+      const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data.messages) || data.messages.length <= 1) return false;
+      messages.value = data.messages.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp), thoughts: [] }));
+      if (data.sessionId) sessionId = data.sessionId; // 尽力续用服务端记忆(Redis 30min 后失效则当新会话)
+      showRecommendation.value = false; // 有历史就不再显示推荐问题
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   onMounted(() => {
-    messages.value = [
-      {
-        role: 'assistant',
-        content: t('ai.greeting'),
-        timestamp: new Date(),
-        thoughts: [],
-      },
-    ];
+    // 优先恢复本地历史;没有历史再显示开场白
+    if (!restoreHistory()) {
+      messages.value = [
+        {
+          role: 'assistant',
+          content: t('ai.greeting'),
+          timestamp: new Date(),
+          thoughts: [],
+        },
+      ];
+    }
     nextTick(() => {
       scrollToBottom('auto');
     });
@@ -190,7 +227,10 @@
   });
   // 每轮回复结束(isLoading 落定)后刷新额度,数字实时反映本次消耗
   watch(isLoading, (v) => {
-    if (!v) fetchAiQuota();
+    if (!v) {
+      fetchAiQuota();
+      persistHistory(); // 一轮回复落定后落地历史
+    }
   });
 
   // 清空对话
@@ -198,6 +238,11 @@
     stopResponse();
     showRecommendation.value = false;
     sessionId = '';
+    try {
+      localStorage.removeItem(CHAT_HISTORY_KEY); // 清空对话同时清掉本地历史
+    } catch {
+      /* ignore */
+    }
     if (isLoading.value) return;
     messages.value = [
       {
