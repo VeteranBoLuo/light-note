@@ -177,6 +177,12 @@ export const submitAppeal = async (req, res) => {
   }
 };
 
+// 注册默认语言:按浏览器 Accept-Language 首选项判断(zh 开头→中文,其余→英文),让老外注册即英文、不必手动切
+function detectLangFromReq(req) {
+  const first = String(req.headers['accept-language'] || '').split(',')[0].trim().toLowerCase();
+  return first.startsWith('zh') ? 'zh-CN' : 'en-US';
+}
+
 // 注册欢迎通知:全员群发通知只发给存量用户,后期注册的用户收不到历史通知,靠这条兜底给新用户一条起始通知
 const WELCOME_NOTIFICATION = {
   type: 'welcome',
@@ -206,7 +212,7 @@ export const registerUser = async (req, res) => {
       role: 'admin', // 角色服务端强制写死,不信任客户端
     };
     // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
-    params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark' });
+    params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark', lang: detectLangFromReq(req) });
     if (params.password) {
       params.password = hashPassword(params.password);
       params.password_method = 'scrypt';
@@ -630,7 +636,7 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   const githubUserId = generateUUID();
   const githubHashedPassword = hashPassword('123456');
   // 与邮箱注册对齐:role 服务端写死 'admin'(缺失会让新用户 role=null → 全站 403 无权限),并给默认 preferences
-  const defaultPreferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark' });
+  const defaultPreferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark', lang: detectLangFromReq(req) });
   await pool.query(
     `INSERT INTO user
       (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
