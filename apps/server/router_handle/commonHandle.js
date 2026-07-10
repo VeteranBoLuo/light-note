@@ -1,6 +1,5 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
-import crypto from 'crypto';
 import https from 'https';
 import http from 'http';
 import fs from 'fs';
@@ -457,47 +456,8 @@ const imageMimeTypes = {
 // 默认图片路径（可选）
 const defaultImagePath = '/uploads/default-icon.png';
 
-// ico.kucat.cn 抓不到目标站图标时,不返回 404,而是回一张固定的 Chrome 图标占位(HTTP 200 + image/png)。
-// 该占位内容固定,按 sha256 精确识别 → 视为"未抓到",好让流程继续走 favimg 兜底(favimg 解析网页 + 聚合源,能拿到强反爬站真图)。
-const KUCAT_PLACEHOLDER_SHA256 = 'c7980ea0d2d98db0b14cb7cd3d321620891dba152d1a0cea821a1e4a643f98e2';
-
-// 图标主源:第三方 ico.kucat.cn(快)。返回 {buffer, contentType} 或 null(失败不抛,交由兜底)
-function fetchIconFromKucat(url) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    const request = https.get(
-      { hostname: 'ico.kucat.cn', path: '/get.php?url=' + encodeURIComponent(url), method: 'GET', rejectUnauthorized: false },
-      (response) => {
-        if (response.statusCode !== 200) {
-          response.resume();
-          return resolve(null);
-        }
-        const contentType = response.headers['content-type'] || '';
-        if (contentType && !contentType.startsWith('image/')) {
-          response.resume();
-          return resolve(null);
-        }
-        response.on('data', (c) => chunks.push(c));
-        response.on('end', () => {
-          const buffer = Buffer.concat(chunks);
-          if (!buffer.length) return resolve(null);
-          // 命中 ico.kucat 固定占位图 → 视为未抓到,交由 favimg 兜底
-          if (crypto.createHash('sha256').update(buffer).digest('hex') === KUCAT_PLACEHOLDER_SHA256) {
-            return resolve(null);
-          }
-          resolve({ buffer, contentType });
-        });
-      },
-    );
-    request.on('error', () => resolve(null));
-    request.setTimeout(8000, () => {
-      request.destroy();
-      resolve(null);
-    });
-  });
-}
-
-// 图标兜底源:同机工具箱 favimg(hub :3480)。会抓网页解析 <link icon> + 站点自身,内置 SSRF 防护/缓存
+// 图标获取:统一走同机工具箱 favimg(hub :3480)。favimg 抓网页解析 <link icon> + 站点自身 favicon.ico,
+// 直连失败(强反爬/超时)再兜底公网聚合源(favicone/yandex);内置 SSRF 防护/缓存。返回 {buffer, contentType} 或 null。
 function fetchIconFromFavimg(url) {
   return new Promise((resolve) => {
     const chunks = [];
@@ -528,9 +488,8 @@ export const analyzeImgUrl = async (req, res) => {
       req.body.map(async (bookmark) => {
         if (!bookmark.noCache) return null;
         const fallback = { id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` };
-        // 多源:先 ico.kucat.cn(快),抓不到再兜底工具箱 favimg(解析网页 link + 站点自身,覆盖面广)
-        let fetched = await fetchIconFromKucat(bookmark.url);
-        if (!fetched) fetched = await fetchIconFromFavimg(bookmark.url);
+        // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
+        const fetched = await fetchIconFromFavimg(bookmark.url);
         if (!fetched) return fallback;
         try {
           let fileExtension = 'png';
