@@ -1,6 +1,6 @@
 <template>
   <div class="card-panel-wrap">
-    <div v-if="bookmark.bookmarkLoading" class="card-panel skeleton-panel">
+    <div v-if="bookmark.bookmarkLoading || (!hasLoaded && !getBookList.length)" class="card-panel skeleton-panel">
       <div v-for="n in skeletonCount" :key="n" class="card-skeleton">
         <div class="skeleton-title">
           <div class="skeleton-avatar"></div>
@@ -67,7 +67,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
-  import { computed, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -83,6 +83,16 @@
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
   });
+
+  // 「已加载过」标记:首次进入时 loading 还是 false、列表为空,若直接显示空状态会闪一下"暂无书签";
+  // 未加载过时统一显示骨架,只有真加载完(loading 由 true→false)且仍为空才显示空状态。
+  const hasLoaded = ref((bookmark.bookmarkList?.length ?? 0) > 0);
+  watch(
+    () => bookmark.bookmarkLoading,
+    (loading, prev) => {
+      if (prev && !loading) hasLoaded.value = true;
+    },
+  );
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
 
   // 首屏空状态引导:书签为空(含 seed 失败兜底)时引导添加第一个,而非一片空白
@@ -165,7 +175,7 @@
       document.removeEventListener('click', clear, true);
       window.clearTimeout(hlTimer);
     };
-    hlTimer = window.setTimeout(clear, 3500);
+    hlTimer = window.setTimeout(clear, 4000);
     // 稍后再挂点击监听,避免被本次跳转残留的点击立即清掉
     window.setTimeout(() => document.addEventListener('click', clear, true), 400);
   }
@@ -189,7 +199,7 @@
   /* 定位高亮:被全局搜索定位到的书签卡片,脉冲描边几下引导视线 */
   .card-locate-hl {
     border-radius: 14px;
-    animation: card-locate-pulse 1s ease-in-out 3;
+    animation: card-locate-pulse 0.7s ease-in-out 5;
   }
   @keyframes card-locate-pulse {
     0%,

@@ -101,11 +101,15 @@
 
   watch(() => bookmark.refreshTagKey, queryTagList);
 
-  // 全局搜索「定位」跳转:切到「全部」并重载,确保目标书签一定在列表里(滚动+高亮在 CardPanel 处理)
+  // 全局搜索「定位」跳转:目标已在当前「全部」列表 → 不重载(避免骨架屏,秒滚动);
+  // 否则(处在标签过滤视图 / 目标不在当前列表)才切「全部」加载
   watch(
     () => route.query.locate,
     (locate) => {
       if (!locate) return;
+      const id = String(Array.isArray(locate) ? locate[0] : locate);
+      const inCurrentList = bookmark.bookmarkList?.some((b: any) => b.id === id);
+      if (bookmark.type === 'all' && inCurrentList) return; // 数据已全且含目标,交 CardPanel 直接滚动高亮
       if (bookmark.type !== 'all') {
         bookmark.type = 'all';
         bookmark.tagData = null;
