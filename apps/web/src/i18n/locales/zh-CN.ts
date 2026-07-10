@@ -142,6 +142,7 @@ export default {
     refreshFailed: '刷新失败，请稍后重试',
     refreshShort: '刷新',
     clear: '清空搜索',
+    locate: '在书签中定位',
     clearShort: '清空',
     cancel: '取消',
     results: '搜索结果',

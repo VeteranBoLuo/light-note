@@ -42,7 +42,12 @@
       :forceFallback="true"
       :delay="50"
     >
-      <div v-for="item in getBookList" :key="item.id">
+      <div
+        v-for="item in getBookList"
+        :key="item.id"
+        :data-bookmark-id="item.id"
+        :class="{ 'card-locate-hl': locateId === item.id }"
+      >
         <RightMenu :menu="menuFor(item)" @select="rightMenuClick($event, item)">
           <TagCard :cardInfo="item" />
         </RightMenu>
@@ -62,9 +67,10 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
-  import { computed } from 'vue';
+  import { computed, nextTick, watch } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
+  import { useRoute } from 'vue-router';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -139,6 +145,31 @@
       console.error('Error updating bookmark sort:', error);
     }
   }
+
+  // ── 全局搜索「定位」:目标书签进入列表后滚动到它并短暂高亮,随后 3.5s 或点击任意处消除(清 url query) ──
+  const route = useRoute();
+  const locateId = computed(() => String(route.query.locate || ''));
+  watch(
+    [() => bookmark.bookmarkList, locateId],
+    async () => {
+      const id = locateId.value;
+      if (!id || !bookmark.bookmarkList?.some((b: any) => b.id === id)) return;
+      await nextTick();
+      const el = document.querySelector(`[data-bookmark-id="${id}"]`) as HTMLElement | null;
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      let timer = 0;
+      const clear = () => {
+        if (String(route.query.locate || '') === id) router.replace({ path: '/home', query: {} });
+        document.removeEventListener('click', clear, true);
+        window.clearTimeout(timer);
+      };
+      timer = window.setTimeout(clear, 3500);
+      // 稍后再挂点击监听,避免被本次跳转残留的点击立即清掉
+      window.setTimeout(() => document.addEventListener('click', clear, true), 150);
+    },
+    { immediate: true },
+  );
 </script>
 
 <style lang="less" scoped>
@@ -146,6 +177,21 @@
     min-height: 100%;
     display: flex;
     flex-direction: column;
+  }
+
+  /* 定位高亮:被全局搜索定位到的书签卡片,脉冲描边几下引导视线 */
+  .card-locate-hl {
+    border-radius: 14px;
+    animation: card-locate-pulse 1s ease-in-out 3;
+  }
+  @keyframes card-locate-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    50% {
+      box-shadow: 0 0 0 3px var(--resource-bookmark-color);
+    }
   }
 
   .card-panel {

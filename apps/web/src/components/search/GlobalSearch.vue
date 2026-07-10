@@ -67,7 +67,17 @@
                 </span>
                 <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
               </span>
-              <span class="item-extra">{{ item.extra }}</span>
+              <span class="item-extra">
+                <span
+                  v-if="item.type === 'bookmark'"
+                  class="locate-btn"
+                  :title="t('resourceCenter.locate')"
+                  @mousedown.prevent.stop="locateItem(item)"
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7" /><path d="M12 1.5v3.5M12 19v3.5M1.5 12h3.5M19 12h3.5" /></svg>
+                </span>
+                {{ item.extra }}
+              </span>
             </button>
           </div>
           <button class="view-all" @mousedown.prevent="goSearch">{{ t('resourceCenter.viewAll') }}</button>
@@ -305,6 +315,16 @@
       return;
     }
     if (item.route) router.push(item.route);
+  }
+
+  // 定位:不打开资源本身,而是跳到对应模块并高亮出来(书签模块本无搜索,借此补上"找到它在哪")
+  function locateItem(item: SearchResultItem) {
+    closeDesktopSuggest();
+    mobileVisible.value = false;
+    if (item.type === 'bookmark') {
+      recordOperation({ module: '全局搜索', operation: `定位书签【${item.title}】` });
+      router.push({ path: '/home', query: { locate: item.id } });
+    }
   }
 
   // ── 下拉键盘操作:↑↓ 选中候选、回车打开选中项(未选中则进资源中心)、Esc 收起 ──
@@ -611,6 +631,22 @@
     color: inherit;
     border-radius: 3px;
     padding: 0 1px;
+  }
+
+  .locate-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    margin-right: 4px;
+    border-radius: 6px;
+    color: var(--desc-color);
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  .locate-btn:hover {
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
   }
 
   .view-all {

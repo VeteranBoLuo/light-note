@@ -101,6 +101,20 @@
 
   watch(() => bookmark.refreshTagKey, queryTagList);
 
+  // 全局搜索「定位」跳转:切到「全部」并重载,确保目标书签一定在列表里(滚动+高亮在 CardPanel 处理)
+  watch(
+    () => route.query.locate,
+    (locate) => {
+      if (!locate) return;
+      if (bookmark.type !== 'all') {
+        bookmark.type = 'all';
+        bookmark.tagData = null;
+      }
+      bookmark.refreshData();
+    },
+    { immediate: true },
+  );
+
   // 查询标签列表
   function queryTagList() {
     bookmark.tagLoading = true;

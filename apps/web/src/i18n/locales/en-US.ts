@@ -146,6 +146,7 @@ export default {
     refreshFailed: 'Refresh failed. Please try again later.',
     refreshShort: 'Refresh',
     clear: 'Clear Search',
+    locate: 'Locate in bookmarks',
     clearShort: 'Clear',
     cancel: 'Cancel',
     results: 'Search Results',
