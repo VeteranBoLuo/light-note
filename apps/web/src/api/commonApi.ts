@@ -19,27 +19,38 @@ export const getNoticeSummary = async function () {
   return apiBaseGet('/api/common/noticeSummary');
 };
 
-// 渐进式抓取书签图标:只抓无图标的,限并发逐个请求,每个抓到立即 applyIcon 回填(不必等最慢站一起返回)。
-// 替代"整批一次请求 + 后端 Promise.all 等最慢",解决书签多时首屏卡十几秒且一次性才出图;并顺带给后端限流。
+// 渐进式抓取书签图标:只抓无图标的,按小批合并请求(避开后端 120次/分 限流),批间限并发、逐批回填。
+// 既不像"整批一次请求"那样被最慢站拖死首屏十几秒,也不像"逐个请求"那样几百个请求撞限流 429。
 export async function loadBookmarkIconsProgressively(
   items: Array<{ url: string; id: string; iconUrl?: string }>,
   applyIcon: (id: string, iconUrl: string) => void,
-  concurrency = 6,
+  { batchSize = 20, concurrency = 2 }: { batchSize?: number; concurrency?: number } = {},
 ): Promise<void> {
   const targets = (items || []).filter((it) => it && it.url && it.id && !it.iconUrl);
   if (!targets.length) return;
-  let idx = 0;
+  // 每批 batchSize 个书签合并成 1 个请求;总请求数 ≈ ceil(targets/batchSize),远低于限流阈值
+  const batches: Array<typeof targets> = [];
+  for (let i = 0; i < targets.length; i += batchSize) {
+    batches.push(targets.slice(i, i + batchSize));
+  }
+  let bi = 0;
   const worker = async () => {
-    while (idx < targets.length) {
-      const it = targets[idx++];
+    while (bi < batches.length) {
+      const batch = batches[bi++];
       try {
-        const res = await apiBasePost('/api/common/analyzeImgUrl', [{ url: it.url, id: it.id, noCache: true }]);
-        const icon = Array.isArray(res?.data) ? res.data[0]?.iconUrl : '';
-        if (res?.status === 200 && icon) applyIcon(it.id, icon);
+        const res = await apiBasePost(
+          '/api/common/analyzeImgUrl',
+          batch.map((it) => ({ url: it.url, id: it.id, noCache: true })),
+        );
+        if (res?.status === 200 && Array.isArray(res.data)) {
+          for (const r of res.data) {
+            if (r?.id && r?.iconUrl) applyIcon(r.id, r.iconUrl); // 逐批到手即回填
+          }
+        }
       } catch {
-        /* 单个失败忽略,不影响其余书签 */
+        /* 整批失败忽略,不影响其余批 */
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, () => worker()));
+  await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, () => worker()));
 }
