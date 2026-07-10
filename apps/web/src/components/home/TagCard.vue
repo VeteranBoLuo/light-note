@@ -5,7 +5,7 @@
         <div class="card-img-container">
           <img :id="cardInfo.id" :src="getIcon(cardInfo)" width="22" height="22" alt=" " />
         </div>
-        <span class="card-title-text">{{ cardInfo.name }}</span></div
+        <span class="card-title-text"><span v-if="(cardInfo as any).isTop" class="card-pin" title="已置顶">📌 </span>{{ cardInfo.name }}</span></div
       >
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>

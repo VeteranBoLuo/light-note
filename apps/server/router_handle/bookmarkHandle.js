@@ -369,7 +369,7 @@ export const getBookmarkList = (req, res) => {
     ) AS tagList
 FROM bookmark b
 JOIN resource_tag_relations tbr ON b.id = tbr.resource_id AND tbr.resource_type = 'bookmark'
-WHERE b.user_id=? AND tbr.tag_id = ? AND  b.del_flag=0   ORDER BY b.sort, b.create_time DESC`;
+WHERE b.user_id=? AND tbr.tag_id = ? AND  b.del_flag=0   ORDER BY b.is_top DESC, b.sort, b.create_time DESC`;
   let params = [userId, tagId];
   const type = req.body.filters.type;
   if (type === 'all') {
@@ -392,7 +392,7 @@ FROM
       WHERE
       b.user_id = ? AND b.del_flag = 0
       ORDER BY
-      b.sort, b.create_time DESC;
+      b.is_top DESC, b.sort, b.create_time DESC;
 
 `;
     params = [userId];
@@ -425,11 +425,11 @@ WHERE
         b.description LIKE CONCAT('%', ?, '%') OR
         t.id IS NOT NULL
     )
-GROUP BY 
+GROUP BY
 
     b.id
-ORDER BY 
-    b.sort, b.create_time DESC;
+ORDER BY
+    b.is_top DESC, b.sort, b.create_time DESC;
 `;
     params = [req.body.filters.value, userId, req.body.filters.value, req.body.filters.value];
   }
@@ -448,6 +448,23 @@ ORDER BY
     .catch((e) => {
       res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
     });
+};
+
+// 置顶 / 取消置顶书签(翻转 is_top;归属校验防越权)。列表 ORDER BY 已 is_top DESC 优先
+export const toggleBookmarkTop = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { id } = req.body || {};
+    const userId = req.user.id;
+    if (!id) return res.send(resultData(null, 400, '缺少书签ID'));
+    const [own] = await pool.query('SELECT is_top FROM bookmark WHERE id=? AND user_id=? AND del_flag=0', [id, userId]);
+    if (!own.length) return res.send(resultData(null, 403, '无权限操作'));
+    const next = own[0].is_top ? 0 : 1;
+    await pool.query('UPDATE bookmark SET is_top=? WHERE id=? AND user_id=?', [next, id, userId]);
+    res.send(resultData({ id, isTop: next }));
+  } catch (e) {
+    res.send(resultData(null, 500, '操作失败: ' + e.message));
+  }
 };
 
 export const addBookmark = async (req, res) => {
@@ -469,6 +486,13 @@ export const addBookmark = async (req, res) => {
     const [checkRes] = await connection.query(sqlCheck, [userId, params.name]);
     if (checkRes.length > 0) {
       throw new Error(`书签${checkRes[0].name}已存在`);
+    }
+    // URL 去重:同一用户下相同网址不重复收藏(url 已归一化 + 补协议);导入逐条走此处也自动去重
+    if (params.url) {
+      const [urlDup] = await connection.query('SELECT name FROM bookmark WHERE user_id=? AND url=? AND del_flag=0', [userId, params.url]);
+      if (urlDup.length > 0) {
+        throw new Error(`该网址已收藏为「${urlDup[0].name}」`);
+      }
     }
 
     const insertParams = mergeExistingProperties(insertData(params), [undefined, '', []], ['related_tags']);

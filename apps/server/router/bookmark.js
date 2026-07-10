@@ -40,6 +40,8 @@ router.post('/getCommonBookmarks', bookmarkHandle.getCommonBookmarks);
 
 router.post('/updateBookmarkSort', bookmarkHandle.updateBookmarkSort);
 
+router.post('/toggleBookmarkTop', bookmarkHandle.toggleBookmarkTop);
+
 router.post('/importBookmarksHtml', upload.single('file'), bookmarkHandle.importBookmarksHtml);
 
 export default router;

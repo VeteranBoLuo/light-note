@@ -43,7 +43,7 @@
       :delay="50"
     >
       <div v-for="item in getBookList" :key="item.id">
-        <RightMenu :menu="[$t('common.edit'), $t('common.copyLink'), $t('common.delete')]" @select="rightMenuClick($event, item)">
+        <RightMenu :menu="menuFor(item)" @select="rightMenuClick($event, item)">
           <TagCard :cardInfo="item" />
         </RightMenu>
       </div>
@@ -84,8 +84,21 @@
     router.push('/manage/editBookmark/add');
   }
 
+  function menuFor(item: any) {
+    return [item.isTop ? t('common.unpin') : t('common.pin'), t('common.edit'), t('common.copyLink'), t('common.delete')];
+  }
+
   function rightMenuClick(type, item) {
     recordOperation({ module: '首页', operation: `右键${type}书签【${item.name}】` });
+    if (type === t('common.pin') || type === t('common.unpin')) {
+      apiBasePost('/api/bookmark/toggleBookmarkTop', { id: item.id }).then((res) => {
+        if (res.status === 200) {
+          message.success(res.data?.isTop ? t('common.pinned') : t('common.unpinned'));
+          bookmark.refreshData();
+        }
+      });
+      return;
+    }
     if (type === t('common.copyLink')) {
       copyTextToClipboard(item.url);
       message.success(t('common.linkCopied'));
