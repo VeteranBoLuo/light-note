@@ -1,6 +1,7 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import fsP from 'fs/promises';
 import path from 'path';
@@ -447,86 +448,106 @@ const imageMimeTypes = {
   'image/svg+xml': 'svg',
   'image/jpeg': 'jpeg',
   'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/x-icon': 'ico',
+  'image/vnd.microsoft.icon': 'ico',
 };
 
 // 默认图片路径（可选）
 const defaultImagePath = '/uploads/default-icon.png';
 
+// 图标主源:第三方 ico.kucat.cn(快)。返回 {buffer, contentType} 或 null(失败不抛,交由兜底)
+function fetchIconFromKucat(url) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    const request = https.get(
+      { hostname: 'ico.kucat.cn', path: '/get.php?url=' + encodeURIComponent(url), method: 'GET', rejectUnauthorized: false },
+      (response) => {
+        if (response.statusCode !== 200) {
+          response.resume();
+          return resolve(null);
+        }
+        const contentType = response.headers['content-type'] || '';
+        if (contentType && !contentType.startsWith('image/')) {
+          response.resume();
+          return resolve(null);
+        }
+        response.on('data', (c) => chunks.push(c));
+        response.on('end', () => {
+          const buffer = Buffer.concat(chunks);
+          resolve(buffer.length ? { buffer, contentType } : null);
+        });
+      },
+    );
+    request.on('error', () => resolve(null));
+    request.setTimeout(8000, () => {
+      request.destroy();
+      resolve(null);
+    });
+  });
+}
+
+// 图标兜底源:同机工具箱 favimg(hub :3480)。会抓网页解析 <link icon> + 站点自身,内置 SSRF 防护/缓存
+function fetchIconFromFavimg(url) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    const request = http.get(`http://127.0.0.1:3480/favimg/?url=${encodeURIComponent(url)}`, (response) => {
+      const contentType = response.headers['content-type'] || '';
+      if (response.statusCode !== 200 || !contentType.startsWith('image/')) {
+        response.resume();
+        return resolve(null);
+      }
+      response.on('data', (c) => chunks.push(c));
+      response.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        resolve(buffer.length ? { buffer, contentType } : null);
+      });
+    });
+    request.on('error', () => resolve(null));
+    request.setTimeout(12000, () => {
+      request.destroy();
+      resolve(null);
+    });
+  });
+}
+
 export const analyzeImgUrl = async (req, res) => {
   const connection = await pool.getConnection();
   try {
-    const promises = req.body.map(async (bookmark) => {
-      if (bookmark.noCache) {
-        return new Promise((resolve, reject) => {
-          const fileBuffer = [];
-          const options = {
-            hostname: 'ico.kucat.cn',
-            path: '/get.php?url=' + encodeURIComponent(bookmark.url),
-            method: 'GET',
-            rejectUnauthorized: false,
-          };
-          https
-            .get(options, (response) => {
-              const contentType = response.headers['content-type'];
-              response.on('data', (chunk) => {
-                fileBuffer.push(chunk);
-              });
-              response.on('end', async () => {
-                try {
-                  const buffer = Buffer.concat(fileBuffer);
-                  // 确定文件扩展名
-                  let fileExtension = 'png';
-                  const mimeType = Object.entries(imageMimeTypes).find(([key, value]) =>
-                    contentType?.includes(key),
-                  )?.[1];
-                  if (mimeType) {
-                    fileExtension = mimeType;
-                  }
+    const results = await Promise.all(
+      req.body.map(async (bookmark) => {
+        if (!bookmark.noCache) return null;
+        const fallback = { id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` };
+        // 多源:先 ico.kucat.cn(快),抓不到再兜底工具箱 favimg(解析网页 link + 站点自身,覆盖面广)
+        let fetched = await fetchIconFromKucat(bookmark.url);
+        if (!fetched) fetched = await fetchIconFromFavimg(bookmark.url);
+        if (!fetched) return fallback;
+        try {
+          let fileExtension = 'png';
+          const mimeType = Object.entries(imageMimeTypes).find(([key]) => fetched.contentType?.includes(key))?.[1];
+          if (mimeType) fileExtension = mimeType;
 
-                  const fileName = `bookmark-${bookmark.id}.${fileExtension}`;
-                  const uploadDir = '/www/wwwroot/images';
-
-                  // 确保目录存在
-                  await fsP.mkdir(uploadDir, { recursive: true });
-
-                  // 先清掉该书签所有旧扩展名的图标,避免换扩展名后旧文件残留成孤儿
-                  await Promise.all(
-                    ['png', 'svg', 'jpeg', 'jpg', 'gif'].map((e) =>
-                      fsP.unlink(path.join(uploadDir, `bookmark-${bookmark.id}.${e}`)).catch(() => {}),
-                    ),
-                  );
-
-                  // 写入文件
-                  const imagePath = path.join(uploadDir, fileName);
-                  await fsP.writeFile(imagePath, buffer);
-
-                  // 生成URL
-                  const imageUrl = `https://${req.get('host')}/uploads/${fileName}`;
-
-                  // 更新数据库中的 icon_url 字段为生成的URL
-                  const insertIconUrlSql = `UPDATE bookmark SET icon_url=? WHERE id=?`;
-                  await connection.query(insertIconUrlSql, [imageUrl, bookmark.id]);
-
-                  // 返回 {id, iconUrl},供前端把新图标回填到当前列表项(不必刷新页面)
-                  resolve({ id: bookmark.id, iconUrl: imageUrl });
-                } catch (err) {
-                  console.error('处理过程中出错:', err);
-                  resolve({ id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` });
-                }
-              });
-            })
-            .on('error', (err) => {
-              // 单个图标下载失败不能 reject——否则整批 Promise.all 失败、所有图标都白抓;降级为默认图
-              console.error('Error downloading file:', err);
-              resolve({ id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` });
-            });
-        });
-      }
-    });
-
-    // 过滤掉非 noCache 项(map 未 return 的 undefined),只回结构化的已更新图标
-    const results = (await Promise.all(promises)).filter(Boolean);
-    res.send(resultData(results, 200, '所有图标已更新成功'));
+          const fileName = `bookmark-${bookmark.id}.${fileExtension}`;
+          const uploadDir = '/www/wwwroot/images';
+          await fsP.mkdir(uploadDir, { recursive: true });
+          // 先清掉该书签所有旧扩展名的图标,避免换扩展名后旧文件残留成孤儿
+          await Promise.all(
+            ['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp'].map((e) =>
+              fsP.unlink(path.join(uploadDir, `bookmark-${bookmark.id}.${e}`)).catch(() => {}),
+            ),
+          );
+          await fsP.writeFile(path.join(uploadDir, fileName), fetched.buffer);
+          const imageUrl = `https://${req.get('host')}/uploads/${fileName}`;
+          await connection.query('UPDATE bookmark SET icon_url=? WHERE id=?', [imageUrl, bookmark.id]);
+          // 返回 {id, iconUrl},供前端把新图标回填到当前列表项(不必刷新页面)
+          return { id: bookmark.id, iconUrl: imageUrl };
+        } catch (err) {
+          console.error('图标落盘失败:', err.message);
+          return fallback;
+        }
+      }),
+    );
+    res.send(resultData(results.filter(Boolean), 200, '所有图标已更新成功'));
   } catch (err) {
     res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
   } finally {
