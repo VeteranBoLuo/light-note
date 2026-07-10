@@ -107,7 +107,7 @@
   import * as XLSX from 'xlsx';
   import { cloneDeep } from 'lodash-es';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   function exportBookmark() {
     // 随便声明一个结果
@@ -164,22 +164,11 @@
       });
       loading.value = false;
       // 缓存图片 + 把抓取到的图标当次回填(不必刷新页面)
-      const imgRes = await apiBasePost(
-        '/api/common/analyzeImgUrl',
-        allRes.data.items?.map((data: any) => {
-          return {
-            url: data.url,
-            id: data.id,
-            noCache: !data.iconUrl,
-          };
-        }),
-      );
-      if (imgRes.status === 200 && Array.isArray(imgRes.data) && imgRes.data.length) {
-        const iconMap = new Map(imgRes.data.map((r: any) => [r.id, r.iconUrl]));
-        tableData.value.forEach((bookmark: any) => {
-          if (iconMap.has(bookmark.id)) bookmark.iconUrl = iconMap.get(bookmark.id);
-        });
-      }
+      // 渐进式:只抓无图标的,限并发逐个,抓到即回填(不再整批等最慢站)
+      loadBookmarkIconsProgressively(allRes.data.items, (id, icon) => {
+        const b: any = tableData.value.find((x: any) => x.id === id);
+        if (b) b.iconUrl = icon;
+      });
     }
   }
 </script>

@@ -249,7 +249,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { useI18n } from 'vue-i18n';
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -719,17 +719,10 @@
           tableData.value.forEach((item: BookmarkInterface) => {
             item.iconUrl = getIcon(item);
           });
-          apiBasePost(
-            '/api/common/analyzeImgUrl',
-            res.data.items?.map((data: any) => ({ url: data.url, id: data.id, noCache: !data.iconUrl })),
-          ).then((imgRes) => {
-            // 把抓取到的图标当次回填,不必刷新页面
-            if (imgRes.status === 200 && Array.isArray(imgRes.data) && imgRes.data.length) {
-              const iconMap = new Map(imgRes.data.map((r: any) => [r.id, r.iconUrl]));
-              tableData.value.forEach((item: BookmarkInterface) => {
-                if (iconMap.has(item.id)) item.iconUrl = iconMap.get(item.id);
-              });
-            }
+          // 渐进式:只抓无图标的,限并发逐个,抓到即回填(不再整批等最慢站)
+          loadBookmarkIconsProgressively(res.data.items, (id, icon) => {
+            const item = tableData.value.find((x: BookmarkInterface) => x.id === id);
+            if (item) item.iconUrl = icon;
           });
         }
       })

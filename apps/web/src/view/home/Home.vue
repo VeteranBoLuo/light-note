@@ -15,6 +15,7 @@
   import { computed, nextTick, onMounted, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { useRoute, useRouter } from 'vue-router';
 
   const bookmark = bookmarkStore();
@@ -51,20 +52,11 @@
   // 不必等下次进页面(否则这一屏一直用 TagCard 里 ico.kucat.cn 的临时兜底图)
   const cacheImages = async () => {
     if (!bookmark.bookmarkList?.length) return;
-    const res = await apiBasePost(
-      '/api/common/analyzeImgUrl',
-      bookmark.bookmarkList.map((data: any) => ({
-        url: data.url,
-        id: data.id,
-        noCache: !data.iconUrl,
-      })),
-    );
-    if (res.status === 200 && Array.isArray(res.data) && res.data.length) {
-      const iconMap = new Map(res.data.map((r: any) => [r.id, r.iconUrl]));
-      bookmark.bookmarkList = bookmark.bookmarkList.map((b: any) =>
-        iconMap.has(b.id) ? { ...b, iconUrl: iconMap.get(b.id) } : b,
-      );
-    }
+    // 渐进式:只抓无图标的,限并发逐个请求,抓到即回填(不再整批等最慢站一起返回)
+    await loadBookmarkIconsProgressively(bookmark.bookmarkList as any, (id, icon) => {
+      const b: any = bookmark.bookmarkList.find((x: any) => x.id === id);
+      if (b) b.iconUrl = icon;
+    });
   };
 
   const watchedRefreshKey = computed(() => bookmark.refreshKey);
