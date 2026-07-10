@@ -115,6 +115,8 @@
   import { ref } from 'vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { bookmarkStore } from '@/store';
+  import i18n from '@/i18n';
+  const $t = i18n.global.t;
 
   interface ButtonItem {
     type?: 'function' | 'primary' | 'danger' | 'success';
