@@ -487,7 +487,8 @@ export const analyzeImgUrl = async (req, res) => {
     const results = await Promise.all(
       req.body.map(async (bookmark) => {
         if (!bookmark.noCache) return null;
-        const fallback = { id: bookmark.id, iconUrl: `${req.protocol}://${req.get('host')}${defaultImagePath}` };
+        // 抓不到 → 空 iconUrl,前端用内置地球图标(icon.nullImg)兜底;不再指向线上并不存在的 /uploads/default-icon.png(避免 404)
+        const fallback = { id: bookmark.id, iconUrl: '' };
         // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
         const fetched = await fetchIconFromFavimg(bookmark.url);
         if (!fetched) return fallback;

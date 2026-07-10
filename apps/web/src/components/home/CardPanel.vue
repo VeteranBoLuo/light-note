@@ -67,7 +67,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
-  import { computed, nextTick, watch } from 'vue';
+  import { computed, watch } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -146,27 +146,34 @@
     }
   }
 
-  // ── 全局搜索「定位」:目标书签进入列表后滚动到它并短暂高亮,随后 3.5s 或点击任意处消除(清 url query) ──
+  // ── 全局搜索「定位」:轮询等目标卡片真渲染出来(切「全部」+加载有延迟,骨架屏期间卡片还不在 DOM),再滚动到它并脉冲高亮,随后 3.5s 或点击任意处消除 ──
   const route = useRoute();
   const locateId = computed(() => String(route.query.locate || ''));
+  let retryTimer = 0;
+  function runLocate(id: string, attempt = 0) {
+    if (locateId.value !== id) return; // 目标已变更/取消
+    const el = document.querySelector(`[data-bookmark-id="${id}"]`) as HTMLElement | null;
+    // 列表仍加载中 或 卡片尚未渲染 → 重试(最多 ~5s),否则会 scroll 不动
+    if (bookmark.bookmarkLoading || !el) {
+      if (attempt < 25) retryTimer = window.setTimeout(() => runLocate(id, attempt + 1), 200);
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    let hlTimer = 0;
+    const clear = () => {
+      if (String(route.query.locate || '') === id) router.replace({ path: '/home', query: {} });
+      document.removeEventListener('click', clear, true);
+      window.clearTimeout(hlTimer);
+    };
+    hlTimer = window.setTimeout(clear, 3500);
+    // 稍后再挂点击监听,避免被本次跳转残留的点击立即清掉
+    window.setTimeout(() => document.addEventListener('click', clear, true), 400);
+  }
   watch(
-    [() => bookmark.bookmarkList, locateId],
-    async () => {
-      const id = locateId.value;
-      if (!id || !bookmark.bookmarkList?.some((b: any) => b.id === id)) return;
-      await nextTick();
-      const el = document.querySelector(`[data-bookmark-id="${id}"]`) as HTMLElement | null;
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      let timer = 0;
-      const clear = () => {
-        if (String(route.query.locate || '') === id) router.replace({ path: '/home', query: {} });
-        document.removeEventListener('click', clear, true);
-        window.clearTimeout(timer);
-      };
-      timer = window.setTimeout(clear, 3500);
-      // 稍后再挂点击监听,避免被本次跳转残留的点击立即清掉
-      window.setTimeout(() => document.addEventListener('click', clear, true), 150);
+    locateId,
+    (id) => {
+      window.clearTimeout(retryTimer);
+      if (id) runLocate(id);
     },
     { immediate: true },
   );
