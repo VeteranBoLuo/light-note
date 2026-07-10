@@ -209,6 +209,24 @@
               </div>
             </div>
 
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.hideEmptyTags') }}</span>
+                <span class="field-desc">{{ t('settings.hideEmptyTagsDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in onOffOpts"
+                  :key="String(o.v)"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.hideEmptyTags ?? false) === o.v }"
+                  @click="set('hideEmptyTags', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+
           </div>
         </section>
 

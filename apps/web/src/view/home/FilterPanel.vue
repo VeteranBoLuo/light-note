@@ -25,7 +25,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
             <template #suffix>
-              <b-tooltip :title="$t('home.hideEmptyTags')">
+              <b-tooltip :title="hideEmptyTags ? $t('home.hideEmptyTags') : $t('home.showEmptyTags')">
                 <BSwitch v-model:checked="hideEmptyTags" />
               </b-tooltip>
             </template>
@@ -95,6 +95,7 @@
   import { useI18n } from 'vue-i18n';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { updatePreference } from '@/utils/savePreference';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useRouter } from 'vue-router';
   import RightMenu from '@/components/base/RightMenu.vue';
@@ -108,7 +109,6 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const tagName = ref('');
-  const hideEmptyTags = ref(true);
   const hasBookmark = (tag: TagInterface) => Array.isArray(tag.bookmarkList) && tag.bookmarkList.length > 0;
   const filterTagList = computed(() => {
     const keyword = tagName.value.trim().toUpperCase();
@@ -127,6 +127,11 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
+
+  const hideEmptyTags = computed({
+    get: () => user.preferences.hideEmptyTags ?? false,
+    set: (val: boolean) => updatePreference({ hideEmptyTags: val }),
+  });
 
   const newName = ref('');
   const rightTagData = ref<TagInterface>();

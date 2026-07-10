@@ -36,6 +36,7 @@ interface UserInfo {
     resourceView?: 'card' | 'list'; // 资源中心视图
     tagView?: 'card' | 'graph'; // 标签详情视图
     openBookmarkIn?: 'newTab' | 'current'; // 书签打开方式:新标签页/当前标签页
+    hideEmptyTags?: boolean; // 首页标签列表是否隐藏空标签(默认 false=不隐藏)
     resourceSort?: 'relevance' | 'updated' | 'name'; // 资源中心默认排序
     weeklyReport?: boolean; // 每周成长周报推送
     notifyLevelUp?: boolean; // 升级提醒通知推送
@@ -73,6 +74,7 @@ const createDefaultUserState = (): UserState => ({
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
     lang: 'zh-CN', // 语言
     homePage: 'landing', // 默认首页（未设置时进官网）
+    hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
   },
 });
 
