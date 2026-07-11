@@ -42,7 +42,7 @@
     </div>
 
     <!-- 补签卡:有卡或可补签时展示;可补签(昨天漏签)时给「续连签」按钮 -->
-    <div v-if="(g.protectCards || 0) > 0 || g.canUseProtectCard" class="gc-protect">
+    <div class="gc-protect">
       <span class="gc-protect-info">🎫 {{ t('growth.protectCard') }} × {{ g.protectCards || 0 }}</span>
       <button v-if="g.canUseProtectCard" class="gc-protect-btn" :disabled="usingCard" @click="onUseCard">
         {{ t('growth.useProtectCard') }}
