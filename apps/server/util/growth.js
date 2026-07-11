@@ -244,6 +244,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let lastCheckin = null;
   let lastNotifiedLevel = 1;
   let protectCards = 0;
+  let canUseProtectCard = false;
   if (userId && userId !== 'visitor') {
     const [rows] = await pool.query(
       'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards FROM user_growth WHERE user_id = ?',
@@ -255,6 +256,15 @@ export async function getGrowth(userId, { userRole = null } = {}) {
       lastCheckin = rows[0].last_checkin_date || null;
       lastNotifiedLevel = Number(rows[0].last_notified_level || 1);
       protectCards = Number(rows[0].streak_protect_cards || 0);
+    }
+    // 补签判定:有卡且昨天没有签到记录(不依赖 lastCheckin,今天签到了昨天漏签也能补)
+    if (protectCards > 0) {
+      const yesterdayKey = dayKey(new Date(Date.now() - 86_400_000));
+      const [[yRow]] = await pool.query(
+        "SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source='checkin' AND day=? AND status='granted'",
+        [userId, yesterdayKey],
+      );
+      canUseProtectCard = Number(yRow?.c || 0) === 0;
     }
   }
   let level = levelForExp(exp);
@@ -288,7 +298,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     trashDays: rank.trashDays,
     streak,
     protectCards, // 补签卡数量(上限 2)
-    canUseProtectCard: protectCards > 0 && lastCheckin === dayKey(new Date(Date.now() - 2 * 86_400_000)), // 昨天漏签且有卡 → 可补签续连签
+    canUseProtectCard, // 昨天漏签且有卡 → 可补签续连签
     checkedInToday: lastCheckin === dayKey(),
     levelStartExp: rank.cumExp,
     nextLevelExp: nextExp,
@@ -630,12 +640,10 @@ export async function checkin(userId, { userRole = null } = {}) {
   }
 }
 
-// 使用补签卡:补回昨天漏签、连签续上。仅「最后签到停在前天(昨天正好漏 1 天)」可补,消耗 1 张卡。
-// 补昨天后用户再正常签到今天(gap=1),连签得以延续,不被断签回退。
+// 使用补签卡:补回昨天漏签、连签续上。不依赖 lastCheckin 日期(今天签到了昨天漏签也能补),消耗 1 张卡。
 export async function useProtectCard(userId, { userRole = null } = {}) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
   const yesterday = dayKey(new Date(Date.now() - 86_400_000));
-  const dayBefore = dayKey(new Date(Date.now() - 2 * 86_400_000));
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -648,24 +656,49 @@ export async function useProtectCard(userId, { userRole = null } = {}) {
       await conn.rollback();
       return { ok: false, reason: 'no_card' };
     }
-    // 仅当「昨天漏签」(最后签到停在前天)可补;已签今天或没断签则无需补
-    if (g.last_checkin_date !== dayBefore) {
+    // 查昨天是否有签到记录(已签则无需补)
+    const [[yRow]] = await conn.query(
+      "SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source='checkin' AND day=? AND status='granted'",
+      [userId, yesterday],
+    );
+    if (Number(yRow?.c || 0) > 0) {
       await conn.rollback();
       return { ok: false, reason: 'not_applicable' };
     }
     const newStreak = Number(g.streak) + 1; // 补上昨天,连签 +1
-    await conn.query(
-      'UPDATE user_growth SET streak = ?, last_checkin_date = ?, streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
-      [newStreak, yesterday, userId],
-    );
+    // 今天已签到的用户不覆盖 last_checkin_date(保持今天),否则设为昨天
+    if (g.last_checkin_date === dayKey()) {
+      await conn.query(
+        'UPDATE user_growth SET streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
+        [userId],
+      );
+    } else {
+      await conn.query(
+        'UPDATE user_growth SET last_checkin_date = ?, streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
+        [yesterday, userId],
+      );
+    }
     // 补一条昨天的签到账本(不发经验,只续连签;唯一键去重防重复补)
     await conn.query(
       `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
        VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)`,
       [userId, yesterday, JSON.stringify({ protectCard: true })],
     );
+    // 重新计算连签:从今天往前数签到事件,直到断签
+    const [events] = await conn.query(
+      "SELECT day FROM growth_events WHERE user_id=? AND source='checkin' AND status='granted' ORDER BY day DESC",
+      [userId],
+    );
+    const daySet = new Set((events || []).map(r => r.day));
+    let correctedStreak = 0;
+    for (let i = 0; ; i++) {
+      const d = dayKey(new Date(Date.now() - i * 86_400_000));
+      if (daySet.has(d)) correctedStreak++;
+      else break;
+    }
+    await conn.query('UPDATE user_growth SET streak = ? WHERE user_id = ?', [correctedStreak, userId]);
     await conn.commit();
-    return { ok: true, streak: newStreak, growth: await getGrowth(userId, { userRole }) };
+    return { ok: true, streak: correctedStreak, growth: await getGrowth(userId, { userRole }) };
   } catch (e) {
     try {
       await conn.rollback();

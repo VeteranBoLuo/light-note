@@ -41,13 +41,10 @@
       </div>
     </div>
 
-    <!-- 补签卡:有卡或可补签时展示;可补签(昨天漏签)时给「续连签」按钮 -->
-    <div v-if="(g.protectCards || 0) > 0 || g.canUseProtectCard" class="gc-protect">
+    <!-- 补签卡:展示张数和获取说明;补签操作在下方日历 -->
+    <div class="gc-protect">
       <span class="gc-protect-info">🎫 {{ t('growth.protectCard') }} × {{ g.protectCards || 0 }}</span>
-      <button v-if="g.canUseProtectCard" class="gc-protect-btn" :disabled="usingCard" @click="onUseCard">
-        {{ t('growth.useProtectCard') }}
-      </button>
-      <span v-else class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
+      <span class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
     </div>
 
     <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->

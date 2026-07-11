@@ -25,8 +25,10 @@
         }"
         @click="cell !== null && onCellClick(cell)"
       >
-        <template v-if="cell !== null">{{ cell }}</template>
-        <small v-if="cell !== null && canMakeup && !isChecked(cell) && isYesterday(cell)" class="cal-makeup-badge">{{ $t('growth.useProtectCard') }}</small>
+        <template v-if="cell !== null">
+          <span class="cal-cell-day">{{ cell }}</span>
+          <span v-if="canMakeup && !isChecked(cell) && isYesterday(cell)" class="cal-makeup-tag">补</span>
+        </template>
       </span>
     </div>
 
@@ -217,20 +219,24 @@ const emit = defineEmits<{ makeup: [] }>();
   .cal-cell.makeup-able {
     cursor: pointer;
     box-shadow: inset 0 0 0 1.5px var(--resource-bookmark-color);
-    color: var(--resource-bookmark-color);
     position: relative;
+    flex-direction: column;
+    gap: 1px;
   }
   .cal-cell.makeup-able:hover {
     background: color-mix(in srgb, var(--resource-bookmark-color) 12%, transparent);
   }
-  .cal-makeup-badge {
-    position: absolute;
-    bottom: 1px;
+  .cal-cell-day {
+    line-height: 1.2;
+  }
+  .cal-makeup-tag {
     font-size: 9px;
     line-height: 1;
+    font-weight: 700;
     color: var(--resource-bookmark-color);
-    opacity: 0.8;
-    pointer-events: none;
+    background: color-mix(in srgb, var(--resource-bookmark-color) 15%, transparent);
+    padding: 0 4px;
+    border-radius: 3px;
   }
   .cal-foot {
     display: flex;
