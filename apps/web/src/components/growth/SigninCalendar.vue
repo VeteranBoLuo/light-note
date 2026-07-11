@@ -21,9 +21,12 @@
           blank: cell === null,
           checked: cell !== null && isChecked(cell),
           today: cell !== null && isToday(cell),
+          'makeup-able': cell !== null && canMakeup && !isChecked(cell) && isYesterday(cell),
         }"
+        @click="cell !== null && onCellClick(cell)"
       >
         <template v-if="cell !== null">{{ cell }}</template>
+        <small v-if="cell !== null && canMakeup && !isChecked(cell) && isYesterday(cell)" class="cal-makeup-badge">{{ $t('growth.useProtectCard') }}</small>
       </span>
     </div>
 
@@ -38,7 +41,8 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
 
-  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number; wide?: boolean }>();
+  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number; wide?: boolean; canMakeup?: boolean }>();
+const emit = defineEmits<{ makeup: [] }>();
   const { t, locale } = useI18n();
 
   const now = new Date();
@@ -75,6 +79,16 @@
     return arr;
   });
 
+  function isYesterday(d: number) {
+    const y = new Date(now.getTime() - 86_400_000);
+    return viewYear.value === y.getFullYear() && viewMonth.value === y.getMonth() && d === y.getDate();
+  }
+  function onCellClick(d: number) {
+    if (!props.canMakeup) return;
+    if (isChecked(d) || isToday(d)) return;
+    if (!isYesterday(d)) return;
+    emit('makeup');
+  }
   function isToday(d: number) {
     return viewYear.value === now.getFullYear() && viewMonth.value === now.getMonth() && d === now.getDate();
   }
@@ -199,6 +213,24 @@
     box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--primary-color) 60%, transparent);
     color: var(--primary-color);
     font-weight: 700;
+  }
+  .cal-cell.makeup-able {
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1.5px var(--resource-bookmark-color);
+    color: var(--resource-bookmark-color);
+    position: relative;
+  }
+  .cal-cell.makeup-able:hover {
+    background: color-mix(in srgb, var(--resource-bookmark-color) 12%, transparent);
+  }
+  .cal-makeup-badge {
+    position: absolute;
+    bottom: 1px;
+    font-size: 9px;
+    line-height: 1;
+    color: var(--resource-bookmark-color);
+    opacity: 0.8;
+    pointer-events: none;
   }
   .cal-foot {
     display: flex;

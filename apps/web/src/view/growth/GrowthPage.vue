@@ -29,6 +29,8 @@
           :checkin-days="stats.checkinDays"
           :checked-in-today="growth?.checkedInToday"
           :streak="growth?.streak"
+          :can-makeup="growth?.canUseProtectCard"
+          @makeup="handleCalendarMakeup"
         />
       </section>
 
@@ -69,7 +71,7 @@
 
   const { t } = useI18n();
   const router = useRouter();
-  const { growth, dashboard, loadDashboard, claimDailyBonus } = useGrowth();
+  const { growth, dashboard, loadDashboard, claimDailyBonus, useProtectCard: apiUseProtectCard } = useGrowth();
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
   const EMPTY_STATS = {
@@ -136,6 +138,25 @@
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
   });
 
+  const makingUp = ref(false);
+  async function handleCalendarMakeup() {
+    if (makingUp.value) return;
+    makingUp.value = true;
+    try {
+      const res = await apiUseProtectCard();
+      if (res?.status === 200 && res.data?.ok) {
+        message.success(t('growth.protectCardOk', { n: res.data.streak }));
+        recordOperation({ module: '成长', operation: `使用补签卡（连签续至 ${res.data.streak} 天）` });
+        loadDashboard();
+      } else {
+        message.info(t('growth.protectCardFail'));
+      }
+    } catch (err) {
+      console.error('补签失败:', err);
+    } finally {
+      makingUp.value = false;
+    }
+  }
   function goBack() {
     if (window.history.length > 1) router.back();
     else router.push('/home');
