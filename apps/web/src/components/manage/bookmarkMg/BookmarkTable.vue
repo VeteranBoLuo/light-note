@@ -17,6 +17,9 @@
             <b-button type="success" @click="showImportExportModal">
               {{ $t('bookmarkMg.importExport') }}
             </b-button>
+            <b-button @click="healthVisible = true">
+              {{ $t('bookmarkMg.healthCheck') }}
+            </b-button>
             <b-button type="primary" @click="router.push({ path: `/manage/editBookmark/add` })">
               {{ $t('common.add') }}
             </b-button>
@@ -230,6 +233,7 @@
         :sections="importExportSections"
         :note="$t('bookmarkMg.exportNote')"
       />
+      <LinkHealthModal v-model:visible="healthVisible" />
     </div>
   </b-loading>
 </template>
@@ -244,6 +248,7 @@
   import router from '@/router';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -260,6 +265,7 @@
   const loading = ref(false);
   const selectedRows = ref<string[]>([]);
   const importExportModalVisible = ref(false);
+  const healthVisible = ref(false);
   const viewMode = ref<'card' | 'table'>('card');
   const tableSearchValue = ref('');
   const tableData = ref<BookmarkInterface[]>([]);

@@ -13,6 +13,7 @@ import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot } from '../util/snapshot.js';
+import { checkBookmarkHealth, getHealthSummary } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -465,6 +466,29 @@ export const toggleBookmarkTop = async (req, res) => {
     res.send(resultData({ id, isTop: next }));
   } catch (e) {
     res.send(resultData(null, 500, '操作失败: ' + e.message));
+  }
+};
+
+// POST /bookmark/health/check —— 检测一批链接死活(增量,最久未测优先)
+export const doCheckHealth = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await checkBookmarkHealth(req.user.id);
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('死链检测失败:', error);
+    res.send(resultData(null, 500, '检测失败: ' + error.message));
+  }
+};
+
+// GET /bookmark/health —— 当前健康概览(总数/已测/失效列表)
+export const getHealth = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    res.send(resultData(await getHealthSummary(req.user.id)));
+  } catch (error) {
+    console.error('获取健康概览失败:', error);
+    res.send(resultData(null, 500, '获取失败: ' + error.message));
   }
 };
 

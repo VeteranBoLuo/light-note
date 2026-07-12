@@ -48,4 +48,8 @@ router.post('/archive', bookmarkHandle.doArchiveBookmark);
 
 router.post('/snapshot', bookmarkHandle.getSnapshot);
 
+router.post('/health/check', bookmarkHandle.doCheckHealth);
+
+router.get('/health', bookmarkHandle.getHealth);
+
 export default router;
