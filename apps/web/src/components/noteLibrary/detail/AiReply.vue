@@ -99,7 +99,7 @@
 
     <div class="ai-output">
       <div class="output-header">
-        <span style="max-width: 100px" class="text-hidden">{{ t('ai.reply.outputTitle') }}</span>
+        <span style="max-width: 100px; min-width: 0" class="text-hidden">{{ t('ai.reply.outputTitle') }}</span>
         <div class="output-actions">
           <button
             style="max-width: 100px"
@@ -119,12 +119,12 @@
             v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
             >{{ t('ai.reply.replaceTitle') }}</button
           >
-          <button class="ghost-btn" :disabled="!outputFull" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">{{
-            t('ai.reply.expand')
-          }}</button>
-          <button class="ghost-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">{{
-            t('ai.reply.clear')
-          }}</button>
+          <button class="ghost-btn icon-btn" :disabled="!outputFull" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+          </button>
+          <button class="ghost-btn icon-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg>
+          </button>
         </div>
       </div>
       <TypewriterOutput
@@ -636,6 +636,7 @@
   .output-actions {
     display: flex;
     gap: 6px;
+    flex-shrink: 0;
   }
   .ghost-btn {
     height: 26px;
@@ -646,11 +647,25 @@
     padding: 0 8px;
     cursor: pointer;
     color: #4b5563;
+    white-space: nowrap;
   }
   .ghost-btn:disabled {
     cursor: not-allowed;
     color: #b5b8bf;
     border-color: #f1f2f6;
+  }
+  /* 放大/清空为图标按钮:窄面板里一行放得下 4 个动作,文字动作(插入/替换标题)保留可读 */
+  .icon-btn {
+    width: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn svg {
+    width: 14px;
+    height: 14px;
+    display: block;
   }
   .output-body {
     padding: 12px;
