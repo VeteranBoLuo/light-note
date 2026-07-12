@@ -107,7 +107,7 @@
   const formData = reactive({
     password: '',
     email: '',
-    role: 'admin',
+    role: 'user',
   });
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -148,7 +148,7 @@
     }
     await validateFun();
     submitting.value = true;
-    formData.role = 'admin';
+    formData.role = 'user';
     const params = cloneDeep(formData);
     apiBasePost('/api/user/registerUser', params)
       .then((res: any) => {

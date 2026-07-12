@@ -57,12 +57,20 @@
           value: 'root',
         },
         {
-          label: 'admin',
-          value: 'admin',
+          label: 'user',
+          value: 'user',
+        },
+        {
+          label: 'test',
+          value: 'test',
         },
         {
           label: 'visitor',
           value: 'visitor',
+        },
+        {
+          label: 'admin',
+          value: 'admin',
         },
       ];
       return genSelector(options, null, i18n.global.t('common.pleaseSelect'));

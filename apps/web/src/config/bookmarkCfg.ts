@@ -31,5 +31,9 @@ export enum RoleEnum {
 
   Root = 'root',
 
-  ADMIN = 'admin',
+  ADMIN = 'admin', // 遗留值,存量数据仍有;阶段 D 迁移后此值不再分配,但枚举保留(路由数组仍引用)
+
+  USER = 'user', // 普通注册用户(原 admin 语义)
+
+  TEST = 'test', // 测试账号:权限同 user,日志/统计中作为内部账号过滤
 }

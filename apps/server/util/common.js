@@ -15,6 +15,9 @@ import seoRouter from '../router/seo.js';
 import growthRouter from '../router/growth.js';
 import notificationRouter from '../router/notification.js';
 
+// 内部账号角色:站长(root) + 测试号(test)。日志/统计中作为「非真实用户」过滤。
+export const INTERNAL_ROLES = ['root', 'test'];
+
 export const resultData = function (data = null, status = 200, msg = '') {
   if (status !== 200 && status !== 'visitor' && status !== 'preview') {
     console.error(status, msg + ' ' + formatDateTime(new Date()));

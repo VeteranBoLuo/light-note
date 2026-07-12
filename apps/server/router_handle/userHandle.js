@@ -235,7 +235,7 @@ export const registerUser = async (req, res) => {
     const params = {
       email: req.body.email,
       password: req.body.password,
-      role: 'admin', // 角色服务端强制写死,不信任客户端
+      role: 'user', // 角色服务端强制写死,不信任客户端
     };
     // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
     params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark', lang: detectLangFromReq(req) });
@@ -277,7 +277,7 @@ export const registerUser = async (req, res) => {
     // 注册即登录:签发会话,前端直接进应用(新用户从空状态开始,由前端空态引导上手)
     const userInfo = await queryUserInfoById(userId);
     const sid = await issueLoginSession(req, res, userInfo, Boolean(req.body.rememberMe));
-    recordConversionEvent(req, 'register', '', { userId, visitorType: 'admin' });
+    recordConversionEvent(req, 'register', '', { userId, visitorType: 'user' });
     res.send(resultData({ ...sanitizeUser(userInfo), sid }));
   } catch (err) {
     console.error('注册过程中发生错误:', err);
@@ -531,7 +531,7 @@ export const github = async (req, res) => {
           id: user.id,
           alias: user.alias,
           head_picture: user.head_picture,
-          role: user.role ?? 'admin',
+          role: user.role ?? 'user',
         },
         requires_email: !githubUser.email, // 标识是否需要补全邮箱
       }),
@@ -661,18 +661,18 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   // 3. 创建新用户
   const githubUserId = generateUUID();
   const githubHashedPassword = hashPassword('123456');
-  // 与邮箱注册对齐:role 服务端写死 'admin'(缺失会让新用户 role=null → 全站 403 无权限),并给默认 preferences
+  // 与邮箱注册对齐:role 服务端写死 'user'(缺失会让新用户 role=null → 全站 403 无权限),并给默认 preferences
   const defaultPreferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark', lang: detectLangFromReq(req) });
   await pool.query(
     `INSERT INTO user
       (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
-     VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'admin', ?)`,
+     VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'user', ?)`,
     [githubUserId, safeEmail, githubUser.id, githubUser.avatar_url, githubHashedPassword, githubUser.login, defaultPreferences],
   );
   const [result] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
 
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
-  recordConversionEvent(req, 'register', '', { userId: githubUserId, visitorType: 'admin' });
+  recordConversionEvent(req, 'register', '', { userId: githubUserId, visitorType: 'user' });
 
   // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
   createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});

@@ -29,6 +29,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
+          <BSwitch v-model:checked="hideInternal" @change="searchApiLog()" />隐藏内部账号(管理员/测试)
           <b-button class="operation-log__clear" @click="clearOperationLogs" type="primary">清空日志</b-button>
         </div>
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
@@ -67,6 +68,7 @@
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -89,6 +91,7 @@
   const pageSize = ref<number>(20);
   const total = ref(0);
   const searchValue = ref('');
+  const hideInternal = ref(true);
   const timer = ref();
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
@@ -162,6 +165,7 @@
       pageSize: pageSize.value,
       filters: {
         key: searchValue.value,
+        hideInternal: hideInternal.value,
       },
     }).then((res) => {
       if (res.status === 200) {

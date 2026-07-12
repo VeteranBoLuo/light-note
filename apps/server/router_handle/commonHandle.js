@@ -1,4 +1,4 @@
-import { resultData, snakeCaseKeys, insertData, generateUUID } from '../util/common.js';
+import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import https from 'https';
 import http from 'http';
@@ -243,16 +243,18 @@ export const getApiLogs = async (req, res) => {
   try {
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const skip = pageSize * (currentPage - 1);
-    const { key, filter_root: filterRoot } = filters;
-    const ROOT_ID = '453c9c95-9b2e-11ef-9d4d-84a93e80c16e';
+    const { key, hide_internal: hideInternal = true } = filters;
+    const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
+    const roleParams = hideInternal ? INTERNAL_ROLES : [];
 
     const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%') OR a.url LIKE CONCAT('%', ?, '%')) AND a.del_flag = 0`;
-    const rootFilter = filterRoot ? ` AND a.user_id != '${ROOT_ID}'` : '';
-    const whereClause = baseWhere + rootFilter;
+    // 隐藏内部账号(root/test);u.role 为 NULL(join 不到 user,如已删用户)按真实用户保留,避免误删日志
+    const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
+    const whereClause = baseWhere + roleFilter;
 
     const [result] = await pool.query(
       `SELECT a.*, u.alias, u.email FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause} ORDER BY a.request_time DESC LIMIT ? OFFSET ?`,
-      [key, key, key, pageSize, skip],
+      [key, key, key, ...roleParams, pageSize, skip],
     );
 
     result.forEach((row) => {
@@ -267,7 +269,7 @@ export const getApiLogs = async (req, res) => {
 
     const [totalRes] = await pool.query(
       `SELECT COUNT(*) AS total FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause}`,
-      [key, key, key],
+      [key, key, key, ...roleParams],
     );
 
     res.send(
@@ -330,8 +332,12 @@ export const recordOperationLogs = (req, res) => {
 
 export const getOperationLogs = (req, res) => {
   try {
-    const { filters, pageSize, currentPage } = req.body;
+    const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const skip = pageSize * (currentPage - 1);
+    const hideInternal = filters.hide_internal !== false;
+    const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
+    const roleParams = hideInternal ? INTERNAL_ROLES : [];
+    const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
     // 查询总数据条数
     pool
       .query(
@@ -341,19 +347,19 @@ LEFT JOIN user u ON o.create_by = u.id
 WHERE (u.alias LIKE CONCAT('%', ?, '%') 
 OR o.operation LIKE CONCAT('%', ?, '%') 
 OR o.module LIKE CONCAT('%', ?, '%')) 
-AND o.del_flag = 0 AND u.alias!='菠萝'
+AND o.del_flag = 0${roleFilter}
 ORDER BY o.create_time DESC
 LIMIT ? OFFSET ?;
 `,
-        [filters.key, filters.key, filters.key, pageSize, skip],
+        [filters.key, filters.key, filters.key, ...roleParams, pageSize, skip],
       )
       .then(async ([result]) => {
         const totalSql = `SELECT COUNT(*) FROM operation_logs o left join user u on o.create_by=u.id WHERE 
 (u.alias LIKE CONCAT('%', ?, '%') 
 OR o.operation LIKE CONCAT('%', ?, '%') 
 OR o.module LIKE CONCAT('%', ?, '%'))
-AND o.del_flag=0 AND u.alias!='菠萝'`;
-        const [totalRes] = await pool.query(totalSql, [filters.key, filters.key, filters.key]);
+AND o.del_flag=0${roleFilter}`;
+        const [totalRes] = await pool.query(totalSql, [filters.key, filters.key, filters.key, ...roleParams]);
         res.send(
           resultData({
             items: result,

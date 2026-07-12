@@ -29,7 +29,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
-          <BSwitch v-model:checked="filterRoot" @change="searchApiLog()" />开启管理员过滤
+          <BSwitch v-model:checked="hideInternal" @change="searchApiLog()" />隐藏内部账号(管理员/测试)
           <b-button @click="handleSearch" type="primary">搜索</b-button>
           <b-button @click="clearApiLogs">清空日志</b-button>
         </div>
@@ -232,7 +232,7 @@
     loading.value = false;
   }
 
-  const filterRoot = ref(true);
+  const hideInternal = ref(true);
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
 
@@ -249,7 +249,7 @@
       pageSize: pageSize.value,
       filters: {
         key: searchValue.value,
-        filterRoot: filterRoot.value,
+        hideInternal: hideInternal.value,
       },
     })
       .then((res) => {

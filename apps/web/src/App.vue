@@ -578,7 +578,10 @@
     }
 
     const requiredRoles = getRequiredRoles(to);
-    if (requiredRoles.length > 0 && !requiredRoles.includes(user.role)) {
+    // 白名单含 VISITOR = 该页面对所有人开放(游客都能看,已登录角色自然都能看)。
+    // 这样新增的 user / test 角色无需改任何路由文件即可访问所有普通页;仅 [Root] 页面(不含 VISITOR)才继续只放行 root。
+    const isPublicRoute = requiredRoles.includes(RoleEnum.VISITOR);
+    if (requiredRoles.length > 0 && !isPublicRoute && !requiredRoles.includes(user.role)) {
       if (!user.id || user.role === RoleEnum.VISITOR) {
         handleUserLogout();
         next(getAppHomePath(user.preferences, bookmark.isMobile));

@@ -108,6 +108,7 @@
       pageSize: pageSize.value,
       filters: {
         key: searchValue.value,
+        hideInternal: hideInternal.value,
       },
     }).then((res) => {
       if (res.status === 200) {

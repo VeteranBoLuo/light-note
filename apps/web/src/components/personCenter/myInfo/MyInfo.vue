@@ -89,7 +89,7 @@
   }
 
   async function saveUserInfo() {
-    if (!['admin', 'root'].includes(user.role)) {
+    if (user.role === 'visitor' || !user.id) {
       message.warn(t('myInfo.pleaseLogin'));
       return;
     }
