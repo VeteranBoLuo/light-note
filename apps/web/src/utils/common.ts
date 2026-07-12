@@ -104,16 +104,37 @@ export function getBrowserType() {
 }
 
 export function getUserOsInfo() {
-  const userAgent = navigator.userAgent;
-  if (userAgent.indexOf('Windows NT 10.0') !== -1) return 'Windows 10';
-  if (userAgent.indexOf('Windows NT 6.2') !== -1) return 'Windows 8';
-  if (userAgent.indexOf('Windows NT 6.1') !== -1) return 'Windows 7';
-  if (userAgent.indexOf('Windows NT 6.0') !== -1) return 'Windows Vista';
-  if (userAgent.indexOf('Windows NT 5.1') !== -1) return 'Windows XP';
-  if (userAgent.indexOf('Windows NT 5.0') !== -1) return 'Windows 2000';
-  if (userAgent.indexOf('Mac') !== -1) return 'Mac/iOS';
-  if (userAgent.indexOf('X11') !== -1) return 'UNIX';
-  if (userAgent.indexOf('Linux') !== -1) return 'Linux';
+  const ua = navigator.userAgent;
+
+  // —— Windows（优先级最高，特征最明确）——
+  // Windows 11 依然用 NT 10.0,可通过其他特征区分
+  const isWin11 = ua.includes('Windows NT 10.0') && (ua.includes('Windows 11') || ua.includes('WOW64'));
+  if (isWin11) return 'Windows 11';
+  if (ua.includes('Windows NT 10.0')) return 'Windows 10';
+  if (ua.includes('Windows NT 6.2')) return 'Windows 8';
+  if (ua.includes('Windows NT 6.1')) return 'Windows 7';
+  if (ua.includes('Windows NT 6.0')) return 'Windows Vista';
+  if (ua.includes('Windows NT 5.1')) return 'Windows XP';
+  if (ua.includes('Windows NT 5.0')) return 'Windows 2000';
+  if (ua.includes('Windows')) return 'Windows'; // 兜底其他 Windows 版本
+
+  // —— HarmonyOS（放 Android 前面，因为鸿蒙 UA 常同时包含两者）——
+  if (ua.includes('HarmonyOS')) return 'HarmonyOS';
+
+  // —— Android（放 Linux 前面，安卓 UA 含 "Linux" 但本质是 Android）——
+  if (ua.includes('Android')) return 'Android';
+
+  // —— Apple 生态（按设备粒度，放 Mac 前面）——
+  if (ua.includes('iPad')) return 'iPadOS';
+  if (ua.includes('iPhone')) return 'iOS';
+  if (ua.includes('Macintosh') || ua.includes('Mac OS X') || ua.includes('Mac_PowerPC')) return 'macOS';
+
+  // —— 桌面 Linux（到这里说明不含 Android/HarmonyOS/Mac）——
+  if (ua.includes('Linux')) return 'Linux';
+
+  // —— UNIX——
+  if (ua.includes('X11')) return 'UNIX';
+
   return 'Other';
 }
 

@@ -59,6 +59,12 @@ function notifyAuthSession(response?: any) {
 
 function notifyAuthExpired(response?: any) {
   const user = useUserStore();
+  // 陈旧的在途响应保护:请求发起时的登录身份 ≠ 当前身份,说明这条响应发出后用户已切换了账号
+  // (典型:退出时发出的游客 /me 响应,晚于「重新登录」才到达)。直接忽略,否则误弹「登录已过期」。
+  const reqUserId = response?.config?.__reqUserId;
+  if (reqUserId !== undefined && reqUserId !== (user.id || '')) {
+    return false;
+  }
   const status = response?.data?.status;
   const headerExpired = response?.headers?.['x-auth-expired'] === '1';
   const serverRole = response?.headers?.['x-auth-role'];
@@ -168,6 +174,9 @@ request.interceptors.request.use(
       if (rememberedSid && !authExpiredFlow) {
         config.headers['X-Session-Id'] = rememberedSid;
       }
+      // 记录请求发起时的登录身份:响应回来时若身份已变(如退出后又登录了别的账号),
+      // 说明这是一条「陈旧的在途响应」,notifyAuthExpired 会据此忽略其过期信号,避免误弹「登录已过期」
+      (config as any).__reqUserId = useUserStore().id || '';
     }
     return config;
   },

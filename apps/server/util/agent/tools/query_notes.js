@@ -3,7 +3,7 @@ import { parseTimeRange } from '../timeRange.js';
 
 export default {
   name: 'query_notes',
-  description: '查询用户的笔记。可按关键词（匹配标题和内容）、时间范围筛选，返回笔记标题和创建时间。管理员可通过 user 参数查询指定用户的笔记。',
+  description: '查询用户的笔记。可按关键词（匹配标题和内容）、时间范围筛选，返回笔记标题、内容片段和创建时间。管理员可通过 user 参数查询指定用户的笔记。',
   parameters: {
     type: 'object',
     properties: {
@@ -32,7 +32,7 @@ export default {
     }
 
     const [[rows], [countRes]] = await Promise.all([
-      pool.query(`SELECT n.id, n.title, n.create_time FROM note n WHERE ${where} ORDER BY n.create_time DESC LIMIT ?`, [...baseParams, take]),
+      pool.query(`SELECT n.id, n.title, LEFT(n.content, 2000) AS content, n.type, n.create_time FROM note n WHERE ${where} ORDER BY n.create_time DESC LIMIT ?`, [...baseParams, take]),
       pool.query(`SELECT COUNT(*) as total FROM note n WHERE ${where}`, baseParams),
     ]);
 
@@ -44,16 +44,27 @@ export default {
       const kw = args.keyword ? `（关键词"${args.keyword}"）` : '';
       return `没有找到笔记${kw}`;
     }
+    const stripHtml = (str) => {
+      if (!str) return '';
+      if (/<[a-z][\s\S]*>/i.test(str)) {
+        return str.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+                  .replace(/\s+/g, ' ').trim();
+      }
+      return str;
+    };
     const lines = items.map((r, i) => {
       const title = r.title || '无标题';
+      const plainText = stripHtml(r.content);
+      const preview = plainText.slice(0, 2000);
+      const suffix = plainText.length > 2000 ? '...' : '';
       const time = r.create_time ? new Date(r.create_time).toLocaleString('zh-CN') : '';
-      return `${i + 1}. 《${title}》 - ${time}`;
+      return `${i + 1}. 《${title}》\n   内容：${preview}${suffix}\n   创建时间：${time}`;
     });
-    return `共 ${raw.total} 条笔记：\n${lines.join('\n')}`;
+    return `共 ${raw.total} 条笔记：\n${lines.join('\n\n')}`;
   },
   summarize(raw, args) {
     if (!raw?.total) return `笔记查询：无结果`;
     const keyword = args.keyword ? `关键词"${args.keyword}"` : '';
-    return `笔记查询${keyword ? `（${keyword}）` : ''}：共 ${raw.total} 条`;
+    return `笔记查询${keyword ? `（${keyword}）` : ''}：共 ${raw.total} 条，已返回内容片段`;
   },
 };

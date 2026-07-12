@@ -225,8 +225,16 @@
     }
 
     userInfoRequest = (async () => {
+      // 记录发起本次 /me 时的登录身份,用于识别并丢弃「陈旧的在途响应」
+      const reqUserId = user.id || '';
       try {
         const res = await apiBaseGet('/api/user/me');
+        // 陈旧响应保护:请求在途期间登录身份已变(典型:退出时发出的游客 /me,晚于「重新登录」才返回),
+        // 该响应已过时。若继续 applyUserInfo 会用游客数据覆盖刚登录的账号,导致登录态被冲掉且无从恢复,
+        // 故整体丢弃——不写 user、不改登录框、不刷通知。当前身份的数据以登录时写入的为准。
+        if ((user.id || '') !== reqUserId) {
+          return res;
+        }
         userInfoLoaded = true;
         applyUserInfo(res.data);
         if (res.status === 200) {

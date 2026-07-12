@@ -51,6 +51,10 @@ const markAuthExpired = (res) => {
   res.setHeader(AUTH_EXPIRED_HEADER, '1');
 };
 
+// 免鉴权的公开接口:带失效 sid 打到这里不算「会话过期」,不设 x-auth-expired 提示头。
+// 前缀与后端路由挂载点(baseRouter 的 '/user' + 子路由)一致。改挂载前缀或新增公开接口时须同步。
+// 注意:该判断只影响前端「是否弹登录已过期」的提示,不是鉴权边界——session 无效一律降级游客,
+// 与本列表无关。匹配放宽是 fail-safe 的(最坏只是本该静默的接口多弹一次提示)。
 const AUTH_EXPIRED_SILENT_PATHS = [
   '/user/login',
   '/user/github',
@@ -61,7 +65,10 @@ const AUTH_EXPIRED_SILENT_PATHS = [
 
 const shouldMarkAuthExpired = (req) => {
   const path = req.path || req.originalUrl || '';
-  return !AUTH_EXPIRED_SILENT_PATHS.some((item) => path.startsWith(item));
+  // 用 includes 替代 startsWith 兜底:即便将来代理层不再剥离 /api(req.path 变成 /api/user/login),
+  // 也能命中静默列表。解除对「代理必须剥离前缀」的隐性依赖。
+  // 放宽在这里是安全的:本函数只决定是否设 x-auth-expired 提示头,非鉴权边界(见上方注释)。
+  return !AUTH_EXPIRED_SILENT_PATHS.some((item) => path.includes(item));
 };
 
 export const getSessionMaxAge = (rememberMe) => (rememberMe ? REMEMBER_MAX_AGE_MS : LOGIN_MAX_AGE_MS);
