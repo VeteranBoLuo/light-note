@@ -501,9 +501,11 @@
   }
 
   .ai-panel {
-    flex: 3;
-    min-width: 310px;
-    width: 0;
+    /* 固定宽度:不随 AI 回答内容伸缩,避免挤压左侧笔记区(内容在面板内部换行/滚动) */
+    flex: 0 0 340px;
+    width: 340px;
+    min-width: 340px;
+    max-width: 340px;
   }
   .editor-component {
     flex: 1 1 auto;
