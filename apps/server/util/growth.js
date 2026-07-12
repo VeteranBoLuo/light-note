@@ -499,8 +499,10 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   const metrics = { ...stats, level: growth.level };
   const achievements = ACHIEVEMENTS.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
-    const unlocked = cur >= a.target;
     const claimed = claimedKeys.has(a.key);
+    // 已领取的成就恒显示为已解锁(粘性):即便之后删内容让指标回落,也不"退回未解锁",
+    // 避免误以为能重复解锁刷分;领取本身按 points_log(reason=achievement,ref=key)永久幂等,绝不重复发。
+    const unlocked = cur >= a.target || claimed;
     return {
       key: a.key,
       group: a.group,

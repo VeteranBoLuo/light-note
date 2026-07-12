@@ -221,6 +221,15 @@ export function resetGrowth() {
   ownerId = null;
 }
 
+// 积分余额单一事实源是 growth.points;商店/抽奖各自缓存了余额副本,
+// 任一动作改动积分后调用此函数把最新余额同步到已加载的视图,避免抽奖/商店余额滞后需刷新页面。
+function syncPointsToViews() {
+  const p = growth.value?.points;
+  if (typeof p !== 'number') return;
+  if (lottery.value) lottery.value.points = p;
+  if (shop.value) shop.value.points = p;
+}
+
 export function useGrowth() {
   async function load(force = false) {
     const uid = useUserStore().id || 'visitor';
@@ -283,6 +292,7 @@ export function useGrowth() {
     if (res?.status === 200 && res.data?.growth) {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;
+      syncPointsToViews();
     }
     return res;
   }
@@ -304,6 +314,7 @@ export function useGrowth() {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;
       await loadDashboard();
+      syncPointsToViews();
     }
     return res;
   }
@@ -339,6 +350,7 @@ export function useGrowth() {
     const res = await growthApi.buyShopItem(itemId);
     if (res?.status === 200 && res.data?.ok) {
       await Promise.all([loadShop(), load(true)]);
+      syncPointsToViews();
     }
     return res;
   }
@@ -382,6 +394,7 @@ export function useGrowth() {
     const res = await growthApi.drawLottery(times, free);
     if (res?.status === 200 && res.data?.ok) {
       await Promise.all([loadLottery(), load(true)]);
+      syncPointsToViews();
     }
     return res;
   }
@@ -391,6 +404,7 @@ export function useGrowth() {
     const res = await growthApi.claimAchievement(key);
     if (res?.status === 200 && res.data?.ok) {
       await Promise.all([loadDashboard(), load(true)]);
+      syncPointsToViews();
     }
     return res;
   }
@@ -409,6 +423,7 @@ export function useGrowth() {
     const res = await growthApi.claimWeekly(key);
     if (res?.status === 200 && res.data?.ok) {
       await Promise.all([loadWeekly(), load(true)]);
+      syncPointsToViews();
     }
     return res;
   }

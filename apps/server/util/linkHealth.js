@@ -1,12 +1,12 @@
 import pool from '../db/index.js';
-import { fetchWebMeta } from './fetchWebMeta.js';
+import { checkUrlLiveness } from './fetchWebMeta.js';
 
-// 死链检测·快照兜底:定期/按需检测收藏链接是否失效(404/超时/无法访问),标记失效并可回退到网页快照阅读。
-// 复用 fetchWebMeta(带 SSRF 防护):ok/NOT_HTML/EMPTY_CONTENT=alive;FETCH_FAILED/无效 URL=dead;内网=skip。
-// 增量按需:每次只检"最久未测"的一批(BATCH),避免一次检数百 URL 导致请求超时;累计写入 bookmark_health。
+// 死链检测·快照兜底:定期/按需检测收藏链接是否失效,标记失效并可回退到网页快照阅读。
+// 判定用 checkUrlLiveness:**只有明确 404/410 才算失效**;反爬(403/429/412)、限流、5xx、超时、
+// 网络错都不判死(站点仍在,只是拿不到),避免大面积误报。增量按需:每次只检一批(BATCH)。
 
-const BATCH = 25; // 单次检测上限(每次检最久未测的这么多条)
-const CONCURRENCY = 8;
+const BATCH = 25; // 单次检测上限(每次检最久未测/待复验的这么多条)
+const CONCURRENCY = 4; // 单核服务器降并发,减少并发挤占导致的超时(超时不再误判死链,但仍拖慢批次)
 
 export async function ensureBookmarkHealthTable() {
   await pool.query(`
@@ -20,14 +20,6 @@ export async function ensureBookmarkHealthTable() {
       KEY idx_user_status (user_id, status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='书签链接健康(死链检测结果)'
   `);
-}
-
-function classify(meta) {
-  if (meta.ok) return { status: 'alive', note: 'ok' };
-  const r = meta.reason || 'FETCH_FAILED';
-  if (r === 'NOT_HTML' || r === 'EMPTY_CONTENT') return { status: 'alive', note: r };
-  if (r === 'BLOCKED_HOST' || r === 'UNSUPPORTED_PROTOCOL') return { status: 'skip', note: r };
-  return { status: 'dead', note: r }; // FETCH_FAILED / INVALID_URL 等
 }
 
 // 简单并发池:对 items 逐个跑 worker,最多 CONCURRENCY 个同时进行
@@ -44,26 +36,27 @@ async function runPool(items, worker) {
 
 // 检测一批(最久未测优先:先没有 health 记录的,再按 checked_at 最早)。返回本批结果 + 累计概览。
 export async function checkBookmarkHealth(userId) {
+  // 顺序:①从未检测的优先 ②其次复验旧的"已失效"(修正历史误报)③再按最久未测
   const [bms] = await pool.query(
     `SELECT b.id, b.url FROM bookmark b
        LEFT JOIN bookmark_health h ON h.bookmark_id = b.id
       WHERE b.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> ''
-      ORDER BY h.checked_at IS NOT NULL, h.checked_at ASC
+      ORDER BY (h.checked_at IS NULL) DESC, (h.status = 'dead') DESC, h.checked_at ASC
       LIMIT ${BATCH}`,
     [userId],
   );
   await runPool(bms, async (b) => {
-    let cls;
+    let r;
     try {
-      const meta = await fetchWebMeta(b.url, { bodyLimit: 1 });
-      cls = classify(meta);
+      r = await checkUrlLiveness(b.url);
     } catch {
-      cls = { status: 'dead', note: 'ERROR' };
+      r = { status: 'unknown', code: 'ERR' };
     }
+    const note = String(r.code || r.status).slice(0, 32);
     await pool.query(
       `INSERT INTO bookmark_health (bookmark_id, user_id, status, note) VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE status = ?, note = ?, checked_at = CURRENT_TIMESTAMP`,
-      [b.id, userId, cls.status, cls.note, cls.status, cls.note],
+      [b.id, userId, r.status, note, r.status, note],
     );
   });
   return { checkedThisRun: bms.length, ...(await getHealthSummary(userId)) };

@@ -540,8 +540,10 @@ export const addBookmark = async (req, res) => {
   try {
     await connection.beginTransaction();
     const userId = req.user.id;
+    // saveSnapshot 是前端表单开关,不是书签字段:先摘出去,避免混进 INSERT(表里无此列)
+    const { saveSnapshot = true, ...bmBody } = req.body || {};
     const params = {
-      ...req.body,
+      ...bmBody,
       userId: userId,
       url: normalizeBookmarkUrl(req.body.url),
     };
@@ -582,7 +584,7 @@ export const addBookmark = async (req, res) => {
     res.send(resultData(result));
     recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
     awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
-    if (params.url) archiveBookmark(userId, insertBookmarkId).catch(() => {}); // 异步存档网页正文(防死链),失败静默,不阻断响应
+    if (params.url && saveSnapshot !== false) archiveBookmark(userId, insertBookmarkId).catch(() => {}); // 用户勾选时异步存档网页正文(防死链),失败静默,不阻断响应
   } catch (err) {
     await connection.rollback();
     res.send(resultData(null, 500, err.message));

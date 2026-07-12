@@ -18,10 +18,13 @@ import net from 'node:net';
 import { lookup as dnsLookup } from 'node:dns';
 
 const FETCH_TIMEOUT = 8000; // 8s：服务器 1 核，不宜久等
+const LIVENESS_TIMEOUT = 12000; // 死活探测用更宽松超时:宁可慢也别误判成死链
 const MAX_CONTENT_BYTES = 1.5 * 1024 * 1024; // 最多读 1.5MB HTML，避免大页面吃内存
 const MAX_REDIRECTS = 3;
 const BODY_TEXT_LIMIT = 2000; // 正文摘录上限，够 LLM 判断即可，避免 prompt 过长
 const UA = 'Mozilla/5.0 (compatible; LightNoteBot/1.0; +https://boluo66.top)';
+// 探活用浏览器 UA:尽量拿到真实状态码(反爬站也常返回 403 而非拒连,便于判定"活着只是被拦")
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
 /** 判断 IPv4/IPv6 是否属于内网或保留网段（SSRF 防护） */
 function isPrivateIp(ip) {
@@ -154,9 +157,13 @@ function decodeBuffer(buf, charset) {
  * >}
  */
 export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT } = {}) {
+  // 归一化:无协议头补 https://(与 read_url 一致)。老书签/导入的 URL 常不带协议,
+  // 不补会直接 new URL() 抛错 → INVALID_URL,导致归档失败/死链误报。
+  let input = String(rawUrl || '').trim();
+  if (input && !/^https?:\/\//i.test(input)) input = 'https://' + input;
   let target;
   try {
-    target = new URL(rawUrl);
+    target = new URL(input);
   } catch {
     return { ok: false, reason: 'INVALID_URL' };
   }
@@ -218,4 +225,46 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT } = {})
   }
 
   return { ok: true, url: target.href, title, description, siteName, keywords, bodyText };
+}
+
+/**
+ * 死活探测(死链检测用)。返回 { status, code }:
+ *  - 'dead':仅当明确 404 / 410(页面被删/永久移除)
+ *  - 'alive':2xx/3xx,以及 403/429/412/400/5xx 等(站点存在,只是反爬/限流/临时错,不算失效)
+ *  - 'unknown':超时 / 连接错 / 无效 URL(拿不到确切结论,不判死,避免误报)
+ *  - 'skip':内网/被 SSRF 拦截
+ * 用流式请求:拿到响应头(状态码)即丢弃响应体,不下载正文,更快、更省、更不易在并发下超时。
+ * 复用与 fetchWebMeta 相同的 guardedLookup agents 做 SSRF 防护。
+ */
+export async function checkUrlLiveness(rawUrl) {
+  let input = String(rawUrl || '').trim();
+  if (!input) return { status: 'unknown', code: 'EMPTY' };
+  if (!/^https?:\/\//i.test(input)) input = 'https://' + input;
+  let target;
+  try {
+    target = new URL(input);
+  } catch {
+    return { status: 'unknown', code: 'INVALID_URL' };
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return { status: 'unknown', code: 'PROTO' };
+  const literalHost = target.hostname.replace(/^\[/, '').replace(/\]$/, '');
+  if (net.isIP(literalHost) && isPrivateIp(literalHost)) return { status: 'skip', code: 'BLOCKED' };
+  try {
+    const resp = await axios.get(target.href, {
+      timeout: LIVENESS_TIMEOUT,
+      maxRedirects: MAX_REDIRECTS,
+      validateStatus: () => true, // 接受所有状态码,自行按 code 判定
+      httpAgent,
+      httpsAgent,
+      responseType: 'stream',
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,*/*;q=0.8', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' },
+    });
+    const code = resp.status;
+    resp.data?.destroy?.(); // 拿到状态码即丢弃响应体,不下载
+    if (code === 404 || code === 410) return { status: 'dead', code };
+    return { status: 'alive', code };
+  } catch (e) {
+    if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) return { status: 'skip', code: 'BLOCKED' };
+    return { status: 'unknown', code: e?.code || 'ERR' }; // 超时/网络错 → 未知,绝不判死
+  }
 }

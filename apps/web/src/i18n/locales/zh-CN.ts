@@ -1173,6 +1173,8 @@ export default {
     bookmarkName: '书签名称',
     bookmarkUrl: '书签地址',
     snapshot: '快照',
+    saveSnapshotOpt: '保存网页快照',
+    saveSnapshotOptDesc: '收藏时存一份网页正文;原链接失效(404/删文)后仍能查看当时内容,也能对存档一键 AI 摘要',
     snapshotTitle: '网页快照 · 防死链',
     snapshotHint: '收藏时已自动存档网页正文,原链接失效(404/删文)也能读到当时内容',
     snapshotEmpty: '暂无存档,点「重新归档」抓取当前网页正文',

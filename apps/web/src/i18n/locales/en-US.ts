@@ -1184,6 +1184,8 @@ export default {
     bookmarkName: 'Bookmark Name',
     bookmarkUrl: 'Bookmark URL',
     snapshot: 'Snapshot',
+    saveSnapshotOpt: 'Save page snapshot',
+    saveSnapshotOptDesc: 'Archive the page text on save; readable even if the link dies (404/deleted), and you can AI-summarize the archive',
     snapshotTitle: 'Page Snapshot · Anti Link-Rot',
     snapshotHint: 'The page text was archived when you saved it — readable even if the original link dies (404/deleted)',
     snapshotEmpty: 'No archive yet — click "Re-archive" to capture the current page text',

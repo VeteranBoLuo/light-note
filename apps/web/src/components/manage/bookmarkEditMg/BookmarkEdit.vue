@@ -50,6 +50,13 @@
           <span class="tag-attr-label">{{ $t('bookmarkMg.description') }}</span>
           <b-input v-model:value="bookmarkData.description" />
         </div>
+        <div v-if="handleType === 'add'" class="tag-attr-item">
+          <label class="snapshot-opt">
+            <input type="checkbox" v-model="saveSnapshot" />
+            <span class="tag-attr-label" style="margin: 0">{{ $t('bookmarkMg.saveSnapshotOpt') }}</span>
+          </label>
+          <span class="snapshot-opt-desc">{{ $t('bookmarkMg.saveSnapshotOptDesc') }}</span>
+        </div>
       </div>
     </b-loading>
     <b-space class="edit-tag-footer">
@@ -134,6 +141,7 @@
     if (handleType.value === 'add') {
       url = '/api/bookmark/addBookmark';
       params.userId = user.id;
+      params.saveSnapshot = saveSnapshot.value; // 仅新增时带上;仅当勾选才存快照
     } else {
       params.iconUrl = null;
     }
@@ -173,6 +181,7 @@
   const snapVisible = ref(false);
   const bookmarkId = computed(() => String(router.currentRoute.value.params?.id || ''));
   const isEdit = computed(() => !!bookmarkId.value && bookmarkId.value !== 'add');
+  const saveSnapshot = ref(true); // 新增书签时是否存网页快照(默认开,防死链)
   const loading = ref(false);
   onMounted(async () => {
     if (handleType.value === 'add') {
@@ -226,6 +235,26 @@
 
   .tag-attr-label {
     white-space: nowrap;
+  }
+
+  .snapshot-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .snapshot-opt input {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+  }
+  .snapshot-opt-desc {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--desc-color);
   }
 
   .tag-attr-head {
