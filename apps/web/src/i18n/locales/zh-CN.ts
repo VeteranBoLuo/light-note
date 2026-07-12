@@ -1111,6 +1111,7 @@ export default {
       replaceContent: '替换笔记内容',
       replaceTitle: '替换标题',
       clear: '清空',
+      expand: '放大',
       emptyMessage: '暂无内容，点击上方操作开始。',
       untitled: '未命名文档',
       stop: '停止生成',

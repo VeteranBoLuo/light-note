@@ -1121,6 +1121,7 @@ export default {
       replaceContent: 'Replace Note Content',
       replaceTitle: 'Replace Title',
       clear: 'Clear',
+      expand: 'Expand',
       emptyMessage: 'No content yet, click the operations above to start.',
       untitled: 'Untitled Document',
       stop: 'Stop Generation',

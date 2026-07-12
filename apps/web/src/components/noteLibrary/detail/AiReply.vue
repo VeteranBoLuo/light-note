@@ -119,6 +119,9 @@
             v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
             >{{ t('ai.reply.replaceTitle') }}</button
           >
+          <button class="ghost-btn" :disabled="!outputFull" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">{{
+            t('ai.reply.expand')
+          }}</button>
           <button class="ghost-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">{{
             t('ai.reply.clear')
           }}</button>
@@ -132,6 +135,17 @@
       />
     </div>
   </div>
+
+  <!-- 放大预览:输出区太窄小时,一键弹大窗舒服阅读,并可直接应用 -->
+  <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
+    <div class="ai-preview">
+      <div class="ai-preview-body" v-html="outputFull"></div>
+      <div class="ai-preview-actions">
+        <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
+        <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
+      </div>
+    </div>
+  </BModal>
 </template>
 
 <script lang="ts" setup>
@@ -140,6 +154,7 @@
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { noteDisplayText } from '@/utils/common.ts';
@@ -159,6 +174,7 @@
   const outputFull = ref('');
   const lastAction = ref('');
   const isLoading = ref(false);
+  const previewVisible = ref(false);
   const sessionId = ref('');
   const abortController = ref<AbortController | null>(null);
 
@@ -442,6 +458,13 @@
   const clearOutput = () => {
     outputFull.value = '';
   };
+
+  // 放大窗内应用:应用后关闭大窗
+  const applyFromPreview = (which: 'body' | 'title') => {
+    if (which === 'body') insertToNote();
+    else replaceTitle();
+    previewVisible.value = false;
+  };
 </script>
 
 <style lang="less" scoped>
@@ -714,5 +737,40 @@
   }
   [data-theme='night'] .primary-btn {
     background: linear-gradient(135deg, #6270f0, #4b5be2);
+  }
+
+  /* 放大预览窗:定宽约束 BModal 的 min-width:max-content,给足阅读空间 */
+  .ai-preview {
+    width: 680px;
+    max-width: 86vw;
+    box-sizing: border-box;
+  }
+  .ai-preview-body {
+    max-height: 68vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 15px;
+    line-height: 1.8;
+    color: var(--text-color);
+    padding: 4px 2px;
+  }
+  .ai-preview-body :deep(p),
+  .ai-preview-body :deep(li),
+  .ai-preview-body :deep(blockquote) {
+    margin: 0 0 10px;
+  }
+  .ai-preview-body :deep(h1),
+  .ai-preview-body :deep(h2),
+  .ai-preview-body :deep(h3) {
+    margin: 14px 0 8px;
+  }
+  .ai-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
   }
 </style>
