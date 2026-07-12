@@ -199,6 +199,51 @@ export const equipTitleHandle = async (req, res) => {
   }
 };
 
+// GET /growth/claimable —— 待领取总数(成就 + 每周挑战),供首页/入口红点
+export const getClaimable = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId || req.user?.role === 'visitor') return res.send(resultData({ count: 0 }));
+    const [dash, wk] = await Promise.all([getGrowthDashboard(userId, { userRole: req.user.role }), getWeeklyChallenges(userId)]);
+    const count = (dash.claimableCount || 0) + (wk.claimableCount || 0);
+    res.send(resultData({ count, achievements: dash.claimableCount || 0, weekly: wk.claimableCount || 0 }));
+  } catch (error) {
+    console.error('获取待领取数失败:', error);
+    res.send(resultData(null, 500, '获取失败: ' + error.message));
+  }
+};
+
+// POST /growth/claimAll —— 一键领取所有可领的成就 + 每周挑战奖励
+export const doClaimAll = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    let claimed = 0;
+    let points = 0;
+    const dash = await getGrowthDashboard(userId, { userRole });
+    for (const a of dash.achievements.filter((x) => x.claimable)) {
+      const r = await claimAchievement(userId, a.key, { userRole });
+      if (r.ok) {
+        claimed++;
+        points += r.reward || 0;
+      }
+    }
+    const wk = await getWeeklyChallenges(userId);
+    for (const c of wk.challenges.filter((x) => x.claimable)) {
+      const r = await claimWeeklyChallenge(userId, c.key);
+      if (r.ok) {
+        claimed++;
+        points += r.reward || 0;
+      }
+    }
+    res.send(resultData({ ok: true, claimed, points }));
+  } catch (error) {
+    console.error('一键领取失败:', error);
+    res.send(resultData(null, 500, '领取失败: ' + error.message));
+  }
+};
+
 // GET /growth/recap —— 那年今日 + 尘封回顾(旧内容重新推到面前)
 export const getRecapHandle = async (req, res) => {
   try {

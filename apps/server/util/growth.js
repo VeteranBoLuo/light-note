@@ -652,11 +652,20 @@ export async function generateGrowthNudges() {
     const yesterday = dayKey(new Date(Date.now() - 86_400_000));
     const today = dayKey();
     const [risk] = await pool.query(
-      'SELECT user_id, streak FROM user_growth WHERE last_checkin_date = ? AND streak >= 3 AND (last_checkin_date <> ?)',
+      `SELECT ug.user_id, ug.streak, u.preferences FROM user_growth ug
+         JOIN user u ON u.id = ug.user_id
+        WHERE ug.last_checkin_date = ? AND ug.streak >= 3 AND ug.last_checkin_date <> ?`,
       [yesterday, today],
     );
     let sent = 0;
     for (const u of risk) {
+      // 尊重通知偏好:设置里关闭「连签将断提醒」的用户跳过(preferences.notifyStreakRisk === false)
+      try {
+        const p = JSON.parse(u.preferences || '{}');
+        if (p.notifyStreakRisk === false) continue;
+      } catch {
+        /* 偏好解析失败按默认(发送)处理 */
+      }
       const [ex] = await pool.query(
         "SELECT 1 FROM notification WHERE user_id = ? AND type = 'streak_risk' AND DATE(create_time) = CURDATE() LIMIT 1",
         [u.user_id],

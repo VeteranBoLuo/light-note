@@ -33,6 +33,9 @@
       >
         {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
       </button>
+      <button v-if="claimable > 0" class="wg-claim" :disabled="claiming" @click.stop="onClaimAll">
+        🎁 {{ t('growth.claimAll') }} · {{ claimable }}
+      </button>
     </div>
   </div>
 </template>
@@ -45,14 +48,49 @@
   import { tierGradient } from '@/config/growthTier';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 
   const { t } = useI18n();
   const router = useRouter();
   const { growth: g, load, doCheckin } = useGrowth();
   const checking = ref(false);
+  const claimable = ref(0);
+  const claiming = ref(false);
+
+  async function loadClaimable() {
+    try {
+      const res = await apiBaseGet('/api/growth/claimable');
+      if (res?.status === 200 && res.data) claimable.value = res.data.count || 0;
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  async function onClaimAll() {
+    if (claiming.value) return;
+    claiming.value = true;
+    try {
+      const res = await apiBasePost('/api/growth/claimAll');
+      if (res?.status === 200 && res.data?.ok) {
+        if (res.data.claimed > 0) {
+          message.success(t('growth.claimAllOk', { n: res.data.points }));
+          recordOperation({ module: '工作台', operation: `一键领取成长奖励（${res.data.claimed} 项,+${res.data.points} 积分）` });
+        } else {
+          message.info(t('growth.claimAllNone'));
+        }
+        claimable.value = 0;
+        load(true); // 刷新积分余额等
+      }
+    } catch (err) {
+      console.error('一键领取失败:', err);
+    } finally {
+      claiming.value = false;
+    }
+  }
 
   onMounted(() => {
     load(); // 共享单例,首次拉一次即可
+    loadClaimable();
   });
 
   function goGrowth() {
@@ -211,6 +249,27 @@
     color: var(--desc-color);
     cursor: default;
     box-shadow: none;
+  }
+  .wg-claim {
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: none;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    box-shadow: 0 6px 14px -8px rgba(245, 158, 11, 0.9);
+    animation: wg-claim-pulse 1.6s infinite;
+  }
+  .wg-claim:disabled {
+    opacity: 0.6;
+    cursor: default;
+    animation: none;
+  }
+  @keyframes wg-claim-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
   }
   .wg-more {
     font-size: 12px;

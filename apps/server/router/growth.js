@@ -19,6 +19,8 @@ router.get('/lottery', growthHandle.getLottery);
 router.post('/lottery/draw', growthHandle.doDrawLottery);
 router.post('/achievement/claim', growthHandle.doClaimAchievement);
 router.get('/recap', growthHandle.getRecapHandle);
+router.get('/claimable', growthHandle.getClaimable);
+router.post('/claimAll', growthHandle.doClaimAll);
 router.get('/weekly', growthHandle.getWeekly);
 router.post('/weekly/claim', growthHandle.doClaimWeekly);
 router.get('/points/log', growthHandle.getMyPointsLog);

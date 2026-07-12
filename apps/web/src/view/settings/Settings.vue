@@ -299,6 +299,24 @@
                 </button>
               </div>
             </div>
+
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notifyStreakRisk') }}</span>
+                <span class="field-desc">{{ t('settings.notifyStreakRiskDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in onOffOpts"
+                  :key="String(o.v)"
+                  class="seg-btn"
+                  :class="{ active: ((user.preferences as any).notifyStreakRisk !== false) === o.v }"
+                  @click="set('notifyStreakRisk', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
