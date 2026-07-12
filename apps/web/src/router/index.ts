@@ -19,7 +19,6 @@ import tagDetailRouter from '@/router/modules/tagDetail.ts';
 import trashRouter from '@/router/modules/trash.ts';
 import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
-import todoRouter from '@/router/modules/todo.ts';
 import { getDesktopHomePath } from '@/utils/preferences.ts';
 
 const routes: RouteRecordRaw[] = [
@@ -41,7 +40,6 @@ const routes: RouteRecordRaw[] = [
       ...commonRouter,
       ...adminRouter,
       manageRouter,
-      todoRouter,
       ...noteLibraryRouter,
       ...cloudSpaceRouter,
       searchRouter,

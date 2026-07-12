@@ -60,14 +60,6 @@
           </div>
           <div
             :style="{
-              color: route.path.includes('/todo') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer"
-            @click="router.push('/todo')"
-            >{{ $t('navigation.todo') }}</div
-          >
-          <div
-            :style="{
               color: route.path.includes('/cloudSpace') ? '#615ced' : '',
             }"
             style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"

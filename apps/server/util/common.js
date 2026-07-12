@@ -14,7 +14,6 @@ import trashRouter from '../router/trash.js';
 import seoRouter from '../router/seo.js';
 import growthRouter from '../router/growth.js';
 import notificationRouter from '../router/notification.js';
-import todoRouter from '../router/todo.js';
 
 // 内部账号角色:站长(root) + 测试号(test)。日志/统计中作为「非真实用户」过滤。
 export const INTERNAL_ROLES = ['root', 'test'];
@@ -177,10 +176,6 @@ export const baseRouter = [
   {
     path: '/notification',
     router: notificationRouter,
-  },
-  {
-    path: '/todo',
-    router: todoRouter,
   },
   {
     path: '/json',
