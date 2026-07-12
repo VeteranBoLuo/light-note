@@ -80,6 +80,7 @@
   import 'tinymce/plugins/quickbars';
   import 'tinymce/skins/ui/oxide-dark/skin.min.css';
   import { apiBasePost } from '@/http/request.ts';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import i18n from '@/i18n';
   import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
@@ -478,7 +479,7 @@
     license_key: 'gpl',
     base_url: '/node_modules/tinymce',
     plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount quickbars',
-    quickbars_selection_toolbar: 'myHeadingMenu |  bold italic forecolor backcolor | removeformat |quicklink',
+    quickbars_selection_toolbar: 'aiEdit | myHeadingMenu |  bold italic forecolor backcolor | removeformat |quicklink',
     quickbars_insert_toolbar: false,
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements: 'input[type|class|checked]',
@@ -729,6 +730,90 @@
           callback(items);
         },
       });
+
+      // 划词 AI:选中文字后在浮动工具条点「AI」→ 就地润色/翻译/精简/扩写,结果替换选区
+      const AI_SEL_TASK: Record<string, string> = {
+        polish: '把下面这段文字润色得更通顺自然,保持原意和原语言',
+        translate: '把下面这段文字在中文与英文之间翻译(中文内容译成英文,英文内容译成中文)',
+        condense: '把下面这段文字精简得更短,只保留关键信息',
+        expand: '把下面这段文字扩写得更充实,补充合理的细节',
+      };
+      const aiEditSelection = async (action: string) => {
+        const raw = editor.selection ? editor.selection.getContent({ format: 'text' }) : '';
+        const text = String(raw || '').trim();
+        if (!text) {
+          message.warning(t('noteDetail.editor.aiSelectFirst'));
+          return;
+        }
+        editor.setProgressState(true);
+        try {
+          // 该 AI 端点始终以 SSE 流返回(stream:false 会拿到未解析的原始 SSE),故用流式并自行收集,与 AiReply 一致
+          let full = '';
+          let buffer = '';
+          let processed = 0;
+          const parseLine = (line: string) => {
+            const l = line.trim();
+            if (!l.startsWith('data:')) return;
+            const ds = l.slice(5).trim();
+            if (!ds || ds === '[DONE]') return;
+            try {
+              const d = JSON.parse(ds);
+              const c = d.output?.text || d.text || d.content || '';
+              if (c && typeof c === 'string') full += c;
+            } catch {
+              /* 跳过不完整片段 */
+            }
+          };
+          await apiBasePost(
+            '/api/note/assist',
+            {
+              message: `任务:${AI_SEL_TASK[action]}。只输出处理后的纯文本,不要任何解释、前后缀或 markdown 代码块。\n\n原文:\n${text}`,
+              stream: true,
+              sessionId: '',
+            },
+            {
+              headers: { 'Content-Type': 'application/json' },
+              responseType: 'text',
+              onDownloadProgress: (progressEvent: any) => {
+                const ev = progressEvent?.event ?? progressEvent;
+                const rt = (ev?.target as XMLHttpRequest | null)?.responseText ?? '';
+                if (!rt) return;
+                const chunk = rt.slice(processed);
+                processed = rt.length;
+                if (!chunk) return;
+                buffer += chunk;
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                lines.forEach(parseLine);
+              },
+            },
+          );
+          if (buffer) buffer.split('\n').forEach(parseLine); // 收尾残余
+          const out = full.trim();
+          if (out) {
+            editor.selection.setContent(editor.dom.encode(out).replace(/\n/g, '<br>')); // 文本编码回填,防 HTML 注入,保留换行
+          } else {
+            message.info(t('noteDetail.editor.aiEmpty'));
+          }
+        } catch {
+          message.info(t('noteDetail.editor.aiFailed'));
+        } finally {
+          editor.setProgressState(false);
+        }
+      };
+      editor.ui.registry.addMenuButton('aiEdit', {
+        text: 'AI',
+        tooltip: t('noteDetail.editor.aiEditTip'),
+        fetch: function (callback) {
+          callback([
+            { type: 'menuitem', text: t('noteDetail.editor.aiPolish'), onAction: () => aiEditSelection('polish') },
+            { type: 'menuitem', text: t('noteDetail.editor.aiTranslate'), onAction: () => aiEditSelection('translate') },
+            { type: 'menuitem', text: t('noteDetail.editor.aiCondense'), onAction: () => aiEditSelection('condense') },
+            { type: 'menuitem', text: t('noteDetail.editor.aiExpand'), onAction: () => aiEditSelection('expand') },
+          ]);
+        },
+      });
+
       const syncCheckboxAttribute = (target: EventTarget | null) => {
         if (!target) return;
         const el = target as HTMLElement;

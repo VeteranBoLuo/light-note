@@ -52,6 +52,30 @@
         v-click-log="{ module: '笔记-AI助手', operation: '纠错与语病' }"
         >{{ t('ai.reply.actions.correctErrors') }}</button
       >
+      <button
+        class="action-btn text-hidden"
+        :disabled="isLoading"
+        @click="runAction('continueWrite')"
+        :title="t('ai.reply.actions.continueWrite')"
+        v-click-log="{ module: '笔记-AI助手', operation: '续写扩展' }"
+        >{{ t('ai.reply.actions.continueWrite') }}</button
+      >
+      <button
+        class="action-btn text-hidden"
+        :disabled="isLoading"
+        @click="runAction('translate')"
+        :title="t('ai.reply.actions.translate')"
+        v-click-log="{ module: '笔记-AI助手', operation: '翻译' }"
+        >{{ t('ai.reply.actions.translate') }}</button
+      >
+      <button
+        class="action-btn text-hidden"
+        :disabled="isLoading"
+        @click="runAction('outline')"
+        :title="t('ai.reply.actions.outline')"
+        v-click-log="{ module: '笔记-AI助手', operation: '生成大纲' }"
+        >{{ t('ai.reply.actions.outline') }}</button
+      >
     </div>
 
     <div class="ai-input">
@@ -149,7 +173,17 @@
     optimizeTitle: { format: 'title' },
     generateSummary: { format: 'body' },
     correctErrors: { format: 'body' },
+    continueWrite: { format: 'body' },
+    translate: { format: 'body' },
+    outline: { format: 'body' },
     custom: { format: 'both' },
+  };
+
+  // 部分动作需要给模型额外说明(泛化的"任务名"不足以表达期望)
+  const ACTION_INSTRUCTION: Record<string, string> = {
+    continueWrite: '请在完整保留原文的前提下,顺着语义自然地往下续写 1~3 段;【正文】必须输出「原文 + 续写」拼接后的完整内容。',
+    translate: '请在中文与英文之间翻译(中文内容译成英文,英文内容译成中文,混合则以主要语言为准);【正文】输出翻译后的完整内容,保持段落结构。',
+    outline: '请为内容提炼一份层级清晰的大纲(用标题层级 + 有序/无序列表);【正文】输出大纲的 HTML。',
   };
 
   const buildFormatHint = (format: 'title' | 'body' | 'both') => {
@@ -173,9 +207,13 @@
         optimizeTitle: '优化标题',
         generateSummary: '生成摘要',
         correctErrors: '纠错与语病',
+        continueWrite: '续写扩展',
+        translate: '翻译（中英互译）',
+        outline: '生成大纲',
         custom: '自定义处理',
       }[action] || '自定义处理';
-    return `任务：${actionText}\n标题：${title}\n内容：${note?.content}\n补充要求：${requirement}\n\n${buildFormatHint(format)}`;
+    const extra = ACTION_INSTRUCTION[action] ? `\n${ACTION_INSTRUCTION[action]}` : '';
+    return `任务：${actionText}${extra}\n标题：${title}\n内容：${note?.content}\n补充要求：${requirement}\n\n${buildFormatHint(format)}`;
   };
 
   const runAction = (action: string) => {
@@ -196,7 +234,7 @@
     // "输出≈输入长度"的动作(润色全文/纠错/自定义)+ 长笔记:提醒结果可能被输出上限截断(不阻断)。
     // 生成摘要/优化标题输出很短,不会截断,不提醒。
     const action = mode === 'action' ? lastAction.value || 'custom' : 'custom';
-    const FULL_OUTPUT_ACTIONS = ['polishFull', 'correctErrors', 'custom'];
+    const FULL_OUTPUT_ACTIONS = ['polishFull', 'correctErrors', 'continueWrite', 'translate', 'custom'];
     if (FULL_OUTPUT_ACTIONS.includes(action) && textLength.value > LONG_CONTENT_THRESHOLD) {
       message.warning(`笔记较长(约 ${textLength.value} 字),AI 输出可能被截断,建议分段处理或改用「生成摘要」`);
     }
