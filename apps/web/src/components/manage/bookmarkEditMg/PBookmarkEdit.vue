@@ -18,10 +18,6 @@
           </div>
           <b-input v-model:value="bookmarkData.url">
           </b-input>
-          <div v-if="handleType === 'edit' && (bookmarkData.hasSnapshot || bookmarkData.hasSummary)" class="bm-badges">
-            <span v-if="bookmarkData.hasSnapshot" class="bm-badge bm-badge--snap">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
-            <span v-if="bookmarkData.hasSummary" class="bm-badge bm-badge--sum">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
-          </div>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -201,33 +197,6 @@
 
   .tag-attr-label {
     white-space: nowrap;
-  }
-
-  .bm-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .bm-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 11px;
-    line-height: 1.6;
-    padding: 1px 8px;
-    border-radius: 20px;
-    border: 1px solid transparent;
-    white-space: nowrap;
-  }
-  .bm-badge--snap {
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent);
-    border-color: color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent);
-  }
-  .bm-badge--sum {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    border-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
   }
 
   .tag-attr-head {

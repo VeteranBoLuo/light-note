@@ -106,8 +106,8 @@
                       <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
                     </div>
                     <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
-                      <span v-if="bookmarkItem.hasSnapshot" class="bm-badge bm-badge--snap">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
-                      <span v-if="bookmarkItem.hasSummary" class="bm-badge bm-badge--sum">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
+                      <span v-if="bookmarkItem.hasSnapshot" class="bm-badge bm-badge--snap" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap(bookmarkItem.id)">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
+                      <span v-if="bookmarkItem.hasSummary" class="bm-badge bm-badge--sum" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap(bookmarkItem.id)">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
                     </div>
                   </div>
                 </div>
@@ -171,8 +171,8 @@
                     />
                   </div>
                   <div class="text-hidden">{{ text }}</div>
-                  <span v-if="(record as BookmarkInterface).hasSnapshot" class="bm-mini" :title="$t('bookmarkMg.badgeArchived')">📄</span>
-                  <span v-if="(record as BookmarkInterface).hasSummary" class="bm-mini" :title="$t('bookmarkMg.badgeSummary')">🤖</span>
+                  <span v-if="(record as BookmarkInterface).hasSnapshot" class="bm-mini" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap((record as BookmarkInterface).id)">📄</span>
+                  <span v-if="(record as BookmarkInterface).hasSummary" class="bm-mini" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap((record as BookmarkInterface).id)">🤖</span>
                 </div>
               </template>
               <template v-else-if="column.key === 'tagList'">
@@ -240,6 +240,7 @@
         :note="$t('bookmarkMg.exportNote')"
       />
       <LinkHealthModal v-model:visible="healthVisible" />
+      <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
     </div>
   </b-loading>
 </template>
@@ -255,6 +256,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
+  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -272,6 +274,13 @@
   const selectedRows = ref<string[]>([]);
   const importExportModalVisible = ref(false);
   const healthVisible = ref(false);
+  // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
+  const snapVisible = ref(false);
+  const snapBookmarkId = ref('');
+  const openSnap = (id: string) => {
+    snapBookmarkId.value = id;
+    snapVisible.value = true;
+  };
   const viewMode = ref<'card' | 'table'>('card');
   const tableSearchValue = ref('');
   const tableData = ref<BookmarkInterface[]>([]);
@@ -1166,6 +1175,14 @@
     border-radius: 20px;
     border: 1px solid transparent;
     white-space: nowrap;
+    cursor: pointer;
+    transition:
+      transform 0.15s ease,
+      filter 0.15s ease;
+    &:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
   }
   .bm-badge--snap {
     color: var(--resource-bookmark-color);
@@ -1180,8 +1197,12 @@
   .bm-mini {
     font-size: 12px;
     margin-left: 6px;
-    cursor: default;
+    cursor: pointer;
     flex-shrink: 0;
+    transition: transform 0.15s ease;
+    &:hover {
+      transform: scale(1.15);
+    }
   }
 
   .bookmark-desc {

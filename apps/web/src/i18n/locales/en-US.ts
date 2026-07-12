@@ -1192,6 +1192,7 @@ export default {
     aiSummaryHint: 'gist',
     badgeArchived: 'Archived',
     badgeSummary: 'AI Summary',
+    badgeClickHint: 'Click to view archive / AI summary',
     snapshotEmpty: 'No archive yet — click "Re-archive" to capture the current page text',
     snapshotArchive: 'Re-archive',
     snapshotArchiving: 'Archiving…',

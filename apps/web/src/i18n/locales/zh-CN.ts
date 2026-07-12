@@ -1181,6 +1181,7 @@ export default {
     aiSummaryHint: '速览',
     badgeArchived: '正文存档',
     badgeSummary: 'AI 摘要',
+    badgeClickHint: '点击查看网页正文存档 / AI 摘要',
     snapshotEmpty: '暂无存档,点「重新归档」抓取当前网页正文',
     snapshotArchive: '重新归档',
     snapshotArchiving: '归档中…',

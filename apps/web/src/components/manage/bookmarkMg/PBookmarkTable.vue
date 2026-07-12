@@ -14,8 +14,8 @@
           {{ data.name }}
         </div>
         <div v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
-          <span v-if="data.hasSnapshot" class="bm-badge bm-badge--snap">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
-          <span v-if="data.hasSummary" class="bm-badge bm-badge--sum">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
+          <span v-if="data.hasSnapshot" class="bm-badge bm-badge--snap" @click.stop="openSnap(data.id)">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
+          <span v-if="data.hasSummary" class="bm-badge bm-badge--sum" @click.stop="openSnap(data.id)">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
         </div>
       </div>
       <div class="edit-tag-operation">
@@ -31,6 +31,7 @@
       </div>
     </template>
   </PhoneListMg>
+  <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
 </template>
 
 <script lang="ts" setup>
@@ -49,6 +50,13 @@
 
   const bookmark = bookmarkStore();
   const loading = ref(false);
+  // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
+  const snapVisible = ref(false);
+  const snapBookmarkId = ref('');
+  const openSnap = (id: string) => {
+    snapBookmarkId.value = id;
+    snapVisible.value = true;
+  };
   computed(() => {
     let columns = [
       {
@@ -111,6 +119,7 @@
   import * as XLSX from 'xlsx';
   import { cloneDeep } from 'lodash-es';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
+  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   function exportBookmark() {
@@ -211,6 +220,10 @@
     border-radius: 20px;
     border: 1px solid transparent;
     white-space: nowrap;
+    cursor: pointer;
+  }
+  .bm-badge:active {
+    filter: brightness(1.1);
   }
   .bm-badge--snap {
     color: var(--resource-bookmark-color);

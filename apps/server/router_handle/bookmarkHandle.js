@@ -715,22 +715,9 @@ export const getBookmarkDetail = (req, res) => {
     let sql = `SELECT * FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`;
     pool
       .query(sql, [req.body.filters.id, userId])
-      .then(async ([result]) => {
+      .then(([result]) => {
         if (result.length === 0) {
           return res.send(resultData(null, 404, '书签不存在'));
-        }
-        // 编辑页角标:标注该书签是否已有正文存档 / AI 摘要(try/catch 兜底,失败仅无角标)
-        try {
-          const [snap] = await pool.query(
-            `SELECT (content IS NOT NULL AND content <> '') AS hasSnapshot,
-                    (summary IS NOT NULL AND summary <> '') AS hasSummary
-               FROM bookmark_snapshot WHERE bookmark_id = ? LIMIT 1`,
-            [result[0].id],
-          );
-          result[0].hasSnapshot = !!(snap[0] && Number(snap[0].hasSnapshot));
-          result[0].hasSummary = !!(snap[0] && Number(snap[0].hasSummary));
-        } catch (e) {
-          console.warn('[书签角标] 详情快照标记失败(忽略):', e.message);
         }
         res.send(resultData(result[0]));
       })

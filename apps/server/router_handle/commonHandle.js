@@ -241,6 +241,8 @@ const reseedSortById = async (connection, tableName) => {
 // sort 列管理已移除（knowledge_base 自带 sort 列）
 
 export const getApiLogs = async (req, res) => {
+  // 全站 API 日志(含所有用户 IP/URL/请求体)——仅 root 运维可查,防越权信息泄露(前端已在 root 后台,后端须同门)
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const skip = pageSize * (currentPage - 1);
@@ -367,6 +369,8 @@ export const removeLogExcludeFp = async (req, res) => {
 };
 
 export const getOperationLogs = (req, res) => {
+  // 全站操作日志(含所有用户行为)——仅 root 运维可查,防越权信息泄露
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const skip = pageSize * (currentPage - 1);
@@ -568,6 +572,8 @@ export const analyzeImgUrl = async (req, res) => {
 };
 
 export const getImages = async (req, res) => {
+  // 后台图库(列全站书签图标 + 笔记图片 + 服务器图片目录)——仅 root 可查
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   const [bookmarkResult] = await pool.query('select icon_url from bookmark');
   const [noteResult] = await pool.query('select url from note_images');
   // 指定要读取的目录路径

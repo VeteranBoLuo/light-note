@@ -472,11 +472,15 @@
     white-space: pre-wrap;
   }
   /* 通知详情弹框(BModal teleport 到 body,不在 .notification-popover 内) */
+  /* 定宽约束 BModal 的 min-width:max-content,否则长正文会把弹框撑成单行、横向溢出 */
   .nt-detail {
     display: flex;
     flex-direction: column;
     gap: 10px;
     padding: 2px;
+    width: 400px;
+    max-width: 84vw;
+    box-sizing: border-box;
   }
   .nt-detail-time {
     font-size: 12px;
@@ -488,6 +492,7 @@
     color: var(--text-color);
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
     max-height: 56vh;
     overflow-y: auto;
   }

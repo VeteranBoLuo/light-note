@@ -111,13 +111,19 @@ export async function getPoints(userId) {
 export async function earnPoints(userId, amount, reason, ref = null, conn = pool) {
   if (!userId || !(amount > 0)) return false;
   if (ref) {
-    const [ex] = await conn.query(
-      'SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ? LIMIT 1',
-      [userId, reason, ref],
+    // 原子幂等:INSERT ... WHERE NOT EXISTS —— 靠 idx_user_reason_ref 的间隙锁串行化并发同 (user,reason,ref) 请求,
+    // affectedRows=0 表示已发过(不再走"先 SELECT 再 INSERT"的非原子判断,修复无行锁 claim 入口的并发双领)。
+    const [ins] = await conn.query(
+      `INSERT INTO points_log (user_id, delta, reason, ref)
+       SELECT ?, ?, ?, ? FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ?)`,
+      [userId, amount, reason, ref, userId, reason, ref],
     );
-    if (ex.length) return false; // 已发过
+    if (!ins.affectedRows) return false; // 已发过
+    await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
+    return true;
   }
-  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, amount, reason, ref]);
+  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, amount, reason, null]);
   await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
   return true;
 }
@@ -128,10 +134,18 @@ export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
   if (!userId || !(mb > 0)) return false;
   const logReason = ('storage:' + reason).slice(0, 32);
   if (ref) {
-    const [ex] = await conn.query('SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ? LIMIT 1', [userId, logReason, ref]);
-    if (ex.length) return false;
+    // 原子幂等,同 earnPoints:防里程碑存储奖励并发重复发放
+    const [ins] = await conn.query(
+      `INSERT INTO points_log (user_id, delta, reason, ref)
+       SELECT ?, 0, ?, ? FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ?)`,
+      [userId, logReason, ref, userId, logReason, ref],
+    );
+    if (!ins.affectedRows) return false;
+    await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
+    return true;
   }
-  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [userId, logReason, ref]);
+  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [userId, logReason, null]);
   await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
   return true;
 }
