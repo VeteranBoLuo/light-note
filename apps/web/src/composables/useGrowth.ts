@@ -16,6 +16,7 @@ export interface Growth {
   points?: number; // 积分余额(消费货币)
   equippedTitle?: string | null; // 已佩戴称号 id
   equippedTitleName?: string | null; // 称号显示名
+  equippedFrame?: string | null; // 已佩戴头像框装扮 id
   checkedInToday: boolean;
   levelStartExp: number;
   nextLevelExp: number | null;
@@ -108,7 +109,8 @@ export interface GrowthDashboard {
 
 export interface ShopItem {
   id: string;
-  type: 'consumable' | 'title';
+  type: 'consumable' | 'title' | 'cosmetic';
+  effect?: string | null;
   name: string;
   desc: string;
   cost: number;
@@ -123,6 +125,7 @@ export interface Shop {
   points: number;
   level: number;
   equippedTitle: string | null;
+  equippedFrame: string | null;
   protectCards: number;
   isVisitor: boolean;
   items: ShopItem[];
@@ -349,6 +352,15 @@ export function useGrowth() {
     return res;
   }
 
+  // 佩戴/卸下头像框装扮:成功则刷新商店 + 成长快照(头像框全局随 growth.equippedFrame 变化)
+  async function equipFrame(frameId: string | null) {
+    const res = await growthApi.equipFrame(frameId);
+    if (res?.status === 200 && res.data?.ok) {
+      await Promise.all([loadShop(), load(true)]);
+    }
+    return res;
+  }
+
   // 抽奖状态:余额/成本/保底/奖池概率
   async function loadLottery() {
     lotteryLoading.value = true;
@@ -434,6 +446,7 @@ export function useGrowth() {
     loadShop,
     buyItem,
     equipTitle,
+    equipFrame,
     loadLottery,
     draw,
     claimAchievement,

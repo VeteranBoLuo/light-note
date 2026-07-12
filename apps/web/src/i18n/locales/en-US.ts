@@ -836,6 +836,7 @@ export default {
     shopEarnHint: 'Daily check-in +20~30 · Complete daily quests +30',
     shopSectionConsumable: 'Handy Items',
     shopSectionTitle: 'Exclusive Titles',
+    shopSectionFrame: 'Avatar Frames',
     shopBuy: 'Redeem',
     shopBuying: 'Redeeming…',
     shopOwned: 'Owned',
@@ -895,6 +896,10 @@ export default {
       title_wellread: { name: 'Well-Read', desc: 'Title · Vast in learning' },
       title_ferryman: { name: 'Knowledge Ferryman', desc: 'Title · Ferrying others and self' },
       title_grandmaster: { name: 'Grandmaster', desc: 'Title · The very peak' },
+      frame_gold: { name: 'Gilded', desc: 'Avatar frame · Flowing gold' },
+      frame_sakura: { name: 'Sakura', desc: 'Avatar frame · Cherry blossom' },
+      frame_neon: { name: 'Neon', desc: 'Avatar frame · Cyber neon' },
+      frame_galaxy: { name: 'Galaxy', desc: 'Avatar frame · Flowing starlight' },
     },
     // —— Growth dashboard ——
     dashTasks: "Today's Tasks",

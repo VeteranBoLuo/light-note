@@ -79,7 +79,37 @@
       </div>
     </div>
 
-    <div v-if="!consumables.length && !titles.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
+    <!-- 头像框装扮 -->
+    <div v-if="frames.length" class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
+    <div class="ps-grid">
+      <div v-for="it in frames" :key="it.id" class="ps-item" :class="{ 'is-equipped': it.equipped }">
+        <div class="ps-frame-preview" :style="frameWrapStyle(it.id, 3)"><span class="ps-frame-inner">🙂</span></div>
+        <div class="ps-item-body">
+          <div class="ps-item-name">
+            {{ itemName(it) }}
+            <span v-if="it.equipped" class="ps-tag-equipped">{{ t('growth.shopEquipped') }}</span>
+          </div>
+          <div class="ps-item-desc">{{ itemDesc(it) }}</div>
+        </div>
+        <div class="ps-item-foot">
+          <span v-if="!it.owned" class="ps-item-cost">🪙 {{ it.cost }}</span>
+          <span v-else class="ps-item-cost ps-item-cost--owned">{{ t('growth.shopOwned') }}</span>
+          <template v-if="it.owned">
+            <BButton v-if="it.equipped" size="small" :disabled="equippingId === it.id" :loading="equippingId === it.id" @click="doEquipFrame(null)">
+              {{ t('growth.shopUnequip') }}
+            </BButton>
+            <BButton v-else size="small" type="primary" :disabled="equippingId === it.id" :loading="equippingId === it.id" @click="doEquipFrame(it.id)">
+              {{ t('growth.shopEquip') }}
+            </BButton>
+          </template>
+          <BButton v-else size="small" type="primary" :disabled="!it.canBuy || buyingId === it.id" :loading="buyingId === it.id" @click="askBuy(it)">
+            {{ titleBtn(it) }}
+          </BButton>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="!consumables.length && !titles.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
 
     <!-- 兑换确认 -->
     <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
@@ -97,9 +127,10 @@
   import PointsLogModal from '@/components/growth/PointsLogModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { frameWrapStyle } from '@/config/growthFrames';
 
   const { t, te } = useI18n();
-  const { shop, loadShop, buyItem, equipTitle } = useGrowth();
+  const { shop, loadShop, buyItem, equipTitle, equipFrame } = useGrowth();
 
   // 商品图标(id → emoji);缺省兜底
   const ICONS: Record<string, string> = {
@@ -127,6 +158,7 @@
 
   const consumables = computed(() => shop.value?.items.filter((i) => i.type === 'consumable') || []);
   const titles = computed(() => shop.value?.items.filter((i) => i.type === 'title') || []);
+  const frames = computed(() => shop.value?.items.filter((i) => i.type === 'cosmetic') || []);
 
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
   function consumableBtn(it: ShopItem) {
@@ -194,6 +226,29 @@
       }
     } catch (err) {
       console.error('佩戴称号失败:', err);
+    } finally {
+      equippingId.value = null;
+    }
+  }
+
+  async function doEquipFrame(frameId: string | null) {
+    equippingId.value = frameId || 'unequip';
+    try {
+      const res = await equipFrame(frameId);
+      if (res?.status === 200 && res.data?.ok) {
+        if (frameId) {
+          const it = frames.value.find((i) => i.id === frameId);
+          message.success(t('growth.shopEquipOk', { name: it ? itemName(it) : '' }));
+          recordOperation({ module: '成长', operation: `佩戴头像框「${it ? itemName(it) : frameId}」` });
+        } else {
+          message.success(t('growth.shopUnequipOk'));
+          recordOperation({ module: '成长', operation: '卸下头像框' });
+        }
+      } else {
+        message.error(res?.data?.msg || '操作失败');
+      }
+    } catch (err) {
+      console.error('佩戴头像框失败:', err);
     } finally {
       equippingId.value = null;
     }
@@ -314,6 +369,19 @@
   .ps-item-icon {
     font-size: 26px;
     line-height: 1;
+  }
+  .ps-frame-preview {
+    line-height: 0;
+  }
+  .ps-frame-inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--background-color);
+    font-size: 16px;
   }
   .ps-item-body {
     flex: 1 1 auto;

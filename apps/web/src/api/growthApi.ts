@@ -38,6 +38,9 @@ export const buyShopItem = (itemId: string) => apiBasePost('/api/growth/shop/buy
 // 佩戴 / 卸下称号(titleId 为空=卸下)
 export const equipTitle = (titleId: string | null) => apiBasePost('/api/growth/equipTitle', { titleId });
 
+// 佩戴 / 卸下头像框装扮(frameId 为空=卸下)
+export const equipFrame = (frameId: string | null) => apiBasePost('/api/growth/equipFrame', { frameId });
+
 // 积分抽奖:状态(余额/成本/保底/奖池概率)+ 抽奖(times=1 单抽 / 10 十连)
 export const getLottery = () => apiBaseGet('/api/growth/lottery');
 export const drawLottery = (times: number, free = false) => apiBasePost('/api/growth/lottery/draw', { times, free });
@@ -75,6 +78,7 @@ export default {
   getShop,
   buyShopItem,
   equipTitle,
+  equipFrame,
   getLottery,
   drawLottery,
   claimAchievement,

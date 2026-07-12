@@ -826,6 +826,7 @@ export default {
     shopEarnHint: '每日签到 +20~30 · 完成今日任务 +30',
     shopSectionConsumable: '实用道具',
     shopSectionTitle: '专属称号',
+    shopSectionFrame: '头像框装扮',
     shopBuy: '兑换',
     shopBuying: '兑换中…',
     shopOwned: '已拥有',
@@ -885,6 +886,10 @@ export default {
       title_wellread: { name: '博览群书', desc: '称号 · 学富五车' },
       title_ferryman: { name: '知识摆渡人', desc: '称号 · 渡人渡己' },
       title_grandmaster: { name: '一代宗师', desc: '称号 · 登峰造极' },
+      frame_gold: { name: '鎏金', desc: '头像框 · 金光流转' },
+      frame_sakura: { name: '樱绯', desc: '头像框 · 樱色浪漫' },
+      frame_neon: { name: '霓虹', desc: '头像框 · 赛博霓虹' },
+      frame_galaxy: { name: '星河', desc: '头像框 · 流光星河' },
     },
     // —— 成长看板 ——
     dashTasks: '今日任务',

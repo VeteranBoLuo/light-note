@@ -127,7 +127,9 @@
       @mouseenter="handleTriggerMouseEnter"
       @mouseleave="handleTriggerMouseLeave"
     >
-      <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      <span class="nav-avatar-frame" :style="frameWrapStyle(growthInfo?.equippedFrame, 2)">
+        <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      </span>
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
@@ -140,6 +142,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { frameWrapStyle } from '@/config/growthFrames';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { formatStorageSize } from '@/utils/common';

@@ -259,10 +259,11 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let canUseProtectCard = false;
   let points = 0;
   let equippedTitle = null;
+  let equippedFrame = null;
   let storageBonus = 0;
   if (userId && userId !== 'visitor') {
     const [rows] = await pool.query(
-      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, storage_bonus_mb FROM user_growth WHERE user_id = ?',
+      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, equipped_frame, storage_bonus_mb FROM user_growth WHERE user_id = ?',
       [userId],
     );
     if (rows[0]) {
@@ -273,6 +274,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
       protectCards = Number(rows[0].streak_protect_cards || 0);
       points = Number(rows[0].points || 0);
       equippedTitle = rows[0].equipped_title || null;
+      equippedFrame = rows[0].equipped_frame || null;
       storageBonus = Number(rows[0].storage_bonus_mb || 0);
     }
     // 补签判定:有卡且昨天没有签到记录(不依赖 lastCheckin,今天签到了昨天漏签也能补)
@@ -320,6 +322,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     points, // 积分余额(消费货币)
     equippedTitle, // 已佩戴称号 id
     equippedTitleName: titleName(equippedTitle), // 称号显示名
+    equippedFrame, // 已佩戴头像框装扮 id
     canUseProtectCard, // 昨天漏签且有卡 → 可补签续连签
     checkedInToday: lastCheckin === dayKey(),
     levelStartExp: rank.cumExp,

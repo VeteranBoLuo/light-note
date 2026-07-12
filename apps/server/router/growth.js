@@ -15,6 +15,7 @@ router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
 router.get('/shop', growthHandle.getShop);
 router.post('/shop/buy', growthHandle.buyShopItem);
 router.post('/equipTitle', growthHandle.equipTitleHandle);
+router.post('/equipFrame', growthHandle.equipFrameHandle);
 router.get('/lottery', growthHandle.getLottery);
 router.post('/lottery/draw', growthHandle.doDrawLottery);
 router.post('/achievement/claim', growthHandle.doClaimAchievement);

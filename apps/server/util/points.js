@@ -69,6 +69,9 @@ export async function ensurePointsSchema() {
   if (await columnMissing('user_growth', 'lottery_free_used')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_free_used` INT NOT NULL DEFAULT 0 COMMENT "当日已用的免费抽奖次数"');
   }
+  if (await columnMissing('user_growth', 'equipped_frame')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `equipped_frame` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴头像框装扮 id"');
+  }
 }
 
 // ============================================================================
@@ -86,6 +89,11 @@ export const SHOP_ITEMS = [
   { id: 'title_wellread', type: 'title', name: '博览群书', desc: '称号 · 学富五车', cost: 900, minLevel: 6 },
   { id: 'title_ferryman', type: 'title', name: '知识摆渡人', desc: '称号 · 渡人渡己', cost: 1400, minLevel: 10 },
   { id: 'title_grandmaster', type: 'title', name: '一代宗师', desc: '称号 · 登峰造极', cost: 2500, minLevel: 14 },
+  // 头像框装扮(type=cosmetic,effect=frame):一次性拥有、可佩戴,前端按 id 渲染样式
+  { id: 'frame_gold', type: 'cosmetic', effect: 'frame', name: '鎏金', desc: '头像框 · 金光流转', cost: 500, minLevel: 0 },
+  { id: 'frame_sakura', type: 'cosmetic', effect: 'frame', name: '樱绯', desc: '头像框 · 樱色浪漫', cost: 500, minLevel: 0 },
+  { id: 'frame_neon', type: 'cosmetic', effect: 'frame', name: '霓虹', desc: '头像框 · 赛博霓虹', cost: 700, minLevel: 4 },
+  { id: 'frame_galaxy', type: 'cosmetic', effect: 'frame', name: '星河', desc: '头像框 · 流光星河', cost: 1200, minLevel: 8 },
 ];
 
 export function getShopItem(id) {
@@ -236,11 +244,11 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
       await conn.rollback();
       return { ok: false, reason: 'level', msg: `需达到 Lv.${item.minLevel} 才能兑换` };
     }
-    if (item.type === 'title') {
+    if (item.type === 'title' || item.type === 'cosmetic') {
       const [owned] = await conn.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [userId, item.id]);
       if (owned.length) {
         await conn.rollback();
-        return { ok: false, reason: 'owned', msg: '已拥有该称号' };
+        return { ok: false, reason: 'owned', msg: '已拥有该装扮' };
       }
     }
     if (item.effect === 'makeup_card' && Number(g.streak_protect_cards) >= 2) {
@@ -264,7 +272,7 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
         'INSERT INTO ai_daily_bonus (user_id, day, bonus_tokens) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE bonus_tokens = bonus_tokens + ?',
         [userId, dayKey(), item.bonusTokens, item.bonusTokens],
       );
-    } else if (item.type === 'title') {
+    } else if (item.type === 'title' || item.type === 'cosmetic') {
       await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, item.id]);
     }
     await conn.commit();
@@ -298,4 +306,21 @@ export async function equipTitle(userId, titleId) {
 export function titleName(id) {
   const it = getShopItem(id);
   return it && it.type === 'title' ? it.name : null;
+}
+
+// 佩戴/卸下头像框:frameId 为空=卸下;非空须已拥有
+export async function equipFrame(userId, frameId) {
+  if (!frameId) {
+    await pool.query('UPDATE user_growth SET equipped_frame = NULL WHERE user_id = ?', [userId]);
+    return { ok: true, equipped: null };
+  }
+  const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [userId, frameId]);
+  if (!owned.length) return { ok: false, reason: 'not_owned', msg: '未拥有该装扮' };
+  await pool.query('UPDATE user_growth SET equipped_frame = ? WHERE user_id = ?', [frameId, userId]);
+  return { ok: true, equipped: frameId };
+}
+
+export async function getEquippedFrame(userId) {
+  const [rows] = await pool.query('SELECT equipped_frame FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  return rows[0]?.equipped_frame || null;
 }

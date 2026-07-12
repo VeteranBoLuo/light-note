@@ -2,7 +2,7 @@ import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, claimAchievement, 
 import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
+import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, equipFrame, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getWeeklyChallenges, claimWeeklyChallenge } from '../util/weeklyChallenge.js';
 import { getRecap } from '../util/recap.js';
@@ -138,34 +138,38 @@ export const getShop = async (req, res) => {
     let level = 0;
     let equippedTitle = null;
     let protectCards = 0;
+    let equippedFrame = null;
     let owned = [];
     if (!isVisitor) {
       const g = await getGrowth(userId, { userRole });
       points = g.points || 0;
       level = g.level || 0;
       equippedTitle = g.equippedTitle || null;
+      equippedFrame = g.equippedFrame || null;
       protectCards = g.protectCards || 0;
       owned = await getOwnedCosmetics(userId);
     }
+    const ownable = (t) => t === 'title' || t === 'cosmetic';
     const items = SHOP_ITEMS.map((it) => {
-      const isOwned = it.type === 'title' && owned.includes(it.id);
+      const isOwned = ownable(it.type) && owned.includes(it.id);
       const meetsLevel = !it.minLevel || level >= it.minLevel;
       const cardFull = it.effect === 'makeup_card' && protectCards >= 2;
       return {
         id: it.id,
         type: it.type,
+        effect: it.effect || null,
         name: it.name,
         desc: it.desc,
         cost: it.cost,
         minLevel: it.minLevel || 0,
         bonusTokens: it.bonusTokens || 0,
         owned: isOwned,
-        equipped: it.type === 'title' && equippedTitle === it.id,
+        equipped: (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
         // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
         canBuy: !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
       };
     });
-    res.send(resultData({ points, level, equippedTitle, protectCards, isVisitor, items }));
+    res.send(resultData({ points, level, equippedTitle, equippedFrame, protectCards, isVisitor, items }));
   } catch (error) {
     console.error('获取积分商店失败:', error);
     res.send(resultData(null, 500, '获取积分商店失败: ' + error.message));
@@ -368,6 +372,19 @@ export const doDrawLottery = async (req, res) => {
   } catch (error) {
     console.error('抽奖失败:', error);
     res.send(resultData(null, 500, '抽奖失败: ' + error.message));
+  }
+};
+
+// POST /growth/equipFrame —— 佩戴/卸下头像框装扮(frameId 为空=卸下;须已拥有)
+export const equipFrameHandle = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { frameId } = req.body || {};
+    const result = await equipFrame(req.user.id, frameId || null);
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('佩戴头像框失败:', error);
+    res.send(resultData(null, 500, '佩戴失败: ' + error.message));
   }
 };
 
