@@ -8,9 +8,14 @@
           <span>{{ $t('bookmarkMg.healthProgress', { checked: summary.checked, total: summary.total }) }}</span>
           <span v-if="summary.suspect.length" class="lh-dead-n">· {{ $t('bookmarkMg.healthSuspectCount', { n: summary.suspect.length }) }}</span>
         </div>
-        <b-button size="small" type="primary" :loading="running || starting" :disabled="running || starting" @click="startCheck">
-          {{ running ? $t('bookmarkMg.healthChecking') : allChecked ? $t('bookmarkMg.healthRecheck') : $t('bookmarkMg.healthStartAll') }}
-        </b-button>
+        <b-space>
+          <b-button size="small" :disabled="running || starting || resetting || summary.checked === 0" @click="resetCheck">
+            {{ $t('bookmarkMg.healthReset') }}
+          </b-button>
+          <b-button size="small" type="primary" :loading="running || starting" :disabled="running || starting" @click="startCheck">
+            {{ running ? $t('bookmarkMg.healthChecking') : allChecked ? $t('bookmarkMg.healthRecheck') : $t('bookmarkMg.healthStartAll') }}
+          </b-button>
+        </b-space>
       </div>
 
       <div v-if="!summary.suspect.length && summary.checked > 0" class="lh-empty">✅ {{ $t('bookmarkMg.healthNoDead') }}</div>
@@ -41,6 +46,7 @@
   import { apiBaseGet, apiBasePost } from '@/http/request.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
 
   const visible = defineModel<boolean>('visible');
@@ -48,6 +54,7 @@
   interface SuspectItem { id: string; name: string; url: string; note: string; hasSnapshot: boolean }
   const summary = ref<{ total: number; checked: number; running: boolean; suspect: SuspectItem[] }>({ total: 0, checked: 0, running: false, suspect: [] });
   const starting = ref(false);
+  const resetting = ref(false);
   const ignoring = ref('');
   const snapVisible = ref(false);
   const snapId = ref('');
@@ -82,6 +89,17 @@
       startPolling();
     } finally {
       starting.value = false;
+    }
+  }
+  // 重置:清空体检记录,回到 0/total,从头重新检测
+  async function resetCheck() {
+    if (resetting.value || running.value) return;
+    resetting.value = true;
+    try {
+      const res = await apiBasePost('/api/bookmark/health/reset');
+      if (res?.status === 200 && res.data) applySummary(res.data);
+    } finally {
+      resetting.value = false;
     }
   }
   // 标记正常:消除误报(SPA/需登录等浏览器能开的),本地即时移除 + 后端置 alive
@@ -119,10 +137,14 @@
 </script>
 
 <style scoped lang="less">
+  /* 固定宽度:约束 BModal 的 min-width:max-content,否则长 URL(nowrap)会把弹框撑到整行宽 */
   .lh {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    width: 480px;
+    max-width: 88vw;
+    box-sizing: border-box;
   }
   .lh-desc {
     margin: 0;

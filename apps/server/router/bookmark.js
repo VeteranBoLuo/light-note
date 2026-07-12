@@ -54,6 +54,8 @@ router.post('/health/check', bookmarkHandle.doCheckHealth);
 
 router.post('/health/checkAll', bookmarkHandle.doCheckAllHealth);
 
+router.post('/health/reset', bookmarkHandle.doResetHealth);
+
 router.get('/health', bookmarkHandle.getHealth);
 
 router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);

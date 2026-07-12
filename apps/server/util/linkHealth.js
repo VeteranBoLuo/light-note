@@ -123,6 +123,13 @@ export async function getHealthSummary(userId) {
   };
 }
 
+// 重置:清空该用户所有体检记录(回到"未检测"),供从头重新体检。正在全量检测时不允许重置。
+export async function resetHealth(userId) {
+  if (fullChecking.has(userId)) return { ok: false, reason: 'running', msg: '正在检测中,请稍后再重置' };
+  await pool.query('DELETE FROM bookmark_health WHERE user_id = ?', [userId]);
+  return { ok: true };
+}
+
 // 用户「标记正常」:把某书签的体检状态置为 alive,消除误报(SPA/需登录等浏览器能开的)。
 export async function markLinkNormal(userId, bookmarkId) {
   await pool.query(

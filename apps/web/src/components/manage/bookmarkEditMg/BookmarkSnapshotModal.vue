@@ -1,5 +1,5 @@
 <template>
-  <BModal v-model:visible="visible" :title="$t('bookmarkMg.snapshotTitle')" :show-footer="false" width="560px">
+  <BModal v-model:visible="visible" :title="$t('bookmarkMg.snapshotTitle')" :show-footer="false" width="auto">
     <div class="bsnap">
       <p class="bsnap-hint">{{ $t('bookmarkMg.snapshotHint') }}</p>
       <div class="bsnap-bar">
@@ -106,12 +106,13 @@
 </script>
 
 <style scoped lang="less">
+  /* 固定宽度:约束 BModal 的 min-width:max-content,否则长文本会把弹框撑到整行宽 */
   .bsnap {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    min-width: 0;
-    max-width: 100%;
+    width: 600px;
+    max-width: 86vw;
     box-sizing: border-box;
   }
   .bsnap-hint {

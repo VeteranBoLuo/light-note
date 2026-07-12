@@ -13,7 +13,7 @@ import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
-import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck } from '../util/linkHealth.js';
+import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck, resetHealth } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -492,6 +492,18 @@ export const doCheckHealth = async (req, res) => {
   } catch (error) {
     console.error('死链检测失败:', error);
     res.send(resultData(null, 500, '检测失败: ' + error.message));
+  }
+};
+
+// POST /bookmark/health/reset —— 清空体检记录,从头重新检测
+export const doResetHealth = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const r = await resetHealth(req.user.id);
+    res.send(resultData(r.ok ? await getHealthSummary(req.user.id) : r));
+  } catch (error) {
+    console.error('重置体检失败:', error);
+    res.send(resultData(null, 500, '重置失败: ' + error.message));
   }
 };
 
