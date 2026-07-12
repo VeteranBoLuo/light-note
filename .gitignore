@@ -39,3 +39,4 @@ vite.config.ts
 .claude/launch.json
 HANDOFF.md
 ln-ai-intro.md
+docs/changelog
