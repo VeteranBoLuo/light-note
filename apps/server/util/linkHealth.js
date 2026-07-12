@@ -1,9 +1,9 @@
 import pool from '../db/index.js';
 import { checkUrlLiveness } from './fetchWebMeta.js';
 
-// 死链检测·快照兜底:定期/按需检测收藏链接是否失效,标记失效并可回退到网页快照阅读。
-// 判定用 checkUrlLiveness:**只有明确 404/410 才算失效**;反爬(403/429/412)、限流、5xx、超时、
-// 网络错都不判死(站点仍在,只是拿不到),避免大面积误报。增量按需:每次只检一批(BATCH)。
+// 链接体检·快照兜底:定期/按需检测收藏链接,把"疑似失效"的挑出来供用户确认,失效的可回退到网页快照阅读。
+// 判定用 checkUrlLiveness:404/410 → 'suspect'(疑似,非断言:SPA 深层路由、被删子页都可能"浏览器能开、服务器 404");
+// 反爬(403/429/412)/限流/5xx/超时/网络错都不算(站点仍在);用户可对疑似项「标记正常」永久消除误报。
 
 const BATCH = 25; // 单次检测上限(每次检最久未测/待复验的这么多条)
 const CONCURRENCY = 4; // 单核服务器降并发,减少并发挤占导致的超时(超时不再误判死链,但仍拖慢批次)
@@ -36,13 +36,13 @@ async function runPool(items, worker) {
 
 // 检测一批(最久未测优先:先没有 health 记录的,再按 checked_at 最早)。返回本批结果 + 累计概览。
 export async function checkBookmarkHealth(userId) {
-  // 顺序:①优先复验"1 小时前判过死"的(纠正历史误报,又不会在同一轮里反复复检刚确认的死链)
-  //       ②其次从未检测过的 ③再按最久未测。这样点几次就能把误报的死链纠正过来,同时新书签也能推进。
+  // 顺序:①优先复验"1 小时前判过疑似失效"的(纠正历史误报,又不在同一轮反复复检刚确认的)
+  //       ②其次从未检测过的 ③再按最久未测。点几次就能把误报纠正过来,同时新书签也能推进。
   const [bms] = await pool.query(
     `SELECT b.id, b.url FROM bookmark b
        LEFT JOIN bookmark_health h ON h.bookmark_id = b.id
       WHERE b.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> ''
-      ORDER BY (h.status = 'dead' AND h.checked_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)) DESC,
+      ORDER BY (h.status = 'suspect' AND h.checked_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)) DESC,
                (h.checked_at IS NULL) DESC,
                h.checked_at ASC
       LIMIT ${BATCH}`,
@@ -65,23 +65,23 @@ export async function checkBookmarkHealth(userId) {
   return { checkedThisRun: bms.length, ...(await getHealthSummary(userId)) };
 }
 
-// 概览:总书签数、已测数、失效数 + 失效列表(含书签名、是否有快照可兜底)
+// 概览:总书签数、已测数 + 疑似失效列表(含书签名、是否有快照可兜底)
 export async function getHealthSummary(userId) {
   const [[tot]] = await pool.query("SELECT COUNT(*) AS c FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''", [userId]);
   const [[chk]] = await pool.query('SELECT COUNT(*) AS c FROM bookmark_health WHERE user_id = ?', [userId]);
-  const [deadRows] = await pool.query(
+  const [rows] = await pool.query(
     `SELECT h.bookmark_id, b.name, b.url, h.note, h.checked_at,
             (SELECT COUNT(*) FROM bookmark_snapshot s WHERE s.bookmark_id = h.bookmark_id) AS has_snapshot
        FROM bookmark_health h
        JOIN bookmark b ON b.id = h.bookmark_id AND b.del_flag = 0
-      WHERE h.user_id = ? AND h.status = 'dead'
+      WHERE h.user_id = ? AND h.status = 'suspect'
       ORDER BY h.checked_at DESC LIMIT 100`,
     [userId],
   );
   return {
     total: Number(tot.c || 0),
     checked: Number(chk.c || 0),
-    dead: deadRows.map((r) => ({
+    suspect: rows.map((r) => ({
       id: r.bookmark_id,
       name: r.name,
       url: r.url,
@@ -90,4 +90,14 @@ export async function getHealthSummary(userId) {
       checkedAt: r.checked_at,
     })),
   };
+}
+
+// 用户「标记正常」:把某书签的体检状态置为 alive,消除误报(SPA/需登录等浏览器能开的)。
+export async function markLinkNormal(userId, bookmarkId) {
+  await pool.query(
+    `INSERT INTO bookmark_health (bookmark_id, user_id, status, note) VALUES (?, ?, 'alive', 'user')
+     ON DUPLICATE KEY UPDATE status = 'alive', note = 'user', checked_at = CURRENT_TIMESTAMP`,
+    [bookmarkId, userId],
+  );
+  return { ok: true };
 }

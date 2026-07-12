@@ -229,12 +229,12 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT } = {})
 
 /**
  * 死活探测(死链检测用)。返回 { status, code }:
- *  - 'dead':仅当明确 404 / 410(页面被删/永久移除)
- *  - 'alive':2xx/3xx,以及 403/429/412/400/5xx 等(站点存在,只是反爬/限流/临时错,不算失效)
- *  - 'unknown':超时 / 连接错 / 无效 URL(拿不到确切结论,不判死,避免误报)
+ *  - 'suspect':服务器对该 URL 返回 404/410。**不等于真失效**——单页应用(SPA)深层路由、
+ *              被删的子页、或托管未做 SPA 兜底,都会让"浏览器能开、服务器直取却 404"。故仅标"疑似",由用户确认。
+ *  - 'alive':2xx/3xx,以及 401/403/429/412/400/5xx(站点存在,只是反爬/限流/鉴权/临时错)
+ *  - 'unknown':超时 / 连接错 / 证书错 / 无效 URL(拿不到结论,绝不判失效,避免误报)
  *  - 'skip':内网/被 SSRF 拦截
- * 用流式请求:拿到响应头(状态码)即丢弃响应体,不下载正文,更快、更省、更不易在并发下超时。
- * 复用与 fetchWebMeta 相同的 guardedLookup agents 做 SSRF 防护。
+ * 流式请求:拿到状态码即丢弃响应体,不下载正文。复用 fetchWebMeta 的 guardedLookup agents 做 SSRF 防护。
  */
 export async function checkUrlLiveness(rawUrl) {
   let input = String(rawUrl || '').trim();
@@ -261,10 +261,10 @@ export async function checkUrlLiveness(rawUrl) {
     });
     const code = resp.status;
     resp.data?.destroy?.(); // 拿到状态码即丢弃响应体,不下载
-    if (code === 404 || code === 410) return { status: 'dead', code };
+    if (code === 404 || code === 410) return { status: 'suspect', code }; // 仅疑似,交用户确认(SPA/子页删除都可能)
     return { status: 'alive', code };
   } catch (e) {
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) return { status: 'skip', code: 'BLOCKED' };
-    return { status: 'unknown', code: e?.code || 'ERR' }; // 超时/网络错 → 未知,绝不判死
+    return { status: 'unknown', code: e?.code || 'ERR' }; // 超时/网络错 → 未知,绝不判失效
   }
 }

@@ -13,7 +13,7 @@ import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
-import { checkBookmarkHealth, getHealthSummary } from '../util/linkHealth.js';
+import { checkBookmarkHealth, getHealthSummary, markLinkNormal } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -495,7 +495,7 @@ export const doCheckHealth = async (req, res) => {
   }
 };
 
-// GET /bookmark/health —— 当前健康概览(总数/已测/失效列表)
+// GET /bookmark/health —— 当前健康概览(总数/已测/疑似失效列表)
 export const getHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
@@ -503,6 +503,19 @@ export const getHealth = async (req, res) => {
   } catch (error) {
     console.error('获取健康概览失败:', error);
     res.send(resultData(null, 500, '获取失败: ' + error.message));
+  }
+};
+
+// POST /bookmark/health/ignore —— 「标记正常」:消除疑似失效误报(SPA/需登录等浏览器能开的)
+export const doIgnoreHealth = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
+    res.send(resultData(await markLinkNormal(req.user.id, id)));
+  } catch (error) {
+    console.error('标记正常失败:', error);
+    res.send(resultData(null, 500, '操作失败: ' + error.message));
   }
 };
 

@@ -6,27 +6,30 @@
       <div class="lh-bar">
         <div class="lh-stats">
           <span>{{ $t('bookmarkMg.healthProgress', { checked: summary.checked, total: summary.total }) }}</span>
-          <span v-if="summary.dead.length" class="lh-dead-n">· {{ $t('bookmarkMg.healthDeadCount', { n: summary.dead.length }) }}</span>
+          <span v-if="summary.suspect.length" class="lh-dead-n">· {{ $t('bookmarkMg.healthSuspectCount', { n: summary.suspect.length }) }}</span>
         </div>
         <b-button size="small" type="primary" :loading="checking" :disabled="checking || allChecked" @click="checkBatch">
           {{ checking ? $t('bookmarkMg.healthChecking') : allChecked ? $t('bookmarkMg.healthAllChecked') : $t('bookmarkMg.healthCheckBatch') }}
         </b-button>
       </div>
 
-      <div v-if="!summary.dead.length && summary.checked > 0" class="lh-empty">✅ {{ $t('bookmarkMg.healthNoDead') }}</div>
+      <div v-if="!summary.suspect.length && summary.checked > 0" class="lh-empty">✅ {{ $t('bookmarkMg.healthNoDead') }}</div>
 
-      <div v-if="summary.dead.length" class="lh-list">
-        <div v-for="d in summary.dead" :key="d.id" class="lh-item">
-          <div class="lh-item-main">
-            <div class="lh-item-name">🔗 {{ d.name }}</div>
-            <div class="lh-item-url">{{ d.url }}</div>
-          </div>
-          <div class="lh-item-actions">
-            <button v-if="d.hasSnapshot" class="lh-act snap" @click="viewSnapshot(d.id)">{{ $t('bookmarkMg.healthViewSnapshot') }}</button>
-            <button v-else class="lh-act" @click="viewSnapshot(d.id)">{{ $t('bookmarkMg.snapshot') }}</button>
+      <template v-if="summary.suspect.length">
+        <p class="lh-hint">{{ $t('bookmarkMg.healthSuspectHint') }}</p>
+        <div class="lh-list">
+          <div v-for="d in summary.suspect" :key="d.id" class="lh-item">
+            <div class="lh-item-main">
+              <a class="lh-item-name" :href="normalizeUrl(d.url)" target="_blank" rel="noopener">🔗 {{ d.name }}</a>
+              <div class="lh-item-url">{{ d.url }}</div>
+            </div>
+            <div class="lh-item-actions">
+              <button class="lh-act" :disabled="ignoring === d.id" @click="markNormal(d.id)">{{ $t('bookmarkMg.healthMarkNormal') }}</button>
+              <button class="lh-act snap" @click="viewSnapshot(d.id)">{{ d.hasSnapshot ? $t('bookmarkMg.healthViewSnapshot') : $t('bookmarkMg.snapshot') }}</button>
+            </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
   </BModal>
 
@@ -42,29 +45,43 @@
 
   const visible = defineModel<boolean>('visible');
 
-  interface DeadItem { id: string; name: string; url: string; note: string; hasSnapshot: boolean }
-  const summary = ref<{ total: number; checked: number; dead: DeadItem[] }>({ total: 0, checked: 0, dead: [] });
+  interface SuspectItem { id: string; name: string; url: string; note: string; hasSnapshot: boolean }
+  const summary = ref<{ total: number; checked: number; suspect: SuspectItem[] }>({ total: 0, checked: 0, suspect: [] });
   const checking = ref(false);
+  const ignoring = ref('');
   const snapVisible = ref(false);
   const snapId = ref('');
 
   const allChecked = computed(() => summary.value.total > 0 && summary.value.checked >= summary.value.total);
 
+  function normalizeUrl(u: string) {
+    return /^https?:\/\//i.test(u) ? u : 'https://' + u;
+  }
+  function applySummary(d: any) {
+    summary.value = { total: d.total || 0, checked: d.checked || 0, suspect: d.suspect || [] };
+  }
   async function loadSummary() {
     const res = await apiBaseGet('/api/bookmark/health');
-    if (res?.status === 200 && res.data) summary.value = res.data;
+    if (res?.status === 200 && res.data) applySummary(res.data);
   }
   async function checkBatch() {
     if (checking.value) return;
     checking.value = true;
     try {
       const res = await apiBasePost('/api/bookmark/health/check');
-      if (res?.status === 200 && res.data) {
-        // 返回体含最新概览(checkedThisRun + total/checked/dead)
-        summary.value = { total: res.data.total, checked: res.data.checked, dead: res.data.dead || [] };
-      }
+      if (res?.status === 200 && res.data) applySummary(res.data); // 返回体含最新概览
     } finally {
       checking.value = false;
+    }
+  }
+  // 标记正常:消除误报(SPA/需登录等浏览器能开的),本地即时移除 + 后端置 alive
+  async function markNormal(id: string) {
+    ignoring.value = id;
+    try {
+      const res = await apiBasePost('/api/bookmark/health/ignore', { id });
+      if (res?.status === 200) summary.value.suspect = summary.value.suspect.filter((s) => s.id !== id);
+    } finally {
+      ignoring.value = '';
     }
   }
   function viewSnapshot(id: string) {
@@ -88,6 +105,24 @@
     font-size: 12px;
     color: var(--desc-color);
     line-height: 1.6;
+  }
+  .lh-hint {
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: #d97706;
+    background: color-mix(in srgb, #f59e0b 8%, transparent);
+    border: 1px solid color-mix(in srgb, #f59e0b 22%, transparent);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  a.lh-item-name {
+    text-decoration: none;
+    color: var(--text-color);
+  }
+  a.lh-item-name:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
   }
   .lh-bar {
     display: flex;

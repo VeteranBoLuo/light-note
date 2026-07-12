@@ -54,4 +54,6 @@ router.post('/health/check', bookmarkHandle.doCheckHealth);
 
 router.get('/health', bookmarkHandle.getHealth);
 
+router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);
+
 export default router;

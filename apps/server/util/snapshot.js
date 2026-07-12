@@ -46,7 +46,17 @@ export async function archiveBookmark(userId, bookmarkId) {
   const url = rows[0].url;
   if (!url) return { ok: false, reason: 'no_url', msg: '该书签没有网址' };
   const meta = await fetchWebMeta(url, { bodyLimit: SNAPSHOT_LIMIT });
-  if (!meta.ok) return { ok: false, reason: meta.reason || 'fetch_failed', msg: '抓取失败' };
+  if (!meta.ok) {
+    // 归档失败给出更贴切的原因(SPA/需登录常见)
+    const MSG = {
+      EMPTY_CONTENT: '该网页正文为空(多为需 JS 渲染的单页应用或需登录),无法存档',
+      NOT_HTML: '该链接不是网页(文件/图片等),无法存档',
+      FETCH_FAILED: '网页无法访问(可能反爬、需登录或已失效),归档失败',
+      BLOCKED_HOST: '拒绝访问该地址',
+      INVALID_URL: '网址格式无效',
+    };
+    return { ok: false, reason: meta.reason || 'fetch_failed', msg: MSG[meta.reason] || '归档失败' };
+  }
   const content = meta.bodyText || '';
   const title = (meta.title || rows[0].name || '').slice(0, 512);
   const u = String(url).slice(0, 2048);
