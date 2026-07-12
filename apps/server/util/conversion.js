@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { isLocalIp } from './ipFilter.js';
+import { isSelfTraffic } from './logExclude.js';
 
 // 取真实客户端 IP：用 req.ip(trust proxy=1 下由 nginx 追加的 X-Forwarded-For 链末尾解析出的真实客户端 IP)，
 // 不取 XFF 首段——首段可被客户端任意伪造，会让 uniqueIps 等统计被刷虚高(与安全模块 requestContext.js 的修复同理)
@@ -21,7 +21,7 @@ export const recordConversionEvent = (req, event, context = '', overrides = {}) 
     const visitorType = overrides.visitorType ?? (req?.user?.role || 'visitor');
     const fingerprint = String(req?.headers?.['fingerprint'] || '').slice(0, 128);
     const ip = String(clientIp(req) || '').slice(0, 64);
-    if (isLocalIp(ip)) return; // 本地/回环请求(本地调试)不计入转化漏斗
+    if (isSelfTraffic(req)) return; // 本地/回环 或 自己人设备(指纹白名单)不计入转化漏斗
     pool
       .query(
         'INSERT INTO conversion_events (fingerprint, user_id, visitor_type, event, context, ip) VALUES (?,?,?,?,?,?)',

@@ -131,6 +131,7 @@
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
+    <LogExcludeModal v-if="user.role === 'root'" v-model:visible="logExcludeVisible" />
   </BPopover>
 </template>
 
@@ -138,6 +139,7 @@
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import LogExcludeModal from '@/components/personCenter/LogExcludeModal.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
@@ -316,6 +318,12 @@
       path: '/updateLogs',
       icon: icon.userCenter.log,
     },
+    {
+      name: 'logExclude',
+      label: '日志白名单',
+      role: 'root',
+      icon: icon.userCenter.log,
+    },
   ]);
   const menuOptions = computed(() => {
     if (user.role === 'root') {
@@ -342,8 +350,13 @@
     },
   ]);
 
+  const logExcludeVisible = ref(false);
   function menuItemClick(menuItem: menuItemInterface) {
     menuVisible.value = false;
+    if (menuItem.name === 'logExclude') {
+      logExcludeVisible.value = true;
+      return;
+    }
     if (menuItem.version) {
       const versionKey = menuItem.versionKey || `${menuItem.name}Version`;
       localStorage.setItem(versionKey, menuItem.version);

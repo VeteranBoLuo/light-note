@@ -1,5 +1,6 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
+import { isSelfTraffic, listLogExclude, addLogExclude, removeLogExclude } from '../util/logExclude.js';
 import https from 'https';
 import http from 'http';
 import fs from 'fs';
@@ -300,7 +301,7 @@ export const recordOperationLogs = (req, res) => {
   try {
     const userId = req.user?.id;
     // 本地/回环请求(本地调试)不记操作日志
-    if (isLocalIp(req.ip)) return res.send(resultData(null));
+    if (isSelfTraffic(req)) return res.send(resultData(null));
     // 服务端受控字段一律放在 ...req.body 之后,防止客户端 body 伪造 create_by / id / ip
     const log = {
       ...req.body,
@@ -327,6 +328,41 @@ export const recordOperationLogs = (req, res) => {
       });
   } catch (e) {
     res.send(resultData(null, 400, '客户端请求异常：' + e.message));
+  }
+};
+
+// —— 日志白名单(自己人设备免记录 api/操作/转化):仅 root 可管理 ——
+export const getLogExclude = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  try {
+    res.send(resultData(await listLogExclude()));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
+};
+
+export const addLogExcludeFp = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  try {
+    const fingerprint = String(req.body?.fingerprint || '').trim().slice(0, 128);
+    const note = String(req.body?.note || '').trim().slice(0, 255);
+    if (!fingerprint) return res.send(resultData(null, 400, '缺少指纹'));
+    await addLogExclude(fingerprint, note);
+    res.send(resultData(null));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  }
+};
+
+export const removeLogExcludeFp = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  try {
+    const fingerprint = String(req.body?.fingerprint || '').trim();
+    if (!fingerprint) return res.send(resultData(null, 400, '缺少指纹'));
+    await removeLogExclude(fingerprint);
+    res.send(resultData(null));
+  } catch (e) {
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
   }
 };
 

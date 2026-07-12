@@ -15,6 +15,12 @@ router.post('/getConversionFunnel', commonHandle.getConversionFunnel);
 
 router.post('/getOperationLogs', commonHandle.getOperationLogs);
 
+router.post('/getLogExclude', commonHandle.getLogExclude);
+
+router.post('/addLogExclude', commonHandle.addLogExcludeFp);
+
+router.post('/removeLogExclude', commonHandle.removeLogExcludeFp);
+
 router.get('/clearOperationLogs', commonHandle.clearOperationLogs);
 
 router.post('/getIpLogStats', commonHandle.getIpLogStats);
