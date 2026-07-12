@@ -470,9 +470,6 @@
 <style lang="less" scoped>
   .ai-container {
     height: 100%;
-    width: 100%;
-    min-width: 0; /* 收敛:宽内容不把面板撑宽 */
-    max-width: 100%;
     background: var(--bl-card-bg, #e5e5ec);
     border-radius: 12px;
     padding: 16px;
@@ -481,7 +478,6 @@
     flex-direction: column;
     gap: 14px;
     border: 1px solid rgba(0, 0, 0, 0.04);
-    overflow: hidden;
   }
 
   .ai-header {
@@ -620,7 +616,6 @@
 
   .ai-output {
     flex: 1 1 auto;
-    min-width: 0; /* 收敛:内容不撑宽 */
     display: flex;
     flex-direction: column;
     background: #ffffff;
@@ -660,27 +655,13 @@
     padding: 12px;
     overflow: auto;
     height: 100%;
-    min-width: 0;
-    max-width: 100%;
-    box-sizing: border-box;
   }
   .output-body :deep(.typewriter-content) {
     margin: 0;
     white-space: pre-wrap;
-    word-break: break-word;
-    overflow-wrap: anywhere;
     font-size: 12px;
     line-height: 1.5;
     color: #2d2f33;
-  }
-  /* 宽内容(代码块/长链接/图片/表格)一律在面板内换行或限宽,绝不撑宽面板 */
-  .output-body :deep(pre) {
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .output-body :deep(img),
-  .output-body :deep(table) {
-    max-width: 100%;
   }
   .output-body :deep(p),
   .output-body :deep(h1),
