@@ -15,6 +15,8 @@ router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
 router.get('/shop', growthHandle.getShop);
 router.post('/shop/buy', growthHandle.buyShopItem);
 router.post('/equipTitle', growthHandle.equipTitleHandle);
+router.get('/lottery', growthHandle.getLottery);
+router.post('/lottery/draw', growthHandle.doDrawLottery);
 router.post('/notices/read', growthHandle.readNotices);
 
 export default router;

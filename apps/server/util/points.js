@@ -60,6 +60,9 @@ export async function ensurePointsSchema() {
   if (await columnMissing('user_growth', 'storage_bonus_mb')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `storage_bonus_mb` INT NOT NULL DEFAULT 0 COMMENT "积分兑换的永久扩容(MB),叠加在段位基础配额之上"');
   }
+  if (await columnMissing('user_growth', 'lottery_count')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_count` INT NOT NULL DEFAULT 0 COMMENT "累计抽奖次数(用于每10抽保底)"');
+  }
 }
 
 // ============================================================================

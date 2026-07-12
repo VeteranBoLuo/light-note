@@ -123,14 +123,44 @@ export interface Shop {
   items: ShopItem[];
 }
 
+export interface LotteryPrize {
+  id: string;
+  kind: 'points' | 'storage' | 'card' | 'ai_pack' | string;
+  amount: number;
+  name: string;
+  rate?: number; // 概率%(仅状态接口返回)
+  rare?: boolean;
+}
+
+export interface LotteryStatus {
+  points: number;
+  count: number;
+  toPity: number;
+  singleCost: number;
+  tenCost: number;
+  pityEvery: number;
+  pool: LotteryPrize[];
+}
+
+export interface LotteryDrawResult {
+  ok: boolean;
+  reason?: string;
+  msg?: string;
+  cost?: number;
+  points?: number;
+  results?: LotteryPrize[];
+}
+
 // 模块级单例:头像徽章、成长卡、段位路线共享同一份数据,一次拉取多处复用(不为此建重 store)
 const growth = ref<Growth | null>(null);
 const ranks = ref<Rank[]>([]);
 const dashboard = ref<GrowthDashboard | null>(null);
 const shop = ref<Shop | null>(null);
+const lottery = ref<LotteryStatus | null>(null);
 const loading = ref(false);
 const dashboardLoading = ref(false);
 const shopLoading = ref(false);
+const lotteryLoading = ref(false);
 let loadedOnce = false;
 let ranksLoaded = false;
 let ownerId: string | null = null; // 成长缓存归属的账号,切号即作废
@@ -140,6 +170,7 @@ export function resetGrowth() {
   growth.value = null;
   dashboard.value = null;
   shop.value = null;
+  lottery.value = null;
   loadedOnce = false;
   ownerId = null;
 }
@@ -275,14 +306,41 @@ export function useGrowth() {
     return res;
   }
 
+  // 抽奖状态:余额/成本/保底/奖池概率
+  async function loadLottery() {
+    lotteryLoading.value = true;
+    try {
+      const res = await growthApi.getLottery();
+      if (res?.status === 200 && res.data) {
+        lottery.value = res.data as LotteryStatus;
+      }
+    } catch (err) {
+      console.warn('加载抽奖信息失败:', err);
+    } finally {
+      lotteryLoading.value = false;
+    }
+    return lottery.value;
+  }
+
+  // 抽奖:times=1 单抽 / 10 十连。返回后端 result;成功则刷新抽奖状态 + 成长快照(余额/存储/卡变化)
+  async function draw(times: number) {
+    const res = await growthApi.drawLottery(times);
+    if (res?.status === 200 && res.data?.ok) {
+      await Promise.all([loadLottery(), load(true)]);
+    }
+    return res;
+  }
+
   return {
     growth,
     ranks,
     dashboard,
     shop,
+    lottery,
     loading,
     dashboardLoading,
     shopLoading,
+    lotteryLoading,
     load,
     loadRanks,
     loadDashboard,
@@ -293,5 +351,7 @@ export function useGrowth() {
     loadShop,
     buyItem,
     equipTitle,
+    loadLottery,
+    draw,
   };
 }

@@ -3,6 +3,7 @@ import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle } from '../util/points.js';
+import { drawLottery, getLotteryStatus } from '../util/lottery.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -192,6 +193,31 @@ export const equipTitleHandle = async (req, res) => {
   } catch (error) {
     console.error('佩戴称号失败:', error);
     res.send(resultData(null, 500, '佩戴称号失败: ' + error.message));
+  }
+};
+
+// GET /growth/lottery —— 抽奖页数据(余额/成本/保底进度/奖池概率;游客只读展示概率)
+export const getLottery = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    const data = await getLotteryStatus(userId);
+    res.send(resultData(data));
+  } catch (error) {
+    console.error('获取抽奖信息失败:', error);
+    res.send(resultData(null, 500, '获取抽奖信息失败: ' + error.message));
+  }
+};
+
+// POST /growth/lottery/draw —— 抽奖(times=1 单抽 / 10 十连);积分不足以 result.ok=false 返回
+export const doDrawLottery = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const times = Number(req.body?.times) === 10 ? 10 : 1;
+    const result = await drawLottery(req.user.id, { times });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('抽奖失败:', error);
+    res.send(resultData(null, 500, '抽奖失败: ' + error.message));
   }
 };
 

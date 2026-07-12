@@ -38,6 +38,10 @@ export const buyShopItem = (itemId: string) => apiBasePost('/api/growth/shop/buy
 // 佩戴 / 卸下称号(titleId 为空=卸下)
 export const equipTitle = (titleId: string | null) => apiBasePost('/api/growth/equipTitle', { titleId });
 
+// 积分抽奖:状态(余额/成本/保底/奖池概率)+ 抽奖(times=1 单抽 / 10 十连)
+export const getLottery = () => apiBaseGet('/api/growth/lottery');
+export const drawLottery = (times: number) => apiBasePost('/api/growth/lottery/draw', { times });
+
 export default {
   getMyGrowth,
   checkin,
@@ -52,4 +56,6 @@ export default {
   getShop,
   buyShopItem,
   equipTitle,
+  getLottery,
+  drawLottery,
 };
