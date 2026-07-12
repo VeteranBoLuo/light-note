@@ -20,6 +20,7 @@
             <b-button @click="healthVisible = true">
               {{ $t('bookmarkMg.healthCheck') }}
             </b-button>
+            <b-button @click="aiOrgVisible = true">🤖 {{ $t('bookmarkMg.aiOrganizeBtn') }}</b-button>
             <b-button type="primary" @click="router.push({ path: `/manage/editBookmark/add` })">
               {{ $t('common.add') }}
             </b-button>
@@ -241,6 +242,7 @@
       />
       <LinkHealthModal v-model:visible="healthVisible" />
       <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
+      <AiOrganizeModal v-model:visible="aiOrgVisible" @applied="init" />
     </div>
   </b-loading>
 </template>
@@ -257,6 +259,7 @@
   import icon from '@/config/icon.ts';
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
+  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -274,6 +277,7 @@
   const selectedRows = ref<string[]>([]);
   const importExportModalVisible = ref(false);
   const healthVisible = ref(false);
+  const aiOrgVisible = ref(false); // AI 智能整理弹框
   // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
   const snapVisible = ref(false);
   const snapBookmarkId = ref('');

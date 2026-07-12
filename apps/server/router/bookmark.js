@@ -60,4 +60,9 @@ router.get('/health', bookmarkHandle.getHealth);
 
 router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);
 
+// AI 自动整理(批量打标签)
+router.post('/ai/organize/quote', bookmarkHandle.doOrganizeQuote);
+router.post('/ai/organize/run', bookmarkHandle.doOrganizeRun);
+router.post('/ai/organize/apply', bookmarkHandle.doOrganizeApply);
+
 export default router;

@@ -15,6 +15,7 @@ import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck, resetHealth } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
+import { suggestBookmarkMeta, getOrganizeState, chargeOrganize } from '../util/aiOrganize.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
 // 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
@@ -960,5 +961,211 @@ export const importBookmarksHtml = async (req, res) => {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
   } finally {
     connection.release();
+  }
+};
+
+// ============================================================================
+// AI 自动整理(批量打标签):免费额度随等级 + 超额扣积分。核心逻辑见 util/aiOrganize.js
+// ============================================================================
+
+// 并发池(单核服务器友好):最多 n 个 worker 同时跑
+async function organizePool(items, n, worker) {
+  let i = 0;
+  const runners = Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) {
+      await worker(items[i++]);
+    }
+  });
+  await Promise.all(runners);
+}
+
+// 解析候选:scope='selected'(指定 ids,校验归属)/ 'untagged'(未打标签的书签)
+async function resolveOrganizeCandidates(userId, scope, ids) {
+  if (scope === 'selected' && Array.isArray(ids) && ids.length) {
+    const [rows] = await pool.query(
+      "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
+      [userId, ids],
+    );
+    return rows;
+  }
+  const [rows] = await pool.query(
+    `SELECT b.id, b.name, b.url, b.description FROM bookmark b
+     LEFT JOIN resource_tag_relations r ON r.resource_id = b.id AND r.resource_type = 'bookmark'
+     WHERE b.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> '' AND r.tag_id IS NULL
+     ORDER BY b.create_time DESC`,
+    [userId],
+  );
+  return rows;
+}
+
+// POST /bookmark/ai/organize/quote —— 预估本次可整理数与免费/积分消耗(不跑 AI)
+export const doOrganizeQuote = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const { scope = 'untagged', ids = [] } = req.body || {};
+    const candidates = await resolveOrganizeCandidates(userId, scope, ids);
+    const state = await getOrganizeState(userId, req.user.role);
+    const affordable = state.freeRemaining + Math.floor(state.points / state.costPerItem);
+    const batchCap = Math.min(candidates.length, state.maxBatch, affordable);
+    const freeUse = Math.min(batchCap, state.freeRemaining);
+    const paidUse = batchCap - freeUse;
+    res.send(
+      resultData({
+        candidateTotal: candidates.length,
+        batchCap,
+        batchIds: candidates.slice(0, batchCap).map((c) => c.id),
+        freeRemaining: state.freeRemaining,
+        freeDaily: state.freeDaily,
+        freeUse,
+        paidUse,
+        cost: paidUse * state.costPerItem,
+        costPerItem: state.costPerItem,
+        points: state.points,
+        maxBatch: state.maxBatch,
+        canRun: batchCap > 0,
+      }),
+    );
+  } catch (e) {
+    res.send(resultData(null, 500, 'AI 整理预估失败: ' + e.message));
+  }
+};
+
+// POST /bookmark/ai/organize/run —— 对指定 ids 跑 AI(并发 3),按成功数结算,返回建议供复审
+export const doOrganizeRun = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const raw = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
+    if (!raw.length) return res.send(resultData(null, 400, '未选择要整理的书签'));
+    const [rows] = await pool.query(
+      "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
+      [userId, raw],
+    );
+    // 按额度可负担数封顶,避免跑超过能支付的量(防 AI 成本失控)
+    const state = await getOrganizeState(userId, req.user.role);
+    const affordable = state.freeRemaining + Math.floor(state.points / state.costPerItem);
+    const targets = rows.slice(0, Math.min(rows.length, state.maxBatch, affordable));
+    if (!targets.length) {
+      return res.send(resultData({ ok: false, reason: 'no_quota', msg: '整理额度不足,可用积分兑换或明天再来' }));
+    }
+    const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
+    const suggestions = [];
+    await organizePool(targets, 3, async (b) => {
+      try {
+        const r = await suggestBookmarkMeta({ url: b.url, name: b.name, description: b.description, userTags: tagRows });
+        if (!r) return;
+        const hasSomething = r.matchedTagIds.length || r.newTags.length || r.name || r.description;
+        if (!hasSomething) return;
+        const matchedTags = tagRows.filter((t) => r.matchedTagIds.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
+        suggestions.push({
+          id: b.id,
+          url: b.url,
+          currentName: b.name || '',
+          currentDesc: b.description || '',
+          suggestName: r.name || '',
+          suggestDesc: r.description || '',
+          matchedTags,
+          newTags: r.newTags || [],
+        });
+      } catch {
+        /* 单条失败跳过,不阻断整批 */
+      }
+    });
+    const charge = await chargeOrganize(userId, suggestions.length, req.user.role);
+    const after = await getOrganizeState(userId, req.user.role);
+    res.send(
+      resultData({
+        ok: true,
+        processed: suggestions.length,
+        suggestions,
+        charge: { freeUsed: charge.freeUsed, pointsSpent: charge.pointsSpent },
+        state: { freeRemaining: after.freeRemaining, points: after.points },
+      }),
+    );
+  } catch (e) {
+    res.send(resultData(null, 500, 'AI 整理失败: ' + e.message));
+  }
+};
+
+// POST /bookmark/ai/organize/apply —— 应用复审后的建议(加标签/新建标签/仅在原为空时补名称描述)
+export const doOrganizeApply = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) return res.send(resultData({ applied: 0 }));
+  const userId = req.user.id;
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [tagRows] = await conn.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const nameToId = new Map(tagRows.map((t) => [norm(t.name), t.id]));
+    const ownTagIds = new Set(tagRows.map((t) => t.id));
+    let applied = 0;
+    for (const it of items) {
+      const id = String(it?.id || '');
+      if (!id) continue;
+      const [own] = await conn.query(
+        'SELECT id, name, description FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0',
+        [id, userId],
+      );
+      if (!own.length) continue;
+      const finalTagIds = [];
+      for (const tid of Array.isArray(it.tagIds) ? it.tagIds : []) {
+        if (ownTagIds.has(tid)) finalTagIds.push(tid);
+      }
+      for (const rawName of Array.isArray(it.newTagNames) ? it.newTagNames : []) {
+        const nm = String(rawName || '').trim();
+        if (!nm) continue;
+        const key = norm(nm);
+        let tid = nameToId.get(key);
+        if (!tid) {
+          const payload = insertData({ name: nm, userId });
+          await conn.query('INSERT INTO tag SET ?', [payload]);
+          tid = payload.id;
+          nameToId.set(key, tid);
+          ownTagIds.add(tid);
+        }
+        finalTagIds.push(tid);
+      }
+      // 4 标签上限:算上已有关联,只补到 4
+      const [[cnt]] = await conn.query(
+        "SELECT COUNT(*) AS c FROM resource_tag_relations WHERE resource_type = 'bookmark' AND resource_id = ?",
+        [id],
+      );
+      const room = Math.max(0, 4 - Number(cnt.c || 0));
+      const toAdd = [...new Set(finalTagIds)].slice(0, room);
+      if (toAdd.length) {
+        await insertResourceTagRelations(conn, {
+          tagIds: toAdd,
+          resourceType: RESOURCE_TYPE.BOOKMARK,
+          resourceId: id,
+          userId,
+          source: 'ai',
+        });
+      }
+      const setName = it.name && !own[0].name ? String(it.name).trim() : null;
+      const setDesc = it.description && !own[0].description ? String(it.description).trim() : null;
+      if (setName || setDesc) {
+        await conn.query('UPDATE bookmark SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ? AND user_id = ?', [
+          setName,
+          setDesc,
+          id,
+          userId,
+        ]);
+      }
+      applied++;
+    }
+    await conn.commit();
+    res.send(resultData({ applied }));
+  } catch (e) {
+    try {
+      await conn.rollback();
+    } catch {
+      /* ignore */
+    }
+    res.send(resultData(null, 500, '应用整理结果失败: ' + e.message));
+  } finally {
+    conn.release();
   }
 };

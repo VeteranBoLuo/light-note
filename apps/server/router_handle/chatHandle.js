@@ -3,8 +3,7 @@ import { resultData } from '../util/common.js';
 import pool from '../db/index.js';
 import { Transform } from 'stream';
 import { Agent as HttpAgent } from 'http';
-import { fetchWebMeta } from '../util/fetchWebMeta.js';
-import { requestDeepSeek } from '../util/agent/deepseekClient.js';
+import { suggestBookmarkMeta } from '../util/aiOrganize.js';
 
 // 创建自定义转换流优化数据处理
 class SSETransform extends Transform {
@@ -143,86 +142,19 @@ export const generateBookmarkMeta = async (req, res) => {
       return res.send(resultData(null, 400, '请输入正确的书签地址'));
     }
 
-    // 抓取网页真实内容：LLM(DeepSeek/千问)本身无联网能力,由后端抓取后再交给模型总结,
-    // 避免模型仅凭域名瞎猜(抓取失败则降级为让模型基于网址谨慎推测)
-    const meta = await fetchWebMeta(url);
-
-    // 拉取用户已有标签,让 AI 从中推荐关联标签(不够再建议新标签)
+    // 拉取用户已有标签,让 AI 从中推荐关联标签(不够再建议新标签)。
+    // 抓网页 + AI 生成的核心逻辑抽到 util/aiOrganize.suggestBookmarkMeta,与「批量整理」共用。
     const metaUserId = req.user?.id;
     let userTags = [];
     if (metaUserId) {
       const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [metaUserId]);
       userTags = tagRows;
     }
-    const tagNameList = userTags.map((t) => t.name);
-
-    const pageInfo = meta.ok
-      ? [
-          `网页标题：${meta.title || '（无）'}`,
-          `网页描述：${meta.description || '（无）'}`,
-          meta.siteName ? `站点名称：${meta.siteName}` : '',
-          meta.keywords ? `关键词：${meta.keywords}` : '',
-          meta.bodyText ? `正文摘录：${meta.bodyText}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n')
-      : '（未能读取到该网页的内容，请仅根据网址本身合理推测，不要编造具体功能或名称。）';
-
-    const userPrompt = [
-      '请为下面这个网页生成适合书签保存的名称、描述,并推荐关联标签。',
-      '',
-      `网址：${url}`,
-      pageInfo,
-      '',
-      '要求：',
-      '- name:简洁自然,像用户自己会给书签起的标题,不超过 20 个字。',
-      '- description:用一句简短自然的中文概括网站内容或用途,不超过 50 个字。',
-      `- 已有标签(JSON 数组):${JSON.stringify(
-        tagNameList,
-      )}。从"已有标签"里挑选与该网页最相关的标签放进 matchedTags(0-4 个,必须与列表中的文字完全一致);若都不合适,matchedTags 返回空数组,并在 newTags 里给出 1-3 个建议新增的简短标签名(2-6 个字)。`,
-      '- 只输出 JSON 对象,格式必须是 {"name":"...","description":"...","matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
-    ].join('\n');
-
-    const { content } = await requestDeepSeek([
-      { role: 'system', content: '你是书签整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
-      { role: 'user', content: userPrompt },
-    ]);
-    const cleanText = String(content || '')
-      .replace(/```json|```/g, '')
-      .trim();
-
-    let parsed = null;
-    try {
-      parsed = JSON.parse(cleanText);
-    } catch (error) {
-      const match = cleanText.match(/\{[\s\S]*\}/);
-      if (match) {
-        parsed = JSON.parse(match[0]);
-      }
-    }
-
-    if (!parsed || (!parsed.name && !parsed.description)) {
+    const result = await suggestBookmarkMeta({ url, userTags });
+    if (!result) {
       return res.status(500).send(resultData(null, 500, 'AI 返回结果解析失败'));
     }
-
-    // 把 AI 挑的已有标签名映射成标签 id(大小写/空格不敏感);newTags 为不在已有列表里的建议新标签
-    const norm = (s) => String(s || '').trim().toLowerCase();
-    const matchedNames = Array.isArray(parsed.matchedTags) ? parsed.matchedTags : [];
-    const matchedTagIds = userTags
-      .filter((t) => matchedNames.some((n) => norm(n) === norm(t.name)))
-      .map((t) => t.id);
-    const newTags = (Array.isArray(parsed.newTags) ? parsed.newTags : [])
-      .map((s) => String(s || '').trim())
-      .filter((n) => n && !userTags.some((t) => norm(t.name) === norm(n)))
-      .slice(0, 3);
-    res.send(
-      resultData({
-        name: String(parsed.name || '').trim(),
-        description: String(parsed.description || '').trim(),
-        matchedTagIds,
-        newTags,
-      }),
-    );
+    res.send(resultData(result));
   } catch (error) {
     const providerMsg = error?.message || String(error);
     console.error('生成书签元信息错误:', providerMsg); // 完整错误(可能含供应商原文 / API key 片段)只进服务器日志

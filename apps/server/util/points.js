@@ -72,6 +72,12 @@ export async function ensurePointsSchema() {
   if (await columnMissing('user_growth', 'equipped_frame')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `equipped_frame` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴头像框装扮 id"');
   }
+  if (await columnMissing('user_growth', 'ai_organize_day')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `ai_organize_day` CHAR(8) DEFAULT NULL COMMENT "上次使用 AI 整理的日期 YYYYMMDD"');
+  }
+  if (await columnMissing('user_growth', 'ai_organize_used')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `ai_organize_used` INT NOT NULL DEFAULT 0 COMMENT "当日已用的 AI 整理条数"');
+  }
 }
 
 // ============================================================================
