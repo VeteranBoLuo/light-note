@@ -102,6 +102,7 @@
 
   const total = ref(0);
   const searchValue = ref('');
+  const hideInternal = ref(true); // 移动端无开关,默认隐藏内部账号(root/test);后端也默认隐藏
   function searchApiLog() {
     apiQueryPost('/api/common/getOperationLogs', {
       currentPage: currentPage.value,

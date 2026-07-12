@@ -68,10 +68,6 @@
           label: 'visitor',
           value: 'visitor',
         },
-        {
-          label: 'admin',
-          value: 'admin',
-        },
       ];
       return genSelector(options, null, i18n.global.t('common.pleaseSelect'));
     },
