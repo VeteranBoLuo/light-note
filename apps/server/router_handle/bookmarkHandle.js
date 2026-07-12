@@ -511,7 +511,7 @@ export const doResetHealth = async (req, res) => {
 export const doCheckAllHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    res.send(resultData(startFullCheck(req.user.id)));
+    res.send(resultData(await startFullCheck(req.user.id)));
   } catch (error) {
     console.error('启动全量检测失败:', error);
     res.send(resultData(null, 500, '启动失败: ' + error.message));

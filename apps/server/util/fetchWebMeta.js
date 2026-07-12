@@ -244,9 +244,9 @@ export async function checkUrlLiveness(rawUrl) {
   try {
     target = new URL(input);
   } catch {
-    return { status: 'unknown', code: 'INVALID_URL' };
+    return { status: 'suspect', code: 'INVALID_URL' }; // URL 格式无效(乱写/多协议头等)= 明确坏链
   }
-  if (target.protocol !== 'http:' && target.protocol !== 'https:') return { status: 'unknown', code: 'PROTO' };
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return { status: 'suspect', code: 'PROTO' };
   const literalHost = target.hostname.replace(/^\[/, '').replace(/\]$/, '');
   if (net.isIP(literalHost) && isPrivateIp(literalHost)) return { status: 'skip', code: 'BLOCKED' };
   try {
@@ -265,6 +265,9 @@ export async function checkUrlLiveness(rawUrl) {
     return { status: 'alive', code };
   } catch (e) {
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) return { status: 'skip', code: 'BLOCKED' };
-    return { status: 'unknown', code: e?.code || 'ERR' }; // 超时/网络错 → 未知,绝不判失效
+    const code = e?.code || 'ERR';
+    // 域名不存在(DNS NXDOMAIN)= 基本可判失效;超时/连接重置/拒绝/证书错 = 未知不判(避免误报)
+    if (code === 'ENOTFOUND') return { status: 'suspect', code };
+    return { status: 'unknown', code };
   }
 }

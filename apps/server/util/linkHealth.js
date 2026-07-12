@@ -76,8 +76,9 @@ async function checkOneAndSave(userId, b) {
 
 // 全量后台检测:一次把该用户所有书签查完(并发受限),后台跑不阻塞请求;前端轮询 getHealthSummary 看进度。
 // 用 fullChecking 防重入(同一用户同时只跑一个)。逐条落库,故轮询能看到 checked/suspect 实时增长。
-export function startFullCheck(userId) {
+export async function startFullCheck(userId) {
   if (fullChecking.has(userId)) return { running: true, already: true };
+  await pool.query('DELETE FROM bookmark_health WHERE user_id = ?', [userId]); // 先清空 → 进度从 0 起,一次全新扫描
   fullChecking.add(userId);
   (async () => {
     try {
