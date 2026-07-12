@@ -153,7 +153,7 @@ function decodeBuffer(buf, charset) {
  *   | { ok: false, reason: string }
  * >}
  */
-export async function fetchWebMeta(rawUrl) {
+export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT } = {}) {
   let target;
   try {
     target = new URL(rawUrl);
@@ -210,7 +210,7 @@ export async function fetchWebMeta(rawUrl) {
   const description = metaDesc || ogDesc;
   const siteName = extractMeta(html, 'og:site_name');
   const keywords = extractMeta(html, 'keywords');
-  const bodyText = extractBodyText(html);
+  const bodyText = extractBodyText(html, bodyLimit);
 
   // 什么都没抓到（SPA 空壳等）→ 视为失败，让调用方降级
   if (!title && !description && !bodyText) {

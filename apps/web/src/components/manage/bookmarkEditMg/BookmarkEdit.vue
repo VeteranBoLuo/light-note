@@ -21,6 +21,9 @@
                 <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
               </button>
             </BTooltip>
+            <button v-if="isEdit" type="button" class="generate-meta-action" @click="snapVisible = true" v-click-log="{ module: '书签详情', operation: '查看网页快照' }">
+              <span>📸 {{ $t('bookmarkMg.snapshot') }}</span>
+            </button>
           </div>
           <b-input v-model:value="bookmarkData.url"> </b-input>
         </div>
@@ -53,6 +56,7 @@
       <b-button type="primary" @click="submit">确定</b-button>
       <b-button @click="$router.back()">返回</b-button>
     </b-space>
+    <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="bookmarkId" />
   </div>
 </template>
 
@@ -67,6 +71,7 @@
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
 
@@ -163,6 +168,11 @@
   });
 
   const router = useRouter();
+
+  // 网页快照(防死链):仅编辑已有书签时可查看/归档(新增页 id==='add')
+  const snapVisible = ref(false);
+  const bookmarkId = computed(() => String(router.currentRoute.value.params?.id || ''));
+  const isEdit = computed(() => !!bookmarkId.value && bookmarkId.value !== 'add');
   const loading = ref(false);
   onMounted(async () => {
     if (handleType.value === 'add') {

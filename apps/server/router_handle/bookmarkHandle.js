@@ -12,6 +12,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { awardCreate, grantExp, hashRef } from '../util/growth.js';
+import { archiveBookmark, getBookmarkSnapshot } from '../util/snapshot.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -467,6 +468,34 @@ export const toggleBookmarkTop = async (req, res) => {
   }
 };
 
+// POST /bookmark/archive —— 手动(重新)归档网页正文,防死链
+export const doArchiveBookmark = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
+    const result = await archiveBookmark(req.user.id, id);
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('归档网页失败:', error);
+    res.send(resultData(null, 500, '归档失败: ' + error.message));
+  }
+};
+
+// POST /bookmark/snapshot —— 读取书签的网页快照(存档正文)
+export const getSnapshot = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
+    const snap = await getBookmarkSnapshot(req.user.id, id);
+    res.send(resultData(snap));
+  } catch (error) {
+    console.error('获取快照失败:', error);
+    res.send(resultData(null, 500, '获取快照失败: ' + error.message));
+  }
+};
+
 export const addBookmark = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const connection = await pool.getConnection();
@@ -515,6 +544,7 @@ export const addBookmark = async (req, res) => {
     res.send(resultData(result));
     recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
     awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
+    if (params.url) archiveBookmark(userId, insertBookmarkId).catch(() => {}); // 异步存档网页正文(防死链),失败静默,不阻断响应
   } catch (err) {
     await connection.rollback();
     res.send(resultData(null, 500, err.message));

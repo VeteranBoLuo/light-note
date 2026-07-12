@@ -10,6 +10,7 @@ import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
 import { generateGrowthNudges } from './util/growth.js';
+import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import rateLimit from 'express-rate-limit';
 
 import dotenv from 'dotenv';
@@ -64,6 +65,7 @@ ensureSecurityTables().catch((err) => console.error('安全模块初始化失败
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败:', err.message));
 initLogExclude().catch((err) => console.error('日志白名单初始化失败:', err.message));
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败:', err.message));
+ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败:', err.message));
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

@@ -44,4 +44,8 @@ router.post('/toggleBookmarkTop', bookmarkHandle.toggleBookmarkTop);
 
 router.post('/importBookmarksHtml', upload.single('file'), bookmarkHandle.importBookmarksHtml);
 
+router.post('/archive', bookmarkHandle.doArchiveBookmark);
+
+router.post('/snapshot', bookmarkHandle.getSnapshot);
+
 export default router;
