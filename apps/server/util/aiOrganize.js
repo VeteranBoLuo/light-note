@@ -1,34 +1,12 @@
-import pool from '../db/index.js';
 import { fetchWebMeta } from './fetchWebMeta.js';
 import { requestDeepSeek } from './agent/deepseekClient.js';
-import { levelForExp } from './growth.js';
 
 // AI 自动整理:批量给书签生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
-// 经济模型(与"存储/AI额度随段位涨、积分买更多"同构):每日免费 N 条随等级解锁,超出按积分计费。
+// 与单条「智能生成」保持一致——【免费】,不扣积分、不设每日固定次数;仅用单次条数上限防跑量,
+// 可分批多次运行。真正的积分出口在商店(AI 加油包/扩容/称号/头像框)与抽奖,不在这个高频提效功能上设卡。
+// AI 用量统一受 aiQuota 观测(当前 dry-run);未来若开启 AI_GATE_ENFORCE,所有 AI 功能一并按 token 额度限流。
 
-export const ORGANIZE_COST_PER_ITEM = 3; // 超出每日免费额度后,每条消耗的积分
-export const ORGANIZE_MAX_BATCH = 15; // 单次最多处理条数(控制时长与成本;可多次运行)
-
-// 每日免费整理条数(随等级):Lv1-2:5 → Lv3-5:10 → Lv6-9:20 → Lv10-14:40 → 满级:80
-export function organizeFreeFor(level) {
-  const lv = Number(level) || 1;
-  if (lv >= 15) return 80;
-  if (lv >= 10) return 40;
-  if (lv >= 6) return 20;
-  if (lv >= 3) return 10;
-  return 5;
-}
-
-function levelOf(exp, userRole) {
-  return userRole === 'root' ? 15 : levelForExp(Number(exp) || 0);
-}
-
-function dayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
-}
+export const ORGANIZE_MAX_BATCH = 20; // 单次最多处理条数(控制单次时长;整完可继续下一批)
 
 /**
  * 单个书签:AI 生成 name/description + 从已有标签匹配(matchedTagIds)+ 建议新标签(newTags)。
@@ -111,81 +89,4 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
     matchedTagIds,
     newTags,
   };
-}
-
-// 当前整理额度状态(只读):等级、每日免费额度、今日已用、剩余、当前积分
-export async function getOrganizeState(userId, userRole = null) {
-  const [rows] = await pool.query(
-    'SELECT points, exp, ai_organize_day, ai_organize_used FROM user_growth WHERE user_id = ? LIMIT 1',
-    [userId],
-  );
-  const g = rows[0] || {};
-  const today = dayKey();
-  const level = levelOf(g.exp, userRole);
-  const freeDaily = organizeFreeFor(level);
-  const usedToday = g.ai_organize_day === today ? Number(g.ai_organize_used) || 0 : 0;
-  return {
-    level,
-    freeDaily,
-    usedToday,
-    freeRemaining: Math.max(0, freeDaily - usedToday),
-    points: Number(g.points || 0),
-    costPerItem: ORGANIZE_COST_PER_ITEM,
-    maxBatch: ORGANIZE_MAX_BATCH,
-  };
-}
-
-// 结算 count 条整理消耗:优先用免费额度,超出扣积分。事务 + FOR UPDATE,防并发。
-// 返回 {ok, freeUsed, pointsSpent}。count 应已按 quote 上限约束(pre-check 保证可负担)。
-export async function chargeOrganize(userId, count, userRole = null) {
-  if (!(count > 0)) return { ok: true, freeUsed: 0, pointsSpent: 0 };
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    const [rows] = await conn.query(
-      'SELECT points, exp, ai_organize_day, ai_organize_used FROM user_growth WHERE user_id = ? FOR UPDATE',
-      [userId],
-    );
-    const g = rows[0];
-    if (!g) {
-      await conn.rollback();
-      return { ok: false, reason: 'no_growth', freeUsed: 0, pointsSpent: 0 };
-    }
-    const today = dayKey();
-    const level = levelOf(g.exp, userRole);
-    const freeDaily = organizeFreeFor(level);
-    const usedToday = g.ai_organize_day === today ? Number(g.ai_organize_used) || 0 : 0;
-    const freeRemaining = Math.max(0, freeDaily - usedToday);
-    const freeUsed = Math.min(count, freeRemaining);
-    const paid = count - freeUsed;
-    const cost = paid * ORGANIZE_COST_PER_ITEM;
-    if (cost > Number(g.points || 0)) {
-      await conn.rollback();
-      return { ok: false, reason: 'insufficient', freeUsed: 0, pointsSpent: 0 };
-    }
-    if (cost > 0) {
-      await conn.query('UPDATE user_growth SET points = points - ? WHERE user_id = ?', [cost, userId]);
-      await conn.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, 'ai_organize', ?)", [
-        userId,
-        -cost,
-        today,
-      ]);
-    }
-    await conn.query('UPDATE user_growth SET ai_organize_day = ?, ai_organize_used = ? WHERE user_id = ?', [
-      today,
-      usedToday + count,
-      userId,
-    ]);
-    await conn.commit();
-    return { ok: true, freeUsed, pointsSpent: cost };
-  } catch (e) {
-    try {
-      await conn.rollback();
-    } catch {
-      /* ignore */
-    }
-    throw e;
-  } finally {
-    conn.release();
-  }
 }

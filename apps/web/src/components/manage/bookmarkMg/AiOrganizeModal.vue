@@ -10,14 +10,11 @@
           <template v-else>
             <ul class="aio-stat">
               <li>{{ $t('bookmarkMg.aiOrganizeCand', { n: quote.candidateTotal }) }}</li>
-              <li>{{ $t('bookmarkMg.aiOrganizeThisRun', { n: quote.batchCap }) }}</li>
               <li>
-                <span v-if="quote.cost > 0">{{ $t('bookmarkMg.aiOrganizeCostMix', { free: quote.freeUse, cost: quote.cost }) }}</span>
-                <span v-else>{{ $t('bookmarkMg.aiOrganizeCostFree', { free: quote.freeUse }) }}</span>
-                <span class="aio-muted"> · {{ $t('bookmarkMg.aiOrganizeFreeLeft', { r: quote.freeRemaining, d: quote.freeDaily }) }}</span>
+                {{ $t('bookmarkMg.aiOrganizeThisRunFree', { n: quote.batchCap }) }}
+                <span v-if="quote.candidateTotal > quote.batchCap" class="aio-muted"> · {{ $t('bookmarkMg.aiOrganizeBatchHint') }}</span>
               </li>
             </ul>
-            <div v-if="!quote.canRun" class="aio-center aio-muted">{{ $t('bookmarkMg.aiOrganizeNoQuota') }}</div>
             <div class="aio-actions">
               <BButton type="primary" :disabled="!quote.canRun" @click="run">{{ $t('bookmarkMg.aiOrganizeStart') }}</BButton>
             </div>
@@ -62,14 +59,13 @@
                 :class="{ sel: s.pickNew.includes(nt) }"
                 @click="toggle(s.pickNew, nt)"
               >
-                ＋{{ nt }}
+                {{ nt }}
               </button>
               <span v-if="!s.matchedTags.length && !s.newTags.length" class="aio-muted">{{ $t('bookmarkMg.aiOrganizeNoTag') }}</span>
             </div>
           </div>
         </div>
         <div class="aio-actions">
-          <span class="aio-muted aio-charge">{{ $t('bookmarkMg.aiOrganizeCharged', { free: charge.freeUsed, pts: charge.pointsSpent }) }}</span>
           <BButton type="primary" :loading="applying" :disabled="applying || !chosenCount" @click="apply">
             {{ $t('bookmarkMg.aiOrganizeApply', { n: chosenCount }) }}
           </BButton>
@@ -80,7 +76,10 @@
       <div v-else-if="step === 'done'" class="aio-center aio-done">
         <div class="aio-check">✓</div>
         <p>{{ $t('bookmarkMg.aiOrganizeDoneMsg', { n: appliedCount }) }}</p>
-        <BButton size="small" @click="close">{{ $t('bookmarkMg.aiOrganizeClose') }}</BButton>
+        <div class="aio-actions" style="justify-content: center">
+          <BButton size="small" @click="continueOrganize">{{ $t('bookmarkMg.aiOrganizeContinue') }}</BButton>
+          <BButton size="small" type="primary" @click="close">{{ $t('bookmarkMg.aiOrganizeClose') }}</BButton>
+        </div>
       </div>
     </div>
   </BModal>
@@ -114,7 +113,6 @@
   const quoteLoading = ref(false);
   const quote = ref<any>(null);
   const suggestions = ref<Sug[]>([]);
-  const charge = ref({ freeUsed: 0, pointsSpent: 0 });
   const fillMeta = ref(true);
   const applying = ref(false);
   const appliedCount = ref(0);
@@ -143,7 +141,6 @@
     try {
       const res = await apiBasePost('/api/bookmark/ai/organize/run', { ids: quote.value.batchIds });
       if (res?.status === 200 && res.data?.ok) {
-        charge.value = res.data.charge || { freeUsed: 0, pointsSpent: 0 };
         suggestions.value = (res.data.suggestions || []).map((s: any) => ({
           ...s,
           include: true,
@@ -197,12 +194,20 @@
     visible.value = false;
   }
 
+  // 完成后继续整理下一批(重新预估,反映已减少的未打标签数)
+  function continueOrganize() {
+    step.value = 'confirm';
+    quote.value = null;
+    suggestions.value = [];
+    appliedCount.value = 0;
+    loadQuote();
+  }
+
   watch(visible, (v) => {
     if (v) {
       step.value = 'confirm';
       quote.value = null;
       suggestions.value = [];
-      charge.value = { freeUsed: 0, pointsSpent: 0 };
       appliedCount.value = 0;
       fillMeta.value = true;
       loadQuote();
@@ -321,31 +326,26 @@
   .aio-tag {
     border: 1px solid var(--card-border-color);
     background: transparent;
-    color: var(--text-color);
+    color: var(--desc-color);
     border-radius: 20px;
-    padding: 2px 10px;
+    padding: 3px 12px;
     font-size: 12px;
     cursor: pointer;
-    opacity: 0.5;
     transition: all 0.15s;
-  }
-  .aio-tag.sel {
-    opacity: 1;
-    border-color: var(--resource-bookmark-color);
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent);
-  }
-  .aio-tag--new.sel {
-    border-style: dashed;
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
   }
   .aio-tag--new {
     border-style: dashed;
   }
-  .aio-charge {
-    margin-right: auto;
+  .aio-tag.sel {
+    color: var(--resource-bookmark-color);
+    border-color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
+    font-weight: 600;
+  }
+  .aio-tag--new.sel {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
   }
   .aio-done .aio-check {
     width: 44px;

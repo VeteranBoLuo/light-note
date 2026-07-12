@@ -1194,6 +1194,9 @@ export default {
     aiOrganizeNone: '暂无未打标签的书签 🎉',
     aiOrganizeCand: '共 {n} 条未打标签的书签',
     aiOrganizeThisRun: '本次整理 {n} 条',
+    aiOrganizeThisRunFree: '本次整理 {n} 条 · 免费',
+    aiOrganizeBatchHint: '其余可分批继续',
+    aiOrganizeContinue: '继续整理下一批',
     aiOrganizeCostMix: '消耗 {free} 次免费额度 + {cost} 积分',
     aiOrganizeCostFree: '消耗 {free} 次免费额度(不扣积分)',
     aiOrganizeFreeLeft: '今日免费剩余 {r}/{d}',
@@ -1437,6 +1440,7 @@ export default {
     needUrl: '请输入网址',
     tagMax: '最多关联 4 个标签',
     failed: '收藏失败,请重试',
+    expired: '登录已过期,请重新登录后再收藏',
   },
   auth: {
     login: '登录',

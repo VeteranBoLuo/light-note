@@ -1205,6 +1205,9 @@ export default {
     aiOrganizeNone: 'No untagged bookmarks 🎉',
     aiOrganizeCand: '{n} untagged bookmarks',
     aiOrganizeThisRun: 'This run: {n}',
+    aiOrganizeThisRunFree: 'This run: {n} · free',
+    aiOrganizeBatchHint: 'the rest in later batches',
+    aiOrganizeContinue: 'Organize next batch',
     aiOrganizeCostMix: 'Uses {free} free + {cost} points',
     aiOrganizeCostFree: 'Uses {free} free (no points)',
     aiOrganizeFreeLeft: 'Free left today {r}/{d}',
@@ -1449,6 +1452,7 @@ export default {
     needUrl: 'Please enter a URL',
     tagMax: 'Up to 4 tags',
     failed: 'Save failed, please retry',
+    expired: 'Session expired, please sign in again to save',
   },
   auth: {
     login: 'Log in',

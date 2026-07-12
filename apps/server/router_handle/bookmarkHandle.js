@@ -15,7 +15,7 @@ import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck, resetHealth } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
-import { suggestBookmarkMeta, getOrganizeState, chargeOrganize } from '../util/aiOrganize.js';
+import { suggestBookmarkMeta, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
 // 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
@@ -998,31 +998,20 @@ async function resolveOrganizeCandidates(userId, scope, ids) {
   return rows;
 }
 
-// POST /bookmark/ai/organize/quote —— 预估本次可整理数与免费/积分消耗(不跑 AI)
+// POST /bookmark/ai/organize/quote —— 预估本次可整理数(免费;不跑 AI)
 export const doOrganizeQuote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
     const { scope = 'untagged', ids = [] } = req.body || {};
     const candidates = await resolveOrganizeCandidates(userId, scope, ids);
-    const state = await getOrganizeState(userId, req.user.role);
-    const affordable = state.freeRemaining + Math.floor(state.points / state.costPerItem);
-    const batchCap = Math.min(candidates.length, state.maxBatch, affordable);
-    const freeUse = Math.min(batchCap, state.freeRemaining);
-    const paidUse = batchCap - freeUse;
+    const batchCap = Math.min(candidates.length, ORGANIZE_MAX_BATCH);
     res.send(
       resultData({
         candidateTotal: candidates.length,
         batchCap,
         batchIds: candidates.slice(0, batchCap).map((c) => c.id),
-        freeRemaining: state.freeRemaining,
-        freeDaily: state.freeDaily,
-        freeUse,
-        paidUse,
-        cost: paidUse * state.costPerItem,
-        costPerItem: state.costPerItem,
-        points: state.points,
-        maxBatch: state.maxBatch,
+        maxBatch: ORGANIZE_MAX_BATCH,
         canRun: batchCap > 0,
       }),
     );
@@ -1031,7 +1020,7 @@ export const doOrganizeQuote = async (req, res) => {
   }
 };
 
-// POST /bookmark/ai/organize/run —— 对指定 ids 跑 AI(并发 3),按成功数结算,返回建议供复审
+// POST /bookmark/ai/organize/run —— 对指定 ids 跑 AI(并发 3,免费),返回建议供复审
 export const doOrganizeRun = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
@@ -1042,13 +1031,9 @@ export const doOrganizeRun = async (req, res) => {
       "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
       [userId, raw],
     );
-    // 按额度可负担数封顶,避免跑超过能支付的量(防 AI 成本失控)
-    const state = await getOrganizeState(userId, req.user.role);
-    const affordable = state.freeRemaining + Math.floor(state.points / state.costPerItem);
-    const targets = rows.slice(0, Math.min(rows.length, state.maxBatch, affordable));
-    if (!targets.length) {
-      return res.send(resultData({ ok: false, reason: 'no_quota', msg: '整理额度不足,可用积分兑换或明天再来' }));
-    }
+    // 单次条数上限(防跑量;可分批多次运行)
+    const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
+    if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
     const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
     const suggestions = [];
     await organizePool(targets, 3, async (b) => {
@@ -1072,17 +1057,7 @@ export const doOrganizeRun = async (req, res) => {
         /* 单条失败跳过,不阻断整批 */
       }
     });
-    const charge = await chargeOrganize(userId, suggestions.length, req.user.role);
-    const after = await getOrganizeState(userId, req.user.role);
-    res.send(
-      resultData({
-        ok: true,
-        processed: suggestions.length,
-        suggestions,
-        charge: { freeUsed: charge.freeUsed, pointsSpent: charge.pointsSpent },
-        state: { freeRemaining: after.freeRemaining, points: after.points },
-      }),
-    );
+    res.send(resultData({ ok: true, processed: suggestions.length, suggestions }));
   } catch (e) {
     res.send(resultData(null, 500, 'AI 整理失败: ' + e.message));
   }

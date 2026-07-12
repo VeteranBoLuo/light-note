@@ -194,6 +194,9 @@
       if (res?.status === 200) {
         saved.value = true;
         setTimeout(() => window.close(), 1500); // 弹窗由脚本打开,可自动关闭
+      } else if (res?.status === 401 || res?.status === 403) {
+        isLoggedIn.value = false; // 打开时还在、保存时过期 → 回到登录提示
+        message.info(t('quickSave.expired'));
       } else {
         message.info(res?.msg || t('quickSave.failed'));
       }
