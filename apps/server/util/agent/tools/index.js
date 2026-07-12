@@ -26,6 +26,14 @@ import queryNotifications from './query_notifications.js';
 import queryLinkHealth from './query_link_health.js';
 import getRecap from './get_recap.js';
 import queryFeedback from './query_feedback.js';
+import queryWeeklyChallenge from './query_weekly_challenge.js';
+import getLotteryStatus from './get_lottery_status.js';
+import queryMyDevices from './query_my_devices.js';
+import getShopStatus from './get_shop_status.js';
+import getInsights from './get_insights.js';
+import getPointsOverview from './get_points_overview.js';
+import getUserDetail from './get_user_detail.js';
+import getPendingFeedback from './get_pending_feedback.js';
 
 export default [
   searchKnowledgeBase,
@@ -56,4 +64,12 @@ export default [
   queryLinkHealth,
   getRecap,
   queryFeedback,
+  queryWeeklyChallenge,
+  getLotteryStatus,
+  queryMyDevices,
+  getShopStatus,
+  getInsights,
+  getPointsOverview,
+  getUserDetail,
+  getPendingFeedback,
 ];
