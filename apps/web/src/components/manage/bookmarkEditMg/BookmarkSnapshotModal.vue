@@ -16,11 +16,12 @@
       </div>
 
       <div v-if="snap?.summary" class="bsnap-summary">
-        <div class="bsnap-summary-head">🤖 {{ $t('bookmarkMg.aiSummaryTitle') }}</div>
+        <div class="bsnap-summary-head">🤖 {{ $t('bookmarkMg.aiSummaryTitle') }} <span class="bsnap-tag">{{ $t('bookmarkMg.aiSummaryHint') }}</span></div>
         <div class="bsnap-summary-body">{{ snap.summary }}</div>
       </div>
       <div v-if="loading" class="bsnap-empty">…</div>
       <div v-else-if="snap?.content" class="bsnap-content">
+        <div class="bsnap-content-label">📄 {{ $t('bookmarkMg.snapshotFullText') }}</div>
         <div v-if="snap.title" class="bsnap-doc-title">{{ snap.title }}</div>
         <div class="bsnap-text">{{ snap.content }}</div>
       </div>
@@ -142,6 +143,21 @@
     font-weight: 700;
     color: var(--primary-color);
     margin-bottom: 6px;
+  }
+  .bsnap-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+    margin-left: 4px;
+  }
+  .bsnap-content-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--desc-color);
+    margin-bottom: 8px;
   }
   .bsnap-summary,
   .bsnap-content {
