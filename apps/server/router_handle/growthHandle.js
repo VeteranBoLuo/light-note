@@ -5,6 +5,7 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getWeeklyChallenges, claimWeeklyChallenge } from '../util/weeklyChallenge.js';
+import { getRecap } from '../util/recap.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -195,6 +196,17 @@ export const equipTitleHandle = async (req, res) => {
   } catch (error) {
     console.error('佩戴称号失败:', error);
     res.send(resultData(null, 500, '佩戴称号失败: ' + error.message));
+  }
+};
+
+// GET /growth/recap —— 那年今日 + 尘封回顾(旧内容重新推到面前)
+export const getRecapHandle = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    res.send(resultData(await getRecap(userId)));
+  } catch (error) {
+    console.error('获取回顾失败:', error);
+    res.send(resultData(null, 500, '获取回顾失败: ' + error.message));
   }
 };
 

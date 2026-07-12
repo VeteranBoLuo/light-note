@@ -177,6 +177,19 @@ export interface WeeklyData {
   claimableCount?: number;
 }
 
+export interface RecapItem {
+  type: 'bookmark' | 'note';
+  id: string;
+  title: string;
+  url: string | null;
+  time: string;
+}
+
+export interface RecapData {
+  onThisDay: RecapItem[];
+  buried: RecapItem[];
+}
+
 // 模块级单例:头像徽章、成长卡、段位路线共享同一份数据,一次拉取多处复用(不为此建重 store)
 const growth = ref<Growth | null>(null);
 const ranks = ref<Rank[]>([]);
@@ -184,6 +197,7 @@ const dashboard = ref<GrowthDashboard | null>(null);
 const shop = ref<Shop | null>(null);
 const lottery = ref<LotteryStatus | null>(null);
 const weekly = ref<WeeklyData | null>(null);
+const recap = ref<RecapData | null>(null);
 const loading = ref(false);
 const dashboardLoading = ref(false);
 const shopLoading = ref(false);
@@ -199,6 +213,7 @@ export function resetGrowth() {
   shop.value = null;
   lottery.value = null;
   weekly.value = null;
+  recap.value = null;
   loadedOnce = false;
   ownerId = null;
 }
@@ -386,6 +401,17 @@ export function useGrowth() {
     return res;
   }
 
+  // 那年今日 · 智能回顾
+  async function loadRecap() {
+    try {
+      const res = await growthApi.getRecap();
+      if (res?.status === 200 && res.data) recap.value = res.data as RecapData;
+    } catch (err) {
+      console.warn('加载回顾失败:', err);
+    }
+    return recap.value;
+  }
+
   return {
     growth,
     ranks,
@@ -393,6 +419,7 @@ export function useGrowth() {
     shop,
     lottery,
     weekly,
+    recap,
     loading,
     dashboardLoading,
     shopLoading,
@@ -412,5 +439,6 @@ export function useGrowth() {
     claimAchievement,
     loadWeekly,
     claimWeekly,
+    loadRecap,
   };
 }

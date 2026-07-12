@@ -45,6 +45,9 @@ export const drawLottery = (times: number, free = false) => apiBasePost('/api/gr
 // 领取成就奖励
 export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });
 
+// 那年今日 · 智能回顾
+export const getRecap = () => apiBaseGet('/api/growth/recap');
+
 // 每周挑战:进度 + 领取
 export const getWeekly = () => apiBaseGet('/api/growth/weekly');
 export const claimWeekly = (key: string) => apiBasePost('/api/growth/weekly/claim', { key });
@@ -75,6 +78,7 @@ export default {
   getLottery,
   drawLottery,
   claimAchievement,
+  getRecap,
   getWeekly,
   claimWeekly,
   getPointsLog,

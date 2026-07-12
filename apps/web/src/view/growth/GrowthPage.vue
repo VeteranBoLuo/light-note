@@ -15,6 +15,10 @@
         <GrowthCard />
       </section>
 
+      <section v-if="hasRecap" class="growth-panel">
+        <RecapCard />
+      </section>
+
       <div class="growth-row">
         <section v-if="questsEnabled" class="growth-panel growth-panel--flex">
           <DailyQuests :quests="quests" :bonus="questBonus" :claiming="claiming" @claim="onClaim" />
@@ -84,6 +88,7 @@
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
+  import RecapCard from '@/components/growth/RecapCard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -94,7 +99,8 @@
 
   const { t } = useI18n();
   const router = useRouter();
-  const { growth, dashboard, loadDashboard, claimDailyBonus, useProtectCard: apiUseProtectCard, claimAchievement } = useGrowth();
+  const { growth, dashboard, recap, loadDashboard, loadRecap, claimDailyBonus, useProtectCard: apiUseProtectCard, claimAchievement } = useGrowth();
+  const hasRecap = computed(() => !!recap.value && (recap.value.onThisDay.length > 0 || recap.value.buried.length > 0));
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
   const EMPTY_STATS = {
@@ -166,6 +172,7 @@
   onMounted(() => {
     recordOperation({ module: '成长', operation: '查看我的成长' });
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
+    loadRecap(); // 那年今日/尘封回顾(有内容才在页首展示)
   });
 
   const claimingAch = ref<string | null>(null);
