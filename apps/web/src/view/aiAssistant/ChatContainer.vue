@@ -238,6 +238,7 @@
     stopResponse();
     showRecommendation.value = false;
     sessionId = '';
+    longChatHinted.value = false;
     try {
       localStorage.removeItem(CHAT_HISTORY_KEY); // 清空对话同时清掉本地历史
     } catch {
@@ -387,6 +388,7 @@
   };
 
   let sessionId = '';
+  const longChatHinted = ref(false); // 超长对话「新建会话」提示只弹一次(每段会话)
   let activeRequestId = 0; // 请求计数器，防止旧请求的 finally 干扰新请求
   // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
@@ -408,6 +410,18 @@
     if (abortController.value) {
       abortController.value.abort();
       abortController.value = null;
+    }
+
+    // 会话上下文快照:本轮问题「之前」的完整对话(显示多少发多少,保证 AI 记得的=你看得到的)。
+    // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
+    const historyForRequest = messages.value
+      .filter((m) => m.content && (m.role === 'user' || m.role === 'assistant'))
+      .map((m) => ({ role: m.role, content: String(m.content) }));
+    // 对话较长时提醒新建会话(一次性):更快、更省 AI 额度
+    const histChars = historyForRequest.reduce((n, m) => n + m.content.length, 0);
+    if (histChars > 11000 && !longChatHinted.value) {
+      longChatHinted.value = true;
+      message.info('对话较长,新建会话回答更快、更省 AI 额度');
     }
 
     // 添加用户消息
@@ -606,6 +620,7 @@
           enableTranslation: enableTranslation.value,
           translationConfig: translationConfig.value,
           aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
+          history: historyForRequest,
         },
         {
           headers: {

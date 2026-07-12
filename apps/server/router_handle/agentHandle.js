@@ -217,6 +217,7 @@ export async function agentChat(req, res) {
       enableTranslation = false,
       translationConfig = {},
       aiStyle = '',
+      history = [],
     } = req.body;
     stream = req.body.stream ?? false;
     // 回答风格 → temperature(仅作用最终回答);未识别则不设、走默认
@@ -279,15 +280,32 @@ export async function agentChat(req, res) {
       userMessage = `请将以下内容翻译成${targetName}${sourceHint}：\n\n${message}`;
     }
 
-    // 构建 messages 数组:会话历史拼成真正的多轮 user/assistant 消息(而非塞进 system 的 JSON 块),
-    // 模型才真有记忆——能答「我之前问过什么」、能正确处理追问。turns 已在 sessionStore 限长(MAX_TURNS)。
+    // 构建 messages 数组:历史拼成真正的多轮 user/assistant 消息(而非塞进 system 的 JSON 块),模型才真有记忆。
+    // 优先用前端带来的完整对话(显示=发送,一致);按字符预算截「最近」部分兜底防超长/超上下文窗口;
+    // 没带 history(老客户端 / 笔记助手等)则回退服务端 session.turns。
+    const HISTORY_CHAR_BUDGET = 16000; // ≈ 8K token(中文),远低于 DeepSeek 64K,给系统提示/工具/生成留足空间
     /** @type {import('../util/agent/deepseekClient.js').DeepSeekMessage[]} */
-    const historyMessages = (session.turns || [])
-      .flatMap((t) => [
-        { role: 'user', content: t.user },
-        { role: 'assistant', content: t.assistant },
-      ])
-      .filter((m) => m.content);
+    let historyMessages;
+    if (Array.isArray(history) && history.length) {
+      const valid = history.filter(
+        (m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content,
+      );
+      const kept = [];
+      let chars = 0;
+      for (let i = valid.length - 1; i >= 0; i--) {
+        chars += valid[i].content.length;
+        if (chars > HISTORY_CHAR_BUDGET && kept.length) break; // 超预算就丢最老的,始终保留最近
+        kept.unshift({ role: valid[i].role, content: valid[i].content });
+      }
+      historyMessages = kept;
+    } else {
+      historyMessages = (session.turns || [])
+        .flatMap((t) => [
+          { role: 'user', content: t.user },
+          { role: 'assistant', content: t.assistant },
+        ])
+        .filter((m) => m.content);
+    }
     const messages = [
       { role: 'system', content: systemContent },
       ...historyMessages,
