@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="both-center"
-    style="margin-top: -200px; display: flex; flex-direction: column; gap: 30px; align-items: center"
-  >
+  <div class="gh-callback">
     <div class="cube-loader">
       <div class="cube-top"></div>
       <div class="cube-wrapper">
@@ -100,6 +97,16 @@
   }
 </script>
 <style scoped>
+  /* 整页垂直+水平居中(回调页独占视口、无导航) */
+  .gh-callback {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    align-items: center;
+    justify-content: center;
+  }
+
   /* From Uiverse.io by andrew-demchenk0 */
   .cube-loader {
     bottom: 20px;

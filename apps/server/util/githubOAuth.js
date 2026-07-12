@@ -22,24 +22,34 @@ const GITHUB_HOST_IPS = [
   '20.205.243.166',
 ];
 
-// 并发 TCP 探测,返回当下可连通的 IP(过滤掉超时/拒绝的)
+// 并发 TCP 探测,返回当下可连通的 IP。
+// 关键:一旦有 IP 连通,只再等 200ms 收集其余快速可达的 IP 就立即返回,不再傻等被 GFW 丢包的 IP
+// 走完整个 timeout —— 原来用 Promise.all 每次登录都要等最慢的 IP 耗满 3s,是"转半天"里稳定的固定开销。
+// 若所有 IP 都失败,则在全部超时后返回空数组(上层据此抛错)。
 function probeReachableIps(ips, port = 443, timeoutMs = 3000) {
-  return Promise.all(
-    ips.map(
-      (ip) =>
-        new Promise((resolve) => {
-          const sock = net.connect({ host: ip, port });
-          const finish = (ok) => {
-            sock.destroy();
-            resolve(ok ? ip : null);
-          };
-          sock.setTimeout(timeoutMs);
-          sock.once('connect', () => finish(true));
-          sock.once('timeout', () => finish(false));
-          sock.once('error', () => finish(false));
-        }),
-    ),
-  ).then((r) => r.filter(Boolean));
+  return new Promise((resolve) => {
+    const good = [];
+    let pending = ips.length;
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve(good.slice());
+    };
+    ips.forEach((ip) => {
+      const sock = net.connect({ host: ip, port });
+      const finish = (ok) => {
+        sock.destroy();
+        if (ok) good.push(ip);
+        if (ok && good.length === 1) setTimeout(done, 200); // 首个连通后仅再等 200ms 收备用 IP
+        if (--pending === 0) done(); // 全部有结果(含全失败)时兜底返回
+      };
+      sock.setTimeout(timeoutMs);
+      sock.once('connect', () => finish(true));
+      sock.once('timeout', () => finish(false));
+      sock.once('error', () => finish(false));
+    });
+  });
 }
 
 // 通过指定 IP 向 github.com 发 HTTPS 请求(servername/Host 固定 github.com)
