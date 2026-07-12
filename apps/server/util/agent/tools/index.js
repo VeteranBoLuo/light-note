@@ -20,6 +20,12 @@ import writeKnowledgeBase from './write_knowledge_base.js';
 import getUserInfo from './get_user_info.js';
 import createBookmark from './create_bookmark.js';
 import readUrl from './read_url.js';
+import getGrowth from './get_growth.js';
+import queryPointsLog from './query_points_log.js';
+import queryNotifications from './query_notifications.js';
+import queryLinkHealth from './query_link_health.js';
+import getRecap from './get_recap.js';
+import queryFeedback from './query_feedback.js';
 
 export default [
   searchKnowledgeBase,
@@ -44,4 +50,10 @@ export default [
   getUserInfo,
   createBookmark,
   readUrl,
+  getGrowth,
+  queryPointsLog,
+  queryNotifications,
+  queryLinkHealth,
+  getRecap,
+  queryFeedback,
 ];
