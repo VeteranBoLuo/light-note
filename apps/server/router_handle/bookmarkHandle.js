@@ -12,7 +12,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { awardCreate, grantExp, hashRef } from '../util/growth.js';
-import { archiveBookmark, getBookmarkSnapshot } from '../util/snapshot.js';
+import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import { checkBookmarkHealth, getHealthSummary } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
@@ -466,6 +466,20 @@ export const toggleBookmarkTop = async (req, res) => {
     res.send(resultData({ id, isTop: next }));
   } catch (e) {
     res.send(resultData(null, 500, '操作失败: ' + e.message));
+  }
+};
+
+// POST /bookmark/summarize —— AI 基于网页快照正文生成摘要(缓存;force 重新生成)
+export const doSummarizeBookmark = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { id, force } = req.body || {};
+    if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
+    const result = await summarizeBookmark(req.user.id, id, { force: force === true });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('AI 摘要失败:', error);
+    res.send(resultData(null, 500, 'AI 摘要失败: ' + error.message));
   }
 };
 

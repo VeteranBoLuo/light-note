@@ -5,9 +5,19 @@
       <div class="bsnap-bar">
         <span v-if="snap?.update_time" class="bsnap-time">{{ $t('bookmarkMg.snapshotUpdatedAt', { t: fmtTime(snap.update_time) }) }}</span>
         <span v-else class="bsnap-time"></span>
-        <b-button size="small" type="primary" :loading="archiving" :disabled="archiving" @click="archive">
-          {{ archiving ? $t('bookmarkMg.snapshotArchiving') : $t('bookmarkMg.snapshotArchive') }}
-        </b-button>
+        <b-space>
+          <b-button size="small" :loading="summarizing" :disabled="summarizing || !snap?.content" @click="aiSummarize">
+            🤖 {{ summarizing ? $t('bookmarkMg.aiSummarizing') : snap?.summary ? $t('bookmarkMg.aiResummary') : $t('bookmarkMg.aiSummary') }}
+          </b-button>
+          <b-button size="small" type="primary" :loading="archiving" :disabled="archiving" @click="archive">
+            {{ archiving ? $t('bookmarkMg.snapshotArchiving') : $t('bookmarkMg.snapshotArchive') }}
+          </b-button>
+        </b-space>
+      </div>
+
+      <div v-if="snap?.summary" class="bsnap-summary">
+        <div class="bsnap-summary-head">🤖 {{ $t('bookmarkMg.aiSummaryTitle') }}</div>
+        <div class="bsnap-summary-body">{{ snap.summary }}</div>
       </div>
       <div v-if="loading" class="bsnap-empty">…</div>
       <div v-else-if="snap?.content" class="bsnap-content">
@@ -26,6 +36,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
 
   const { t } = useI18n();
   const props = defineProps<{ bookmarkId?: string }>();
@@ -34,6 +45,7 @@
   const snap = ref<any>(null);
   const loading = ref(false);
   const archiving = ref(false);
+  const summarizing = ref(false);
 
   function fmtTime(v: string) {
     const d = new Date(v);
@@ -69,6 +81,22 @@
     }
   }
 
+  async function aiSummarize() {
+    if (!props.bookmarkId || summarizing.value) return;
+    summarizing.value = true;
+    try {
+      const res = await apiBasePost('/api/bookmark/summarize', { id: props.bookmarkId, force: !!snap.value?.summary });
+      if (res?.status === 200 && res.data?.ok) {
+        if (snap.value) snap.value.summary = res.data.summary;
+        else await loadSnap();
+      } else {
+        message.info(res?.data?.msg || t('bookmarkMg.snapshotFail'));
+      }
+    } finally {
+      summarizing.value = false;
+    }
+  }
+
   watch(visible, (v) => {
     if (v) {
       snap.value = null;
@@ -98,6 +126,25 @@
   .bsnap-time {
     font-size: 11.5px;
     color: var(--desc-color);
+  }
+  .bsnap-summary {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
+    border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
+  }
+  .bsnap-summary-head {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 6px;
+  }
+  .bsnap-summary-body {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
   .bsnap-content {
     max-height: 52vh;
