@@ -75,7 +75,8 @@ export async function ensurePointsSchema() {
 // 商店目录(单一事实源)。type: consumable(可反复买) / title(一次性称号)
 // ============================================================================
 export const SHOP_ITEMS = [
-  { id: 'makeup_card', type: 'consumable', name: '补签卡', desc: '补回一天漏签,守护连续签到', cost: 200, effect: 'makeup_card' },
+  // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
+  // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
   { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '今日 AI 额度 +30 万 tokens(当天有效)', cost: 150, effect: 'ai_pack', bonusTokens: 300_000 },
   { id: 'storage_512', type: 'consumable', name: '扩容包 512MB', desc: '云空间永久 +512MB,叠加在等级配额之上', cost: 800, effect: 'storage', storageMb: 512 },
   { id: 'storage_2g', type: 'consumable', name: '扩容包 2GB', desc: '云空间永久 +2GB,大文件党首选', cost: 2500, effect: 'storage', storageMb: 2048 },
@@ -130,6 +131,78 @@ export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
 export async function getStorageBonus(userId) {
   const [rows] = await pool.query('SELECT storage_bonus_mb FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
   return Number(rows[0]?.storage_bonus_mb || 0);
+}
+
+// ============================================================================
+// 积分明细 / 运营(D 批)
+// ============================================================================
+
+// 用户积分流水(分页,新→旧)。reason 原样返回,前端按类型映射文案。
+export async function getPointsLog(userId, { limit = 30, offset = 0 } = {}) {
+  const lim = Math.min(100, Math.max(1, Number(limit) || 30));
+  const off = Math.max(0, Number(offset) || 0); // lim/off 已 clamp 为整数,直接内插避免 LIMIT 占位符类型坑
+  const [rows] = await pool.query(
+    `SELECT delta, reason, ref, create_time FROM points_log WHERE user_id = ? ORDER BY id DESC LIMIT ${lim} OFFSET ${off}`,
+    [userId],
+  );
+  const [[c]] = await pool.query('SELECT COUNT(*) AS c FROM points_log WHERE user_id = ?', [userId]);
+  return { rows, total: Number(c.c || 0), limit: lim, offset: off };
+}
+
+// 经济总览(root 运营):发放/消耗/存量、按来源分布、抽奖返还率、持有人 Top。
+export async function getPointsOverview() {
+  const [[issued]] = await pool.query('SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0');
+  const [[spent]] = await pool.query('SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0');
+  const [[outstanding]] = await pool.query('SELECT COALESCE(SUM(points),0) AS s FROM user_growth');
+  const [byReason] = await pool.query('SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC');
+  const [[lotCost]] = await pool.query("SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason='lottery_cost'");
+  const [[lotWin]] = await pool.query("SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason='lottery_win'");
+  const [[lotDraws]] = await pool.query('SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth');
+  const [[holders]] = await pool.query('SELECT COUNT(*) AS c FROM user_growth WHERE points > 0');
+  const [top] = await pool.query('SELECT user_id, points FROM user_growth WHERE points > 0 ORDER BY points DESC LIMIT 10');
+  const cost = Number(lotCost.s);
+  return {
+    issued: Number(issued.s),
+    spent: Number(spent.s),
+    outstanding: Number(outstanding.s),
+    byReason: byReason.map((r) => ({ reason: r.reason, delta: Number(r.delta), cnt: Number(r.cnt) })),
+    lottery: { cost, winPoints: Number(lotWin.s), draws: Number(lotDraws.s), payoutRatio: cost > 0 ? +((Number(lotWin.s) / cost) * 100).toFixed(1) : 0 },
+    holders: Number(holders.c),
+    top: top.map((r) => ({ userId: r.user_id, points: Number(r.points) })),
+  };
+}
+
+// 运营手动发放/扣减(root):points 可正可负(下限 0);storageMb 追加;cards 增减(封顶 2)。
+export async function adminGrantPoints(userId, { points = 0, cards = 0, storageMb = 0, note = '' } = {}) {
+  const [rows] = await pool.query('SELECT 1 FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  if (!rows.length) await pool.query('INSERT INTO user_growth (user_id) VALUES (?)', [userId]);
+  const ref = ('admin:' + (note || '')).slice(0, 64);
+  const p = Math.trunc(Number(points) || 0);
+  const s = Math.trunc(Number(storageMb) || 0);
+  const c = Math.trunc(Number(cards) || 0);
+  if (p) {
+    await pool.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, p, 'admin', ref]);
+    await pool.query('UPDATE user_growth SET points = GREATEST(0, points + ?) WHERE user_id = ?', [p, userId]);
+  }
+  if (s) {
+    await pool.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, 'storage:admin', ?)", [userId, ref]);
+    await pool.query('UPDATE user_growth SET storage_bonus_mb = GREATEST(0, storage_bonus_mb + ?) WHERE user_id = ?', [s, userId]);
+  }
+  if (c) {
+    await pool.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, GREATEST(0, streak_protect_cards + ?)) WHERE user_id = ?', [c, userId]);
+  }
+  const [[g]] = await pool.query('SELECT points, storage_bonus_mb, streak_protect_cards FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  return { ok: true, points: Number(g.points), storageBonusMb: Number(g.storage_bonus_mb), cards: Number(g.streak_protect_cards) };
+}
+
+// 单账号积分详情(root 查账):余额 + 最近 30 条流水。
+export async function getUserPointsDetail(userId) {
+  const [[g]] = await pool.query('SELECT points, storage_bonus_mb, streak_protect_cards, lottery_count FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  const { rows } = await getPointsLog(userId, { limit: 30 });
+  return {
+    balance: g ? { points: Number(g.points), storageBonusMb: Number(g.storage_bonus_mb), cards: Number(g.streak_protect_cards), lotteryCount: Number(g.lottery_count) } : null,
+    log: rows,
+  };
 }
 
 export async function getOwnedCosmetics(userId) {

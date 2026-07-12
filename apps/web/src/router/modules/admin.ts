@@ -58,6 +58,10 @@ const adminRouter: RouteRecordRaw[] = [
         path: 'logExclude',
         component: () => import('@/view/admin/components/logExclude/LogExclude.vue'),
       },
+      {
+        path: 'pointsOps',
+        component: () => import('@/view/admin/components/pointsOps/PointsOps.vue'),
+      },
     ],
   },
   {

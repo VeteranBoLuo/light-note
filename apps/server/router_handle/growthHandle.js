@@ -2,7 +2,7 @@ import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, claimAchievement, 
 import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle } from '../util/points.js';
+import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
@@ -194,6 +194,58 @@ export const equipTitleHandle = async (req, res) => {
   } catch (error) {
     console.error('佩戴称号失败:', error);
     res.send(resultData(null, 500, '佩戴称号失败: ' + error.message));
+  }
+};
+
+// GET /growth/points/log —— 当前用户积分流水(分页)
+export const getMyPointsLog = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const limit = Number(req.query?.limit) || 30;
+    const offset = Number(req.query?.offset) || 0;
+    const data = await getPointsLog(req.user.id, { limit, offset });
+    res.send(resultData(data));
+  } catch (error) {
+    console.error('获取积分明细失败:', error);
+    res.send(resultData(null, 500, '获取积分明细失败: ' + error.message));
+  }
+};
+
+// GET /growth/admin/pointsOverview —— 积分经济总览(root 运营)
+export const getPointsOverviewForAdmin = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  try {
+    res.send(resultData(await getPointsOverview()));
+  } catch (error) {
+    console.error('获取积分总览失败:', error);
+    res.send(resultData(null, 500, '获取积分总览失败: ' + error.message));
+  }
+};
+
+// POST /growth/admin/userPoints —— 查目标用户积分详情(root)
+export const getUserPointsForAdmin = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  try {
+    const { userId } = req.body || {};
+    if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
+    res.send(resultData(await getUserPointsDetail(userId)));
+  } catch (error) {
+    console.error('查询用户积分失败:', error);
+    res.send(resultData(null, 500, '查询失败: ' + error.message));
+  }
+};
+
+// POST /growth/admin/grantPoints —— 手动发放/扣减积分/存储/补签卡(root)
+export const doAdminGrantPoints = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  try {
+    const { userId, points, cards, storageMb, note } = req.body || {};
+    if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
+    const result = await adminGrantPoints(userId, { points, cards, storageMb, note });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('发放积分失败:', error);
+    res.send(resultData(null, 500, '发放失败: ' + error.message));
   }
 };
 

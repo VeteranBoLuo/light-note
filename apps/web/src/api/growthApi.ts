@@ -45,6 +45,15 @@ export const drawLottery = (times: number, free = false) => apiBasePost('/api/gr
 // 领取成就奖励
 export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });
 
+// 积分明细(分页)
+export const getPointsLog = (limit = 30, offset = 0) => apiBaseGet(`/api/growth/points/log?limit=${limit}&offset=${offset}`);
+
+// —— root 积分运营 ——
+export const adminPointsOverview = () => apiBasePost('/api/growth/admin/pointsOverview');
+export const adminUserPoints = (userId: string) => apiBasePost('/api/growth/admin/userPoints', { userId });
+export const adminGrantPoints = (payload: { userId: string; points?: number; cards?: number; storageMb?: number; note?: string }) =>
+  apiBasePost('/api/growth/admin/grantPoints', payload);
+
 export default {
   getMyGrowth,
   checkin,
@@ -62,4 +71,8 @@ export default {
   getLottery,
   drawLottery,
   claimAchievement,
+  getPointsLog,
+  adminPointsOverview,
+  adminUserPoints,
+  adminGrantPoints,
 };

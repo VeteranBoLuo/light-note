@@ -79,6 +79,11 @@
       title: '日志白名单',
       icon: icon.userCenter.log,
     },
+    {
+      id: 'pointsOps',
+      title: '积分运营',
+      icon: icon.userCenter.sql,
+    },
   ]);
 
   function nodeClick(menu: any) {

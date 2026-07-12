@@ -18,6 +18,10 @@ router.post('/equipTitle', growthHandle.equipTitleHandle);
 router.get('/lottery', growthHandle.getLottery);
 router.post('/lottery/draw', growthHandle.doDrawLottery);
 router.post('/achievement/claim', growthHandle.doClaimAchievement);
+router.get('/points/log', growthHandle.getMyPointsLog);
+router.post('/admin/pointsOverview', growthHandle.getPointsOverviewForAdmin);
+router.post('/admin/userPoints', growthHandle.getUserPointsForAdmin);
+router.post('/admin/grantPoints', growthHandle.doAdminGrantPoints);
 router.post('/notices/read', growthHandle.readNotices);
 
 export default router;

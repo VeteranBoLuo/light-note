@@ -8,8 +8,11 @@
       <div class="ps-balance">
         <span class="ps-balance-label">{{ t('growth.myPoints') }}</span>
         <span class="ps-balance-num">🪙 {{ (shop?.points || 0).toLocaleString('en-US') }}</span>
+        <button v-if="!shop?.isVisitor" class="ps-log-link" @click="logVisible = true">{{ t('growth.pointsLogEntry') }} ›</button>
       </div>
     </div>
+
+    <PointsLogModal v-model:visible="logVisible" />
 
     <div class="ps-earn">💡 {{ t('growth.shopEarnHint') }}</div>
     <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
@@ -91,6 +94,7 @@
   import { useGrowth, type ShopItem } from '@/composables/useGrowth.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import PointsLogModal from '@/components/growth/PointsLogModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
 
@@ -143,6 +147,7 @@
   const equippingId = ref<string | null>(null);
   const confirmVisible = ref(false);
   const pending = ref<ShopItem | null>(null);
+  const logVisible = ref(false);
 
   function askBuy(it: ShopItem) {
     if (!it.canBuy) return;
@@ -242,6 +247,18 @@
     font-weight: 800;
     color: #d97706;
     font-variant-numeric: tabular-nums;
+  }
+  .ps-log-link {
+    margin-top: 2px;
+    background: transparent;
+    border: none;
+    color: var(--desc-color);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .ps-log-link:hover {
+    color: var(--primary-color);
   }
   .ps-earn {
     font-size: 12px;
