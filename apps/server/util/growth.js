@@ -618,6 +618,14 @@ export async function checkin(userId, { userRole = null } = {}) {
       await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + 1) WHERE user_id = ?', [userId]);
     }
     const grant = await grantExp(userId, 'checkin', { day: today, amount, meta: { streak }, userRole }, conn);
+    // root 不经 grantExp 写入 events(第 94 行对 root return),手动记一条签到事件供日历/统计/成就使用
+    if (userRole === 'root' && grant.skipped === 'root') {
+      await conn.query(
+        `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
+         VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)`,
+        [userId, today, JSON.stringify({ streak })],
+      );
+    }
     await conn.commit();
 
     return {
