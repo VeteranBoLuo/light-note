@@ -541,7 +541,7 @@
     }, NOTICE_POLLING_INTERVAL);
   }
 
-  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role', 'landing', 'banned'];
+  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role', 'landing', 'banned', 'quickSave'];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {

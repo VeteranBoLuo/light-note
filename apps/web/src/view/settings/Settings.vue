@@ -397,6 +397,26 @@
           </div>
         </section>
 
+        <!-- 快速收藏(bookmarklet) -->
+        <section class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--appearance">🔖</span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.quickSaveTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.quickSaveDesc') }}</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.quickSaveDrag') }}</span>
+                <span class="field-desc">{{ t('settings.quickSaveHint') }}</span>
+              </div>
+              <a ref="bmRef" class="qs-bookmarklet" draggable="true" @click.prevent="onBmClick">🔖 {{ t('settings.quickSaveBtn') }}</a>
+            </div>
+          </div>
+        </section>
+
         <p class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
@@ -419,6 +439,20 @@
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+
+  // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
+  const bmRef = ref<HTMLAnchorElement | null>(null);
+  function onBmClick() {
+    message.info(t('settings.quickSaveDragTip'));
+  }
+  onMounted(() => {
+    const o = window.location.origin;
+    const code =
+      "javascript:(function(){var o='" +
+      o +
+      "';var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title||''),s='';try{s=encodeURIComponent((''+(window.getSelection?window.getSelection():'')).slice(0,500))}catch(e){}window.open(o+'/quick-save?u='+u+'&t='+t+'&d='+s,'ln_qs','width=480,height=680')})();";
+    if (bmRef.value) bmRef.value.setAttribute('href', code);
+  });
 
   // 选项 label 必须用 computed:语言即时切换(不再整页刷新)后,顶层一次性求值的 t() 不会更新
   const themeOpts = computed(() => [
@@ -720,6 +754,26 @@
     text-align: center;
     font-size: 12px;
     color: var(--desc-color);
+  }
+
+  .qs-bookmarklet {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 70%, #000));
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: grab;
+    user-select: none;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--primary-color) 30%, transparent);
+    white-space: nowrap;
+  }
+  .qs-bookmarklet:active {
+    cursor: grabbing;
   }
 
   @media (max-width: 560px) {

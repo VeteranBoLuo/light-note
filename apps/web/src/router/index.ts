@@ -71,6 +71,12 @@ const routes: RouteRecordRaw[] = [
     name: 'banned',
     component: () => import('@/view/banned/BannedAppeal.vue'),
   },
+  {
+    // 一键收藏落地页(bookmarklet 弹窗打开):独立无导航壳,自己处理登录态
+    path: '/quick-save',
+    name: 'quickSave',
+    component: () => import('@/view/quickSave/QuickSave.vue'),
+  },
   ...statusRouter,
   ...phoneRouter,
   {
