@@ -1,5 +1,5 @@
 <template>
-  <a-dropdown :trigger="['click']" v-model:open="filterVisible" placement="bottomRight">
+  <BPopover v-model:open="filterVisible" trigger="click" placement="bottom-right">
     <b-button
       class="noteType-select"
       :style="{
@@ -11,7 +11,7 @@
       <div class="text-hidden" style="max-width: 100px"> {{ viewNoteFilter }}</div>
       <svg-icon :src="icon.arrow_left" :style="{ rotate: filterVisible ? '-90deg' : '90deg' }" />
     </b-button>
-    <template #overlay>
+    <template #content>
       <div class="filter-container">
         <div class="fixed-section">
           <div class="filter-header">
@@ -52,7 +52,7 @@
         </div>
       </div>
     </template>
-  </a-dropdown>
+  </BPopover>
 </template>
 
 <script lang="ts" setup>
@@ -63,6 +63,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { computed, ref } from 'vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import router from '@/router';
@@ -122,15 +123,14 @@
     }
   }
   .filter-container {
+    /* 背景/圆角/阴影由 BPopover 面板统一提供,这里只管尺寸与布局,避免双重卡片 */
     width: 200px;
     max-height: 300px;
     padding: 5px;
-    background: var(--menu-container-bg-color);
-    box-shadow: 1px 1px 5px #4d5264;
-    border-radius: 8px;
     display: flex;
     flex-direction: column;
     gap: 0;
+    box-sizing: border-box;
   }
   .fixed-section {
     flex-shrink: 0;

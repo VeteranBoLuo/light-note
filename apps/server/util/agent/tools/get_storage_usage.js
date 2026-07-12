@@ -1,8 +1,9 @@
 import pool from '../../../db/index.js';
+import { FILE_CATEGORY_CASE, breakdownFromRows } from '../fileCategory.js';
 
 export default {
   name: 'get_storage_usage',
-  description: '查询当前用户的云空间存储用量，返回正常文件数量和占用空间，并在有回收站文件时附带回收站数量、大小及合计。不支持按时间筛选。',
+  description: '查询当前用户的云空间存储用量：文件总数、占用空间、各类型(图片/文档/视频/音频/压缩包/其他)数量分布,以及回收站情况。回答"云空间有多少文件/各类文件多少"用它。',
   parameters: {
     type: 'object',
     properties: {
@@ -11,7 +12,7 @@ export default {
   },
   requireRoot: false,
   async execute(args, ctx) {
-    const [[active], [trash]] = await Promise.all([
+    const [[active], [trash], [bdRows]] = await Promise.all([
       pool.query(
         `SELECT COUNT(*) as fileCount, COALESCE(SUM(file_size), 0) as totalSize FROM files WHERE create_by = ? AND del_flag = 0`,
         [ctx.userId],
@@ -20,12 +21,14 @@ export default {
         `SELECT COUNT(*) as fileCount, COALESCE(SUM(file_size), 0) as totalSize FROM files WHERE create_by = ? AND del_flag = 1`,
         [ctx.userId],
       ),
+      pool.query(`SELECT ${FILE_CATEGORY_CASE} AS category, COUNT(*) AS c FROM files WHERE create_by = ? AND del_flag = 0 GROUP BY category`, [ctx.userId]),
     ]);
     return {
       fileCount: Number(active[0].fileCount),
       totalSize: Number(active[0].totalSize),
       trashFileCount: Number(trash[0].fileCount || 0),
       trashSize: Number(trash[0].totalSize || 0),
+      typeBreakdown: breakdownFromRows(bdRows).map,
     };
   },
   transform(raw) {
@@ -37,8 +40,10 @@ export default {
       return (b / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
     };
     let result = `云空间：${raw.fileCount} 个文件，已用 ${formatSize(raw.totalSize)}`;
+    const { text } = breakdownFromRows(Object.entries(raw?.typeBreakdown || {}).map(([category, c]) => ({ category, c })));
+    if (text) result += `\n各类型分布：${text}`;
     if (raw.trashFileCount > 0) {
-      result += `（回收站还有 ${raw.trashFileCount} 个文件，${formatSize(raw.trashSize)}，合计 ${formatSize(raw.totalSize + raw.trashSize)}）`;
+      result += `\n（回收站还有 ${raw.trashFileCount} 个文件，${formatSize(raw.trashSize)}，合计 ${formatSize(raw.totalSize + raw.trashSize)}）`;
     }
     return result;
   },

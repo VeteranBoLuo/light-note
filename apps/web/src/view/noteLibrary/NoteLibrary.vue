@@ -49,6 +49,7 @@
               </template>
             </b-input>
           </div>
+          <b-button style="border-radius: 20px" @click="aiOrgVisible = true">🤖 {{ $t('bookmarkMg.aiOrganizeBtn') }}</b-button>
           <b-button
             type="primary"
             style="border-radius: 20px"
@@ -186,6 +187,9 @@
     :sections="typePickerSections"
     :note="$t('note.pickEditorTip')"
   />
+
+  <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
+  <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
 </div>
 </template>
 
@@ -199,6 +203,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
+  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
@@ -219,6 +224,7 @@
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
   const showTypePicker = ref(false);
+  const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
   const typePickerSections = computed(() => [
     {
       key: 'type',

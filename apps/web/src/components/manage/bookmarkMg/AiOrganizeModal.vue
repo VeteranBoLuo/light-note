@@ -3,14 +3,6 @@
     <div class="aio">
       <!-- 确认额度 -->
       <template v-if="step === 'confirm'">
-        <div class="aio-seg">
-          <button type="button" class="aio-seg-btn" :class="{ active: resourceType === 'bookmark' }" @click="switchType('bookmark')">
-            {{ $t('bookmarkMg.aiOrganizeBookmarks') }}
-          </button>
-          <button type="button" class="aio-seg-btn" :class="{ active: resourceType === 'note' }" @click="switchType('note')">
-            {{ $t('bookmarkMg.aiOrganizeNotes') }}
-          </button>
-        </div>
         <p class="aio-hint">{{ resourceType === 'note' ? $t('bookmarkMg.aiOrganizeIntroNote') : $t('bookmarkMg.aiOrganizeIntro') }}</p>
         <div v-if="quoteLoading" class="aio-center aio-muted">…</div>
         <template v-else-if="quote">
@@ -105,13 +97,6 @@
   const emit = defineEmits<{ (e: 'applied'): void }>();
 
   const resourceType = ref<'bookmark' | 'note'>('bookmark');
-  function switchType(t: 'bookmark' | 'note') {
-    if (t === resourceType.value) return;
-    resourceType.value = t;
-    quote.value = null;
-    suggestions.value = [];
-    loadQuote();
-  }
 
   type Sug = {
     id: string;
@@ -246,29 +231,6 @@
     font-size: 13px;
     line-height: 1.6;
     color: var(--desc-color);
-  }
-  .aio-seg {
-    display: inline-flex;
-    background: var(--bl-input-noBorder-bg-color, rgba(0, 0, 0, 0.05));
-    border-radius: 8px;
-    padding: 3px;
-    margin-bottom: 12px;
-  }
-  .aio-seg-btn {
-    border: 0;
-    background: transparent;
-    color: var(--desc-color);
-    padding: 5px 18px;
-    font-size: 13px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .aio-seg-btn.active {
-    background: var(--menu-body-bg-color, #fff);
-    color: var(--text-color);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    font-weight: 600;
   }
   .aio-muted {
     color: var(--desc-color);

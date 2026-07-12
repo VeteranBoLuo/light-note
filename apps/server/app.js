@@ -12,6 +12,7 @@ import { ensurePointsSchema } from './util/points.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
+import { ensureTodoTable } from './util/todo.js';
 import rateLimit from 'express-rate-limit';
 
 import dotenv from 'dotenv';
@@ -68,6 +69,7 @@ initLogExclude().catch((err) => console.error('日志白名单初始化失败:',
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败:', err.message));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败:', err.message));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败:', err.message));
+ensureTodoTable().catch((err) => console.error('待办表初始化失败:', err.message));
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {
