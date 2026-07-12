@@ -1,9 +1,9 @@
 import { RouteRecordRaw } from 'vue-router';
-import { RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 
 const trashRouter: RouteRecordRaw = {
   meta: {
-    roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+    roles: ALL_ROLES,
   },
   path: '/trash',
   name: 'trash',

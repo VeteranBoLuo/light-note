@@ -8,7 +8,7 @@ import adminRouter from '@/router/modules/admin';
 import manageRouter from '@/router/modules/manage.ts';
 import phoneRouter from '@/router/modules/phone';
 import noteLibraryRouter from '@/router/modules/noteLibrary.ts';
-import { RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
@@ -24,7 +24,7 @@ import { getDesktopHomePath } from '@/utils/preferences.ts';
 const routes: RouteRecordRaw[] = [
   {
     meta: {
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/',
     name: '/',
@@ -54,7 +54,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     meta: {
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/personCenter',
     name: 'personCenter',
@@ -75,7 +75,7 @@ const routes: RouteRecordRaw[] = [
   ...phoneRouter,
   {
     meta: {
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/auth/callback',
     name: 'githubCallBack',

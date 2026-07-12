@@ -31,9 +31,11 @@ export enum RoleEnum {
 
   Root = 'root',
 
-  ADMIN = 'admin', // 遗留值,存量数据仍有;阶段 D 迁移后此值不再分配,但枚举保留(路由数组仍引用)
-
   USER = 'user', // 普通注册用户(原 admin 语义)
 
   TEST = 'test', // 测试账号:权限同 user,日志/统计中作为内部账号过滤
 }
+
+// 所有角色都可访问的普通页面(游客可只读预览):路由白名单统一引用此常量,替代逐一枚举 [Root, ADMIN, VISITOR]。
+// 以后新增角色只需改这里一处;守卫仍以「是否含 VISITOR」判定公开页。
+export const ALL_ROLES = [RoleEnum.Root, RoleEnum.USER, RoleEnum.TEST, RoleEnum.VISITOR];

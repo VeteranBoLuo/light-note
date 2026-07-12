@@ -1,12 +1,12 @@
 import { RouteRecordRaw } from 'vue-router';
-import { RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 
 const searchRouter: RouteRecordRaw = {
   meta: {
     title: '资源中心',
     keepAlive: true,
     requireAuth: true,
-    roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+    roles: ALL_ROLES,
   },
   path: '/search',
   name: 'searchCenter',

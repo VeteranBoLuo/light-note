@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 
 const commonRouter: RouteRecordRaw[] = [
   {
@@ -7,7 +7,7 @@ const commonRouter: RouteRecordRaw[] = [
       title: '帮助文档',
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/help',
     name: 'help',
@@ -17,7 +17,7 @@ const commonRouter: RouteRecordRaw[] = [
     meta: {
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/updateLogs',
     name: 'updateLogs',
@@ -28,7 +28,7 @@ const commonRouter: RouteRecordRaw[] = [
       title: '设置',
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/settings',
     name: 'settings',
@@ -39,7 +39,7 @@ const commonRouter: RouteRecordRaw[] = [
       title: '我的成长',
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/growth',
     name: 'growth',

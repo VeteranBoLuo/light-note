@@ -1,12 +1,12 @@
 import { RouteRecordRaw } from 'vue-router';
-import { RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 
 const phoneRouter: RouteRecordRaw[] = [
   {
     meta: {
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/ptrash',
     name: 'ptrash',
@@ -16,7 +16,7 @@ const phoneRouter: RouteRecordRaw[] = [
     meta: {
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/opinions',
     name: 'opinions',
@@ -26,7 +26,7 @@ const phoneRouter: RouteRecordRaw[] = [
     meta: {
       keepAlive: true,
       requireAuth: true,
-      roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+      roles: ALL_ROLES,
     },
     path: '/myInfo',
     name: 'myInfo',

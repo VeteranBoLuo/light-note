@@ -1,5 +1,5 @@
 import { RouteRecordRaw } from 'vue-router';
-import { RoleEnum } from '@/config/bookmarkCfg.ts';
+import { ALL_ROLES } from '@/config/bookmarkCfg.ts';
 
 const mainPageRouter: RouteRecordRaw = {
   path: 'home',
@@ -7,7 +7,7 @@ const mainPageRouter: RouteRecordRaw = {
     title: '书签',
     keepAlive: true,
     requireAuth: true,
-    roles: [RoleEnum.Root, RoleEnum.ADMIN, RoleEnum.VISITOR],
+    roles: ALL_ROLES,
   },
   children: [
     {
