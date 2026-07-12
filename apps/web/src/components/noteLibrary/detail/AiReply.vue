@@ -134,18 +134,19 @@
         :empty-text="t('ai.reply.emptyMessage')"
       />
     </div>
-  </div>
 
-  <!-- 放大预览:输出区太窄小时,一键弹大窗舒服阅读,并可直接应用 -->
-  <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
-    <div class="ai-preview">
-      <div class="ai-preview-body" v-html="outputFull"></div>
-      <div class="ai-preview-actions">
-        <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
-        <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
+    <!-- 放大预览:输出区太窄小时,一键弹大窗舒服阅读,并可直接应用。
+         必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
+    <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
+      <div class="ai-preview">
+        <div class="ai-preview-body" v-html="outputFull"></div>
+        <div class="ai-preview-actions">
+          <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
+          <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
+        </div>
       </div>
-    </div>
-  </BModal>
+    </BModal>
+  </div>
 </template>
 
 <script lang="ts" setup>
