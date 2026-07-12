@@ -38,6 +38,10 @@
         />
       </section>
 
+      <section v-if="streakMilestones.length" class="growth-panel">
+        <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
+      </section>
+
       <section class="growth-panel">
         <AchievementWall
           :achievements="achievements"
@@ -65,6 +69,7 @@
   import AchievementWall from '@/components/growth/AchievementWall.vue';
   import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
   import SigninCalendar from '@/components/growth/SigninCalendar.vue';
+  import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   import PointsShop from '@/components/growth/PointsShop.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -99,6 +104,8 @@
   // 仅在后端明确 questsEnabled===false(满级/root)时隐藏任务卡;游客/加载中默认展示
   const questsEnabled = computed(() => dashboard.value?.questsEnabled !== false);
   const questBonus = computed(() => dashboard.value?.questBonus || EMPTY_BONUS);
+  const streakMilestones = computed(() => dashboard.value?.streakMilestones || []);
+  const currentStreak = computed(() => dashboard.value?.currentStreak ?? growth.value?.streak ?? 0);
 
   const claiming = ref(false);
   async function onClaim() {

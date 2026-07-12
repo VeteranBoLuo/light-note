@@ -11,7 +11,7 @@
  */
 import pool from '../db/index.js';
 import crypto from 'crypto';
-import { earnPoints, titleName } from './points.js';
+import { earnPoints, earnStorage, titleName } from './points.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(方案A,前期平缓、后期陡增,凸显高等级价值):Lv1 0.5G → Lv10 5G → Lv15 20G,
@@ -39,6 +39,15 @@ export const MAX_LEVEL = 15;
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
 const DAILY_QUEST_BONUS = 15; // 今日任务全部完成的一次性奖励(每日一次;计入并受日顶 200 约束,不超上限)
 const DAILY_QUEST_POINTS = 30; // 今日任务全部完成额外发的积分(消费货币,不受经验日顶约束)
+
+// 连签里程碑大奖:累计连续签到命中当天即发(积分/永久存储/补签卡),按 ref=days 一次性幂等。
+// 把签到从「+5 经验」升级为值得长期坚持的习惯养成:越久回报越丰厚(存储是最实在的诱惑)。
+export const STREAK_MILESTONES = [
+  { days: 7, points: 50 },
+  { days: 30, points: 300, storageMb: 512, cards: 1 },
+  { days: 100, points: 1000, storageMb: 2048 },
+  { days: 365, points: 5000, storageMb: 5120 },
+];
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
 // 连续加成:第 N 天 +min(N,5),第 5 天起固定 +5 → 单日签到 ≤ 10
@@ -249,9 +258,10 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let canUseProtectCard = false;
   let points = 0;
   let equippedTitle = null;
+  let storageBonus = 0;
   if (userId && userId !== 'visitor') {
     const [rows] = await pool.query(
-      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title FROM user_growth WHERE user_id = ?',
+      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, storage_bonus_mb FROM user_growth WHERE user_id = ?',
       [userId],
     );
     if (rows[0]) {
@@ -262,6 +272,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
       protectCards = Number(rows[0].streak_protect_cards || 0);
       points = Number(rows[0].points || 0);
       equippedTitle = rows[0].equipped_title || null;
+      storageBonus = Number(rows[0].storage_bonus_mb || 0);
     }
     // 补签判定:有卡且昨天没有签到记录(不依赖 lastCheckin,今天签到了昨天漏签也能补)
     if (protectCards > 0) {
@@ -299,7 +310,8 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     exp,
     level,
     name: rank.name,
-    spaceMb: rank.spaceMb,
+    spaceMb: rank.spaceMb + storageBonus, // 段位基础(root 已是满级 rank) + 积分永久扩容
+    spaceBonusMb: storageBonus, // 其中积分兑换的扩容部分(前端可单独标注「已扩容 +X」)
     aiTokenDaily: rank.aiTokenDaily,
     trashDays: rank.trashDays,
     streak,
@@ -523,6 +535,16 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     claimable: questsEnabled && allQuestsDone && !bonusClaimed,
   };
 
+  // 连签里程碑阶梯(静态奖励表 + 按当前连签标注是否达成),供成长页展示「坚持到 X 天可得 Y」
+  const curStreak = Number(growth.streak || 0);
+  const streakMilestones = STREAK_MILESTONES.map((m) => ({
+    days: m.days,
+    points: m.points,
+    storageMb: m.storageMb || 0,
+    cards: m.cards || 0,
+    reached: curStreak >= m.days,
+  }));
+
   return {
     stats,
     achievements,
@@ -532,6 +554,8 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     questsEnabled,
     questBonus,
     timeline,
+    streakMilestones,
+    currentStreak: curStreak,
   };
 }
 
@@ -577,13 +601,18 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
  * 供文件上传配额校验按等级下发,替代原先"非 root 一律 500MB"。
  */
 export async function getUserSpaceMb(userId, userRole = null) {
-  if (userRole === 'root') return RANKS[MAX_LEVEL - 1].spaceMb;
+  // root 视为满级;积分兑换的永久扩容对所有人(含 root)叠加
+  let bonus = 0;
   let exp = 0;
   if (userId && userId !== 'visitor') {
-    const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
-    if (rows[0]) exp = Number(rows[0].exp || 0);
+    const [rows] = await pool.query('SELECT exp, storage_bonus_mb FROM user_growth WHERE user_id = ?', [userId]);
+    if (rows[0]) {
+      exp = Number(rows[0].exp || 0);
+      bonus = Number(rows[0].storage_bonus_mb || 0);
+    }
   }
-  return rankOf(levelForExp(exp)).spaceMb;
+  const base = userRole === 'root' ? RANKS[MAX_LEVEL - 1].spaceMb : rankOf(levelForExp(exp)).spaceMb;
+  return base + bonus;
 }
 
 // 标记升级通知已读(用户查看成长页后调用):把"已知晓等级"抬到当前等级
@@ -641,6 +670,20 @@ export async function checkin(userId, { userRole = null } = {}) {
     // 签到额外发积分(消费货币):基础 20 + 连签加成(≤10),按天幂等,与 EXP 同事务落库
     const checkinPoints = 20 + Math.min(streak, 10);
     const gotCheckinPoints = await earnPoints(userId, checkinPoints, 'checkin', today, conn);
+
+    // 连签里程碑大奖:命中当天(streak 恰好==里程碑天数)发积分/存储/卡,按 ref=days 一次性幂等
+    let milestone = null;
+    const ms = STREAK_MILESTONES.find((m) => m.days === streak);
+    if (ms) {
+      const firstHit = await earnPoints(userId, ms.points, 'streak_milestone', String(ms.days), conn);
+      if (firstHit) {
+        if (ms.storageMb) await earnStorage(userId, ms.storageMb, 'streak_milestone', String(ms.days), conn);
+        if (ms.cards) {
+          await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + ?) WHERE user_id = ?', [ms.cards, userId]);
+        }
+        milestone = { days: ms.days, points: ms.points, storageMb: ms.storageMb || 0, cards: ms.cards || 0 };
+      }
+    }
     await conn.commit();
 
     return {
@@ -649,6 +692,7 @@ export async function checkin(userId, { userRole = null } = {}) {
       streak,
       expGained: grant.granted || 0,
       pointsEarned: gotCheckinPoints ? checkinPoints : 0,
+      milestone, // 命中连签里程碑时的大奖详情(供前端庆祝),否则 null
       leveledUp: !!grant.leveledUp,
       growth: await getGrowth(userId, { userRole }),
     };

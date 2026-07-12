@@ -30,6 +30,7 @@
       <div class="gc-perk">
         <span class="gc-perk-label">{{ t('growth.space') }}</span>
         <b class="gc-perk-val">{{ spaceLabel }}</b>
+        <span v-if="(g.spaceBonusMb || 0) > 0" class="gc-perk-bonus">{{ t('growth.spaceBonusTag', { n: bonusSpaceLabel }) }}</span>
       </div>
       <div class="gc-perk">
         <span class="gc-perk-label">{{ t('growth.aiQuota') }}</span>
@@ -119,10 +120,9 @@
   // 满级时用数据统计摘要替代「怎么获取经验」;数据取自成长页已加载的共享看板(useGrowth 单例)
   const stats = computed(() => dashboard.value?.stats || null);
 
-  const spaceLabel = computed(() => {
-    const mb = g.value?.spaceMb || 0;
-    return mb >= 1024 ? `${+(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
-  });
+  const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)} GB` : `${mb} MB`);
+  const spaceLabel = computed(() => fmtMb(g.value?.spaceMb || 0));
+  const bonusSpaceLabel = computed(() => fmtMb(g.value?.spaceBonusMb || 0)); // 已扩容部分,单独标注
   const tokenLabel = computed(() => (g.value?.aiTokenDaily || 0).toLocaleString('en-US'));
   // 今日经验进度百分比(0-100)
   const dailyPercent = computed(() => {
@@ -151,6 +151,18 @@
             lvUp.value = { level: res.data.growth.level, name: res.data.growth.name }; // 触发升级庆祝动画
             markRead(); // 签到升级当场已看动画 → 立即标记已读,避免刷新页面重复弹
             recordOperation({ module: '成长', operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}` });
+          }
+          // 连签里程碑大奖:额外弹一条庆祝并记录(奖励含积分/永久存储/补签卡)
+          if (res.data.milestone) {
+            const m = res.data.milestone;
+            const parts = [`+${m.points} ${t('growth.points')}`];
+            if (m.storageMb) parts.push(`+${m.storageMb}MB`);
+            if (m.cards) parts.push(`+${m.cards} ${t('growth.milestoneCardUnit')}`);
+            message.success(t('growth.streakMilestoneToast', { days: m.days, reward: parts.join(' · ') }));
+            recordOperation({
+              module: '成长',
+              operation: `连签里程碑 ${m.days} 天达成（+${m.points}积分${m.storageMb ? '、+' + m.storageMb + 'MB' : ''}${m.cards ? '、+' + m.cards + '补签卡' : ''}）`,
+            });
           }
         }
         // 签到后刷新看板:同页的「今日任务」签到项、签到日历、数据统计随之更新,无需手动刷新
@@ -378,6 +390,12 @@
     font-size: 14px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+  }
+  .gc-perk-bonus {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #d97706;
+    margin-top: 1px;
   }
   /* 每日经验 */
   .gc-daily {

@@ -57,6 +57,9 @@ export async function ensurePointsSchema() {
   if (await columnMissing('user_growth', 'equipped_title')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `equipped_title` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴称号 id"');
   }
+  if (await columnMissing('user_growth', 'storage_bonus_mb')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `storage_bonus_mb` INT NOT NULL DEFAULT 0 COMMENT "积分兑换的永久扩容(MB),叠加在段位基础配额之上"');
+  }
 }
 
 // ============================================================================
@@ -65,6 +68,8 @@ export async function ensurePointsSchema() {
 export const SHOP_ITEMS = [
   { id: 'makeup_card', type: 'consumable', name: '补签卡', desc: '补回一天漏签,守护连续签到', cost: 200, effect: 'makeup_card' },
   { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '今日 AI 额度 +30 万 tokens(当天有效)', cost: 150, effect: 'ai_pack', bonusTokens: 300_000 },
+  { id: 'storage_512', type: 'consumable', name: '扩容包 512MB', desc: '云空间永久 +512MB,叠加在等级配额之上', cost: 800, effect: 'storage', storageMb: 512 },
+  { id: 'storage_2g', type: 'consumable', name: '扩容包 2GB', desc: '云空间永久 +2GB,大文件党首选', cost: 2500, effect: 'storage', storageMb: 2048 },
   { id: 'title_collector', type: 'title', name: '藏书家', desc: '称号 · 收藏成癖', cost: 300, minLevel: 0 },
   { id: 'title_writer', type: 'title', name: '笔耕不辍', desc: '称号 · 笔记不停', cost: 500, minLevel: 3 },
   { id: 'title_cloud', type: 'title', name: '云端行者', desc: '称号 · 云上安家', cost: 600, minLevel: 4 },
@@ -97,6 +102,25 @@ export async function earnPoints(userId, amount, reason, ref = null, conn = pool
   await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, amount, reason, ref]);
   await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
   return true;
+}
+
+// 永久扩容(MB)。同 earnPoints 语义:ref 非空时按 (user_id, 'storage:'+reason, ref) 幂等,防里程碑重复发放。
+// 用 points_log 记一条 delta=0 的审计流水(reason 前缀 storage: 区分,不影响积分余额)。需调用方已确保行存在;可传事务连接。
+export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
+  if (!userId || !(mb > 0)) return false;
+  const logReason = ('storage:' + reason).slice(0, 32);
+  if (ref) {
+    const [ex] = await conn.query('SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ? LIMIT 1', [userId, logReason, ref]);
+    if (ex.length) return false;
+  }
+  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [userId, logReason, ref]);
+  await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
+  return true;
+}
+
+export async function getStorageBonus(userId) {
+  const [rows] = await pool.query('SELECT storage_bonus_mb FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  return Number(rows[0]?.storage_bonus_mb || 0);
 }
 
 export async function getOwnedCosmetics(userId) {
@@ -149,6 +173,9 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
     await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, -item.cost, 'buy', item.id]);
     if (item.effect === 'makeup_card') {
       await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + 1) WHERE user_id = ?', [userId]);
+    } else if (item.effect === 'storage') {
+      // 永久扩容:可反复购买叠加(无幂等 ref,每次都加)
+      await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [item.storageMb, userId]);
     } else if (item.effect === 'ai_pack') {
       // 直接写当日额度加成表(aiQuota 只读它);不 import aiQuota,避免循环依赖
       await conn.query(

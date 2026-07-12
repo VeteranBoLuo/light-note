@@ -101,6 +101,8 @@
   const ICONS: Record<string, string> = {
     makeup_card: '🎫',
     ai_pack: '⚡',
+    storage_512: '💾',
+    storage_2g: '💽',
     title_collector: '📚',
     title_writer: '✍️',
     title_cloud: '☁️',

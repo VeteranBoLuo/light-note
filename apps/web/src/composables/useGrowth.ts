@@ -7,6 +7,7 @@ export interface Growth {
   level: number;
   name: string;
   spaceMb: number;
+  spaceBonusMb?: number; // 其中积分兑换的永久扩容部分(MB)
   aiTokenDaily: number;
   trashDays?: number;
   streak: number;
@@ -79,6 +80,14 @@ export interface QuestBonus {
   claimable: boolean;
 }
 
+export interface StreakMilestone {
+  days: number;
+  points: number;
+  storageMb: number;
+  cards: number;
+  reached: boolean;
+}
+
 export interface GrowthDashboard {
   stats: GrowthStats;
   achievements: Achievement[];
@@ -88,6 +97,8 @@ export interface GrowthDashboard {
   questsEnabled: boolean;
   questBonus: QuestBonus;
   timeline: TimelineItem[];
+  streakMilestones?: StreakMilestone[];
+  currentStreak?: number;
 }
 
 export interface ShopItem {
