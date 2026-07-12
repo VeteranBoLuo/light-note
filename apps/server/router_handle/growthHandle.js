@@ -4,6 +4,7 @@ import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
+import { getWeeklyChallenges, claimWeeklyChallenge } from '../util/weeklyChallenge.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -194,6 +195,30 @@ export const equipTitleHandle = async (req, res) => {
   } catch (error) {
     console.error('佩戴称号失败:', error);
     res.send(resultData(null, 500, '佩戴称号失败: ' + error.message));
+  }
+};
+
+// GET /growth/weekly —— 本周挑战(进度 + 可领取态;游客展示 0 进度)
+export const getWeekly = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    res.send(resultData(await getWeeklyChallenges(userId)));
+  } catch (error) {
+    console.error('获取每周挑战失败:', error);
+    res.send(resultData(null, 500, '获取每周挑战失败: ' + error.message));
+  }
+};
+
+// POST /growth/weekly/claim —— 领取每周挑战奖励(完成且本周未领 → 发积分)
+export const doClaimWeekly = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { key } = req.body || {};
+    if (!key) return res.send(resultData(null, 400, '缺少挑战 key'));
+    res.send(resultData(await claimWeeklyChallenge(req.user.id, key)));
+  } catch (error) {
+    console.error('领取每周挑战失败:', error);
+    res.send(resultData(null, 500, '领取失败: ' + error.message));
   }
 };
 

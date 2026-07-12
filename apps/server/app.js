@@ -9,6 +9,7 @@ import { generateWeeklyReports } from './util/weeklyReport.js';
 import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
+import { generateGrowthNudges } from './util/growth.js';
 import rateLimit from 'express-rate-limit';
 
 import dotenv from 'dotenv';
@@ -115,6 +116,20 @@ function scheduleWeeklyReport() {
   console.log(`[周报] 定时已注册，首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleWeeklyReport();
+
+// 每日 20:00 生成成长提醒(连签将断),晚间提醒当天未签到的用户守住连签
+function scheduleGrowthNudges() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(20, 0, 0, 0);
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  setTimeout(() => {
+    generateGrowthNudges();
+    setInterval(generateGrowthNudges, 24 * 60 * 60 * 1000);
+  }, next.getTime() - now.getTime());
+  console.log(`[成长提醒] 定时已注册,首次执行: ${next.toLocaleString('zh-CN')}`);
+}
+scheduleGrowthNudges();
 
 // 启动 Express 服务器
 app.listen(9001, () => {

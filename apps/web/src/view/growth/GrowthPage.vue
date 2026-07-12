@@ -24,6 +24,10 @@
         </section>
       </div>
 
+      <section v-if="questsEnabled" class="growth-panel">
+        <WeeklyChallenge />
+      </section>
+
       <section class="growth-panel">
         <PointsShop />
       </section>
@@ -79,6 +83,7 @@
   import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
+  import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';

@@ -12,6 +12,7 @@
 import pool from '../db/index.js';
 import crypto from 'crypto';
 import { earnPoints, earnStorage, titleName } from './points.js';
+import { createNotification } from './notification.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(方案A,前期平缓、后期陡增,凸显高等级价值):Lv1 0.5G → Lv10 5G → Lv15 20G,
@@ -641,6 +642,38 @@ export async function getUserSpaceMb(userId, userRole = null) {
   }
   const base = userRole === 'root' ? RANKS[MAX_LEVEL - 1].spaceMb : rankOf(levelForExp(exp)).spaceMb;
   return base + bonus;
+}
+
+// 每日成长提醒(定时任务):把成长价值主动推到通知中心,驱动回访。
+// 只做「连签将断」——高价值(守住习惯)、非骚扰(仅昨天签过、今天未签、连签≥3 的用户)、单查询低成本;
+// 免费抽/成就待领等靠站内徽章提示,不在此每日推送以免刷屏。按 (user, type, 当天) 幂等。
+export async function generateGrowthNudges() {
+  try {
+    const yesterday = dayKey(new Date(Date.now() - 86_400_000));
+    const today = dayKey();
+    const [risk] = await pool.query(
+      'SELECT user_id, streak FROM user_growth WHERE last_checkin_date = ? AND streak >= 3 AND (last_checkin_date <> ?)',
+      [yesterday, today],
+    );
+    let sent = 0;
+    for (const u of risk) {
+      const [ex] = await pool.query(
+        "SELECT 1 FROM notification WHERE user_id = ? AND type = 'streak_risk' AND DATE(create_time) = CURDATE() LIMIT 1",
+        [u.user_id],
+      );
+      if (ex.length) continue;
+      await createNotification(u.user_id, {
+        type: 'streak_risk',
+        title: `连签 ${u.streak} 天,别断啦!`,
+        content: '今天还没签到,来保住你的连续签到吧~',
+        link: '/growth',
+      }).catch(() => {});
+      sent++;
+    }
+    console.log(`[成长提醒] 连签将断候选 ${risk.length} 人,新发提醒 ${sent} 条`);
+  } catch (e) {
+    console.warn('[成长提醒] 生成失败:', e.message);
+  }
 }
 
 // 标记升级通知已读(用户查看成长页后调用):把"已知晓等级"抬到当前等级

@@ -45,6 +45,10 @@ export const drawLottery = (times: number, free = false) => apiBasePost('/api/gr
 // 领取成就奖励
 export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });
 
+// 每周挑战:进度 + 领取
+export const getWeekly = () => apiBaseGet('/api/growth/weekly');
+export const claimWeekly = (key: string) => apiBasePost('/api/growth/weekly/claim', { key });
+
 // 积分明细(分页)
 export const getPointsLog = (limit = 30, offset = 0) => apiBaseGet(`/api/growth/points/log?limit=${limit}&offset=${offset}`);
 
@@ -71,6 +75,8 @@ export default {
   getLottery,
   drawLottery,
   claimAchievement,
+  getWeekly,
+  claimWeekly,
   getPointsLog,
   adminPointsOverview,
   adminUserPoints,

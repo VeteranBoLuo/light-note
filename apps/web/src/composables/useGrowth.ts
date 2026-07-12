@@ -160,12 +160,30 @@ export interface LotteryDrawResult {
   results?: LotteryPrize[];
 }
 
+export interface WeeklyChallenge {
+  key: string;
+  metric: string;
+  target: number;
+  reward: number;
+  cur: number;
+  done: boolean;
+  claimed: boolean;
+  claimable: boolean;
+}
+
+export interface WeeklyData {
+  weekKey: string | null;
+  challenges: WeeklyChallenge[];
+  claimableCount?: number;
+}
+
 // 模块级单例:头像徽章、成长卡、段位路线共享同一份数据,一次拉取多处复用(不为此建重 store)
 const growth = ref<Growth | null>(null);
 const ranks = ref<Rank[]>([]);
 const dashboard = ref<GrowthDashboard | null>(null);
 const shop = ref<Shop | null>(null);
 const lottery = ref<LotteryStatus | null>(null);
+const weekly = ref<WeeklyData | null>(null);
 const loading = ref(false);
 const dashboardLoading = ref(false);
 const shopLoading = ref(false);
@@ -180,6 +198,7 @@ export function resetGrowth() {
   dashboard.value = null;
   shop.value = null;
   lottery.value = null;
+  weekly.value = null;
   loadedOnce = false;
   ownerId = null;
 }
@@ -349,12 +368,31 @@ export function useGrowth() {
     return res;
   }
 
+  // 每周挑战:进度 + 领取
+  async function loadWeekly() {
+    try {
+      const res = await growthApi.getWeekly();
+      if (res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
+    } catch (err) {
+      console.warn('加载每周挑战失败:', err);
+    }
+    return weekly.value;
+  }
+  async function claimWeekly(key: string) {
+    const res = await growthApi.claimWeekly(key);
+    if (res?.status === 200 && res.data?.ok) {
+      await Promise.all([loadWeekly(), load(true)]);
+    }
+    return res;
+  }
+
   return {
     growth,
     ranks,
     dashboard,
     shop,
     lottery,
+    weekly,
     loading,
     dashboardLoading,
     shopLoading,
@@ -372,5 +410,7 @@ export function useGrowth() {
     loadLottery,
     draw,
     claimAchievement,
+    loadWeekly,
+    claimWeekly,
   };
 }

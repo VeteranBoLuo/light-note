@@ -18,6 +18,8 @@ router.post('/equipTitle', growthHandle.equipTitleHandle);
 router.get('/lottery', growthHandle.getLottery);
 router.post('/lottery/draw', growthHandle.doDrawLottery);
 router.post('/achievement/claim', growthHandle.doClaimAchievement);
+router.get('/weekly', growthHandle.getWeekly);
+router.post('/weekly/claim', growthHandle.doClaimWeekly);
 router.get('/points/log', growthHandle.getMyPointsLog);
 router.post('/admin/pointsOverview', growthHandle.getPointsOverviewForAdmin);
 router.post('/admin/userPoints', growthHandle.getUserPointsForAdmin);
