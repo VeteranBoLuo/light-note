@@ -36,6 +36,7 @@ export interface Rank {
   spaceMb: number;
   aiTokenDaily: number;
   trashDays: number;
+  freeDraws?: number; // 每日免费抽奖次数(随等级解锁)
 }
 
 export interface Achievement {
@@ -44,6 +45,9 @@ export interface Achievement {
   target: number;
   cur: number;
   unlocked: boolean;
+  reward?: number; // 解锁后可领的积分
+  claimed?: boolean; // 是否已领取
+  claimable?: boolean; // 已解锁且未领
 }
 
 export interface GrowthStats {
@@ -92,6 +96,7 @@ export interface GrowthDashboard {
   stats: GrowthStats;
   achievements: Achievement[];
   unlockedCount: number;
+  claimableCount?: number;
   totalAchievements: number;
   quests: Quest[];
   questsEnabled: boolean;
@@ -139,6 +144,9 @@ export interface LotteryStatus {
   singleCost: number;
   tenCost: number;
   pityEvery: number;
+  level: number;
+  freeDaily: number; // 当前等级每日免费次数
+  freeRemaining: number; // 今日剩余免费次数
   pool: LotteryPrize[];
 }
 
@@ -147,6 +155,7 @@ export interface LotteryDrawResult {
   reason?: string;
   msg?: string;
   cost?: number;
+  free?: boolean;
   points?: number;
   results?: LotteryPrize[];
 }
@@ -322,11 +331,20 @@ export function useGrowth() {
     return lottery.value;
   }
 
-  // 抽奖:times=1 单抽 / 10 十连。返回后端 result;成功则刷新抽奖状态 + 成长快照(余额/存储/卡变化)
-  async function draw(times: number) {
-    const res = await growthApi.drawLottery(times);
+  // 抽奖:times=1 单抽 / 10 十连;free=true 用每日免费次数(单抽)。成功则刷新抽奖状态 + 成长快照
+  async function draw(times: number, free = false) {
+    const res = await growthApi.drawLottery(times, free);
     if (res?.status === 200 && res.data?.ok) {
       await Promise.all([loadLottery(), load(true)]);
+    }
+    return res;
+  }
+
+  // 领取成就奖励:成功则刷新看板(领取态)+ 成长快照(积分余额)
+  async function claimAchievement(key: string) {
+    const res = await growthApi.claimAchievement(key);
+    if (res?.status === 200 && res.data?.ok) {
+      await Promise.all([loadDashboard(), load(true)]);
     }
     return res;
   }
@@ -353,5 +371,6 @@ export function useGrowth() {
     equipTitle,
     loadLottery,
     draw,
+    claimAchievement,
   };
 }

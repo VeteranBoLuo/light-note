@@ -40,7 +40,10 @@ export const equipTitle = (titleId: string | null) => apiBasePost('/api/growth/e
 
 // 积分抽奖:状态(余额/成本/保底/奖池概率)+ 抽奖(times=1 单抽 / 10 十连)
 export const getLottery = () => apiBaseGet('/api/growth/lottery');
-export const drawLottery = (times: number) => apiBasePost('/api/growth/lottery/draw', { times });
+export const drawLottery = (times: number, free = false) => apiBasePost('/api/growth/lottery/draw', { times, free });
+
+// 领取成就奖励
+export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });
 
 export default {
   getMyGrowth,
@@ -58,4 +61,5 @@ export default {
   equipTitle,
   getLottery,
   drawLottery,
+  claimAchievement,
 };

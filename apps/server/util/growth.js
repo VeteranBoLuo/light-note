@@ -340,27 +340,28 @@ export async function getGrowth(userId, { userRole = null } = {}) {
 // 不新增表、不改 schema,零风险叠加在现有增长引擎之上。前端按 key 映射图标与 i18n 文案。
 // ============================================================================
 
-// 成就定义:阈值单一事实源。group=分类;metric=进度所依据的统计字段;target=解锁阈值。
+// 成就定义:阈值单一事实源。group=分类;metric=进度所依据的统计字段;target=解锁阈值;reward=解锁后可领的积分。
+// reward 按难度递增:首次类 20;中阶 50~120;高阶 150~250;里程碑级 500~600。领取幂等由 points_log(reason='achievement', ref=key)保证,无需额外表。
 export const ACHIEVEMENTS = [
-  { key: 'first_checkin', group: 'checkin', metric: 'totalCheckins', target: 1 },
-  { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7 },
-  { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30 },
-  { key: 'checkin_50', group: 'checkin', metric: 'totalCheckins', target: 50 },
-  { key: 'checkin_100', group: 'checkin', metric: 'totalCheckins', target: 100 },
-  { key: 'first_bookmark', group: 'create', metric: 'bookmarkCount', target: 1 },
-  { key: 'bookmark_50', group: 'create', metric: 'bookmarkCount', target: 50 },
-  { key: 'bookmark_200', group: 'create', metric: 'bookmarkCount', target: 200 },
-  { key: 'first_note', group: 'create', metric: 'noteCount', target: 1 },
-  { key: 'note_20', group: 'create', metric: 'noteCount', target: 20 },
-  { key: 'note_50', group: 'create', metric: 'noteCount', target: 50 },
-  { key: 'first_file', group: 'create', metric: 'fileCount', target: 1 },
-  { key: 'level_5', group: 'level', metric: 'level', target: 5 },
-  { key: 'level_10', group: 'level', metric: 'level', target: 10 },
-  { key: 'level_15', group: 'level', metric: 'level', target: 15 },
-  { key: 'join_7', group: 'tenure', metric: 'joinDays', target: 7 },
-  { key: 'join_30', group: 'tenure', metric: 'joinDays', target: 30 },
-  { key: 'join_100', group: 'tenure', metric: 'joinDays', target: 100 },
-  { key: 'join_365', group: 'tenure', metric: 'joinDays', target: 365 },
+  { key: 'first_checkin', group: 'checkin', metric: 'totalCheckins', target: 1, reward: 20 },
+  { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
+  { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30, reward: 120 },
+  { key: 'checkin_50', group: 'checkin', metric: 'totalCheckins', target: 50, reward: 80 },
+  { key: 'checkin_100', group: 'checkin', metric: 'totalCheckins', target: 100, reward: 150 },
+  { key: 'first_bookmark', group: 'create', metric: 'bookmarkCount', target: 1, reward: 20 },
+  { key: 'bookmark_50', group: 'create', metric: 'bookmarkCount', target: 50, reward: 80 },
+  { key: 'bookmark_200', group: 'create', metric: 'bookmarkCount', target: 200, reward: 200 },
+  { key: 'first_note', group: 'create', metric: 'noteCount', target: 1, reward: 20 },
+  { key: 'note_20', group: 'create', metric: 'noteCount', target: 20, reward: 60 },
+  { key: 'note_50', group: 'create', metric: 'noteCount', target: 50, reward: 120 },
+  { key: 'first_file', group: 'create', metric: 'fileCount', target: 1, reward: 20 },
+  { key: 'level_5', group: 'level', metric: 'level', target: 5, reward: 100 },
+  { key: 'level_10', group: 'level', metric: 'level', target: 10, reward: 250 },
+  { key: 'level_15', group: 'level', metric: 'level', target: 15, reward: 600 },
+  { key: 'join_7', group: 'tenure', metric: 'joinDays', target: 7, reward: 40 },
+  { key: 'join_30', group: 'tenure', metric: 'joinDays', target: 30, reward: 100 },
+  { key: 'join_100', group: 'tenure', metric: 'joinDays', target: 100, reward: 250 },
+  { key: 'join_365', group: 'tenure', metric: 'joinDays', target: 365, reward: 600 },
 ];
 
 function safeParseMeta(m) {
@@ -485,18 +486,30 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   }
 
   // 成就进度:统一用 stats + 当前等级派生(root 等级=满级,资源统计真实)
+  // 已领取集合:points_log 里 reason='achievement' 的 ref 即已领成就 key(领取幂等的单一事实源)
+  let claimedKeys = new Set();
+  if (!isGuest) {
+    const [cRows] = await pool.query("SELECT ref FROM points_log WHERE user_id = ? AND reason = 'achievement'", [userId]);
+    claimedKeys = new Set(cRows.map((r) => r.ref));
+  }
   const metrics = { ...stats, level: growth.level };
   const achievements = ACHIEVEMENTS.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
+    const unlocked = cur >= a.target;
+    const claimed = claimedKeys.has(a.key);
     return {
       key: a.key,
       group: a.group,
       target: a.target,
       cur,
-      unlocked: cur >= a.target,
+      unlocked,
+      reward: a.reward, // 解锁后可领的积分
+      claimed, // 是否已领取奖励
+      claimable: unlocked && !claimed, // 可领取(已解锁且未领)
     };
   });
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const claimableCount = achievements.filter((a) => a.claimable).length; // 待领取数(前端红点/汇总)
 
   // 今日任务(派生):签到 / 记录一条内容 / 今日获得 30 经验。
   // "记录内容"按真实资源当日创建判定(不依赖 growth_events),root 也能完成。
@@ -549,6 +562,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     stats,
     achievements,
     unlockedCount,
+    claimableCount,
     totalAchievements: ACHIEVEMENTS.length,
     quests,
     questsEnabled,
@@ -600,6 +614,20 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
  * 用户当前等级对应的云空间配额(MB)。root=满级;无成长账本(新用户)=Lv1。
  * 供文件上传配额校验按等级下发,替代原先"非 root 一律 500MB"。
  */
+// 领取单个成就奖励:已解锁且未领 → 发积分(幂等,ref=成就 key,与 dashboard.claimed 同源)。
+export async function claimAchievement(userId, key, { userRole = null } = {}) {
+  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  const ach = ACHIEVEMENTS.find((a) => a.key === key);
+  if (!ach) return { ok: false, reason: 'not_found', msg: '成就不存在' };
+  // 复用看板派生的解锁判定(单一事实源),避免重复实现各 metric 的统计口径
+  const dash = await getGrowthDashboard(userId, { userRole });
+  const a = dash.achievements.find((x) => x.key === key);
+  if (!a || !a.unlocked) return { ok: false, reason: 'locked', msg: '成就尚未解锁' };
+  const got = await earnPoints(userId, ach.reward, 'achievement', key);
+  if (!got) return { ok: false, reason: 'claimed', msg: '该成就奖励已领取' };
+  return { ok: true, key, reward: ach.reward, growth: await getGrowth(userId, { userRole }) };
+}
+
 export async function getUserSpaceMb(userId, userRole = null) {
   // root 视为满级;积分兑换的永久扩容对所有人(含 root)叠加
   let bonus = 0;

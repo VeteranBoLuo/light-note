@@ -17,6 +17,7 @@ router.post('/shop/buy', growthHandle.buyShopItem);
 router.post('/equipTitle', growthHandle.equipTitleHandle);
 router.get('/lottery', growthHandle.getLottery);
 router.post('/lottery/draw', growthHandle.doDrawLottery);
+router.post('/achievement/claim', growthHandle.doClaimAchievement);
 router.post('/notices/read', growthHandle.readNotices);
 
 export default router;

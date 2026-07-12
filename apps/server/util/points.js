@@ -63,6 +63,12 @@ export async function ensurePointsSchema() {
   if (await columnMissing('user_growth', 'lottery_count')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_count` INT NOT NULL DEFAULT 0 COMMENT "累计抽奖次数(用于每10抽保底)"');
   }
+  if (await columnMissing('user_growth', 'lottery_free_day')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_free_day` CHAR(8) DEFAULT NULL COMMENT "上次使用每日免费抽奖的日期 YYYYMMDD"');
+  }
+  if (await columnMissing('user_growth', 'lottery_free_used')) {
+    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_free_used` INT NOT NULL DEFAULT 0 COMMENT "当日已用的免费抽奖次数"');
+  }
 }
 
 // ============================================================================

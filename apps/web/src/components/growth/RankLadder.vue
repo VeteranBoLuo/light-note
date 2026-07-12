@@ -20,7 +20,9 @@
           <span v-if="r.level === maxLevel" class="rl-max">{{ t('growth.max') }}</span>
         </span>
         <span class="rl-exp">{{ r.cumExp.toLocaleString('en-US') }}</span>
-        <span class="rl-perk">{{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} · {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays }) }}</span>
+        <span class="rl-perk">
+          {{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} · {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays }) }}<span v-if="r.freeDraws" class="rl-free">· 🎟️{{ r.freeDraws }}</span>
+        </span>
       </div>
     </div>
   </div>
@@ -150,5 +152,10 @@
     color: var(--desc-color);
     font-size: 11px;
     white-space: nowrap;
+  }
+  .rl-free {
+    color: #d97706;
+    font-weight: 600;
+    margin-left: 2px;
   }
 </style>

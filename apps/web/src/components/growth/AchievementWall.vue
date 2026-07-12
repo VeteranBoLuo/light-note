@@ -2,6 +2,7 @@
   <div class="aw">
     <div class="aw-head">
       <span class="aw-title">{{ t('growth.dashWall') }}</span>
+      <span v-if="(claimableCount || 0) > 0" class="aw-claimable">🎁 {{ t('growth.achClaimableN', { n: claimableCount }) }}</span>
       <span class="aw-count">{{ t('growth.achUnlocked', { n: unlockedCount, total: totalAchievements }) }}</span>
     </div>
     <div class="aw-bar">
@@ -26,10 +27,16 @@
             </span>
           </div>
           <div class="aw-name">{{ t(`growth.achName.${a.key}`) }}</div>
-          <div v-if="a.unlocked" class="aw-got">{{ t('growth.achGot') }}</div>
+          <template v-if="a.unlocked">
+            <button v-if="a.claimable" class="aw-claim" :disabled="claimingKey === a.key" @click.stop="onClaim(a)">
+              🪙 {{ t('growth.achClaim', { n: a.reward }) }}
+            </button>
+            <div v-else class="aw-got">✓ {{ t('growth.achClaimed') }}</div>
+          </template>
           <div v-else class="aw-mini">
             <div class="aw-mini-bar"><div class="aw-mini-fill" :style="{ width: prog(a) + '%' }"></div></div>
             <span class="aw-mini-num">{{ Math.min(a.cur, a.target) }}/{{ a.target }}</span>
+            <span v-if="a.reward" class="aw-reward-hint">🪙 {{ a.reward }}</span>
           </div>
         </div>
       </div>
@@ -43,7 +50,11 @@
         </div>
         <div class="awd-name">{{ t(`growth.achName.${detail.key}`) }}</div>
         <div class="awd-desc">{{ t(`growth.achDesc.${detail.key}`) }}</div>
-        <div v-if="detail.unlocked" class="awd-status unlocked">✓ {{ t('growth.achGot') }}</div>
+        <div v-if="detail.reward" class="awd-reward">{{ t('growth.achRewardLabel') }} 🪙 {{ detail.reward }}</div>
+        <button v-if="detail.claimable" class="awd-claim" :disabled="claimingKey === detail.key" @click="onClaim(detail)">
+          {{ t('growth.achClaim', { n: detail.reward }) }}
+        </button>
+        <div v-else-if="detail.unlocked" class="awd-status unlocked">✓ {{ t('growth.achClaimed') }}</div>
         <div v-else class="awd-status">
           <div class="awd-bar"><div class="awd-fill" :style="{ width: prog(detail) + '%' }"></div></div>
           <span class="awd-num">{{ Math.min(detail.cur, detail.target) }} / {{ detail.target }}</span>
@@ -60,7 +71,14 @@
   import { ACHIEVEMENT_ICONS, ACHIEVEMENT_GROUPS } from '@/config/achievements.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 
-  const props = defineProps<{ achievements: Achievement[]; unlockedCount: number; totalAchievements: number }>();
+  const props = defineProps<{
+    achievements: Achievement[];
+    unlockedCount: number;
+    totalAchievements: number;
+    claimableCount?: number;
+    claimingKey?: string | null;
+  }>();
+  const emit = defineEmits<{ (e: 'claim', key: string): void }>();
   const { t } = useI18n();
 
   const icons = ACHIEVEMENT_ICONS;
@@ -69,6 +87,9 @@
   function openDetail(a: Achievement) {
     detail.value = a;
     detailVisible.value = true;
+  }
+  function onClaim(a: Achievement) {
+    emit('claim', a.key);
   }
   // 只展示实际存在数据的分组(向后兼容后端新增/删减)
   const groups = computed(() => ACHIEVEMENT_GROUPS.filter((g) => props.achievements.some((a) => a.group === g)));
@@ -214,6 +235,43 @@
     color: #f59e0b;
     letter-spacing: 0.04em;
   }
+  .aw-claimable {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #d97706;
+    margin-left: auto;
+    margin-right: 8px;
+  }
+  .aw-claim {
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    box-shadow: 0 4px 10px -5px rgba(245, 158, 11, 0.8);
+    transition: transform 0.15s;
+    animation: aw-claim-pulse 1.6s infinite;
+  }
+  .aw-claim:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .aw-claim:disabled {
+    opacity: 0.6;
+    cursor: default;
+    animation: none;
+  }
+  @keyframes aw-claim-pulse {
+    0%, 100% { box-shadow: 0 4px 10px -5px rgba(245, 158, 11, 0.8); }
+    50% { box-shadow: 0 4px 16px -3px rgba(245, 158, 11, 0.95); }
+  }
+  .aw-reward-hint {
+    font-size: 9.5px;
+    color: #d97706;
+    font-weight: 600;
+  }
   .aw-mini {
     display: flex;
     flex-direction: column;
@@ -294,6 +352,31 @@
     font-size: 13px;
     font-weight: 700;
     color: #f59e0b;
+  }
+  .awd-reward {
+    font-size: 13px;
+    font-weight: 600;
+    color: #d97706;
+  }
+  .awd-claim {
+    margin-top: 6px;
+    padding: 8px 22px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #f59e0b, #f97316);
+    box-shadow: 0 8px 18px -8px rgba(245, 158, 11, 0.8);
+    transition: transform 0.15s;
+  }
+  .awd-claim:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .awd-claim:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
   .awd-bar {
     width: 80%;

@@ -51,6 +51,9 @@
           :achievements="achievements"
           :unlocked-count="dashboard?.unlockedCount || 0"
           :total-achievements="dashboard?.totalAchievements || achievements.length"
+          :claimable-count="dashboard?.claimableCount || 0"
+          :claiming-key="claimingAch"
+          @claim="onClaimAchievement"
         />
       </section>
 
@@ -86,7 +89,7 @@
 
   const { t } = useI18n();
   const router = useRouter();
-  const { growth, dashboard, loadDashboard, claimDailyBonus, useProtectCard: apiUseProtectCard } = useGrowth();
+  const { growth, dashboard, loadDashboard, claimDailyBonus, useProtectCard: apiUseProtectCard, claimAchievement } = useGrowth();
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
   const EMPTY_STATS = {
@@ -159,6 +162,27 @@
     recordOperation({ module: '成长', operation: '查看我的成长' });
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
   });
+
+  const claimingAch = ref<string | null>(null);
+  async function onClaimAchievement(key: string) {
+    if (claimingAch.value) return;
+    claimingAch.value = key;
+    try {
+      const res = await claimAchievement(key);
+      if (res?.status === 200 && res.data?.ok) {
+        message.success(t('growth.achClaimOk', { n: res.data.reward }));
+        recordOperation({ module: '成长', operation: `领取成就奖励 ${key}（+${res.data.reward} 积分）` });
+      } else if (res?.data?.reason === 'claimed') {
+        message.info(t('growth.achClaimedAlready'));
+      } else if (res?.data?.reason === 'locked') {
+        message.info(t('growth.achClaimLocked'));
+      }
+    } catch (err) {
+      console.error('领取成就奖励失败:', err);
+    } finally {
+      claimingAch.value = null;
+    }
+  }
 
   const makingUp = ref(false);
   async function handleCalendarMakeup() {

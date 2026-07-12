@@ -46,8 +46,17 @@
       <span v-else-if="lottery">{{ t('growth.lotteryPityLeft', { n: lottery.toPity }) }}</span>
     </div>
 
+    <!-- 每日免费抽奖(随等级解锁) -->
+    <div class="lt-free-info">
+      <span v-if="(lottery?.freeDaily || 0) > 0">🎟️ {{ t('growth.lotteryFreeDaily', { n: lottery?.freeDaily }) }}</span>
+      <span v-else>🔒 {{ t('growth.lotteryFreeLocked') }}</span>
+    </div>
+
     <!-- 抽奖按钮 -->
     <div class="lt-actions">
+      <BButton v-if="(lottery?.freeDaily || 0) > 0" type="success" :disabled="!canFree" :loading="rolling" @click="onDraw(1, true)">
+        {{ t('growth.lotteryFreeDraw') }} · {{ t('growth.lotteryFreeLeft', { n: lottery?.freeRemaining || 0 }) }}
+      </BButton>
       <BButton type="primary" :disabled="!canDraw(1)" :loading="rolling" @click="onDraw(1)">
         {{ t('growth.lotteryDrawOne') }} · 🪙 {{ lottery?.singleCost || 88 }}
       </BButton>
@@ -90,6 +99,7 @@
 
   const isVisitor = computed(() => !useUserStore().id || useUserStore().id === 'visitor');
   const hasEnoughAny = computed(() => (lottery.value?.points || 0) >= (lottery.value?.singleCost || 88));
+  const canFree = computed(() => !rolling.value && !isVisitor.value && (lottery.value?.freeRemaining || 0) > 0);
 
   function canDraw(times: number) {
     if (rolling.value || isVisitor.value || !lottery.value) return false;
@@ -109,20 +119,20 @@
     return p.name;
   }
 
-  async function onDraw(times: number) {
-    if (!canDraw(times)) return;
+  async function onDraw(times: number, free = false) {
+    if (free ? !canFree.value : !canDraw(times)) return;
     rolling.value = true;
     revealed.value = [];
     hitBest.value = false;
     try {
-      const res = await draw(times);
+      const res = await draw(times, free);
       // 悬念:滚动动画至少展示 ~650ms 再揭晓
       await new Promise((r) => setTimeout(r, 650));
       if (res?.status === 200 && res.data?.ok) {
         revealed.value = res.data.results || [];
         // 大奖(512MB 存储)高亮庆祝
         hitBest.value = revealed.value.some((p) => p.kind === 'storage' && p.amount >= 512);
-        recordOperation({ module: '成长', operation: `积分抽奖 ${times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）` });
+        recordOperation({ module: '成长', operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）` });
       } else {
         message.error(res?.data?.msg || t('growth.shopInsufficient'));
       }
@@ -287,6 +297,11 @@
     font-size: 12px;
     color: var(--desc-color);
     min-height: 16px;
+  }
+  .lt-free-info {
+    text-align: center;
+    font-size: 12px;
+    color: var(--desc-color);
   }
   .lt-pity-now {
     color: #d97706;
