@@ -100,12 +100,16 @@
     gap: 10px;
     padding: 20px;
     box-sizing: border-box;
+    height: 100%; /* 子路由根被内联固定高度;这里撑满,让内容区在框内滚动而非被裁 */
   }
   .menu-body {
     width: 200px;
+    flex: 0 0 200px;
   }
   .admin-view-panel {
     width: calc(100% - 210px);
+    min-height: 0; /* flex 子项允许收缩,配合 overflow 才能滚 */
+    overflow-y: auto; /* 内容超高时自身滚动(如积分运营页) */
   }
 
   .person-menu {

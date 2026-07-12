@@ -123,13 +123,16 @@
     </template>
     <div
       class="navigation-icon"
+      :class="{ 'has-frame': equippedFrameRing }"
       style="margin-left: 5px; position: relative"
       @mouseenter="handleTriggerMouseEnter"
       @mouseleave="handleTriggerMouseLeave"
     >
-      <span class="nav-avatar-frame" :style="frameWrapStyle(growthInfo?.equippedFrame, 2)">
-        <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      <!-- 佩戴头像框:关掉父级 clip,由框做圆环、内部头像单独裁圆,避免被裁 -->
+      <span v-if="equippedFrameRing" class="nav-avatar-frame" :style="{ background: equippedFrameRing }">
+        <span class="nav-avatar-clip"><svg-icon size="30" :src="user.headPicture || icon.navigation.user" class="dom-hover" /></span>
       </span>
+      <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
@@ -142,7 +145,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import { frameWrapStyle } from '@/config/growthFrames';
+  import { frameRing } from '@/config/growthFrames';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { formatStorageSize } from '@/utils/common';
@@ -172,6 +175,7 @@
 
   // 成长徽章:登录用户在头像旁展示当前等级(纯展示,管理成长走「设置」菜单入口)
   const { growth: growthInfo, load: loadGrowth } = useGrowth();
+  const equippedFrameRing = computed(() => frameRing(growthInfo.value?.equippedFrame));
   const badgeTier = computed(() => tierOf(growthInfo.value?.level || 1));
   onMounted(() => {
     loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
@@ -429,6 +433,23 @@
     align-items: center;
     clip-path: circle(50% at 50% 50%);
     cursor: pointer;
+  }
+  /* 佩戴头像框时不裁,否则会把渐变环边缘裁掉 */
+  .navigation-icon.has-frame {
+    clip-path: none;
+  }
+  .nav-avatar-frame {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: 50%;
+    line-height: 0;
+  }
+  .nav-avatar-clip {
+    display: inline-flex;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--background-color);
+    line-height: 0;
   }
 
   .handle-body {

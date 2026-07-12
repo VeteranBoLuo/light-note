@@ -9,21 +9,23 @@
         <div class="tag-attr-item">
           <div class="tag-attr-head">
             <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
-            <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
-              <button
-                type="button"
-                class="generate-meta-action"
-                @click="generateBookmarkMeta"
-                :class="{ loading: generating }"
-                v-click-log="{ module: '书签详情', operation: '点击智能生成' }"
-              >
-                <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
-                <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
+            <div class="tag-attr-actions">
+              <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
+                <button
+                  type="button"
+                  class="generate-meta-action"
+                  @click="generateBookmarkMeta"
+                  :class="{ loading: generating }"
+                  v-click-log="{ module: '书签详情', operation: '点击智能生成' }"
+                >
+                  <svg-icon :src="icon.common.magicWand" :title="$t('bookmarkMg.generateMetaTitle')" />
+                  <span>{{ $t('bookmarkMg.generateMetaTitle') }}</span>
+                </button>
+              </BTooltip>
+              <button v-if="isEdit" type="button" class="generate-meta-action" @click="snapVisible = true" v-click-log="{ module: '书签详情', operation: '查看网页快照' }">
+                <span>📸 {{ $t('bookmarkMg.snapshot') }}</span>
               </button>
-            </BTooltip>
-            <button v-if="isEdit" type="button" class="generate-meta-action" @click="snapVisible = true" v-click-log="{ module: '书签详情', operation: '查看网页快照' }">
-              <span>📸 {{ $t('bookmarkMg.snapshot') }}</span>
-            </button>
+            </div>
           </div>
           <b-input v-model:value="bookmarkData.url"> </b-input>
         </div>
@@ -262,6 +264,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+  .tag-attr-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   .edit-tag-footer {

@@ -1202,6 +1202,8 @@ export default {
     healthSuspectHint: '"Suspect" means the server got a 404 — the page may be removed, or it may be an SPA/login-only page (opens in a browser but not on the server). Click the title to check; mark ones that are fine as normal.',
     healthMarkNormal: 'Mark normal',
     healthCheckBatch: 'Check a batch',
+    healthStartAll: 'Check all',
+    healthRecheck: 'Re-check',
     healthChecking: 'Checking…',
     healthAllChecked: 'All checked',
     healthNoDead: 'Great — no dead links',

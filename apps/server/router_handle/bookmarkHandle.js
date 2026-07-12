@@ -13,7 +13,7 @@ import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
-import { checkBookmarkHealth, getHealthSummary, markLinkNormal } from '../util/linkHealth.js';
+import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -495,7 +495,18 @@ export const doCheckHealth = async (req, res) => {
   }
 };
 
-// GET /bookmark/health —— 当前健康概览(总数/已测/疑似失效列表)
+// POST /bookmark/health/checkAll —— 启动一次全量后台检测(前端随后轮询 GET /health 看进度)
+export const doCheckAllHealth = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    res.send(resultData(startFullCheck(req.user.id)));
+  } catch (error) {
+    console.error('启动全量检测失败:', error);
+    res.send(resultData(null, 500, '启动失败: ' + error.message));
+  }
+};
+
+// GET /bookmark/health —— 当前健康概览(总数/已测/疑似失效列表 + running)
 export const getHealth = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {

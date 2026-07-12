@@ -110,6 +110,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .bsnap-hint {
     margin: 0;
@@ -139,12 +142,20 @@
     color: var(--primary-color);
     margin-bottom: 6px;
   }
+  .bsnap-summary,
+  .bsnap-content {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
   .bsnap-summary-body {
     font-size: 13px;
     line-height: 1.7;
     color: var(--text-color);
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
   }
   .bsnap-content {
     max-height: 52vh;
@@ -166,6 +177,7 @@
     color: var(--text-color);
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
   }
   .bsnap-empty {
     text-align: center;

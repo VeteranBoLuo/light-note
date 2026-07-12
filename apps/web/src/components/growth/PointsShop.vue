@@ -31,7 +31,7 @@
           <BButton
             size="small"
             type="primary"
-            :disabled="!it.canBuy || buyingId === it.id"
+            :disabled="!canBuyNow(it) || buyingId === it.id"
             :loading="buyingId === it.id"
             @click="askBuy(it)"
           >
@@ -69,7 +69,7 @@
             v-else
             size="small"
             type="primary"
-            :disabled="!it.canBuy || buyingId === it.id"
+            :disabled="!canBuyNow(it) || buyingId === it.id"
             :loading="buyingId === it.id"
             @click="askBuy(it)"
           >
@@ -102,7 +102,7 @@
               {{ t('growth.shopEquip') }}
             </BButton>
           </template>
-          <BButton v-else size="small" type="primary" :disabled="!it.canBuy || buyingId === it.id" :loading="buyingId === it.id" @click="askBuy(it)">
+          <BButton v-else size="small" type="primary" :disabled="!canBuyNow(it) || buyingId === it.id" :loading="buyingId === it.id" @click="askBuy(it)">
             {{ titleBtn(it) }}
           </BButton>
         </div>
@@ -160,16 +160,25 @@
   const titles = computed(() => shop.value?.items.filter((i) => i.type === 'title') || []);
   const frames = computed(() => shop.value?.items.filter((i) => i.type === 'cosmetic') || []);
 
+  // 可兑换判定:全前端按 live shop.points/level/owned/上限 实时算,积分变动即时生效(不依赖服务端 canBuy 快照,免刷新)
+  function canBuyNow(it: ShopItem) {
+    const s = shop.value;
+    if (!s || s.isVisitor || it.owned) return false;
+    if (it.minLevel && (s.level || 0) < it.minLevel) return false;
+    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return false;
+    return (s.points || 0) >= it.cost;
+  }
+
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
   function consumableBtn(it: ShopItem) {
-    if (it.canBuy) return t('growth.shopBuy');
+    if (canBuyNow(it)) return t('growth.shopBuy');
     if (it.id === 'makeup_card' && (shop.value?.protectCards || 0) >= 2) return t('growth.shopCardMax');
     if ((shop.value?.points || 0) < it.cost) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
   }
   // 称号按钮文案:未拥有且不可买 → 等级不足 / 积分不足
   function titleBtn(it: ShopItem) {
-    if (it.canBuy) return t('growth.shopBuy');
+    if (canBuyNow(it)) return t('growth.shopBuy');
     if (it.minLevel && (shop.value?.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
     if ((shop.value?.points || 0) < it.cost) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
@@ -182,7 +191,7 @@
   const logVisible = ref(false);
 
   function askBuy(it: ShopItem) {
-    if (!it.canBuy) return;
+    if (!canBuyNow(it)) return;
     pending.value = it;
     confirmVisible.value = true;
   }

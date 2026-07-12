@@ -197,6 +197,7 @@
     flex-direction: column;
     gap: 16px;
     color: var(--text-color);
+    padding-bottom: 24px;
   }
   .pops-header {
     display: flex;

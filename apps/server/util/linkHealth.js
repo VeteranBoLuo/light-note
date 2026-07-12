@@ -22,6 +22,12 @@ export async function ensureBookmarkHealthTable() {
   `);
 }
 
+// 正在全量检测的用户(内存态,进程级):防重入 + 供前端轮询判断是否还在跑
+const fullChecking = new Set();
+export function isChecking(userId) {
+  return fullChecking.has(userId);
+}
+
 // 简单并发池:对 items 逐个跑 worker,最多 CONCURRENCY 个同时进行
 async function runPool(items, worker) {
   let i = 0;
@@ -48,24 +54,48 @@ export async function checkBookmarkHealth(userId) {
       LIMIT ${BATCH}`,
     [userId],
   );
-  await runPool(bms, async (b) => {
-    let r;
-    try {
-      r = await checkUrlLiveness(b.url);
-    } catch {
-      r = { status: 'unknown', code: 'ERR' };
-    }
-    const note = String(r.code || r.status).slice(0, 32);
-    await pool.query(
-      `INSERT INTO bookmark_health (bookmark_id, user_id, status, note) VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE status = ?, note = ?, checked_at = CURRENT_TIMESTAMP`,
-      [b.id, userId, r.status, note, r.status, note],
-    );
-  });
+  await runPool(bms, (b) => checkOneAndSave(userId, b));
   return { checkedThisRun: bms.length, ...(await getHealthSummary(userId)) };
 }
 
-// 概览:总书签数、已测数 + 疑似失效列表(含书签名、是否有快照可兜底)
+// 单条检测并落库(全量/增量共用)
+async function checkOneAndSave(userId, b) {
+  let r;
+  try {
+    r = await checkUrlLiveness(b.url);
+  } catch {
+    r = { status: 'unknown', code: 'ERR' };
+  }
+  const note = String(r.code || r.status).slice(0, 32);
+  await pool.query(
+    `INSERT INTO bookmark_health (bookmark_id, user_id, status, note) VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE status = ?, note = ?, checked_at = CURRENT_TIMESTAMP`,
+    [b.id, userId, r.status, note, r.status, note],
+  );
+}
+
+// 全量后台检测:一次把该用户所有书签查完(并发受限),后台跑不阻塞请求;前端轮询 getHealthSummary 看进度。
+// 用 fullChecking 防重入(同一用户同时只跑一个)。逐条落库,故轮询能看到 checked/suspect 实时增长。
+export function startFullCheck(userId) {
+  if (fullChecking.has(userId)) return { running: true, already: true };
+  fullChecking.add(userId);
+  (async () => {
+    try {
+      const [bms] = await pool.query(
+        "SELECT id, url FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''",
+        [userId],
+      );
+      await runPool(bms, (b) => checkOneAndSave(userId, b));
+    } catch (e) {
+      console.warn('[死链体检] 全量检测失败:', e.message);
+    } finally {
+      fullChecking.delete(userId);
+    }
+  })();
+  return { running: true };
+}
+
+// 概览:总书签数、已测数 + 疑似失效列表(含书签名、是否有快照可兜底);running=是否正在全量检测
 export async function getHealthSummary(userId) {
   const [[tot]] = await pool.query("SELECT COUNT(*) AS c FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''", [userId]);
   const [[chk]] = await pool.query('SELECT COUNT(*) AS c FROM bookmark_health WHERE user_id = ?', [userId]);
@@ -81,6 +111,7 @@ export async function getHealthSummary(userId) {
   return {
     total: Number(tot.c || 0),
     checked: Number(chk.c || 0),
+    running: fullChecking.has(userId),
     suspect: rows.map((r) => ({
       id: r.bookmark_id,
       name: r.name,

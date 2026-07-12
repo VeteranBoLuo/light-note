@@ -1191,6 +1191,8 @@ export default {
     healthSuspectHint: '「疑似」指服务器访问返回 404,可能页面已删除,也可能是单页应用/需登录(浏览器能打开却服务器读不到)。点标题确认;确实正常的可「标记正常」消除。',
     healthMarkNormal: '标记正常',
     healthCheckBatch: '检测一批',
+    healthStartAll: '全面检测',
+    healthRecheck: '重新检测',
     healthChecking: '检测中…',
     healthAllChecked: '已全部检测完',
     healthNoDead: '太好了,暂无失效链接',

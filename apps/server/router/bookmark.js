@@ -52,6 +52,8 @@ router.post('/summarize', bookmarkHandle.doSummarizeBookmark);
 
 router.post('/health/check', bookmarkHandle.doCheckHealth);
 
+router.post('/health/checkAll', bookmarkHandle.doCheckAllHealth);
+
 router.get('/health', bookmarkHandle.getHealth);
 
 router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);

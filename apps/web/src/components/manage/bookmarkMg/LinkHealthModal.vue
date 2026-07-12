@@ -8,8 +8,8 @@
           <span>{{ $t('bookmarkMg.healthProgress', { checked: summary.checked, total: summary.total }) }}</span>
           <span v-if="summary.suspect.length" class="lh-dead-n">· {{ $t('bookmarkMg.healthSuspectCount', { n: summary.suspect.length }) }}</span>
         </div>
-        <b-button size="small" type="primary" :loading="checking" :disabled="checking || allChecked" @click="checkBatch">
-          {{ checking ? $t('bookmarkMg.healthChecking') : allChecked ? $t('bookmarkMg.healthAllChecked') : $t('bookmarkMg.healthCheckBatch') }}
+        <b-button size="small" type="primary" :loading="running || starting" :disabled="running || starting" @click="startCheck">
+          {{ running ? $t('bookmarkMg.healthChecking') : allChecked ? $t('bookmarkMg.healthRecheck') : $t('bookmarkMg.healthStartAll') }}
         </b-button>
       </div>
 
@@ -37,7 +37,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref, watch, onUnmounted } from 'vue';
   import { apiBaseGet, apiBasePost } from '@/http/request.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -46,32 +46,42 @@
   const visible = defineModel<boolean>('visible');
 
   interface SuspectItem { id: string; name: string; url: string; note: string; hasSnapshot: boolean }
-  const summary = ref<{ total: number; checked: number; suspect: SuspectItem[] }>({ total: 0, checked: 0, suspect: [] });
-  const checking = ref(false);
+  const summary = ref<{ total: number; checked: number; running: boolean; suspect: SuspectItem[] }>({ total: 0, checked: 0, running: false, suspect: [] });
+  const starting = ref(false);
   const ignoring = ref('');
   const snapVisible = ref(false);
   const snapId = ref('');
+  let poller: ReturnType<typeof setInterval> | null = null;
 
+  const running = computed(() => summary.value.running);
   const allChecked = computed(() => summary.value.total > 0 && summary.value.checked >= summary.value.total);
 
   function normalizeUrl(u: string) {
     return /^https?:\/\//i.test(u) ? u : 'https://' + u;
   }
   function applySummary(d: any) {
-    summary.value = { total: d.total || 0, checked: d.checked || 0, suspect: d.suspect || [] };
+    summary.value = { total: d.total || 0, checked: d.checked || 0, running: !!d.running, suspect: d.suspect || [] };
   }
   async function loadSummary() {
     const res = await apiBaseGet('/api/bookmark/health');
     if (res?.status === 200 && res.data) applySummary(res.data);
   }
-  async function checkBatch() {
-    if (checking.value) return;
-    checking.value = true;
+  function stopPoll() {
+    if (poller) {
+      clearInterval(poller);
+      poller = null;
+    }
+  }
+  // 全量检测:启动后台任务,再轮询进度(checked/total 与疑似列表实时增长),跑完自动停
+  async function startCheck() {
+    if (starting.value || running.value) return;
+    starting.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/health/check');
-      if (res?.status === 200 && res.data) applySummary(res.data); // 返回体含最新概览
+      await apiBasePost('/api/bookmark/health/checkAll');
+      await loadSummary();
+      startPolling();
     } finally {
-      checking.value = false;
+      starting.value = false;
     }
   }
   // 标记正常:消除误报(SPA/需登录等浏览器能开的),本地即时移除 + 后端置 alive
@@ -90,8 +100,22 @@
   }
 
   watch(visible, (v) => {
-    if (v) loadSummary();
+    if (v) {
+      loadSummary().then(() => {
+        if (summary.value.running && !poller) startPolling(); // 打开时若后台仍在跑,接着轮询
+      });
+    } else {
+      stopPoll();
+    }
   });
+  function startPolling() {
+    stopPoll();
+    poller = setInterval(async () => {
+      await loadSummary();
+      if (!summary.value.running) stopPoll();
+    }, 2500);
+  }
+  onUnmounted(stopPoll);
 </script>
 
 <style scoped lang="less">
