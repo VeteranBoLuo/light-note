@@ -74,6 +74,11 @@
       title: '日志清理',
       icon: icon.userCenter.sql,
     },
+    {
+      id: 'logExclude',
+      title: '日志白名单',
+      icon: icon.userCenter.log,
+    },
   ]);
 
   function nodeClick(menu: any) {

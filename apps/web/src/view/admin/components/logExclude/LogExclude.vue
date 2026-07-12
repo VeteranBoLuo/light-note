@@ -1,51 +1,49 @@
 <template>
-  <BModal v-model:visible="visible" title="日志白名单(自己人设备免记录)" :mask-closable="false" @ok="visible = false">
-    <div class="log-exclude">
-      <p class="le-desc">
-        加入白名单的浏览器指纹,其 API 日志 / 操作日志 / 转化漏斗都不再记录。用来把你自己测试用的设备排除掉,换电脑/浏览器时在对应设备上再点一次「加入」即可。
+  <div class="log-exclude">
+    <header class="le-header">
+      <h2 class="le-title">日志白名单</h2>
+      <p class="le-subtitle">
+        加入白名单的浏览器指纹,其 API 日志 / 操作日志 / 转化漏斗都不再记录。用来把自己测试用的设备排除掉;换电脑/浏览器时,在对应设备上打开本页点一次「加入」即可(白名单存服务端,任意设备当场加)。
       </p>
+    </header>
 
-      <div class="le-current">
-        <div class="le-current-info">
-          <span class="le-label">当前浏览器指纹</span>
-          <code class="le-fp">{{ currentFp || '(未生成)' }}</code>
-        </div>
-        <b-button v-if="currentFp" type="primary" size="small" :disabled="inList || adding" @click="addCurrent">
-          {{ inList ? '本设备已在白名单' : '加入白名单' }}
-        </b-button>
+    <div class="le-current">
+      <div class="le-current-info">
+        <span class="le-label">当前浏览器指纹</span>
+        <code class="le-fp">{{ currentFp || '(未生成)' }}</code>
       </div>
+      <b-button v-if="currentFp" type="primary" size="small" :disabled="inList || adding" @click="addCurrent">
+        {{ inList ? '本设备已在白名单' : '加入白名单' }}
+      </b-button>
+    </div>
 
-      <div class="le-list">
-        <div class="le-list-head">
-          <span>已加入设备({{ list.length }})</span>
-          <b-button size="small" :disabled="loading" @click="load">刷新</b-button>
+    <div class="le-list">
+      <div class="le-list-head">
+        <span>已加入设备({{ list.length }})</span>
+        <b-button size="small" :disabled="loading" @click="load">刷新</b-button>
+      </div>
+      <div v-if="!list.length" class="le-empty">暂无</div>
+      <div
+        v-for="item in list"
+        :key="item.fingerprint"
+        class="le-item"
+        :class="{ 'is-current': item.fingerprint === currentFp }"
+      >
+        <div class="le-item-main">
+          <code class="le-fp">{{ item.fingerprint }}</code>
+          <span v-if="item.fingerprint === currentFp" class="le-badge">本设备</span>
+          <span v-if="item.note" class="le-note">{{ item.note }}</span>
         </div>
-        <div v-if="!list.length" class="le-empty">暂无</div>
-        <div
-          v-for="item in list"
-          :key="item.fingerprint"
-          class="le-item"
-          :class="{ 'is-current': item.fingerprint === currentFp }"
-        >
-          <div class="le-item-main">
-            <code class="le-fp">{{ item.fingerprint }}</code>
-            <span v-if="item.fingerprint === currentFp" class="le-badge">本设备</span>
-            <span v-if="item.note" class="le-note">{{ item.note }}</span>
-          </div>
-          <span class="le-del dom-hover" @click="remove(item.fingerprint)">删除</span>
-        </div>
+        <span class="le-del dom-hover" @click="remove(item.fingerprint)">删除</span>
       </div>
     </div>
-  </BModal>
+  </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import { computed, onMounted, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { getLogExclude, addLogExclude, removeLogExclude } from '@/api/commonApi';
-
-  const visible = defineModel<boolean>('visible', { default: false });
 
   interface ExcludeItem {
     fingerprint: string;
@@ -92,22 +90,27 @@
     }
   }
 
-  watch(visible, (v) => {
-    if (v) {
-      currentFp.value = (window as any).fingerprint || '';
-      load();
-    }
-  });
+  onMounted(load);
 </script>
 
 <style scoped lang="less">
   .log-exclude {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     color: var(--text-color);
   }
-  .le-desc {
+  .le-header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .le-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .le-subtitle {
     margin: 0;
     font-size: 12px;
     line-height: 1.6;
@@ -118,7 +121,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px;
+    padding: 12px 14px;
     border-radius: 10px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
     background: var(--workbench-subcard-bg);
@@ -161,7 +164,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 8px 10px;
+    padding: 8px 12px;
     border-radius: 8px;
     background: color-mix(in srgb, var(--card-border-color) 14%, transparent);
   }
