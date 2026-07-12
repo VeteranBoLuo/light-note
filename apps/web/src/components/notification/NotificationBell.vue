@@ -66,9 +66,7 @@
                 <span class="nt-dot" :class="`type-${n.type}`"></span>
                 <div class="nt-item-main">
                   <div class="nt-item-title">{{ renderTitle(n) }}</div>
-                  <div v-if="renderContent(n)" class="nt-item-content" :class="{ expanded: n._expanded }">{{
-                    renderContent(n)
-                  }}</div>
+                  <div v-if="renderContent(n)" class="nt-item-content">{{ renderContent(n) }}</div>
                   <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
                 </div>
                 <button class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
@@ -96,6 +94,15 @@
     </template>
   </BPopover>
   <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
+
+  <!-- 无跳转链接的通知:点击弹框看完整标题 + 正文(列表里被截两行) -->
+  <BModal v-model:visible="detailVisible" :title="detailItem ? renderTitle(detailItem) : ''" :show-footer="false" width="440px">
+    <div class="nt-detail">
+      <div v-if="detailItem" class="nt-detail-time">{{ fmtTime(detailItem.createTime) }}</div>
+      <div v-if="detailItem && renderContent(detailItem)" class="nt-detail-content">{{ renderContent(detailItem) }}</div>
+      <div v-else class="nt-detail-empty">{{ t('notification.noContent') }}</div>
+    </div>
+  </BModal>
 </template>
 
 <script setup lang="ts">
@@ -106,6 +113,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -116,6 +124,8 @@
   const open = ref(false);
   const wrVisible = ref(false);
   const wrData = ref<any>(null);
+  const detailVisible = ref(false);
+  const detailItem = ref<NotificationItem | null>(null);
   const items = ref<NotificationItem[]>([]);
   const total = ref(0);
   const loading = ref(false);
@@ -237,8 +247,10 @@
       open.value = false;
       router.push(n.link).catch(() => {});
     } else {
-      // 系统/其他等无跳转链接的通知:就地展开/收起全文(避免内容被截断、点击无反应)
-      n._expanded = !n._expanded;
+      // 系统/其他等无跳转链接的通知:弹框展示完整标题+正文(列表里被截成两行,弹框看全)
+      detailItem.value = n;
+      detailVisible.value = true;
+      open.value = false;
     }
   }
   // 删除单条:本地即时移除 + 后端软删(未读的会由 refreshUnread 同步角标)
@@ -459,10 +471,30 @@
     -webkit-box-orient: vertical;
     white-space: pre-wrap;
   }
-  /* 点击展开:去掉两行截断,显示全文 */
-  .notification-popover .nt-item-content.expanded {
-    -webkit-line-clamp: unset;
-    overflow: visible;
+  /* 通知详情弹框(BModal teleport 到 body,不在 .notification-popover 内) */
+  .nt-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 2px;
+  }
+  .nt-detail-time {
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .nt-detail-content {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 56vh;
+    overflow-y: auto;
+  }
+  .nt-detail-empty {
+    font-size: 13px;
+    color: var(--desc-color);
+    padding: 8px 0;
   }
   .notification-popover .nt-item-time {
     margin-top: 4px;

@@ -984,6 +984,7 @@ export default {
     title: '通知',
     markAllRead: '全部已读',
     empty: '暂无通知',
+    noContent: '(无更多内容)',
     loading: '加载中…',
     loadMore: '加载更多',
     groupToday: '今天',

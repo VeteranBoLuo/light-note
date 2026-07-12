@@ -994,6 +994,7 @@ export default {
     title: 'Notifications',
     markAllRead: 'Mark all read',
     empty: 'No notifications',
+    noContent: '(no further content)',
     loading: 'Loading…',
     loadMore: 'Load more',
     groupToday: 'Today',
