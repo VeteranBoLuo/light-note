@@ -2,6 +2,7 @@ import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, checkin, useProtec
 import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle } from '../util/points.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -120,6 +121,77 @@ export const getRanks = async (req, res) => {
   } catch (error) {
     console.error('获取段位表失败:', error);
     res.send(resultData(null, 500, '获取段位表失败: ' + error.message));
+  }
+};
+
+// GET /growth/shop —— 积分商店(目录 + 当前用户余额/等级/已拥有/已佩戴;游客只读展示,canBuy 全 false)
+export const getShop = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    const userRole = req.user?.role || 'visitor';
+    const isVisitor = !req.user?.id || userRole === 'visitor';
+    let points = 0;
+    let level = 0;
+    let equippedTitle = null;
+    let protectCards = 0;
+    let owned = [];
+    if (!isVisitor) {
+      const g = await getGrowth(userId, { userRole });
+      points = g.points || 0;
+      level = g.level || 0;
+      equippedTitle = g.equippedTitle || null;
+      protectCards = g.protectCards || 0;
+      owned = await getOwnedCosmetics(userId);
+    }
+    const items = SHOP_ITEMS.map((it) => {
+      const isOwned = it.type === 'title' && owned.includes(it.id);
+      const meetsLevel = !it.minLevel || level >= it.minLevel;
+      const cardFull = it.effect === 'makeup_card' && protectCards >= 2;
+      return {
+        id: it.id,
+        type: it.type,
+        name: it.name,
+        desc: it.desc,
+        cost: it.cost,
+        minLevel: it.minLevel || 0,
+        bonusTokens: it.bonusTokens || 0,
+        owned: isOwned,
+        equipped: it.type === 'title' && equippedTitle === it.id,
+        // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
+        canBuy: !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
+      };
+    });
+    res.send(resultData({ points, level, equippedTitle, protectCards, isVisitor, items }));
+  } catch (error) {
+    console.error('获取积分商店失败:', error);
+    res.send(resultData(null, 500, '获取积分商店失败: ' + error.message));
+  }
+};
+
+// POST /growth/shop/buy —— 购买商品(补签卡/AI加油包/称号);业务失败以 result.ok=false + msg 返回(HTTP 200)
+export const buyShopItem = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { itemId } = req.body || {};
+    if (!itemId) return res.send(resultData(null, 400, '缺少商品 id'));
+    const result = await buyItem(req.user.id, itemId, { userRole: req.user.role });
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('购买失败:', error);
+    res.send(resultData(null, 500, '购买失败: ' + error.message));
+  }
+};
+
+// POST /growth/equipTitle —— 佩戴/卸下称号(titleId 为空=卸下;须已拥有)
+export const equipTitleHandle = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { titleId } = req.body || {};
+    const result = await equipTitle(req.user.id, titleId || null);
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('佩戴称号失败:', error);
+    res.send(resultData(null, 500, '佩戴称号失败: ' + error.message));
   }
 };
 

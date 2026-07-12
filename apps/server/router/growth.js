@@ -12,6 +12,9 @@ router.get('/weeklyReport', growthHandle.getWeeklyReport);
 router.post('/admin/userGrowth', growthHandle.getUserGrowthForAdmin);
 router.post('/admin/adjust', growthHandle.doAdminAdjustGrowth);
 router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
+router.get('/shop', growthHandle.getShop);
+router.post('/shop/buy', growthHandle.buyShopItem);
+router.post('/equipTitle', growthHandle.equipTitleHandle);
 router.post('/notices/read', growthHandle.readNotices);
 
 export default router;

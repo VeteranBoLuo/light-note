@@ -11,6 +11,7 @@
  */
 import pool from '../db/index.js';
 import crypto from 'crypto';
+import { earnPoints, titleName } from './points.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(方案A,前期平缓、后期陡增,凸显高等级价值):Lv1 0.5G → Lv10 5G → Lv15 20G,
@@ -37,6 +38,7 @@ export const RANKS = [
 export const MAX_LEVEL = 15;
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
 const DAILY_QUEST_BONUS = 15; // 今日任务全部完成的一次性奖励(每日一次;计入并受日顶 200 约束,不超上限)
+const DAILY_QUEST_POINTS = 30; // 今日任务全部完成额外发的积分(消费货币,不受经验日顶约束)
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
 // 连续加成:第 N 天 +min(N,5),第 5 天起固定 +5 → 单日签到 ≤ 10
@@ -245,9 +247,11 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let lastNotifiedLevel = 1;
   let protectCards = 0;
   let canUseProtectCard = false;
+  let points = 0;
+  let equippedTitle = null;
   if (userId && userId !== 'visitor') {
     const [rows] = await pool.query(
-      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards FROM user_growth WHERE user_id = ?',
+      'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title FROM user_growth WHERE user_id = ?',
       [userId],
     );
     if (rows[0]) {
@@ -256,6 +260,8 @@ export async function getGrowth(userId, { userRole = null } = {}) {
       lastCheckin = rows[0].last_checkin_date || null;
       lastNotifiedLevel = Number(rows[0].last_notified_level || 1);
       protectCards = Number(rows[0].streak_protect_cards || 0);
+      points = Number(rows[0].points || 0);
+      equippedTitle = rows[0].equipped_title || null;
     }
     // 补签判定:有卡且昨天没有签到记录(不依赖 lastCheckin,今天签到了昨天漏签也能补)
     if (protectCards > 0) {
@@ -298,6 +304,9 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     trashDays: rank.trashDays,
     streak,
     protectCards, // 补签卡数量(上限 2)
+    points, // 积分余额(消费货币)
+    equippedTitle, // 已佩戴称号 id
+    equippedTitleName: titleName(equippedTitle), // 称号显示名
     canUseProtectCard, // 昨天漏签且有卡 → 可补签续连签
     checkedInToday: lastCheckin === dayKey(),
     levelStartExp: rank.cumExp,
@@ -550,10 +559,13 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
 
   const grant = await grantExp(userId, 'daily_quest', { day: today, amount: DAILY_QUEST_BONUS, userRole });
   if (grant.duplicated) return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+  // 积分与经验独立:即便经验被日顶截断(granted=0),完成任务照样发积分。按天幂等。
+  const gotQuestPoints = await earnPoints(userId, DAILY_QUEST_POINTS, 'quest', today);
   // granted 为 0 = 今日经验已达上限被截断(奖励入账为 0,但已标记领取,不重复)
   return {
     ok: true,
     expGained: grant.granted || 0,
+    pointsEarned: gotQuestPoints ? DAILY_QUEST_POINTS : 0,
     capped: (grant.granted || 0) === 0,
     leveledUp: !!grant.leveledUp,
     growth: await getGrowth(userId, { userRole }),
@@ -626,6 +638,9 @@ export async function checkin(userId, { userRole = null } = {}) {
         [userId, today, JSON.stringify({ streak })],
       );
     }
+    // 签到额外发积分(消费货币):基础 20 + 连签加成(≤10),按天幂等,与 EXP 同事务落库
+    const checkinPoints = 20 + Math.min(streak, 10);
+    const gotCheckinPoints = await earnPoints(userId, checkinPoints, 'checkin', today, conn);
     await conn.commit();
 
     return {
@@ -633,6 +648,7 @@ export async function checkin(userId, { userRole = null } = {}) {
       already: false,
       streak,
       expGained: grant.granted || 0,
+      pointsEarned: gotCheckinPoints ? checkinPoints : 0,
       leveledUp: !!grant.leveledUp,
       growth: await getGrowth(userId, { userRole }),
     };

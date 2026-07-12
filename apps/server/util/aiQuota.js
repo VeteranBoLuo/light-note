@@ -52,7 +52,16 @@ async function userDailyQuota(userId, userRole) {
   if (userRole === 'root') return RANKS[RANKS.length - 1].aiTokenDaily;
   try {
     const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
-    return rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
+    const base = rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
+    // 叠加今日购买的额度加成(积分商店「AI 加油包」写入 ai_daily_bonus,此处只读)
+    let bonus = 0;
+    try {
+      const [b] = await pool.query('SELECT bonus_tokens FROM ai_daily_bonus WHERE user_id = ? AND day = ?', [userId, dayKey()]);
+      bonus = Number(b[0]?.bonus_tokens || 0);
+    } catch {
+      /* 表尚未建(ensurePointsSchema 之前)时忽略 */
+    }
+    return base + bonus;
   } catch {
     return RANKS[0].aiTokenDaily;
   }

@@ -29,6 +29,15 @@ export const adminAdjustGrowth = (payload: { userId: string; expDelta?: number; 
 // 标记升级通知已读(查看成长页后)
 export const markNoticesRead = () => apiBasePost('/api/growth/notices/read');
 
+// 积分商店:目录 + 当前用户余额/等级/已拥有/已佩戴(游客只读)
+export const getShop = () => apiBaseGet('/api/growth/shop');
+
+// 购买商品(补签卡 / AI 加油包 / 称号)
+export const buyShopItem = (itemId: string) => apiBasePost('/api/growth/shop/buy', { itemId });
+
+// 佩戴 / 卸下称号(titleId 为空=卸下)
+export const equipTitle = (titleId: string | null) => apiBasePost('/api/growth/equipTitle', { titleId });
+
 export default {
   getMyGrowth,
   checkin,
@@ -40,4 +49,7 @@ export default {
   adminGetUserGrowth,
   adminAdjustGrowth,
   markNoticesRead,
+  getShop,
+  buyShopItem,
+  equipTitle,
 };

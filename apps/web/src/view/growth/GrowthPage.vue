@@ -24,6 +24,10 @@
         </section>
       </div>
 
+      <section class="growth-panel">
+        <PointsShop />
+      </section>
+
       <section v-if="!growth?.isMax" class="growth-panel">
         <SigninCalendar
           :checkin-days="stats.checkinDays"
@@ -61,6 +65,7 @@
   import AchievementWall from '@/components/growth/AchievementWall.vue';
   import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
   import SigninCalendar from '@/components/growth/SigninCalendar.vue';
+  import PointsShop from '@/components/growth/PointsShop.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -107,8 +112,13 @@
         } else if (res.data.capped) {
           message.info(t('growth.questCapped'));
         } else {
-          message.success(t('growth.questClaimOk', { n: res.data.expGained }));
-          recordOperation({ module: '成长', operation: `领取每日任务奖励（+${res.data.expGained}）` });
+          const pts = res.data.pointsEarned || 0;
+          if (pts > 0) {
+            message.success(t('growth.questClaimOkPts', { n: res.data.expGained, p: pts }));
+          } else {
+            message.success(t('growth.questClaimOk', { n: res.data.expGained }));
+          }
+          recordOperation({ module: '成长', operation: `领取每日任务奖励（经验+${res.data.expGained}、积分+${pts}）` });
         }
       }
     } catch (err) {

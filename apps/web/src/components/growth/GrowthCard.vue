@@ -9,8 +9,12 @@
         <div class="gc-name">
           {{ t('growth.ranks.' + g.level) }}
           <span v-if="g.isMax" class="gc-max">{{ t('growth.max') }}</span>
+          <span v-if="g.equippedTitleName" class="gc-title-badge">🏅 {{ g.equippedTitleName }}</span>
         </div>
-        <div class="gc-exp">{{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}</div>
+        <div class="gc-exp">
+          {{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}
+          <span class="gc-points">· 🪙 {{ (g.points || 0).toLocaleString('en-US') }} {{ t('growth.points') }}</span>
+        </div>
       </div>
       <button class="gc-checkin" :class="{ done: g.checkedInToday }" :disabled="g.checkedInToday || checking" @click="onCheckin">
         {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
@@ -136,8 +140,13 @@
         if (res.data.already) {
           message.info(t('growth.alreadyChecked'));
         } else {
-          message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
-          recordOperation({ module: '成长', operation: `每日签到（连续 ${res.data.streak} 天，+${res.data.expGained}）` });
+          const pts = res.data.pointsEarned || 0;
+          if (pts > 0) {
+            message.success(t('growth.checkinSuccessPts', { n: res.data.expGained, p: pts }));
+          } else {
+            message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
+          }
+          recordOperation({ module: '成长', operation: `每日签到（连续 ${res.data.streak} 天，经验+${res.data.expGained}、积分+${pts}）` });
           if (res.data.leveledUp && res.data.growth) {
             lvUp.value = { level: res.data.growth.level, name: res.data.growth.name }; // 触发升级庆祝动画
             markRead(); // 签到升级当场已看动画 → 立即标记已读,避免刷新页面重复弹
@@ -252,10 +261,23 @@
     color: #fff;
     background: linear-gradient(135deg, #f43f5e, #fb923c);
   }
+  .gc-title-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary-color), #22d3ee);
+    white-space: nowrap;
+  }
   .gc-exp {
     font-size: 12.5px;
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
+  }
+  .gc-points {
+    color: #d97706;
+    font-weight: 600;
   }
   .gc-checkin {
     flex: 0 0 auto;
