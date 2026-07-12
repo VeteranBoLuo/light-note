@@ -417,6 +417,28 @@
           </div>
         </section>
 
+        <!-- 数据导出 / 备份 -->
+        <section class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--appearance">📦</span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.exportTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.exportDesc') }}</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.exportAll') }}</span>
+                <span class="field-desc">{{ t('settings.exportAllDesc') }}</span>
+              </div>
+              <button class="export-btn" :disabled="exporting" @click="exportAll">
+                {{ exporting ? t('settings.exporting') : t('settings.exportBtn') }}
+              </button>
+            </div>
+          </div>
+        </section>
+
         <p class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
@@ -453,6 +475,37 @@
       "';var u=encodeURIComponent(location.href),t=encodeURIComponent(document.title||''),s='';try{s=encodeURIComponent((''+(window.getSelection?window.getSelection():'')).slice(0,500))}catch(e){}window.open(o+'/quick-save?u='+u+'&t='+t+'&d='+s,'ln_qs','width=480,height=680')})();";
     if (bmRef.value) bmRef.value.setAttribute('href', code);
   });
+
+  // 一键导出/备份:拉全部数据 → 下成 JSON(文件名用本地日期,不用 toISOString 避免跨日偏差)
+  const exporting = ref(false);
+  async function exportAll() {
+    if (exporting.value) return;
+    exporting.value = true;
+    try {
+      const res = await apiBasePost('/api/user/exportData', {});
+      if (res?.status === 200 && res.data) {
+        const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const d = new Date();
+        const p = (n: number) => String(n).padStart(2, '0');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `轻笺备份_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        const c = res.data.counts || {};
+        message.success(t('settings.exportOk', { b: c.bookmarks || 0, n: c.notes || 0, f: c.files || 0 }));
+      } else {
+        message.info(res?.msg || t('settings.exportFail'));
+      }
+    } catch {
+      message.info(t('settings.exportFail'));
+    } finally {
+      exporting.value = false;
+    }
+  }
 
   // 选项 label 必须用 computed:语言即时切换(不再整页刷新)后,顶层一次性求值的 t() 不会更新
   const themeOpts = computed(() => [
@@ -774,6 +827,22 @@
   }
   .qs-bookmarklet:active {
     cursor: grabbing;
+  }
+
+  .export-btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--primary-color);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .export-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   @media (max-width: 560px) {

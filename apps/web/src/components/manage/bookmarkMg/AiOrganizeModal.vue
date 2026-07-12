@@ -3,7 +3,15 @@
     <div class="aio">
       <!-- 确认额度 -->
       <template v-if="step === 'confirm'">
-        <p class="aio-hint">{{ $t('bookmarkMg.aiOrganizeIntro') }}</p>
+        <div class="aio-seg">
+          <button type="button" class="aio-seg-btn" :class="{ active: resourceType === 'bookmark' }" @click="switchType('bookmark')">
+            {{ $t('bookmarkMg.aiOrganizeBookmarks') }}
+          </button>
+          <button type="button" class="aio-seg-btn" :class="{ active: resourceType === 'note' }" @click="switchType('note')">
+            {{ $t('bookmarkMg.aiOrganizeNotes') }}
+          </button>
+        </div>
+        <p class="aio-hint">{{ resourceType === 'note' ? $t('bookmarkMg.aiOrganizeIntroNote') : $t('bookmarkMg.aiOrganizeIntro') }}</p>
         <div v-if="quoteLoading" class="aio-center aio-muted">…</div>
         <template v-else-if="quote">
           <div v-if="quote.candidateTotal === 0" class="aio-center aio-muted">{{ $t('bookmarkMg.aiOrganizeNone') }}</div>
@@ -32,7 +40,7 @@
       <template v-else-if="step === 'review'">
         <div class="aio-review-head">
           <span>{{ $t('bookmarkMg.aiOrganizeReview', { n: chosenCount }) }}</span>
-          <label class="aio-fill"><input type="checkbox" v-model="fillMeta" /> {{ $t('bookmarkMg.aiOrganizeFillMeta') }}</label>
+          <label v-if="resourceType === 'bookmark'" class="aio-fill"><input type="checkbox" v-model="fillMeta" /> {{ $t('bookmarkMg.aiOrganizeFillMeta') }}</label>
         </div>
         <div class="aio-list">
           <div v-for="s in suggestions" :key="s.id" class="aio-item" :class="{ off: !s.include }">
@@ -93,7 +101,17 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const visible = defineModel<boolean>('visible');
+  const props = defineProps<{ initType?: 'bookmark' | 'note' }>();
   const emit = defineEmits<{ (e: 'applied'): void }>();
+
+  const resourceType = ref<'bookmark' | 'note'>('bookmark');
+  function switchType(t: 'bookmark' | 'note') {
+    if (t === resourceType.value) return;
+    resourceType.value = t;
+    quote.value = null;
+    suggestions.value = [];
+    loadQuote();
+  }
 
   type Sug = {
     id: string;
@@ -128,7 +146,7 @@
   async function loadQuote() {
     quoteLoading.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/quote', { scope: 'untagged' });
+      const res = await apiBasePost('/api/bookmark/ai/organize/quote', { scope: 'untagged', resourceType: resourceType.value });
       if (res?.status === 200) quote.value = res.data;
     } finally {
       quoteLoading.value = false;
@@ -139,7 +157,7 @@
     if (!quote.value?.batchIds?.length) return;
     step.value = 'running';
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/run', { ids: quote.value.batchIds });
+      const res = await apiBasePost('/api/bookmark/ai/organize/run', { ids: quote.value.batchIds, resourceType: resourceType.value });
       if (res?.status === 200 && res.data?.ok) {
         suggestions.value = (res.data.suggestions || []).map((s: any) => ({
           ...s,
@@ -177,7 +195,7 @@
     if (!items.length) return;
     applying.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/apply', { items });
+      const res = await apiBasePost('/api/bookmark/ai/organize/apply', { items, resourceType: resourceType.value });
       if (res?.status === 200) {
         appliedCount.value = res.data?.applied || 0;
         step.value = 'done';
@@ -205,6 +223,7 @@
 
   watch(visible, (v) => {
     if (v) {
+      resourceType.value = props.initType || 'bookmark';
       step.value = 'confirm';
       quote.value = null;
       suggestions.value = [];
@@ -227,6 +246,29 @@
     font-size: 13px;
     line-height: 1.6;
     color: var(--desc-color);
+  }
+  .aio-seg {
+    display: inline-flex;
+    background: var(--bl-input-noBorder-bg-color, rgba(0, 0, 0, 0.05));
+    border-radius: 8px;
+    padding: 3px;
+    margin-bottom: 12px;
+  }
+  .aio-seg-btn {
+    border: 0;
+    background: transparent;
+    color: var(--desc-color);
+    padding: 5px 18px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .aio-seg-btn.active {
+    background: var(--menu-body-bg-color, #fff);
+    color: var(--text-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    font-weight: 600;
   }
   .aio-muted {
     color: var(--desc-color);

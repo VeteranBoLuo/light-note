@@ -841,3 +841,52 @@ export const verifyCode = async (req, res) => {
     res.send(resultData(null, 500, L(req, '验证服务异常:', 'Verification service error: ') + e.message)); // 设置状态码为400
   }
 };
+
+// POST /user/exportData —— 一键导出/备份当前用户全部数据(书签/笔记/文件元信息 + 标签),前端下成 JSON。
+// 仅本人数据(游客拦截);文件只导元信息(名称/大小/时间),不含二进制。
+export const exportData = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const [[acct]] = await pool.query('SELECT alias, email FROM user WHERE id = ?', [userId]);
+    const [tags] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0 ORDER BY create_time', [userId]);
+    const [bookmarks] = await pool.query(
+      'SELECT id, name, url, description, create_time FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC',
+      [userId],
+    );
+    const [notes] = await pool.query(
+      'SELECT id, title, content, type, create_time FROM note WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC',
+      [userId],
+    );
+    const [files] = await pool.query(
+      'SELECT id, file_name, file_size, create_time FROM files WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC',
+      [userId],
+    );
+    // 标签关联 → 按资源附上标签名
+    const [rels] = await pool.query(
+      `SELECT r.resource_type, r.resource_id, t.name FROM resource_tag_relations r
+       JOIN tag t ON t.id = r.tag_id AND t.del_flag = 0 WHERE r.user_id = ?`,
+      [userId],
+    );
+    const tagMap = { bookmark: {}, note: {}, file: {} };
+    for (const r of rels) {
+      const m = tagMap[r.resource_type];
+      if (!m) continue;
+      (m[r.resource_id] = m[r.resource_id] || []).push(r.name);
+    }
+    const attach = (rows, type) => rows.map((x) => ({ ...x, tags: tagMap[type][x.id] || [] }));
+    res.send(
+      resultData({
+        exportedAt: new Date().toISOString(),
+        account: acct ? { alias: acct.alias, email: acct.email } : null,
+        counts: { bookmarks: bookmarks.length, notes: notes.length, files: files.length, tags: tags.length },
+        tags,
+        bookmarks: attach(bookmarks, 'bookmark'),
+        notes: attach(notes, 'note'),
+        files: attach(files, 'file'),
+      }),
+    );
+  } catch (e) {
+    res.send(resultData(null, 500, L(req, '导出失败: ', 'Export failed: ') + e.message));
+  }
+};

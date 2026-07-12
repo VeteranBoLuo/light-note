@@ -47,4 +47,6 @@ router.post('/verifyCode', userHandle.verifyCode);
 
 router.post('/appeal', userHandle.submitAppeal);
 
+router.post('/exportData', userHandle.exportData);
+
 export default router;

@@ -15,7 +15,7 @@ import { awardCreate, grantExp, hashRef } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck, resetHealth } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
-import { suggestBookmarkMeta, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
+import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
 // 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
@@ -979,8 +979,25 @@ async function organizePool(items, n, worker) {
   await Promise.all(runners);
 }
 
-// 解析候选:scope='selected'(指定 ids,校验归属)/ 'untagged'(未打标签的书签)
-async function resolveOrganizeCandidates(userId, scope, ids) {
+// 解析候选:resourceType='bookmark'|'note';scope='selected'(指定 ids,校验归属)/ 'untagged'(未打标签)
+async function resolveOrganizeCandidates(userId, scope, ids, resourceType = 'bookmark') {
+  if (resourceType === 'note') {
+    if (scope === 'selected' && Array.isArray(ids) && ids.length) {
+      const [rows] = await pool.query(
+        'SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)',
+        [userId, ids],
+      );
+      return rows;
+    }
+    const [rows] = await pool.query(
+      `SELECT n.id, n.title, n.content FROM note n
+       LEFT JOIN resource_tag_relations r ON r.resource_id = n.id AND r.resource_type = 'note'
+       WHERE n.create_by = ? AND n.del_flag = 0 AND r.tag_id IS NULL
+       ORDER BY n.create_time DESC`,
+      [userId],
+    );
+    return rows;
+  }
   if (scope === 'selected' && Array.isArray(ids) && ids.length) {
     const [rows] = await pool.query(
       "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
@@ -998,13 +1015,22 @@ async function resolveOrganizeCandidates(userId, scope, ids) {
   return rows;
 }
 
+// 去 HTML 标签,取纯文本摘录(笔记正文是富文本 HTML)
+function stripHtml(html) {
+  return String(html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // POST /bookmark/ai/organize/quote —— 预估本次可整理数(免费;不跑 AI)
 export const doOrganizeQuote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
-    const { scope = 'untagged', ids = [] } = req.body || {};
-    const candidates = await resolveOrganizeCandidates(userId, scope, ids);
+    const { scope = 'untagged', ids = [], resourceType = 'bookmark' } = req.body || {};
+    const candidates = await resolveOrganizeCandidates(userId, scope, ids, resourceType);
     const batchCap = Math.min(candidates.length, ORGANIZE_MAX_BATCH);
     res.send(
       resultData({
@@ -1025,38 +1051,63 @@ export const doOrganizeRun = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
+    const resourceType = req.body?.resourceType === 'note' ? 'note' : 'bookmark';
     const raw = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
-    if (!raw.length) return res.send(resultData(null, 400, '未选择要整理的书签'));
-    const [rows] = await pool.query(
-      "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
-      [userId, raw],
-    );
-    // 单次条数上限(防跑量;可分批多次运行)
-    const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
-    if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
+    if (!raw.length) return res.send(resultData(null, 400, '未选择要整理的内容'));
     const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
+    const toMatched = (ids) => tagRows.filter((t) => ids.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
     const suggestions = [];
-    await organizePool(targets, 3, async (b) => {
-      try {
-        const r = await suggestBookmarkMeta({ url: b.url, name: b.name, description: b.description, userTags: tagRows });
-        if (!r) return;
-        const hasSomething = r.matchedTagIds.length || r.newTags.length || r.name || r.description;
-        if (!hasSomething) return;
-        const matchedTags = tagRows.filter((t) => r.matchedTagIds.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
-        suggestions.push({
-          id: b.id,
-          url: b.url,
-          currentName: b.name || '',
-          currentDesc: b.description || '',
-          suggestName: r.name || '',
-          suggestDesc: r.description || '',
-          matchedTags,
-          newTags: r.newTags || [],
-        });
-      } catch {
-        /* 单条失败跳过,不阻断整批 */
-      }
-    });
+
+    if (resourceType === 'note') {
+      const [rows] = await pool.query('SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)', [userId, raw]);
+      const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
+      if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
+      await organizePool(targets, 3, async (n) => {
+        try {
+          const text = `标题:${n.title || '(无)'}\n正文:${stripHtml(n.content).slice(0, 1200)}`;
+          const r = await suggestTagsFromText({ text, userTags: tagRows });
+          if (!r || (!r.matchedTagIds.length && !r.newTags.length)) return;
+          suggestions.push({
+            id: n.id,
+            url: '',
+            currentName: n.title || '',
+            currentDesc: '',
+            suggestName: '',
+            suggestDesc: '',
+            matchedTags: toMatched(r.matchedTagIds),
+            newTags: r.newTags || [],
+          });
+        } catch {
+          /* 单条失败跳过 */
+        }
+      });
+    } else {
+      const [rows] = await pool.query(
+        "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
+        [userId, raw],
+      );
+      const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
+      if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
+      await organizePool(targets, 3, async (b) => {
+        try {
+          const r = await suggestBookmarkMeta({ url: b.url, name: b.name, description: b.description, userTags: tagRows });
+          if (!r) return;
+          if (!r.matchedTagIds.length && !r.newTags.length && !r.name && !r.description) return;
+          suggestions.push({
+            id: b.id,
+            url: b.url,
+            currentName: b.name || '',
+            currentDesc: b.description || '',
+            suggestName: r.name || '',
+            suggestDesc: r.description || '',
+            matchedTags: toMatched(r.matchedTagIds),
+            newTags: r.newTags || [],
+          });
+        } catch {
+          /* 单条失败跳过 */
+        }
+      });
+    }
     res.send(resultData({ ok: true, processed: suggestions.length, suggestions }));
   } catch (e) {
     res.send(resultData(null, 500, 'AI 整理失败: ' + e.message));
@@ -1066,6 +1117,9 @@ export const doOrganizeRun = async (req, res) => {
 // POST /bookmark/ai/organize/apply —— 应用复审后的建议(加标签/新建标签/仅在原为空时补名称描述)
 export const doOrganizeApply = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const resourceType = req.body?.resourceType === 'note' ? 'note' : 'bookmark';
+  const isNote = resourceType === 'note';
+  const relType = isNote ? RESOURCE_TYPE.NOTE : RESOURCE_TYPE.BOOKMARK;
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.send(resultData({ applied: 0 }));
   const userId = req.user.id;
@@ -1080,10 +1134,10 @@ export const doOrganizeApply = async (req, res) => {
     for (const it of items) {
       const id = String(it?.id || '');
       if (!id) continue;
-      const [own] = await conn.query(
-        'SELECT id, name, description FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0',
-        [id, userId],
-      );
+      // 归属校验:书签按 user_id、笔记按 create_by
+      const [own] = isNote
+        ? await conn.query('SELECT id FROM note WHERE id = ? AND create_by = ? AND del_flag = 0', [id, userId])
+        : await conn.query('SELECT id, name, description FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [id, userId]);
       if (!own.length) continue;
       const finalTagIds = [];
       for (const tid of Array.isArray(it.tagIds) ? it.tagIds : []) {
@@ -1104,30 +1158,24 @@ export const doOrganizeApply = async (req, res) => {
         finalTagIds.push(tid);
       }
       // 4 标签上限:算上已有关联,只补到 4
-      const [[cnt]] = await conn.query(
-        "SELECT COUNT(*) AS c FROM resource_tag_relations WHERE resource_type = 'bookmark' AND resource_id = ?",
-        [id],
-      );
+      const [[cnt]] = await conn.query('SELECT COUNT(*) AS c FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ?', [relType, id]);
       const room = Math.max(0, 4 - Number(cnt.c || 0));
       const toAdd = [...new Set(finalTagIds)].slice(0, room);
       if (toAdd.length) {
-        await insertResourceTagRelations(conn, {
-          tagIds: toAdd,
-          resourceType: RESOURCE_TYPE.BOOKMARK,
-          resourceId: id,
-          userId,
-          source: 'ai',
-        });
+        await insertResourceTagRelations(conn, { tagIds: toAdd, resourceType: relType, resourceId: id, userId, source: 'ai' });
       }
-      const setName = it.name && !own[0].name ? String(it.name).trim() : null;
-      const setDesc = it.description && !own[0].description ? String(it.description).trim() : null;
-      if (setName || setDesc) {
-        await conn.query('UPDATE bookmark SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ? AND user_id = ?', [
-          setName,
-          setDesc,
-          id,
-          userId,
-        ]);
+      // 仅书签补空名称/描述;笔记不改标题正文
+      if (!isNote) {
+        const setName = it.name && !own[0].name ? String(it.name).trim() : null;
+        const setDesc = it.description && !own[0].description ? String(it.description).trim() : null;
+        if (setName || setDesc) {
+          await conn.query('UPDATE bookmark SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ? AND user_id = ?', [
+            setName,
+            setDesc,
+            id,
+            userId,
+          ]);
+        }
       }
       applied++;
     }

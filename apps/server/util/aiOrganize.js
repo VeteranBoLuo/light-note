@@ -8,6 +8,61 @@ import { requestDeepSeek } from './agent/deepseekClient.js';
 
 export const ORGANIZE_MAX_BATCH = 20; // 单次最多处理条数(控制单次时长;整完可继续下一批)
 
+// 解析 AI 返回的 JSON(容错去 markdown / 提取花括号)
+function parseAiJson(content) {
+  const clean = String(content || '')
+    .replace(/```json|```/g, '')
+    .trim();
+  try {
+    return JSON.parse(clean);
+  } catch {
+    const m = clean.match(/\{[\s\S]*\}/);
+    if (m) {
+      try {
+        return JSON.parse(m[0]);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+// 把 AI 的 matchedTags(标签名)映射为已有标签 id;newTags 过滤掉与已有重名的
+function mapTagSuggestion(parsed, userTags) {
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const matchedNames = Array.isArray(parsed?.matchedTags) ? parsed.matchedTags : [];
+  const matchedTagIds = userTags.filter((t) => matchedNames.some((n) => norm(n) === norm(t.name))).map((t) => t.id);
+  const newTags = (Array.isArray(parsed?.newTags) ? parsed.newTags : [])
+    .map((s) => String(s || '').trim())
+    .filter((n) => n && !userTags.some((t) => norm(t.name) === norm(n)))
+    .slice(0, 3);
+  return { matchedTagIds, newTags };
+}
+
+// 从纯文本(如笔记标题+正文)推荐标签:只匹配/建议标签,不生成名称描述。供「AI 整理笔记」用。
+export async function suggestTagsFromText({ text, userTags = [] }) {
+  const tagNameList = userTags.map((t) => t.name);
+  const userPrompt = [
+    '请根据下面的内容,为它推荐关联标签。',
+    '',
+    '内容:',
+    String(text || '').slice(0, 1500),
+    '',
+    `已有标签(JSON 数组):${JSON.stringify(
+      tagNameList,
+    )}。从"已有标签"里挑 0-4 个最相关的放进 matchedTags(必须与列表文字完全一致);都不合适则 matchedTags 返回空数组,并在 newTags 给 1-3 个建议新增的简短标签名(2-6 个字)。`,
+    '只输出 JSON 对象:{"matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
+  ].join('\n');
+  const { content } = await requestDeepSeek([
+    { role: 'system', content: '你是内容整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
+    { role: 'user', content: userPrompt },
+  ]);
+  const parsed = parseAiJson(content);
+  if (!parsed) return null;
+  return mapTagSuggestion(parsed, userTags);
+}
+
 /**
  * 单个书签:AI 生成 name/description + 从已有标签匹配(matchedTagIds)+ 建议新标签(newTags)。
  * 已有 name+description 时【不再抓网页】(省时省钱),直接据已有信息打标签;缺失才抓正文。
@@ -57,32 +112,9 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
     { role: 'system', content: '你是书签整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
     { role: 'user', content: userPrompt },
   ]);
-  const cleanText = String(content || '')
-    .replace(/```json|```/g, '')
-    .trim();
-
-  let parsed = null;
-  try {
-    parsed = JSON.parse(cleanText);
-  } catch {
-    const match = cleanText.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        parsed = JSON.parse(match[0]);
-      } catch {
-        parsed = null;
-      }
-    }
-  }
+  const parsed = parseAiJson(content);
   if (!parsed || (!parsed.name && !parsed.description && !Array.isArray(parsed.matchedTags))) return null;
-
-  const norm = (s) => String(s || '').trim().toLowerCase();
-  const matchedNames = Array.isArray(parsed.matchedTags) ? parsed.matchedTags : [];
-  const matchedTagIds = userTags.filter((t) => matchedNames.some((n) => norm(n) === norm(t.name))).map((t) => t.id);
-  const newTags = (Array.isArray(parsed.newTags) ? parsed.newTags : [])
-    .map((s) => String(s || '').trim())
-    .filter((n) => n && !userTags.some((t) => norm(t.name) === norm(n)))
-    .slice(0, 3);
+  const { matchedTagIds, newTags } = mapTagSuggestion(parsed, userTags);
   return {
     name: String(parsed.name || '').trim(),
     description: String(parsed.description || '').trim(),
