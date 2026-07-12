@@ -36,12 +36,15 @@ async function runPool(items, worker) {
 
 // 检测一批(最久未测优先:先没有 health 记录的,再按 checked_at 最早)。返回本批结果 + 累计概览。
 export async function checkBookmarkHealth(userId) {
-  // 顺序:①从未检测的优先 ②其次复验旧的"已失效"(修正历史误报)③再按最久未测
+  // 顺序:①优先复验"1 小时前判过死"的(纠正历史误报,又不会在同一轮里反复复检刚确认的死链)
+  //       ②其次从未检测过的 ③再按最久未测。这样点几次就能把误报的死链纠正过来,同时新书签也能推进。
   const [bms] = await pool.query(
     `SELECT b.id, b.url FROM bookmark b
        LEFT JOIN bookmark_health h ON h.bookmark_id = b.id
       WHERE b.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> ''
-      ORDER BY (h.checked_at IS NULL) DESC, (h.status = 'dead') DESC, h.checked_at ASC
+      ORDER BY (h.status = 'dead' AND h.checked_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)) DESC,
+               (h.checked_at IS NULL) DESC,
+               h.checked_at ASC
       LIMIT ${BATCH}`,
     [userId],
   );
