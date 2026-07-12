@@ -490,19 +490,29 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   }
 
   // 成就进度:统一用 stats + 当前等级派生(root 等级=满级,资源统计真实)
-  // 已领取集合:points_log 里 reason='achievement' 的 ref 即已领成就 key(领取幂等的单一事实源)
+  // 永久解锁模型(业界惯例):一旦达标即永久解锁,此后删内容让指标回落也【不退回未解锁、不重复置灰/高亮】。
+  // 事实源仍用 points_log(无需额外表):reason='achievement'=已领取;reason='ach_unlock'(delta=0)=已解锁的永久标记。
   let claimedKeys = new Set();
+  let unlockedKeys = new Set();
   if (!isGuest) {
-    const [cRows] = await pool.query("SELECT ref FROM points_log WHERE user_id = ? AND reason = 'achievement'", [userId]);
-    claimedKeys = new Set(cRows.map((r) => r.ref));
+    const [cRows] = await pool.query(
+      "SELECT reason, ref FROM points_log WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock')",
+      [userId],
+    );
+    for (const r of cRows) {
+      unlockedKeys.add(r.ref);
+      if (r.reason === 'achievement') claimedKeys.add(r.ref);
+    }
   }
   const metrics = { ...stats, level: growth.level };
+  const newlyUnlocked = []; // 本次读取里首次达标、尚无永久标记的成就 → 待落库固化
   const achievements = ACHIEVEMENTS.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
     const claimed = claimedKeys.has(a.key);
-    // 已领取的成就恒显示为已解锁(粘性):即便之后删内容让指标回落,也不"退回未解锁",
-    // 避免误以为能重复解锁刷分;领取本身按 points_log(reason=achievement,ref=key)永久幂等,绝不重复发。
-    const unlocked = cur >= a.target || claimed;
+    // 永久解锁 = 已领取 / 有解锁标记 / 或当前刚达标(后者首次出现时落标记固化,之后指标回落也不退回)
+    const everUnlocked = claimed || unlockedKeys.has(a.key);
+    const unlocked = everUnlocked || cur >= a.target;
+    if (!isGuest && !everUnlocked && cur >= a.target) newlyUnlocked.push(a.key);
     return {
       key: a.key,
       group: a.group,
@@ -514,6 +524,16 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
       claimable: unlocked && !claimed, // 可领取(已解锁且未领)
     };
   });
+  // 首次达标 → 落一条永久解锁标记(delta=0,不影响积分余额;幂等 INSERT..WHERE NOT EXISTS 防并发重复)。
+  // 用户「积分明细」查询会排除 ach_unlock,不污染流水展示。
+  for (const key of newlyUnlocked) {
+    await pool.query(
+      `INSERT INTO points_log (user_id, delta, reason, ref)
+       SELECT ?, 0, 'ach_unlock', ? FROM DUAL
+       WHERE NOT EXISTS (SELECT 1 FROM points_log WHERE user_id = ? AND reason = 'ach_unlock' AND ref = ?)`,
+      [userId, key, userId, key],
+    );
+  }
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const claimableCount = achievements.filter((a) => a.claimable).length; // 待领取数(前端红点/汇总)
 

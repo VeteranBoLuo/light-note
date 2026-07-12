@@ -163,11 +163,12 @@ export async function getStorageBonus(userId) {
 export async function getPointsLog(userId, { limit = 30, offset = 0 } = {}) {
   const lim = Math.min(100, Math.max(1, Number(limit) || 30));
   const off = Math.max(0, Number(offset) || 0); // lim/off 已 clamp 为整数,直接内插避免 LIMIT 占位符类型坑
+  // 排除 ach_unlock:那是成就"永久解锁"的内部标记(delta=0),非积分流水,不该出现在用户明细里
   const [rows] = await pool.query(
-    `SELECT delta, reason, ref, create_time FROM points_log WHERE user_id = ? ORDER BY id DESC LIMIT ${lim} OFFSET ${off}`,
+    `SELECT delta, reason, ref, create_time FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock' ORDER BY id DESC LIMIT ${lim} OFFSET ${off}`,
     [userId],
   );
-  const [[c]] = await pool.query('SELECT COUNT(*) AS c FROM points_log WHERE user_id = ?', [userId]);
+  const [[c]] = await pool.query("SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock'", [userId]);
   return { rows, total: Number(c.c || 0), limit: lim, offset: off };
 }
 
