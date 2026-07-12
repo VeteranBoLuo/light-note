@@ -302,6 +302,83 @@
           </div>
         </section>
 
+        <!-- 账号与安全(登录用户可见) -->
+        <section v-if="!isGuestUser()" class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--general">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
+              </svg>
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">账号与安全</h2>
+              <p class="card-sub">密码、账号绑定与登录设备</p>
+            </div>
+          </div>
+          <div class="fields">
+            <AccountSecurity />
+          </div>
+        </section>
+
+        <!-- AI 设置 -->
+        <section class="settings-card">
+          <div class="card-head">
+            <span class="card-icon card-icon--appearance">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3.5" />
+                <path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18" />
+              </svg>
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">AI 设置</h2>
+              <p class="card-sub">回答风格与今日额度</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">回答风格</span>
+                <span class="field-desc">越「发散」每次回答越不同,越「严谨」越稳定一致</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in aiStyleOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: ((user.preferences as any).aiStyle || 'balanced') === o.v }"
+                  @click="set('aiStyle', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">AI 开关</span>
+                <span class="field-desc">关闭后隐藏 AI 助手入口</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in onOffOpts"
+                  :key="String(o.v)"
+                  class="seg-btn"
+                  :class="{ active: ((user.preferences as any).aiEnabled ?? true) === o.v }"
+                  @click="set('aiEnabled', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">今日 AI 额度</span>
+                <span class="field-desc">按成长等级每日发放</span>
+              </div>
+              <span class="field-desc" style="color: var(--text-color)">{{ quotaText }}</span>
+            </div>
+          </div>
+        </section>
+
         <p class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
@@ -309,7 +386,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
@@ -318,6 +395,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { apiBasePost } from '@/http/request';
+  import AccountSecurity from '@/components/settings/AccountSecurity.vue';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -381,6 +460,31 @@
       message.warning(t('settings.saveFailed'));
     }
   }
+
+  // AI 回答风格(映射后端 temperature:严谨0.3/平衡1.0/发散1.5)
+  const aiStyleOpts = [
+    { v: 'strict', label: '严谨' },
+    { v: 'balanced', label: '平衡' },
+    { v: 'creative', label: '发散' },
+  ];
+
+  // 今日 AI 额度
+  const quotaText = ref('加载中…');
+  function fmtTokens(n: number) {
+    if (!Number.isFinite(n)) return '—';
+    return n >= 10000 ? `${(n / 10000).toFixed(n % 10000 === 0 ? 0 : 1)}万` : String(n);
+  }
+  onMounted(async () => {
+    try {
+      const res = await apiBasePost('/api/chat/aiQuota', {});
+      const d: any = res?.data;
+      if (d?.exempt) quotaText.value = '不限(内部账号)';
+      else if (d && Number.isFinite(d.quota)) quotaText.value = `已用 ${fmtTokens(d.used)} / ${fmtTokens(d.quota)} tokens`;
+      else quotaText.value = '—';
+    } catch {
+      quotaText.value = '—';
+    }
+  });
 
   function goBack() {
     if (window.history.length > 1) router.back();

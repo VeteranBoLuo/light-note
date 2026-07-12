@@ -7,9 +7,10 @@ import { fetchGitHubTokenRacing } from '../util/githubOAuth.js';
 import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
-import { issueLoginSession, logoutCurrentSession, ensureNotVisitor } from '../util/auth.js';
+import crypto from 'crypto';
+import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
 import { recordConversionEvent } from '../util/conversion.js';
-import { removeUserSessions, createSession } from '../util/sessionStore.js';
+import { removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
 let redisClient;
@@ -548,6 +549,58 @@ export const logout = async (req, res) => {
     res.send(resultData(null, 200, L(req, '退出成功', 'Signed out successfully.')));
   } catch (e) {
     res.send(resultData(null, 500, L(req, '退出登录失败：', 'Logout failed: ') + e.message));
+  }
+};
+
+// 会话句柄:对外只暴露 sid 的 sha256 前 16 位,绝不把真 sid 交给页面(防 XSS 泄露会话)
+const sessionHandle = (sid) => crypto.createHash('sha256').update(String(sid)).digest('hex').slice(0, 16);
+
+// 登录设备/会话列表:展示 IP/设备/最近活跃 + 标记本机
+export const getMySessions = async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId || req.user?.role === 'visitor') {
+    return res.send(resultData(null, 401, L(req, '请先登录', 'Please sign in first.')));
+  }
+  try {
+    const currentSid = getRequestSid(req);
+    const rows = await listUserSessions(userId);
+    const items = rows.map((r) => ({
+      id: sessionHandle(r.sid),
+      ip: r.ip || '',
+      userAgent: r.user_agent || '',
+      createTime: r.create_time,
+      lastActiveTime: r.last_active_time,
+      current: r.sid === currentSid,
+    }));
+    res.send(resultData(items));
+  } catch (e) {
+    res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + e.message));
+  }
+};
+
+// 吊销会话:body.id=按句柄下线单台;body.others=true 下线除本机外所有。只在本人会话集合内匹配,天然限权。
+export const revokeSession = async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId || req.user?.role === 'visitor') {
+    return res.send(resultData(null, 401, L(req, '请先登录', 'Please sign in first.')));
+  }
+  try {
+    const { id, others } = req.body || {};
+    const currentSid = getRequestSid(req);
+    const rows = await listUserSessions(userId);
+    let targets = [];
+    if (others) {
+      targets = rows.filter((r) => r.sid !== currentSid).map((r) => r.sid);
+    } else {
+      const match = rows.find((r) => sessionHandle(r.sid) === id);
+      if (!match) return res.send(resultData(null, 400, L(req, '会话不存在', 'Session not found.')));
+      if (match.sid === currentSid) return res.send(resultData(null, 400, L(req, '不能在此下线当前设备,请用退出登录', 'Use sign out for the current device.')));
+      targets = [match.sid];
+    }
+    for (const sid of targets) await removeSession(sid);
+    res.send(resultData({ revoked: targets.length }));
+  } catch (e) {
+    res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + e.message));
   }
 };
 

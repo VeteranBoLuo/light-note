@@ -202,6 +202,8 @@ export async function requestDeepSeekStream(messages, options) {
       model: getModel(cfg),
       messages,
       stream: true,
+      // 回答风格:调用方(agentHandle)按用户偏好传入并已 clamp;仅作用于最终回答,Planner 不设(保证工具选择稳定)
+      ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
       ...cfg.extraBody,
     }),
   });

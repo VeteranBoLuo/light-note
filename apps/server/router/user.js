@@ -37,6 +37,10 @@ router.post('/logout', userHandle.logout);
 
 router.post('/configPassword', userHandle.configPassword);
 
+router.post('/getMySessions', userHandle.getMySessions);
+
+router.post('/revokeSession', userHandle.revokeSession);
+
 router.post('/sendEmail', userHandle.sendEmail);
 
 router.post('/verifyCode', userHandle.verifyCode);

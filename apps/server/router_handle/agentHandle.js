@@ -19,7 +19,7 @@ import {
   parseLeakedToolCalls,
 } from '../util/agent/deepseekClient.js';
 import { parseTimeRange } from '../util/agent/timeRange.js';
-import { getOrCreateSession, recordTurn, buildContext, getSessionId } from '../util/agent/sessionStore.js';
+import { getOrCreateSession, recordTurn, getSessionId } from '../util/agent/sessionStore.js';
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import * as aiQuota from '../util/aiQuota.js';
@@ -216,8 +216,12 @@ export async function agentChat(req, res) {
       sessionId = '',
       enableTranslation = false,
       translationConfig = {},
+      aiStyle = '',
     } = req.body;
     stream = req.body.stream ?? false;
+    // 回答风格 → temperature(仅作用最终回答);未识别则不设、走默认
+    const STYLE_TEMP = { strict: 0.3, balanced: 1.0, creative: 1.5 };
+    const styleTemperature = STYLE_TEMP[aiStyle];
 
     if (!message?.trim()) {
       return res.status(400).send(resultData(null, 400, '消息不能为空'));
@@ -256,12 +260,13 @@ export async function agentChat(req, res) {
 
     // 会话
     const session = await getOrCreateSession(sessionId);
-    const contextStr = buildContext(session);
 
     // 构建 system prompt（动态：根据角色决定工具提示详略）
     const prompt = buildPlannerPrompt(toolRegistry, userRole);
-    const systemContent = contextStr
-      ? `${prompt}\n\n---\n\n${contextStr}`
+    // 只把「最近一次成功工具调用」放 system,帮助理解省略式追问(如「那第二个呢」);
+    // 对话历史不再塞进 system 的 JSON 块,而是作为真实多轮消息注入(见下方 messages),模型才真有记忆。
+    const systemContent = session.lastTool
+      ? `${prompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
       : prompt;
 
     // 处理翻译模式
@@ -274,10 +279,18 @@ export async function agentChat(req, res) {
       userMessage = `请将以下内容翻译成${targetName}${sourceHint}：\n\n${message}`;
     }
 
-    // 构建 messages 数组
+    // 构建 messages 数组:会话历史拼成真正的多轮 user/assistant 消息(而非塞进 system 的 JSON 块),
+    // 模型才真有记忆——能答「我之前问过什么」、能正确处理追问。turns 已在 sessionStore 限长(MAX_TURNS)。
     /** @type {import('../util/agent/deepseekClient.js').DeepSeekMessage[]} */
+    const historyMessages = (session.turns || [])
+      .flatMap((t) => [
+        { role: 'user', content: t.user },
+        { role: 'assistant', content: t.assistant },
+      ])
+      .filter((m) => m.content);
     const messages = [
       { role: 'system', content: systemContent },
+      ...historyMessages,
       { role: 'user', content: userMessage },
     ];
 
@@ -404,6 +417,7 @@ export async function agentChat(req, res) {
         const BUFFER_CHARS = 12;
 
         await requestDeepSeekStream(messages, {
+          temperature: styleTemperature,
           onDelta: (chunk) => {
             if (isBuffering && bufferStart === 0) {
               bufferStart = Date.now();

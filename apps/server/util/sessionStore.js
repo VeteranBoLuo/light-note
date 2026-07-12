@@ -169,3 +169,16 @@ export const removeUserSessions = async (userId) => {
 export const cleanupExpiredSessions = async () => {
   await pool.query('DELETE FROM user_sessions WHERE expires_at <= NOW()');
 };
+
+// 列出某用户当前所有有效会话(供"登录设备/会话管理"展示 + 远程下线)
+export const listUserSessions = async (userId) => {
+  if (!userId) return [];
+  const [rows] = await pool.query(
+    `SELECT sid, ip, user_agent, create_time, last_active_time, expires_at
+     FROM user_sessions
+     WHERE user_id = ? AND expires_at > NOW()
+     ORDER BY last_active_time DESC`,
+    [userId],
+  );
+  return rows;
+};

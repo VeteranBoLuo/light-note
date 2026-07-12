@@ -605,6 +605,7 @@
           sessionId: sessionId,
           enableTranslation: enableTranslation.value,
           translationConfig: translationConfig.value,
+          aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
         },
         {
           headers: {
