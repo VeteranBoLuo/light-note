@@ -1179,6 +1179,8 @@ export default {
     snapshotHint: '上方「AI 摘要」= 速览主旨;下方「完整正文」= 收藏时存的全文文字(非截图),原链失效后仍可读全文。',
     snapshotFullText: '完整正文',
     aiSummaryHint: '速览',
+    badgeArchived: '正文存档',
+    badgeSummary: 'AI 摘要',
     snapshotEmpty: '暂无存档,点「重新归档」抓取当前网页正文',
     snapshotArchive: '重新归档',
     snapshotArchiving: '归档中…',

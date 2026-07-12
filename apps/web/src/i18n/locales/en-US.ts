@@ -1190,6 +1190,8 @@ export default {
     snapshotHint: 'Top "AI Summary" = quick gist; bottom "Full Text" = the whole page text saved on bookmarking (not a screenshot), still readable if the link dies.',
     snapshotFullText: 'Full text',
     aiSummaryHint: 'gist',
+    badgeArchived: 'Archived',
+    badgeSummary: 'AI Summary',
     snapshotEmpty: 'No archive yet — click "Re-archive" to capture the current page text',
     snapshotArchive: 'Re-archive',
     snapshotArchiving: 'Archiving…',

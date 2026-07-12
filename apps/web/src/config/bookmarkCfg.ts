@@ -18,6 +18,8 @@ export interface BookmarkInterface {
   description?: string;
   tagList?: TagInterface[];
   iconUrl?: string;
+  hasSnapshot?: boolean; // 是否已有网页正文存档(列表/编辑页角标)
+  hasSummary?: boolean; // 是否已有 AI 摘要
   [key: string]: any;
 }
 

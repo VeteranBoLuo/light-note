@@ -105,6 +105,10 @@
                     <div class="bookmark-url" :title="bookmarkItem.url">
                       <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
                     </div>
+                    <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
+                      <span v-if="bookmarkItem.hasSnapshot" class="bm-badge bm-badge--snap">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
+                      <span v-if="bookmarkItem.hasSummary" class="bm-badge bm-badge--sum">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -167,6 +171,8 @@
                     />
                   </div>
                   <div class="text-hidden">{{ text }}</div>
+                  <span v-if="(record as BookmarkInterface).hasSnapshot" class="bm-mini" :title="$t('bookmarkMg.badgeArchived')">📄</span>
+                  <span v-if="(record as BookmarkInterface).hasSummary" class="bm-mini" :title="$t('bookmarkMg.badgeSummary')">🤖</span>
                 </div>
               </template>
               <template v-else-if="column.key === 'tagList'">
@@ -1141,6 +1147,41 @@
         color: var(--resource-bookmark-color);
       }
     }
+  }
+
+  // ── 正文存档 / AI 摘要 角标 ──
+  .bm-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .bm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 1px 8px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .bm-badge--snap {
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent);
+    border-color: color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent);
+  }
+  .bm-badge--sum {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    border-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
+  }
+  .bm-mini {
+    font-size: 12px;
+    margin-left: 6px;
+    cursor: default;
+    flex-shrink: 0;
   }
 
   .bookmark-desc {

@@ -440,6 +440,28 @@ ORDER BY
     .then(async ([result]) => {
       const totalSql = `SELECT COUNT(*) FROM bookmark WHERE user_id=? and del_flag = 0`;
       const [totalRes] = await pool.query(totalSql, [userId]);
+      // 回填「正文存档 / AI 摘要」角标:单查一次快照表按 id 注入,不改主查询;
+      // try/catch 兜底,即便快照表缺失或异常也只是没角标,绝不拖垮书签列表本身。
+      try {
+        const ids = (result || []).map((r) => r.id).filter(Boolean);
+        if (ids.length) {
+          const [snaps] = await pool.query(
+            `SELECT bookmark_id,
+                    (content IS NOT NULL AND content <> '') AS hasSnapshot,
+                    (summary IS NOT NULL AND summary <> '') AS hasSummary
+               FROM bookmark_snapshot WHERE bookmark_id IN (?)`,
+            [ids],
+          );
+          const map = new Map(snaps.map((s) => [s.bookmark_id, s]));
+          for (const r of result) {
+            const s = map.get(r.id);
+            r.hasSnapshot = !!(s && Number(s.hasSnapshot));
+            r.hasSummary = !!(s && Number(s.hasSummary));
+          }
+        }
+      } catch (e) {
+        console.warn('[书签角标] 快照标记回填失败(忽略):', e.message);
+      }
       res.send(
         resultData({
           items: result,
@@ -693,9 +715,22 @@ export const getBookmarkDetail = (req, res) => {
     let sql = `SELECT * FROM bookmark WHERE id=? AND user_id=? AND del_flag=0`;
     pool
       .query(sql, [req.body.filters.id, userId])
-      .then(([result]) => {
+      .then(async ([result]) => {
         if (result.length === 0) {
           return res.send(resultData(null, 404, '书签不存在'));
+        }
+        // 编辑页角标:标注该书签是否已有正文存档 / AI 摘要(try/catch 兜底,失败仅无角标)
+        try {
+          const [snap] = await pool.query(
+            `SELECT (content IS NOT NULL AND content <> '') AS hasSnapshot,
+                    (summary IS NOT NULL AND summary <> '') AS hasSummary
+               FROM bookmark_snapshot WHERE bookmark_id = ? LIMIT 1`,
+            [result[0].id],
+          );
+          result[0].hasSnapshot = !!(snap[0] && Number(snap[0].hasSnapshot));
+          result[0].hasSummary = !!(snap[0] && Number(snap[0].hasSummary));
+        } catch (e) {
+          console.warn('[书签角标] 详情快照标记失败(忽略):', e.message);
         }
         res.send(resultData(result[0]));
       })
