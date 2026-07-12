@@ -2,6 +2,7 @@ import searchKnowledgeBase from './search_knowledge_base.js';
 import queryBookmarks from './query_bookmarks.js';
 import queryNotes from './query_notes.js';
 import queryFiles from './query_files.js';
+import searchContent from './search_content.js';
 import getStorageUsage from './get_storage_usage.js';
 import getSecurityEvents from './get_security_events.js';
 import getSecuritySummary from './get_security_summary.js';
@@ -25,6 +26,7 @@ export default [
   queryBookmarks,
   queryNotes,
   queryFiles,
+  searchContent,
   getStorageUsage,
   getSecurityEvents,
   getSecuritySummary,
