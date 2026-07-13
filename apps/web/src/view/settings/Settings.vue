@@ -716,8 +716,12 @@
   .settings-anchors {
     position: fixed;
     top: 50%;
-    transform: translateY(-50%);
-    left: calc((100vw - 680px) / 2 - 148px);
+    left: 50%;
+    /* 用「视口中心 + transform 偏移」定位到居中内容(max-width 680)左侧空白:
+       340(内容半宽) + 132(自身宽) + 16(间距) = 488。刻意避开 100vw——它在界面缩放(<html> zoom)下取值
+       会与 fixed 的 zoom 二次缩放叠加,导致锚点栏右移遮住内容;而视口中心与内容在同一 zoom 上下文等比缩放,
+       相对位置恒定,放大/缩小都不遮元素。zoom=1 时与原 calc 结果等价。 */
+    transform: translate(-488px, -50%);
     z-index: 6;
     display: flex;
     flex-direction: column;
