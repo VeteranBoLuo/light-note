@@ -581,11 +581,12 @@ export const doArchiveBookmark = async (req, res) => {
 
 // POST /bookmark/snapshot —— 读取书签的网页快照(存档正文)
 export const getSnapshot = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  // 只读接口:查看已存网页快照。游客(共享 visitor 账号)也应能看示例书签的正文存档,故不加 ensureNotVisitor;
+  // 归属仍由 getBookmarkSnapshot 内 WHERE user_id 隔离(游客只读到游客账号自己的快照)。
   try {
     const { id } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
-    const snap = await getBookmarkSnapshot(req.user.id, id);
+    const snap = await getBookmarkSnapshot(req.user?.id, id);
     res.send(resultData(snap));
   } catch (error) {
     console.error('获取快照失败:', error);

@@ -5,7 +5,7 @@
       <div class="bsnap-bar">
         <span v-if="snap?.update_time" class="bsnap-time">{{ $t('bookmarkMg.snapshotUpdatedAt', { t: fmtTime(snap.update_time) }) }}</span>
         <span v-else class="bsnap-time"></span>
-        <b-space>
+        <b-space v-if="!isGuest">
           <b-button size="small" :loading="summarizing" :disabled="summarizing || !snap?.content" @click="aiSummarize">
             🤖 {{ summarizing ? $t('bookmarkMg.aiSummarizing') : snap?.summary ? $t('bookmarkMg.aiResummary') : $t('bookmarkMg.aiSummary') }}
           </b-button>
@@ -31,17 +31,22 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import { useUserStore } from '@/store';
 
   const { t } = useI18n();
   const props = defineProps<{ bookmarkId?: string }>();
   const visible = defineModel<boolean>('visible');
+
+  // 游客(共享 visitor 账号)可查看快照,但「归档 / AI 摘要」是写/消耗操作,对游客隐藏,避免点了被后端拦。
+  const user = useUserStore();
+  const isGuest = computed(() => !user.id || user.role === 'visitor');
 
   const snap = ref<any>(null);
   const loading = ref(false);
