@@ -490,15 +490,28 @@
     );
     return list;
   });
+  let scrollRaf = 0;
   function scrollToSection(id: string) {
     const page = pageRef.value;
     const el = document.getElementById(id);
     if (!page || !el) return;
-    // 不在此处立即设 activeAnchor:否则点击后先跳到目标、smooth 滚动途中 scrollspy 又跟着经过的区块跳回,造成闪跳。
-    // 交给 scrollspy 平滑跟随 + 到底兜底(onPageScroll)即可。
-    // 手动算目标在滚动容器内的位置:此页是固定框内的子路由,scrollIntoView 定位不到 .settings-page,直接 scrollTo 容器最可靠
-    const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
-    page.scrollTo({ top, behavior: 'smooth' });
+    // 目标 = 该区块在滚动容器内的绝对位置(此页是固定框内子路由,scrollIntoView 定位不到 .settings-page)
+    const target = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
+    // 用 rAF 自实现平滑滚动:原生 scrollTo({behavior:'smooth'}) 在滚动容器里长距离常滚不到目标就停(需点多次),
+    // 按帧插值最后一帧必等于 target,一次到位且平滑;不在此处设 activeAnchor,由 scrollspy 平滑跟随。
+    if (scrollRaf) cancelAnimationFrame(scrollRaf);
+    const start = page.scrollTop;
+    const dist = target - start;
+    const duration = 380;
+    let startTs = 0;
+    const step = (ts: number) => {
+      if (!startTs) startTs = ts;
+      const p = Math.min((ts - startTs) / duration, 1);
+      const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
+      page.scrollTop = start + dist * ease;
+      if (p < 1) scrollRaf = requestAnimationFrame(step);
+    };
+    scrollRaf = requestAnimationFrame(step);
   }
 
   // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
