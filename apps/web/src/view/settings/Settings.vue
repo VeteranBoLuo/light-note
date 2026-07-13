@@ -494,7 +494,8 @@
     const page = pageRef.value;
     const el = document.getElementById(id);
     if (!page || !el) return;
-    activeAnchor.value = id; // 点击即高亮:明确用户意图,不等 scrollspy(底部区块 scrollspy 判定带够不到,否则点了不亮)
+    // 不在此处立即设 activeAnchor:否则点击后先跳到目标、smooth 滚动途中 scrollspy 又跟着经过的区块跳回,造成闪跳。
+    // 交给 scrollspy 平滑跟随 + 到底兜底(onPageScroll)即可。
     // 手动算目标在滚动容器内的位置:此页是固定框内的子路由,scrollIntoView 定位不到 .settings-page,直接 scrollTo 容器最可靠
     const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
     page.scrollTo({ top, behavior: 'smooth' });
