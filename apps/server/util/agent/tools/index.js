@@ -4,6 +4,7 @@ import queryNotes from './query_notes.js';
 import queryFiles from './query_files.js';
 import searchContent from './search_content.js';
 import getStorageUsage from './get_storage_usage.js';
+import getAiQuota from './get_ai_quota.js';
 import getSecurityEvents from './get_security_events.js';
 import getSecuritySummary from './get_security_summary.js';
 import queryUsers from './query_users.js';
@@ -42,6 +43,7 @@ export default [
   queryFiles,
   searchContent,
   getStorageUsage,
+  getAiQuota,
   getSecurityEvents,
   getSecuritySummary,
   queryUsers,

@@ -149,6 +149,21 @@ export async function getStatus(req, ctx) {
   }
 }
 
+// 供 Agent「查我的 AI 额度」工具用:按 userId 查登录用户今日额度,不依赖 req(游客走指纹的场景不在此覆盖,直接给固定配额提示)。
+export async function getStatusForUser(userId, userRole) {
+  try {
+    if (!userId || userId === 'visitor' || userRole === 'visitor') {
+      return { guest: true, quota: DAILY_QUOTA.visitor };
+    }
+    const quota = await userDailyQuota(userId, userRole);
+    const used = await getDayUsed('user', userId, dayKey());
+    return { type: 'user', used, quota, remaining: Math.max(0, quota - used), enforcing: ENFORCE };
+  } catch (e) {
+    console.warn('[aiQuota] getStatusForUser 失败:', e.message);
+    return { guest: true, quota: DAILY_QUOTA.visitor };
+  }
+}
+
 export function isEnforcing() {
   return ENFORCE;
 }
