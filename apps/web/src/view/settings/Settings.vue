@@ -490,28 +490,13 @@
     );
     return list;
   });
-  let scrollRaf = 0;
   function scrollToSection(id: string) {
     const page = pageRef.value;
     const el = document.getElementById(id);
     if (!page || !el) return;
-    // 目标 = 该区块在滚动容器内的绝对位置(此页是固定框内子路由,scrollIntoView 定位不到 .settings-page)
-    const target = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
-    // 用 rAF 自实现平滑滚动:原生 scrollTo({behavior:'smooth'}) 在滚动容器里长距离常滚不到目标就停(需点多次),
-    // 按帧插值最后一帧必等于 target,一次到位且平滑;不在此处设 activeAnchor,由 scrollspy 平滑跟随。
-    if (scrollRaf) cancelAnimationFrame(scrollRaf);
-    const start = page.scrollTop;
-    const dist = target - start;
-    const duration = 380;
-    let startTs = 0;
-    const step = (ts: number) => {
-      if (!startTs) startTs = ts;
-      const p = Math.min((ts - startTs) / duration, 1);
-      const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
-      page.scrollTop = start + dist * ease;
-      if (p < 1) scrollRaf = requestAnimationFrame(step);
-    };
-    scrollRaf = requestAnimationFrame(step);
+    // 目标 = 该区块在滚动容器内的绝对位置(此页是固定框内子路由,scrollIntoView 定位不到 .settings-page,故手动算 + scrollTo)
+    const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
+    page.scrollTo({ top, behavior: 'smooth' });
   }
 
   // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
