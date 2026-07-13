@@ -791,10 +791,13 @@
   .ai-preview-body {
     max-height: 68vh;
     overflow-y: auto;
-    white-space: pre-wrap;
+    /* 内容是 v-html 渲染的 HTML 片段,不能用 pre-wrap——否则 AI 输出里标签间的源码换行
+       (<li>…</li> 之间的 \n、标题到列表之间的空行)会被当成可见换行,把行/段间距撑得很大。
+       用 normal 让浏览器折叠 HTML 空白,段间距交给下方 p/li/h* 的 margin 控制。 */
+    white-space: normal;
     word-break: break-word;
     font-size: 15px;
-    line-height: 1.8;
+    line-height: 1.7;
     color: var(--text-color);
     padding: 4px 2px;
   }
