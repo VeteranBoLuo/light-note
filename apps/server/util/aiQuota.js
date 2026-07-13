@@ -48,23 +48,28 @@ function resolveSubject(req, { userId, userRole }) {
 // 注册用户每日额度按成长等级下发(aiTokenDaily,单一事实源 = growth.RANKS,满级 800k);查不到按 Lv.1 兜底。
 // 替代早期「所有注册用户硬编码 100k」——那与成长权益页展示的按等级额度对不上。
 async function userDailyQuota(userId, userRole) {
-  // root 免账本、无经验记录,但等级视为满级 → 取满级额度(否则会掉到 Lv.1)
-  if (userRole === 'root') return RANKS[RANKS.length - 1].aiTokenDaily;
-  try {
-    const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
-    const base = rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
-    // 叠加今日购买的额度加成(积分商店「AI 加油包」写入 ai_daily_bonus,此处只读)
-    let bonus = 0;
+  // 基础额度:root 免账本、无经验记录,等级视为满级;普通用户按成长等级(查不到按 Lv.1 兜底)
+  let base;
+  if (userRole === 'root') {
+    base = RANKS[RANKS.length - 1].aiTokenDaily;
+  } else {
     try {
-      const [b] = await pool.query('SELECT bonus_tokens FROM ai_daily_bonus WHERE user_id = ? AND day = ?', [userId, dayKey()]);
-      bonus = Number(b[0]?.bonus_tokens || 0);
+      const [rows] = await pool.query('SELECT exp FROM user_growth WHERE user_id = ?', [userId]);
+      base = rankOf(levelForExp(Number(rows[0]?.exp || 0))).aiTokenDaily;
     } catch {
-      /* 表尚未建(ensurePointsSchema 之前)时忽略 */
+      return RANKS[0].aiTokenDaily;
     }
-    return base + bonus;
-  } catch {
-    return RANKS[0].aiTokenDaily;
   }
+  // 叠加今日「AI 加油包」额度加成(使用加油包写入 ai_daily_bonus,此处只读)。
+  // 修复:此前 root 提前 return 满级额度,跳过了这段,导致 root 用加油包后总量不增加。
+  let bonus = 0;
+  try {
+    const [b] = await pool.query('SELECT bonus_tokens FROM ai_daily_bonus WHERE user_id = ? AND day = ?', [userId, dayKey()]);
+    bonus = Number(b[0]?.bonus_tokens || 0);
+  } catch {
+    /* 表尚未建(ensurePointsSchema 之前)时忽略 */
+  }
+  return base + bonus;
 }
 
 async function getDayUsed(type, key, pk) {
