@@ -1229,7 +1229,9 @@
   }
 
   .result-grid--list {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr):裸 1fr 的最小值是 min-content,会被超长描述撑破 → 横向溢出、标签/时间被推出视口;
+       minmax(0,1fr) 让单列最小可收缩到 0,列表行内 row-desc 的 flex-shrink 才生效,行宽收敛到容器内 */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .result-skeleton {
