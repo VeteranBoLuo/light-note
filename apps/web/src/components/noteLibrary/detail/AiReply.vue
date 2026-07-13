@@ -139,7 +139,15 @@
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
       <div class="ai-preview">
-        <div class="ai-preview-body" v-html="outputFull"></div>
+        <div
+          class="ai-preview-body"
+          ref="previewBodyRef"
+          v-html="outputFull"
+          @scroll="handlePreviewScroll"
+          @wheel.passive="handlePreviewUserInteraction"
+          @touchstart.passive="handlePreviewUserInteraction"
+          @pointerdown.passive="handlePreviewUserInteraction"
+        ></div>
         <div class="ai-preview-actions">
           <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
           <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
@@ -150,7 +158,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, inject, ref, watchEffect } from 'vue';
+  import { computed, inject, nextTick, ref, watch, watchEffect } from 'vue';
   import { parse, Allow } from 'partial-json';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
@@ -183,6 +191,59 @@
   const textLength = ref(0);
   watchEffect(async () => {
     textLength.value = (await noteDisplayText(note?.content || '', note?.type)).length;
+  });
+
+  // 放大弹框的自动滚动:照搬小屏 TypewriterOutput 逻辑——生成时贴底跟随;用户上滚则暂停,
+  // 滚回接近底部(阈值 120px)再自动恢复跟随。弹框用纯 v-html(即时展示便于阅读),故在此单独实现。
+  const previewBodyRef = ref<HTMLElement | null>(null);
+  const previewAutoScroll = ref(true);
+  const previewInterrupted = ref(false);
+  let previewLastScrollTop = 0;
+  const PREVIEW_SCROLL_THRESHOLD = 120;
+
+  const scrollPreviewToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const el = previewBodyRef.value;
+    if (!el || previewInterrupted.value) return;
+    el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior });
+  };
+
+  const handlePreviewScroll = () => {
+    const el = previewBodyRef.value;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    const distToBottom = scrollHeight - scrollTop - clientHeight;
+    const delta = scrollTop - previewLastScrollTop;
+    previewLastScrollTop = scrollTop;
+    if (delta < 0) {
+      previewInterrupted.value = true;
+      previewAutoScroll.value = false;
+    } else if (distToBottom <= PREVIEW_SCROLL_THRESHOLD) {
+      previewAutoScroll.value = true;
+      previewInterrupted.value = false;
+    }
+  };
+
+  const handlePreviewUserInteraction = () => {
+    if (!previewAutoScroll.value && previewInterrupted.value) return;
+    previewInterrupted.value = true;
+    previewAutoScroll.value = false;
+  };
+
+  // 流式内容增长时跟随到底
+  watch(outputFull, () => {
+    if (!previewVisible.value || !previewAutoScroll.value || previewInterrupted.value) return;
+    nextTick(() => scrollPreviewToBottom('smooth'));
+  });
+
+  // 打开弹框:重置跟随状态;正在生成则立即贴底跟随,已完成则停在顶部方便阅读
+  watch(previewVisible, (open) => {
+    if (!open) return;
+    previewInterrupted.value = false;
+    previewAutoScroll.value = true;
+    previewLastScrollTop = 0;
+    nextTick(() => {
+      if (isLoading.value) scrollPreviewToBottom('auto');
+    });
   });
 
   const actionConfig: Record<string, { format: 'title' | 'body' | 'both' }> = {
