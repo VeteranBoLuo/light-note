@@ -99,7 +99,7 @@
     },
   );
 
-  watch(() => bookmark.refreshTagKey, queryTagList);
+  watch(() => bookmark.refreshTagKey, () => queryTagList());
 
   // 全局搜索「定位」跳转:目标已在当前「全部」列表 → 不重载(避免骨架屏,秒滚动);
   // 否则(处在标签过滤视图 / 目标不在当前列表)才切「全部」加载
@@ -119,11 +119,11 @@
     { immediate: true },
   );
 
-  // 查询标签列表
-  function queryTagList() {
-    bookmark.tagLoading = true;
+  // 查询标签列表。silent=true:已有缓存时的后台刷新——不显示骨架、不重复刷书签,仅把别处新增/删除的标签同步过来。
+  function queryTagList(silent = false) {
+    if (!silent) bookmark.tagLoading = true;
     const user = useUserStore();
-    if (bookmark.type !== 'normal') {
+    if (!silent && bookmark.type !== 'normal') {
       bookmark.refreshData();
     }
     apiQueryPost('/api/bookmark/queryTagList', {
@@ -133,13 +133,13 @@
         if (res.status === 200) {
           bookmark.tagList = res.data;
           user.tagTotal = res.data.length;
-          if (bookmark.type === 'normal') {
+          if (!silent && bookmark.type === 'normal') {
             bookmark.refreshData();
           }
         }
       })
       .finally(() => {
-        bookmark.tagLoading = false;
+        if (!silent) bookmark.tagLoading = false;
       });
   }
 
@@ -174,7 +174,8 @@
       bookmark.bookmarkSearch = Array.isArray(route.params.value) ? route.params.value[0] : route.params.value;
     }
     if (bookmark.tagList.length) {
-      bookmark.refreshData();
+      bookmark.refreshData(); // 有缓存:先用缓存的标签+书签立即渲染,避免每次进页面闪骨架屏
+      queryTagList(true); // 再后台静默刷新标签列表:别处新增/删除的标签,回到书签页即同步(修「回页面标签不刷新」)
     } else {
       queryTagList();
     }
