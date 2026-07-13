@@ -494,6 +494,7 @@
     const page = pageRef.value;
     const el = document.getElementById(id);
     if (!page || !el) return;
+    activeAnchor.value = id; // 点击即高亮:明确用户意图,不等 scrollspy(底部区块 scrollspy 判定带够不到,否则点了不亮)
     // 手动算目标在滚动容器内的位置:此页是固定框内的子路由,scrollIntoView 定位不到 .settings-page,直接 scrollTo 容器最可靠
     const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
     page.scrollTo({ top, behavior: 'smooth' });
@@ -503,6 +504,14 @@
   const activeAnchor = ref('set-appearance');
   const pageRef = ref<HTMLElement | null>(null);
   let anchorSpy: IntersectionObserver | null = null;
+  // 滚到容器底部时强制高亮最后一项:底部几个区块因判定带够不到,IntersectionObserver 永远轮不到它们(scrollspy 通病,业界通用兜底)
+  const onPageScroll = () => {
+    const page = pageRef.value;
+    if (!page) return;
+    if (page.scrollTop + page.clientHeight >= page.scrollHeight - 4) {
+      activeAnchor.value = anchors.value[anchors.value.length - 1].id;
+    }
+  };
   onMounted(() => {
     anchorSpy = new IntersectionObserver(
       (entries) => {
@@ -516,8 +525,12 @@
       const el = document.getElementById(a.id);
       if (el) anchorSpy!.observe(el);
     });
+    pageRef.value?.addEventListener('scroll', onPageScroll, { passive: true });
   });
-  onBeforeUnmount(() => anchorSpy?.disconnect());
+  onBeforeUnmount(() => {
+    anchorSpy?.disconnect();
+    pageRef.value?.removeEventListener('scroll', onPageScroll);
+  });
   const user = useUserStore();
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
