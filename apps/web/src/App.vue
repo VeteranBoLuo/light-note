@@ -115,6 +115,16 @@
     }
   }
 
+  // 首屏同步恢复偏好——必须在 setup 阶段执行,早于子路由组件的 setup(它们会在 setup 里读 user.preferences,
+  // 如资源中心视图/排序、标签详情视图)。若放到 onMounted 的 initApp(晚于子组件 setup),子组件会先读到默认值、
+  // 退回各自陈旧的独立 localStorage 缓存,表现为「设置页改了视图/排序,刷新对应页面不生效」。
+  (() => {
+    const stored = getStoredPreferences();
+    if (stored && Object.keys(stored).length > 0) {
+      user.preferences = { ...user.preferences, ...stored };
+    }
+  })();
+
   // 路由映射表
   const phoneReplaceMap = {
     '/admin/apiLog': '/apiLog',
@@ -166,12 +176,7 @@
   }, 100);
   function initApp() {
     localStorage.removeItem('theme');
-    // 页面加载前需要提前预设置主题，否则如果后台查询是黑夜主题，但是页面默认是白色的，页面会从白到黑闪一下，这种情况就需要提前设置为黑色
-    const preferences = getStoredPreferences();
-    if (Object.keys(preferences).length > 0) {
-      user.preferences = preferences as any;
-    }
-
+    // 偏好已在 setup 阶段同步恢复(见上方,早于子路由 setup),此处不再重复恢复,直接应用主题/缩放。
     applyTheme();
     applyScaleForRoute(); // 启动即应用缩放(仅应用内页;landing 等入口页不缩放)
     // 设置指纹
