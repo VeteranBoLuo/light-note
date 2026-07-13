@@ -139,7 +139,7 @@
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
       <div class="ai-preview">
-        <div class="ai-preview-body" ref="previewBodyRef" v-html="outputFull"></div>
+        <div class="ai-preview-body" ref="previewBodyRef" v-html="previewTyped"></div>
         <div class="ai-preview-actions">
           <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
           <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
@@ -201,11 +201,47 @@
     if (el) el.scrollTop = el.scrollHeight;
   };
 
-  // 流式内容增长:watch 默认 pre-flush,回调此刻 DOM 仍是旧内容——先判定是否贴底,再于 DOM 更新后(nextTick)贴底
-  watch(outputFull, () => {
-    if (!previewVisible.value || !isPreviewNearBottom()) return;
-    nextTick(scrollPreviewToBottom);
-  });
+  // 放大预览逐字缓冲:小窗靠 TypewriterOutput 内部逐字所以流式丝滑;放大弹框原来直接 v-html(outputFull),
+  // 只能按后端 SSE chunk 粒度整段刷新 → 观感一段段卡顿。这里对放大内容做「自适应逐字追赶」,与小窗一致平滑;
+  // 破碎的 HTML 前缀由浏览器容错渲染(同 TypewriterOutput 机制)。
+  const previewTyped = ref('');
+  let previewTypingTimer: number | null = null;
+  const stopPreviewTyping = () => {
+    if (previewTypingTimer) {
+      clearTimeout(previewTypingTimer);
+      previewTypingTimer = null;
+    }
+  };
+  const pumpPreviewTyping = () => {
+    if (previewTypingTimer) return; // 已在逐字,勿重复启动
+    const tick = () => {
+      const full = outputFull.value;
+      if (previewTyped.value.length >= full.length) {
+        previewTypingTimer = null;
+        return;
+      }
+      const remaining = full.length - previewTyped.value.length;
+      const add = Math.max(2, Math.floor(remaining / 20)); // 落后越多追越快、接近时放慢:平滑又不掉队
+      previewTyped.value = full.slice(0, previewTyped.value.length + add);
+      if (previewVisible.value && isPreviewNearBottom()) nextTick(scrollPreviewToBottom);
+      previewTypingTimer = window.setTimeout(tick, 16);
+    };
+    previewTypingTimer = window.setTimeout(tick, 16);
+  };
+
+  // 弹框可见且生成中 → 逐字追赶;否则(未打开 / 已完成)直接同步为完整,避免打开已生成好的内容还从头打字。
+  watch(
+    [outputFull, previewVisible, isLoading],
+    () => {
+      if (previewVisible.value && isLoading.value) {
+        pumpPreviewTyping();
+      } else {
+        stopPreviewTyping();
+        previewTyped.value = outputFull.value;
+      }
+    },
+    { immediate: true },
+  );
 
   // 打开弹框:正在生成→贴底开始跟随;已完成→停在顶部方便阅读
   watch(previewVisible, (open) => {
