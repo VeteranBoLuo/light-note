@@ -33,7 +33,6 @@
           <div v-for="stat in stats" :key="stat.key" class="stat-card" :class="`stat-card--${stat.key}`">
             <div class="stat-label">{{ stat.label }}</div>
             <div class="stat-value">{{ stat.value }}</div>
-            <div class="stat-desc">{{ stat.desc }}</div>
           </div>
         </div>
       </section>
@@ -106,21 +105,6 @@
                     <svg-icon :src="icon.table_delete" size="15" />
                     <span>{{ t('common.delete') }}</span>
                   </button>
-                </div>
-              </div>
-
-              <div class="resource-stats">
-                <div class="resource-stat resource-stat--bookmark">
-                  <span class="resource-stat__label">{{ t('tagManage.bookmark') }}</span>
-                  <span class="resource-stat__value">{{ tag.bookmarkList?.length || 0 }}</span>
-                </div>
-                <div class="resource-stat resource-stat--note">
-                  <span class="resource-stat__label">{{ t('tagManage.note') }}</span>
-                  <span class="resource-stat__value">{{ tag.noteList?.length || 0 }}</span>
-                </div>
-                <div class="resource-stat resource-stat--file">
-                  <span class="resource-stat__label">{{ t('tagManage.file') }}</span>
-                  <span class="resource-stat__value">{{ tag.fileList?.length || 0 }}</span>
                 </div>
               </div>
 
@@ -557,7 +541,7 @@
 
   .stat-card {
     border-radius: @radius-card;
-    padding: 14px 16px;
+    padding: 11px 14px;
     background: var(--tag-stat-bg);
     border: 1px solid var(--workbench-border-color);
     transition:
@@ -600,8 +584,8 @@
   }
 
   .stat-value {
-    margin-top: 8px;
-    font-size: 28px;
+    margin-top: 4px;
+    font-size: 22px;
     font-weight: 700;
   }
 
@@ -791,7 +775,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 14px;
-    padding: 18px 18px 0;
+    padding: 18px 18px 14px;
   }
 
   .tag-identity {
@@ -873,73 +857,6 @@
     background: color-mix(in srgb, #ef4444 @color-mix-hover, var(--tag-muted-bg));
     border-color: color-mix(in srgb, #ef4444 20%, transparent);
     color: #ef4444;
-  }
-
-  // ═══════════════════════════════════════
-  //  资源统计
-  // ═══════════════════════════════════════
-  .resource-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    padding: 16px 18px 14px;
-    position: relative;
-  }
-
-  .resource-stat {
-    border-radius: @radius-sm;
-    padding: 10px 14px;
-    background: color-mix(in srgb, var(--tag-muted-bg) 40%, transparent);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    position: relative;
-    overflow: hidden;
-
-    // 左侧迷你色条
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      width: 3px;
-      border-radius: 0 2px 2px 0;
-    }
-  }
-
-  .resource-stat--bookmark::before {
-    background: var(--resource-bookmark-color);
-  }
-  .resource-stat--note::before {
-    background: var(--resource-note-color);
-  }
-  .resource-stat--file::before {
-    background: var(--resource-file-color);
-  }
-
-  .resource-stat__label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  .resource-stat--bookmark .resource-stat__label {
-    color: var(--resource-bookmark-color);
-  }
-  .resource-stat--note .resource-stat__label {
-    color: var(--resource-note-color);
-  }
-  .resource-stat--file .resource-stat__label {
-    color: var(--resource-file-color);
-  }
-
-  .resource-stat__value {
-    font-size: 24px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
   }
 
   // ═══════════════════════════════════════
