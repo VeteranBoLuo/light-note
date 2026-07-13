@@ -19,10 +19,10 @@
         <div v-if="bookmark.isMobile" class="mobile-header">
           <div class="mobile-tools">
             <div class="view-toggle mobile-view-toggle">
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
+              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
                 <svg-icon :src="cardViewIcon" size="14" />
               </button>
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="viewMode = 'table'">
+              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">
                 <svg-icon :src="listViewIcon" size="14" />
               </button>
             </div>
@@ -41,10 +41,10 @@
           <div class="header-spacer"></div>
           <div class="header-toolbar">
             <div class="view-toggle">
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
+              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
                 <svg-icon :src="cardViewIcon" size="14" />
               </button>
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="viewMode = 'table'">
+              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">
                 <svg-icon :src="listViewIcon" size="14" />
               </button>
             </div>
@@ -112,13 +112,14 @@
 <script lang="ts" setup>
   import icon from '@/config/icon';
   import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-  import { bookmarkStore, cloudSpaceStore } from '@/store';
+  import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { updatePreference } from '@/utils/savePreference';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
 
@@ -130,15 +131,26 @@
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
+  const user = useUserStore();
   const route = useRoute();
 
   const CLOUD_SPACE_VIEW_STORAGE_KEY = 'cloud-space-view-mode';
 
   const handleBtnGroup = ref();
   const batchMode = ref(false);
+  // 视图优先取用户偏好(设置页「云空间视图」/ 跨设备),再回退本浏览器独立缓存,最后卡片——与标签详情/资源中心对齐。
+  // user 偏好在 App.vue setup 阶段已从 localStorage 早恢复,本路由组件 setup 时已就绪。
   const viewMode = ref<'card' | 'table'>(
-    (localStorage.getItem(CLOUD_SPACE_VIEW_STORAGE_KEY) as 'card' | 'table') || 'card',
+    (user.preferences.cloudView as 'card' | 'table') ||
+      (localStorage.getItem(CLOUD_SPACE_VIEW_STORAGE_KEY) as 'card' | 'table') ||
+      'card',
   );
+  // 切换云空间视图:本地即时生效(下方 watch 写独立缓存)+ 记忆到偏好(登录用户同步后端、设置页可改)
+  function setViewMode(mode: 'card' | 'table') {
+    if (viewMode.value === mode) return;
+    viewMode.value = mode;
+    updatePreference({ cloudView: mode }).catch(() => {});
+  }
   const cardViewIcon =
     '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></g></svg>';
   const listViewIcon = icon.filterPanel.list;

@@ -34,6 +34,7 @@ interface UserInfo {
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
     uiScale?: 'small' | 'medium' | 'large'; // 界面缩放(整体风格:小/标准/大,用 zoom 实现)
     resourceView?: 'card' | 'list'; // 资源中心视图
+    cloudView?: 'card' | 'table'; // 云空间视图:卡片/表格
     tagView?: 'card' | 'graph'; // 标签详情视图
     openBookmarkIn?: 'newTab' | 'current'; // 书签打开方式:新标签页/当前标签页
     hideEmptyTags?: boolean; // 首页标签列表是否隐藏空标签(默认 false=不隐藏)

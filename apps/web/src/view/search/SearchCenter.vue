@@ -1258,8 +1258,27 @@
     gap: 10px;
   }
 
+  /* 列表骨架:紧凑横向行,与重构后的列表行一致(避免加载完从大卡跳变) */
   .result-skeleton--list .result-sk-card {
-    min-height: 132px;
+    min-height: 0;
+    flex-direction: row;
+    align-items: center;
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  .result-skeleton--list .result-sk-top {
+    margin-bottom: 0;
+  }
+  .result-skeleton--list .result-sk-line--title {
+    width: 160px;
+  }
+  .result-skeleton--list .result-sk-line--desc {
+    flex: 1;
+    width: auto;
+  }
+  .result-skeleton--list .result-sk-line--desc2,
+  .result-skeleton--list .result-sk-meta {
+    display: none;
   }
 
   .result-sk-top {

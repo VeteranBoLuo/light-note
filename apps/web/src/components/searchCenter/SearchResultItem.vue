@@ -1,42 +1,69 @@
 <template>
   <article class="result-item" :class="[`result-item--${view}`, { 'result-item--selected': selected }]">
-    <label v-if="selectable" class="result-checkbox-wrap">
-      <input type="checkbox" class="result-checkbox" :checked="selected" @click.stop @change="emit('toggle-select')" />
-    </label>
-
-    <button class="result-click-area" :class="{ 'result-click-area--selectable': selectable }" @click="emit('open')">
-      <header class="item-head">
+    <!-- 列表视图:横向紧凑行(信息密度高,适合快速检索定位) -->
+    <template v-if="view === 'list'">
+      <label v-if="selectable" class="row-checkbox-wrap">
+        <input type="checkbox" class="result-checkbox" :checked="selected" @click.stop @change="emit('toggle-select')" />
+      </label>
+      <button class="result-row" @click="emit('open')">
         <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
-        <span class="item-extra">{{ headerExtra }}</span>
-      </header>
-
-      <h3 class="item-title">
-        <template v-for="(segment, index) in titleSegments" :key="`title-${index}`">
-          <mark v-if="segment.highlight">{{ segment.text }}</mark>
-          <span v-else>{{ segment.text }}</span>
-        </template>
-      </h3>
-
-      <p class="item-desc">
-        <template v-for="(segment, index) in descSegments" :key="`desc-${index}`">
-          <mark v-if="segment.highlight">{{ segment.text }}</mark>
-          <span v-else>{{ segment.text }}</span>
-        </template>
-      </p>
-
-      <div class="item-meta">
-        <span class="meta-line">
-          <strong>{{ t('tagManage.relatedTag') }}:</strong>
-          <span class="meta-line-value" :class="{ 'meta-line-value--empty': !tagMetaText }">{{ tagMetaText || '-' }}</span>
+        <span class="row-title">
+          <template v-for="(segment, index) in titleSegments" :key="`lt-${index}`">
+            <mark v-if="segment.highlight">{{ segment.text }}</mark>
+            <span v-else>{{ segment.text }}</span>
+          </template>
         </span>
-        <span class="meta-line">
-          <strong>{{ t('tagGraph.panel.updateTime') }}:</strong>
-          <span class="meta-line-value" :class="{ 'meta-line-value--empty': !updateMetaText }">
-            {{ updateMetaText || '-' }}
+        <span class="row-desc">
+          <template v-for="(segment, index) in descSegments" :key="`ld-${index}`">
+            <mark v-if="segment.highlight">{{ segment.text }}</mark>
+            <span v-else>{{ segment.text }}</span>
+          </template>
+        </span>
+        <span class="row-tags" :class="{ 'row-meta--empty': !tagMetaText }">{{ tagMetaText || '—' }}</span>
+        <span class="row-time" :class="{ 'row-meta--empty': !updateMetaText }">{{ updateMetaText || '—' }}</span>
+      </button>
+    </template>
+
+    <!-- 卡片视图:竖排卡片(舒适浏览) -->
+    <template v-else>
+      <label v-if="selectable" class="result-checkbox-wrap">
+        <input type="checkbox" class="result-checkbox" :checked="selected" @click.stop @change="emit('toggle-select')" />
+      </label>
+
+      <button class="result-click-area" :class="{ 'result-click-area--selectable': selectable }" @click="emit('open')">
+        <header class="item-head">
+          <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
+          <span class="item-extra">{{ headerExtra }}</span>
+        </header>
+
+        <h3 class="item-title">
+          <template v-for="(segment, index) in titleSegments" :key="`title-${index}`">
+            <mark v-if="segment.highlight">{{ segment.text }}</mark>
+            <span v-else>{{ segment.text }}</span>
+          </template>
+        </h3>
+
+        <p class="item-desc">
+          <template v-for="(segment, index) in descSegments" :key="`desc-${index}`">
+            <mark v-if="segment.highlight">{{ segment.text }}</mark>
+            <span v-else>{{ segment.text }}</span>
+          </template>
+        </p>
+
+        <div class="item-meta">
+          <span class="meta-line">
+            <strong>{{ t('tagManage.relatedTag') }}:</strong>
+            <span class="meta-line-value" :class="{ 'meta-line-value--empty': !tagMetaText }">{{ tagMetaText || '-' }}</span>
           </span>
-        </span>
-      </div>
-    </button>
+          <span class="meta-line">
+            <strong>{{ t('tagGraph.panel.updateTime') }}:</strong>
+            <span class="meta-line-value" :class="{ 'meta-line-value--empty': !updateMetaText }">
+              {{ updateMetaText || '-' }}
+            </span>
+          </span>
+        </div>
+      </button>
+    </template>
   </article>
 </template>
 
@@ -121,8 +148,82 @@
     min-height: 186px;
   }
 
+  /* 列表视图:横向紧凑行——覆盖卡片的最小高度与位移 hover,一行内横排:类型 / 标题 / 描述 / 标签 / 时间 */
   .result-item--list {
-    min-height: 136px;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .result-item--list:hover {
+    transform: none;
+  }
+  .row-checkbox-wrap {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+  }
+  .result-row {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    box-sizing: border-box;
+  }
+  .result-item--list .type-pill {
+    flex: 0 0 auto;
+  }
+  .row-title {
+    flex: 0 1 auto;
+    min-width: 96px;
+    max-width: 42%;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row-desc {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row-tags {
+    flex: 0 0 auto;
+    max-width: 22%;
+    color: var(--desc-color);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row-time {
+    flex: 0 0 auto;
+    width: 112px;
+    text-align: right;
+    color: var(--desc-color);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .row-meta--empty {
+    opacity: 0.5;
+  }
+  /* 中等宽度(如平板 list)优先牺牲描述,保住 类型/标题/标签/时间 */
+  @media (max-width: 820px) {
+    .row-desc {
+      display: none;
+    }
   }
 
   .result-checkbox-wrap {

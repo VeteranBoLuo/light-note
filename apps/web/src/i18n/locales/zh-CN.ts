@@ -671,6 +671,8 @@ export default {
     resourceViewDesc: '资源中心搜索结果的默认展示',
     tagView: '标签详情视图',
     tagViewDesc: '打开标签详情时的默认视图',
+    cloudView: '云空间视图',
+    cloudViewDesc: '云空间文件的默认展示方式',
     hideEmptyTags: '隐藏空标签',
     hideEmptyTagsDesc: '首页标签列表默认不显示没有书签的空标签',
     resourceSort: '资源中心排序',
@@ -689,6 +691,7 @@ export default {
     switchOff: '关闭',
     cardView: '卡片',
     listView: '列表',
+    tableView: '表格',
     home: {
       landing: '官网首页',
       workbench: '工作台',

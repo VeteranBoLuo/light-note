@@ -215,6 +215,24 @@
 
             <div class="field">
               <div class="field-head">
+                <span class="field-label">{{ t('settings.cloudView') }}</span>
+                <span class="field-desc">{{ t('settings.cloudViewDesc') }}</span>
+              </div>
+              <div class="seg">
+                <button
+                  v-for="o in cloudViewOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.cloudView || 'card') === o.v }"
+                  @click="set('cloudView', o.v)"
+                >
+                  {{ o.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-head">
                 <span class="field-label">{{ t('settings.hideEmptyTags') }}</span>
                 <span class="field-desc">{{ t('settings.hideEmptyTagsDesc') }}</span>
               </div>
@@ -660,6 +678,10 @@
   const tagViewOpts = computed(() => [
     { v: 'card', label: t('tagGraph.viewMode.card') },
     { v: 'graph', label: t('tagGraph.viewMode.graph') },
+  ]);
+  const cloudViewOpts = computed(() => [
+    { v: 'card', label: t('settings.cardView') },
+    { v: 'table', label: t('settings.tableView') },
   ]);
   const onOffOpts = computed(() => [
     { v: true, label: t('settings.switchOn') },

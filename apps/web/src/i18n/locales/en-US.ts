@@ -681,6 +681,8 @@ export default {
     resourceViewDesc: 'Default layout of resource center results',
     tagView: 'Tag detail view',
     tagViewDesc: 'Default view when opening a tag detail',
+    cloudView: 'Cloud space view',
+    cloudViewDesc: 'Default layout of cloud space files',
     hideEmptyTags: 'Hide empty tags',
     hideEmptyTagsDesc: 'Hide tags with no bookmarks in the sidebar',
     resourceSort: 'Resource sort',
@@ -699,6 +701,7 @@ export default {
     switchOff: 'Off',
     cardView: 'Card',
     listView: 'List',
+    tableView: 'Table',
     home: {
       landing: 'Landing',
       workbench: 'Workbench',
