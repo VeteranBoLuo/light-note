@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-page">
+  <div class="settings-page" ref="pageRef">
     <div class="settings-container">
       <header class="settings-hero">
         <button class="settings-back" @click="goBack">
@@ -10,9 +10,13 @@
         <p class="settings-subtitle">{{ t('settings.subtitle') }}</p>
       </header>
 
+      <nav class="settings-anchors">
+        <button v-for="a in anchors" :key="a.id" type="button" class="anchor-chip" :class="{ active: activeAnchor === a.id }" @click="scrollToSection(a.id)">{{ a.label }}</button>
+      </nav>
+
       <div class="settings-body">
         <!-- 外观 -->
-        <section class="settings-card">
+        <section class="settings-card" id="set-appearance">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">
               <svg viewBox="0 0 24 24" width="20" height="20">
@@ -84,7 +88,7 @@
         </section>
 
         <!-- 通用 -->
-        <section class="settings-card">
+        <section class="settings-card" id="set-general">
           <div class="card-head">
             <span class="card-icon card-icon--general">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
@@ -231,7 +235,7 @@
         </section>
 
         <!-- 通知 -->
-        <section class="settings-card">
+        <section class="settings-card" id="set-notification">
           <div class="card-head">
             <span class="card-icon card-icon--general">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -321,7 +325,7 @@
         </section>
 
         <!-- 账号与安全(登录用户可见) -->
-        <section v-if="!isGuestUser()" class="settings-card">
+        <section v-if="!isGuestUser()" class="settings-card" id="set-account">
           <div class="card-head">
             <span class="card-icon card-icon--general">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -339,7 +343,7 @@
         </section>
 
         <!-- AI 设置 -->
-        <section class="settings-card">
+        <section class="settings-card" id="set-ai">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -398,7 +402,7 @@
         </section>
 
         <!-- 快速收藏(bookmarklet) -->
-        <section class="settings-card">
+        <section class="settings-card" id="set-quicksave">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">🔖</span>
             <div class="card-head-text">
@@ -418,7 +422,7 @@
         </section>
 
         <!-- 数据导出 / 备份 -->
-        <section class="settings-card">
+        <section class="settings-card" id="set-export">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">📦</span>
             <div class="card-head-text">
@@ -456,7 +460,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, onMounted } from 'vue';
+  import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
@@ -470,6 +474,45 @@
 
   const { t } = useI18n();
   const router = useRouter();
+
+  // 设置页锚点导航:区块多、页面长,顶部 sticky 锚点条一键跳转。游客隐藏「账号与安全」锚点,与该区块 v-if 一致。
+  const anchors = computed(() => {
+    const list = [
+      { id: 'set-appearance', label: t('settings.appearance') },
+      { id: 'set-general', label: t('settings.general') },
+      { id: 'set-notification', label: t('settings.notification') },
+    ];
+    if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
+    list.push(
+      { id: 'set-ai', label: 'AI 设置' },
+      { id: 'set-quicksave', label: t('settings.quickSaveTitle') },
+      { id: 'set-export', label: t('settings.exportTitle') },
+    );
+    return list;
+  });
+  function scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
+  const activeAnchor = ref('set-appearance');
+  const pageRef = ref<HTMLElement | null>(null);
+  let anchorSpy: IntersectionObserver | null = null;
+  onMounted(() => {
+    anchorSpy = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) activeAnchor.value = (e.target as HTMLElement).id;
+        }
+      },
+      { root: pageRef.value, rootMargin: '-12% 0px -78% 0px', threshold: 0 },
+    );
+    anchors.value.forEach((a) => {
+      const el = document.getElementById(a.id);
+      if (el) anchorSpy!.observe(el);
+    });
+  });
+  onBeforeUnmount(() => anchorSpy?.disconnect());
   const user = useUserStore();
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
@@ -662,6 +705,60 @@
     box-sizing: border-box;
     background: var(--background-color);
     color: var(--text-color);
+  }
+
+  /* 侧边竖排锚点导航:PC 下浮在居中内容(max-width 680)左侧空白区,不占内容宽度、不遮挡任何元素;窄屏无空间则隐藏。 */
+  .settings-anchors {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    left: calc((100vw - 680px) / 2 - 148px);
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 132px;
+    max-height: 74vh;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .settings-anchors::-webkit-scrollbar {
+    display: none;
+  }
+  .anchor-chip {
+    text-align: left;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--desc-color);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      background 0.15s;
+  }
+  .anchor-chip:hover {
+    color: var(--text-color);
+    background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
+  }
+  .anchor-chip.active {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    font-weight: 600;
+  }
+  /* 窄屏(容器两侧无足够空间)隐藏侧边导航,内容照常滚动 */
+  @media (max-width: 1040px) {
+    .settings-anchors {
+      display: none;
+    }
+  }
+  /* 点击锚点定位时略留顶部空隙 */
+  .settings-card {
+    scroll-margin-top: 16px;
   }
 
   /* 单列居中:设置项聚焦"偏好"本身;账号/帮助等入口不再重复(已在个人中心),布局更清爽。 */
