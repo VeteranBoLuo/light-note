@@ -187,6 +187,7 @@ try {
 - [ ] 后端：检查最外层 `try/catch`、`return` 遗漏、事务完整性
 - [ ] SQL：确认全部参数化，无字符串拼接
 - [ ] 构建通过（`vite build` 或类型检查）
+- [ ] **涉及用户可见的新功能 / 功能变更 → 同步更新 AI 知识库（见下方「AI 助手知识库」），否则 AI 助手会答"没有该功能"**
 
 ### 后端 handler 自检
 
@@ -197,6 +198,15 @@ try {
 - [ ] 用户输入全部参数化
 - [ ] 权限判断正确（登录态、角色、用户隔离）
 - [ ] INSERT 使用正确的函数（insertData / snakeCaseKeys）
+
+## AI 助手知识库（功能变更需同步）
+
+AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `knowledge_base` 表（工具 `search_knowledge_base` → `util/knowledgeService.js`）。**每次上线用户可见的新功能或较大改动，必须同步更新知识库**，否则 AI 会答"没有该功能 / 机制"（例：积分系统上线后未同步，AI 答不出"AI 额度"）。
+
+- **检索机制**：关键词二字词打分（非向量），`title` 命中权重高于 `content`，所以标题要含核心词；有 5 分钟内存缓存，写入后需 `pm2 restart app`（或等 5 分钟）才生效。
+- **字段**：`title` / `content`（html 或 markdown）/ `category`（帮助中心 · 内部知识 · FAQ · 系统行为）/ `status`（`public` 普通用户可搜、`internal` 仅 root）。
+- **写入方式**：root 让 AI 用 `write_knowledge_base` 工具；或写 `.mjs` 脚本 `import { generateUUID }` + INSERT `knowledge_base`（title 已存在则 UPDATE，幂等），放服务器 `node` 跑。
+- **配套**：若新功能涉及"可查询的实时数据"（如额度、用量），除知识库说明外，考虑给 Agent 加对应查询工具（见 `util/agent/tools/`，如 `get_ai_quota`）。
 
 ## 部署
 
