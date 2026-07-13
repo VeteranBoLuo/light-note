@@ -503,6 +503,16 @@
   const activeAnchor = ref('set-appearance');
   const pageRef = ref<HTMLElement | null>(null);
   let anchorSpy: IntersectionObserver | null = null;
+  // 滚到容器底部时强制高亮最后一项:底部几个区块因判定带够不到,IntersectionObserver 永远轮不到(scrollspy 通病)。
+  // 只在到底时改高亮、不碰滚动,故不会造成"点多次"(那是 zoom 定位偏移导致的,已修)。
+  // scrollTop/clientHeight/scrollHeight 均为布局坐标、不受界面缩放 zoom 影响,此处无需换算。
+  const onPageScroll = () => {
+    const page = pageRef.value;
+    if (!page) return;
+    if (page.scrollTop + page.clientHeight >= page.scrollHeight - 4) {
+      activeAnchor.value = anchors.value[anchors.value.length - 1].id;
+    }
+  };
   onMounted(() => {
     anchorSpy = new IntersectionObserver(
       (entries) => {
@@ -516,8 +526,12 @@
       const el = document.getElementById(a.id);
       if (el) anchorSpy!.observe(el);
     });
+    pageRef.value?.addEventListener('scroll', onPageScroll, { passive: true });
   });
-  onBeforeUnmount(() => anchorSpy?.disconnect());
+  onBeforeUnmount(() => {
+    anchorSpy?.disconnect();
+    pageRef.value?.removeEventListener('scroll', onPageScroll);
+  });
   const user = useUserStore();
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
