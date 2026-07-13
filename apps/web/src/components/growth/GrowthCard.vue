@@ -9,7 +9,6 @@
         <div class="gc-name">
           {{ t('growth.ranks.' + g.level) }}
           <span v-if="g.isMax" class="gc-max">{{ t('growth.max') }}</span>
-          <span v-if="g.equippedTitleName" class="gc-title-badge">🏅 {{ g.equippedTitleName }}</span>
         </div>
         <div class="gc-exp">
           {{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}

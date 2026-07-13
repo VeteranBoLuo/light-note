@@ -41,44 +41,6 @@
       </div>
     </div>
 
-    <!-- 专属称号 -->
-    <div v-if="titles.length" class="ps-section-title">{{ t('growth.shopSectionTitle') }}</div>
-    <div class="ps-grid">
-      <div v-for="it in titles" :key="it.id" class="ps-item" :class="{ 'is-equipped': it.equipped }">
-        <div class="ps-item-icon">{{ ICONS[it.id] || '🏅' }}</div>
-        <div class="ps-item-body">
-          <div class="ps-item-name">
-            {{ itemName(it) }}
-            <span v-if="it.equipped" class="ps-tag-equipped">{{ t('growth.shopEquipped') }}</span>
-          </div>
-          <div class="ps-item-desc">{{ itemDesc(it) }}</div>
-        </div>
-        <div class="ps-item-foot">
-          <span v-if="!it.owned" class="ps-item-cost">🪙 {{ it.cost }}</span>
-          <span v-else class="ps-item-cost ps-item-cost--owned">{{ t('growth.shopOwned') }}</span>
-          <!-- 已拥有:佩戴 / 卸下;未拥有:兑换 -->
-          <template v-if="it.owned">
-            <BButton v-if="it.equipped" size="small" :disabled="equippingId === it.id" :loading="equippingId === it.id" @click="doEquip(null)">
-              {{ t('growth.shopUnequip') }}
-            </BButton>
-            <BButton v-else size="small" type="primary" :disabled="equippingId === it.id" :loading="equippingId === it.id" @click="doEquip(it.id)">
-              {{ t('growth.shopEquip') }}
-            </BButton>
-          </template>
-          <BButton
-            v-else
-            size="small"
-            type="primary"
-            :disabled="!canBuyNow(it) || buyingId === it.id"
-            :loading="buyingId === it.id"
-            @click="askBuy(it)"
-          >
-            {{ titleBtn(it) }}
-          </BButton>
-        </div>
-      </div>
-    </div>
-
     <!-- 头像框装扮 -->
     <div v-if="frames.length" class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
     <div class="ps-grid">
@@ -109,7 +71,7 @@
       </div>
     </div>
 
-    <div v-if="!consumables.length && !titles.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
+    <div v-if="!consumables.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
 
     <!-- 兑换确认 -->
     <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
@@ -130,7 +92,7 @@
   import { frameWrapStyle } from '@/config/growthFrames';
 
   const { t, te } = useI18n();
-  const { shop, loadShop, buyItem, equipTitle, equipFrame } = useGrowth();
+  const { shop, loadShop, buyItem, equipFrame } = useGrowth();
 
   // 商品图标(id → emoji);缺省兜底
   const ICONS: Record<string, string> = {
@@ -138,12 +100,6 @@
     ai_pack: '⚡',
     storage_512: '💾',
     storage_2g: '💽',
-    title_collector: '📚',
-    title_writer: '✍️',
-    title_cloud: '☁️',
-    title_wellread: '🎓',
-    title_ferryman: '⛵',
-    title_grandmaster: '👑',
   };
 
   // 名称/描述优先取 i18n(双语),缺失键则回退后端返回的中文名(单一经济事实源仍在后端)
@@ -157,7 +113,6 @@
   }
 
   const consumables = computed(() => shop.value?.items.filter((i) => i.type === 'consumable') || []);
-  const titles = computed(() => shop.value?.items.filter((i) => i.type === 'title') || []);
   const frames = computed(() => shop.value?.items.filter((i) => i.type === 'cosmetic') || []);
 
   // 可兑换判定:全前端按 live shop.points/level/owned/上限 实时算,积分变动即时生效(不依赖服务端 canBuy 快照,免刷新)
@@ -214,29 +169,6 @@
     } finally {
       buyingId.value = null;
       pending.value = null;
-    }
-  }
-
-  async function doEquip(titleId: string | null) {
-    equippingId.value = titleId || 'unequip';
-    try {
-      const res = await equipTitle(titleId);
-      if (res?.status === 200 && res.data?.ok) {
-        if (titleId) {
-          const it = titles.value.find((i) => i.id === titleId);
-          message.success(t('growth.shopEquipOk', { name: it ? itemName(it) : '' }));
-          recordOperation({ module: '成长', operation: `佩戴称号「${it ? itemName(it) : titleId}」` });
-        } else {
-          message.success(t('growth.shopUnequipOk'));
-          recordOperation({ module: '成长', operation: '卸下称号' });
-        }
-      } else {
-        message.error(res?.data?.msg || '操作失败');
-      }
-    } catch (err) {
-      console.error('佩戴称号失败:', err);
-    } finally {
-      equippingId.value = null;
     }
   }
 

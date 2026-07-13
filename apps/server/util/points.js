@@ -85,12 +85,7 @@ export const SHOP_ITEMS = [
   { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '+30 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)', cost: 150, effect: 'ai_pack', bonusTokens: 300_000 },
   { id: 'storage_512', type: 'consumable', name: '扩容包 512MB', desc: '云空间永久 +512MB,叠加在等级配额之上', cost: 800, effect: 'storage', storageMb: 512 },
   { id: 'storage_2g', type: 'consumable', name: '扩容包 2GB', desc: '云空间永久 +2GB,大文件党首选', cost: 2500, effect: 'storage', storageMb: 2048 },
-  { id: 'title_collector', type: 'title', name: '藏书家', desc: '称号 · 收藏成癖', cost: 300, minLevel: 0 },
-  { id: 'title_writer', type: 'title', name: '笔耕不辍', desc: '称号 · 笔记不停', cost: 500, minLevel: 3 },
-  { id: 'title_cloud', type: 'title', name: '云端行者', desc: '称号 · 云上安家', cost: 600, minLevel: 4 },
-  { id: 'title_wellread', type: 'title', name: '博览群书', desc: '称号 · 学富五车', cost: 900, minLevel: 6 },
-  { id: 'title_ferryman', type: 'title', name: '知识摆渡人', desc: '称号 · 渡人渡己', cost: 1400, minLevel: 10 },
-  { id: 'title_grandmaster', type: 'title', name: '一代宗师', desc: '称号 · 登峰造极', cost: 2500, minLevel: 14 },
+  // 专属称号已下架:称号仅本人可见、无公开展示价值,故移除兑换入口(buyItem/equipTitle 仍兼容 type==='title' 历史数据,目录不再上架)。
   // 头像框装扮(type=cosmetic,effect=frame):一次性拥有、可佩戴,前端按 id 渲染样式
   { id: 'frame_gold', type: 'cosmetic', effect: 'frame', name: '鎏金', desc: '头像框 · 金光流转', cost: 500, minLevel: 0 },
   { id: 'frame_sakura', type: 'cosmetic', effect: 'frame', name: '樱绯', desc: '头像框 · 樱色浪漫', cost: 500, minLevel: 0 },
