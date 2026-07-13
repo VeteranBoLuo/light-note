@@ -49,7 +49,10 @@
         <div class="pops-top">
           <div v-for="(u, i) in ov?.top || []" :key="u.userId" class="pops-top-row">
             <span class="pops-top-rank">{{ i + 1 }}</span>
-            <code class="pops-top-uid dom-hover" @click="pickUser(u.userId)">{{ u.userId }}</code>
+            <div class="pops-top-user dom-hover" @click="pickUser(u.userId)" :title="'点击回填 · ' + u.userId">
+              <span class="pops-top-alias">{{ u.alias || '(未设昵称)' }}</span>
+              <span class="pops-top-email">{{ u.email || u.userId }}</span>
+            </div>
             <b class="pops-top-pts">🪙 {{ u.points.toLocaleString('en-US') }}</b>
           </div>
           <div v-if="!ov?.top?.length" class="pops-empty">暂无持有人</div>
@@ -75,6 +78,11 @@
       </div>
 
       <div v-if="detail" class="pops-detail">
+        <div v-if="detail.user" class="pops-detail-user">
+          <b>{{ detail.user.alias || '(未设昵称)' }}</b>
+          <span>{{ detail.user.email || '—' }}</span>
+          <code>{{ form.userId.trim() }}</code>
+        </div>
         <div class="pops-detail-bal">
           <span>余额 🪙 <b>{{ detail.balance?.points ?? 0 }}</b></span>
           <span>扩容 💾 <b>{{ detail.balance?.storageBonusMb ?? 0 }}MB</b></span>
@@ -311,13 +319,28 @@
     color: var(--desc-color);
     font-weight: 700;
   }
-  .pops-top-uid {
+  .pops-top-user {
     flex: 1 1 auto;
-    font-family: monospace;
-    font-size: 11.5px;
-    color: var(--primary-color);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     cursor: pointer;
-    word-break: break-all;
+  }
+  .pops-top-alias {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pops-top-email {
+    font-size: 11px;
+    color: var(--desc-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .pops-empty {
     font-size: 12px;
@@ -355,6 +378,24 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+  .pops-detail-user {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .pops-detail-user b {
+    font-size: 14px;
+  }
+  .pops-detail-user span {
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .pops-detail-user code {
+    font-size: 11px;
+    color: var(--desc-color);
+    font-family: monospace;
   }
   .pops-detail-bal {
     display: flex;

@@ -182,7 +182,9 @@ export async function getPointsOverview() {
   const [[lotWin]] = await pool.query("SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason='lottery_win'");
   const [[lotDraws]] = await pool.query('SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth');
   const [[holders]] = await pool.query('SELECT COUNT(*) AS c FROM user_growth WHERE points > 0');
-  const [top] = await pool.query('SELECT user_id, points FROM user_growth WHERE points > 0 ORDER BY points DESC LIMIT 10');
+  const [top] = await pool.query(
+    'SELECT g.user_id, g.points, u.alias, u.email FROM user_growth g LEFT JOIN user u ON u.id = g.user_id WHERE g.points > 0 ORDER BY g.points DESC LIMIT 10',
+  );
   const cost = Number(lotCost.s);
   return {
     issued: Number(issued.s),
@@ -191,7 +193,7 @@ export async function getPointsOverview() {
     byReason: byReason.map((r) => ({ reason: r.reason, delta: Number(r.delta), cnt: Number(r.cnt) })),
     lottery: { cost, winPoints: Number(lotWin.s), draws: Number(lotDraws.s), payoutRatio: cost > 0 ? +((Number(lotWin.s) / cost) * 100).toFixed(1) : 0 },
     holders: Number(holders.c),
-    top: top.map((r) => ({ userId: r.user_id, points: Number(r.points) })),
+    top: top.map((r) => ({ userId: r.user_id, points: Number(r.points), alias: r.alias || null, email: r.email || null })),
   };
 }
 
@@ -220,9 +222,11 @@ export async function adminGrantPoints(userId, { points = 0, cards = 0, storageM
 
 // 单账号积分详情(root 查账):余额 + 最近 30 条流水。
 export async function getUserPointsDetail(userId) {
+  const [[u]] = await pool.query('SELECT alias, email FROM user WHERE id = ? LIMIT 1', [userId]);
   const [[g]] = await pool.query('SELECT points, storage_bonus_mb, streak_protect_cards, lottery_count FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
   const { rows } = await getPointsLog(userId, { limit: 30 });
   return {
+    user: u ? { alias: u.alias || null, email: u.email || null } : null,
     balance: g ? { points: Number(g.points), storageBonusMb: Number(g.storage_bonus_mb), cards: Number(g.streak_protect_cards), lotteryCount: Number(g.lottery_count) } : null,
     log: rows,
   };
