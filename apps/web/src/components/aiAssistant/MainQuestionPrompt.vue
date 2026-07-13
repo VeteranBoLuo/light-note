@@ -22,25 +22,20 @@
 
   const emit = defineEmits(['recommendation-click']);
 
-  // 定义一个大的常见问题列表
+  // 预设问题池:优先展示能直接触发 AI 工具能力的实用问题(检索/洞察/实操),而非纯操作教程。
   const allQuestions = [
-    t('ai.howToCreateBookmark'),
-    t('ai.cloudSpaceUsage'),
-    t('ai.howToCreateTag'),
-    t('ai.howToManageBookmarks'),
-    t('ai.howToEditNote'),
-    t('ai.howToImportExportBookmarks'),
-    t('ai.myBookmarks'),
+    t('ai.aiCapabilities'),
+    t('ai.crossSearch'),
     t('ai.recentBookmarks'),
+    t('ai.growthStatus'),
+    t('ai.summarizeUrl'),
+    t('ai.linkHealth'),
+    t('ai.storageUsage'),
+    t('ai.weeklyRecap'),
     t('ai.myNotes'),
     t('ai.myTags'),
     t('ai.trashContent'),
-    t('ai.storageUsage'),
     t('ai.quickNote'),
-    t('ai.addTag'),
-    t('ai.restoreTrash'),
-    t('ai.crossSearch'),
-    t('ai.bookmarkTagUsage'),
   ];
 
   const recommendationItems = ref<string[]>([]);
