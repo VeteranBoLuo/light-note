@@ -1,35 +1,40 @@
 <template>
   <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
-    <section class="hero-card">
-      <div class="hero-copy">
-        <div class="eyebrow">{{ t('resourceCenter.eyebrow') }}</div>
-        <h1>{{ t('resourceCenter.title') }}</h1>
-        <p>{{ t('resourceCenter.subtitle') }}</p>
+    <section class="search-header">
+      <div class="search-header-bar">
+        <div class="search-header-title">
+          <span class="eyebrow">{{ t('resourceCenter.eyebrow') }}</span>
+          <h1>{{ t('resourceCenter.title') }}</h1>
+          <span class="search-header-sub">{{ t('resourceCenter.subtitle') }}</span>
+        </div>
         <button
-          style="
-            margin-top: 12px;
-            border: 0;
-            cursor: pointer;
-            color: #fff;
-            background: #615ced;
-            font-size: 14px;
-            padding: 8px 16px;
-            border-radius: 8px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-          "
+          class="graph-entry"
           @click="$router.push('/graph')"
           v-click-log="{ module: '资源中心', operation: '进入知识图谱' }"
         >
           🌐 {{ t('resourceCenter.knowledgeGraph') }}
         </button>
       </div>
-      <div class="hero-stats">
-        <div v-for="stat in stats" :key="stat.type" class="stat-card">
-          <span class="stat-value">{{ stat.count }}</span>
-          <span class="stat-label">{{ stat.label }}</span>
-        </div>
+      <div class="search-header-input">
+        <b-input
+          id="search-center-input"
+          v-model:value="queryState.keyword"
+          :placeholder="t('resourceCenter.searchPlaceholder')"
+          height="48px"
+          @input="syncQueryDebounced"
+          @enter="submitSearch"
+        >
+          <template #prefix>
+            <svg-icon :src="icon.navigation.search" size="18" />
+          </template>
+        </b-input>
+        <button
+          class="refresh-btn refresh-btn--inline"
+          @click="refreshData"
+          v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+        >
+          {{ t('resourceCenter.refresh') }}
+        </button>
       </div>
     </section>
 
@@ -74,28 +79,6 @@
           </div>
         </div>
 
-        <section class="query-filter-bar">
-          <b-input
-            id="search-center-input"
-            v-model:value="queryState.keyword"
-            :placeholder="t('resourceCenter.searchPlaceholder')"
-            height="42px"
-            @input="syncQueryDebounced"
-            @enter="submitSearch"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="18" />
-            </template>
-          </b-input>
-          <button
-            class="refresh-btn refresh-btn--inline"
-            @click="refreshData"
-            v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
-          >
-            {{ t('resourceCenter.refresh') }}
-          </button>
-        </section>
-
         <section class="advanced-filters">
           <div class="filter-row">
             <label class="select-wrap">
@@ -132,17 +115,22 @@
             </button>
           </div>
 
-          <div class="tag-filter-wrap">
+          <div class="tag-filter-wrap" v-if="tagOptions.length">
             <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
-            <div class="tag-filter-list">
-              <button
-                v-for="tag in tagOptions"
-                :key="tag"
-                class="tag-chip"
-                :class="{ active: queryState.tags.includes(tag) }"
-                @click="toggleTagFilter(tag)"
-              >
-                {{ tag }}
+            <div class="tag-filter-main">
+              <div class="tag-filter-list" :class="{ 'tag-filter-list--collapsed': !showAllTags }">
+                <button
+                  v-for="tag in tagOptions"
+                  :key="tag"
+                  class="tag-chip"
+                  :class="{ active: queryState.tags.includes(tag) }"
+                  @click="toggleTagFilter(tag)"
+                >
+                  {{ tag }}
+                </button>
+              </div>
+              <button v-if="tagOptions.length > 14" class="tag-toggle-btn" @click="showAllTags = !showAllTags">
+                {{ showAllTags ? t('resourceCenter.tagCollapse') : t('resourceCenter.tagExpand', { count: tagOptions.length }) }}
               </button>
             </div>
           </div>
@@ -242,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -386,13 +374,8 @@
   );
   const tagOptions = computed(() => collectTagOptions(mappedItems.value));
 
-  const stats = computed(() =>
-    SEARCH_TYPE_LIST.map((type) => ({
-      type,
-      label: getSearchTypeLabel(t, type),
-      count: Number(summaryTotals.value[type] || 0),
-    })),
-  );
+  // 标签筛选 chips 折叠:默认收起,标签较多时点「更多」展开(原 hero 统计卡已删,信息与左侧类型筛选栏重复)
+  const showAllTags = ref(false);
 
   const typeFilters = computed(() => [
     {
@@ -833,6 +816,16 @@
     },
   );
 
+  // 打开资源中心自动聚焦搜索框(移动端不聚焦,避免弹出软键盘遮挡内容);让「打开即可搜」
+  onMounted(() => {
+    if (bookmark.isMobile) return;
+    nextTick(() => {
+      const host = document.getElementById('search-center-input');
+      const input = host && (host.tagName === 'INPUT' ? host : host.querySelector('input'));
+      (input as HTMLInputElement | null)?.focus();
+    });
+  });
+
   onBeforeUnmount(() => {
     if (syncTimer.value) clearTimeout(syncTimer.value);
   });
@@ -863,45 +856,58 @@
     --search-muted-bg: #35363d;
   }
 
-  .hero-card {
+  .search-header {
     position: relative;
     overflow: hidden;
-    border-radius: 24px;
-    padding: 24px;
+    border-radius: 18px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
     background:
       radial-gradient(
-        circle at 12% 18%,
-        color-mix(in srgb, var(--resource-file-color) 22%, transparent),
-        transparent 28%
-      ),
-      radial-gradient(
-        circle at 86% 14%,
-        color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent),
-        transparent 30%
+        circle at 97% -10%,
+        color-mix(in srgb, var(--resource-bookmark-color) 18%, transparent),
+        transparent 42%
       ),
       var(--search-hero-bg);
     border: 1px solid var(--card-border-color);
     box-shadow: var(--ant-table-boxShadow);
   }
 
-  .hero-copy,
-  .hero-stats {
-    position: relative;
-    z-index: 1;
+  .search-header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .search-header-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .search-header-sub {
+    color: var(--desc-color);
+    font-size: 13px;
   }
 
   .eyebrow {
     color: var(--resource-bookmark-color);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
   h1 {
-    margin: 8px 0 10px;
-    font-size: 38px;
-    line-height: 1;
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 800;
   }
 
   p {
@@ -940,30 +946,28 @@
     font-weight: 700;
   }
 
-  .hero-stats {
-    margin-top: 20px;
+  .graph-entry {
+    flex-shrink: 0;
+    border: 0;
+    cursor: pointer;
+    color: #fff;
+    background: #615ced;
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+
+  .search-header-input {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    max-width: 760px;
+    grid-template-columns: minmax(220px, 1fr) 110px;
+    gap: 10px;
+    align-items: center;
   }
 
-  .stat-card {
-    padding: 14px;
-    border-radius: 16px;
-    background: var(--search-stat-bg);
-    border: 1px solid var(--card-border-color);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .stat-value {
-    font-size: 24px;
-    font-weight: 800;
-  }
-
-  .stat-label,
   .result-subtitle,
   .filter-count {
     color: var(--desc-color);
@@ -1084,16 +1088,8 @@
     align-items: center;
   }
 
-  .query-filter-bar {
-    margin-top: 12px;
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) 110px;
-    gap: 10px;
-    align-items: center;
-  }
-
   .refresh-btn--inline {
-    height: 42px;
+    height: 48px;
     border-radius: 12px;
     font-weight: 700;
   }
@@ -1161,13 +1157,34 @@
     line-height: 30px;
   }
 
+  .tag-filter-main {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
   .tag-filter-list {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    max-height: 96px;
-    overflow: auto;
     padding-right: 2px;
+  }
+
+  .tag-filter-list--collapsed {
+    max-height: 34px;
+    overflow: hidden;
+  }
+
+  .tag-toggle-btn {
+    align-self: flex-start;
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--resource-bookmark-color);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 0;
   }
 
   .tag-chip {
@@ -1393,25 +1410,21 @@
       padding: 12px;
     }
 
-    .hero-card {
-      padding: 18px;
+    .search-header {
+      padding: 14px 16px;
       border-radius: 16px;
     }
 
     h1 {
-      font-size: 28px;
+      font-size: 18px;
     }
 
     .search-layout {
       grid-template-columns: 1fr;
     }
 
-    .query-filter-bar {
+    .search-header-input {
       grid-template-columns: 1fr;
-    }
-
-    .hero-stats {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .type-filter {

@@ -198,6 +198,8 @@ export default {
     mobileEmptyDesc: 'Bring scattered content together and return to the resource you need.',
     clearFilters: 'Clear Filters',
     tagFilter: 'Tag Filter',
+    tagExpand: 'Show all {count}',
+    tagCollapse: 'Collapse',
     untagged: 'Untagged Only',
     emptyActionBookmark: 'New Bookmark',
     emptyActionNote: 'New Note',

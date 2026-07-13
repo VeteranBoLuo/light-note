@@ -194,6 +194,8 @@ export default {
     mobileEmptyDesc: '把零散内容聚在一起找，快速回到需要的资源。',
     clearFilters: '清空筛选',
     tagFilter: '标签筛选',
+    tagExpand: '展开全部 {count} 个',
+    tagCollapse: '收起',
     untagged: '仅看无标签',
     emptyActionBookmark: '新建书签',
     emptyActionNote: '新建笔记',
