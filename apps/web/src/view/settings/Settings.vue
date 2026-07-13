@@ -491,7 +491,12 @@
     return list;
   });
   function scrollToSection(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const page = pageRef.value;
+    const el = document.getElementById(id);
+    if (!page || !el) return;
+    // 手动算目标在滚动容器内的位置:此页是固定框内的子路由,scrollIntoView 定位不到 .settings-page,直接 scrollTo 容器最可靠
+    const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
+    page.scrollTo({ top, behavior: 'smooth' });
   }
 
   // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
