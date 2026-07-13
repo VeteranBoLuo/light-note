@@ -737,6 +737,13 @@ export default {
     exporting: '导出中…',
     exportOk: '已导出:书签 {b} · 笔记 {n} · 文件 {f}',
     exportFail: '导出失败,请重试',
+    importAll: '数据导入 / 恢复',
+    importAllDesc: '从上面导出的备份 JSON 恢复书签、笔记与标签(自动去重,不会产生副本);文件因备份不含本体,需重新上传',
+    importBtn: '选择备份文件',
+    importing: '导入中…',
+    importOk: '导入完成:书签 +{b} · 笔记 +{n},跳过重复 {sk} 条',
+    importFail: '导入失败,请重试',
+    importInvalid: '文件格式无效,请选择轻笺导出的备份 JSON',
     saveFailed: '保存失败,已还原',
   },
   growth: {

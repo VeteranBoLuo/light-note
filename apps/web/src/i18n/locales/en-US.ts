@@ -747,6 +747,13 @@ export default {
     exporting: 'Exporting…',
     exportOk: 'Exported: {b} bookmarks · {n} notes · {f} files',
     exportFail: 'Export failed, please retry',
+    importAll: 'Import / Restore',
+    importAllDesc: 'Restore bookmarks, notes and tags from a backup JSON exported above (auto-dedup, no duplicates); files need re-upload since binaries are not in the backup',
+    importBtn: 'Choose backup file',
+    importing: 'Importing…',
+    importOk: 'Imported: bookmarks +{b} · notes +{n}, skipped {sk} duplicates',
+    importFail: 'Import failed, please retry',
+    importInvalid: 'Invalid file, please choose a backup JSON exported from LightNote',
     saveFailed: 'Save failed, reverted',
   },
   growth: {

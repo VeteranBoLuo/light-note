@@ -436,6 +436,16 @@
                 {{ exporting ? t('settings.exporting') : t('settings.exportBtn') }}
               </button>
             </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.importAll') }}</span>
+                <span class="field-desc">{{ t('settings.importAllDesc') }}</span>
+              </div>
+              <button class="export-btn" :disabled="importing" @click="triggerImport">
+                {{ importing ? t('settings.importing') : t('settings.importBtn') }}
+              </button>
+              <input ref="importInputRef" type="file" accept="application/json,.json" style="display: none" @change="onImportFile" />
+            </div>
           </div>
         </section>
 
@@ -504,6 +514,49 @@
       message.info(t('settings.exportFail'));
     } finally {
       exporting.value = false;
+    }
+  }
+
+  // 数据导入:选择「数据导出」生成的备份 JSON,恢复书签/笔记/标签(后端智能去重)。文件二进制不在备份内,跳过。
+  const importing = ref(false);
+  const importInputRef = ref<HTMLInputElement | null>(null);
+  function triggerImport() {
+    if (importing.value) return;
+    importInputRef.value?.click();
+  }
+  async function onImportFile(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // 清空,允许重复选同一文件再次导入
+    if (!file) return;
+    importing.value = true;
+    try {
+      const text = await file.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        message.info(t('settings.importInvalid'));
+        return;
+      }
+      const res = await apiBasePost('/api/user/importData', { data });
+      if (res?.status === 200 && res.data) {
+        const s = res.data;
+        message.success(
+          t('settings.importOk', {
+            b: s.bookmarks?.added || 0,
+            n: s.notes?.added || 0,
+            sk: (s.bookmarks?.skipped || 0) + (s.notes?.skipped || 0),
+          }),
+        );
+        recordOperation({ module: '设置', operation: `导入数据(书签+${s.bookmarks?.added || 0}、笔记+${s.notes?.added || 0})` });
+      } else {
+        message.info(res?.msg || t('settings.importFail'));
+      }
+    } catch {
+      message.info(t('settings.importFail'));
+    } finally {
+      importing.value = false;
     }
   }
 

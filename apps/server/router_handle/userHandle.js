@@ -13,6 +13,7 @@ import { recordConversionEvent } from '../util/conversion.js';
 import { removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
+import { insertResourceTagRelations, RESOURCE_TYPE } from '../util/resourceTags.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -888,5 +889,127 @@ export const exportData = async (req, res) => {
     );
   } catch (e) {
     res.send(resultData(null, 500, L(req, '导出失败: ', 'Export failed: ') + e.message));
+  }
+};
+
+// POST /user/importData —— 从 exportData 生成的备份 JSON 恢复数据(书签/笔记/标签)。
+// 智能去重:标签按名称复用、书签按网址跳过、笔记按标题+内容跳过;数据归当前登录用户、重新生成 id、尽量保留原创建时间。
+// 文件(files)备份里只有元信息、无二进制,无法恢复本体,直接跳过。备份 JSON 的键是驼峰(导出经 camelCaseKeys)。
+export const importData = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const data = req.body?.data && typeof req.body.data === 'object' ? req.body.data : req.body;
+  if (!data || typeof data !== 'object' || (!Array.isArray(data.bookmarks) && !Array.isArray(data.notes) && !Array.isArray(data.tags))) {
+    return res.send(resultData(null, 400, L(req, '文件格式无效,请选择轻笺导出的备份 JSON', 'Invalid file, please choose a backup JSON exported from LightNote')));
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const userId = req.user.id;
+
+    // 预加载现有数据用于去重:标签 name→id、书签网址集、笔记「标题+内容」集
+    const [tagRows] = await connection.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
+    const [bmRows] = await connection.query('SELECT name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [userId]);
+    const [noteRows] = await connection.query('SELECT title, content FROM note WHERE create_by = ? AND del_flag = 0', [userId]);
+    const normUrl = (u) => {
+      let s = String(u || '').trim();
+      if (s && !/^https?:\/\//i.test(s)) s = 'https://' + s;
+      return s;
+    };
+    const noteKey = (t, c) => `${t} ${c}`;
+    const tagMap = new Map(tagRows.map((r) => [r.name, r.id]));
+    const existUrls = new Set(bmRows.map((r) => normUrl(r.url)).filter(Boolean));
+    const existNames = new Set(bmRows.map((r) => r.name).filter(Boolean));
+    const existNotes = new Set(noteRows.map((r) => noteKey(r.title || '', r.content || '')));
+
+    // 确保标签存在,返回其 id(已有同名复用,否则新建)
+    const ensureTag = async (name) => {
+      const nm = String(name || '').trim();
+      if (!nm) return null;
+      if (tagMap.has(nm)) return tagMap.get(nm);
+      const payload = insertData({ name: nm, userId });
+      await connection.query('INSERT INTO tag SET ?', [payload]);
+      tagMap.set(nm, payload.id);
+      return payload.id;
+    };
+
+    const stat = {
+      tags: { added: 0, reused: 0 },
+      bookmarks: { added: 0, skipped: 0 },
+      notes: { added: 0, skipped: 0 },
+      files: { skipped: 0 },
+    };
+
+    // 1) 独立标签(即便没被任何资源引用也一并恢复)
+    for (const t of Array.isArray(data.tags) ? data.tags : []) {
+      const nm = String(t?.name || '').trim();
+      if (!nm) continue;
+      if (tagMap.has(nm)) {
+        stat.tags.reused++;
+        continue;
+      }
+      await ensureTag(nm);
+      stat.tags.added++;
+    }
+
+    // 2) 书签(按网址去重)
+    for (const b of Array.isArray(data.bookmarks) ? data.bookmarks : []) {
+      const url = normUrl(b?.url);
+      const name = String(b?.name || '').trim();
+      if (!name && !url) continue;
+      const bmName = name || url;
+      // 与 addBookmark 的产品规则一致:同一用户下「网址」或「书签名」重复都跳过(避免重复收藏 / 同名冲突)
+      if ((url && existUrls.has(url)) || (bmName && existNames.has(bmName))) {
+        stat.bookmarks.skipped++;
+        continue;
+      }
+      const payload = insertData({ name: bmName, url, description: b?.description || '', userId, ...(b?.createTime ? { createTime: b.createTime } : {}) });
+      await connection.query('INSERT INTO bookmark SET ?', [payload]);
+      if (url) existUrls.add(url);
+      if (bmName) existNames.add(bmName);
+      stat.bookmarks.added++;
+      const tagIds = [];
+      for (const tn of Array.isArray(b?.tags) ? b.tags : []) {
+        const id = await ensureTag(tn);
+        if (id) tagIds.push(id);
+      }
+      if (tagIds.length) {
+        await insertResourceTagRelations(connection, { tagIds, resourceType: RESOURCE_TYPE.BOOKMARK, resourceId: payload.id, userId, source: 'import' });
+      }
+    }
+
+    // 3) 笔记(按标题+内容去重)
+    for (const n of Array.isArray(data.notes) ? data.notes : []) {
+      const title = String(n?.title || '').trim();
+      const content = n?.content || '';
+      if (!title && !content) continue;
+      const k = noteKey(title, content);
+      if (existNotes.has(k)) {
+        stat.notes.skipped++;
+        continue;
+      }
+      const payload = insertData({ title: title || 'Untitled', content, type: n?.type || 'html', createBy: userId, ...(n?.createTime ? { createTime: n.createTime } : {}) });
+      await connection.query('INSERT INTO note SET ?', [payload]);
+      existNotes.add(k);
+      stat.notes.added++;
+      const tagIds = [];
+      for (const tn of Array.isArray(n?.tags) ? n.tags : []) {
+        const id = await ensureTag(tn);
+        if (id) tagIds.push(id);
+      }
+      if (tagIds.length) {
+        await insertResourceTagRelations(connection, { tagIds, resourceType: RESOURCE_TYPE.NOTE, resourceId: payload.id, userId, source: 'import' });
+      }
+    }
+
+    // 4) 文件:备份无二进制,无法恢复本体,仅计数跳过
+    stat.files.skipped = Array.isArray(data.files) ? data.files.length : 0;
+
+    await connection.commit();
+    res.send(resultData(stat));
+  } catch (e) {
+    await connection.rollback();
+    res.send(resultData(null, 500, L(req, '导入失败: ', 'Import failed: ') + e.message));
+  } finally {
+    connection.release();
   }
 };
