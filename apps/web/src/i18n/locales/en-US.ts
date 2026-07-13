@@ -785,7 +785,7 @@ export default {
     rankLadder: 'Rank ladder',
     colRank: 'Rank',
     colExp: 'Total EXP',
-    colPerks: 'Cloud · AI/day · Trash',
+    colPerks: 'Cloud · AI/day · Trash · Draw',
     trashRetain: 'Trash',
     trashForever: 'Forever',
     protectCard: 'Make-up card',

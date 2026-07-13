@@ -212,21 +212,27 @@
   @media (min-width: 900px) {
     .growth-card {
       flex-direction: row;
-      align-items: flex-start;
+      align-items: stretch; /* 两栏等高:右侧段位路线撑满左侧高度,不再左高右矮 */
       gap: 28px;
     }
     .gc-main {
       flex: 1 1 auto;
     }
     .gc-ladder {
-      flex: 0 0 320px;
-      width: 320px;
+      flex: 0 0 360px; /* 加宽:容纳「20G · 2000k · 永久 · 🎟️5」不再挤 */
+      width: 360px;
+      display: flex;
+      flex-direction: column;
     }
     .gc-ladder :deep(.rank-ladder) {
       margin-top: 0;
+      flex: 1 1 auto;
+      min-height: 0;
     }
     .gc-ladder :deep(.rl-list) {
-      max-height: 460px;
+      max-height: none; /* 取消固定高,撑满两栏等高后的剩余空间,内部滚动 */
+      flex: 1 1 auto;
+      min-height: 0;
     }
   }
   .gc-top {

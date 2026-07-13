@@ -775,7 +775,7 @@ export default {
     rankLadder: '段位路线',
     colRank: '段位',
     colExp: '累计经验',
-    colPerks: '云盘 · AI/日 · 回收站',
+    colPerks: '云盘 · AI/日 · 回收站 · 抽奖',
     trashRetain: '回收站',
     trashForever: '永久',
     protectCard: '补签卡',
