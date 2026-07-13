@@ -33,6 +33,7 @@
           <div v-for="stat in stats" :key="stat.key" class="stat-card" :class="`stat-card--${stat.key}`">
             <div class="stat-label">{{ stat.label }}</div>
             <div class="stat-value">{{ stat.value }}</div>
+            <div class="stat-desc">{{ stat.desc }}</div>
           </div>
         </div>
       </section>
