@@ -130,7 +130,7 @@
       <TypewriterOutput
         class="output-body"
         :typing-speed="1"
-        :content="displayOutput"
+        :content="outputFull"
         :empty-text="t('ai.reply.emptyMessage')"
       />
     </div>
@@ -139,7 +139,7 @@
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
       <div class="ai-preview">
-        <div class="ai-preview-body" ref="previewBodyRef" v-html="displayOutput"></div>
+        <div class="ai-preview-body" ref="previewBodyRef" v-html="outputFull"></div>
         <div class="ai-preview-actions">
           <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
           <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
@@ -232,12 +232,12 @@
 
   const buildFormatHint = (format: 'title' | 'body' | 'both') => {
     if (format === 'title') {
-      return '请直接输出结果，不要输出任何前言、说明、解释或开场白；严格按以下格式输出：\n【标题】\n<一行标题建议>';
+      return '开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】必须位于末尾：\n【标题】\n<一行标题建议>';
     }
     if (format === 'body') {
-      return '请直接输出结果，不要输出任何前言、说明、解释或开场白；严格按以下格式输出。【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【正文】\n<HTML 正文内容>';
+      return '开头至多一句话简短引导（不超过 20 字，如「以下是润色后的全文：」），不要长篇说明；随后务必在最后严格按以下格式输出，且【正文】必须位于末尾；【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【正文】\n<HTML 正文内容>';
     }
-    return '请直接输出结果，不要输出任何前言、说明、解释或开场白；严格按以下格式输出。【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【标题】\n<一行标题建议>\n【正文】\n<HTML 正文内容>';
+    return '开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】/【正文】两段必须位于末尾；【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【标题】\n<一行标题建议>\n【正文】\n<HTML 正文内容>';
   };
 
   const buildMessage = (actionOverride?: string) => {
@@ -455,21 +455,6 @@
 
   const hasTitle = computed(() => !!extractSection(outputFull.value, '标题'));
   const hasBody = computed(() => !!extractSection(outputFull.value, '正文'));
-
-  // 展示用:剥离 AI 在【标题】/【正文】标记前可能输出的前言/说明,并隐藏标记字样本身,
-  // 让输出区直接呈现结果正文(prompt 已要求不输出前言,此处为兜底双保险)。
-  // 注意:插入到笔记/替换标题仍用 outputFull 原文 + extractSection,保留标记以精确切分,互不影响。
-  const displayOutput = computed(() => {
-    const full = outputFull.value;
-    if (!full) return '';
-    const markers = ['【标题】', '【正文】'];
-    const firstIdx = Math.min(...markers.map((m) => {
-      const i = full.indexOf(m);
-      return i === -1 ? Infinity : i;
-    }));
-    if (firstIdx === Infinity) return full; // 尚无标记(流式早期或未按格式):原样展示
-    return full.slice(firstIdx).replace('【标题】', '').replace('【正文】', '\n').trim();
-  });
 
   const insertToNote = () => {
     if (!note || !outputFull.value) return;
