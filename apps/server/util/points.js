@@ -1,13 +1,5 @@
 import pool from '../db/index.js';
-
-// 本地日期键(YYYYMMDD,本地时区),口径与 growth/aiQuota 的 dayKey 一致。
-// 单独实现是为了不 import growth/aiQuota —— 否则 growth→points→aiQuota→growth 会循环依赖。
-function dayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
-}
+import { grantItem } from './items.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -49,7 +41,17 @@ export async function ensurePointsSchema() {
       day CHAR(8) NOT NULL,
       bonus_tokens INT NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, day)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购买的当日 AI 额度加成'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='当日 AI 额度加成(使用 AI 加油包/历史购买 写入,aiQuota 只读)'
+  `);
+  // 背包:用户持有的消耗品(AI 加油包等)。补签卡为特例,仍存 user_growth.streak_protect_cards,不入此表。
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_item (
+      user_id VARCHAR(64) NOT NULL,
+      item_id VARCHAR(64) NOT NULL,
+      qty INT NOT NULL DEFAULT 0,
+      update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户持有的消耗品(背包)'
   `);
   if (await columnMissing('user_growth', 'points')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `points` INT NOT NULL DEFAULT 0 COMMENT "积分余额"');
@@ -80,7 +82,7 @@ export async function ensurePointsSchema() {
 export const SHOP_ITEMS = [
   // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
   // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
-  { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '今日 AI 额度 +30 万 tokens(当天有效)', cost: 150, effect: 'ai_pack', bonusTokens: 300_000 },
+  { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '+30 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)', cost: 150, effect: 'ai_pack', bonusTokens: 300_000 },
   { id: 'storage_512', type: 'consumable', name: '扩容包 512MB', desc: '云空间永久 +512MB,叠加在等级配额之上', cost: 800, effect: 'storage', storageMb: 512 },
   { id: 'storage_2g', type: 'consumable', name: '扩容包 2GB', desc: '云空间永久 +2GB,大文件党首选', cost: 2500, effect: 'storage', storageMb: 2048 },
   { id: 'title_collector', type: 'title', name: '藏书家', desc: '称号 · 收藏成癖', cost: 300, minLevel: 0 },
@@ -281,16 +283,13 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
     await conn.query('UPDATE user_growth SET points = points - ? WHERE user_id = ?', [item.cost, userId]);
     await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, -item.cost, 'buy', item.id]);
     if (item.effect === 'makeup_card') {
-      await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + 1) WHERE user_id = ?', [userId]);
+      await grantItem(conn, userId, 'makeup_card', 1);
     } else if (item.effect === 'storage') {
-      // 永久扩容:可反复购买叠加(无幂等 ref,每次都加)
+      // 永久扩容:即时生效类,直接叠加(可反复购买;无幂等 ref,每次都加)
       await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [item.storageMb, userId]);
     } else if (item.effect === 'ai_pack') {
-      // 直接写当日额度加成表(aiQuota 只读它);不 import aiQuota,避免循环依赖
-      await conn.query(
-        'INSERT INTO ai_daily_bonus (user_id, day, bonus_tokens) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE bonus_tokens = bonus_tokens + ?',
-        [userId, dayKey(), item.bonusTokens, item.bonusTokens],
-      );
+      // AI 加油包 → 进背包(消耗品),用户择时「使用」才加当日额度;不再"购买即当天生效、当天不用作废"
+      await grantItem(conn, userId, 'ai_pack', 1);
     } else if (item.type === 'title' || item.type === 'cosmetic') {
       await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, item.id]);
     }

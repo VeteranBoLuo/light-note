@@ -4,6 +4,7 @@ import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, equipFrame, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
+import { getInventory, useItem } from '../util/items.js';
 import { getWeeklyChallenges, claimWeeklyChallenge } from '../util/weeklyChallenge.js';
 import { getRecap } from '../util/recap.js';
 
@@ -187,6 +188,31 @@ export const buyShopItem = async (req, res) => {
   } catch (error) {
     console.error('购买失败:', error);
     res.send(resultData(null, 500, '购买失败: ' + error.message));
+  }
+};
+
+// GET /growth/inventory —— 背包(消耗品持有)+ 资产(积分/永久扩容/今日AI加油)总览
+export const getInventoryHandle = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    res.send(resultData(await getInventory(userId)));
+  } catch (error) {
+    console.error('获取背包失败:', error);
+    res.send(resultData(null, 500, '获取背包失败: ' + error.message));
+  }
+};
+
+// POST /growth/item/use —— 使用一件背包消耗品(如 AI 加油包 → 今日额度 +30万);补签卡走 /useProtectCard
+export const useItemHandle = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const { itemId } = req.body || {};
+    if (!itemId) return res.send(resultData(null, 400, '缺少物品 id'));
+    const result = await useItem(req.user.id, itemId);
+    res.send(resultData(result));
+  } catch (error) {
+    console.error('使用物品失败:', error);
+    res.send(resultData(null, 500, '使用物品失败: ' + error.message));
   }
 };
 

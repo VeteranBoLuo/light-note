@@ -40,6 +40,10 @@
         <LotteryDraw />
       </section>
 
+      <section class="growth-panel">
+        <MyInventory />
+      </section>
+
       <section v-if="!growth?.isMax" class="growth-panel">
         <SigninCalendar
           :checkin-days="stats.checkinDays"
@@ -87,6 +91,7 @@
   import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
+  import MyInventory from '@/components/growth/MyInventory.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import RecapCard from '@/components/growth/RecapCard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';

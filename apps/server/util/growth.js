@@ -12,6 +12,7 @@
 import pool from '../db/index.js';
 import crypto from 'crypto';
 import { earnPoints, earnStorage, titleName } from './points.js';
+import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
@@ -168,8 +169,8 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
         [userId],
       );
       const notifyLevelUp = nluRow?.v !== 'false';
-      // 每升 1 级奖励 1 张补签卡(上限 2)
-      await c.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + ?) WHERE user_id = ?', [toLevel - fromLevel, userId]);
+      // 每升 1 级奖励 1 张补签卡(上限 2),统一走 grantItem
+      await grantItem(c, userId, 'makeup_card', toLevel - fromLevel);
       for (let L = fromLevel + 1; L <= toLevel; L++) {
         const rankName = rankOf(L).name;
         await c.query(
@@ -749,9 +750,9 @@ export async function checkin(userId, { userRole = null } = {}) {
     const amount = CHECKIN_BASE + checkinBonus(streak); // 5 + min(streak,5),单日 ≤10
 
     await conn.query('UPDATE user_growth SET streak = ?, last_checkin_date = ? WHERE user_id = ?', [streak, today, userId]);
-    // 连签满 7 天奖励 1 张补签卡(上限 2)
+    // 连签满 7 天奖励 1 张补签卡(上限 2),统一走 grantItem
     if (streak > 0 && streak % 7 === 0) {
-      await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + 1) WHERE user_id = ?', [userId]);
+      await grantItem(conn, userId, 'makeup_card', 1);
     }
     const grant = await grantExp(userId, 'checkin', { day: today, amount, meta: { streak }, userRole }, conn);
     // root 不经 grantExp 写入 events(第 94 行对 root return),手动记一条签到事件供日历/统计/成就使用
@@ -774,7 +775,7 @@ export async function checkin(userId, { userRole = null } = {}) {
       if (firstHit) {
         if (ms.storageMb) await earnStorage(userId, ms.storageMb, 'streak_milestone', String(ms.days), conn);
         if (ms.cards) {
-          await conn.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, streak_protect_cards + ?) WHERE user_id = ?', [ms.cards, userId]);
+          await grantItem(conn, userId, 'makeup_card', ms.cards);
         }
         milestone = { days: ms.days, points: ms.points, storageMb: ms.storageMb || 0, cards: ms.cards || 0 };
       }

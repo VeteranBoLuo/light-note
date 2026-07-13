@@ -14,6 +14,8 @@ router.post('/admin/adjust', growthHandle.doAdminAdjustGrowth);
 router.post('/claimDailyBonus', growthHandle.claimDailyBonus);
 router.get('/shop', growthHandle.getShop);
 router.post('/shop/buy', growthHandle.buyShopItem);
+router.get('/inventory', growthHandle.getInventoryHandle);
+router.post('/item/use', growthHandle.useItemHandle);
 router.post('/equipTitle', growthHandle.equipTitleHandle);
 router.post('/equipFrame', growthHandle.equipFrameHandle);
 router.get('/lottery', growthHandle.getLottery);

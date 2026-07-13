@@ -131,6 +131,20 @@ export interface Shop {
   items: ShopItem[];
 }
 
+export interface InventoryItem {
+  id: string;
+  name: string;
+  icon: string;
+  desc: string;
+  qty: number;
+  action: 'use' | 'makeup'; // use=直接使用(AI加油包) / makeup=去签到日历补签(补签卡)
+}
+
+export interface Inventory {
+  items: InventoryItem[];
+  assets: { points: number; storageBonusMb: number; todayAiBonus: number };
+}
+
 export interface LotteryPrize {
   id: string;
   kind: 'points' | 'storage' | 'card' | 'ai_pack' | string;
@@ -198,6 +212,7 @@ const growth = ref<Growth | null>(null);
 const ranks = ref<Rank[]>([]);
 const dashboard = ref<GrowthDashboard | null>(null);
 const shop = ref<Shop | null>(null);
+const inventory = ref<Inventory | null>(null);
 const lottery = ref<LotteryStatus | null>(null);
 const weekly = ref<WeeklyData | null>(null);
 const recap = ref<RecapData | null>(null);
@@ -214,6 +229,7 @@ export function resetGrowth() {
   growth.value = null;
   dashboard.value = null;
   shop.value = null;
+  inventory.value = null;
   lottery.value = null;
   weekly.value = null;
   recap.value = null;
@@ -293,6 +309,7 @@ export function useGrowth() {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;
       syncPointsToViews();
+      loadInventory(); // 签到里程碑/满7天可能发补签卡 → 刷新背包
     }
     return res;
   }
@@ -303,6 +320,7 @@ export function useGrowth() {
     if (res?.status === 200 && res.data?.growth) {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;
+      loadInventory(); // 补签卡数量变化 → 刷新背包
     }
     return res;
   }
@@ -345,11 +363,32 @@ export function useGrowth() {
     return shop.value;
   }
 
+  // 背包 + 资产:每次进成长页刷新(使用/购买/抽奖/签到后数量随之变化)
+  async function loadInventory() {
+    try {
+      const res = await growthApi.getInventory();
+      if (res?.status === 200 && res.data) inventory.value = res.data as Inventory;
+    } catch (err) {
+      console.warn('加载背包失败:', err);
+    }
+    return inventory.value;
+  }
+
+  // 使用一件背包消耗品(如 AI 加油包 → 今日额度 +30万);成功则刷新背包 + 成长快照(数量/额度变化)
+  async function useItem(itemId: string) {
+    const res = await growthApi.useItemApi(itemId);
+    if (res?.status === 200 && res.data?.ok) {
+      await Promise.all([loadInventory(), load(true)]);
+    }
+    return res;
+  }
+
   // 购买商品:返回后端 result(ok/reason/msg/points);成功则刷新商店 + 成长快照(余额/卡数/称号变化)
   async function buyItem(itemId: string) {
     const res = await growthApi.buyShopItem(itemId);
     if (res?.status === 200 && res.data?.ok) {
-      await Promise.all([loadShop(), load(true)]);
+      // 买到的 AI 加油包/补签卡进背包 → 一并刷新背包
+      await Promise.all([loadShop(), load(true), loadInventory()]);
       syncPointsToViews();
     }
     return res;
@@ -393,7 +432,8 @@ export function useGrowth() {
   async function draw(times: number, free = false) {
     const res = await growthApi.drawLottery(times, free);
     if (res?.status === 200 && res.data?.ok) {
-      await Promise.all([loadLottery(), load(true)]);
+      // 抽中的 AI 加油包/补签卡进背包 → 一并刷新背包
+      await Promise.all([loadLottery(), load(true), loadInventory()]);
       syncPointsToViews();
     }
     return res;
@@ -444,6 +484,7 @@ export function useGrowth() {
     ranks,
     dashboard,
     shop,
+    inventory,
     lottery,
     weekly,
     recap,
@@ -460,6 +501,8 @@ export function useGrowth() {
     markRead,
     loadShop,
     buyItem,
+    loadInventory,
+    useItem,
     equipTitle,
     equipFrame,
     loadLottery,
