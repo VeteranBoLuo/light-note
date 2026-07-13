@@ -427,7 +427,11 @@
   }
 
   function parseView(value: unknown): ResourceView {
-    const raw = String(value || localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) || 'card');
+    // URL 未带 view 时回退到用户偏好(设置页「资源中心视图」),再回退独立缓存,最后卡片——与 parseSort 对齐。
+    // 此前漏了 user.preferences.resourceView:route 同步(line ~490 用 parseView 覆盖 queryState.view)时读不到设置值,
+    // 刷新便退回陈旧的独立缓存 SEARCH_VIEW_STORAGE_KEY,表现为「设置改列表、刷新资源中心仍是卡片」。
+    const fallback = (user.preferences.resourceView as ResourceView) || (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card';
+    const raw = String(value || fallback);
     return raw === 'list' ? 'list' : 'card';
   }
 
