@@ -73,7 +73,7 @@ Search bookmarks, notes, tags, and files across every module at once — keyword
 ---
 
 **🤖 AI assistant**  
-Built-in conversational AI to help you process knowledge. Context-aware Q&A, quick-prompt templates, streaming responses.
+Built-in conversational AI that can call tools to look up your bookmarks, notes, and growth data — with web search, deep thinking, and streaming responses.
 
 <p align="center">
   <img src="apps/web/screenshots/ai-chat.png" alt="AI assistant" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
@@ -81,7 +81,7 @@ Built-in conversational AI to help you process knowledge. Context-aware Q&A, qui
 
 ---
 
-**And more** 🌙 Dark / light theme · 📱 Mobile-friendly · 🌐 Bilingual (中 / EN) · 🗑️ Recycle bin · ☁️ Cloud storage · 🏷️ Unified tags · 🛡️ Security center
+**And more** 🌱 Growth system (check-in / points / achievements) · 📚 Knowledge base · 🕸️ Relationship graph · 🔗 Note sharing · 🌙 Dark / light theme · 📱 Mobile-friendly · 🌐 Bilingual (中 / EN) · 🗑️ Recycle bin · ☁️ Cloud storage · 🏷️ Unified tags · 🛡️ Security center
 
 ---
 
