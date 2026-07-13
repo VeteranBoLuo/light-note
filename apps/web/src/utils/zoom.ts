@@ -15,3 +15,16 @@ export function getRootZoom(): number {
   const z = parseFloat(el.style.zoom || getComputedStyle(el).zoom || '1');
   return z && z > 0 ? z : 1;
 }
+
+/**
+ * 在滚动容器内平滑滚动到目标元素,内部已换算界面缩放(<html> zoom)。
+ * 「滚动到某元素」一律用它,不要再裸写 getBoundingClientRect + scrollTo——否则 zoom≠1 时
+ * 视觉坐标(rect)与布局坐标(scrollTop)混用会定位偏移(参见本文件顶部说明)。
+ * @param container overflow 滚动的容器
+ * @param el 目标元素(container 的后代)
+ * @param offset 目标顶部距容器顶的留白(px,布局坐标)
+ */
+export function scrollIntoContainer(container: HTMLElement, el: HTMLElement, offset = 0): void {
+  const top = (el.getBoundingClientRect().top - container.getBoundingClientRect().top) / getRootZoom() + container.scrollTop - offset;
+  container.scrollTo({ top, behavior: 'smooth' });
+}

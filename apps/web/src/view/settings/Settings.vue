@@ -465,6 +465,7 @@
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
   import { updatePreference, isGuestUser } from '@/utils/savePreference';
+  import { scrollIntoContainer } from '@/utils/zoom';
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -494,9 +495,8 @@
     const page = pageRef.value;
     const el = document.getElementById(id);
     if (!page || !el) return;
-    // 目标 = 该区块在滚动容器内的绝对位置(此页是固定框内子路由,scrollIntoView 定位不到 .settings-page,故手动算 + scrollTo)
-    const top = el.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 16;
-    page.scrollTo({ top, behavior: 'smooth' });
+    // 固定框子路由里 scrollIntoView 定位不到 .settings-page;统一用 scrollIntoContainer(内部已换算界面缩放 zoom,见 utils/zoom.ts)
+    scrollIntoContainer(page, el, 16);
   }
 
   // scrollspy:高亮当前滚动到的区块。root 必须是滚动容器 .settings-page(子路由在固定框内滚动,非 window)。
