@@ -51,7 +51,7 @@ export async function suggestTagsFromText({ text, userTags = [] }) {
     '',
     `已有标签(JSON 数组):${JSON.stringify(
       tagNameList,
-    )}。从"已有标签"里挑 0-4 个最相关的放进 matchedTags(必须与列表文字完全一致);都不合适则 matchedTags 返回空数组,并在 newTags 给 1-3 个建议新增的简短标签名(2-6 个字)。`,
+    )}。从"已有标签"里挑最相关的放进 matchedTags(必须与列表文字完全一致);不足或都不合适时,在 newTags 给建议新增的简短标签名(2-6 个字)。**matchedTags 与 newTags 合计最多 3 个,只保留最相关的,宁少勿多,优先复用已有标签。**`,
     '只输出 JSON 对象:{"matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
   ].join('\n');
   const { content } = await requestDeepSeek([
@@ -60,7 +60,12 @@ export async function suggestTagsFromText({ text, userTags = [] }) {
   ]);
   const parsed = parseAiJson(content);
   if (!parsed) return null;
-  return mapTagSuggestion(parsed, userTags);
+  const mapped = mapTagSuggestion(parsed, userTags);
+  // 兜底封顶:总推荐数 ≤ 3(prompt 已要求,此处防模型偶尔不听话);优先保留已有标签,不足再用新建标签补满
+  const TAG_CAP = 3;
+  const matchedTagIds = (mapped.matchedTagIds || []).slice(0, TAG_CAP);
+  const newTags = (mapped.newTags || []).slice(0, Math.max(0, TAG_CAP - matchedTagIds.length));
+  return { matchedTagIds, newTags };
 }
 
 /**
