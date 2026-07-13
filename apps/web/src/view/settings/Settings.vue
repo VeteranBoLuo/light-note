@@ -505,14 +505,6 @@
   const activeAnchor = ref('set-appearance');
   const pageRef = ref<HTMLElement | null>(null);
   let anchorSpy: IntersectionObserver | null = null;
-  // 滚到容器底部时强制高亮最后一项:底部几个区块因判定带够不到,IntersectionObserver 永远轮不到它们(scrollspy 通病,业界通用兜底)
-  const onPageScroll = () => {
-    const page = pageRef.value;
-    if (!page) return;
-    if (page.scrollTop + page.clientHeight >= page.scrollHeight - 4) {
-      activeAnchor.value = anchors.value[anchors.value.length - 1].id;
-    }
-  };
   onMounted(() => {
     anchorSpy = new IntersectionObserver(
       (entries) => {
@@ -526,12 +518,8 @@
       const el = document.getElementById(a.id);
       if (el) anchorSpy!.observe(el);
     });
-    pageRef.value?.addEventListener('scroll', onPageScroll, { passive: true });
   });
-  onBeforeUnmount(() => {
-    anchorSpy?.disconnect();
-    pageRef.value?.removeEventListener('scroll', onPageScroll);
-  });
+  onBeforeUnmount(() => anchorSpy?.disconnect());
   const user = useUserStore();
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
