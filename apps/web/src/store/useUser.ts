@@ -36,6 +36,7 @@ interface UserInfo {
     resourceView?: 'card' | 'list'; // 资源中心视图
     cloudView?: 'card' | 'table'; // 云空间视图:卡片/表格
     tagView?: 'card' | 'graph'; // 标签详情视图
+    tagManageView?: 'card' | 'list'; // 标签管理页视图:卡片/列表
     openBookmarkIn?: 'newTab' | 'current'; // 书签打开方式:新标签页/当前标签页
     hideEmptyTags?: boolean; // 首页标签列表是否隐藏空标签(默认 false=不隐藏)
     resourceSort?: 'relevance' | 'updated' | 'name'; // 资源中心默认排序

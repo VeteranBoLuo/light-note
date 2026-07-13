@@ -675,6 +675,8 @@ export default {
     tagViewDesc: '打开标签详情时的默认视图',
     cloudView: '云空间视图',
     cloudViewDesc: '云空间文件的默认展示方式',
+    tagManageView: '标签管理视图',
+    tagManageViewDesc: '标签管理页的默认展示方式',
     hideEmptyTags: '隐藏空标签',
     hideEmptyTagsDesc: '首页标签列表默认不显示没有书签的空标签',
     resourceSort: '资源中心排序',

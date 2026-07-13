@@ -685,6 +685,8 @@ export default {
     tagViewDesc: 'Default view when opening a tag detail',
     cloudView: 'Cloud space view',
     cloudViewDesc: 'Default layout of cloud space files',
+    tagManageView: 'Tag manage view',
+    tagManageViewDesc: 'Default layout of the tag manage page',
     hideEmptyTags: 'Hide empty tags',
     hideEmptyTagsDesc: 'Hide tags with no bookmarks in the sidebar',
     resourceSort: 'Resource sort',

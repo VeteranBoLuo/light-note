@@ -63,10 +63,24 @@
               <div class="result-title">{{ t('tagManage.resultTitle') }}</div>
               <div class="result-subtitle">{{ resultSubtitle }}</div>
             </div>
+            <div class="view-switch" v-if="!bookmark.isMobile">
+              <button class="view-btn" :class="{ active: viewMode === 'card' }" @click="setTagView('card')">
+                {{ t('resourceCenter.view.card') }}
+              </button>
+              <button class="view-btn" :class="{ active: viewMode === 'list' }" @click="setTagView('list')">
+                {{ t('resourceCenter.view.list') }}
+              </button>
+            </div>
           </div>
 
-          <div v-if="visibleTags.length" class="tag-grid">
-            <article v-for="tag in visibleTags" :key="tag.id" class="tag-card">
+          <div v-if="visibleTags.length && effectiveView === 'card'" class="tag-grid">
+            <article
+              v-for="tag in visibleTags"
+              :key="tag.id"
+              class="tag-card"
+              @click="openTagDetail(tag.id)"
+              v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+            >
               <div class="tag-card__head">
                 <div class="tag-identity">
                   <div class="tag-icon-wrap">
@@ -89,37 +103,29 @@
                 <div class="tag-actions">
                   <button
                     class="action-btn"
-                    @click="openTagDetail(tag.id)"
-                    v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
-                  >
-                    <span>{{ t('common.detail') }}</span>
-                  </button>
-                  <button
-                    class="action-btn"
-                    @click="edit(tag.id)"
+                    @click.stop="edit(tag.id)"
                     v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
                   >
                     <svg-icon :src="icon.table_edit" size="15" />
                     <span>{{ t('common.edit') }}</span>
                   </button>
-                  <button class="action-btn action-btn--danger" @click="handleDeleteTag(tag)">
+                  <button class="action-btn action-btn--danger" @click.stop="handleDeleteTag(tag)">
                     <svg-icon :src="icon.table_delete" size="15" />
                     <span>{{ t('common.delete') }}</span>
                   </button>
                 </div>
               </div>
 
-              <div class="section-block">
+              <div v-if="tag.relatedTagList?.length" class="section-block">
                 <div class="section-title">{{ t('tagManage.relatedTag') }}</div>
-                <div v-if="tag.relatedTagList?.length" class="chip-list">
+                <div class="chip-list">
                   <span v-for="related in tag.relatedTagList" :key="related.id" class="common-chip">
                     {{ related.name }}
                   </span>
                 </div>
-                <div v-else class="empty-inline">{{ t('tagManage.noRelatedTags') }}</div>
               </div>
 
-              <div class="section-block">
+              <div v-if="getTotalResourceCount(tag)" class="section-block">
                 <div class="section-title">{{ t('tagManage.relatedContent') }}</div>
                 <div class="resource-stack">
                   <div v-if="tag.bookmarkList?.length" class="resource-row">
@@ -130,7 +136,7 @@
                         :key="bookmarkItem.id"
                         class="resource-chip resource-chip--bookmark"
                         :title="bookmarkItem.name"
-                        @click="openPage(bookmarkItem.url)"
+                        @click.stop="openPage(bookmarkItem.url)"
                         v-click-log="{ module: '标签管理', operation: `打开关联书签【${bookmarkItem.name}】` }"
                       >
                         {{ bookmarkItem.name }}
@@ -146,7 +152,7 @@
                         :key="noteItem.id"
                         class="resource-chip resource-chip--note"
                         :title="noteItem.name"
-                        @click="openNote(noteItem.id)"
+                        @click.stop="openNote(noteItem.id)"
                         v-click-log="{ module: '标签管理', operation: `打开关联笔记【${noteItem.name}】` }"
                       >
                         {{ noteItem.name }}
@@ -162,18 +168,47 @@
                         :key="fileItem.id"
                         class="resource-chip resource-chip--file"
                         :title="fileItem.name"
-                        @click="previewFile(fileItem.id)"
+                        @click.stop="previewFile(fileItem.id)"
                         v-click-log="{ module: '标签管理', operation: `预览关联文件【${fileItem.name}】` }"
                       >
                         {{ fileItem.name }}
                       </button>
                     </div>
                   </div>
-
-                  <div v-if="!getTotalResourceCount(tag)" class="empty-inline">{{
-                    t('tagManage.noRelatedContent')
-                  }}</div>
                 </div>
+              </div>
+            </article>
+          </div>
+
+          <div v-else-if="visibleTags.length" class="tag-list">
+            <article
+              v-for="tag in visibleTags"
+              :key="tag.id"
+              class="tag-row"
+              @click="openTagDetail(tag.id)"
+              v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+            >
+              <div class="tag-row-icon">
+                <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="18" />
+                <span v-else>#</span>
+              </div>
+              <div class="tag-row-name">{{ tag.name }}</div>
+              <div class="tag-row-summary">
+                {{ t('tagManage.tagSummary', { count: getTotalResourceCount(tag), related: tag.relatedTagList?.length || 0 }) }}
+              </div>
+              <div class="tag-row-actions">
+                <button
+                  class="action-btn"
+                  @click.stop="edit(tag.id)"
+                  v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
+                >
+                  <svg-icon :src="icon.table_edit" size="15" />
+                  <span>{{ t('common.edit') }}</span>
+                </button>
+                <button class="action-btn action-btn--danger" @click.stop="handleDeleteTag(tag)">
+                  <svg-icon :src="icon.table_delete" size="15" />
+                  <span>{{ t('common.delete') }}</span>
+                </button>
               </div>
             </article>
           </div>
@@ -208,6 +243,7 @@
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { updatePreference } from '@/utils/savePreference';
 
   interface RelatedItem {
     id: string;
@@ -237,6 +273,15 @@
   const tableSearchValue = ref('');
   const activeFilter = ref<FilterValue>('all');
   const tableData = ref<TagRecord[]>([]);
+
+  // 视图优先取用户偏好(设置页「标签管理视图」/跨设备);移动端强制卡片(窄屏列表无优势)
+  const viewMode = ref<'card' | 'list'>((user.preferences.tagManageView as 'card' | 'list') || 'card');
+  const effectiveView = computed<'card' | 'list'>(() => (bookmark.isMobile ? 'card' : viewMode.value));
+  function setTagView(mode: 'card' | 'list') {
+    if (viewMode.value === mode) return;
+    viewMode.value = mode;
+    updatePreference({ tagManageView: mode }).catch(() => {});
+  }
 
   const filteredByKeyword = computed(() => {
     const keyword = tableSearchValue.value.trim().toLowerCase();
@@ -464,7 +509,7 @@
     background: var(--tag-hero-bg);
     border: 1px solid var(--workbench-border-color);
     border-radius: 22px;
-    padding: 24px;
+    padding: 18px 20px;
     overflow: hidden;
 
     // 右上角装饰光晕
@@ -492,8 +537,8 @@
 
     h1 {
       margin: 0;
-      font-size: 34px;
-      line-height: 1.1;
+      font-size: 22px;
+      line-height: 1.2;
     }
 
     p {
@@ -707,6 +752,28 @@
     margin-bottom: 20px;
   }
 
+  .view-switch {
+    display: inline-flex;
+    border: 1px solid var(--workbench-border-color);
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .view-btn {
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    padding: 6px 12px;
+    background: transparent;
+  }
+
+  .view-btn.active {
+    background: var(--resource-tag-color);
+    color: #fff;
+  }
+
   .result-title {
     font-size: 20px;
     font-weight: 700;
@@ -727,8 +794,83 @@
     gap: 16px;
   }
 
+  // ═══════════════════════════════════════
+  //  列表视图(紧凑横向行)
+  // ═══════════════════════════════════════
+  .tag-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .tag-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--workbench-border-color);
+    background: var(--tag-card-bg);
+    cursor: pointer;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .tag-row:hover {
+    border-color: color-mix(in srgb, var(--resource-tag-color) 30%, var(--workbench-border-color));
+    box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.12);
+  }
+
+  .tag-row-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--resource-tag-color);
+    background: color-mix(in srgb, var(--resource-tag-color) 12%, transparent);
+    font-size: 15px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .tag-row-name {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 30%;
+    flex-shrink: 0;
+  }
+
+  .tag-row-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    opacity: @opacity-secondary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tag-row-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+  }
+
+  .tag-row:hover .tag-row-actions {
+    opacity: 1;
+  }
+
   .tag-card {
     position: relative;
+    cursor: pointer;
     border-radius: @radius-card;
     padding: 0;
     background: var(--tag-card-bg);
