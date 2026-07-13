@@ -914,7 +914,7 @@ export default {
     lotteryFreeUsedUp: '今日免费次数已用完',
     shopItems: {
       makeup_card: { name: '补签卡', desc: '补回一天漏签，守护连续签到' },
-      ai_pack: { name: 'AI 加油包', desc: '今日 AI 额度 +30 万 tokens（当天有效）' },
+      ai_pack: { name: 'AI 加油包', desc: '+30 万 tokens · 存入背包，「使用」当天生效（不再当天不用即作废）' },
       storage_512: { name: '扩容包 512MB', desc: '云空间永久 +512MB，叠加在等级配额之上' },
       storage_2g: { name: '扩容包 2GB', desc: '云空间永久 +2GB，大文件党首选' },
       title_collector: { name: '藏书家', desc: '称号 · 收藏成癖' },

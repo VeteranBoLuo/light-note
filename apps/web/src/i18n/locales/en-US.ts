@@ -924,7 +924,7 @@ export default {
     lotteryFreeUsedUp: "Today's free draws used up",
     shopItems: {
       makeup_card: { name: 'Make-up Card', desc: 'Recover one missed day, protect your streak' },
-      ai_pack: { name: 'AI Boost Pack', desc: "Today's AI quota +300K tokens (valid today)" },
+      ai_pack: { name: 'AI Boost Pack', desc: '+300K tokens · goes to backpack, "Use" to apply for the day (no longer wasted if unused)' },
       storage_512: { name: '+512MB Storage', desc: 'Permanent +512MB cloud space, stacks on your tier quota' },
       storage_2g: { name: '+2GB Storage', desc: 'Permanent +2GB cloud space, for heavy uploaders' },
       title_collector: { name: 'Collector', desc: 'Title · Born to collect' },
