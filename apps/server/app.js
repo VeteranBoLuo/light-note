@@ -64,7 +64,8 @@ allRouter.forEach((item) => {
 startSessionMaintenance();
 ensureSecurityTables().catch((err) => console.error('安全模块初始化失败:', err.message));
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败:', err.message));
-initLogExclude().catch((err) => console.error('日志白名单初始化失败:', err.message));
+// 白名单缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻用白名单设备操作)
+await initLogExclude().catch((err) => console.error('日志白名单初始化失败:', err.message));
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败:', err.message));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败:', err.message));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败:', err.message));

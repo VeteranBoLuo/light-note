@@ -160,6 +160,11 @@ export const authMiddleware = async (req, res, next) => {
       return next();
     }
 
+    // 有 session 时优先用 session 中的 role(支持 elevateVisitor 等临时提权场景)
+    if (session.role && session.role !== user.role) {
+      user.role = session.role;
+    }
+
     attachUserToRequest(req, res, user, sid, Number(session.expires_in_seconds || 0));
 
     // 管理员预览其他用户：当 root 用户携带 X-Admin-Preview-User-Id 请求头时，切换为对应身份

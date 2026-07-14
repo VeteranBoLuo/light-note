@@ -8,7 +8,7 @@ import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
 import crypto from 'crypto';
-import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
+import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid, setAuthCookie } from '../util/auth.js';
 import { recordConversionEvent } from '../util/conversion.js';
 import { removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
@@ -1011,5 +1011,31 @@ export const importData = async (req, res) => {
     res.send(resultData(null, 500, L(req, '导入失败: ', 'Import failed: ') + e.message));
   } finally {
     connection.release();
+  }
+};
+
+// 游客临时提权:输入 openRoot 后创建一个 role=root 的 session,仅对当前浏览器生效
+export const elevateVisitor = async (req, res) => {
+  try {
+    const [visitors] = await pool.query(
+      'SELECT id, role FROM user WHERE role = ? ORDER BY del_flag ASC, create_time ASC LIMIT 1',
+      ['visitor']
+    );
+    const visitor = visitors[0];
+    if (!visitor) {
+      return res.send(resultData(null, 404, '未找到游客账号'));
+    }
+    const { sid } = await createSession({
+      userId: visitor.id,
+      role: 'root',
+      maxAgeMs: 24 * 60 * 60 * 1000, // 24小时
+      ip: req.ip || '',
+      userAgent: req.headers['user-agent'] || '',
+    });
+    // 种 cookie,使后续请求携带此 session
+    setAuthCookie(res, sid, 24 * 60 * 60 * 1000);
+    res.send(resultData({ sid, expiresIn: 86400 }));
+  } catch (e) {
+    res.send(resultData(null, 500, '提权失败: ' + e.message));
   }
 };

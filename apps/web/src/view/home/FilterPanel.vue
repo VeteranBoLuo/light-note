@@ -33,6 +33,7 @@
           <div
             v-if="!bookmark.isMobile"
             ref="manageEntryRef"
+            data-guide="bookmark-mg"
             class="filter-manage-entry"
             @click="router.push('/manage/bookmarkMg')"
           >

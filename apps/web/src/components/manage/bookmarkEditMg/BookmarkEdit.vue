@@ -29,7 +29,7 @@
           </div>
           <b-input v-model:value="bookmarkData.url"> </b-input>
         </div>
-        <div class="tag-attr-item">
+        <div class="tag-attr-item" data-guide="bookmark-tags">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
           <b-select
             mode="multiple"

@@ -103,9 +103,12 @@
 
   // 新手引导:桌面 + 书签为空 + 没引导过 → 教用户建第一个书签(跨页面:首页添加按钮 → 编辑页填网址 → 保存)
   const CREATE_BOOKMARK_STEPS: GuideStep[] = [
+    { target: '[data-guide="bookmark-mg"]', title: t('guide.cbMgTitle'), content: t('guide.cbMgDesc') },
     { target: '[data-guide="add-bookmark"]', title: t('guide.cbAddTitle'), content: t('guide.cbAddDesc') },
     { target: '[data-guide="bookmark-url"]', title: t('guide.cbUrlTitle'), content: t('guide.cbUrlDesc'), route: '/manage/editBookmark/add' },
+    { target: '[data-guide="bookmark-tags"]', title: t('guide.cbTagTitle'), content: t('guide.cbTagDesc'), route: '/manage/editBookmark/add' },
     { target: '[data-guide="bookmark-save"]', title: t('guide.cbSaveTitle'), content: t('guide.cbSaveDesc'), route: '/manage/editBookmark/add' },
+    { target: '#nav-tag-entry', title: t('guide.cbNavTitle'), content: t('guide.cbNavDesc') },
   ];
   function maybeStartCreateBookmarkGuide() {
     if (bookmark.isMobile) return; // 移动端入口不同,暂不引导
