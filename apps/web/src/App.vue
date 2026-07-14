@@ -11,6 +11,8 @@
       <Login v-if="bookmark.isShowLogin" />
       <BViewer />
       <FloatQuestion v-if="aiVisible" />
+      <GuestNudge />
+      <BGuide />
     </a-config-provider>
   </div>
 </template>
@@ -33,6 +35,8 @@
   import { useI18n } from 'vue-i18n';
   import { getAdminLoginPreviewPreferences, isAdminLoginPreview, hasLoggedInBefore } from '@/utils/authStorage.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
+  import GuestNudge from '@/components/home/GuestNudge.vue';
+  import BGuide from '@/components/base/BasicComponents/BGuide.vue';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));

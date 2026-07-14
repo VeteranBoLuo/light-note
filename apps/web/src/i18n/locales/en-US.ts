@@ -1460,6 +1460,18 @@ export default {
     keepBrowsing: 'Keep browsing',
     registerNow: 'Sign up free, own it now',
   },
+  guide: {
+    skip: 'Skip',
+    prev: 'Back',
+    next: 'Next',
+    done: 'Done',
+    cbAddTitle: 'Add your first bookmark',
+    cbAddDesc: 'Click here to save a site into your LightNote',
+    cbUrlTitle: 'Enter the URL',
+    cbUrlDesc: 'Paste a URL, then tap "Auto-generate" to fetch title & description',
+    cbSaveTitle: 'Save it',
+    cbSaveDesc: 'Click "OK" and it lands in your own knowledge base',
+  },
   app: {
     loadUserFailed: 'Failed to load user info: ',
     sessionExpired: 'Your session has expired. Please log in again.',

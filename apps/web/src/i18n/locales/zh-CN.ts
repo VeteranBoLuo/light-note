@@ -1448,6 +1448,18 @@ export default {
     keepBrowsing: '继续浏览',
     registerNow: '免费注册，立即拥有',
   },
+  guide: {
+    skip: '跳过',
+    prev: '上一步',
+    next: '下一步',
+    done: '完成',
+    cbAddTitle: '添加第一个书签',
+    cbAddDesc: '点这里，把喜欢的网站收进你的轻笺',
+    cbUrlTitle: '填入网址',
+    cbUrlDesc: '粘贴网址，点「智能生成」可自动抓取标题和描述',
+    cbSaveTitle: '保存收藏',
+    cbSaveDesc: '点「确定」，这个书签就存进你自己的知识库了',
+  },
   app: {
     loadUserFailed: '获取用户信息失败：',
     sessionExpired: '登录已过期，请重新登录',

@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const apiBasePost = vi.fn().mockResolvedValue({});
 vi.mock('@/http/request', () => ({ apiBasePost: (...a: any[]) => apiBasePost(...a) }));
-const alertAlert = vi.fn();
-vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
-  default: { alert: (...a: any[]) => alertAlert(...a), destroy: vi.fn() },
-}));
+const showGuestNudge = vi.fn();
+vi.mock('@/composables/guestNudge', () => ({ showGuestNudge: (...a: any[]) => showGuestNudge(...a) }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
@@ -22,7 +20,7 @@ describe('blockGuestWrite', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     apiBasePost.mockClear();
-    alertAlert.mockClear();
+    showGuestNudge.mockClear();
     userState.id = '';
     userState.role = 'visitor';
   });
@@ -34,7 +32,7 @@ describe('blockGuestWrite', () => {
   it('游客:记 wall_hit + 弹注册引导,返回 true', () => {
     const blocked = blockGuestWrite('add-bookmark');
     expect(blocked).toBe(true);
-    expect(alertAlert).toHaveBeenCalledTimes(1);
+    expect(showGuestNudge).toHaveBeenCalledTimes(1);
     expect(apiBasePost).toHaveBeenCalledWith(
       '/api/common/recordConversion',
       expect.objectContaining({ event: 'wall_hit', source: 'add-bookmark' }),
@@ -46,7 +44,7 @@ describe('blockGuestWrite', () => {
     userState.role = 'admin';
     const blocked = blockGuestWrite('add-bookmark');
     expect(blocked).toBe(false);
-    expect(alertAlert).not.toHaveBeenCalled();
+    expect(showGuestNudge).not.toHaveBeenCalled();
     expect(apiBasePost).not.toHaveBeenCalled();
   });
 });

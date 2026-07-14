@@ -26,6 +26,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import type { HomePagePreference } from '@/utils/preferences.ts';
+  import { guideActive } from '@/composables/useGuide';
 
   // 新用户注册后:引导设置登录后默认首页(注册成功由 RegisterPage 打上 ln_just_registered 标记)
   const FLAG = 'ln_just_registered';
@@ -70,6 +71,7 @@
 
   function maybeShow() {
     if (show.value) return;
+    if (guideActive.value) return; // 新手引导进行中先让位,避免两个引导同时弹
     let flagged = false;
     try {
       flagged = localStorage.getItem(FLAG) === '1';

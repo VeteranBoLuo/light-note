@@ -6,7 +6,7 @@
           <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkName') }}</span>
           <b-input v-model:value="bookmarkData.name" />
         </div>
-        <div class="tag-attr-item">
+        <div class="tag-attr-item" data-guide="bookmark-url">
           <div class="tag-attr-head">
             <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkUrl') }}</span>
             <div class="tag-attr-actions">
@@ -62,7 +62,7 @@
       </div>
     </b-loading>
     <b-space class="edit-tag-footer">
-      <b-button type="primary" @click="submit">确定</b-button>
+      <b-button type="primary" data-guide="bookmark-save" @click="submit">确定</b-button>
       <b-button @click="$router.back()">返回</b-button>
     </b-space>
     <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="bookmarkId" />

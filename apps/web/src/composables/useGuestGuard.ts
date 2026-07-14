@@ -1,8 +1,8 @@
 import { computed } from 'vue';
-import Alert from '@/components/base/BasicComponents/BModal/Alert';
 import i18n from '@/i18n';
-import { bookmarkStore, useUserStore } from '@/store';
+import { useUserStore } from '@/store';
 import { apiBasePost } from '@/http/request';
+import { showGuestNudge } from './guestNudge';
 
 let previewGuideLocked = false;
 let wallHitLocked = false;
@@ -44,24 +44,8 @@ export function showPreviewGuide(content?: string): void {
     previewGuideLocked = false;
   }, 1500);
 
-  const bookmark = bookmarkStore();
-  Alert.alert({
-    title: i18n.global.t('guest.previewTitle'),
-    content: content || i18n.global.t('guest.previewContent'),
-    footer: [
-      { label: i18n.global.t('guest.keepBrowsing'), type: 'dashed', function: () => Alert.destroy() },
-      {
-        label: i18n.global.t('guest.registerNow'),
-        type: 'primary',
-        function: () => {
-          Alert.destroy();
-          // 转化埋点:点击 CTA(fire-and-forget,不阻塞)
-          apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'preview-guide' }).catch(() => {});
-          bookmark.openAuthModal('注册');
-        },
-      },
-    ],
-  });
+  // 右下角非模态软引导:不挡内容、不强制交互、自动收起;注册 CTA(含 cta_click 埋点)在 GuestNudge 组件内
+  showGuestNudge(content || i18n.global.t('guest.previewContent'));
 }
 
 /**

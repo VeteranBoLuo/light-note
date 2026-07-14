@@ -22,6 +22,7 @@
       <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('home.noBookmarks') }}</p>
       <p style="margin: 0; font-size: 13px">{{ $t('home.noBookmarksHint') }}</p>
       <button
+        data-guide="add-bookmark"
         @click="goAddBookmark"
         style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
       >
@@ -67,7 +68,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref, watch, nextTick } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -77,6 +78,8 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { copyTextToClipboard } from '@/utils/common.ts';
   import { useI18n } from 'vue-i18n';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { startGuide, guideDone, type GuideStep } from '@/composables/useGuide';
   const bookmark = bookmarkStore();
   const { t } = useI18n();
 
@@ -90,10 +93,26 @@
   watch(
     () => bookmark.bookmarkLoading,
     (loading, prev) => {
-      if (prev && !loading) hasLoaded.value = true;
+      if (prev && !loading) {
+        hasLoaded.value = true;
+        maybeStartCreateBookmarkGuide();
+      }
     },
   );
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
+
+  // 新手引导:桌面 + 书签为空 + 没引导过 → 教用户建第一个书签(跨页面:首页添加按钮 → 编辑页填网址 → 保存)
+  const CREATE_BOOKMARK_STEPS: GuideStep[] = [
+    { target: '[data-guide="add-bookmark"]', title: t('guide.cbAddTitle'), content: t('guide.cbAddDesc') },
+    { target: '[data-guide="bookmark-url"]', title: t('guide.cbUrlTitle'), content: t('guide.cbUrlDesc'), route: '/manage/editBookmark/add' },
+    { target: '[data-guide="bookmark-save"]', title: t('guide.cbSaveTitle'), content: t('guide.cbSaveDesc'), route: '/manage/editBookmark/add' },
+  ];
+  function maybeStartCreateBookmarkGuide() {
+    if (bookmark.isMobile) return; // 移动端入口不同,暂不引导
+    if (getBookList.value.length) return; // 有书签不引导
+    if (guideDone('create-bookmark')) return; // 一次性,引导过不再弹
+    nextTick(() => startGuide('create-bookmark', CREATE_BOOKMARK_STEPS));
+  }
 
   // 首屏空状态引导:书签为空(含 seed 失败兜底)时引导添加第一个,而非一片空白
   function goAddBookmark() {
@@ -145,6 +164,11 @@
 
   async function onEnd() {
     document.body.classList.remove('drag-active');
+    // 游客:拖拽库已把本地顺序改了,这里拦截并回滚(重新拉取恢复原序)、弹撞墙引导、不发写请求
+    if (blockGuestWrite('bookmark-sort')) {
+      bookmark.refreshData();
+      return;
+    }
     try {
       // 拖拽即时归位:置顶书签始终浮回顶部(按 isTop 稳定排序,组内保持拖拽后的顺序),再持久化 sort
       const reordered = [...bookmark.bookmarkList].sort((a: any, b: any) => (b.isTop ? 1 : 0) - (a.isTop ? 1 : 0));
