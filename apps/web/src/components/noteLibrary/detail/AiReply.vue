@@ -153,7 +153,6 @@
 
 <script lang="ts" setup>
   import { computed, inject, nextTick, ref, watch, watchEffect } from 'vue';
-  import { parse, Allow } from 'partial-json';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
@@ -164,6 +163,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
+  import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
 
   const { t } = useI18n();
 
@@ -340,23 +340,8 @@
     }
     outputFull.value = '';
     isLoading.value = true;
-    abortController.value = new AbortController();
-
-    const parseJSONSafely = (str: string) => {
-      try {
-        return JSON.parse(str);
-      } catch (e) {
-        if (e instanceof SyntaxError) {
-          try {
-            return parse(str, Allow.ALL);
-          } catch (partialError) {
-            console.warn('Partial JSON解析失败:', partialError);
-            return null;
-          }
-        }
-        throw e;
-      }
-    };
+    const requestController = new AbortController();
+    abortController.value = requestController;
 
     try {
       const actionOverride = mode === 'custom' ? '自定义处理' : undefined;
@@ -368,35 +353,17 @@
         outputFull.value += content;
       };
 
+      const handleData = (data: AiSseEvent) => {
+        if (requestController.signal.aborted) return;
+        const content = data.output?.text || data.text || data.content || '';
+        if (content && typeof content === 'string') handleNewContent(content);
+        if (data.output?.session_id) sessionId.value = data.output.session_id;
+      };
+
       const handleChunk = (chunk: string) => {
-        buffer += chunk;
-
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line) continue;
-
-          if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim();
-            if (dataStr === '[DONE]') {
-              break;
-            }
-            if (!dataStr) continue;
-
-            const data = parseJSONSafely(dataStr);
-            if (!data) continue;
-
-            const content = data.output?.text || data.text || data.content || '';
-            if (content && typeof content === 'string') {
-              handleNewContent(content);
-            }
-            if (data.output?.session_id) {
-              sessionId.value = data.output.session_id;
-            }
-          }
-        }
+        const parsed = consumeAiSseChunk(buffer, chunk);
+        buffer = parsed.buffer;
+        parsed.events.forEach(handleData);
       };
 
       await apiBasePost(
@@ -411,7 +378,7 @@
             'Content-Type': 'application/json',
           },
           responseType: 'text',
-          signal: abortController.value.signal,
+          signal: requestController.signal,
           onDownloadProgress: (progressEvent) => {
             const event = (progressEvent as any).event ?? progressEvent;
             const responseText = (event?.target as XMLHttpRequest | null)?.responseText ?? '';
@@ -426,24 +393,7 @@
         },
       );
 
-      if (buffer.trim()) {
-        const remainingLines = buffer.split('\n');
-        for (const rawLine of remainingLines) {
-          const line = rawLine.trim();
-          if (!line.startsWith('data:')) continue;
-          const dataStr = line.slice(5).trim();
-          if (!dataStr || dataStr === '[DONE]') continue;
-          const data = parseJSONSafely(dataStr);
-          if (!data) continue;
-          const content = data.output?.text || data.text || data.content || '';
-          if (content && typeof content === 'string') {
-            handleNewContent(content);
-          }
-          if (data.output?.session_id) {
-            sessionId.value = data.output.session_id;
-          }
-        }
-      }
+      flushAiSseBuffer(buffer).forEach(handleData);
     } catch (error: any) {
       console.error('AI 回复生成失败:', error, axios.isCancel(error));
       if (axios.isCancel(error)) {
@@ -453,7 +403,7 @@
       }
     } finally {
       isLoading.value = false;
-      abortController.value = null;
+      if (abortController.value === requestController) abortController.value = null;
     }
   };
 

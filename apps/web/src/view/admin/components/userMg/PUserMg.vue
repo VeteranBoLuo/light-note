@@ -15,7 +15,7 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'operation'">
           <b-space>
-            <BTooltip :title="record.role === 'visitor' ? t('guest.visitorWorkspaceEntry') : t('guest.userPreviewEntry')">
+            <BTooltip :title="t('guest.userPreviewEntry')">
               <svg-icon
                 :src="icon.navigation.user"
                 size="16"
@@ -23,7 +23,7 @@
                 class="dom-hover"
               />
             </BTooltip>
-            <BTooltip v-if="record.role !== 'visitor'" :title="t('guest.adminContextMaintainEntry')">
+            <BTooltip :title="t('guest.adminContextMaintainEntry')">
               <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
             </BTooltip>
             <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
@@ -126,10 +126,6 @@
   const loginAsUser = (record) => {
     if (!record?.id) {
       message.warning('此用户缺少用户ID，无法预览');
-      return;
-    }
-    if (record.role === 'visitor') {
-      maintainAsUser(record);
       return;
     }
     openPreview(record, 'readonly');
