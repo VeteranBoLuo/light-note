@@ -230,7 +230,7 @@ export const baseRouter = [
     router: growthRouter,
   },
   {
-    // SEO 内容页(/help、/help/:id、/sitemap.xml)：挂根路径，只注册 GET，
+    // SEO 内容页(/helpCenter、/helpCenter/:id、/sitemap.xml)：挂根路径，只注册 GET，
     // 未匹配的请求穿透到后续路由，不影响其他接口
     path: '/',
     router: seoRouter,

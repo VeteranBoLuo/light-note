@@ -3,6 +3,7 @@ Allow: /
 Disallow: /admin
 Disallow: /securityCenter
 Disallow: /personCenter
-Disallow: /share/download
+Disallow: /share/
+Disallow: /api/
 
 Sitemap: https://boluo66.top/sitemap.xml

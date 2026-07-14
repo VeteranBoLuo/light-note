@@ -18,11 +18,12 @@ describe('growth 段位表', () => {
     }
   });
 
-  it('权益(容量/AI token)随等级单调不降,端点符合方案', () => {
-    expect(RANKS[0].spaceMb).toBe(500);
-    expect(RANKS[14].spaceMb).toBe(5120);
-    expect(RANKS[0].aiTokenDaily).toBe(100_000);
-    expect(RANKS[14].aiTokenDaily).toBe(800_000);
+  it('权益(容量/AI token)随等级单调不降,端点符合当前方案', () => {
+    expect(RANKS[0].spaceMb).toBe(512);
+    expect(RANKS[9].spaceMb).toBe(5120);
+    expect(RANKS[14].spaceMb).toBe(20480);
+    expect(RANKS[0].aiTokenDaily).toBe(250_000);
+    expect(RANKS[14].aiTokenDaily).toBe(2_000_000);
     for (let i = 1; i < RANKS.length; i++) {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
       expect(RANKS[i].aiTokenDaily).toBeGreaterThanOrEqual(RANKS[i - 1].aiTokenDaily);

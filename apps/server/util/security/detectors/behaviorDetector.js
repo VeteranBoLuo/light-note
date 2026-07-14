@@ -15,7 +15,26 @@ const evidence = ({ code, name, attackType, severity, scoreDelta, confidence, fi
   confidence,
 });
 
+const PUBLIC_SEO_READ_PATH = /^\/(?:sitemap\.xml|helpCenter(?:\/[^/]+)?)\/?$/;
+
+export const isPublicSeoReadRequest = (context = {}) =>
+  ['GET', 'HEAD'].includes(String(context.method || '').toUpperCase()) &&
+  PUBLIC_SEO_READ_PATH.test(String(context.path || ''));
+
 export const detectRequestBehavior = (context) => {
+  // sitemap 会引导爬虫连续读取全部公开帮助文章。这里仅跳过这些只读页面的
+  // 高频/路径枚举统计，避免正常收录被误判为 API 枚举；签名检测、404 扫描
+  // 检测和 express-rate-limit 全局限流仍在其他层继续生效。
+  if (isPublicSeoReadRequest(context)) {
+    return {
+      evidence: [],
+      metrics: {
+        requestCount1m: 0,
+        uniquePathCount1m: 0,
+      },
+    };
+  }
+
   const ip = context.sourceIp || 'unknown';
   addWindowEvent(`req:${ip}`, { path: context.path }, 60 * 1000);
   addWindowEvent(`path:${ip}`, { path: context.path }, 60 * 1000);

@@ -32,7 +32,7 @@ export default defineStore('dom', {
       }
     >{
       usedSpace: 0,
-      maxSpace: 500, // 兜底基础配额(MB);真实配额由后端 /queryTotalFileSize 下发 quotaMB 覆盖(按角色/等级)
+      maxSpace: 512, // 兜底基础配额(MB);真实配额由后端 /queryTotalFileSize 下发 quotaMB 覆盖(按角色/等级)
       folderList: [],
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],

@@ -421,8 +421,8 @@ import { formatStorageSize } from '@/utils/common';
   const cloud = cloudSpaceStore();
   const { growth } = useGrowth();
   // 云空间配额按等级下发(满级 20G):优先取成长数据里的 spaceMb,回退 store 兜底值,
-  // 避免工作台没触发 /queryTotalFileSize 时恒显默认 500MB(见 cloudSpace.ts maxSpace 兜底)
-  const maxSpaceMb = computed(() => growth.value?.spaceMb || cloud.maxSpace || 500);
+  // 避免工作台没触发 /queryTotalFileSize 时恒显过期配额(见 cloudSpace.ts maxSpace 兜底)
+  const maxSpaceMb = computed(() => growth.value?.spaceMb || cloud.maxSpace || 512);
   const user = useUserStore();
   const router = useRouter();
   const { t } = useI18n();

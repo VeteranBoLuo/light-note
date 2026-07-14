@@ -16,6 +16,7 @@
  * 每页顺带重写 head（SPA 所有路由共享 index.html，canonical 全指向 /landing，
  * 公开页不改写会被 Google 当成 /landing 的重复页拒收）：
  *   - <link rel="canonical"> / <meta og:url> → 指向页面自身
+ *   - <meta name="robots"> → 仅预渲染成功的公开页改为 index, follow
  *   - /updateLogs 另有独立 title/description（避免全站同名同描述被判重复）
  *
  * 用 puppeteer-core + 系统 Chrome（不引入 170MB 的 Chromium 下载）：
@@ -186,8 +187,10 @@ async function renderPage(browser, port, pageConf) {
 
     let html = await page.content();
 
-    // 修正 canonical 与 og:url 指向页面自身（正则宽容匹配属性顺序与空白）
+    // 基础 SPA 空壳默认 noindex；只有真实正文完成预渲染后才允许收录。
+    // 同时修正 canonical 与 og:url 指向页面自身（正则宽容匹配属性顺序与空白）。
     html = html
+      .replace(/(<meta[^>]*name="robots"[^>]*content=")[^"]*(")/i, '$1index, follow$2')
       .replace(/(<link[^>]*rel="canonical"[^>]*href=")[^"]*(")/i, `$1${SITE_ORIGIN}${route}$2`)
       .replace(/(<meta[^>]*property="og:url"[^>]*content=")[^"]*(")/i, `$1${SITE_ORIGIN}${route}$2`);
 
@@ -218,8 +221,12 @@ async function renderPage(browser, port, pageConf) {
       .replace(/<[^>]+>/g, '')
       .trim().length;
     const selectorClass = waitSelector.replace(/^\./, '');
+    const allowsIndexing = /<meta[^>]*name="robots"[^>]*content="index, follow"/i.test(html);
     if (!html.includes(selectorClass) || textLen < 500) {
       throw new Error(`预渲染产物疑似空壳（正文 ${textLen} 字符），拒绝落盘`);
+    }
+    if (!allowsIndexing) {
+      throw new Error('预渲染产物未正确设置 robots=index, follow，拒绝落盘');
     }
 
     const outDir = path.join(DIST, route.replace(/^\//, ''));
@@ -255,7 +262,7 @@ async function main() {
         await renderPage(browser, port, pageConf);
       } catch (err) {
         if (pageConf.critical) throw err; // 门面页失败 → 整体失败,绝不上线空壳
-        // 非关键页失败只警告:该页退回 SPA 空壳(canonical 会错指 /landing,收录暂缓),不阻塞部署
+        // 非关键页失败只警告:该页退回带 noindex 的 SPA 空壳，不会误收录，也不阻塞部署
         console.warn(`⚠️  ${pageConf.route} 预渲染失败(非关键页,继续): ${err.message}`);
       }
     }

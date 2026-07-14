@@ -14,6 +14,8 @@
     <meta name="keywords" content="书签管理，云笔记，云空间存储，标签分类，知识管理" />
     <meta name="author" content="轻笺团队" />
     <meta name="baidu-site-verification" content="codeva-EXqHTBpFSg" />
+    <!-- SPA 基础空壳及登录态页面默认不收录；构建期预渲染成功的公开页会改为 index, follow。 -->
+    <meta name="robots" content="noindex, nofollow" />
     <!-- canonical 指向 /landing 而非自身:根路径 / 是纯客户端重定向(无保存偏好的访客默认也会被带去
          /landing),自身对不执行 JS 的爬虫是空壳,把权重信号汇总到真正有预渲染正文的 /landing -->
     <link rel="canonical" href="https://boluo66.top/landing" />
@@ -27,6 +29,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://boluo66.top/landing" />
     <meta property="og:image" content="https://boluo66.top/eg-bookmark.png" />
+    <meta property="og:image:alt" content="轻笺书签管理界面预览" />
     <meta property="og:image:width" content="2940" />
     <meta property="og:image:height" content="1846" />
     <meta property="og:site_name" content="轻笺" />
@@ -40,6 +43,7 @@
       content="基于 AI 技术的智能知识管理平台，集成书签管理、云笔记和云空间三大功能，具备智能内容分析、自动标签分类、语义搜索和知识图谱构建能力。"
     />
     <meta name="twitter:image" content="https://boluo66.top/eg-bookmark.png" />
+    <meta name="twitter:image:alt" content="轻笺书签管理界面预览" />
 
     <!-- ===== 结构化数据 (JSON-LD) - 用于 SEO ===== -->
     <script type="application/ld+json">
@@ -48,7 +52,8 @@
         "@type": "WebApplication",
         "name": "轻笺",
         "description": "一个集成的书签、笔记和云存储管理平台，支持多标签分类、智能检索和跨设备同步功能。",
-        "url": "https://boluo66.top",
+        "url": "https://boluo66.top/landing",
+        "image": "https://boluo66.top/eg-bookmark.png",
         "applicationCategory": "ProductivityApplication",
         "operatingSystem": "Any",
         "permissions": "browser",
@@ -69,7 +74,8 @@
         },
         "author": {
           "@type": "Organization",
-          "name": "轻笺"
+          "name": "轻笺",
+          "url": "https://boluo66.top/landing"
         }
       }
     </script>

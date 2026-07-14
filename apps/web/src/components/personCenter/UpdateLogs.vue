@@ -6,8 +6,8 @@
 
     <div class="logs-container">
       <div class="logs-intro">
-        <h2 class="intro-title">{{ ($t('changelog.pageTitle'), '更新日志') }}</h2>
-        <p class="intro-desc">{{ ($t('changelog.pageDesc'), '查看系统的版本更新历史与功能改进详情。') }}</p>
+        <h1 class="intro-title">{{ $t('changelog.pageTitle') }}</h1>
+        <p class="intro-desc">{{ $t('changelog.pageDesc') }}</p>
       </div>
 
       <div class="timeline-wrapper">
