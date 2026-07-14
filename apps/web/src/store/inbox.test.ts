@@ -79,6 +79,15 @@ describe('inbox store', () => {
     await expect(store.refreshList()).resolves.toBe(false);
     expect(store.items.map((item) => item.resourceId)).toEqual(['existing']);
     expect(store.loading).toBe(false);
+    expect(store.loadFailed).toBe(true);
+  });
+
+  it('列表重试成功后清除错误态', async () => {
+    const store = useInboxStore();
+    store.loadFailed = true;
+    listInbox.mockResolvedValueOnce(successList([]));
+    await expect(store.refreshList()).resolves.toBe(true);
+    expect(store.loadFailed).toBe(false);
   });
 
   it('完成接口异常时不抛出且不修改列表', async () => {

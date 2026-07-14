@@ -6,15 +6,17 @@ export async function recordAdminContextAudit(entry) {
   try {
     await pool.query(
       `INSERT INTO admin_context_audit
-       (id, context_id, actor_user_id, subject_user_id, mode, action, route, method,
-        resource_type, outcome, result_status, ip, user_agent, meta)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, context_id, actor_user_id, subject_user_id, subject_role, mode, capability,
+        action, route, method, resource_type, outcome, result_status, ip, user_agent, meta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         crypto.randomUUID(),
         entry.contextId || null,
         entry.actorUserId,
         entry.subjectUserId || null,
+        entry.subjectRole || null,
         entry.mode || null,
+        entry.capability || null,
         entry.action,
         entry.route || null,
         entry.method || null,
@@ -50,7 +52,9 @@ export function attachAdminContextRequestAudit(req, res) {
       contextId: context.id,
       actorUserId: context.actorUserId,
       subjectUserId: context.subjectUserId,
+      subjectRole: context.subjectRole,
       mode: context.mode,
+      capability: `${req.adminCapability?.resourceType || 'unknown'}.${policy}`,
       action: 'request',
       route: String(req.originalUrl || req.path || '').split('?')[0],
       method: req.method,

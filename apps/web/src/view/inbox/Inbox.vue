@@ -23,8 +23,19 @@
       </BButton>
     </section>
 
+    <section v-if="inbox.loadFailed && inbox.items.length" class="inbox-error-banner">
+      <span>{{ t('inbox.loadFailedDesc') }}</span>
+      <BButton size="small" @click="inbox.refreshList()">{{ t('inbox.retry') }}</BButton>
+    </section>
+
     <BLoading :loading="inbox.loading" class="inbox-loading">
-      <div v-if="!inbox.loading && inbox.items.length === 0" class="inbox-empty">
+      <div v-if="!inbox.loading && inbox.loadFailed && inbox.items.length === 0" class="inbox-empty inbox-error">
+        <div class="inbox-empty__icon">!</div>
+        <h2>{{ t('inbox.loadFailedTitle') }}</h2>
+        <p>{{ t('inbox.loadFailedDesc') }}</p>
+        <BButton type="primary" @click="inbox.refreshList()">{{ t('inbox.retry') }}</BButton>
+      </div>
+      <div v-else-if="!inbox.loading && inbox.items.length === 0" class="inbox-empty">
         <div class="inbox-empty__icon">✓</div>
         <h2>{{ t('inbox.emptyTitle') }}</h2>
         <p>{{ t('inbox.emptyDesc') }}</p>
@@ -73,6 +84,8 @@
   import { inboxStore, useUserStore } from '@/store';
   import type { InboxItem as InboxItemType } from '@/api/inboxApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { recordOperation } from '@/api/commonApi';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -107,6 +120,7 @@
 
   function openCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
+    recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.quickCaptureVisible = true;
   }
   async function changeFilter() { inbox.currentPage = 1; await inbox.refreshList(); }
@@ -120,6 +134,7 @@
       : inbox.selectedKeys.filter((value) => value !== key);
   }
   function openResource(item: InboxItemType) {
+    recordOperation(OPERATION_LOG_MAP.inbox.openResource);
     if (item.resourceType === 'bookmark') router.push(`/manage/editBookmark/${item.resourceId}`);
     else if (item.resourceType === 'note') router.push(`/noteLibrary/${item.resourceId}`);
     else router.push({ path: '/cloudSpace', query: { fileName: item.title } });
@@ -129,7 +144,10 @@
     completingKey.value = inbox.resourceKey(item);
     try {
       const completed = await inbox.complete([item]);
-      if (completed) message.success(t('inbox.completedSuccess'));
+      if (completed) {
+        recordOperation(OPERATION_LOG_MAP.inbox.completeOne);
+        message.success(t('inbox.completedSuccess'));
+      }
     } finally { completingKey.value = ''; }
   }
   async function completeSelected() {
@@ -139,7 +157,10 @@
     batchCompleting.value = true;
     try {
       const completed = await inbox.complete(selected);
-      if (completed) message.success(t('inbox.completedCount', { count: completed }));
+      if (completed) {
+        recordOperation({ ...OPERATION_LOG_MAP.inbox.completeBatch, operation: `批量整理完成【${completed}项】` });
+        message.success(t('inbox.completedCount', { count: completed }));
+      }
     } finally { batchCompleting.value = false; }
   }
 </script>
@@ -151,10 +172,12 @@
   .inbox-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 16px; }
   .inbox-toolbar__right { display: grid; grid-template-columns: minmax(180px, 280px) 130px; gap: 8px; }
   .inbox-batch { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; background: rgba(97, 92, 237, .1); }
+  .inbox-error-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; color: var(--text-color); background: color-mix(in srgb, var(--danger-color, #e5484d) 10%, transparent); }
   .inbox-loading { min-height: 280px; }
   .inbox-list { display: flex; flex-direction: column; gap: 12px; }
   .inbox-empty { min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
   .inbox-empty__icon { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: #615ced; font-size: 24px; }
+  .inbox-error .inbox-empty__icon { background: var(--danger-color, #e5484d); }
   .inbox-empty h2 { margin: 14px 0 6px; } .inbox-empty p { color: var(--desc-color); margin: 0 0 16px; }
   :deep(.bpagination) { margin-top: 20px; }
   @media (max-width: 767px) {

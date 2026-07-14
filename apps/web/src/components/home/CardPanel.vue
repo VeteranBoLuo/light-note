@@ -87,10 +87,12 @@
   import { startGuide, guideDone, type GuideStep } from '@/composables/useGuide';
   import { shouldStartCreateBookmarkGuide } from '@/utils/bookmarkGuide';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const route = useRoute();
   const { t } = useI18n();
+  const { addResourcesToInbox } = useInboxEnqueue();
 
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
@@ -167,6 +169,7 @@
       item.isTop ? t('common.unpin') : t('common.pin'),
       t('common.edit'),
       t('common.copyLink'),
+      t('inbox.addExisting'),
       t('common.delete'),
     ];
   }
@@ -185,6 +188,10 @@
     if (type === t('common.copyLink')) {
       copyTextToClipboard(item.url);
       message.success(t('common.linkCopied'));
+      return;
+    }
+    if (type === t('inbox.addExisting')) {
+      addResourcesToInbox([{ resourceType: 'bookmark', resourceId: String(item.id) }], '书签');
       return;
     }
     if (type === t('common.edit')) {

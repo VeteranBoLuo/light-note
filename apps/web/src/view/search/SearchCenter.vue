@@ -248,7 +248,7 @@
     type SearchResultItem,
     type SearchType,
   } from '@/api/search.ts';
-  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -269,15 +269,14 @@
   import { getSearchTypeLabel, SEARCH_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
-  import { enqueueInbox } from '@/api/inboxApi';
-  import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
-  const inbox = inboxStore();
+  const { addResourcesToInbox } = useInboxEnqueue();
   const { t } = useI18n();
 
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
@@ -772,19 +771,10 @@
   }
 
   async function addItemsToInbox(items: DisplaySearchItem[]) {
-    if (blockGuestWrite('inbox-enqueue', t('inbox.guestPrompt'))) return;
     const resources = items
       .filter((item) => item.type !== 'tag')
       .map((item) => ({ resourceType: item.type as 'bookmark' | 'note' | 'file', resourceId: String(item.id) }));
-    if (!resources.length) {
-      message.warning(t('inbox.noResourceSelected'));
-      return;
-    }
-    const res = await enqueueInbox(resources, 'manual');
-    if (res.status !== 200) return;
-    const changed = Number(res.data?.added || 0) + Number(res.data?.reopened || 0);
-    message.success(changed > 0 ? t('inbox.addedCount', { count: changed }) : t('inbox.alreadyPending'));
-    await inbox.refreshCount();
+    await addResourcesToInbox(resources, '资源中心');
   }
 
   async function batchAddToInbox() {

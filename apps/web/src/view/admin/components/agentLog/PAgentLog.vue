@@ -22,7 +22,7 @@
         </div>
         <div class="phone-item-question">{{ item.question || '-' }}</div>
         <div class="phone-item-meta">
-          <span>{{ item.toolsUsed || '无工具' }}</span>
+          <span>{{ formatToolsUsed(item.toolsUsed) }}</span>
           <span>·</span>
           <span>{{ item.totalTokens || 0 }} tk</span>
           <span>·</span>
@@ -43,7 +43,7 @@
       <div v-if="selected" class="detail-grid">
         <div class="detail-row"><strong>用户：</strong>{{ selected.userAlias }}</div>
         <div class="detail-row"><strong>提问：</strong>{{ selected.question }}</div>
-        <div class="detail-row"><strong>工具：</strong>{{ selected.toolsUsed || '无' }}</div>
+        <div class="detail-row"><strong>工具：</strong>{{ formatToolsUsed(selected.toolsUsed) }}</div>
         <div class="detail-row"><strong>供应商：</strong>{{ selected.provider || '-' }} / {{ selected.model || '-' }}</div>
         <div class="detail-row"><strong>Request ID：</strong>{{ selected.requestId || '-' }}</div>
         <div class="detail-row"><strong>API 次数：</strong>{{ selected.iterations }}</div>
@@ -99,6 +99,17 @@
   function formatTime(t: string) {
     if (!t) return '';
     return new Date(t).toLocaleString('zh-CN');
+  }
+
+  function formatToolsUsed(value: unknown) {
+    if (!value) return '无工具';
+    try {
+      const parsed = JSON.parse(String(value));
+      if (!Array.isArray(parsed)) return String(value);
+      return parsed.map((tool) => `${tool.name}${tool.status ? `(${tool.status})` : ''}`).join('、');
+    } catch {
+      return String(value);
+    }
   }
 
   onMounted(() => { fetchLogs(); });

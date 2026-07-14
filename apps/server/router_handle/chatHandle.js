@@ -244,6 +244,7 @@ export const assistNote = async (req, res) => {
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       });
+      res.write(`data: ${JSON.stringify({ event: 'start', requestId, output: { session_id: sessionId } })}\n\n`);
       const result = await requestDeepSeekStream(messages, {
         signal: abortController.signal,
         maxTokens: 4096,

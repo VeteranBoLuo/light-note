@@ -780,6 +780,27 @@ export const getHelpConfig = async (req, res) => {
 
 // 草稿管理相关 handler 已移除（迁移至 knowledge_base 表）
 
+function percentile(values, ratio) {
+  const nums = values
+    .filter((value) => value !== null && value !== undefined && value !== '')
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  if (!nums.length) return null;
+  return nums[Math.min(nums.length - 1, Math.max(0, Math.ceil(nums.length * ratio) - 1))];
+}
+
+function parseAgentToolStatuses(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    // 兼容升级前仅保存逗号分隔工具名的历史日志。
+    return String(value).split(',').filter(Boolean).map((name) => ({ name, status: 'unknown' }));
+  }
+}
+
 export const getAgentLogsSummary = async (req, res) => {
   try {
     const userRole = req.user?.role;
@@ -810,7 +831,44 @@ export const getAgentLogsSummary = async (req, res) => {
       ),
     ]);
 
-    console.log('[AgentLogsSummary] todayStr:', todayStr, 'todayRow:', JSON.stringify(todayRow), 'totalRow:', JSON.stringify(totalRow));
+    let metricRows = [];
+    try {
+      const [rows] = await pool.query(
+        `SELECT a.status, a.duration_ms, a.first_token_ms, a.planner_ms, a.tool_ms,
+                a.final_ms, a.task_type, a.tools_used
+         FROM agent_logs a
+         LEFT JOIN user u ON a.user_id = u.id
+         WHERE a.created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)${roleClause}
+         ORDER BY a.created_at DESC
+         LIMIT 5000`,
+        [...roleParams],
+      );
+      metricRows = rows;
+    } catch (error) {
+      // 迁移前的旧表缺少追踪字段时仍返回基础统计，避免后台页面整体不可用。
+      if (error?.code !== 'ER_BAD_FIELD_ERROR') throw error;
+    }
+
+    const toolRows = metricRows.filter((row) => row.tools_used);
+    const toolErrors = toolRows.filter((row) =>
+      parseAgentToolStatuses(row.tools_used).some((tool) => tool.status === 'error'),
+    ).length;
+    const errorCount = metricRows.filter((row) => row.status === 'error').length;
+    const confirmationApproved = metricRows.filter(
+      (row) => row.task_type === 'agent_confirmation' && row.status === 'success',
+    ).length;
+    const confirmationRejected = metricRows.filter(
+      (row) => row.task_type === 'agent_confirmation' && row.status === 'confirmation_rejected',
+    ).length;
+    const ratio = (value, total) => (total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0);
+    const average = (field) => {
+      const values = metricRows
+        .map((row) => row[field])
+        .filter((value) => value !== null && value !== undefined && value !== '')
+        .map(Number)
+        .filter(Number.isFinite);
+      return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
+    };
 
     res.send(resultData({
       today: {
@@ -822,6 +880,22 @@ export const getAgentLogsSummary = async (req, res) => {
         count: totalRow[0].count,
         tokens: totalRow[0].tokens,
         cost: Number(totalRow[0].cost).toFixed(4),
+      },
+      quality: {
+        sampleCount: metricRows.length,
+        errorRate: ratio(errorCount, metricRows.length),
+        durationP50: percentile(metricRows.map((row) => row.duration_ms), 0.5),
+        durationP95: percentile(metricRows.map((row) => row.duration_ms), 0.95),
+        firstTokenP50: percentile(metricRows.map((row) => row.first_token_ms), 0.5),
+        firstTokenP95: percentile(metricRows.map((row) => row.first_token_ms), 0.95),
+        plannerAvg: average('planner_ms'),
+        toolAvg: average('tool_ms'),
+        finalAvg: average('final_ms'),
+        toolHitRate: ratio(toolRows.length, metricRows.length),
+        toolErrorRate: ratio(toolErrors, toolRows.length),
+        confirmationRate: ratio(confirmationApproved, confirmationApproved + confirmationRejected),
+        directTaskCount: metricRows.filter((row) => row.task_type === 'note_assist').length,
+        agentTaskCount: metricRows.filter((row) => row.task_type === 'agent').length,
       },
     }));
   } catch (e) {

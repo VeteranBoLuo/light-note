@@ -123,6 +123,17 @@ export async function revokeAdminContext(token) {
 
 export function adminContextPublicView(context) {
   if (!context) return null;
+  const capabilities = [
+    'bookmark.read',
+    'note.read',
+    'file.read',
+    'tag.read',
+    'trash.read',
+  ];
+  if (context.mode === 'maintain') {
+    capabilities.push('bookmark.write', 'note.write', 'tag.write', 'trash.restore', 'ai.use');
+    if (context.subjectRole !== 'visitor') capabilities.push('file.write');
+  }
   return {
     id: context.id,
     subjectUserId: context.subjectUserId,
@@ -131,5 +142,6 @@ export function adminContextPublicView(context) {
     mode: context.mode,
     issuedAt: context.issuedAt,
     expiresAt: context.expiresAt,
+    capabilities,
   };
 }

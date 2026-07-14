@@ -64,6 +64,15 @@ export const OPERATION_LOG_MAP = {
     saveNote: '保存笔记',
   }),
   cloudSpace: createModule('云空间', {}),
+  inbox: createModule('待整理箱', {
+    openCapture: '打开快速收集',
+    captureBookmark: '收集书签成功',
+    captureNote: '收集笔记成功',
+    captureFile: '收集文件成功',
+    completeOne: '单条整理完成',
+    completeBatch: '批量整理完成',
+    openResource: '打开原资源继续整理',
+  }),
   workbenches: createModule('工作台', {
     tag: '标签总览',
     note: '笔记总览',

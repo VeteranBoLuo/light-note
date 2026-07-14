@@ -14,6 +14,7 @@ export default defineStore('inbox', {
     items: [] as InboxItem[],
     total: 0,
     loading: false,
+    loadFailed: false,
     currentPage: 1,
     pageSize: 20,
     filterType: 'all' as 'all' | InboxResourceType,
@@ -37,6 +38,7 @@ export default defineStore('inbox', {
       this.total = 0;
       this.currentPage = 1;
       this.selectedKeys = [];
+      this.loadFailed = false;
       this.requestId += 1;
     },
     async refreshCount() {
@@ -54,6 +56,7 @@ export default defineStore('inbox', {
     async refreshList() {
       const requestId = ++this.requestId;
       this.loading = true;
+      this.loadFailed = false;
       try {
         const res = await listInbox({
           type: this.filterType,
@@ -62,7 +65,11 @@ export default defineStore('inbox', {
           pageSize: this.pageSize,
           sort: this.sort,
         });
-        if (requestId !== this.requestId || res.status !== 200) return false;
+        if (requestId !== this.requestId) return false;
+        if (res.status !== 200) {
+          this.loadFailed = true;
+          return false;
+        }
         this.items = Array.isArray(res.data?.items) ? res.data.items : [];
         this.total = Number(res.data?.total || 0);
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
@@ -71,6 +78,7 @@ export default defineStore('inbox', {
         return true;
       } catch {
         // 前后端灰度发布或网络失败时保留当前列表，并吞掉组件生命周期中的未处理异常。
+        if (requestId === this.requestId) this.loadFailed = true;
         return false;
       } finally {
         if (requestId === this.requestId) this.loading = false;

@@ -42,6 +42,28 @@ const TABLE_CONFIG = {
   file: { table: 'files', userIdField: 'create_by', nameField: 'file_name' },
 };
 
+async function purgeInboxRelations(connection, resourceType, ids, userId = null) {
+  if (!ids?.length) return;
+  const placeholders = ids.map(() => '?').join(',');
+  const userCondition = userId ? ' AND user_id = ?' : '';
+  await connection.query(
+    `DELETE FROM resource_inbox
+      WHERE resource_type = ? AND resource_id IN (${placeholders})${userCondition}`,
+    userId ? [resourceType, ...ids, userId] : [resourceType, ...ids],
+  );
+}
+
+async function purgeDeletedInboxRelationsForUser(connection, resourceType, userId) {
+  const cfg = TABLE_CONFIG[resourceType];
+  await connection.query(
+    `DELETE i FROM resource_inbox i
+      INNER JOIN \`${cfg.table}\` t ON i.resource_id = CAST(t.id AS CHAR)
+       AND i.resource_type = ?
+      WHERE i.user_id = ? AND t.${cfg.userIdField} = ? AND t.del_flag = 1`,
+    [resourceType, userId, userId],
+  );
+}
+
 // ---- 清理过期数据 ----
 
 // 回收站保留天数按成长等级(低级维持 30 天,高级递增到满级 90 天):引用连接的 user_growth g.exp。
@@ -70,6 +92,7 @@ async function cleanupExpiredFiles(connection, userId = null) {
   const ids = rows.map((r) => r.id);
   const placeholders = ids.map(() => '?').join(',');
 
+  await purgeInboxRelations(connection, 'file', ids);
   await connection.query(`DELETE FROM resource_tag_relations WHERE resource_type = 'file' AND resource_id IN (${placeholders})`, ids);
   await connection.query(`DELETE FROM files WHERE id IN (${placeholders})`, ids);
 
@@ -89,6 +112,7 @@ async function cleanupExpiredNotes(connection, userId = null) {
   if (notes.length === 0) return 0;
   const ids = notes.map((n) => n.id);
   const ph = ids.map(() => '?').join(',');
+  await purgeInboxRelations(connection, 'note', ids);
   const urls = await purgeNoteImages(connection, ids);
   await purgeNoteVersions(connection, ids);
   const [result] = await connection.query(`DELETE FROM note WHERE id IN (${ph})`, ids);
@@ -98,6 +122,12 @@ async function cleanupExpiredNotes(connection, userId = null) {
 
 async function cleanupExpiredBookmarks(connection, userId = null) {
   const userCond = userId ? ` AND b.user_id = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('b.user_id')}`;
+
+  const [bookmarks] = await connection.query(
+    `SELECT b.id FROM bookmark b LEFT JOIN user_growth g ON g.user_id = b.user_id
+     WHERE ${expiryWhere('b')}${userCond}`,
+  );
+  await purgeInboxRelations(connection, 'bookmark', bookmarks.map((bookmark) => bookmark.id));
 
   // 先清 resource_tag_relations（bookmark 的多态字段无 FK CASCADE）
   await connection.query(
@@ -297,6 +327,7 @@ export const permanentDelete = async (req, res) => {
       `DELETE FROM resource_tag_relations WHERE resource_type = ? AND resource_id IN (${placeholders})`,
       [resourceType, ...ids],
     );
+    await purgeInboxRelations(connection, resourceType, ids, userId);
 
     let objsToDelete = [];
     let noteImageUrls = [];
@@ -392,6 +423,8 @@ export const emptyTrash = async (req, res) => {
     let total = 0;
     for (const type of RESOURCE_TYPES) {
       const cfg = TABLE_CONFIG[type];
+
+      await purgeDeletedInboxRelationsForUser(connection, type, userId);
 
       await connection.query(
         `DELETE rtr FROM resource_tag_relations rtr

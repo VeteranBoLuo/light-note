@@ -28,6 +28,7 @@ describe('adminContextAudit', () => {
         id: 'ctx-1',
         actorUserId: 'root-1',
         subjectUserId: 'user-1',
+        subjectRole: 'user',
         mode: 'readonly',
       },
       adminCapability: { policy: 'read', resourceType: 'bookmark' },
@@ -47,7 +48,10 @@ describe('adminContextAudit', () => {
     finish();
     await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(1));
     const params = query.mock.calls[0][1];
-    expect(params).toEqual(expect.arrayContaining(['ctx-1', 'root-1', 'user-1', 'readonly', 'request', '/api/bookmark/list', 'bookmark', 'allowed', 200]));
+    expect(params).toEqual(expect.arrayContaining([
+      'ctx-1', 'root-1', 'user-1', 'user', 'readonly', 'bookmark.read',
+      'request', '/api/bookmark/list', 'bookmark', 'allowed', 200,
+    ]));
     expect(JSON.parse(params.at(-1))).toMatchObject({ policy: 'read' });
   });
 

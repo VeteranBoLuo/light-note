@@ -74,6 +74,8 @@
     normalizeCaptureUrl,
     type InboxCaptureType,
   } from '@/utils/inboxCapture';
+  import { recordOperation } from '@/api/commonApi';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
 
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ captured: [] }>();
@@ -193,6 +195,12 @@
         : captureType.value === 'note'
           ? await collectNote()
           : await collectFiles();
+      const operation = captureType.value === 'bookmark'
+        ? OPERATION_LOG_MAP.inbox.captureBookmark
+        : captureType.value === 'note'
+          ? OPERATION_LOG_MAP.inbox.captureNote
+          : OPERATION_LOG_MAP.inbox.captureFile;
+      recordOperation(operation);
       content.value = '';
       files.value = [];
       manualType.value = false;

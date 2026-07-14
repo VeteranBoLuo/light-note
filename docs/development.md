@@ -150,6 +150,8 @@ try {
 | 操作成功（新增、删除、保存等） | `recordOperation()` |
 | 后台管理页面 | 只记录 API 日志，不加埋点 |
 
+待整理相关的手动入队必须复用 `composables/useInboxEnqueue.ts`，避免各资源模块分别实现游客拦截、幂等提示、角标刷新和操作日志。
+
 **响应式断点：**
 
 - 来源于 `src/store/bookmark.ts`

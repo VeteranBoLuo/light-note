@@ -59,6 +59,14 @@ const markAuthExpired = (res) => {
   res.setHeader(AUTH_EXPIRED_HEADER, '1');
 };
 
+const rejectAdminContextWithoutActorSession = (res) => {
+  return res.status(401).json({
+    data: { code: 'ADMIN_CONTEXT_EXPIRED' },
+    status: 401,
+    msg: '管理员登录会话已失效，请关闭预览后重新进入。',
+  });
+};
+
 // 免鉴权的公开接口:带失效 sid 打到这里不算「会话过期」,不设 x-auth-expired 提示头。
 // 前缀与后端路由挂载点(baseRouter 的 '/user' + 子路由)一致。改挂载前缀或新增公开接口时须同步。
 // 注意:该判断只影响前端「是否弹登录已过期」的提示,不是鉴权边界——session 无效一律降级游客,
@@ -151,6 +159,8 @@ export const authMiddleware = async (req, res, next) => {
 
     const sid = getRequestSid(req);
     if (!sid) {
+      // 请求显式携带管理员上下文时必须 fail closed，不能降级为游客后继续读取共享游客数据。
+      if (adminContextToken) return rejectAdminContextWithoutActorSession(res);
       attachUserToRequest(req, res, await findVisitorUser());
       return next();
     }
@@ -161,6 +171,7 @@ export const authMiddleware = async (req, res, next) => {
         markAuthExpired(res);
       }
       clearAuthCookie(res);
+      if (adminContextToken) return rejectAdminContextWithoutActorSession(res);
       attachUserToRequest(req, res, await findVisitorUser());
       return next();
     }
@@ -179,6 +190,7 @@ export const authMiddleware = async (req, res, next) => {
       }
       await removeSession(sid);
       clearAuthCookie(res);
+      if (adminContextToken) return rejectAdminContextWithoutActorSession(res);
       attachUserToRequest(req, res, await findVisitorUser());
       return next();
     }
@@ -203,7 +215,9 @@ export const authMiddleware = async (req, res, next) => {
               contextId: staleContext.id,
               actorUserId: actor.id,
               subjectUserId: staleContext.subjectUserId,
+              subjectRole: staleContext.subjectRole,
               mode: staleContext.mode,
+              capability: 'admin_context.access',
               action: 'access_denied',
               outcome: 'blocked',
               route: requestPath,
@@ -230,7 +244,9 @@ export const authMiddleware = async (req, res, next) => {
             contextId: staleContext.id,
             actorUserId: actor.id,
             subjectUserId: staleContext.subjectUserId,
+            subjectRole: staleContext.subjectRole,
             mode: staleContext.mode,
+            capability: 'admin_context.access',
             action: 'expired',
             outcome: 'expired',
             route: requestPath,
@@ -255,7 +271,9 @@ export const authMiddleware = async (req, res, next) => {
           contextId: context.id,
           actorUserId: actor.id,
           subjectUserId: context.subjectUserId,
+          subjectRole: context.subjectRole,
           mode: context.mode,
+          capability: 'admin_context.access',
           action: 'access_denied',
           outcome: 'blocked',
           route: requestPath,
@@ -281,7 +299,9 @@ export const authMiddleware = async (req, res, next) => {
           contextId: context.id,
           actorUserId: actor.id,
           subjectUserId: context.subjectUserId,
+          subjectRole: context.subjectRole,
           mode: context.mode,
+          capability: 'admin_context.access',
           action: 'access_denied',
           outcome: 'blocked',
           route: requestPath,

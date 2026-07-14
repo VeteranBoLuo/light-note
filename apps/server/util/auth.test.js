@@ -40,6 +40,42 @@ beforeEach(() => {
 });
 
 describe('authMiddleware 管理员上下文', () => {
+  it('携带上下文令牌但 actor 会话缺失时 fail closed，不降级为游客', async () => {
+    const req = {
+      headers: { 'x-admin-context': 'context-token' },
+      originalUrl: '/api/bookmark/getBookmarkList',
+      path: '/bookmark/getBookmarkList',
+      method: 'POST',
+      body: {},
+    };
+    const res = mockRes();
+    const next = vi.fn();
+    await authMiddleware(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_EXPIRED' } }),
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('携带上下文令牌但 actor session 已过期时 fail closed', async () => {
+    getSession.mockResolvedValue(null);
+    const req = {
+      headers: { cookie: 'sid=expired-sid', 'x-admin-context': 'context-token' },
+      originalUrl: '/api/note/queryNoteList',
+      path: '/note/queryNoteList',
+      method: 'POST',
+      body: {},
+    };
+    const res = mockRes();
+    const next = vi.fn();
+    await authMiddleware(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('把真实 root actor 与目标 subject 分离并绑定同一登录会话', async () => {
     getSession.mockResolvedValue({ user_id: 'root-1', expires_in_seconds: 600 });
     getAdminContext.mockResolvedValue({

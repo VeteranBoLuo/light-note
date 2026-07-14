@@ -18,6 +18,7 @@
             @edit="handleEditMessage"
             @regenerate="() => handleRegenerate(index)"
           />
+          <AiToolStatusList v-if="message.toolEvents?.length" :items="message.toolEvents" />
           <AiSourceCards v-if="message.sources?.length" :sources="message.sources" />
           <AiToolConfirmationCard
             v-for="confirmation in message.confirmations || []"
@@ -60,7 +61,6 @@
 
 <script setup lang="ts">
   import { ref, onMounted, nextTick, watch } from 'vue';
-  import { parse, Allow } from 'partial-json';
   import { bookmarkStore, useUserStore } from '@/store';
   import ChatMessageItem from '@/components/aiAssistant/ChatMessageItem.vue';
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
@@ -68,11 +68,13 @@
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
   import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
+  import AiToolStatusList, { type AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
 
   const { t } = useI18n();
 
@@ -101,6 +103,7 @@
       preview?: { title?: string; target?: string; impact?: string };
     }>;
     sources?: AiSource[];
+    toolEvents?: AiToolStatusItem[];
   }
 
   // 响应式数据
@@ -143,6 +146,7 @@
   // 流式输出控制
   const abortController = ref<AbortController | null>(null);
   let currentMessageIndex = -1;
+  let activeRequestId = 0; // 请求计数器，隔离停止、切换账号与新请求之间的异步回调
 
   // 当前这一轮对话是否已经开始输出答案正文
   const hasAnswerStarted = ref(false);
@@ -419,7 +423,10 @@
     (nextId, previousId) => {
       if (nextId === previousId) return;
       stopResponse();
+      activeRequestId += 1;
       sessionId = '';
+      currentMessageIndex = -1;
+      contexts.value = [];
       messages.value = [];
       if (!restoreHistory()) {
         messages.value = [
@@ -434,7 +441,6 @@
     },
   );
   const longChatHinted = ref(false); // 超长对话「新建会话」提示只弹一次(每段会话)
-  let activeRequestId = 0; // 请求计数器，防止旧请求的 finally 干扰新请求
   // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
     showRecommendation.value = false;
@@ -499,13 +505,15 @@
     }
 
     // 创建中止控制器
-    abortController.value = new AbortController();
+    const requestController = new AbortController();
+    abortController.value = requestController;
 
     let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
     // 服务端已经按 token 流式输出，前端直接渲染增量；不再叠加第二层逐字打字机。
     const handleNewContent = async (content: string) => {
       if (!content) return;
       if (activeRequestId !== thisRequestId) return;
+      if (requestController.signal.aborted) return;
       const current = messages.value[currentMessageIndex];
       if (!current) return;
       current.content += content;
@@ -519,29 +527,8 @@
       let buffer = '';
       let processedLength = 0;
 
-      const parseJSONSafely = (str) => {
+      const handleData = (data: AiSseEvent) => {
         try {
-          return JSON.parse(str);
-        } catch (e) {
-          if (e instanceof SyntaxError) {
-            // 尝试使用partial-json解析不完整JSON
-            try {
-              return parse(str, Allow.ALL);
-            } catch (partialError) {
-              console.warn('Partial JSON解析也失败:', partialError);
-              return null;
-            }
-          }
-          throw e;
-        }
-      };
-
-      const handleDataLine = (dataStr: string) => {
-        if (!dataStr || dataStr === '[DONE]') return;
-        try {
-          const data = parseJSONSafely(dataStr);
-          if (!data) return;
-
           // 后端流式出错时会推送 { error, message } 帧：记下来、标记已开始(停思考流)，
           // 交给流结束后统一显示 —— 不在此直接改内容，避免与打字机争用当前消息
           if (data.error) {
@@ -554,6 +541,26 @@
             const currentMsg = messages.value[currentMessageIndex];
             if (currentMsg) {
               currentMsg.confirmations = [...(currentMsg.confirmations || []), data.confirmation];
+            }
+          }
+
+          if ((data.event === 'tool_start' || data.event === 'tool_result') && typeof data.tool === 'string') {
+            const currentMsg = messages.value[currentMessageIndex];
+            if (currentMsg) {
+              const round = Number(data.round || 1);
+              const status = data.event === 'tool_start'
+                ? 'running'
+                : data.status === 'confirmation_required'
+                  ? 'confirmation_required'
+                  : data.status === 'success'
+                    ? 'success'
+                    : 'error';
+              const items = [...(currentMsg.toolEvents || [])];
+              const existing = items.findIndex((item) => item.name === data.tool && Number(item.round || 1) === round);
+              const nextItem: AiToolStatusItem = { name: data.tool, status, round };
+              if (existing >= 0) items[existing] = nextItem;
+              else items.push(nextItem);
+              currentMsg.toolEvents = items;
             }
           }
 
@@ -597,22 +604,14 @@
             sessionId = data.output.session_id;
           }
         } catch (e) {
-          console.warn('解析数据失败，跳过数据块:', dataStr);
+          console.warn('处理 AI 流式事件失败，已跳过:', data.event || 'unknown');
         }
       };
 
       const handleChunk = (chunk: string) => {
-        buffer += chunk;
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line) continue;
-          if (!line.startsWith('data:')) continue;
-          const dataStr = line.slice(5).trim();
-          handleDataLine(dataStr);
-        }
+        const parsed = consumeAiSseChunk(buffer, chunk);
+        buffer = parsed.buffer;
+        parsed.events.forEach(handleData);
       };
 
       // Agent 模式：统一走 DeepSeek，不再区分 DashScope
@@ -633,7 +632,7 @@
             'Content-Type': 'application/json',
           },
           responseType: 'text',
-          signal: abortController.value.signal,
+          signal: requestController.signal,
           onDownloadProgress: (progressEvent) => {
             const event = (progressEvent as any).event ?? progressEvent;
             const responseText = (event?.target as XMLHttpRequest | null)?.responseText ?? '';
@@ -649,16 +648,7 @@
       );
 
       // 处理缓冲区剩余数据
-      if (buffer.trim()) {
-        const remainingLines = buffer.split('\n');
-        for (const rawLine of remainingLines) {
-          const line = rawLine.trim();
-          if (!line.startsWith('data:')) continue;
-          const dataStr = line.slice(5).trim();
-          if (!dataStr || dataStr === '[DONE]') continue;
-          handleDataLine(dataStr);
-        }
-      }
+      flushAiSseBuffer(buffer).forEach(handleData);
 
       // 后端流式返回错误帧：已有半截内容则保留并追加友好提示。
       if (streamError && thisRequestId === activeRequestId) {
@@ -682,7 +672,7 @@
       if (thisRequestId !== activeRequestId) return;
 
       isLoading.value = false;
-      abortController.value = null;
+      if (abortController.value === requestController) abortController.value = null;
       showRecommendation.value = true;
 
       // 最终滚动

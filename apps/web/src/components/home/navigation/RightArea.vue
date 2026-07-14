@@ -78,6 +78,7 @@
 
   function openQuickCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
+    recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.quickCaptureVisible = true;
   }
 

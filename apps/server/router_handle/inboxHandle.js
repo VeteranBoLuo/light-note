@@ -18,6 +18,13 @@ function sendInboxError(res, error) {
   return res.send(resultData(null, status, status === 403 ? error.message : '待整理服务暂时不可用，请稍后重试'));
 }
 
+function forbidVisitorWorkspaceFiles(req, res, items) {
+  if (req.adminContext?.subjectRole !== 'visitor') return false;
+  if (!items.some((item) => item.resourceType === 'file')) return false;
+  res.send(resultData(null, 403, '游客工作区维护仅支持书签和笔记'));
+  return true;
+}
+
 export async function countInbox(req, res) {
   try {
     res.send(resultData(await queryPendingCount(pool, req.user.id)));
@@ -99,6 +106,7 @@ export async function enqueueInbox(req, res) {
   const items = normalizeInboxItems(req.body?.items);
   const source = normalizeInboxSource(req.body?.source, 'manual');
   if (!items || !source) return res.send(resultData(null, 400, '无效的资源列表或来源'));
+  if (forbidVisitorWorkspaceFiles(req, res, items)) return;
   let connection;
   try {
     connection = await pool.getConnection();
@@ -118,6 +126,7 @@ export async function completeInbox(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   const items = normalizeInboxItems(req.body?.items);
   if (!items) return res.send(resultData(null, 400, '无效的资源列表'));
+  if (forbidVisitorWorkspaceFiles(req, res, items)) return;
   let connection;
   try {
     connection = await pool.getConnection();

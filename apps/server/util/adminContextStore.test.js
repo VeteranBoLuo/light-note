@@ -12,6 +12,7 @@ vi.mock('../db/index.js', () => ({ default: { query } }));
 
 const {
   AdminContextError,
+  adminContextPublicView,
   createAdminContext,
   getAdminContext,
   getAdminContextMetadata,
@@ -24,6 +25,22 @@ describe('adminContextStore', () => {
     redis.setEx.mockResolvedValue('OK');
     redis.del.mockResolvedValue(1);
     process.env.ADMIN_MAINTENANCE_ENABLED = 'true';
+  });
+
+  it('公开上下文只返回最小信息并按目标角色生成能力', () => {
+    const visitor = adminContextPublicView({
+      id: 'ctx-1',
+      subjectUserId: 'visitor-1',
+      subjectRole: 'visitor',
+      subjectAlias: '游客',
+      mode: 'maintain',
+      issuedAt: '2026-07-15T00:00:00.000Z',
+      expiresAt: '2026-07-15T00:10:00.000Z',
+      actorSessionId: 'must-not-leak',
+    });
+    expect(visitor.capabilities).toContain('bookmark.write');
+    expect(visitor.capabilities).not.toContain('file.write');
+    expect(visitor).not.toHaveProperty('actorSessionId');
   });
 
   it('仅 root 真实会话可签发，且 Redis 只保存令牌哈希键', async () => {

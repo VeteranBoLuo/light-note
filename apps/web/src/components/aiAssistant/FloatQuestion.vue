@@ -20,13 +20,17 @@
     </BDrawer>
 
     <!-- 悬浮按钮保持不变 -->
-    <div
+    <BButton
       class="float-button"
+      role="button"
+      tabindex="0"
+      :aria-label="t('ai.title')"
       :class="{
         'button-active': isOpen,
         'button-minimized': !isOpen,
       }"
       @click="toggleModal"
+      @keydown.enter.space.prevent="toggleModal"
       v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
       @mouseenter="handleButtonMouseEnter"
       @mouseleave="handleButtonMouseLeave"
@@ -75,7 +79,7 @@
           <div class="sparkle" v-for="i in 3" :key="i" :style="sparkleStyle(i)"></div>
         </div>
       </div>
-    </div>
+    </BButton>
   </div>
 </template>
 
@@ -272,6 +276,8 @@
   .float-button {
     width: 50px;
     height: 50px;
+    padding: 0;
+    line-height: normal;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
     border-radius: 50%;
     display: flex;

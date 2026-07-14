@@ -100,7 +100,7 @@ res.send(resultData(null, 500, '服务器内部错误'));    // 服务端错误
 - 普通权限检查仍通过 `req.user?.role` 判断；管理员预览使用短时 `X-Admin-Context`，鉴权层分离真实操作者 `billingUser` 与资源主体 `resourceUser`
 - 管理员上下文所有路由必须在 `adminRoutePolicy.js` 显式声明语义策略，遗漏时默认拒绝
 - `readonly` 只允许读取；`maintain` 仅允许可逆内容维护，抑制目标账号成长、转化和权益副作用，并写入 `admin_context_audit`
-- 管理员上下文仅以 Token 哈希作为 Redis 键；过期元数据额外保留 24 小时用于审计，审计结果统一为 `allowed/blocked/noop/failed/expired`
+- 管理员上下文仅以 Token 哈希作为 Redis 键；过期元数据额外保留 24 小时用于审计，审计记录 actor、subject、角色、能力与模式，结果统一为 `allowed/blocked/noop/failed/expired`
 - Root 操作使用 `ensureRootRole(req, res)` 检查
 
 ## 前端架构
@@ -199,6 +199,8 @@ src/
 - 快速收集支持 URL、Markdown 文本和文件，创建资源与加入待整理在同一业务事务或确认链中完成
 - 加入操作以 `(user_id, resource_type, resource_id)` 幂等；完成整理只更新关系状态，不修改资源本体
 - 列表查询、批量完成与重新加入都必须校验当前资源主体归属；资源删除时清理对应关系
+- 资源中心及书签、笔记、云空间现有菜单统一复用 `useInboxEnqueue` 手动入队；接口失败显示可重试错误态，不伪装成空列表
+- 管理员维护游客工作区时，待整理写操作只允许游客自己的书签和笔记，文件始终拒绝；永久删除和过期清理再次兜底移除关系
 
 ## 关键流程
 

@@ -9,7 +9,15 @@ vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 // 直接首个 import commonHandle.js 会拿到未初始化的导出而报错。
 // 先按应用真实顺序 import common.js,让 commonHandle.js 作为叶子完成初始化,规避循环。
 await import('../util/common.js');
-const { recordConversion, recordOperationLogs, analyzeImgUrl, getConversionFunnel, clearLogsByIp, getIpLogStats } = await import('./commonHandle.js');
+const {
+  recordConversion,
+  recordOperationLogs,
+  analyzeImgUrl,
+  getConversionFunnel,
+  clearLogsByIp,
+  getIpLogStats,
+  getAgentLogsSummary,
+} = await import('./commonHandle.js');
 
 function mockRes() {
   const res = {};
@@ -362,5 +370,43 @@ describe('getIpLogStats 统计', () => {
     const res = mockRes();
     await getIpLogStats({ user: { id: 'r', role: 'root' }, body: {} }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+  });
+});
+
+describe('getAgentLogsSummary AI 质量指标', () => {
+  beforeEach(() => query.mockReset());
+
+  it('计算错误率、延迟分位、工具质量和确认比例', async () => {
+    query.mockImplementation((sql) => {
+      if (/SELECT COUNT\(\*\).*created_at >=/.test(sql)) {
+        return Promise.resolve([[{ count: 3, tokens: 120, cost: 0.02 }]]);
+      }
+      if (/SELECT COUNT\(\*\).*WHERE 1=1/.test(sql)) {
+        return Promise.resolve([[{ count: 10, tokens: 500, cost: 0.1 }]]);
+      }
+      if (/SELECT a\.status, a\.duration_ms/.test(sql)) {
+        return Promise.resolve([[
+          { status: 'success', duration_ms: 100, first_token_ms: 30, planner_ms: 20, tool_ms: 10, final_ms: 70, task_type: 'agent', tools_used: '[{"name":"query_notes","status":"success"}]' },
+          { status: 'error', duration_ms: 900, first_token_ms: null, planner_ms: 100, tool_ms: 50, final_ms: null, task_type: 'agent', tools_used: '[{"name":"query_notes","status":"error"}]' },
+          { status: 'success', duration_ms: 300, first_token_ms: 80, planner_ms: null, tool_ms: null, final_ms: 300, task_type: 'agent_confirmation', tools_used: null },
+          { status: 'confirmation_rejected', duration_ms: 200, first_token_ms: null, planner_ms: null, tool_ms: null, final_ms: null, task_type: 'agent_confirmation', tools_used: null },
+        ]]);
+      }
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getAgentLogsSummary({ user: { role: 'root' }, body: { hideInternal: false } }, res);
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.quality).toMatchObject({
+      sampleCount: 4,
+      errorRate: 25,
+      durationP50: 200,
+      durationP95: 900,
+      firstTokenP50: 30,
+      toolHitRate: 50,
+      toolErrorRate: 50,
+      confirmationRate: 50,
+    });
   });
 });

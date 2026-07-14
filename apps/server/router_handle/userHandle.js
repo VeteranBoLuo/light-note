@@ -382,7 +382,9 @@ export const startAdminContext = async (req, res) => {
       contextId: result.context.id,
       actorUserId: actor.id,
       subjectUserId,
+      subjectRole: result.context.subjectRole,
       mode,
+      capability: 'admin_context.start',
       action: 'start',
       outcome: 'allowed',
       route: req.originalUrl,
@@ -391,11 +393,20 @@ export const startAdminContext = async (req, res) => {
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     });
+    const publicContext = adminContextPublicView(result.context);
     res.send(
       resultData({
         contextToken: result.token,
         ttlSeconds: result.ttlSeconds,
-        context: adminContextPublicView(result.context),
+        mode: publicContext.mode,
+        target: {
+          id: publicContext.subjectUserId,
+          alias: publicContext.subjectAlias,
+          role: publicContext.subjectRole,
+        },
+        expiresAt: publicContext.expiresAt,
+        capabilities: publicContext.capabilities,
+        context: publicContext,
       }),
     );
   } catch (error) {
@@ -408,6 +419,7 @@ export const startAdminContext = async (req, res) => {
       actorUserId: req.user?.id || null,
       subjectUserId: String(req.body?.targetUserId || '').trim() || null,
       mode: String(req.body?.mode || 'readonly').trim(),
+      capability: 'admin_context.start',
       action: 'start_denied',
       outcome: status >= 500 ? 'failed' : 'blocked',
       route: req.originalUrl,
@@ -448,7 +460,9 @@ export const endAdminContext = async (req, res) => {
     contextId: context.id,
     actorUserId: actor.id,
     subjectUserId: context.subjectUserId,
+    subjectRole: context.subjectRole,
     mode: context.mode,
+    capability: 'admin_context.end',
     action: 'end',
     outcome: 'allowed',
     route: req.originalUrl,

@@ -17,7 +17,7 @@
         </template>
       </dl>
       <pre v-if="argsText">{{ argsText }}</pre>
-      <small>{{ t('ai.confirmationExpires', { minutes: Math.max(1, Math.floor(confirmation.expiresIn / 60)) }) }}</small>
+      <small>{{ t('ai.confirmationRemaining', { seconds: remainingSeconds }) }}</small>
     </div>
     <div v-if="status === 'pending'" class="tool-confirmation-actions">
       <BButton size="small" :disabled="loading" @click="cancel">{{ t('common.cancel') }}</BButton>
@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, onMounted, onUnmounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -49,8 +49,29 @@
   const emit = defineEmits<{ resolved: [summary: string, sources: any[]] }>();
   const { t } = useI18n();
   const loading = ref(false);
-  const status = ref<'pending' | 'confirmed' | 'cancelled' | 'failed'>('pending');
+  const status = ref<'pending' | 'confirmed' | 'cancelled' | 'failed' | 'expired'>('pending');
   const resultText = ref('');
+  const expiresAt = Date.now() + Math.max(0, Number(props.confirmation.expiresIn || 0)) * 1000;
+  const remainingSeconds = ref(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
+  let countdownTimer: number | null = null;
+
+  const refreshCountdown = () => {
+    remainingSeconds.value = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+    if (remainingSeconds.value === 0 && status.value === 'pending') {
+      status.value = 'expired';
+      resultText.value = t('ai.confirmationExpired');
+      if (countdownTimer) window.clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  };
+
+  onMounted(() => {
+    refreshCountdown();
+    if (status.value === 'pending') countdownTimer = window.setInterval(refreshCountdown, 1000);
+  });
+  onUnmounted(() => {
+    if (countdownTimer) window.clearInterval(countdownTimer);
+  });
 
   const toolLabel = computed(() => t(`ai.tools.${props.confirmation.toolName}`, props.confirmation.toolName));
   const argsText = computed(() => {
@@ -59,7 +80,7 @@
   });
 
   async function confirm() {
-    if (loading.value || status.value !== 'pending') return;
+    if (loading.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
     loading.value = true;
     try {
       const res = await apiBasePost('/api/chat/agent/confirm', {
@@ -81,7 +102,7 @@
   }
 
   async function cancel() {
-    if (loading.value || status.value !== 'pending') return;
+    if (loading.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
     loading.value = true;
     try {
       const res = await apiBasePost('/api/chat/agent/confirm/reject', {

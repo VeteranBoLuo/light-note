@@ -25,6 +25,12 @@ import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import { selectAgentTools } from '../util/agent/toolRouter.js';
 import {
+  SECOND_ROUND_INSTRUCTION,
+  constrainSecondRoundToolCalls,
+  selectSecondRoundTools,
+  shouldRunSecondPlanner,
+} from '../util/agent/secondRound.js';
+import {
   consumeToolConfirmation,
   createToolConfirmation,
   rejectToolConfirmation,
@@ -361,7 +367,22 @@ async function logAgentRequest({ userId, userAlias, question, toolsUsed, iterati
     (totalUsage.promptTokens / 1_000_000) * price.input +
     (totalUsage.completionTokens / 1_000_000) * price.output
   );
-  const toolsStr = toolsUsed.map(t => t.name).join(',') || null;
+  const loggedTools = toolsUsed.map((tool) => ({
+    name: String(tool.name || '').slice(0, 80),
+    status: String(tool.status || '').slice(0, 32),
+    error: tool.error ? String(tool.error).slice(0, 80) : undefined,
+  }));
+  let toolsStr = loggedTools.length ? JSON.stringify(loggedTools) : null;
+  // 线上旧字段是 varchar(500)：逐项缩减，始终保存合法 JSON，避免直接截断后后台无法解析。
+  while (toolsStr && toolsStr.length > 480 && loggedTools.length > 1) {
+    loggedTools.pop();
+    toolsStr = JSON.stringify(loggedTools);
+  }
+  if (toolsStr && toolsStr.length > 480) {
+    loggedTools[0].error = undefined;
+    loggedTools[0].name = loggedTools[0].name.slice(0, 48);
+    toolsStr = JSON.stringify(loggedTools);
+  }
   try {
     const data = {
       id: generateUUID(),
@@ -572,13 +593,13 @@ export async function agentChat(req, res) {
     /** @type {import('../util/agent/deepseekClient.js').DeepSeekMessage[]} */
     let historyMessages;
     if (Array.isArray(history) && history.length) {
-      const valid = history.filter(
+      const valid = history.slice(-40).filter(
         (m) =>
           m &&
           (m.role === 'user' || m.role === 'assistant') &&
           typeof m.content === 'string' &&
           m.content &&
-          m.content.length <= 12000,
+          m.content.length <= 8000,
       );
       const kept = [];
       let chars = 0;
@@ -638,7 +659,7 @@ export async function agentChat(req, res) {
     });
     trace.plannerMs = Date.now() - plannerStartedAt;
     trace.finishReason = plannerResponse.finishReason;
-    const plannerUsageReported = plannerResponse.usageStatus === 'reported';
+    let plannerUsageReported = plannerResponse.usageStatus === 'reported';
     trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
     apiCalls++;
     apiCallsForLog = apiCalls;
@@ -785,6 +806,109 @@ export async function agentChat(req, res) {
           tool_call_id: r.toolCallId,
           content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
         });
+      }
+
+      // 第一轮失败或空结果时，最多再进行一轮受限纠错。第二轮工具定义与实际调用均只允许
+      // 本轮已授权的只读工具，工具内容也明确视为不可信资料，不能借提示注入扩大权限。
+      const secondRoundTools = selectSecondRoundTools(selectedTools);
+      const secondRoundEnabled = process.env.AI_SECOND_ROUND_ENABLED !== 'false';
+      if (
+        secondRoundEnabled &&
+        secondRoundTools.length > 0 &&
+        shouldRunSecondPlanner(results, confirmations)
+      ) {
+        messages.push({ role: 'user', content: SECOND_ROUND_INSTRUCTION });
+        const secondPlannerStartedAt = Date.now();
+        let secondPlannerResponse = await requestDeepSeek(messages, {
+          tools: getToolDefinitions(secondRoundTools),
+          signal: agentAbortController.signal,
+          maxTokens: 900,
+        });
+        trace.plannerMs += Date.now() - secondPlannerStartedAt;
+        trace.finishReason = secondPlannerResponse.finishReason || trace.finishReason;
+        plannerUsageReported =
+          plannerUsageReported && secondPlannerResponse.usageStatus === 'reported';
+        trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
+        apiCalls++;
+        apiCallsForLog = apiCalls;
+        totalUsage.promptTokens += secondPlannerResponse.usage.promptTokens;
+        totalUsage.completionTokens += secondPlannerResponse.usage.completionTokens;
+        totalUsage.totalTokens += secondPlannerResponse.usage.totalTokens;
+
+        if (
+          !secondPlannerResponse.toolCalls?.length &&
+          looksLikeLeakedToolCall(secondPlannerResponse.content)
+        ) {
+          secondPlannerResponse = {
+            ...secondPlannerResponse,
+            toolCalls: parseLeakedToolCalls(secondPlannerResponse.content),
+            content: '',
+          };
+        }
+        const secondToolCalls = constrainSecondRoundToolCalls(
+          secondPlannerResponse.toolCalls,
+          secondRoundTools,
+        );
+
+        if (secondToolCalls.length > 0) {
+          messages.push({ role: 'assistant', content: null, tool_calls: secondToolCalls });
+          const secondToolStartedAt = Date.now();
+          const secondResults = await Promise.all(
+            secondToolCalls.map(async (tc) => {
+              let args = {};
+              try {
+                args = JSON.parse(tc.function.arguments || '{}');
+              } catch {
+                args = {};
+              }
+              if (stream && !res.writableEnded) {
+                res.write(`data: ${JSON.stringify({ event: 'tool_start', requestId, tool: tc.function.name, round: 2 })}\n\n`);
+              }
+              const result = await executeTool(tc.function.name, args, {
+                userId,
+                userRole,
+                userAlias,
+                billingUserId: identity.billingUserId,
+                billingUserRole: identity.billingUserRole,
+                signal: agentAbortController.signal,
+              });
+              if (Array.isArray(result.sources)) sources.push(...result.sources);
+              usedTools.push({
+                name: tc.function.name,
+                status: result.status,
+                params: args,
+                error: result.error,
+                dataSummary: result.dataSummary,
+              });
+              if (stream && !res.writableEnded) {
+                res.write(
+                  `data: ${JSON.stringify({ event: 'tool_result', requestId, tool: tc.function.name, status: result.status, round: 2 })}\n\n`,
+                );
+              }
+              return { toolCallId: tc.id, result };
+            }),
+          );
+          trace.toolMs += Date.now() - secondToolStartedAt;
+          for (const r of secondResults) {
+            const summary = String(r.result.summary || '').slice(
+              0,
+              Math.max(0, remainingToolResultBudget),
+            );
+            remainingToolResultBudget -= summary.length;
+            messages.push({
+              role: 'tool',
+              tool_call_id: r.toolCallId,
+              content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
+            });
+          }
+        } else if (secondPlannerResponse.content) {
+          messages.push({
+            role: 'assistant',
+            content: looksLikeLeakedToolCall(secondPlannerResponse.content)
+              ? '第二轮未获得可安全执行的只读工具调用。'
+              : secondPlannerResponse.content,
+          });
+        }
       }
 
       // ---- 第2步：Final Reply ----

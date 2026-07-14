@@ -88,12 +88,14 @@
       :touchStartThreshold="10"
       :delay="100"
     >
-      <note-card
+      <RightMenu
         v-for="note in visibleDragNoteList"
         :key="note.id"
-        :note="note"
-        @nodeTypeChange="handleNodeTypeChange"
-      />
+        :menu="[t('inbox.addExisting')]"
+        @select="addNoteToInbox(note)"
+      >
+        <note-card :note="note" @nodeTypeChange="handleNodeTypeChange" />
+      </RightMenu>
     </VueDraggable>
     <div v-if="currentViewMode === 'list'" class="note-library-body-list">
       <div class="tag-sidebar">
@@ -155,12 +157,14 @@
         :touchStartThreshold="10"
         :delay="100"
       >
-        <note-list-item
+        <RightMenu
           v-for="note in visibleDragNoteList"
           :key="note.id"
-          :note="note"
-          @nodeTypeChange="handleNodeTypeChange"
-        />
+          :menu="[t('inbox.addExisting')]"
+          @select="addNoteToInbox(note)"
+        >
+          <note-list-item :note="note" @nodeTypeChange="handleNodeTypeChange" />
+        </RightMenu>
       </VueDraggable>
     </div>
     <div
@@ -170,12 +174,13 @@
       <div style="font-size: 44px; opacity: 0.7">📝</div>
       <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('note.empty') }}</p>
       <p style="margin: 0; font-size: 13px">{{ $t('note.emptyHint') }}</p>
-      <button
+      <BButton
+        type="primary"
         @click="showNewNotePicker"
         style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
       >
         {{ $t('note.newNote') }}
-      </button>
+      </BButton>
     </div>
   </div>
 
@@ -218,8 +223,11 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import RightMenu from '@/components/base/RightMenu.vue';
+  import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   const { t } = useI18n();
   const bookmark = bookmarkStore();
+  const { addResourcesToInbox } = useInboxEnqueue();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
@@ -256,6 +264,9 @@
 
   function showNewNotePicker() {
     showTypePicker.value = true;
+  }
+  function addNoteToInbox(note: any) {
+    addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
   }
   const user = useUserStore();
   const selectedTag = computed(() => router.currentRoute.value.query.tag || null);

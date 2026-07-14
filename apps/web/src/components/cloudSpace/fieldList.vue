@@ -114,6 +114,11 @@
                   icon: icon.manage_categoryBtn_tag,
                   function: () => openTagDialog(item),
                 },
+                {
+                  label: $t('inbox.addExisting'),
+                  icon: icon.common.more,
+                  function: () => addFileToInbox(item),
+                },
               ]"
             >
               <BTooltip :title="$t('common.more')">
@@ -275,6 +280,11 @@
                   icon: icon.cloudSpace.moveFile,
                   function: () => emit('moveField', [item]),
                 },
+                {
+                  label: $t('inbox.addExisting'),
+                  icon: icon.common.more,
+                  function: () => addFileToInbox(item),
+                },
               ]"
             >
               <svg-icon class="download-icon" :src="icon.common.more" size="20" />
@@ -317,12 +327,13 @@
       <div style="font-size: 44px; opacity: 0.7">📁</div>
       <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">还没有文件</p>
       <p style="margin: 0; font-size: 13px">点下方按钮上传，或直接把文件拖拽到这里</p>
-      <button
+      <BButton
+        type="primary"
         @click="triggerUpload"
         style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
       >
         上传文件
-      </button>
+      </BButton>
     </div>
     <b-loading :loading="cloud.loading" class="both-center" />
 
@@ -403,6 +414,7 @@
   import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -417,10 +429,14 @@
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
+  const { addResourcesToInbox } = useInboxEnqueue();
   const props = defineProps<{ clearKey?: number; batchMode: boolean; viewMode?: 'card' | 'table' }>();
   const viewMode = computed(() => props.viewMode ?? 'table');
 
   const batchMode = computed(() => props.batchMode ?? false);
+  function addFileToInbox(file: any) {
+    addResourcesToInbox([{ resourceType: 'file', resourceId: String(file.id) }], '云空间');
+  }
   const selectedRows = ref<string[]>([]);
   const selectAll = ref(false);
   const hasSelection = computed(() => selectedRows.value.length > 0);

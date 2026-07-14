@@ -206,6 +206,8 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { useI18n } from 'vue-i18n';
   import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { recordOperation } from '@/api/commonApi';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -219,6 +221,7 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 
   function openQuickCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
+    recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.quickCaptureVisible = true;
   }
 

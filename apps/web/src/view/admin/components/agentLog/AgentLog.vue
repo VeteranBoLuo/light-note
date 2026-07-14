@@ -35,6 +35,26 @@
           <strong class="admin-stat-value">¥{{ totalCost }}</strong>
           <span class="admin-stat-hint">累计</span>
         </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">30 天错误率</span>
+          <strong class="admin-stat-value">{{ quality.errorRate }}%</strong>
+          <span class="admin-stat-hint">{{ quality.sampleCount }} 次样本</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">完成耗时 P95</span>
+          <strong class="admin-stat-value">{{ formatDuration(quality.durationP95) }}</strong>
+          <span class="admin-stat-hint">P50 {{ formatDuration(quality.durationP50) }}</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">首字耗时 P50</span>
+          <strong class="admin-stat-value">{{ formatDuration(quality.firstTokenP50) }}</strong>
+          <span class="admin-stat-hint">P95 {{ formatDuration(quality.firstTokenP95) }}</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">工具错误率</span>
+          <strong class="admin-stat-value">{{ quality.toolErrorRate }}%</strong>
+          <span class="admin-stat-hint">命中率 {{ quality.toolHitRate }}%</span>
+        </li>
       </ul>
 
       <div class="admin-filters">
@@ -90,7 +110,7 @@
           </div>
           <div class="agent-detail__tools" v-if="selectedRecord.toolsUsed">
             <label>调用工具</label>
-            <p>{{ selectedRecord.toolsUsed }}</p>
+            <p>{{ formatToolsUsed(selectedRecord.toolsUsed) }}</p>
           </div>
           <div class="agent-detail__tools" v-if="selectedRecord.selectedTools">
             <label>本轮候选工具</label>
@@ -135,6 +155,16 @@
   const todayTokens = ref(0);
   const todayCost = ref('0');
   const totalCost = ref('0');
+  const quality = ref<any>({
+    sampleCount: 0,
+    errorRate: 0,
+    durationP50: null,
+    durationP95: null,
+    firstTokenP50: null,
+    firstTokenP95: null,
+    toolHitRate: 0,
+    toolErrorRate: 0,
+  });
   const searchValue = ref('');
   const hideInternal = ref(true);
   const selectedRecord = ref<any>(null);
@@ -144,7 +174,7 @@
   const columns = [
     { title: '用户', key: 'userAlias', width: '1fr' },
     { title: '提问', key: 'question', width: '2fr', ellipsis: true },
-    { title: '工具', key: 'toolsUsed', width: '1fr' },
+    { title: '工具', key: 'toolsUsedDisplay', width: '1fr' },
     { title: '供应商', key: 'provider', width: '90px' },
     { title: '费用(¥)', key: 'cost', width: '100px' },
     { title: '调用', key: 'iterations', width: '60px' },
@@ -175,7 +205,10 @@
       hideInternal: hideInternal.value,
     }).then((res: any) => {
       if (res.status === 200) {
-        logList.value = res.data.items || [];
+        logList.value = (res.data.items || []).map((item: any) => ({
+          ...item,
+          toolsUsedDisplay: formatToolsUsed(item.toolsUsed),
+        }));
         total.value = res.data.total || 0;
       }
     });
@@ -189,6 +222,7 @@
         todayTokens.value = d.today?.tokens ?? 0;
         todayCost.value = d.today?.cost ?? '0';
         totalCost.value = d.total?.cost ?? '0';
+        quality.value = { ...quality.value, ...(d.quality || {}) };
       }
     }).catch((err: any) => {
       console.warn('获取汇总失败:', err);
@@ -203,6 +237,22 @@
   function formatNumber(n: number) {
     if (n == null) return '0';
     return n.toLocaleString();
+  }
+
+  function formatDuration(value: unknown) {
+    const duration = Number(value);
+    if (!Number.isFinite(duration)) return '-';
+    return duration >= 1000 ? `${(duration / 1000).toFixed(1)}s` : `${duration}ms`;
+  }
+
+  function formatToolsUsed(value: unknown) {
+    try {
+      const parsed = JSON.parse(String(value || '[]'));
+      if (!Array.isArray(parsed)) return String(value || '-');
+      return parsed.map((tool) => `${tool.name}${tool.status ? `(${tool.status})` : ''}`).join('、');
+    } catch {
+      return String(value || '-');
+    }
   }
 
   function formatSelectedTools(value: unknown) {

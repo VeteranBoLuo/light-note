@@ -115,6 +115,31 @@ describe('inboxHandle 写事务', () => {
     expect(enqueueResources).not.toHaveBeenCalled();
   });
 
+  it('管理员维护游客工作区时拒绝将文件加入待整理', async () => {
+    const res = mockRes();
+    await enqueueInbox({
+      user: { id: 'visitor-subject', role: 'visitor' },
+      adminContext: { subjectRole: 'visitor', mode: 'maintain' },
+      body: { items: [{ resourceType: 'file', resourceId: '8' }] },
+    }, res);
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith({
+      data: null,
+      status: 403,
+      msg: '游客工作区维护仅支持书签和笔记',
+    });
+  });
+
+  it('管理员维护游客工作区时仍可处理书签和笔记', async () => {
+    await completeInbox({
+      user: { id: 'visitor-subject', role: 'visitor' },
+      adminContext: { subjectRole: 'visitor', mode: 'maintain' },
+      body: { items: [{ resourceType: 'note', resourceId: 'n1' }] },
+    }, mockRes());
+    expect(getConnection).toHaveBeenCalledTimes(1);
+    expect(completeResources).toHaveBeenCalledTimes(1);
+  });
+
   it('列表使用固定三类 UNION、当前用户过滤和分页边界', async () => {
     poolQuery
       .mockResolvedValueOnce([[{ total: 1 }]])
