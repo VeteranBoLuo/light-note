@@ -17,18 +17,18 @@ light-note/
 
 ## 技术栈
 
-| 层 | 技术 | 版本 |
-|---|------|------|
-| 前端框架 | Vue 3 | ^3.x |
-| 构建工具 | Vite | ^5.x |
-| 状态管理 | Pinia | — |
-| HTTP 客户端 | Axios | ^0.24.0 |
-| UI 组件 | Ant Design Vue 3.x + 自研 BComponent | — |
-| 多语言 | vue-i18n | — |
-| 后端框架 | Express | — |
-| 数据库 | MySQL 5.7 / 8.0 | — |
-| 对象存储 | 华为云 OBS | — |
-| 认证 | Cookie Session（express-session） | — |
+| 层          | 技术                                 | 版本    |
+| ----------- | ------------------------------------ | ------- |
+| 前端框架    | Vue 3                                | ^3.x    |
+| 构建工具    | Vite                                 | ^5.x    |
+| 状态管理    | Pinia                                | —       |
+| HTTP 客户端 | Axios                                | ^0.24.0 |
+| UI 组件     | Ant Design Vue 3.x + 自研 BComponent | —       |
+| 多语言      | vue-i18n                             | —       |
+| 后端框架    | Express                              | —       |
+| 数据库      | MySQL 5.7 / 8.0                      | —       |
+| 对象存储    | 华为云 OBS                           | —       |
+| 认证        | Cookie Session（express-session）    | —       |
 
 ## 后端架构
 
@@ -76,6 +76,7 @@ apps/server/
     ├── adminContextStore.js # Redis 管理员上下文（actor/subject 分离）
     ├── adminRoutePolicy.js  # 管理员上下文显式路由策略
     ├── resourceInbox.js     # 待整理关系与归属服务
+    ├── services/            # 页面 handler 与 Agent 共用的资源写入业务 Service
     └── security/          # 安全攻击检测
 ```
 
@@ -84,11 +85,11 @@ apps/server/
 所有 API 统一使用 `resultData(data, status, msg)`：
 
 ```javascript
-res.send(resultData({ id, name }, 200));           // 成功
-res.send(resultData(null, 400, '参数错误'));        // 客户端错误
-res.send(resultData(null, 401, '请先登录'));        // 未认证
-res.send(resultData(null, 403, '无权限操作'));       // 无权限
-res.send(resultData(null, 500, '服务器内部错误'));    // 服务端错误
+res.send(resultData({ id, name }, 200)); // 成功
+res.send(resultData(null, 400, "参数错误")); // 客户端错误
+res.send(resultData(null, 401, "请先登录")); // 未认证
+res.send(resultData(null, 403, "无权限操作")); // 无权限
+res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 ```
 
 - `resultData` 会自动将 snake_case key 转为 camelCase
@@ -152,33 +153,33 @@ src/
 
 ## 数据库核心表
 
-| 表 | 作用 | 主键类型 |
-|----|------|---------|
-| `user` | 用户 | UUID |
-| `bookmark` | 书签 | UUID |
-| `note` | 笔记 | UUID |
-| `files` | 云空间文件 | 自增 |
-| `folder` | 云空间文件夹 | 自增 |
-| `tag` | 标签 | UUID |
-| `resource_tag_relations` | 资源-标签关联 | 无独立 id |
-| `resource_inbox` | 书签/笔记/文件待整理关系 | UUID |
-| `tag_relations` | 标签-标签关联 | 无独立 id |
-| `api_logs` | API 请求日志 | UUID |
-| `operation_logs` | 操作日志 | UUID |
-| `security_events` | 安全事件 | 自增 |
-| `conversion_events` | 游客转化事件 | 自增 |
-| `admin_context_audit` | 管理员预览与内容维护审计 | UUID |
-| `agent_logs` | AI 请求、用量和阶段追踪 | UUID |
-| `opinion` | 用户反馈 | UUID |
-| `help_config` / `help_config_draft` | 帮助中心 | UUID |
+| 表                                  | 作用                     | 主键类型  |
+| ----------------------------------- | ------------------------ | --------- |
+| `user`                              | 用户                     | UUID      |
+| `bookmark`                          | 书签                     | UUID      |
+| `note`                              | 笔记                     | UUID      |
+| `files`                             | 云空间文件               | 自增      |
+| `folder`                            | 云空间文件夹             | 自增      |
+| `tag`                               | 标签                     | UUID      |
+| `resource_tag_relations`            | 资源-标签关联            | 无独立 id |
+| `resource_inbox`                    | 书签/笔记/文件待整理关系 | UUID      |
+| `tag_relations`                     | 标签-标签关联            | 无独立 id |
+| `api_logs`                          | API 请求日志             | UUID      |
+| `operation_logs`                    | 操作日志                 | UUID      |
+| `security_events`                   | 安全事件                 | 自增      |
+| `conversion_events`                 | 游客转化事件             | 自增      |
+| `admin_context_audit`               | 管理员预览与内容维护审计 | UUID      |
+| `agent_logs`                        | AI 请求、用量和阶段追踪  | UUID      |
+| `opinion`                           | 用户反馈                 | UUID      |
+| `help_config` / `help_config_draft` | 帮助中心                 | UUID      |
 
 ### INSERT 规范
 
-| 主键类型 | 使用函数 |
-|---------|---------|
-| UUID | `insertData({ ... })` 或 `generateUUID()` |
-| 自增 | 直接用 `snakeCaseKeys()` |
-| 无 id 列（关系表） | 用 `snakeCaseKeys()` |
+| 主键类型           | 使用函数                                  |
+| ------------------ | ----------------------------------------- |
+| UUID               | `insertData({ ... })` 或 `generateUUID()` |
+| 自增               | 直接用 `snakeCaseKeys()`                  |
+| 无 id 列（关系表） | 用 `snakeCaseKeys()`                      |
 
 ## 轻笺智域（AI Agent）
 
@@ -190,6 +191,7 @@ src/
 - 会话按用户或管理员 actor/subject 组合隔离；前端历史也按账号键隔离
 - 每轮按意图筛选不超过 12 个工具，非 root 不下发管理工具，游客与只读上下文不下发写工具
 - 五个写工具使用 Redis 哈希键保存的一次性确认令牌；前端先展示风险、目标和影响范围，确认后按服务端保存参数执行
+- 笔记、书签、标签、回收站恢复和知识库写入必须复用 `util/services/`；Agent 工具不得再直接拼接这些业务 SQL，以保持事务、归属、成长、转化、快照和参数校验一致
 - SSE 使用 `start/tool_start/tool_result/tool_confirmation/sources/delta/done` 结构化事件，并保留 `requestId` 关联日志
 - 用户可为单条消息选择书签、笔记、文件或标签上下文；后端重新校验归属后读取，不信任前端正文
 

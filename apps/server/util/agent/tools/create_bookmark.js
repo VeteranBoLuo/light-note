@@ -1,7 +1,4 @@
-import pool from '../../../db/index.js';
-import { insertData } from '../data.js';
-import { fetchWebMeta } from '../../fetchWebMeta.js';
-import { ensureTag } from '../tagUtil.js';
+import { createBookmark } from '../../services/bookmarkService.js';
 
 export default {
   name: 'create_bookmark',
@@ -22,60 +19,25 @@ export default {
   riskLevel: 'low',
   confirmationPolicy: 'default',
   async execute(args, ctx) {
-    let url = String(args.url || '').trim();
+    const url = String(args.url || '').trim();
     if (!url) return { error: 'URL_REQUIRED', message: '网址不能为空' };
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-
-    let name = String(args.name || '').trim();
-    let description = String(args.description || '').trim();
-
-    // 未给名称/描述时抓网页补全(fetchWebMeta 自带 SSRF 防护)
-    if (!name || !description) {
-      const meta = await fetchWebMeta(url, { signal: ctx.signal });
-      if (meta.ok) {
-        if (!name) name = meta.title || '';
-        if (!description) description = meta.description || '';
-      }
-    }
-    if (!name) name = url; // 兜底
-
-    const tagNames = Array.isArray(args.tags)
-      ? args.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 4)
-      : [];
-    const userId = ctx.userId;
-    const data = insertData({ name, url, description, userId });
-    const attached = [];
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      const [dup] = await connection.query(
-        'SELECT id FROM bookmark WHERE user_id = ? AND name = ? AND del_flag = 0',
-        [userId, name],
-      );
-      if (dup.length) {
-        await connection.rollback();
-        return { error: 'DUPLICATE', message: `已存在同名书签「${name}」` };
-      }
-
-      await connection.query('INSERT INTO bookmark SET ?', [data]);
-      // 书签和标签关系作为一个原子操作提交，避免标签失败后残留半成功书签。
-      for (const tagName of tagNames) {
-        const tagId = await ensureTag(userId, tagName, connection);
-        if (!tagId) continue;
-        await connection.query(
-          `INSERT IGNORE INTO resource_tag_relations (tag_id, resource_type, resource_id, user_id, source) VALUES (?, 'bookmark', ?, ?, 'agent')`,
-          [tagId, data.id, userId],
-        );
-        attached.push(tagName);
-      }
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-    return { id: data.id, name, url, tags: attached };
+    const tagNames = Array.isArray(args.tags) ? args.tags.map((t) => String(t).trim()).filter(Boolean) : [];
+    return createBookmark({
+      userId: ctx.userId,
+      userRole: ctx.userRole,
+      bookmark: {
+        name: String(args.name || '').trim(),
+        url,
+        description: String(args.description || '').trim(),
+      },
+      tagNames,
+      tagSource: 'agent',
+      fillMetadata: true,
+      saveSnapshot: true,
+      signal: ctx.signal,
+      request: ctx.request,
+      suppressUserRewards: ctx.suppressUserRewards,
+    });
   },
   transform(raw) {
     if (raw.error) return `收藏失败:${raw.message}`;

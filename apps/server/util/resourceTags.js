@@ -94,6 +94,26 @@ export const validateUserTags = async (connection, { tagIds = [], userId }) => {
   return normalizedTagIds;
 };
 
+const RESOURCE_OWNER_CONFIG = {
+  [RESOURCE_TYPE.BOOKMARK]: { table: 'bookmark', ownerField: 'user_id' },
+  [RESOURCE_TYPE.NOTE]: { table: 'note', ownerField: 'create_by' },
+  [RESOURCE_TYPE.FILE]: { table: 'files', ownerField: 'create_by' },
+};
+
+export const validateUserResources = async (connection, { resourceIds = [], resourceType, userId }) => {
+  const normalizedResourceIds = normalizeTagIds(resourceIds);
+  if (!normalizedResourceIds.length) return [];
+  const config = RESOURCE_OWNER_CONFIG[resourceType];
+  if (!config) throw new Error('不支持的资源类型');
+  const placeholders = normalizedResourceIds.map(() => '?').join(',');
+  const [rows] = await connection.query(
+    `SELECT id FROM \`${config.table}\` WHERE id IN (${placeholders}) AND ${config.ownerField} = ? AND del_flag = 0`,
+    [...normalizedResourceIds, userId],
+  );
+  if (rows.length !== normalizedResourceIds.length) throw new Error('包含无权访问或不存在的资源');
+  return normalizedResourceIds;
+};
+
 export const queryTagsForResource = async ({ resourceType, resourceId }) => {
   const [rows] = await pool.query(
     `

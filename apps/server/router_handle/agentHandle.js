@@ -70,7 +70,7 @@ function registerTool(tool) {
 }
 
 // 注册所有工具
-toolDefsArray.forEach(t => registerTool(t));
+toolDefsArray.forEach((t) => registerTool(t));
 
 /**
  * 获取 OpenAI function-calling 格式的工具定义列表
@@ -89,6 +89,39 @@ function getToolDefinitions(tools) {
     });
   }
   return defs;
+}
+
+const PUBLIC_TOOL_ERROR_CODES = new Set([
+  'CONTENT_TOO_LONG',
+  'DUPLICATE_NAME',
+  'DUPLICATE_TITLE',
+  'DUPLICATE_URL',
+  'EMPTY_PATCH',
+  'FILTER_REQUIRED',
+  'ID_REQUIRED',
+  'INVALID_NOTE_TYPE',
+  'INVALID_STATUS',
+  'INVALID_TYPE',
+  'NOT_FOUND',
+  'TAG_DUPLICATE',
+  'TAG_REQUIRED',
+  'TAG_TOO_LONG',
+  'TITLE_REQUIRED',
+  'TITLE_TOO_LONG',
+  'TOO_MANY_IDS',
+  'TOO_MANY_TAGS',
+  'TYPE_REQUIRED',
+  'URL_REQUIRED',
+  'URL_TOO_LONG',
+  'USER_REQUIRED',
+]);
+
+function publicToolError(error, fallback = '操作失败，请稍后重试。') {
+  const raw = String(error?.message || error || '');
+  const match = /^([A-Z][A-Z0-9_]+):\s*(.+)$/.exec(raw);
+  if (match && PUBLIC_TOOL_ERROR_CODES.has(match[1])) return { code: match[1], message: match[2].slice(0, 300) };
+  if (raw === 'TOOL_TIMEOUT') return { code: 'TOOL_TIMEOUT', message: '操作超时，请稍后重试。' };
+  return { code: 'TOOL_EXECUTION_FAILED', message: fallback };
 }
 
 /**
@@ -155,10 +188,7 @@ async function executeTool(name, args, ctx) {
         }, tool.timeoutMs);
       });
       try {
-        raw = await Promise.race([
-          tool.execute(args, { ...ctx, signal: toolAbortController.signal }),
-          timeout,
-        ]);
+        raw = await Promise.race([tool.execute(args, { ...ctx, signal: toolAbortController.signal }), timeout]);
       } finally {
         clearTimeout(timer);
         ctx.signal?.removeEventListener('abort', abortTool);
@@ -176,9 +206,7 @@ async function executeTool(name, args, ctx) {
       };
     }
     // dataSummary 比 transform 更精简，给 lastTool 用
-    const dataSummary = typeof tool.summarize === 'function'
-      ? tool.summarize(raw, args)
-      : summary.slice(0, 200);
+    const dataSummary = typeof tool.summarize === 'function' ? tool.summarize(raw, args) : summary.slice(0, 200);
     return {
       status: 'success',
       summary,
@@ -189,31 +217,36 @@ async function executeTool(name, args, ctx) {
   } catch (err) {
     if (err?.name === 'AbortError') throw err;
     console.error(`[Agent] 工具 ${name} 执行失败:`, err.message);
+    const publicError = publicToolError(err, tool.isWrite ? '写入失败，请稍后重试。' : '查询失败，请稍后重试。');
     return {
       status: 'error',
-      summary: `查询失败：${err.message}`,
-      error: err.message,
+      summary: publicError.message,
+      error: publicError.code,
       params: args,
     };
   }
 }
 
 function plainText(value) {
-  return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function extractToolSources(name, raw) {
   const rows = Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : raw?.id ? [raw] : [];
   if (!rows.length) return [];
-  const sourceType = name === 'query_notes' || name === 'create_note'
-    ? 'note'
-    : name === 'query_bookmarks' || name === 'create_bookmark'
-      ? 'bookmark'
-      : name === 'query_files'
-        ? 'file'
-        : name === 'search_knowledge_base'
-          ? 'knowledge'
-          : null;
+  const sourceType =
+    name === 'query_notes' || name === 'create_note'
+      ? 'note'
+      : name === 'query_bookmarks' || name === 'create_bookmark'
+        ? 'bookmark'
+        : name === 'query_files'
+          ? 'file'
+          : name === 'search_knowledge_base'
+            ? 'knowledge'
+            : null;
   if (!sourceType) return [];
   return rows.slice(0, 10).map((row) => ({
     type: sourceType,
@@ -313,18 +346,19 @@ async function resolveResourceContexts(userId, contexts) {
         [item.id, userId],
       );
     } else {
-      [rows] = await pool.query(
-        'SELECT id, name AS title FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0',
-        [item.id, userId],
-      );
+      [rows] = await pool.query('SELECT id, name AS title FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0', [
+        item.id,
+        userId,
+      ]);
     }
     const row = rows[0];
     if (!row) continue;
-    const content = item.type === 'file'
-      ? `文件类型：${row.file_type || '未知'}；大小：${Number(row.file_size || 0)} bytes`
-      : item.type === 'tag'
-        ? '用户选择的标签上下文'
-        : plainText(row.content || row.url || '').slice(0, 4000);
+    const content =
+      item.type === 'file'
+        ? `文件类型：${row.file_type || '未知'}；大小：${Number(row.file_size || 0)} bytes`
+        : item.type === 'tag'
+          ? '用户选择的标签上下文'
+          : plainText(row.content || row.url || '').slice(0, 4000);
     blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}\n${content}`);
     if (item.type !== 'tag') {
       sources.push({
@@ -344,7 +378,6 @@ async function resolveResourceContexts(userId, contexts) {
   };
 }
 
-
 // ============================================================
 // Agent 请求日志
 // ============================================================
@@ -354,7 +387,18 @@ async function resolveResourceContexts(userId, contexts) {
  * 成本按当前生效的 AGENT_LLM_PROVIDER 计价(见 deepseekClient.js 的 PROVIDERS 单价表),
  * 不同供应商单价不同,切换后新请求会自动按新供应商计费。
  */
-async function logAgentRequest({ userId, userAlias, question, toolsUsed, iterations, totalUsage, durationMs, status, errorMsg, trace = {} }) {
+async function logAgentRequest({
+  userId,
+  userAlias,
+  question,
+  toolsUsed,
+  iterations,
+  totalUsage,
+  durationMs,
+  status,
+  errorMsg,
+  trace = {},
+}) {
   let price = trace.providerInfo?.price;
   if (!price) {
     try {
@@ -363,10 +407,8 @@ async function logAgentRequest({ userId, userAlias, question, toolsUsed, iterati
       price = { input: 0, output: 0 };
     }
   }
-  const cost = (
-    (totalUsage.promptTokens / 1_000_000) * price.input +
-    (totalUsage.completionTokens / 1_000_000) * price.output
-  );
+  const cost =
+    (totalUsage.promptTokens / 1_000_000) * price.input + (totalUsage.completionTokens / 1_000_000) * price.output;
   const loggedTools = toolsUsed.map((tool) => ({
     name: String(tool.name || '').slice(0, 80),
     status: String(tool.status || '').slice(0, 32),
@@ -419,13 +461,42 @@ async function logAgentRequest({ userId, userAlias, question, toolsUsed, iterati
         `INSERT INTO agent_logs
           (id,request_id,provider,model,task_type,toolset_version,selected_tools,finish_reason,first_token_ms,planner_ms,tool_ms,final_ms,usage_status,aborted_stage,user_id,user_alias,question,tools_used,iterations,prompt_tokens,completion_tokens,total_tokens,cost,status,error_msg,duration_ms)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [data.id, ...traceValues, data.user_id, data.user_alias, data.question, data.tools_used, data.iterations, data.prompt_tokens, data.completion_tokens, data.total_tokens, data.cost, data.status, data.error_msg, data.duration_ms],
+        [
+          data.id,
+          ...traceValues,
+          data.user_id,
+          data.user_alias,
+          data.question,
+          data.tools_used,
+          data.iterations,
+          data.prompt_tokens,
+          data.completion_tokens,
+          data.total_tokens,
+          data.cost,
+          data.status,
+          data.error_msg,
+          data.duration_ms,
+        ],
       );
     } catch (error) {
       if (error?.code !== 'ER_BAD_FIELD_ERROR') throw error;
       await pool.query(
         `INSERT INTO agent_logs (id,user_id,user_alias,question,tools_used,iterations,prompt_tokens,completion_tokens,total_tokens,cost,status,error_msg,duration_ms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [data.id, data.user_id, data.user_alias, data.question, data.tools_used, data.iterations, data.prompt_tokens, data.completion_tokens, data.total_tokens, data.cost, data.status, data.error_msg, data.duration_ms],
+        [
+          data.id,
+          data.user_id,
+          data.user_alias,
+          data.question,
+          data.tools_used,
+          data.iterations,
+          data.prompt_tokens,
+          data.completion_tokens,
+          data.total_tokens,
+          data.cost,
+          data.status,
+          data.error_msg,
+          data.duration_ms,
+        ],
       );
     }
   } catch (err) {
@@ -529,7 +600,9 @@ export async function agentChat(req, res) {
           Connection: 'keep-alive',
           'X-Accel-Buffering': 'no',
         });
-        res.write(`data: ${JSON.stringify({ event: 'delta', requestId, output: { text: tip }, preview: userRole === 'visitor', quotaExceeded: true })}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: tip }, preview: userRole === 'visitor', quotaExceeded: true })}\n\n`,
+        );
         res.write(`data: ${JSON.stringify({ event: 'done', requestId, usage: totalUsage, quotaExceeded: true })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
@@ -593,14 +666,16 @@ export async function agentChat(req, res) {
     /** @type {import('../util/agent/deepseekClient.js').DeepSeekMessage[]} */
     let historyMessages;
     if (Array.isArray(history) && history.length) {
-      const valid = history.slice(-40).filter(
-        (m) =>
-          m &&
-          (m.role === 'user' || m.role === 'assistant') &&
-          typeof m.content === 'string' &&
-          m.content &&
-          m.content.length <= 8000,
-      );
+      const valid = history
+        .slice(-40)
+        .filter(
+          (m) =>
+            m &&
+            (m.role === 'user' || m.role === 'assistant') &&
+            typeof m.content === 'string' &&
+            m.content &&
+            m.content.length <= 8000,
+        );
       const kept = [];
       let chars = 0;
       for (let i = valid.length - 1; i >= 0; i--) {
@@ -634,7 +709,9 @@ export async function agentChat(req, res) {
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       });
-      res.write(`data: ${JSON.stringify({ event: 'start', requestId, output: { session_id: getSessionId(session) } })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ event: 'start', requestId, output: { session_id: getSessionId(session) } })}\n\n`,
+      );
     }
 
     // 工具定义
@@ -720,9 +797,10 @@ export async function agentChat(req, res) {
             };
           } else if (tool.isWrite) {
             try {
-              const preview = typeof tool.preview === 'function'
-                ? await tool.preview(args, { userId, userRole, userAlias })
-                : buildWritePreview(tool, args);
+              const preview =
+                typeof tool.preview === 'function'
+                  ? await tool.preview(args, { userId, userRole, userAlias })
+                  : buildWritePreview(tool, args);
               const pending = await createToolConfirmation({
                 ownerKey: identity.ownerKey,
                 sessionId: getSessionId(session),
@@ -750,10 +828,11 @@ export async function agentChat(req, res) {
                 params: args,
               };
             } catch (error) {
+              const publicError = publicToolError(error, '参数无效或预览生成失败，请检查后重试。');
               result = {
                 status: 'error',
-                summary: `无法生成安全的操作预览：${String(error?.message || '参数无效').slice(0, 300)}`,
-                error: 'TOOL_PREVIEW_FAILED',
+                summary: `无法生成安全的操作预览：${publicError.message}`,
+                error: publicError.code === 'TOOL_EXECUTION_FAILED' ? 'TOOL_PREVIEW_FAILED' : publicError.code,
                 params: args,
               };
             }
@@ -768,6 +847,8 @@ export async function agentChat(req, res) {
               billingUserId: identity.billingUserId,
               billingUserRole: identity.billingUserRole,
               signal: agentAbortController.signal,
+              request: req,
+              suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
             });
           }
           if (Array.isArray(result.sources)) sources.push(...result.sources);
@@ -812,11 +893,7 @@ export async function agentChat(req, res) {
       // 本轮已授权的只读工具，工具内容也明确视为不可信资料，不能借提示注入扩大权限。
       const secondRoundTools = selectSecondRoundTools(selectedTools);
       const secondRoundEnabled = process.env.AI_SECOND_ROUND_ENABLED !== 'false';
-      if (
-        secondRoundEnabled &&
-        secondRoundTools.length > 0 &&
-        shouldRunSecondPlanner(results, confirmations)
-      ) {
+      if (secondRoundEnabled && secondRoundTools.length > 0 && shouldRunSecondPlanner(results, confirmations)) {
         messages.push({ role: 'user', content: SECOND_ROUND_INSTRUCTION });
         const secondPlannerStartedAt = Date.now();
         let secondPlannerResponse = await requestDeepSeek(messages, {
@@ -826,8 +903,7 @@ export async function agentChat(req, res) {
         });
         trace.plannerMs += Date.now() - secondPlannerStartedAt;
         trace.finishReason = secondPlannerResponse.finishReason || trace.finishReason;
-        plannerUsageReported =
-          plannerUsageReported && secondPlannerResponse.usageStatus === 'reported';
+        plannerUsageReported = plannerUsageReported && secondPlannerResponse.usageStatus === 'reported';
         trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
         apiCalls++;
         apiCallsForLog = apiCalls;
@@ -835,20 +911,14 @@ export async function agentChat(req, res) {
         totalUsage.completionTokens += secondPlannerResponse.usage.completionTokens;
         totalUsage.totalTokens += secondPlannerResponse.usage.totalTokens;
 
-        if (
-          !secondPlannerResponse.toolCalls?.length &&
-          looksLikeLeakedToolCall(secondPlannerResponse.content)
-        ) {
+        if (!secondPlannerResponse.toolCalls?.length && looksLikeLeakedToolCall(secondPlannerResponse.content)) {
           secondPlannerResponse = {
             ...secondPlannerResponse,
             toolCalls: parseLeakedToolCalls(secondPlannerResponse.content),
             content: '',
           };
         }
-        const secondToolCalls = constrainSecondRoundToolCalls(
-          secondPlannerResponse.toolCalls,
-          secondRoundTools,
-        );
+        const secondToolCalls = constrainSecondRoundToolCalls(secondPlannerResponse.toolCalls, secondRoundTools);
 
         if (secondToolCalls.length > 0) {
           messages.push({ role: 'assistant', content: null, tool_calls: secondToolCalls });
@@ -862,7 +932,9 @@ export async function agentChat(req, res) {
                 args = {};
               }
               if (stream && !res.writableEnded) {
-                res.write(`data: ${JSON.stringify({ event: 'tool_start', requestId, tool: tc.function.name, round: 2 })}\n\n`);
+                res.write(
+                  `data: ${JSON.stringify({ event: 'tool_start', requestId, tool: tc.function.name, round: 2 })}\n\n`,
+                );
               }
               const result = await executeTool(tc.function.name, args, {
                 userId,
@@ -871,6 +943,8 @@ export async function agentChat(req, res) {
                 billingUserId: identity.billingUserId,
                 billingUserRole: identity.billingUserRole,
                 signal: agentAbortController.signal,
+                request: req,
+                suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
               });
               if (Array.isArray(result.sources)) sources.push(...result.sources);
               usedTools.push({
@@ -890,10 +964,7 @@ export async function agentChat(req, res) {
           );
           trace.toolMs += Date.now() - secondToolStartedAt;
           for (const r of secondResults) {
-            const summary = String(r.result.summary || '').slice(
-              0,
-              Math.max(0, remainingToolResultBudget),
-            );
+            const summary = String(r.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
             remainingToolResultBudget -= summary.length;
             messages.push({
               role: 'tool',
@@ -941,14 +1012,18 @@ export async function agentChat(req, res) {
               const elapsed = Date.now() - bufferStart;
               if (elapsed >= BUFFER_MS || bufferText.length >= BUFFER_CHARS) {
                 finalContent += bufferText;
-                res.write(`data: ${JSON.stringify({ event: 'delta', requestId, output: { text: bufferText, session_id: getSessionId(session) } })}\n\n`);
+                res.write(
+                  `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: bufferText, session_id: getSessionId(session) } })}\n\n`,
+                );
                 isBuffering = false;
               }
               return;
             }
 
             finalContent += chunk;
-            res.write(`data: ${JSON.stringify({ event: 'delta', requestId, output: { text: chunk, session_id: getSessionId(session) } })}\n\n`);
+            res.write(
+              `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: chunk, session_id: getSessionId(session) } })}\n\n`,
+            );
           },
           signal: agentAbortController.signal,
         });
@@ -962,7 +1037,9 @@ export async function agentChat(req, res) {
 
         if (isBuffering && bufferText) {
           finalContent += bufferText;
-          res.write(`data: ${JSON.stringify({ event: 'delta', requestId, output: { text: bufferText, session_id: getSessionId(session) } })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: bufferText, session_id: getSessionId(session) } })}\n\n`,
+          );
         }
 
         apiCalls++;
@@ -995,12 +1072,15 @@ export async function agentChat(req, res) {
       if (!res.writableEnded) {
         if (sources.length) {
           const uniqueSources = sources.filter(
-            (source, index, all) => all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
+            (source, index, all) =>
+              all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
           );
           res.write(`data: ${JSON.stringify({ event: 'sources', requestId, sources: uniqueSources })}\n\n`);
         }
         if (!usedTools.length) {
-          res.write(`data: ${JSON.stringify({ event: 'delta', requestId, output: { text: finalContent, session_id: getSessionId(session) } })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: finalContent, session_id: getSessionId(session) } })}\n\n`,
+          );
         }
         res.write(
           `data: ${JSON.stringify({ event: 'done', requestId, output: { session_id: getSessionId(session) }, usage: totalUsage, usageStatus: trace.usageStatus })}\n\n`,
@@ -1033,7 +1113,8 @@ export async function agentChat(req, res) {
     usedToolsForLog = usedTools;
     apiCallsForLog = apiCalls;
     logAgentRequest({
-      userId: logUserId, userAlias: logUserAlias,
+      userId: logUserId,
+      userAlias: logUserAlias,
       question: message,
       toolsUsed: usedTools,
       iterations: apiCalls,
@@ -1074,7 +1155,9 @@ export async function agentChat(req, res) {
             `data: ${JSON.stringify({ event: 'error', requestId, error: 'AI_SERVICE_ERROR', message: 'AI 服务暂时不可用，请稍后重试。' })}\n\n`,
           );
           res.end();
-        } catch (_) { /* ignore */ }
+        } catch (_) {
+          /* ignore */
+        }
       }
     } else if (!res.headersSent) {
       res.status(500).send(resultData(null, 500, 'AI 服务暂时不可用，请稍后重试。'));
@@ -1083,9 +1166,10 @@ export async function agentChat(req, res) {
   } finally {
     // AI token 额度回写:正常/异常/abort 都执行。abort 按已消耗结算、不退还占位(见 aiQuota.reconcile)。
     try {
-      const reconciledTokens = trace.usageStatus === 'missing'
-        ? Math.max(totalUsage.totalTokens, Number(quotaHandle?.reserved || 0))
-        : totalUsage.totalTokens;
+      const reconciledTokens =
+        trace.usageStatus === 'missing'
+          ? Math.max(totalUsage.totalTokens, Number(quotaHandle?.reserved || 0))
+          : totalUsage.totalTokens;
       await aiQuota.reconcile(quotaHandle, reconciledTokens, {
         aborted: agentAbortController.signal.aborted,
       });
@@ -1148,8 +1232,11 @@ export async function confirmAgentTool(req, res) {
       userId: identity.resourceUserId,
       userRole: identity.resourceUserRole,
       userAlias: identity.resourceUserAlias,
-      allowVisitorMaintenance:
-        req.adminContext?.mode === 'maintain' && identity.resourceUserRole === 'visitor',
+      billingUserId: identity.billingUserId,
+      billingUserRole: identity.billingUserRole,
+      allowVisitorMaintenance: req.adminContext?.mode === 'maintain' && identity.resourceUserRole === 'visitor',
+      request: req,
+      suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
     });
     if (result.status !== 'success') {
       logAgentRequest({
@@ -1164,13 +1251,15 @@ export async function confirmAgentTool(req, res) {
         errorMsg: result.error || 'TOOL_EXECUTION_FAILED',
         trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
       });
-      return res.status(400).send(
-        resultData(
-          { code: result.error || 'TOOL_EXECUTION_FAILED', toolName: confirmation.toolName },
-          400,
-          result.summary,
-        ),
-      );
+      return res
+        .status(400)
+        .send(
+          resultData(
+            { code: result.error || 'TOOL_EXECUTION_FAILED', toolName: confirmation.toolName },
+            400,
+            result.summary,
+          ),
+        );
     }
     logAgentRequest({
       userId: identity.billingUserId,
@@ -1211,13 +1300,15 @@ export async function confirmAgentTool(req, res) {
         trace: { requestId, taskType: 'agent_confirmation', selectedTools: toolName ? [toolName] : [] },
       });
     }
-    return res.status(status).send(
-      resultData(
-        { code },
-        status,
-        error instanceof ToolConfirmationError ? error.message : '操作执行失败，请重新发起。',
-      ),
-    );
+    return res
+      .status(status)
+      .send(
+        resultData(
+          { code },
+          status,
+          error instanceof ToolConfirmationError ? error.message : '操作执行失败，请重新发起。',
+        ),
+      );
   }
 }
 
@@ -1227,11 +1318,7 @@ export async function rejectAgentTool(req, res) {
   let identity = null;
   try {
     identity = getAgentIdentity(req);
-    const rejected = await rejectToolConfirmation(
-      req.body?.confirmationToken,
-      identity.ownerKey,
-      req.body?.sessionId,
-    );
+    const rejected = await rejectToolConfirmation(req.body?.confirmationToken, identity.ownerKey, req.body?.sessionId);
     logAgentRequest({
       userId: identity.billingUserId,
       userAlias: req.adminActor?.alias || identity.resourceUserAlias,
@@ -1261,8 +1348,8 @@ export async function rejectAgentTool(req, res) {
         trace: { requestId, taskType: 'agent_confirmation', selectedTools: [] },
       });
     }
-    return res.status(status).send(
-      resultData({ code }, status, error instanceof ToolConfirmationError ? error.message : '取消操作失败。'),
-    );
+    return res
+      .status(status)
+      .send(resultData({ code }, status, error instanceof ToolConfirmationError ? error.message : '取消操作失败。'));
   }
 }

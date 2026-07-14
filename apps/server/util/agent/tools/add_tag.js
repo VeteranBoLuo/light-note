@@ -1,5 +1,4 @@
-import pool from '../../../db/index.js';
-import { insertData } from '../data.js';
+import { createTag } from '../../services/tagService.js';
 
 export default {
   name: 'add_tag',
@@ -21,18 +20,8 @@ export default {
       return { error: 'TAG_REQUIRED', message: '标签名称不能为空' };
     }
 
-    const [existing] = await pool.query(
-      'SELECT id FROM tag WHERE user_id = ? AND name = ? AND del_flag = 0',
-      [ctx.userId, tagName],
-    );
-
-    if (existing.length > 0) {
-      return { tagName, isNew: false };
-    }
-
-    const tagData = insertData({ name: tagName, userId: ctx.userId });
-    await pool.query('INSERT INTO tag SET ?', [tagData]);
-    return { tagName, isNew: true };
+    const result = await createTag({ userId: ctx.userId, name: tagName, existingIsSuccess: true });
+    return { id: result.id, tagName: result.name, isNew: result.isNew };
   },
   transform(raw) {
     if (raw.error) return `操作失败：${raw.message}`;

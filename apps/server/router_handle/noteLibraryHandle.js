@@ -2,41 +2,27 @@ import pool from '../db/index.js';
 import { snakeCaseKeys, resultData, mergeExistingProperties, insertData } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { recordFirstOwnResource } from '../util/conversion.js';
-import { awardCreate } from '../util/growth.js';
-import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
+import { removeInboxRelations } from '../util/resourceInbox.js';
+import { createNote } from '../util/services/noteService.js';
+import { createTag } from '../util/services/tagService.js';
 
 export const addNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
     const userId = req.user.id;
     const { addToInbox = false, inboxSource = 'quick_capture', ...noteBody } = req.body || {};
-    const params = {
-      ...noteBody,
-      createBy: userId,
-    };
-    const noteData = insertData(params);
-    await connection.beginTransaction();
-    await connection.query('INSERT INTO note SET ?', [noteData]);
-    if (addToInbox === true) {
-      await enqueueResources(connection, {
-        userId,
-        items: [{ resourceType: 'note', resourceId: noteData.id }],
-        source: inboxSource,
-      });
-    }
-    await connection.commit();
-    res.send(resultData({ id: noteData.id, addedToInbox: addToInbox === true }));
-    if (!req.isVisitorWorkspace && !req.suppressUserRewards) {
-      recordFirstOwnResource(req, 'note');
-      awardCreate(userId, 'note', noteData.id, { userRole: req.user.role }).catch(() => {});
-    }
+    const result = await createNote({
+      userId,
+      userRole: req.user.role,
+      note: noteBody,
+      addToInbox: addToInbox === true,
+      inboxSource,
+      request: req,
+      suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
+    });
+    res.send(resultData({ id: result.id, addedToInbox: result.addedToInbox }));
   } catch (e) {
-    await connection.rollback();
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
-  } finally {
-    connection.release();
   }
 };
 
@@ -68,7 +54,10 @@ async function pruneNoteVersions(connection, noteId) {
 async function snapshotNoteVersion(connection, { noteId, userId, newContent }) {
   // 本次未提交正文(仅改标题/标签等)则不快照
   if (newContent === undefined || newContent === null) return;
-  const [rows] = await connection.query('SELECT title, content, type FROM note WHERE id=? AND create_by=?', [noteId, userId]);
+  const [rows] = await connection.query('SELECT title, content, type FROM note WHERE id=? AND create_by=?', [
+    noteId,
+    userId,
+  ]);
   if (rows.length === 0) return; // 笔记不存在或非本人,交由后续 update 的 where 兜底
   const oldContent = rows[0].content ?? '';
   if (oldContent === newContent) return; // 正文无变化,去重
@@ -80,7 +69,13 @@ async function snapshotNoteVersion(connection, { noteId, userId, newContent }) {
   if (lastRows.length > 0 && Date.now() - new Date(lastRows[0].create_time).getTime() < NOTE_VERSION_MERGE_WINDOW_MS) {
     return;
   }
-  const versionData = insertData({ noteId, title: rows[0].title, content: oldContent, type: rows[0].type, createBy: userId });
+  const versionData = insertData({
+    noteId,
+    title: rows[0].title,
+    content: oldContent,
+    type: rows[0].type,
+    createBy: userId,
+  });
   await connection.query('INSERT INTO note_versions SET ?', [versionData]);
   await pruneNoteVersions(connection, noteId);
 }
@@ -100,7 +95,11 @@ export const updateNote = async (req, res) => {
       await snapshotNoteVersion(connection, { noteId: req.body.id, userId, newContent: req.body.content });
       // 更新 note 表，排除 tags
       const updateParams = mergeExistingProperties(params, [], ['id', 'tags']);
-      await connection.query('update note set ? where id=? and create_by=?', [snakeCaseKeys(updateParams), req.body.id, userId]);
+      await connection.query('update note set ? where id=? and create_by=?', [
+        snakeCaseKeys(updateParams),
+        req.body.id,
+        userId,
+      ]);
       if (params.tags && Array.isArray(params.tags)) {
         const tagIds = await validateUserTags(connection, { tagIds: params.tags, userId });
         await replaceResourceTagRelations(connection, {
@@ -246,30 +245,11 @@ export const addNoteTag = async (req, res) => {
     if (!name) {
       return res.send(resultData(null, 400, '标签名称不能为空'));
     }
-    const params = {
-      name,
-      userId: userId,
-    };
-    const connection = await pool.getConnection();
     try {
-      await connection.beginTransaction();
-      const [checkRes] = await connection.query('SELECT id FROM tag WHERE user_id = ? AND name = ? AND del_flag = 0', [
-        userId,
-        name,
-      ]);
-      if (checkRes.length > 0) {
-        throw new Error('标签已存在');
-      }
-      const tagData = insertData(params);
-      await connection.query('INSERT INTO tag SET ?', [tagData]);
-      const createdTag = { id: tagData.id, name: tagData.name };
-      await connection.commit();
-      res.send(resultData(createdTag || '添加标签成功'));
+      const createdTag = await createTag({ userId, name });
+      res.send(resultData({ id: createdTag.id, name: createdTag.name }));
     } catch (err) {
-      await connection.rollback();
-      res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
-    } finally {
-      connection.release();
+      res.send(resultData(null, 500, '服务器内部错误: ' + String(err.message || err).replace(/^[A-Z_]+:\s*/, '')));
     }
   } catch (e) {
     res.send(resultData(null, 400, '客户端请求异常' + e));
@@ -351,7 +331,11 @@ export const getNoteTags = async (req, res) => {
     const userId = req.user.id;
     const noteId = req.body.id;
     // 归属校验:先确认该笔记属于当前用户,防止传他人 note id 枚举其标签
-    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [noteId, userId, '0']);
+    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [
+      noteId,
+      userId,
+      '0',
+    ]);
     if (own.length === 0) {
       return res.send(resultData(null, 404, '笔记不存在'));
     }
@@ -439,7 +423,11 @@ export const getNoteVersions = async (req, res) => {
       return res.send(resultData(null, 400, '参数错误'));
     }
     // 归属校验:只能看自己笔记的版本
-    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [noteId, userId, '0']);
+    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [
+      noteId,
+      userId,
+      '0',
+    ]);
     if (own.length === 0) {
       return res.send(resultData(null, 404, '笔记不存在'));
     }

@@ -14,8 +14,12 @@
           {{ data.name }}
         </div>
         <div v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
-          <span v-if="data.hasSnapshot" class="bm-badge bm-badge--snap" @click.stop="openSnap(data.id)">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
-          <span v-if="data.hasSummary" class="bm-badge bm-badge--sum" @click.stop="openSnap(data.id)">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
+          <span v-if="data.hasSnapshot" class="bm-badge bm-badge--snap" @click.stop="openSnap(data.id)"
+            >📄 {{ $t('bookmarkMg.badgeArchived') }}</span
+          >
+          <span v-if="data.hasSummary" class="bm-badge bm-badge--sum" @click.stop="openSnap(data.id)"
+            >🤖 {{ $t('bookmarkMg.badgeSummary') }}</span
+          >
         </div>
       </div>
       <div class="edit-tag-operation">
@@ -44,6 +48,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { cloneDeep } from 'lodash-es';
+  import { exportExcelFile } from '@/utils/excel';
 
   const visible = defineModel<boolean>('visible');
   const user = useUserStore();
@@ -116,13 +122,11 @@
     }
   });
 
-  import * as XLSX from 'xlsx';
-  import { cloneDeep } from 'lodash-es';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  function exportBookmark() {
+  async function exportBookmark() {
     // 随便声明一个结果
     const exportData = bookmarkList.value?.map((item: any) => {
       return {
@@ -133,9 +137,6 @@
       };
     });
     // 创建一个新的工作簿
-    const workbook = XLSX.utils.book_new();
-    // 创建一个新的工作表
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
     // 获取第一列和第二列的最大字符长度
     const maxLen = [
       Math.max(...exportData.map((item) => item.标签名.length)),
@@ -143,11 +144,21 @@
       Math.max(...exportData.map((item) => item.描述?.length)),
     ];
 
-    worksheet['!cols'] = [{ wch: maxLen[0] }, { wch: maxLen[1] }, { wch: 50 }, { wch: 20 }];
-    // 将工作表附加到工作簿，并将工作表命名为students
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'bookmark');
-    // 导出工作簿，并命名导出文件名为Presidents.xlsx
-    XLSX.writeFile(workbook, '书签集合.xlsx');
+    try {
+      await exportExcelFile(
+        exportData,
+        [
+          { header: '标签名', key: '标签名', width: Math.max(maxLen[0], 12) },
+          { header: '网址', key: '网址', width: Math.max(maxLen[1], 20) },
+          { header: '描述', key: '描述', width: 50 },
+          { header: '关联书签', key: '关联书签', width: 20 },
+        ],
+        '书签集合.xlsx',
+      );
+      message.success('Excel导出成功');
+    } catch (error: any) {
+      message.error(`Excel导出失败：${error.message || '未知错误'}`);
+    }
   }
 
   function getIcon(bookmark) {

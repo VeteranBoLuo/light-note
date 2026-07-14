@@ -107,8 +107,20 @@
                       <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
                     </div>
                     <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
-                      <span v-if="bookmarkItem.hasSnapshot" class="bm-badge bm-badge--snap" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap(bookmarkItem.id)">📄 {{ $t('bookmarkMg.badgeArchived') }}</span>
-                      <span v-if="bookmarkItem.hasSummary" class="bm-badge bm-badge--sum" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap(bookmarkItem.id)">🤖 {{ $t('bookmarkMg.badgeSummary') }}</span>
+                      <span
+                        v-if="bookmarkItem.hasSnapshot"
+                        class="bm-badge bm-badge--snap"
+                        :title="$t('bookmarkMg.badgeClickHint')"
+                        @click.stop="openSnap(bookmarkItem.id)"
+                        >📄 {{ $t('bookmarkMg.badgeArchived') }}</span
+                      >
+                      <span
+                        v-if="bookmarkItem.hasSummary"
+                        class="bm-badge bm-badge--sum"
+                        :title="$t('bookmarkMg.badgeClickHint')"
+                        @click.stop="openSnap(bookmarkItem.id)"
+                        >🤖 {{ $t('bookmarkMg.badgeSummary') }}</span
+                      >
                     </div>
                   </div>
                 </div>
@@ -172,8 +184,20 @@
                     />
                   </div>
                   <div class="text-hidden">{{ text }}</div>
-                  <span v-if="(record as BookmarkInterface).hasSnapshot" class="bm-mini" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap((record as BookmarkInterface).id)">📄</span>
-                  <span v-if="(record as BookmarkInterface).hasSummary" class="bm-mini" :title="$t('bookmarkMg.badgeClickHint')" @click.stop="openSnap((record as BookmarkInterface).id)">🤖</span>
+                  <span
+                    v-if="(record as BookmarkInterface).hasSnapshot"
+                    class="bm-mini"
+                    :title="$t('bookmarkMg.badgeClickHint')"
+                    @click.stop="openSnap((record as BookmarkInterface).id)"
+                    >📄</span
+                  >
+                  <span
+                    v-if="(record as BookmarkInterface).hasSummary"
+                    class="bm-mini"
+                    :title="$t('bookmarkMg.badgeClickHint')"
+                    @click.stop="openSnap((record as BookmarkInterface).id)"
+                    >🤖</span
+                  >
                 </div>
               </template>
               <template v-else-if="column.key === 'tagList'">
@@ -267,6 +291,8 @@
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
   import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { cloneDeep } from 'lodash-es';
+  import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -518,10 +544,7 @@
   };
 
   // ── 导入导出 ──
-  import * as XLSX from 'xlsx';
-  import { cloneDeep } from 'lodash-es';
-
-  function exportBookmark() {
+  async function exportBookmark() {
     loading.value = true;
     const bookmarksToExport =
       selectedRows.value.length > 0
@@ -537,19 +560,28 @@
       网址: item.url,
       描述: item?.description,
     }));
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
     const maxLen = [
       Math.max(...exportData.map((item) => item.书签名.length)),
       Math.max(...exportData.map((item) => item.网址.length)),
       Math.max(...exportData.map((item) => item.描述?.length || 0)),
     ];
-    worksheet['!cols'] = [{ wch: maxLen[0] }, { wch: maxLen[1] }, { wch: 50 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'bookmark');
-    XLSX.writeFile(workbook, '书签集合.xlsx');
-    importExportModalVisible.value = false;
-    message.success('Excel导出成功');
-    loading.value = false;
+    try {
+      await exportExcelFile(
+        exportData,
+        [
+          { header: '书签名', key: '书签名', width: Math.max(maxLen[0], 12) },
+          { header: '网址', key: '网址', width: Math.max(maxLen[1], 20) },
+          { header: '描述', key: '描述', width: 50 },
+        ],
+        '书签集合.xlsx',
+      );
+      importExportModalVisible.value = false;
+      message.success('Excel导出成功');
+    } catch (error: any) {
+      message.error(`Excel导出失败：${error.message || '未知错误'}`);
+    } finally {
+      loading.value = false;
+    }
   }
 
   function exportBookmarksHTML() {
@@ -639,69 +671,62 @@
     const file = target.files?.[0];
     if (!file) return;
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        loading.value = true;
-        const data = new Uint8Array(event.target!.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-        const requiredColumns = ['书签名', '网址', '描述'];
-        const hasRequired = requiredColumns.every(
-          (col) => jsonData.length > 0 && Object.keys(jsonData[0]).includes(col),
+      loading.value = true;
+      const jsonData = await readFirstExcelSheet(file);
+      const requiredColumns = ['书签名', '网址', '描述'];
+      const hasRequired = requiredColumns.every((col) => jsonData.length > 0 && Object.keys(jsonData[0]).includes(col));
+      if (!hasRequired) {
+        message.error('导入文件格式不正确，请确保包含书签名、网址、描述列');
+        return;
+      }
+      const bookmarksToImport = jsonData.map((item: any) => ({
+        name: item['书签名'].trim(),
+        url: item['网址'].trim(),
+        description: item['描述']?.trim() || '',
+      }));
+      let successCount = 0;
+      let failedCount = 0;
+      const failedItems: any[] = [];
+      const results: PromiseSettledResult<any>[] = [];
+      for (let index = 0; index < bookmarksToImport.length; index += 8) {
+        const batch = bookmarksToImport.slice(index, index + 8);
+        results.push(
+          ...(await Promise.allSettled(batch.map((bm: any) => apiBasePost('/api/bookmark/addBookmark', bm)))),
         );
-        if (!hasRequired) {
-          message.error('导入文件格式不正确，请确保包含书签名、网址、描述列');
-          loading.value = false;
-          return;
-        }
-        const bookmarksToImport = jsonData.map((item: any) => ({
-          name: item['书签名'].trim(),
-          url: item['网址'].trim(),
-          description: item['描述']?.trim() || '',
-        }));
-        let successCount = 0;
-        let failedCount = 0;
-        const failedItems: any[] = [];
-        const requests = bookmarksToImport.map((bm: any) => apiBasePost('/api/bookmark/addBookmark', bm));
-        const results: any = await Promise.allSettled(requests);
-        results.forEach((result: any, index: number) => {
-          if (result.status === 'fulfilled' && result.value.status === 200) {
-            successCount++;
-          } else {
-            failedCount++;
-            failedItems.push({
-              name: bookmarksToImport[index].name,
-              url: bookmarksToImport[index].url,
-              error: result.value?.msg,
-            });
-          }
-        });
-        await init();
-        if (failedCount > 0) {
-          const errorText = failedItems
-            .map((item) => `${item.name} (${item.url}): <span style="color: #ff5722">${item.error}</span>`)
-            .join('<br/>');
-          Alert.alert({
-            title: `导入完成 (${successCount}成功/${failedCount}失败)`,
-            content: errorText,
-            okText: '复制错误信息',
-            onOk() {
-              navigator.clipboard.writeText(failedItems.map((f) => `${f.name} (${f.url}): ${f.error}`).join('\n'));
-              message.success('错误信息已复制到剪贴板');
-            },
-          });
+      }
+      results.forEach((result: any, index: number) => {
+        if (result.status === 'fulfilled' && result.value.status === 200) {
+          successCount++;
         } else {
-          message.success(`导入成功！共导入 ${successCount} 个书签`);
+          failedCount++;
+          failedItems.push({
+            name: bookmarksToImport[index].name,
+            url: bookmarksToImport[index].url,
+            error: result.value?.msg || result.reason?.message || '请求失败',
+          });
         }
-        loading.value = false;
-      };
-      reader.readAsArrayBuffer(file);
+      });
+      await init();
+      if (failedCount > 0) {
+        const errorText = failedItems
+          .map((item) => `${item.name} (${item.url}): <span style="color: #ff5722">${item.error}</span>`)
+          .join('<br/>');
+        Alert.alert({
+          title: `导入完成 (${successCount}成功/${failedCount}失败)`,
+          content: errorText,
+          okText: '复制错误信息',
+          onOk() {
+            navigator.clipboard.writeText(failedItems.map((f) => `${f.name} (${f.url}): ${f.error}`).join('\n'));
+            message.success('错误信息已复制到剪贴板');
+          },
+        });
+      } else {
+        message.success(`导入成功！共导入 ${successCount} 个书签`);
+      }
     } catch (err: any) {
       message.error('文件处理失败: ' + err.message);
-      loading.value = false;
     } finally {
+      loading.value = false;
       target.value = '';
     }
   };

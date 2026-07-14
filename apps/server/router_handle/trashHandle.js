@@ -4,6 +4,7 @@ import { deleteObjectFromObs, buildObjectKey } from '../util/obsClient.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { promises as fsP } from 'node:fs';
 import path from 'node:path';
+import { restoreTrashResources } from '../util/services/trashService.js';
 
 const NOTE_IMAGE_DIR = '/www/wwwroot/images';
 
@@ -76,8 +77,7 @@ const RETAIN_DAYS_CASE = `CASE
 // 过期条件:资源表用别名 alias,调用方须 LEFT JOIN user_growth g;按所有者等级算保留天数
 const expiryWhere = (alias) =>
   `${alias}.del_flag = 1 AND ${alias}.deleted_at < DATE_SUB(NOW(), INTERVAL (${RETAIN_DAYS_CASE}) DAY)`;
-const NOT_ROOT_CONDITION = (idField) =>
-  `${idField} NOT IN (SELECT id FROM \`user\` WHERE role = 'root')`;
+const NOT_ROOT_CONDITION = (idField) => `${idField} NOT IN (SELECT id FROM \`user\` WHERE role = 'root')`;
 
 async function cleanupExpiredFiles(connection, userId = null) {
   const userCond = userId ? ` AND f.create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('f.create_by')}`;
@@ -93,7 +93,10 @@ async function cleanupExpiredFiles(connection, userId = null) {
   const placeholders = ids.map(() => '?').join(',');
 
   await purgeInboxRelations(connection, 'file', ids);
-  await connection.query(`DELETE FROM resource_tag_relations WHERE resource_type = 'file' AND resource_id IN (${placeholders})`, ids);
+  await connection.query(
+    `DELETE FROM resource_tag_relations WHERE resource_type = 'file' AND resource_id IN (${placeholders})`,
+    ids,
+  );
   await connection.query(`DELETE FROM files WHERE id IN (${placeholders})`, ids);
 
   // 异步删 OBS，不阻塞
@@ -127,7 +130,11 @@ async function cleanupExpiredBookmarks(connection, userId = null) {
     `SELECT b.id FROM bookmark b LEFT JOIN user_growth g ON g.user_id = b.user_id
      WHERE ${expiryWhere('b')}${userCond}`,
   );
-  await purgeInboxRelations(connection, 'bookmark', bookmarks.map((bookmark) => bookmark.id));
+  await purgeInboxRelations(
+    connection,
+    'bookmark',
+    bookmarks.map((bookmark) => bookmark.id),
+  );
 
   // 先清 resource_tag_relations（bookmark 的多态字段无 FK CASCADE）
   await connection.query(
@@ -270,7 +277,6 @@ export const getTrashFileSize = async (req, res) => {
 
 export const restoreTrash = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
     const userId = req.user?.id;
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
@@ -283,23 +289,11 @@ export const restoreTrash = async (req, res) => {
       return res.send(resultData(null, 400, '无效的ID列表'));
     }
 
-    const cfg = TABLE_CONFIG[resourceType];
-    const placeholders = ids.map(() => '?').join(',');
-
-    await connection.beginTransaction();
-    const [result] = await connection.query(
-      `UPDATE \`${cfg.table}\` SET del_flag = 0, deleted_at = NULL
-       WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
-      [...ids, userId],
-    );
-    await connection.commit();
-
-    res.send(resultData({ restored: result.affectedRows }, 200, '恢复成功'));
+    const results = await restoreTrashResources({ userId, filters: { resourceType, ids } });
+    const restored = results.reduce((sum, item) => sum + Number(item.count || 0), 0);
+    res.send(resultData({ restored }, 200, '恢复成功'));
   } catch (e) {
-    await connection.rollback();
     res.send(resultData(null, 500, '恢复失败: ' + e.message));
-  } finally {
-    connection.release();
   }
 };
 

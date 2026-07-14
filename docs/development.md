@@ -46,14 +46,14 @@ cd apps/server && node app.js
 
 ### 命名规范
 
-| 类型 | 规范 | 示例 |
-|------|------|------|
-| 后端 handler | `xxHandle.js` | `bookmarkHandle.js` |
-| 后端路由 | `router/xx.js` | `router/common.js` |
-| Vue 组件 | PascalCase | `CloudFolder.vue` |
-| Pinia store | camelCase | `bookmark.ts` |
-| 目录 | kebab-case | `basic-components/` |
-| API 路由路径 | kebab-case | `/api/common/getDashboard` |
+| 类型         | 规范           | 示例                       |
+| ------------ | -------------- | -------------------------- |
+| 后端 handler | `xxHandle.js`  | `bookmarkHandle.js`        |
+| 后端路由     | `router/xx.js` | `router/common.js`         |
+| Vue 组件     | PascalCase     | `CloudFolder.vue`          |
+| Pinia store  | camelCase      | `bookmark.ts`              |
+| 目录         | kebab-case     | `basic-components/`        |
+| API 路由路径 | kebab-case     | `/api/common/getDashboard` |
 
 ### 后端规范
 
@@ -62,7 +62,7 @@ cd apps/server && node app.js
 ```javascript
 // ✅ 统一使用 resultData
 res.send(resultData({ id, name }, 200));
-res.send(resultData(null, 401, '请先登录'));
+res.send(resultData(null, 401, "请先登录"));
 
 // ❌ 不要手动构造
 res.json({ code: 0, data: xxx });
@@ -70,15 +70,15 @@ res.json({ code: 0, data: xxx });
 
 **状态码约定：**
 
-| 状态码 | 含义 |
-|--------|------|
-| 200 | 成功 |
-| 400 | 客户端输入错误 |
-| 401 | 未登录 |
-| 403 | 无权限 |
-| 404 | 不存在 |
-| 423 | 账号封禁 |
-| 500 | 服务端错误 |
+| 状态码 | 含义           |
+| ------ | -------------- |
+| 200    | 成功           |
+| 400    | 客户端输入错误 |
+| 401    | 未登录         |
+| 403    | 无权限         |
+| 404    | 不存在         |
+| 423    | 账号封禁       |
+| 500    | 服务端错误     |
 
 **INSERT 规范：**
 
@@ -93,7 +93,7 @@ res.json({ code: 0, data: xxx });
 const connection = await pool.getConnection();
 try {
   await connection.beginTransaction();
-  await connection.query('...');  // 必须用 connection.query()
+  await connection.query("..."); // 必须用 connection.query()
   await connection.commit();
 } catch (e) {
   await connection.rollback();
@@ -118,16 +118,16 @@ try {
 
 **组件选择（铁律：有 B 组件必用 B 组件，禁原生控件，不新增 Ant Design）：**
 
-| 场景 | 使用 | 不要使用 |
-|------|------|---------|
-| 表格 | `BTable` | `a-table` |
-| 按钮 | `b-button` | 原生 `<button>`、`a-button` |
-| 下拉选择 | `BSelect` | 原生 `<select>`、`a-select` |
-| 输入框 | `BInput` | 原生 `<input>`、`a-input` |
-| 确认弹窗 | `Alert.alert()` | `Modal.confirm` |
-| 业务弹窗 | `BModal` | ant-design-vue 的 Modal |
-| 气泡卡片 | `BPopover` | `a-popover` |
-| 文字提示 | `BTooltip` | `a-tooltip` |
+| 场景     | 使用            | 不要使用                    |
+| -------- | --------------- | --------------------------- |
+| 表格     | `BTable`        | `a-table`                   |
+| 按钮     | `b-button`      | 原生 `<button>`、`a-button` |
+| 下拉选择 | `BSelect`       | 原生 `<select>`、`a-select` |
+| 输入框   | `BInput`        | 原生 `<input>`、`a-input`   |
+| 确认弹窗 | `Alert.alert()` | `Modal.confirm`             |
+| 业务弹窗 | `BModal`        | ant-design-vue 的 Modal     |
+| 气泡卡片 | `BPopover`      | `a-popover`                 |
+| 文字提示 | `BTooltip`      | `a-tooltip`                 |
 
 - 存量 Ant Design（`a-*`）逐步替换为自研 B 组件，不新增；确无对应 B 组件才用原生，并注明原因。
 
@@ -144,11 +144,11 @@ try {
 
 **埋点规范：**
 
-| 场景 | 方式 |
-|------|------|
-| 简单点击（跳转、弹窗、筛选等） | `v-click-log` |
-| 操作成功（新增、删除、保存等） | `recordOperation()` |
-| 后台管理页面 | 只记录 API 日志，不加埋点 |
+| 场景                           | 方式                      |
+| ------------------------------ | ------------------------- |
+| 简单点击（跳转、弹窗、筛选等） | `v-click-log`             |
+| 操作成功（新增、删除、保存等） | `recordOperation()`       |
+| 后台管理页面                   | 只记录 API 日志，不加埋点 |
 
 待整理相关的手动入队必须复用 `composables/useInboxEnqueue.ts`，避免各资源模块分别实现游客拦截、幂等提示、角标刷新和操作日志。
 
@@ -200,6 +200,7 @@ try {
 - [ ] 用户输入全部参数化
 - [ ] 权限判断正确（登录态、角色、用户隔离）
 - [ ] INSERT 使用正确的函数（insertData / snakeCaseKeys）
+- [ ] 笔记、书签、标签、回收站恢复和知识库写入复用 `util/services/`，页面 handler 与 Agent 工具不得各写一套 SQL 和副作用
 
 ## AI 助手知识库（功能变更需同步）
 

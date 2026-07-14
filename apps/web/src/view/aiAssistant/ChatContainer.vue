@@ -301,7 +301,6 @@
     lastScrollTop.value = scrollTop;
     // 用户向上滚动（无论距离多小）立即停止自动滚动
     if (scrollDelta < 0) {
-      console.log('用户向上滚动，自动滚动已禁用');
       userHasInterrupted.value = true;
       autoScrollEnabled.value = false;
       isProgrammaticScroll.value = false;
@@ -312,7 +311,6 @@
         autoScrollEnabled.value = true;
         userHasInterrupted.value = false;
         showScrollToBottom.value = false;
-        console.log('用户滚动到底部，自动滚动已启用');
       }
     }
     if (scrollPosition > SCROLL_THRESHOLD) {
@@ -548,13 +546,14 @@
             const currentMsg = messages.value[currentMessageIndex];
             if (currentMsg) {
               const round = Number(data.round || 1);
-              const status = data.event === 'tool_start'
-                ? 'running'
-                : data.status === 'confirmation_required'
-                  ? 'confirmation_required'
-                  : data.status === 'success'
-                    ? 'success'
-                    : 'error';
+              const status =
+                data.event === 'tool_start'
+                  ? 'running'
+                  : data.status === 'confirmation_required'
+                    ? 'confirmation_required'
+                    : data.status === 'success'
+                      ? 'success'
+                      : 'error';
               const items = [...(currentMsg.toolEvents || [])];
               const existing = items.findIndex((item) => item.name === data.tool && Number(item.round || 1) === round);
               const nextItem: AiToolStatusItem = { name: data.tool, status, round };
@@ -569,7 +568,8 @@
             if (currentMsg) {
               const merged = [...(currentMsg.sources || []), ...data.sources];
               currentMsg.sources = merged.filter(
-                (source, index, all) => all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
+                (source, index, all) =>
+                  all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
               );
             }
           }
@@ -677,7 +677,6 @@
 
       // 最终滚动
       await nextTick();
-      console.log('Final autoScrollEnabled:', autoScrollEnabled.value, 'userHasInterrupted:', userHasInterrupted.value);
       if (autoScrollEnabled.value && !userHasInterrupted.value) {
         scrollToBottom('smooth');
       }

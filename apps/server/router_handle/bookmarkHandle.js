@@ -6,25 +6,30 @@ import {
   insertTagResourceRelations,
   replaceResourceTagRelations,
   replaceTagResourceRelations,
+  validateUserTags,
+  validateUserResources,
 } from '../util/resourceTags.js';
 
 import { promises as fs } from 'fs';
 import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
-import { awardCreate, grantExp, hashRef } from '../util/growth.js';
+import { grantExp } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
-import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck, resetHealth } from '../util/linkHealth.js';
-import { recordFirstOwnResource } from '../util/conversion.js';
+import {
+  checkBookmarkHealth,
+  getHealthSummary,
+  markLinkNormal,
+  startFullCheck,
+  resetHealth,
+} from '../util/linkHealth.js';
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
-import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
+import { removeInboxRelations } from '../util/resourceInbox.js';
+import { createBookmark, normalizeBookmarkUrl } from '../util/services/bookmarkService.js';
+import { createTag as createTagService } from '../util/services/tagService.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
 // 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
-export const normalizeBookmarkUrl = (url) => {
-  const trimmed = String(url || '').trim();
-  if (!trimmed) return trimmed;
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-};
+export { normalizeBookmarkUrl };
 
 export const queryTagList = (req, res) => {
   const userId = req.user.id;
@@ -188,24 +193,14 @@ export const addTag = async (req, res) => {
     try {
       await connection.beginTransaction(); // 开始事务
       const userId = req.user.id;
-      const params = {
-        ...req.body,
-        userId: userId,
-      };
-      const sqlCheck = 'SELECT * FROM tag WHERE user_id=? AND name = ? AND del_flag = 0';
-      const [checkRes] = await connection.query(sqlCheck, [userId, params.name]);
-      if (checkRes.length > 0) {
-        throw new Error('标签已存在');
-      }
-      // 插入新的标签
-      const insertParams = mergeExistingProperties(
-        insertData(params),
-        [undefined, '', []],
-        ['related_tag_ids', 'bookmark_list', 'note_list', 'file_list'],
-      );
-      const insertedTagId = insertParams.id;
-      let sql = `INSERT INTO tag SET ?`;
-      const [insertResult] = await connection.query(sql, [insertParams]);
+      const createdTag = await createTagService({
+        userId,
+        name: req.body?.name,
+        iconUrl: req.body?.iconUrl,
+        sort: req.body?.sort,
+        connection,
+      });
+      const insertedTagId = createdTag.id;
       // 处理关联标签数量限制
       const { relatedTagIds, bookmarkList, noteList, fileList } = req.body;
       if (relatedTagIds && relatedTagIds.length > 4) {
@@ -213,7 +208,8 @@ export const addTag = async (req, res) => {
       }
       // 如果有相关标签，则插入新的关联
       if (relatedTagIds && relatedTagIds.length > 0) {
-        for (const relatedTagId of relatedTagIds) {
+        const validRelatedTagIds = await validateUserTags(connection, { tagIds: relatedTagIds, userId });
+        for (const relatedTagId of validRelatedTagIds) {
           const insertAssociationSql = `INSERT INTO tag_relations (tag_id, related_tag_id) VALUES (?, ?), (?, ?)`;
           await connection.query(insertAssociationSql, [insertedTagId, relatedTagId, relatedTagId, insertedTagId]);
         }
@@ -221,32 +217,47 @@ export const addTag = async (req, res) => {
 
       // 处理各类资源关联
       if (bookmarkList && bookmarkList.length > 0) {
+        const resourceIds = await validateUserResources(connection, {
+          resourceIds: bookmarkList,
+          resourceType: RESOURCE_TYPE.BOOKMARK,
+          userId,
+        });
         await insertTagResourceRelations(connection, {
           tagId: insertedTagId,
           resourceType: RESOURCE_TYPE.BOOKMARK,
-          resourceIds: bookmarkList,
+          resourceIds,
           userId,
         });
       }
       if (noteList && noteList.length > 0) {
+        const resourceIds = await validateUserResources(connection, {
+          resourceIds: noteList,
+          resourceType: RESOURCE_TYPE.NOTE,
+          userId,
+        });
         await insertTagResourceRelations(connection, {
           tagId: insertedTagId,
           resourceType: RESOURCE_TYPE.NOTE,
-          resourceIds: noteList,
+          resourceIds,
           userId,
         });
       }
       // 游客维护工作区当前不开放云空间；即使前端携带 fileList，也不得改动文件标签关系。
       if (!req.isVisitorWorkspace && fileList && fileList.length > 0) {
+        const resourceIds = await validateUserResources(connection, {
+          resourceIds: fileList,
+          resourceType: RESOURCE_TYPE.FILE,
+          userId,
+        });
         await insertTagResourceRelations(connection, {
           tagId: insertedTagId,
           resourceType: RESOURCE_TYPE.FILE,
-          resourceIds: fileList,
+          resourceIds,
           userId,
         });
       }
       await connection.commit(); // 提交事务
-      res.send(resultData(insertResult)); // 发送成功响应
+      res.send(resultData({ id: insertedTagId })); // 发送成功响应
     } catch (error) {
       await connection.rollback(); // 回滚事务
       res.send(resultData(null, 500, '服务器内部错误: ' + error.message)); // 设置状态码为500
@@ -299,7 +310,10 @@ export const updateTag = async (req, res) => {
       throw new Error('最多选择4个相关标签');
     }
     // 归属校验：确认标签属于当前用户，避免越权改动及破坏关系表
-    const [own] = await connection.query('SELECT id FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0', [id, userId]);
+    const [own] = await connection.query('SELECT id FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0', [
+      id,
+      userId,
+    ]);
     if (own.length === 0) {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
@@ -315,7 +329,8 @@ export const updateTag = async (req, res) => {
 
       // 如果有相关标签，则插入新的关联
       if (relatedTagIds) {
-        for (const relatedTagId of relatedTagIds) {
+        const validRelatedTagIds = await validateUserTags(connection, { tagIds: relatedTagIds, userId });
+        for (const relatedTagId of validRelatedTagIds.filter((relatedTagId) => relatedTagId !== id)) {
           const insertAssociationSql = `INSERT INTO tag_relations (tag_id, related_tag_id) VALUES (?, ?), (?, ?)`;
           await connection.query(insertAssociationSql, [id, relatedTagId, relatedTagId, id]);
         }
@@ -324,27 +339,42 @@ export const updateTag = async (req, res) => {
 
     // 只要传了bookmarkList，就需要重新处理
     if (bookmarkList !== undefined) {
+      const resourceIds = await validateUserResources(connection, {
+        resourceIds: bookmarkList || [],
+        resourceType: RESOURCE_TYPE.BOOKMARK,
+        userId,
+      });
       await replaceTagResourceRelations(connection, {
         tagId: id,
         resourceType: RESOURCE_TYPE.BOOKMARK,
-        resourceIds: bookmarkList || [],
+        resourceIds,
         userId,
       });
     }
     if (noteList !== undefined) {
+      const resourceIds = await validateUserResources(connection, {
+        resourceIds: noteList || [],
+        resourceType: RESOURCE_TYPE.NOTE,
+        userId,
+      });
       await replaceTagResourceRelations(connection, {
         tagId: id,
         resourceType: RESOURCE_TYPE.NOTE,
-        resourceIds: noteList || [],
+        resourceIds,
         userId,
       });
     }
     // 游客维护工作区只维护书签、笔记和标签本身，保留既有文件关联不动。
     if (!req.isVisitorWorkspace && fileList !== undefined) {
+      const resourceIds = await validateUserResources(connection, {
+        resourceIds: fileList || [],
+        resourceType: RESOURCE_TYPE.FILE,
+        userId,
+      });
       await replaceTagResourceRelations(connection, {
         tagId: id,
         resourceType: RESOURCE_TYPE.FILE,
-        resourceIds: fileList || [],
+        resourceIds,
         userId,
       });
     }
@@ -599,80 +629,25 @@ export const getSnapshot = async (req, res) => {
 
 export const addBookmark = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
-    await connection.beginTransaction();
     const userId = req.user.id;
     // saveSnapshot 是前端表单开关,不是书签字段:先摘出去,避免混进 INSERT(表里无此列)
     const { saveSnapshot = true, addToInbox = false, inboxSource = 'quick_capture', ...bmBody } = req.body || {};
-    const params = {
-      ...bmBody,
-      userId: userId,
-      url: normalizeBookmarkUrl(req.body.url),
-    };
-    // 自动补协议，避免相对路径跳转
-    if (params.url && !params.url.startsWith('http://') && !params.url.startsWith('https://')) {
-      params.url = 'https://' + params.url;
-    }
-    // URL 去重:同一用户下相同网址不重复收藏(url 已归一化 + 补协议);导入逐条走此处也自动去重
-    if (params.url) {
-      const [urlDup] = await connection.query('SELECT id, name FROM bookmark WHERE user_id=? AND url=? AND del_flag=0', [userId, params.url]);
-      if (urlDup.length > 0) {
-        if (addToInbox === true) {
-          const queueResult = await enqueueResources(connection, {
-            userId,
-            items: [{ resourceType: 'bookmark', resourceId: String(urlDup[0].id) }],
-            source: 'duplicate_requeue',
-          });
-          await connection.commit();
-          return res.send(
-            resultData({ id: urlDup[0].id, duplicate: true, addedToInbox: true, inbox: queueResult }),
-          );
-        }
-        throw new Error(`该网址已收藏为「${urlDup[0].name}」`);
-      }
-    }
-    const sqlCheck = 'SELECT * FROM bookmark WHERE user_id=? AND name = ? AND del_flag = 0';
-    const [checkRes] = await connection.query(sqlCheck, [userId, params.name]);
-    if (checkRes.length > 0) {
-      throw new Error(`书签${checkRes[0].name}已存在`);
-    }
-
-    const insertParams = mergeExistingProperties(insertData(params), [undefined, '', []], ['related_tags']);
-    const insertBookmarkId = insertParams.id;
-    let sql = `INSERT INTO bookmark SET ?`;
-    const [result] = await connection.query(sql, [insertParams]);
-    if (addToInbox === true) {
-      await enqueueResources(connection, {
-        userId,
-        items: [{ resourceType: 'bookmark', resourceId: insertBookmarkId }],
-        source: inboxSource,
-      });
-    }
-    if (req.body.relatedTags && req.body.relatedTags.length > 4) {
-      throw new Error('最多选择4个关联标签');
-    }
-    if (req.body.relatedTags && req.body.relatedTags.length > 0) {
-      const tagIds = req.body.relatedTags;
-      await insertResourceTagRelations(connection, {
-        tagIds,
-        resourceType: RESOURCE_TYPE.BOOKMARK,
-        resourceId: insertBookmarkId,
-        userId,
-      });
-    }
-    await connection.commit();
-    res.send(resultData({ ...result, id: insertBookmarkId, addedToInbox: addToInbox === true }));
-    if (!req.isVisitorWorkspace && !req.suppressUserRewards) {
-      recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
-      awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
-    }
-    if (params.url && saveSnapshot !== false) archiveBookmark(userId, insertBookmarkId).catch(() => {}); // 用户勾选时异步存档网页正文(防死链),失败静默,不阻断响应
+    const result = await createBookmark({
+      userId,
+      userRole: req.user.role,
+      bookmark: bmBody,
+      tagIds: req.body.relatedTags || [],
+      addToInbox: addToInbox === true,
+      inboxSource,
+      duplicateToInbox: addToInbox === true,
+      saveSnapshot: saveSnapshot !== false,
+      request: req,
+      suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
+    });
+    res.send(resultData(result));
   } catch (err) {
-    await connection.rollback();
-    res.send(resultData(null, 500, err.message));
-  } finally {
-    connection.release();
+    res.send(resultData(null, 500, String(err.message || err).replace(/^[A-Z_]+:\s*/, '')));
   }
 };
 
@@ -689,7 +664,10 @@ export const updateBookmark = async (req, res) => {
       throw new Error('书签已存在');
     }
     // 归属校验：确认书签属于当前用户，避免越权改动及破坏关系表
-    const [own] = await connection.query('SELECT id FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [id, userId]);
+    const [own] = await connection.query('SELECT id FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
+      id,
+      userId,
+    ]);
     if (own.length === 0) {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
@@ -788,7 +766,11 @@ export const delBookmark = async (req, res) => {
       deleted_at: new Date(),
     };
 
-    const [updateResult] = await connection.query(`UPDATE bookmark SET ? WHERE id=? AND user_id=?`, [params, id, userId]);
+    const [updateResult] = await connection.query(`UPDATE bookmark SET ? WHERE id=? AND user_id=?`, [
+      params,
+      id,
+      userId,
+    ]);
     await removeInboxRelations(connection, {
       userId,
       items: [{ resourceType: 'bookmark', resourceId: String(id) }],
@@ -989,7 +971,11 @@ export const importBookmarksHtml = async (req, res) => {
     );
     // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)
     if (createdBookmarks > 0 && !req.suppressUserRewards) {
-      grantExp(userId, 'bookmark_import', { refId: `import_${userId}_${Date.now()}`, amount: 15, userRole: req.user.role }).catch(() => {});
+      grantExp(userId, 'bookmark_import', {
+        refId: `import_${userId}_${Date.now()}`,
+        amount: 15,
+        userRole: req.user.role,
+      }).catch(() => {});
     }
   } catch (e) {
     await connection.rollback();
@@ -1094,7 +1080,10 @@ export const doOrganizeRun = async (req, res) => {
     const suggestions = [];
 
     if (resourceType === 'note') {
-      const [rows] = await pool.query('SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)', [userId, raw]);
+      const [rows] = await pool.query(
+        'SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)',
+        [userId, raw],
+      );
       const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
       if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
       await organizePool(targets, 3, async (n) => {
@@ -1125,7 +1114,12 @@ export const doOrganizeRun = async (req, res) => {
       if (!targets.length) return res.send(resultData({ ok: true, processed: 0, suggestions: [] }));
       await organizePool(targets, 3, async (b) => {
         try {
-          const r = await suggestBookmarkMeta({ url: b.url, name: b.name, description: b.description, userTags: tagRows });
+          const r = await suggestBookmarkMeta({
+            url: b.url,
+            name: b.name,
+            description: b.description,
+            userTags: tagRows,
+          });
           if (!r) return;
           if (!r.matchedTagIds.length && !r.newTags.length && !r.name && !r.description) return;
           suggestions.push({
@@ -1162,7 +1156,10 @@ export const doOrganizeApply = async (req, res) => {
   try {
     await conn.beginTransaction();
     const [tagRows] = await conn.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
-    const norm = (s) => String(s || '').trim().toLowerCase();
+    const norm = (s) =>
+      String(s || '')
+        .trim()
+        .toLowerCase();
     const nameToId = new Map(tagRows.map((t) => [norm(t.name), t.id]));
     const ownTagIds = new Set(tagRows.map((t) => t.id));
     let applied = 0;
@@ -1172,7 +1169,10 @@ export const doOrganizeApply = async (req, res) => {
       // 归属校验:书签按 user_id、笔记按 create_by
       const [own] = isNote
         ? await conn.query('SELECT id FROM note WHERE id = ? AND create_by = ? AND del_flag = 0', [id, userId])
-        : await conn.query('SELECT id, name, description FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [id, userId]);
+        : await conn.query('SELECT id, name, description FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
+            id,
+            userId,
+          ]);
       if (!own.length) continue;
       const finalTagIds = [];
       for (const tid of Array.isArray(it.tagIds) ? it.tagIds : []) {
@@ -1193,23 +1193,30 @@ export const doOrganizeApply = async (req, res) => {
         finalTagIds.push(tid);
       }
       // 4 标签上限:算上已有关联,只补到 4
-      const [[cnt]] = await conn.query('SELECT COUNT(*) AS c FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ?', [relType, id]);
+      const [[cnt]] = await conn.query(
+        'SELECT COUNT(*) AS c FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ?',
+        [relType, id],
+      );
       const room = Math.max(0, 4 - Number(cnt.c || 0));
       const toAdd = [...new Set(finalTagIds)].slice(0, room);
       if (toAdd.length) {
-        await insertResourceTagRelations(conn, { tagIds: toAdd, resourceType: relType, resourceId: id, userId, source: 'ai' });
+        await insertResourceTagRelations(conn, {
+          tagIds: toAdd,
+          resourceType: relType,
+          resourceId: id,
+          userId,
+          source: 'ai',
+        });
       }
       // 仅书签补空名称/描述;笔记不改标题正文
       if (!isNote) {
         const setName = it.name && !own[0].name ? String(it.name).trim() : null;
         const setDesc = it.description && !own[0].description ? String(it.description).trim() : null;
         if (setName || setDesc) {
-          await conn.query('UPDATE bookmark SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ? AND user_id = ?', [
-            setName,
-            setDesc,
-            id,
-            userId,
-          ]);
+          await conn.query(
+            'UPDATE bookmark SET name = COALESCE(?, name), description = COALESCE(?, description) WHERE id = ? AND user_id = ?',
+            [setName, setDesc, id, userId],
+          );
         }
       }
       applied++;

@@ -1,5 +1,4 @@
-import pool from '../../../db/index.js';
-import { insertData } from '../data.js';
+import { createNote } from '../../services/noteService.js';
 
 export default {
   name: 'create_note',
@@ -22,15 +21,19 @@ export default {
       return { error: 'TITLE_REQUIRED', message: '笔记标题不能为空' };
     }
 
-    const noteData = insertData({
-      title: title.trim().slice(0, 255),
-      content: String(content).trim().slice(0, 60000),
-      type: 'markdown',
-      createBy: ctx.userId,
+    const result = await createNote({
+      userId: ctx.userId,
+      userRole: ctx.userRole,
+      note: {
+        title: title.trim(),
+        content: String(content).trim(),
+        type: 'markdown',
+      },
+      request: ctx.request,
+      suppressUserRewards: ctx.suppressUserRewards,
+      maxContentLength: 60000,
     });
-
-    await pool.query('INSERT INTO note SET ?', [noteData]);
-    return { id: noteData.id, title: title.trim() };
+    return { id: result.id, title: result.title, type: result.type };
   },
   transform(raw) {
     if (raw.error) return `创建失败：${raw.message}`;

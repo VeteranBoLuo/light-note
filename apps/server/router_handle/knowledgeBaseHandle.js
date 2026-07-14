@@ -1,6 +1,26 @@
-import { resultData, generateUUID } from '../util/common.js';
+import { resultData } from '../util/common.js';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
+import { upsertKnowledgeBase, updateKnowledgeBaseById } from '../util/services/knowledgeBaseService.js';
+
+const KNOWLEDGE_CLIENT_ERRORS = new Set([
+  'CONTENT_TOO_LONG',
+  'DUPLICATE_TITLE',
+  'EMPTY_PATCH',
+  'ID_REQUIRED',
+  'INVALID_STATUS',
+  'INVALID_TYPE',
+  'TITLE_REQUIRED',
+  'TITLE_TOO_LONG',
+]);
+
+const sendKnowledgeError = (res, error) => {
+  const raw = String(error?.message || error || '');
+  const match = /^([A-Z][A-Z0-9_]+):\s*(.+)$/.exec(raw);
+  if (match?.[1] === 'NOT_FOUND') return res.send(resultData(null, 404, match[2]));
+  if (match && KNOWLEDGE_CLIENT_ERRORS.has(match[1])) return res.send(resultData(null, 400, match[2]));
+  return res.send(resultData(null, 500, '服务器内部错误'));
+};
 
 const ensureRootRole = async (req, res) => {
   try {
@@ -43,7 +63,7 @@ export const listKnowledgeBase = async (req, res) => {
 
     const [rows] = await pool.query(
       `SELECT id, title, category, status, type, sort, created_at, updated_at FROM knowledge_base ${where} ORDER BY ${order || 'sort ASC, created_at DESC'} LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset]
+      [...params, pageSize, offset],
     );
     const [countRes] = await pool.query(`SELECT COUNT(*) as total FROM knowledge_base ${where}`, params);
     res.send(resultData({ items: rows, total: countRes[0].total }));
@@ -77,18 +97,24 @@ export const searchKnowledgeBase = async (req, res) => {
     const conditions = [];
     const params = ['%' + keyword.trim() + '%', '%' + keyword.trim() + '%'];
     conditions.push('(title LIKE ? OR content LIKE ?)');
-    if (category) { conditions.push('category = ?'); params.push(category); }
-    if (status) { conditions.push('status = ?'); params.push(status); }
+    if (category) {
+      conditions.push('category = ?');
+      params.push(category);
+    }
+    if (status) {
+      conditions.push('status = ?');
+      params.push(status);
+    }
     const where = 'WHERE ' + conditions.join(' AND ');
 
     const [rows] = await pool.query(
       `SELECT id, title, content, status, category FROM knowledge_base ${where} ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, sort ASC LIMIT 50`,
-      ['%' + keyword.trim() + '%', ...params]
+      ['%' + keyword.trim() + '%', ...params],
     );
 
     // 在 JS 中提取关键字周围的上下文片段
     const kwLower = keyword.trim().toLowerCase();
-    const items = rows.map(r => {
+    const items = rows.map((r) => {
       const plainText = (r.content || '')
         .replace(/<[^>]*>/g, '')
         .replace(/&nbsp;/g, ' ')
@@ -128,20 +154,14 @@ export const createKnowledgeBase = async (req, res) => {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
     const { title, content, category, status, type } = req.body;
-    if (!title?.trim()) return res.send(resultData(null, 400, '标题不能为空'));
-
-    const id = generateUUID();
-    await pool.query(
-      'INSERT INTO knowledge_base (id, title, content, category, status, type, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, title.trim(), content || '', category || 'internal', status || 'internal', type || 'html', userId, userId]
-    );
-    // Get max sort for this category
-    const [sortRes] = await pool.query('SELECT COALESCE(MAX(sort), -1) + 1 AS next_sort FROM knowledge_base');
-    await pool.query('UPDATE knowledge_base SET sort = ? WHERE id = ?', [sortRes[0].next_sort, id]);
-
-    res.send(resultData({ id }));
+    const result = await upsertKnowledgeBase({
+      userId,
+      createOnly: true,
+      input: { title, content, category: category || 'internal', status: status || 'internal', type: type || 'html' },
+    });
+    res.send(resultData({ id: result.id }));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    sendKnowledgeError(res, e);
   }
 };
 
@@ -150,26 +170,11 @@ export const updateKnowledgeBase = async (req, res) => {
   try {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
-    const { id, title, content, category, status, type } = req.body;
-    if (!id) return res.send(resultData(null, 400, '缺少 ID'));
-    if (title !== undefined && !title?.trim()) return res.send(resultData(null, 400, '标题不能为空'));
-
-    const fields = [];
-    const params = [];
-    if (title !== undefined) { fields.push('title = ?'); params.push(title.trim()); }
-    if (content !== undefined) { fields.push('content = ?'); params.push(content); }
-    if (category !== undefined) { fields.push('category = ?'); params.push(category); }
-    if (status !== undefined) { fields.push('status = ?'); params.push(status); }
-    if (type !== undefined) { fields.push('type = ?'); params.push(type); }
-    if (fields.length === 0) return res.send(resultData(null, 400, '没有需要更新的字段'));
-
-    fields.push('updated_by = ?'); params.push(userId);
-    params.push(id);
-
-    await pool.query(`UPDATE knowledge_base SET ${fields.join(', ')} WHERE id = ?`, params);
+    const { id, ...patch } = req.body;
+    await updateKnowledgeBaseById({ userId, id, patch });
     res.send(resultData(null));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    sendKnowledgeError(res, e);
   }
 };
 
@@ -210,7 +215,11 @@ export const batchUpdateKnowledgeCategory = async (req, res) => {
     const { ids, category } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.send(resultData(null, 400, '请选择条目'));
     if (!category?.trim()) return res.send(resultData(null, 400, '分类不能为空'));
-    await pool.query('UPDATE knowledge_base SET category = ?, updated_by = ? WHERE id IN (?)', [category.trim(), userId, ids]);
+    await pool.query('UPDATE knowledge_base SET category = ?, updated_by = ? WHERE id IN (?)', [
+      category.trim(),
+      userId,
+      ids,
+    ]);
     res.send(resultData({ updated: ids.length }));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
@@ -237,7 +246,7 @@ export const getKnowledgeCategories = async (req, res) => {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
     const [rows] = await pool.query('SELECT DISTINCT category FROM knowledge_base ORDER BY category ASC');
-    const categories = rows.map(r => r.category);
+    const categories = rows.map((r) => r.category);
     // Always include 帮助中心 as default
     if (!categories.includes('帮助中心')) categories.unshift('帮助中心');
     res.send(resultData(categories));
@@ -250,7 +259,7 @@ export const getKnowledgeCategories = async (req, res) => {
 export const getHelpCenterArticles = async (req, res) => {
   try {
     const [result] = await pool.query(
-      "SELECT id, title, content, sort FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' ORDER BY sort ASC, created_at ASC"
+      "SELECT id, title, content, sort FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' ORDER BY sort ASC, created_at ASC",
     );
     res.send(resultData(result, 200));
   } catch (e) {
