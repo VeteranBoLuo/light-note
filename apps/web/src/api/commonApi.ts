@@ -2,8 +2,10 @@ import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 import { isAdminLoginPreview } from '@/utils/authStorage.ts';
 import useUserStore from '@/store/useUser.ts';
 
+const isReadOnlyAdminPreview = () => isAdminLoginPreview() && !useUserStore().visitorWorkspace;
+
 export const recordOperation = async function (params: { module: string; operation: string }) {
-  if (isAdminLoginPreview() && !useUserStore().visitorWorkspace) {
+  if (isReadOnlyAdminPreview()) {
     return;
   }
   if (!params?.module || !params?.operation) {
@@ -27,6 +29,9 @@ export async function loadBookmarkIconsProgressively(
   applyIcon: (id: string, iconUrl: string) => void,
   { batchSize = 20, concurrency = 2 }: { batchSize?: number; concurrency?: number } = {},
 ): Promise<void> {
+  // 普通用户的管理员预览是只读模式。图标补全会抓取文件并更新 bookmark.icon_url，
+  // 因此不能把它当作列表查询的附带动作发出；游客维护工作区仍按后端白名单正常执行。
+  if (isReadOnlyAdminPreview()) return;
   const targets = (items || []).filter((it) => it && it.url && it.id && !it.iconUrl);
   if (!targets.length) return;
   // 每批 batchSize 个书签合并成 1 个请求;总请求数 ≈ ceil(targets/batchSize),远低于限流阈值
