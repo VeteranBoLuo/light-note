@@ -23,16 +23,14 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';
-  import { apiBasePost } from '@/http/request';
-  import { nudgeVisible, nudgeContent, hideGuestNudge, pauseNudgeTimer, resumeNudgeTimer } from '@/composables/guestNudge';
+  import { nudgeVisible, nudgeContent, nudgeSource, hideGuestNudge, pauseNudgeTimer, resumeNudgeTimer } from '@/composables/guestNudge';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
 
   function register() {
-    // 转化埋点:点击 CTA(fire-and-forget,不阻塞)
-    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'preview-guide' }).catch(() => {});
-    bookmark.openAuthModal('注册');
+    // 打开注册弹窗(openAuthModal 内部记 signup_open);用 nudgeSource 保持与撞墙场景同一归因来源
+    bookmark.openAuthModal('注册', nudgeSource.value);
     hideGuestNudge();
   }
 </script>

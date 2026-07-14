@@ -6,6 +6,8 @@ import { ref } from 'vue';
 
 export const nudgeVisible = ref(false);
 export const nudgeContent = ref('');
+// 撞墙场景对应的注册归因 source(write_add_bookmark 等);CTA 打开注册时用它,保持 wall_hit→signup_open→register 同一来源
+export const nudgeSource = ref('preview_guide');
 
 const AUTO_HIDE_MS = 7000; // 首次展示后自动收起
 const RESUME_MS = 4000; // 鼠标移开后再停留一会
@@ -19,8 +21,9 @@ function clearTimer() {
   }
 }
 
-export function showGuestNudge(content: string): void {
+export function showGuestNudge(content: string, source = 'preview_guide'): void {
   nudgeContent.value = content;
+  nudgeSource.value = source;
   nudgeVisible.value = true;
   clearTimer();
   hideTimer = setTimeout(() => {

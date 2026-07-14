@@ -4,8 +4,10 @@
       <header class="admin-header">
         <div class="admin-title-block">
           <p class="admin-eyebrow">Admin / 增长</p>
-          <h2 class="admin-title">游客转化漏斗</h2>
-          <p class="admin-subtitle">访问 → 撞墙 → 点注册 → 注册成功(按独立访客 fingerprint 去重)</p>
+          <h2 class="admin-title">游客转化各阶段</h2>
+          <p class="admin-subtitle">
+            主链:访问 → 进入示例 → 打开注册 → 提交 → 注册成功。数字为各阶段独立访客数(按非空 fingerprint 去重),相邻百分比是近似转化、非严格时序漏斗;撞墙为独立意图分支,不在主链必经路径上。
+          </p>
         </div>
       </header>
 
@@ -20,24 +22,49 @@
           <span class="admin-stat-hint">独立访客 · {{ uniqueIps }} 个 IP</span>
         </li>
         <li class="admin-stat-card">
-          <span class="admin-stat-label">撞墙访客</span>
-          <strong class="admin-stat-value">{{ wall }}</strong>
-          <span class="admin-stat-hint">访问→撞墙 {{ visitToWall }}%</span>
+          <span class="admin-stat-label">进入示例</span>
+          <strong class="admin-stat-value">{{ demoEnter }}</strong>
+          <span class="admin-stat-hint">访问→进入 {{ visitToDemo }}%</span>
         </li>
         <li class="admin-stat-card">
-          <span class="admin-stat-label">点击注册</span>
-          <strong class="admin-stat-value">{{ cta }}</strong>
-          <span class="admin-stat-hint">撞墙→点击 {{ wallToCta }}%</span>
+          <span class="admin-stat-label">打开注册</span>
+          <strong class="admin-stat-value">{{ signupOpen }}</strong>
+          <span class="admin-stat-hint">进入→打开 {{ demoToOpen }}%</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">提交注册</span>
+          <strong class="admin-stat-value">{{ signupSubmit }}</strong>
+          <span class="admin-stat-hint">打开→提交 {{ signupOpenToSubmit }}%</span>
         </li>
         <li class="admin-stat-card">
           <span class="admin-stat-label">注册成功</span>
           <strong class="admin-stat-value">{{ reg }}</strong>
-          <span class="admin-stat-hint">点击→注册 {{ ctaToReg }}%</span>
+          <span class="admin-stat-hint">提交→成功 {{ submitToReg }}%</span>
         </li>
         <li class="admin-stat-card">
           <span class="admin-stat-label">整体转化</span>
           <strong class="admin-stat-value">{{ visitToReg }}%</strong>
           <span class="admin-stat-hint">访问→注册</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">撞墙访客(意图分支)</span>
+          <strong class="admin-stat-value">{{ wall }}</strong>
+          <span class="admin-stat-hint">撞墙→打开注册 {{ wallToSignupOpen }}%</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">激活用户</span>
+          <strong class="admin-stat-value">{{ activated }}</strong>
+          <span class="admin-stat-hint">本期注册中激活 {{ regToActivated }}%</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">注册失败</span>
+          <strong class="admin-stat-value">{{ signupFailed }}</strong>
+          <span class="admin-stat-hint">{{ failReasonsText || '按标准原因码统计' }}</span>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">无法归因</span>
+          <strong class="admin-stat-value">{{ unattributed }}</strong>
+          <span class="admin-stat-hint">空 fingerprint 事件(不计入访客数)</span>
         </li>
         <li class="admin-stat-card">
           <span class="admin-stat-label">分享页曝光</span>
@@ -48,11 +75,6 @@
           <span class="admin-stat-label">分享页点击</span>
           <strong class="admin-stat-value">{{ shareCta }}</strong>
           <span class="admin-stat-hint">曝光→点击 {{ shareViewToCta }}%</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">激活用户</span>
-          <strong class="admin-stat-value">{{ activated }}</strong>
-          <span class="admin-stat-hint">注册→激活 {{ regToActivated }}%(近似)</span>
         </li>
       </ul>
 
@@ -70,17 +92,17 @@
       </div>
 
       <div class="admin-table-card" v-if="trend.length">
-        <p class="funnel-section-title">按天趋势(游客访问 / 点击注册 / 注册成功)</p>
+        <p class="funnel-section-title">按天趋势(游客访问 / 打开注册 / 注册成功)</p>
         <div class="funnel-trend-wrap">
           <table class="funnel-trend">
             <thead>
-              <tr><th>日期</th><th>访问</th><th>点击注册</th><th>注册成功</th></tr>
+              <tr><th>日期</th><th>访问</th><th>打开注册</th><th>注册成功</th></tr>
             </thead>
             <tbody>
               <tr v-for="t in trend" :key="t.d">
                 <td>{{ t.d }}</td
                 ><td>{{ t.pv }}</td
-                ><td>{{ t.cta }}</td
+                ><td>{{ t.signupOpen }}</td
                 ><td>{{ t.reg }}</td>
               </tr>
             </tbody>
@@ -98,9 +120,14 @@
   import DateRangePicker from './DateRangePicker.vue';
 
   const pageView = ref(0);
+  const demoEnter = ref(0);
   const wall = ref(0);
-  const cta = ref(0);
+  const signupOpen = ref(0);
+  const signupSubmit = ref(0);
   const reg = ref(0);
+  const signupFailed = ref(0);
+  const unattributed = ref(0);
+  const failReasons = ref<{ reason: string; cnt: number }[]>([]);
   const uniqueIps = ref(0);
   const hotspots = ref<any[]>([]);
   const currentPage = ref(1);
@@ -130,12 +157,23 @@
   ];
 
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
-  const visitToWall = computed(() => rate(wall.value, pageView.value));
-  const wallToCta = computed(() => rate(cta.value, wall.value));
-  const ctaToReg = computed(() => rate(reg.value, cta.value));
+  const visitToDemo = computed(() => rate(demoEnter.value, pageView.value));
+  const demoToOpen = computed(() => rate(signupOpen.value, demoEnter.value)); // 主链:进入示例→打开注册(撞墙不在主链)
+  const wallToSignupOpen = computed(() => rate(signupOpen.value, wall.value)); // 独立分支:撞墙→打开注册
+  const signupOpenToSubmit = computed(() => rate(signupSubmit.value, signupOpen.value));
+  const submitToReg = computed(() => rate(reg.value, signupSubmit.value));
   const visitToReg = computed(() => rate(reg.value, pageView.value));
   const shareViewToCta = computed(() => rate(shareCta.value, shareView.value));
   const regToActivated = computed(() => rate(activated.value, reg.value));
+  // 失败原因码 → 中文,拼成一行在「注册失败」卡展示
+  const REASON_LABEL: Record<string, string> = {
+    email_exists: '账号已存在',
+    weak_password: '密码太弱',
+    server_error: '服务异常',
+  };
+  const failReasonsText = computed(() =>
+    failReasons.value.map((r) => `${REASON_LABEL[r.reason] || r.reason} ${r.cnt}`).join(' · '),
+  );
 
   function fetchData(start?: string, end?: string) {
     apiBasePost('/api/common/getConversionFunnel', {
@@ -145,9 +183,14 @@
       if (res.status === 200) {
         const d = res.data || {};
         pageView.value = d.pageViewVisitors || 0;
+        demoEnter.value = d.demoEnterVisitors || 0;
         wall.value = d.wallHitVisitors || 0;
-        cta.value = d.ctaClickVisitors || 0;
+        signupOpen.value = d.signupOpenVisitors || 0;
+        signupSubmit.value = d.signupSubmitVisitors || 0;
         reg.value = d.registerVisitors || 0;
+        signupFailed.value = d.signupFailedVisitors || 0;
+        unattributed.value = d.unattributedEvents || 0;
+        failReasons.value = d.signupFailReasons || [];
         shareView.value = d.shareViewVisitors || 0;
         shareCta.value = d.shareCtaClickVisitors || 0;
         activated.value = d.activatedUsers || 0;

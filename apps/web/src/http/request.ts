@@ -16,6 +16,7 @@ const HTTP_STATUS_KEYS: { [key: number]: string } = {
   423: 'http.status423',
   401: 'http.status401',
   400: 'http.status400',
+  409: 'http.status409',
   404: 'http.status404',
   504: 'http.status504',
   505: 'http.status505',

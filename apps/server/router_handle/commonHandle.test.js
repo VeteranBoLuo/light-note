@@ -45,6 +45,49 @@ describe('recordConversion 白名单', () => {
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][0]).toContain('INSERT INTO conversion_events');
   });
+
+  it('游客 + v1.1 新事件(demo_enter/signup_open/signup_submit)→ 均写库', () => {
+    for (const event of ['demo_enter', 'signup_open', 'signup_submit']) {
+      query.mockReset();
+      query.mockResolvedValue([[]]);
+      const res = mockRes();
+      recordConversion({ user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event, source: 'nav' } }, res);
+      expect(query, `${event} 应写库`).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('后端专属事件(register/first_own_resource/signup_failed)不接受客户端上报 → 400', () => {
+    for (const event of ['register', 'first_own_resource', 'signup_failed']) {
+      query.mockReset();
+      const res = mockRes();
+      recordConversion({ user: { role: 'visitor' }, headers: {}, body: { event } }, res);
+      expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+      expect(query, `${event} 不应写库`).not.toHaveBeenCalled();
+    }
+  });
+
+  it('渠道事件(signup_open)非法 source 降级 unknown,不落原始脏值', () => {
+    query.mockReset();
+    query.mockResolvedValue([[]]);
+    const res = mockRes();
+    recordConversion(
+      { user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event: 'signup_open', source: '/api/x?token=secret' } },
+      res,
+    );
+    // params: [fingerprint, userId, visitorType, event, context, ip];context(第 5 个)应为归一后的 unknown
+    expect(query.mock.calls[0][1][4]).toBe('unknown');
+  });
+
+  it('wall_hit 的 context 保留原始操作名(撞墙操作是另一维度,不套渠道白名单)', () => {
+    query.mockReset();
+    query.mockResolvedValue([[]]);
+    const res = mockRes();
+    recordConversion(
+      { user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event: 'wall_hit', source: 'add-bookmark' } },
+      res,
+    );
+    expect(query.mock.calls[0][1][4]).toBe('add-bookmark');
+  });
 });
 
 describe('recordOperationLogs 管理员预览审计', () => {
@@ -153,9 +196,12 @@ describe('getConversionFunnel', () => {
         return Promise.resolve([
           [
             { event: 'page_view', visitors: 10 },
+            { event: 'demo_enter', visitors: 8 },
             { event: 'wall_hit', visitors: 6 },
-            { event: 'cta_click', visitors: 3 },
+            { event: 'signup_open', visitors: 4 },
+            { event: 'signup_submit', visitors: 2 },
             { event: 'register', visitors: 1 },
+            { event: 'signup_failed', visitors: 1 },
           ],
         ]);
       }
@@ -168,9 +214,12 @@ describe('getConversionFunnel', () => {
     expect(arg.status).toBe(200);
     expect(arg.data).toMatchObject({
       pageViewVisitors: 10,
+      demoEnterVisitors: 8,
       wallHitVisitors: 6,
-      ctaClickVisitors: 3,
+      signupOpenVisitors: 4,
+      signupSubmitVisitors: 2,
       registerVisitors: 1,
+      signupFailedVisitors: 1,
       uniqueIps: 4,
     });
     expect(arg.data.hotspots).toEqual([{ context: 'add-bookmark', cnt: 5 }]);
@@ -191,17 +240,37 @@ describe('getConversionFunnel', () => {
       }
       if (/DISTINCT ip/.test(sql)) return Promise.resolve([[{ ips: 4 }]]);
       if (/first_own_resource/.test(sql)) return Promise.resolve([[{ activated: 5 }]]);
-      if (/DATE_FORMAT/.test(sql)) return Promise.resolve([[{ d: '2026-07-01', pv: 10, cta: 3, reg: 1 }]]);
+      if (/DATE_FORMAT/.test(sql)) return Promise.resolve([[{ d: '2026-07-01', pv: 10, signupOpen: 3, reg: 1 }]]);
       return Promise.resolve([[]]); // hotspots
     });
     const res = mockRes();
     await getConversionFunnel({ user: { role: 'root' }, body: { startDate: '2026-06-01', endDate: '2026-06-30' } }, res);
     const arg = res.send.mock.calls[0][0];
     expect(arg.data).toMatchObject({ shareViewVisitors: 7, shareCtaClickVisitors: 2, activatedUsers: 5 });
-    expect(arg.data.trend).toEqual([{ d: '2026-07-01', pv: 10, cta: 3, reg: 1 }]);
+    expect(arg.data.trend).toEqual([{ d: '2026-07-01', pv: 10, signupOpen: 3, reg: 1 }]);
     const funnelCall = calls.find((c) => /GROUP BY event/.test(c.sql));
     expect(funnelCall.sql).toContain('create_time');
     expect(funnelCall.params).toEqual(['2026-06-01 00:00:00', '2026-06-30']);
+  });
+
+  it('激活按 register cohort 关联(JOIN),空 fingerprint 不计入访客,返回无法归因与失败原因分布', async () => {
+    query.mockImplementation((sql) => {
+      if (/GROUP BY event/.test(sql)) return Promise.resolve([[{ event: 'register', visitors: 3 }]]);
+      if (/DISTINCT ip/.test(sql)) return Promise.resolve([[{ ips: 2 }]]);
+      if (/JOIN conversion_events f/.test(sql)) return Promise.resolve([[{ activated: 2 }]]); // cohort:只算本期注册用户的激活
+      if (/fingerprint = ''/.test(sql)) return Promise.resolve([[{ cnt: 7 }]]); // 无法归因
+      if (/event = 'signup_failed'/.test(sql)) return Promise.resolve([[{ reason: 'email_exists', cnt: 4 }]]); // 失败分布
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getConversionFunnel({ user: { role: 'root' } }, res);
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.data.activatedUsers).toBe(2);
+    expect(arg.data.unattributedEvents).toBe(7);
+    expect(arg.data.signupFailReasons).toEqual([{ reason: 'email_exists', cnt: 4 }]);
+    // 主漏斗只算非空 fingerprint(空 fingerprint 不被 COUNT DISTINCT 合并成虚假访客)
+    const funnelSql = query.mock.calls.map((c) => c[0]).find((s) => /GROUP BY event/.test(s));
+    expect(funnelSql).toContain("fingerprint <> ''");
   });
 });
 

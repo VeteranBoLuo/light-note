@@ -44,7 +44,6 @@
   import router from '@/router';
   import { useRoute } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { apiBasePost } from '@/http/request.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
   const bookmark = bookmarkStore();
@@ -61,10 +60,9 @@
     window.open('https://boluo66.top/toolkit/');
   }
 
-  // 游客点导航栏「免费注册」:记 cta_click 转化埋点 + 打开注册弹窗
+  // 游客点导航栏「免费注册」:打开注册弹窗(openAuthModal 内部记 signup_open,source=nav)
   function registerClick() {
-    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'nav' }).catch(() => {});
-    bookmark.openAuthModal('注册');
+    bookmark.openAuthModal('注册', 'nav');
   }
 
   function handleToPhoneUserCenter() {

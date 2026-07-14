@@ -49,15 +49,13 @@
 <script lang="ts" setup>
   import { computed } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { apiBasePost } from '@/http/request';
   import router from '@/router';
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const isGuest = computed(() => !user.visitorWorkspace && (!user.id || user.role === 'visitor'));
-  // 游客点首页「注册拥有」:记 cta_click 转化埋点 + 打开注册弹窗
+  // 游客点首页「注册拥有」:打开注册弹窗(openAuthModal 内部记 signup_open,source=home_demo_hint)
   function guestRegister() {
-    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'home-demo-hint' }).catch(() => {});
-    bookmark.openAuthModal('注册');
+    bookmark.openAuthModal('注册', 'home_demo_hint');
   }
   function handleToTagPage(tag) {
     bookmark.type = 'normal';

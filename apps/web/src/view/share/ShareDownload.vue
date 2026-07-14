@@ -133,6 +133,7 @@
   } from '@ant-design/icons-vue';
   import { downloadField } from '@/http/common.ts';
   import { apiBasePost } from '@/http/request';
+  import { trackConversion } from '@/utils/conversion';
   import FilePreview from '@/components/FilePreview.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -239,11 +240,11 @@
   const bookmark = bookmarkStore();
 
   // 分享页曝光埋点(后端只对游客落库)
-  apiBasePost('/api/common/recordConversion', { event: 'share_view', source: 'share-download' }).catch(() => {});
+  trackConversion('share_view', 'share');
   // 品牌注册引导:把站外分享流量转成注册
   function goRegister() {
-    apiBasePost('/api/common/recordConversion', { event: 'share_cta_click', source: 'share-download' }).catch(() => {});
-    bookmark.openAuthModal('注册');
+    trackConversion('share_cta_click', 'share');
+    bookmark.openAuthModal('注册', 'share'); // openAuthModal 内部另记 signup_open
   }
 
   // 初始化文件信息

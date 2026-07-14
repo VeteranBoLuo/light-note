@@ -50,8 +50,16 @@
     // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
     router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
+      // 注册来源:GitHub 发起注册前暂存于 sessionStorage,这里透传给后端作 register 的 context(仅本次有效,用后即删)
+      let signupSource = '';
+      try {
+        signupSource = sessionStorage.getItem('ln_signup_source') || '';
+        sessionStorage.removeItem('ln_signup_source');
+      } catch {
+        /* 隐私模式忽略 */
+      }
       // 发送 code 给后端换取 Token
-      const cRes = await apiBasePost('/api/user/github', { code });
+      const cRes = await apiBasePost('/api/user/github', { code, signupSource });
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();

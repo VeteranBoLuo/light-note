@@ -51,7 +51,7 @@ export function recordWallHit(source = 'client-guard'): void {
  * 注意：本函数不记录 wall_hit —— 它会被后端 preview 兜底路径(App.vue handlePreviewBlocked)复用(后端已记 wall_hit),
  * 客户端主动拦截请用 blockGuestWrite / recordWallHit 记录,避免重复计数。
  */
-export function showPreviewGuide(content?: string): void {
+export function showPreviewGuide(content?: string, source = 'preview_guide'): void {
   if (previewGuideLocked) {
     return;
   }
@@ -60,8 +60,23 @@ export function showPreviewGuide(content?: string): void {
     previewGuideLocked = false;
   }, 1500);
 
-  // 右下角非模态软引导:不挡内容、不强制交互、自动收起;注册 CTA(含 cta_click 埋点)在 GuestNudge 组件内
-  showGuestNudge(content || i18n.global.t('guest.previewContent'));
+  // 右下角非模态软引导:不挡内容、不强制交互、自动收起;注册 CTA(打开注册弹窗,记 signup_open)在 GuestNudge 组件内。
+  // source 透传给 nudge,CTA 打开注册时复用它,保证 wall_hit→signup_open→signup_submit→register 归因来源一致
+  showGuestNudge(content || i18n.global.t('guest.previewContent'), source);
+}
+
+// 按撞墙操作给场景:① 引导文案 msgKey ② 注册归因 source(取值都在 CONVERSION_SOURCES 白名单内)。
+// 用关键词做「模块级」归类:同模块的增删改都归同一注册 source —— 这是期望行为(书签相关操作都算书签场景),
+// 不是模糊匹配出错;未命中一律回退 preview_guide。话术红线:游客此刻没有自己的内容,统一「注册后拥有你自己的 X」。
+function sceneForSource(raw: string): { source: string; msgKey: string } {
+  const s = String(raw || '');
+  if (s.includes('bookmark')) return { source: 'write_add_bookmark', msgKey: 'guest.nudgeBookmark' };
+  if (s.includes('note')) return { source: 'write_add_note', msgKey: 'guest.nudgeNote' };
+  if (s.includes('file') || s.includes('folder') || s.includes('upload') || s.includes('cloud'))
+    return { source: 'write_upload_file', msgKey: 'guest.nudgeCloud' };
+  if (s.includes('tag')) return { source: 'preview_guide', msgKey: 'guest.nudgeTag' };
+  if (s.includes('ai')) return { source: 'write_ai', msgKey: 'guest.nudgeAi' };
+  return { source: 'preview_guide', msgKey: 'guest.previewContent' };
 }
 
 /**
@@ -79,8 +94,10 @@ export function blockGuestWrite(source: string, content?: string): boolean {
     return true;
   }
   if (!user.id || user.role === 'visitor') {
-    recordWallHit(source);
-    showPreviewGuide(content);
+    recordWallHit(source); // wall_hit 的 context 用原始操作名(热点表按具体操作分析)
+    const scene = sceneForSource(source);
+    // 文案优先用调用方显式传的,否则用场景文案;CTA 打开注册用场景归因 source,保持全链路同源
+    showPreviewGuide(content || i18n.global.t(scene.msgKey), scene.source);
     return true;
   }
   return false;

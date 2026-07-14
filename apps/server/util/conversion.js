@@ -8,6 +8,35 @@ const clientIp = (req) => {
   return ip.replace(/^::ffff:/, '');
 };
 
+// 渠道归因 source 白名单(与前端 utils/conversion.ts 的 SOURCES 保持一致):
+// 仅用于「渠道归因类」事件(signup_open/signup_submit/register/demo_enter/share_*)的 context;
+// 非白名单值一律降级 unknown,防止把 URL/邮箱/正文等脏值当 source 落库。
+// 注意:wall_hit 的 context 存的是「撞墙操作」(另一维度,给热点表用),不走此白名单。
+export const CONVERSION_SOURCES = new Set([
+  'landing_primary',
+  'landing_final',
+  'landing_demo',
+  'nav',
+  'home_demo_hint',
+  'browse_nudge',
+  'preview_guide',
+  'write_add_bookmark',
+  'write_add_note',
+  'write_upload_file',
+  'write_edit_bookmark',
+  'write_edit_note',
+  'write_ai',
+  'share',
+  'auth_switch',
+  'unknown',
+]);
+
+/** 归一渠道 source:白名单命中原样返回,否则降级 unknown(最长 64)。 */
+export function normalizeConversionSource(source) {
+  const s = String(source || '').slice(0, 64);
+  return CONVERSION_SOURCES.has(s) ? s : 'unknown';
+}
+
 /**
  * 记录游客转化漏斗事件(旁路、fire-and-forget,绝不阻塞/抛错影响主流程)。
  * 事件枚举:page_view / wall_hit(撞写操作墙) / cta_click(点立即注册) / register(注册成功) / share_view(分享页曝光) / share_cta_click(分享页点注册)。

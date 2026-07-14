@@ -9,7 +9,7 @@ import { verifyPassword, hashPassword, validatePassword } from '../util/password
 import nodeMail from '../util/nodemailer.js';
 import crypto from 'crypto';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
-import { recordConversionEvent } from '../util/conversion.js';
+import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
 import { removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
@@ -221,14 +221,20 @@ function buildWelcomeNotification(lang) {
 
 export const registerUser = async (req, res) => {
   try {
+    // 注册来源(前端透传,仅作转化 context):走白名单归一,非法/脏值降级 unknown
+    const signupSource = normalizeConversionSource(req.body?.signupSource);
     // 检查邮箱是否已存在
     const [existingUser] = await pool.query('SELECT * FROM user WHERE email = ?', [req.body.email]);
     if (existingUser?.length > 0) {
-      return res.send(resultData(null, 500, L(req, '账号已存在', 'Account already exists.')));
+      // 「账号已存在」是可预期的用户输入错误,不是服务端异常:返回 409(原 500 会污染错误率)。
+      // context 只存标准原因码,不拼 source —— 失败原因与来源归因是两个维度,不混在一个字段
+      recordConversionEvent(req, 'signup_failed', 'email_exists');
+      return res.send(resultData(null, 409, L(req, '账号已存在', 'Account already exists.')));
     }
     // 后端密码校验(前端规则可绕过,后端为准):非空、6-64 位
     const pwdCheck = validatePassword(req.body.password, reqLang(req));
     if (!pwdCheck.ok) {
+      recordConversionEvent(req, 'signup_failed', 'weak_password');
       return res.send(resultData(null, 400, pwdCheck.msg));
     }
 
@@ -279,10 +285,11 @@ export const registerUser = async (req, res) => {
     // 注册即登录:签发会话,前端直接进应用(新用户从空状态开始,由前端空态引导上手)
     const userInfo = await queryUserInfoById(userId);
     const sid = await issueLoginSession(req, res, userInfo, Boolean(req.body.rememberMe));
-    recordConversionEvent(req, 'register', '', { userId, visitorType: 'user' });
+    recordConversionEvent(req, 'register', signupSource, { userId, visitorType: 'user' });
     res.send(resultData({ ...sanitizeUser(userInfo), sid }));
   } catch (err) {
     console.error('注册过程中发生错误:', err);
+    recordConversionEvent(req, 'signup_failed', 'server_error'); // 不可预期异常也记失败,便于观察真实注册失败(返回文案不暴露异常对象)
     if (err.message.includes('邮箱') || err.message.includes('账号')) {
       res.send(resultData(null, 500, err.message));
     } else {
@@ -731,7 +738,8 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   const [result] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
 
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
-  recordConversionEvent(req, 'register', '', { userId: githubUserId, visitorType: 'user' });
+  const ghSignupSource = normalizeConversionSource(req.body?.signupSource); // 前端 GithubCallBack 透传的来源(走白名单归一)
+  recordConversionEvent(req, 'register', ghSignupSource, { userId: githubUserId, visitorType: 'user' });
 
   // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
   createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});

@@ -97,6 +97,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { apiBasePost } from '@/http/request.ts';
+  import { trackConversion } from '@/utils/conversion';
   import { checkEndCondition } from '@/utils/validator.ts';
   import { cloneDeep } from 'lodash-es';
   import router from '@/router';
@@ -125,6 +126,14 @@
 
   // GitHub 一键注册/登录:与登录页同一 OAuth 流程(已有账号→登录,新账号→创建);多数 CTA 直开注册 Tab,补上最省事的入口
   const registerWithGitHub = () => {
+    // GitHub 发起注册也记 signup_submit;来源跨 OAuth 跳转用 sessionStorage 暂存,回调后透传给后端
+    const source = bookmark.authModalSource || 'unknown';
+    trackConversion('signup_submit', source);
+    try {
+      sessionStorage.setItem('ln_signup_source', source);
+    } catch {
+      /* 隐私模式忽略 */
+    }
     const clientId = 'Ov23liuOPhDka7KkXrpQ';
     const redirectUri = 'https://boluo66.top/auth/callback';
     const scope = 'user:email';
@@ -149,7 +158,10 @@
     await validateFun();
     submitting.value = true;
     formData.role = 'user';
-    const params = cloneDeep(formData);
+    // 前端校验通过、真正发起注册:记 signup_submit(带来源),并把来源透传给后端作 register 的 context
+    const source = bookmark.authModalSource || 'unknown';
+    trackConversion('signup_submit', source);
+    const params = { ...cloneDeep(formData), signupSource: source };
     apiBasePost('/api/user/registerUser', params)
       .then((res: any) => {
         if (res.status === 200) {
@@ -163,8 +175,6 @@
           user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
           user.preferences.homePage = getHomePagePreference(res.data?.preferences);
           localStorage.setItem('preferences', JSON.stringify(user.preferences));
-          // 标记「刚注册」,进入首页后由 HomeDefaultHint 引导设置默认首页
-          localStorage.setItem('ln_just_registered', '1');
           router.push(getAppHomePath(user.preferences, bookmark.isMobile));
           message.success(t('auth.registerSuccess'));
           setLocale(user.preferences.lang || 'zh-CN');

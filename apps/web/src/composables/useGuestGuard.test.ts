@@ -40,6 +40,27 @@ describe('blockGuestWrite', () => {
     );
   });
 
+  it('按 source 出不同场景文案 + 归因 source 透传到 nudge', () => {
+    blockGuestWrite('add-bookmark');
+    const [bookmarkMsg, bookmarkSrc] = showGuestNudge.mock.calls[0];
+    showGuestNudge.mockClear();
+    vi.advanceTimersByTime(1600); // 释放 showPreviewGuide 的 1.5s 防抖锁
+    blockGuestWrite('upload-file');
+    const [cloudMsg, cloudSrc] = showGuestNudge.mock.calls[0];
+    showGuestNudge.mockClear();
+    vi.advanceTimersByTime(1600);
+    blockGuestWrite('client-guard');
+    const [genericMsg, genericSrc] = showGuestNudge.mock.calls[0];
+    // 文案按场景不同(书签/云空间/通用两两不同)
+    expect(bookmarkMsg).toBeTruthy();
+    expect(bookmarkMsg).not.toBe(cloudMsg);
+    expect(bookmarkMsg).not.toBe(genericMsg);
+    // 归因 source 透传:撞墙操作 → 渠道 source(都在白名单内),未命中回退 preview_guide,保证 CTA 打开注册同源
+    expect(bookmarkSrc).toBe('write_add_bookmark');
+    expect(cloudSrc).toBe('write_upload_file');
+    expect(genericSrc).toBe('preview_guide');
+  });
+
   it('已登录用户:放行,返回 false,不弹不记', () => {
     userState.id = 'u1';
     userState.role = 'admin';

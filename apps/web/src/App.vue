@@ -192,7 +192,16 @@
     try {
       if (!sessionStorage.getItem('ln_pv_sent')) {
         sessionStorage.setItem('ln_pv_sent', '1');
-        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: location.pathname }).catch(() => {});
+        // page_view 的 source 只记规范页面名,不存完整 pathname(/share/:id 等含 ID/PII)
+        const pvPage =
+          location.pathname === '/landing'
+            ? 'landing'
+            : location.pathname.startsWith('/share')
+              ? 'share'
+              : location.pathname === '/' || location.pathname === '/home'
+                ? 'home'
+                : 'app';
+        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: pvPage }).catch(() => {});
       }
     } catch (e) {
       /* 隐私模式 sessionStorage 不可用时忽略 */

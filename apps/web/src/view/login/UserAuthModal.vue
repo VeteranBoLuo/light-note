@@ -22,6 +22,7 @@
   import { onMounted, onUnmounted, ref, Ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { trackConversion } from '@/utils/conversion';
   import LoginPage from '@/components/login/LoginPage.vue';
   import ResetPage from '@/components/login/ResetPage.vue';
   import RegisterPage from '@/components/login/RegisterPage.vue';
@@ -32,10 +33,16 @@
   // 登录/注册/重置切换时卡片有 0.6s 翻转动画,期间隐藏关闭按钮,避免 × 悬在翻转卡片外显得脱节
   const flipping = ref(false);
   let flipTimer = 0;
-  watch(title, () => {
+  watch(title, (newTitle, oldTitle) => {
     flipping.value = true;
     clearTimeout(flipTimer);
     flipTimer = window.setTimeout(() => (flipping.value = false), 650);
+    // 从登录/重置切到注册:直开注册由 openAuthModal 记 signup_open,这里补「切换到注册」这条链路(否则会出现有 signup_submit 却无 signup_open)。
+    // source 优先继承打开弹窗时的来源,无有效来源时用 auth_switch;trackConversion 内置 1.5s 同 source 去重,不会与直开重复。
+    if (newTitle === '注册' && oldTitle !== '注册') {
+      const src = bookmark.authModalSource && bookmark.authModalSource !== 'unknown' ? bookmark.authModalSource : 'auth_switch';
+      trackConversion('signup_open', src);
+    }
   });
 
   const { t } = useI18n();

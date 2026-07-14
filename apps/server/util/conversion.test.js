@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const query = vi.fn().mockResolvedValue([[]]);
 vi.mock('../db/index.js', () => ({ default: { query } }));
 
-const { recordConversionEvent, recordFirstOwnResource } = await import('./conversion.js');
+const { recordConversionEvent, recordFirstOwnResource, normalizeConversionSource } = await import('./conversion.js');
 
 describe('recordConversionEvent', () => {
   beforeEach(() => query.mockClear());
@@ -71,5 +71,20 @@ describe('recordFirstOwnResource(激活里程碑)', () => {
   it('无 userId → 直接返回,不查库', async () => {
     await recordFirstOwnResource({ user: {}, headers: {} }, 'file');
     expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('normalizeConversionSource(渠道 source 白名单)', () => {
+  it('白名单命中原样返回', () => {
+    expect(normalizeConversionSource('write_add_bookmark')).toBe('write_add_bookmark');
+    expect(normalizeConversionSource('nav')).toBe('nav');
+    expect(normalizeConversionSource('auth_switch')).toBe('auth_switch');
+  });
+  it('非白名单/脏值/空/超长一律降级 unknown', () => {
+    expect(normalizeConversionSource('/api/bookmark/add?token=x')).toBe('unknown'); // URL 不落库
+    expect(normalizeConversionSource('add-bookmark')).toBe('unknown'); // 撞墙操作名不是渠道 source
+    expect(normalizeConversionSource('')).toBe('unknown');
+    expect(normalizeConversionSource(undefined)).toBe('unknown');
+    expect(normalizeConversionSource('x'.repeat(100))).toBe('unknown');
   });
 });

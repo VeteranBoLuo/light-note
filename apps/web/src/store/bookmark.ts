@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { TagInterface } from '@/config/bookmarkCfg.ts';
 import Viewer from 'viewerjs';
+import { trackConversion } from '@/utils/conversion';
 
 const VIEWPORT_BREAKPOINTS = {
   mobile: 768,
@@ -24,6 +25,7 @@ interface BookmarkState {
   theme: 'day' | 'night' | 'system' | string;
   isShowLogin: boolean;
   authModalTab: '登录' | '注册' | '重置';
+  authModalSource: string;
   viewerKey: string;
   bookmarkLoading: boolean;
   viewer: {
@@ -53,6 +55,7 @@ export default defineStore('bookmark', {
     theme: 'day',
     isShowLogin: false,
     authModalTab: '登录' as '登录' | '注册' | '重置',
+    authModalSource: 'unknown',
     viewerKey: '',
     bookmarkLoading: false,
     tagLoading: false,
@@ -161,9 +164,13 @@ export default defineStore('bookmark', {
     /**
      * 打开登录/注册弹窗，并指定初始展示的标签页（默认登录）
      */
-    openAuthModal(tab: '登录' | '注册' | '重置' = '登录'): void {
+    openAuthModal(tab: '登录' | '注册' | '重置' = '登录', source = 'unknown'): void {
       this.authModalTab = tab;
+      this.authModalSource = source;
       this.isShowLogin = true;
+      // 注册弹窗真正打开才记 signup_open(带来源);登录/重置不记
+      if (tab === '注册') trackConversion('signup_open', source);
     },
+
   },
 });

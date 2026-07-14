@@ -11,7 +11,6 @@
 <script setup lang="ts">
   import { ref, onMounted, onBeforeUnmount } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { apiBasePost } from '@/http/request';
 
   // 游客被动浏览软触发:停留够久或滚动够多后,一次会话弹一次注册软邀请,把「看完就走」的游客接进转化闭环
   const SESSION_KEY = 'ln_browse_nudge';
@@ -64,9 +63,8 @@
   function register() {
     mark();
     show.value = false;
-    // 转化埋点(后端只对游客落库)+ 打开注册弹窗
-    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'browse-nudge' }).catch(() => {});
-    bookmark.openAuthModal('注册');
+    // 打开注册弹窗(openAuthModal 内部记 signup_open,source=browse_nudge)
+    bookmark.openAuthModal('注册', 'browse_nudge');
   }
 
   onMounted(() => {

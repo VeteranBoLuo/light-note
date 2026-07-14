@@ -26,24 +26,32 @@
                 <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
               </h1>
               <div class="hero-actions">
-                <button class="btn-primary" @click="goHome" v-click-log="{ module: '官网首页', operation: '免费体验' }">
-                  <span>{{ t('landing.tryFree') }}</span>
+                <button
+                  v-if="isLoggedIn"
+                  class="btn-primary"
+                  @click="enterApp"
+                  v-click-log="{ module: '官网首页', operation: '进入我的轻笺' }"
+                >
+                  <span>{{ t('landing.ctaEnterApp') }}</span>
                   <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M5 12h14M13 5l7 7-7 7"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
+                    <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
                 </button>
-                <button
-                  class="btn-ghost"
-                  @click="scrollTo(1)"
-                  v-click-log="{ module: '官网首页', operation: '看看功能' }"
-                  >{{ t('landing.seeFeatures') }}</button
-                >
+                <template v-else>
+                  <button
+                    class="btn-primary"
+                    @click="goRegister('landing_primary')"
+                    v-click-log="{ module: '官网首页', operation: '免费创建我的空间' }"
+                  >
+                    <span>{{ t('landing.ctaCreateSpace') }}</span>
+                    <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                  <button class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
+                    t('landing.ctaTryDemo')
+                  }}</button>
+                </template>
               </div>
             </div>
             <div class="cover-mockup">
@@ -208,22 +216,40 @@
             <div class="cta-emoji">✨</div>
             <h2 class="cta-title">{{ t('landing.ctaTitle') }}</h2>
             <p class="cta-desc">{{ t('landing.ctaDesc') }}</p>
-            <button
-              class="btn-primary btn-large"
-              @click="goHome"
-              v-click-log="{ module: '官网首页', operation: '开始使用' }"
-            >
-              {{ t('landing.startNow') }}
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M5 12h14M13 5l7 7-7 7"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-            </button>
+            <div class="cta-actions">
+              <button
+                v-if="isLoggedIn"
+                class="btn-primary btn-large"
+                @click="enterApp"
+                v-click-log="{ module: '官网首页', operation: '进入我的轻笺' }"
+              >
+                {{ t('landing.ctaEnterApp') }}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+              <template v-else>
+                <button
+                  class="btn-primary btn-large"
+                  @click="goRegister('landing_final')"
+                  v-click-log="{ module: '官网首页', operation: '免费创建我的空间' }"
+                >
+                  {{ t('landing.ctaCreateSpace') }}
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+                <button class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
+                  t('landing.ctaTryDemo')
+                }}</button>
+              </template>
+            </div>
+            <ul class="trust-badges">
+              <li>{{ t('landing.trustSpace') }}</li>
+              <li>{{ t('landing.trustExport') }}</li>
+              <li>{{ t('landing.trustMaintained') }}</li>
+              <li>{{ t('landing.trustFiling') }}</li>
+            </ul>
           </div>
           <div class="cta-foot">boluo66.top</div>
           <div class="landing-footer">
@@ -289,12 +315,16 @@
   import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import { useUserStore } from '@/store';
+  import { useUserStore, bookmarkStore } from '@/store';
   import { apiBasePost } from '@/http/request';
+  import { trackConversion } from '@/utils/conversion';
+  import { getAppHomePath } from '@/utils/preferences';
 
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
+  const isLoggedIn = computed(() => !!user.id && user.role !== 'visitor');
   const theme = ref(user.preferences?.theme || 'day');
   const slidesRef = ref<HTMLElement>();
   const canvasRef = ref<HTMLCanvasElement>();
@@ -325,9 +355,17 @@
     goTo(i);
   }
   function goHome() {
-    // 落地页唯一公域 CTA:记 cta_click 转化埋点(source: landing-hero,后端只对游客落库)
-    apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'landing-hero' }).catch(() => {});
+    // 次 CTA「先体验示例」:进入游客共享示例空间,记 demo_enter
+    trackConversion('demo_enter', 'landing_demo');
     router.push('/home');
+  }
+  // 主 CTA「免费创建我的空间」:打开注册弹窗(openAuthModal 内部记 signup_open,source 区分主/末屏)
+  function goRegister(source: string) {
+    bookmark.openAuthModal('注册', source);
+  }
+  // 已登录用户:直接进入应用,按其首页偏好跳转(与登录成功一致,不固定 /home)
+  function enterApp() {
+    router.push(getAppHomePath(user.preferences, bookmark.isMobile));
   }
   function handleContact() {
     showContactModal.value = true;
@@ -1352,6 +1390,37 @@
     margin-bottom: 24px;
     position: relative;
     z-index: 1;
+  }
+  .cta-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+  }
+  .trust-badges {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 18px;
+    margin: 20px 0 0;
+    padding: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .trust-badges li {
+    font-size: 12px;
+    color: #888;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .trust-badges li::before {
+    content: '✓';
+    color: #00a884;
+    font-weight: 700;
   }
   .cta-foot {
     margin-top: 20px;

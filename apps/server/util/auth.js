@@ -307,7 +307,7 @@ export const ensureNotVisitor = (req, res) => {
     return false;
   }
   if (!req.user?.id || req.user.role === 'visitor') {
-    recordConversionEvent(req, 'wall_hit', req.originalUrl || '');
+    recordConversionEvent(req, 'wall_hit', req.path || ''); // 用 req.path(不含 query)避免把 token 等 PII 写进 context
     res.send(resultData(null, 'preview', '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册后即可拥有你自己的轻笺，免费收藏书签、记笔记、存文件。'));
     return false;
   }

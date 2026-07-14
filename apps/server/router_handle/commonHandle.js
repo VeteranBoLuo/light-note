@@ -8,11 +8,13 @@ import fsP from 'fs/promises';
 import path from 'path';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
-import { recordConversionEvent } from '../util/conversion.js';
+import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
-  const ALLOWED = ['cta_click', 'page_view', 'wall_hit', 'share_view', 'share_cta_click'];
+  // v1.1:新增 demo_enter/signup_open/signup_submit;cta_click 仅兼容旧客户端(新代码不再写入);
+  // register/first_own_resource/signup_failed 仅后端记录,不接受客户端上报(防伪造激活/注册)
+  const ALLOWED = ['page_view', 'demo_enter', 'signup_open', 'signup_submit', 'wall_hit', 'share_view', 'share_cta_click', 'cta_click'];
   const event = String(req.body?.event || '');
   if (!ALLOWED.includes(event)) {
     return res.send(resultData(null, 400, '不支持的事件'));
@@ -21,7 +23,12 @@ export const recordConversion = (req, res) => {
   if ((req.user?.role || 'visitor') !== 'visitor') {
     return res.send(resultData(null));
   }
-  recordConversionEvent(req, event, req.body?.source || '');
+  // 渠道归因类事件的 source 走白名单归一(signup_open/demo_enter/share_* 等);
+  // wall_hit 的 source 是「撞墙操作」、page_view 是页面名,属另一维度,只截断不套渠道白名单
+  const CHANNEL_EVENTS = new Set(['demo_enter', 'signup_open', 'signup_submit', 'share_view', 'share_cta_click']);
+  const rawSource = req.body?.source || '';
+  const context = CHANNEL_EVENTS.has(event) ? normalizeConversionSource(rawSource) : String(rawSource).slice(0, 255);
+  recordConversionEvent(req, event, context);
   res.send(resultData(null));
 };
 
@@ -43,9 +50,10 @@ export const getConversionFunnel = async (req, res) => {
     }
     const andTime = timeCond.length ? ' AND ' + timeCond.join(' AND ') : '';
 
-    // 漏斗只算游客:page_view/wall_hit/cta_click/share_* 限 visitor;register(转化那一刻)按 fingerprint 全算
+    // 漏斗只算游客:page_view/demo_enter/wall_hit/signup_open/signup_submit/signup_failed/share_* 限 visitor;
+    // register(转化那一刻 visitor_type 已转 user)靠 event='register' OR 补进来;按 fingerprint 去重(轻量近似漏斗,不建 session)
     const [rows] = await pool.query(
-      `SELECT event, COUNT(DISTINCT fingerprint) AS visitors FROM conversion_events WHERE (event = 'register' OR visitor_type = 'visitor')${andTime} GROUP BY event`,
+      `SELECT event, COUNT(DISTINCT fingerprint) AS visitors FROM conversion_events WHERE fingerprint <> '' AND (event = 'register' OR visitor_type = 'visitor')${andTime} GROUP BY event`,
       timeParams,
     );
     // 用显式 camelCase 标量字段返回,避免 resultData 的 camelCaseKeys 把 wall_hit/cta_click 等带下划线的 key 改名
@@ -61,16 +69,32 @@ export const getConversionFunnel = async (req, res) => {
       `SELECT COUNT(DISTINCT ip) AS ips FROM conversion_events WHERE visitor_type = 'visitor' AND ip <> ''${andTime}`,
       timeParams,
     );
-    // 激活里程碑:首次自建资源的去重用户数(登录用户,按 user_id)
+    // 激活里程碑(按注册 cohort 归因):只算「本期注册的用户」里做过 first_own_resource 的去重数,
+    // 用 register 关联,排除历史用户/内部账号的自建事件混入,避免激活率虚高甚至超过 100%。
+    // (v1.1 不做「注册后 24h 内」时间窗约束——那属完整 V2,达触发条件再加)
+    const andTimeReg = timeCond.length ? ' AND ' + timeCond.map((c) => c.replace('create_time', 'r.create_time')).join(' AND ') : '';
     const [actRow] = await pool.query(
-      `SELECT COUNT(DISTINCT user_id) AS activated FROM conversion_events WHERE event = 'first_own_resource' AND user_id IS NOT NULL${andTime}`,
+      `SELECT COUNT(DISTINCT r.user_id) AS activated
+       FROM conversion_events r
+       JOIN conversion_events f ON f.user_id = r.user_id AND f.event = 'first_own_resource'
+       WHERE r.event = 'register' AND r.user_id IS NOT NULL${andTimeReg}`,
       timeParams,
     );
-    // 按天趋势(访问 / 点击注册 / 注册成功),用 DATE_FORMAT 直接出字符串避免时区偏移
+    // 无法归因:空 fingerprint 的游客事件数(不计入访客数,单独展示,提示采集质量)
+    const [unattrRow] = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM conversion_events WHERE fingerprint = '' AND visitor_type = 'visitor'${andTime}`,
+      timeParams,
+    );
+    // 注册失败原因分布(标准原因码:email_exists / weak_password / server_error)
+    const [failReasons] = await pool.query(
+      `SELECT context AS reason, COUNT(*) AS cnt FROM conversion_events WHERE event = 'signup_failed' AND context <> ''${andTime} GROUP BY context ORDER BY cnt DESC`,
+      timeParams,
+    );
+    // 按天趋势(访问 / 打开注册 / 注册成功),用 DATE_FORMAT 直接出字符串避免时区偏移
     const [trend] = await pool.query(
       `SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d,
          COUNT(DISTINCT CASE WHEN visitor_type = 'visitor' AND event = 'page_view' THEN fingerprint END) AS pv,
-         COUNT(DISTINCT CASE WHEN visitor_type = 'visitor' AND event = 'cta_click' THEN fingerprint END) AS cta,
+         COUNT(DISTINCT CASE WHEN visitor_type = 'visitor' AND event = 'signup_open' THEN fingerprint END) AS signupOpen,
          COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS reg
        FROM conversion_events WHERE 1 = 1${andTime}
        GROUP BY d ORDER BY d`,
@@ -79,15 +103,21 @@ export const getConversionFunnel = async (req, res) => {
     res.send(
       resultData({
         pageViewVisitors: visitorsOf('page_view'),
+        demoEnterVisitors: visitorsOf('demo_enter'),
         wallHitVisitors: visitorsOf('wall_hit'),
-        ctaClickVisitors: visitorsOf('cta_click'),
+        signupOpenVisitors: visitorsOf('signup_open'),
+        signupSubmitVisitors: visitorsOf('signup_submit'),
         registerVisitors: visitorsOf('register'),
+        signupFailedVisitors: visitorsOf('signup_failed'),
+        ctaClickVisitors: visitorsOf('cta_click'), // legacy:旧客户端历史上报,新代码不再写入,仅供历史对比
         shareViewVisitors: visitorsOf('share_view'),
         shareCtaClickVisitors: visitorsOf('share_cta_click'),
         activatedUsers: Number(actRow[0]?.activated || 0),
+        unattributedEvents: Number(unattrRow[0]?.cnt || 0),
+        signupFailReasons: (failReasons || []).map((r) => ({ reason: r.reason, cnt: Number(r.cnt || 0) })),
         uniqueIps: Number(ipRow[0]?.ips || 0),
         hotspots,
-        trend: (trend || []).map((t) => ({ d: t.d, pv: Number(t.pv || 0), cta: Number(t.cta || 0), reg: Number(t.reg || 0) })),
+        trend: (trend || []).map((t) => ({ d: t.d, pv: Number(t.pv || 0), signupOpen: Number(t.signupOpen || 0), reg: Number(t.reg || 0) })),
       }),
     );
   } catch (e) {
