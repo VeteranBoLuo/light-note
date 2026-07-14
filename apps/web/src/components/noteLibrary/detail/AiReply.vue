@@ -130,7 +130,8 @@
       <TypewriterOutput
         class="output-body"
         :typing-speed="1"
-        :content="outputFull"
+        :content="displayOutput"
+        :render-as-text="isMarkdownNote"
         :empty-text="t('ai.reply.emptyMessage')"
       />
     </div>
@@ -139,7 +140,8 @@
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
       <div class="ai-preview">
-        <div class="ai-preview-body" ref="previewBodyRef" v-html="previewTyped"></div>
+        <div v-if="isMarkdownNote" class="ai-preview-body is-markdown" ref="previewBodyRef" v-text="previewTyped"></div>
+        <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="previewTyped"></div>
         <div class="ai-preview-actions">
           <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
           <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
@@ -168,7 +170,10 @@
 
   const note = inject<any>('note', null);
   const applyTitleFromAi = inject<((title: string) => void) | null>('applyTitleFromAi', null);
-  const applyContentFromAi = inject<((html: string) => Promise<void> | void) | null>('applyContentFromAi', null);
+  const applyContentFromAi = inject<((content: string, type: 'html' | 'markdown') => Promise<void> | void) | null>(
+    'applyContentFromAi',
+    null,
+  );
   const triggerSave = inject<(() => void) | null>('triggerSave', null);
   const focusEditorToEnd = inject<(() => void) | null>('focusEditorToEnd', null);
   const prompt = ref('');
@@ -178,6 +183,7 @@
   const previewVisible = ref(false);
   const sessionId = ref('');
   const abortController = ref<AbortController | null>(null);
+  const isMarkdownNote = computed(() => note?.type === 'markdown');
 
   // 字数按"渲染后页面展示文本"计(html: DOM textContent; md: marked 渲染后取文本),与历史版本口径一致
   const textLength = ref(0);
@@ -205,6 +211,7 @@
   // 只能按后端 SSE chunk 粒度整段刷新 → 观感一段段卡顿。这里对放大内容做「自适应逐字追赶」,与小窗一致平滑;
   // 破碎的 HTML 前缀由浏览器容错渲染(同 TypewriterOutput 机制)。
   const previewTyped = ref('');
+  const previewSource = ref('');
   let previewTypingTimer: number | null = null;
   const stopPreviewTyping = () => {
     if (previewTypingTimer) {
@@ -215,7 +222,7 @@
   const pumpPreviewTyping = () => {
     if (previewTypingTimer) return; // 已在逐字,勿重复启动
     const tick = () => {
-      const full = outputFull.value;
+      const full = previewSource.value;
       if (previewTyped.value.length >= full.length) {
         previewTypingTimer = null;
         return;
@@ -237,7 +244,7 @@
         pumpPreviewTyping();
       } else {
         stopPreviewTyping();
-        previewTyped.value = outputFull.value;
+        previewTyped.value = previewSource.value;
       }
     },
     { immediate: true },
@@ -263,17 +270,21 @@
   const ACTION_INSTRUCTION: Record<string, string> = {
     continueWrite: '请在完整保留原文的前提下,顺着语义自然地往下续写 1~3 段;【正文】必须输出「原文 + 续写」拼接后的完整内容。',
     translate: '请在中文与英文之间翻译(中文内容译成英文,英文内容译成中文,混合则以主要语言为准);【正文】输出翻译后的完整内容,保持段落结构。',
-    outline: '请为内容提炼一份层级清晰的大纲(用标题层级 + 有序/无序列表);【正文】输出大纲的 HTML。',
+    outline: '请为内容提炼一份层级清晰的大纲(用标题层级 + 有序/无序列表)。',
   };
 
   const buildFormatHint = (format: 'title' | 'body' | 'both') => {
     if (format === 'title') {
       return '开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】必须位于末尾：\n【标题】\n<一行标题建议>';
     }
+    const bodyRequirement = isMarkdownNote.value
+      ? '【正文】必须输出 Markdown 源文本，保留标题、列表、引用、强调和代码块语法，不要用 HTML，也不要用代码围栏包裹整篇正文。'
+      : '【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。';
+    const bodyPlaceholder = isMarkdownNote.value ? '<Markdown 正文内容>' : '<HTML 正文内容>';
     if (format === 'body') {
-      return '开头至多一句话简短引导（不超过 20 字，如「以下是润色后的全文：」），不要长篇说明；随后务必在最后严格按以下格式输出，且【正文】必须位于末尾；【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【正文】\n<HTML 正文内容>';
+      return `开头至多一句话简短引导（不超过 20 字，如「以下是润色后的全文：」），不要长篇说明；随后务必在最后严格按以下格式输出，且【正文】必须位于末尾；${bodyRequirement}\n【正文】\n${bodyPlaceholder}`;
     }
-    return '开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】/【正文】两段必须位于末尾；【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。\n【标题】\n<一行标题建议>\n【正文】\n<HTML 正文内容>';
+    return `开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】/【正文】两段必须位于末尾；${bodyRequirement}\n【标题】\n<一行标题建议>\n【正文】\n${bodyPlaceholder}`;
   };
 
   const buildMessage = (actionOverride?: string) => {
@@ -449,21 +460,28 @@
       .replace(/\r/g, '');
   };
 
+  const findSectionMarker = (text: string, key: '标题' | '正文') => {
+    const match = new RegExp(`(?:\\*\\*|__)?【${key}】(?:\\*\\*|__)?`).exec(text);
+    if (!match || match.index === undefined) return null;
+    return { start: match.index, end: match.index + match[0].length };
+  };
+
   const extractSection = (text: string, key: '标题' | '正文') => {
-    // 先在原始文本中找标记,不 stripMarkdown——保留 markdown 语法不被破坏
-    const marker = `【${key}】`;
-    const idx = text.indexOf(marker);
-    if (idx !== -1) {
-      const start = idx + marker.length;
-      return text.slice(start).trim();
+    // 直接在原文定位标记，既去掉标记外围的 Markdown 强调符，又保留正文自身的 Markdown 语法。
+    const marker = findSectionMarker(text, key);
+    if (marker) {
+      const bodyMarker = key === '标题' ? findSectionMarker(text, '正文') : null;
+      const end = bodyMarker && bodyMarker.start > marker.end ? bodyMarker.start : text.length;
+      return text.slice(marker.end, end).trim();
     }
-    // 兜底:AI 可能把标记包在 ** 里,strip 后重试
+
+    // 最后兜底：兼容模型输出了无法直接识别的 Markdown 包装。
     const normalized = stripMarkdown(text);
-    const fallbackIdx = normalized.indexOf(marker);
-    if (fallbackIdx !== -1) {
-      return normalized.slice(fallbackIdx + marker.length).trim();
-    }
-    return '';
+    const normalizedMarker = findSectionMarker(normalized, key);
+    if (!normalizedMarker) return '';
+    const bodyMarker = key === '标题' ? findSectionMarker(normalized, '正文') : null;
+    const end = bodyMarker && bodyMarker.start > normalizedMarker.end ? bodyMarker.start : normalized.length;
+    return normalized.slice(normalizedMarker.end, end).trim();
   };
 
   const cleanupFallback = (text: string) => {
@@ -475,10 +493,16 @@
       .trim();
   };
 
-  const buildHtmlContent = () => {
+  const unwrapMarkdownFence = (text: string) => {
+    const match = text.trim().match(/^```(?:markdown|md)\s*\n([\s\S]*?)\n```$/i);
+    return (match?.[1] || text).trim();
+  };
+
+  const buildBodyContent = () => {
     const body = extractSection(outputFull.value, '正文');
     const base = body || cleanupFallback(outputFull.value);
     if (!base) return '';
+    if (isMarkdownNote.value) return unwrapMarkdownFence(base);
     const hasHtmlTag = /<\/?[a-z][\s\S]*?>/i.test(base);
     if (hasHtmlTag) return base.trim();
     return base
@@ -492,14 +516,31 @@
   const hasTitle = computed(() => !!extractSection(outputFull.value, '标题'));
   const hasBody = computed(() => !!extractSection(outputFull.value, '正文'));
 
-  const insertToNote = () => {
+  // 展示正文结果而非协议标记；Markdown 笔记交给 TypewriterOutput 以纯文本显示，避免被 v-html 当作富文本。
+  const displayOutput = computed(() => {
+    if (!outputFull.value) return '';
+    const body = extractSection(outputFull.value, '正文');
+    if (body) return isMarkdownNote.value ? unwrapMarkdownFence(body) : body;
+    const title = extractSection(outputFull.value, '标题');
+    return title || outputFull.value;
+  });
+  watch(
+    displayOutput,
+    (content) => {
+      previewSource.value = content;
+      if (!previewVisible.value || !isLoading.value) previewTyped.value = content;
+    },
+    { immediate: true },
+  );
+
+  const insertToNote = async () => {
     if (!note || !outputFull.value) return;
-    const html = buildHtmlContent();
-    if (!html) return;
+    const content = buildBodyContent();
+    if (!content) return;
     if (applyContentFromAi) {
-      applyContentFromAi(html);
+      await applyContentFromAi(content, isMarkdownNote.value ? 'markdown' : 'html');
     } else {
-      note.content = html;
+      note.content = content;
     }
     triggerSave?.();
     focusEditorToEnd?.();
@@ -524,8 +565,8 @@
   };
 
   // 放大窗内应用:应用后关闭大窗
-  const applyFromPreview = (which: 'body' | 'title') => {
-    if (which === 'body') insertToNote();
+  const applyFromPreview = async (which: 'body' | 'title') => {
+    if (which === 'body') await insertToNote();
     else replaceTitle();
     previewVisible.value = false;
   };
@@ -836,6 +877,10 @@
     line-height: 1.7;
     color: var(--text-color);
     padding: 4px 2px;
+  }
+  .ai-preview-body.is-markdown {
+    white-space: pre-wrap;
+    font-family: 'Fira Code', 'Courier New', monospace;
   }
   .ai-preview-body :deep(p),
   .ai-preview-body :deep(li),

@@ -8,6 +8,7 @@
     @pointerdown.passive="handleUserInteraction"
   >
     <div v-if="!displayContent" class="empty">{{ emptyText }}</div>
+    <div v-else-if="renderAsText" class="typewriter-content" v-text="displayContent"></div>
     <div v-else class="typewriter-content" v-html="displayContent"></div>
   </div>
 </template>
@@ -19,6 +20,7 @@
     content: string;
     typingSpeed?: number;
     emptyText?: string;
+    renderAsText?: boolean;
   }>();
 
   const displayContent = ref('');

@@ -436,24 +436,31 @@
     editor.nodeChanged?.();
   };
 
-  const replaceContentWithUndo = async (html: string) => {
+  const replaceContentWithUndo = async (value: string, inputType: 'html' | 'markdown' = 'html') => {
     await nextTick();
     if (currentType.value === 'markdown') {
-      // AI 返回的是 HTML，转成 MD 再插入
-      const turndownService = new TurndownService({
-        headingStyle: 'atx',
-        codeBlockStyle: 'fenced',
-      });
-      const md = turndownService.turndown(html || '');
+      const md =
+        inputType === 'markdown'
+          ? value || ''
+          : new TurndownService({
+              headingStyle: 'atx',
+              codeBlockStyle: 'fenced',
+            }).turndown(value || '');
       mdContent.value = md;
       content.value = md;
-      if (markedLib) renderMd();
+      await renderMd();
       return true;
     }
     const editor = editorRef.value;
     if (!editor) return false;
+    let html = value || '';
+    if (inputType === 'markdown') {
+      await ensureMdLib();
+      html = markedLib.parse(html);
+      html = dompurifyLib ? dompurifyLib.sanitize(html) : html;
+    }
     editor.undoManager?.transact(() => {
-      editor.setContent(html || '');
+      editor.setContent(html);
     });
     editor.nodeChanged?.();
     return true;

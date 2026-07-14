@@ -73,6 +73,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
+  import TurndownService from 'turndown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const { t } = useI18n();
@@ -92,11 +93,24 @@
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
 
+  type NoteType = 'html' | 'markdown';
+  const normalizeNoteType = (type?: string): NoteType => (type === 'markdown' || type === 'md' ? 'markdown' : 'html');
+  const normalizeLoadedContent = (content: string, rawType?: string) => {
+    const normalized = normalizeNoteContentResourceUrls(content || '');
+    // 早期 Markdown 笔记使用 type=md，正文实际存的是 HTML；加载时转回 Markdown 源文本。
+    if (rawType !== 'md' || !/^\s*<(?:h[1-6]|p|ul|ol|blockquote|pre|div)\b/i.test(normalized)) return normalized;
+    return new TurndownService({
+      headingStyle: 'atx',
+      codeBlockStyle: 'fenced',
+    }).turndown(normalized);
+  };
+
   // 历史版本恢复后:回写标题/正文并刷新编辑器与目录
   async function onVersionRestored(data: any) {
     if (!data) return;
     // 恢复的版本可能是不同编辑模式(md/html):模式变了直接重载,保证编辑器与内容一致(罕见路径)
-    if (data.type && data.type !== note.type) {
+    const restoredType = normalizeNoteType(data.type || note.type);
+    if (restoredType !== note.type) {
       window.location.reload();
       return;
     }
@@ -106,10 +120,10 @@
       syncHeaderTitle();
     }
     if (typeof data.content === 'string') {
-      const html = normalizeNoteContentResourceUrls(data.content);
-      const applied = await editorRef.value?.replaceContentWithUndo?.(html);
+      const content = normalizeLoadedContent(data.content, data.type);
+      const applied = await editorRef.value?.replaceContentWithUndo?.(content, restoredType);
       if (!applied) {
-        note.content = html;
+        note.content = content;
       }
     }
     setUpdateTime();
@@ -139,10 +153,10 @@
   provide('focusEditorToEnd', () => {
     editorRef.value?.focusToEnd?.();
   });
-  provide('applyContentFromAi', async (html: string) => {
-    const applied = await editorRef.value?.replaceContentWithUndo?.(html);
+  provide('applyContentFromAi', async (content: string, type: 'html' | 'markdown') => {
+    const applied = await editorRef.value?.replaceContentWithUndo?.(content, type);
     if (!applied) {
-      note.content = html;
+      note.content = content;
     }
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
@@ -395,9 +409,11 @@
       })
         .then((res) => {
           if (res.status === 200) {
+            const rawType = res.data?.type;
             Object.assign(note, {
               ...res.data,
-              content: normalizeNoteContentResourceUrls(res.data?.content || ''),
+              type: normalizeNoteType(rawType),
+              content: normalizeLoadedContent(res.data?.content || '', rawType),
             });
             note.lastTitle = cloneDeep(note.title);
             updateTime.value = res.data?.updateTime ?? res.data?.createTime;
