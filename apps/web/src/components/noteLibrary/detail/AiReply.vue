@@ -450,18 +450,18 @@
   };
 
   const extractSection = (text: string, key: '标题' | '正文') => {
-    const normalized = stripMarkdown(text);
-    const titleIndex = normalized.indexOf('【标题】');
-    const bodyIndex = normalized.indexOf('【正文】');
-    if (titleIndex === -1 && bodyIndex === -1) return '';
-    if (key === '标题' && titleIndex !== -1) {
-      const start = titleIndex + '【标题】'.length;
-      const end = bodyIndex !== -1 ? bodyIndex : normalized.length;
-      return normalized.slice(start, end).trim();
+    // 先在原始文本中找标记,不 stripMarkdown——保留 markdown 语法不被破坏
+    const marker = `【${key}】`;
+    const idx = text.indexOf(marker);
+    if (idx !== -1) {
+      const start = idx + marker.length;
+      return text.slice(start).trim();
     }
-    if (key === '正文' && bodyIndex !== -1) {
-      const start = bodyIndex + '【正文】'.length;
-      return normalized.slice(start).trim();
+    // 兜底:AI 可能把标记包在 ** 里,strip 后重试
+    const normalized = stripMarkdown(text);
+    const fallbackIdx = normalized.indexOf(marker);
+    if (fallbackIdx !== -1) {
+      return normalized.slice(fallbackIdx + marker.length).trim();
     }
     return '';
   };
