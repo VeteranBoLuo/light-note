@@ -301,18 +301,30 @@ export const clearApiLogs = (req, res) => {
 // 用户操作日志
 export const recordOperationLogs = (req, res) => {
   try {
-    const userId = req.user?.id;
+    if (req.isAdminPreview && !req.isVisitorWorkspace) {
+      return res.send(resultData(null, 403, '管理员用户预览为只读模式'));
+    }
+    if (req.isVisitorWorkspace && req.adminActor?.role !== 'root') {
+      return res.send(resultData(null, 403, '游客维护工作区需要真实管理员身份'));
+    }
+    const userId = req.isVisitorWorkspace ? req.adminActor?.id : req.user?.id;
+    const moduleName = String(req.body?.module || '').trim();
+    const operationName = String(req.body?.operation || '').trim();
+    if (!userId || !moduleName || !operationName) {
+      return res.send(resultData(null, 400, '操作日志参数不完整'));
+    }
     // 本地/回环请求(本地调试)不记操作日志
-    if (isSelfTraffic(req)) return res.send(resultData(null));
-    // 服务端受控字段一律放在 ...req.body 之后,防止客户端 body 伪造 create_by / id / ip
+    // 游客内容维护属于管理员审计，即使是自己人设备也必须记录。
+    if (!req.isVisitorWorkspace && isSelfTraffic(req)) return res.send(resultData(null));
     const log = {
-      ...req.body,
+      module: req.isVisitorWorkspace ? `游客内容维护/${moduleName}` : moduleName,
+      operation: req.isVisitorWorkspace
+        ? `${operationName}（目标游客：${req.user?.id || '未知'}）`
+        : operationName,
       create_by: userId,
       ip: req.ip || '',
       del_flag: 0,
     };
-    delete log.createBy; // 防客户端用驼峰键绕过覆盖(snakeCaseKeys 会与 create_by 合流)
-    delete log.id; // 防客户端指定主键(交由 insertData 生成 UUID)
     // operation_logs 为 latin1 表,operation/module 等列不支持 4 字节字符(emoji):
     // 写入前剥离星芒面字符,避免含 emoji 的操作(如撤回带 🎉 标题的通知)整条 500,
     // 进而被前端拦截器弹成「报错通知」(实际业务操作已成功)。
@@ -528,11 +540,44 @@ function fetchIconFromFavimg(url) {
 }
 
 export const analyzeImgUrl = async (req, res) => {
+  const canMaintainVisitorBookmarks =
+    req.isVisitorWorkspaceContentWrite && req.isVisitorWorkspace && req.adminActor?.role === 'root';
+  if (req.isAdminPreview && !canMaintainVisitorBookmarks) {
+    return res.send(resultData(null, 403, '管理员用户预览为只读模式'));
+  }
+  // 图标抓取会落盘并更新 bookmark.icon_url，属于写操作。普通游客浏览时静默跳过，避免自动请求弹注册墙。
+  if ((!req.user?.id || req.user.role === 'visitor') && !canMaintainVisitorBookmarks) {
+    return res.send(resultData([]));
+  }
+  if (!Array.isArray(req.body)) {
+    return res.send(resultData(null, 400, '请求参数格式错误'));
+  }
+
+  const requestedIds = [
+    ...new Set(
+      req.body
+        .slice(0, 50)
+        .filter((item) => item?.noCache)
+        .map((item) => String(item?.id || '').trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (requestedIds.length === 0) {
+    return res.send(resultData([]));
+  }
+
   const connection = await pool.getConnection();
   try {
+    // URL 与归属均以数据库为准，不信任客户端传来的 id/url；防止越权改图标或借图标抓取请求任意地址。
+    const placeholders = requestedIds.map(() => '?').join(',');
+    const [ownedBookmarks] = await connection.query(
+      `SELECT id, url
+       FROM bookmark
+       WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
+      [req.user.id, ...requestedIds],
+    );
     const results = await Promise.all(
-      req.body.map(async (bookmark) => {
-        if (!bookmark.noCache) return null;
+      ownedBookmarks.map(async (bookmark) => {
         // 抓不到 → 空 iconUrl,前端用内置地球图标(icon.nullImg)兜底;不再指向线上并不存在的 /uploads/default-icon.png(避免 404)
         const fallback = { id: bookmark.id, iconUrl: '' };
         // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
@@ -554,7 +599,11 @@ export const analyzeImgUrl = async (req, res) => {
           );
           await fsP.writeFile(path.join(uploadDir, fileName), fetched.buffer);
           const imageUrl = `https://${req.get('host')}/uploads/${fileName}`;
-          await connection.query('UPDATE bookmark SET icon_url=? WHERE id=?', [imageUrl, bookmark.id]);
+          await connection.query('UPDATE bookmark SET icon_url=? WHERE id=? AND user_id=?', [
+            imageUrl,
+            bookmark.id,
+            req.user.id,
+          ]);
           // 返回 {id, iconUrl},供前端把新图标回填到当前列表项(不必刷新页面)
           return { id: bookmark.id, iconUrl: imageUrl };
         } catch (err) {

@@ -235,7 +235,8 @@ export const addTag = async (req, res) => {
           userId,
         });
       }
-      if (fileList && fileList.length > 0) {
+      // 游客维护工作区当前不开放云空间；即使前端携带 fileList，也不得改动文件标签关系。
+      if (!req.isVisitorWorkspace && fileList && fileList.length > 0) {
         await insertTagResourceRelations(connection, {
           tagId: insertedTagId,
           resourceType: RESOURCE_TYPE.FILE,
@@ -337,7 +338,8 @@ export const updateTag = async (req, res) => {
         userId,
       });
     }
-    if (fileList !== undefined) {
+    // 游客维护工作区只维护书签、笔记和标签本身，保留既有文件关联不动。
+    if (!req.isVisitorWorkspace && fileList !== undefined) {
       await replaceTagResourceRelations(connection, {
         tagId: id,
         resourceType: RESOURCE_TYPE.FILE,
@@ -642,8 +644,10 @@ export const addBookmark = async (req, res) => {
     }
     await connection.commit();
     res.send(resultData(result));
-    recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
-    awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
+    if (!req.isVisitorWorkspace) {
+      recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
+      awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
+    }
     if (params.url && saveSnapshot !== false) archiveBookmark(userId, insertBookmarkId).catch(() => {}); // 用户勾选时异步存档网页正文(防死链),失败静默,不阻断响应
   } catch (err) {
     await connection.rollback();

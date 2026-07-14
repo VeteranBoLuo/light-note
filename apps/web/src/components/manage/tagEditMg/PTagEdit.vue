@@ -163,7 +163,7 @@
     { type: 'bookmark', label: '书签', count: selectedBookmarkIds.value.length, color: RESOURCE_COLOR_HEX.bookmark },
     { type: 'note', label: '笔记', count: selectedNoteIds.value.length, color: RESOURCE_COLOR_HEX.note },
     { type: 'file', label: '文件', count: selectedFileIds.value.length, color: RESOURCE_COLOR_HEX.file },
-  ]);
+  ].filter((card) => !user.visitorWorkspace || card.type !== 'file'));
 
   function getResourceItems(type: 'bookmark' | 'note' | 'file') {
     return allResources.value.filter((item) => item.type === type);
@@ -204,7 +204,7 @@
       selectedIds: selectedFileIds.value,
       selectedCount: selectedFileIds.value.length,
     },
-  ]);
+  ].filter((section) => !user.visitorWorkspace || section.type !== 'file'));
 
   function toggleResource(type: 'bookmark' | 'note' | 'file', id: string, checked: boolean) {
     const map = {
@@ -221,12 +221,15 @@
   }
 
   async function getAllResources() {
+    const fileRequest = user.visitorWorkspace
+      ? Promise.resolve({ status: 200, data: [] })
+      : apiBasePost('/api/file/queryFiles', { filters: { category: CLOUD_FILE_CATEGORY_ORDER } });
     const [bookmarkRes, noteRes, fileRes] = await Promise.all([
       apiQueryPost('/api/bookmark/getBookmarkList', {
         filters: { userId: user.id, type: 'all' },
       }),
       apiBasePost('/api/note/queryNoteList'),
-      apiBasePost('/api/file/queryFiles', { filters: { category: CLOUD_FILE_CATEGORY_ORDER } }),
+      fileRequest,
     ]);
 
     const resources: ResourceItem[] = [];
@@ -316,7 +319,11 @@
     tag.value.iconUrl = normalizeIconUrl(tag.value.iconUrl);
     tag.value.bookmarkList = selectedBookmarkIds.value;
     tag.value.noteList = selectedNoteIds.value;
-    tag.value.fileList = selectedFileIds.value;
+    if (user.visitorWorkspace) {
+      delete tag.value.fileList;
+    } else {
+      tag.value.fileList = selectedFileIds.value;
+    }
     const url = handleType.value === 'add' ? '/api/bookmark/addTag' : '/api/bookmark/updateTag';
     const res = await apiBasePost(url, tag.value);
     if (res.status === 200) {
@@ -339,12 +346,15 @@
       });
       tag.value = res.data;
 
+      const fileListRequest = user.visitorWorkspace
+        ? Promise.resolve({ status: 200, data: [] })
+        : apiBasePost('/api/file/queryFiles', { filters: { tagId: tag.value.id, category: CLOUD_FILE_CATEGORY_ORDER } });
       const [bookmarkListRes, noteListRes, fileListRes, relatedRes] = await Promise.all([
         apiQueryPost('/api/bookmark/getBookmarkList', {
           filters: { userId: user.id, tagId: tag.value.id, type: 'normal' },
         }),
         apiBasePost('/api/note/queryNoteList', { tagId: tag.value.id }),
-        apiBasePost('/api/file/queryFiles', { filters: { tagId: tag.value.id, category: CLOUD_FILE_CATEGORY_ORDER } }),
+        fileListRequest,
         apiQueryPost('/api/bookmark/getRelatedTag', {
           filters: { userId: user.id, id: tag.value.id },
         }),

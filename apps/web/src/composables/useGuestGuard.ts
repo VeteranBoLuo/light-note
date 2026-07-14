@@ -3,9 +3,25 @@ import i18n from '@/i18n';
 import { useUserStore } from '@/store';
 import { apiBasePost } from '@/http/request';
 import { showGuestNudge } from './guestNudge';
+import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
 let previewGuideLocked = false;
 let wallHitLocked = false;
+
+// 游客维护工作区只放行展示内容本身；该列表是前端体验层，真正的安全边界仍由后端接口白名单控制。
+const VISITOR_WORKSPACE_WRITE_SOURCES = new Set([
+  'add-bookmark',
+  'delete-bookmark',
+  'bookmark-sort',
+  'add-tag',
+  'delete-tag',
+  'add-note',
+  'save-note',
+  'delete-note',
+  'reorder-note',
+  'update-note-tags',
+  'restore-note-version',
+]);
 
 /**
  * 上报「撞墙」转化埋点(wall_hit)。
@@ -55,6 +71,13 @@ export function showPreviewGuide(content?: string): void {
  */
 export function blockGuestWrite(source: string, content?: string): boolean {
   const user = useUserStore();
+  if (user.visitorWorkspace) {
+    if (VISITOR_WORKSPACE_WRITE_SOURCES.has(source)) {
+      return false;
+    }
+    message.warning(i18n.global.t('guest.visitorWorkspaceScope'));
+    return true;
+  }
   if (!user.id || user.role === 'visitor') {
     recordWallHit(source);
     showPreviewGuide(content);
@@ -77,7 +100,7 @@ export function blockGuestWrite(source: string, content?: string): boolean {
  */
 export function useGuestGuard() {
   const user = useUserStore();
-  const isGuest = computed(() => !user.id || user.role === 'visitor');
+  const isGuest = computed(() => !user.visitorWorkspace && (!user.id || user.role === 'visitor'));
   function guardWrite(action?: () => void, source = 'client-guard'): boolean {
     if (blockGuestWrite(source)) {
       return false;

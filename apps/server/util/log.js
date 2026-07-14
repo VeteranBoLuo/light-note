@@ -7,9 +7,10 @@ export async function logFunction(req, res, next) {
     if (req.originalUrl.includes('/login')) {
       // 登录成败交给登录接口处理，日志中间件只记录请求。
     }
-    const userId = req.user?.id;
-    // 管理员预览模式下不记录 API 日志
-    if (req.isAdminPreview) {
+    const isVisitorWorkspaceWrite = Boolean(req.isVisitorWorkspaceContentWrite);
+    const userId = isVisitorWorkspaceWrite ? req.adminActor?.id : req.user?.id;
+    // 普通管理员预览与游客工作区只读请求不记日志；游客展示内容的实际写入必须保留审计。
+    if (req.isAdminPreview && !isVisitorWorkspaceWrite) {
       next();
       return;
     }
@@ -27,16 +28,24 @@ export async function logFunction(req, res, next) {
       'unreadCount', // 通知未读数:铃铛角标每 120s 轮询,高频且无操作审计价值,不记 API 日志
     ].some((key) => req.originalUrl.includes(key));
 
-    if (skipApi) {
+    if (skipApi && !isVisitorWorkspaceWrite) {
       next();
       return;
     }
     // 本地/回环 IP,或「自己人」设备(指纹白名单)——不记 API 日志
-    if (isSelfTraffic(req)) {
+    if (!isVisitorWorkspaceWrite && isSelfTraffic(req)) {
       next();
       return;
     }
-    const requestPayload = JSON.stringify(req.method === 'GET' ? req.query : req.body);
+    const rawRequestPayload = req.method === 'GET' ? req.query : req.body;
+    const requestPayload = JSON.stringify(
+      isVisitorWorkspaceWrite
+        ? {
+            payload: rawRequestPayload,
+            visitorWorkspaceTargetUserId: req.user?.id || '',
+          }
+        : rawRequestPayload,
+    );
     // 等待响应结束
     res.on('finish', async () => {
       if (userId) {
@@ -45,6 +54,12 @@ export async function logFunction(req, res, next) {
             browser: req.headers['browser'] ?? '未知',
             os: req.headers['os'] ?? '未知',
             fingerprint: req.headers['fingerprint'],
+            ...(isVisitorWorkspaceWrite
+              ? {
+                  adminPreview: true,
+                  targetUserId: req.user?.id || '',
+                }
+              : {}),
           });
           // 构造日志对象
           const log = {

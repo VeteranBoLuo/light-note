@@ -53,7 +53,7 @@
   import router from '@/router';
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const isGuest = computed(() => !user.id || user.role === 'visitor');
+  const isGuest = computed(() => !user.visitorWorkspace && (!user.id || user.role === 'visitor'));
   // 游客点首页「注册拥有」:记 cta_click 转化埋点 + 打开注册弹窗
   function guestRegister() {
     apiBasePost('/api/common/recordConversion', { event: 'cta_click', source: 'home-demo-hint' }).catch(() => {});

@@ -18,8 +18,10 @@ export const addNote = (req, res) => {
       .query('INSERT INTO note SET ?', [noteData])
       .then(() => {
         res.send(resultData({ id: noteData.id }));
-        recordFirstOwnResource(req, 'note'); // 激活里程碑:首次自建笔记
-        awardCreate(userId, 'note', noteData.id, { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减)
+        if (!req.isVisitorWorkspace) {
+          recordFirstOwnResource(req, 'note'); // 激活里程碑:首次自建笔记
+          awardCreate(userId, 'note', noteData.id, { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减)
+        }
       })
       .catch((err) => {
         res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
@@ -521,4 +523,3 @@ export const restoreNoteVersion = async (req, res) => {
     res.send(resultData(null, 400, '客户端请求异常' + e));
   }
 };
-

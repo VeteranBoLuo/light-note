@@ -178,8 +178,6 @@
   import { useI18n } from 'vue-i18n';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { apiBasePost } from '@/http/request.ts';
-  import { useUserStore } from '@/store';
 
   const router = useRouter();
   const route = useRoute();
@@ -353,27 +351,6 @@
     }
   }
   function onEnter() {
-    const kw = keyword.value.trim();
-    if (kw === 'openRoot') {
-      const user = useUserStore();
-      if (user.id && user.role !== 'visitor') {
-        // 已登录用户无需提权，静默忽略
-        keyword.value = '';
-        closeDesktopSuggest();
-        mobileVisible.value = false;
-        return;
-      }
-      closeDesktopSuggest();
-      mobileVisible.value = false;
-      apiBasePost('/api/user/elevateVisitor', {}).then((res) => {
-        if (res.status === 200) {
-          window.location.reload();
-        } else {
-          alert('提权失败: ' + (res.message || '未知错误'));
-        }
-      });
-      return;
-    }
     const list = flatItems.value;
     if (activeIndex.value >= 0 && list[activeIndex.value]) openItem(list[activeIndex.value]);
     else goSearch();

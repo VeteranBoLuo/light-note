@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // mock db 连接池(可断言 query 调用),redis/nodemailer 由 vitest.setup.js 全局 mock
 const query = vi.fn();
-vi.mock('../db/index.js', () => ({ default: { query, getConnection: vi.fn() } }));
+const getConnection = vi.fn();
+vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 
 // common.js ↔ router/common.js ↔ commonHandle.js 存在循环依赖:
 // 直接首个 import commonHandle.js 会拿到未初始化的导出而报错。
 // 先按应用真实顺序 import common.js,让 commonHandle.js 作为叶子完成初始化,规避循环。
 await import('../util/common.js');
-const { recordConversion, getConversionFunnel, clearLogsByIp, getIpLogStats } = await import('./commonHandle.js');
+const { recordConversion, recordOperationLogs, analyzeImgUrl, getConversionFunnel, clearLogsByIp, getIpLogStats } = await import('./commonHandle.js');
 
 function mockRes() {
   const res = {};
@@ -43,6 +44,97 @@ describe('recordConversion 白名单', () => {
     );
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0][0]).toContain('INSERT INTO conversion_events');
+  });
+});
+
+describe('recordOperationLogs 管理员预览审计', () => {
+  beforeEach(() => query.mockReset());
+
+  it('普通用户预览不能伪造操作日志', () => {
+    const res = mockRes();
+    recordOperationLogs(
+      {
+        isAdminPreview: true,
+        isVisitorWorkspace: false,
+        user: { id: 'user-1', role: 'user' },
+        body: { module: '笔记库', operation: '修改笔记' },
+      },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('游客维护日志记录真实 root，并在操作中保留目标游客', async () => {
+    query.mockResolvedValue([{}]);
+    const res = mockRes();
+    recordOperationLogs(
+      {
+        isAdminPreview: true,
+        isVisitorWorkspace: true,
+        adminActor: { id: 'root-1', role: 'root' },
+        user: { id: 'visitor-1', role: 'visitor' },
+        headers: {},
+        body: { module: '笔记库', operation: '保存笔记' },
+        ip: '127.0.0.1',
+      },
+      res,
+    );
+    await vi.waitFor(() => expect(res.send).toHaveBeenCalled());
+    expect(query).toHaveBeenCalledTimes(1);
+    const inserted = query.mock.calls[0][1][0];
+    expect(inserted.create_by).toBe('root-1');
+    expect(inserted.module).toBe('游客内容维护/笔记库');
+    expect(inserted.operation).toContain('visitor-1');
+  });
+});
+
+describe('analyzeImgUrl 写权限与归属', () => {
+  beforeEach(() => {
+    query.mockReset();
+    getConnection.mockReset();
+  });
+
+  it('普通游客浏览时静默跳过图标写入', async () => {
+    const res = mockRes();
+    await analyzeImgUrl(
+      { user: { id: 'visitor-1', role: 'visitor' }, body: [{ id: 'bookmark-1', noCache: true }] },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: [] }));
+    expect(getConnection).not.toHaveBeenCalled();
+  });
+
+  it('普通用户预览不能触发图标写入', async () => {
+    const res = mockRes();
+    await analyzeImgUrl(
+      {
+        isAdminPreview: true,
+        isVisitorWorkspace: false,
+        user: { id: 'user-1', role: 'user' },
+        body: [{ id: 'bookmark-1', noCache: true }],
+      },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(getConnection).not.toHaveBeenCalled();
+  });
+
+  it('登录用户只按自己的 user_id 查询待更新书签，且不信任客户端 URL', async () => {
+    const connection = { query: vi.fn().mockResolvedValue([[]]), release: vi.fn() };
+    getConnection.mockResolvedValue(connection);
+    const res = mockRes();
+    await analyzeImgUrl(
+      {
+        user: { id: 'user-1', role: 'user' },
+        body: [{ id: 'bookmark-1', url: 'http://attacker.invalid', noCache: true }],
+      },
+      res,
+    );
+    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(connection.query.mock.calls[0][0]).toContain('WHERE user_id = ?');
+    expect(connection.query.mock.calls[0][1]).toEqual(['user-1', 'bookmark-1']);
+    expect(connection.release).toHaveBeenCalledTimes(1);
   });
 });
 

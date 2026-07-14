@@ -15,7 +15,14 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'operation'">
           <b-space>
-            <svg-icon title="登录此用户" :src="icon.navigation.user" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
+            <BTooltip :title="record.role === 'visitor' ? t('guest.visitorWorkspaceEntry') : t('guest.userPreviewEntry')">
+              <svg-icon
+                :src="icon.navigation.user"
+                size="16"
+                @click.stop="loginAsUser(record)"
+                class="dom-hover"
+              />
+            </BTooltip>
             <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
             <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
           </b-space>
@@ -55,11 +62,13 @@
 
 <script lang="ts" setup>
   import { onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiQueryPost } from '@/http/request.ts';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
@@ -70,6 +79,7 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  const { t } = useI18n();
   const userList = ref([]);
 
   const userColumns = [

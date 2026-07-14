@@ -170,6 +170,29 @@ export const cleanupExpiredSessions = async () => {
   await pool.query('DELETE FROM user_sessions WHERE expires_at <= NOW()');
 };
 
+// 清理历史 openRoot 遗留的“visitor 用户 + root 会话角色”。
+// 鉴权已不再信任 session.role，因此这些会话即使尚未清理也没有 root 权限；此处用于彻底下线旧入口并清除缓存残留。
+export const cleanupLegacyElevatedVisitorSessions = async () => {
+  const [rows] = await pool.query(
+    `SELECT s.sid
+     FROM user_sessions s
+     INNER JOIN user u ON u.id = s.user_id
+     WHERE u.role = ? AND s.role = ?`,
+    ['visitor', 'root'],
+  );
+  const sids = rows.map((row) => row.sid).filter(Boolean);
+  if (sids.length === 0) return 0;
+
+  const placeholders = sids.map(() => '?').join(',');
+  await pool.query(`DELETE FROM user_sessions WHERE sid IN (${placeholders})`, sids);
+  try {
+    await redisClient.del(sids.map((sid) => CACHE_PREFIX + sid));
+  } catch (e) {
+    console.error('[session] 清理历史游客提权缓存失败:', e.message);
+  }
+  return sids.length;
+};
+
 // 列出某用户当前所有有效会话(供"登录设备/会话管理"展示 + 远程下线)
 export const listUserSessions = async (userId) => {
   if (!userId) return [];

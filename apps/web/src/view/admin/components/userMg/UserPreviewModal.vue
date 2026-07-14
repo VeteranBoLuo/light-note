@@ -20,6 +20,7 @@
 
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import {
     ADMIN_LOGIN_PREVIEW_FRAME_NAME,
@@ -29,6 +30,7 @@
   } from '@/utils/authStorage.ts';
 
   const visible = defineModel<boolean>('visible');
+  const { t } = useI18n();
   const props = defineProps<{
     userInfo?: any;
   }>();
@@ -36,7 +38,9 @@
   const previewUrl = ref('');
   const previewTitle = computed(() => {
     const name = props.userInfo?.alias || props.userInfo?.email || '用户';
-    return `以 ${name} 身份预览`;
+    return props.userInfo?.role === 'visitor'
+      ? t('guest.visitorWorkspaceTitle')
+      : t('guest.userPreviewTitle', { name });
   });
 
   watch(

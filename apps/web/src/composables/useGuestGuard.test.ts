@@ -8,7 +8,7 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 // 可变的登录态,供各用例切换游客/登录
-const userState = { id: '', role: 'visitor' };
+const userState = { id: '', role: 'visitor', visitorWorkspace: false };
 vi.mock('@/store', () => ({
   useUserStore: () => userState,
   bookmarkStore: () => ({ openAuthModal: vi.fn() }),
@@ -23,6 +23,7 @@ describe('blockGuestWrite', () => {
     showGuestNudge.mockClear();
     userState.id = '';
     userState.role = 'visitor';
+    userState.visitorWorkspace = false;
   });
   afterEach(() => {
     vi.runAllTimers(); // 释放 wall_hit / 引导的 1.5s 锁,避免污染下一个用例
@@ -44,6 +45,24 @@ describe('blockGuestWrite', () => {
     userState.role = 'admin';
     const blocked = blockGuestWrite('add-bookmark');
     expect(blocked).toBe(false);
+    expect(showGuestNudge).not.toHaveBeenCalled();
+    expect(apiBasePost).not.toHaveBeenCalled();
+  });
+
+  it('游客维护工作区:放行书签/笔记/标签写操作', () => {
+    userState.id = 'visitor-1';
+    userState.role = 'visitor';
+    userState.visitorWorkspace = true;
+    expect(blockGuestWrite('save-note')).toBe(false);
+    expect(showGuestNudge).not.toHaveBeenCalled();
+    expect(apiBasePost).not.toHaveBeenCalled();
+  });
+
+  it('游客维护工作区:继续拦截云空间等范围外操作且不记录转化', () => {
+    userState.id = 'visitor-1';
+    userState.role = 'visitor';
+    userState.visitorWorkspace = true;
+    expect(blockGuestWrite('upload-file')).toBe(true);
     expect(showGuestNudge).not.toHaveBeenCalled();
     expect(apiBasePost).not.toHaveBeenCalled();
   });

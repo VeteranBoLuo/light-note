@@ -23,7 +23,7 @@
     <button v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
     </button>
-    <span v-if="user.role === 'visitor'" class="guest-register-link" @click="registerClick">{{ $t('home.freeRegister') }}</span>
+    <span v-if="user.role === 'visitor' && !user.visitorWorkspace" class="guest-register-link" @click="registerClick">{{ $t('home.freeRegister') }}</span>
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">

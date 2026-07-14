@@ -1447,6 +1447,11 @@ export default {
     previewContent: '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册即用、自动登录、已备好示例数据，免费收藏书签、记笔记、存文件。',
     keepBrowsing: '继续浏览',
     registerNow: '免费注册，立即拥有',
+    visitorWorkspaceEntry: '维护游客展示内容',
+    userPreviewEntry: '预览此用户',
+    visitorWorkspaceTitle: '维护游客展示内容（书签、笔记、标签可编辑）',
+    userPreviewTitle: '以 {name} 身份预览（只读）',
+    visitorWorkspaceScope: '游客维护工作区仅允许编辑书签、笔记和标签。',
   },
   guide: {
     skip: '跳过',

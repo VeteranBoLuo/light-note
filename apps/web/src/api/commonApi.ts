@@ -1,8 +1,9 @@
 import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 import { isAdminLoginPreview } from '@/utils/authStorage.ts';
+import useUserStore from '@/store/useUser.ts';
 
 export const recordOperation = async function (params: { module: string; operation: string }) {
-  if (isAdminLoginPreview()) {
+  if (isAdminLoginPreview() && !useUserStore().visitorWorkspace) {
     return;
   }
   if (!params?.module || !params?.operation) {

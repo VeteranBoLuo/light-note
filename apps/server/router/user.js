@@ -50,6 +50,4 @@ router.post('/appeal', userHandle.submitAppeal);
 router.post('/exportData', userHandle.exportData);
 router.post('/importData', userHandle.importData);
 
-router.post('/elevateVisitor', userHandle.elevateVisitor);
-
 export default router;

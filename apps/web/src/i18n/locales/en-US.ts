@@ -1459,6 +1459,11 @@ export default {
     previewContent: 'Preview mode is view-only. Creating, editing, or deleting requires an account. Sign up for instant access — auto login, sample data ready — and keep bookmarks, notes, and files for free.',
     keepBrowsing: 'Keep browsing',
     registerNow: 'Sign up free, own it now',
+    visitorWorkspaceEntry: 'Maintain visitor showcase',
+    userPreviewEntry: 'Preview this user',
+    visitorWorkspaceTitle: 'Maintain visitor showcase (bookmarks, notes, and tags are editable)',
+    userPreviewTitle: 'Preview as {name} (read-only)',
+    visitorWorkspaceScope: 'The visitor workspace only allows editing bookmarks, notes, and tags.',
   },
   guide: {
     skip: 'Skip',

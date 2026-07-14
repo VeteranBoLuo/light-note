@@ -49,13 +49,14 @@
           <template #bodyCell="{ column, text, record }">
             <template v-if="column.key === 'operation'">
               <BSpace>
-                <svg-icon
-                  title="登录此用户"
-                  :src="icon.navigation.user"
-                  size="16"
-                  @click.stop="loginAsUser(record)"
-                  class="dom-hover"
-                />
+                <BTooltip :title="record.role === 'visitor' ? t('guest.visitorWorkspaceEntry') : t('guest.userPreviewEntry')">
+                  <svg-icon
+                    :src="icon.navigation.user"
+                    size="16"
+                    @click.stop="loginAsUser(record)"
+                    class="dom-hover"
+                  />
+                </BTooltip>
                 <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
                 <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
                 <span
@@ -126,6 +127,7 @@
 
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiQueryPost } from '@/http/request.ts';
   import { useTableScrollY } from '@/composables/useTableScrollY';
   import icon from '@/config/icon.ts';
@@ -140,8 +142,11 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
+
+  const { t } = useI18n();
 
   const tableCardRef = ref<HTMLElement | null>(null);
   useTableScrollY({ ref: tableCardRef });

@@ -1,6 +1,12 @@
 import pool from '../db/index.js';
 import { resultData } from './common.js';
-import { cleanupExpiredSessions, createSession, getSession, removeSession } from './sessionStore.js';
+import {
+  cleanupExpiredSessions,
+  cleanupLegacyElevatedVisitorSessions,
+  createSession,
+  getSession,
+  removeSession,
+} from './sessionStore.js';
 import { recordConversionEvent } from './conversion.js';
 
 const COOKIE_NAME = 'sid';
@@ -126,6 +132,12 @@ const attachUserToRequest = (req, res, user, sessionId = '', expiresInSeconds = 
 
 export const authMiddleware = async (req, res, next) => {
   try {
+    // 每个请求显式初始化预览上下文，避免下游把普通请求误判为管理员预览。
+    req.adminActor = null;
+    req.isAdminPreview = false;
+    req.isVisitorWorkspace = false;
+    req.isVisitorWorkspaceContentWrite = false;
+
     const sid = getRequestSid(req);
     if (!sid) {
       attachUserToRequest(req, res, await findVisitorUser());
@@ -160,24 +172,32 @@ export const authMiddleware = async (req, res, next) => {
       return next();
     }
 
-    // 有 session 时优先用 session 中的 role(支持 elevateVisitor 等临时提权场景)
-    if (session.role && session.role !== user.role) {
-      user.role = session.role;
-    }
-
+    // 权限只信任 user 表中的实时角色。user_sessions.role 仅保留为会话签发时的历史快照，
+    // 不能覆盖数据库角色，否则任何能写入/取得高权限 session 的路径都会变成提权入口。
     attachUserToRequest(req, res, user, sid, Number(session.expires_in_seconds || 0));
 
-    // 管理员预览其他用户：当 root 用户携带 X-Admin-Preview-User-Id 请求头时，切换为对应身份
+    // 管理员预览其他用户：保留真实 root 操作者(actor)，再把资源归属身份切换为目标用户(subject)。
+    // 后续权限判断可据此区分“谁在操作”和“正在维护谁的数据”，不能只看被切换后的 req.user。
     const previewUserId = req.headers['x-admin-preview-user-id'];
     if (previewUserId && req.user?.role === 'root' && previewUserId !== req.user.id) {
+      const actor = { ...req.user };
       const [previewRows] = await pool.query(
-        'SELECT id, role, del_flag FROM user WHERE id = ? LIMIT 1',
+        'SELECT id, alias, role, del_flag FROM user WHERE id = ? LIMIT 1',
         [previewUserId],
       );
       if (previewRows[0]) {
-        attachUserToRequest(req, res, previewRows[0], req.user.sessionId, 0);
+        req.adminActor = {
+          id: actor.id,
+          alias: actor.alias,
+          role: actor.role,
+          sessionId: actor.sessionId,
+        };
+        req.isAdminPreview = true;
+        req.isVisitorWorkspace = previewRows[0].role === 'visitor';
+        req.isVisitorWorkspaceContentWrite =
+          req.isVisitorWorkspace && isVisitorWorkspaceContentWrite(req);
+        attachUserToRequest(req, res, previewRows[0], actor.sessionId, 0);
         req.user.isBanned = false; // 管理员预览时不触发封禁拦截
-        req.isAdminPreview = true; // 标记为预览模式，供日志中间件等下游使用
       }
     }
 
@@ -228,11 +248,64 @@ export const requireRole = (...roles) => {
   };
 };
 
+// 游客展示内容维护的最小写入白名单。
+// 只有“真实数据库 root 会话 + 预览目标确为 visitor”时才可能命中；普通游客无法通过伪造请求头进入。
+// 云空间、回收站、成长、用户/后台管理、通知、AI 批处理等接口均不在此范围。
+const VISITOR_WORKSPACE_CONTENT_WRITE_PATHS = new Set([
+  '/bookmark/updateTagSort',
+  '/bookmark/addTag',
+  '/bookmark/delTag',
+  '/bookmark/updateTag',
+  '/bookmark/addBookmark',
+  '/bookmark/updateBookmark',
+  '/bookmark/delBookmark',
+  '/bookmark/updateBookmarkSort',
+  '/bookmark/toggleBookmarkTop',
+  '/common/analyzeImgUrl',
+  '/note/uploadImage',
+  '/note/updateNote',
+  '/note/addNote',
+  '/note/delNote',
+  '/note/updateNoteSort',
+  '/note/addNoteTag',
+  '/note/editNoteTag',
+  '/note/delNoteTag',
+  '/note/updateNoteTags',
+  '/note/restoreNoteVersion',
+]);
+
+const requestRoutePath = (req) => String(req.originalUrl || req.path || '').split('?')[0];
+
+export const isVisitorWorkspaceContentWrite = (req) => {
+  const routePath = requestRoutePath(req);
+  return [...VISITOR_WORKSPACE_CONTENT_WRITE_PATHS].some((path) => routePath.endsWith(path));
+};
+
 // 游客只读预览守卫：游客（或无身份）执行写操作时，返回 status 'preview' 触发前端注册软引导。
 // 注意：必须用 'preview'，不能用 401/403/'visitor'——前端 request.ts 把这些当作会话过期/硬错误，
 // 只有 'preview' 才会派发 light-note:preview-blocked 弹注册引导。
 // 用法：if (!ensureNotVisitor(req, res)) return; —— 事务函数须放在 pool.getConnection() 之前。
 export const ensureNotVisitor = (req, res) => {
+  if (req.isAdminPreview) {
+    if (
+      req.isVisitorWorkspace &&
+      req.adminActor?.role === 'root' &&
+      isVisitorWorkspaceContentWrite(req)
+    ) {
+      req.isVisitorWorkspaceContentWrite = true;
+      return true;
+    }
+    res.send(
+      resultData(
+        null,
+        403,
+        req.isVisitorWorkspace
+          ? '游客维护工作区仅允许编辑书签、笔记和标签。'
+          : '管理员用户预览为只读模式，不能修改被预览账号的数据。',
+      ),
+    );
+    return false;
+  }
   if (!req.user?.id || req.user.role === 'visitor') {
     recordConversionEvent(req, 'wall_hit', req.originalUrl || '');
     res.send(resultData(null, 'preview', '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册后即可拥有你自己的轻笺，免费收藏书签、记笔记、存文件。'));
@@ -243,8 +316,18 @@ export const ensureNotVisitor = (req, res) => {
 
 export const startSessionMaintenance = () => {
   cleanupExpiredSessions().catch((e) => console.error('清理过期登录态失败:', e.message));
+  cleanupLegacyElevatedVisitorSessions()
+    .then((count) => {
+      if (count > 0) console.log(`[session] 已清理 ${count} 个历史游客提权会话`);
+    })
+    .catch((e) => console.error('清理历史游客提权会话失败:', e.message));
   setInterval(
-    () => cleanupExpiredSessions().catch((e) => console.error('清理过期登录态失败:', e.message)),
+    () => {
+      cleanupExpiredSessions().catch((e) => console.error('清理过期登录态失败:', e.message));
+      cleanupLegacyElevatedVisitorSessions().catch((e) =>
+        console.error('清理历史游客提权会话失败:', e.message),
+      );
+    },
     60 * 60 * 1000,
   );
 };

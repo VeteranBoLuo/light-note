@@ -15,6 +15,8 @@ interface UserInfo {
   alias: string;
   password: string;
   role: string;
+  adminPreview: boolean;
+  visitorWorkspace: boolean;
   headPicture: string;
   email: string;
   tagTotal: number;
@@ -55,6 +57,8 @@ const createDefaultUserState = (): UserState => ({
   alias: '默认昵称',
   password: '',
   role: 'visitor',
+  adminPreview: false,
+  visitorWorkspace: false,
   headPicture: icon.navigation.user,
   email: '',
   tagTotal: 0,

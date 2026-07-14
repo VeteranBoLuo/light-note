@@ -8,7 +8,7 @@ import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import nodeMail from '../util/nodemailer.js';
 import crypto from 'crypto';
-import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid, setAuthCookie } from '../util/auth.js';
+import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
 import { recordConversionEvent } from '../util/conversion.js';
 import { removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
@@ -305,7 +305,8 @@ export const getUserInfo = async (req, res) => {
     }
     // 没有储存ip或者ip地址改变，则更新用户ip相关信息
     const clientIp = getClientIp(req);
-    if (clientIp && (userRes[0].ip === null || userRes[0].ip !== clientIp)) {
+    // 管理员预览/游客维护时，请求 IP 属于真实管理员，不能覆盖到被预览账号。
+    if (!req.isAdminPreview && clientIp && (userRes[0].ip === null || userRes[0].ip !== clientIp)) {
       const { data } = await request.get(
         `https://restapi.amap.com/v3/ip?ip=${clientIp}&key=${process.env.AMAP_API_KEY}`,
       );
@@ -335,11 +336,11 @@ export const getUserInfo = async (req, res) => {
       return;
     }
     const safeUser = sanitizeUser(result);
-    // 如果 session 中 role 与 DB 不同(如 elevateVisitor 临时提权),以 session 为准
-    if (req.user?.role && req.user.role !== result.role) {
-      safeUser.role = req.user.role;
-    }
-    if (safeUser.role === 'visitor') {
+    safeUser.adminPreview = Boolean(req.isAdminPreview);
+    safeUser.visitorWorkspace = Boolean(req.isVisitorWorkspace);
+    // 普通游客仍返回 visitor 状态触发只读引导；真实 root 打开的游客维护工作区视为有效管理上下文，
+    // 返回 200，避免前端因本机“曾登录过”而误弹登录框。
+    if (safeUser.role === 'visitor' && !req.isVisitorWorkspace) {
       res.send(resultData(safeUser, 'visitor'));
     } else {
       res.send(resultData(safeUser));
@@ -1015,31 +1016,5 @@ export const importData = async (req, res) => {
     res.send(resultData(null, 500, L(req, '导入失败: ', 'Import failed: ') + e.message));
   } finally {
     connection.release();
-  }
-};
-
-// 游客临时提权:输入 openRoot 后创建一个 role=root 的 session,仅对当前浏览器生效
-export const elevateVisitor = async (req, res) => {
-  try {
-    const [visitors] = await pool.query(
-      'SELECT id, role FROM user WHERE role = ? ORDER BY del_flag ASC, create_time ASC LIMIT 1',
-      ['visitor']
-    );
-    const visitor = visitors[0];
-    if (!visitor) {
-      return res.send(resultData(null, 404, '未找到游客账号'));
-    }
-    const { sid } = await createSession({
-      userId: visitor.id,
-      role: 'root',
-      maxAgeMs: 24 * 60 * 60 * 1000, // 24小时
-      ip: req.ip || '',
-      userAgent: req.headers['user-agent'] || '',
-    });
-    // 种 cookie,使后续请求携带此 session
-    setAuthCookie(res, sid, 24 * 60 * 60 * 1000);
-    res.send(resultData({ sid, expiresIn: 86400 }));
-  } catch (e) {
-    res.send(resultData(null, 500, '提权失败: ' + e.message));
   }
 };

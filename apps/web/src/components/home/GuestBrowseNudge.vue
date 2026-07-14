@@ -25,7 +25,7 @@
   let scrollEl: HTMLElement | null = null;
 
   function isGuest() {
-    return !user.id || user.role === 'visitor';
+    return !user.visitorWorkspace && (!user.id || user.role === 'visitor');
   }
   function seen() {
     try {
