@@ -1633,12 +1633,11 @@ export default {
     navFeatures: 'Features',
     navWhy: 'Why',
     navStart: 'Start',
-    ctaCreateSpace: 'Create my free space',
+    ctaCreateSpace: 'Sign up free and get started',
     ctaTryDemo: 'Explore the demo first',
     ctaEnterApp: 'Open my LightNote',
     trustSpace: '512MB to start',
     trustExport: 'Export notes to PDF',
     trustMaintained: 'Actively maintained',
-    trustFiling: 'ICP-registered',
   },
 };

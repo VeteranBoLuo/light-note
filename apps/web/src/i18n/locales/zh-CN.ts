@@ -1621,12 +1621,11 @@ export default {
     navFeatures: '功能',
     navWhy: '理由',
     navStart: '开始',
-    ctaCreateSpace: '免费创建我的空间',
+    ctaCreateSpace: '免费注册，开始使用',
     ctaTryDemo: '先体验示例',
     ctaEnterApp: '进入我的轻笺',
     trustSpace: '512MB 起步空间',
     trustExport: '笔记可导出 PDF',
     trustMaintained: '持续更新维护',
-    trustFiling: '已完成 ICP 备案',
   },
 };

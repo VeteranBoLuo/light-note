@@ -26,8 +26,9 @@
                 <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
               </h1>
               <div class="hero-actions">
-                <button
+                <BButton
                   v-if="isLoggedIn"
+                  type="primary"
                   class="btn-primary"
                   @click="enterApp"
                   v-click-log="{ module: '官网首页', operation: '进入我的轻笺' }"
@@ -36,21 +37,22 @@
                   <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
                     <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
-                </button>
+                </BButton>
                 <template v-else>
-                  <button
+                  <BButton
+                    type="primary"
                     class="btn-primary"
                     @click="goRegister('landing_primary')"
-                    v-click-log="{ module: '官网首页', operation: '免费创建我的空间' }"
+                    v-click-log="{ module: '官网首页', operation: '免费注册开始使用' }"
                   >
                     <span>{{ t('landing.ctaCreateSpace') }}</span>
                     <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
                       <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
-                  </button>
-                  <button class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
+                  </BButton>
+                  <BButton class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
                     t('landing.ctaTryDemo')
-                  }}</button>
+                  }}</BButton>
                 </template>
               </div>
             </div>
@@ -217,8 +219,9 @@
             <h2 class="cta-title">{{ t('landing.ctaTitle') }}</h2>
             <p class="cta-desc">{{ t('landing.ctaDesc') }}</p>
             <div class="cta-actions">
-              <button
+              <BButton
                 v-if="isLoggedIn"
+                type="primary"
                 class="btn-primary btn-large"
                 @click="enterApp"
                 v-click-log="{ module: '官网首页', operation: '进入我的轻笺' }"
@@ -227,28 +230,28 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-              </button>
+              </BButton>
               <template v-else>
-                <button
+                <BButton
+                  type="primary"
                   class="btn-primary btn-large"
                   @click="goRegister('landing_final')"
-                  v-click-log="{ module: '官网首页', operation: '免费创建我的空间' }"
+                  v-click-log="{ module: '官网首页', operation: '免费注册开始使用' }"
                 >
                   {{ t('landing.ctaCreateSpace') }}
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                     <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
-                </button>
-                <button class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
+                </BButton>
+                <BButton class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
                   t('landing.ctaTryDemo')
-                }}</button>
+                }}</BButton>
               </template>
             </div>
             <ul class="trust-badges">
               <li>{{ t('landing.trustSpace') }}</li>
               <li>{{ t('landing.trustExport') }}</li>
               <li>{{ t('landing.trustMaintained') }}</li>
-              <li>{{ t('landing.trustFiling') }}</li>
             </ul>
           </div>
           <div class="cta-foot">boluo66.top</div>
@@ -319,6 +322,7 @@
   import { apiBasePost } from '@/http/request';
   import { trackConversion } from '@/utils/conversion';
   import { getAppHomePath } from '@/utils/preferences';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -359,7 +363,7 @@
     trackConversion('demo_enter', 'landing_demo');
     router.push('/home');
   }
-  // 主 CTA「免费创建我的空间」:打开注册弹窗(openAuthModal 内部记 signup_open,source 区分主/末屏)
+  // 主 CTA「免费注册，开始使用」:打开注册弹窗(openAuthModal 内部记 signup_open,source 区分主/末屏)
   function goRegister(source: string) {
     bookmark.openAuthModal('注册', source);
   }
@@ -573,7 +577,8 @@
     position: fixed;
     top: 0;
     left: 0;
-    z-index: 9999;
+    /* 官网是普通路由页面，不应盖住 App 根节点 Teleport 的登录/注册弹窗。 */
+    z-index: 1;
   }
   .landing,
   .landing * {
@@ -1080,6 +1085,8 @@
     border: none;
     cursor: pointer;
     transition: all 0.3s ease;
+    height: auto;
+    line-height: 1.2;
   }
   .btn-primary:hover {
     transform: translateY(-3px) scale(1.02);
@@ -1113,6 +1120,8 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     cursor: pointer;
     transition: all 0.3s ease;
+    height: auto;
+    line-height: 1.2;
   }
   .btn-ghost:hover {
     border-color: rgba(99, 92, 237, 0.4);
