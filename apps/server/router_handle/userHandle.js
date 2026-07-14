@@ -335,6 +335,10 @@ export const getUserInfo = async (req, res) => {
       return;
     }
     const safeUser = sanitizeUser(result);
+    // 如果 session 中 role 与 DB 不同(如 elevateVisitor 临时提权),以 session 为准
+    if (req.user?.role && req.user.role !== result.role) {
+      safeUser.role = req.user.role;
+    }
     if (safeUser.role === 'visitor') {
       res.send(resultData(safeUser, 'visitor'));
     } else {
