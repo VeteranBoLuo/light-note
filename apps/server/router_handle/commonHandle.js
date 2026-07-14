@@ -710,13 +710,21 @@ export const getAgentLogsSummary = async (req, res) => {
     const pad = (n) => String(n).padStart(2, '0');
     const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
+    // 隐藏内部账号(root/test):与列表口径一致,按 user_id join user 判角色
+    const { hideInternal = true } = req.body || {};
+    const roleClause = hideInternal
+      ? ` AND (u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`
+      : '';
+    const roleParams = hideInternal ? INTERNAL_ROLES : [];
+
     const [[todayRow], [totalRow]] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(total_tokens),0) as tokens, COALESCE(SUM(cost),0) as cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)`,
-        [todayStr, todayStr],
+        `SELECT COUNT(*) as count, COALESCE(SUM(a.total_tokens),0) as tokens, COALESCE(SUM(a.cost),0) as cost FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE a.created_at >= ? AND a.created_at < DATE_ADD(?, INTERVAL 1 DAY)${roleClause}`,
+        [todayStr, todayStr, ...roleParams],
       ),
       pool.query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(total_tokens),0) as tokens, COALESCE(SUM(cost),0) as cost FROM agent_logs`,
+        `SELECT COUNT(*) as count, COALESCE(SUM(a.total_tokens),0) as tokens, COALESCE(SUM(a.cost),0) as cost FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE 1=1${roleClause}`,
+        [...roleParams],
       ),
     ]);
 
@@ -744,6 +752,14 @@ export const getAgentLogsSummary = async (req, res) => {
 export const getAdminOverview = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
   try {
+    // 隐藏内部账号(root/test):默认开。user/user_sessions 直接按 role;内容/AI/反馈按创建者 id 子查询排除。
+    // INTERNAL_ROLES 是代码常量(非用户输入),内联进 SQL 以免大量参数错位;游客转化/系统健康不受影响
+    const hideInternal = req.body?.hideInternal !== false;
+    const irSql = INTERNAL_ROLES.map((r) => `'${r}'`).join(', ');
+    const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
+    const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+    const notIntCreateBy = hideInternal ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+
     // 用 Node 本地时间算今日与近7天序列(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
     const now = new Date();
     const pad = (nn) => String(nn).padStart(2, '0');
@@ -758,18 +774,18 @@ export const getAdminOverview = async (req, res) => {
     const weekAgo = days[0];
 
     const [userAgg, resAgg, convAgg, opinionAgg, securityAgg, activeAgg, sysAgg, userTrendRows, contentTrendRows] = await Promise.all([
-      pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0', [today]),
+      pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' + notIntRole, [today]),
       pool.query(
         `SELECT
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0) AS bookmarkTotal,
-           (SELECT COUNT(*) FROM note WHERE del_flag = 0) AS noteTotal,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0) AS fileTotal,
-           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0), 0) AS storageMb,
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?) AS bookmarkToday,
-           (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?) AS noteToday,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?) AS fileToday,
-           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1), 0) AS trashMb,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 1) AS trashCount`,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${notIntUser}) AS bookmarkTotal,
+           (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}) AS noteTotal,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}) AS fileTotal,
+           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0${notIntCreateBy}), 0) AS storageMb,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser}) AS bookmarkToday,
+           (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}) AS noteToday,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}) AS fileToday,
+           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}), 0) AS trashMb,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 1${notIntCreateBy}) AS trashCount`,
         [today, today, today],
       ),
       pool.query(
@@ -778,7 +794,7 @@ export const getAdminOverview = async (req, res) => {
            COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
          FROM conversion_events`,
       ),
-      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?', [OPINION_STATUS.PENDING]),
+      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + notIntUser, [OPINION_STATUS.PENDING]),
       pool
         .query("SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')")
         .catch(() => [[{ unhandled: 0 }]]),
@@ -788,7 +804,7 @@ export const getAdminOverview = async (req, res) => {
           `SELECT
              COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS activeToday,
              COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS active7d
-           FROM user_sessions WHERE role != 'visitor'`,
+           FROM user_sessions WHERE role != 'visitor'${notIntRole}`,
           [today, weekAgo],
         )
         .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
@@ -802,7 +818,7 @@ export const getAdminOverview = async (req, res) => {
       // 近7天新增用户按天
       pool
         .query(
-          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ? GROUP BY d",
+          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" + notIntRole + ' GROUP BY d',
           [weekAgo],
         )
         .catch(() => [[]]),
@@ -810,9 +826,9 @@ export const getAdminOverview = async (req, res) => {
       pool
         .query(
           `SELECT d, SUM(c) AS c FROM (
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ? GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ? GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ? GROUP BY d
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser} GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy} GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy} GROUP BY d
            ) t GROUP BY d`,
           [weekAgo, weekAgo, weekAgo],
         )
@@ -824,10 +840,10 @@ export const getAdminOverview = async (req, res) => {
     try {
       const [[aiToday], [aiTotal]] = await Promise.all([
         pool.query(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)',
+          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)' + notIntUser,
           [today, today],
         ),
-        pool.query('SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs'),
+        pool.query('SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE 1=1' + notIntUser),
       ]);
       ai = {
         todayCount: Number(aiToday[0].count), todayTokens: Number(aiToday[0].tokens), todayCost: Number(aiToday[0].cost).toFixed(4),
@@ -873,7 +889,7 @@ export const getAgentLogs = async (req, res) => {
       return res.send(resultData(null, 403, '仅管理员可查看'));
     }
 
-    const { keyword, pageSize = 20, currentPage = 1 } = req.body || {};
+    const { keyword, pageSize = 20, currentPage = 1, hideInternal = true } = req.body || {};
     const take = Math.min(Math.max(pageSize || 20, 1), 100);
     const offset = take * (Math.max(currentPage || 1, 1) - 1);
 
@@ -881,17 +897,23 @@ export const getAgentLogs = async (req, res) => {
     const params = [];
 
     if (keyword) {
-      where += ' AND (question LIKE ? OR user_alias LIKE ? OR tools_used LIKE ?)';
+      where += ' AND (a.question LIKE ? OR a.user_alias LIKE ? OR a.tools_used LIKE ?)';
       params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+    }
+
+    // 隐藏内部账号(root/test):按 user_id join user 判角色;join 不到(u.role NULL,如已删用户)按真实用户保留
+    if (hideInternal) {
+      where += ` AND (u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`;
+      params.push(...INTERNAL_ROLES);
     }
 
     const [[rows], [countRes]] = await Promise.all([
       pool.query(
-        `SELECT * FROM agent_logs WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        `SELECT a.* FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${where} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
         [...params, take, offset],
       ),
       pool.query(
-        `SELECT COUNT(*) as total FROM agent_logs WHERE ${where}`,
+        `SELECT COUNT(*) as total FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${where}`,
         params,
       ),
     ]);

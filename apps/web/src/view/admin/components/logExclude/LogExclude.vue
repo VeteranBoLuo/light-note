@@ -1,49 +1,56 @@
 <template>
-  <div class="log-exclude">
-    <header class="le-header">
-      <h2 class="le-title">日志白名单</h2>
-      <p class="le-subtitle">
-        加入白名单的浏览器指纹,其 API 日志 / 操作日志 / 转化漏斗都不再记录。用来把自己测试用的设备排除掉;换电脑/浏览器时,在对应设备上打开本页点一次「加入」即可(白名单存服务端,任意设备当场加)。
-      </p>
-    </header>
+  <CommonContainer title="日志白名单" @backClick="router.push('/admin')">
+    <div class="log-exclude">
+      <header class="le-header">
+        <!-- 移动端标题由 CommonContainer 顶栏提供,这里隐藏避免重复;PC 端无顶栏,保留标题 -->
+        <h2 v-if="!bookmark.isMobile" class="le-title">日志白名单</h2>
+        <p class="le-subtitle">
+          加入白名单的浏览器指纹,其 API 日志 / 操作日志 / 转化漏斗都不再记录。用来把自己测试用的设备排除掉;换电脑/浏览器时,在对应设备上打开本页点一次「加入」即可(白名单存服务端,任意设备当场加)。
+        </p>
+      </header>
 
-    <div class="le-current">
-      <div class="le-current-info">
-        <span class="le-label">当前浏览器指纹</span>
-        <code class="le-fp">{{ currentFp || '(未生成)' }}</code>
-      </div>
-      <b-button v-if="currentFp" type="primary" size="small" :disabled="inList || adding" @click="addCurrent">
-        {{ inList ? '本设备已在白名单' : '加入白名单' }}
-      </b-button>
-    </div>
-
-    <div class="le-list">
-      <div class="le-list-head">
-        <span>已加入设备({{ list.length }})</span>
-        <b-button size="small" :disabled="loading" @click="load">刷新</b-button>
-      </div>
-      <div v-if="!list.length" class="le-empty">暂无</div>
-      <div
-        v-for="item in list"
-        :key="item.fingerprint"
-        class="le-item"
-        :class="{ 'is-current': item.fingerprint === currentFp }"
-      >
-        <div class="le-item-main">
-          <code class="le-fp">{{ item.fingerprint }}</code>
-          <span v-if="item.fingerprint === currentFp" class="le-badge">本设备</span>
-          <span v-if="item.note" class="le-note">{{ item.note }}</span>
+      <div class="le-current">
+        <div class="le-current-info">
+          <span class="le-label">当前浏览器指纹</span>
+          <code class="le-fp">{{ currentFp || '(未生成)' }}</code>
         </div>
-        <span class="le-del dom-hover" @click="remove(item.fingerprint)">删除</span>
+        <b-button v-if="currentFp" type="primary" size="small" :disabled="inList || adding" @click="addCurrent">
+          {{ inList ? '本设备已在白名单' : '加入白名单' }}
+        </b-button>
+      </div>
+
+      <div class="le-list">
+        <div class="le-list-head">
+          <span>已加入设备({{ list.length }})</span>
+          <b-button size="small" :disabled="loading" @click="load">刷新</b-button>
+        </div>
+        <div v-if="!list.length" class="le-empty">暂无</div>
+        <div
+          v-for="item in list"
+          :key="item.fingerprint"
+          class="le-item"
+          :class="{ 'is-current': item.fingerprint === currentFp }"
+        >
+          <div class="le-item-main">
+            <code class="le-fp">{{ item.fingerprint }}</code>
+            <span v-if="item.fingerprint === currentFp" class="le-badge">本设备</span>
+            <!-- 是否「本设备」由上方 badge 按当前浏览器指纹动态判断;历史数据里 note 被写死成「本设备」是脏数据,过滤掉避免每行都显示 -->
+            <span v-if="item.note && item.note !== '本设备'" class="le-note">{{ item.note }}</span>
+          </div>
+          <span class="le-del dom-hover" @click="remove(item.fingerprint)">删除</span>
+        </div>
       </div>
     </div>
-  </div>
+  </CommonContainer>
 </template>
 
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { getLogExclude, addLogExclude, removeLogExclude } from '@/api/commonApi';
+  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import { bookmarkStore } from '@/store';
+  import router from '@/router';
 
   interface ExcludeItem {
     fingerprint: string;
@@ -51,6 +58,7 @@
     create_time?: string;
   }
 
+  const bookmark = bookmarkStore();
   const list = ref<ExcludeItem[]>([]);
   const loading = ref(false);
   const adding = ref(false);
@@ -72,7 +80,8 @@
     if (!currentFp.value || inList.value) return;
     adding.value = true;
     try {
-      const res = await addLogExclude(currentFp.value, '本设备');
+      // 不传 note:是否本设备由列表项 badge 按 fingerprint === currentFp 动态判断,固化进 note 会导致换设备后仍显示「本设备」
+      const res = await addLogExclude(currentFp.value);
       if (res.status === 200) {
         message.success('已加入白名单,本设备的日志/漏斗将不再记录');
         await load();

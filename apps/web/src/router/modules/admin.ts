@@ -100,6 +100,10 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'logCleanup',
     component: () => import('@/view/admin/components/logCleanup/LogCleanup.vue'),
   },
+  {
+    path: 'logExclude',
+    component: () => import('@/view/admin/components/logExclude/LogExclude.vue'),
+  },
 ];
 
 export default adminRouter;

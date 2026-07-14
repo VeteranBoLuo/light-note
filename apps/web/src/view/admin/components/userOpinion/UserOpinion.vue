@@ -35,6 +35,9 @@
             :options="statusOptions"
             @change="searchOpinionList"
           />
+          <label class="user-opinion__hide-internal">
+            <BSwitch v-model:checked="hideInternal" @change="onToggleInternal" />隐藏内部账号(管理员/测试)
+          </label>
         </div>
         <span class="admin-filters-hint">支持内容检索和状态筛选，回复后用户会收到未读提醒。</span>
       </div>
@@ -143,6 +146,7 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
@@ -169,6 +173,7 @@
   const total = ref(0);
   const searchValue = ref('');
   const statusFilter = ref((route.query.status as string) || 'all');
+  const hideInternal = ref(true);
   const summary = ref<any>({});
   const timer = ref();
 
@@ -245,6 +250,11 @@
     }, 400);
   }
 
+  function onToggleInternal() {
+    currentPage.value = 1;
+    searchOpinionList();
+  }
+
   async function searchOpinionList() {
     const res = await opinionApi.getOpinionList({
       currentPage: currentPage.value,
@@ -252,6 +262,7 @@
       filters: {
         key: searchValue.value,
         status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+        hideInternal: hideInternal.value,
       },
     });
     if (res.status === 200) {
@@ -315,6 +326,16 @@
 
   .user-opinion__status-filter {
     width: 160px;
+  }
+
+  .user-opinion__hide-internal {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-color);
+    white-space: nowrap;
+    cursor: pointer;
   }
 
   .user-opinion__filters-hint,

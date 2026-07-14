@@ -9,6 +9,9 @@
             全站累计规模与近期动态一览<template v-if="data"> · 更新于 {{ data.generatedAt }}</template>
           </p>
         </div>
+        <label class="ov-hide-internal">
+          <BSwitch v-model:checked="hideInternal" @change="load" />隐藏内部账号(管理员/测试)
+        </label>
       </header>
 
       <!-- 待办提示:有待处理事项时高亮 -->
@@ -168,8 +171,10 @@
   import { ref, computed, onMounted } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import router from '@/router';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
 
   const data = ref<any>(null);
+  const hideInternal = ref(true);
 
   const n = (v: any) => (v == null ? '—' : Number(v).toLocaleString());
   const delta = (v: any) => (v == null ? '今日 —' : `今日 +${Number(v).toLocaleString()}`);
@@ -237,7 +242,7 @@
   }
 
   function load() {
-    apiBasePost('/api/common/getAdminOverview', {}).then((res: any) => {
+    apiBasePost('/api/common/getAdminOverview', { hideInternal: hideInternal.value }).then((res: any) => {
       if (res.status === 200) data.value = res.data;
     });
   }
@@ -247,6 +252,17 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-manage.less';
+
+  .ov-hide-internal {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-color);
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
 
   /* 内容较多:整面板纵向滚动、KPI 卡按自然高度排布(同 ConversionFunnel 的做法) */
   .admin-panel {

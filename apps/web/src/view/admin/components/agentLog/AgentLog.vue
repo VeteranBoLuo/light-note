@@ -49,6 +49,7 @@
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
           </b-input>
+          <BSwitch v-model:checked="hideInternal" @change="onToggleInternal" />隐藏内部账号(管理员/测试)
         </div>
         <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
       </div>
@@ -111,6 +112,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
 
   const logList = ref([]);
   const currentPage = ref(1);
@@ -121,6 +123,7 @@
   const todayCost = ref('0');
   const totalCost = ref('0');
   const searchValue = ref('');
+  const hideInternal = ref(true);
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
   let timer: number | null = null;
@@ -143,11 +146,19 @@
     timer = window.setTimeout(() => { currentPage.value = 1; fetchLogs(); }, 500);
   }
 
+  // 隐藏内部账号(root/test)开关:切换后列表与统计同步按新口径重查
+  function onToggleInternal() {
+    currentPage.value = 1;
+    fetchLogs();
+    fetchTodaySummary();
+  }
+
   function fetchLogs() {
     apiBasePost('/api/common/getAgentLogs', {
       keyword: searchValue.value || undefined,
       pageSize: pageSize.value,
       currentPage: currentPage.value,
+      hideInternal: hideInternal.value,
     }).then((res: any) => {
       if (res.status === 200) {
         logList.value = res.data.items || [];
@@ -157,7 +168,7 @@
   }
 
   function fetchTodaySummary() {
-    apiBasePost('/api/common/getAgentLogsSummary', {}).then((res: any) => {
+    apiBasePost('/api/common/getAgentLogsSummary', { hideInternal: hideInternal.value }).then((res: any) => {
       if (res.status === 200) {
         const d = res.data;
         todayCount.value = d.today?.count ?? 0;

@@ -1366,7 +1366,7 @@ export default {
       <p>To better assist you, please search for the content you need to understand using the left directory or search box. In addition, our website supports <b>multi-device adaptation</b>, whether you are on PC, mobile phone, or tablet, you can enjoy a consistent excellent experience.</p>
       <p>If you encounter any problems during use, please provide your valuable suggestions through feedback. You can also contact me through the following methods:</p>
       <div>
-        Email: <a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
+        Email: <a href="mailto:1902013368{'@'}qq.com" style="text-decoration: underline;">1902013368{'@'}qq.com</a>
       </div>
       <p>Although the project was established not long ago, I guarantee that the quality is excellent, and considerable effort has been put into the details, ensuring you'll be satisfied with the experience! In the future, I will continue to upgrade it, such as adding bookmark export/import, bookmark sharing, bookmark synchronization and backup, team collaboration, AI analysis, and other features, making bookmark management more flexible and convenient. Please look forward to it - more practical features are on the way, guaranteeing to take your bookmark management experience to the next level!</p>
       <p>Thank you for your understanding and support!</p>
@@ -1596,7 +1596,7 @@ export default {
     copyright: '© 2024 LightNote',
     helpCenter: 'Help Center',
     contactUs: 'Contact us',
-    contactEmail: 'Email: 1902013368@qq.com',
+    contactEmail: "Email: 1902013368{'@'}qq.com",
     feedbackLabel: 'Share your feedback',
     feedbackPlaceholder: 'Feature ideas, bug reports, anything on your mind…',
     submitting: 'Submitting…',

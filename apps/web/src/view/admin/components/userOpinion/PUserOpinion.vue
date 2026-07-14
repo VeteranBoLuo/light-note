@@ -160,6 +160,7 @@
       filters: {
         key: searchValue.value,
         status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+        hideInternal: true,
       },
     });
     if (res.status === 200) {

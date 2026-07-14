@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { snakeCaseKeys, resultData, insertData } from '../util/common.js';
+import { snakeCaseKeys, resultData, insertData, INTERNAL_ROLES } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
 
@@ -52,6 +52,12 @@ export const getOpinionList = async (req, res) => {
   }
 
   try {
+    // 隐藏内部账号(root/test):仅 root 查看全部反馈(未指定某用户)时生效;查指定用户或普通用户看自己时不过滤
+    const hideInternal = filters.hideInternal !== false;
+    const applyRoleFilter = role === 'root' && targetUserId === undefined && hideInternal;
+    const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
+    const internalRoleClause = `(u.role IS NULL OR u.role NOT IN (${rolePh}))`;
+
     let query = 'SELECT o.*, u.alias FROM opinion o LEFT JOIN user u ON o.user_id = u.id WHERE o.del_flag = 0';
     const params = [];
     const whereClauses = [];
@@ -72,6 +78,11 @@ export const getOpinionList = async (req, res) => {
     if (filters.status) {
       whereClauses.push('o.status = ?');
       params.push(filters.status);
+    }
+
+    if (applyRoleFilter) {
+      whereClauses.push(internalRoleClause);
+      params.push(...INTERNAL_ROLES);
     }
 
     if (whereClauses.length > 0) {
@@ -103,19 +114,28 @@ export const getOpinionList = async (req, res) => {
           totalParams.push(filters.status);
         }
 
+        if (applyRoleFilter) {
+          totalQuery += ` AND ${internalRoleClause}`;
+          totalParams.push(...INTERNAL_ROLES);
+        }
+
         const [totalRes] = await pool.query(totalQuery, totalParams);
         let summaryQuery = `
           SELECT
             SUM(CASE WHEN o.status = '${OPINION_STATUS.PENDING}' THEN 1 ELSE 0 END) AS pending_total,
             SUM(CASE WHEN o.status = '${OPINION_STATUS.REPLIED}' THEN 1 ELSE 0 END) AS replied_total,
             SUM(CASE WHEN o.status = '${OPINION_STATUS.VIEWED}' THEN 1 ELSE 0 END) AS viewed_total
-          FROM opinion o
+          FROM opinion o LEFT JOIN user u ON o.user_id = u.id
           WHERE o.del_flag = 0
         `;
         const summaryParams = [];
         if (targetUserId !== undefined) {
           summaryQuery += ' AND o.user_id = ?';
           summaryParams.push(targetUserId);
+        }
+        if (applyRoleFilter) {
+          summaryQuery += ` AND ${internalRoleClause}`;
+          summaryParams.push(...INTERNAL_ROLES);
         }
         const [summaryRes] = await pool.query(summaryQuery, summaryParams);
         res.send(

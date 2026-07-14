@@ -89,7 +89,7 @@ export const SHOP_ITEMS = [
   // 头像框装扮(type=cosmetic,effect=frame):一次性拥有、可佩戴,前端按 id 渲染样式
   { id: 'frame_gold', type: 'cosmetic', effect: 'frame', name: '鎏金', desc: '头像框 · 金光流转', cost: 500, minLevel: 0 },
   { id: 'frame_sakura', type: 'cosmetic', effect: 'frame', name: '樱绯', desc: '头像框 · 樱色浪漫', cost: 500, minLevel: 0 },
-  { id: 'frame_neon', type: 'cosmetic', effect: 'frame', name: '霓虹', desc: '头像框 · 赛博霓虹', cost: 700, minLevel: 4 },
+  { id: 'frame_neon', type: 'cosmetic', effect: 'frame', name: '霓虹', desc: '头像框 · 赛博霓虹', cost: 500, minLevel: 0 },
   { id: 'frame_galaxy', type: 'cosmetic', effect: 'frame', name: '星河', desc: '头像框 · 流光星河', cost: 1200, minLevel: 8 },
 ];
 

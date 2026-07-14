@@ -129,7 +129,12 @@
       @mouseleave="handleTriggerMouseLeave"
     >
       <!-- 佩戴头像框:关掉父级 clip,由框做圆环、内部头像单独裁圆,避免被裁 -->
-      <span v-if="equippedFrameRing" class="nav-avatar-frame" :style="{ background: equippedFrameRing }">
+      <span
+        v-if="equippedFrameRing"
+        class="nav-avatar-frame"
+        :class="{ 'nav-avatar-frame--galaxy': equippedIsGalaxy }"
+        :style="{ '--frame-ring': equippedFrameRing }"
+      >
         <span class="nav-avatar-clip"><svg-icon size="30" :src="user.headPicture || icon.navigation.user" class="dom-hover" /></span>
       </span>
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
@@ -176,6 +181,7 @@
   // 成长徽章:登录用户在头像旁展示当前等级(纯展示,管理成长走「设置」菜单入口)
   const { growth: growthInfo, load: loadGrowth } = useGrowth();
   const equippedFrameRing = computed(() => frameRing(growthInfo.value?.equippedFrame));
+  const equippedIsGalaxy = computed(() => growthInfo.value?.equippedFrame === 'frame_galaxy');
   const badgeTier = computed(() => tierOf(growthInfo.value?.level || 1));
   onMounted(() => {
     loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
@@ -443,6 +449,22 @@
     padding: 2px;
     border-radius: 50%;
     line-height: 0;
+    position: relative;
+  }
+  /* 渐变环单独放底层:旋转/色相动效只作用在环上,中间头像不转、不变色 */
+  .nav-avatar-frame::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--frame-ring);
+    z-index: 0;
+    animation: nav-frame-spin 7s linear infinite;
+  }
+  .nav-avatar-frame--galaxy::before {
+    animation:
+      nav-frame-spin 7s linear infinite,
+      nav-frame-glow 2.6s ease-in-out infinite;
   }
   .nav-avatar-clip {
     display: inline-flex;
@@ -450,6 +472,27 @@
     overflow: hidden;
     background: var(--background-color);
     line-height: 0;
+    position: relative;
+    z-index: 1;
+  }
+  @keyframes nav-frame-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes nav-frame-glow {
+    0%,
+    100% {
+      filter: brightness(1);
+    }
+    50% {
+      filter: brightness(1.35);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav-avatar-frame::before {
+      animation: none;
+    }
   }
 
   .handle-body {

@@ -83,6 +83,7 @@
       keyword: searchValue.value || undefined,
       pageSize: pageSize.value,
       currentPage: currentPage.value,
+      hideInternal: true,
     }).then((res: any) => {
       if (res.status === 200) {
         logList.value = res.data.items || [];

@@ -1354,7 +1354,7 @@ export default {
       <p>为了更好地帮助您，请使用左侧目录或搜索框搜索您需要了解的内容。此外，我们的网站支持<b>多设备适配</b>，无论您在 PC、手机还是平板上，都能享受到一致的优质体验。</p>
       <p>如果您在使用过程中遇到任何问题，请通过意见反馈提供您的宝贵建议。您也可以通过以下方式联系我：</p>
       <div>
-        邮箱：<a href="mailto:1902013368@qq.com" style="text-decoration: underline;">1902013368@qq.com</a>
+        邮箱：<a href="mailto:1902013368{'@'}qq.com" style="text-decoration: underline;">1902013368{'@'}qq.com</a>
       </div>
       <p>虽然项目成立不久，但我保证质量上乘，并在细节上倾注了大量心血，确保您满意体验！未来，我将继续升级它，例如添加书签导出/导入、书签分享、书签同步备份、团队协作、AI 分析等功能，让书签管理更加灵活便捷。请期待吧——更多实用功能正在路上，保证将您的书签管理体验提升到新水平！</p>
       <p>感谢您的理解和支持！</p>
@@ -1584,7 +1584,7 @@ export default {
     copyright: '© 2024 轻笺',
     helpCenter: '帮助中心',
     contactUs: '联系我们',
-    contactEmail: '邮箱：1902013368@qq.com',
+    contactEmail: "邮箱：1902013368{'@'}qq.com",
     feedbackLabel: '写下你的反馈意见',
     feedbackPlaceholder: '功能建议、问题反馈、任何你想说的…',
     submitting: '提交中…',

@@ -15,6 +15,17 @@
         <GrowthCard />
       </section>
 
+      <!-- 签到日历:紧跟成长卡(第一个卡片),放在时光回顾之前;满级用户签到已并入顶部卡,故 !isMax 才单独展示 -->
+      <section v-if="!growth?.isMax" class="growth-panel">
+        <SigninCalendar
+          :checkin-days="stats.checkinDays"
+          :checked-in-today="growth?.checkedInToday"
+          :streak="growth?.streak"
+          :can-makeup="growth?.canUseProtectCard"
+          @makeup="handleCalendarMakeup"
+        />
+      </section>
+
       <section v-if="hasRecap" class="growth-panel">
         <RecapCard />
       </section>
@@ -42,16 +53,6 @@
 
       <section class="growth-panel">
         <MyInventory />
-      </section>
-
-      <section v-if="!growth?.isMax" class="growth-panel">
-        <SigninCalendar
-          :checkin-days="stats.checkinDays"
-          :checked-in-today="growth?.checkedInToday"
-          :streak="growth?.streak"
-          :can-makeup="growth?.canUseProtectCard"
-          @makeup="handleCalendarMakeup"
-        />
       </section>
 
       <section v-if="streakMilestones.length" class="growth-panel">

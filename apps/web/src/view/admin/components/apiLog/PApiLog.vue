@@ -82,12 +82,16 @@
     { title: '时间', key: 'requestTime', width: '1fr' },
   ];
 
+  // 常用系统各配一个有辨识度、深浅主题都可读的颜色;未知/其他保持中性灰
   function getOsColor(os?: string): string {
-    if (!os) return '#666';
-    if (os.includes('Windows')) return '#1677ff';
-    if (os.includes('Mac')) return '#00a884';
-    if (os.includes('Linux')) return '#52c41a';
-    return '#666';
+    if (!os) return '#8a919e';
+    if (os.includes('Windows')) return '#3b82f6'; // 蓝
+    if (os.includes('iOS') || os.includes('iPhone') || os.includes('iPad')) return '#0ea5e9'; // 天蓝
+    if (os.includes('Mac')) return '#8b5cf6'; // 紫
+    if (os.includes('Android')) return '#22c55e'; // 绿
+    if (os.includes('HarmonyOS') || os.includes('Harmony') || os.includes('鸿蒙')) return '#ef4444'; // 红
+    if (os.includes('Linux') || os.includes('Ubuntu')) return '#f59e0b'; // 橙
+    return '#8a919e'; // 其他/未知
   }
 
   const currentPage = ref<number>(1);

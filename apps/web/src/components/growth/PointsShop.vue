@@ -45,7 +45,7 @@
     <div v-if="frames.length" class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
     <div class="ps-grid">
       <div v-for="it in frames" :key="it.id" class="ps-item" :class="{ 'is-equipped': it.equipped }">
-        <div class="ps-frame-preview" :style="frameWrapStyle(it.id, 3)"><span class="ps-frame-inner">🙂</span></div>
+        <div class="ps-frame-preview" :class="{ 'ps-frame-preview--galaxy': it.id === 'frame_galaxy' }" :style="frameWrapStyle(it.id, 4)"><span class="ps-frame-inner">🙂</span></div>
         <div class="ps-item-body">
           <div class="ps-item-name">
             {{ itemName(it) }}
@@ -312,17 +312,59 @@
     line-height: 1;
   }
   .ps-frame-preview {
+    /* 父 .ps-item 是 flex column(默认 align-items:stretch),不加 align-self 会把预览拉满整行宽度,
+       叠加 border-radius:50% 会渲染成横向胶囊而非圆形头像框 */
+    align-self: flex-start;
     line-height: 0;
+    position: relative;
+  }
+  /* 渐变环单独放底层:旋转/色相动效只作用在这里,不波及中间的头像/表情 */
+  .ps-frame-preview::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--frame-ring);
+    z-index: 0;
+    animation: ps-ring-spin 7s linear infinite;
+  }
+  /* 星河(conic 彩虹):旋转 + 亮度脉动(流光闪烁);不用色相流动以免出现绿色。只作用在环上,头像不受影响 */
+  .ps-frame-preview--galaxy::before {
+    animation:
+      ps-ring-spin 7s linear infinite,
+      ps-ring-glow 2.6s ease-in-out infinite;
   }
   .ps-frame-inner {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     background: var(--background-color);
-    font-size: 16px;
+    font-size: 24px;
+  }
+  @keyframes ps-ring-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes ps-ring-glow {
+    0%,
+    100% {
+      filter: brightness(1);
+    }
+    50% {
+      filter: brightness(1.35);
+    }
+  }
+  /* 尊重系统「减少动态效果」偏好 */
+  @media (prefers-reduced-motion: reduce) {
+    .ps-frame-preview::before {
+      animation: none;
+    }
   }
   .ps-item-body {
     flex: 1 1 auto;

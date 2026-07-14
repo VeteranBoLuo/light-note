@@ -72,6 +72,12 @@
         icon: icon.userCenter.sql,
         url: '/logCleanup',
       },
+      {
+        id: 'logExclude',
+        title: '日志白名单',
+        icon: icon.userCenter.log,
+        url: '/logExclude',
+      },
     ],
     [
       {
