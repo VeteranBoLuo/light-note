@@ -151,7 +151,8 @@
     position: fixed;
     inset: 0;
     z-index: 4000;
-    pointer-events: none; /* 遮罩层本身不拦截,交互只发生在气泡和高亮的目标上 */
+    /* 遮罩整体拦截点击:引导期间点蒙版/高亮区都不会穿透到底层、误触打断;推进只走气泡上的「下一步/上一步/跳过」,跨页由 step.route 自动跳转 */
+    pointer-events: auto;
   }
   .bguide-spotlight {
     position: fixed;

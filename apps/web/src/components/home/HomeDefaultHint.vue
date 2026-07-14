@@ -52,6 +52,12 @@
   function dismiss() {
     show.value = false;
     clearFlag();
+    // 通知建书签引导:默认首页选择已结束,可以接着启动(两个引导串行,不重叠)
+    try {
+      window.dispatchEvent(new Event('ln:home-default-done'));
+    } catch {
+      /* ignore */
+    }
   }
 
   async function pick(value: HomePagePreference, label: string) {
@@ -80,8 +86,8 @@
     }
     // 仅新注册的登录用户展示一次(显示即清标记)
     if (flagged && user.id && user.role !== 'visitor') {
+      // 不在这里清标记:保留到 dismiss,作为「HomeDefaultHint 正活跃」的信号,让建书签引导先等它关闭
       show.value = true;
-      clearFlag();
     }
   }
 

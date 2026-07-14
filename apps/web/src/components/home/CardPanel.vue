@@ -68,7 +68,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
-  import { computed, ref, watch, nextTick } from 'vue';
+  import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -114,8 +114,21 @@
     if (bookmark.isMobile) return; // 移动端入口不同,暂不引导
     if (getBookList.value.length) return; // 有书签不引导
     if (guideDone('create-bookmark')) return; // 一次性,引导过不再弹
+    // 与「选默认首页」提示串行:注册后该标记还在(HomeDefaultHint 待处理/正显示)时先不启动,
+    // 等它关闭派发 ln:home-default-done 事件后再触发,避免两个引导同时出现、遮罩挡住选择条
+    try {
+      if (localStorage.getItem('ln_just_registered') === '1') return;
+    } catch {
+      /* 隐私模式忽略 */
+    }
     nextTick(() => startGuide('create-bookmark', CREATE_BOOKMARK_STEPS));
   }
+  // 「选默认首页」提示关闭后,轮到建书签引导启动(串行,不与其重叠)
+  function onHomeDefaultDone() {
+    maybeStartCreateBookmarkGuide();
+  }
+  onMounted(() => window.addEventListener('ln:home-default-done', onHomeDefaultDone));
+  onBeforeUnmount(() => window.removeEventListener('ln:home-default-done', onHomeDefaultDone));
 
   // 首屏空状态引导:书签为空(含 seed 失败兜底)时引导添加第一个,而非一片空白
   function goAddBookmark() {
