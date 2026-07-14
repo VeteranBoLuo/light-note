@@ -1,4 +1,4 @@
-import { generateUUID } from '../../../util/common.js';
+import { generateUUID } from '../data.js';
 import pool from '../../../db/index.js';
 
 export default {
@@ -17,14 +17,34 @@ export default {
   },
   requireRoot: true,
   isWrite: true,
+  riskLevel: 'high',
+  confirmationPolicy: 'always',
+  async preview(args) {
+    const title = String(args.title || '').trim().slice(0, 255);
+    if (!title) throw new Error('TITLE_REQUIRED: 标题不能为空');
+    const [existing] = await pool.query('SELECT id FROM knowledge_base WHERE title = ? LIMIT 1', [title]);
+    return {
+      title: existing.length ? '更新知识库条目' : '创建知识库条目',
+      target: title,
+      impact: existing.length
+        ? `将覆盖现有条目 ${existing[0].id} 的正文和分类配置`
+        : '将新增一条知识库内容',
+    };
+  },
   async execute(args, ctx) {
-    const title = (args.title || '').trim();
+    const title = String(args.title || '').trim().slice(0, 255);
     if (!title) return { error: 'TITLE_REQUIRED', message: '标题不能为空' };
 
-    const content = args.content || '';
-    const category = args.category || '内部知识';
-    const status = args.status || 'internal';
-    const type = args.type || 'markdown';
+    const content = String(args.content || '').slice(0, 100000);
+    const category = String(args.category || '内部知识').slice(0, 100);
+    const status = String(args.status || 'internal');
+    const type = String(args.type || 'markdown');
+    if (!['public', 'internal'].includes(status)) {
+      return { error: 'INVALID_STATUS', message: '知识库状态仅支持 public 或 internal' };
+    }
+    if (!['html', 'markdown'].includes(type)) {
+      return { error: 'INVALID_TYPE', message: '知识库内容类型仅支持 html 或 markdown' };
+    }
 
     // Check if title already exists
     const [existing] = await pool.query('SELECT id FROM knowledge_base WHERE title = ? LIMIT 1', [title]);

@@ -19,6 +19,7 @@ import tagDetailRouter from '@/router/modules/tagDetail.ts';
 import trashRouter from '@/router/modules/trash.ts';
 import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
+import inboxRouter from '@/router/modules/inbox.ts';
 import { getDesktopHomePath } from '@/utils/preferences.ts';
 
 const routes: RouteRecordRaw[] = [
@@ -48,6 +49,7 @@ const routes: RouteRecordRaw[] = [
       trashRouter,
       knowledgeBaseRouter,
       graphRouter,
+      inboxRouter,
       ...securityCenterRouter,
       notificationCenterRouter,
     ],

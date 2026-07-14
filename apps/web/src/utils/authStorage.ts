@@ -1,7 +1,7 @@
 import { UserPreferences } from '@/utils/preferences';
 
 const PREVIEW_FLAG_KEY = 'adminLoginPreview';
-const PREVIEW_USER_ID_KEY = 'adminLoginPreviewUserId';
+const PREVIEW_TOKEN_KEY = 'adminContextToken';
 const PREVIEW_PREFERENCES_KEY = 'adminLoginPreviewPreferences';
 
 export const ADMIN_LOGIN_PREVIEW_FRAME_NAME = 'admin-login-preview-frame';
@@ -16,8 +16,8 @@ export function isAdminLoginPreview(): boolean {
   return hasPreviewQuery || isNamedPreviewFrame || isMarkedPreviewFrame;
 }
 
-export function getAdminLoginPreviewUserId(): string {
-  return isAdminLoginPreview() ? window.sessionStorage.getItem(PREVIEW_USER_ID_KEY) || '' : '';
+export function getAdminContextToken(): string {
+  return isAdminLoginPreview() ? window.sessionStorage.getItem(PREVIEW_TOKEN_KEY) || '' : '';
 }
 
 export function getAdminLoginPreviewPreferences(): Partial<UserPreferences> {
@@ -31,9 +31,9 @@ export function getAdminLoginPreviewPreferences(): Partial<UserPreferences> {
   }
 }
 
-export function setAdminLoginPreview(userId: string, preferences?: Partial<UserPreferences> | null) {
+export function setAdminLoginPreview(token: string, preferences?: Partial<UserPreferences> | null) {
   window.sessionStorage.setItem(PREVIEW_FLAG_KEY, '1');
-  window.sessionStorage.setItem(PREVIEW_USER_ID_KEY, userId);
+  window.sessionStorage.setItem(PREVIEW_TOKEN_KEY, token);
   if (preferences) {
     window.sessionStorage.setItem(PREVIEW_PREFERENCES_KEY, JSON.stringify(preferences));
   } else {
@@ -43,7 +43,7 @@ export function setAdminLoginPreview(userId: string, preferences?: Partial<UserP
 
 export function clearAdminLoginPreview() {
   window.sessionStorage.removeItem(PREVIEW_FLAG_KEY);
-  window.sessionStorage.removeItem(PREVIEW_USER_ID_KEY);
+  window.sessionStorage.removeItem(PREVIEW_TOKEN_KEY);
   window.sessionStorage.removeItem(PREVIEW_PREFERENCES_KEY);
 }
 

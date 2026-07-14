@@ -1,5 +1,5 @@
 import pool from '../../../db/index.js';
-import { insertData } from '../../../util/common.js';
+import { insertData } from '../data.js';
 
 export default {
   name: 'add_tag',
@@ -13,6 +13,8 @@ export default {
   },
   requireRoot: false,
   isWrite: true,
+  riskLevel: 'low',
+  confirmationPolicy: 'default',
   async execute(args, ctx) {
     const tagName = (args.tagName || args.tag || '').trim();
     if (!tagName) {

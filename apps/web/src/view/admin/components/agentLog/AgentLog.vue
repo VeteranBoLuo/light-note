@@ -73,11 +73,16 @@
         <div class="agent-detail" v-if="selectedRecord">
           <div class="agent-detail__grid">
             <div><label>用户</label><p>{{ selectedRecord.userAlias || '-' }}</p></div>
-            <div><label>状态</label><p>{{ selectedRecord.status === 'success' ? '✓ 成功' : '✗ 失败' }}</p></div>
+            <div><label>状态</label><p>{{ selectedRecord.status || '-' }}</p></div>
+            <div><label>供应商 / 模型</label><p>{{ selectedRecord.provider || '-' }} / {{ selectedRecord.model || '-' }}</p></div>
+            <div><label>Request ID</label><p>{{ selectedRecord.requestId || '-' }}</p></div>
             <div><label>时间</label><p>{{ formatTime(selectedRecord.createdAt) }}</p></div>
             <div><label>耗时</label><p>{{ selectedRecord.durationMs }} ms</p></div>
+            <div><label>首字耗时</label><p>{{ selectedRecord.firstTokenMs ?? '-' }} ms</p></div>
             <div><label>API 调用次数</label><p>{{ selectedRecord.iterations || 1 }} 次</p></div>
             <div><label>费用</label><p>¥{{ Number(selectedRecord.cost || 0).toFixed(6) }}</p></div>
+            <div><label>Usage</label><p>{{ selectedRecord.usageStatus || '-' }}</p></div>
+            <div><label>结束原因</label><p>{{ selectedRecord.finishReason || '-' }}</p></div>
           </div>
           <div class="agent-detail__question">
             <label>提问</label>
@@ -86,6 +91,14 @@
           <div class="agent-detail__tools" v-if="selectedRecord.toolsUsed">
             <label>调用工具</label>
             <p>{{ selectedRecord.toolsUsed }}</p>
+          </div>
+          <div class="agent-detail__tools" v-if="selectedRecord.selectedTools">
+            <label>本轮候选工具</label>
+            <p>{{ formatSelectedTools(selectedRecord.selectedTools) }}</p>
+          </div>
+          <div class="agent-detail__tools">
+            <label>阶段耗时</label>
+            <p>Planner {{ selectedRecord.plannerMs ?? '-' }} ms · Tool {{ selectedRecord.toolMs ?? '-' }} ms · Final {{ selectedRecord.finalMs ?? '-' }} ms</p>
           </div>
           <div class="agent-detail__tokens">
             <div class="token-bar">
@@ -132,6 +145,7 @@
     { title: '用户', key: 'userAlias', width: '1fr' },
     { title: '提问', key: 'question', width: '2fr', ellipsis: true },
     { title: '工具', key: 'toolsUsed', width: '1fr' },
+    { title: '供应商', key: 'provider', width: '90px' },
     { title: '费用(¥)', key: 'cost', width: '100px' },
     { title: '调用', key: 'iterations', width: '60px' },
     { title: '时间', key: 'createdAt', width: '1fr' },
@@ -189,6 +203,16 @@
   function formatNumber(n: number) {
     if (n == null) return '0';
     return n.toLocaleString();
+  }
+
+  function formatSelectedTools(value: unknown) {
+    if (Array.isArray(value)) return value.join('、');
+    try {
+      const parsed = JSON.parse(String(value || '[]'));
+      return Array.isArray(parsed) ? parsed.join('、') : String(value || '-');
+    } catch {
+      return String(value || '-');
+    }
   }
 
   onMounted(() => {

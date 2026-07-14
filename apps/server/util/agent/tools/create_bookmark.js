@@ -1,5 +1,5 @@
 import pool from '../../../db/index.js';
-import { insertData } from '../../../util/common.js';
+import { insertData } from '../data.js';
 import { fetchWebMeta } from '../../fetchWebMeta.js';
 import { ensureTag } from '../tagUtil.js';
 
@@ -19,6 +19,8 @@ export default {
   },
   requireRoot: false,
   isWrite: true,
+  riskLevel: 'low',
+  confirmationPolicy: 'default',
   async execute(args, ctx) {
     let url = String(args.url || '').trim();
     if (!url) return { error: 'URL_REQUIRED', message: '网址不能为空' };
@@ -29,7 +31,7 @@ export default {
 
     // 未给名称/描述时抓网页补全(fetchWebMeta 自带 SSRF 防护)
     if (!name || !description) {
-      const meta = await fetchWebMeta(url);
+      const meta = await fetchWebMeta(url, { signal: ctx.signal });
       if (meta.ok) {
         if (!name) name = meta.title || '';
         if (!description) description = meta.description || '';
@@ -37,26 +39,41 @@ export default {
     }
     if (!name) name = url; // 兜底
 
-    const userId = ctx.userId;
-    const [dup] = await pool.query('SELECT id FROM bookmark WHERE user_id = ? AND name = ? AND del_flag = 0', [userId, name]);
-    if (dup.length) return { error: 'DUPLICATE', message: `已存在同名书签「${name}」` };
-
-    const data = insertData({ name, url, description, userId });
-    await pool.query('INSERT INTO bookmark SET ?', [data]);
-
-    // 关联标签(自动建标签,最多 4 个,与手动新增一致)
     const tagNames = Array.isArray(args.tags)
       ? args.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 4)
       : [];
+    const userId = ctx.userId;
+    const data = insertData({ name, url, description, userId });
     const attached = [];
-    for (const tagName of tagNames) {
-      const tagId = await ensureTag(userId, tagName);
-      if (!tagId) continue;
-      await pool.query(
-        `INSERT IGNORE INTO resource_tag_relations (tag_id, resource_type, resource_id, user_id, source) VALUES (?, 'bookmark', ?, ?, 'agent')`,
-        [tagId, data.id, userId],
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [dup] = await connection.query(
+        'SELECT id FROM bookmark WHERE user_id = ? AND name = ? AND del_flag = 0',
+        [userId, name],
       );
-      attached.push(tagName);
+      if (dup.length) {
+        await connection.rollback();
+        return { error: 'DUPLICATE', message: `已存在同名书签「${name}」` };
+      }
+
+      await connection.query('INSERT INTO bookmark SET ?', [data]);
+      // 书签和标签关系作为一个原子操作提交，避免标签失败后残留半成功书签。
+      for (const tagName of tagNames) {
+        const tagId = await ensureTag(userId, tagName, connection);
+        if (!tagId) continue;
+        await connection.query(
+          `INSERT IGNORE INTO resource_tag_relations (tag_id, resource_type, resource_id, user_id, source) VALUES (?, 'bookmark', ?, ?, 'agent')`,
+          [tagId, data.id, userId],
+        );
+        attached.push(tagName);
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
     return { id: data.id, name, url, tags: attached };
   },

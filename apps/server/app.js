@@ -3,6 +3,7 @@ import bodyParser from 'body-parser';
 import { logFunction } from './util/log.js';
 import { baseRouter } from './util/common.js';
 import { accountBanMiddleware, authMiddleware, startSessionMaintenance } from './util/auth.js';
+import { adminRoutePolicyMiddleware } from './util/adminRoutePolicy.js';
 import { attackMonitor, ensureSecurityTables, cleanupExpiredSecurityEvents } from './util/security/index.js';
 import { cleanupAllExpiredTrash } from './router_handle/trashHandle.js';
 import { generateWeeklyReports } from './util/weeklyReport.js';
@@ -36,6 +37,8 @@ app.use(express.json());
 
 // 还原可信登录态
 app.use(authMiddleware);
+// 管理员预览/维护上下文采用显式语义策略；未声明接口默认拒绝。
+app.use(adminRoutePolicyMiddleware);
 // 账号封禁只拦业务访问，登录/退出等入口继续放行
 app.use(accountBanMiddleware);
 // 安全防护与攻击事件采集

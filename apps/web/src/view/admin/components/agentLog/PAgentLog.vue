@@ -44,10 +44,14 @@
         <div class="detail-row"><strong>用户：</strong>{{ selected.userAlias }}</div>
         <div class="detail-row"><strong>提问：</strong>{{ selected.question }}</div>
         <div class="detail-row"><strong>工具：</strong>{{ selected.toolsUsed || '无' }}</div>
+        <div class="detail-row"><strong>供应商：</strong>{{ selected.provider || '-' }} / {{ selected.model || '-' }}</div>
+        <div class="detail-row"><strong>Request ID：</strong>{{ selected.requestId || '-' }}</div>
         <div class="detail-row"><strong>API 次数：</strong>{{ selected.iterations }}</div>
         <div class="detail-row"><strong>Token：</strong>{{ selected.promptTokens }} + {{ selected.completionTokens }} = {{ selected.totalTokens }}</div>
         <div class="detail-row"><strong>费用：</strong>¥{{ Number(selected.cost || 0).toFixed(6) }}</div>
         <div class="detail-row"><strong>耗时：</strong>{{ selected.durationMs }} ms</div>
+        <div class="detail-row"><strong>阶段耗时：</strong>Planner {{ selected.plannerMs ?? '-' }} / Tool {{ selected.toolMs ?? '-' }} / Final {{ selected.finalMs ?? '-' }} ms</div>
+        <div class="detail-row"><strong>Usage：</strong>{{ selected.usageStatus || '-' }}</div>
         <div class="detail-row"><strong>状态：</strong>{{ selected.status }}</div>
         <div class="detail-row"><strong>时间：</strong>{{ formatTime(selected.createdAt) }}</div>
       </div>

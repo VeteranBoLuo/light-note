@@ -20,72 +20,72 @@
     </div>
 
     <div class="ai-actions">
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('polishFull')"
         :title="t('ai.reply.actions.polishFull')"
         v-click-log="{ module: '笔记-AI助手', operation: '润色全文' }"
-        >{{ t('ai.reply.actions.polishFull') }}</button
+        >{{ t('ai.reply.actions.polishFull') }}</BButton
       >
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('optimizeTitle')"
         :title="t('ai.reply.actions.optimizeTitle')"
         v-click-log="{ module: '笔记-AI助手', operation: '优化标题' }"
-        >{{ t('ai.reply.actions.optimizeTitle') }}</button
+        >{{ t('ai.reply.actions.optimizeTitle') }}</BButton
       >
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('generateSummary')"
         :title="t('ai.reply.actions.generateSummary')"
         v-click-log="{ module: '笔记-AI助手', operation: '生成摘要' }"
-        >{{ t('ai.reply.actions.generateSummary') }}</button
+        >{{ t('ai.reply.actions.generateSummary') }}</BButton
       >
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('correctErrors')"
         :title="t('ai.reply.actions.correctErrors')"
         v-click-log="{ module: '笔记-AI助手', operation: '纠错与语病' }"
-        >{{ t('ai.reply.actions.correctErrors') }}</button
+        >{{ t('ai.reply.actions.correctErrors') }}</BButton
       >
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('continueWrite')"
         :title="t('ai.reply.actions.continueWrite')"
         v-click-log="{ module: '笔记-AI助手', operation: '续写扩展' }"
-        >{{ t('ai.reply.actions.continueWrite') }}</button
+        >{{ t('ai.reply.actions.continueWrite') }}</BButton
       >
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('translate')"
         :title="t('ai.reply.actions.translate')"
         v-click-log="{ module: '笔记-AI助手', operation: '翻译' }"
-        >{{ t('ai.reply.actions.translate') }}</button
+        >{{ t('ai.reply.actions.translate') }}</BButton
       >
-      <button
+      <BButton
         class="action-btn text-hidden"
         :disabled="isLoading"
         @click="runAction('outline')"
         :title="t('ai.reply.actions.outline')"
         v-click-log="{ module: '笔记-AI助手', operation: '生成大纲' }"
-        >{{ t('ai.reply.actions.outline') }}</button
+        >{{ t('ai.reply.actions.outline') }}</BButton
       >
     </div>
 
     <div class="ai-input">
       <div class="input-label">{{ t('ai.reply.inputLabel') }}</div>
-      <textarea v-model="prompt" :placeholder="t('ai.reply.inputPlaceholder')" />
-      <button v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')" v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }">
+      <BInput v-model:value="prompt" type="textarea" :rows="4" :placeholder="t('ai.reply.inputPlaceholder')" />
+      <BButton v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')" v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }">
         <span class="stop-icon"></span>
         {{ t('ai.reply.stop', '停止生成') }}
-      </button>
-      <button
+      </BButton>
+      <BButton
         v-else
         class="primary-btn"
         :disabled="!prompt.trim()"
@@ -94,37 +94,37 @@
         v-click-log="{ module: '笔记-AI助手', operation: '自定义处理' }"
       >
         {{ t('ai.reply.processButton') }}
-      </button>
+      </BButton>
     </div>
 
     <div class="ai-output">
       <div class="output-header">
         <span style="max-width: 100px; min-width: 0" class="text-hidden">{{ t('ai.reply.outputTitle') }}</span>
         <div class="output-actions">
-          <button
+          <BButton
             style="max-width: 100px"
             class="ghost-btn text-hidden"
             :disabled="!outputFull || !hasBody"
             @click="insertToNote"
             :title="t('ai.reply.replaceContent')"
             v-click-log="{ module: '笔记-AI助手', operation: '插入到笔记' }"
-            >{{ t('ai.reply.replaceContent') }}</button
+            >{{ t('ai.reply.replaceContent') }}</BButton
           >
-          <button
+          <BButton
             style="max-width: 100px"
             class="ghost-btn text-hidden"
             :disabled="!outputFull || !hasTitle"
             @click="replaceTitle"
             :title="t('ai.reply.replaceTitle')"
             v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
-            >{{ t('ai.reply.replaceTitle') }}</button
+            >{{ t('ai.reply.replaceTitle') }}</BButton
           >
-          <button class="ghost-btn icon-btn" :disabled="!outputFull" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">
+          <BButton class="ghost-btn icon-btn" :disabled="!outputFull" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
-          </button>
-          <button class="ghost-btn icon-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">
+          </BButton>
+          <BButton class="ghost-btn icon-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg>
-          </button>
+          </BButton>
         </div>
       </div>
       <TypewriterOutput
@@ -141,10 +141,10 @@
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
       <div class="ai-preview">
         <div v-if="isMarkdownNote" class="ai-preview-body is-markdown" ref="previewBodyRef" v-text="previewTyped"></div>
-        <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="previewTyped"></div>
+        <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
         <div class="ai-preview-actions">
-          <button class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</button>
-          <button class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</button>
+          <BButton class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</BButton>
+          <BButton class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</BButton>
         </div>
       </div>
     </BModal>
@@ -158,9 +158,12 @@
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { noteDisplayText } from '@/utils/common.ts';
+  import DOMPurify from 'dompurify';
 
   const { t } = useI18n();
 
@@ -211,6 +214,12 @@
   // 只能按后端 SSE chunk 粒度整段刷新 → 观感一段段卡顿。这里对放大内容做「自适应逐字追赶」,与小窗一致平滑;
   // 破碎的 HTML 前缀由浏览器容错渲染(同 TypewriterOutput 机制)。
   const previewTyped = ref('');
+  const safePreviewTyped = computed(() =>
+    DOMPurify.sanitize(previewTyped.value, {
+      ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],
+      ALLOWED_ATTR: [],
+    }),
+  );
   const previewSource = ref('');
   let previewTypingTimer: number | null = null;
   const stopPreviewTyping = () => {
@@ -504,17 +513,29 @@
     if (!base) return '';
     if (isMarkdownNote.value) return unwrapMarkdownFence(base);
     const hasHtmlTag = /<\/?[a-z][\s\S]*?>/i.test(base);
-    if (hasHtmlTag) return base.trim();
-    return base
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => `<p>${line}</p>`)
-      .join('');
+    const html = hasHtmlTag
+      ? base.trim()
+      : base
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => `<p>${line}</p>`)
+          .join('');
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],
+      ALLOWED_ATTR: [],
+    });
   };
 
-  const hasTitle = computed(() => !!extractSection(outputFull.value, '标题'));
-  const hasBody = computed(() => !!extractSection(outputFull.value, '正文'));
+  const hasTitle = computed(() =>
+    Boolean(extractSection(outputFull.value, '标题') || (lastAction.value === 'optimizeTitle' && cleanupFallback(outputFull.value))),
+  );
+  const hasBody = computed(() =>
+    Boolean(
+      extractSection(outputFull.value, '正文') ||
+        (lastAction.value !== 'optimizeTitle' && cleanupFallback(outputFull.value)),
+    ),
+  );
 
   // 展示正文结果而非协议标记；Markdown 笔记交给 TypewriterOutput 以纯文本显示，避免被 v-html 当作富文本。
   const displayOutput = computed(() => {
@@ -637,6 +658,7 @@
     gap: 8px;
   }
   .action-btn {
+    width: 100%;
     height: 32px;
     border: 1px solid #e5e7eb;
     background: #ffffff;
@@ -662,7 +684,7 @@
     font-size: 12px;
     color: #6b7280;
   }
-  textarea {
+  .ai-input :deep(.b-textarea) {
     width: 100%;
     min-height: 80px;
     resize: vertical;
@@ -676,11 +698,12 @@
     outline: none;
     font-family: inherit;
   }
-  textarea:focus {
+  .ai-input :deep(.b-textarea:focus) {
     border-color: #7b8cff;
     box-shadow: 0 0 0 2px rgba(123, 140, 255, 0.15);
   }
   .primary-btn {
+    width: 100%;
     height: 34px;
     border: none;
     border-radius: 8px;
@@ -695,6 +718,7 @@
   }
 
   .stop-btn {
+    width: 100%;
     height: 34px;
     border: 1px solid #ff4d4f;
     border-radius: 8px;
@@ -839,7 +863,7 @@
   }
   [data-theme='night'] .ai-note-meta,
   [data-theme='night'] .ai-output,
-  [data-theme='night'] textarea,
+  [data-theme='night'] .ai-input :deep(.b-textarea),
   [data-theme='night'] .action-btn,
   [data-theme='night'] .ghost-btn {
     background: #313740;
@@ -851,7 +875,7 @@
     border-color: #9aa8ff;
     color: #e0e7ff;
   }
-  [data-theme='night'] textarea:focus {
+  [data-theme='night'] .ai-input :deep(.b-textarea:focus) {
     border-color: #7b8cff;
     box-shadow: 0 0 0 2px rgba(123, 140, 255, 0.2);
   }

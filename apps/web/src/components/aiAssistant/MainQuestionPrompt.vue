@@ -2,7 +2,7 @@
   <div class="recommendation-container">
     <div class="recommendation-title">{{ $t('ai.tip') }}</div>
     <div class="recommendation-list">
-      <div
+      <BButton
         v-for="(item, index) in recommendationItems"
         :key="index"
         class="recommendation-item"
@@ -10,44 +10,29 @@
         v-click-log="{ module: 'AI助手', operation: `点击推荐问题【${item}】` }"
       >
         {{ item }}
-      </div>
+      </BButton>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue';
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRoute } from 'vue-router';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const { t } = useI18n();
+  const route = useRoute();
 
   const emit = defineEmits(['recommendation-click']);
 
-  // 预设问题池:优先展示能直接触发 AI 工具能力的实用问题(检索/洞察/实操),而非纯操作教程。
-  const allQuestions = [
-    t('ai.aiCapabilities'),
-    t('ai.crossSearch'),
-    t('ai.recentBookmarks'),
-    t('ai.growthStatus'),
-    t('ai.summarizeUrl'),
-    t('ai.linkHealth'),
-    t('ai.storageUsage'),
-    t('ai.weeklyRecap'),
-    t('ai.myNotes'),
-    t('ai.myTags'),
-    t('ai.trashContent'),
-    t('ai.quickNote'),
-  ];
-
-  const recommendationItems = ref<string[]>([]);
-
-  // 随机选择三个问题
-  function selectRandomQuestions() {
-    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
-    recommendationItems.value = shuffled.slice(0, 3);
-  }
-
-  onMounted(() => {
-    selectRandomQuestions();
+  const recommendationItems = computed(() => {
+    const path = route.path;
+    if (path.includes('/noteLibrary/')) return [t('ai.myNotes'), t('ai.crossSearch'), t('ai.quickNote')];
+    if (path.includes('/cloudSpace')) return [t('ai.storageUsage'), t('ai.crossSearch'), t('ai.trashContent')];
+    if (path.includes('/tag/')) return [t('ai.myTags'), t('ai.crossSearch'), t('ai.recentBookmarks')];
+    if (path.includes('/workbenches')) return [t('ai.weeklyRecap'), t('ai.growthStatus'), t('ai.recentBookmarks')];
+    if (path.includes('/inbox')) return [t('ai.crossSearch'), t('ai.myTags'), t('ai.quickNote')];
+    return [t('ai.recentBookmarks'), t('ai.linkHealth'), t('ai.crossSearch')];
   });
 
   function handleRecommendationClick(item) {
@@ -82,7 +67,9 @@
   }
 
   .recommendation-item {
-    background: white;
+    width: auto;
+    height: auto;
+    background: var(--background-color);
     padding: 0.5rem 1rem;
     border-radius: 1rem;
     font-size: 0.75rem;

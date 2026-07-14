@@ -8,19 +8,17 @@
       {{ quota.role === 'root' ? t('ai.quotaUnlimited') : t('ai.quotaExempt') }}
     </div>
     <div class="input-container">
-      <textarea
+      <AiContextPicker :model-value="contexts" @update:model-value="$emit('update:contexts', $event)" />
+      <BInput
         :value="modelValue"
+        type="textarea"
         @input="onInput"
-        @keydown.enter.exact="handleSend"
-        @keydown.shift.enter="handleNewLine"
-        @keydown.esc="handleEscape"
-        @compositionstart="isComposing = true"
-        @compositionend="handleCompositionEnd"
+        @enter="handleSend"
         :placeholder="t('ai.inputPlaceholder')"
-        rows="1"
+        :rows="1"
         ref="textInput"
         class="text-input"
-      ></textarea>
+      />
       <div class="input-actions">
         <TranslationToggle
           v-if="showTranslation"
@@ -29,7 +27,7 @@
           @update:enableTranslation="$emit('update:enableTranslation', $event)"
           @update:translationConfig="$emit('update:translationConfig', $event)"
         />
-        <button
+        <BButton
           @click="isLoading ? stopFn() : sendFn()"
           v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
           :disabled="!modelValue.trim() && !isLoading"
@@ -37,7 +35,7 @@
           :class="{ stop: isLoading }"
         >
           {{ isLoading ? t('ai.pause') : t('ai.send') }}
-        </button>
+        </BButton>
       </div>
     </div>
     <div v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</div>
@@ -47,8 +45,10 @@
 <script setup lang="ts">
   import { onMounted, ref, nextTick, watch, computed } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import icon from '@/config/icon.ts';
   import TranslationToggle from './TranslationToggle.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
 
   const { t } = useI18n();
 
@@ -62,16 +62,17 @@
     isMobile: boolean;
     sendFn: () => void;
     stopFn: () => void;
+    contexts: AiResourceContext[];
   }>();
 
   const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;
     (e: 'update:enableTranslation', value: boolean): void;
     (e: 'update:translationConfig', value: { source: string; target: string }): void;
+    (e: 'update:contexts', value: AiResourceContext[]): void;
   }>();
 
-  const textInput = ref<HTMLTextAreaElement | null>(null);
-  const isComposing = ref(false);
+  const textInput = ref<{ focus: () => void } | null>(null);
 
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
   const quotaPercent = computed(() => {
@@ -84,29 +85,15 @@
     return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(v);
   }
 
-  const adjustTextareaHeight = () => {
-    if (textInput.value) {
-      textInput.value.style.height = 'auto';
-      textInput.value.style.height = Math.min(textInput.value.scrollHeight, 120) + 'px';
-    }
-  };
+  const adjustTextareaHeight = () => {};
 
-  const onInput = (event: Event) => {
-    const target = event.target as HTMLTextAreaElement;
-    emit('update:modelValue', target.value);
+  const onInput = (value: string) => {
+    emit('update:modelValue', value);
     adjustTextareaHeight();
   };
 
-  const handleCompositionEnd = (event: CompositionEvent) => {
-    isComposing.value = false;
-    onInput(event);
-  };
-
   const handleSend = (event: KeyboardEvent) => {
-    if (isComposing.value || event.isComposing || event.keyCode === 229) {
-      return;
-    }
-    event.preventDefault();
+    if (event?.isComposing || event?.keyCode === 229) return;
 
     // 如果输入为空，仅中断（不发送）
     if (!props.modelValue.trim()) {
@@ -119,15 +106,6 @@
     props.sendFn();
   };
 
-  const handleNewLine = () => {
-    nextTick(adjustTextareaHeight);
-  };
-
-  const handleEscape = (event: KeyboardEvent) => {
-    if (isComposing.value || event.isComposing || event.keyCode === 229) {
-      event.stopPropagation();
-    }
-  };
 
   onMounted(() => {
     adjustTextareaHeight();
@@ -143,11 +121,7 @@
   // 供父组件调用：编辑消息回填内容后，聚焦输入框并把光标移到末尾
   function focus() {
     nextTick(() => {
-      const el = textInput.value;
-      if (!el) return;
-      el.focus();
-      const len = el.value.length;
-      el.setSelectionRange(len, len);
+      textInput.value?.focus();
       adjustTextareaHeight();
     });
   }
@@ -174,18 +148,18 @@
 
   .text-input {
     width: 100%;
-    height: 100%;
     min-height: 40px;
+  }
+
+  .text-input :deep(.b-textarea) {
+    min-height: 40px;
+    max-height: 120px;
+    resize: none;
     border: none;
-    background: transparent;
-    color: var(--text-color);
+    padding: 0;
+    background: transparent !important;
     font-size: 1rem;
     line-height: 1.5;
-    resize: none;
-    outline: none;
-    transition: all 0.2s;
-    max-height: 120px;
-    font-family: inherit;
   }
 
   .text-input:focus {
@@ -235,7 +209,6 @@
 
   .send-btn {
     padding: 0.25rem 0.75rem;
-    border: none;
     border-radius: 0.5rem;
     background: var(--primary-color);
     color: white;
@@ -243,6 +216,8 @@
     cursor: pointer;
     transition: all 0.2s;
     min-width: 50px;
+    height: 28px;
+    line-height: 28px;
   }
 
   .send-btn:hover:not(:disabled) {

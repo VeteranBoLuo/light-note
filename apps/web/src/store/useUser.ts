@@ -17,6 +17,15 @@ interface UserInfo {
   role: string;
   adminPreview: boolean;
   visitorWorkspace: boolean;
+  adminContext: {
+    id: string;
+    subjectUserId: string;
+    subjectRole: string;
+    subjectAlias: string;
+    mode: 'readonly' | 'maintain';
+    issuedAt: string;
+    expiresAt: string;
+  } | null;
   headPicture: string;
   email: string;
   tagTotal: number;
@@ -59,6 +68,7 @@ const createDefaultUserState = (): UserState => ({
   role: 'visitor',
   adminPreview: false,
   visitorWorkspace: false,
+  adminContext: null,
   headPicture: icon.navigation.user,
   email: '',
   tagTotal: 0,

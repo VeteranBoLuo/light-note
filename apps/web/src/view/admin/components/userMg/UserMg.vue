@@ -57,6 +57,9 @@
                     class="dom-hover"
                   />
                 </BTooltip>
+                <BTooltip v-if="record.role !== 'visitor'" :title="t('guest.adminContextMaintainEntry')">
+                  <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
+                </BTooltip>
                 <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
                 <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
                 <span
@@ -119,7 +122,7 @@
         </div>
       </BModal>
 
-      <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
+      <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
       <GrowthAdminModal v-model:visible="growthAdminVisible" :user-id="growthAdminUser.id" :user-name="growthAdminUser.alias" />
     </section>
   </div>
@@ -143,6 +146,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
 
@@ -162,7 +166,7 @@
       { title: '书签数', key: 'bookmarkTotal', width: '50px' },
       { title: '笔记数', key: 'noteTotal', width: '70px' },
       { title: '云空间(MB)', key: 'storageUsed', width: '110px' },
-      { title: '操作', key: 'operation', width: '120px' },
+      { title: '操作', key: 'operation', width: '190px' },
     ];
   });
 
@@ -227,6 +231,7 @@
   const editVisible = ref(false);
   const previewVisible = ref(false);
   const previewUser = ref<any>(null);
+  const previewMode = ref<'readonly' | 'maintain'>('readonly');
   const growthAdminVisible = ref(false);
   const growthAdminUser = ref<{ id: string; alias: string }>({ id: '', alias: '' });
   const openGrowthAdmin = (record) => {
@@ -244,8 +249,30 @@
       message.warning('此用户缺少用户ID，无法预览');
       return;
     }
+    if (record.role === 'visitor') {
+      maintainAsUser(record);
+      return;
+    }
+    openPreview(record, 'readonly');
+  };
+
+  const openPreview = (record, mode: 'readonly' | 'maintain') => {
     previewUser.value = record;
+    previewMode.value = mode;
     previewVisible.value = true;
+  };
+
+  const maintainAsUser = (record) => {
+    if (!record?.id) {
+      message.warning(t('guest.adminContextMissingUser'));
+      return;
+    }
+    const name = record.alias || record.email || t('guest.adminContextUnknownUser');
+    Alert.alert({
+      title: t('guest.adminContextMaintainConfirmTitle'),
+      content: t('guest.adminContextMaintainConfirm', { name }),
+      onOk: () => openPreview(record, 'maintain'),
+    });
   };
 
   const delUser = (record) => {

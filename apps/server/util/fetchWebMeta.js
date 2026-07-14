@@ -156,7 +156,7 @@ function decodeBuffer(buf, charset) {
  *   | { ok: false, reason: string }
  * >}
  */
-export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT } = {}) {
+export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal } = {}) {
   // 归一化:无协议头补 https://(与 read_url 一致)。老书签/导入的 URL 常不带协议,
   // 不补会直接 new URL() 抛错 → INVALID_URL,导致归档失败/死链误报。
   let input = String(rawUrl || '').trim();
@@ -194,6 +194,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT } = {})
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
+      signal,
     });
     contentType = resp.headers?.['content-type'] || '';
     // 只处理 HTML/文本，二进制（PDF/图片等）直接放弃

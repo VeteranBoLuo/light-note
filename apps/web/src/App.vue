@@ -13,6 +13,7 @@
       <FloatQuestion v-if="aiVisible" />
       <GuestNudge />
       <BGuide />
+      <AdminContextBanner />
     </a-config-provider>
   </div>
 </template>
@@ -37,6 +38,7 @@
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import GuestNudge from '@/components/home/GuestNudge.vue';
   import BGuide from '@/components/base/BasicComponents/BGuide.vue';
+  import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -96,7 +98,6 @@
     // 预渲染会把它烘焙进 landing 首屏 modulepreload,拖累 TBT/未使用JS;落地页访客也用不到 AI 助手。
     // AI 开关(设置里)关闭则不挂悬浮球;默认(未设置)视为开启
     return (
-      !bookmark.isMobile &&
       !bookmark.isShowLogin &&
       router.currentRoute.value.name !== 'landing' &&
       (user.preferences as any).aiEnabled !== false

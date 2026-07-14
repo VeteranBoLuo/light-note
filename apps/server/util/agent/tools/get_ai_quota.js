@@ -10,7 +10,10 @@ export default {
   },
   requireRoot: false,
   async execute(args, ctx) {
-    return await getStatusForUser(ctx.userId, ctx.userRole);
+    return await getStatusForUser(
+      ctx.billingUserId || ctx.userId,
+      ctx.billingUserRole || ctx.userRole,
+    );
   },
   transform(raw) {
     if (raw?.guest) {

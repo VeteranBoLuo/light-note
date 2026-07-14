@@ -462,6 +462,9 @@
     editor.undoManager?.transact(() => {
       editor.setContent(html);
     });
+    // setContent 并不保证所有 TinyMCE 版本都会同步触发 v-model 事件；显式更新事实源，
+    // 避免界面已替换但保存时仍提交旧正文。
+    content.value = html;
     editor.nodeChanged?.();
     return true;
   };

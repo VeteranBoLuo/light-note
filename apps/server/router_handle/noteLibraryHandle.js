@@ -4,30 +4,39 @@ import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '..
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 import { awardCreate } from '../util/growth.js';
+import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 
-export const addNote = (req, res) => {
+export const addNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const connection = await pool.getConnection();
   try {
     const userId = req.user.id;
+    const { addToInbox = false, inboxSource = 'quick_capture', ...noteBody } = req.body || {};
     const params = {
-      ...req.body,
+      ...noteBody,
       createBy: userId,
     };
     const noteData = insertData(params);
-    pool
-      .query('INSERT INTO note SET ?', [noteData])
-      .then(() => {
-        res.send(resultData({ id: noteData.id }));
-        if (!req.isVisitorWorkspace) {
-          recordFirstOwnResource(req, 'note'); // 激活里程碑:首次自建笔记
-          awardCreate(userId, 'note', noteData.id, { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减)
-        }
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+    await connection.beginTransaction();
+    await connection.query('INSERT INTO note SET ?', [noteData]);
+    if (addToInbox === true) {
+      await enqueueResources(connection, {
+        userId,
+        items: [{ resourceType: 'note', resourceId: noteData.id }],
+        source: inboxSource,
       });
+    }
+    await connection.commit();
+    res.send(resultData({ id: noteData.id, addedToInbox: addToInbox === true }));
+    if (!req.isVisitorWorkspace && !req.suppressUserRewards) {
+      recordFirstOwnResource(req, 'note');
+      awardCreate(userId, 'note', noteData.id, { userRole: req.user.role }).catch(() => {});
+    }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    await connection.rollback();
+    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  } finally {
+    connection.release();
   }
 };
 
@@ -183,12 +192,25 @@ export const delNote = async (req, res) => {
 
     const userId = req.user.id;
     const placeholders = ids.map(() => '?').join(',');
-    const [updateResult] = await pool.query(
-      `UPDATE note SET del_flag = 1, deleted_at = NOW() WHERE id IN (${placeholders}) AND create_by = ?`,
-      [...ids, userId],
-    );
-
-    res.send(resultData(updateResult));
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [updateResult] = await connection.query(
+        `UPDATE note SET del_flag = 1, deleted_at = NOW() WHERE id IN (${placeholders}) AND create_by = ?`,
+        [...ids, userId],
+      );
+      await removeInboxRelations(connection, {
+        userId,
+        items: ids.map((id) => ({ resourceType: 'note', resourceId: String(id) })),
+      });
+      await connection.commit();
+      res.send(resultData(updateResult));
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (e) {
     res.send(resultData(null, 400, '客户端请求异常: ' + e.message));
   }

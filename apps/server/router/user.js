@@ -23,6 +23,12 @@ router.get('/getUserInfo', userHandle.getUserInfo);
 
 router.get('/me', userHandle.me);
 
+router.post('/adminContext/start', userHandle.startAdminContext);
+
+router.get('/adminContext/status', userHandle.getAdminContextStatus);
+
+router.post('/adminContext/end', userHandle.endAdminContext);
+
 router.post('/getUserList', userHandle.getUserList);
 
 router.post('/registerUser', registerLimiter, userHandle.registerUser);

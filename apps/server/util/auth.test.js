@@ -1,11 +1,23 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
-vi.mock('../db/index.js', () => ({ default: { query: vi.fn().mockResolvedValue([[]]) } }));
+const query = vi.fn();
+const getSession = vi.fn();
+const getAdminContext = vi.fn();
+vi.mock('../db/index.js', () => ({ default: { query } }));
+vi.mock('./sessionStore.js', () => ({
+  cleanupExpiredSessions: vi.fn(),
+  cleanupLegacyElevatedVisitorSessions: vi.fn(),
+  createSession: vi.fn(),
+  getSession,
+  removeSession: vi.fn(),
+}));
+vi.mock('./adminContextStore.js', () => ({ getAdminContext }));
+vi.mock('./conversion.js', () => ({ recordConversionEvent: vi.fn() }));
 
 // auth.js 依赖 common.js(resultData),存在 common.js↔router↔handler 循环依赖:
 // 先 import common.js 让 handler 作为叶子完成初始化,规避循环(同 commonHandle.test.js)。
 await import('./common.js');
-const { accountBanMiddleware, ensureNotVisitor, isVisitorWorkspaceContentWrite } = await import('./auth.js');
+const { accountBanMiddleware, authMiddleware, ensureNotVisitor } = await import('./auth.js');
 
 function mockRes() {
   const res = {};
@@ -13,8 +25,70 @@ function mockRes() {
   res.json = vi.fn().mockReturnValue(res);
   res.send = vi.fn().mockReturnValue(res);
   res.setHeader = vi.fn();
+  res.removeHeader = vi.fn();
+  res.cookie = vi.fn();
+  res.clearCookie = vi.fn();
   return res;
 }
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('authMiddleware 管理员上下文', () => {
+  it('把真实 root actor 与目标 subject 分离并绑定同一登录会话', async () => {
+    getSession.mockResolvedValue({ user_id: 'root-1', expires_in_seconds: 600 });
+    getAdminContext.mockResolvedValue({
+      id: 'ctx-1',
+      actorUserId: 'root-1',
+      actorSessionId: 'sid-1',
+      subjectUserId: 'user-1',
+      subjectRole: 'user',
+      mode: 'readonly',
+    });
+    query
+      .mockResolvedValueOnce([[{ id: 'root-1', alias: 'root', role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([[{ id: 'user-1', alias: 'subject', role: 'user', del_flag: 0 }]]);
+    const req = {
+      headers: { cookie: 'sid=sid-1', 'x-admin-context': 'context-token' },
+      originalUrl: '/api/bookmark/getBookmarkList',
+      path: '/bookmark/getBookmarkList',
+      body: {},
+    };
+    const next = vi.fn();
+    await authMiddleware(req, mockRes(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.adminActor).toMatchObject({ id: 'root-1', role: 'root' });
+    expect(req.billingUser).toMatchObject({ id: 'root-1', role: 'root' });
+    expect(req.resourceUser).toEqual({ id: 'user-1', role: 'user' });
+    expect(req.user).toMatchObject({ id: 'user-1', role: 'user', sessionId: 'sid-1' });
+    expect(req.suppressUserRewards).toBe(true);
+  });
+
+  it('非 root 登录态即使拿到上下文令牌也不能进入目标账号', async () => {
+    getSession.mockResolvedValue({ user_id: 'user-2', expires_in_seconds: 600 });
+    getAdminContext.mockResolvedValue({
+      id: 'ctx-1',
+      actorUserId: 'root-1',
+      actorSessionId: 'sid-1',
+      subjectUserId: 'user-1',
+      mode: 'readonly',
+    });
+    query.mockResolvedValueOnce([[{ id: 'user-2', role: 'user', del_flag: 0 }]]);
+    const req = {
+      headers: { cookie: 'sid=sid-user-2', 'x-admin-context': 'stolen-token' },
+      originalUrl: '/api/bookmark/getBookmarkList',
+      path: '/bookmark/getBookmarkList',
+      body: {},
+    };
+    const res = mockRes();
+    const next = vi.fn();
+    await authMiddleware(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_FORBIDDEN' } }));
+  });
+});
 
 describe('accountBanMiddleware', () => {
   it('未封禁用户放行', () => {
@@ -49,51 +123,29 @@ describe('accountBanMiddleware', () => {
 });
 
 describe('游客内容维护权限', () => {
-  it('仅识别明确列出的书签/笔记/标签写路径', () => {
-    expect(isVisitorWorkspaceContentWrite({ originalUrl: '/api/note/updateNote?from=auto-save' })).toBe(true);
-    expect(isVisitorWorkspaceContentWrite({ originalUrl: '/api/bookmark/addTag' })).toBe(true);
-    expect(isVisitorWorkspaceContentWrite({ originalUrl: '/api/file/uploadFile' })).toBe(false);
-    expect(isVisitorWorkspaceContentWrite({ originalUrl: '/api/user/saveUserInfo' })).toBe(false);
-  });
-
-  it('真实 root 建立的游客工作区可执行白名单内容写入', () => {
+  it('新管理员维护上下文仅放行已声明的内容写策略', () => {
     const req = {
-      originalUrl: '/api/note/updateNote',
-      user: { id: 'visitor-1', role: 'visitor' },
-      adminActor: { id: 'root-1', role: 'root' },
-      isAdminPreview: true,
-      isVisitorWorkspace: true,
+      user: { id: 'user-1', role: 'user' },
+      adminContext: { id: 'ctx-1', mode: 'maintain', subjectRole: 'user' },
+      adminCapability: { policy: 'content_write', resourceType: 'note' },
     };
     const res = mockRes();
     expect(ensureNotVisitor(req, res)).toBe(true);
-    expect(req.isVisitorWorkspaceContentWrite).toBe(true);
-    expect(res.send).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
   });
 
-  it('游客工作区不能写云空间或后台接口', () => {
+  it('新管理员只读上下文在 handler 二次守卫处仍拒绝写入', () => {
     const req = {
-      originalUrl: '/api/file/updateFile',
-      user: { id: 'visitor-1', role: 'visitor' },
-      adminActor: { id: 'root-1', role: 'root' },
-      isAdminPreview: true,
-      isVisitorWorkspace: true,
-    };
-    const res = mockRes();
-    expect(ensureNotVisitor(req, res)).toBe(false);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
-  });
-
-  it('普通用户的管理员预览保持只读', () => {
-    const req = {
-      originalUrl: '/api/note/updateNote',
       user: { id: 'user-1', role: 'user' },
-      adminActor: { id: 'root-1', role: 'root' },
-      isAdminPreview: true,
-      isVisitorWorkspace: false,
+      adminContext: { id: 'ctx-1', mode: 'readonly', subjectRole: 'user' },
+      adminCapability: { policy: 'content_write', resourceType: 'note' },
     };
     const res = mockRes();
     expect(ensureNotVisitor(req, res)).toBe(false);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }),
+    );
   });
 
   it('普通登录用户不受游客维护逻辑影响', () => {

@@ -6,6 +6,7 @@
  * - 保留最近 N 轮对话摘要
  */
 import redisClient from '../redisClient.js';
+import crypto from 'crypto';
 
 const MAX_TURNS = 10;
 const MAX_TEXT_LENGTH = 700;
@@ -44,16 +45,25 @@ function cleanupExpired() {
 function evictOldest() {
   while (sessions.size > MAX_SESSIONS) {
     let oldest = null;
-    for (const [id, s] of sessions) {
-      if (!oldest || s.updatedAt < oldest.updatedAt) oldest = s;
+    for (const [key, s] of sessions) {
+      if (!oldest || s.updatedAt < oldest.updatedAt) oldest = { key, updatedAt: s.updatedAt };
     }
-    if (oldest) sessions.delete(oldest.id);
+    if (oldest) sessions.delete(oldest.key);
   }
 }
 
-function makeSession(id) {
+function normalizeOwnerKey(ownerKey) {
+  return crypto.createHash('sha256').update(String(ownerKey || 'visitor:anonymous')).digest('hex');
+}
+
+function storageKey(ownerKey, sessionId) {
+  return `${normalizeOwnerKey(ownerKey)}:${sessionId}`;
+}
+
+function makeSession(id, ownerKey) {
   return {
     id,
+    ownerKey: normalizeOwnerKey(ownerKey),
     turns: [],
     lastTool: null,
     createdAt: now(),
@@ -82,36 +92,43 @@ async function redisSet(key, data) {
 
 // ---- 公开 API ----
 
-export async function getOrCreateSession(sessionId) {
+export async function getOrCreateSession(ownerKey, sessionId) {
   cleanupExpired();
 
-  const id = sessionId?.trim();
+  const requestedId = String(sessionId || '').trim();
+  const id = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedId)
+    ? requestedId
+    : '';
+  const ownerHash = normalizeOwnerKey(ownerKey);
   if (id) {
+    const key = storageKey(ownerKey, id);
     // 先尝试 Redis
-    const redisSession = await redisGet(id);
-    if (redisSession && !isExpired(redisSession)) {
+    const redisSession = await redisGet(key);
+    if (redisSession && redisSession.ownerKey === ownerHash && !isExpired(redisSession)) {
       redisSession.updatedAt = now();
-      sessions.set(id, redisSession);
+      sessions.set(key, redisSession);
       return redisSession;
     }
     // Redis 没有或过期，查内存
-    if (sessions.has(id)) {
-      const session = sessions.get(id);
-      if (!isExpired(session)) {
+    if (sessions.has(key)) {
+      const session = sessions.get(key);
+      if (session.ownerKey === ownerHash && !isExpired(session)) {
         session.updatedAt = now();
         return session;
       }
-      sessions.delete(id);
+      sessions.delete(key);
     }
   }
 
-  const newId = id || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const session = makeSession(newId);
-  sessions.set(newId, session);
+  // 不接受客户端指定一个服务端不存在的 ID，避免会话固定；新会话始终由服务端生成。
+  const newId = crypto.randomUUID();
+  const key = storageKey(ownerKey, newId);
+  const session = makeSession(newId, ownerKey);
+  sessions.set(key, session);
   evictOldest();
 
   // 异步写 Redis
-  redisSet(newId, session);
+  redisSet(key, session);
 
   return session;
 }
@@ -144,7 +161,7 @@ export async function recordTurn(session, userMsg, assistantMsg, toolResults = [
   session.updatedAt = now();
 
   // 异步写 Redis
-  redisSet(session.id, session);
+  redisSet(`${session.ownerKey}:${session.id}`, session);
 }
 
 export function buildContext(session) {

@@ -11,14 +11,21 @@
         @touchstart.passive="handleUserInteraction"
         @pointerdown.passive="handleUserInteraction"
       >
-        <ChatMessageItem
-          v-for="(message, index) in messages"
-          :key="index"
-          :message="message"
-          :has-answer-started="hasAnswerStarted"
-          @edit="handleEditMessage"
-          @regenerate="() => handleRegenerate(index)"
-        />
+        <template v-for="(message, index) in messages" :key="index">
+          <ChatMessageItem
+            :message="message"
+            :has-answer-started="hasAnswerStarted"
+            @edit="handleEditMessage"
+            @regenerate="() => handleRegenerate(index)"
+          />
+          <AiSourceCards v-if="message.sources?.length" :sources="message.sources" />
+          <AiToolConfirmationCard
+            v-for="confirmation in message.confirmations || []"
+            :key="confirmation.id"
+            :confirmation="confirmation"
+            @resolved="(summary, sources) => handleConfirmationResolved(index, summary, sources)"
+          />
+        </template>
         <!-- 智能滚动提示  -->
         <ScrollPrompt
           v-if="showScrollToBottom"
@@ -42,8 +49,10 @@
         :is-mobile="bookmark.isMobile"
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
+        :contexts="contexts"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
+        @update:contexts="contexts = $event"
       />
     </div>
   </div>
@@ -57,9 +66,13 @@
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
+  import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
+  import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
+  import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const { t } = useI18n();
 
@@ -77,6 +90,17 @@
     thoughts?: any[];
     thinkingText?: string; // 当前消息完整的思考过程文本
     thinkingDisplay?: string; // 当前消息用于展示的思考文本（打字机效果）
+    confirmations?: Array<{
+      token: string;
+      id: string;
+      sessionId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      expiresIn: number;
+      riskLevel?: 'low' | 'medium' | 'high';
+      preview?: { title?: string; target?: string; impact?: string };
+    }>;
+    sources?: AiSource[];
   }
 
   // 响应式数据
@@ -87,6 +111,7 @@
   const chatInputRef = ref<{ focus: () => void } | null>(null);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
+  const contexts = ref<AiResourceContext[]>([]);
 
   // AI 今日额度(按成长等级下发;root/本机自测豁免返回 exempt)。进页与每轮回复结束后刷新,展示「已用 / 剩余」
   const aiQuota = ref<{ exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null>(
@@ -175,7 +200,7 @@
 
   // 初始化
   // 对话历史本地持久化:刷新 / 重进不丢当前会话(多会话切换是后续更大的功能,暂不含)
-  const CHAT_HISTORY_KEY = 'ai-chat-history';
+  const chatHistoryKey = () => `ai-chat-history:${user.id || 'visitor'}`;
   function persistHistory() {
     try {
       const toSave = messages.value
@@ -183,11 +208,12 @@
         .map((m) => ({
           role: m.role,
           content: m.content,
+          sources: m.sources || [],
           timestamp: (m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).toISOString(),
         }));
       // 只有产生过真实对话(不止开场白一条)才存
       if (toSave.length > 1) {
-        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify({ messages: toSave, sessionId }));
+        localStorage.setItem(chatHistoryKey(), JSON.stringify({ messages: toSave, sessionId }));
       }
     } catch {
       /* 隐私模式 / 超额写入失败不影响主流程 */
@@ -195,7 +221,7 @@
   }
   function restoreHistory() {
     try {
-      const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+      const raw = localStorage.getItem(chatHistoryKey());
       if (!raw) return false;
       const data = JSON.parse(raw);
       if (!Array.isArray(data.messages) || data.messages.length <= 1) return false;
@@ -240,7 +266,7 @@
     sessionId = '';
     longChatHinted.value = false;
     try {
-      localStorage.removeItem(CHAT_HISTORY_KEY); // 清空对话同时清掉本地历史
+      localStorage.removeItem(chatHistoryKey()); // 清空对话同时清掉当前账号的本地历史
     } catch {
       /* ignore */
     }
@@ -388,6 +414,25 @@
   };
 
   let sessionId = '';
+  watch(
+    () => user.id,
+    (nextId, previousId) => {
+      if (nextId === previousId) return;
+      stopResponse();
+      sessionId = '';
+      messages.value = [];
+      if (!restoreHistory()) {
+        messages.value = [
+          {
+            role: 'assistant',
+            content: t('ai.greeting'),
+            timestamp: new Date(),
+            thoughts: [],
+          },
+        ];
+      }
+    },
+  );
   const longChatHinted = ref(false); // 超长对话「新建会话」提示只弹一次(每段会话)
   let activeRequestId = 0; // 请求计数器，防止旧请求的 finally 干扰新请求
   // 重新设计打字机效果，确保内容完整且逐字显示
@@ -456,74 +501,17 @@
     // 创建中止控制器
     abortController.value = new AbortController();
 
-    // 新增打字机效果相关变量
-    const accumulatedContent = ref(''); // 累积的完整内容
-    const displayedContent = ref(''); // 当前显示的内容（逐字增加）
-    let typingTimer: number | null = null;
     let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
-    let isTyping = false; // 是否正在打字
-    let wakeResolver: (() => void) | null = null; // 唤醒休眠中的打字机
-
-    // 打字机效果函数（差额驱动：持续比较 accumulated vs displayed 的差额，从不停止重启）
-    const startTypewriter = async () => {
-      if (isTyping) return;
-
-      isTyping = true;
-
-      while (true) {
-        // 被新请求取代时立即停止
-        if (activeRequestId !== thisRequestId) break;
-        if (!isLoading.value) break; // 如果响应被停止，退出打字
-
-        const disLen = displayedContent.value.length;
-        const accLen = accumulatedContent.value.length;
-
-        if (disLen < accLen) {
-          // 有差额：打下一个字符
-          displayedContent.value = accumulatedContent.value.slice(0, disLen + 1);
-          messages.value[currentMessageIndex].content = displayedContent.value;
-
-          // 只有在用户没有干预时才自动滚动
-          if (autoScrollEnabled.value && !userHasInterrupted.value) {
-            await nextTick();
-            scrollToBottom('smooth');
-          }
-
-          // 控制打字速度
-          await new Promise((resolve) => {
-            typingTimer = window.setTimeout(resolve, TYPING_SPEED);
-          });
-        } else {
-          // 没有差额：等待新内容到达或超时后重新检查
-          await new Promise<void>((resolve) => {
-            wakeResolver = resolve;
-            typingTimer = window.setTimeout(() => {
-              if (wakeResolver === resolve) wakeResolver = null;
-              resolve();
-            }, 50);
-          });
-        }
-      }
-
-      isTyping = false;
-    };
-    // 处理新内容的函数
-    const handleNewContent = (content: string) => {
+    // 服务端已经按 token 流式输出，前端直接渲染增量；不再叠加第二层逐字打字机。
+    const handleNewContent = async (content: string) => {
       if (!content) return;
-      // 被新请求取代时丢弃数据
       if (activeRequestId !== thisRequestId) return;
-
-      accumulatedContent.value += content;
-
-      // 如果没有正在打字，启动打字机（仅首次启动，之后持续运行不停止）
-      if (!isTyping) {
-        startTypewriter();
-      }
-
-      // 新内容到了，唤醒睡眠中的打字机，不必等 50ms 超时
-      if (wakeResolver) {
-        wakeResolver();
-        wakeResolver = null;
+      const current = messages.value[currentMessageIndex];
+      if (!current) return;
+      current.content += content;
+      if (autoScrollEnabled.value && !userHasInterrupted.value) {
+        await nextTick();
+        scrollToBottom('smooth');
       }
     };
 
@@ -562,11 +550,28 @@
             return;
           }
 
+          if (data.event === 'tool_confirmation' && data.confirmation) {
+            const currentMsg = messages.value[currentMessageIndex];
+            if (currentMsg) {
+              currentMsg.confirmations = [...(currentMsg.confirmations || []), data.confirmation];
+            }
+          }
+
+          if (data.event === 'sources' && Array.isArray(data.sources)) {
+            const currentMsg = messages.value[currentMessageIndex];
+            if (currentMsg) {
+              const merged = [...(currentMsg.sources || []), ...data.sources];
+              currentMsg.sources = merged.filter(
+                (source, index, all) => all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
+              );
+            }
+          }
+
           const content = data.output?.text || data.text || data.content || '';
 
           if (content && typeof content === 'string') {
             // 使用新的内容处理函数
-            handleNewContent(content);
+            void handleNewContent(content);
             // 一旦答案开始输出，标记并停止后续思考流
             hasAnswerStarted.value = true;
           }
@@ -621,6 +626,7 @@
           translationConfig: translationConfig.value,
           aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
           history: historyForRequest,
+          contexts: contexts.value,
         },
         {
           headers: {
@@ -654,54 +660,14 @@
         }
       }
 
-      // 等待打字机效果完成
-      const waitForTypewriter = () => {
-        return new Promise((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (displayedContent.value.length >= accumulatedContent.value.length) {
-              clearInterval(checkInterval);
-              resolve(true);
-            }
-          }, 100);
-
-          // 设置最大等待时间
-          setTimeout(() => {
-            clearInterval(checkInterval);
-            resolve(true);
-          }, 10000);
-        });
-      };
-
-      // 后端流式返回错误帧：停打字机，把错误提示落到当前消息(已有半截内容则保留并追加)
+      // 后端流式返回错误帧：已有半截内容则保留并追加友好提示。
       if (streamError && thisRequestId === activeRequestId) {
-        if (typingTimer) {
-          clearTimeout(typingTimer);
-          typingTimer = null;
-        }
         const errText = t('ai.errorMessage');
-        const full = accumulatedContent.value ? `${accumulatedContent.value}\n\n${errText}` : errText;
-        accumulatedContent.value = full;
-        displayedContent.value = full;
-        messages.value[currentMessageIndex].content = full;
+        const current = messages.value[currentMessageIndex];
+        current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }
-
-      await waitForTypewriter();
-
-      // 被新请求取代时跳过最终同步
-      if (activeRequestId !== thisRequestId) return;
-
-      // 最终检查，确保显示完整内容
-      if (displayedContent.value !== accumulatedContent.value) {
-        messages.value[currentMessageIndex].content = accumulatedContent.value;
-        displayedContent.value = accumulatedContent.value;
-      }
+      contexts.value = [];
     } catch (error: any) {
-      // 清理旧请求的定时器（无论是否被取代）
-      if (typingTimer) {
-        clearTimeout(typingTimer);
-        typingTimer = null;
-      }
-
       // 旧请求的异常，不再修改当前消息
       if (thisRequestId !== activeRequestId) return;
 
@@ -712,12 +678,6 @@
         messages.value[currentMessageIndex].content = t('ai.errorMessage');
       }
     } finally {
-      // 清理资源
-      if (typingTimer) {
-        clearTimeout(typingTimer);
-        typingTimer = null;
-      }
-
       // 仅最新请求才能更新状态，防止旧请求的 finally 提前关闭 loading
       if (thisRequestId !== activeRequestId) return;
 
@@ -748,6 +708,14 @@
     nextTick(() => {
       chatInputRef.value?.focus();
     });
+  };
+
+  const handleConfirmationResolved = (index: number, summary: string, sources: AiSource[] = []) => {
+    const target = messages.value[index];
+    if (!target || !summary) return;
+    target.content = `${target.content}${target.content ? '\n\n' : ''}${summary}`;
+    if (sources.length) target.sources = [...(target.sources || []), ...sources];
+    persistHistory();
   };
 
   // 重新生成：回到该 AI 回答对应的那轮提问，截断后用原问题重发（复用完整发送流程）

@@ -9,12 +9,13 @@
   >
     <div v-if="!displayContent" class="empty">{{ emptyText }}</div>
     <div v-else-if="renderAsText" class="typewriter-content" v-text="displayContent"></div>
-    <div v-else class="typewriter-content" v-html="displayContent"></div>
+    <div v-else class="typewriter-content" v-html="safeDisplayContent"></div>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import DOMPurify from 'dompurify';
 
   const props = defineProps<{
     content: string;
@@ -139,6 +140,12 @@
   };
 
   const emptyText = computed(() => props.emptyText ?? '');
+  const safeDisplayContent = computed(() =>
+    DOMPurify.sanitize(displayContent.value, {
+      ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],
+      ALLOWED_ATTR: [],
+    }),
+  );
 </script>
 
 <style>

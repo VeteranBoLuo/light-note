@@ -20,36 +20,50 @@ export default {
   },
   requireRoot: false,
   isWrite: true,
+  riskLevel: 'medium',
+  confirmationPolicy: 'always',
+  async preview(args, ctx) {
+    const filters = normalizeFilters(args);
+    const impact = [];
+    for (const type of filters.types) {
+      const cfg = TABLE_CONFIG[type];
+      const { where, params } = buildWhere(cfg, filters, ctx.userId);
+      const [rows] = await pool.query(`SELECT COUNT(*) AS count FROM \`${cfg.table}\` WHERE ${where}`, params);
+      impact.push({ type, count: Number(rows[0]?.count || 0) });
+    }
+    const total = impact.reduce((sum, item) => sum + item.count, 0);
+    return {
+      title: '恢复回收站内容',
+      target: impact.map((item) => `${item.type} ${item.count} 项`).join('、'),
+      impact: `预计恢复 ${total} 项内容`,
+      items: impact,
+    };
+  },
   async execute(args, ctx) {
-    const { type, id } = args;
-    const time = parseTimeRange(args.timeRange);
-    const types = type ? [type] : ['bookmark', 'note', 'file'];
+    const filters = normalizeFilters(args);
 
     const results = [];
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      for (const t of filters.types) {
+        const cfg = TABLE_CONFIG[t];
+        const { where, params } = buildWhere(cfg, filters, ctx.userId);
 
-    for (const t of types) {
-      const cfg = TABLE_CONFIG[t];
-      if (!cfg) continue;
-
-      let where = `${cfg.userIdField} = ? AND del_flag = 1`;
-      const params = [ctx.userId];
-
-      if (id) {
-        where += ' AND id = ?';
-        params.push(id);
+        const [r] = await connection.query(
+          `UPDATE \`${cfg.table}\` SET del_flag = 0, deleted_at = NULL WHERE ${where}`,
+          params,
+        );
+        if (r.affectedRows > 0) {
+          results.push({ type: t, count: r.affectedRows });
+        }
       }
-      if (time) {
-        where += ' AND deleted_at >= ? AND deleted_at <= ?';
-        params.push(time.start, time.end);
-      }
-
-      const [r] = await pool.query(
-        `UPDATE \`${cfg.table}\` SET del_flag = 0, deleted_at = NULL WHERE ${where}`,
-        params,
-      );
-      if (r.affectedRows > 0) {
-        results.push({ type: t, count: r.affectedRows });
-      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
 
     return results;
@@ -65,3 +79,33 @@ export default {
     return `恢复回收站：共 ${total} 项`;
   },
 };
+
+function normalizeFilters(args = {}) {
+  const type = String(args.type || '').trim();
+  const id = String(args.id || '').trim();
+  const time = parseTimeRange(args.timeRange);
+  if (!type && !id && !time) {
+    throw new Error('FILTER_REQUIRED: 至少需要提供资源类型、资源 ID 或有效时间范围');
+  }
+  if (type && !TABLE_CONFIG[type]) {
+    throw new Error('INVALID_TYPE: 不支持的资源类型');
+  }
+  if (id && !type) {
+    throw new Error('TYPE_REQUIRED: 按 ID 恢复时必须同时指定资源类型');
+  }
+  return { id, time, types: type ? [type] : Object.keys(TABLE_CONFIG) };
+}
+
+function buildWhere(cfg, filters, userId) {
+  let where = `${cfg.userIdField} = ? AND del_flag = 1`;
+  const params = [userId];
+  if (filters.id) {
+    where += ' AND id = ?';
+    params.push(filters.id);
+  }
+  if (filters.time) {
+    where += ' AND deleted_at >= ? AND deleted_at <= ?';
+    params.push(filters.time.start, filters.time.end);
+  }
+  return { where, params };
+}

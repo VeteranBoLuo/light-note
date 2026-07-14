@@ -13,6 +13,18 @@ const userApi = {
   logout() {
     return apiBasePost('/api/user/logout');
   },
+  startAdminContext(targetUserId: string, mode: 'readonly' | 'maintain') {
+    return apiBasePost('/api/user/adminContext/start', { targetUserId, mode });
+  },
+  getAdminContextStatus() {
+    return apiBaseGet('/api/user/adminContext/status');
+  },
+  endAdminContext(token?: string) {
+    return apiBasePost(
+      '/api/user/adminContext/end',
+      token ? { contextToken: token } : undefined,
+    );
+  },
 };
 
 export default userApi;

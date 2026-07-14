@@ -1,5 +1,5 @@
 import pool from '../../../db/index.js';
-import { resultData, insertData } from '../../../util/common.js';
+import { insertData } from '../data.js';
 
 export default {
   name: 'create_note',
@@ -14,6 +14,8 @@ export default {
   },
   requireRoot: false,
   isWrite: true,
+  riskLevel: 'low',
+  confirmationPolicy: 'default',
   async execute(args, ctx) {
     const { title, content = '' } = args;
     if (!title?.trim()) {
@@ -21,8 +23,9 @@ export default {
     }
 
     const noteData = insertData({
-      title: title.trim(),
-      content: content.trim(),
+      title: title.trim().slice(0, 255),
+      content: String(content).trim().slice(0, 60000),
+      type: 'markdown',
       createBy: ctx.userId,
     });
 

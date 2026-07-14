@@ -3,6 +3,7 @@ import { resultData, formatDateTime } from '../util/common.js';
 import { resolveFileCategory } from '../util/fileCategory.js';
 import { normalizeTagIds, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { removeInboxRelations } from '../util/resourceInbox.js';
 
 const SEARCH_TYPES = ['bookmark', 'note', 'file', 'tag'];
 const BATCH_EDITABLE_TYPES = ['bookmark', 'note', 'file'];
@@ -736,6 +737,13 @@ export const batchDeleteResources = async (req, res) => {
            WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
           [...validIds, userId],
         );
+      }
+
+      if (type !== 'tag') {
+        await removeInboxRelations(connection, {
+          userId,
+          items: validIds.map((id) => ({ resourceType: type, resourceId: String(id) })),
+        });
       }
 
       const affected = Number(result?.affectedRows || 0);

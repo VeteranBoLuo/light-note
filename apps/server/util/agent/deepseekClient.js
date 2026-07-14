@@ -82,6 +82,11 @@ export function getActiveProviderPricing() {
   return { provider: cfg.name, price: cfg.price };
 }
 
+export function getActiveProviderInfo() {
+  const cfg = getProviderConfig();
+  return { provider: cfg.name, model: getModel(cfg), price: cfg.price };
+}
+
 // ---- 超时控制 ----
 // Planner(同步)用整体超时;流式用"空闲超时"(见 requestDeepSeekStream),
 // 避免正常的长回答被绝对超时误杀,只拦截"连上却不吐字"的挂死。
@@ -127,6 +132,8 @@ export async function requestDeepSeek(messages, options = {}) {
     messages,
     stream: false,
     ...cfg.extraBody,
+    ...(Number.isFinite(options.maxTokens) ? { max_tokens: options.maxTokens } : {}),
+    ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
   };
 
   if (options.tools?.length) {
@@ -152,6 +159,7 @@ export async function requestDeepSeek(messages, options = {}) {
 
   const msg = data.choices?.[0]?.message;
   const usage = data.usage || {};
+  const usageStatus = Number(usage.total_tokens || 0) > 0 ? 'reported' : 'missing';
   return {
     content: msg?.content || '',
     toolCalls: msg?.tool_calls || [],
@@ -160,6 +168,10 @@ export async function requestDeepSeek(messages, options = {}) {
       completionTokens: usage.completion_tokens || 0,
       totalTokens: usage.total_tokens || 0,
     },
+    usageStatus,
+    provider: cfg.name,
+    model: body.model,
+    finishReason: data.choices?.[0]?.finish_reason || null,
   };
 }
 
@@ -202,6 +214,8 @@ export async function requestDeepSeekStream(messages, options) {
       model: getModel(cfg),
       messages,
       stream: true,
+      stream_options: { include_usage: true },
+      ...(Number.isFinite(options.maxTokens) ? { max_tokens: options.maxTokens } : {}),
       // 回答风格:调用方(agentHandle)按用户偏好传入并已 clamp;仅作用于最终回答,Planner 不设(保证工具选择稳定)
       ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
       ...cfg.extraBody,
@@ -218,6 +232,8 @@ export async function requestDeepSeekStream(messages, options) {
   const decoder = new TextDecoder();
   let buffer = '';
   let fullContent = '';
+  const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  let finishReason = null;
 
   try {
     while (true) {
@@ -246,6 +262,14 @@ export async function requestDeepSeekStream(messages, options) {
           throw new Error(chunk.error.message);
         }
 
+        if (chunk.usage) {
+          usage.promptTokens = Number(chunk.usage.prompt_tokens || 0);
+          usage.completionTokens = Number(chunk.usage.completion_tokens || 0);
+          usage.totalTokens = Number(chunk.usage.total_tokens || 0);
+        }
+
+        if (chunk.choices?.[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason;
+
         const delta = chunk.choices?.[0]?.delta?.content || '';
         if (!delta) continue;
         fullContent += delta;
@@ -256,7 +280,14 @@ export async function requestDeepSeekStream(messages, options) {
     clearTimeout(idleTimer); // 正常结束/异常/abort 都清掉计时器,防泄漏
   }
 
-  return { content: fullContent };
+  return {
+    content: fullContent,
+    usage,
+    usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
+    provider: cfg.name,
+    model: getModel(cfg),
+    finishReason,
+  };
 }
 
 /**

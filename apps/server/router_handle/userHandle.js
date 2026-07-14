@@ -14,6 +14,13 @@ import { removeUserSessions, createSession, listUserSessions, removeSession } fr
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../util/resourceTags.js';
+import {
+  adminContextPublicView,
+  AdminContextError,
+  createAdminContext,
+  revokeAdminContext,
+} from '../util/adminContextStore.js';
+import { recordAdminContextAudit } from '../util/adminContextAudit.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -345,9 +352,10 @@ export const getUserInfo = async (req, res) => {
     const safeUser = sanitizeUser(result);
     safeUser.adminPreview = Boolean(req.isAdminPreview);
     safeUser.visitorWorkspace = Boolean(req.isVisitorWorkspace);
+    safeUser.adminContext = adminContextPublicView(req.adminContext);
     // 普通游客仍返回 visitor 状态触发只读引导；真实 root 打开的游客维护工作区视为有效管理上下文，
     // 返回 200，避免前端因本机“曾登录过”而误弹登录框。
-    if (safeUser.role === 'visitor' && !req.isVisitorWorkspace) {
+    if (safeUser.role === 'visitor' && !req.adminContext && !req.isVisitorWorkspace) {
       res.send(resultData(safeUser, 'visitor'));
     } else {
       res.send(resultData(safeUser));
@@ -358,6 +366,96 @@ export const getUserInfo = async (req, res) => {
 };
 
 export const me = getUserInfo;
+
+export const startAdminContext = async (req, res) => {
+  try {
+    const actor = req.user;
+    const subjectUserId = String(req.body?.targetUserId || '').trim();
+    const mode = String(req.body?.mode || 'readonly').trim();
+    const result = await createAdminContext({
+      actor,
+      actorSessionId: getRequestSid(req),
+      subjectUserId,
+      mode,
+    });
+    recordAdminContextAudit({
+      contextId: result.context.id,
+      actorUserId: actor.id,
+      subjectUserId,
+      mode,
+      action: 'start',
+      route: req.originalUrl,
+      method: req.method,
+      resultStatus: 200,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    res.send(
+      resultData({
+        contextToken: result.token,
+        ttlSeconds: result.ttlSeconds,
+        context: adminContextPublicView(result.context),
+      }),
+    );
+  } catch (error) {
+    const status = error instanceof AdminContextError ? error.status : 500;
+    const code = error instanceof AdminContextError ? error.code : 'ADMIN_CONTEXT_START_FAILED';
+    if (!(error instanceof AdminContextError)) {
+      console.error('[admin-context] 开启失败:', error.message);
+    }
+    recordAdminContextAudit({
+      actorUserId: req.user?.id || null,
+      subjectUserId: String(req.body?.targetUserId || '').trim() || null,
+      mode: String(req.body?.mode || 'readonly').trim(),
+      action: 'start_denied',
+      route: req.originalUrl,
+      method: req.method,
+      resultStatus: status,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      meta: { code },
+    });
+    const msg = error instanceof AdminContextError ? error.message : '管理员预览开启失败，请稍后重试。';
+    res.status(status).json({ data: { code }, status, msg });
+  }
+};
+
+export const getAdminContextStatus = async (req, res) => {
+  if (!req.adminContext || !req.adminActor) {
+    return res.status(401).json({
+      data: { code: 'ADMIN_CONTEXT_EXPIRED' },
+      status: 401,
+      msg: '管理员预览已过期。',
+    });
+  }
+  return res.send(resultData({ context: adminContextPublicView(req.adminContext) }));
+};
+
+export const endAdminContext = async (req, res) => {
+  if (!req.adminContext || !req.adminActor || !req.adminContextToken) {
+    return res.status(401).json({
+      data: { code: 'ADMIN_CONTEXT_EXPIRED' },
+      status: 401,
+      msg: '管理员预览已过期。',
+    });
+  }
+  const context = req.adminContext;
+  const actor = req.adminActor;
+  await revokeAdminContext(req.adminContextToken);
+  recordAdminContextAudit({
+    contextId: context.id,
+    actorUserId: actor.id,
+    subjectUserId: context.subjectUserId,
+    mode: context.mode,
+    action: 'end',
+    route: req.originalUrl,
+    method: req.method,
+    resultStatus: 200,
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  });
+  return res.send(resultData({ ended: true }));
+};
 export const getUserList = (req, res) => {
   try {
     if (req.user?.role !== 'root') {
@@ -928,7 +1026,7 @@ export const importData = async (req, res) => {
       if (s && !/^https?:\/\//i.test(s)) s = 'https://' + s;
       return s;
     };
-    const noteKey = (t, c) => `${t} ${c}`;
+    const noteKey = (t, c) => `${t}\u0000${c}`;
     const tagMap = new Map(tagRows.map((r) => [r.name, r.id]));
     const existUrls = new Set(bmRows.map((r) => normUrl(r.url)).filter(Boolean));
     const existNames = new Set(bmRows.map((r) => r.name).filter(Boolean));

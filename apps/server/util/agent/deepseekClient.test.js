@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { getActiveProviderPricing, requestDeepSeek, requestDeepSeekStream, looksLikeLeakedToolCall } from './deepseekClient.js';
 
 const ORIGINAL_ENV = { ...process.env };
+const ORIGINAL_FETCH = globalThis.fetch;
 
 describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
   afterEach(() => {
     process.env = { ...ORIGINAL_ENV };
+    globalThis.fetch = ORIGINAL_FETCH;
   });
 
   it('未设置 AGENT_LLM_PROVIDER 时默认走 deepseek,单价 1/2', () => {
@@ -35,6 +37,51 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     await expect(requestDeepSeekStream([{ role: 'user', content: 'hi' }], { onDelta: () => {} })).rejects.toThrow(
       /DEEPSEEK_API_KEY/,
     );
+  });
+
+  it('同步请求返回供应商、模型、finish reason 与真实 usage', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    await expect(requestDeepSeek([{ role: 'user', content: 'hi' }])).resolves.toMatchObject({
+      content: 'ok',
+      provider: 'deepseek',
+      finishReason: 'stop',
+      usageStatus: 'reported',
+      usage: { promptTokens: 11, completionTokens: 7, totalTokens: 18 },
+    });
+  });
+
+  it('流式请求解析增量与末尾 usage，不把缺失 usage 记为 0 成功', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"你"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"好"},"finish_reason":"stop"}]}',
+      'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(sse, { status: 200 }));
+    const chunks = [];
+    const result = await requestDeepSeekStream([{ role: 'user', content: 'hi' }], {
+      onDelta: (chunk) => chunks.push(chunk),
+    });
+    expect(chunks).toEqual(['你', '好']);
+    expect(result).toMatchObject({
+      content: '你好',
+      finishReason: 'stop',
+      usageStatus: 'reported',
+      usage: { promptTokens: 9, completionTokens: 2, totalTokens: 11 },
+    });
   });
 });
 

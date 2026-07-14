@@ -17,6 +17,7 @@ import * as fileHandle from '../router_handle/fileHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 import crypto from 'crypto';
+import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 const router = express.Router();
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
@@ -126,15 +127,13 @@ router.post('/confirmUpload', async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const userId = req.user.id;
-    const { files, folderId } = req.body || {};
+    const { files, folderId, addToInbox = false, inboxSource = 'quick_capture' } = req.body || {};
 
     if (!userId) {
-      connection.release();
       return res.send(resultData(null, 400, '缺少用户信息'));
     }
 
     if (!Array.isArray(files) || files.length === 0) {
-      connection.release();
       return res.send(resultData(null, 400, '没有上传文件'));
     }
 
@@ -182,12 +181,24 @@ router.post('/confirmUpload', async (req, res) => {
       const [existingRows] = await connection.query(selectSql, [userId, fileName]);
 
       if (existingRows.length > 0) {
+        await removeInboxRelations(connection, {
+          userId,
+          items: [{ resourceType: 'file', resourceId: String(existingRows[0].id) }],
+        });
         const deleteSql = 'DELETE FROM files WHERE id = ?';
         await connection.query(deleteSql, [existingRows[0].id]);
       }
 
       const insertSql = 'INSERT INTO files SET ?';
       const [insertResult] = await connection.query(insertSql, [snakeCaseKeys(fileInfo)]);
+
+      if (addToInbox === true) {
+        await enqueueResources(connection, {
+          userId,
+          items: [{ resourceType: 'file', resourceId: String(insertResult.insertId) }],
+          source: inboxSource,
+        });
+      }
 
       results.push({
         filename: fileName,
@@ -200,9 +211,11 @@ router.post('/confirmUpload', async (req, res) => {
     res.send(resultData(results));
     recordFirstOwnResource(req, 'file'); // 激活里程碑:首次自建文件(直传回调写库成功)
     // 创造类发经验:仅对新增(非覆盖)文件,逐个按当日衰减发放(grantExp 内日顶 200 兜底)
-    results
-      .filter((r) => r.status === '已上传')
-      .forEach((r) => awardCreate(req.user.id, 'file', r.fileId, { userRole: req.user.role }).catch(() => {}));
+    if (!req.suppressUserRewards) {
+      results
+        .filter((r) => r.status === '已上传')
+        .forEach((r) => awardCreate(req.user.id, 'file', r.fileId, { userRole: req.user.role }).catch(() => {}));
+    }
   } catch (error) {
     await connection.rollback();
     res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
@@ -345,6 +358,10 @@ router.post('/deleteFileById', async (req, res) => {
       `UPDATE files SET del_flag = 1, deleted_at = NOW() WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
       [...fileIds, userId],
     );
+    await removeInboxRelations(connection, {
+      userId,
+      items: fileIds.map((fileId) => ({ resourceType: 'file', resourceId: String(fileId) })),
+    });
     await connection.commit();
     res.send(resultData({ deletedIds: fileIds, count: result.affectedRows }, 200, '删除成功'));
   } catch (e) {

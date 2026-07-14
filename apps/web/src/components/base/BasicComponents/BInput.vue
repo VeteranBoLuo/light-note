@@ -1,13 +1,16 @@
 <template>
   <div class="input-container">
     <textarea
+      ref="inputEl"
       v-if="type === 'textarea'"
       :id="id"
       :rows="rows"
+      :maxlength="maxlength"
       class="b-textarea"
       :value="value"
       @input="handleInput"
-      @enter="$emit('enter')"
+      @keydown.enter="handleEnter"
+      @keydown.esc="handleEscape"
       :style="{
         paddingLeft: hasPrefixSlot ? '30px' : '11px',
         paddingRight: hasSuffixSlot ? '30px' : '11px',
@@ -18,6 +21,7 @@
       @focusout="$emit('focusout')"
     />
     <input
+      ref="inputEl"
       v-else
       :id="id"
       class="b-input"
@@ -49,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-  import { useSlots, computed, Ref } from 'vue';
+  import { useSlots, computed, Ref, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
@@ -80,6 +84,7 @@
   );
   const value: Ref<string | number | undefined> = defineModel('value');
   const emit = defineEmits(['input', 'enter', 'focus', 'focusout', 'blur', 'change']);
+  const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
   // 获取插槽内容
   const slots = useSlots();
@@ -105,9 +110,20 @@
   }
 
   function handleEnter(event: KeyboardEvent) {
-    if (event.isComposing) return;
-    emit('enter');
+    if (event.isComposing || event.keyCode === 229 || (props.type === 'textarea' && event.shiftKey)) return;
+    if (props.type === 'textarea') event.preventDefault();
+    emit('enter', event);
   }
+
+  function handleEscape(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) event.stopPropagation();
+  }
+
+  function focus() {
+    inputEl.value?.focus();
+  }
+
+  defineExpose({ focus, inputEl });
 
   const inputTheme = computed(() => {
     if (props.theme) {

@@ -2,14 +2,14 @@
   <Teleport to="body">
     <div v-if="localVisible" class="b-drawer-wrapper" :class="{ 'is-entered': entered }">
       <div class="b-drawer-mask" @click="handleMaskClick" />
-      <div class="b-drawer-panel" :style="{ width: panelWidth }">
+      <div class="b-drawer-panel" :class="{ 'b-drawer-panel--fullscreen': fullScreen }" :style="{ width: panelWidth }">
         <div class="b-drawer-header">
           <span class="b-drawer-title">{{ title }}</span>
-          <button class="b-drawer-close" @click="handleClose">
+          <BButton class="b-drawer-close" @click="handleClose">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
-          </button>
+          </BButton>
         </div>
         <div class="b-drawer-body">
           <slot />
@@ -21,6 +21,7 @@
 
 <script lang="ts" setup>
   import { computed, ref, watch, nextTick } from 'vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -28,11 +29,13 @@
       title?: string;
       width?: string;
       maskClosable?: boolean;
+      fullScreen?: boolean;
     }>(),
     {
       title: '',
       width: '640px',
       maskClosable: true,
+      fullScreen: false,
     },
   );
 
@@ -135,6 +138,11 @@
       background: var(--scrollbar-color, rgba(144, 147, 153, 0.3));
       border-radius: 3px;
     }
+  }
+
+  .b-drawer-panel--fullscreen {
+    min-width: 100vw;
+    max-width: 100vw;
   }
 
   .is-entered {

@@ -72,6 +72,20 @@
       ></div>
     </div>
     <div class="person-menu">
+      <div class="person-menu-item" @click="openQuickCapture">
+        <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
+        <span class="person-menu-item-des">
+          {{ inbox.pendingTotal || '' }}
+          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+        </span>
+      </div>
+      <div class="person-menu-item" @click="$router.push('/inbox')">
+        <span class="person-menu-item-title">{{ $t('inbox.title') }}</span>
+        <span class="person-menu-item-des">
+          {{ inbox.pendingTotal || '' }}
+          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+        </span>
+      </div>
       <div
         class="person-menu-item"
         @click="$router.push('/search')"
@@ -141,7 +155,7 @@
       ></div>
       <div
         class="person-menu-item"
-        @click="$router.push('/help')"
+        @click="openAiAssistant"
         v-click-log="{ module: '轻笺助手', operation: `轻笺助手` }"
       >
         <span class="person-menu-item-title">{{ $t('ai.title') }}</span>
@@ -173,6 +187,7 @@
       >
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
+    <QuickCaptureModal v-model:visible="inbox.quickCaptureVisible" />
   </CommonContainer>
 </template>
 
@@ -180,7 +195,7 @@
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, ref } from 'vue';
@@ -189,15 +204,27 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { useI18n } from 'vue-i18n';
+  import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
+  const inbox = inboxStore();
   const menuVisible = ref(false);
   const userVisible = ref(false);
 
   const user = useUserStore();
+
+  function openQuickCapture() {
+    if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
+    inbox.quickCaptureVisible = true;
+  }
+
+  function openAiAssistant() {
+    window.dispatchEvent(new CustomEvent('light-note:open-ai'));
+  }
 
   const themeMenuOptions = computed(() => [
     { label: t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },

@@ -22,12 +22,12 @@ export default {
   },
   requireRoot: false,
   isWrite: false,
-  async execute(args) {
+  async execute(args, ctx) {
     let url = String(args.url || '').trim();
     if (!url) return { error: 'URL_REQUIRED', message: '网址不能为空' };
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
-    const meta = await fetchWebMeta(url);
+    const meta = await fetchWebMeta(url, { signal: ctx.signal });
     if (!meta.ok) return { error: meta.reason, message: REASON_MSG[meta.reason] || '读取失败' };
     return {
       url: meta.url,

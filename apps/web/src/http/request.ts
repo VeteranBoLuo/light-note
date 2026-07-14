@@ -4,8 +4,9 @@ import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
 import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
 import {
+  clearAdminLoginPreview,
+  getAdminContextToken,
   getAdminLoginPreviewPreferences,
-  getAdminLoginPreviewUserId,
 } from '@/utils/authStorage.ts';
 
 // 常量定义
@@ -162,12 +163,9 @@ request.interceptors.request.use(
       config.headers['OS'] = getUserOsInfo();
       config.headers['Browser'] = getBrowserType();
       config.headers['X-Lang'] = currentLang;
-      const previewUserId = getAdminLoginPreviewUserId();
-      if (previewUserId) {
-        config.headers['X-Admin-Preview-User-Id'] = previewUserId;
-        if (config.data?.filters && Object.prototype.hasOwnProperty.call(config.data.filters, 'userId')) {
-          config.data.filters.userId = previewUserId;
-        }
+      const adminContextToken = getAdminContextToken();
+      if (adminContextToken) {
+        config.headers['X-Admin-Context'] = adminContextToken;
       }
       config.headers['fingerprint'] = (window as any)['fingerprint'];
       const rememberedSid = localStorage.getItem('rememberedSid');
@@ -198,6 +196,44 @@ request.interceptors.response.use(
   (error) => {
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
+      const adminContextCode = error.response.data?.data?.code;
+      const invalidAdminContextCodes = new Set([
+        'ADMIN_CONTEXT_EXPIRED',
+        'ADMIN_CONTEXT_UNAVAILABLE',
+        'ADMIN_CONTEXT_TARGET_MISSING',
+        'ADMIN_CONTEXT_FORBIDDEN',
+      ]);
+      if (invalidAdminContextCodes.has(adminContextCode)) {
+        clearAdminLoginPreview();
+        window.dispatchEvent(
+          new CustomEvent('light-note:admin-context-expired', {
+            detail: { code: adminContextCode, msg: error.response.data?.msg },
+          }),
+        );
+        return Promise.reject({
+          code: adminContextCode,
+          message: error.response.data?.msg,
+          status: error.response.status,
+        });
+      }
+      if (adminContextCode === 'ADMIN_PREVIEW_READONLY') {
+        const msg = error.response.data?.msg || '当前处于只读预览模式。';
+        message.info(msg);
+        return Promise.reject({ code: adminContextCode, message: msg, status: error.response.status });
+      }
+      if (
+        adminContextCode === 'ADMIN_MAINTENANCE_FORBIDDEN' ||
+        adminContextCode === 'ADMIN_MAINTENANCE_DISABLED'
+      ) {
+        const msg = error.response.data?.msg || '当前内容代管模式不允许此操作。';
+        message.warning(msg);
+        return Promise.reject({ code: adminContextCode, message: msg, status: error.response.status });
+      }
+      if (adminContextCode === 'ADMIN_CONTEXT_POLICY_MISSING') {
+        const msg = error.response.data?.msg || '该功能尚未声明管理员预览策略。';
+        message.error(msg);
+        return Promise.reject({ code: adminContextCode, message: msg, status: error.response.status });
+      }
       if (notifyIpBanned(error.response)) {
         return Promise.reject({
           code: 'IP_BANNED',

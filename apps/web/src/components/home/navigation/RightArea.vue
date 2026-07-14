@@ -5,6 +5,9 @@
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
     <GlobalSearch />
+    <BButton v-if="!bookmark.isMobile" size="small" type="primary" class="quick-capture-btn" @click="openQuickCapture">
+      {{ $t('inbox.quickCapture') }}
+    </BButton>
     <BTooltip :title="$t('home.toolbox')" always>
       <div v-if="!bookmark.isMobile" @click="toolkitClick" v-click-log="OPERATION_LOG_MAP.navigation.toolkit" class="toolkit-link">
         <svg-icon size="26" hover :src="icon.toolkit" />
@@ -31,6 +34,7 @@
     </div>
     <!--pc端个人中心       -->
     <PersonCenter v-else />
+    <QuickCaptureModal v-model:visible="inbox.quickCaptureVisible" />
   </div>
 </template>
 
@@ -46,7 +50,14 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
+  import { inboxStore } from '@/store';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useI18n } from 'vue-i18n';
   const bookmark = bookmarkStore();
+  const inbox = inboxStore();
+  const { t } = useI18n();
 
   const user = useUserStore();
   const route = useRoute();
@@ -63,6 +74,11 @@
   // 游客点导航栏「免费注册」:打开注册弹窗(openAuthModal 内部记 signup_open,source=nav)
   function registerClick() {
     bookmark.openAuthModal('注册', 'nav');
+  }
+
+  function openQuickCapture() {
+    if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
+    inbox.quickCaptureVisible = true;
   }
 
   function handleToPhoneUserCenter() {
@@ -119,6 +135,9 @@
   }
   .toolkit-link {
     text-decoration: none;
+  }
+  .quick-capture-btn {
+    flex: 0 0 auto;
   }
   .guest-register-link {
     font-size: 13px;

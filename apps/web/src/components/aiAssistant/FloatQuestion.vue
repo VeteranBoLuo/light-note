@@ -4,44 +4,20 @@
     class="float-question-container"
     :class="{ 'container-peek': isPeeked, 'float-question-container--open': isOpen || containerActive }"
   >
-    <!-- 问答弹窗 -->
-    <transition
-      name="modal-slide"
-      @after-leave="onModalLeave"
+    <BDrawer
+      :open="isOpen"
+      :title="t('ai.title')"
+      :width="bookmark.isMobile ? '100vw' : '480px'"
+      :full-screen="bookmark.isMobile"
+      @close="minimize"
     >
-      <div v-show="isOpen" class="question-modal glassmorphism">
-        <!-- 拖拽手柄区域 -->
-        <div class="modal-header drag-handle">
-          <div class="header-content">
-            <div class="title-section">
-              <div class="ai-icon">🤖</div>
-              <h3>{{ t('ai.title') }}</h3>
-              <span class="status-dot"></span>
-            </div>
-            <div class="header-actions">
-              <!-- 最小化按钮改为清空对话 -->
-              <button class="action-btn minimize" @click="clearConversation" :title="t('ai.newConversation')">
-                <span>➕</span>
-              </button>
-              <button class="action-btn close-btn" @click="minimize" :title="t('ai.close')">
-                <span>❌</span>
-              </button>
-            </div>
-          </div>
+      <div class="ai-drawer-content">
+        <div class="ai-drawer-toolbar">
+          <BButton size="small" @click="clearConversation">{{ t('ai.newConversation') }}</BButton>
         </div>
-
-        <!-- 内容区域 -->
-        <div class="modal-content">
-          <!-- 添加ref以便调用清空方法 -->
-          <ChatContainer ref="aiAssistantRef" />
-        </div>
-
-        <!-- 底部装饰 -->
-        <div class="modal-footer">
-          <div class="footer-wave"></div>
-        </div>
+        <ChatContainer ref="aiAssistantRef" />
       </div>
-    </transition>
+    </BDrawer>
 
     <!-- 悬浮按钮保持不变 -->
     <div
@@ -107,10 +83,14 @@
   import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
+  import { bookmarkStore } from '@/store';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));
 
   const { t } = useI18n();
+  const bookmark = bookmarkStore();
 
   // 状态管理
   const isOpen = ref(false);
@@ -146,6 +126,7 @@
   // 关闭弹窗（缩小到图标）
   const minimize = () => {
     isOpen.value = false;
+    containerActive.value = false;
     isPeeked.value = false;
     schedulePeek();
   };
@@ -160,9 +141,11 @@
     clearPeekTimer();
   };
 
-  // 缩小动画播完后清理容器状态
-  const onModalLeave = () => {
-    containerActive.value = false;
+  const handleOpenAi = () => {
+    isOpen.value = true;
+    containerActive.value = true;
+    isPeeked.value = false;
+    clearPeekTimer();
   };
 
   // 新增：清空对话方法
@@ -237,17 +220,38 @@
     }
     document.addEventListener('keydown', handleKeydown);
     window.addEventListener('light-note:close-ai', handleCloseAi); // 全局搜索下拉打开时互斥收起 AI 面板(仅在已展开时)
+    window.addEventListener('light-note:open-ai', handleOpenAi);
     schedulePeek();
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('light-note:close-ai', handleCloseAi);
+    window.removeEventListener('light-note:open-ai', handleOpenAi);
     clearPeekTimer();
   });
 </script>
 
 <style scoped>
+  .ai-drawer-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .ai-drawer-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding-bottom: 10px;
+    flex-shrink: 0;
+  }
+
+  .ai-drawer-content :deep(.ai-chat-container) {
+    flex: 1;
+    min-height: 0;
+  }
+
   .float-question-container {
     position: fixed;
     z-index: 100;
@@ -708,7 +712,7 @@
   @media (max-width: 600px) {
     .float-question-container {
       right: 10px;
-      bottom: 0px;
+      bottom: calc(72px + env(safe-area-inset-bottom));
     }
     .question-modal {
       width: 100vw;

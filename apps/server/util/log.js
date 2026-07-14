@@ -4,6 +4,11 @@ import { isSelfTraffic } from './logExclude.js';
 
 export async function logFunction(req, res, next) {
   try {
+    // 管理员上下文由 admin_context_audit 统一记录 actor/subject/policy，避免混入普通用户 API 日志。
+    if (req.adminContext) {
+      next();
+      return;
+    }
     if (req.originalUrl.includes('/login')) {
       // 登录成败交给登录接口处理，日志中间件只记录请求。
     }

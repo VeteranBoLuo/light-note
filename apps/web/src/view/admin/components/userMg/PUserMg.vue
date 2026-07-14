@@ -23,6 +23,9 @@
                 class="dom-hover"
               />
             </BTooltip>
+            <BTooltip v-if="record.role !== 'visitor'" :title="t('guest.adminContextMaintainEntry')">
+              <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
+            </BTooltip>
             <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
             <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
           </b-space>
@@ -42,7 +45,7 @@
         <b-form form-id="userEditForm" :form-data="editData" :fields="formFields" />
       </div>
     </BModal>
-    <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" />
+    <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
 
     <BModal v-model:visible="detailVisible" title="用户详情" width="90%" :show-footer="false" :mask-closable="true">
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px;" v-if="selectedRecord">
@@ -69,6 +72,7 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
@@ -85,7 +89,7 @@
   const userColumns = [
     { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
-    { title: '操作', key: 'operation', width: '90px' },
+    { title: '操作', key: 'operation', width: '160px' },
   ];
 
   const currentPage = ref<number>(1);
@@ -105,6 +109,7 @@
   const editVisible = ref(false);
   const previewVisible = ref(false);
   const previewUser = ref<any>(null);
+  const previewMode = ref<'readonly' | 'maintain'>('readonly');
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
 
@@ -123,8 +128,30 @@
       message.warning('此用户缺少用户ID，无法预览');
       return;
     }
+    if (record.role === 'visitor') {
+      maintainAsUser(record);
+      return;
+    }
+    openPreview(record, 'readonly');
+  };
+
+  const openPreview = (record, mode: 'readonly' | 'maintain') => {
     previewUser.value = record;
+    previewMode.value = mode;
     previewVisible.value = true;
+  };
+
+  const maintainAsUser = (record) => {
+    if (!record?.id) {
+      message.warning(t('guest.adminContextMissingUser'));
+      return;
+    }
+    const name = record.alias || record.email || t('guest.adminContextUnknownUser');
+    Alert.alert({
+      title: t('guest.adminContextMaintainConfirmTitle'),
+      content: t('guest.adminContextMaintainConfirm', { name }),
+      onOk: () => openPreview(record, 'maintain'),
+    });
   };
 
   const delUser = (record) => {

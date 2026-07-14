@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
-import { insertData } from './common.js';
+// 使用无路由副作用的数据工具，避免业务 service -> common.js -> router -> Agent 的循环依赖。
+import { insertData } from './agent/data.js';
 
 const CREATE_SQL = `
   CREATE TABLE IF NOT EXISTS notification (

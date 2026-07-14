@@ -74,7 +74,7 @@
       </div>
       <div v-if="!isSearching && helpOutline.length" :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']">
         <div class="help-outline-title">{{ t('help.outline') }}</div>
-        <button
+        <BButton
           v-for="heading in helpOutline"
           :key="heading.id"
           class="help-outline-item"
@@ -84,7 +84,7 @@
         >
           <span class="help-outline-marker"></span>
           <span class="text-hidden">{{ heading.text }}</span>
-        </button>
+        </BButton>
       </div>
     </div>
   </div>
@@ -98,11 +98,14 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { getHelpConfig } from '@/api/helpApi';
+  import { useRoute } from 'vue-router';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
 
   const { t, locale } = useI18n();
+  const route = useRoute();
   const helpInfo = {
     content:
       locale.value === 'zh-CN'
@@ -115,11 +118,12 @@
 <ul>
   <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述；支持 Excel / HTML 格式导入导出，批量编辑标签</li>
   <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
+  <li><strong>快速收集与待整理</strong>：从导航栏快速记录网址、文本或文件，先集中进入待整理箱，再搜索、筛选、批量完成整理</li>
   <li><strong>笔记库</strong>：支持 HTML 富文本 / Markdown 双模式编辑器；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；可导出为 PDF / HTML / Markdown</li>
   <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
   <li><strong>资源中心</strong>：导航栏全局搜索，一键检索书签、笔记、文件和标签，支持按类型筛选；按 <code>/</code> 键可快速唤起搜索</li>
   <li><strong>回收站</strong>：删除的书签、笔记、文件统一进入回收站，30 天内可随时恢复，过期自动清理</li>
-  <li><strong>轻笺智域</strong>：内置 AI 对话助手，可查询书签/笔记/文件数据、搜索帮助文档、多语言翻译，以及常见功能问题快捷问答</li>
+  <li><strong>轻笺智域</strong>：内置 AI 对话助手，可用 <code>@</code> 选择当前资源作为上下文；查询结果提供来源卡片，任何写入都会先展示目标与影响范围并等待确认</li>
   <li><strong>工作台</strong>：聚合书签/笔记/文件总数、7 天活跃趋势、高频书签与标签热度排行，快捷操作一步直达</li>
 </ul>
 <p>更多功能：<b>键盘快捷键</b>（<code>/</code> 快速搜索、拖拽排序等）、<b>移动端</b>专属界面、<b>GitHub 快捷登录</b>，助你高效管理知识。</p>
@@ -135,6 +139,7 @@
 
 <h3>📂 快速上手</h3>
 <ol>
+  <li>点击导航栏的<b>快速收集</b>，随手保存网址、文本或文件；稍后到<b>待整理</b>统一处理</li>
   <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
   <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
   <li>打开<b>笔记库</b>新建笔记（支持 HTML 或 Markdown），用标签关联相关知识</li>
@@ -160,11 +165,12 @@
 <ul>
   <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats; batch tag editing</li>
   <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
+  <li><strong>Quick Capture & Inbox</strong>: Capture URLs, text, or files from the navigation bar, then search, filter, and batch-complete them in one inbox</li>
   <li><strong>Note Library</strong>: Dual-mode editor supporting HTML rich text and Markdown; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
   <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
   <li><strong>Resource Center</strong>: Global search from the navigation bar — find bookmarks, notes, files, and tags in one place; filter by type; press <code>/</code> to quickly activate search</li>
   <li><strong>Trash</strong>: Deleted bookmarks, notes, and files go to the trash for 30 days — recover anytime before automatic cleanup</li>
-  <li><strong>Light Note AI</strong>: Built-in AI chat assistant for querying bookmarks/notes/files, searching help docs, multi-language translation, and quick answers to common feature questions</li>
+  <li><strong>Light Note AI</strong>: Attach resources as per-message context, trace answers through source cards, and review the target and impact before any AI write is executed</li>
   <li><strong>Workbench</strong>: Aggregate bookmark/note/file totals, 7-day activity trends, top bookmarks and tag popularity rankings, and one-click quick actions</li>
 </ul>
 <p>More features: <b>Keyboard shortcuts</b> (<code>/</code> quick search, drag & drop sorting, etc.), <b>mobile</b> optimized interface, <b>GitHub quick login</b>.</p>
@@ -180,6 +186,7 @@
 
 <h3>📂 Quick Start</h3>
 <ol>
+  <li>Use <b>Quick Capture</b> to save a URL, text, or file, then process it later in the <b>Inbox</b></li>
   <li>On the <b>Bookmarks</b> page, click tags to filter your saved web pages</li>
   <li>Go to <b>Bookmark Management</b> to add, edit, or batch-operate bookmarks</li>
   <li>Open the <b>Note Library</b> to create notes and link them with tags</li>
@@ -391,8 +398,24 @@
     const res = await getHelpConfig();
     if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
       serverOptions.value = res.data;
+      openArticleFromRoute();
     }
   }
+
+  function openArticleFromRoute() {
+    const articleId = String(route.query.article || '');
+    if (!articleId) return;
+    const target = serverOptions.value.find((item) => String(item.id) === articleId);
+    if (!target) return;
+    searchValue.value = '';
+    selectedFromSearch.value = false;
+    logItem(target);
+  }
+
+  watch(
+    () => route.query.article,
+    () => openArticleFromRoute(),
+  );
 
   onMounted(() => {
     setupClickListener();

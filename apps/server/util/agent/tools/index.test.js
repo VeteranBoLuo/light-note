@@ -1,0 +1,26 @@
+import { describe, expect, it } from 'vitest';
+import tools from './index.js';
+
+describe('Agent 工具注册表', () => {
+  it('可独立导入且工具名称唯一、schema 与执行器完整', () => {
+    expect(tools.length).toBeGreaterThan(0);
+    expect(new Set(tools.map((tool) => tool.name)).size).toBe(tools.length);
+    for (const tool of tools) {
+      expect(tool.name).toBeTruthy();
+      expect(tool.parameters?.type).toBe('object');
+      expect(typeof tool.execute).toBe('function');
+      expect(typeof tool.transform).toBe('function');
+    }
+  });
+
+  it('所有写工具显式声明有效风险等级和确认策略', () => {
+    const writeTools = tools.filter((tool) => tool.isWrite);
+    expect(writeTools.map((tool) => tool.name).sort()).toEqual(
+      ['add_tag', 'create_bookmark', 'create_note', 'restore_trash', 'write_knowledge_base'].sort(),
+    );
+    for (const tool of writeTools) {
+      expect(['low', 'medium', 'high']).toContain(tool.riskLevel);
+      expect(['default', 'always']).toContain(tool.confirmationPolicy);
+    }
+  });
+});

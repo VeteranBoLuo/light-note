@@ -16,6 +16,7 @@ import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util
 import { checkBookmarkHealth, getHealthSummary, markLinkNormal, startFullCheck, resetHealth } from '../util/linkHealth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
+import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
 // 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
@@ -603,7 +604,7 @@ export const addBookmark = async (req, res) => {
     await connection.beginTransaction();
     const userId = req.user.id;
     // saveSnapshot 是前端表单开关,不是书签字段:先摘出去,避免混进 INSERT(表里无此列)
-    const { saveSnapshot = true, ...bmBody } = req.body || {};
+    const { saveSnapshot = true, addToInbox = false, inboxSource = 'quick_capture', ...bmBody } = req.body || {};
     const params = {
       ...bmBody,
       userId: userId,
@@ -613,23 +614,41 @@ export const addBookmark = async (req, res) => {
     if (params.url && !params.url.startsWith('http://') && !params.url.startsWith('https://')) {
       params.url = 'https://' + params.url;
     }
+    // URL 去重:同一用户下相同网址不重复收藏(url 已归一化 + 补协议);导入逐条走此处也自动去重
+    if (params.url) {
+      const [urlDup] = await connection.query('SELECT id, name FROM bookmark WHERE user_id=? AND url=? AND del_flag=0', [userId, params.url]);
+      if (urlDup.length > 0) {
+        if (addToInbox === true) {
+          const queueResult = await enqueueResources(connection, {
+            userId,
+            items: [{ resourceType: 'bookmark', resourceId: String(urlDup[0].id) }],
+            source: 'duplicate_requeue',
+          });
+          await connection.commit();
+          return res.send(
+            resultData({ id: urlDup[0].id, duplicate: true, addedToInbox: true, inbox: queueResult }),
+          );
+        }
+        throw new Error(`该网址已收藏为「${urlDup[0].name}」`);
+      }
+    }
     const sqlCheck = 'SELECT * FROM bookmark WHERE user_id=? AND name = ? AND del_flag = 0';
     const [checkRes] = await connection.query(sqlCheck, [userId, params.name]);
     if (checkRes.length > 0) {
       throw new Error(`书签${checkRes[0].name}已存在`);
-    }
-    // URL 去重:同一用户下相同网址不重复收藏(url 已归一化 + 补协议);导入逐条走此处也自动去重
-    if (params.url) {
-      const [urlDup] = await connection.query('SELECT name FROM bookmark WHERE user_id=? AND url=? AND del_flag=0', [userId, params.url]);
-      if (urlDup.length > 0) {
-        throw new Error(`该网址已收藏为「${urlDup[0].name}」`);
-      }
     }
 
     const insertParams = mergeExistingProperties(insertData(params), [undefined, '', []], ['related_tags']);
     const insertBookmarkId = insertParams.id;
     let sql = `INSERT INTO bookmark SET ?`;
     const [result] = await connection.query(sql, [insertParams]);
+    if (addToInbox === true) {
+      await enqueueResources(connection, {
+        userId,
+        items: [{ resourceType: 'bookmark', resourceId: insertBookmarkId }],
+        source: inboxSource,
+      });
+    }
     if (req.body.relatedTags && req.body.relatedTags.length > 4) {
       throw new Error('最多选择4个关联标签');
     }
@@ -643,8 +662,8 @@ export const addBookmark = async (req, res) => {
       });
     }
     await connection.commit();
-    res.send(resultData(result));
-    if (!req.isVisitorWorkspace) {
+    res.send(resultData({ ...result, id: insertBookmarkId, addedToInbox: addToInbox === true }));
+    if (!req.isVisitorWorkspace && !req.suppressUserRewards) {
       recordFirstOwnResource(req, 'bookmark'); // 激活里程碑:首次自建书签(不 await,失败不影响响应)
       awardCreate(userId, 'bookmark', hashRef(params.url), { userRole: req.user.role }).catch(() => {}); // 创造类发经验(当日衰减 + url 判重)
     }
@@ -737,12 +756,15 @@ export const getBookmarkDetail = (req, res) => {
 
 export const delBookmark = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const connection = await pool.getConnection();
   try {
     const userId = req.user.id;
     const id = req.body.id;
 
-    const [result] = await pool.query(`SELECT * FROM bookmark WHERE id=? AND user_id=?`, [id, userId]);
+    await connection.beginTransaction();
+    const [result] = await connection.query(`SELECT * FROM bookmark WHERE id=? AND user_id=?`, [id, userId]);
     if (result.length === 0) {
+      await connection.rollback();
       return res.send(resultData(null, 404, '书签不存在'));
     }
 
@@ -766,11 +788,19 @@ export const delBookmark = async (req, res) => {
       deleted_at: new Date(),
     };
 
-    const [updateResult] = await pool.query(`UPDATE bookmark SET ? WHERE id=? AND user_id=?`, [params, id, userId]);
+    const [updateResult] = await connection.query(`UPDATE bookmark SET ? WHERE id=? AND user_id=?`, [params, id, userId]);
+    await removeInboxRelations(connection, {
+      userId,
+      items: [{ resourceType: 'bookmark', resourceId: String(id) }],
+    });
+    await connection.commit();
 
     res.send(resultData(updateResult));
   } catch (e) {
+    await connection.rollback();
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+  } finally {
+    connection.release();
   }
 };
 
@@ -958,7 +988,7 @@ export const importBookmarksHtml = async (req, res) => {
       }),
     );
     // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)
-    if (createdBookmarks > 0) {
+    if (createdBookmarks > 0 && !req.suppressUserRewards) {
       grantExp(userId, 'bookmark_import', { refId: `import_${userId}_${Date.now()}`, amount: 15, userRole: req.user.role }).catch(() => {});
     }
   } catch (e) {

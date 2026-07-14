@@ -39,7 +39,7 @@
              气泡因此只需包住文字即可自适应收窄，不再被这一行撑宽 -->
         <div class="msg-footer" v-if="message.role === 'user' && message.content">
           <div class="msg-actions">
-            <button type="button" class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
+            <BButton class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
               <svg
                 viewBox="0 0 24 24"
                 width="15"
@@ -54,8 +54,8 @@
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
-            </button>
-            <button type="button" class="msg-action-btn" :title="t('ai.edit')" @click="handleEdit">
+            </BButton>
+            <BButton class="msg-action-btn" :title="t('ai.edit')" @click="handleEdit">
               <svg
                 viewBox="0 0 24 24"
                 width="15"
@@ -70,25 +70,25 @@
                 <path d="M12 20h9"></path>
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
               </svg>
-            </button>
+            </BButton>
           </div>
           <span class="time">{{ formatTime(message.timestamp) }}</span>
         </div>
         <!-- AI 回答:操作条(复制 + 重新生成),左对齐;用户消息的复制/编辑另在上方 -->
         <div class="msg-footer" style="justify-content: flex-start" v-if="message.role === 'assistant' && message.content">
           <div class="msg-actions">
-            <button type="button" class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
+            <BButton class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
-            </button>
-            <button type="button" class="msg-action-btn" :title="t('ai.regenerate')" @click="handleRegenerate">
+            </BButton>
+            <BButton class="msg-action-btn" :title="t('ai.regenerate')" @click="handleRegenerate">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M23 4v6h-6"></path>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
               </svg>
-            </button>
+            </BButton>
           </div>
         </div>
       </div>
@@ -105,6 +105,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import { copyTextToClipboard } from '@/utils/common';
@@ -170,7 +171,7 @@
 
   const formatMessage = (message: ChatMessage): string => {
     if (message.role === 'user') {
-      return message.content.replace(/\n/g, '<br>');
+      return DOMPurify.sanitize(message.content, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\n/g, '<br>');
     }
 
     try {
@@ -214,7 +215,7 @@
       return cleanHtml;
     } catch (error) {
       console.error('Markdown解析错误:', error);
-      return message.content.replace(/\n/g, '<br>');
+      return DOMPurify.sanitize(message.content, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\n/g, '<br>');
     }
   };
 

@@ -46,6 +46,7 @@ export function normalizeConversionSource(source) {
  */
 export const recordConversionEvent = (req, event, context = '', overrides = {}) => {
   try {
+    if (req?.suppressConversionTracking || req?.adminContext) return;
     const userId = overrides.userId ?? (req?.user?.id || null);
     const visitorType = overrides.visitorType ?? (req?.user?.role || 'visitor');
     const fingerprint = String(req?.headers?.['fingerprint'] || '').slice(0, 128);
@@ -66,6 +67,7 @@ export const recordConversionEvent = (req, event, context = '', overrides = {}) 
 // 注册时的示例数据走直插、不经过这些 handler,故首次调用即真实自建;仅登录用户触发,不走游客白名单接口,由 handler 直接调用。
 export const recordFirstOwnResource = async (req, type) => {
   try {
+    if (req?.suppressConversionTracking || req?.adminContext) return;
     const userId = req?.user?.id;
     if (!userId) return;
     const [rows] = await pool.query(

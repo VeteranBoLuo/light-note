@@ -570,9 +570,12 @@ function fetchIconFromFavimg(url) {
 }
 
 export const analyzeImgUrl = async (req, res) => {
+  const canMaintainAdminBookmarks =
+    req.adminContext?.mode === 'maintain' && req.adminCapability?.policy === 'content_write';
   const canMaintainVisitorBookmarks =
-    req.isVisitorWorkspaceContentWrite && req.isVisitorWorkspace && req.adminActor?.role === 'root';
-  if (req.isAdminPreview && !canMaintainVisitorBookmarks) {
+    canMaintainAdminBookmarks ||
+    (req.isVisitorWorkspaceContentWrite && req.isVisitorWorkspace && req.adminActor?.role === 'root');
+  if (req.isAdminPreview && !canMaintainAdminBookmarks && !canMaintainVisitorBookmarks) {
     return res.send(resultData(null, 403, '管理员用户预览为只读模式'));
   }
   // 图标抓取会落盘并更新 bookmark.icon_url，属于写操作。普通游客浏览时静默跳过，避免自动请求弹注册墙。

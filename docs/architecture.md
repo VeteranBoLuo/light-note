@@ -49,6 +49,8 @@ apps/server/
 │   ├── bookmark.js        # 书签路由
 │   ├── note.js            # 笔记路由
 │   ├── file.js            # 云空间文件路由
+│   ├── inbox.js           # 快速收集与待整理路由
+│   ├── chat.js            # AI Agent、写操作确认与额度路由
 │   ├── user.js            # 用户路由
 │   ├── security.js        # 安全中心路由
 │   ├── trash.js           # 回收站路由
@@ -71,6 +73,9 @@ apps/server/
     ├── resourceTags.js    # 资源-标签关联管理
     ├── log.js             # API 请求日志中间件
     ├── agent/             # 轻笺智域 AI 代理
+    ├── adminContextStore.js # Redis 管理员上下文（actor/subject 分离）
+    ├── adminRoutePolicy.js  # 管理员上下文显式路由策略
+    ├── resourceInbox.js     # 待整理关系与归属服务
     └── security/          # 安全攻击检测
 ```
 
@@ -92,7 +97,9 @@ res.send(resultData(null, 500, '服务器内部错误'));    // 服务端错误
 ### 权限模型
 
 - 角色：`visitor`（游客）、`user`（普通用户）、`root`（管理员）
-- 权限检查内联在各 handler 中，通过 `req.user?.role` 判断
+- 普通权限检查仍通过 `req.user?.role` 判断；管理员预览使用短时 `X-Admin-Context`，鉴权层分离真实操作者 `billingUser` 与资源主体 `resourceUser`
+- 管理员上下文所有路由必须在 `adminRoutePolicy.js` 显式声明语义策略，遗漏时默认拒绝
+- `readonly` 只允许读取；`maintain` 仅允许可逆内容维护，抑制目标账号成长、转化和权益副作用，并写入 `admin_context_audit`
 - Root 操作使用 `ensureRootRole(req, res)` 检查
 
 ## 前端架构
@@ -153,11 +160,14 @@ src/
 | `folder` | 云空间文件夹 | 自增 |
 | `tag` | 标签 | UUID |
 | `resource_tag_relations` | 资源-标签关联 | 无独立 id |
+| `resource_inbox` | 书签/笔记/文件待整理关系 | UUID |
 | `tag_relations` | 标签-标签关联 | 无独立 id |
 | `api_logs` | API 请求日志 | UUID |
 | `operation_logs` | 操作日志 | UUID |
 | `security_events` | 安全事件 | 自增 |
 | `conversion_events` | 游客转化事件 | 自增 |
+| `admin_context_audit` | 管理员预览与内容维护审计 | UUID |
+| `agent_logs` | AI 请求、用量和阶段追踪 | UUID |
 | `opinion` | 用户反馈 | UUID |
 | `help_config` / `help_config_draft` | 帮助中心 | UUID |
 
@@ -176,6 +186,18 @@ src/
 - 通过 `AGENT_LLM_PROVIDER` 环境变量切换
 - 配置集中在 `util/agent/deepseekClient.js` 的 `PROVIDERS` 表
 - 价格按供应商独立计算
+- 会话按用户或管理员 actor/subject 组合隔离；前端历史也按账号键隔离
+- 每轮按意图筛选不超过 12 个工具，非 root 不下发管理工具，游客与只读上下文不下发写工具
+- 五个写工具使用 Redis 哈希键保存的一次性确认令牌；前端先展示风险、目标和影响范围，确认后按服务端保存参数执行
+- SSE 使用 `start/tool_start/tool_result/tool_confirmation/sources/delta/done` 结构化事件，并保留 `requestId` 关联日志
+- 用户可为单条消息选择书签、笔记、文件或标签上下文；后端重新校验归属后读取，不信任前端正文
+
+## 快速收集与待整理
+
+- `resource_inbox` 是跨资源关系表，不复制书签、笔记或文件正文；资源本体仍是唯一事实源
+- 快速收集支持 URL、Markdown 文本和文件，创建资源与加入待整理在同一业务事务或确认链中完成
+- 加入操作以 `(user_id, resource_type, resource_id)` 幂等；完成整理只更新关系状态，不修改资源本体
+- 列表查询、批量完成与重新加入都必须校验当前资源主体归属；资源删除时清理对应关系
 
 ## 关键流程
 
