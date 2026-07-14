@@ -3,12 +3,15 @@ import pool from '../db/index.js';
 import redisClient from './redisClient.js';
 
 const CACHE_PREFIX = 'admin-context:';
+const METADATA_PREFIX = 'admin-context-meta:';
 const READONLY_TTL_SECONDS = 20 * 60;
 const MAINTAIN_TTL_SECONDS = 10 * 60;
+const METADATA_RETENTION_SECONDS = 24 * 60 * 60;
 const VALID_MODES = new Set(['readonly', 'maintain']);
 
 const hashToken = (token) => crypto.createHash('sha256').update(String(token || '')).digest('hex');
 const cacheKey = (token) => `${CACHE_PREFIX}${hashToken(token)}`;
+const metadataKey = (token) => `${METADATA_PREFIX}${hashToken(token)}`;
 
 export class AdminContextError extends Error {
   constructor(code, message, status = 403) {
@@ -71,7 +74,12 @@ export async function createAdminContext({ actor, actorSessionId, subjectUserId,
     expiresAt: new Date(now + ttlSeconds * 1000).toISOString(),
   };
 
-  await redisClient.setEx(cacheKey(token), ttlSeconds, JSON.stringify(context));
+  const serialized = JSON.stringify(context);
+  await Promise.all([
+    redisClient.setEx(cacheKey(token), ttlSeconds, serialized),
+    // 活跃令牌到期后短时保留不含原始 token 的元数据，只用于记录过期访问审计。
+    redisClient.setEx(metadataKey(token), ttlSeconds + METADATA_RETENTION_SECONDS, serialized),
+  ]);
   return { token, ttlSeconds, context };
 }
 
@@ -88,9 +96,29 @@ export async function getAdminContext(token) {
   }
 }
 
+export async function getAdminContextMetadata(token) {
+  if (!token) return null;
+  const raw = await redisClient.get(metadataKey(token));
+  if (!raw) return null;
+  try {
+    const context = JSON.parse(raw);
+    if (!context?.id || !VALID_MODES.has(context.mode) || !context.expiresAt) return null;
+    return {
+      context,
+      expired: Date.parse(context.expiresAt) <= Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function revokeAdminContext(token) {
   if (!token) return false;
-  return (await redisClient.del(cacheKey(token))) > 0;
+  const [activeDeleted, metadataDeleted] = await Promise.all([
+    redisClient.del(cacheKey(token)),
+    redisClient.del(metadataKey(token)),
+  ]);
+  return activeDeleted > 0 || metadataDeleted > 0;
 }
 
 export function adminContextPublicView(context) {

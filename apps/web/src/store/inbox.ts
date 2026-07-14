@@ -40,10 +40,15 @@ export default defineStore('inbox', {
       this.requestId += 1;
     },
     async refreshCount() {
-      const res = await countInbox();
-      if (res.status === 200) {
+      try {
+        const res = await countInbox();
+        if (res.status !== 200) return false;
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
+        return true;
+      } catch {
+        // 导航角标属于增强信息，接口暂不可用时保留现有数量，避免影响主页面。
+        return false;
       }
     },
     async refreshList() {
@@ -57,26 +62,34 @@ export default defineStore('inbox', {
           pageSize: this.pageSize,
           sort: this.sort,
         });
-        if (requestId !== this.requestId || res.status !== 200) return;
+        if (requestId !== this.requestId || res.status !== 200) return false;
         this.items = Array.isArray(res.data?.items) ? res.data.items : [];
         this.total = Number(res.data?.total || 0);
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
         this.selectedKeys = [];
+        return true;
+      } catch {
+        // 前后端灰度发布或网络失败时保留当前列表，并吞掉组件生命周期中的未处理异常。
+        return false;
       } finally {
         if (requestId === this.requestId) this.loading = false;
       }
     },
     async complete(items: InboxResourceRef[]) {
       if (items.length === 0) return 0;
-      const res = await completeInbox(items);
-      if (res.status !== 200) return 0;
-      const completed = Number(res.data?.completed || 0);
-      if (completed > 0) {
-        if (this.currentPage > 1 && this.items.length <= completed) this.currentPage -= 1;
-        await this.refreshList();
+      try {
+        const res = await completeInbox(items);
+        if (res.status !== 200) return 0;
+        const completed = Number(res.data?.completed || 0);
+        if (completed > 0) {
+          if (this.currentPage > 1 && this.items.length <= completed) this.currentPage -= 1;
+          await this.refreshList();
+        }
+        return completed;
+      } catch {
+        return 0;
       }
-      return completed;
     },
   },
 });

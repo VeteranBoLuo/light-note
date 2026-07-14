@@ -1,6 +1,11 @@
 -- Agent / 笔记助手追踪字段（幂等、兼容 MySQL 5.7）。
 -- 每个字段和索引独立检测，允许迁移执行一半后安全重跑。
 
+-- confirmation_rejected 长 21 字符，旧 status varchar(20) 在严格模式下会写入失败。
+SET @status_width := (SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_logs' AND COLUMN_NAME = 'status' LIMIT 1);
+SET @ddl := IF(@status_width IS NOT NULL AND @status_width < 32, "ALTER TABLE `agent_logs` MODIFY COLUMN `status` varchar(32) DEFAULT NULL", 'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 SET @col := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agent_logs' AND COLUMN_NAME = 'request_id');
 SET @ddl := IF(@col = 0, "ALTER TABLE `agent_logs` ADD COLUMN `request_id` varchar(64) DEFAULT NULL AFTER `id`", 'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;

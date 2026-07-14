@@ -14,6 +14,7 @@ const {
   AdminContextError,
   createAdminContext,
   getAdminContext,
+  getAdminContextMetadata,
   revokeAdminContext,
 } = await import('./adminContextStore.js');
 
@@ -38,12 +39,17 @@ describe('adminContextStore', () => {
     expect(result.token).toMatch(/^[A-Za-z0-9_-]{40,}$/);
     expect(result.context.actorSessionId).toBe('sid-1');
     expect(result.context.subjectUserId).toBe('user-1');
-    expect(redis.setEx).toHaveBeenCalledTimes(1);
+    expect(redis.setEx).toHaveBeenCalledTimes(2);
     const [key, ttl, raw] = redis.setEx.mock.calls[0];
     expect(key).toMatch(/^admin-context:[0-9a-f]{64}$/);
     expect(key).not.toContain(result.token);
     expect(ttl).toBe(20 * 60);
     expect(JSON.parse(raw).mode).toBe('readonly');
+    const [metadataCacheKey, metadataTtl, metadataRaw] = redis.setEx.mock.calls[1];
+    expect(metadataCacheKey).toMatch(/^admin-context-meta:[0-9a-f]{64}$/);
+    expect(metadataCacheKey).not.toContain(result.token);
+    expect(metadataTtl).toBe(20 * 60 + 24 * 60 * 60);
+    expect(JSON.parse(metadataRaw).id).toBe(result.context.id);
   });
 
   it('维护模式使用更短有效期', async () => {
@@ -106,8 +112,23 @@ describe('adminContextStore', () => {
     await expect(getAdminContext('broken')).resolves.toBeNull();
   });
 
-  it('撤销上下文删除哈希键', async () => {
+  it('活跃令牌过期后仍可读取短期审计元数据', async () => {
+    const context = {
+      id: 'ctx-expired',
+      mode: 'readonly',
+      expiresAt: new Date(Date.now() - 1_000).toISOString(),
+    };
+    redis.get.mockResolvedValueOnce(JSON.stringify(context));
+    await expect(getAdminContextMetadata('expired-token')).resolves.toEqual({
+      context,
+      expired: true,
+    });
+  });
+
+  it('撤销上下文同时删除活跃键和审计元数据键', async () => {
     await expect(revokeAdminContext('token')).resolves.toBe(true);
+    expect(redis.del).toHaveBeenCalledTimes(2);
     expect(redis.del.mock.calls[0][0]).toMatch(/^admin-context:[0-9a-f]{64}$/);
+    expect(redis.del.mock.calls[1][0]).toMatch(/^admin-context-meta:[0-9a-f]{64}$/);
   });
 });

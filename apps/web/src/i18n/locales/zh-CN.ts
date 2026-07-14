@@ -51,6 +51,8 @@ export default {
     chooseFiles: '选择文件',
     dropFiles: '或把文件拖到这里',
     viewInbox: '查看待整理箱',
+    continueCapture: '继续收集',
+    openCaptured: '打开原资源',
     captureSuccess: '已加入待整理',
     captureSuccessCount: '已将 {count} 个文件加入待整理',
     captureFailed: '收集失败，请稍后重试',

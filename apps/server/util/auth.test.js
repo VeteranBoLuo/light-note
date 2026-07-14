@@ -3,6 +3,8 @@ import { beforeEach, describe, it, expect, vi } from 'vitest';
 const query = vi.fn();
 const getSession = vi.fn();
 const getAdminContext = vi.fn();
+const getAdminContextMetadata = vi.fn();
+const recordAdminContextAudit = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query } }));
 vi.mock('./sessionStore.js', () => ({
   cleanupExpiredSessions: vi.fn(),
@@ -11,7 +13,8 @@ vi.mock('./sessionStore.js', () => ({
   getSession,
   removeSession: vi.fn(),
 }));
-vi.mock('./adminContextStore.js', () => ({ getAdminContext }));
+vi.mock('./adminContextStore.js', () => ({ getAdminContext, getAdminContextMetadata }));
+vi.mock('./adminContextAudit.js', () => ({ recordAdminContextAudit }));
 vi.mock('./conversion.js', () => ({ recordConversionEvent: vi.fn() }));
 
 // auth.js 依赖 common.js(resultData),存在 common.js↔router↔handler 循环依赖:
@@ -33,6 +36,7 @@ function mockRes() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getAdminContextMetadata.mockResolvedValue(null);
 });
 
 describe('authMiddleware 管理员上下文', () => {
@@ -87,6 +91,37 @@ describe('authMiddleware 管理员上下文', () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_FORBIDDEN' } }));
+    expect(recordAdminContextAudit).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'blocked' }));
+  });
+
+  it('上下文过期时使用短期元数据记录 expired 审计', async () => {
+    getSession.mockResolvedValue({ user_id: 'root-1', expires_in_seconds: 600 });
+    getAdminContext.mockResolvedValue(null);
+    getAdminContextMetadata.mockResolvedValue({
+      expired: true,
+      context: {
+        id: 'ctx-expired',
+        actorUserId: 'root-1',
+        actorSessionId: 'sid-1',
+        subjectUserId: 'user-1',
+        subjectRole: 'user',
+        mode: 'readonly',
+      },
+    });
+    query.mockResolvedValueOnce([[{ id: 'root-1', role: 'root', del_flag: 0 }]]);
+    const req = {
+      headers: { cookie: 'sid=sid-1', 'x-admin-context': 'expired-token' },
+      originalUrl: '/api/bookmark/getBookmarkList',
+      path: '/bookmark/getBookmarkList',
+      method: 'POST',
+      body: {},
+    };
+    const res = mockRes();
+    await authMiddleware(req, res, vi.fn());
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(recordAdminContextAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ contextId: 'ctx-expired', action: 'expired', outcome: 'expired' }),
+    );
   });
 });
 

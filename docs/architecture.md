@@ -100,6 +100,7 @@ res.send(resultData(null, 500, '服务器内部错误'));    // 服务端错误
 - 普通权限检查仍通过 `req.user?.role` 判断；管理员预览使用短时 `X-Admin-Context`，鉴权层分离真实操作者 `billingUser` 与资源主体 `resourceUser`
 - 管理员上下文所有路由必须在 `adminRoutePolicy.js` 显式声明语义策略，遗漏时默认拒绝
 - `readonly` 只允许读取；`maintain` 仅允许可逆内容维护，抑制目标账号成长、转化和权益副作用，并写入 `admin_context_audit`
+- 管理员上下文仅以 Token 哈希作为 Redis 键；过期元数据额外保留 24 小时用于审计，审计结果统一为 `allowed/blocked/noop/failed/expired`
 - Root 操作使用 `ensureRootRole(req, res)` 检查
 
 ## 前端架构

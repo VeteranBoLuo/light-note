@@ -7,8 +7,8 @@ export async function recordAdminContextAudit(entry) {
     await pool.query(
       `INSERT INTO admin_context_audit
        (id, context_id, actor_user_id, subject_user_id, mode, action, route, method,
-        resource_type, result_status, ip, user_agent, meta)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        resource_type, outcome, result_status, ip, user_agent, meta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         crypto.randomUUID(),
         entry.contextId || null,
@@ -19,6 +19,7 @@ export async function recordAdminContextAudit(entry) {
         entry.route || null,
         entry.method || null,
         entry.resourceType || null,
+        entry.outcome || null,
         entry.resultStatus ?? null,
         entry.ip || null,
         entry.userAgent || null,
@@ -36,6 +37,15 @@ export function attachAdminContextRequestAudit(req, res) {
   req.adminContextAuditAttached = true;
   const startedAt = Date.now();
   res.once('finish', () => {
+    const policy = req.adminCapability?.policy || 'missing';
+    const outcome =
+      res.statusCode >= 500
+        ? 'failed'
+        : res.statusCode >= 400
+          ? 'blocked'
+          : policy === 'background_write'
+            ? 'noop'
+            : 'allowed';
     recordAdminContextAudit({
       contextId: context.id,
       actorUserId: context.actorUserId,
@@ -45,11 +55,12 @@ export function attachAdminContextRequestAudit(req, res) {
       route: String(req.originalUrl || req.path || '').split('?')[0],
       method: req.method,
       resourceType: req.adminCapability?.resourceType,
+      outcome,
       resultStatus: res.statusCode,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
       meta: {
-        policy: req.adminCapability?.policy || 'missing',
+        policy,
         durationMs: Date.now() - startedAt,
       },
     });

@@ -32,7 +32,8 @@
             </div>
           </div>
           <!-- Markdown 渲染内容 -->
-          <div class="text" v-html="formatMessage(message)" @click="handleLinkClick"></div>
+          <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
+          <div v-else class="text" v-html="formatAssistantMessage(message.content)" @click="handleLinkClick"></div>
         </div>
         <ReplyLoading v-else />
         <!-- 用户消息：操作条移到气泡外下方（纯图标 + 时间），整体右对齐，
@@ -98,9 +99,6 @@
 
 <script setup lang="ts">
   import { computed } from 'vue';
-  import { marked } from 'marked';
-  import DOMPurify from 'dompurify';
-  import hljs from 'highlight.js';
   import 'highlight.js/styles/github.css';
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
@@ -112,6 +110,7 @@
   // 注意：本组件有名为 message 的 prop，这里必须改名，否则导入会遮蔽 prop，
   // 导致模板里的 message.content/role 全部指向该工具对象而恒为 undefined（消息一直转圈不显示）
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { renderAssistantMarkdown } from '@/utils/aiMessageRender';
 
   const { t } = useI18n();
 
@@ -155,69 +154,7 @@
     emit('regenerate');
   };
 
-  // 配置 Markdown 解析器（保持与原组件一致，忽略类型检查约束）
-  const markedOptions: any = {
-    highlight: function (code: string, lang: string) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(code, { language }).value;
-    },
-    breaks: true,
-    gfm: true,
-    smartLists: true,
-    smartypants: true,
-  };
-
-  marked.setOptions(markedOptions);
-
-  const formatMessage = (message: ChatMessage): string => {
-    if (message.role === 'user') {
-      return DOMPurify.sanitize(message.content, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\n/g, '<br>');
-    }
-
-    try {
-      // 预处理：给裸 URL 加尖括号 < >，避免中文/全角字符被 marked 吞入链接
-      const processedContent = message.content.replace(
-        /([\s\n]|^)(https?:\/\/[^\s<]*?)(?=[）\)】」』」。，、；：\s<]|$)/g,
-        '$1<$2>',
-      );
-      const rawHtml = marked.parse(processedContent) as string;
-      const cleanHtml = DOMPurify.sanitize(rawHtml, {
-        ALLOWED_TAGS: [
-          'h1',
-          'h2',
-          'h3',
-          'h4',
-          'h5',
-          'h6',
-          'p',
-          'br',
-          'strong',
-          'em',
-          'u',
-          's',
-          'ul',
-          'ol',
-          'li',
-          'blockquote',
-          'code',
-          'pre',
-          'a',
-          'img',
-          'table',
-          'thead',
-          'tbody',
-          'tr',
-          'th',
-          'td',
-        ],
-        ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'class'],
-      });
-      return cleanHtml;
-    } catch (error) {
-      console.error('Markdown解析错误:', error);
-      return DOMPurify.sanitize(message.content, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).replace(/\n/g, '<br>');
-    }
-  };
+  const formatAssistantMessage = renderAssistantMarkdown;
 
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString('zh-CN', {
@@ -308,6 +245,10 @@
   .text {
     line-height: 1.5;
     word-wrap: break-word;
+  }
+
+  .user-text {
+    white-space: pre-wrap;
   }
 
   .text h1,

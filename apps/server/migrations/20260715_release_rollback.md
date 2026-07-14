@@ -16,7 +16,7 @@
 
 ## 回滚顺序
 
-1. 先关闭 `ADMIN_MAINTENANCE_ENABLED`，并清理 Redis `admin-context:*` 与 `agent:confirm:*` 短时令牌。
+1. 先关闭 `ADMIN_MAINTENANCE_ENABLED`，并清理 Redis `admin-context:*`、`admin-context-meta:*` 与 `agent:confirm:*` 短时令牌。
 2. 回滚前端，隐藏待整理和新版 AI 交互入口。
 3. 回滚服务端代码。
 4. `admin_context_audit` 默认保留，不删除历史审计。
@@ -28,3 +28,4 @@
 - `agentHandle` 对未迁移 `agent_logs` 新列保留旧字段写入回退，但完整追踪依赖迁移完成。
 - `resource_inbox` 是待整理接口的硬依赖，不能在未建表时开放入口。
 - 审计写入失败不会阻断业务，但属于上线告警，不能长期忽略。
+- 活跃管理员上下文仅保存 Token 哈希键；`admin-context-meta:*` 在上下文过期后额外保留 24 小时，仅用于区分过期访问并写审计，不保存原始 Token。

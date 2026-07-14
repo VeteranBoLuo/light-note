@@ -8,7 +8,8 @@ import {
   removeSession,
 } from './sessionStore.js';
 import { recordConversionEvent } from './conversion.js';
-import { getAdminContext } from './adminContextStore.js';
+import { getAdminContext, getAdminContextMetadata } from './adminContextStore.js';
+import { recordAdminContextAudit } from './adminContextAudit.js';
 
 const COOKIE_NAME = 'sid';
 const AUTH_EXPIRED_HEADER = 'X-Auth-Expired';
@@ -190,6 +191,55 @@ export const authMiddleware = async (req, res, next) => {
       const actor = { ...req.user };
       const context = await getAdminContext(adminContextToken);
       if (!context) {
+        const metadata = await getAdminContextMetadata(adminContextToken);
+        if (metadata?.context) {
+          const staleContext = metadata.context;
+          const belongsToActor =
+            actor.role === 'root' &&
+            staleContext.actorUserId === actor.id &&
+            staleContext.actorSessionId === sid;
+          if (!belongsToActor) {
+            recordAdminContextAudit({
+              contextId: staleContext.id,
+              actorUserId: actor.id,
+              subjectUserId: staleContext.subjectUserId,
+              mode: staleContext.mode,
+              action: 'access_denied',
+              outcome: 'blocked',
+              route: requestPath,
+              method: req.method,
+              resultStatus: 403,
+              ip: req.ip,
+              userAgent: req.headers['user-agent'],
+              meta: { code: 'ADMIN_CONTEXT_FORBIDDEN' },
+            });
+            return res.status(403).json({
+              data: { code: 'ADMIN_CONTEXT_FORBIDDEN' },
+              status: 403,
+              msg: '管理员预览令牌与当前登录会话不匹配。',
+            });
+          }
+          if (!metadata.expired) {
+            return res.status(503).json({
+              data: { code: 'ADMIN_CONTEXT_UNAVAILABLE' },
+              status: 503,
+              msg: '管理员预览上下文暂时不可用，请稍后重试。',
+            });
+          }
+          recordAdminContextAudit({
+            contextId: staleContext.id,
+            actorUserId: actor.id,
+            subjectUserId: staleContext.subjectUserId,
+            mode: staleContext.mode,
+            action: 'expired',
+            outcome: 'expired',
+            route: requestPath,
+            method: req.method,
+            resultStatus: 401,
+            ip: req.ip,
+            userAgent: req.headers['user-agent'],
+          });
+        }
         return res.status(401).json({
           data: { code: 'ADMIN_CONTEXT_EXPIRED' },
           status: 401,
@@ -201,6 +251,20 @@ export const authMiddleware = async (req, res, next) => {
         context.actorUserId !== actor.id ||
         context.actorSessionId !== sid
       ) {
+        recordAdminContextAudit({
+          contextId: context.id,
+          actorUserId: actor.id,
+          subjectUserId: context.subjectUserId,
+          mode: context.mode,
+          action: 'access_denied',
+          outcome: 'blocked',
+          route: requestPath,
+          method: req.method,
+          resultStatus: 403,
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          meta: { code: 'ADMIN_CONTEXT_FORBIDDEN' },
+        });
         return res.status(403).json({
           data: { code: 'ADMIN_CONTEXT_FORBIDDEN' },
           status: 403,
@@ -213,6 +277,20 @@ export const authMiddleware = async (req, res, next) => {
       );
       const subject = subjectRows[0];
       if (!subject || subject.role === 'root') {
+        recordAdminContextAudit({
+          contextId: context.id,
+          actorUserId: actor.id,
+          subjectUserId: context.subjectUserId,
+          mode: context.mode,
+          action: 'access_denied',
+          outcome: 'blocked',
+          route: requestPath,
+          method: req.method,
+          resultStatus: 404,
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          meta: { code: 'ADMIN_CONTEXT_TARGET_MISSING' },
+        });
         return res.status(404).json({
           data: { code: 'ADMIN_CONTEXT_TARGET_MISSING' },
           status: 404,

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS admin_context_audit (
   route varchar(255) DEFAULT NULL,
   method varchar(16) DEFAULT NULL,
   resource_type varchar(32) DEFAULT NULL,
+  outcome varchar(16) DEFAULT NULL COMMENT 'allowed/blocked/noop/failed/expired',
   result_status int DEFAULT NULL,
   ip varchar(64) DEFAULT NULL,
   user_agent varchar(512) DEFAULT NULL,

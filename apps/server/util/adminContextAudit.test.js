@@ -47,7 +47,24 @@ describe('adminContextAudit', () => {
     finish();
     await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(1));
     const params = query.mock.calls[0][1];
-    expect(params).toEqual(expect.arrayContaining(['ctx-1', 'root-1', 'user-1', 'readonly', 'request', '/api/bookmark/list', 'bookmark', 200]));
+    expect(params).toEqual(expect.arrayContaining(['ctx-1', 'root-1', 'user-1', 'readonly', 'request', '/api/bookmark/list', 'bookmark', 'allowed', 200]));
     expect(JSON.parse(params.at(-1))).toMatchObject({ policy: 'read' });
+  });
+
+  it('后台写降级为空操作时记录 noop outcome', async () => {
+    query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    let finish;
+    const req = {
+      adminContext: { id: 'ctx-2', actorUserId: 'root-1', subjectUserId: 'user-1', mode: 'readonly' },
+      adminCapability: { policy: 'background_write', resourceType: 'telemetry' },
+      originalUrl: '/api/common/recordConversion',
+      method: 'POST',
+      headers: {},
+    };
+    const res = { statusCode: 200, once: vi.fn((_event, callback) => (finish = callback)) };
+    attachAdminContextRequestAudit(req, res);
+    finish();
+    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(1));
+    expect(query.mock.calls[0][1]).toContain('noop');
   });
 });

@@ -51,6 +51,8 @@ export default {
     chooseFiles: 'Choose files',
     dropFiles: 'or drop files here',
     viewInbox: 'View inbox',
+    continueCapture: 'Keep collecting',
+    openCaptured: 'Open resource',
     captureSuccess: 'Added to inbox',
     captureSuccessCount: '{count} files added to inbox',
     captureFailed: 'Capture failed. Please try again.',

@@ -7,7 +7,7 @@
     :mask-closable="!submitting"
     @close="close"
   >
-    <div class="capture-modal">
+    <div class="capture-modal" @paste="handlePaste">
       <p class="capture-hint">{{ t('inbox.captureHint') }}</p>
       <BTabs v-model:active-tab="captureType" :options="typeOptions" @change="manualType = true" />
 
@@ -37,7 +37,11 @@
 
       <div v-if="successText" class="capture-success">
         <span>{{ successText }}</span>
-        <BButton size="small" @click="goInbox">{{ t('inbox.viewInbox') }}</BButton>
+        <div class="capture-success__actions">
+          <BButton size="small" @click="continueCapture">{{ t('inbox.continueCapture') }}</BButton>
+          <BButton size="small" @click="openCapturedResource">{{ t('inbox.openCaptured') }}</BButton>
+          <BButton size="small" @click="goInbox">{{ t('inbox.viewInbox') }}</BButton>
+        </div>
       </div>
 
       <div class="capture-actions">
@@ -63,39 +67,34 @@
   import { apiBasePost } from '@/http/request';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { inboxStore } from '@/store';
-
-  type CaptureType = 'bookmark' | 'note' | 'file';
+  import {
+    buildCaptureFileMeta,
+    buildMarkdownNotePayload,
+    detectInboxCaptureType,
+    normalizeCaptureUrl,
+    type InboxCaptureType,
+  } from '@/utils/inboxCapture';
 
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ captured: [] }>();
   const { t } = useI18n();
   const router = useRouter();
   const inbox = inboxStore();
-  const captureType = ref<CaptureType>('note');
+  const captureType = ref<InboxCaptureType>('note');
   const content = ref('');
   const files = ref<File[]>([]);
   const submitting = ref(false);
   const successText = ref('');
   const manualType = ref(false);
+  const capturedResource = ref<{ type: InboxCaptureType; id?: string; title?: string } | null>(null);
 
   const typeOptions = computed(() => [
     { key: 'bookmark', label: t('inbox.bookmark') },
     { key: 'note', label: t('inbox.note') },
     { key: 'file', label: t('inbox.file') },
   ]);
-  const parsedUrl = computed(() => {
-    let value = content.value.trim();
-    if (value && !/^[a-z][a-z\d+.-]*:\/\//i.test(value) && /^[\w.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(value)) {
-      value = `https://${value}`;
-    }
-    try {
-      const url = new URL(value);
-      return url;
-    } catch {
-      return null;
-    }
-  });
-  const validUrl = computed(() => Boolean(parsedUrl.value && /^https?:$/.test(parsedUrl.value.protocol)));
+  const parsedUrl = computed(() => normalizeCaptureUrl(content.value));
+  const validUrl = computed(() => Boolean(parsedUrl.value));
   const canSubmit = computed(() =>
     captureType.value === 'file' ? files.value.length > 0 : Boolean(content.value.trim()) && (captureType.value !== 'bookmark' || validUrl.value),
   );
@@ -106,8 +105,9 @@
 
   function detectType() {
     successText.value = '';
+    capturedResource.value = null;
     if (manualType.value || captureType.value === 'file') return;
-    captureType.value = validUrl.value ? 'bookmark' : 'note';
+    captureType.value = detectInboxCaptureType(content.value);
   }
 
   function selectFiles(value: File[]) {
@@ -115,15 +115,18 @@
     captureType.value = 'file';
     manualType.value = true;
     successText.value = '';
+    capturedResource.value = null;
   }
 
   function handleDrop(event: DragEvent) {
     selectFiles(Array.from(event.dataTransfer?.files || []));
   }
 
-  function noteTitle(value: string) {
-    const firstLine = value.split(/\r?\n/).find((line) => line.trim()) || t('inbox.untitledNote');
-    return firstLine.replace(/^#{1,6}\s*/, '').replace(/[*_`~\[\]()>]/g, '').trim().slice(0, 100) || t('inbox.untitledNote');
+  function handlePaste(event: ClipboardEvent) {
+    const pastedFiles = Array.from(event.clipboardData?.files || []);
+    if (!pastedFiles.length) return;
+    event.preventDefault();
+    selectFiles(pastedFiles);
   }
 
   async function collectBookmark() {
@@ -137,24 +140,24 @@
       inboxSource: 'quick_capture',
     });
     if (res.status !== 200) throw new Error(res.msg || t('inbox.captureFailed'));
+    capturedResource.value = { type: 'bookmark', id: String(res.data?.id || ''), title: url.hostname };
     return res.data?.duplicate ? t('inbox.duplicateRequeued') : t('inbox.captureSuccess');
   }
 
   async function collectNote() {
-    const value = content.value;
+    const payload = buildMarkdownNotePayload(content.value, t('inbox.untitledNote'));
     const res = await apiBasePost('/api/note/addNote', {
-      title: noteTitle(value),
-      content: value,
-      type: 'markdown',
+      ...payload,
       addToInbox: true,
       inboxSource: 'quick_capture',
     });
     if (res.status !== 200) throw new Error(res.msg || t('inbox.captureFailed'));
+    capturedResource.value = { type: 'note', id: String(res.data?.id || ''), title: payload.title };
     return t('inbox.captureSuccess');
   }
 
   async function collectFiles() {
-    const fileMeta = files.value.map((file) => ({ fileName: file.name, fileType: file.type, fileSize: file.size }));
+    const fileMeta = buildCaptureFileMeta(files.value);
     const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: fileMeta });
     if (uploadRes.status !== 200) throw new Error(uploadRes.msg || t('inbox.captureFailed'));
     const signed = Array.isArray(uploadRes.data) ? uploadRes.data : [];
@@ -176,6 +179,7 @@
       inboxSource: 'quick_capture',
     });
     if (confirmRes.status !== 200) throw new Error(confirmRes.msg || t('inbox.captureFailed'));
+    capturedResource.value = { type: 'file', title: files.value[0]?.name || '' };
     return t('inbox.captureSuccessCount', { count: files.value.length });
   }
 
@@ -208,11 +212,26 @@
     router.push('/inbox');
   }
 
+  function continueCapture() {
+    successText.value = '';
+    capturedResource.value = null;
+  }
+
+  function openCapturedResource() {
+    const resource = capturedResource.value;
+    if (!resource) return;
+    visible.value = false;
+    if (resource.type === 'bookmark' && resource.id) router.push(`/manage/editBookmark/${resource.id}`);
+    else if (resource.type === 'note' && resource.id) router.push(`/noteLibrary/${resource.id}`);
+    else router.push({ path: '/cloudSpace', query: resource.title ? { fileName: resource.title } : {} });
+  }
+
   function reset() {
     content.value = '';
     files.value = [];
     submitting.value = false;
     successText.value = '';
+    capturedResource.value = null;
     manualType.value = false;
     captureType.value = 'note';
   }
@@ -238,7 +257,12 @@
     display: flex; justify-content: space-between; align-items: center; gap: 12px;
     padding: 10px 12px; border-radius: 8px; background: rgba(46, 204, 113, 0.1); color: var(--text-color);
   }
+  .capture-success__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
   .capture-actions { display: flex; justify-content: flex-end; gap: 8px; }
   :deep(.b-textarea) { resize: vertical; min-height: 82px; }
-  @media (max-width: 767px) { .capture-actions :deep(.b_btn) { flex: 1; width: auto; } }
+  @media (max-width: 767px) {
+    .capture-success { align-items: flex-start; flex-direction: column; }
+    .capture-success__actions { width: 100%; justify-content: flex-start; }
+    .capture-actions :deep(.b_btn) { flex: 1; width: auto; }
+  }
 </style>

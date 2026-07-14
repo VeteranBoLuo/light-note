@@ -985,13 +985,18 @@ function buildWritePreview(tool, args) {
  * 消费一次性确认令牌后执行单个写工具。令牌与用户/管理员上下文绑定，且只能使用一次。
  */
 export async function confirmAgentTool(req, res) {
+  const requestStartedAt = Date.now();
+  const requestId = generateUUID();
+  let identity = null;
+  let toolName = '';
   try {
-    const identity = getAgentIdentity(req);
+    identity = getAgentIdentity(req);
     const confirmation = await consumeToolConfirmation(
       req.body?.confirmationToken,
       identity.ownerKey,
       req.body?.sessionId,
     );
+    toolName = confirmation.toolName;
     if (confirmation.resourceUserId !== identity.resourceUserId) {
       throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '操作确认与当前资源账号不匹配。', 403);
     }
@@ -1023,6 +1028,18 @@ export async function confirmAgentTool(req, res) {
         req.adminContext?.mode === 'maintain' && identity.resourceUserRole === 'visitor',
     });
     if (result.status !== 'success') {
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: [{ name: confirmation.toolName, status: 'error' }],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'error',
+        errorMsg: result.error || 'TOOL_EXECUTION_FAILED',
+        trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
+      });
       return res.status(400).send(
         resultData(
           { code: result.error || 'TOOL_EXECUTION_FAILED', toolName: confirmation.toolName },
@@ -1031,6 +1048,17 @@ export async function confirmAgentTool(req, res) {
         ),
       );
     }
+    logAgentRequest({
+      userId: identity.billingUserId,
+      userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+      question: '',
+      toolsUsed: [{ name: confirmation.toolName, status: 'success' }],
+      iterations: 0,
+      totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      durationMs: Date.now() - requestStartedAt,
+      status: 'success',
+      trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
+    });
     return res.send(
       resultData({
         toolName: confirmation.toolName,
@@ -1045,6 +1073,20 @@ export async function confirmAgentTool(req, res) {
     if (!(error instanceof ToolConfirmationError)) {
       console.error('[Agent] 确认写操作失败:', error.message);
     }
+    if (identity) {
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: toolName ? [{ name: toolName, status: 'error' }] : [],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'error',
+        errorMsg: code,
+        trace: { requestId, taskType: 'agent_confirmation', selectedTools: toolName ? [toolName] : [] },
+      });
+    }
     return res.status(status).send(
       resultData(
         { code },
@@ -1056,17 +1098,45 @@ export async function confirmAgentTool(req, res) {
 }
 
 export async function rejectAgentTool(req, res) {
+  const requestStartedAt = Date.now();
+  const requestId = generateUUID();
+  let identity = null;
   try {
-    const identity = getAgentIdentity(req);
+    identity = getAgentIdentity(req);
     const rejected = await rejectToolConfirmation(
       req.body?.confirmationToken,
       identity.ownerKey,
       req.body?.sessionId,
     );
+    logAgentRequest({
+      userId: identity.billingUserId,
+      userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+      question: '',
+      toolsUsed: [{ name: rejected.toolName, status: 'rejected' }],
+      iterations: 0,
+      totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      durationMs: Date.now() - requestStartedAt,
+      status: 'confirmation_rejected',
+      trace: { requestId, taskType: 'agent_confirmation', selectedTools: [rejected.toolName] },
+    });
     return res.send(resultData(rejected));
   } catch (error) {
     const status = error instanceof ToolConfirmationError ? error.status : 500;
     const code = error instanceof ToolConfirmationError ? error.code : 'TOOL_CONFIRMATION_REJECT_FAILED';
+    if (identity) {
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: [],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'error',
+        errorMsg: code,
+        trace: { requestId, taskType: 'agent_confirmation', selectedTools: [] },
+      });
+    }
     return res.status(status).send(
       resultData({ code }, status, error instanceof ToolConfirmationError ? error.message : '取消操作失败。'),
     );

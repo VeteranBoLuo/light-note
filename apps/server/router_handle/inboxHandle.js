@@ -99,17 +99,18 @@ export async function enqueueInbox(req, res) {
   const items = normalizeInboxItems(req.body?.items);
   const source = normalizeInboxSource(req.body?.source, 'manual');
   if (!items || !source) return res.send(resultData(null, 400, '无效的资源列表或来源'));
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
     const result = await enqueueResources(connection, { userId: req.user.id, items, source });
     await connection.commit();
     res.send(resultData(result));
   } catch (error) {
-    await connection.rollback();
+    if (connection) await connection.rollback();
     sendInboxError(res, error);
   } finally {
-    connection.release();
+    connection?.release();
   }
 }
 
@@ -117,16 +118,17 @@ export async function completeInbox(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   const items = normalizeInboxItems(req.body?.items);
   if (!items) return res.send(resultData(null, 400, '无效的资源列表'));
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
     const result = await completeResources(connection, { userId: req.user.id, items });
     await connection.commit();
     res.send(resultData(result));
   } catch (error) {
-    await connection.rollback();
+    if (connection) await connection.rollback();
     sendInboxError(res, error);
   } finally {
-    connection.release();
+    connection?.release();
   }
 }
