@@ -28,6 +28,7 @@ interface BookmarkState {
   authModalSource: string;
   viewerKey: string;
   bookmarkLoading: boolean;
+  bookmarkAllLoaded: boolean;
   viewer: {
     container?: Viewer;
     src: string;
@@ -58,6 +59,8 @@ export default defineStore('bookmark', {
     authModalSource: 'unknown',
     viewerKey: '',
     bookmarkLoading: false,
+    // 只有「全部书签」接口成功返回后才为 true。初始空数组不能代表用户真的没有书签。
+    bookmarkAllLoaded: false,
     tagLoading: false,
     viewer: {
       src: '',
@@ -159,6 +162,7 @@ export default defineStore('bookmark', {
       this.refreshTagKey = false;
       this.type = 'all';
       this.bookmarkSearch = '';
+      this.bookmarkAllLoaded = false;
       this.isShowLogin = false;
     },
     /**
@@ -171,6 +175,5 @@ export default defineStore('bookmark', {
       // 注册弹窗真正打开才记 signup_open(带来源);登录/重置不记
       if (tab === '注册') trackConversion('signup_open', source);
     },
-
   },
 });

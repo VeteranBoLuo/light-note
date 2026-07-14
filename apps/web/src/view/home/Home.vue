@@ -42,6 +42,7 @@
       bookmark.bookmarkList = res.data.items;
       if (type === 'all') {
         user.bookmarkTotal = res.data.total;
+        bookmark.bookmarkAllLoaded = true;
       }
     }
   };
@@ -62,6 +63,10 @@
     () => watchedRefreshKey.value,
     async () => {
       bookmark.bookmarkList = [];
+      if (bookmark.type === 'all') {
+        // 请求成功前保持 false，避免把刷新时的临时空数组误判成「新用户没有书签」。
+        bookmark.bookmarkAllLoaded = false;
+      }
       bookmark.bookmarkLoading = true;
       const loadingStart = Date.now();
       try {
@@ -97,7 +102,10 @@
     },
   );
 
-  watch(() => bookmark.refreshTagKey, () => queryTagList());
+  watch(
+    () => bookmark.refreshTagKey,
+    () => queryTagList(),
+  );
 
   // 全局搜索「定位」跳转:目标已在当前「全部」列表 → 不重载(避免骨架屏,秒滚动);
   // 否则(处在标签过滤视图 / 目标不在当前列表)才切「全部」加载

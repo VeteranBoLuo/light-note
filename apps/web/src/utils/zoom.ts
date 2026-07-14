@@ -16,6 +16,31 @@ export function getRootZoom(): number {
   return z && z > 0 ? z : 1;
 }
 
+export interface RootZoomRect {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+/** 把 getBoundingClientRect() 的视觉坐标统一换算成 html zoom 子树中的布局坐标。 */
+export function normalizeRectForRootZoom(
+  rect: Pick<DOMRect, 'top' | 'right' | 'bottom' | 'left' | 'width' | 'height'>,
+  rootZoom = getRootZoom(),
+): RootZoomRect {
+  const zoom = Number.isFinite(rootZoom) && rootZoom > 0 ? rootZoom : 1;
+  return {
+    top: rect.top / zoom,
+    right: rect.right / zoom,
+    bottom: rect.bottom / zoom,
+    left: rect.left / zoom,
+    width: rect.width / zoom,
+    height: rect.height / zoom,
+  };
+}
+
 /**
  * 在滚动容器内平滑滚动到目标元素,内部已换算界面缩放(<html> zoom)。
  * 「滚动到某元素」一律用它,不要再裸写 getBoundingClientRect + scrollTo——否则 zoom≠1 时
@@ -25,6 +50,9 @@ export function getRootZoom(): number {
  * @param offset 目标顶部距容器顶的留白(px,布局坐标)
  */
 export function scrollIntoContainer(container: HTMLElement, el: HTMLElement, offset = 0): void {
-  const top = (el.getBoundingClientRect().top - container.getBoundingClientRect().top) / getRootZoom() + container.scrollTop - offset;
+  const top =
+    (el.getBoundingClientRect().top - container.getBoundingClientRect().top) / getRootZoom() +
+    container.scrollTop -
+    offset;
   container.scrollTo({ top, behavior: 'smooth' });
 }

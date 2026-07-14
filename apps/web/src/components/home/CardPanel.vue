@@ -16,18 +16,23 @@
     </div>
     <div
       v-else-if="!getBookList.length"
-      style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 64px 20px;
+        text-align: center;
+        color: var(--text-second-color, #888);
+      "
     >
       <div style="font-size: 44px; opacity: 0.7">🔖</div>
       <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('home.noBookmarks') }}</p>
       <p style="margin: 0; font-size: 13px">{{ $t('home.noBookmarksHint') }}</p>
-      <button
-        data-guide="add-bookmark"
-        @click="goAddBookmark"
-        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
-      >
+      <BButton data-guide="add-bookmark" type="primary" class="empty-add-button" @click="goAddBookmark">
         {{ $t('home.addBookmark') }}
-      </button>
+      </BButton>
     </div>
     <VueDraggable
       v-else
@@ -67,7 +72,7 @@
 <script lang="ts" setup>
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { computed, ref, watch, nextTick, onMounted } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
@@ -80,7 +85,11 @@
   import { useI18n } from 'vue-i18n';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { startGuide, guideDone, type GuideStep } from '@/composables/useGuide';
+  import { shouldStartCreateBookmarkGuide } from '@/utils/bookmarkGuide';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const route = useRoute();
   const { t } = useI18n();
 
   const getBookList = computed(() => {
@@ -105,16 +114,42 @@
   const CREATE_BOOKMARK_STEPS: GuideStep[] = [
     { target: '[data-guide="bookmark-mg"]', title: t('guide.cbMgTitle'), content: t('guide.cbMgDesc') },
     { target: '[data-guide="add-bookmark"]', title: t('guide.cbAddTitle'), content: t('guide.cbAddDesc') },
-    { target: '[data-guide="bookmark-url"]', title: t('guide.cbUrlTitle'), content: t('guide.cbUrlDesc'), route: '/manage/editBookmark/add' },
-    { target: '[data-guide="bookmark-tags"]', title: t('guide.cbTagTitle'), content: t('guide.cbTagDesc'), route: '/manage/editBookmark/add' },
-    { target: '[data-guide="bookmark-save"]', title: t('guide.cbSaveTitle'), content: t('guide.cbSaveDesc'), route: '/manage/editBookmark/add' },
+    {
+      target: '[data-guide="bookmark-url"]',
+      title: t('guide.cbUrlTitle'),
+      content: t('guide.cbUrlDesc'),
+      route: '/manage/editBookmark/add',
+    },
+    {
+      target: '[data-guide="bookmark-tags"]',
+      title: t('guide.cbTagTitle'),
+      content: t('guide.cbTagDesc'),
+      route: '/manage/editBookmark/add',
+    },
+    {
+      target: '[data-guide="bookmark-save"]',
+      title: t('guide.cbSaveTitle'),
+      content: t('guide.cbSaveDesc'),
+      route: '/manage/editBookmark/add',
+    },
     { target: '#nav-tag-entry', title: t('guide.cbNavTitle'), content: t('guide.cbNavDesc') },
   ];
   function maybeStartCreateBookmarkGuide() {
-    if (bookmark.isMobile) return; // 移动端入口不同,暂不引导
-    if (bookmark.bookmarkLoading) return; // 加载中列表长度不准,等下面的 loading watch 加载完再判断
-    if (getBookList.value.length) return; // 有书签不引导
-    if (guideDone('create-bookmark')) return; // 一次性,引导过不再弹
+    const hasCompleted = guideDone('create-bookmark');
+    if (
+      !shouldStartCreateBookmarkGuide({
+        isMobile: bookmark.isMobile,
+        isBookmarkRoot: route.path === '/home',
+        isAllView: bookmark.type === 'all',
+        isLoading: bookmark.bookmarkLoading,
+        isAllLoaded: bookmark.bookmarkAllLoaded,
+        bookmarkTotal: Number(user.bookmarkTotal),
+        visibleBookmarkCount: getBookList.value.length,
+        hasCompleted,
+      })
+    ) {
+      return;
+    }
     nextTick(() => startGuide('create-bookmark', CREATE_BOOKMARK_STEPS));
   }
   // 状态驱动:进入书签页(onMounted)与书签加载完成(上面的 loading watch)各检查一次,
@@ -128,7 +163,12 @@
   }
 
   function menuFor(item: any) {
-    return [item.isTop ? t('common.unpin') : t('common.pin'), t('common.edit'), t('common.copyLink'), t('common.delete')];
+    return [
+      item.isTop ? t('common.unpin') : t('common.pin'),
+      t('common.edit'),
+      t('common.copyLink'),
+      t('common.delete'),
+    ];
   }
 
   function rightMenuClick(type, item) {
@@ -189,7 +229,6 @@
   }
 
   // ── 全局搜索「定位」:轮询等目标卡片真渲染出来(切「全部」+加载有延迟,骨架屏期间卡片还不在 DOM),再滚动到它并脉冲高亮,随后 3.5s 或点击任意处消除 ──
-  const route = useRoute();
   const locateId = computed(() => String(route.query.locate || ''));
   let retryTimer = 0;
   function runLocate(id: string, attempt = 0) {
@@ -250,6 +289,9 @@
     padding: 0 16px;
     gap: 20px;
     align-content: start;
+  }
+  .empty-add-button {
+    margin-top: 6px;
   }
   .skeleton-panel {
     margin-top: 16px;

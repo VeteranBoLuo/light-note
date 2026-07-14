@@ -10,11 +10,11 @@
         <div class="bguide-pop-foot">
           <span class="bguide-step">{{ guideStepIndex + 1 }} / {{ guideSteps.length }}</span>
           <div class="bguide-btns">
-            <button class="bguide-btn bguide-btn--text" @click="onSkip">{{ t('guide.skip') }}</button>
-            <button v-if="guideStepIndex > 0" class="bguide-btn" @click="prevGuideStep">{{ t('guide.prev') }}</button>
-            <button class="bguide-btn bguide-btn--primary" @click="nextGuideStep">
+            <BButton class="bguide-btn bguide-btn--text" @click="onSkip">{{ t('guide.skip') }}</BButton>
+            <BButton v-if="guideStepIndex > 0" class="bguide-btn" @click="prevGuideStep">{{ t('guide.prev') }}</BButton>
+            <BButton type="primary" class="bguide-btn bguide-btn--primary" @click="nextGuideStep">
               {{ isLast ? t('guide.done') : t('guide.next') }}
-            </button>
+            </BButton>
           </div>
         </div>
       </div>
@@ -34,20 +34,39 @@
     prevGuideStep,
     endGuide,
   } from '@/composables/useGuide';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { getRootZoom, normalizeRectForRootZoom, type RootZoomRect } from '@/utils/zoom';
 
   const { t } = useI18n();
   const router = useRouter();
 
-  const rect = ref<DOMRect | null>(null);
+  const rect = ref<RootZoomRect | null>(null);
   const current = computed(() => guideSteps.value[guideStepIndex.value] || null);
   const isLast = computed(() => guideStepIndex.value >= guideSteps.value.length - 1);
 
   let pollTimer = 0;
+  let targetResizeObserver: ResizeObserver | null = null;
   function clearPoll() {
     if (pollTimer) {
       clearTimeout(pollTimer);
       pollTimer = 0;
     }
+  }
+
+  function clearTargetObserver() {
+    targetResizeObserver?.disconnect();
+    targetResizeObserver = null;
+  }
+
+  function measureTarget(el: HTMLElement) {
+    rect.value = normalizeRectForRootZoom(el.getBoundingClientRect());
+  }
+
+  function observeTarget(el: HTMLElement) {
+    clearTargetObserver();
+    if (typeof ResizeObserver === 'undefined') return;
+    targetResizeObserver = new ResizeObserver(() => measureTarget(el));
+    targetResizeObserver.observe(el);
   }
 
   // 定位当前步:必要时先跨路由跳转,再轮询等目标元素渲染出来,滚动到可视区并取其位置
@@ -56,6 +75,7 @@
     if (!step) return;
     rect.value = null;
     clearPoll();
+    clearTargetObserver();
     if (step.route && router.currentRoute.value.path !== step.route) {
       router.push(step.route).catch(() => {});
     }
@@ -70,7 +90,8 @@
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       // 等滚动稳定再取位置,避免高亮框错位
       pollTimer = window.setTimeout(() => {
-        rect.value = el.getBoundingClientRect();
+        measureTarget(el);
+        observeTarget(el);
       }, 280);
     } else if (attempt < 40) {
       pollTimer = window.setTimeout(() => findTarget(selector, attempt + 1), 150); // 最多约 6s
@@ -84,7 +105,7 @@
     const step = current.value;
     if (!step) return;
     const el = document.querySelector(step.target) as HTMLElement | null;
-    if (el) rect.value = el.getBoundingClientRect();
+    if (el) measureTarget(el);
   }
 
   function onSkip() {
@@ -101,6 +122,7 @@
       } else {
         rect.value = null;
         clearPoll();
+        clearTargetObserver();
         window.removeEventListener('resize', reposition);
         window.removeEventListener('scroll', reposition, true);
       }
@@ -110,6 +132,7 @@
 
   onBeforeUnmount(() => {
     clearPoll();
+    clearTargetObserver();
     window.removeEventListener('resize', reposition);
     window.removeEventListener('scroll', reposition, true);
   });
@@ -134,8 +157,9 @@
     if (!r) return {};
     const POP_W = 300;
     const GAP = 14;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const zoom = getRootZoom();
+    const vw = document.documentElement.clientWidth / zoom;
+    const vh = document.documentElement.clientHeight / zoom;
     const placement = current.value?.placement || 'auto';
     const below = placement === 'bottom' || (placement === 'auto' && vh - r.bottom > 180);
     const left = Math.min(Math.max(r.left, 12), vw - POP_W - 12);
