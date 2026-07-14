@@ -24,8 +24,13 @@ export const list = async (req, res) => {
     const where = ['user_id = ?', 'del_flag = 0'];
     const params = [userId];
     if (type && type !== 'all') {
-      where.push('type = ?');
-      params.push(type);
+      if (type === 'other') {
+        // 「其他」tab 作兜底:除三大已知类型外的所有(如 streak_risk 签到提醒),避免新增类型无处归类
+        where.push("type NOT IN ('level_up', 'opinion_reply', 'system')");
+      } else {
+        where.push('type = ?');
+        params.push(type);
+      }
     }
     const whereSql = where.join(' AND ');
 

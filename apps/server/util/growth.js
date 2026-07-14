@@ -745,7 +745,7 @@ export async function checkin(userId, { userRole = null } = {}) {
     if (!g.last_checkin_date) streak = 1;
     else {
       const gap = daysBetween(today, g.last_checkin_date);
-      streak = gap === 1 ? Number(g.streak) + 1 : Math.max(1, Number(g.streak) - 3); // 连签+1 / 断签回退3天不清零
+      streak = gap === 1 ? Number(g.streak) + 1 : 1; // 连签+1 / 断签(gap>1)重置为1(今天重新开始);昨天漏签可用补签卡接回真实连续
     }
     const amount = CHECKIN_BASE + checkinBonus(streak); // 5 + min(streak,5),单日 ≤10
 
@@ -829,7 +829,6 @@ export async function useProtectCard(userId, { userRole = null } = {}) {
       await conn.rollback();
       return { ok: false, reason: 'not_applicable' };
     }
-    const newStreak = Number(g.streak) + 1; // 补上昨天,连签 +1
     // 今天已签到的用户不覆盖 last_checkin_date(保持今天),否则设为昨天
     if (g.last_checkin_date === dayKey()) {
       await conn.query(

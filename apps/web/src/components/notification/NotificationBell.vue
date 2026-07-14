@@ -141,8 +141,17 @@
     { v: 'other', label: t('notification.tabOther') },
   ]);
   // 各 tab 未读角标:全部=总数,其余=该类型未读数
+  // 「其他」tab 兜底:非三大已知类型(如 streak_risk 签到提醒)都归它,与后端 list 口径一致
+  const KNOWN_NOTIFY_TYPES = ['level_up', 'opinion_reply', 'system'];
   function tabUnread(v: string): number {
-    return v === 'all' ? unreadTotal.value : unreadByType.value[v] || 0;
+    if (v === 'all') return unreadTotal.value;
+    if (v === 'other') {
+      return Object.entries(unreadByType.value).reduce(
+        (s, [t, c]) => (KNOWN_NOTIFY_TYPES.includes(t) ? s : s + Number(c || 0)),
+        0,
+      );
+    }
+    return unreadByType.value[v] || 0;
   }
 
   // 按时间把当前列表分「今天 / 本周 / 更早」三组(纯前端,不改后端返回顺序)
@@ -437,6 +446,10 @@
     margin-top: 6px;
     border-radius: 50%;
     background: var(--card-border-color);
+  }
+  /* 未读点兜底色:未配专属色的类型(如 streak_risk 签到提醒)也显示未读色,不再是灰点看着像已读;下面各 type 专属色会按需覆盖 */
+  .notification-popover .nt-item.unread .nt-dot {
+    background: var(--primary-color);
   }
   .notification-popover .nt-item.unread .nt-dot.type-level_up {
     background: #fb923c;

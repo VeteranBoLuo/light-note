@@ -96,9 +96,9 @@ const emit = defineEmits<{ makeup: [] }>();
   }
   function isChecked(d: number) {
     if (checkedSet.value.has(dayStr(d))) return true;
-    // 免账本用户(如 root)历史签到无逐日记录,但有当前连续签到数:
-    // 今日已签则「今日往前 streak-1 天」视为连续签到日,与「连续签到 N 天」保持一致。
-    if (props.checkedInToday) {
+    // streak 推算仅用于「无逐日签到明细」的免账本用户(如 root):有 checkinDays 明细的用户一律按真实记录高亮,
+    // 不能再用连续数往前点亮,否则会把实际没签的昨天(断签日)也点成已签(如连签2天却把前一天空白日点亮)。
+    if (props.checkedInToday && (props.checkinDays?.length ?? 0) === 0) {
       const cell = new Date(viewYear.value, viewMonth.value, d).getTime();
       const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
       const diff = Math.round((today0 - cell) / 86_400_000);
