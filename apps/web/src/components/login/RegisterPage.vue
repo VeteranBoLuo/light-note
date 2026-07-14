@@ -1,87 +1,55 @@
 <template>
-  <div class="view-body" :class="title !== '注册' ? 'hide' : ''">
-    <div class="view-page">
-      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">{{ t('auth.register') }}</b>
-      <p class="register-benefits">{{ t('auth.registerBenefits') }}</p>
-      <a-form
-        :label-col="{
-          span: 4,
-        }"
-        ref="registerRef"
-        :model="formData"
-      >
-        <a-form-item
-          label=""
-          name="email"
-          @blur="validateFun('email')"
-          :rules="[
-            {
-              type: 'email',
-              message: t('auth.emailInvalid'),
-            },
-          ]"
+  <div class="auth-panel">
+    <div class="auth-fields">
+      <label class="auth-field" for="auth-register-email">
+        <span class="auth-field__label">{{ t('auth.email') }}</span>
+        <BInput
+          id="auth-register-email"
+          v-model:value="formData.email"
+          class="auth-input"
+          height="48px"
+          autocomplete="on"
+          :placeholder="t('auth.emailPlaceholder')"
         >
-          <b-input height="40px" theme="al-day" v-model:value="formData.email" :placeholder="t('auth.email')" @blur="validateFun">
-            <template #prefix>
-              <svg-icon :src="icon.login.email" size="16" />
-            </template>
-          </b-input>
-        </a-form-item>
-        <a-form-item
-          label=""
-          name="password"
-          :rules="[
-            {
-              max: 16,
-              message: t('auth.pwdMax16'),
-            },
-            {
-              min: 6,
-              message: t('auth.pwdMin6'),
-            },
-          ]"
+          <template #prefix>
+            <SvgIcon :src="icon.login.email" size="16" />
+          </template>
+        </BInput>
+      </label>
+
+      <label class="auth-field" for="auth-register-password">
+        <span class="auth-field__label">{{ t('auth.password') }}</span>
+        <BInput
+          id="auth-register-password"
+          v-model:value="formData.password"
+          class="auth-input"
+          height="48px"
+          maxlength="16"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="t('auth.passwordRulePlaceholder')"
         >
-          <span class="flex-center">
-            <b-input
-              theme="al-day"
-              height="40px"
-              maxlength="20"
-              type="password"
-              autocomplete="new-password"
-              :placeholder="t('auth.password')"
-              @blur="validateFun('password')"
-              v-model:value="formData.password"
-            >
-              <template #prefix>
-                <svg-icon :src="icon.login.password" size="16" />
-              </template>
-            </b-input>
-          </span>
-        </a-form-item>
-        <a-form-item>
-          <b-button
-            type="primary"
-            class="handle-btn"
-            :class="{ 'disable-btn': disable || submitting }"
-            @click="handleRegister"
-            >{{ t('auth.register') }}
-          </b-button>
-        </a-form-item>
-        <a-form-item>
-          <a
-            class="dom-hover-click"
-            style="display: block; text-align: center; color: #3b82f6; cursor: pointer"
-            v-click-log="OPERATION_LOG_MAP.register.githubRegister"
-            @click="registerWithGitHub"
-            >{{ t('auth.githubRegister') }}</a
-          >
-        </a-form-item>
-      </a-form>
-      <span class="tips-text"
-        >{{ t('auth.hasAccount') }}<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '登录'"
-          >{{ t('auth.goLogin') }}</a
-        ></span
-      >
+          <template #prefix>
+            <SvgIcon :src="icon.login.password" size="16" />
+          </template>
+        </BInput>
+      </label>
+    </div>
+
+    <BButton type="primary" class="auth-primary" :loading="submitting" :disabled="disable" @click="handleRegister">
+      {{ t('auth.registerAndStart') }}
+    </BButton>
+
+    <div class="auth-divider">{{ t('auth.or') }}</div>
+
+    <BButton class="auth-secondary" v-click-log="OPERATION_LOG_MAP.register.githubRegister" @click="registerWithGitHub">
+      <SvgIcon :src="icon.github" size="17" />
+      {{ t('auth.githubRegister') }}
+    </BButton>
+
+    <div class="auth-switch">
+      <span>{{ t('auth.hasAccount') }}</span>
+      <BButton class="auth-link" @click="title = '登录'">{{ t('auth.goLogin') }}</BButton>
     </div>
   </div>
 </template>
@@ -89,122 +57,86 @@
 <script lang="ts" setup>
   import { computed, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { cloneDeep } from 'lodash-es';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { trackConversion } from '@/utils/conversion';
-  import { checkEndCondition } from '@/utils/validator.ts';
-  import { cloneDeep } from 'lodash-es';
+  import { checkEndCondition, isValidEmail } from '@/utils/validator.ts';
   import router from '@/router';
   import { markLoggedIn } from '@/utils/authStorage';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { setLocale } from '@/i18n';
-  const title = defineModel('title');
-  const formData = reactive({
-    password: '',
-    email: '',
-    role: 'user',
-  });
+
+  type AuthMode = '登录' | '注册' | '重置';
+
+  const title = defineModel<AuthMode>('title', { required: true });
+  const formData = reactive({ password: '', email: '', role: 'user' });
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const disable = computed(() => {
-    return !formData.password || !formData.email;
-  });
-  const submitting = ref(false); // 防重复提交:请求在途时禁止再次提交
+  const submitting = ref(false);
+  const disable = computed(() => submitting.value || !formData.password || !formData.email);
+  const emit = defineEmits<{ 'update:success': [formData: { email: string; password: string }] }>();
 
-  async function validateFun(names?: any) {
-    await registerRef.value.validate(names);
-  }
-  const registerRef = ref();
-  const emit = defineEmits(['update:success']);
-
-  // GitHub 一键注册/登录:与登录页同一 OAuth 流程(已有账号→登录,新账号→创建);多数 CTA 直开注册 Tab,补上最省事的入口
-  const registerWithGitHub = () => {
-    // GitHub 发起注册也记 signup_submit;来源跨 OAuth 跳转用 sessionStorage 暂存,回调后透传给后端
+  function registerWithGitHub() {
     const source = bookmark.authModalSource || 'unknown';
     trackConversion('signup_submit', source);
     try {
       sessionStorage.setItem('ln_signup_source', source);
     } catch {
-      /* 隐私模式忽略 */
+      // 隐私模式下 sessionStorage 可能不可用，不影响 OAuth 跳转。
     }
     const clientId = 'Ov23liuOPhDka7KkXrpQ';
     const redirectUri = 'https://boluo66.top/auth/callback';
     const scope = 'user:email';
     const state = Math.random().toString(36).substring(7);
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
-    window.location.href = authUrl;
-  };
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
+  }
+
   async function handleRegister() {
     const condition = [
-      {
-        endCondition: formData.password.length > 16,
-        message: t('auth.pwdMax16'),
-      },
-      {
-        endCondition: formData.password.length < 6,
-        message: t('auth.pwdMin6'),
-      },
+      { endCondition: !formData.email, message: t('auth.emailRequired') },
+      { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },
+      { endCondition: !formData.password, message: t('auth.passwordRequired') },
+      { endCondition: formData.password.length > 16, message: t('auth.pwdMax16') },
+      { endCondition: !!formData.password && formData.password.length < 6, message: t('auth.pwdMin6') },
     ];
-    if (submitting.value || checkEndCondition(condition) || disable.value) {
-      return;
-    }
-    await validateFun();
+    if (submitting.value || checkEndCondition(condition)) return;
+
     submitting.value = true;
     formData.role = 'user';
-    // 前端校验通过、真正发起注册:记 signup_submit(带来源),并把来源透传给后端作 register 的 context
     const source = bookmark.authModalSource || 'unknown';
     trackConversion('signup_submit', source);
     const params = { ...cloneDeep(formData), signupSource: source };
-    apiBasePost('/api/user/registerUser', params)
-      .then((res: any) => {
-        if (res.status === 200) {
-          // 注册成功埋点:从按钮 v-click-log 移到这里,代表"一次真实注册",双击也只记一条
-          recordOperation(OPERATION_LOG_MAP.register.register);
-          // 注册即登录:复用登录成功的入应用流程,直接进应用(新用户为空状态,由空态引导上手)
-          markLoggedIn();
-          user.setUserInfo(res.data);
-          user.preferences.theme = res.data?.preferences?.theme || 'day';
-          user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
-          user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
-          user.preferences.homePage = getHomePagePreference(res.data?.preferences);
-          localStorage.setItem('preferences', JSON.stringify(user.preferences));
-          router.push(getAppHomePath(user.preferences, bookmark.isMobile));
-          message.success(t('auth.registerSuccess'));
-          setLocale(user.preferences.lang || 'zh-CN');
-          bookmark.isShowLogin = false;
-          bookmark.type = 'all';
-          bookmark.refreshTag();
-          emit('update:success', formData);
-        }
-      })
-      .finally(() => {
-        submitting.value = false;
-      });
+
+    try {
+      const res: any = await apiBasePost('/api/user/registerUser', params);
+      if (res.status !== 200) return;
+
+      recordOperation(OPERATION_LOG_MAP.register.register);
+      markLoggedIn();
+      user.setUserInfo(res.data);
+      user.preferences.theme = res.data?.preferences?.theme || 'day';
+      user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
+      user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+      user.preferences.homePage = getHomePagePreference(res.data?.preferences);
+      localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+      message.success(t('auth.registerSuccess'));
+      setLocale(user.preferences.lang || 'zh-CN');
+      bookmark.isShowLogin = false;
+      bookmark.type = 'all';
+      bookmark.refreshTag();
+      emit('update:success', { email: formData.email, password: formData.password });
+    } finally {
+      submitting.value = false;
+    }
   }
 
-  defineExpose({
-    handleRegister,
-  });
+  defineExpose({ handleRegister });
 </script>
-
-<style lang="less" scoped>
-  .register-benefits {
-    justify-self: center;
-    margin: 6px 0 14px;
-    font-size: 12px;
-    color: var(--text-color);
-    opacity: 0.7;
-    text-align: center;
-  }
-
-  :deep(:-webkit-autofill) {
-    -webkit-text-fill-color: var(--text-color) !important;
-  }
-</style>

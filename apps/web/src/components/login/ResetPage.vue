@@ -1,214 +1,174 @@
 <template>
-  <div class="view-body" :class="title !== '重置' ? 'hide' : ''">
-    <div class="view-page">
-      <span>
-        <span class="dom-hover" style="color: var(--primary-text)" @click="title = '登录'">{{ t('common.back') }}</span>
-        <b style="font-size: 30px; color: var(--text-color); position: absolute; left: 50%; transform: translateX(-50%)"
-          >{{ t('auth.resetPassword') }}</b
+  <div class="auth-panel auth-panel--reset">
+    <div class="auth-fields">
+      <label class="auth-field" for="auth-reset-email">
+        <span class="auth-field__label">{{ t('auth.email') }}</span>
+        <BInput
+          id="auth-reset-email"
+          v-model:value="formData.email"
+          class="auth-input"
+          height="48px"
+          autocomplete="on"
+          :placeholder="t('auth.emailPlaceholder')"
         >
-      </span>
-      <a-form
-        style="position: relative; top: 10%"
-        :label-col="{
-          span: 4,
-        }"
-        ref="resetRef"
-        :model="formData"
-      >
-        <a-form-item
-          label=""
-          name="email"
-          :rules="[
-            {
-              type: 'email',
-              message: t('auth.emailInvalid'),
-            },
-          ]"
+          <template #prefix>
+            <SvgIcon :src="icon.login.email" size="16" />
+          </template>
+        </BInput>
+      </label>
+
+      <label class="auth-field" for="auth-reset-password">
+        <span class="auth-field__label">{{ t('auth.newPassword') }}</span>
+        <BInput
+          id="auth-reset-password"
+          v-model:value="formData.password"
+          class="auth-input"
+          height="48px"
+          maxlength="16"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="t('auth.passwordRulePlaceholder')"
         >
-          <b-input
-            @blur="validateFun('email')"
-            theme="al-day"
-            height="40px"
-            v-model:value="formData.email"
-            :placeholder="t('auth.email')"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.login.email" size="16" />
-            </template>
-          </b-input>
-        </a-form-item>
-        <a-form-item
-          label=""
-          name="password"
-          @blur="validateFun('password')"
-          :rules="[
-            {
-              max: 15,
-              message: t('auth.pwdMax15'),
-            },
-            {
-              min: 6,
-              message: t('auth.pwdMin6'),
-            },
-          ]"
+          <template #prefix>
+            <SvgIcon :src="icon.login.password" size="16" />
+          </template>
+        </BInput>
+      </label>
+
+      <label class="auth-field" for="auth-reset-confirm">
+        <span class="auth-field__label">{{ t('auth.confirmPassword') }}</span>
+        <BInput
+          id="auth-reset-confirm"
+          v-model:value="formData.rPassword"
+          class="auth-input"
+          height="48px"
+          maxlength="16"
+          type="password"
+          autocomplete="new-password"
+          :placeholder="t('auth.confirmPasswordPlaceholder')"
         >
-          <b-input
-            height="40px"
-            theme="al-day"
-            type="password"
-            autocomplete="new-password"
-            @blur="validateFun('password')"
-            v-model:value="formData.password"
-            :placeholder="t('auth.newPassword')"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.login.password" size="16" />
-            </template>
-          </b-input>
-        </a-form-item>
-        <a-form-item
-          label=""
-          name="rPassword"
-          :rules="[
-            { required: true, message: t('auth.confirmPasswordRequired') },
-            { validator: validatePasswordMatch, message: t('auth.passwordMismatch') },
-          ]"
+          <template #prefix>
+            <SvgIcon :src="icon.login.password" size="16" />
+          </template>
+        </BInput>
+      </label>
+
+      <label class="auth-field" for="auth-reset-code">
+        <span class="auth-field__label">{{ t('auth.code') }}</span>
+        <BInput
+          id="auth-reset-code"
+          v-model:value="formData.code"
+          class="auth-input auth-input--action"
+          height="48px"
+          :maxlength="6"
+          :placeholder="t('auth.codePlaceholder')"
         >
-          <b-input
-            height="40px"
-            theme="al-day"
-            type="password"
-            autocomplete="new-password"
-            v-model:value="formData.rPassword"
-            :placeholder="t('auth.confirmPassword')"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.login.password" size="16" />
-            </template>
-          </b-input>
-        </a-form-item>
-        <a-form-item label="" name="code" :rules="[{ required: true, message: t('auth.codeRequired') }]">
-          <span class="flex-center">
-            <b-input :maxlength="6" theme="al-day" height="40px" :placeholder="t('auth.code')" v-model:value="formData.code">
-              <template #prefix>
-                <svg-icon :src="icon.login.code" size="16" />
-              </template>
-              <template #suffix>
-                <span style="color: var(--primary-text)" class="dom-hover" @click="sendEmail">{{
-                  codeTime == 0 ? t('auth.getCode') : codeTime + 's'
-                }}</span>
-              </template>
-            </b-input>
-          </span>
-        </a-form-item>
-        <a-form-item>
-          <b-button class="handle-btn" type="primary" @click="verifyCode" :class="{ 'disable-btn': disable }"
-            >{{ t('auth.submit') }}</b-button
-          >
-        </a-form-item>
-      </a-form>
+          <template #prefix>
+            <SvgIcon :src="icon.login.code" size="16" />
+          </template>
+          <template #suffix>
+            <BButton class="auth-inline-action" :loading="sendingCode" :disabled="codeTime > 0" @click="sendEmail">
+              {{ codeTime === 0 ? t('auth.getCode') : `${codeTime}s` }}
+            </BButton>
+          </template>
+        </BInput>
+      </label>
+    </div>
+
+    <BButton type="primary" class="auth-primary" :loading="submitting" :disabled="disable" @click="verifyCode">
+      {{ t('auth.resetAndLogin') }}
+    </BButton>
+
+    <div class="auth-switch">
+      <BButton class="auth-link" @click="title = '登录'">{{ t('auth.backToLogin') }}</BButton>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
+  import { computed, onUnmounted, reactive, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { bookmarkStore } from '@/store';
-  import { computed, reactive, ref } from 'vue';
-  import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { checkEndCondition } from '@/utils/validator.ts';
+  import { checkEndCondition, isValidEmail } from '@/utils/validator.ts';
 
-  const title = defineModel('title');
-  const formData = reactive({
-    email: '',
-    password: '',
-    rPassword: '',
-    code: '',
-  });
+  type AuthMode = '登录' | '注册' | '重置';
 
-  const validatePasswordMatch = (_rule: any, value: string) => {
-    if (value && value !== formData.password) {
-      return Promise.reject(t('auth.passwordMismatch'));
-    }
-    return Promise.resolve();
-  };
-
+  const title = defineModel<AuthMode>('title', { required: true });
+  const formData = reactive({ email: '', password: '', rPassword: '', code: '' });
   const { t } = useI18n();
-  const bookmark = bookmarkStore();
-  const disable = computed(() => {
-    return !formData.password || !formData.rPassword || !formData.email || !formData.code;
-  });
-  const resetRef = ref();
-  async function validateFun(names: any) {
-    await resetRef.value.validate(names);
-  }
-
-  function handleReset() {
-    if (disable.value) {
-      return;
-    }
-  }
-
   const codeTime = ref(0);
-  function sendEmail() {
-    if (codeTime.value !== 0) {
-      return;
-    }
+  const sendingCode = ref(false);
+  const submitting = ref(false);
+  let countdownTimer: ReturnType<typeof setInterval> | null = null;
+  const disable = computed(
+    () => submitting.value || !formData.password || !formData.rPassword || !formData.email || !formData.code,
+  );
+  const emit = defineEmits<{ 'update:success': [formData: { email: string; password: string }] }>();
+
+  async function sendEmail() {
+    if (codeTime.value > 0 || sendingCode.value) return;
     if (!formData.email) {
       message.warning(t('auth.fillEmail'));
       return;
     }
-    apiBasePost('/api/user/sendEmail', { email: formData.email }).then((res) => {
-      if (res.status === 200) {
-        message.success(t('auth.codeSent'));
-        codeTime.value = 60;
-        const timer = setInterval(() => {
-          codeTime.value--;
-          if (codeTime.value === 0) {
-            clearInterval(timer);
-          }
-        }, 1000);
-      }
-    });
-  }
-  const emit = defineEmits(['update:success']);
-
-  function verifyCode() {
-    const condition = [
-      {
-        endCondition: formData.password !== formData.rPassword,
-        message: t('auth.passwordMismatch'),
-      },
-      {
-        endCondition: formData.password.length > 16,
-        message: t('auth.pwdMax16'),
-      },
-      {
-        endCondition: formData.password.length < 6,
-        message: t('auth.pwdMin6'),
-      },
-    ];
-    if (checkEndCondition(condition)) {
+    if (!isValidEmail(formData.email)) {
+      message.warning(t('auth.emailInvalid'));
       return;
     }
-    apiBasePost('/api/user/verifyCode', formData).then((res) => {
-      if (res.status === 200) {
-        title.value = '登录';
-        message.success(t('auth.resetSuccess'));
-        emit('update:success', formData);
-      }
-    });
+
+    sendingCode.value = true;
+    try {
+      const res: any = await apiBasePost('/api/user/sendEmail', { email: formData.email });
+      if (res.status !== 200) return;
+      message.success(t('auth.codeSent'));
+      codeTime.value = 60;
+      countdownTimer = setInterval(() => {
+        codeTime.value--;
+        if (codeTime.value <= 0 && countdownTimer) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+        }
+      }, 1000);
+    } finally {
+      sendingCode.value = false;
+    }
   }
 
-  defineExpose({
-    handleReset,
-  });
-</script>
-<style lang="less" scoped>
-  :deep(:-webkit-autofill) {
-    -webkit-text-fill-color: var(--text-color) !important;
+  async function verifyCode() {
+    const condition = [
+      { endCondition: !formData.email, message: t('auth.emailRequired') },
+      { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },
+      { endCondition: !formData.password, message: t('auth.passwordRequired') },
+      { endCondition: formData.password.length > 16, message: t('auth.pwdMax16') },
+      { endCondition: !!formData.password && formData.password.length < 6, message: t('auth.pwdMin6') },
+      { endCondition: !formData.rPassword, message: t('auth.confirmPasswordRequired') },
+      { endCondition: formData.password !== formData.rPassword, message: t('auth.passwordMismatch') },
+      { endCondition: !formData.code, message: t('auth.codeRequired') },
+    ];
+    if (submitting.value || checkEndCondition(condition)) return;
+
+    submitting.value = true;
+    try {
+      const res: any = await apiBasePost('/api/user/verifyCode', formData);
+      if (res.status !== 200) return;
+      title.value = '登录';
+      message.success(t('auth.resetSuccess'));
+      emit('update:success', { email: formData.email, password: formData.password });
+    } finally {
+      submitting.value = false;
+    }
   }
-</style>
+
+  function handleReset() {
+    return verifyCode();
+  }
+
+  onUnmounted(() => {
+    if (countdownTimer) clearInterval(countdownTimer);
+  });
+
+  defineExpose({ handleReset });
+</script>

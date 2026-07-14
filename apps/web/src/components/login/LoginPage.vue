@@ -1,216 +1,147 @@
 <template>
-  <div
-    v-if="viewPhoneVisible"
-    class="phone-preview-mask"
-    @click="viewPhoneVisible = false"
-    style="
-      position: fixed;
-      inset: 0;
-      z-index: 99999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.45);
-    "
-  >
-    <div
-      class="phone-preview-frame"
-      @click.stop
-      style="position: relative; width: 390px; max-width: 92vw; height: 844px; max-height: 88vh"
-    >
-      <iframe
-        src="https://boluo66.top"
-        title="移动端预览"
-        style="
-          display: block;
-          width: 100%;
-          height: 100%;
-          border: none;
-          border-radius: 14px;
-          background: #fff;
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-        "
-      />
-      <img
-        src="../../assets/icons/close.svg"
-        class="dom-hover"
-        width="14"
-        height="14"
-        alt=""
-        @click="viewPhoneVisible = false"
-        style="
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 4px;
-          border-radius: 50%;
-          background: var(--background-color, #fff);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-          cursor: pointer;
-        "
-      />
-    </div>
-  </div>
-  <div v-else class="view-body" :class="title !== '登录' ? 'hide' : ''">
-    <div class="view-page">
-      <b style="font-size: 30px; justify-self: center; color: var(--text-color)">{{ t('auth.login') }}</b>
-      <span
-        style="
-          font-size: 12px;
-          position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          top: 65px;
-          color: var(--desc-color);
-          width: 100%;
-          text-align: center;
-        "
-        >{{ t('auth.welcome') }}</span
-      >
-      <a-form
-        :label-col="{
-          span: 4,
-        }"
-        ref="formDataRef"
-        :model="formData"
-      >
-        <a-form-item
-          label=""
-          name="email"
-          :rules="[
-            { required: true, message: t('auth.emailRequired') },
-            { type: 'email', message: t('auth.emailInvalid') },
-          ]"
+  <div class="auth-panel">
+    <div class="auth-fields">
+      <label class="auth-field" for="auth-login-email">
+        <span class="auth-field__label">{{ t('auth.email') }}</span>
+        <BInput
+          id="auth-login-email"
+          v-model:value="formData.email"
+          class="auth-input"
+          height="48px"
+          autocomplete="on"
+          :placeholder="t('auth.emailPlaceholder')"
         >
-          <b-input theme="al-day" height="40px" v-model:value="formData.email" :placeholder="t('auth.email')">
-            <template #prefix>
-              <svg-icon :src="icon.login.email" size="16" />
-            </template>
-          </b-input>
-        </a-form-item>
-        <a-form-item label="" name="password" :rules="[{ required: true, message: t('auth.passwordRequired') }]">
-          <span class="flex-center">
-            <b-input
-              theme="al-day"
-              height="40px"
-              maxlength="20"
-              type="password"
-              autocomplete="new-password"
-              :placeholder="t('auth.password')"
-              v-model:value="formData.password"
-            >
-              <template #prefix>
-                <svg-icon :src="icon.login.password" size="16" />
-              </template>
-              <template #suffix>
-                <span class="dom-hover forget-text" @click="title = '重置'">{{ t('auth.forgotPassword') }}</span>
-              </template>
-            </b-input>
-          </span>
-        </a-form-item>
-        <a-form-item>
-          <div class="login-tips-text">
-            <span class="remember-text"
-              ><b-checkbox type="circle" v-model:checked="isCheck" />{{ t('auth.rememberMe') }}</span
-            >
-            <a class="dom-hover-click" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub">{{
-              t('auth.githubLogin')
-            }}</a>
-          </div>
-        </a-form-item>
-        <a-form-item>
-          <b-button type="primary" class="handle-btn" :class="{ 'disable-btn': disable }" @click="handleLogin"
-            >{{ t('auth.login') }}
-          </b-button>
-        </a-form-item>
-      </a-form>
-      <a
-        v-click-log="OPERATION_LOG_MAP.login.previewMobile"
-        class="tips-text dom-hover"
-        style="left: 20px; font-size: 12px; width: max-content"
-        v-if="!bookmark.isMobile"
-        @click="viewPhoneVisible = true"
-        >{{ t('auth.previewMobile') }}</a
-      >
-      <span class="tips-text"
-        >{{ t('auth.noAccount')
-        }}<a style="cursor: pointer !important; color: #3b82f6; margin-left: 2px" @click="title = '注册'">{{
-          t('auth.goRegister')
-        }}</a></span
-      >
+          <template #prefix>
+            <SvgIcon :src="icon.login.email" size="16" />
+          </template>
+        </BInput>
+      </label>
+
+      <label class="auth-field" for="auth-login-password">
+        <span class="auth-field__label">{{ t('auth.password') }}</span>
+        <BInput
+          id="auth-login-password"
+          v-model:value="formData.password"
+          class="auth-input"
+          height="48px"
+          maxlength="20"
+          type="password"
+          autocomplete="on"
+          :placeholder="t('auth.passwordPlaceholder')"
+        >
+          <template #prefix>
+            <SvgIcon :src="icon.login.password" size="16" />
+          </template>
+        </BInput>
+      </label>
+    </div>
+
+    <div class="auth-options">
+      <BCheckbox v-model:checked="isCheck">{{ t('auth.rememberMe') }}</BCheckbox>
+      <BButton class="auth-link" @click="title = '重置'">{{ t('auth.forgotPassword') }}</BButton>
+    </div>
+
+    <BButton type="primary" class="auth-primary" :loading="submitting" :disabled="disable" @click="handleLogin">
+      {{ t('auth.login') }}
+    </BButton>
+
+    <div class="auth-divider">{{ t('auth.or') }}</div>
+
+    <BButton class="auth-secondary" v-click-log="OPERATION_LOG_MAP.login.githubLogin" @click="loginWithGitHub">
+      <SvgIcon :src="icon.github" size="17" />
+      {{ t('auth.githubLogin') }}
+    </BButton>
+
+    <div class="auth-switch">
+      <span>{{ t('auth.noAccount') }}</span>
+      <BButton class="auth-link" @click="title = '注册'">{{ t('auth.goRegister') }}</BButton>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
+  import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { computed, onMounted, ref, watch } from 'vue';
-  import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { setLocale } from '@/i18n';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { markLoggedIn } from '@/utils/authStorage';
-  const title = defineModel('title');
-  const formData: any = defineModel('formData');
+  import { isValidEmail } from '@/utils/validator.ts';
+
+  type AuthMode = '登录' | '注册' | '重置';
+  interface LoginFormData {
+    email: string;
+    password: string;
+  }
+
+  const title = defineModel<AuthMode>('title', { required: true });
+  const formData = defineModel<LoginFormData>('formData', { required: true });
   const REMEMBERED_EMAIL_KEY = 'rememberedLoginEmail';
   const isCheck = ref(true);
-  const disable = computed(() => {
-    return !formData.value.email || !formData.value.password;
-  });
-  const formDataRef = ref();
+  const submitting = ref(false);
+  const disable = computed(() => submitting.value || !formData.value.email || !formData.value.password);
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const viewPhoneVisible = ref(false);
+
   async function handleLogin() {
-    if (disable.value) {
+    if (submitting.value) return;
+    if (!formData.value.email) {
+      message.warning(t('auth.emailRequired'));
       return;
     }
-    await formDataRef.value.validate();
+    if (!isValidEmail(formData.value.email)) {
+      message.warning(t('auth.emailInvalid'));
+      return;
+    }
+    if (!formData.value.password) {
+      message.warning(t('auth.passwordRequired'));
+      return;
+    }
 
-    apiBasePost('/api/user/login', { ...formData.value, rememberMe: isCheck.value }).then((res: any) => {
-      if (res.status === 200) {
-        markLoggedIn();
-        if (isCheck.value) {
-          localStorage.setItem(REMEMBERED_EMAIL_KEY, formData.value.email || '');
-          if (res.data?.sid) {
-            localStorage.setItem('rememberedSid', res.data.sid);
-          }
-        } else {
-          localStorage.removeItem(REMEMBERED_EMAIL_KEY);
-          localStorage.removeItem('rememberedSid');
-        }
-        user.setUserInfo(res.data);
-        user.preferences.theme = res.data?.preferences?.theme || 'day';
-        user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
-        user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
-        user.preferences.homePage = getHomePagePreference(res.data?.preferences);
-        localStorage.setItem('preferences', JSON.stringify(user.preferences));
-        router.push(getAppHomePath(user.preferences, bookmark.isMobile));
-        message.success(t('auth.loginSuccess'));
-        setLocale(user.preferences.lang || 'zh-CN');
-        bookmark.isShowLogin = false;
-        bookmark.type = 'all';
-        bookmark.refreshTag();
+    submitting.value = true;
+    try {
+      const res: any = await apiBasePost('/api/user/login', { ...formData.value, rememberMe: isCheck.value });
+      if (res.status !== 200) return;
+
+      markLoggedIn();
+      if (isCheck.value) {
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, formData.value.email || '');
+        if (res.data?.sid) localStorage.setItem('rememberedSid', res.data.sid);
+      } else {
+        localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+        localStorage.removeItem('rememberedSid');
       }
-    });
+      user.setUserInfo(res.data);
+      user.preferences.theme = res.data?.preferences?.theme || 'day';
+      user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
+      user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+      user.preferences.homePage = getHomePagePreference(res.data?.preferences);
+      localStorage.setItem('preferences', JSON.stringify(user.preferences));
+      router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+      message.success(t('auth.loginSuccess'));
+      setLocale(user.preferences.lang || 'zh-CN');
+      bookmark.isShowLogin = false;
+      bookmark.type = 'all';
+      bookmark.refreshTag();
+    } finally {
+      submitting.value = false;
+    }
   }
 
-  const loginWithGitHub = () => {
+  function loginWithGitHub() {
     const clientId = 'Ov23liuOPhDka7KkXrpQ';
     const redirectUri = 'https://boluo66.top/auth/callback';
     const scope = 'user:email';
     const state = Math.random().toString(36).substring(7);
-
-    // 关键：URL 必须为单行无空格
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
-    window.location.href = authUrl;
-  };
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
+  }
 
   onMounted(() => {
     const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY) || '';
@@ -220,53 +151,5 @@
     }
   });
 
-  watch(
-    () => viewPhoneVisible.value,
-    (val) => {
-      const bg: any = document.getElementsByClassName('index-container');
-
-      if (val) {
-        bg[0].style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
-      } else {
-        bg[0].style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-      }
-    },
-  );
-
-  defineExpose({
-    handleLogin,
-  });
+  defineExpose({ handleLogin });
 </script>
-
-<style lang="less" scoped>
-  :deep(:-webkit-autofill) {
-    -webkit-text-fill-color: var(--text-color) !important;
-  }
-  .login-tips-text {
-    height: 40px;
-    line-height: 40px;
-    display: flex;
-    width: 100%;
-    justify-content: space-between;
-    padding: 0 5px;
-    box-sizing: border-box;
-  }
-
-  .remember-text {
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--text-color) !important;
-  }
-
-  .forget-text {
-    width: max-content;
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 12px;
-    color: var(--primary-color) !important;
-  }
-</style>

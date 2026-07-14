@@ -249,9 +249,9 @@
               </template>
             </div>
             <ul class="trust-badges">
-              <li>{{ t('landing.trustSpace') }}</li>
-              <li>{{ t('landing.trustExport') }}</li>
-              <li>{{ t('landing.trustMaintained') }}</li>
+              <li>{{ t('landing.trustUnified') }}</li>
+              <li>{{ t('landing.trustAi') }}</li>
+              <li>{{ t('landing.trustMultiDevice') }}</li>
             </ul>
           </div>
           <div class="cta-foot">boluo66.top</div>

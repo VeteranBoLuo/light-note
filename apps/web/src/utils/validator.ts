@@ -68,3 +68,10 @@ export function isEmpty(val: unknown): boolean {
 export function isFocused(element: Element): boolean {
   return document.activeElement === element;
 }
+
+/**
+ * 基础邮箱格式校验。用于不依赖第三方表单组件的轻量表单场景。
+ */
+export function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
