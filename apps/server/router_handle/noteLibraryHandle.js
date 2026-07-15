@@ -2,7 +2,7 @@ import pool from '../db/index.js';
 import { snakeCaseKeys, resultData, mergeExistingProperties, insertData } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { removeInboxRelations } from '../util/resourceInbox.js';
+import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createNote } from '../util/services/noteService.js';
 import { createTag } from '../util/services/tagService.js';
 
@@ -145,12 +145,17 @@ export const queryNoteList = (req, res) => {
     sql += ` GROUP BY n.id ORDER BY n.sort, n.update_time DESC`;
     pool
       .query(sql, params)
-      .then(([result]) => {
+      .then(async ([result]) => {
         // 处理 tags 为数组，如果 NULL 或包含无效标签则为空数组
         result.forEach((note) => {
           note.tags =
             note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
         });
+        try {
+          await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
+        } catch (error) {
+          console.warn('[待整理角标] 笔记状态回填失败(忽略):', error.message);
+        }
         res.send(resultData(result));
       })
       .catch((err) => {

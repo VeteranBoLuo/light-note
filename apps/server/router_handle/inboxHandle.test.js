@@ -140,19 +140,17 @@ describe('inboxHandle 写事务', () => {
     expect(completeResources).toHaveBeenCalledTimes(1);
   });
 
-  it('列表使用固定三类 UNION、当前用户过滤和分页边界', async () => {
-    poolQuery
-      .mockResolvedValueOnce([[{ total: 1 }]])
-      .mockResolvedValueOnce([[
-        { resourceType: 'file', resourceId: '8', title: 'demo.txt' },
-      ]]);
+  it('列表使用固定三类 UNION、当前用户过滤并一次返回全部结果', async () => {
+    poolQuery.mockResolvedValueOnce([[
+      { resourceType: 'file', resourceId: '8', title: 'demo.txt' },
+    ]]);
     const res = mockRes();
     await listInbox({
       user: { id: 'u1' },
-      body: { type: 'file', keyword: 'demo', sort: 'oldest', currentPage: 2, pageSize: 100 },
+      body: { type: 'file', keyword: 'demo', sort: 'oldest' },
     }, res);
-    expect(poolQuery).toHaveBeenCalledTimes(2);
-    const listSql = poolQuery.mock.calls[1][0];
+    expect(poolQuery).toHaveBeenCalledTimes(1);
+    const listSql = poolQuery.mock.calls[0][0];
     expect(listSql).toContain("SELECT CONVERT('bookmark' USING utf8)");
     expect(listSql).toContain("CONVERT('note' USING utf8)");
     expect(listSql).toContain("CONVERT('file' USING utf8)");
@@ -161,10 +159,11 @@ describe('inboxHandle 写事务', () => {
     expect(listSql).toContain('COLLATE utf8_general_ci');
     expect(listSql).toContain('i.user_id = ?');
     expect(listSql).toContain('i.create_time ASC');
-    expect(poolQuery.mock.calls[1][1].slice(-2)).toEqual([50, 50]);
+    expect(listSql).not.toContain('LIMIT');
+    expect(poolQuery.mock.calls[0][1]).toEqual(['u1', 'file', '%demo%', '%demo%']);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
       status: 200,
-      data: expect.objectContaining({ total: 1, currentPage: 2, pageSize: 50 }),
+      data: expect.objectContaining({ total: 1 }),
     }));
   });
 

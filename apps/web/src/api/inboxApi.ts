@@ -19,8 +19,6 @@ export interface InboxItem extends InboxResourceRef {
 export const listInbox = (params: {
   type: 'all' | InboxResourceType;
   keyword: string;
-  currentPage: number;
-  pageSize: number;
   sort: 'newest' | 'oldest';
 }) => apiBasePost('/api/inbox/list', params, { silent: true });
 

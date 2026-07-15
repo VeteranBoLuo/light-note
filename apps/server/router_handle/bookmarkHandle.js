@@ -23,7 +23,7 @@ import {
   resetHealth,
 } from '../util/linkHealth.js';
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
-import { removeInboxRelations } from '../util/resourceInbox.js';
+import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl } from '../util/services/bookmarkService.js';
 import { createTag as createTagService } from '../util/services/tagService.js';
 
@@ -495,6 +495,11 @@ ORDER BY
         }
       } catch (e) {
         console.warn('[书签角标] 快照标记回填失败(忽略):', e.message);
+      }
+      try {
+        await attachPendingStatus(pool, { userId, resourceType: 'bookmark', items: result });
+      } catch (e) {
+        console.warn('[待整理角标] 书签状态回填失败(忽略):', e.message);
       }
       res.send(
         resultData({

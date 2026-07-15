@@ -16,7 +16,13 @@
         @undo-switch="triggerEditorUndo"
         @history="versionHistoryVisible = true"
       />
-      <div class="note-body">
+      <div v-if="isOrganizingFromInbox" class="inbox-organize-banner">
+        <span>{{ t('inbox.organizeEditorHint') }}</span>
+        <BButton type="primary" size="small" :loading="completingInbox" @click="saveAndCompleteInbox">
+          {{ t('inbox.saveAndComplete') }}
+        </BButton>
+      </div>
+      <div class="note-body" :class="{ 'note-body--organizing': isOrganizingFromInbox }">
         <Catalog class="catalog-panel" :content="note.content" :note-type="note.type" />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
@@ -70,15 +76,18 @@
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
+  import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
   import TurndownService from 'turndown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const user = useUserStore();
   const { guardWrite } = useGuestGuard();
+  const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const DEFAULT_NOTE_TITLE = '未命名文档';
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
   const note = reactive({
@@ -298,10 +307,10 @@
   async function saveNote(isMsg?: boolean) {
     if (!note.title || !note.title.trim()) {
       message.warning(t('noteDetail.titleRequired'));
-      return;
+      return false;
     }
     if (!isMsg && !note.id && !hasNewNoteDraft()) {
-      return;
+      return false;
     }
     isStartEdit.value = true;
     isCurrentSave.value = true;
@@ -341,6 +350,25 @@
         clearTimeout(timer.value);
       }, delay);
     }
+    return ok;
+  }
+
+  async function saveAndCompleteInbox() {
+    if (!guardWrite(undefined, 'save-note') || !note.id) return;
+    if (timer.value) {
+      clearTimeout(timer.value);
+      timer.value = null;
+    }
+    const saved = await saveNote(false);
+    if (!saved) return;
+    const completed = await completeInboxResource('note', note.id);
+    if (!completed) {
+      message.warning(t('inbox.completeFailed'));
+      return;
+    }
+    recordOperation({ module: '笔记', operation: `保存并完成整理笔记【${note.title}】` });
+    message.success(t('inbox.saveAndCompleteSuccess'));
+    router.push('/inbox');
   }
 
   function clickSaveNote(flag?: boolean) {
@@ -506,6 +534,28 @@
     top: 60px;
     width: 100%;
     min-width: 0;
+  }
+  .inbox-organize-banner {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    z-index: 12;
+    width: 100%;
+    height: 48px;
+    padding: 0 20px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
+    border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
+    font-size: 13px;
+  }
+  .note-body.note-body--organizing {
+    top: 108px;
+    height: calc(100% - 108px);
   }
   .catalog-panel {
     flex: 2;

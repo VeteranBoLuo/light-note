@@ -865,14 +865,14 @@
 
   @media (max-width: 600px) {
     .ai-chat-container {
-      padding: 10px;
+      padding: 0;
     }
     .chat-wrapper {
-      height: calc(100vh - 100px);
-      border-radius: 12px;
+      height: 100%;
+      border-radius: 0;
     }
     .messages-container {
-      padding: 1rem;
+      padding: 0.75rem 0.5rem;
     }
     .message-content {
       max-width: 85%;

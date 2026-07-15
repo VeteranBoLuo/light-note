@@ -31,10 +31,16 @@ describe('inboxCapture', () => {
     expect(buildMarkdownNotePayload('   ', '未命名笔记').title).toBe('未命名笔记');
   });
 
+  it('跳过网址和 Markdown 结构行，优先使用标题并清理链接语法', () => {
+    expect(buildMarkdownNotePayload('https://example.com\n---\n正文第一句', '未命名笔记').title).toBe('正文第一句');
+    expect(buildMarkdownNotePayload('- 临时正文\n# [真正标题](https://example.com)', '未命名笔记').title).toBe(
+      '真正标题',
+    );
+    expect(buildMarkdownNotePayload('```\nconst demo = true\n```', '未命名笔记').title).toBe('const demo = true');
+  });
+
   it('文件元数据只包含确认上传所需字段', () => {
     const files = [new File(['abc'], '中文.txt', { type: 'text/plain' })];
-    expect(buildCaptureFileMeta(files)).toEqual([
-      { fileName: '中文.txt', fileType: 'text/plain', fileSize: 3 },
-    ]);
+    expect(buildCaptureFileMeta(files)).toEqual([{ fileName: '中文.txt', fileType: 'text/plain', fileSize: 3 }]);
   });
 });

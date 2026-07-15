@@ -1,6 +1,6 @@
 <template>
   <CommonContainer :title="(handleType === 'add' ? '新增' : '编辑') + '书签'">
-    <b-loading :loading="loading" style='height: unset'>
+    <b-loading :loading="loading" style="height: unset">
       <div class="tag-edit-body">
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.bookmarkName') }}</span>
@@ -16,8 +16,7 @@
               </button>
             </BTooltip>
           </div>
-          <b-input v-model:value="bookmarkData.url">
-          </b-input>
+          <b-input v-model:value="bookmarkData.url"> </b-input>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -31,7 +30,11 @@
             v-model:value="bookmarkData.relatedTags"
           >
             <template #dropdown-footer>
-              <div class="add-tag-entry" @click="goAddTag" v-click-log="{ module: '书签详情', operation: '下拉里新增标签' }">
+              <div
+                class="add-tag-entry"
+                @click="goAddTag"
+                v-click-log="{ module: '书签详情', operation: '下拉里新增标签' }"
+              >
                 <span class="add-tag-plus">+</span>
                 <span>{{ $t('navigation.newTag') }}</span>
               </div>
@@ -44,12 +47,9 @@
         </div>
       </div>
     </b-loading>
-    <b-button
-      class="container-footer-btn"
-      type="primary"
-      @click="submit"
-      >确定</b-button
-    >
+    <b-button class="container-footer-btn" type="primary" :loading="completingInbox" @click="submit">{{
+      isOrganizingFromInbox ? $t('inbox.saveAndComplete') : $t('common.confirm')
+    }}</b-button>
   </CommonContainer>
 </template>
 
@@ -68,9 +68,13 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
+  import { useI18n } from 'vue-i18n';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const { t } = useI18n();
+  const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
 
   const bookmarkData = ref<any>({
     id: '',
@@ -107,9 +111,15 @@
     return [];
   }
 
-  function submit() {
+  async function submit() {
     // 游客:即时拦截 + 上下文邀请文案(不发无效请求);后端 addBookmark 仍有 ensureNotVisitor 兜底
-    if (blockGuestWrite('add-bookmark', '把整理好的书签存进你自己的轻笺？注册即用、自动登录,免费收藏书签、记笔记、存文件。')) return;
+    if (
+      blockGuestWrite(
+        'add-bookmark',
+        '把整理好的书签存进你自己的轻笺？注册即用、自动登录,免费收藏书签、记笔记、存文件。',
+      )
+    )
+      return;
     if (loading.value) {
       message.warning('请等待数据请求完毕');
       return;
@@ -120,16 +130,27 @@
       url = '/api/bookmark/addBookmark';
       params.userId = user.id;
     }
-    apiBasePost(url, params).then((res) => {
-      if (res.status === 200) {
-        recordOperation({
-          module: '书签详情',
-          operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || bookmarkData.value.url}】`,
-        });
-        message.success('保存成功');
-        router.back();
-      }
+    const res = await apiBasePost(url, params);
+    if (res.status !== 200) return;
+    recordOperation({
+      module: '书签详情',
+      operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || bookmarkData.value.url}】`,
     });
+    if (isOrganizingFromInbox.value && handleType.value === 'edit') {
+      const completed = await completeInboxResource(
+        'bookmark',
+        bookmarkData.value.id || router.currentRoute.value.params.id,
+      );
+      if (!completed) {
+        message.warning(t('inbox.completeFailed'));
+        return;
+      }
+      message.success(t('inbox.saveAndCompleteSuccess'));
+      router.push('/inbox');
+      return;
+    }
+    message.success(t('common.saveSuccess'));
+    router.back();
   }
 
   // 下拉里「新增标签」:跳转到新增标签页(注:会离开当前书签编辑页)
@@ -251,7 +272,6 @@
       color: var(--text-color);
     }
   }
-
 
   :deep(.ant-transfer-list-header) {
     background-color: var(--background-color);

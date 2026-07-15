@@ -1,6 +1,13 @@
 <template>
-  <div class="card-body" :class="{ 'has-top-badge': isTop }" @click="toNewPage">
-    <span v-if="isTop" class="card-top-badge">{{ $t('common.pin') }}</span>
+  <div
+    class="card-body"
+    :class="{ 'has-top-badge': isTop, 'has-pending-badge': cardInfo.isPending }"
+    @click="toNewPage"
+  >
+    <div v-if="isTop || cardInfo.isPending" class="card-status-badges">
+      <span v-if="isTop" class="card-top-badge">{{ $t('common.pin') }}</span>
+      <InboxPendingBadge v-if="cardInfo.isPending" />
+    </div>
     <div class="card-title">
       <div class="card-img-container">
         <img :id="cardInfo.id" :src="getIcon(cardInfo)" width="22" height="22" alt=" " />
@@ -33,6 +40,7 @@
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import icon from '@/config/icon.ts';
+  import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
 
   const bookmark = bookmarkStore();
   const props = defineProps({
@@ -44,6 +52,7 @@
         url: string;
         tags: any;
         tagList?: any;
+        isPending?: boolean;
       },
       default: () => ({
         id: '',
@@ -120,11 +129,18 @@
   }
 
   /* 置顶:仅右上角徽章标识,不加描边(保持卡片干净) */
-  .card-top-badge {
+  .card-status-badges {
     position: absolute;
     top: 8px;
     right: 8px;
     z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .card-top-badge {
+    display: inline-flex;
     padding: 1px 7px;
     font-size: 10px;
     line-height: 1.6;
@@ -152,6 +168,14 @@
   /* 置顶徽章浮在右上角(absolute 不占宽),给标题右侧留出空间,避免长标题被徽章遮住 */
   .card-body.has-top-badge .card-title {
     padding-right: 46px;
+  }
+
+  .card-body.has-pending-badge .card-title {
+    padding-right: 66px;
+  }
+
+  .card-body.has-top-badge.has-pending-badge .card-title {
+    padding-right: 104px;
   }
 
   .card-img-container {

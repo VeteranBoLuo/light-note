@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   assertResourcesOwned,
+  attachPendingStatus,
   completeResources,
   enqueueResources,
   normalizeInboxItems,
@@ -16,7 +17,9 @@ describe('resourceInbox', () => {
     expect(normalizeInboxSource('duplicate_requeue')).toBe('duplicate_requeue');
     expect(normalizeInboxSource('unsafe')).toBeNull();
     expect(normalizeInboxItems([])).toBeNull();
-    expect(normalizeInboxItems(Array.from({ length: 51 }, (_, i) => ({ resourceType: 'note', resourceId: i })))).toBeNull();
+    expect(
+      normalizeInboxItems(Array.from({ length: 51 }, (_, i) => ({ resourceType: 'note', resourceId: i }))),
+    ).toBeNull();
     expect(
       normalizeInboxItems([
         { resourceType: 'note', resourceId: 'n1' },
@@ -27,7 +30,10 @@ describe('resourceInbox', () => {
 
   it('归属检查按固定表映射查询并拒绝缺失资源', async () => {
     const connection = {
-      query: vi.fn().mockResolvedValueOnce([[{ id: 'n1' }]]).mockResolvedValueOnce([[{ id: '8' }]]),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ id: 'n1' }]])
+        .mockResolvedValueOnce([[{ id: '8' }]]),
     };
     const items = [
       { resourceType: 'note', resourceId: 'n1' },
@@ -90,11 +96,29 @@ describe('resourceInbox', () => {
 
   it('数量结果始终包含三种资源', async () => {
     const connection = {
-      query: vi.fn().mockResolvedValue([[{ resourceType: 'note', total: 2 }, { resourceType: 'file', total: 1 }]]),
+      query: vi.fn().mockResolvedValue([
+        [
+          { resourceType: 'note', total: 2 },
+          { resourceType: 'file', total: 1 },
+        ],
+      ]),
     };
     await expect(queryPendingCount(connection, 'u1')).resolves.toEqual({
       pendingTotal: 3,
       typeTotals: { bookmark: 0, note: 2, file: 1 },
     });
+  });
+
+  it('列表状态回填默认 false，只标记当前用户仍待整理的资源', async () => {
+    const connection = {
+      query: vi.fn().mockResolvedValue([[{ resourceId: 'n2' }]]),
+    };
+    const items = [{ id: 'n1' }, { id: 'n2' }];
+    await expect(attachPendingStatus(connection, { userId: 'u1', resourceType: 'note', items })).resolves.toBe(items);
+    expect(items).toEqual([
+      { id: 'n1', isPending: false },
+      { id: 'n2', isPending: true },
+    ]);
+    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 'note', 'n1', 'n2']);
   });
 });

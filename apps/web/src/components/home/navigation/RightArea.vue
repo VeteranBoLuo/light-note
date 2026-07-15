@@ -37,7 +37,6 @@
     </div>
     <!--pc端个人中心       -->
     <PersonCenter v-else />
-    <QuickCaptureModal v-model:visible="inbox.quickCaptureVisible" />
   </div>
 </template>
 
@@ -54,7 +53,6 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import GlobalSearch from '@/components/search/GlobalSearch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
   import { inboxStore } from '@/store';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useI18n } from 'vue-i18n';
@@ -88,7 +86,7 @@
   function openQuickCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
-    inbox.quickCaptureVisible = true;
+    inbox.openQuickCapture();
   }
 
   function handleToPhoneUserCenter() {

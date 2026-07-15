@@ -9,6 +9,10 @@
   >
     <div class="capture-modal" @paste="handlePaste">
       <p class="capture-hint">{{ t('inbox.captureHint') }}</p>
+      <div v-if="!successText && inbox.pendingTotal > 0" class="capture-pending">
+        <span>{{ t('inbox.pendingSummary', { count: inbox.pendingTotal }) }}</span>
+        <BButton size="small" @click="goInbox">{{ t('inbox.organizeNow') }}</BButton>
+      </div>
       <BTabs v-model:active-tab="captureType" :options="typeOptions" @change="manualType = true" />
 
       <template v-if="captureType !== 'file'">
@@ -82,7 +86,7 @@
   const { t } = useI18n();
   const router = useRouter();
   const inbox = inboxStore();
-  const captureType = ref<InboxCaptureType>('note');
+  const captureType = ref<InboxCaptureType>(inbox.quickCaptureType);
   const content = ref('');
   const files = ref<File[]>([]);
   const submitting = ref(false);
@@ -98,11 +102,18 @@
   const parsedUrl = computed(() => normalizeCaptureUrl(content.value));
   const validUrl = computed(() => Boolean(parsedUrl.value));
   const canSubmit = computed(() =>
-    captureType.value === 'file' ? files.value.length > 0 : Boolean(content.value.trim()) && (captureType.value !== 'bookmark' || validUrl.value),
+    captureType.value === 'file'
+      ? files.value.length > 0
+      : Boolean(content.value.trim()) && (captureType.value !== 'bookmark' || validUrl.value),
   );
 
   watch(visible, (value) => {
-    if (!value) reset();
+    if (value) {
+      captureType.value = inbox.quickCaptureType;
+      manualType.value = false;
+    } else {
+      reset();
+    }
   });
 
   function detectType() {
@@ -190,22 +201,24 @@
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     submitting.value = true;
     try {
-      successText.value = captureType.value === 'bookmark'
-        ? await collectBookmark()
-        : captureType.value === 'note'
-          ? await collectNote()
-          : await collectFiles();
-      const operation = captureType.value === 'bookmark'
-        ? OPERATION_LOG_MAP.inbox.captureBookmark
-        : captureType.value === 'note'
-          ? OPERATION_LOG_MAP.inbox.captureNote
-          : OPERATION_LOG_MAP.inbox.captureFile;
+      successText.value =
+        captureType.value === 'bookmark'
+          ? await collectBookmark()
+          : captureType.value === 'note'
+            ? await collectNote()
+            : await collectFiles();
+      const operation =
+        captureType.value === 'bookmark'
+          ? OPERATION_LOG_MAP.inbox.captureBookmark
+          : captureType.value === 'note'
+            ? OPERATION_LOG_MAP.inbox.captureNote
+            : OPERATION_LOG_MAP.inbox.captureFile;
       recordOperation(operation);
       content.value = '';
       files.value = [];
       manualType.value = false;
-      captureType.value = 'note';
-      await inbox.refreshCount();
+      if (router.currentRoute.value.path.startsWith('/inbox')) await inbox.refreshList();
+      else await inbox.refreshCount();
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
@@ -241,7 +254,7 @@
     successText.value = '';
     capturedResource.value = null;
     manualType.value = false;
-    captureType.value = 'note';
+    captureType.value = inbox.quickCaptureType;
   }
 
   function close() {
@@ -251,26 +264,104 @@
 </script>
 
 <style scoped lang="less">
-  .capture-modal { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-  .capture-hint { margin: 0; color: var(--desc-color); font-size: 13px; }
-  .detected-type { color: var(--desc-color); font-size: 12px; }
+  .capture-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .capture-hint {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+  .capture-pending {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+    color: var(--text-color);
+    font-size: 13px;
+  }
+  .capture-pending span {
+    min-width: 0;
+  }
+  .capture-pending :deep(.b_btn) {
+    flex: 0 0 auto;
+  }
+  .detected-type {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
   .file-capture {
-    min-height: 150px; border: 1px dashed var(--card-border-color); border-radius: 10px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-    color: var(--desc-color); padding: 18px; box-sizing: border-box;
+    min-height: 150px;
+    border: 1px dashed var(--card-border-color);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--desc-color);
+    padding: 18px;
+    box-sizing: border-box;
   }
-  .file-list { width: 100%; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-color); }
-  .file-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-color);
+  }
+  .file-list span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .capture-success {
-    display: flex; justify-content: space-between; align-items: center; gap: 12px;
-    padding: 10px 12px; border-radius: 8px; background: rgba(46, 204, 113, 0.1); color: var(--text-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(46, 204, 113, 0.1);
+    color: var(--text-color);
   }
-  .capture-success__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
-  .capture-actions { display: flex; justify-content: flex-end; gap: 8px; }
-  :deep(.b-textarea) { resize: vertical; min-height: 82px; }
+  .capture-success__actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .capture-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  :deep(.b-textarea) {
+    resize: vertical;
+    min-height: 82px;
+  }
   @media (max-width: 767px) {
-    .capture-success { align-items: flex-start; flex-direction: column; }
-    .capture-success__actions { width: 100%; justify-content: flex-start; }
-    .capture-actions :deep(.b_btn) { flex: 1; width: auto; }
+    .capture-pending {
+      align-items: flex-start;
+    }
+    .capture-success {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .capture-success__actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+    .capture-actions :deep(.b_btn) {
+      flex: 1;
+      width: auto;
+    }
   }
 </style>

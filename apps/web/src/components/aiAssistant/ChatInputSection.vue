@@ -137,6 +137,8 @@
     background: var(--background-color);
     padding: 0.5rem 1.25rem 0.75rem;
     flex-shrink: 0;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .input-container {
@@ -146,6 +148,9 @@
     background-color: var(--menu-container-bg-color);
     padding: 0.7rem 0.75rem 0.6rem;
     min-height: 48px;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     box-shadow:
       0 0 0 1px color-mix(in srgb, var(--text-color) 8%, transparent),
       0 8px 24px rgba(15, 23, 42, 0.06);
@@ -159,8 +164,19 @@
   }
 
   .text-input {
+    display: block;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     min-height: 40px;
+    box-sizing: border-box;
+  }
+
+  .text-input :deep(.input-container) {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .text-input :deep(.b-textarea) {
@@ -273,7 +289,12 @@
 
   @media (max-width: 600px) {
     .input-section {
-      padding: 0.4rem 0.75rem 0.6rem;
+      padding: 0.4rem 0.35rem calc(0.45rem + env(safe-area-inset-bottom));
+    }
+
+    .input-container {
+      padding: 0.6rem 0.65rem 0.5rem;
+      border-radius: 0.875rem;
     }
 
     .composer-toolbar {

@@ -14,11 +14,15 @@
       <GuestNudge />
       <BGuide />
       <AdminContextBanner />
+      <QuickCaptureModal
+        v-if="inbox.quickCaptureVisible"
+        v-model:visible="inbox.quickCaptureVisible"
+      />
     </a-config-provider>
   </div>
 </template>
 <script setup lang="ts">
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
   import { h, nextTick, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
@@ -42,10 +46,12 @@
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
+  const QuickCaptureModal = defineAsyncComponent(() => import('@/components/inbox/QuickCaptureModal.vue'));
 
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const inbox = inboxStore();
   const { t } = useI18n();
   const NOTICE_KEY = 'pending-notice';
   const NOTICE_POLLING_INTERVAL = 300 * 1000;

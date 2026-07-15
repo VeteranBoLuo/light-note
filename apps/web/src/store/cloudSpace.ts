@@ -22,6 +22,7 @@ export default defineStore('dom', {
           fileType: string;
           fileUrl: string;
           tags?: { id: string; name: string }[];
+          isPending?: boolean;
         }[];
         typeCheckValue: CloudFileCategory[];
         folder?: { id: string; name: string };

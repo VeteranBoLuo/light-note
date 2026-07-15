@@ -60,6 +60,12 @@
           </div>
         </div>
       </div>
+      <div v-if="isOrganizingFromInbox" class="inbox-file-organizer">
+        <span>{{ t('inbox.completeFileHint') }}</span>
+        <BButton type="primary" size="small" :loading="completingInbox" @click="completeOrganizingFile">
+          {{ t('inbox.complete') }}
+        </BButton>
+      </div>
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
         <div class="mobile-folder-list">
           <div
@@ -120,12 +126,14 @@
   import MoveFile from '@/components/cloudSpace/MoveFile.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { updatePreference } from '@/utils/savePreference';
-  import { useRoute } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
 
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -133,6 +141,23 @@
   const cloud = cloudSpaceStore();
   const user = useUserStore();
   const route = useRoute();
+  const router = useRouter();
+  const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
+  const organizingFileId = computed(() => {
+    const value = route.query.fileId;
+    return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+  });
+
+  async function completeOrganizingFile() {
+    if (!organizingFileId.value) return;
+    const completed = await completeInboxResource('file', organizingFileId.value);
+    if (!completed) {
+      message.warning(t('inbox.completeFailed'));
+      return;
+    }
+    message.success(t('inbox.completedSuccess'));
+    router.push('/inbox');
+  }
 
   const CLOUD_SPACE_VIEW_STORAGE_KEY = 'cloud-space-view-mode';
 
@@ -368,6 +393,19 @@
 </script>
 
 <style lang="less" scoped>
+  .inbox-file-organizer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 20px 12px;
+    padding: 9px 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
+    border-radius: 8px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
+    font-size: 13px;
+  }
   .cloud-container {
     padding: 20px 20px 0 20px;
     width: 100%;

@@ -7,20 +7,22 @@
     <BDrawer
       :open="isOpen"
       :title="t('ai.title')"
-      :width="bookmark.isMobile ? '100vw' : '480px'"
+      :width="bookmark.isMobile ? '100%' : '480px'"
       :full-screen="bookmark.isMobile"
+      mobile-full-screen
       @close="minimize"
     >
+      <template #header-actions>
+        <BButton size="small" @click="clearConversation">{{ t('ai.newConversation') }}</BButton>
+      </template>
       <div class="ai-drawer-content">
-        <div class="ai-drawer-toolbar">
-          <BButton size="small" @click="clearConversation">{{ t('ai.newConversation') }}</BButton>
-        </div>
         <ChatContainer ref="aiAssistantRef" />
       </div>
     </BDrawer>
 
     <!-- 悬浮按钮保持不变 -->
     <BButton
+      v-show="!isOpen"
       class="float-button"
       role="button"
       tabindex="0"
@@ -131,6 +133,11 @@
   const minimize = () => {
     isOpen.value = false;
     containerActive.value = false;
+    if (bookmark.isMobile) {
+      isPeeked.value = true;
+      clearPeekTimer();
+      return;
+    }
     isPeeked.value = false;
     schedulePeek();
   };
@@ -242,13 +249,6 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-  }
-
-  .ai-drawer-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    padding-bottom: 10px;
-    flex-shrink: 0;
   }
 
   .ai-drawer-content :deep(.ai-chat-container) {

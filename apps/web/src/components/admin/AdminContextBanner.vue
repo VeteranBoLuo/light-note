@@ -1,5 +1,9 @@
 <template>
-  <div v-if="user.adminContext" class="admin-context-banner" :class="`mode-${user.adminContext.mode}`">
+  <div
+    v-if="user.adminContext && !isEmbeddedPreview"
+    class="admin-context-banner"
+    :class="`mode-${user.adminContext.mode}`"
+  >
     <div class="admin-context-copy">
       <strong>{{ modeTitle }}</strong>
       <span>{{ subjectLabel }}</span>
@@ -18,13 +22,15 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import userApi from '@/api/userApi.ts';
   import useUserStore from '@/store/useUser.ts';
-  import { clearAdminLoginPreview } from '@/utils/authStorage.ts';
+  import { ADMIN_LOGIN_PREVIEW_FRAME_NAME, clearAdminLoginPreview } from '@/utils/authStorage.ts';
 
   const { t } = useI18n();
   const user = useUserStore();
   const now = ref(Date.now());
   const ending = ref(false);
   let timer: number | null = null;
+  const isEmbeddedPreview =
+    typeof window !== 'undefined' && window.name === ADMIN_LOGIN_PREVIEW_FRAME_NAME;
 
   const modeTitle = computed(() =>
     user.adminContext?.mode === 'maintain'
@@ -69,6 +75,7 @@
   }
 
   onMounted(() => {
+    if (isEmbeddedPreview) return;
     timer = window.setInterval(() => (now.value = Date.now()), 1000);
     window.addEventListener('light-note:admin-context-expired', handleExpired);
   });

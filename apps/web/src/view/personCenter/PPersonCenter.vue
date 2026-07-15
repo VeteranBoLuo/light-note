@@ -148,15 +148,6 @@
       ></div>
       <div
         class="person-menu-item"
-        @click="openAiAssistant"
-        v-click-log="{ module: '轻笺助手', operation: `轻笺助手` }"
-      >
-        <span class="person-menu-item-title">{{ $t('ai.title') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-      <div
-        class="person-menu-item"
         @click="$router.push('/updateLogs')"
         v-click-log="{ module: '更新日志', operation: `更新日志` }"
       >
@@ -180,7 +171,6 @@
       >
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
-    <QuickCaptureModal v-model:visible="inbox.quickCaptureVisible" />
   </CommonContainer>
 </template>
 
@@ -197,7 +187,6 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { useI18n } from 'vue-i18n';
-  import QuickCaptureModal from '@/components/inbox/QuickCaptureModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
@@ -216,11 +205,7 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   function openQuickCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
-    inbox.quickCaptureVisible = true;
-  }
-
-  function openAiAssistant() {
-    window.dispatchEvent(new CustomEvent('light-note:open-ai'));
+    inbox.openQuickCapture();
   }
 
   const themeMenuOptions = computed(() => [

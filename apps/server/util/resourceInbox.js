@@ -150,3 +150,32 @@ export async function queryPendingCount(connection, userId) {
     typeTotals,
   };
 }
+
+/**
+ * 给模块列表回填待整理状态。resource_inbox 只是工作流关系，查询失败不应影响资源主列表，
+ * 因此调用方负责 catch 并保留这里预先写入的 false 默认值。
+ */
+export async function attachPendingStatus(connection, { userId, resourceType, items, idKey = 'id' }) {
+  const type = normalizeResourceType(resourceType);
+  const list = Array.isArray(items) ? items : [];
+  list.forEach((item) => {
+    item.isPending = false;
+  });
+  if (!type || list.length === 0) return list;
+
+  const ids = [...new Set(list.map((item) => String(item?.[idKey] ?? '').trim()).filter(Boolean))];
+  if (ids.length === 0) return list;
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await connection.query(
+    `SELECT resource_id AS resourceId
+       FROM resource_inbox
+      WHERE user_id = ? AND resource_type = ? AND status = 'pending'
+        AND resource_id IN (${placeholders})`,
+    [userId, type, ...ids],
+  );
+  const pendingIds = new Set(rows.map((row) => String(row.resourceId)));
+  list.forEach((item) => {
+    item.isPending = pendingIds.has(String(item?.[idKey] ?? ''));
+  });
+  return list;
+}

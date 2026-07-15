@@ -2,14 +2,32 @@
   <Teleport to="body">
     <div v-if="localVisible" class="b-drawer-wrapper" :class="{ 'is-entered': entered }">
       <div class="b-drawer-mask" @click="handleMaskClick" />
-      <div class="b-drawer-panel" :class="{ 'b-drawer-panel--fullscreen': fullScreen }" :style="{ width: panelWidth }">
+      <div
+        class="b-drawer-panel"
+        :class="{
+          'b-drawer-panel--fullscreen': fullScreen,
+          'b-drawer-panel--mobile-fullscreen': mobileFullScreen,
+        }"
+        :style="panelStyle"
+      >
         <div class="b-drawer-header">
           <span class="b-drawer-title">{{ title }}</span>
-          <BButton class="b-drawer-close" @click="handleClose">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </BButton>
+          <div class="b-drawer-header-actions">
+            <slot name="header-actions" />
+            <BButton class="b-drawer-close" @click="handleClose">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </BButton>
+          </div>
         </div>
         <div class="b-drawer-body">
           <slot />
@@ -30,12 +48,14 @@
       width?: string;
       maskClosable?: boolean;
       fullScreen?: boolean;
+      mobileFullScreen?: boolean;
     }>(),
     {
       title: '',
       width: '640px',
       maskClosable: true,
       fullScreen: false,
+      mobileFullScreen: false,
     },
   );
 
@@ -86,6 +106,9 @@
     const w = props.width;
     return isNumeric(w) ? `${w}px` : w;
   });
+  const panelStyle = computed(() =>
+    props.fullScreen ? { width: '100%', minWidth: '100%', maxWidth: '100%' } : { width: panelWidth.value },
+  );
 
   function isNumeric(v: string): boolean {
     return /^\d+$/.test(v);
@@ -140,9 +163,39 @@
     }
   }
 
+  .fullscreen-drawer() {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: auto;
+    box-shadow: none;
+
+    .b-drawer-header {
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-right: max(14px, env(safe-area-inset-right));
+      padding-bottom: 12px;
+      padding-left: max(14px, env(safe-area-inset-left));
+    }
+
+    .b-drawer-body {
+      overflow: hidden;
+      padding: 12px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
+        max(12px, env(safe-area-inset-left));
+    }
+  }
+
   .b-drawer-panel--fullscreen {
-    min-width: 100vw;
-    max-width: 100vw;
+    .fullscreen-drawer();
+  }
+
+  @media (max-width: 767px) {
+    .b-drawer-panel--mobile-fullscreen {
+      .fullscreen-drawer();
+    }
   }
 
   .is-entered {
@@ -175,6 +228,12 @@
     color: var(--text-color);
   }
 
+  .b-drawer-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .b-drawer-close {
     width: 32px;
     height: 32px;
@@ -186,7 +245,9 @@
     background: transparent;
     color: var(--desc-color, #999);
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition:
+      background 0.15s,
+      color 0.15s;
 
     &:hover {
       background: var(--menu-item-bg-color, #f2f2f4);

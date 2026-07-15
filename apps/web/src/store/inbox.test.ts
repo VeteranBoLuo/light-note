@@ -31,12 +31,23 @@ describe('inbox store', () => {
     store.ownerId = 'user-a';
     store.items = [{ resourceType: 'note', resourceId: 'n1' } as any];
     store.selectedKeys = ['note:n1'];
+    store.quickCaptureVisible = true;
+    store.quickCaptureType = 'file';
     const before = store.requestId;
     store.resetForOwner('user-b');
     expect(store.ownerId).toBe('user-b');
     expect(store.items).toEqual([]);
     expect(store.selectedKeys).toEqual([]);
+    expect(store.quickCaptureVisible).toBe(false);
+    expect(store.quickCaptureType).toBe('note');
     expect(store.requestId).toBe(before + 1);
+  });
+
+  it('快速收集可以由入口指定默认资源类型', () => {
+    const store = useInboxStore();
+    store.openQuickCapture('file');
+    expect(store.quickCaptureType).toBe('file');
+    expect(store.quickCaptureVisible).toBe(true);
   });
 
   it('并发筛选请求只接受最后一次响应', async () => {
@@ -54,7 +65,7 @@ describe('inbox store', () => {
     expect(store.loading).toBe(false);
   });
 
-  it('翻页刷新后清空跨页选择', async () => {
+  it('刷新全量列表后清空旧选择', async () => {
     const store = useInboxStore();
     store.selectedKeys = ['note:n1'];
     listInbox.mockResolvedValueOnce(successList([{ resourceType: 'note', resourceId: 'n2' }]));
@@ -70,6 +81,24 @@ describe('inbox store', () => {
     await expect(store.complete([item])).resolves.toBe(0);
     expect(store.items).toEqual([item]);
     expect(listInbox).not.toHaveBeenCalled();
+  });
+
+  it('全选超过 50 项时按后端上限分批完成并只刷新一次', async () => {
+    const store = useInboxStore();
+    const items = Array.from({ length: 51 }, (_, index) => ({
+      resourceType: 'note' as const,
+      resourceId: `n${index}`,
+    }));
+    completeInbox
+      .mockResolvedValueOnce({ status: 200, data: { completed: 50 } })
+      .mockResolvedValueOnce({ status: 200, data: { completed: 1 } });
+    listInbox.mockResolvedValueOnce(successList([]));
+
+    await expect(store.complete(items)).resolves.toBe(51);
+    expect(completeInbox).toHaveBeenCalledTimes(2);
+    expect(completeInbox.mock.calls[0][0]).toHaveLength(50);
+    expect(completeInbox.mock.calls[1][0]).toHaveLength(1);
+    expect(listInbox).toHaveBeenCalledTimes(1);
   });
 
   it('列表接口异常时稳定降级且结束加载态', async () => {

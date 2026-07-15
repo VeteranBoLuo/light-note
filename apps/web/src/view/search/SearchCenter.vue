@@ -1,7 +1,7 @@
 <template>
   <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
+    <ResourceCenterSectionNav class="section-switcher" />
     <section class="search-header">
-      <ResourceCenterSectionNav />
       <div class="search-header-bar">
         <div class="search-header-title">
           <span class="eyebrow">{{ t('resourceCenter.eyebrow') }}</span>
@@ -863,10 +863,19 @@
     --search-muted-bg: var(--bl-input-noBorder-bg-color);
 
     height: 100%;
-    overflow: auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 24px;
     box-sizing: border-box;
     color: var(--text-color);
+  }
+
+  .section-switcher {
+    margin-bottom: 12px;
   }
 
   .search-page--night {

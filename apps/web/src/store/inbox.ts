@@ -15,13 +15,12 @@ export default defineStore('inbox', {
     total: 0,
     loading: false,
     loadFailed: false,
-    currentPage: 1,
-    pageSize: 20,
     filterType: 'all' as 'all' | InboxResourceType,
     keyword: '',
     sort: 'newest' as 'newest' | 'oldest',
     selectedKeys: [] as string[],
     quickCaptureVisible: false,
+    quickCaptureType: 'note' as InboxResourceType,
     ownerId: '',
     requestId: 0,
   }),
@@ -36,10 +35,15 @@ export default defineStore('inbox', {
       this.typeTotals = { bookmark: 0, note: 0, file: 0 };
       this.items = [];
       this.total = 0;
-      this.currentPage = 1;
       this.selectedKeys = [];
+      this.quickCaptureVisible = false;
+      this.quickCaptureType = 'note';
       this.loadFailed = false;
       this.requestId += 1;
+    },
+    openQuickCapture(type: InboxResourceType = 'note') {
+      this.quickCaptureType = type;
+      this.quickCaptureVisible = true;
     },
     async refreshCount() {
       try {
@@ -61,8 +65,6 @@ export default defineStore('inbox', {
         const res = await listInbox({
           type: this.filterType,
           keyword: this.keyword,
-          currentPage: this.currentPage,
-          pageSize: this.pageSize,
           sort: this.sort,
         });
         if (requestId !== this.requestId) return false;
@@ -86,17 +88,21 @@ export default defineStore('inbox', {
     },
     async complete(items: InboxResourceRef[]) {
       if (items.length === 0) return 0;
+      let completed = 0;
       try {
-        const res = await completeInbox(items);
-        if (res.status !== 200) return 0;
-        const completed = Number(res.data?.completed || 0);
+        // 后端单次最多接收 50 项；全量列表下的“全选”需要在前端分批提交。
+        for (let index = 0; index < items.length; index += 50) {
+          const res = await completeInbox(items.slice(index, index + 50));
+          if (res.status !== 200) break;
+          completed += Number(res.data?.completed || 0);
+        }
         if (completed > 0) {
-          if (this.currentPage > 1 && this.items.length <= completed) this.currentPage -= 1;
           await this.refreshList();
         }
         return completed;
       } catch {
-        return 0;
+        if (completed > 0) await this.refreshList();
+        return completed;
       }
     },
   },

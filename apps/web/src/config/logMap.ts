@@ -71,6 +71,8 @@ export const OPERATION_LOG_MAP = {
     captureFile: '收集文件成功',
     completeOne: '单条整理完成',
     completeBatch: '批量整理完成',
+    deleteOne: '单条资源移入回收站',
+    deleteBatch: '批量资源移入回收站',
     openResource: '打开原资源继续整理',
   }),
   workbenches: createModule('工作台', {

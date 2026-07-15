@@ -5,7 +5,10 @@
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
     <div class="note-info">
-      <div class="note-title">{{ note.title }}</div>
+      <div class="note-title-row">
+        <div class="note-title">{{ note.title }}</div>
+        <InboxPendingBadge v-if="note.isPending" />
+      </div>
       <div class="note-description" v-html="getDescription(note.content)"></div>
       <div class="note-tags" v-if="getTags(note)">
         <span
@@ -36,6 +39,7 @@
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
 
   const props = defineProps<{ note: any }>();
   const bookmark = bookmarkStore();
@@ -50,7 +54,10 @@
   const getDescription = (htmlContent: string) => {
     // Markdown 笔记
     if (props.note?.type === 'markdown' && !(htmlContent || '').includes('<')) {
-      const text = (htmlContent || '').replace(/[#*`~>\[\]()_-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const text = (htmlContent || '')
+        .replace(/[#*`~>\[\]()_-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       return text.length > 150 ? text.substring(0, 150) + '...' : text;
     }
     // 提取文本内容作为描述
@@ -97,12 +104,22 @@
     }
     .note-info {
       flex: 1;
+      min-width: 0;
+      .note-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
       .note-title {
         font-size: 18px;
         font-weight: 600;
         color: var(--text-color);
         margin-bottom: 8px;
         line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .note-description {
         font-size: 14px;

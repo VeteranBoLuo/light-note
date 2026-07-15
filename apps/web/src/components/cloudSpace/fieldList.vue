@@ -1,34 +1,39 @@
 <template>
   <div class="field-list">
     <div v-if="viewMode === 'card'" class="card-toolbar">
-      <b-input v-model:value="cloud.searchFileName" :placeholder="$t('cloudSpace.fileName')" @input="onSearchInput" class="card-search-input">
+      <b-input
+        v-model:value="cloud.searchFileName"
+        :placeholder="$t('cloudSpace.fileName')"
+        @input="onSearchInput"
+        class="card-search-input"
+      >
         <template #suffix>
           <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
         </template>
       </b-input>
       <div v-if="batchMode" class="batch-actions">
-      <b-space :size="10">
-        <BCheckbox
-          v-if="viewMode === 'card'"
-          :indeterminate="indeterminate"
-          :checked="selectAll"
-          @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
-          class="batch-select-all"
-        />
-        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
-        <b-button
-          size="small"
-          type="primary"
-          @click="handleBatchMove"
-          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-          >{{ $t('cloudSpace.batchMove') }}</b-button
-        >
-        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
-          {{ $t('cloudSpace.batchDownload') }}
-        </b-button>
-      </b-space>
-    </div>
+        <b-space :size="10">
+          <BCheckbox
+            v-if="viewMode === 'card'"
+            :indeterminate="indeterminate"
+            :checked="selectAll"
+            @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
+            class="batch-select-all"
+          />
+          <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+          <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
+          <b-button
+            size="small"
+            type="primary"
+            @click="handleBatchMove"
+            v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
+            >{{ $t('cloudSpace.batchMove') }}</b-button
+          >
+          <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+            {{ $t('cloudSpace.batchDownload') }}
+          </b-button>
+        </b-space>
+      </div>
     </div>
     <div v-if="viewMode === 'card'" class="file-card-grid">
       <article
@@ -132,6 +137,7 @@
             <span class="file-card-type" :class="`file-card-type--${getFileCategory(item)}`">{{
               getFileTypeLabel(item)
             }}</span>
+            <InboxPendingBadge v-if="item.isPending" />
             <span class="file-card-size">{{ formatFileSize(item.fileSize) }}</span>
           </div>
           <div class="file-card-name" :title="item.fileName">{{ item.fileName }}</div>
@@ -182,24 +188,36 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div v-if="viewMode === 'table' && batchMode" class="batch-actions" style="padding: 8px 20px; background: var(--table-header-bg-color); border-radius: 8px; display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-        <BCheckbox
-          :indeterminate="indeterminate"
-          :checked="selectAll"
-          @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
-        />
-        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
-        <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
-        <b-button
-          size="small"
-          type="primary"
-          @click="handleBatchMove"
-          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-          >{{ $t('cloudSpace.batchMove') }}</b-button
-        >
-        <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
-          {{ $t('cloudSpace.batchDownload') }}
-        </b-button>
+    <div
+      v-if="viewMode === 'table' && batchMode"
+      class="batch-actions"
+      style="
+        padding: 8px 20px;
+        background: var(--table-header-bg-color);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+      "
+    >
+      <BCheckbox
+        :indeterminate="indeterminate"
+        :checked="selectAll"
+        @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
+      />
+      <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+      <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
+      <b-button
+        size="small"
+        type="primary"
+        @click="handleBatchMove"
+        v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
+        >{{ $t('cloudSpace.batchMove') }}</b-button
+      >
+      <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+        {{ $t('cloudSpace.batchDownload') }}
+      </b-button>
     </div>
     <div v-if="viewMode === 'table'" class="file-container">
       <div
@@ -226,6 +244,7 @@
           >
             <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
             <span style="width: 100%" class="text-hidden">{{ item.fileName }}</span>
+            <InboxPendingBadge v-if="item.isPending" />
           </div>
           <b-input v-else class="edit-file-input" v-model:value="item.fileName" @click.stop @enter="submitReName(item)">
             <template #suffix>
@@ -322,7 +341,16 @@
     </div>
     <div
       v-if="!cloud.loading && !cloud.fileList.length"
-      style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
+      style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 64px 20px;
+        text-align: center;
+        color: var(--text-second-color, #888);
+      "
     >
       <div style="font-size: 44px; opacity: 0.7">📁</div>
       <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">还没有文件</p>
@@ -330,19 +358,23 @@
       <BButton
         type="primary"
         @click="triggerUpload"
-        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
+        style="
+          margin-top: 6px;
+          border: 0;
+          cursor: pointer;
+          color: #fff;
+          background: #615ced;
+          font-size: 14px;
+          padding: 8px 18px;
+          border-radius: 8px;
+        "
       >
         上传文件
       </BButton>
     </div>
     <b-loading :loading="cloud.loading" class="both-center" />
 
-    <b-modal
-      v-model:visible="shareDescVisible"
-      :title="$t('cloudSpace.share')"
-      width="450px"
-      :show-footer="false"
-    >
+    <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
       <div class="share-desc-body">
         <div class="share-desc-tip">{{ $t('cloudSpace.shareDescTip') }}</div>
         <b-input
@@ -376,12 +408,7 @@
       @close="renameModalFile = null"
     >
       <div class="rename-modal-field">
-        <b-input
-          v-model:value="renameModalValue"
-          class="rename-modal-input"
-          @enter="confirmRename"
-          @click.stop
-        />
+        <b-input v-model:value="renameModalValue" class="rename-modal-input" @enter="confirmRename" @click.stop />
         <span v-if="renameModalFile" class="rename-modal-ext">.{{ originalExt }}</span>
       </div>
       <div class="rename-modal-actions">
@@ -415,6 +442,7 @@
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
+  import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -677,6 +705,9 @@
       if (res.status === 200) {
         file.isRename = false;
         file.fileName = nextName;
+        if (cloud.searchFileName === originalName.value) {
+          cloud.searchFileName = nextName;
+        }
         recordOperation({ module: '云空间', operation: `重命名文件成功【${nextName}】` });
         message.success(t('cloudSpace.renameSuccess'));
         cloud.queryFieldList();
@@ -1303,7 +1334,9 @@
     border: 1px solid color-mix(in srgb, var(--folder-list-border-color) 82%, var(--desc-color) 18%);
     background: color-mix(in srgb, var(--card-bg-color) 94%, var(--bl-input-noBorder-bg-color) 6%);
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
     overflow: hidden;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.02) inset,
@@ -1494,10 +1527,10 @@
     transition: opacity 0.2s ease;
   }
   .file-card-more .more-icon {
-    color: rgba(255,255,255,.7);
-    filter: drop-shadow(0 1px 3px rgba(0,0,0,.5));
+    color: rgba(255, 255, 255, 0.7);
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
     cursor: pointer;
-    transition: color .2s;
+    transition: color 0.2s;
   }
   .file-card-more .more-icon:hover {
     color: #fff;

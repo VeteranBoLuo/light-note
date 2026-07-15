@@ -17,7 +17,7 @@ import * as fileHandle from '../router_handle/fileHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 import crypto from 'crypto';
-import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
+import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 const router = express.Router();
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
@@ -230,8 +230,7 @@ router.post('/queryFiles', async (req, res) => {
     const userId = req.user.id;
     const { filters = {} } = req.body;
     const params = [userId];
-    let sql =
-      `SELECT files.*, folders.name AS folderName,
+    let sql = `SELECT files.*, folders.name AS folderName,
         (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
          FROM resource_tag_relations r
          INNER JOIN tag t ON r.tag_id = t.id
@@ -239,7 +238,12 @@ router.post('/queryFiles', async (req, res) => {
         ) AS tags
        FROM files LEFT JOIN folders ON files.folder_id = folders.id WHERE files.create_by = ?`;
     // 添加文件夹ID条件
-    if (filters.folderId !== undefined && filters.folderId !== null && filters.folderId !== '' && filters.folderId !== 'all') {
+    if (
+      filters.folderId !== undefined &&
+      filters.folderId !== null &&
+      filters.folderId !== '' &&
+      filters.folderId !== 'all'
+    ) {
       sql += ' AND files.folder_id = ?';
       params.push(filters.folderId);
     }
@@ -258,6 +262,12 @@ router.post('/queryFiles', async (req, res) => {
       file.tags =
         file.tags && Array.isArray(file.tags) && file.tags.every((tag) => tag && tag.id !== null) ? file.tags : [];
     });
+
+    try {
+      await attachPendingStatus(pool, { userId, resourceType: 'file', items: formattedFiles });
+    } catch (error) {
+      console.warn('[待整理角标] 文件状态回填失败(忽略):', error.message);
+    }
 
     // 3. 应用文件名过滤
     if (filters?.fileName) {
@@ -392,10 +402,7 @@ router.post('/checkFileNames', async (req, res) => {
       exists: existingNames.has(name),
     }));
     // 同时返回该用户所有已有文件名，供前端自动改名构建完整 existingSet
-    const [allRows] = await pool.query(
-      `SELECT file_name FROM files WHERE create_by = ? AND del_flag = 0`,
-      [userId],
-    );
+    const [allRows] = await pool.query(`SELECT file_name FROM files WHERE create_by = ? AND del_flag = 0`, [userId]);
     const allNames = allRows.map((r) => r.file_name);
     res.send(resultData({ check: result, allNames }, 200));
   } catch (e) {
@@ -447,7 +454,7 @@ router.post('/hermesBackup', backupUpload.single('file'), async (req, res) => {
     const expected = process.env.BACKUP_TOKEN;
 
     if (!expected || token !== expected) {
-      if (filePath) await import('fs').then(fs => fs.promises.unlink(filePath).catch(() => {}));
+      if (filePath) await import('fs').then((fs) => fs.promises.unlink(filePath).catch(() => {}));
       return res.send(resultData(null, 403, '备份令牌无效'));
     }
 

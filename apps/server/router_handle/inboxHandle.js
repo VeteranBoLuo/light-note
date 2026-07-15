@@ -39,8 +39,6 @@ export async function listInbox(req, res) {
     const type = typeValue === 'all' ? 'all' : normalizeResourceType(typeValue);
     const sort = String(req.body?.sort || 'newest').toLowerCase();
     const keyword = String(req.body?.keyword || '').trim().slice(0, 100);
-    const currentPage = Math.max(1, Number.parseInt(req.body?.currentPage, 10) || 1);
-    const pageSize = Math.min(50, Math.max(1, Number.parseInt(req.body?.pageSize, 10) || 20));
     if (!type || !SORT_SQL[sort]) {
       return res.send(resultData(null, 400, '无效的筛选或排序参数'));
     }
@@ -89,25 +87,20 @@ export async function listInbox(req, res) {
        AND r.resource_id = i.resource_id
        AND r.user_id = i.user_id
       WHERE ${where.join(' AND ')}`;
-    const [totalRows] = await pool.query(`SELECT COUNT(*) AS total ${fromSql}`, params);
-    const offset = (currentPage - 1) * pageSize;
     const [items] = await pool.query(
       `SELECT i.resource_type AS resourceType, i.resource_id AS resourceId,
               i.source, i.create_time AS collectedAt,
               r.title, r.summary, r.detail, r.resource_create_time AS resourceCreatedAt
          ${fromSql}
-        ORDER BY ${SORT_SQL[sort]}
-        LIMIT ? OFFSET ?`,
-      [...params, pageSize, offset],
+        ORDER BY ${SORT_SQL[sort]}`,
+      params,
     );
     const counts = await queryPendingCount(pool, req.user.id);
     res.send(
       resultData({
         items,
-        total: Number(totalRows[0]?.total || 0),
+        total: items.length,
         ...counts,
-        currentPage,
-        pageSize,
       }),
     );
   } catch (error) {

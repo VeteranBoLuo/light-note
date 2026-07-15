@@ -4,7 +4,10 @@
     class="note-card"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
-    <div class="note-title" :title="note.title">{{ note.title }}</div>
+    <div class="note-title-row">
+      <div class="note-title" :title="note.title">{{ note.title }}</div>
+      <InboxPendingBadge v-if="note.isPending" />
+    </div>
     <div class="note-content" v-html="extractAndConvertTags(note.content)" />
     <div class="note-footer">
       <div class="note-tags" v-if="note.tags && note.tags.length">
@@ -41,6 +44,7 @@
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   const props = defineProps<{ note: any }>();
 
   const bookmark = bookmarkStore();
@@ -61,7 +65,10 @@
     let content = htmlContent || '';
     if (props.note?.type === 'markdown' && !content.includes('<')) {
       // 简单处理：纯 MD 文本，只取前 200 字作为预览
-      const text = content.replace(/[#*`~>\[\]()_-]/g, ' ').replace(/\s+/g, ' ').trim();
+      const text = content
+        .replace(/[#*`~>\[\]()_-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       return text.length > 200 ? text.substring(0, 200) + '...' : text;
     }
     // 创建一个临时的DOM元素
@@ -134,6 +141,14 @@
     }
   }
 
+  .note-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 28px;
+    min-width: 0;
+  }
+
   .note-title {
     font-size: 16px;
     font-weight: 600;
@@ -143,7 +158,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 0 0 auto;
-    max-width: calc(100% - 32px);
+    max-width: 100%;
   }
 
   .note-content {

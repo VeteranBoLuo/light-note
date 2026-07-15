@@ -41,7 +41,11 @@
             v-model:value="bookmarkData.relatedTags"
           >
             <template #dropdown-footer>
-              <div class="add-tag-entry" @click="goAddTag" v-click-log="{ module: '书签详情', operation: '下拉里新增标签' }">
+              <div
+                class="add-tag-entry"
+                @click="goAddTag"
+                v-click-log="{ module: '书签详情', operation: '下拉里新增标签' }"
+              >
                 <span class="add-tag-plus">+</span>
                 <span>{{ $t('navigation.newTag') }}</span>
               </div>
@@ -62,7 +66,9 @@
       </div>
     </b-loading>
     <b-space class="edit-tag-footer">
-      <b-button type="primary" data-guide="bookmark-save" @click="submit">确定</b-button>
+      <b-button type="primary" data-guide="bookmark-save" :loading="completingInbox" @click="submit">
+        {{ isOrganizingFromInbox ? $t('inbox.saveAndComplete') : $t('common.confirm') }}
+      </b-button>
       <b-button @click="$router.back()">返回</b-button>
     </b-space>
     <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="bookmarkId" />
@@ -83,9 +89,13 @@
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
+  import { useI18n } from 'vue-i18n';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const { t } = useI18n();
+  const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
 
   const bookmarkData = ref<any>({
     id: '',
@@ -122,9 +132,15 @@
     return [];
   }
 
-  function submit() {
+  async function submit() {
     // 游客:即时拦截 + 上下文邀请文案(不发无效请求);后端 addBookmark 仍有 ensureNotVisitor 兜底
-    if (blockGuestWrite('add-bookmark', '把整理好的书签存进你自己的轻笺？注册即用、自动登录,免费收藏书签、记笔记、存文件。')) return;
+    if (
+      blockGuestWrite(
+        'add-bookmark',
+        '把整理好的书签存进你自己的轻笺？注册即用、自动登录,免费收藏书签、记笔记、存文件。',
+      )
+    )
+      return;
     if (loading.value) {
       message.warning('请等待数据请求完毕');
       return;
@@ -147,16 +163,24 @@
     } else {
       params.iconUrl = null;
     }
-    apiBasePost(url, params).then((res) => {
-      if (res.status === 200) {
-        recordOperation({
-          module: '书签详情',
-          operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || params.url}】`,
-        });
-        message.success('保存成功');
-        router.back();
-      }
+    const res = await apiBasePost(url, params);
+    if (res.status !== 200) return;
+    recordOperation({
+      module: '书签详情',
+      operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || params.url}】`,
     });
+    if (isOrganizingFromInbox.value && handleType.value === 'edit') {
+      const completed = await completeInboxResource('bookmark', bookmarkData.value.id || bookmarkId.value);
+      if (!completed) {
+        message.warning(t('inbox.completeFailed'));
+        return;
+      }
+      message.success(t('inbox.saveAndCompleteSuccess'));
+      router.push('/inbox');
+      return;
+    }
+    message.success(t('common.saveSuccess'));
+    router.back();
   }
 
   // 下拉里「新增标签」:跳转到新增标签页(注:会离开当前书签编辑页)
