@@ -20,12 +20,6 @@
 </p>
 
 <p align="center">
-  <a href="https://boluo66.top">
-    <img src="apps/web/screenshots/hero.png" alt="ブックマーク・ノート・クラウドファイル・タグを管理する LightNote ワークスペース" width="92%" />
-  </a>
-</p>
-
-<p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge" alt="简体中文"></a>
   <a href="README.en.md"><img src="https://img.shields.io/badge/English-555?style=for-the-badge" alt="English"></a>
   <img src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-615ced?style=for-the-badge" alt="日本語">

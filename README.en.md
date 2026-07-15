@@ -22,12 +22,6 @@
 </p>
 
 <p align="center">
-  <a href="https://boluo66.top">
-    <img src="apps/web/screenshots/hero.png" alt="LightNote workspace for bookmarks, notes, cloud files, and tags" width="92%" />
-  </a>
-</p>
-
-<p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge" alt="简体中文"></a>
   <img src="https://img.shields.io/badge/English-615ced?style=for-the-badge" alt="English">
   <a href="README.ja.md"><img src="https://img.shields.io/badge/%E6%97%A5%E6%9C%AC%E8%AA%9E-555?style=for-the-badge" alt="日本語"></a>
