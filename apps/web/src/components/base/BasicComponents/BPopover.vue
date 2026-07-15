@@ -36,8 +36,8 @@
     defineProps<{
       // hover/click 由组件自身管理开关;manual 为纯受控(只跟随 v-model:open,适合调用方自己管 hover 逻辑)
       trigger?: 'hover' | 'click' | 'manual';
-      // 浮层水平对齐:bottom-left(触发元素左对齐)/ bottom-right(右对齐)
-      placement?: 'bottom-left' | 'bottom-right';
+      // 浮层对齐方向；空间不足时会自动翻转到另一侧，避免超出视口。
+      placement?: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right';
       overlayClassName?: string;
       // 与 antd 一致:返回浮层挂载容器(默认 body)。挂进定位容器可让"鼠标移到浮层上"仍算容器内(hover 卡不关闭)。
       getPopupContainer?: (trigger: HTMLElement) => HTMLElement | null;
@@ -57,6 +57,7 @@
   const teleportTarget = ref<HTMLElement | string>('body');
   const panelStyle = reactive<Record<string, string>>({ position: 'fixed', top: '0px', left: '0px' });
   let closeTimer: number | null = null;
+  let resizeObserver: ResizeObserver | null = null;
 
   const isHover = computed(() => props.trigger === 'hover');
   const isClick = computed(() => props.trigger === 'click');
@@ -66,21 +67,38 @@
     if (!el) return;
     const zoom = getRootZoom();
     const r = el.getBoundingClientRect();
+    const rTop = r.top / zoom;
     const rBottom = r.bottom / zoom;
     const rLeft = r.left / zoom;
     const rRight = r.right / zoom;
     const panelW = panelRef.value?.offsetWidth ?? 0;
-    const vLeft = props.placement === 'bottom-right' ? rRight - panelW : rLeft;
+    const panelH = panelRef.value?.offsetHeight ?? 0;
+    const alignRight = props.placement.endsWith('right');
+    const vLeft = alignRight ? rRight - panelW : rLeft;
     // 统一用 fixed(视口坐标):无论 teleport 到 body 还是某容器,fixed 都相对视口定位,
     // 不依赖容器是否为定位元素 —— 原 absolute 分支在静态容器(如 #tag-container)下会把面板顶到页首(缩放时 c.top≠0 尤甚)。
     // 坐标口径:getBoundingClientRect=视觉像素(÷zoom 得布局);offsetWidth=布局像素;
     // documentElement.clientWidth=视觉像素(÷zoom 得布局);style.top/left=布局像素(渲染再 ×zoom)。
     let left = vLeft;
     const vw = document.documentElement.clientWidth / zoom; // 视口宽(布局像素),与 left/panelW 同口径
+    const vh = document.documentElement.clientHeight / zoom;
     if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
     if (left < 8) left = 8;
+
+    // 优先使用调用方指定的方向；指定方向放不下时自动翻转。两侧都放不下时，
+    // 选择空间更大的一侧并钳制到视口内，面板自身可再通过 max-height 滚动。
+    const spaceAbove = rTop - 8;
+    const spaceBelow = vh - rBottom - 8;
+    let placeAbove = props.placement.startsWith('top');
+    if (panelH) {
+      if (placeAbove && panelH > spaceAbove && spaceBelow > spaceAbove) placeAbove = false;
+      if (!placeAbove && panelH > spaceBelow && spaceAbove > spaceBelow) placeAbove = true;
+    }
+    let top = placeAbove ? rTop - panelH - 6 : rBottom + 6;
+    if (panelH) top = Math.max(8, Math.min(top, vh - panelH - 8));
+
     panelStyle.position = 'fixed';
-    panelStyle.top = `${rBottom + 6}px`;
+    panelStyle.top = `${top}px`;
     panelStyle.left = `${left}px`;
   }
 
@@ -108,11 +126,20 @@
     emit('openChange', val);
     if (val) {
       teleportTarget.value = props.getPopupContainer?.(triggerRef.value as HTMLElement) || 'body';
-      nextTick(computePosition);
+      nextTick(() => {
+        computePosition();
+        resizeObserver?.disconnect();
+        if (panelRef.value && typeof ResizeObserver !== 'undefined') {
+          resizeObserver = new ResizeObserver(computePosition);
+          resizeObserver.observe(panelRef.value);
+        }
+      });
       window.addEventListener('scroll', computePosition, true);
       window.addEventListener('resize', computePosition);
       if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
     } else {
+      resizeObserver?.disconnect();
+      resizeObserver = null;
       window.removeEventListener('scroll', computePosition, true);
       window.removeEventListener('resize', computePosition);
       document.removeEventListener('mousedown', onDocMouseDown, true);
@@ -147,6 +174,7 @@
 
   onBeforeUnmount(() => {
     clearCloseTimer();
+    resizeObserver?.disconnect();
     window.removeEventListener('scroll', computePosition, true);
     window.removeEventListener('resize', computePosition);
     document.removeEventListener('mousedown', onDocMouseDown, true);

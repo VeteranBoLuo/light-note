@@ -30,14 +30,6 @@
       </div>
       <div class="navigation-tab flex-align-center" style="gap: 30px; width: max-content">
         <template v-if="navigationFucVisible">
-          <BButton
-            :style="{ color: route.path.includes('/inbox') ? '#615ced' : '' }"
-            class="navigation-inbox"
-            @click="router.push('/inbox')"
-          >
-            {{ $t('navigation.inbox') }}
-            <span v-if="inbox.pendingTotal" class="navigation-inbox__count">{{ displayInboxCount }}</span>
-          </BButton>
           <div
             :style="{
               color: route.path.includes('/workbenches') ? '#615ced' : '',
@@ -93,7 +85,7 @@
 
           <div
             :style="{
-              color: route.path.includes('/search') ? '#615ced' : '',
+              color: route.path.includes('/search') || route.path.includes('/inbox') ? '#615ced' : '',
             }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
@@ -124,7 +116,6 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import RightArea from '@/components/home/navigation/RightArea.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi';
 
   const route = useRoute();
@@ -149,7 +140,6 @@
   ]);
 
   const bookmark = bookmarkStore();
-  const displayInboxCount = computed(() => (inbox.pendingTotal > 99 ? '99+' : inbox.pendingTotal));
   const isHomeDrawerLayout = computed(() => route.path.includes('home') && bookmark.isMobile);
 
   async function handleToIndex() {
@@ -273,35 +263,6 @@
   .navigation-manage {
     background-color: #ffffff;
     color: #000000;
-  }
-  .navigation-inbox {
-    height: auto;
-    line-height: normal;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .navigation-inbox:hover {
-    background: transparent;
-  }
-  .navigation-inbox__count {
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
-    border-radius: 9px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: #615ced;
-    color: #fff;
-    font-size: 10px;
   }
   #navigation-container {
     position: absolute;

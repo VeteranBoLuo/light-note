@@ -5,8 +5,9 @@
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
     <GlobalSearch />
-    <BButton v-if="!bookmark.isMobile" size="small" type="primary" class="quick-capture-btn" @click="openQuickCapture">
+    <BButton v-if="showQuickCapture" size="small" type="primary" class="quick-capture-btn" @click="openQuickCapture">
       {{ $t('inbox.quickCapture') }}
+      <span v-if="inbox.pendingTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
     </BButton>
     <BTooltip :title="$t('home.toolbox')" always>
       <div v-if="!bookmark.isMobile" @click="toolkitClick" v-click-log="OPERATION_LOG_MAP.navigation.toolkit" class="toolkit-link">
@@ -23,10 +24,12 @@
     >
       <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
     </b-dropdown>
-    <button v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
+    <BButton v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
-    </button>
-    <span v-if="user.role === 'visitor' && !user.visitorWorkspace" class="guest-register-link" @click="registerClick">{{ $t('home.freeRegister') }}</span>
+    </BButton>
+    <BButton v-if="showGuestRegister" type="primary" class="guest-register-link" @click="registerClick">
+      {{ $t('home.freeRegister') }}
+    </BButton>
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
     <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
@@ -55,12 +58,18 @@
   import { inboxStore } from '@/store';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useI18n } from 'vue-i18n';
+  import { computed } from 'vue';
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { t } = useI18n();
 
   const user = useUserStore();
   const route = useRoute();
+  const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
+  const showGuestRegister = computed(
+    () => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor',
+  );
+  const displayInboxCount = computed(() => (inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal)));
 
   function githubClick() {
     window.open('https://github.com/VeteranBoLuo/light-note');
@@ -139,6 +148,21 @@
   }
   .quick-capture-btn {
     flex: 0 0 auto;
+    gap: 6px;
+  }
+  .quick-capture-count {
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+    font-size: 10px;
+    line-height: 1;
   }
   .guest-register-link {
     font-size: 13px;

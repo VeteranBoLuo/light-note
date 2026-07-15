@@ -118,10 +118,10 @@
 <ul>
   <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述；支持 Excel / HTML 格式导入导出，批量编辑标签</li>
   <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
-  <li><strong>快速收集与待整理</strong>：从导航栏快速记录网址、文本或文件，先集中进入待整理箱，再搜索、筛选、批量完成整理</li>
+  <li><strong>快速收集与待整理</strong>：登录后可从导航栏快速记录网址、文本或文件，再到资源中心的“待整理”视图统一处理</li>
   <li><strong>笔记库</strong>：支持 HTML 富文本 / Markdown 双模式编辑器；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；可导出为 PDF / HTML / Markdown</li>
   <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
-  <li><strong>资源中心</strong>：导航栏全局搜索，一键检索书签、笔记、文件和标签，支持按类型筛选；按 <code>/</code> 键可快速唤起搜索</li>
+  <li><strong>资源中心</strong>：一键检索书签、笔记、文件和标签，并在“全部资源”和“待整理”之间切换；按 <code>/</code> 键可快速唤起搜索</li>
   <li><strong>回收站</strong>：删除的书签、笔记、文件统一进入回收站，30 天内可随时恢复，过期自动清理</li>
   <li><strong>轻笺智域</strong>：内置 AI 对话助手，可用 <code>@</code> 选择当前资源作为上下文；查询结果提供来源卡片，任何写入都会先展示目标与影响范围并等待确认</li>
   <li><strong>工作台</strong>：聚合书签/笔记/文件总数、7 天活跃趋势、高频书签与标签热度排行，快捷操作一步直达</li>
@@ -139,7 +139,7 @@
 
 <h3>📂 快速上手</h3>
 <ol>
-  <li>点击导航栏的<b>快速收集</b>，随手保存网址、文本或文件；稍后到<b>待整理</b>统一处理</li>
+  <li>登录后点击导航栏的<b>快速收集</b>，随手保存网址、文本或文件；稍后到<b>资源中心 → 待整理</b>统一处理</li>
   <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
   <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
   <li>打开<b>笔记库</b>新建笔记（支持 HTML 或 Markdown），用标签关联相关知识</li>
@@ -165,10 +165,10 @@
 <ul>
   <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats; batch tag editing</li>
   <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
-  <li><strong>Quick Capture & Inbox</strong>: Capture URLs, text, or files from the navigation bar, then search, filter, and batch-complete them in one inbox</li>
+  <li><strong>Quick Capture & Inbox</strong>: Signed-in users can capture URLs, text, or files from the navigation bar, then process them in the Resource Center's Inbox view</li>
   <li><strong>Note Library</strong>: Dual-mode editor supporting HTML rich text and Markdown; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
   <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
-  <li><strong>Resource Center</strong>: Global search from the navigation bar — find bookmarks, notes, files, and tags in one place; filter by type; press <code>/</code> to quickly activate search</li>
+  <li><strong>Resource Center</strong>: Find bookmarks, notes, files, and tags in one place, and switch between All Resources and Inbox; press <code>/</code> to quickly activate search</li>
   <li><strong>Trash</strong>: Deleted bookmarks, notes, and files go to the trash for 30 days — recover anytime before automatic cleanup</li>
   <li><strong>Light Note AI</strong>: Attach resources as per-message context, trace answers through source cards, and review the target and impact before any AI write is executed</li>
   <li><strong>Workbench</strong>: Aggregate bookmark/note/file totals, 7-day activity trends, top bookmarks and tag popularity rankings, and one-click quick actions</li>
@@ -186,7 +186,7 @@
 
 <h3>📂 Quick Start</h3>
 <ol>
-  <li>Use <b>Quick Capture</b> to save a URL, text, or file, then process it later in the <b>Inbox</b></li>
+  <li>After signing in, use <b>Quick Capture</b> to save a URL, text, or file, then process it under <b>Resource Center → Inbox</b></li>
   <li>On the <b>Bookmarks</b> page, click tags to filter your saved web pages</li>
   <li>Go to <b>Bookmark Management</b> to add, edit, or batch-operate bookmarks</li>
   <li>Open the <b>Note Library</b> to create notes and link them with tags</li>

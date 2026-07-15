@@ -35,7 +35,12 @@
         />
 
         <!-- 常见问题提示 -->
-        <MainQuestionPrompt v-if="showRecommendation" @recommendation-click="handleRecommendationClick" />
+        <MainQuestionPrompt
+          v-if="showRecommendation"
+          :used-questions="usedQuestions"
+          :round="conversationRound"
+          @recommendation-click="handleRecommendationClick"
+        />
       </main>
 
       <!-- 输入区域 -->
@@ -60,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, nextTick, watch } from 'vue';
+  import { computed, ref, onMounted, nextTick, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import ChatMessageItem from '@/components/aiAssistant/ChatMessageItem.vue';
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
@@ -132,7 +137,14 @@
   // 智能滚动相关状态 - 简化状态管理
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
   const showScrollToBottom = ref(false);
-  const showRecommendation = ref(true);
+  const usedQuestions = computed(() =>
+    messages.value.filter((message) => message.role === 'user').map((message) => message.content.trim()),
+  );
+  const conversationRound = computed(() => usedQuestions.value.length);
+  const showRecommendation = computed(() => {
+    if (isLoading.value || !messages.value.length) return false;
+    return messages.value[messages.value.length - 1]?.role === 'assistant';
+  });
 
   // 新增：是否为程序触发的滚动
   const isProgrammaticScroll = ref(false);
@@ -231,7 +243,6 @@
       if (!Array.isArray(data.messages) || data.messages.length <= 1) return false;
       messages.value = data.messages.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp), thoughts: [] }));
       if (data.sessionId) sessionId = data.sessionId; // 尽力续用服务端记忆(Redis 30min 后失效则当新会话)
-      showRecommendation.value = false; // 有历史就不再显示推荐问题
       return true;
     } catch {
       return false;
@@ -266,7 +277,6 @@
   // 清空对话
   function clearHistory() {
     stopResponse();
-    showRecommendation.value = false;
     sessionId = '';
     longChatHinted.value = false;
     try {
@@ -283,7 +293,6 @@
         thoughts: [],
       },
     ];
-    showRecommendation.value = true;
     resetScrollState();
   }
 
@@ -441,7 +450,6 @@
   const longChatHinted = ref(false); // 超长对话「新建会话」提示只弹一次(每段会话)
   // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
-    showRecommendation.value = false;
     // 每次开始新的提问时，重置自动滚动状态，确保本轮对话自动跟随到底部
     autoScrollEnabled.value = true;
     userHasInterrupted.value = false;
@@ -673,8 +681,6 @@
 
       isLoading.value = false;
       if (abortController.value === requestController) abortController.value = null;
-      showRecommendation.value = true;
-
       // 最终滚动
       await nextTick();
       if (autoScrollEnabled.value && !userHasInterrupted.value) {

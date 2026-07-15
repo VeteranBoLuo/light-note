@@ -1,5 +1,6 @@
 <template>
   <main class="inbox-page">
+    <ResourceCenterSectionNav />
     <header class="inbox-hero">
       <div>
         <h1>{{ t('inbox.title') }}</h1>
@@ -86,6 +87,7 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
+  import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -167,7 +169,7 @@
 
 <style scoped lang="less">
   .inbox-page { min-height: calc(100vh - 60px); padding: 34px 5vw 60px; box-sizing: border-box; color: var(--text-color); }
-  .inbox-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+  .inbox-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin: 18px 0 24px; }
   h1 { margin: 0 0 6px; font-size: 28px; } .inbox-hero p { margin: 0; color: var(--desc-color); }
   .inbox-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 16px; }
   .inbox-toolbar__right { display: grid; grid-template-columns: minmax(180px, 280px) 130px; gap: 8px; }

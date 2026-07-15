@@ -72,15 +72,8 @@
       ></div>
     </div>
     <div class="person-menu">
-      <div class="person-menu-item" @click="openQuickCapture">
+      <div v-if="canUseQuickCapture" class="person-menu-item" @click="openQuickCapture">
         <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
-        <span class="person-menu-item-des">
-          {{ inbox.pendingTotal || '' }}
-          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-        </span>
-      </div>
-      <div class="person-menu-item" @click="$router.push('/inbox')">
-        <span class="person-menu-item-title">{{ $t('inbox.title') }}</span>
         <span class="person-menu-item-des">
           {{ inbox.pendingTotal || '' }}
           <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
@@ -218,6 +211,7 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   const userVisible = ref(false);
 
   const user = useUserStore();
+  const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
 
   function openQuickCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;

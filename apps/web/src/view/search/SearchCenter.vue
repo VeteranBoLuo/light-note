@@ -1,6 +1,7 @@
 <template>
   <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
     <section class="search-header">
+      <ResourceCenterSectionNav />
       <div class="search-header-bar">
         <div class="search-header-title">
           <span class="eyebrow">{{ t('resourceCenter.eyebrow') }}</span>
@@ -270,6 +271,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
+  import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();

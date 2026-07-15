@@ -1,7 +1,9 @@
 <template>
   <footer class="input-section">
     <div v-if="quota && !quota.exempt && quota.quota" class="ai-quota" :title="t('ai.quotaTip')">
-      <span class="ai-quota-txt">{{ t('ai.quotaToday') }} {{ fmtTokens(quota.used) }} / {{ fmtTokens(quota.quota) }}</span>
+      <span class="ai-quota-txt"
+        >{{ t('ai.quotaToday') }} {{ fmtTokens(quota.used) }} / {{ fmtTokens(quota.quota) }}</span
+      >
       <div class="ai-quota-bar"><div class="ai-quota-fill" :style="{ width: quotaPercent + '%' }"></div></div>
     </div>
     <div v-else-if="quota && quota.exempt" class="ai-quota ai-quota--free">
@@ -19,26 +21,28 @@
         ref="textInput"
         class="text-input"
       />
-      <div class="input-actions">
-        <TranslationToggle
-          v-if="showTranslation"
-          :enableTranslation="enableTranslation"
-          :translationConfig="translationConfig"
-          @update:enableTranslation="$emit('update:enableTranslation', $event)"
-          @update:translationConfig="$emit('update:translationConfig', $event)"
-        />
-        <BButton
-          @click="isLoading ? stopFn() : sendFn()"
-          v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
-          :disabled="!modelValue.trim() && !isLoading"
-          class="send-btn"
-          :class="{ stop: isLoading }"
-        >
-          {{ isLoading ? t('ai.pause') : t('ai.send') }}
-        </BButton>
+      <div class="composer-toolbar">
+        <span v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</span>
+        <div class="input-actions">
+          <TranslationToggle
+            v-if="showTranslation"
+            :enableTranslation="enableTranslation"
+            :translationConfig="translationConfig"
+            @update:enableTranslation="$emit('update:enableTranslation', $event)"
+            @update:translationConfig="$emit('update:translationConfig', $event)"
+          />
+          <BButton
+            @click="isLoading ? stopFn() : sendFn()"
+            v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
+            :disabled="!modelValue.trim() && !isLoading"
+            class="send-btn"
+            :class="{ stop: isLoading }"
+          >
+            {{ isLoading ? t('ai.pause') : t('ai.send') }}
+          </BButton>
+        </div>
       </div>
     </div>
-    <div v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</div>
   </footer>
 </template>
 
@@ -106,7 +110,6 @@
     props.sendFn();
   };
 
-
   onMounted(() => {
     adjustTextareaHeight();
   });
@@ -132,18 +135,27 @@
 <style scoped>
   .input-section {
     background: var(--background-color);
-    border-top: 1px solid #e1e5e9;
-    padding: 0.5rem 1.25rem;
+    padding: 0.5rem 1.25rem 0.75rem;
     flex-shrink: 0;
   }
 
   .input-container {
     position: relative;
-    border: 1px solid #d1d5db;
-    border-radius: 0.75rem;
+    border: 0;
+    border-radius: 1rem;
     background-color: var(--menu-container-bg-color);
-    padding: 0.75rem 0.75rem 2rem 0.75rem;
+    padding: 0.7rem 0.75rem 0.6rem;
     min-height: 48px;
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--text-color) 8%, transparent),
+      0 8px 24px rgba(15, 23, 42, 0.06);
+    transition: box-shadow 0.2s ease;
+  }
+
+  .input-container:focus-within {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary-color) 48%, transparent),
+      0 10px 28px rgba(15, 23, 42, 0.08);
   }
 
   .text-input {
@@ -162,49 +174,36 @@
     line-height: 1.5;
   }
 
+  .text-input :deep(.b-textarea:hover),
+  .text-input :deep(.b-textarea:focus),
+  .text-input :deep(.b-textarea:active) {
+    border: 0;
+    box-shadow: none;
+  }
+
   .text-input:focus {
     box-shadow: none;
   }
 
-  .text-input::placeholder {
-    color: #9ca3af;
+  .text-input :deep(.b-textarea::placeholder) {
+    color: var(--desc-color);
+  }
+
+  .composer-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 28px;
+    margin-top: 0.25rem;
   }
 
   .input-actions {
-    height: 25px;
-    position: absolute;
-    bottom: 0.75rem;
-    right: 0.75rem;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
     gap: 0.5rem;
-    align-items: center;
-  }
-
-  .search-btn {
-    padding: 0.25rem 0.5rem;
-    border: none;
-    background: transparent;
-    color: var(--text-color);
-    cursor: pointer;
-    border-radius: 0.5rem;
-    transition: all 0.2s;
-    font-size: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-  }
-
-  .search-btn:hover {
-    background: rgba(0, 0, 0, 0.1);
-  }
-
-  .search-btn.active {
-    background: var(--primary-color);
-    color: white;
-  }
-
-  .search-btn.active:hover {
-    background: #4f46e5;
   }
 
   .send-btn {
@@ -217,7 +216,7 @@
     transition: all 0.2s;
     min-width: 50px;
     height: 28px;
-    line-height: 28px;
+    line-height: 1;
   }
 
   .send-btn:hover:not(:disabled) {
@@ -267,15 +266,18 @@
     font-weight: 600;
   }
   .input-hint {
-    text-align: center;
     font-size: 0.75rem;
-    color: #6b7280;
-    margin-top: 0.5rem;
+    color: var(--desc-color);
+    white-space: nowrap;
   }
 
   @media (max-width: 600px) {
     .input-section {
-      padding: 0.5rem 1rem;
+      padding: 0.4rem 0.75rem 0.6rem;
+    }
+
+    .composer-toolbar {
+      justify-content: flex-end;
     }
   }
 </style>

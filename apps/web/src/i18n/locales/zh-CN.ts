@@ -212,6 +212,10 @@ export default {
   resourceCenter: {
     eyebrow: 'Resource Center',
     title: '资源中心',
+    sections: {
+      resources: '全部资源',
+      inbox: '待整理',
+    },
     knowledgeGraph: '知识图谱',
     deleteConfirmUnbind: '请确认是否要删除{type}【{name}】？删除后会解除与资源的绑定。',
     deleteConfirmTrash: '请确认是否要删除{type}【{name}】？删除后会移入回收站。',
@@ -1167,6 +1171,7 @@ export default {
     homeTitle: '首页',
     newConversation: '新的对话',
     close: '关闭',
+    followUpTip: '你还可以继续问',
     aiCapabilities: '你支持哪些工具？',
     growthStatus: '我的成长等级和积分怎么样？',
     summarizeUrl: '帮我总结一个网页（粘贴链接）',

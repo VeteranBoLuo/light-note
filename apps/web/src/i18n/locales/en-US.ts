@@ -215,6 +215,10 @@ export default {
   resourceCenter: {
     eyebrow: 'Resource Center',
     title: 'Resource Center',
+    sections: {
+      resources: 'All Resources',
+      inbox: 'Inbox',
+    },
     knowledgeGraph: 'Knowledge Graph',
     deleteConfirmUnbind: 'Delete {type} "{name}"? It will be unbound from all linked resources.',
     deleteConfirmTrash: 'Delete {type} "{name}"? It will be moved to the trash.',
@@ -1184,6 +1188,7 @@ export default {
     homeTitle: 'Home',
     newConversation: 'New conversation',
     close: 'Close',
+    followUpTip: 'You can also ask',
     howToCreateTag: 'How to create a tag?',
     howToManageBookmarks: 'How to manage bookmarks?',
     howToEditNote: 'How to edit notes?',

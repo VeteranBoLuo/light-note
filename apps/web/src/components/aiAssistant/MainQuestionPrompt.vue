@@ -1,10 +1,10 @@
 <template>
-  <div class="recommendation-container">
-    <div class="recommendation-title">{{ $t('ai.tip') }}</div>
+  <div v-if="recommendationItems.length" class="recommendation-container">
+    <div class="recommendation-title">{{ round > 0 ? $t('ai.followUpTip') : $t('ai.tip') }}</div>
     <div class="recommendation-list">
       <BButton
-        v-for="(item, index) in recommendationItems"
-        :key="index"
+        v-for="item in recommendationItems"
+        :key="item"
         class="recommendation-item"
         @click="handleRecommendationClick(item)"
         v-click-log="{ module: 'AI助手', operation: `点击推荐问题【${item}】` }"
@@ -23,19 +23,44 @@
   const { t } = useI18n();
   const route = useRoute();
 
-  const emit = defineEmits(['recommendation-click']);
+  const props = withDefaults(
+    defineProps<{
+      usedQuestions?: string[];
+      round?: number;
+    }>(),
+    {
+      usedQuestions: () => [],
+      round: 0,
+    },
+  );
+
+  const emit = defineEmits<{ 'recommendation-click': [item: string] }>();
 
   const recommendationItems = computed(() => {
     const path = route.path;
-    if (path.includes('/noteLibrary/')) return [t('ai.myNotes'), t('ai.crossSearch'), t('ai.quickNote')];
-    if (path.includes('/cloudSpace')) return [t('ai.storageUsage'), t('ai.crossSearch'), t('ai.trashContent')];
-    if (path.includes('/tag/')) return [t('ai.myTags'), t('ai.crossSearch'), t('ai.recentBookmarks')];
-    if (path.includes('/workbenches')) return [t('ai.weeklyRecap'), t('ai.growthStatus'), t('ai.recentBookmarks')];
-    if (path.includes('/inbox')) return [t('ai.crossSearch'), t('ai.myTags'), t('ai.quickNote')];
-    return [t('ai.recentBookmarks'), t('ai.linkHealth'), t('ai.crossSearch')];
+    let keys = ['recentBookmarks', 'linkHealth', 'crossSearch', 'myBookmarks', 'weeklyRecap', 'summarizeUrl'];
+    if (path.includes('/noteLibrary')) {
+      keys = ['myNotes', 'crossSearch', 'quickNote', 'howToEditNote', 'weeklyRecap', 'myTags'];
+    } else if (path.includes('/cloudSpace')) {
+      keys = ['storageUsage', 'trashContent', 'crossSearch', 'cloudSpaceUsage', 'myNotes', 'myBookmarks'];
+    } else if (path.includes('/tag')) {
+      keys = ['myTags', 'crossSearch', 'recentBookmarks', 'addTag', 'bookmarkTagUsage', 'myNotes'];
+    } else if (path.includes('/workbenches')) {
+      keys = ['weeklyRecap', 'growthStatus', 'recentBookmarks', 'myNotes', 'storageUsage', 'linkHealth'];
+    } else if (path.includes('/inbox')) {
+      keys = ['crossSearch', 'myTags', 'quickNote', 'weeklyRecap', 'linkHealth', 'recentBookmarks'];
+    }
+
+    const used = new Set(props.usedQuestions.map((question) => question.trim()));
+    const available = keys.map((key) => t(`ai.${key}`)).filter((question) => !used.has(question));
+    if (!available.length) return [];
+
+    // 每轮按固定步长轮换，同时排除已经问过的问题，避免回答后原样重复同一组快捷提问。
+    const offset = (props.round * 2) % available.length;
+    return [...available.slice(offset), ...available.slice(0, offset)].slice(0, 3);
   });
 
-  function handleRecommendationClick(item) {
+  function handleRecommendationClick(item: string) {
     emit('recommendation-click', item);
   }
 </script>
@@ -69,15 +94,15 @@
   .recommendation-item {
     width: auto;
     height: auto;
-    background: var(--background-color);
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
     padding: 0.5rem 1rem;
     border-radius: 1rem;
     font-size: 0.75rem;
     color: #4b5563;
-    border: 1px solid #e2e8f0;
+    border: 0;
     cursor: pointer;
     transition: all 0.2s;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: none;
   }
 
   .recommendation-item:hover {
