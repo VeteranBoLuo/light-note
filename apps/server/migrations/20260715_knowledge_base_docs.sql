@@ -26,6 +26,9 @@ SELECT
 FROM DUAL
 WHERE NOT EXISTS (
   SELECT 1 FROM knowledge_base WHERE title = @inbox_doc_title
+)
+AND NOT EXISTS (
+  SELECT 1 FROM knowledge_base WHERE id = @inbox_doc_id
 );
 
 UPDATE knowledge_base
@@ -36,7 +39,7 @@ SET
   type = 'html',
   sort = 90,
   updated_by = NULL
-WHERE title = @inbox_doc_title;
+WHERE id = @inbox_doc_id OR title = @inbox_doc_title;
 
 SET @admin_doc_id = 'c50b6d73-f0a8-4ced-b42a-c2ddfd394abe';
 SET @admin_doc_title = '管理员只读预览与内容代管';
@@ -56,6 +59,9 @@ SELECT
 FROM DUAL
 WHERE NOT EXISTS (
   SELECT 1 FROM knowledge_base WHERE title = @admin_doc_title
+)
+AND NOT EXISTS (
+  SELECT 1 FROM knowledge_base WHERE id = @admin_doc_id
 );
 
 UPDATE knowledge_base
@@ -66,7 +72,7 @@ SET
   type = 'html',
   sort = 900,
   updated_by = NULL
-WHERE title = @admin_doc_title;
+WHERE id = @admin_doc_id OR title = @admin_doc_title;
 
 COMMIT;
 

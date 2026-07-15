@@ -16,6 +16,9 @@ SELECT
 FROM DUAL
 WHERE NOT EXISTS (
   SELECT 1 FROM knowledge_base WHERE title = @tag_icon_title
+)
+AND NOT EXISTS (
+  SELECT 1 FROM knowledge_base WHERE id = @tag_icon_id
 );
 
 UPDATE knowledge_base
@@ -25,7 +28,7 @@ SET content = @tag_icon_content,
     type = 'html',
     sort = 95,
     updated_by = NULL
-WHERE title = @tag_icon_title;
+WHERE id = @tag_icon_id OR title = @tag_icon_title;
 
 COMMIT;
 

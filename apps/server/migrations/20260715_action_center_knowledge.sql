@@ -35,6 +35,9 @@ SELECT
 FROM DUAL
 WHERE NOT EXISTS (
   SELECT 1 FROM knowledge_base WHERE title = @action_center_title
+)
+AND NOT EXISTS (
+  SELECT 1 FROM knowledge_base WHERE id = @action_center_id
 );
 
 UPDATE knowledge_base
@@ -44,7 +47,7 @@ SET content = @action_center_content,
     type = 'html',
     sort = 90,
     updated_by = NULL
-WHERE title = @action_center_title;
+WHERE id = @action_center_id OR title = @action_center_title;
 
 COMMIT;
 
