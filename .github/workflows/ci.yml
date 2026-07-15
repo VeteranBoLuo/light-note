@@ -18,6 +18,17 @@ jobs:
     name: 类型检查、测试与构建
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # CI 只使用无权限占位配置，避免测试导入模块时连接生产数据库或真实 OBS。
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_USER: ci
+      DB_PASSWORD: ci
+      DB_NAME: light_note_ci
+      OBS_AK: ci-placeholder
+      OBS_SK: ci-placeholder
+      OBS_ENDPOINT: https://obs.example.invalid
+      OBS_BUCKET_NAME: light-note-ci
     steps:
       - name: 读取仓库内容
         uses: actions/checkout@v4
