@@ -1,0 +1,48 @@
+name: 功能建议
+description: 提议能改善轻笺在线服务的产品能力
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: 感谢你的建议。描述真实场景比只给出功能名称更有助于判断优先级。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景
+      description: 你在什么情况下遇到了什么困难？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案
+      description: 你希望轻笺如何解决这个问题？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 现有替代方式
+      description: 目前你如何完成这件事？也可以附上参考产品或截图。
+  - type: dropdown
+    id: area
+    attributes:
+      label: 相关模块
+      options:
+        - 书签
+        - 笔记
+        - 云空间
+        - 标签与资源中心
+        - AI 助手
+        - 账号与登录
+        - 移动端
+        - 其他
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已搜索现有 Issue，未发现相同建议。
+          required: true
