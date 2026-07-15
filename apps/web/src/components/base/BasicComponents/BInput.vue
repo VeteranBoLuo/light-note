@@ -69,6 +69,7 @@
       rows?: number;
       maxlength?: number | string;
       clearable?: boolean;
+      submitOnEnter?: boolean;
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),
@@ -79,6 +80,7 @@
       theme: '',
       maxlength: '',
       clearable: false,
+      submitOnEnter: false,
       rows: 4,
     },
   );
@@ -110,8 +112,11 @@
   }
 
   function handleEnter(event: KeyboardEvent) {
-    if (event.isComposing || event.keyCode === 229 || (props.type === 'textarea' && event.shiftKey)) return;
-    if (props.type === 'textarea') event.preventDefault();
+    if (event.isComposing || event.keyCode === 229) return;
+    if (props.type === 'textarea') {
+      if (!props.submitOnEnter || event.shiftKey) return;
+      event.preventDefault();
+    }
     emit('enter', event);
   }
 

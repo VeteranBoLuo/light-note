@@ -167,6 +167,16 @@
   function onDocMouseDown(e: MouseEvent) {
     const t = e.target as Node;
     if (triggerRef.value?.contains(t) || panelRef.value?.contains(t)) return;
+    // BSelect 的下拉层会 Teleport 到 body。只有“触发器确实位于当前 Popover 内”的下拉层
+    // 才属于内部交互；页面上其他 BSelect 仍应关闭当前 Popover，避免旧浮层残留并遮挡新控件。
+    if (t instanceof Element) {
+      const dropdown = t.closest<HTMLElement>('.select-dropdown[data-b-select-id]');
+      const selectId = dropdown?.dataset.bSelectId;
+      const ownedByPanel = Array.from(
+        panelRef.value?.querySelectorAll<HTMLElement>('.b-select[data-b-select-id]') || [],
+      ).some((select) => select.dataset.bSelectId === selectId);
+      if (selectId && ownedByPanel) return;
+    }
     doClose();
   }
 

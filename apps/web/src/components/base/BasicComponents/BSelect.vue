@@ -1,5 +1,10 @@
 <template>
-  <div class="b-select" ref="containerRef" :class="{ 'is-multiple': isMultiple, 'is-open': isOpen }">
+  <div
+    class="b-select"
+    ref="containerRef"
+    :data-b-select-id="selectId"
+    :class="{ 'is-multiple': isMultiple, 'is-open': isOpen }"
+  >
     <div
       class="select-trigger"
       @click="toggleOpen"
@@ -46,7 +51,15 @@
     </div>
 
     <Teleport to="body">
-      <div ref="dropdownRef" class="select-dropdown" :class="{ 'has-footer': $slots['dropdown-footer'] }" v-show="isOpen" :style="dropdownStyle" @click.stop>
+      <div
+        ref="dropdownRef"
+        class="select-dropdown"
+        :data-b-select-id="selectId"
+        :class="{ 'has-footer': $slots['dropdown-footer'] }"
+        v-show="isOpen"
+        :style="dropdownStyle"
+        @click.stop
+      >
         <div v-if="showSearch && isMultiple" class="select-search-bar">
           <input
             v-model="searchText"
@@ -120,6 +133,7 @@ const containerRef = ref<HTMLElement>();
 const triggerRef = ref<HTMLElement>();
 const dropdownStyle = ref({ top: '0px', left: '0px', width: '0px' });
 const dropdownRef = ref<HTMLElement>();
+const selectId = `b-select-${Math.random().toString(36).slice(2, 10)}`;
 let placementAbove = false;
 
 // 当前选中值（标准化为数组）
@@ -292,9 +306,8 @@ function updateDropdownPosition() {
 // 点击外部关闭
 function handleClickOutside(e: MouseEvent) {
   const target = e.target as HTMLElement;
-  if (containerRef.value?.contains(target) || target.closest('.select-dropdown')) {
-    return;
-  }
+  const dropdown = target.closest<HTMLElement>('.select-dropdown[data-b-select-id]');
+  if (containerRef.value?.contains(target) || dropdown?.dataset.bSelectId === selectId) return;
   isOpen.value = false;
 }
 

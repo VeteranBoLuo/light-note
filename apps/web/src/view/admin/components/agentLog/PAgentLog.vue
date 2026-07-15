@@ -4,7 +4,7 @@
       <div>
         <span>{{ t('aiMonitor.balance.title') }}</span>
         <strong>{{ balanceDisplay }}</strong>
-        <small>{{ balanceHint }}</small>
+        <small v-if="balanceHint">{{ balanceHint }}</small>
       </div>
       <BButton size="small" :loading="balanceLoading" @click="fetchBalance(true)">
         {{ t('aiMonitor.balance.refresh') }}
@@ -101,9 +101,9 @@
   });
   const balanceHint = computed(() => {
     if (balanceError.value && !balance.value) return t('aiMonitor.balance.failed');
-    if (!balance.value) return t('aiMonitor.balance.hint');
+    if (!balance.value) return '';
     if (!balance.value.isAvailable) return t('aiMonitor.balance.disabled');
-    return balance.value.stale ? t('aiMonitor.balance.cached') : t('aiMonitor.balance.available');
+    return balance.value.stale ? t('aiMonitor.balance.cached') : '';
   });
 
   function handleSearch() {

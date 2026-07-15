@@ -13,6 +13,18 @@ export function normalizeBookmarkUrl(value) {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
+export function shouldResetBookmarkIcon(existingUrl, nextUrl) {
+  const existing = normalizeBookmarkUrl(existingUrl);
+  const next = normalizeBookmarkUrl(nextUrl);
+  try {
+    // favicon 通常跟站点主机绑定。同域名仅路径、参数或 http/https 变化时继续复用，
+    // 域名（含端口）变化才立即判定旧图标失效。
+    return new URL(existing).host.toLowerCase() !== new URL(next).host.toLowerCase();
+  } catch {
+    return existing !== next;
+  }
+}
+
 function cleanBookmarkFields(bookmark, { userId, url, name, description }) {
   const fields = { name, url, description, userId };
   if (bookmark?.iconUrl !== undefined) fields.iconUrl = bookmark.iconUrl;

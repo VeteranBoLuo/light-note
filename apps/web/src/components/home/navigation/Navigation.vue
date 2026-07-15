@@ -24,7 +24,7 @@
           @click="foldClick"
         />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
-          <img src="/favicon.svg" :title="$t('navigation.title')" width="25" height="25" alt="" />
+          <img src="/favicon.svg?v=7" :title="$t('navigation.title')" width="25" height="25" alt="" />
           <span style="font-size: 18px" v-if="!bookmark.isMobile">{{ $t('navigation.title') }}</span>
         </div>
       </div>

@@ -6,22 +6,24 @@
     v-model:open="open"
     @openChange="onOpenChange"
   >
-    <div class="nt-bell dom-hover" :title="t('notification.title')">
-      <svg
-        viewBox="0 0 24 24"
-        width="24"
-        height="24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-      </svg>
-      <span v-if="unreadTotal > 0" class="nt-badge">{{ unreadTotal > 99 ? '99+' : unreadTotal }}</span>
-    </div>
+    <BTooltip :title="t('notification.title')">
+      <div class="nt-bell dom-hover">
+        <svg
+          viewBox="0 0 24 24"
+          width="24"
+          height="24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        <span v-if="unreadTotal > 0" class="nt-badge">{{ unreadTotal > 99 ? '99+' : unreadTotal }}</span>
+      </div>
+    </BTooltip>
 
     <template #content>
       <div class="nt-panel">
@@ -96,10 +98,17 @@
   <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
 
   <!-- 无跳转链接的通知:点击弹框看完整标题 + 正文(列表里被截两行) -->
-  <BModal v-model:visible="detailVisible" :title="detailItem ? renderTitle(detailItem) : ''" :show-footer="false" width="440px">
+  <BModal
+    v-model:visible="detailVisible"
+    :title="detailItem ? renderTitle(detailItem) : ''"
+    :show-footer="false"
+    width="440px"
+  >
     <div class="nt-detail">
       <div v-if="detailItem" class="nt-detail-time">{{ fmtTime(detailItem.createTime) }}</div>
-      <div v-if="detailItem && renderContent(detailItem)" class="nt-detail-content">{{ renderContent(detailItem) }}</div>
+      <div v-if="detailItem && renderContent(detailItem)" class="nt-detail-content">{{
+        renderContent(detailItem)
+      }}</div>
       <div v-else class="nt-detail-empty">{{ t('notification.noContent') }}</div>
     </div>
   </BModal>
@@ -111,6 +120,7 @@
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -292,12 +302,20 @@
     justify-content: center;
     color: var(--text-color);
     cursor: pointer;
-    padding: 0 3px;
+    padding: 6px;
+    border-radius: 8px;
+    box-sizing: border-box;
+    transition: background-color 0.2s;
+  }
+  @media (min-width: 600px) {
+    .nt-bell:hover {
+      background-color: var(--menu-item-h-bg-color);
+    }
   }
   .nt-badge {
     position: absolute;
-    top: -4px;
-    right: -3px;
+    top: -1px;
+    right: -1px;
     min-width: 16px;
     height: 16px;
     padding: 0 4px;

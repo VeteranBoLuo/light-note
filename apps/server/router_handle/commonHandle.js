@@ -626,10 +626,17 @@ export const analyzeImgUrl = async (req, res) => {
     const results = await Promise.all(
       ownedBookmarks.map(async (bookmark) => {
         // 抓不到 → 空 iconUrl,前端用内置地球图标(icon.nullImg)兜底;不再指向线上并不存在的 /uploads/default-icon.png(避免 404)
-        const fallback = { id: bookmark.id, iconUrl: '' };
+        const checkedAt = new Date().toISOString();
+        const markChecked = async () => {
+          await connection.query('UPDATE bookmark SET icon_checked_at=NOW() WHERE id=? AND user_id=?', [
+            bookmark.id,
+            req.user.id,
+          ]);
+          return { id: bookmark.id, iconUrl: '', iconCheckedAt: checkedAt };
+        };
         // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
         const fetched = await fetchIconFromFavimg(bookmark.url);
-        if (!fetched) return fallback;
+        if (!fetched) return markChecked();
         try {
           let fileExtension = 'png';
           const mimeType = Object.entries(imageMimeTypes).find(([key]) => fetched.contentType?.includes(key))?.[1];
@@ -637,25 +644,32 @@ export const analyzeImgUrl = async (req, res) => {
 
           const fileName = `bookmark-${bookmark.id}.${fileExtension}`;
           const uploadDir = '/www/wwwroot/images';
+          const finalPath = path.join(uploadDir, fileName);
+          const tempPath = path.join(uploadDir, `.bookmark-${bookmark.id}-${Date.now()}.tmp`);
           await fsP.mkdir(uploadDir, { recursive: true });
-          // 先清掉该书签所有旧扩展名的图标,避免换扩展名后旧文件残留成孤儿
-          await Promise.all(
-            ['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp'].map((e) =>
-              fsP.unlink(path.join(uploadDir, `bookmark-${bookmark.id}.${e}`)).catch(() => {}),
-            ),
-          );
-          await fsP.writeFile(path.join(uploadDir, fileName), fetched.buffer);
-          const imageUrl = `https://${req.get('host')}/uploads/${fileName}`;
-          await connection.query('UPDATE bookmark SET icon_url=? WHERE id=? AND user_id=?', [
+          // 先写临时文件，再原子替换目标文件。写入失败时旧图标仍在，不能为了刷新把可用图标删掉。
+          await fsP.writeFile(tempPath, fetched.buffer);
+          await fsP.rename(tempPath, finalPath);
+          // query 版本号用于主动绕过浏览器缓存；文件名不变时也能立刻看到网站的新 favicon。
+          const imageUrl = `https://${req.get('host')}/uploads/${fileName}?v=${Date.now()}`;
+          await connection.query('UPDATE bookmark SET icon_url=?, icon_checked_at=NOW() WHERE id=? AND user_id=?', [
             imageUrl,
             bookmark.id,
             req.user.id,
           ]);
+          // 数据库已经指向新文件后，再清理其他扩展名的历史文件。
+          await Promise.all(
+            ['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp']
+              .filter((extension) => extension !== fileExtension)
+              .map((extension) =>
+                fsP.unlink(path.join(uploadDir, `bookmark-${bookmark.id}.${extension}`)).catch(() => {}),
+              ),
+          );
           // 返回 {id, iconUrl},供前端把新图标回填到当前列表项(不必刷新页面)
-          return { id: bookmark.id, iconUrl: imageUrl };
+          return { id: bookmark.id, iconUrl: imageUrl, iconCheckedAt: checkedAt };
         } catch (err) {
           console.error('图标落盘失败:', err.message);
-          return fallback;
+          return markChecked();
         }
       }),
     );

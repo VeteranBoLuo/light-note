@@ -24,7 +24,7 @@ import {
 } from '../util/linkHealth.js';
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
-import { createBookmark, normalizeBookmarkUrl } from '../util/services/bookmarkService.js';
+import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
 import { createTag as createTagService } from '../util/services/tagService.js';
 
 // 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
@@ -242,8 +242,7 @@ export const addTag = async (req, res) => {
           userId,
         });
       }
-      // 游客维护工作区当前不开放云空间；即使前端携带 fileList，也不得改动文件标签关系。
-      if (!req.isVisitorWorkspace && fileList && fileList.length > 0) {
+      if (fileList && fileList.length > 0) {
         const resourceIds = await validateUserResources(connection, {
           resourceIds: fileList,
           resourceType: RESOURCE_TYPE.FILE,
@@ -364,8 +363,7 @@ export const updateTag = async (req, res) => {
         userId,
       });
     }
-    // 游客维护工作区只维护书签、笔记和标签本身，保留既有文件关联不动。
-    if (!req.isVisitorWorkspace && fileList !== undefined) {
+    if (fileList !== undefined) {
       const resourceIds = await validateUserResources(connection, {
         resourceIds: fileList || [],
         resourceType: RESOURCE_TYPE.FILE,
@@ -669,7 +667,7 @@ export const updateBookmark = async (req, res) => {
       throw new Error('书签已存在');
     }
     // 归属校验：确认书签属于当前用户，避免越权改动及破坏关系表
-    const [own] = await connection.query('SELECT id FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
+    const [own] = await connection.query('SELECT id, url, icon_url FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
       id,
       userId,
     ]);
@@ -681,7 +679,15 @@ export const updateBookmark = async (req, res) => {
     if (req.body.url) {
       req.body.url = normalizeBookmarkUrl(req.body.url);
     }
-    req.body.iconUrl = null;
+    // 仅网址真正变化时清理旧 favicon。名称、描述、标签等普通编辑必须保留已经落库的图标，
+    // 否则每次保存都会先显示默认地球，再等待异步抓图，造成明显闪烁和无意义的网络/写入。
+    if (req.body.url && shouldResetBookmarkIcon(own[0].url, req.body.url)) {
+      req.body.iconUrl = null;
+      req.body.iconCheckedAt = null;
+    } else {
+      delete req.body.iconUrl;
+      delete req.body.iconCheckedAt;
+    }
     const sql = `update bookmark set ? where id=?`;
     const [updateResult] = await connection.query(sql, [
       mergeExistingProperties(snakeCaseKeys(req.body), [], ['related_tags', 'related_tags']),

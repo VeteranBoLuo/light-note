@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">
+  <title>轻笺</title>
+  <g fill="#000" transform="translate(128 128) scale(1.1153846154) translate(-128 -128)">
+    <path d="M132 24h48c28.72 0 52 23.28 52 52v48h-48l-52-52V24z"/>
+    <path d="M132 24h48c28.72 0 52 23.28 52 52v48h-48l-52-52V24z" transform="rotate(90 128 128)"/>
+    <path d="M132 24h48c28.72 0 52 23.28 52 52v48h-48l-52-52V24z" transform="rotate(180 128 128)"/>
+    <path d="M132 24h48c28.72 0 52 23.28 52 52v48h-48l-52-52V24z" transform="rotate(270 128 128)"/>
+  </g>
+</svg>

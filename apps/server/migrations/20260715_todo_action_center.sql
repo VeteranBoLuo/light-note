@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS todo_items (
   KEY idx_todo_due (user_id, due_at, status, del_flag),
   KEY idx_todo_update (user_id, update_time),
   CONSTRAINT fk_todo_items_user FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='行动中心待办事项';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='待处理中的待办事项';
 
 CREATE TABLE IF NOT EXISTS todo_reminders (
   id char(36) NOT NULL,
@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS todo_reminders (
   user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   channel varchar(16) NOT NULL DEFAULT 'in_app',
   scheduled_at datetime NOT NULL,
+  schedule_start_at datetime DEFAULT NULL COMMENT '提醒计划首次执行时间',
+  repeat_interval_minutes int DEFAULT NULL COMMENT '周期提醒间隔分钟数，NULL 表示单次',
+  repeat_end_at datetime DEFAULT NULL COMMENT '周期提醒结束时间',
+  target_email varchar(254) DEFAULT NULL COMMENT '邮件提醒收件地址',
   status varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/sent/failed/cancelled',
   retry_count int NOT NULL DEFAULT 0,
   last_error varchar(500) DEFAULT NULL,

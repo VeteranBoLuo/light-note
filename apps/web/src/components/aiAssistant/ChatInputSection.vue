@@ -14,6 +14,7 @@
       <BInput
         :value="modelValue"
         type="textarea"
+        submit-on-enter
         @input="onInput"
         @enter="handleSend"
         :placeholder="t('ai.inputPlaceholder')"

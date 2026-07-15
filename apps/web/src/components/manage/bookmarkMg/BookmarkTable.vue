@@ -15,12 +15,17 @@
               $t('bookmarkMg.batchDelete')
             }}</b-button>
             <b-button type="success" @click="showImportExportModal">
+              <svg-icon :src="icon.bookmarkManage.importExport" color="currentColor" size="18" style="margin-right: 6px" />
               {{ $t('bookmarkMg.importExport') }}
             </b-button>
             <b-button @click="healthVisible = true">
+              <svg-icon :src="icon.bookmarkManage.healthCheck" color="currentColor" size="18" style="margin-right: 6px" />
               {{ $t('bookmarkMg.healthCheck') }}
             </b-button>
-            <b-button @click="aiOrgVisible = true">🤖 {{ $t('bookmarkMg.aiOrganizeBtn') }}</b-button>
+            <b-button @click="aiOrgVisible = true">
+              <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
+              {{ $t('bookmarkMg.aiOrganizeBtn') }}
+            </b-button>
             <b-button type="primary" @click="router.push({ path: `/manage/editBookmark/add` })">
               {{ $t('common.add') }}
             </b-button>

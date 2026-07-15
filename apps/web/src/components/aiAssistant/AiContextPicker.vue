@@ -9,7 +9,7 @@
       <BButton size="small" :disabled="modelValue.length >= 5">@ {{ t('ai.addContext') }}</BButton>
       <template #content>
         <div class="ai-context-panel">
-          <BInput v-model:value="keyword" :placeholder="t('ai.searchContext')" clearable @enter="search" />
+          <BInput v-model:value="keyword" :placeholder="t('ai.searchContext')" clearable @enter="searchNow" />
           <div class="ai-context-results">
             <BButton v-if="currentPageContext && !selected(currentPageContext)" @click="add(currentPageContext)">
               <span>{{ t('ai.currentPage') }}</span
@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
@@ -57,6 +57,8 @@
   const keyword = ref('');
   const results = ref<AiResourceContext[]>([]);
   const loading = ref(false);
+  let debounceTimer: number | null = null;
+  let searchRequestId = 0;
 
   const currentPageContext = computed<AiResourceContext | null>(() => {
     const id = String(route.params.id || '');
@@ -72,19 +74,37 @@
     props.modelValue.some((value) => value.type === item.type && value.id === item.id);
 
   watch(open, (value) => {
-    if (value) search();
+    if (value) searchNow();
+    else clearDebounce();
+  });
+  watch(keyword, () => {
+    if (!open.value) return;
+    clearDebounce();
+    debounceTimer = window.setTimeout(searchNow, 320);
   });
 
-  async function search() {
+  function clearDebounce() {
+    if (debounceTimer !== null) {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+  }
+
+  async function searchNow() {
+    clearDebounce();
+    const requestId = ++searchRequestId;
     loading.value = true;
     try {
       const data = await fetchGlobalSearch(keyword.value, 5, true);
+      if (requestId !== searchRequestId) return;
       results.value = (data.items || [])
         .filter((item: SearchResultItem) => ['bookmark', 'note', 'file', 'tag'].includes(item.type))
         .slice(0, 12)
         .map((item) => ({ type: item.type, id: String(item.id), title: item.title }));
+    } catch {
+      if (requestId === searchRequestId) results.value = [];
     } finally {
-      loading.value = false;
+      if (requestId === searchRequestId) loading.value = false;
     }
   }
   function add(item: AiResourceContext) {
@@ -98,6 +118,10 @@
       props.modelValue.filter((value) => value.type !== item.type || value.id !== item.id),
     );
   }
+  onBeforeUnmount(() => {
+    clearDebounce();
+    searchRequestId += 1;
+  });
 </script>
 
 <style scoped lang="less">
@@ -108,6 +132,7 @@
     flex-wrap: wrap;
     width: 100%;
     min-width: 0;
+    margin-bottom: 10px;
   }
   .ai-context-chips {
     display: flex;

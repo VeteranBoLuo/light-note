@@ -9,21 +9,13 @@
       {{ $t('inbox.quickCapture') }}
       <span v-if="inbox.actionTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
     </BButton>
-    <BTooltip :title="$t('home.toolbox')" always>
-      <div v-if="!bookmark.isMobile" @click="toolkitClick" v-click-log="OPERATION_LOG_MAP.navigation.toolkit" class="toolkit-link">
-        <svg-icon size="26" hover :src="icon.toolkit" />
-      </div>
+    <BTooltip v-if="!bookmark.isMobile" :title="$t('navigation.moreEntries')">
+      <b-dropdown align="center" trigger="click" :menu-options="moreMenuOptions">
+        <div class="more-menu-trigger">
+          <svg-icon size="26" hover :src="icon.navigation.portal" />
+        </div>
+      </b-dropdown>
     </BTooltip>
-    <b-dropdown
-      v-if="!bookmark.isMobile"
-      align="center"
-      :menu-options="[
-        { label: $t('navigation.projectAddress'), function: () => githubClick() },
-        { label: $t('home.officialSite'), function: () => router.push('/landing') },
-      ]"
-    >
-      <svg-icon size="26" hover :src="icon.github" @click="githubClick" />
-    </b-dropdown>
     <BButton v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
     </BButton>
@@ -43,6 +35,7 @@
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import PersonCenter from '@/view/personCenter/PersonCenter.vue';
   import NotificationBell from '@/components/notification/NotificationBell.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -64,18 +57,27 @@
   const user = useUserStore();
   const route = useRoute();
   const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
-  const showGuestRegister = computed(
-    () => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor',
-  );
+  const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
   const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
+  const moreMenuOptions = computed(() => [
+    { label: t('home.officialSite'), icon: icon.userCenter.home, function: officialSiteClick },
+    { label: t('home.toolbox'), icon: icon.toolkit, function: toolkitClick },
+    { label: t('navigation.projectAddress'), icon: icon.github, function: githubClick },
+  ]);
 
   function githubClick() {
-    window.open('https://github.com/VeteranBoLuo/light-note');
-    recordOperation({ module: '导航栏', operation: `点击书签卡片Github` });
+    window.open('https://github.com/VeteranBoLuo/light-note', '_blank', 'noopener,noreferrer');
+    recordOperation({ module: '导航栏', operation: '访问项目 GitHub' });
   }
 
   function toolkitClick() {
-    window.open('https://boluo66.top/toolkit/');
+    window.open('https://boluo66.top/toolkit/', '_blank', 'noopener,noreferrer');
+    recordOperation(OPERATION_LOG_MAP.navigation.toolkit);
+  }
+
+  function officialSiteClick() {
+    router.push('/landing');
+    recordOperation({ module: '导航栏', operation: '访问官方首页' });
   }
 
   // 游客点导航栏「免费注册」:打开注册弹窗(openAuthModal 内部记 signup_open,source=nav)
@@ -141,8 +143,10 @@
     cursor: pointer;
     flex: 0 0 auto;
   }
-  .toolkit-link {
-    text-decoration: none;
+  .more-menu-trigger {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
   }
   .quick-capture-btn {
     flex: 0 0 auto;

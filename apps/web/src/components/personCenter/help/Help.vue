@@ -69,8 +69,10 @@
           <span class="search-back-icon">←</span>
           <span class="search-back-text">{{ t('help.backToResults') }}</span>
         </div>
-        <div v-if="selectedFromSearch" class="search-content-scroll" v-html="renderedContent"></div>
-        <div v-else v-html="renderedContent"></div>
+        <div v-if="selectedFromSearch" class="search-content-scroll">
+          <div class="help-article-content" v-html="renderedContent"></div>
+        </div>
+        <div v-else class="help-article-content" v-html="renderedContent"></div>
       </div>
       <div v-if="!isSearching && helpOutline.length" :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']">
         <div class="help-outline-title">{{ t('help.outline') }}</div>
@@ -118,7 +120,7 @@
 <ul>
   <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述；支持 Excel / HTML 格式导入导出，批量编辑标签</li>
   <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
-  <li><strong>快速收集与待整理</strong>：登录后可从导航栏快速记录网址、文本或文件，再到资源中心的“待整理”视图统一处理</li>
+  <li><strong>快速添加与待处理</strong>：登录后可从导航栏添加网址、文本、文件或待办，再到“待处理”统一整理资源、完成任务</li>
   <li><strong>笔记库</strong>：支持 HTML 富文本 / Markdown 双模式编辑器；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；可导出为 PDF / HTML / Markdown</li>
   <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
   <li><strong>资源中心</strong>：一键检索书签、笔记、文件和标签，并在“全部资源”和“待整理”之间切换；按 <code>/</code> 键可快速唤起搜索</li>
@@ -139,7 +141,7 @@
 
 <h3>📂 快速上手</h3>
 <ol>
-  <li>登录后点击导航栏的<b>快速收集</b>，随手保存网址、文本或文件；稍后到<b>资源中心 → 待整理</b>统一处理</li>
+  <li>登录后点击导航栏的<b>快速添加</b>，随手保存网址、文本、文件或创建待办；稍后到<b>资源中心 → 待处理</b>统一处理</li>
   <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
   <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
   <li>打开<b>笔记库</b>新建笔记（支持 HTML 或 Markdown），用标签关联相关知识</li>
@@ -165,7 +167,7 @@
 <ul>
   <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats; batch tag editing</li>
   <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
-  <li><strong>Quick Capture & Inbox</strong>: Signed-in users can capture URLs, text, or files from the navigation bar, then process them in the Resource Center's Inbox view</li>
+  <li><strong>Quick Add & Pending</strong>: Signed-in users can add URLs, text, files, or todos from the navigation bar, then organize resources and finish tasks under Pending</li>
   <li><strong>Note Library</strong>: Dual-mode editor supporting HTML rich text and Markdown; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
   <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
   <li><strong>Resource Center</strong>: Find bookmarks, notes, files, and tags in one place, and switch between All Resources and Inbox; press <code>/</code> to quickly activate search</li>
@@ -186,7 +188,7 @@
 
 <h3>📂 Quick Start</h3>
 <ol>
-  <li>After signing in, use <b>Quick Capture</b> to save a URL, text, or file, then process it under <b>Resource Center → Inbox</b></li>
+  <li>After signing in, use <b>Quick Add</b> to save a URL, text, file, or todo, then process it under <b>Resource Center → Pending</b></li>
   <li>On the <b>Bookmarks</b> page, click tags to filter your saved web pages</li>
   <li>Go to <b>Bookmark Management</b> to add, edit, or batch-operate bookmarks</li>
   <li>Open the <b>Note Library</b> to create notes and link them with tags</li>
@@ -450,20 +452,28 @@
   .help-body {
     position: relative;
     display: flex;
-    gap: 20px;
+    gap: 0;
     height: 100%;
     min-height: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-border-color));
+    border-radius: 12px;
+    background: var(--menu-body-bg-color);
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--resource-bookmark-color) 6%, transparent);
   }
   .help-sidebar {
-    width: 200px;
-    min-width: 200px;
-    max-width: 200px;
-    flex: 0 0 200px;
+    width: 220px;
+    min-width: 220px;
+    max-width: 220px;
+    flex: 0 0 220px;
     display: flex;
     flex-direction: column;
     gap: 12px;
     min-height: 0;
+    padding: 16px;
     box-sizing: border-box;
+    border-right: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 36%, transparent);
   }
   .help-search-input {
     width: 100% !important;
@@ -508,28 +518,84 @@
     border: 1px solid #ccc;
   }
   .help-editor {
+    position: relative;
     height: 100%;
-    border: 1px solid var(--card-border-color);
-    border-radius: 8px;
-    padding: 20px;
+    border: 0;
+    border-radius: 0;
+    padding: clamp(24px, 3vw, 40px);
     overflow: auto;
     box-sizing: border-box;
     line-height: 2rem;
     flex: 1 1 auto;
     min-width: 0;
+    background: var(--menu-body-bg-color);
+    box-shadow: none;
+  }
+  .help-article-content {
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
+    color: var(--text-color);
+  }
+  .help-article-content > :first-child {
+    margin-top: 0;
+  }
+  .help-article-content > :last-child {
+    margin-bottom: 0;
+  }
+  .help-article-content h1,
+  .help-article-content h2,
+  .help-article-content h3,
+  .help-article-content h4,
+  .help-article-content h5,
+  .help-article-content h6 {
+    color: var(--text-color);
+    line-height: 1.4;
+    scroll-margin-top: 24px;
+  }
+  .help-article-content h1,
+  .help-article-content h2 {
+    margin: 36px 0 18px;
+    letter-spacing: -0.015em;
+  }
+  .help-article-content > h1:first-child,
+  .help-article-content > h2:first-child {
+    margin-top: 0;
+    margin-bottom: 24px;
+  }
+  .help-article-content h3,
+  .help-article-content h4,
+  .help-article-content h5,
+  .help-article-content h6 {
+    margin: 32px 0 12px;
+  }
+  .help-article-content p {
+    margin: 0 0 16px;
+    line-height: 1.9;
+  }
+  .help-article-content ul,
+  .help-article-content ol {
+    margin: 12px 0 20px;
+    padding-left: 1.75em;
+  }
+  .help-article-content li {
+    margin: 6px 0;
+    line-height: 1.85;
   }
   .help-editor--with-outline {
-    flex-basis: calc(100% - 420px);
+    flex-basis: calc(100% - 410px);
   }
   .help-outline {
-    width: 180px;
-    min-width: 180px;
-    max-width: 180px;
+    width: 190px;
+    min-width: 190px;
+    max-width: 190px;
     height: 100%;
-    padding: 12px 0;
+    padding: 16px 8px;
     box-sizing: border-box;
-    overflow: auto;
-    border-left: 1px solid var(--card-border-color);
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-left: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 24%, transparent);
   }
   .help-outline-title {
     padding: 0 10px 8px;
@@ -537,9 +603,14 @@
     font-size: 12px;
     font-weight: 700;
   }
-  .help-outline-item {
+  .help-outline .help-outline-item.b_btn,
+  .phone-help-outline .help-outline-item.b_btn {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: auto;
     min-height: 30px;
+    line-height: 20px;
     border: 0;
     background: transparent;
     color: var(--catalog-color);
@@ -553,13 +624,23 @@
     font: inherit;
     font-size: 13px;
     border-radius: 6px;
+    justify-content: flex-start;
+    overflow: hidden;
   }
-  .help-outline-item:hover {
+  .help-outline .help-outline-item.b_btn:hover,
+  .phone-help-outline .help-outline-item.b_btn:hover {
     background: var(--bl-input-noBorder-bg-color);
   }
-  .help-outline-item.active {
+  .help-outline .help-outline-item.b_btn.active,
+  .phone-help-outline .help-outline-item.b_btn.active {
     color: var(--resource-bookmark-color);
     font-weight: 700;
+  }
+  .help-outline-item .text-hidden {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
   }
   .help-outline-marker {
     width: 3px;
@@ -579,7 +660,8 @@
     width: min(240px, calc(100vw - 32px));
     max-height: 42vh;
     padding: 10px 0;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     border-radius: 8px;
     border: 1px solid var(--card-border-color);
     background: var(--menu-container-bg-color);
@@ -592,15 +674,39 @@
     padding-right: 12px;
   }
   @media (max-width: 768px) {
+    .help-container {
+      padding: 12px;
+    }
     .help-body {
       flex-direction: column;
       gap: 12px;
+      overflow: visible;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .help-sidebar {
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      flex: 0 0 auto;
+      padding: 0;
+      border-right: 0;
+      background: transparent;
     }
     .help-editor {
       width: 100%;
       height: auto;
       min-height: 0;
       flex: 1 1 auto;
+      padding: 22px 18px;
+      border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-border-color));
+      border-radius: 10px;
+      background: var(--menu-body-bg-color);
+    }
+    .help-editor--search-active {
+      padding: 0;
     }
   }
 
@@ -717,7 +823,7 @@
   .search-content-scroll {
     flex: 1;
     overflow: auto;
-    padding: 20px;
+    padding: clamp(24px, 3vw, 40px);
   }
 
   /* ===== 搜索框清除按钮 ===== */

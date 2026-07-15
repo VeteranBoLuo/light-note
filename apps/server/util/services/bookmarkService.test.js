@@ -24,7 +24,19 @@ vi.mock('../snapshot.js', () => ({ archiveBookmark: vi.fn() }));
 vi.mock('../fetchWebMeta.js', () => ({ fetchWebMeta: vi.fn() }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects: vi.fn() }));
 
-const { createBookmark } = await import('./bookmarkService.js');
+const { createBookmark, shouldResetBookmarkIcon } = await import('./bookmarkService.js');
+
+describe('bookmarkService.shouldResetBookmarkIcon', () => {
+  it('网址未变化时保留已有图标', () => {
+    expect(shouldResetBookmarkIcon('https://example.com', 'https://example.com')).toBe(false);
+    expect(shouldResetBookmarkIcon('example.com', 'https://example.com')).toBe(false);
+    expect(shouldResetBookmarkIcon('https://example.com/old', 'https://example.com/new?from=edit')).toBe(false);
+  });
+
+  it('网址真正变化时清理旧图标', () => {
+    expect(shouldResetBookmarkIcon('https://example.com', 'https://another.example.com')).toBe(true);
+  });
+});
 
 describe('bookmarkService.createBookmark', () => {
   beforeEach(() => {

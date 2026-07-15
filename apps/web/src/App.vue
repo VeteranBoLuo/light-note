@@ -56,6 +56,15 @@
   const NOTICE_KEY = 'pending-notice';
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
+  const scaleExcludedRouter = new Set([
+    'updateLogs',
+    'githubCallBack',
+    'not-found',
+    'not-role',
+    'landing',
+    'banned',
+    'quickSave',
+  ]);
 
   // 监听主题变化
   watch(
@@ -65,11 +74,11 @@
     },
   );
 
-  // 缩放只作用于登录后的应用内页面;landing/帮助/更新日志等入口页(skipRouter)一律不缩放,
-  // 避免营销页/预渲染页的固定排版被 zoom 拉变形。
+  // 缩放只排除营销页、独立入口页等固定排版页面。
+  // 路由鉴权放行由 skipRouter 单独负责，避免公开访问规则误伤帮助中心等应用内页面的界面缩放。
   function applyScaleForRoute(routeName?: string) {
     const name = String(routeName ?? router.currentRoute.value.name ?? '');
-    if (skipRouter.includes(name)) {
+    if (scaleExcludedRouter.has(name)) {
       document.documentElement.style.zoom = '';
     } else {
       applyDisplaySettings();
@@ -627,7 +636,7 @@
     next();
   });
 
-  // 每次路由切换后按目标页决定是否缩放:入口页(skipRouter)清零、应用内页按 uiScale
+  // 每次路由切换后按目标页决定是否缩放：固定排版入口页清零，帮助中心等应用内页面按 uiScale。
   router.afterEach((to) => {
     applyScaleForRoute(<string>to.name);
   });

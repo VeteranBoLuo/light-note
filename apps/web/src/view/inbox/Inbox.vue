@@ -6,11 +6,15 @@
         <h1>{{ t('inbox.title') }}</h1>
         <p>{{ t('inbox.subtitle') }}</p>
       </div>
-      <BButton type="primary" @click="openTodoEditor()">{{ t('inbox.createTodo') }}</BButton>
     </header>
 
     <section class="inbox-toolbar">
-      <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" @change="changeFilter" />
+      <BTabs
+        v-model:active-tab="inbox.filterType"
+        :options="filterOptions"
+        variant="pill"
+        @change="changeFilter"
+      />
       <div class="inbox-toolbar__right" :class="{ 'has-status': inbox.filterType === 'todo' }">
         <BInput v-model:value="inbox.keyword" :placeholder="t('inbox.searchPlaceholder')" clearable @enter="search" />
         <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
@@ -76,7 +80,7 @@
             <div class="inbox-empty__icon">{{ isInboxGloballyEmpty ? '✓' : '0' }}</div>
             <h2>{{ emptyStateTitle }}</h2>
             <p>{{ emptyStateDesc }}</p>
-            <BButton type="primary" @click="openCapture">{{ emptyStateAction }}</BButton>
+            <BButton type="primary" @click="handleEmptyStateAction">{{ emptyStateAction }}</BButton>
           </div>
           <div v-else class="inbox-list">
             <template v-for="action in actionItems" :key="action.key">
@@ -162,11 +166,22 @@
     () => selectedItems.value.length > 0 && selectedItems.value.length < inbox.items.length,
   );
   const hasPendingOperation = computed(() =>
-    Boolean(completingKey.value || deletingKey.value || batchCompleting.value || batchDeleting.value || updatingTodoId.value || deletingTodoId.value),
+    Boolean(
+      completingKey.value ||
+      deletingKey.value ||
+      batchCompleting.value ||
+      batchDeleting.value ||
+      updatingTodoId.value ||
+      deletingTodoId.value,
+    ),
   );
   const pageLoading = computed(() => inbox.loading || todo.loading);
   const pageLoadFailed = computed(() =>
-    inbox.filterType === 'todo' ? todo.loadFailed : inbox.filterType === 'all' ? inbox.loadFailed || todo.loadFailed : inbox.loadFailed,
+    inbox.filterType === 'todo'
+      ? todo.loadFailed
+      : inbox.filterType === 'all'
+        ? inbox.loadFailed || todo.loadFailed
+        : inbox.loadFailed,
   );
   const isInboxGloballyEmpty = computed(() => inbox.actionTotal === 0);
   const currentTypeLabel = computed(() =>
@@ -196,11 +211,11 @@
   });
 
   const filterOptions = computed(() => [
-    { key: 'all', label: `${t('inbox.all')} ${inbox.actionTotal}` },
-    { key: 'bookmark', label: `${t('inbox.bookmark')} ${inbox.typeTotals.bookmark}` },
-    { key: 'note', label: `${t('inbox.note')} ${inbox.typeTotals.note}` },
-    { key: 'file', label: `${t('inbox.file')} ${inbox.typeTotals.file}` },
-    { key: 'todo', label: `${t('inbox.todo')} ${todo.pendingTotal}` },
+    { key: 'all', label: t('inbox.all'), badge: inbox.actionTotal },
+    { key: 'bookmark', label: t('inbox.bookmark'), badge: inbox.typeTotals.bookmark },
+    { key: 'note', label: t('inbox.note'), badge: inbox.typeTotals.note },
+    { key: 'file', label: t('inbox.file'), badge: inbox.typeTotals.file },
+    { key: 'todo', label: t('inbox.todo'), badge: todo.pendingTotal },
   ]);
   const sortOptions = computed(() =>
     inbox.filterType === 'todo'
@@ -223,10 +238,16 @@
     if (inbox.filterType === 'todo') {
       return todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
     }
-    const resources = inbox.items.map((item) => ({ actionType: 'resource' as const, key: inbox.resourceKey(item), item }));
+    const resources = inbox.items.map((item) => ({
+      actionType: 'resource' as const,
+      key: inbox.resourceKey(item),
+      item,
+    }));
     if (inbox.filterType !== 'all') return resources;
     const todos = todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
-    return [...resources, ...todos].sort((left, right) => actionRank(left) - actionRank(right) || actionTime(right) - actionTime(left));
+    return [...resources, ...todos].sort(
+      (left, right) => actionRank(left) - actionRank(right) || actionTime(right) - actionTime(left),
+    );
   });
 
   watch(
@@ -269,8 +290,12 @@
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.openQuickCapture(inbox.filterType === 'all' ? 'note' : inbox.filterType);
   }
+  function handleEmptyStateAction() {
+    if (inbox.filterType === 'todo') openTodoEditor();
+    else openCapture();
+  }
   async function changeFilter() {
-    inbox.sort = inbox.filterType === 'todo' ? 'smart' as any : 'newest';
+    inbox.sort = inbox.filterType === 'todo' ? ('smart' as any) : 'newest';
     router.replace({ query: { ...route.query, tab: inbox.filterType === 'all' ? undefined : inbox.filterType } });
     await refreshList(true);
   }
@@ -280,11 +305,14 @@
   async function refreshList(resetScroll = false) {
     todo.keyword = inbox.keyword;
     if (inbox.filterType === 'todo') todo.sort = inbox.sort as TodoSort;
-    const refreshed = inbox.filterType === 'todo'
-      ? await todo.refreshList()
-      : inbox.filterType === 'all'
-        ? (await Promise.all([inbox.refreshList(), todo.refreshList({ status: 'pending', keyword: inbox.keyword })])).every(Boolean)
-        : await inbox.refreshList();
+    const refreshed =
+      inbox.filterType === 'todo'
+        ? await todo.refreshList()
+        : inbox.filterType === 'all'
+          ? (
+              await Promise.all([inbox.refreshList(), todo.refreshList({ status: 'pending', keyword: inbox.keyword })])
+            ).every(Boolean)
+          : await inbox.refreshList();
     await inbox.refreshCount();
     todo.pendingTotal = inbox.todoPendingTotal;
     await nextTick();
@@ -499,15 +527,30 @@
   .inbox-toolbar {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    gap: 20px;
-    margin-bottom: 16px;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 9px 10px;
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, transparent);
+    border-radius: 14px;
+    background: linear-gradient(
+      112deg,
+      color-mix(in srgb, var(--primary-color) 5%, var(--background-color)),
+      color-mix(in srgb, var(--background-color) 98%, transparent)
+    );
+    box-shadow: 0 8px 24px rgba(28, 33, 66, 0.035);
     flex-shrink: 0;
+  }
+  .inbox-toolbar :deep(.tab-container) {
+    min-width: 0;
+    flex: 1;
   }
   .inbox-toolbar__right {
     display: grid;
     grid-template-columns: minmax(180px, 280px) 130px;
     gap: 8px;
+    flex-shrink: 0;
   }
   .inbox-toolbar__right.has-status {
     grid-template-columns: minmax(180px, 250px) 130px 120px;
@@ -635,6 +678,15 @@
     .inbox-page {
       padding: 12px;
     }
+    .inbox-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .inbox-toolbar__right,
+    .inbox-toolbar__right.has-status {
+      width: 100%;
+      grid-template-columns: minmax(0, 1fr) 130px 120px;
+    }
   }
   @media (max-width: 767px) {
     .inbox-hero {
@@ -644,15 +696,22 @@
       font-size: 22px;
     }
     .inbox-toolbar {
-      display: block;
-      overflow: hidden;
+      gap: 8px;
+      padding: 8px;
+      overflow: visible;
     }
     .inbox-toolbar :deep(.tab-container) {
+      width: 100%;
       overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+    .inbox-toolbar :deep(.tab-container::-webkit-scrollbar) {
+      display: none;
     }
     .inbox-toolbar__right {
       grid-template-columns: 1fr 110px;
-      margin-top: 10px;
+      margin-top: 0;
     }
     .inbox-toolbar__right.has-status {
       grid-template-columns: 1fr 1fr;

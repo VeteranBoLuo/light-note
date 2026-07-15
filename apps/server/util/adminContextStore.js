@@ -131,8 +131,14 @@ export function adminContextPublicView(context) {
     'trash.read',
   ];
   if (context.mode === 'maintain') {
-    capabilities.push('bookmark.write', 'note.write', 'tag.write', 'trash.restore', 'ai.use');
-    if (context.subjectRole !== 'visitor') capabilities.push('file.write');
+    capabilities.push(
+      'bookmark.write',
+      'note.write',
+      'file.write',
+      'tag.write',
+      'trash.restore',
+      'ai.use',
+    );
   }
   return {
     id: context.id,

@@ -10,7 +10,8 @@
     </div>
     <div class="card-title">
       <div class="card-img-container">
-        <img :id="cardInfo.id" :src="getIcon(cardInfo)" width="22" height="22" alt=" " />
+        <span v-if="cardInfo.iconLoading" class="card-icon-loading" aria-hidden="true"></span>
+        <img v-else :src="getIcon(cardInfo)" width="22" height="22" alt="" @error="handleIconError" />
       </div>
       <span class="card-title-text">{{ cardInfo.name }}</span>
     </div>
@@ -34,9 +35,9 @@
 </template>
 
 <script lang="ts" setup>
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore } from '@/store';
   import router from '@/router';
-  import { computed, onMounted } from 'vue';
+  import { computed } from 'vue';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import icon from '@/config/icon.ts';
@@ -53,6 +54,8 @@
         tags: any;
         tagList?: any;
         isPending?: boolean;
+        iconUrl?: string;
+        iconLoading?: boolean;
       },
       default: () => ({
         id: '',
@@ -91,17 +94,10 @@
     return bookmark.iconUrl || icon.nullImg;
   }
 
-  const user = useUserStore();
-  onMounted(() => {
-    const imgElement = document.getElementById(props.cardInfo.id);
-    if (imgElement) {
-      // 监听图片加载错误事件
-      imgElement.onerror = function () {
-        // 设置默认图片
-        this.src = icon.nullImg;
-      };
-    }
-  });
+  function handleIconError(event: Event) {
+    const image = event.currentTarget as HTMLImageElement;
+    if (image.src !== icon.nullImg) image.src = icon.nullImg;
+  }
 </script>
 
 <style lang="less" scoped>
@@ -125,6 +121,29 @@
     }
     &:active {
       transform: translateY(0);
+    }
+  }
+  .card-icon-loading {
+    display: block;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--primary-color) 7%, var(--card-border-color)) 20%,
+      color-mix(in srgb, var(--primary-color) 18%, var(--background-color)) 45%,
+      color-mix(in srgb, var(--primary-color) 7%, var(--card-border-color)) 70%
+    );
+    background-size: 220% 100%;
+    animation: bookmark-icon-loading 1.1s ease-in-out infinite;
+  }
+
+  @keyframes bookmark-icon-loading {
+    from {
+      background-position: 100% 0;
+    }
+    to {
+      background-position: -100% 0;
     }
   }
 

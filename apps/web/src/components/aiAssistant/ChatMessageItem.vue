@@ -34,6 +34,12 @@
           <!-- Markdown 渲染内容 -->
           <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
           <div v-else class="text" v-html="formatAssistantMessage(message.content)" @click="handleLinkClick"></div>
+          <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
+            <span v-for="item in message.contexts" :key="`${item.type}:${item.id}`" :title="item.title">
+              <small>{{ t(`ai.sourceTypes.${item.type}`) }}</small>
+              <strong>{{ item.title }}</strong>
+            </span>
+          </div>
         </div>
         <ReplyLoading v-else />
         <!-- 用户消息：操作条移到气泡外下方（纯图标 + 时间），整体右对齐，
@@ -76,16 +82,40 @@
           <span class="time">{{ formatTime(message.timestamp) }}</span>
         </div>
         <!-- AI 回答:操作条(复制 + 重新生成),左对齐;用户消息的复制/编辑另在上方 -->
-        <div class="msg-footer" style="justify-content: flex-start" v-if="message.role === 'assistant' && message.content">
+        <div
+          class="msg-footer"
+          style="justify-content: flex-start"
+          v-if="message.role === 'assistant' && message.content"
+        >
           <div class="msg-actions">
             <BButton class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </BButton>
             <BButton class="msg-action-btn" :title="t('ai.regenerate')" @click="handleRegenerate">
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M23 4v6h-6"></path>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
               </svg>
@@ -124,6 +154,7 @@
     thoughts?: any[];
     thinkingText?: string;
     thinkingDisplay?: string;
+    contexts?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag'; id: string; title: string }>;
   }
 
   const props = defineProps<{
@@ -133,7 +164,7 @@
 
   // 点“编辑”把这条用户消息内容抛给容器，回填到输入框
   const emit = defineEmits<{
-    (e: 'edit', content: string): void;
+    (e: 'edit', content: string, contexts: NonNullable<ChatMessage['contexts']>): void;
     (e: 'regenerate'): void;
   }>();
 
@@ -146,7 +177,7 @@
 
   // 编辑：把内容回填到输入框（由 ChatContainer 处理并聚焦）
   const handleEdit = () => {
-    emit('edit', props.message.content);
+    emit('edit', props.message.content, props.message.contexts || []);
   };
 
   // 重新生成：请求容器用上一条用户消息重发本轮（仅 AI 回答用）
@@ -249,6 +280,40 @@
 
   .user-text {
     white-space: pre-wrap;
+  }
+
+  .user-contexts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
+  }
+
+  .user-contexts > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 220px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--background-color));
+  }
+
+  .user-contexts small {
+    color: var(--primary-color);
+    font-size: 10px;
+  }
+  .user-contexts strong {
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 11px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .text h1,

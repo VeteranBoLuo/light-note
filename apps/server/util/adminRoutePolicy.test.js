@@ -91,10 +91,20 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(req.suppressConversionTracking).toBe(true);
   });
 
-  it('游客维护上下文仍禁止云空间写入', () => {
+  it('游客维护上下文允许云空间可逆写入并继续抑制副作用', () => {
+    const next = vi.fn();
+    const req = createReq('/file/uploadFiles', 'POST', 'maintain', 'visitor');
+    adminRoutePolicyMiddleware(req, createRes(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.suppressUserRewards).toBe(true);
+    expect(req.suppressConversionTracking).toBe(true);
+    expect(req.isVisitorWorkspaceContentWrite).toBe(true);
+  });
+
+  it('游客维护上下文仍拒绝云空间不可逆操作', () => {
     const next = vi.fn();
     const res = createRes();
-    adminRoutePolicyMiddleware(createReq('/file/updateFile', 'POST', 'maintain', 'visitor'), res, next);
+    adminRoutePolicyMiddleware(createReq('/file/hermesBackup', 'POST', 'maintain', 'visitor'), res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),

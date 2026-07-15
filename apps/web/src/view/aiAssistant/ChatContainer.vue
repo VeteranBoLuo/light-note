@@ -109,6 +109,7 @@
     }>;
     sources?: AiSource[];
     toolEvents?: AiToolStatusItem[];
+    contexts?: AiResourceContext[];
   }
 
   // 响应式数据
@@ -225,6 +226,7 @@
           role: m.role,
           content: m.content,
           sources: m.sources || [],
+          contexts: m.contexts || [],
           timestamp: (m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).toISOString(),
         }));
       // 只有产生过真实对话(不止开场白一条)才存
@@ -459,6 +461,7 @@
     thinkingTyping = false;
     const inputText = userInput.value.trim();
     if (!inputText) return;
+    const contextSnapshot = contexts.value.map((item) => ({ ...item }));
 
     // 标记当前请求序号，防止旧请求的 finally 提前关闭 loading
     const thisRequestId = ++activeRequestId;
@@ -486,6 +489,7 @@
       role: 'user',
       content: inputText,
       timestamp: new Date(),
+      contexts: contextSnapshot,
     };
     messages.value.push(userMessage);
 
@@ -633,7 +637,7 @@
           translationConfig: translationConfig.value,
           aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
           history: historyForRequest,
-          contexts: contexts.value,
+          contexts: contextSnapshot,
         },
         {
           headers: {
@@ -698,8 +702,9 @@
   };
 
   // 编辑用户消息：把该条内容回填到输入框并聚焦，不自动发送（让用户改完再发）
-  const handleEditMessage = (content: string) => {
+  const handleEditMessage = (content: string, attachedContexts: AiResourceContext[] = []) => {
     userInput.value = content;
+    contexts.value = attachedContexts.map((item) => ({ ...item }));
     nextTick(() => {
       chatInputRef.value?.focus();
     });
@@ -720,8 +725,10 @@
     while (userIdx >= 0 && messages.value[userIdx].role !== 'user') userIdx--;
     if (userIdx < 0) return;
     const userContent = messages.value[userIdx].content;
+    const userContexts = messages.value[userIdx].contexts || [];
     messages.value.splice(userIdx); // 移除这轮 user + 其后所有消息，再用原问题重发
     userInput.value = userContent;
+    contexts.value = userContexts.map((item) => ({ ...item }));
     sendMessage();
   };
 

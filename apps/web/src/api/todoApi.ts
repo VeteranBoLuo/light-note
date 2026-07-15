@@ -3,6 +3,17 @@ import { apiBasePost } from '@/http/request';
 export type TodoPriority = 0 | 1 | 2;
 export type TodoStatus = 'pending' | 'completed';
 export type TodoSort = 'smart' | 'due' | 'newest' | 'oldest';
+export type TodoReminderMode = 'once' | 'repeat';
+export type TodoReminderChannel = 'in_app' | 'email';
+
+export interface TodoReminderConfig {
+  mode: TodoReminderMode;
+  channels: TodoReminderChannel[];
+  startAt: string;
+  endAt?: string | null;
+  intervalMinutes?: number | null;
+  email?: string | null;
+}
 
 export interface TodoChecklistItem {
   id: string;
@@ -18,6 +29,8 @@ export interface TodoItem {
   priority: TodoPriority;
   status: TodoStatus;
   dueAt?: string | null;
+  reminder?: TodoReminderConfig | null;
+  /** 兼容旧接口；新代码使用 reminder。 */
   reminderAt?: string | null;
   completedAt?: string | null;
   createdAt: string;
@@ -30,6 +43,8 @@ export interface TodoPayload {
   checklist?: TodoChecklistItem[];
   priority?: TodoPriority;
   dueAt?: string | null;
+  reminder?: TodoReminderConfig | null;
+  /** 兼容旧调用方；服务端会转换为单次站内提醒。 */
   reminderAt?: string | null;
 }
 

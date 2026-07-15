@@ -49,7 +49,10 @@
               </template>
             </b-input>
           </div>
-          <b-button style="border-radius: 20px" @click="aiOrgVisible = true">🤖 {{ $t('bookmarkMg.aiOrganizeBtn') }}</b-button>
+          <b-button style="border-radius: 20px" @click="aiOrgVisible = true">
+            <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          </b-button>
           <b-button
             type="primary"
             style="border-radius: 20px"

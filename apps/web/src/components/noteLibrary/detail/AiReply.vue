@@ -80,7 +80,7 @@
 
     <div class="ai-input">
       <div class="input-label">{{ t('ai.reply.inputLabel') }}</div>
-      <BInput v-model:value="prompt" type="textarea" :rows="4" :placeholder="t('ai.reply.inputPlaceholder')" />
+      <BInput v-model:value="prompt" type="textarea" :rows="2" :placeholder="t('ai.reply.inputPlaceholder')" />
       <BButton v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')" v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }">
         <span class="stop-icon"></span>
         {{ t('ai.reply.stop', '停止生成') }}
@@ -100,32 +100,35 @@
     <div class="ai-output">
       <div class="output-header">
         <span style="max-width: 100px; min-width: 0" class="text-hidden">{{ t('ai.reply.outputTitle') }}</span>
-        <div class="output-actions">
+        <div v-if="outputFull" class="output-actions">
           <BButton
+            v-if="canApplyBody"
             style="max-width: 100px"
             class="ghost-btn text-hidden"
-            :disabled="!outputFull || !hasBody"
             @click="insertToNote"
             :title="t('ai.reply.replaceContent')"
             v-click-log="{ module: '笔记-AI助手', operation: '插入到笔记' }"
             >{{ t('ai.reply.replaceContent') }}</BButton
           >
           <BButton
+            v-if="canApplyTitle"
             style="max-width: 100px"
             class="ghost-btn text-hidden"
-            :disabled="!outputFull || !hasTitle"
             @click="replaceTitle"
             :title="t('ai.reply.replaceTitle')"
             v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
             >{{ t('ai.reply.replaceTitle') }}</BButton
           >
-          <BButton class="ghost-btn icon-btn" :disabled="!outputFull" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">
+          <BButton class="ghost-btn icon-btn" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
           </BButton>
-          <BButton class="ghost-btn icon-btn" :disabled="!outputFull" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">
+          <BButton class="ghost-btn icon-btn" :disabled="isLoading" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg>
           </BButton>
         </div>
+      </div>
+      <div v-if="formatInvalid" class="format-warning">
+        {{ t('ai.reply.formatInvalid', { markers: missingMarkers.join(t('ai.reply.markerSeparator')) }) }}
       </div>
       <TypewriterOutput
         class="output-body"
@@ -143,8 +146,8 @@
         <div v-if="isMarkdownNote" class="ai-preview-body is-markdown" ref="previewBodyRef" v-text="previewTyped"></div>
         <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
         <div class="ai-preview-actions">
-          <BButton class="ghost-btn" :disabled="!hasBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</BButton>
-          <BButton class="ghost-btn" :disabled="!hasTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</BButton>
+          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</BButton>
+          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</BButton>
         </div>
       </div>
     </BModal>
@@ -183,6 +186,9 @@
   const outputFull = ref('');
   const lastAction = ref('');
   const isLoading = ref(false);
+  type ResultFormat = 'title' | 'body' | 'both';
+  const resultFormat = ref<ResultFormat>('both');
+  const requestCompleted = ref(false);
   const previewVisible = ref(false);
   const sessionId = ref('');
   const abortController = ref<AbortController | null>(null);
@@ -264,7 +270,7 @@
     if (open && isLoading.value) nextTick(scrollPreviewToBottom);
   });
 
-  const actionConfig: Record<string, { format: 'title' | 'body' | 'both' }> = {
+  const actionConfig: Record<string, { format: ResultFormat }> = {
     polishFull: { format: 'body' },
     optimizeTitle: { format: 'title' },
     generateSummary: { format: 'body' },
@@ -282,18 +288,18 @@
     outline: '请为内容提炼一份层级清晰的大纲(用标题层级 + 有序/无序列表)。',
   };
 
-  const buildFormatHint = (format: 'title' | 'body' | 'both') => {
+  const buildFormatHint = (format: ResultFormat) => {
     if (format === 'title') {
-      return '开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】必须位于末尾：\n【标题】\n<一行标题建议>';
+      return '禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【标题】标记必须原样保留：\n【标题】\n<一行标题建议>';
     }
     const bodyRequirement = isMarkdownNote.value
       ? '【正文】必须输出 Markdown 源文本，保留标题、列表、引用、强调和代码块语法，不要用 HTML，也不要用代码围栏包裹整篇正文。'
       : '【正文】内容需使用 HTML 片段（适配 TinyMCE），允许标签：p,h1-h6,strong,em,ul,ol,li,blockquote。';
     const bodyPlaceholder = isMarkdownNote.value ? '<Markdown 正文内容>' : '<HTML 正文内容>';
     if (format === 'body') {
-      return `开头至多一句话简短引导（不超过 20 字，如「以下是润色后的全文：」），不要长篇说明；随后务必在最后严格按以下格式输出，且【正文】必须位于末尾；${bodyRequirement}\n【正文】\n${bodyPlaceholder}`;
+      return `禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【正文】标记必须原样保留；${bodyRequirement}\n【正文】\n${bodyPlaceholder}`;
     }
-    return `开头至多一句话简短引导（不超过 20 字），不要长篇说明；随后务必在最后严格按以下格式输出，且【标题】/【正文】两段必须位于末尾；${bodyRequirement}\n【标题】\n<一行标题建议>\n【正文】\n${bodyPlaceholder}`;
+    return `禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【标题】和【正文】标记必须原样保留；${bodyRequirement}\n【标题】\n<一行标题建议>\n【正文】\n${bodyPlaceholder}`;
   };
 
   const buildMessage = (actionOverride?: string) => {
@@ -334,6 +340,9 @@
     // "输出≈输入长度"的动作(润色全文/纠错/自定义)+ 长笔记:提醒结果可能被输出上限截断(不阻断)。
     // 生成摘要/优化标题输出很短,不会截断,不提醒。
     const action = mode === 'action' ? lastAction.value || 'custom' : 'custom';
+    const expectedFormat = actionConfig[action]?.format || 'both';
+    resultFormat.value = expectedFormat;
+    requestCompleted.value = false;
     const FULL_OUTPUT_ACTIONS = ['polishFull', 'correctErrors', 'continueWrite', 'translate', 'custom'];
     if (FULL_OUTPUT_ACTIONS.includes(action) && textLength.value > LONG_CONTENT_THRESHOLD) {
       message.warning(`笔记较长(约 ${textLength.value} 字),AI 输出可能被截断,建议分段处理或改用「生成摘要」`);
@@ -347,6 +356,8 @@
       const actionOverride = mode === 'custom' ? '自定义处理' : undefined;
       let buffer = '';
       let processedLength = 0;
+      let receivedDone = false;
+      let streamErrorMessage = '';
 
       const handleNewContent = (content: string) => {
         if (!content) return;
@@ -355,6 +366,11 @@
 
       const handleData = (data: AiSseEvent) => {
         if (requestController.signal.aborted) return;
+        if (data.event === 'error') {
+          streamErrorMessage = String(data.message || data.error || 'AI 流式响应异常');
+          return;
+        }
+        if (data.event === 'done') receivedDone = true;
         const content = data.output?.text || data.text || data.content || '';
         if (content && typeof content === 'string') handleNewContent(content);
         if (data.output?.session_id) sessionId.value = data.output.session_id;
@@ -372,6 +388,7 @@
           message: buildMessage(actionOverride),
           stream: true,
           sessionId: sessionId.value,
+          responseFormat: expectedFormat,
         },
         {
           headers: {
@@ -394,6 +411,9 @@
       );
 
       flushAiSseBuffer(buffer).forEach(handleData);
+      if (streamErrorMessage) throw new Error(streamErrorMessage);
+      if (!receivedDone) throw new Error('AI 流式响应未完整结束');
+      requestCompleted.value = true;
     } catch (error: any) {
       console.error('AI 回复生成失败:', error, axios.isCancel(error));
       if (axios.isCancel(error)) {
@@ -443,15 +463,6 @@
     return normalized.slice(normalizedMarker.end, end).trim();
   };
 
-  const cleanupFallback = (text: string) => {
-    return stripMarkdown(text)
-      .replace(/^润色后的文本如下.*?[:：]\s*/i, '')
-      .replace(/^标题[:：]\s*/i, '')
-      .replace(/^内容[:：]\s*/i, '')
-      .replace(/^如需.*$/gim, '')
-      .trim();
-  };
-
   const unwrapMarkdownFence = (text: string) => {
     const match = text.trim().match(/^```(?:markdown|md)\s*\n([\s\S]*?)\n```$/i);
     return (match?.[1] || text).trim();
@@ -459,13 +470,12 @@
 
   const buildBodyContent = () => {
     const body = extractSection(outputFull.value, '正文');
-    const base = body || cleanupFallback(outputFull.value);
-    if (!base) return '';
-    if (isMarkdownNote.value) return unwrapMarkdownFence(base);
-    const hasHtmlTag = /<\/?[a-z][\s\S]*?>/i.test(base);
+    if (!body) return '';
+    if (isMarkdownNote.value) return unwrapMarkdownFence(body);
+    const hasHtmlTag = /<\/?[a-z][\s\S]*?>/i.test(body);
     const html = hasHtmlTag
-      ? base.trim()
-      : base
+      ? body.trim()
+      : body
           .split('\n')
           .map((line) => line.trim())
           .filter(Boolean)
@@ -477,14 +487,18 @@
     });
   };
 
-  const hasTitle = computed(() =>
-    Boolean(extractSection(outputFull.value, '标题') || (lastAction.value === 'optimizeTitle' && cleanupFallback(outputFull.value))),
-  );
-  const hasBody = computed(() =>
-    Boolean(
-      extractSection(outputFull.value, '正文') ||
-        (lastAction.value !== 'optimizeTitle' && cleanupFallback(outputFull.value)),
-    ),
+  const hasTitle = computed(() => Boolean(extractSection(outputFull.value, '标题')));
+  const hasBody = computed(() => Boolean(extractSection(outputFull.value, '正文')));
+  const canApplyTitle = computed(() => requestCompleted.value && !isLoading.value && hasTitle.value);
+  const canApplyBody = computed(() => requestCompleted.value && !isLoading.value && hasBody.value);
+  const missingMarkers = computed(() => {
+    const markers: string[] = [];
+    if ((resultFormat.value === 'title' || resultFormat.value === 'both') && !hasTitle.value) markers.push('【标题】');
+    if ((resultFormat.value === 'body' || resultFormat.value === 'both') && !hasBody.value) markers.push('【正文】');
+    return markers;
+  });
+  const formatInvalid = computed(
+    () => requestCompleted.value && Boolean(outputFull.value) && missingMarkers.value.length > 0,
   );
 
   // 展示正文结果而非协议标记；Markdown 笔记交给 TypewriterOutput 以纯文本显示，避免被 v-html 当作富文本。
@@ -520,7 +534,7 @@
   const replaceTitle = () => {
     if (!note || !outputFull.value) return;
     const titleSection = extractSection(outputFull.value, '标题');
-    const firstLine = (titleSection || cleanupFallback(outputFull.value)).split('\n').find((line) => line.trim());
+    const firstLine = titleSection.split('\n').find((line) => line.trim());
     if (firstLine) {
       if (applyTitleFromAi) {
         applyTitleFromAi(firstLine.trim());
@@ -533,6 +547,7 @@
 
   const clearOutput = () => {
     outputFull.value = '';
+    requestCompleted.value = false;
   };
 
   // 放大窗内应用:应用后关闭大窗
@@ -552,7 +567,7 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
     border: 1px solid rgba(0, 0, 0, 0.04);
   }
 
@@ -582,21 +597,36 @@
   .ai-note-meta {
     background: #ffffff;
     border-radius: 10px;
-    padding: 12px;
-    display: grid;
-    gap: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .meta-row {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
     font-size: 12px;
+  }
+  .meta-row:first-child {
+    flex: 1.6;
+  }
+  .meta-row + .meta-row {
+    padding-left: 12px;
+    border-left: 1px solid #eef0f5;
   }
   .meta-row .label {
     color: #8a8f98;
+    white-space: nowrap;
   }
   .meta-row .value {
     color: #2d2f33;
-    max-width: 180px;
+    flex: 1;
+    min-width: 0;
+    text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -604,7 +634,7 @@
 
   .ai-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
   .action-btn {
@@ -636,7 +666,8 @@
   }
   .ai-input :deep(.b-textarea) {
     width: 100%;
-    min-height: 80px;
+    min-height: 56px;
+    max-height: 120px;
     resize: vertical;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
@@ -694,7 +725,9 @@
   }
 
   .ai-output {
-    flex: 1 1 auto;
+    flex: 1 1 280px;
+    min-height: 220px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     background: #ffffff;
@@ -746,9 +779,19 @@
     display: block;
   }
   .output-body {
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 12px;
     overflow: auto;
-    height: 100%;
+    box-sizing: border-box;
+  }
+  .format-warning {
+    padding: 8px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--resource-file-color) 24%, transparent);
+    background: color-mix(in srgb, var(--resource-file-color) 10%, transparent);
+    color: color-mix(in srgb, var(--resource-file-color) 75%, var(--text-color));
+    font-size: 11px;
+    line-height: 1.5;
   }
   .output-body :deep(.typewriter-content) {
     margin: 0;
@@ -796,6 +839,9 @@
   [data-theme='night'] .meta-row .value,
   [data-theme='night'] .output-body :deep(.typewriter-content) {
     color: #f3f4f6;
+  }
+  [data-theme='night'] .meta-row + .meta-row {
+    border-left-color: rgba(255, 255, 255, 0.12);
   }
 
   [data-theme='night'] .stop-btn {

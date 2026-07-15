@@ -27,7 +27,7 @@ describe('adminContextStore', () => {
     process.env.ADMIN_MAINTENANCE_ENABLED = 'true';
   });
 
-  it('公开上下文只返回最小信息并按目标角色生成能力', () => {
+  it('公开上下文只返回最小信息并向维护模式提供云空间能力', () => {
     const visitor = adminContextPublicView({
       id: 'ctx-1',
       subjectUserId: 'visitor-1',
@@ -39,7 +39,7 @@ describe('adminContextStore', () => {
       actorSessionId: 'must-not-leak',
     });
     expect(visitor.capabilities).toContain('bookmark.write');
-    expect(visitor.capabilities).not.toContain('file.write');
+    expect(visitor.capabilities).toContain('file.write');
     expect(visitor).not.toHaveProperty('actorSessionId');
   });
 

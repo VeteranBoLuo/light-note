@@ -51,11 +51,22 @@
   // 不必等下次进页面(否则这一屏一直用 TagCard 里 ico.kucat.cn 的临时兜底图)
   const cacheImages = async () => {
     if (!bookmark.bookmarkList?.length) return;
+    const currentItems = bookmark.bookmarkList as any[];
+    // 只有首次缺图标时显示加载占位；已有图标过期检查时继续展示旧图，后台成功后无感替换。
+    const pendingItems = currentItems.filter((item) => item?.id && item?.url && !item.iconUrl);
+    pendingItems.forEach((item) => (item.iconLoading = true));
     // 渐进式:只抓无图标的,限并发逐个请求,抓到即回填(不再整批等最慢站一起返回)
-    await loadBookmarkIconsProgressively(bookmark.bookmarkList as any, (id, icon) => {
-      const b: any = bookmark.bookmarkList.find((x: any) => x.id === id);
-      if (b) b.iconUrl = icon;
-    });
+    try {
+      await loadBookmarkIconsProgressively(currentItems, (id, icon) => {
+        const item = currentItems.find((candidate) => candidate.id === id);
+        if (item) {
+          item.iconUrl = icon;
+          item.iconLoading = false;
+        }
+      });
+    } finally {
+      pendingItems.forEach((item) => (item.iconLoading = false));
+    }
   };
 
   const watchedRefreshKey = computed(() => bookmark.refreshKey);

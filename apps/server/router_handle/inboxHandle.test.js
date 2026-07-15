@@ -118,29 +118,38 @@ describe('inboxHandle 写事务', () => {
     expect(enqueueResources).not.toHaveBeenCalled();
   });
 
-  it('管理员维护游客工作区时拒绝将文件加入待整理', async () => {
-    const res = mockRes();
-    await enqueueInbox({
+  it('管理员维护游客工作区时可将所属文件加入待整理', async () => {
+    const req = {
       user: { id: 'visitor-subject', role: 'visitor' },
       adminContext: { subjectRole: 'visitor', mode: 'maintain' },
-      body: { items: [{ resourceType: 'file', resourceId: '8' }] },
-    }, res);
-    expect(getConnection).not.toHaveBeenCalled();
-    expect(res.send).toHaveBeenCalledWith({
-      data: null,
-      status: 403,
-      msg: '游客工作区维护仅支持书签和笔记',
+      body: { items: [{ resourceType: 'file', resourceId: '8' }], source: 'manual' },
+    };
+    const res = mockRes();
+    await enqueueInbox(req, res);
+    expect(getConnection).toHaveBeenCalledTimes(1);
+    expect(enqueueResources).toHaveBeenCalledWith(connection, {
+      userId: 'visitor-subject',
+      items: req.body.items,
+      source: 'manual',
     });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 
-  it('管理员维护游客工作区时仍可处理书签和笔记', async () => {
-    await completeInbox({
-      user: { id: 'visitor-subject', role: 'visitor' },
-      adminContext: { subjectRole: 'visitor', mode: 'maintain' },
-      body: { items: [{ resourceType: 'note', resourceId: 'n1' }] },
-    }, mockRes());
+  it('管理员维护游客工作区时可完成文件整理', async () => {
+    await completeInbox(
+      {
+        user: { id: 'visitor-subject', role: 'visitor' },
+        adminContext: { subjectRole: 'visitor', mode: 'maintain' },
+        body: { items: [{ resourceType: 'file', resourceId: '8' }] },
+      },
+      mockRes(),
+    );
     expect(getConnection).toHaveBeenCalledTimes(1);
-    expect(completeResources).toHaveBeenCalledTimes(1);
+    expect(completeResources).toHaveBeenCalledWith(connection, {
+      userId: 'visitor-subject',
+      items: [{ resourceType: 'file', resourceId: '8' }],
+    });
   });
 
   it('列表使用固定三类 UNION、当前用户过滤并一次返回全部结果', async () => {

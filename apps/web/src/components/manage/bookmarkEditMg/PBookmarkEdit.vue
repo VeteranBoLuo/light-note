@@ -17,6 +17,9 @@
             </BTooltip>
           </div>
           <b-input v-model:value="bookmarkData.url"> </b-input>
+          <b-button v-if="isEdit" size="small" :loading="refreshingIcon" @click="handleRefreshIcon">
+            {{ $t('bookmarkMg.refreshIcon') }}
+          </b-button>
         </div>
         <div class="tag-attr-item">
           <span class="tag-attr-label">{{ $t('bookmarkMg.relatedTag') }}</span>
@@ -65,7 +68,7 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import { recordOperation, refreshBookmarkIcon } from '@/api/commonApi.ts';
   import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
@@ -172,7 +175,22 @@
   });
 
   const router = useRouter();
+  const isEdit = computed(() => handleType.value === 'edit');
   const loading = ref(false);
+  const refreshingIcon = ref(false);
+
+  async function handleRefreshIcon() {
+    if (!bookmarkData.value?.id || refreshingIcon.value) return;
+    refreshingIcon.value = true;
+    try {
+      const iconUrl = await refreshBookmarkIcon(bookmarkData.value);
+      if (iconUrl) message.success(t('bookmarkMg.refreshIconSuccess'));
+      else message.warning(t('bookmarkMg.refreshIconFailed'));
+    } finally {
+      refreshingIcon.value = false;
+    }
+  }
+
   onMounted(async () => {
     if (handleType.value === 'add') {
       if (router.currentRoute.value.params.tagId) {

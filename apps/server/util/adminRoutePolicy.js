@@ -363,14 +363,6 @@ export function adminRoutePolicyMiddleware(req, res, next) {
     if (req.adminContext.mode !== 'maintain') {
       return sendPolicyError(res, 403, 'ADMIN_PREVIEW_READONLY', '管理员当前处于只读预览模式。');
     }
-    if (req.adminContext.subjectRole === 'visitor' && capability.resourceType === 'file') {
-      return sendPolicyError(
-        res,
-        403,
-        'ADMIN_MAINTENANCE_FORBIDDEN',
-        '游客展示账号不允许维护云空间内容。',
-      );
-    }
     req.suppressUserRewards = true;
     req.suppressConversionTracking = true;
     req.isVisitorWorkspaceContentWrite = req.adminContext.subjectRole === 'visitor';

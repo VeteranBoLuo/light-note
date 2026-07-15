@@ -14,7 +14,7 @@
           <span class="admin-stat-label">{{ t('aiMonitor.balance.title') }}</span>
           <strong class="admin-stat-value">{{ balanceDisplay }}</strong>
           <span class="admin-stat-hint">
-            {{ balanceHint }}
+            <span v-if="balanceHint">{{ balanceHint }}</span>
             <BButton size="small" :loading="balanceLoading" @click="fetchBalance(true)">
               {{ t('aiMonitor.balance.refresh') }}
             </BButton>
@@ -196,10 +196,9 @@
   });
   const balanceHint = computed(() => {
     if (balanceError.value && !balance.value) return t('aiMonitor.balance.failed');
-    if (!balance.value) return t('aiMonitor.balance.hint');
+    if (!balance.value) return '';
     if (!balance.value.isAvailable) return t('aiMonitor.balance.disabled');
-    const source = balance.value.stale ? t('aiMonitor.balance.cached') : t('aiMonitor.balance.available');
-    return `${source} · ${t('aiMonitor.balance.granted')} ${balance.value.grantedBalance} · ${t('aiMonitor.balance.toppedUp')} ${balance.value.toppedUpBalance}`;
+    return balance.value.stale ? t('aiMonitor.balance.cached') : '';
   });
 
   const columns = [

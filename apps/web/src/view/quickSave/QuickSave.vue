@@ -2,7 +2,7 @@
   <div class="qs-wrap">
     <div class="qs-card">
       <div class="qs-head">
-        <img class="qs-logo" src="/favicon.svg" alt="轻笺" @error="onLogoErr" />
+        <img class="qs-logo" src="/favicon.svg?v=7" alt="轻笺" @error="onLogoErr" />
         <span class="qs-title">{{ $t('quickSave.title') }}</span>
       </div>
 

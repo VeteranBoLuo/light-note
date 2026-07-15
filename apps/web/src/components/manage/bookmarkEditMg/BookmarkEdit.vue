@@ -25,6 +25,9 @@
               <button v-if="isEdit" type="button" class="generate-meta-action" @click="snapVisible = true" v-click-log="{ module: '书签详情', operation: '查看网页快照' }">
                 <span>📸 {{ $t('bookmarkMg.snapshot') }}</span>
               </button>
+              <b-button v-if="isEdit" size="small" :loading="refreshingIcon" @click="handleRefreshIcon">
+                {{ $t('bookmarkMg.refreshIcon') }}
+              </b-button>
             </div>
           </div>
           <b-input v-model:value="bookmarkData.url"> </b-input>
@@ -84,7 +87,7 @@
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import { recordOperation, refreshBookmarkIcon } from '@/api/commonApi.ts';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
@@ -160,8 +163,6 @@
       url = '/api/bookmark/addBookmark';
       params.userId = user.id;
       params.saveSnapshot = saveSnapshot.value; // 仅新增时带上;仅当勾选才存快照
-    } else {
-      params.iconUrl = null;
     }
     const res = await apiBasePost(url, params);
     if (res.status !== 200) return;
@@ -209,6 +210,20 @@
   const isEdit = computed(() => !!bookmarkId.value && bookmarkId.value !== 'add');
   const saveSnapshot = ref(true); // 新增书签时是否存网页快照(默认开,防死链)
   const loading = ref(false);
+  const refreshingIcon = ref(false);
+
+  async function handleRefreshIcon() {
+    if (!bookmarkData.value?.id || refreshingIcon.value) return;
+    refreshingIcon.value = true;
+    try {
+      const iconUrl = await refreshBookmarkIcon(bookmarkData.value);
+      if (iconUrl) message.success(t('bookmarkMg.refreshIconSuccess'));
+      else message.warning(t('bookmarkMg.refreshIconFailed'));
+    } finally {
+      refreshingIcon.value = false;
+    }
+  }
+
   onMounted(async () => {
     if (handleType.value === 'add') {
       if (router.currentRoute.value.params.tagId) {

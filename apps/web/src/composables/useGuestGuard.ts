@@ -8,7 +8,8 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage';
 let previewGuideLocked = false;
 let wallHitLocked = false;
 
-// 游客维护工作区只放行展示内容本身；该列表是前端体验层，真正的安全边界仍由后端接口白名单控制。
+// 管理员维护游客工作区时放行三类基础内容及其整理动作；该列表只是体验层，
+// 真正的安全边界仍由后端管理员上下文策略、资源归属校验和不可逆操作禁令控制。
 const VISITOR_WORKSPACE_WRITE_SOURCES = new Set([
   'add-bookmark',
   'delete-bookmark',
@@ -21,6 +22,20 @@ const VISITOR_WORKSPACE_WRITE_SOURCES = new Set([
   'reorder-note',
   'update-note-tags',
   'restore-note-version',
+  'upload-file',
+  'move-file',
+  'rename-file',
+  'delete-file',
+  'share-file',
+  'update-file-tags',
+  'delete-folder',
+  'manage-folder',
+  'reorder-folder',
+  'restore-trash',
+  'inbox-enqueue',
+  'inbox-capture',
+  'inbox-complete',
+  'inbox-delete',
 ]);
 
 /**

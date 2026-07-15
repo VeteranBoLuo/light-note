@@ -42,7 +42,7 @@
     if (route.path === path) return;
     recordOperation({
       module: '资源中心',
-      operation: path === '/inbox' ? '切换行动中心视图' : '切换全部资源视图',
+      operation: path === '/inbox' ? '切换待处理视图' : '切换全部资源视图',
     });
     router.push(path);
   }

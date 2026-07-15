@@ -64,8 +64,8 @@ export const OPERATION_LOG_MAP = {
     saveNote: '保存笔记',
   }),
   cloudSpace: createModule('云空间', {}),
-  inbox: createModule('行动中心', {
-    openCapture: '打开快速收集',
+  inbox: createModule('待处理', {
+    openCapture: '打开快速添加',
     captureBookmark: '收集书签成功',
     captureNote: '收集笔记成功',
     captureFile: '收集文件成功',

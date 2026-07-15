@@ -12,7 +12,7 @@ import {
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
-  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒时间|截止时间|清单/.test(message);
+  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔/.test(message);
   if (!clientError) console.error('[todo] 请求失败:', message);
   return res.send(resultData(null, clientError ? 400 : 500, clientError ? message : '待办服务暂时不可用，请稍后重试'));
 }
@@ -40,7 +40,9 @@ export async function listTodo(req, res) {
   try {
     const status = String(req.body?.status || 'pending');
     const sort = String(req.body?.sort || 'smart');
-    const keyword = String(req.body?.keyword || '').trim().slice(0, 100);
+    const keyword = String(req.body?.keyword || '')
+      .trim()
+      .slice(0, 100);
     const [items, pendingTotal] = await Promise.all([
       listTodos(pool, req.user.id, { status, sort, keyword }),
       queryTodoPendingCount(pool, req.user.id),
@@ -53,7 +55,8 @@ export async function listTodo(req, res) {
 
 export async function countTodo(req, res) {
   try {
-    const pendingTotal = !req.user?.id || req.user.role === 'visitor' ? 0 : await queryTodoPendingCount(pool, req.user.id);
+    const pendingTotal =
+      !req.user?.id || req.user.role === 'visitor' ? 0 : await queryTodoPendingCount(pool, req.user.id);
     return res.send(resultData({ pendingTotal }));
   } catch (error) {
     return sendTodoError(res, error);

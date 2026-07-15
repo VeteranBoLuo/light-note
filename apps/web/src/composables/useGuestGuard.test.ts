@@ -79,11 +79,24 @@ describe('blockGuestWrite', () => {
     expect(apiBasePost).not.toHaveBeenCalled();
   });
 
-  it('游客维护工作区:继续拦截云空间等范围外操作且不记录转化', () => {
+  it('游客维护工作区:放行云空间与待整理的内容维护操作', () => {
     userState.id = 'visitor-1';
     userState.role = 'visitor';
     userState.visitorWorkspace = true;
-    expect(blockGuestWrite('upload-file')).toBe(true);
+    expect(blockGuestWrite('upload-file')).toBe(false);
+    expect(blockGuestWrite('manage-folder')).toBe(false);
+    expect(blockGuestWrite('update-file-tags')).toBe(false);
+    expect(blockGuestWrite('inbox-enqueue')).toBe(false);
+    expect(blockGuestWrite('inbox-complete')).toBe(false);
+    expect(showGuestNudge).not.toHaveBeenCalled();
+    expect(apiBasePost).not.toHaveBeenCalled();
+  });
+
+  it('游客维护工作区:继续拦截永久删除等范围外操作且不记录转化', () => {
+    userState.id = 'visitor-1';
+    userState.role = 'visitor';
+    userState.visitorWorkspace = true;
+    expect(blockGuestWrite('delete-trash')).toBe(true);
     expect(showGuestNudge).not.toHaveBeenCalled();
     expect(apiBasePost).not.toHaveBeenCalled();
   });
