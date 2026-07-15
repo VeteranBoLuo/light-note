@@ -46,17 +46,31 @@ export async function listInbox(req, res) {
     }
 
     const resourceUnion = `
-      SELECT 'bookmark' AS resource_type, CAST(b.id AS CHAR) AS resource_id,
-             b.user_id, b.name AS title, LEFT(COALESCE(b.description, ''), 1000) AS summary,
-             b.url AS detail, b.create_time AS resource_create_time
+      SELECT CONVERT('bookmark' USING utf8) COLLATE utf8_general_ci AS resource_type,
+             CONVERT(CAST(b.id AS CHAR) USING utf8) COLLATE utf8_general_ci AS resource_id,
+             CONVERT(b.user_id USING utf8) COLLATE utf8_general_ci AS user_id,
+             CONVERT(b.name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS title,
+             CONVERT(LEFT(COALESCE(b.description, ''), 1000) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS summary,
+             CONVERT(b.url USING utf8mb4) COLLATE utf8mb4_unicode_ci AS detail,
+             b.create_time AS resource_create_time
         FROM bookmark b WHERE b.del_flag = 0
       UNION ALL
-      SELECT 'note', CAST(n.id AS CHAR), n.create_by, n.title,
-             LEFT(COALESCE(n.content, ''), 1000), n.type, n.create_time
+      SELECT CONVERT('note' USING utf8) COLLATE utf8_general_ci,
+             CONVERT(CAST(n.id AS CHAR) USING utf8) COLLATE utf8_general_ci,
+             CONVERT(n.create_by USING utf8) COLLATE utf8_general_ci,
+             CONVERT(n.title USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+             CONVERT(LEFT(COALESCE(n.content, ''), 1000) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+             CONVERT(n.type USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+             n.create_time
         FROM note n WHERE n.del_flag = 0
       UNION ALL
-      SELECT 'file', CAST(f.id AS CHAR), f.create_by, f.file_name,
-             COALESCE(f.file_type, ''), CAST(COALESCE(f.folder_id, '') AS CHAR), f.create_time
+      SELECT CONVERT('file' USING utf8) COLLATE utf8_general_ci,
+             CONVERT(CAST(f.id AS CHAR) USING utf8) COLLATE utf8_general_ci,
+             CONVERT(f.create_by USING utf8) COLLATE utf8_general_ci,
+             CONVERT(f.file_name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+             CONVERT(COALESCE(f.file_type, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+             CONVERT(CAST(COALESCE(f.folder_id, '') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+             f.create_time
         FROM files f WHERE f.del_flag = 0`;
     const where = [`i.user_id = ?`, `i.status = 'pending'`];
     const params = [req.user.id];

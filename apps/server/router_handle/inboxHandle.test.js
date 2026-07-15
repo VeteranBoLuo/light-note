@@ -153,10 +153,12 @@ describe('inboxHandle 写事务', () => {
     }, res);
     expect(poolQuery).toHaveBeenCalledTimes(2);
     const listSql = poolQuery.mock.calls[1][0];
-    expect(listSql).toContain("SELECT 'bookmark'");
-    expect(listSql).toContain("SELECT 'note'");
-    expect(listSql).toContain("SELECT 'file'");
+    expect(listSql).toContain("SELECT CONVERT('bookmark' USING utf8)");
+    expect(listSql).toContain("CONVERT('note' USING utf8)");
+    expect(listSql).toContain("CONVERT('file' USING utf8)");
     expect(listSql).toContain('CAST(f.id AS CHAR)');
+    expect(listSql).toContain('COLLATE utf8mb4_unicode_ci');
+    expect(listSql).toContain('COLLATE utf8_general_ci');
     expect(listSql).toContain('i.user_id = ?');
     expect(listSql).toContain('i.create_time ASC');
     expect(poolQuery.mock.calls[1][1].slice(-2)).toEqual([50, 50]);
