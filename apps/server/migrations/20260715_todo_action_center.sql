@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS todo_items (
+  id char(36) NOT NULL,
+  user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  title varchar(200) NOT NULL,
+  description text,
+  checklist json DEFAULT NULL,
+  priority tinyint NOT NULL DEFAULT 1 COMMENT '0 low / 1 normal / 2 high',
+  status varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/completed',
+  due_at datetime DEFAULT NULL,
+  completed_at datetime DEFAULT NULL,
+  create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  del_flag tinyint NOT NULL DEFAULT 0,
+  deleted_at datetime DEFAULT NULL,
+  PRIMARY KEY (id),
+  KEY idx_todo_user_status (user_id, status, del_flag),
+  KEY idx_todo_due (user_id, due_at, status, del_flag),
+  KEY idx_todo_update (user_id, update_time),
+  CONSTRAINT fk_todo_items_user FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='行动中心待办事项';
+
+CREATE TABLE IF NOT EXISTS todo_reminders (
+  id char(36) NOT NULL,
+  todo_id char(36) NOT NULL,
+  user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  channel varchar(16) NOT NULL DEFAULT 'in_app',
+  scheduled_at datetime NOT NULL,
+  status varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/sent/failed/cancelled',
+  retry_count int NOT NULL DEFAULT 0,
+  last_error varchar(500) DEFAULT NULL,
+  sent_at datetime DEFAULT NULL,
+  create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uniq_todo_reminder (todo_id, channel, scheduled_at),
+  KEY idx_todo_reminder_schedule (status, scheduled_at),
+  KEY idx_todo_reminder_user (user_id, status),
+  CONSTRAINT fk_todo_reminder_todo FOREIGN KEY (todo_id) REFERENCES todo_items(id) ON DELETE CASCADE,
+  CONSTRAINT fk_todo_reminder_user FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='待办站内/邮件提醒计划';

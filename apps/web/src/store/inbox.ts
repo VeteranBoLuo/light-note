@@ -7,20 +7,24 @@ interface TypeTotals {
   file: number;
 }
 
+export type ActionCaptureType = InboxResourceType | 'todo';
+
 export default defineStore('inbox', {
   state: () => ({
     pendingTotal: 0,
+    todoPendingTotal: 0,
+    actionTotal: 0,
     typeTotals: { bookmark: 0, note: 0, file: 0 } as TypeTotals,
     items: [] as InboxItem[],
     total: 0,
     loading: false,
     loadFailed: false,
-    filterType: 'all' as 'all' | InboxResourceType,
+    filterType: 'all' as 'all' | InboxResourceType | 'todo',
     keyword: '',
     sort: 'newest' as 'newest' | 'oldest',
     selectedKeys: [] as string[],
     quickCaptureVisible: false,
-    quickCaptureType: 'note' as InboxResourceType,
+    quickCaptureType: 'note' as ActionCaptureType,
     ownerId: '',
     requestId: 0,
   }),
@@ -32,6 +36,8 @@ export default defineStore('inbox', {
       if (this.ownerId === ownerId) return;
       this.ownerId = ownerId;
       this.pendingTotal = 0;
+      this.todoPendingTotal = 0;
+      this.actionTotal = 0;
       this.typeTotals = { bookmark: 0, note: 0, file: 0 };
       this.items = [];
       this.total = 0;
@@ -41,7 +47,7 @@ export default defineStore('inbox', {
       this.loadFailed = false;
       this.requestId += 1;
     },
-    openQuickCapture(type: InboxResourceType = 'note') {
+    openQuickCapture(type: ActionCaptureType = 'note') {
       this.quickCaptureType = type;
       this.quickCaptureVisible = true;
     },
@@ -50,6 +56,8 @@ export default defineStore('inbox', {
         const res = await countInbox();
         if (res.status !== 200) return false;
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
+        this.todoPendingTotal = Number(res.data?.todoPendingTotal || 0);
+        this.actionTotal = Number(res.data?.actionTotal || this.pendingTotal + this.todoPendingTotal);
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
         return true;
       } catch {
@@ -63,7 +71,7 @@ export default defineStore('inbox', {
       this.loadFailed = false;
       try {
         const res = await listInbox({
-          type: this.filterType,
+          type: this.filterType === 'todo' ? 'all' : this.filterType,
           keyword: this.keyword,
           sort: this.sort,
         });
@@ -75,6 +83,8 @@ export default defineStore('inbox', {
         this.items = Array.isArray(res.data?.items) ? res.data.items : [];
         this.total = Number(res.data?.total || 0);
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
+        this.todoPendingTotal = Number(res.data?.todoPendingTotal || 0);
+        this.actionTotal = Number(res.data?.actionTotal || this.pendingTotal + this.todoPendingTotal);
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
         this.selectedKeys = [];
         return true;

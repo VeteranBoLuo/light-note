@@ -45,8 +45,8 @@ describe('inbox store', () => {
 
   it('快速收集可以由入口指定默认资源类型', () => {
     const store = useInboxStore();
-    store.openQuickCapture('file');
-    expect(store.quickCaptureType).toBe('file');
+    store.openQuickCapture('todo');
+    expect(store.quickCaptureType).toBe('todo');
     expect(store.quickCaptureVisible).toBe(true);
   });
 
@@ -130,9 +130,11 @@ describe('inbox store', () => {
 
   it('角标接口始终归一化缺失数量', async () => {
     const store = useInboxStore();
-    countInbox.mockResolvedValueOnce({ status: 200, data: { pendingTotal: 2 } });
+    countInbox.mockResolvedValueOnce({ status: 200, data: { pendingTotal: 2, todoPendingTotal: 3, actionTotal: 5 } });
     await store.refreshCount();
     expect(store.pendingTotal).toBe(2);
+    expect(store.todoPendingTotal).toBe(3);
+    expect(store.actionTotal).toBe(5);
     expect(store.typeTotals).toEqual({ bookmark: 0, note: 0, file: 0 });
   });
 });

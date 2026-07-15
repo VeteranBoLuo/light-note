@@ -10,6 +10,16 @@
       </header>
 
       <ul class="admin-stats">
+        <li class="admin-stat-card agent-balance-card">
+          <span class="admin-stat-label">{{ t('aiMonitor.balance.title') }}</span>
+          <strong class="admin-stat-value">{{ balanceDisplay }}</strong>
+          <span class="admin-stat-hint">
+            {{ balanceHint }}
+            <BButton size="small" :loading="balanceLoading" @click="fetchBalance(true)">
+              {{ t('aiMonitor.balance.refresh') }}
+            </BButton>
+          </span>
+        </li>
         <li class="admin-stat-card">
           <span class="admin-stat-label">总请求</span>
           <strong class="admin-stat-value">{{ total }}</strong>
@@ -138,7 +148,8 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
@@ -146,6 +157,9 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+
+  const { t } = useI18n();
 
   const logList = ref([]);
   const currentPage = ref(1);
@@ -155,6 +169,9 @@
   const todayTokens = ref(0);
   const todayCost = ref('0');
   const totalCost = ref('0');
+  const balance = ref<any>(null);
+  const balanceLoading = ref(false);
+  const balanceError = ref(false);
   const quality = ref<any>({
     sampleCount: 0,
     errorRate: 0,
@@ -170,6 +187,20 @@
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
   let timer: number | null = null;
+
+  const balanceDisplay = computed(() => {
+    if (balanceLoading.value && !balance.value) return t('aiMonitor.balance.loading');
+    if (!balance.value) return t('aiMonitor.balance.unavailable');
+    const symbol = balance.value.currency === 'CNY' ? '¥' : `${balance.value.currency || ''} `;
+    return `${symbol}${Number(balance.value.totalBalance || 0).toFixed(2)}`;
+  });
+  const balanceHint = computed(() => {
+    if (balanceError.value && !balance.value) return t('aiMonitor.balance.failed');
+    if (!balance.value) return t('aiMonitor.balance.hint');
+    if (!balance.value.isAvailable) return t('aiMonitor.balance.disabled');
+    const source = balance.value.stale ? t('aiMonitor.balance.cached') : t('aiMonitor.balance.available');
+    return `${source} · ${t('aiMonitor.balance.granted')} ${balance.value.grantedBalance} · ${t('aiMonitor.balance.toppedUp')} ${balance.value.toppedUpBalance}`;
+  });
 
   const columns = [
     { title: '用户', key: 'userAlias', width: '1fr' },
@@ -229,6 +260,21 @@
     });
   }
 
+  async function fetchBalance(forceRefresh = false) {
+    if (balanceLoading.value) return;
+    balanceLoading.value = true;
+    balanceError.value = false;
+    try {
+      const res: any = await apiBasePost('/api/common/getDeepSeekBalance', { forceRefresh }, { silent: true });
+      if (res.status === 200 && res.data) balance.value = res.data;
+      else balanceError.value = true;
+    } catch {
+      balanceError.value = true;
+    } finally {
+      balanceLoading.value = false;
+    }
+  }
+
   function formatTime(t: string) {
     if (!t) return '';
     return new Date(t).toLocaleString('zh-CN');
@@ -268,6 +314,7 @@
   onMounted(() => {
     fetchLogs();
     fetchTodaySummary();
+    fetchBalance();
   });
 </script>
 
@@ -275,6 +322,16 @@
   @import '@/assets/css/admin-manage.less';
   .log-search-input { flex: 1; }
   .admin-table-card { padding: 0; }
+  .agent-balance-card {
+    border-color: color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 9%, var(--card-background)), var(--card-background));
+  }
+  .agent-balance-card .admin-stat-hint {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 
   .agent-detail__grid {
     display: grid;

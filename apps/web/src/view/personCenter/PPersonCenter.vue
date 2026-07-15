@@ -75,7 +75,7 @@
       <div v-if="canUseQuickCapture" class="person-menu-item" @click="openQuickCapture">
         <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
         <span class="person-menu-item-des">
-          {{ inbox.pendingTotal || '' }}
+          {{ inbox.actionTotal || '' }}
           <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
         </span>
       </div>

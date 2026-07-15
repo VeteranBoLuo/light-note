@@ -205,6 +205,21 @@ export function fingerprint() {
   const fingerprintString = attributes.join(';');
   return createHash(fingerprintString);
 }
+
+const LOG_DEVICE_ID_KEY = 'ln_log_device_id';
+
+// 日志排除使用的稳定设备标识。它只用于站长主动配置的日志白名单，不参与登录或权限判断。
+export function getLogDeviceId() {
+  try {
+    const stored = localStorage.getItem(LOG_DEVICE_ID_KEY);
+    if (stored) return stored;
+    const value = globalThis.crypto?.randomUUID?.() || generateUUID();
+    localStorage.setItem(LOG_DEVICE_ID_KEY, value);
+    return value;
+  } catch {
+    return '';
+  }
+}
 export function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     let r = (Math.random() * 16) | 0,

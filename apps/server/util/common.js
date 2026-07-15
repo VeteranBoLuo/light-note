@@ -15,6 +15,7 @@ import seoRouter from '../router/seo.js';
 import growthRouter from '../router/growth.js';
 import notificationRouter from '../router/notification.js';
 import inboxRouter from '../router/inbox.js';
+import todoRouter from '../router/todo.js';
 
 // 内部账号角色:站长(root) + 测试号(test)。日志/统计中作为「非真实用户」过滤。
 export const INTERNAL_ROLES = ['root', 'test'];
@@ -233,6 +234,10 @@ export const baseRouter = [
   {
     path: '/inbox',
     router: inboxRouter,
+  },
+  {
+    path: '/todo',
+    router: todoRouter,
   },
   {
     // SEO 内容页(/helpCenter、/helpCenter/:id、/sitemap.xml)：挂根路径，只注册 GET，

@@ -122,6 +122,18 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
   ['POST', '/inbox/enqueue'],
   ['POST', '/inbox/complete'],
 ]);
+declare(ADMIN_POLICIES.READ, 'todo', [
+  ['POST', '/todo/list'],
+  ['POST', '/todo/count'],
+]);
+// 待办属于账号私有行动数据，首期不开放管理员代管；普通请求不受该策略影响。
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
+  ['POST', '/todo/create'],
+  ['POST', '/todo/update'],
+  ['POST', '/todo/complete'],
+  ['POST', '/todo/reopen'],
+  ['POST', '/todo/delete'],
+]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'search', [
   ['POST', '/search/batchUpdateResourceTags'],
   ['POST', '/search/batchDeleteResources'],
@@ -241,6 +253,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/runSql'],
   ['POST', '/common/getAgentLogs'],
   ['POST', '/common/getAgentLogsSummary'],
+  ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverview'],
   ['POST', '/notification/send'],
   ['POST', '/notification/admin/stats'],

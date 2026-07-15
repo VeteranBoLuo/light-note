@@ -7,7 +7,7 @@
     <GlobalSearch />
     <BButton v-if="showQuickCapture" size="small" type="primary" class="quick-capture-btn" @click="openQuickCapture">
       {{ $t('inbox.quickCapture') }}
-      <span v-if="inbox.pendingTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
+      <span v-if="inbox.actionTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
     </BButton>
     <BTooltip :title="$t('home.toolbox')" always>
       <div v-if="!bookmark.isMobile" @click="toolkitClick" v-click-log="OPERATION_LOG_MAP.navigation.toolkit" class="toolkit-link">
@@ -67,7 +67,7 @@
   const showGuestRegister = computed(
     () => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor',
   );
-  const displayInboxCount = computed(() => (inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal)));
+  const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
 
   function githubClick() {
     window.open('https://github.com/VeteranBoLuo/light-note');

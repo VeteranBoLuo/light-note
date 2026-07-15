@@ -13,6 +13,7 @@ import { ensurePointsSchema } from './util/points.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
+import { startTodoReminderScheduler } from './util/todoReminder.js';
 import rateLimit from 'express-rate-limit';
 
 import dotenv from 'dotenv';
@@ -138,6 +139,7 @@ function scheduleGrowthNudges() {
   console.log(`[成长提醒] 定时已注册,首次执行: ${next.toLocaleString('zh-CN')}`);
 }
 scheduleGrowthNudges();
+startTodoReminderScheduler();
 
 // 启动 Express 服务器
 app.listen(9001, () => {

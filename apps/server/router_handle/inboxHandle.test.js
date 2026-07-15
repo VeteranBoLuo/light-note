@@ -11,6 +11,7 @@ const poolQuery = vi.fn();
 const enqueueResources = vi.fn();
 const completeResources = vi.fn();
 const queryPendingCount = vi.fn();
+const queryTodoPendingCount = vi.fn();
 const ensureNotVisitor = vi.fn(() => true);
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
@@ -26,6 +27,7 @@ vi.mock('../util/resourceInbox.js', () => ({
   normalizeResourceType: vi.fn((type) => (['bookmark', 'note', 'file'].includes(type) ? type : null)),
   queryPendingCount,
 }));
+vi.mock('../util/services/todoService.js', () => ({ queryTodoPendingCount }));
 
 const { completeInbox, countInbox, enqueueInbox, listInbox } = await import('./inboxHandle.js');
 
@@ -42,6 +44,7 @@ describe('inboxHandle 写事务', () => {
       pendingTotal: 1,
       typeTotals: { bookmark: 0, note: 1, file: 0 },
     });
+    queryTodoPendingCount.mockResolvedValue(2);
     ensureNotVisitor.mockReturnValue(true);
     getConnection.mockResolvedValue(connection);
   });
@@ -179,7 +182,12 @@ describe('inboxHandle 写事务', () => {
     await countInbox({ user: { id: 'u1' } }, res);
     expect(queryPendingCount).toHaveBeenCalledWith(expect.anything(), 'u1');
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
-      data: { pendingTotal: 1, typeTotals: { bookmark: 0, note: 1, file: 0 } },
+      data: {
+        pendingTotal: 1,
+        typeTotals: { bookmark: 0, note: 1, file: 0 },
+        todoPendingTotal: 2,
+        actionTotal: 3,
+      },
     }));
   });
 });

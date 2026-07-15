@@ -64,11 +64,12 @@ export const OPERATION_LOG_MAP = {
     saveNote: '保存笔记',
   }),
   cloudSpace: createModule('云空间', {}),
-  inbox: createModule('待整理箱', {
+  inbox: createModule('行动中心', {
     openCapture: '打开快速收集',
     captureBookmark: '收集书签成功',
     captureNote: '收集笔记成功',
     captureFile: '收集文件成功',
+    captureTodo: '创建待办成功',
     completeOne: '单条整理完成',
     completeBatch: '批量整理完成',
     deleteOne: '单条资源移入回收站',

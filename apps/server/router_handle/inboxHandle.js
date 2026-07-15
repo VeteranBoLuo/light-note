@@ -9,6 +9,12 @@ import {
   normalizeResourceType,
   queryPendingCount,
 } from '../util/resourceInbox.js';
+import { queryTodoPendingCount } from '../util/services/todoService.js';
+
+async function withActionCounts(counts, userId) {
+  const todoPendingTotal = await queryTodoPendingCount(pool, userId);
+  return { ...counts, todoPendingTotal, actionTotal: Number(counts.pendingTotal || 0) + todoPendingTotal };
+}
 
 const SORT_SQL = Object.freeze({ newest: 'i.create_time DESC', oldest: 'i.create_time ASC' });
 
@@ -27,7 +33,7 @@ function forbidVisitorWorkspaceFiles(req, res, items) {
 
 export async function countInbox(req, res) {
   try {
-    res.send(resultData(await queryPendingCount(pool, req.user.id)));
+    res.send(resultData(await withActionCounts(await queryPendingCount(pool, req.user.id), req.user.id)));
   } catch (error) {
     sendInboxError(res, error);
   }
@@ -95,7 +101,7 @@ export async function listInbox(req, res) {
         ORDER BY ${SORT_SQL[sort]}`,
       params,
     );
-    const counts = await queryPendingCount(pool, req.user.id);
+    const counts = await withActionCounts(await queryPendingCount(pool, req.user.id), req.user.id);
     res.send(
       resultData({
         items,

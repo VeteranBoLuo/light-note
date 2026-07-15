@@ -9,8 +9,8 @@
   >
     <div class="capture-modal" @paste="handlePaste">
       <p class="capture-hint">{{ t('inbox.captureHint') }}</p>
-      <div v-if="!successText && inbox.pendingTotal > 0" class="capture-pending">
-        <span>{{ t('inbox.pendingSummary', { count: inbox.pendingTotal }) }}</span>
+      <div v-if="!successText && inbox.actionTotal > 0" class="capture-pending">
+        <span>{{ t('inbox.pendingSummary', { count: inbox.actionTotal }) }}</span>
         <BButton size="small" @click="goInbox">{{ t('inbox.organizeNow') }}</BButton>
       </div>
       <BTabs v-model:active-tab="captureType" :options="typeOptions" @change="manualType = true" />
@@ -19,9 +19,9 @@
         <BInput
           v-model:value="content"
           type="textarea"
-          :rows="captureType === 'bookmark' ? 3 : 8"
+          :rows="captureType === 'bookmark' ? 3 : captureType === 'todo' ? 4 : 8"
           :maxlength="60000"
-          :placeholder="captureType === 'bookmark' ? t('inbox.urlPlaceholder') : t('inbox.textPlaceholder')"
+          :placeholder="capturePlaceholder"
           @input="detectType"
         />
         <div v-if="captureType === 'bookmark' && content" class="detected-type">
@@ -51,7 +51,7 @@
       <div class="capture-actions">
         <BButton @click="close">{{ t('common.cancel') }}</BButton>
         <BButton type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
-          {{ t('inbox.collect') }}
+          {{ captureType === 'todo' ? t('inbox.createTodo') : t('inbox.collect') }}
         </BButton>
       </div>
     </div>
@@ -70,35 +70,45 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import { inboxStore } from '@/store';
+  import { inboxStore, todoStore } from '@/store';
   import {
     buildCaptureFileMeta,
     buildMarkdownNotePayload,
     detectInboxCaptureType,
     normalizeCaptureUrl,
-    type InboxCaptureType,
   } from '@/utils/inboxCapture';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
+  import { createTodo } from '@/api/todoApi';
+  import type { ActionCaptureType } from '@/store/inbox';
 
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ captured: [] }>();
   const { t } = useI18n();
   const router = useRouter();
   const inbox = inboxStore();
-  const captureType = ref<InboxCaptureType>(inbox.quickCaptureType);
+  const todo = todoStore();
+  const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
   const content = ref('');
   const files = ref<File[]>([]);
   const submitting = ref(false);
   const successText = ref('');
   const manualType = ref(false);
-  const capturedResource = ref<{ type: InboxCaptureType; id?: string; title?: string } | null>(null);
+  const capturedResource = ref<{ type: ActionCaptureType; id?: string; title?: string } | null>(null);
 
   const typeOptions = computed(() => [
     { key: 'bookmark', label: t('inbox.bookmark') },
     { key: 'note', label: t('inbox.note') },
     { key: 'file', label: t('inbox.file') },
+    { key: 'todo', label: t('inbox.todo') },
   ]);
+  const capturePlaceholder = computed(() =>
+    captureType.value === 'bookmark'
+      ? t('inbox.urlPlaceholder')
+      : captureType.value === 'todo'
+        ? t('inbox.todoTitlePlaceholder')
+        : t('inbox.textPlaceholder'),
+  );
   const parsedUrl = computed(() => normalizeCaptureUrl(content.value));
   const validUrl = computed(() => Boolean(parsedUrl.value));
   const canSubmit = computed(() =>
@@ -119,7 +129,7 @@
   function detectType() {
     successText.value = '';
     capturedResource.value = null;
-    if (manualType.value || captureType.value === 'file') return;
+    if (manualType.value || captureType.value === 'file' || captureType.value === 'todo') return;
     captureType.value = detectInboxCaptureType(content.value);
   }
 
@@ -196,6 +206,14 @@
     return t('inbox.captureSuccessCount', { count: files.value.length });
   }
 
+  async function collectTodo() {
+    const title = content.value.trim().split(/\r?\n/)[0].slice(0, 200);
+    const res = await createTodo({ title, priority: 1 });
+    if (res.status !== 200) throw new Error(res.msg || t('inbox.todoSaveFailed'));
+    capturedResource.value = { type: 'todo', id: String(res.data?.id || ''), title };
+    return t('inbox.todoSaved');
+  }
+
   async function submit() {
     if (!canSubmit.value || submitting.value) return;
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
@@ -206,19 +224,26 @@
           ? await collectBookmark()
           : captureType.value === 'note'
             ? await collectNote()
-            : await collectFiles();
+            : captureType.value === 'file'
+              ? await collectFiles()
+              : await collectTodo();
       const operation =
         captureType.value === 'bookmark'
           ? OPERATION_LOG_MAP.inbox.captureBookmark
           : captureType.value === 'note'
             ? OPERATION_LOG_MAP.inbox.captureNote
-            : OPERATION_LOG_MAP.inbox.captureFile;
+            : captureType.value === 'file'
+              ? OPERATION_LOG_MAP.inbox.captureFile
+              : OPERATION_LOG_MAP.inbox.captureTodo;
       recordOperation(operation);
       content.value = '';
       files.value = [];
       manualType.value = false;
-      if (router.currentRoute.value.path.startsWith('/inbox')) await inbox.refreshList();
-      else await inbox.refreshCount();
+      if (router.currentRoute.value.path.startsWith('/inbox')) {
+        await Promise.all([inbox.refreshList(), todo.refreshList()]);
+      } else {
+        await Promise.all([inbox.refreshCount(), todo.refreshCount()]);
+      }
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
@@ -230,7 +255,7 @@
 
   function goInbox() {
     visible.value = false;
-    router.push('/inbox');
+    router.push(captureType.value === 'todo' ? { path: '/inbox', query: { tab: 'todo' } } : '/inbox');
   }
 
   function continueCapture() {
@@ -242,7 +267,8 @@
     const resource = capturedResource.value;
     if (!resource) return;
     visible.value = false;
-    if (resource.type === 'bookmark' && resource.id) router.push(`/manage/editBookmark/${resource.id}`);
+    if (resource.type === 'todo') router.push({ path: '/inbox', query: { tab: 'todo', todoId: resource.id } });
+    else if (resource.type === 'bookmark' && resource.id) router.push(`/manage/editBookmark/${resource.id}`);
     else if (resource.type === 'note' && resource.id) router.push(`/noteLibrary/${resource.id}`);
     else router.push({ path: '/cloudSpace', query: resource.title ? { fileName: resource.title } : {} });
   }

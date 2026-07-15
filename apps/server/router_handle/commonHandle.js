@@ -9,6 +9,7 @@ import path from 'path';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
+import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -141,6 +142,18 @@ const ensureRootRole = async (req, res) => {
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
     return null;
+  }
+};
+
+export const getDeepSeekBalance = async (req, res) => {
+  const rootUserId = await ensureRootRole(req, res);
+  if (!rootUserId) return;
+  try {
+    const balance = await queryDeepSeekBalance({ forceRefresh: req.body?.forceRefresh === true });
+    return res.send(resultData(balance));
+  } catch (error) {
+    console.error('[agent-balance] DeepSeek 余额查询失败:', error?.message || error);
+    return res.send(resultData(null, 500, 'DeepSeek 余额查询暂时不可用'));
   }
 };
 
@@ -389,9 +402,10 @@ export const addLogExcludeFp = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
     const fingerprint = String(req.body?.fingerprint || '').trim().slice(0, 128);
+    const deviceId = String(req.body?.deviceId || req.headers?.['x-log-device-id'] || '').trim().slice(0, 128);
     const note = String(req.body?.note || '').trim().slice(0, 255);
     if (!fingerprint) return res.send(resultData(null, 400, '缺少指纹'));
-    await addLogExclude(fingerprint, note);
+    await addLogExclude(fingerprint, deviceId, note);
     res.send(resultData(null));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));

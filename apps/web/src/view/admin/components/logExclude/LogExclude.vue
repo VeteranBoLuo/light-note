@@ -5,7 +5,7 @@
         <!-- 移动端标题由 CommonContainer 顶栏提供,这里隐藏避免重复;PC 端无顶栏,保留标题 -->
         <h2 v-if="!bookmark.isMobile" class="le-title">日志白名单</h2>
         <p class="le-subtitle">
-          加入白名单的浏览器指纹,其 API 日志 / 操作日志 / 转化漏斗都不再记录。用来把自己测试用的设备排除掉;换电脑/浏览器时,在对应设备上打开本页点一次「加入」即可(白名单存服务端,任意设备当场加)。
+          加入白名单后，系统优先使用本浏览器的稳定设备标识过滤 API 日志、操作日志和转化漏斗，并保留浏览器指纹兼容旧记录。浏览器升级或屏幕变化时也不容易失效。
         </p>
       </header>
 
@@ -13,9 +13,10 @@
         <div class="le-current-info">
           <span class="le-label">当前浏览器指纹</span>
           <code class="le-fp">{{ currentFp || '(未生成)' }}</code>
+          <span class="le-label">稳定设备标识：{{ currentDeviceId || '(存储不可用)' }}</span>
         </div>
-        <b-button v-if="currentFp" type="primary" size="small" :disabled="inList || adding" @click="addCurrent">
-          {{ inList ? '本设备已在白名单' : '加入白名单' }}
+        <b-button v-if="currentFp" type="primary" size="small" :disabled="stableInList || adding" @click="addCurrent">
+          {{ stableInList ? '本设备已在白名单' : fingerprintInList ? '升级为稳定白名单' : '加入白名单' }}
         </b-button>
       </div>
 
@@ -29,11 +30,11 @@
           v-for="item in list"
           :key="item.fingerprint"
           class="le-item"
-          :class="{ 'is-current': item.fingerprint === currentFp }"
+          :class="{ 'is-current': isCurrent(item) }"
         >
           <div class="le-item-main">
             <code class="le-fp">{{ item.fingerprint }}</code>
-            <span v-if="item.fingerprint === currentFp" class="le-badge">本设备</span>
+            <span v-if="isCurrent(item)" class="le-badge">本设备</span>
             <!-- 是否「本设备」由上方 badge 按当前浏览器指纹动态判断;历史数据里 note 被写死成「本设备」是脏数据,过滤掉避免每行都显示 -->
             <span v-if="item.note && item.note !== '本设备'" class="le-note">{{ item.note }}</span>
           </div>
@@ -51,9 +52,11 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { bookmarkStore } from '@/store';
   import router from '@/router';
+  import { getLogDeviceId } from '@/utils/common';
 
   interface ExcludeItem {
     fingerprint: string;
+    deviceId?: string;
     note?: string;
     create_time?: string;
   }
@@ -63,8 +66,17 @@
   const loading = ref(false);
   const adding = ref(false);
   const currentFp = ref<string>((window as any).fingerprint || '');
+  const currentDeviceId = ref(getLogDeviceId());
 
-  const inList = computed(() => list.value.some((i) => i.fingerprint === currentFp.value));
+  const isCurrent = (item: ExcludeItem) =>
+    Boolean(
+      (currentDeviceId.value && item.deviceId === currentDeviceId.value) ||
+      item.fingerprint === currentFp.value,
+    );
+  const stableInList = computed(() =>
+    Boolean(currentDeviceId.value && list.value.some((item) => item.deviceId === currentDeviceId.value)),
+  );
+  const fingerprintInList = computed(() => list.value.some((item) => item.fingerprint === currentFp.value));
 
   async function load() {
     loading.value = true;
@@ -77,11 +89,11 @@
   }
 
   async function addCurrent() {
-    if (!currentFp.value || inList.value) return;
+    if (!currentFp.value || stableInList.value) return;
     adding.value = true;
     try {
       // 不传 note:是否本设备由列表项 badge 按 fingerprint === currentFp 动态判断,固化进 note 会导致换设备后仍显示「本设备」
-      const res = await addLogExclude(currentFp.value);
+      const res = await addLogExclude(currentFp.value, currentDeviceId.value);
       if (res.status === 200) {
         message.success('已加入白名单,本设备的日志/漏斗将不再记录');
         await load();

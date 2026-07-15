@@ -17,7 +17,7 @@
       @click="goTo('/inbox')"
     >
       {{ t('resourceCenter.sections.inbox') }}
-      <span v-if="inbox.pendingTotal" class="section-nav-count">{{ displayInboxCount }}</span>
+      <span v-if="inbox.actionTotal" class="section-nav-count">{{ displayInboxCount }}</span>
     </BButton>
   </div>
 </template>
@@ -36,13 +36,13 @@
   const inbox = inboxStore();
 
   const activeSection = computed(() => (route.path.startsWith('/inbox') ? 'inbox' : 'resources'));
-  const displayInboxCount = computed(() => (inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal)));
+  const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
 
   function goTo(path: '/search' | '/inbox') {
     if (route.path === path) return;
     recordOperation({
       module: '资源中心',
-      operation: path === '/inbox' ? '切换待整理视图' : '切换全部资源视图',
+      operation: path === '/inbox' ? '切换行动中心视图' : '切换全部资源视图',
     });
     router.push(path);
   }

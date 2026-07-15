@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
-import { getBrowserType, getUserOsInfo } from '@/utils/common.ts';
+import { getBrowserType, getLogDeviceId, getUserOsInfo } from '@/utils/common.ts';
 import {
   clearAdminLoginPreview,
   getAdminContextToken,
@@ -168,6 +168,8 @@ request.interceptors.request.use(
         config.headers['X-Admin-Context'] = adminContextToken;
       }
       config.headers['fingerprint'] = (window as any)['fingerprint'];
+      const logDeviceId = getLogDeviceId();
+      if (logDeviceId) config.headers['X-Log-Device-Id'] = logDeviceId;
       const rememberedSid = localStorage.getItem('rememberedSid');
       // 过期流程中不再重放旧 sid,避免带着失效凭证继续触发过期
       if (rememberedSid && !authExpiredFlow) {

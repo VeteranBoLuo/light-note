@@ -21,6 +21,7 @@ import {
   revokeAdminContext,
 } from '../util/adminContextStore.js';
 import { recordAdminContextAudit } from '../util/adminContextAudit.js';
+import { isSelfTraffic } from '../util/logExclude.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -267,26 +268,29 @@ export const registerUser = async (req, res) => {
     // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
     createNotification(userId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});
 
-    // 记录日志（非关键，失败不影响注册）
-    try {
-      const system = JSON.stringify({
-        browser: req.headers['browser'] ?? '未知',
-        os: req.headers['os'] ?? '未知',
-        fingerprint: req.headers['fingerprint'] ?? '未知',
-      });
-      const requestPayload = JSON.stringify(req.method === 'GET' ? req.query : req.body);
-      const log = {
-        userId: userId,
-        method: req.method,
-        url: req.originalUrl,
-        req: requestPayload === '{}' ? '' : requestPayload,
-        ip: getClientIp(req) || '未知',
-        system: system,
-        del_flag: 0,
-      };
-      await pool.query('INSERT INTO api_logs SET ?', [insertData(log)]);
-    } catch (err) {
-      console.error('注册日志更新错误:', err.message);
+    // 记录日志（非关键，失败不影响注册）。注册路由手动写 api_logs，
+    // 不经过全局请求日志中间件，因此必须在这里单独应用自有流量白名单。
+    if (!isSelfTraffic(req)) {
+      try {
+        const system = JSON.stringify({
+          browser: req.headers['browser'] ?? '未知',
+          os: req.headers['os'] ?? '未知',
+          fingerprint: req.headers['fingerprint'] ?? '未知',
+        });
+        const requestPayload = JSON.stringify(req.method === 'GET' ? req.query : req.body);
+        const log = {
+          userId: userId,
+          method: req.method,
+          url: req.originalUrl,
+          req: requestPayload === '{}' ? '' : requestPayload,
+          ip: getClientIp(req) || '未知',
+          system: system,
+          del_flag: 0,
+        };
+        await pool.query('INSERT INTO api_logs SET ?', [insertData(log)]);
+      } catch (err) {
+        console.error('注册日志更新错误:', err.message);
+      }
     }
 
     // 注册即登录:签发会话,前端直接进应用(新用户从空状态开始,由前端空态引导上手)

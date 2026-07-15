@@ -35,6 +35,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'file.js': '/file',
       'growth.js': '/growth',
       'inbox.js': '/inbox',
+      'todo.js': '/todo',
       'json.js': '/json',
       'knowledgeBase.js': '/knowledgeBase',
       'noteLibrary.js': '/note',
