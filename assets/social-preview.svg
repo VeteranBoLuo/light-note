@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">轻笺 GitHub 社交预览图</title>
+  <desc id="desc">轻笺是一款面向书签、笔记、文件与 AI 的轻量级知识管理平台。</desc>
+  <defs>
+    <linearGradient id="bg" x1="70" y1="40" x2="1130" y2="600" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17182f"/>
+      <stop offset="0.52" stop-color="#0e1020"/>
+      <stop offset="1" stop-color="#080a13"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="88" y1="180" x2="660" y2="390" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#817cff"/>
+      <stop offset="0.34" stop-color="#615ced"/>
+      <stop offset="0.66" stop-color="#00c69a"/>
+      <stop offset="1" stop-color="#ff9d2e"/>
+    </linearGradient>
+    <radialGradient id="glowPurple" cx="0" cy="0" r="1" gradientTransform="translate(270 300) rotate(18) scale(420 350)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#615ced" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#615ced" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowGreen" cx="0" cy="0" r="1" gradientTransform="translate(970 300) rotate(150) scale(350 300)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00a884" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#00a884" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000" flood-opacity=".32"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="630" rx="28" fill="url(#glowPurple)"/>
+  <rect width="1200" height="630" rx="28" fill="url(#glowGreen)"/>
+  <g opacity=".14" stroke="#8d91b7">
+    <path d="M0 105h1200M0 210h1200M0 315h1200M0 420h1200M0 525h1200"/>
+    <path d="M120 0v630M240 0v630M360 0v630M480 0v630M600 0v630M720 0v630M840 0v630M960 0v630M1080 0v630"/>
+  </g>
+
+  <g transform="translate(76 70)">
+    <rect width="74" height="74" rx="22" fill="url(#brand)"/>
+    <path d="M21 24.5c0-4.7 3.8-8.5 8.5-8.5h25c4.7 0 8.5 3.8 8.5 8.5v25c0 4.7-3.8 8.5-8.5 8.5h-25c-4.7 0-8.5-3.8-8.5-8.5v-25Z" fill="#fff" fill-opacity=".16" stroke="#fff" stroke-width="3"/>
+    <path d="M30 31h24M30 40h19M30 49h14" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <text x="172" y="116" fill="#f7f8ff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="31" font-weight="700">轻笺 · Light Note</text>
+  <text x="172" y="145" fill="#9499b8" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="17">boluo66.top</text>
+
+  <text x="76" y="265" fill="#f8f9ff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="62" font-weight="750" letter-spacing="-2">轻笺 · 轻量级知识管理</text>
+  <text x="78" y="332" fill="#918aff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="31" font-weight="650">书签 · 笔记 · 文件 · AI</text>
+  <text x="78" y="382" fill="#afb3ca" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="23">随手记录，随时整理</text>
+
+  <g transform="translate(76 462)">
+    <rect width="146" height="48" rx="24" fill="#615ced" fill-opacity=".14" stroke="#756fff"/>
+    <circle cx="28" cy="24" r="8" fill="#615ced"/>
+    <text x="47" y="31" fill="#d9d7ff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="600">书签</text>
+    <g transform="translate(162)">
+      <rect width="146" height="48" rx="24" fill="#00a884" fill-opacity=".12" stroke="#00a884"/>
+      <circle cx="28" cy="24" r="8" fill="#00a884"/>
+      <text x="47" y="31" fill="#bdf5e8" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="600">笔记</text>
+    </g>
+    <g transform="translate(324)">
+      <rect width="146" height="48" rx="24" fill="#ff8a00" fill-opacity=".12" stroke="#ff8a00"/>
+      <circle cx="28" cy="24" r="8" fill="#ff8a00"/>
+      <text x="47" y="31" fill="#ffe0b5" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="600">文件</text>
+    </g>
+  </g>
+
+  <g transform="translate(800 124)" filter="url(#shadow)">
+    <rect width="318" height="382" rx="34" fill="#171925" stroke="#35394d" stroke-width="2"/>
+    <rect x="27" y="29" width="264" height="68" rx="18" fill="#202238"/>
+    <rect x="49" y="51" width="24" height="29" rx="6" fill="#615ced"/>
+    <path d="M56 59h10M56 65h10M56 71h7" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="91" y="70" fill="#ececff" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="650">收藏灵感</text>
+    <text x="91" y="89" fill="#858aa5" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="12">书签 · 自动获取网站信息</text>
+
+    <rect x="27" y="116" width="264" height="68" rx="18" fill="#192b2b"/>
+    <rect x="49" y="138" width="24" height="29" rx="6" fill="#00a884"/>
+    <path d="M56 146h10M56 152h10M56 158h7" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="91" y="157" fill="#eafffa" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="650">记录想法</text>
+    <text x="91" y="176" fill="#7da99f" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="12">笔记 · 富文本与 Markdown</text>
+
+    <rect x="27" y="203" width="264" height="68" rx="18" fill="#2e271c"/>
+    <path d="M49 231c0-5 4-9 9-9h9l6 6h11c5 0 9 4 9 9v13H49v-19Z" fill="#ff8a00"/>
+    <text x="105" y="244" fill="#fff6e9" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="650">管理文件</text>
+    <text x="105" y="263" fill="#b39a78" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="12">文件 · 云端集中整理</text>
+
+    <rect x="27" y="290" width="264" height="65" rx="18" fill="#2d2030"/>
+    <path d="m62 307 4.5 9 9 4.5-9 4.5-4.5 9-4.5-9-9-4.5 9-4.5 4.5-9Z" fill="#ec4899"/>
+    <text x="91" y="330" fill="#fff0fa" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="19" font-weight="650">AI 智能整理</text>
+    <text x="91" y="349" fill="#ac819f" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="12">理解、查找与组织内容</text>
+  </g>
+
+  <text x="76" y="575" fill="#737891" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="15" letter-spacing="1.2">FREE ONLINE WORKSPACE</text>
+</svg>
