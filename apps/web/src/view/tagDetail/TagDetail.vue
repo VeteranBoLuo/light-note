@@ -989,8 +989,22 @@
 
   @media (max-width: 767px) {
     .tag-detail-container {
+      min-width: 0;
+      max-width: 100%;
       height: 100%;
       padding: 12px;
+      overflow-x: hidden;
+    }
+
+    .tag-content,
+    .resource-section,
+    .summary-grid,
+    .related-tag-grid,
+    .bookmark-grid,
+    .note-list,
+    .file-list {
+      min-width: 0;
+      max-width: 100%;
     }
 
     .summary-grid {
@@ -1014,11 +1028,27 @@
     }
 
     .bookmark-grid {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    .note-list {
-      grid-template-columns: 1fr;
+    .related-tag-grid,
+    .note-list,
+    .file-list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .related-tag-card,
+    .bookmark-card,
+    .note-item,
+    .file-item {
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .bookmark-card-header,
+    .bookmark-card-name {
+      min-width: 0;
     }
   }
 

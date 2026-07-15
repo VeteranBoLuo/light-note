@@ -6,14 +6,15 @@
         <p class="p-trash-desc">
           <template v-if="total > 0">
             {{ $t('trash.totalCount', { count: total }) }}
-            <template v-if="trashFileSize > 0"> · {{ $t('trash.trashFileSize') }} {{ trashFileSizeMB }}</template>
+            <template v-if="trashFileSize > 0"> · {{ $t('trash.trashFileSize') }} {{ trashFileSizeText }}</template>
           </template>
           <template v-else>{{ $t('trash.subtitle') }}</template>
         </p>
         <!-- 提示 -->
         <div v-if="total > 0" class="p-trash-info flex-align-center-gap">
           <svg-icon :src="icon.table_delete" />
-          <span>{{ $t('trash.autoCleanTip') }}</span>
+          <span v-if="retainDays >= 3650">{{ $t('trash.autoCleanForever') }}</span>
+          <span v-else>{{ $t('trash.autoCleanTip', { days: retainDays }) }}</span>
         </div>
         <div v-if="trashFileSizeWarnLevel" :class="['p-trash-warn', `is-${trashFileSizeWarnLevel}`]">
           <span>{{
@@ -34,32 +35,59 @@
       </div>
       <div class="p-trash-tabs">
         <div class="trash-type-filter">
-          <button
+          <BButton
             class="trash-type-btn"
             :class="{ active: filterType === '' }"
-            @click="filterType = ''; onFilterChange()"
-          >{{ $t('trash.allType') }}</button>
-          <button
+            @click="
+              filterType = '';
+              onFilterChange();
+            "
+            >{{ $t('trash.allType') }}</BButton
+          >
+          <BButton
             class="trash-type-btn"
             :class="{ active: filterType === 'bookmark' }"
-            @click="filterType = 'bookmark'; onFilterChange()"
-          >{{ $t('trash.bookmark') }}</button>
-          <button
+            @click="
+              filterType = 'bookmark';
+              onFilterChange();
+            "
+            >{{ $t('trash.bookmark') }}</BButton
+          >
+          <BButton
             class="trash-type-btn"
             :class="{ active: filterType === 'note' }"
-            @click="filterType = 'note'; onFilterChange()"
-          >{{ $t('trash.note') }}</button>
-          <button
+            @click="
+              filterType = 'note';
+              onFilterChange();
+            "
+            >{{ $t('trash.note') }}</BButton
+          >
+          <BButton
             class="trash-type-btn"
             :class="{ active: filterType === 'file' }"
-            @click="filterType = 'file'; onFilterChange()"
-          >{{ $t('trash.file') }}</button>
+            @click="
+              filterType = 'file';
+              onFilterChange();
+            "
+            >{{ $t('trash.file') }}</BButton
+          >
         </div>
-        <div style="display: flex; gap: 6px; flex-shrink: 0">
-          <b-button type="danger" :loading="emptyingAll" :disabled="total === 0" class="p-trash-empty-btn" @click="confirmEmptyAll">
+        <div class="p-trash-global-actions">
+          <b-button
+            type="danger"
+            :loading="emptyingAll"
+            :disabled="total === 0"
+            class="p-trash-empty-btn"
+            @click="confirmEmptyAll"
+          >
             {{ $t('trash.emptyAll') }}
           </b-button>
-          <b-button :loading="restoringAll" :disabled="total === 0" class="p-trash-empty-btn" @click="confirmRestoreAll">
+          <b-button
+            :loading="restoringAll"
+            :disabled="total === 0"
+            class="p-trash-empty-btn"
+            @click="confirmRestoreAll"
+          >
             一键恢复
           </b-button>
         </div>
@@ -102,10 +130,7 @@
             }}</span>
           </div>
           <div class="p-trash-actions">
-            <BButton
-              size="small"
-              @click="confirmRestore(item)"
-            >
+            <BButton size="small" @click="confirmRestore(item)">
               {{ $t('trash.restore') }}
             </BButton>
             <BButton size="small" type="danger" @click="confirmDelete(item)">{{ $t('trash.permanentDelete') }}</BButton>
@@ -127,8 +152,11 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useGrowth } from '@/composables/useGrowth.ts';
 
   const { t } = useI18n();
+  const { growth, load: loadGrowth } = useGrowth();
+  const retainDays = computed(() => growth.value?.trashDays || 30);
 
   const loading = ref(false);
   const emptyingAll = ref(false);
@@ -138,7 +166,8 @@
   const keyword = ref('');
   const total = ref(0);
   const trashFileSize = ref(0);
-  const trashFileSizeMB = computed(() => formatSize(trashFileSize.value));
+  const trashFileSizeText = computed(() => formatSize(trashFileSize.value));
+  const trashFileSizeMB = computed(() => (trashFileSize.value / 1024 / 1024).toFixed(1));
   const trashFileSizeWarnLevel = computed(() => {
     const mb = trashFileSize.value / 1024 / 1024;
     if (mb > 500) return 'danger';
@@ -267,7 +296,6 @@
       const res = await apiBasePost('/api/trash/restoreAll', {});
       if (res.status === 200) {
         message.success(res.msg || '恢复成功');
-        selectedIds.value = [];
         fetchList();
       }
     } catch (e: any) {
@@ -322,6 +350,7 @@
   }
 
   fetchList();
+  loadGrowth();
 </script>
 
 <style lang="less" scoped>
@@ -377,48 +406,20 @@
 
   .p-trash-tabs {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    align-items: stretch;
+    flex-direction: column;
     gap: 8px;
     margin-bottom: 14px;
+  }
 
-    :deep(.ant-radio-group) {
-      background: var(--table-header-bg-color);
-      border-radius: 10px;
-      padding: 3px;
-      flex-shrink: 0;
-
-      .ant-radio-button-wrapper {
-        border: none;
-        background: transparent;
-        border-radius: 8px;
-        padding: 0 12px;
-        height: 30px;
-        line-height: 30px;
-        font-size: 12px;
-        color: var(--desc-color);
-        box-shadow: none;
-        transition: all 0.2s;
-
-        &::before {
-          display: none;
-        }
-
-        &.ant-radio-button-wrapper-checked {
-          background: var(--bg-color);
-          color: var(--text-color);
-          font-weight: 600;
-        }
-
-        &:hover:not(.ant-radio-button-wrapper-checked) {
-          color: var(--text-color);
-        }
-      }
-    }
+  .p-trash-global-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .p-trash-empty-btn {
-    flex-shrink: 0;
+    width: 100%;
   }
 
   .p-trash-footer {
@@ -602,36 +603,42 @@
       left: 120%;
     }
   }
-.trash-type-filter {
-  display: inline-flex;
-  border: 1px solid var(--card-border-color, #6e6e77);
-  border-radius: 8px;
-  overflow: hidden;
-}
+  .trash-type-filter {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    border: 1px solid var(--card-border-color, #6e6e77);
+    border-radius: 8px;
+    overflow: hidden;
+  }
 
-.trash-type-btn {
-  padding: 4px 16px;
-  border: none;
-  border-right: 1px solid var(--card-border-color, #6e6e77);
-  background: transparent;
-  color: var(--text-color);
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
+  .trash-type-btn {
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    padding: 4px 8px;
+    border: none;
+    border-right: 1px solid var(--card-border-color, #6e6e77);
+    border-radius: 0;
+    background: transparent !important;
+    color: var(--text-color);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
 
-.trash-type-btn:last-child {
-  border-right: none;
-}
+  .trash-type-btn:last-child {
+    border-right: none;
+  }
 
-.trash-type-btn:hover {
-  background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent);
-  color: var(--primary-color, #615ced);
-}
+  .trash-type-btn:hover {
+    background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent);
+    color: var(--primary-color, #615ced);
+  }
 
-.trash-type-btn.active {
-  background: var(--primary-color, #615ced);
-  color: #fff;
-}
+  .trash-type-btn.active {
+    background: var(--primary-color, #615ced) !important;
+    color: #fff !important;
+  }
 </style>

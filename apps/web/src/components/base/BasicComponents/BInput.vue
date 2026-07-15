@@ -6,6 +6,7 @@
       :id="id"
       :rows="rows"
       :maxlength="maxlength"
+      :disabled="disabled"
       class="b-textarea"
       :value="value"
       @input="handleInput"
@@ -36,6 +37,7 @@
       }"
       :autocomplete="autocomplete"
       :maxlength="maxlength"
+      :disabled="disabled"
       :placeholder="placeholder"
       @change="$emit('change')"
       @focus="$emit('focus')"
@@ -70,6 +72,7 @@
       maxlength?: number | string;
       clearable?: boolean;
       submitOnEnter?: boolean;
+      disabled?: boolean;
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),
@@ -82,6 +85,7 @@
       clearable: false,
       submitOnEnter: false,
       rows: 4,
+      disabled: false,
     },
   );
   const value: Ref<string | number | undefined> = defineModel('value');
@@ -169,6 +173,10 @@
       background: var(--bl-input-noBorder-hover-bg-color);
     }
     outline: none;
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.72;
+    }
   }
   .b-textarea {
     border: 1px solid #d9d9d9;
@@ -190,6 +198,10 @@
       border: 1px solid var(--bl-input-border-h-color);
     }
     outline: none;
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.72;
+    }
   }
 
   .prefix-icon {
@@ -236,7 +248,9 @@
     cursor: pointer;
     font-size: 12px;
     color: var(--desc-color);
-    transition: background 0.15s, color 0.15s;
+    transition:
+      background 0.15s,
+      color 0.15s;
     line-height: 1;
     z-index: 1;
   }

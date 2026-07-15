@@ -291,4 +291,31 @@
       display: none;
     }
   }
+
+  @media (max-width: 767px) {
+    .note-card {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .note-content {
+      min-width: 0;
+    }
+
+    .note-title {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .note-content :deep(img),
+    .note-content :deep(table),
+    .note-content :deep(pre) {
+      max-width: 100%;
+    }
+
+    .note-content :deep(img) {
+      height: auto !important;
+      object-fit: contain;
+    }
+  }
 </style>

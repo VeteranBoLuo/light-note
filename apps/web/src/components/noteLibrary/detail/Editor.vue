@@ -21,10 +21,18 @@
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
           <span class="md-view-toggle">
-            <button class="md-view-btn" :class="{ active: mdView === 'edit' }" @click="mdView = 'edit'" :title="$t('note.mdEditOnly')"
+            <button
+              class="md-view-btn"
+              :class="{ active: mdView === 'edit' }"
+              @click="mdView = 'edit'"
+              :title="$t('note.mdEditOnly')"
               >{{ $t('note.mdEdit') }}</button
             >
-            <button class="md-view-btn" :class="{ active: mdView === 'split' }" @click="mdView = 'split'" :title="$t('note.mdSplit')"
+            <button
+              class="md-view-btn"
+              :class="{ active: mdView === 'split' }"
+              @click="mdView = 'split'"
+              :title="$t('note.mdSplit')"
               >{{ $t('note.mdEditPreview') }}</button
             >
             <button
@@ -817,7 +825,11 @@
         fetch: function (callback) {
           callback([
             { type: 'menuitem', text: t('noteDetail.editor.aiPolish'), onAction: () => aiEditSelection('polish') },
-            { type: 'menuitem', text: t('noteDetail.editor.aiTranslate'), onAction: () => aiEditSelection('translate') },
+            {
+              type: 'menuitem',
+              text: t('noteDetail.editor.aiTranslate'),
+              onAction: () => aiEditSelection('translate'),
+            },
             { type: 'menuitem', text: t('noteDetail.editor.aiCondense'), onAction: () => aiEditSelection('condense') },
             { type: 'menuitem', text: t('noteDetail.editor.aiExpand'), onAction: () => aiEditSelection('expand') },
           ]);
@@ -866,8 +878,12 @@
         }, 0);
       });
     },
-    content_style:
+    content_style: [
       '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 10px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; }',
+      bookmark.isMobile
+        ? '.note-editor-body, .mce-content-body { max-width: 100%; overflow-wrap: anywhere; box-sizing: border-box; } .note-editor-body h1, .mce-content-body h1 { font-size: clamp(26px, 8vw, 38px); line-height: 1.2; overflow-wrap: anywhere; } .note-editor-body img, .mce-content-body img { max-width: 100%; height: auto !important; object-fit: contain; } .note-editor-body img[src*="/uploads/note-"], .mce-content-body img[src*="/uploads/note-"] { width: 100% !important; }'
+        : '',
+    ].join(' '),
   }));
 
   watchEffect(() => {
@@ -1367,6 +1383,30 @@
       background-color: transparent !important;
       border: none !important;
       overflow: hidden !important;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .note-editor-body,
+    .md-preview {
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      box-sizing: border-box;
+    }
+
+    .note-editor-body img[src*='/uploads/note-'],
+    .md-preview img[src*='/uploads/note-'] {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      object-fit: contain;
+    }
+
+    .note-editor-body h1,
+    .md-preview h1 {
+      font-size: clamp(26px, 8vw, 38px);
+      line-height: 1.2;
+      overflow-wrap: anywhere;
     }
   }
 

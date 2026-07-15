@@ -2,159 +2,91 @@
   <div class="note-library-wrapper">
     <div class="note-library-container">
       <div class="note-library-header" v-if="bookmark.isMobile">
-      <div class="header-content">
-        <div class="back-icon" @click="backRouterPage">
-          <SvgIcon :src="icon.noteDetail.back" />
+        <div class="header-content">
+          <div class="back-icon" @click="backRouterPage">
+            <SvgIcon :src="icon.noteDetail.back" />
+          </div>
+          <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
         </div>
-        <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
-      </div>
-      <div class="handle-btn-group">
-        <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
+        <div class="handle-btn-group">
+          <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
         <b-button
           type="primary"
+          class="mobile-add-note-btn"
           style="border-radius: 20px"
           @click="showNewNotePicker"
           v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
         >
-          + {{ $t('note.newNote') }}
-        </b-button>
-      </div>
-    </div>
-    <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
-      <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{
-        $t('note.title')
-      }}</div>
-      <div class="handle-btn-group">
-        <template v-if="hasCheck">
-          <span class="deleteText" @click="batchDeleteNote"
-            ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
-          >
-          <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
-            {{ $t('note.exitBatch') }}
+          <span>+</span><span class="mobile-add-note-label">{{ $t('note.newNote') }}</span>
           </b-button>
-        </template>
-        <template v-else>
-          <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
-          <ViewModeToggle />
-          <div
-            class="search-icon flex-center dom-hover"
-            :class="searchActive ? 'normal-input' : 'icon-input'"
-            @click="searchActive = true"
-            v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote"
-            :style="{ width: searchActive ? '200px' : '32px' }"
-          >
-            <b-input :placeholder="searchActive ? $t('note.searchNote') : ''" v-model:value="searchValue">
-              <template #prefix>
-                <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" @click="focusSearchInput" />
-              </template>
-            </b-input>
-          </div>
-          <b-button style="border-radius: 20px" @click="aiOrgVisible = true">
-            <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
-            {{ $t('bookmarkMg.aiOrganizeBtn') }}
-          </b-button>
-          <b-button
-            type="primary"
-            style="border-radius: 20px"
-            @click="showNewNotePicker"
-            v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-          >
-            + {{ $t('note.newNote') }}
-          </b-button>
-        </template>
-      </div>
-    </div>
-    <div v-if="loading && currentViewMode === 'card'" class="note-library-body note-card-skeleton-wrap">
-      <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
-        <div class="skeleton-line long"></div>
-        <div class="skeleton-line"></div>
-        <div class="skeleton-line short"></div>
-        <div class="skeleton-tags">
-          <div class="skeleton-chip"></div>
-          <div class="skeleton-chip"></div>
         </div>
       </div>
-    </div>
-    <VueDraggable
-      v-else-if="currentViewMode === 'card'"
-      :disabled="!canDragNote"
-      :animation="200"
-      v-model="visibleDragNoteList"
-      class="note-library-body"
-      @start="onStart"
-      @end="onEnd"
-      ghost-class="note-card-drag-ghost"
-      chosen-class="note-card-drag-chosen"
-      drag-class="note-card-dragging"
-      :scroll-sensitivity="50"
-      :forceFallback="true"
-      :touchStartThreshold="10"
-      :delay="100"
-    >
-      <RightMenu
-        v-for="note in visibleDragNoteList"
-        :key="note.id"
-        :menu="[t('inbox.addExisting')]"
-        @select="addNoteToInbox(note)"
-      >
-        <note-card :note="note" @nodeTypeChange="handleNodeTypeChange" />
-      </RightMenu>
-    </VueDraggable>
-    <div v-if="currentViewMode === 'list'" class="note-library-body-list">
-      <div class="tag-sidebar">
-        <template v-if="loading">
-          <div class="tag-tree-skeleton">
-            <div class="skeleton-line"></div>
-            <div class="skeleton-line short"></div>
-            <div class="skeleton-line"></div>
-            <div class="skeleton-line medium"></div>
-            <div class="skeleton-line short"></div>
-          </div>
-        </template>
-        <template v-else>
-          <div
-            class="tag-item"
-            :class="{ active: selectedTag === null }"
-            @click="selectTag(null)"
-            v-click-log="{ module: '笔记库', operation: '筛选全部笔记' }"
-          >
-            {{ $t('note.allNote') }}
-          </div>
-          <div
-            class="tag-item"
-            :class="{ active: selectedTag === 'null' }"
-            @click="selectTag('null')"
-            v-click-log="{ module: '笔记库', operation: '筛选无标签笔记' }"
-          >
-            {{ $t('note.noTagNote') }}
-          </div>
-          <div
-            v-for="tag in visibleNoteTags"
-            class="tag-item"
-            :class="{ active: selectedTag === tag.id }"
-            @click="selectTag(tag)"
-            v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
-          >
-            {{ tag.name }}
-          </div>
-        </template>
+      <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
+        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{
+          $t('note.title')
+        }}</div>
+        <div class="handle-btn-group">
+          <template v-if="hasCheck">
+            <span class="deleteText" @click="batchDeleteNote"
+              ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
+            >
+            <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
+              {{ $t('note.exitBatch') }}
+            </b-button>
+          </template>
+          <template v-else>
+            <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
+            <ViewModeToggle />
+            <div
+              class="search-icon flex-center dom-hover"
+              :class="searchActive ? 'normal-input' : 'icon-input'"
+              @click="searchActive = true"
+              v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote"
+              :style="{ width: searchActive ? '200px' : '32px' }"
+            >
+              <b-input :placeholder="searchActive ? $t('note.searchNote') : ''" v-model:value="searchValue">
+                <template #prefix>
+                  <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" @click="focusSearchInput" />
+                </template>
+              </b-input>
+            </div>
+            <b-button style="border-radius: 20px" @click="aiOrgVisible = true">
+              <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
+              {{ $t('bookmarkMg.aiOrganizeBtn') }}
+            </b-button>
+            <b-button
+              type="primary"
+              style="border-radius: 20px"
+              @click="showNewNotePicker"
+              v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+            >
+              + {{ $t('note.newNote') }}
+            </b-button>
+          </template>
+        </div>
       </div>
-      <div v-if="loading" class="note-list note-list-skeleton-wrap">
-        <div v-for="n in 10" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
+      <div v-if="loading && currentViewMode === 'card'" class="note-library-body note-card-skeleton-wrap">
+        <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
           <div class="skeleton-line long"></div>
           <div class="skeleton-line"></div>
           <div class="skeleton-line short"></div>
+          <div class="skeleton-tags">
+            <div class="skeleton-chip"></div>
+            <div class="skeleton-chip"></div>
+          </div>
         </div>
       </div>
       <VueDraggable
-        v-else
+        v-else-if="currentViewMode === 'card'"
         :disabled="!canDragNote"
         :animation="200"
-        ref="el"
         v-model="visibleDragNoteList"
-        class="note-list"
+        class="note-library-body"
         @start="onStart"
         @end="onEnd"
+        ghost-class="note-card-drag-ghost"
+        chosen-class="note-card-drag-chosen"
+        drag-class="note-card-dragging"
         :scroll-sensitivity="50"
         :forceFallback="true"
         :touchStartThreshold="10"
@@ -166,39 +98,108 @@
           :menu="[t('inbox.addExisting')]"
           @select="addNoteToInbox(note)"
         >
-          <note-list-item :note="note" @nodeTypeChange="handleNodeTypeChange" />
+          <note-card :note="note" @nodeTypeChange="handleNodeTypeChange" />
         </RightMenu>
       </VueDraggable>
-    </div>
-    <div
-      v-if="!loading && !visibleDragNoteList.length"
+      <div v-if="currentViewMode === 'list'" class="note-library-body-list">
+        <div class="tag-sidebar">
+          <template v-if="loading">
+            <div class="tag-tree-skeleton">
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line short"></div>
+              <div class="skeleton-line"></div>
+              <div class="skeleton-line medium"></div>
+              <div class="skeleton-line short"></div>
+            </div>
+          </template>
+          <template v-else>
+            <div
+              class="tag-item"
+              :class="{ active: selectedTag === null }"
+              @click="selectTag(null)"
+              v-click-log="{ module: '笔记库', operation: '筛选全部笔记' }"
+            >
+              {{ $t('note.allNote') }}
+            </div>
+            <div
+              class="tag-item"
+              :class="{ active: selectedTag === 'null' }"
+              @click="selectTag('null')"
+              v-click-log="{ module: '笔记库', operation: '筛选无标签笔记' }"
+            >
+              {{ $t('note.noTagNote') }}
+            </div>
+            <div
+              v-for="tag in visibleNoteTags"
+              class="tag-item"
+              :class="{ active: selectedTag === tag.id }"
+              @click="selectTag(tag)"
+              v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
+            >
+              {{ tag.name }}
+            </div>
+          </template>
+        </div>
+        <div v-if="loading" class="note-list note-list-skeleton-wrap">
+          <div v-for="n in 10" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
+            <div class="skeleton-line long"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line short"></div>
+          </div>
+        </div>
+        <VueDraggable
+          v-else
+          :disabled="!canDragNote"
+          :animation="200"
+          ref="el"
+          v-model="visibleDragNoteList"
+          class="note-list"
+          @start="onStart"
+          @end="onEnd"
+          :scroll-sensitivity="50"
+          :forceFallback="true"
+          :touchStartThreshold="10"
+          :delay="100"
+        >
+          <RightMenu
+            v-for="note in visibleDragNoteList"
+            :key="note.id"
+            :menu="[t('inbox.addExisting')]"
+            @select="addNoteToInbox(note)"
+          >
+            <note-list-item :note="note" @nodeTypeChange="handleNodeTypeChange" />
+          </RightMenu>
+        </VueDraggable>
+      </div>
+      <div
+        v-if="!loading && !visibleDragNoteList.length"
       style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
-    >
-      <div style="font-size: 44px; opacity: 0.7">📝</div>
-      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('note.empty') }}</p>
-      <p style="margin: 0; font-size: 13px">{{ $t('note.emptyHint') }}</p>
-      <BButton
-        type="primary"
-        @click="showNewNotePicker"
-        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
       >
-        {{ $t('note.newNote') }}
-      </BButton>
+        <div style="font-size: 44px; opacity: 0.7">📝</div>
+        <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('note.empty') }}</p>
+        <p style="margin: 0; font-size: 13px">{{ $t('note.emptyHint') }}</p>
+        <BButton
+          type="primary"
+          @click="showNewNotePicker"
+        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
+        >
+          {{ $t('note.newNote') }}
+        </BButton>
+      </div>
     </div>
+
+    <!-- 新建笔记类型选择 -->
+    <ActionCardModal
+      v-model:visible="showTypePicker"
+      :mask-closable="false"
+      :title="$t('note.pickEditor')"
+      :sections="typePickerSections"
+      :note="$t('note.pickEditorTip')"
+    />
+
+    <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
+    <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
   </div>
-
-  <!-- 新建笔记类型选择 -->
-  <ActionCardModal
-    v-model:visible="showTypePicker"
-    :mask-closable="false"
-    :title="$t('note.pickEditor')"
-    :sections="typePickerSections"
-    :note="$t('note.pickEditorTip')"
-  />
-
-  <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
-  <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
-</div>
 </template>
 
 <script lang="ts" setup>
@@ -814,11 +815,61 @@
     }
   }
   @media (max-width: 767px) {
+    .note-library-container {
+      min-width: 0;
+      overflow-x: hidden;
+    }
+
+    .note-library-header {
+      gap: 10px;
+      padding: 0 12px;
+
+      .header-content {
+        min-width: 0;
+        gap: 10px;
+
+        > div:last-child {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      .handle-btn-group {
+        flex: 0 0 auto;
+        gap: 6px;
+
+        :deep(.noteType-select) {
+          max-width: 112px;
+          padding-inline: 8px;
+        }
+      }
+    }
+
+    .mobile-add-note-btn {
+      gap: 4px;
+      padding-inline: 10px;
+    }
+
     .note-library-body {
       margin-top: 40px;
-      grid-template-columns: 1fr;
+      min-width: 0;
+      max-width: 100%;
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       padding: 12px;
+    }
+
+    .note-library-body > * {
+      min-width: 0;
+      max-width: 100%;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .mobile-add-note-label {
+      display: none;
     }
   }
 </style>

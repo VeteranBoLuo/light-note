@@ -14,7 +14,13 @@
         <span class="text-hidden" style="font-size: 14px">{{ heading.text }}</span>
       </div>
     </div>
-    <div v-if="bookmark.isMobile && note.headings.length > 0" class="folder" title="目录" @click="getCategory" v-click-log="{ module: '笔记', operation: '切换目录显示' }">
+    <div
+      v-if="bookmark.isMobile && note.headings.length > 0"
+      class="folder"
+      title="目录"
+      @click="getCategory"
+      v-click-log="{ module: '笔记', operation: '切换目录显示' }"
+    >
       <svg-icon :src="icon.noteDetail.catalogue" size="24" style="color: var(--text-color)" />
     </div>
   </div>
@@ -72,7 +78,9 @@
     if (heading) {
       heading.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    setTimeout(() => { manualScrolling = false; }, 800);
+    setTimeout(() => {
+      manualScrolling = false;
+    }, 800);
   };
 
   const setupScrollSpy = () => {
@@ -231,8 +239,17 @@
   }
   .folder {
     position: fixed;
-    right: 5px;
-    top: 10%;
+    right: 14px;
+    top: 73px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--background-color) 88%, transparent);
+    border: 1px solid var(--card-border-color);
+    box-sizing: border-box;
     color: white;
     cursor: pointer;
     z-index: 999;
@@ -244,11 +261,11 @@
   }
   .phone-catalog {
     position: fixed;
-    top: 13%;
-    right: 20px;
+    top: 116px;
+    right: 14px;
     z-index: 999;
     background: var(--menu-container-bg-color);
-    width: 200px;
+    width: min(260px, calc(100vw - 28px));
     border-radius: 8px;
     box-shadow:
       0 6px 16px 0 rgba(0, 0, 0, 0.08),

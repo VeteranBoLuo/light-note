@@ -11,7 +11,7 @@
           <div class="card-img-container">
             <img v-if="data.iconUrl" :src="data.iconUrl" height="20" width="20" @error="onErrorImg" alt="" />
           </div>
-          {{ data.name }}
+          <span class="bookmark-item-name">{{ data.name }}</span>
         </div>
         <div v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
           <BookmarkCapabilityBadge
@@ -207,6 +207,7 @@
 <style lang="less" scoped>
   .bookmark-item-main {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: 6px;
     min-width: 0;
@@ -217,6 +218,12 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
+  }
+  .bookmark-item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .bookmark-item-tags {
     display: flex;
@@ -245,9 +252,17 @@
   .edit-tag-operation {
     position: absolute;
     right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
     gap: 10px;
+  }
+  :deep(.list-item) {
+    height: auto;
+    min-height: 44px;
+    padding-block: 10px;
+    box-sizing: border-box;
   }
   .table-search-input {
     width: 100%;

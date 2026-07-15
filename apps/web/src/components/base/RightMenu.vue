@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" style="width: 100%">
+  <div ref="containerRef" class="right-menu-anchor">
     <!-- 定义插槽，传递的内容就要显示在插槽之中 -->
     <slot></slot>
     <!-- 设置一个 div 用来显示菜单 -->
@@ -97,6 +97,17 @@
   });
 </script>
 <style lang="less">
+  .right-menu-anchor {
+    width: 100%;
+  }
+
+  @media (max-width: 767px) {
+    .right-menu-anchor {
+      min-width: 0;
+      max-width: 100%;
+    }
+  }
+
   .context-menu-wrapper {
     position: fixed;
     z-index: 9999;

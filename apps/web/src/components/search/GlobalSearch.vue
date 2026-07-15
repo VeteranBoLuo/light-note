@@ -96,7 +96,7 @@
       @click="openMobileSearch"
       v-click-log="{ module: '全局搜索', operation: '打开移动端搜索' }"
     >
-      <svg-icon size="16" :src="icon.navigation.search" />
+      <svg-icon class="mobile-search-icon" size="20" :src="icon.navigation.search" />
       <span class="mobile-search-placeholder">{{ t('resourceCenter.mobileTrigger') }}</span>
     </button>
 
@@ -701,6 +701,14 @@
     text-align: left;
     box-sizing: border-box;
     min-width: 0;
+    overflow: hidden;
+  }
+
+  .mobile-search-icon {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px;
+    flex: 0 0 20px;
   }
 
   .mobile-search-placeholder {

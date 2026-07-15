@@ -26,7 +26,18 @@
         <Catalog class="catalog-panel" :content="note.content" :note-type="note.type" />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
+            <BInput
+              v-if="bookmark.isMobile"
+              class="note-title-mobile"
+              height="50px"
+              :disabled="readonly"
+              v-model:value="note.title"
+              @change="inputBlur"
+              @focusout="focusout"
+              :placeholder="$t('noteDetail.titlePlaceholder')"
+            />
             <a-input
+              v-else
               :disabled="readonly"
               v-model:value="note.title"
               @change="inputBlur"
@@ -77,6 +88,7 @@
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
@@ -523,6 +535,18 @@
       }
     }
   }
+  .note-title-mobile {
+    width: 100%;
+
+    :deep(.b-input) {
+      border-radius: 0;
+      background-color: var(--bl-input-bg-color);
+      color: var(--bl-input-color);
+      font-size: clamp(18px, 5vw, 24px);
+      font-weight: 600;
+      text-overflow: ellipsis;
+    }
+  }
   .note-body {
     display: flex;
     padding: 20px;
@@ -626,6 +650,20 @@
     #editor-toolbar .tox-toolbar {
       flex-wrap: nowrap !important;
       overflow-x: auto;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .note-body-header {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .note-body-title {
+      width: 100%;
+      padding-right: 52px;
+      box-sizing: border-box;
     }
   }
 </style>
