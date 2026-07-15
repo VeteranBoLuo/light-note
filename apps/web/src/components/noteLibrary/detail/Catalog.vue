@@ -30,6 +30,7 @@
   import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { bookmarkStore, noteStore } from '@/store';
   import { customTimer } from '@/utils/common.ts';
+  import { scrollIntoContainer } from '@/utils/zoom.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   const bookmark = bookmarkStore();
@@ -75,8 +76,9 @@
       await customTimer(100);
     }
     const heading = note.headings[index];
-    if (heading) {
-      heading.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const scrollContainer = document.querySelector<HTMLElement>('.note-editor-scroll');
+    if (heading && scrollContainer) {
+      scrollIntoContainer(scrollContainer, heading.element as HTMLElement, 5);
     }
     setTimeout(() => {
       manualScrolling = false;

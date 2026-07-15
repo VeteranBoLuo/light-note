@@ -10,14 +10,14 @@
         </div>
         <div class="handle-btn-group">
           <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
-        <b-button
-          type="primary"
-          class="mobile-add-note-btn"
-          style="border-radius: 20px"
-          @click="showNewNotePicker"
-          v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-        >
-          <span>+</span><span class="mobile-add-note-label">{{ $t('note.newNote') }}</span>
+          <b-button
+            type="primary"
+            class="mobile-add-note-btn"
+            style="border-radius: 20px"
+            @click="showNewNotePicker"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+          >
+            {{ $t('note.newNote') }}
           </b-button>
         </div>
       </div>
@@ -848,7 +848,6 @@
     }
 
     .mobile-add-note-btn {
-      gap: 4px;
       padding-inline: 10px;
     }
 
@@ -867,9 +866,4 @@
     }
   }
 
-  @media (max-width: 380px) {
-    .mobile-add-note-label {
-      display: none;
-    }
-  }
 </style>

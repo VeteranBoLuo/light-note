@@ -538,13 +538,20 @@
   .note-title-mobile {
     width: 100%;
 
-    :deep(.b-input) {
+    .b-input {
       border-radius: 0;
-      background-color: var(--bl-input-bg-color);
+      padding: 0 15px !important;
+      background: transparent !important;
       color: var(--bl-input-color);
-      font-size: clamp(18px, 5vw, 24px);
+      font-size: 25px;
       font-weight: 600;
       text-overflow: ellipsis;
+
+      &:hover,
+      &:focus,
+      &:focus-visible {
+        background: transparent !important;
+      }
     }
   }
   .note-body {
