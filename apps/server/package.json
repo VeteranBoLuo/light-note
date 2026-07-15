@@ -22,7 +22,7 @@
     "express": "5.0.0",
     "express-rate-limit": "^8.5.1",
     "marked": "^17.0.6",
-    "multer": "1.4.5-lts.1",
+    "multer": "2.2.0",
     "mysql2": "^3.11.4",
     "nodemailer": "^9.0.3",
     "redis": "^5.6.0",
@@ -30,6 +30,6 @@
   },
   "devDependencies": {
     "prettier": "^3.4.2",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.6"
   }
 }

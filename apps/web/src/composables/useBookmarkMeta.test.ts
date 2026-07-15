@@ -42,6 +42,42 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     expect(alertAlert).not.toHaveBeenCalled();
   });
 
+  it('已有内容不被 AI 静默覆盖,用户可选择保留当前内容', async () => {
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] },
+    });
+    const t = setup([]);
+    t.bookmarkData.value.name = '当前名称';
+    t.bookmarkData.value.description = '当前描述';
+
+    const generating = t.generateBookmarkMeta();
+    await vi.waitFor(() => expect(alertAlert).toHaveBeenCalledTimes(1));
+    alertAlert.mock.calls[0][0].footer[0].function();
+    await generating;
+
+    expect(t.bookmarkData.value.name).toBe('当前名称');
+    expect(t.bookmarkData.value.description).toBe('当前描述');
+  });
+
+  it('用户确认后应用 AI 识别结果', async () => {
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] },
+    });
+    const t = setup([]);
+    t.bookmarkData.value.name = '当前名称';
+    t.bookmarkData.value.description = '当前描述';
+
+    const generating = t.generateBookmarkMeta();
+    await vi.waitFor(() => expect(alertAlert).toHaveBeenCalledTimes(1));
+    alertAlert.mock.calls[0][0].footer[1].function();
+    await generating;
+
+    expect(t.bookmarkData.value.name).toBe('AI 名称');
+    expect(t.bookmarkData.value.description).toBe('AI 描述');
+  });
+
   it('勾选标签遵守 ≤4 上限', async () => {
     apiBasePost.mockResolvedValue({
       status: 200,

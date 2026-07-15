@@ -38,6 +38,10 @@ export const getAdminList = (params: { currentPage?: number; pageSize?: number }
 // 后台通知中心(仅 root):撤回一个批次
 export const recallNotification = (batchId: string) => apiBasePost('/api/notification/admin/recall', { batchId });
 
+// 后台通知中心(仅 root):删除一个批次(同时撤回并从发送记录移除)
+export const deleteAdminNotification = (batchId: string) =>
+  apiBasePost('/api/notification/admin/delete', { batchId });
+
 export default {
   getNotificationList,
   getUnreadCount,
@@ -48,4 +52,5 @@ export default {
   getAdminStats,
   getAdminList,
   recallNotification,
+  deleteAdminNotification,
 };

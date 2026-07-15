@@ -71,6 +71,28 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('管理员预览时放行目标用户的通知查询', () => {
+    for (const path of ['/notification/list', '/notification/unreadCount']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path), res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.json).not.toHaveBeenCalled();
+    }
+  });
+
+  it('管理员预览时通知状态写入降级为空操作', () => {
+    for (const path of ['/notification/markRead', '/notification/markAllRead', '/notification/delete']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { noop: true, adminContext: true } }),
+      );
+    }
+  });
+
   it('readonly 模式拒绝内容写入并返回稳定错误码', () => {
     const next = vi.fn();
     const res = createRes();

@@ -1,5 +1,5 @@
 <template>
-  <CommonContainer :title="(handleType === 'add' ? '新增' : '编辑') + '标签'">
+  <CommonContainer :title="pageTitle">
     <b-loading :loading="loading" style="height: unset">
       <div class="tag-edit-body">
         <div class="base-card">
@@ -23,43 +23,47 @@
           </div>
         </div>
 
-        <div class="summary-grid">
-          <div v-for="card in sectionCards" :key="card.type" class="summary-card" :style="{ '--section-color': card.color }">
-            <div class="summary-label">{{ card.label }}</div>
-            <div class="summary-value">{{ card.count }}</div>
+        <section class="resource-section" :style="{ '--section-color': activeResourceSection.color }">
+          <div class="resource-tabs">
+            <BButton
+              v-for="section in resourceSections"
+              :key="section.type"
+              class="resource-tab"
+              :class="{ active: activeResourceType === section.type }"
+              @click="activeResourceType = section.type"
+            >
+              <span class="resource-tab-dot" :style="{ background: section.color }"></span>
+              <span>{{ section.label }}</span>
+              <strong>{{ section.selectedCount }}/{{ section.items.length }}</strong>
+            </BButton>
           </div>
-        </div>
-
-        <div class="resource-panel">
-          <div v-for="section in resourceSections" :key="section.type" class="resource-section" :style="{ '--section-color': section.color }">
-            <div class="section-header">
-              <div class="section-title-wrap">
-                <span class="section-dot"></span>
-                <span class="section-title">{{ section.label }}</span>
-                <span class="section-count">{{ section.selectedCount }}/{{ section.items.length }}</span>
-              </div>
-              <b-input v-model:value="searchMap[section.type]" class="section-search" :placeholder="$t('placeholder.searchPlaceholder')" />
-            </div>
-            <div class="resource-list">
-              <label
-                v-for="item in section.filteredItems"
-                :key="`${section.type}-${item.rawId}`"
-                class="resource-card"
-                :class="{ active: section.selectedIds.includes(item.rawId) }"
-              >
-                <BCheckbox :checked="section.selectedIds.includes(item.rawId)" @change="(checked: boolean) => toggleResource(section.type, item.rawId, checked)" />
-                <div class="resource-info">
-                  <div class="resource-name text-hidden">{{ item.name }}</div>
-                  <div class="resource-meta">{{ section.label }}</div>
-                </div>
-              </label>
-              <div v-if="!section.filteredItems.length" class="resource-empty">{{ $t('tagManage.listEmptyText') }}</div>
+          <BInput
+            v-model:value="searchMap[activeResourceType]"
+            class="section-search"
+            :placeholder="$t('placeholder.searchPlaceholder')"
+            clearable
+          />
+          <div :key="activeResourceType" class="resource-list">
+            <label
+              v-for="item in activeResourceSection.filteredItems"
+              :key="`${activeResourceType}-${item.rawId}`"
+              class="resource-card"
+              :class="{ active: activeResourceSection.selectedIds.includes(item.rawId) }"
+            >
+              <BCheckbox
+                :checked="activeResourceSection.selectedIds.includes(item.rawId)"
+                @change="(checked: boolean) => toggleResource(activeResourceSection.type, item.rawId, checked)"
+              />
+              <div class="resource-name text-hidden" :title="item.name">{{ item.name }}</div>
+            </label>
+            <div v-if="!activeResourceSection.filteredItems.length" class="resource-empty">
+              {{ $t('tagManage.listEmptyText') }}
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </b-loading>
-    <b-button class="container-footer-btn" type="primary" @click="submit">确定</b-button>
+    <b-button class="container-footer-btn" type="primary" @click="submit">{{ $t('common.confirm') }}</b-button>
   </CommonContainer>
 </template>
 
@@ -69,6 +73,7 @@
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { useRouter } from 'vue-router';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
@@ -81,7 +86,9 @@
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { normalizeTagIconValue } from '@/utils/tagIcon.ts';
 
+  type ResourceKind = 'bookmark' | 'note' | 'file';
   type ResourceItem = { rawId: string; name: string; type: ResourceType };
 
   const router = useRouter();
@@ -107,37 +114,26 @@
   const selectedNoteIds = ref<string[]>([]);
   const selectedFileIds = ref<string[]>([]);
   const tagOptions = ref<{ label: string; value: string }[]>([]);
+  const activeResourceType = ref<ResourceKind>('bookmark');
   const searchMap = reactive<Record<'bookmark' | 'note' | 'file', string>>({
     bookmark: '',
     note: '',
     file: '',
   });
 
-  function normalizeIconUrl(input: string) {
-    const raw = String(input || '').trim();
-    if (!raw) return '';
-    if (raw.startsWith('data:image/')) return raw;
-    if (raw.includes('<svg')) return raw;
-    if (/^[A-Za-z0-9+/=]+$/.test(raw) && raw.length > 64) {
-      return `data:image/svg+xml;base64,${raw}`;
-    }
-    return raw;
-  }
-
   const handleType = computed(() => (router.currentRoute.value.params.id === 'add' ? 'add' : 'edit'));
+  const pageTitle = computed(() =>
+    t(handleType.value === 'add' ? 'tagManage.editorAddTitle' : 'tagManage.editorEditTitle'),
+  );
 
-  const sectionCards = computed(() => [
-    { type: 'bookmark', label: '书签', count: selectedBookmarkIds.value.length, color: RESOURCE_COLOR_HEX.bookmark },
-    { type: 'note', label: '笔记', count: selectedNoteIds.value.length, color: RESOURCE_COLOR_HEX.note },
-    { type: 'file', label: '文件', count: selectedFileIds.value.length, color: RESOURCE_COLOR_HEX.file },
-  ]);
-
-  function getResourceItems(type: 'bookmark' | 'note' | 'file') {
+  function getResourceItems(type: ResourceKind) {
     return allResources.value.filter((item) => item.type === type);
   }
 
-  function filterItems(type: 'bookmark' | 'note' | 'file') {
-    const keyword = String(searchMap[type] || '').trim().toLowerCase();
+  function filterItems(type: ResourceKind) {
+    const keyword = String(searchMap[type] || '')
+      .trim()
+      .toLowerCase();
     const items = getResourceItems(type);
     if (!keyword) return items;
     return items.filter((item) => item.name.toLowerCase().includes(keyword));
@@ -146,7 +142,7 @@
   const resourceSections = computed(() => [
     {
       type: 'bookmark' as const,
-      label: '书签',
+      label: t('tagManage.bookmark'),
       color: RESOURCE_COLOR_HEX.bookmark,
       items: getResourceItems('bookmark'),
       filteredItems: filterItems('bookmark'),
@@ -155,7 +151,7 @@
     },
     {
       type: 'note' as const,
-      label: '笔记',
+      label: t('tagManage.note'),
       color: RESOURCE_COLOR_HEX.note,
       items: getResourceItems('note'),
       filteredItems: filterItems('note'),
@@ -164,7 +160,7 @@
     },
     {
       type: 'file' as const,
-      label: '文件',
+      label: t('tagManage.file'),
       color: RESOURCE_COLOR_HEX.file,
       items: getResourceItems('file'),
       filteredItems: filterItems('file'),
@@ -173,7 +169,11 @@
     },
   ]);
 
-  function toggleResource(type: 'bookmark' | 'note' | 'file', id: string, checked: boolean) {
+  const activeResourceSection = computed(() =>
+    resourceSections.value.find((section) => section.type === activeResourceType.value)!,
+  );
+
+  function toggleResource(type: ResourceKind, id: string, checked: boolean) {
     const map = {
       bookmark: selectedBookmarkIds,
       note: selectedNoteIds,
@@ -233,7 +233,7 @@
       message.warning('请等待数据请求完毕');
       return;
     }
-    tag.value.iconUrl = normalizeIconUrl(tag.value.iconUrl);
+    tag.value.iconUrl = normalizeTagIconValue(tag.value.iconUrl);
     tag.value.bookmarkList = selectedBookmarkIds.value;
     tag.value.noteList = selectedNoteIds.value;
     tag.value.fileList = selectedFileIds.value;
@@ -291,11 +291,10 @@
   }
 
   .base-card,
-  .summary-card,
   .resource-section {
     border: 1px solid var(--card-border-color);
     background: var(--background-color);
-    border-radius: 8px;
+    border-radius: 12px;
   }
 
   .base-card,
@@ -319,68 +318,57 @@
     color: var(--desc-color);
   }
 
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .summary-card {
-    padding: 12px;
-    border-top: 3px solid var(--section-color);
-  }
-
-  .summary-label {
-    font-size: 12px;
-    color: var(--desc-color);
-  }
-
-  .summary-value {
-    margin-top: 6px;
-    font-size: 20px;
-    font-weight: 600;
-  }
-
-  .resource-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .section-header {
+  .resource-section {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 10px;
+    min-height: 320px;
   }
 
-  .section-title-wrap {
+  .resource-tabs {
     display: flex;
     align-items: center;
     gap: 8px;
+    padding-bottom: 2px;
+    overflow-x: auto;
   }
 
-  .section-dot {
+  .resource-tab {
+    height: 32px;
+    gap: 6px;
+    padding: 0 10px;
+    color: var(--desc-color);
+    background: transparent;
+    border: 1px solid transparent;
+
+    strong {
+      font-size: 10px;
+      font-weight: 500;
+    }
+  }
+
+  .resource-tab.active {
+    color: var(--text-color);
+    border-color: color-mix(in srgb, var(--section-color) 38%, var(--card-border-color));
+    background: color-mix(in srgb, var(--section-color) 9%, var(--background-color));
+  }
+
+  .resource-tab-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--section-color);
+    flex: 0 0 auto;
   }
 
-  .section-title {
-    font-weight: 600;
-  }
-
-  .section-count {
-    color: var(--desc-color);
-    font-size: 12px;
+  .section-search {
+    width: 100%;
   }
 
   .resource-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 220px;
+    max-height: min(44vh, 360px);
     overflow: auto;
   }
 
@@ -388,7 +376,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
+    min-height: 44px;
+    padding: 0 12px;
     border-radius: 8px;
     border: 1px solid var(--card-border-color);
     min-width: 0;
@@ -399,13 +388,16 @@
     background: color-mix(in srgb, var(--section-color) 8%, var(--background-color));
   }
 
-  .resource-info {
+  .resource-name {
     min-width: 0;
+    color: var(--text-color);
+    font-size: 13px;
   }
 
-  .resource-meta,
   .resource-empty {
     font-size: 12px;
     color: var(--desc-color);
+    padding: 24px 0;
+    text-align: center;
   }
 </style>

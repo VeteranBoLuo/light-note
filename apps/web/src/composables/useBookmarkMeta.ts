@@ -35,6 +35,39 @@ const MAX_RELATED_TAGS = 4;
 export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBookmarkMetaOptions) {
   const generating = ref(false);
 
+  function confirmOverwrite(name: string, description: string): Promise<boolean> {
+    const currentName = String(bookmarkData.value.name || '').trim();
+    const currentDescription = String(bookmarkData.value.description || '').trim();
+    const replacesName = !!currentName && !!name && currentName !== name.trim();
+    const replacesDescription =
+      !!currentDescription && !!description && currentDescription !== description.trim();
+    if (!replacesName && !replacesDescription) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      Alert.alert({
+        title: i18n.global.t('bookmarkEditor.overwriteTitle'),
+        content: i18n.global.t('bookmarkEditor.overwriteContent'),
+        footer: [
+          {
+            label: i18n.global.t('bookmarkEditor.keepExisting'),
+            function: () => {
+              Alert.destroy();
+              resolve(false);
+            },
+          },
+          {
+            label: i18n.global.t('bookmarkEditor.applyResult'),
+            type: 'primary',
+            function: () => {
+              Alert.destroy();
+              resolve(true);
+            },
+          },
+        ],
+      });
+    });
+  }
+
   // 合并勾选标签并去重，遵守后端 4 个上限
   function selectTags(ids: string[]) {
     const cur: string[] = bookmarkData.value.relatedTags || [];
@@ -42,6 +75,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   }
 
   async function generateBookmarkMeta() {
+    if (generating.value) return;
     const rawUrl = String(bookmarkData.value.url || '').trim();
     if (!rawUrl) {
       message.warning(i18n.global.t('bookmarkMeta.fillUrlFirst'));
@@ -56,11 +90,15 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       });
       if (res.status !== 200) return;
 
-      if (res.data.name) {
-        bookmarkData.value.name = res.data.name;
+      const generatedName = String(res.data.name || '').trim();
+      const generatedDescription = String(res.data.description || '').trim();
+      if (!(await confirmOverwrite(generatedName, generatedDescription))) return;
+
+      if (generatedName) {
+        bookmarkData.value.name = generatedName;
       }
-      if (res.data.description) {
-        bookmarkData.value.description = res.data.description;
+      if (generatedDescription) {
+        bookmarkData.value.description = generatedDescription;
       }
 
       // 只勾选确实存在于候选里的标签（后端已保证，这里再兜底一次，避免勾中不存在的 id 无法显示）

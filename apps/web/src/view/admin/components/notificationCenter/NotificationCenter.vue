@@ -120,24 +120,42 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'title'">
-              <div class="nc-h-title" :class="{ recalled: Number(record.recalled) === 1 }">{{ record.title }}</div>
-              <div v-if="record.content" class="nc-h-content">{{ record.content }}</div>
+              <div class="nc-h-title" :class="{ recalled: Number(asBatch(record).recalled) === 1 }">
+                {{ asBatch(record).title }}
+              </div>
+              <div v-if="asBatch(record).content" class="nc-h-content">{{ asBatch(record).content }}</div>
             </template>
             <template v-else-if="column.key === 'type'">
-              <span class="nc-type" :class="`t-${record.type}`">{{ record.type === 'system' ? '系统' : '其他' }}</span>
+              <span class="nc-type" :class="`t-${asBatch(record).type}`">{{
+                asBatch(record).type === 'system' ? '系统' : '其他'
+              }}</span>
             </template>
             <template v-else-if="column.key === 'readRate'">
               <div class="nc-rate">
-                <div class="nc-rate-bar"><div class="nc-rate-fill" :style="{ width: readPct(record) + '%' }"></div></div>
-                <span class="nc-rate-num">{{ record.readCount }}/{{ record.recipients }}</span>
+                <div class="nc-rate-bar">
+                  <div class="nc-rate-fill" :style="{ width: readPct(asBatch(record)) + '%' }"></div>
+                </div>
+                <span class="nc-rate-num">{{ asBatch(record).readCount }}/{{ asBatch(record).recipients }}</span>
               </div>
             </template>
             <template v-else-if="column.key === 'createTime'">
-              <span class="nc-time">{{ fmtTime(record.createTime) }}</span>
+              <span class="nc-time">{{ fmtTime(asBatch(record).createTime) }}</span>
             </template>
             <template v-else-if="column.key === 'operation'">
-              <span v-if="Number(record.recalled) === 1" class="nc-recalled-tag">已撤回</span>
-              <button v-else class="nc-recall-btn" @click="onRecall(record)">撤回</button>
+              <BSpace class="nc-actions" :size="6">
+                <span v-if="Number(asBatch(record).recalled) === 1" class="nc-recalled-tag">已撤回</span>
+                <BButton v-else class="nc-recall-btn" size="small" @click="onRecall(asBatch(record))">撤回</BButton>
+                <BButton
+                  class="nc-delete-btn"
+                  type="danger"
+                  size="small"
+                  :loading="deletingBatchId === asBatch(record).batchId"
+                  :disabled="Boolean(deletingBatchId)"
+                  @click="onDelete(asBatch(record))"
+                >
+                  {{ t('notificationAdmin.delete') }}
+                </BButton>
+              </BSpace>
             </template>
           </template>
         </BTable>
@@ -148,14 +166,19 @@
 
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiQueryPost } from '@/http/request.ts';
   import notificationApi from '@/api/notificationApi.ts';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+
+  const { t } = useI18n();
 
   interface UserLite {
     id: string;
@@ -178,7 +201,7 @@
   const stats = ref({ totalSent: 0, totalRead: 0, batches: 0, totalRecalled: 0 });
 
   // —— 发送表单 ——
-  const targetModes = [
+  const targetModes: { v: 'all' | 'users'; label: string }[] = [
     { v: 'all', label: '全体用户' },
     { v: 'users', label: '指定用户' },
   ];
@@ -305,8 +328,12 @@
     { title: '类型', key: 'type', width: '72px' },
     { title: '已读率', key: 'readRate', width: '150px' },
     { title: '发送时间', key: 'createTime', width: '160px' },
-    { title: '操作', key: 'operation', width: '80px' },
+    { title: '操作', key: 'operation', width: '138px' },
   ];
+
+  function asBatch(record: unknown): Batch {
+    return record as Batch;
+  }
 
   function readPct(r: Batch) {
     return r.recipients ? Math.round((Number(r.readCount) / Number(r.recipients)) * 100) : 0;
@@ -359,6 +386,31 @@
             refreshAll();
           }
         });
+      },
+    });
+  }
+  const deletingBatchId = ref('');
+  function onDelete(record: Batch) {
+    if (deletingBatchId.value) return;
+    Alert.alert({
+      title: t('notificationAdmin.deleteTitle'),
+      content: t('notificationAdmin.deleteConfirm'),
+      okText: t('notificationAdmin.delete'),
+      onOk() {
+        deletingBatchId.value = record.batchId;
+        notificationApi
+          .deleteAdminNotification(record.batchId)
+          .then((res) => {
+            if (res.status === 200) {
+              message.success(t('notificationAdmin.deleted', { count: res.data?.deleted ?? 0 }));
+              recordOperation({ module: '通知中心', operation: `删除通知【${record.title}】` });
+              if (history.value.length === 1 && currentPage.value > 1) currentPage.value -= 1;
+              refreshAll();
+            }
+          })
+          .finally(() => {
+            deletingBatchId.value = '';
+          });
       },
     });
   }
@@ -693,13 +745,9 @@
     color: var(--desc-color);
   }
   .nc-recall-btn {
-    padding: 4px 12px;
-    border-radius: 7px;
     border: 1px solid color-mix(in srgb, #ef4444 45%, transparent);
     background: transparent;
     color: #ef4444;
-    font-size: 12px;
-    cursor: pointer;
   }
   .nc-recall-btn:hover {
     background: color-mix(in srgb, #ef4444 10%, transparent);
@@ -707,5 +755,8 @@
   .nc-recalled-tag {
     font-size: 11.5px;
     color: var(--desc-color);
+  }
+  .nc-delete-btn {
+    min-width: 48px;
   }
 </style>

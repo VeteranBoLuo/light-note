@@ -192,9 +192,11 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/opinion/recordOpinion'],
 ]);
 
-declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'notification', [
+declare(ADMIN_POLICIES.READ, 'notification', [
   ['POST', '/notification/list'],
   ['POST', '/notification/unreadCount'],
+]);
+declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'notification', [
   ['POST', '/notification/markRead'],
   ['POST', '/notification/markAllRead'],
   ['POST', '/notification/delete'],
@@ -261,6 +263,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/notification/admin/stats'],
   ['POST', '/notification/admin/list'],
   ['POST', '/notification/admin/recall'],
+  ['POST', '/notification/admin/delete'],
   ['POST', '/opinion/getOpinionList'],
   ['POST', '/opinion/replyOpinion'],
   ['POST', '/opinion/delOpinion'],

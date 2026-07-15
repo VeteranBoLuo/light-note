@@ -71,7 +71,13 @@ export function useNotification() {
       const res = await notificationApi.getNotificationList(params);
       if (res?.status === 200 && res.data) {
         unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;
-        return res.data as NotificationPage;
+        return {
+          items: Array.isArray(res.data.items) ? res.data.items : [],
+          total: Number(res.data.total) || 0,
+          unreadTotal: unreadTotal.value,
+          currentPage: Number(res.data.currentPage) || empty.currentPage,
+          pageSize: Number(res.data.pageSize) || empty.pageSize,
+        };
       }
     } catch {
       /* 忽略 */

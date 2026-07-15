@@ -248,3 +248,22 @@ export const adminRecall = async (req, res) => {
     res.send(resultData(null, 500, '撤回失败: ' + e.message));
   }
 };
+
+// POST /notification/admin/delete —— 删除一个管理员发送批次(同时具备撤回效果;仅 root)
+export const adminDelete = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  const { batchId } = req.body || {};
+  if (!batchId) return res.send(resultData(null, 400, '缺少批次标识'));
+  try {
+    const typePlaceholders = ADMIN_TYPES.map(() => '?').join(',');
+    // 硬删除整批记录即可原子完成「撤回 + 从发送记录移除」。类型白名单避免误删升级、反馈等自动通知。
+    const [result] = await pool.query(
+      `DELETE FROM notification
+       WHERE (batch_id = ? OR id = ?) AND type IN (${typePlaceholders})`,
+      [batchId, batchId, ...ADMIN_TYPES],
+    );
+    res.send(resultData({ deleted: result.affectedRows || 0 }));
+  } catch (e) {
+    res.send(resultData(null, 500, '删除通知记录失败: ' + e.message));
+  }
+};

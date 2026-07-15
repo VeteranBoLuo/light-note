@@ -1,224 +1,267 @@
 <template>
   <b-loading :loading="loading">
     <div class="tag-manage-page" :class="{ 'tag-manage-page--night': user.currentTheme === 'night' }">
-      <section class="hero-card">
-        <div class="hero-copy">
-          <div class="eyebrow">{{ t('navigation.workbench') }}</div>
-          <h1>{{ t('tagManage.title') }}</h1>
-          <p>{{ t('tagManage.subtitle') }}</p>
-        </div>
-
-        <div class="hero-actions">
-          <b-input v-model:value="tableSearchValue" class="hero-search" :placeholder="$t('home.tagSearch')">
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="18" />
-            </template>
-          </b-input>
-          <div class="hero-btns">
+      <section class="manage-header">
+        <div class="manage-header__top">
+          <div class="manage-copy">
+            <div class="eyebrow">{{ t('tagManage.workspaceEyebrow') }}</div>
+            <h1>{{ t('tagManage.title') }}</h1>
+            <p>{{ t('tagManage.subtitle') }}</p>
+          </div>
+          <div class="header-actions">
             <b-button
-              config_id="test"
               v-click-log="OPERATION_LOG_MAP.tagMg.addTag"
               type="primary"
-              @click="$router.push({ path: `/manage/editTag/add` })"
+              @click="$router.push({ path: '/manage/editTag/add' })"
             >
-              {{ $t('common.add') }}
+              {{ t('tagManage.createTag') }}
             </b-button>
-            <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: `返回` }">
-              {{ $t('common.back') }}
+            <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: '返回' }">
+              {{ t('common.back') }}
             </b-button>
           </div>
         </div>
 
-        <div class="hero-stats">
-          <div v-for="stat in stats" :key="stat.key" class="stat-card" :class="`stat-card--${stat.key}`">
-            <div class="stat-label">{{ stat.label }}</div>
-            <div class="stat-value">{{ stat.value }}</div>
-            <div class="stat-desc">{{ stat.desc }}</div>
+        <div class="overview-strip" :aria-label="t('tagManage.overview')">
+          <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
+            <span class="overview-dot"></span>
+            <strong>{{ stat.value }}</strong>
+            <span>{{ stat.label }}</span>
           </div>
         </div>
       </section>
 
-      <section class="content-layout">
-        <aside class="filter-panel">
-          <div class="filter-title">{{ t('tagManage.filtersTitle') }}</div>
-          <button
+      <section class="workspace-panel">
+        <div class="primary-toolbar">
+          <b-input v-model:value="keyword" class="tag-search" :placeholder="t('tagManage.searchPlaceholder')">
+            <template #prefix>
+              <svg-icon :src="icon.navigation.search" size="18" />
+            </template>
+          </b-input>
+
+          <div class="toolbar-actions">
+            <BSelect v-model:value="sortMode" class="sort-select" :options="sortOptions" />
+            <div class="view-switch" :aria-label="t('tagManage.viewMode')">
+              <b-button
+                size="small"
+                class="view-button"
+                :class="{ active: viewMode === 'card' }"
+                :aria-pressed="viewMode === 'card'"
+                @click="setTagView('card')"
+              >
+                {{ t('resourceCenter.view.card') }}
+              </b-button>
+              <b-button
+                size="small"
+                class="view-button"
+                :class="{ active: viewMode === 'list' }"
+                :aria-pressed="viewMode === 'list'"
+                @click="setTagView('list')"
+              >
+                {{ t('resourceCenter.view.list') }}
+              </b-button>
+            </div>
+          </div>
+        </div>
+
+        <div class="filter-toolbar" :aria-label="t('tagManage.filtersTitle')">
+          <b-button
             v-for="filter in filters"
             :key="filter.value"
-            class="filter-item"
-            :class="{ active: activeFilter === filter.value }"
+            size="small"
+            class="filter-chip"
+            :class="[`filter-chip--${filter.value}`, { active: activeFilter === filter.value }]"
+            :aria-pressed="activeFilter === filter.value"
             @click="activeFilter = filter.value"
             v-click-log="{ module: '标签管理', operation: `筛选标签【${filter.label}】` }"
           >
-            <span class="filter-left">
-              <span class="filter-dot" :class="`filter-dot--${filter.value}`"></span>
-              <span>{{ filter.label }}</span>
-            </span>
+            <span class="filter-dot"></span>
+            <span>{{ filter.label }}</span>
             <span class="filter-count">{{ filter.count }}</span>
-          </button>
-        </aside>
+          </b-button>
+        </div>
 
-        <main class="result-panel">
-          <div class="result-toolbar">
-            <div>
-              <div class="result-title">{{ t('tagManage.resultTitle') }}</div>
-              <div class="result-subtitle">{{ resultSubtitle }}</div>
-            </div>
-            <div class="view-switch" v-if="!bookmark.isMobile">
-              <button class="view-btn" :class="{ active: viewMode === 'card' }" @click="setTagView('card')">
-                {{ t('resourceCenter.view.card') }}
-              </button>
-              <button class="view-btn" :class="{ active: viewMode === 'list' }" @click="setTagView('list')">
-                {{ t('resourceCenter.view.list') }}
-              </button>
-            </div>
+        <div class="result-toolbar">
+          <div>
+            <div class="result-title">{{ t('tagManage.resultTitle') }}</div>
+            <div class="result-subtitle">{{ resultSubtitle }}</div>
           </div>
+          <span v-if="activeFilter !== 'all' || keyword" class="active-query-hint">
+            {{ t('tagManage.filteredResult') }}
+          </span>
+        </div>
 
-          <div v-if="visibleTags.length && effectiveView === 'card'" class="tag-grid">
-            <article
-              v-for="tag in visibleTags"
-              :key="tag.id"
-              class="tag-card"
-              @click="openTagDetail(tag.id)"
-              v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
-            >
-              <div class="tag-card__head">
-                <div class="tag-identity">
-                  <div class="tag-icon-wrap">
-                    <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="24" />
-                    <span v-else>#</span>
-                  </div>
-                  <div class="tag-meta">
-                    <div class="tag-name">{{ tag.name }}</div>
-                    <div class="tag-summary">
-                      {{
-                        t('tagManage.tagSummary', {
-                          count: getTotalResourceCount(tag),
-                          related: tag.relatedTagList?.length || 0,
-                        })
-                      }}
-                    </div>
-                  </div>
+        <div v-if="visibleTags.length && viewMode === 'card'" class="tag-grid">
+          <article
+            v-for="tag in visibleTags"
+            :key="tag.id"
+            class="tag-card"
+            role="button"
+            tabindex="0"
+            @click="openTagDetail(tag.id)"
+            @keydown.enter="openTagDetail(tag.id)"
+            v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+          >
+            <div class="tag-card__head">
+              <div class="tag-identity">
+                <div class="tag-icon-wrap">
+                  <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="24" />
+                  <span v-else>#</span>
                 </div>
-
-                <div class="tag-actions">
-                  <button
-                    class="action-btn"
-                    @click.stop="edit(tag.id)"
-                    v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
-                  >
-                    <svg-icon :src="icon.table_edit" size="15" />
-                    <span>{{ t('common.edit') }}</span>
-                  </button>
-                  <button class="action-btn action-btn--danger" @click.stop="handleDeleteTag(tag)">
-                    <svg-icon :src="icon.table_delete" size="15" />
-                    <span>{{ t('common.delete') }}</span>
-                  </button>
+                <div class="tag-meta">
+                  <div class="tag-name">{{ tag.name }}</div>
+                  <div class="tag-summary">
+                    {{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}
+                  </div>
                 </div>
               </div>
 
-              <div v-if="tag.relatedTagList?.length" class="section-block">
-                <div class="section-title">{{ t('tagManage.relatedTag') }}</div>
-                <div class="chip-list">
-                  <span v-for="related in tag.relatedTagList" :key="related.id" class="common-chip">
+              <div class="tag-actions">
+                <b-button
+                  size="small"
+                  class="action-button"
+                  @click.stop="edit(tag.id)"
+                  v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
+                >
+                  <svg-icon :src="icon.table_edit" size="14" />
+                  <span>{{ t('common.edit') }}</span>
+                </b-button>
+                <b-button size="small" class="action-button action-button--danger" @click.stop="handleDeleteTag(tag)">
+                  <svg-icon :src="icon.table_delete" size="14" />
+                  <span>{{ t('common.delete') }}</span>
+                </b-button>
+              </div>
+            </div>
+
+            <div class="resource-metrics">
+              <div class="resource-metric resource-metric--bookmark">
+                <span>{{ t('tagManage.bookmark') }}</span>
+                <strong>{{ tag.bookmarkList?.length || 0 }}</strong>
+              </div>
+              <div class="resource-metric resource-metric--note">
+                <span>{{ t('tagManage.note') }}</span>
+                <strong>{{ tag.noteList?.length || 0 }}</strong>
+              </div>
+              <div class="resource-metric resource-metric--file">
+                <span>{{ t('tagManage.file') }}</span>
+                <strong>{{ tag.fileList?.length || 0 }}</strong>
+              </div>
+            </div>
+
+            <div class="tag-card__content">
+              <div v-if="tag.relatedTagList?.length" class="compact-row">
+                <span class="compact-label">{{ t('tagManage.relatedTag') }}</span>
+                <div class="compact-values">
+                  <span v-for="related in tag.relatedTagList.slice(0, 2)" :key="related.id" class="related-chip">
                     {{ related.name }}
+                  </span>
+                  <span v-if="tag.relatedTagList.length > 2" class="more-count"
+                    >+{{ tag.relatedTagList.length - 2 }}</span
+                  >
+                </div>
+              </div>
+
+              <div v-if="getPreviewResources(tag).length" class="compact-row compact-row--resources">
+                <span class="compact-label">{{ t('tagManage.previewContent') }}</span>
+                <div class="preview-list">
+                  <b-button
+                    v-for="item in getPreviewResources(tag)"
+                    :key="`${item.type}-${item.id}`"
+                    size="small"
+                    class="preview-chip"
+                    :class="`preview-chip--${item.type}`"
+                    :title="item.name"
+                    @click.stop="openResource(item)"
+                  >
+                    <span class="preview-dot"></span>
+                    <span class="preview-name">{{ item.name }}</span>
+                  </b-button>
+                  <span v-if="getRemainingResourceCount(tag)" class="more-count">
+                    +{{ getRemainingResourceCount(tag) }}
                   </span>
                 </div>
               </div>
 
-              <div v-if="getTotalResourceCount(tag)" class="section-block">
-                <div class="section-title">{{ t('tagManage.relatedContent') }}</div>
-                <div class="resource-stack">
-                  <div v-if="tag.bookmarkList?.length" class="resource-row">
-                    <div class="resource-row__label resource-row__label--bookmark">{{ t('tagManage.bookmark') }}</div>
-                    <div class="chip-list">
-                      <button
-                        v-for="bookmarkItem in tag.bookmarkList.slice(0, 4)"
-                        :key="bookmarkItem.id"
-                        class="resource-chip resource-chip--bookmark"
-                        :title="bookmarkItem.name"
-                        @click.stop="openPage(bookmarkItem.url)"
-                        v-click-log="{ module: '标签管理', operation: `打开关联书签【${bookmarkItem.name}】` }"
-                      >
-                        {{ bookmarkItem.name }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div v-if="tag.noteList?.length" class="resource-row">
-                    <div class="resource-row__label resource-row__label--note">{{ t('tagManage.note') }}</div>
-                    <div class="chip-list">
-                      <button
-                        v-for="noteItem in tag.noteList.slice(0, 4)"
-                        :key="noteItem.id"
-                        class="resource-chip resource-chip--note"
-                        :title="noteItem.name"
-                        @click.stop="openNote(noteItem.id)"
-                        v-click-log="{ module: '标签管理', operation: `打开关联笔记【${noteItem.name}】` }"
-                      >
-                        {{ noteItem.name }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div v-if="tag.fileList?.length" class="resource-row">
-                    <div class="resource-row__label resource-row__label--file">{{ t('tagManage.file') }}</div>
-                    <div class="chip-list">
-                      <button
-                        v-for="fileItem in tag.fileList.slice(0, 4)"
-                        :key="fileItem.id"
-                        class="resource-chip resource-chip--file"
-                        :title="fileItem.name"
-                        @click.stop="previewFile(fileItem.id)"
-                        v-click-log="{ module: '标签管理', operation: `预览关联文件【${fileItem.name}】` }"
-                      >
-                        {{ fileItem.name }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              <div v-if="!getTotalResourceCount(tag) && !tag.relatedTagList?.length" class="unlinked-hint">
+                {{ t('tagManage.unlinkedHint') }}
               </div>
-            </article>
-          </div>
+            </div>
 
-          <div v-else-if="visibleTags.length" class="tag-list">
-            <article
-              v-for="tag in visibleTags"
-              :key="tag.id"
-              class="tag-row"
-              @click="openTagDetail(tag.id)"
-              v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
-            >
+            <div class="tag-card__footer">
+              <span>{{ t('tagManage.openDetail') }}</span>
+              <span aria-hidden="true">→</span>
+            </div>
+          </article>
+        </div>
+
+        <div v-else-if="visibleTags.length" class="tag-list">
+          <div class="tag-list__header" aria-hidden="true">
+            <span>{{ t('tagManage.tagColumn') }}</span>
+            <span>{{ t('tagManage.resourceDistribution') }}</span>
+            <span>{{ t('tagManage.relatedTag') }}</span>
+            <span>{{ t('tagManage.actions') }}</span>
+          </div>
+          <article
+            v-for="tag in visibleTags"
+            :key="tag.id"
+            class="tag-row"
+            role="button"
+            tabindex="0"
+            @click="openTagDetail(tag.id)"
+            @keydown.enter="openTagDetail(tag.id)"
+            v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+          >
+            <div class="tag-row__identity">
               <div class="tag-row-icon">
                 <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="18" />
                 <span v-else>#</span>
               </div>
-              <div class="tag-row-name">{{ tag.name }}</div>
-              <div class="tag-row-summary">
-                {{ t('tagManage.tagSummary', { count: getTotalResourceCount(tag), related: tag.relatedTagList?.length || 0 }) }}
+              <div class="tag-row-copy">
+                <strong>{{ tag.name }}</strong>
+                <span>{{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}</span>
               </div>
-              <div class="tag-row-actions">
-                <button
-                  class="action-btn"
-                  @click.stop="edit(tag.id)"
-                  v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
-                >
-                  <svg-icon :src="icon.table_edit" size="15" />
-                  <span>{{ t('common.edit') }}</span>
-                </button>
-                <button class="action-btn action-btn--danger" @click.stop="handleDeleteTag(tag)">
-                  <svg-icon :src="icon.table_delete" size="15" />
-                  <span>{{ t('common.delete') }}</span>
-                </button>
-              </div>
-            </article>
-          </div>
+            </div>
+            <div class="row-metrics">
+              <span class="row-metric row-metric--bookmark"
+                >{{ t('tagManage.bookmarkShort') }} {{ tag.bookmarkList?.length || 0 }}</span
+              >
+              <span class="row-metric row-metric--note"
+                >{{ t('tagManage.noteShort') }} {{ tag.noteList?.length || 0 }}</span
+              >
+              <span class="row-metric row-metric--file"
+                >{{ t('tagManage.fileShort') }} {{ tag.fileList?.length || 0 }}</span
+              >
+            </div>
+            <div class="row-related">
+              <span v-for="related in tag.relatedTagList?.slice(0, 2)" :key="related.id" class="related-chip">
+                {{ related.name }}
+              </span>
+              <span v-if="!tag.relatedTagList?.length" class="row-empty">{{ t('tagManage.none') }}</span>
+              <span v-else-if="tag.relatedTagList.length > 2" class="more-count"
+                >+{{ tag.relatedTagList.length - 2 }}</span
+              >
+            </div>
+            <div class="tag-row-actions">
+              <b-button size="small" class="action-button" @click.stop="edit(tag.id)">
+                <svg-icon :src="icon.table_edit" size="14" />
+                <span>{{ t('common.edit') }}</span>
+              </b-button>
+              <b-button size="small" class="action-button action-button--danger" @click.stop="handleDeleteTag(tag)">
+                <svg-icon :src="icon.table_delete" size="14" />
+                <span>{{ t('common.delete') }}</span>
+              </b-button>
+            </div>
+          </article>
+        </div>
 
-          <div v-else class="empty-state">
-            <div class="empty-orbit"></div>
-            <h3>{{ t('tagManage.emptyTitle') }}</h3>
-            <p>{{ t('tagManage.emptyDesc') }}</p>
-          </div>
-        </main>
+        <div v-else class="empty-state">
+          <div class="empty-symbol">#</div>
+          <h3>{{ t('tagManage.emptyTitle') }}</h3>
+          <p>{{ t('tagManage.emptyDesc') }}</p>
+          <b-button v-if="!keyword" type="primary" @click="$router.push('/manage/editTag/add')">
+            {{ t('tagManage.createTag') }}
+          </b-button>
+        </div>
       </section>
     </div>
 
@@ -228,520 +271,388 @@
 
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, ref } from 'vue';
+  import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import router from '@/router';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import type { BaseOptions } from '@/config/bookmarkCfg.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import { openPage } from '@/utils/common.ts';
+  import icon from '@/config/icon.ts';
+  import router from '@/router';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { updatePreference } from '@/utils/savePreference';
+  import { openPage } from '@/utils/common.ts';
+  import {
+    getTotalResourceCount,
+    type RelatedItem,
+    type TagFilterValue,
+    type TagRecord,
+    useTagManage,
+  } from './useTagManage';
 
-  interface RelatedItem {
-    id: string;
-    name: string;
-    url?: string;
+  interface PreviewResource extends RelatedItem {
+    type: 'bookmark' | 'note' | 'file';
   }
-
-  interface TagRecord {
-    id: string;
-    name: string;
-    iconUrl?: string;
-    relatedTagList?: RelatedItem[];
-    bookmarkList?: RelatedItem[];
-    noteList?: RelatedItem[];
-    fileList?: RelatedItem[];
-  }
-
-  type FilterValue = 'all' | 'active' | 'bookmark' | 'note' | 'file' | 'empty';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const loading = ref(false);
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
-  const tableSearchValue = ref('');
-  const activeFilter = ref<FilterValue>('all');
-  const tableData = ref<TagRecord[]>([]);
-
-  // 视图优先取用户偏好(设置页「标签管理视图」/跨设备);移动端强制卡片(窄屏列表无优势)
   const viewMode = ref<'card' | 'list'>((user.preferences.tagManageView as 'card' | 'list') || 'card');
-  const effectiveView = computed<'card' | 'list'>(() => (bookmark.isMobile ? 'card' : viewMode.value));
+  const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
+
+  const stats = computed(() => [
+    { key: 'tag', label: t('tagManage.statTotal'), value: overview.value.tag },
+    { key: 'bookmark', label: t('tagManage.bookmark'), value: overview.value.bookmark },
+    { key: 'note', label: t('tagManage.note'), value: overview.value.note },
+    { key: 'file', label: t('tagManage.file'), value: overview.value.file },
+  ]);
+
+  const filters = computed(() => [
+    { value: 'all' as TagFilterValue, label: t('tagManage.filterAll'), count: filterCounts.value.all },
+    { value: 'active' as TagFilterValue, label: t('tagManage.filterActive'), count: filterCounts.value.active },
+    { value: 'bookmark' as TagFilterValue, label: t('tagManage.bookmark'), count: filterCounts.value.bookmark },
+    { value: 'note' as TagFilterValue, label: t('tagManage.note'), count: filterCounts.value.note },
+    { value: 'file' as TagFilterValue, label: t('tagManage.file'), count: filterCounts.value.file },
+    { value: 'empty' as TagFilterValue, label: t('tagManage.filterEmpty'), count: filterCounts.value.empty },
+  ]);
+
+  const sortOptions = computed<BaseOptions[]>(() => [
+    { label: t('tagManage.sortDefault'), value: 'default' },
+    { label: t('tagManage.sortResourceDesc'), value: 'resourceDesc' },
+    { label: t('tagManage.sortNameAsc'), value: 'nameAsc' },
+    { label: t('tagManage.sortEmptyFirst'), value: 'emptyFirst' },
+  ]);
+
+  const resultSubtitle = computed(() => {
+    const searchKeyword = keyword.value.trim();
+    return searchKeyword
+      ? t('tagManage.resultSubtitleKeyword', { keyword: searchKeyword, count: visibleTags.value.length })
+      : t('tagManage.resultSubtitle', { count: visibleTags.value.length });
+  });
+
   function setTagView(mode: 'card' | 'list') {
     if (viewMode.value === mode) return;
     viewMode.value = mode;
     updatePreference({ tagManageView: mode }).catch(() => {});
   }
 
-  const filteredByKeyword = computed(() => {
-    const keyword = tableSearchValue.value.trim().toLowerCase();
-    if (!keyword) return tableData.value;
-    return tableData.value.filter((item) => item.name?.toLowerCase().includes(keyword));
-  });
-
-  const visibleTags = computed(() => {
-    const data = filteredByKeyword.value;
-    switch (activeFilter.value) {
-      case 'active':
-        return data.filter((item) => getTotalResourceCount(item) > 0);
-      case 'bookmark':
-        return data.filter((item) => (item.bookmarkList?.length || 0) > 0);
-      case 'note':
-        return data.filter((item) => (item.noteList?.length || 0) > 0);
-      case 'file':
-        return data.filter((item) => (item.fileList?.length || 0) > 0);
-      case 'empty':
-        return data.filter((item) => getTotalResourceCount(item) === 0);
-      default:
-        return data;
-    }
-  });
-
-  const uniqueBookmarkTotal = computed(() => getUniqueResourceCount('bookmarkList'));
-  const uniqueNoteTotal = computed(() => getUniqueResourceCount('noteList'));
-  const uniqueFileTotal = computed(() => getUniqueResourceCount('fileList'));
-
-  const stats = computed(() => [
-    {
-      key: 'tag',
-      label: t('tagManage.statTotal'),
-      value: tableData.value.length,
-      desc: t('tagManage.statTotalDesc'),
-    },
-    {
-      key: 'bookmark',
-      label: t('tagManage.bookmark'),
-      value: uniqueBookmarkTotal.value,
-      desc: t('tagManage.statBookmarkDesc'),
-    },
-    {
-      key: 'note',
-      label: t('tagManage.note'),
-      value: uniqueNoteTotal.value,
-      desc: t('tagManage.statNoteDesc'),
-    },
-    {
-      key: 'file',
-      label: t('tagManage.file'),
-      value: uniqueFileTotal.value,
-      desc: t('tagManage.statFileDesc'),
-    },
-  ]);
-
-  const filters = computed(() => [
-    { value: 'all' as const, label: t('tagManage.filterAll'), count: filteredByKeyword.value.length },
-    {
-      value: 'active' as const,
-      label: t('tagManage.filterActive'),
-      count: filteredByKeyword.value.filter((item) => getTotalResourceCount(item) > 0).length,
-    },
-    {
-      value: 'bookmark' as const,
-      label: t('tagManage.bookmark'),
-      count: filteredByKeyword.value.filter((item) => (item.bookmarkList?.length || 0) > 0).length,
-    },
-    {
-      value: 'note' as const,
-      label: t('tagManage.note'),
-      count: filteredByKeyword.value.filter((item) => (item.noteList?.length || 0) > 0).length,
-    },
-    {
-      value: 'file' as const,
-      label: t('tagManage.file'),
-      count: filteredByKeyword.value.filter((item) => (item.fileList?.length || 0) > 0).length,
-    },
-    {
-      value: 'empty' as const,
-      label: t('tagManage.filterEmpty'),
-      count: filteredByKeyword.value.filter((item) => getTotalResourceCount(item) === 0).length,
-    },
-  ]);
-
-  const resultSubtitle = computed(() => {
-    const keyword = tableSearchValue.value.trim();
-    if (keyword) {
-      return t('tagManage.resultSubtitleKeyword', { keyword, count: visibleTags.value.length });
-    }
-    return t('tagManage.resultSubtitle', { count: visibleTags.value.length });
-  });
-
-  function getTotalResourceCount(tag: TagRecord) {
-    return (tag.bookmarkList?.length || 0) + (tag.noteList?.length || 0) + (tag.fileList?.length || 0);
+  function getPreviewResources(tag: TagRecord): PreviewResource[] {
+    return [
+      ...(tag.bookmarkList || []).map((item) => ({ ...item, type: 'bookmark' as const })),
+      ...(tag.noteList || []).map((item) => ({ ...item, type: 'note' as const })),
+      ...(tag.fileList || []).map((item) => ({ ...item, type: 'file' as const })),
+    ].slice(0, 3);
   }
 
-  function getUniqueResourceCount(key: 'bookmarkList' | 'noteList' | 'fileList') {
-    const ids = new Set<string>();
-    tableData.value.forEach((tag) => {
-      (tag[key] || []).forEach((item) => {
-        if (item?.id) {
-          ids.add(item.id);
-        }
-      });
-    });
-    return ids.size;
+  function getRemainingResourceCount(tag: TagRecord) {
+    return Math.max(0, getTotalResourceCount(tag) - getPreviewResources(tag).length);
   }
 
-  const edit = (id: string) => {
+  function edit(id: string) {
     router.push({ path: `/manage/editTag/${id}` });
-  };
+  }
 
-  const openTagDetail = (id: string) => {
+  function openTagDetail(id: string) {
     router.push({ path: `/tag/${id}` });
-  };
+  }
 
   function openNote(id: string) {
-    if (!id) return;
-    router.push(`/noteLibrary/${id}`);
+    if (id) router.push(`/noteLibrary/${id}`);
   }
 
   async function previewFile(id: string) {
     if (!id) return;
     const res = await apiBasePost('/api/file/getFileInfo', { id });
-    if (res.status === 200 && res.data) {
-      previewFileInfo.value = {
-        ...res.data,
-        fileName: res.data.file_name || res.data.fileName,
-        fileType: res.data.file_type || res.data.fileType,
-        fileUrl: res.data.fileUrl,
-        category: res.data.category,
-      };
-      filePreviewVisible.value = true;
-    }
+    if (res.status !== 200 || !res.data) return;
+    previewFileInfo.value = {
+      ...res.data,
+      fileName: res.data.file_name || res.data.fileName,
+      fileType: res.data.file_type || res.data.fileType,
+      fileUrl: res.data.fileUrl,
+      category: res.data.category,
+    };
+    filePreviewVisible.value = true;
+  }
+
+  function openResource(item: PreviewResource) {
+    if (item.type === 'bookmark' && item.url) openPage(item.url);
+    else if (item.type === 'note') openNote(item.id);
+    else if (item.type === 'file') previewFile(item.id);
   }
 
   function handleDeleteTag(tag: TagRecord) {
     if (blockGuestWrite('delete-tag')) return;
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除标签【${tag.name}】？`,
+      title: t('tagManage.confirmDeleteTitle'),
+      content: t('tagManage.confirmDeleteContent', { name: tag.name }),
       onOk() {
         apiBasePost('/api/bookmark/delTag', { id: tag.id }).then((res) => {
-          if (res.status == 200) {
-            recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
-            message.success('删除成功');
-            init();
-          }
+          if (res.status !== 200) return;
+          recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
+          message.success(t('tagManage.deleteSuccess'));
+          reload();
         });
       },
     });
   }
 
   function handleToBack() {
-    if (bookmark.isMobile) {
-      router.push('/personCenter');
-    } else {
-      router.back();
-    }
+    if (bookmark.isMobile) router.push('/personCenter');
+    else router.back();
   }
 
-  function init() {
-    loading.value = true;
-    apiQueryPost('/api/bookmark/queryTagList', {
-      filters: {
-        userId: user.id,
-      },
-    })
-      .then((res) => {
-        if (res.status === 200) {
-          tableData.value = res.data || [];
-        }
-      })
-      .finally(() => {
-        loading.value = false;
-      });
-  }
-
-  init();
+  reload();
 </script>
 
 <style lang="less" scoped>
-  // ── 统一变量 ──
-  @color-mix-hover: 10%;
-  @color-mix-active: 14%;
-  @color-mix-border-light: 26%;
-  @color-mix-border-strong: 38%;
-  @opacity-primary: 0.72;
-  @opacity-secondary: 0.54;
-  @radius-card: 16px;
-  @radius-sm: 10px;
-  @radius-xs: 8px;
+  @radius-panel: 18px;
+  @radius-card: 14px;
+  @muted-opacity: 0.62;
 
   .tag-manage-page {
-    --tag-hero-bg: linear-gradient(135deg, var(--background-color), var(--menu-body-bg-color));
-    --tag-stat-bg: rgba(255, 255, 255, 0.48);
     --tag-panel-bg: var(--background-color);
     --tag-card-bg: var(--menu-body-bg-color);
     --tag-muted-bg: var(--bl-input-noBorder-bg-color);
+    --tag-soft-shadow: 0 14px 36px -30px rgba(15, 23, 42, 0.42);
 
     height: 100%;
     overflow: auto;
-    padding: 24px;
+    padding: 22px 24px 28px;
     box-sizing: border-box;
     color: var(--text-color);
   }
 
   .tag-manage-page--night {
-    --tag-hero-bg: linear-gradient(135deg, #1b1c21, #24252a);
-    --tag-stat-bg: #27282e;
-    --tag-panel-bg: #1f2025;
+    --tag-panel-bg: #202126;
     --tag-card-bg: #26272d;
-    --tag-muted-bg: #2c2d34;
+    --tag-muted-bg: #2d2e35;
+    --tag-soft-shadow: none;
   }
 
-  // ═══════════════════════════════════════
-  //  Hero 区域
-  // ═══════════════════════════════════════
-  .hero-card {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-    gap: 20px;
-    background: var(--tag-hero-bg);
+  .manage-header,
+  .workspace-panel {
     border: 1px solid var(--workbench-border-color);
-    border-radius: 22px;
-    padding: 18px 20px;
+    background: var(--tag-panel-bg);
+    box-shadow: var(--tag-soft-shadow);
+  }
+
+  .manage-header {
+    position: relative;
+    border-radius: @radius-panel;
+    padding: 20px;
     overflow: hidden;
 
-    // 右上角装饰光晕
-    &::before {
+    &::after {
       content: '';
       position: absolute;
-      top: -60px;
-      right: -40px;
-      width: 220px;
+      top: -100px;
+      right: -60px;
+      width: 280px;
       height: 220px;
       border-radius: 50%;
       background: radial-gradient(
         circle,
-        color-mix(in srgb, var(--resource-tag-color) 8%, transparent) 0%,
-        transparent 70%
+        color-mix(in srgb, var(--resource-tag-color) 9%, transparent),
+        transparent 72%
       );
       pointer-events: none;
     }
   }
 
-  .hero-copy {
+  .manage-header__top {
+    position: relative;
+    z-index: 1;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .manage-copy {
+    min-width: 0;
 
     h1 {
-      margin: 0;
-      font-size: 22px;
-      line-height: 1.2;
+      margin: 4px 0 0;
+      font-size: 24px;
+      line-height: 1.25;
     }
 
     p {
-      margin: 0;
-      max-width: 640px;
+      margin: 8px 0 0;
+      max-width: 720px;
       font-size: 14px;
-      line-height: 1.7;
-      opacity: @opacity-primary;
+      line-height: 1.65;
+      opacity: @muted-opacity;
     }
   }
 
   .eyebrow {
+    color: var(--resource-tag-color);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--resource-tag-color);
+    letter-spacing: 0.08em;
   }
 
-  .hero-actions {
+  .header-actions,
+  .toolbar-actions,
+  .view-switch,
+  .filter-toolbar,
+  .tag-actions,
+  .tag-row-actions {
     display: flex;
-    flex-direction: column;
-    gap: 14px;
-    align-items: stretch;
+    align-items: center;
   }
 
-  .hero-search {
-    width: 100%;
-  }
-
-  .hero-btns {
-    display: flex;
+  .header-actions {
     gap: 10px;
-    justify-content: flex-end;
+    flex-shrink: 0;
   }
 
-  // ═══════════════════════════════════════
-  //  统计卡片
-  // ═══════════════════════════════════════
-  .hero-stats {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-  }
-
-  .stat-card {
-    border-radius: @radius-card;
-    padding: 11px 14px;
-    background: var(--tag-stat-bg);
-    border: 1px solid var(--workbench-border-color);
-    transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
+  .overview-strip {
     position: relative;
-    overflow: hidden;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    margin-top: 18px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--tag-muted-bg) 72%, transparent);
+  }
 
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
+  .overview-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    opacity: 0.78;
+
+    strong {
+      font-size: 17px;
+      color: var(--text-color);
+      opacity: 1;
+      font-variant-numeric: tabular-nums;
     }
   }
 
-  .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
-  }
-
-  .stat-card--tag::before {
-    background: var(--resource-tag-color);
-  }
-  .stat-card--bookmark::before {
-    background: var(--resource-bookmark-color);
-  }
-  .stat-card--note::before {
-    background: var(--resource-note-color);
-  }
-  .stat-card--file::before {
-    background: var(--resource-file-color);
-  }
-
-  .stat-label {
-    font-size: 12px;
-    opacity: @opacity-secondary;
-  }
-
-  .stat-value {
-    margin-top: 4px;
-    font-size: 22px;
-    font-weight: 700;
-  }
-
-  .stat-desc {
-    margin-top: 4px;
-    font-size: 12px;
-    opacity: @opacity-secondary;
-  }
-
-  // ═══════════════════════════════════════
-  //  内容布局
-  // ═══════════════════════════════════════
-  .content-layout {
-    display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 18px;
-    margin-top: 22px;
-    min-height: 0;
-  }
-
-  .filter-panel,
-  .result-panel {
-    background: var(--tag-panel-bg);
-    border: 1px solid var(--workbench-border-color);
-    border-radius: @radius-card;
-  }
-
-  .filter-panel {
-    padding: 16px;
-    height: fit-content;
-    position: sticky;
-    top: 0;
-  }
-
-  .filter-title {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: @opacity-secondary;
-    margin-bottom: 10px;
-    padding: 0 4px;
-  }
-
-  .filter-item {
-    width: 100%;
-    border: 0;
-    border-radius: @radius-sm;
-    background: transparent;
-    color: inherit;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    transition: all 0.18s ease;
-  }
-
-  .filter-item + .filter-item {
-    margin-top: 4px;
-  }
-
-  .filter-item:hover {
-    background: color-mix(in srgb, var(--resource-tag-color) @color-mix-hover, var(--tag-muted-bg));
-  }
-
-  .filter-item.active {
-    background: color-mix(in srgb, var(--resource-tag-color) @color-mix-active, var(--tag-muted-bg));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--resource-tag-color) 20%, transparent);
-  }
-
-  .filter-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-  }
-
-  .filter-dot {
+  .overview-dot,
+  .filter-dot,
+  .preview-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
     background: var(--resource-tag-color);
+    flex-shrink: 0;
   }
 
-  .filter-dot--bookmark {
+  .overview-item--bookmark .overview-dot,
+  .filter-chip--bookmark .filter-dot,
+  .preview-chip--bookmark .preview-dot {
     background: var(--resource-bookmark-color);
   }
-  .filter-dot--note {
+
+  .overview-item--note .overview-dot,
+  .filter-chip--note .filter-dot,
+  .preview-chip--note .preview-dot {
     background: var(--resource-note-color);
   }
-  .filter-dot--file {
+
+  .overview-item--file .overview-dot,
+  .filter-chip--file .filter-dot,
+  .preview-chip--file .preview-dot {
     background: var(--resource-file-color);
   }
-  .filter-dot--empty {
+
+  .filter-chip--empty .filter-dot {
     background: #94a3b8;
   }
 
-  .filter-count {
-    font-size: 12px;
-    opacity: @opacity-secondary;
-    font-variant-numeric: tabular-nums;
+  .workspace-panel {
+    margin-top: 16px;
+    border-radius: @radius-panel;
+    padding: 18px;
+    min-width: 0;
   }
 
-  // ═══════════════════════════════════════
-  //  结果面板
-  // ═══════════════════════════════════════
-  .result-panel {
-    padding: 20px;
-    min-width: 0;
+  .primary-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .tag-search {
+    width: min(480px, 100%);
+  }
+
+  .toolbar-actions {
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .sort-select {
+    width: 170px;
+  }
+
+  .view-switch {
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--tag-muted-bg);
+  }
+
+  .view-button,
+  .filter-chip,
+  .action-button,
+  .preview-chip {
+    border-radius: 8px;
+  }
+
+  .view-button.active {
+    background: var(--resource-tag-color) !important;
+    color: #fff !important;
+  }
+
+  .filter-toolbar {
+    gap: 8px;
+    margin-top: 14px;
+    padding-bottom: 14px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--workbench-border-color);
+  }
+
+  .filter-chip {
+    gap: 7px;
+    flex-shrink: 0;
+    background: transparent;
+  }
+
+  .filter-chip.active {
+    color: var(--resource-tag-color);
+    background: color-mix(in srgb, var(--resource-tag-color) 11%, var(--tag-muted-bg)) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--resource-tag-color) 20%, transparent);
+  }
+
+  .filter-count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 18px;
+    color: var(--sub-text-color);
+    background: color-mix(in srgb, var(--tag-muted-bg) 80%, transparent);
+    font-variant-numeric: tabular-nums;
   }
 
   .result-toolbar {
@@ -749,449 +660,433 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 20px;
-  }
-
-  .view-switch {
-    display: inline-flex;
-    border: 1px solid var(--workbench-border-color);
-    border-radius: 10px;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-
-  .view-btn {
-    border: 0;
-    cursor: pointer;
-    font: inherit;
-    color: inherit;
-    padding: 6px 12px;
-    background: transparent;
-  }
-
-  .view-btn.active {
-    background: var(--resource-tag-color);
-    color: #fff;
+    margin: 16px 2px 14px;
   }
 
   .result-title {
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 700;
   }
 
-  .result-subtitle {
-    margin-top: 4px;
-    font-size: 13px;
-    opacity: @opacity-primary;
+  .result-subtitle,
+  .active-query-hint {
+    margin-top: 3px;
+    font-size: 12px;
+    opacity: @muted-opacity;
   }
 
-  // ═══════════════════════════════════════
-  //  标签卡片
-  // ═══════════════════════════════════════
+  .active-query-hint {
+    margin: 0;
+    padding: 5px 9px;
+    border-radius: 999px;
+    color: var(--resource-tag-color);
+    background: color-mix(in srgb, var(--resource-tag-color) 8%, transparent);
+  }
+
   .tag-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  // ═══════════════════════════════════════
-  //  列表视图(紧凑横向行)
-  // ═══════════════════════════════════════
-  .tag-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .tag-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--workbench-border-color);
-    background: var(--tag-card-bg);
-    cursor: pointer;
-    transition:
-      border-color 0.2s ease,
-      box-shadow 0.2s ease;
-  }
-
-  .tag-row:hover {
-    border-color: color-mix(in srgb, var(--resource-tag-color) 30%, var(--workbench-border-color));
-    box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.12);
-  }
-
-  .tag-row-icon {
-    width: 30px;
-    height: 30px;
-    border-radius: 9px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--resource-tag-color);
-    background: color-mix(in srgb, var(--resource-tag-color) 12%, transparent);
-    font-size: 15px;
-    font-weight: 700;
-    flex-shrink: 0;
-  }
-
-  .tag-row-name {
-    font-size: 14px;
-    font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 30%;
-    flex-shrink: 0;
-  }
-
-  .tag-row-summary {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 12px;
-    opacity: @opacity-secondary;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .tag-row-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
-  }
-
-  .tag-row:hover .tag-row-actions {
-    opacity: 1;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 14px;
   }
 
   .tag-card {
-    position: relative;
-    cursor: pointer;
-    border-radius: @radius-card;
-    padding: 0;
-    background: var(--tag-card-bg);
-    border: 1px solid var(--workbench-border-color);
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 236px;
+    border: 1px solid var(--workbench-border-color);
+    border-radius: @radius-card;
+    background: var(--tag-card-bg);
     overflow: hidden;
+    cursor: pointer;
     transition:
-      box-shadow 0.3s ease,
-      border-color 0.3s ease,
-      transform 0.3s ease;
+      transform 0.2s ease,
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
 
-    // 顶部渐变光晕
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: linear-gradient(
-        90deg,
-        var(--resource-tag-color),
-        color-mix(in srgb, var(--resource-tag-color) 50%, transparent)
-      );
-      opacity: 0.6;
-      transition: opacity 0.3s ease;
-    }
-
-    &:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.1);
-      border-color: color-mix(in srgb, var(--resource-tag-color) 30%, var(--workbench-border-color));
-
-      &::before {
-        opacity: 1;
-      }
+    &:hover,
+    &:focus-visible {
+      outline: none;
+      transform: translateY(-2px);
+      border-color: color-mix(in srgb, var(--resource-tag-color) 32%, var(--workbench-border-color));
+      box-shadow: 0 12px 28px -22px rgba(15, 23, 42, 0.5);
     }
   }
 
-  // 卡片头部略缩进
   .tag-card__head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 14px;
-    padding: 18px 18px 14px;
+    gap: 12px;
+    padding: 15px 15px 11px;
   }
 
-  .tag-identity {
+  .tag-identity,
+  .tag-row__identity {
     display: flex;
     align-items: center;
-    gap: 14px;
     min-width: 0;
   }
 
-  .tag-icon-wrap {
-    width: 46px;
-    height: 46px;
-    border-radius: 14px;
+  .tag-identity {
+    gap: 11px;
+  }
+
+  .tag-icon-wrap,
+  .tag-row-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--resource-tag-color);
-    font-size: 22px;
     flex-shrink: 0;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
-    transition:
-      transform 0.3s ease,
-      background 0.3s ease;
+    color: var(--resource-tag-color);
+    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--tag-muted-bg));
   }
 
-  .tag-card:hover .tag-icon-wrap {
-    transform: scale(1.05);
+  .tag-icon-wrap {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: 700;
   }
 
-  .tag-meta {
+  .tag-meta,
+  .tag-row-copy {
     min-width: 0;
   }
 
   .tag-name {
-    font-size: 17px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 16px;
     font-weight: 700;
-    word-break: break-word;
   }
 
   .tag-summary {
     margin-top: 4px;
     font-size: 12px;
-    opacity: @opacity-primary;
+    opacity: @muted-opacity;
   }
 
-  .tag-actions {
-    display: flex;
-    gap: 4px;
+  .tag-actions,
+  .tag-row-actions {
+    gap: 5px;
     flex-shrink: 0;
-    opacity: 0.6;
-    transition: opacity 0.25s ease;
   }
 
-  .tag-card:hover .tag-actions {
+  .action-button {
+    gap: 4px;
+    padding: 0 8px;
+    opacity: 0.72;
+  }
+
+  .action-button:hover {
     opacity: 1;
   }
 
-  .action-btn {
-    border: 1px solid transparent;
-    background: color-mix(in srgb, var(--tag-muted-bg) 60%, transparent);
-    color: inherit;
-    border-radius: @radius-xs;
-    height: 30px;
-    padding: 0 9px;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.18s ease;
-  }
-
-  .action-btn:hover {
-    background: color-mix(in srgb, var(--resource-tag-color) @color-mix-hover, var(--tag-muted-bg));
-    border-color: color-mix(in srgb, var(--resource-tag-color) 20%, transparent);
-  }
-
-  .action-btn--danger:hover {
-    background: color-mix(in srgb, #ef4444 @color-mix-hover, var(--tag-muted-bg));
-    border-color: color-mix(in srgb, #ef4444 20%, transparent);
+  .action-button--danger:hover {
     color: #ef4444;
+    background: color-mix(in srgb, #ef4444 8%, var(--tag-muted-bg)) !important;
   }
 
-  // ═══════════════════════════════════════
-  //  区块（相关标签 / 关联内容）
-  // ═══════════════════════════════════════
-  .section-block {
-    padding: 0 18px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  .resource-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    padding: 0 15px 12px;
   }
 
-  .section-block + .section-block {
-    border-top: 1px solid var(--workbench-border-color);
-    padding-top: 14px;
-  }
-
-  .section-title {
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+  .resource-metric {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
+    padding: 7px 9px;
+    border-radius: 9px;
+    font-size: 11px;
+    color: var(--sub-text-color);
+    background: var(--tag-muted-bg);
 
-    &::before {
-      content: '';
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--resource-tag-color);
-      opacity: 0.5;
+    strong {
+      font-size: 13px;
+      color: var(--text-color);
+      font-variant-numeric: tabular-nums;
     }
   }
 
-  .chip-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+  .resource-metric--bookmark strong,
+  .row-metric--bookmark {
+    color: var(--resource-bookmark-color);
   }
 
-  .common-chip,
-  .resource-chip {
+  .resource-metric--note strong,
+  .row-metric--note {
+    color: var(--resource-note-color);
+  }
+
+  .resource-metric--file strong,
+  .row-metric--file {
+    color: var(--resource-file-color);
+  }
+
+  .tag-card__content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 9px;
+    padding: 0 15px 12px;
+  }
+
+  .compact-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .compact-label {
+    width: 58px;
+    flex-shrink: 0;
+    padding-top: 4px;
+    font-size: 11px;
+    color: var(--sub-text-color);
+  }
+
+  .compact-values,
+  .preview-list,
+  .row-related,
+  .row-metrics {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .compact-values,
+  .preview-list {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .related-chip,
+  .more-count,
+  .row-empty {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    height: 24px;
+    padding: 0 8px;
     border-radius: 999px;
-    padding: 5px 11px;
-    font-size: 12px;
-    line-height: 1.4;
-    max-width: 100%;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .related-chip {
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--resource-tag-color);
+    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--tag-muted-bg));
+  }
+
+  .more-count,
+  .row-empty {
+    color: var(--sub-text-color);
+    background: var(--tag-muted-bg);
+  }
+
+  .preview-chip {
+    min-width: 0;
+    max-width: 150px;
+    gap: 6px;
+    padding: 0 8px;
+    background: transparent;
+  }
+
+  .preview-name {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .common-chip {
-    background: color-mix(in srgb, var(--resource-tag-color) 10%, var(--tag-muted-bg));
+  .unlinked-hint {
+    padding: 9px 10px;
+    border-radius: 9px;
+    font-size: 12px;
+    color: var(--sub-text-color);
+    background: var(--tag-muted-bg);
+  }
+
+  .tag-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 15px;
+    border-top: 1px solid var(--workbench-border-color);
+    font-size: 11px;
+    color: var(--sub-text-color);
+    transition:
+      color 0.2s ease,
+      background 0.2s ease;
+  }
+
+  .tag-card:hover .tag-card__footer {
     color: var(--resource-tag-color);
-    transition: background 0.2s ease;
+    background: color-mix(in srgb, var(--resource-tag-color) 4%, transparent);
   }
 
-  .common-chip:hover {
-    background: color-mix(in srgb, var(--resource-tag-color) 16%, var(--tag-muted-bg));
-  }
-
-  .resource-stack {
+  .tag-list {
     display: flex;
     flex-direction: column;
+    gap: 7px;
+  }
+
+  .tag-list__header,
+  .tag-row {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.1fr) minmax(230px, 1fr) minmax(160px, 0.8fr) auto;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .tag-list__header {
+    padding: 0 14px 5px;
+    font-size: 11px;
+    color: var(--sub-text-color);
+  }
+
+  .tag-row {
+    padding: 10px 12px;
+    border: 1px solid var(--workbench-border-color);
+    border-radius: 11px;
+    background: var(--tag-card-bg);
+    cursor: pointer;
+    transition:
+      border-color 0.2s ease,
+      background 0.2s ease;
+
+    &:hover,
+    &:focus-visible {
+      outline: none;
+      border-color: color-mix(in srgb, var(--resource-tag-color) 28%, var(--workbench-border-color));
+      background: color-mix(in srgb, var(--resource-tag-color) 3%, var(--tag-card-bg));
+    }
+  }
+
+  .tag-row__identity {
     gap: 10px;
   }
 
-  .resource-row {
+  .tag-row-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-weight: 700;
+  }
+
+  .tag-row-copy {
     display: flex;
     flex-direction: column;
+    gap: 3px;
+
+    strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    span {
+      font-size: 11px;
+      color: var(--sub-text-color);
+    }
+  }
+
+  .row-metrics {
     gap: 6px;
   }
 
-  .resource-row__label {
+  .row-metric {
+    padding: 4px 7px;
+    border-radius: 7px;
     font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    background: var(--tag-muted-bg);
   }
 
-  .resource-row__label--bookmark {
-    color: var(--resource-bookmark-color);
-  }
-  .resource-row__label--note {
-    color: var(--resource-note-color);
-  }
-  .resource-row__label--file {
-    color: var(--resource-file-color);
-  }
-
-  .resource-chip {
-    border: 1px solid transparent;
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    transition: all 0.18s ease;
-  }
-
-  .resource-chip:hover {
-    filter: brightness(1.12);
-    transform: translateY(-1px);
-  }
-
-  .resource-chip--bookmark {
-    border-color: color-mix(in srgb, var(--resource-bookmark-color) 18%, transparent);
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 7%, transparent);
-  }
-
-  .resource-chip--note {
-    border-color: color-mix(in srgb, var(--resource-note-color) 18%, transparent);
-    color: var(--resource-note-color);
-    background: color-mix(in srgb, var(--resource-note-color) 7%, transparent);
-  }
-
-  .resource-chip--file {
-    border-color: color-mix(in srgb, var(--resource-file-color) 18%, transparent);
-    color: var(--resource-file-color);
-    background: color-mix(in srgb, var(--resource-file-color) 7%, transparent);
-  }
-
-  .empty-inline {
-    font-size: 12px;
-    opacity: @opacity-secondary;
-  }
-
-  // ═══════════════════════════════════════
-  //  空状态
-  // ═══════════════════════════════════════
   .empty-state {
-    min-height: 420px;
-    border-radius: @radius-card;
-    border: 1px dashed color-mix(in srgb, var(--resource-tag-color) 22%, var(--workbench-border-color));
-    background: linear-gradient(180deg, color-mix(in srgb, var(--resource-tag-color) 4%, transparent), transparent);
+    min-height: 360px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
+    border-radius: 14px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--resource-tag-color) 5%, transparent), transparent);
 
     h3 {
-      margin: 0;
-      font-size: 22px;
-      font-weight: 600;
+      margin: 12px 0 0;
+      font-size: 20px;
     }
 
     p {
-      margin: 10px 0 0;
-      max-width: 420px;
-      font-size: 14px;
-      line-height: 1.7;
-      opacity: @opacity-primary;
+      margin: 8px 0 18px;
+      font-size: 13px;
+      color: var(--sub-text-color);
     }
   }
 
-  .empty-orbit {
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    margin-bottom: 20px;
-    border: 3px solid color-mix(in srgb, var(--resource-tag-color) 14%, transparent);
-    border-top-color: var(--resource-tag-color);
-    animation: empty-spin 1.2s linear infinite;
+  .empty-symbol {
+    width: 58px;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 18px;
+    color: var(--resource-tag-color);
+    background: color-mix(in srgb, var(--resource-tag-color) 10%, var(--tag-muted-bg));
+    font-size: 28px;
+    font-weight: 700;
   }
 
-  @keyframes empty-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  // ═══════════════════════════════════════
-  //  响应式
-  // ═══════════════════════════════════════
-  @media (max-width: 1280px) {
-    .hero-card {
-      grid-template-columns: 1fr;
-    }
-
-    .hero-stats {
+  @media (max-width: 1180px) {
+    .tag-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .content-layout {
-      grid-template-columns: 1fr;
+    .tag-list__header,
+    .tag-row {
+      grid-template-columns: minmax(180px, 1fr) minmax(210px, 1fr) auto;
     }
 
-    .filter-panel {
-      position: static;
+    .tag-list__header span:nth-child(3),
+    .row-related {
+      display: none;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .tag-manage-page {
+      padding: 16px;
+    }
+
+    .manage-header__top,
+    .primary-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .header-actions {
+      justify-content: flex-end;
+    }
+
+    .tag-search {
+      width: 100%;
+    }
+
+    .toolbar-actions {
+      justify-content: space-between;
     }
 
     .tag-grid {
