@@ -500,13 +500,14 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding: 24px 24px 16px;
+    padding: 16px 24px;
     box-sizing: border-box;
     color: var(--text-color);
   }
   .section-switcher {
     margin-bottom: 12px;
     flex-shrink: 0;
+    align-self: flex-start;
   }
   .inbox-hero {
     display: flex;

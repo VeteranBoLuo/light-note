@@ -64,13 +64,7 @@
             </template>
             <template v-else-if="column.key === 'operation'">
               <div class="user-opinion__operation">
-                <svg-icon
-                  title="删除"
-                  :src="icon.table_delete"
-                  size="16"
-                  @click.stop="delOpinion(record)"
-                  class="dom-hover"
-                />
+                <BActionButton action="delete" :tooltip="$t('common.delete')" @click="delOpinion(record)" />
               </div>
             </template>
           </template>
@@ -143,6 +137,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';

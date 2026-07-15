@@ -112,33 +112,32 @@
                       <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
                     </div>
                     <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
-                      <span
+                      <BookmarkCapabilityBadge
                         v-if="bookmarkItem.hasSnapshot"
-                        class="bm-badge bm-badge--snap"
-                        :title="$t('bookmarkMg.badgeClickHint')"
-                        @click.stop="openSnap(bookmarkItem.id)"
-                        >📄 {{ $t('bookmarkMg.badgeArchived') }}</span
-                      >
-                      <span
+                        type="snapshot"
+                        :label="$t('bookmarkMg.badgeArchived')"
+                        :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+                        @click="openSnap(bookmarkItem.id)"
+                      />
+                      <BookmarkCapabilityBadge
                         v-if="bookmarkItem.hasSummary"
-                        class="bm-badge bm-badge--sum"
-                        :title="$t('bookmarkMg.badgeClickHint')"
-                        @click.stop="openSnap(bookmarkItem.id)"
-                        >🤖 {{ $t('bookmarkMg.badgeSummary') }}</span
-                      >
+                        type="summary"
+                        :label="$t('bookmarkMg.badgeSummary')"
+                        :tooltip="$t('bookmarkMg.badgeSummaryHint')"
+                        @click="openSnap(bookmarkItem.id)"
+                      />
                     </div>
                   </div>
                 </div>
 
                 <div class="bookmark-actions">
-                  <button class="action-btn" @click="edit(bookmarkItem.id)">
-                    <svg-icon :src="icon.table_edit" size="15" />
-                    <span>{{ $t('common.edit') }}</span>
-                  </button>
-                  <button class="action-btn action-btn--danger" @click="handleDeleteTag(bookmarkItem)">
-                    <svg-icon :src="icon.table_delete" size="15" />
-                    <span>{{ $t('common.delete') }}</span>
-                  </button>
+                  <BActionButton action="edit" :label="$t('common.edit')" :tooltip="$t('common.edit')" @click="edit(bookmarkItem.id)" />
+                  <BActionButton
+                    action="delete"
+                    :label="$t('common.delete')"
+                    :tooltip="$t('common.delete')"
+                    @click="handleDeleteTag(bookmarkItem)"
+                  />
                 </div>
               </div>
 
@@ -189,20 +188,22 @@
                     />
                   </div>
                   <div class="text-hidden">{{ text }}</div>
-                  <span
+                  <BookmarkCapabilityBadge
                     v-if="(record as BookmarkInterface).hasSnapshot"
-                    class="bm-mini"
-                    :title="$t('bookmarkMg.badgeClickHint')"
-                    @click.stop="openSnap((record as BookmarkInterface).id)"
-                    >📄</span
-                  >
-                  <span
+                    type="snapshot"
+                    compact
+                    :label="$t('bookmarkMg.badgeArchived')"
+                    :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+                    @click="openSnap((record as BookmarkInterface).id)"
+                  />
+                  <BookmarkCapabilityBadge
                     v-if="(record as BookmarkInterface).hasSummary"
-                    class="bm-mini"
-                    :title="$t('bookmarkMg.badgeClickHint')"
-                    @click.stop="openSnap((record as BookmarkInterface).id)"
-                    >🤖</span
-                  >
+                    type="summary"
+                    compact
+                    :label="$t('bookmarkMg.badgeSummary')"
+                    :tooltip="$t('bookmarkMg.badgeSummaryHint')"
+                    @click="openSnap((record as BookmarkInterface).id)"
+                  />
                 </div>
               </template>
               <template v-else-if="column.key === 'tagList'">
@@ -224,19 +225,15 @@
               </template>
               <template v-else-if="column.key === 'operation'">
                 <div class="edit-tag-operation">
-                  <svg-icon
-                    title="编辑"
-                    :src="icon.table_edit"
-                    size="16"
+                  <BActionButton
+                    action="edit"
+                    :tooltip="$t('common.edit')"
                     @click="edit((record as BookmarkInterface).id)"
-                    class="dom-hover"
                   />
-                  <svg-icon
-                    title="删除"
-                    :src="icon.table_delete"
-                    size="16"
+                  <BActionButton
+                    action="delete"
+                    :tooltip="$t('common.delete')"
                     @click="handleDeleteTag(record as BookmarkInterface)"
-                    class="dom-hover"
                   />
                 </div>
               </template>
@@ -289,9 +286,11 @@
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
+  import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import { useI18n } from 'vue-i18n';
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
   import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
@@ -1199,45 +1198,6 @@
     gap: 6px;
     margin-top: 6px;
   }
-  .bm-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 11px;
-    line-height: 1.6;
-    padding: 1px 8px;
-    border-radius: 20px;
-    border: 1px solid transparent;
-    white-space: nowrap;
-    cursor: pointer;
-    transition:
-      transform 0.15s ease,
-      filter 0.15s ease;
-    &:hover {
-      transform: translateY(-1px);
-      filter: brightness(1.06);
-    }
-  }
-  .bm-badge--snap {
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent);
-    border-color: color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent);
-  }
-  .bm-badge--sum {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    border-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
-  }
-  .bm-mini {
-    font-size: 12px;
-    margin-left: 6px;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: transform 0.15s ease;
-    &:hover {
-      transform: scale(1.15);
-    }
-  }
 
   .bookmark-desc {
     margin-top: 10px;
@@ -1254,30 +1214,6 @@
     display: flex;
     gap: 6px;
     flex-shrink: 0;
-  }
-
-  .action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    border: 0;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 12px;
-    cursor: pointer;
-    opacity: 0.6;
-    transition: all 0.18s ease;
-    background: var(--bm-muted-bg);
-    color: inherit;
-    &:hover {
-      opacity: 1;
-      background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--bm-muted-bg));
-    }
-  }
-
-  .action-btn--danger:hover {
-    background: #fef2f2;
-    color: #ef4444;
   }
 
   // ── 卡片内区块 ──

@@ -14,24 +14,30 @@
           {{ data.name }}
         </div>
         <div v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
-          <span v-if="data.hasSnapshot" class="bm-badge bm-badge--snap" @click.stop="openSnap(data.id)"
-            >📄 {{ $t('bookmarkMg.badgeArchived') }}</span
-          >
-          <span v-if="data.hasSummary" class="bm-badge bm-badge--sum" @click.stop="openSnap(data.id)"
-            >🤖 {{ $t('bookmarkMg.badgeSummary') }}</span
-          >
+          <BookmarkCapabilityBadge
+            v-if="data.hasSnapshot"
+            type="snapshot"
+            :label="$t('bookmarkMg.badgeArchived')"
+            :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+            @click="openSnap(data.id)"
+          />
+          <BookmarkCapabilityBadge
+            v-if="data.hasSummary"
+            type="summary"
+            :label="$t('bookmarkMg.badgeSummary')"
+            :tooltip="$t('bookmarkMg.badgeSummaryHint')"
+            @click="openSnap(data.id)"
+          />
         </div>
       </div>
       <div class="edit-tag-operation">
-        <svg-icon
-          title="编辑"
-          :src="icon.table_edit"
-          size="16"
+        <BActionButton
+          action="edit"
+          :tooltip="$t('common.edit')"
           @click="edit(data.id)"
           v-click-log="{ module: '书签管理', operation: `点击编辑图标` }"
-          class="dom-hover"
         />
-        <svg-icon title="删除" :src="icon.table_delete" size="16" @click="handleDeleteTag(data)" class="dom-hover" />
+        <BActionButton action="delete" :tooltip="$t('common.delete')" @click="handleDeleteTag(data)" />
       </div>
     </template>
   </PhoneListMg>
@@ -45,9 +51,10 @@
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import router from '@/router';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
+  import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import { cloneDeep } from 'lodash-es';
   import { exportExcelFile } from '@/utils/excel';
 
@@ -220,31 +227,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-  }
-  .bm-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 11px;
-    line-height: 1.6;
-    padding: 1px 8px;
-    border-radius: 20px;
-    border: 1px solid transparent;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-  .bm-badge:active {
-    filter: brightness(1.1);
-  }
-  .bm-badge--snap {
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, transparent);
-    border-color: color-mix(in srgb, var(--resource-bookmark-color) 22%, transparent);
-  }
-  .bm-badge--sum {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    border-color: color-mix(in srgb, var(--primary-color) 22%, transparent);
   }
   .bookmark-item-tag {
     max-width: 120px;

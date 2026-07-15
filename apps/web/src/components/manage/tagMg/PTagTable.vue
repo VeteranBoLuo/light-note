@@ -98,14 +98,18 @@
             </div>
 
             <div class="mobile-card-actions">
-              <b-button size="small" class="mobile-action" @click.stop="edit(tag.id)">
-                <svg-icon :src="icon.table_edit" size="14" />
-                <span>{{ t('common.edit') }}</span>
-              </b-button>
-              <b-button size="small" class="mobile-action mobile-action--danger" @click.stop="handleDeleteTag(tag)">
-                <svg-icon :src="icon.table_delete" size="14" />
-                <span>{{ t('common.delete') }}</span>
-              </b-button>
+              <BActionButton
+                action="edit"
+                :label="t('common.edit')"
+                :tooltip="t('common.edit')"
+                @click="edit(tag.id)"
+              />
+              <BActionButton
+                action="delete"
+                :label="t('common.delete')"
+                :tooltip="t('common.delete')"
+                @click="handleDeleteTag(tag)"
+              />
             </div>
           </article>
         </div>
@@ -132,6 +136,7 @@
   import type { BaseOptions } from '@/config/bookmarkCfg.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -491,15 +496,6 @@
     gap: 6px;
     padding: 8px 10px;
     border-top: 1px solid var(--workbench-border-color);
-  }
-
-  .mobile-action {
-    gap: 4px;
-    border-radius: 8px;
-  }
-
-  .mobile-action--danger:hover {
-    color: #ef4444;
   }
 
   .mobile-empty {

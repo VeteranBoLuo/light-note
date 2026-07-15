@@ -26,8 +26,8 @@
             <BTooltip :title="t('guest.adminContextMaintainEntry')">
               <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
             </BTooltip>
-            <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
-            <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
+            <BActionButton action="edit" :tooltip="t('common.edit')" @click="editUser(record)" />
+            <BActionButton action="delete" :tooltip="t('common.delete')" @click="delUser(record)" />
           </b-space>
         </template>
       </template>
@@ -73,6 +73,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';

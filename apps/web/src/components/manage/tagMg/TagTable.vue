@@ -1,6 +1,12 @@
 <template>
   <b-loading :loading="loading">
-    <div class="tag-manage-page" :class="{ 'tag-manage-page--night': user.currentTheme === 'night' }">
+    <div
+      class="tag-manage-page"
+      :class="{
+        'tag-manage-page--night': user.currentTheme === 'night',
+        'tag-manage-page--compact': isCompactHeader,
+      }"
+    >
       <section class="manage-header">
         <div class="manage-header__top">
           <div class="manage-copy">
@@ -8,6 +14,15 @@
             <h1>{{ t('tagManage.title') }}</h1>
             <p>{{ t('tagManage.subtitle') }}</p>
           </div>
+
+          <div class="overview-strip" :aria-label="t('tagManage.overview')">
+            <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
+              <span class="overview-dot"></span>
+              <strong>{{ stat.value }}</strong>
+              <span>{{ stat.label }}</span>
+            </div>
+          </div>
+
           <div class="header-actions">
             <b-button
               v-click-log="OPERATION_LOG_MAP.tagMg.addTag"
@@ -19,14 +34,6 @@
             <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: '返回' }">
               {{ t('common.back') }}
             </b-button>
-          </div>
-        </div>
-
-        <div class="overview-strip" :aria-label="t('tagManage.overview')">
-          <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
-            <span class="overview-dot"></span>
-            <strong>{{ stat.value }}</strong>
-            <span>{{ stat.label }}</span>
           </div>
         </div>
       </section>
@@ -91,176 +98,190 @@
           </span>
         </div>
 
-        <div v-if="visibleTags.length && viewMode === 'card'" class="tag-grid">
-          <article
-            v-for="tag in visibleTags"
-            :key="tag.id"
-            class="tag-card"
-            role="button"
-            tabindex="0"
-            @click="openTagDetail(tag.id)"
-            @keydown.enter="openTagDetail(tag.id)"
-            v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
-          >
-            <div class="tag-card__head">
-              <div class="tag-identity">
-                <div class="tag-icon-wrap">
-                  <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="24" />
-                  <span v-else>#</span>
-                </div>
-                <div class="tag-meta">
-                  <div class="tag-name">{{ tag.name }}</div>
-                  <div class="tag-summary">
-                    {{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}
+        <div
+          class="results-viewport"
+          :class="{
+            'results-viewport--above': hasScrollAbove,
+            'results-viewport--below': hasScrollBelow,
+          }"
+        >
+          <div ref="resultScrollerRef" class="result-scroller" @scroll.passive="handleResultScroll">
+            <div v-if="visibleTags.length && viewMode === 'card'" class="tag-grid">
+              <article
+                v-for="tag in visibleTags"
+                :key="tag.id"
+                class="tag-card"
+                role="button"
+                tabindex="0"
+                @click="openTagDetail(tag.id)"
+                @keydown.enter="openTagDetail(tag.id)"
+                v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+              >
+                <div class="tag-card__head">
+                  <div class="tag-identity">
+                    <div class="tag-icon-wrap">
+                      <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="24" />
+                      <span v-else>#</span>
+                    </div>
+                    <div class="tag-meta">
+                      <div class="tag-name">{{ tag.name }}</div>
+                      <div class="tag-summary">
+                        {{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tag-actions">
+                    <BActionButton
+                      action="edit"
+                      :label="t('common.edit')"
+                      :tooltip="t('common.edit')"
+                      @click="edit(tag.id)"
+                      v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
+                    />
+                    <BActionButton
+                      action="delete"
+                      :label="t('common.delete')"
+                      :tooltip="t('common.delete')"
+                      @click="handleDeleteTag(tag)"
+                    />
                   </div>
                 </div>
-              </div>
 
-              <div class="tag-actions">
-                <b-button
-                  size="small"
-                  class="action-button"
-                  @click.stop="edit(tag.id)"
-                  v-click-log="{ module: '标签管理', operation: `编辑标签【${tag.name}】` }"
-                >
-                  <svg-icon :src="icon.table_edit" size="14" />
-                  <span>{{ t('common.edit') }}</span>
-                </b-button>
-                <b-button size="small" class="action-button action-button--danger" @click.stop="handleDeleteTag(tag)">
-                  <svg-icon :src="icon.table_delete" size="14" />
-                  <span>{{ t('common.delete') }}</span>
-                </b-button>
-              </div>
+                <div class="resource-metrics">
+                  <div class="resource-metric resource-metric--bookmark">
+                    <span>{{ t('tagManage.bookmark') }}</span>
+                    <strong>{{ tag.bookmarkList?.length || 0 }}</strong>
+                  </div>
+                  <div class="resource-metric resource-metric--note">
+                    <span>{{ t('tagManage.note') }}</span>
+                    <strong>{{ tag.noteList?.length || 0 }}</strong>
+                  </div>
+                  <div class="resource-metric resource-metric--file">
+                    <span>{{ t('tagManage.file') }}</span>
+                    <strong>{{ tag.fileList?.length || 0 }}</strong>
+                  </div>
+                </div>
+
+                <div class="tag-card__content">
+                  <div v-if="tag.relatedTagList?.length" class="compact-row">
+                    <span class="compact-label">{{ t('tagManage.relatedTag') }}</span>
+                    <div class="compact-values">
+                      <span v-for="related in tag.relatedTagList.slice(0, 2)" :key="related.id" class="related-chip">
+                        {{ related.name }}
+                      </span>
+                      <span v-if="tag.relatedTagList.length > 2" class="more-count"
+                        >+{{ tag.relatedTagList.length - 2 }}</span
+                      >
+                    </div>
+                  </div>
+
+                  <div v-if="getPreviewResources(tag).length" class="compact-row compact-row--resources">
+                    <span class="compact-label">{{ t('tagManage.previewContent') }}</span>
+                    <div class="preview-list">
+                      <b-button
+                        v-for="item in getPreviewResources(tag)"
+                        :key="`${item.type}-${item.id}`"
+                        size="small"
+                        class="preview-chip"
+                        :class="`preview-chip--${item.type}`"
+                        :title="item.name"
+                        @click.stop="openResource(item)"
+                      >
+                        <span class="preview-dot"></span>
+                        <span class="preview-name">{{ item.name }}</span>
+                      </b-button>
+                      <span v-if="getRemainingResourceCount(tag)" class="more-count">
+                        +{{ getRemainingResourceCount(tag) }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div v-if="!getTotalResourceCount(tag) && !tag.relatedTagList?.length" class="unlinked-hint">
+                    {{ t('tagManage.unlinkedHint') }}
+                  </div>
+                </div>
+
+                <div class="tag-card__footer">
+                  <span>{{ t('tagManage.openDetail') }}</span>
+                  <span aria-hidden="true">→</span>
+                </div>
+              </article>
             </div>
 
-            <div class="resource-metrics">
-              <div class="resource-metric resource-metric--bookmark">
-                <span>{{ t('tagManage.bookmark') }}</span>
-                <strong>{{ tag.bookmarkList?.length || 0 }}</strong>
+            <div v-else-if="visibleTags.length" class="tag-list">
+              <div class="tag-list__header" aria-hidden="true">
+                <span>{{ t('tagManage.tagColumn') }}</span>
+                <span>{{ t('tagManage.resourceDistribution') }}</span>
+                <span>{{ t('tagManage.relatedTag') }}</span>
+                <span>{{ t('tagManage.actions') }}</span>
               </div>
-              <div class="resource-metric resource-metric--note">
-                <span>{{ t('tagManage.note') }}</span>
-                <strong>{{ tag.noteList?.length || 0 }}</strong>
-              </div>
-              <div class="resource-metric resource-metric--file">
-                <span>{{ t('tagManage.file') }}</span>
-                <strong>{{ tag.fileList?.length || 0 }}</strong>
-              </div>
-            </div>
-
-            <div class="tag-card__content">
-              <div v-if="tag.relatedTagList?.length" class="compact-row">
-                <span class="compact-label">{{ t('tagManage.relatedTag') }}</span>
-                <div class="compact-values">
-                  <span v-for="related in tag.relatedTagList.slice(0, 2)" :key="related.id" class="related-chip">
+              <article
+                v-for="tag in visibleTags"
+                :key="tag.id"
+                class="tag-row"
+                role="button"
+                tabindex="0"
+                @click="openTagDetail(tag.id)"
+                @keydown.enter="openTagDetail(tag.id)"
+                v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
+              >
+                <div class="tag-row__identity">
+                  <div class="tag-row-icon">
+                    <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="18" />
+                    <span v-else>#</span>
+                  </div>
+                  <div class="tag-row-copy">
+                    <strong>{{ tag.name }}</strong>
+                    <span>{{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}</span>
+                  </div>
+                </div>
+                <div class="row-metrics">
+                  <span class="row-metric row-metric--bookmark"
+                    >{{ t('tagManage.bookmarkShort') }} {{ tag.bookmarkList?.length || 0 }}</span
+                  >
+                  <span class="row-metric row-metric--note"
+                    >{{ t('tagManage.noteShort') }} {{ tag.noteList?.length || 0 }}</span
+                  >
+                  <span class="row-metric row-metric--file"
+                    >{{ t('tagManage.fileShort') }} {{ tag.fileList?.length || 0 }}</span
+                  >
+                </div>
+                <div class="row-related">
+                  <span v-for="related in tag.relatedTagList?.slice(0, 2)" :key="related.id" class="related-chip">
                     {{ related.name }}
                   </span>
-                  <span v-if="tag.relatedTagList.length > 2" class="more-count"
+                  <span v-if="!tag.relatedTagList?.length" class="row-empty">{{ t('tagManage.none') }}</span>
+                  <span v-else-if="tag.relatedTagList.length > 2" class="more-count"
                     >+{{ tag.relatedTagList.length - 2 }}</span
                   >
                 </div>
-              </div>
-
-              <div v-if="getPreviewResources(tag).length" class="compact-row compact-row--resources">
-                <span class="compact-label">{{ t('tagManage.previewContent') }}</span>
-                <div class="preview-list">
-                  <b-button
-                    v-for="item in getPreviewResources(tag)"
-                    :key="`${item.type}-${item.id}`"
-                    size="small"
-                    class="preview-chip"
-                    :class="`preview-chip--${item.type}`"
-                    :title="item.name"
-                    @click.stop="openResource(item)"
-                  >
-                    <span class="preview-dot"></span>
-                    <span class="preview-name">{{ item.name }}</span>
-                  </b-button>
-                  <span v-if="getRemainingResourceCount(tag)" class="more-count">
-                    +{{ getRemainingResourceCount(tag) }}
-                  </span>
+                <div class="tag-row-actions">
+                  <BActionButton
+                    action="edit"
+                    :label="t('common.edit')"
+                    :tooltip="t('common.edit')"
+                    @click="edit(tag.id)"
+                  />
+                  <BActionButton
+                    action="delete"
+                    :label="t('common.delete')"
+                    :tooltip="t('common.delete')"
+                    @click="handleDeleteTag(tag)"
+                  />
                 </div>
-              </div>
-
-              <div v-if="!getTotalResourceCount(tag) && !tag.relatedTagList?.length" class="unlinked-hint">
-                {{ t('tagManage.unlinkedHint') }}
-              </div>
+              </article>
             </div>
 
-            <div class="tag-card__footer">
-              <span>{{ t('tagManage.openDetail') }}</span>
-              <span aria-hidden="true">→</span>
+            <div v-else class="empty-state">
+              <div class="empty-symbol">#</div>
+              <h3>{{ t('tagManage.emptyTitle') }}</h3>
+              <p>{{ t('tagManage.emptyDesc') }}</p>
+              <b-button v-if="!keyword" type="primary" @click="$router.push('/manage/editTag/add')">
+                {{ t('tagManage.createTag') }}
+              </b-button>
             </div>
-          </article>
-        </div>
-
-        <div v-else-if="visibleTags.length" class="tag-list">
-          <div class="tag-list__header" aria-hidden="true">
-            <span>{{ t('tagManage.tagColumn') }}</span>
-            <span>{{ t('tagManage.resourceDistribution') }}</span>
-            <span>{{ t('tagManage.relatedTag') }}</span>
-            <span>{{ t('tagManage.actions') }}</span>
           </div>
-          <article
-            v-for="tag in visibleTags"
-            :key="tag.id"
-            class="tag-row"
-            role="button"
-            tabindex="0"
-            @click="openTagDetail(tag.id)"
-            @keydown.enter="openTagDetail(tag.id)"
-            v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
-          >
-            <div class="tag-row__identity">
-              <div class="tag-row-icon">
-                <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="18" />
-                <span v-else>#</span>
-              </div>
-              <div class="tag-row-copy">
-                <strong>{{ tag.name }}</strong>
-                <span>{{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}</span>
-              </div>
-            </div>
-            <div class="row-metrics">
-              <span class="row-metric row-metric--bookmark"
-                >{{ t('tagManage.bookmarkShort') }} {{ tag.bookmarkList?.length || 0 }}</span
-              >
-              <span class="row-metric row-metric--note"
-                >{{ t('tagManage.noteShort') }} {{ tag.noteList?.length || 0 }}</span
-              >
-              <span class="row-metric row-metric--file"
-                >{{ t('tagManage.fileShort') }} {{ tag.fileList?.length || 0 }}</span
-              >
-            </div>
-            <div class="row-related">
-              <span v-for="related in tag.relatedTagList?.slice(0, 2)" :key="related.id" class="related-chip">
-                {{ related.name }}
-              </span>
-              <span v-if="!tag.relatedTagList?.length" class="row-empty">{{ t('tagManage.none') }}</span>
-              <span v-else-if="tag.relatedTagList.length > 2" class="more-count"
-                >+{{ tag.relatedTagList.length - 2 }}</span
-              >
-            </div>
-            <div class="tag-row-actions">
-              <b-button size="small" class="action-button" @click.stop="edit(tag.id)">
-                <svg-icon :src="icon.table_edit" size="14" />
-                <span>{{ t('common.edit') }}</span>
-              </b-button>
-              <b-button size="small" class="action-button action-button--danger" @click.stop="handleDeleteTag(tag)">
-                <svg-icon :src="icon.table_delete" size="14" />
-                <span>{{ t('common.delete') }}</span>
-              </b-button>
-            </div>
-          </article>
-        </div>
-
-        <div v-else class="empty-state">
-          <div class="empty-symbol">#</div>
-          <h3>{{ t('tagManage.emptyTitle') }}</h3>
-          <p>{{ t('tagManage.emptyDesc') }}</p>
-          <b-button v-if="!keyword" type="primary" @click="$router.push('/manage/editTag/add')">
-            {{ t('tagManage.createTag') }}
-          </b-button>
         </div>
       </section>
     </div>
@@ -270,11 +291,12 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, defineAsyncComponent, ref } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -308,13 +330,18 @@
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
   const viewMode = ref<'card' | 'list'>((user.preferences.tagManageView as 'card' | 'list') || 'card');
+  const resultScrollerRef = ref<HTMLElement>();
+  const isCompactHeader = ref(false);
+  const hasScrollAbove = ref(false);
+  const hasScrollBelow = ref(false);
+  let resultResizeObserver: ResizeObserver | undefined;
   const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
 
   const stats = computed(() => [
     { key: 'tag', label: t('tagManage.statTotal'), value: overview.value.tag },
-    { key: 'bookmark', label: t('tagManage.bookmark'), value: overview.value.bookmark },
-    { key: 'note', label: t('tagManage.note'), value: overview.value.note },
-    { key: 'file', label: t('tagManage.file'), value: overview.value.file },
+    { key: 'bookmark', label: t('tagManage.taggedBookmark'), value: overview.value.bookmark },
+    { key: 'note', label: t('tagManage.taggedNote'), value: overview.value.note },
+    { key: 'file', label: t('tagManage.taggedFile'), value: overview.value.file },
   ]);
 
   const filters = computed(() => [
@@ -344,6 +371,33 @@
     if (viewMode.value === mode) return;
     viewMode.value = mode;
     updatePreference({ tagManageView: mode }).catch(() => {});
+  }
+
+  function updateScrollState() {
+    const scroller = resultScrollerRef.value;
+    if (!scroller) return;
+    const remainingScroll = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+    hasScrollAbove.value = scroller.scrollTop > 4;
+    hasScrollBelow.value = remainingScroll > 4;
+    isCompactHeader.value = scroller.scrollTop > 28;
+  }
+
+  function handleResultScroll() {
+    updateScrollState();
+  }
+
+  function resetResultScroll() {
+    const scroller = resultScrollerRef.value;
+    if (scroller) scroller.scrollTop = 0;
+    isCompactHeader.value = false;
+    hasScrollAbove.value = false;
+    nextTick(updateScrollState);
+  }
+
+  async function loadTags() {
+    await reload();
+    await nextTick();
+    updateScrollState();
   }
 
   function getPreviewResources(tag: TagRecord): PreviewResource[] {
@@ -400,7 +454,7 @@
           if (res.status !== 200) return;
           recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
           message.success(t('tagManage.deleteSuccess'));
-          reload();
+          loadTags();
         });
       },
     });
@@ -411,7 +465,21 @@
     else router.back();
   }
 
-  reload();
+  watch([keyword, activeFilter, sortMode, viewMode], resetResultScroll);
+
+  onMounted(() => {
+    if (resultScrollerRef.value && typeof ResizeObserver !== 'undefined') {
+      resultResizeObserver = new ResizeObserver(updateScrollState);
+      resultResizeObserver.observe(resultScrollerRef.value);
+    }
+    updateScrollState();
+  });
+
+  onBeforeUnmount(() => {
+    resultResizeObserver?.disconnect();
+  });
+
+  loadTags();
 </script>
 
 <style lang="less" scoped>
@@ -426,8 +494,11 @@
     --tag-soft-shadow: 0 14px 36px -30px rgba(15, 23, 42, 0.42);
 
     height: 100%;
-    overflow: auto;
-    padding: 22px 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    padding: 14px 24px 18px;
     box-sizing: border-box;
     color: var(--text-color);
   }
@@ -448,9 +519,11 @@
 
   .manage-header {
     position: relative;
+    flex-shrink: 0;
     border-radius: @radius-panel;
-    padding: 20px;
+    padding: 16px 18px;
     overflow: hidden;
+    transition: padding 0.22s ease;
 
     &::after {
       content: '';
@@ -473,34 +546,48 @@
     position: relative;
     z-index: 1;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 24px;
+    gap: 14px 24px;
   }
 
   .manage-copy {
+    flex: 1;
     min-width: 0;
 
     h1 {
-      margin: 4px 0 0;
-      font-size: 24px;
+      margin: 3px 0 0;
+      font-size: 22px;
       line-height: 1.25;
+      transition: font-size 0.22s ease;
     }
 
     p {
-      margin: 8px 0 0;
+      max-height: 48px;
+      margin: 6px 0 0;
       max-width: 720px;
-      font-size: 14px;
-      line-height: 1.65;
+      overflow: hidden;
+      font-size: 13px;
+      line-height: 1.55;
       opacity: @muted-opacity;
+      transition:
+        max-height 0.22s ease,
+        margin 0.22s ease,
+        opacity 0.16s ease;
     }
   }
 
   .eyebrow {
+    max-height: 20px;
+    overflow: hidden;
     color: var(--resource-tag-color);
     font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.08em;
+    transition:
+      max-height 0.18s ease,
+      opacity 0.16s ease;
   }
 
   .header-actions,
@@ -521,14 +608,19 @@
   .overview-strip {
     position: relative;
     z-index: 1;
+    order: 3;
+    flex-basis: 100%;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 10px 22px;
-    margin-top: 18px;
-    padding: 12px 14px;
+    margin-top: 0;
+    padding: 9px 12px;
     border-radius: 12px;
     background: color-mix(in srgb, var(--tag-muted-bg) 72%, transparent);
+    transition:
+      padding 0.22s ease,
+      background 0.22s ease;
   }
 
   .overview-item {
@@ -537,6 +629,7 @@
     gap: 7px;
     font-size: 13px;
     opacity: 0.78;
+    white-space: nowrap;
 
     strong {
       font-size: 17px;
@@ -579,9 +672,14 @@
   }
 
   .workspace-panel {
-    margin-top: 16px;
+    position: relative;
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     border-radius: @radius-panel;
-    padding: 18px;
+    padding: 14px 16px 0;
     min-width: 0;
   }
 
@@ -614,7 +712,6 @@
 
   .view-button,
   .filter-chip,
-  .action-button,
   .preview-chip {
     border-radius: 8px;
   }
@@ -626,8 +723,8 @@
 
   .filter-toolbar {
     gap: 8px;
-    margin-top: 14px;
-    padding-bottom: 14px;
+    margin-top: 9px;
+    padding-bottom: 9px;
     overflow-x: auto;
     border-bottom: 1px solid var(--workbench-border-color);
   }
@@ -660,11 +757,12 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin: 16px 2px 14px;
+    flex-shrink: 0;
+    margin: 9px 2px 8px;
   }
 
   .result-title {
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 700;
   }
 
@@ -681,6 +779,104 @@
     border-radius: 999px;
     color: var(--resource-tag-color);
     background: color-mix(in srgb, var(--resource-tag-color) 8%, transparent);
+  }
+
+  .results-viewport {
+    position: relative;
+    min-height: 0;
+    flex: 1;
+    isolation: isolate;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      z-index: 3;
+      left: 0;
+      right: 0;
+      height: 26px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.18s ease;
+    }
+
+    &::before {
+      top: 0;
+      background: linear-gradient(180deg, var(--tag-panel-bg), transparent);
+    }
+
+    &::after {
+      bottom: 0;
+      background: linear-gradient(0deg, var(--tag-panel-bg), transparent);
+    }
+  }
+
+  .results-viewport--above::before,
+  .results-viewport--below::after {
+    opacity: 1;
+  }
+
+  .result-scroller {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 2px 4px 18px 2px;
+    box-sizing: border-box;
+  }
+
+  .tag-manage-page--compact {
+    .manage-header {
+      padding: 9px 14px;
+    }
+
+    .manage-header__top {
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .manage-copy {
+      flex: 0 0 auto;
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      p {
+        max-height: 0;
+        margin: 0;
+        opacity: 0;
+      }
+    }
+
+    .eyebrow {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    .overview-strip {
+      order: initial;
+      min-width: 0;
+      flex: 1;
+      flex-basis: auto;
+      flex-wrap: nowrap;
+      gap: 12px;
+      overflow: hidden;
+      padding: 0;
+      background: transparent;
+    }
+
+    .overview-item {
+      gap: 5px;
+      font-size: 11px;
+
+      strong {
+        font-size: 14px;
+      }
+    }
   }
 
   .tag-grid {
@@ -773,21 +969,6 @@
   .tag-row-actions {
     gap: 5px;
     flex-shrink: 0;
-  }
-
-  .action-button {
-    gap: 4px;
-    padding: 0 8px;
-    opacity: 0.72;
-  }
-
-  .action-button:hover {
-    opacity: 1;
-  }
-
-  .action-button--danger:hover {
-    color: #ef4444;
-    background: color-mix(in srgb, #ef4444 8%, var(--tag-muted-bg)) !important;
   }
 
   .resource-metrics {
@@ -952,9 +1133,13 @@
   }
 
   .tag-list__header {
-    padding: 0 14px 5px;
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    padding: 6px 14px 8px;
     font-size: 11px;
     color: var(--sub-text-color);
+    background: var(--tag-panel-bg);
   }
 
   .tag-row {
@@ -1016,7 +1201,7 @@
   }
 
   .empty-state {
-    min-height: 360px;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1068,10 +1253,9 @@
 
   @media (max-width: 860px) {
     .tag-manage-page {
-      padding: 16px;
+      padding: 12px 14px 16px;
     }
 
-    .manage-header__top,
     .primary-toolbar {
       align-items: stretch;
       flex-direction: column;

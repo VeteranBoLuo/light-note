@@ -131,6 +131,39 @@ try {
 
 - 存量 Ant Design（`a-*`）逐步替换为自研 B 组件，不新增；确无对应 B 组件才用原生，并注明原因。
 
+**图标开发规范：**
+
+1. 新增图标前先搜索 `src/config/icon.ts`，语义相同的图标直接复用或更新原有配置，禁止在不同页面复制 SVG。
+2. 新增或修改静态 UI 图标时统一写入 `src/config/icon.ts`，页面和组件使用 `SvgIcon` 渲染。
+3. 禁止为静态 UI 图标在 `.vue` 模板内直接新增 `<svg>` / `<path>`；禁止创建仅用于保存 SVG 路径的 `XxxIcon.vue`。
+4. 只有存在独立且可复用的交互或布局职责时才创建组件，例如统一点击区域、Tooltip、键盘可访问性、紧凑/带文字两种模式。即使创建组件，图标本身仍从 `icon.ts` 读取。
+5. 共享单色图标使用 `currentColor`，颜色由 CSS 主题变量或语义组件控制，避免把普通操作色硬编码进 SVG。
+6. 多色品牌图标、网站 favicon、用户上传图标和后端返回的动态图标可以保留其自身颜色或 URL，不要求写入 `icon.ts`。
+7. 数据可视化、关系图、复杂插画和运行时数据生成的 SVG 不属于静态 UI 图标，按其组件职责实现。
+
+推荐写法：
+
+```vue
+<script setup lang="ts">
+import SvgIcon from "@/components/base/SvgIcon/src/SvgIcon.vue";
+import icon from "@/config/icon.ts";
+</script>
+
+<template>
+  <SvgIcon :src="icon.table_edit" size="16" />
+</template>
+```
+
+禁止写法：
+
+```vue
+<!-- 不在业务组件内保存静态图标路径 -->
+<svg viewBox="0 0 24 24"><path d="..." /></svg>
+
+<!-- 不为一段静态 SVG 单独创建组件 -->
+<EditIcon />
+```
+
 **国际化：**
 
 - 所有固定展示文案用 `$t()` 或 vue-i18n 的 `t()`

@@ -60,8 +60,8 @@
                 <BTooltip :title="t('guest.adminContextMaintainEntry')">
                   <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
                 </BTooltip>
-                <svg-icon title="编辑" :src="icon.table_edit" size="16" @click.stop="editUser(record)" class="dom-hover" />
-                <svg-icon title="删除" :src="icon.table_delete" size="16" @click.stop="delUser(record)" class="dom-hover" />
+                <BActionButton action="edit" :tooltip="t('common.edit')" @click="editUser(record)" />
+                <BActionButton action="delete" :tooltip="t('common.delete')" @click="delUser(record)" />
                 <span
                   title="成长运营(发经验/调等级/送补签卡)"
                   class="dom-hover"
@@ -147,6 +147,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
 

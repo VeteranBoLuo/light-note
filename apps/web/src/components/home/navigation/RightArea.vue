@@ -123,15 +123,24 @@
   }
   .phone-top-menu {
     position: absolute;
-    left: 128px;
+    left: 104px;
     right: 14px;
     width: unset !important;
     min-width: 0;
-    gap: 10px !important;
+    gap: 8px !important;
   }
   .phone-top-menu :deep(.global-search) {
     flex: 1;
     min-width: 0;
+  }
+  .phone-top-menu .guest-register-link,
+  .phone-top-menu .mobile-github-btn,
+  .phone-top-menu .navigation-icon {
+    flex: 0 0 auto;
+  }
+  .phone-top-menu .guest-register-link {
+    padding-right: 12px;
+    padding-left: 12px;
   }
   .mobile-github-btn {
     border: 0;
@@ -183,5 +192,11 @@
   .guest-register-link:hover {
     opacity: 0.9;
     box-shadow: 0 3px 12px rgba(97, 92, 237, 0.4);
+  }
+
+  @media (max-width: 360px) {
+    .phone-top-menu .mobile-github-btn {
+      display: none;
+    }
   }
 </style>

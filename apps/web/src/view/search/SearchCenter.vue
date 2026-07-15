@@ -1,27 +1,24 @@
 <template>
   <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
-    <ResourceCenterSectionNav class="section-switcher" />
+    <div class="search-page-topbar">
+      <ResourceCenterSectionNav class="section-switcher" />
+    </div>
+
     <section class="search-header">
-      <div class="search-header-bar">
+      <div class="search-header-copy">
         <div class="search-header-title">
           <span class="eyebrow">{{ t('resourceCenter.eyebrow') }}</span>
           <h1>{{ t('resourceCenter.title') }}</h1>
-          <span class="search-header-sub">{{ t('resourceCenter.subtitle') }}</span>
         </div>
-        <button
-          class="graph-entry"
-          @click="$router.push('/graph')"
-          v-click-log="{ module: '资源中心', operation: '进入知识图谱' }"
-        >
-          🌐 {{ t('resourceCenter.knowledgeGraph') }}
-        </button>
+        <span class="search-header-sub">{{ t('resourceCenter.subtitle') }}</span>
       </div>
+
       <div class="search-header-input">
         <b-input
           id="search-center-input"
           v-model:value="queryState.keyword"
           :placeholder="t('resourceCenter.searchPlaceholder')"
-          height="48px"
+          height="42px"
           @input="syncQueryDebounced"
           @enter="submitSearch"
         >
@@ -29,19 +26,28 @@
             <svg-icon :src="icon.navigation.search" size="18" />
           </template>
         </b-input>
-        <button
-          class="refresh-btn refresh-btn--inline"
+        <BButton
+          class="refresh-btn"
+          :loading="viewState.loading"
           @click="refreshData"
           v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
         >
-          {{ t('resourceCenter.refresh') }}
-        </button>
+          {{ t('resourceCenter.refreshShort') }}
+        </BButton>
+        <BButton
+          class="graph-entry"
+          @click="$router.push('/graph')"
+          v-click-log="{ module: '资源中心', operation: '进入知识图谱' }"
+        >
+          <svg-icon :src="icon.ai.internet" size="16" />
+          {{ t('resourceCenter.knowledgeGraph') }}
+        </BButton>
       </div>
     </section>
 
     <section class="search-layout">
       <aside class="type-filter">
-        <button
+        <BButton
           v-for="item in typeFilters"
           :key="item.value"
           class="filter-item"
@@ -52,31 +58,34 @@
           <span class="filter-dot" :class="`filter-dot--${item.value}`"></span>
           <span>{{ item.label }}</span>
           <span class="filter-count">{{ item.count }}</span>
-        </button>
+        </BButton>
       </aside>
 
       <main class="result-panel">
-        <div class="result-toolbar">
-          <div>
+        <div class="result-toolbar result-toolbar--summary">
+          <div class="result-heading">
             <div class="result-title">{{ t('resourceCenter.results') }}</div>
             <div class="result-subtitle">{{ resultSubtitle }}</div>
           </div>
           <div class="toolbar-actions">
-            <button
+            <BButton
+              size="small"
               class="clear-btn"
               :disabled="!queryState.keyword"
               @click="clearKeyword"
               v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }"
             >
               {{ t('resourceCenter.clear') }}
-            </button>
-            <button
+            </BButton>
+            <BButton
+              size="small"
               class="clear-btn"
+              :disabled="!hasActiveAdvancedFilters"
               @click="clearAdvancedFilters"
               v-click-log="{ module: '资源中心', operation: '清空筛选条件' }"
             >
               {{ t('resourceCenter.clearFilters') }}
-            </button>
+            </BButton>
           </div>
         </div>
 
@@ -103,24 +112,32 @@
             </label>
 
             <div class="view-switch" v-if="!bookmark.isMobile">
-              <button class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
+              <BButton class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
                 {{ t('resourceCenter.view.card') }}
-              </button>
-              <button class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
+              </BButton>
+              <BButton class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
                 {{ t('resourceCenter.view.list') }}
-              </button>
+              </BButton>
             </div>
 
-            <button class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
+            <BButton class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
               {{ t('resourceCenter.untagged') }}
-            </button>
+            </BButton>
+
+            <BButton
+              class="select-visible-btn"
+              :disabled="!selectableVisibleItems.length"
+              @click="toggleSelectAllVisible"
+            >
+              {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
+            </BButton>
           </div>
 
           <div class="tag-filter-wrap" v-if="tagOptions.length">
             <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
             <div class="tag-filter-main">
               <div class="tag-filter-list" :class="{ 'tag-filter-list--collapsed': !showAllTags }">
-                <button
+                <BButton
                   v-for="tag in tagOptions"
                   :key="tag"
                   class="tag-chip"
@@ -128,20 +145,21 @@
                   @click="toggleTagFilter(tag)"
                 >
                   {{ tag }}
-                </button>
+                </BButton>
               </div>
-              <button v-if="tagOptions.length > 14" class="tag-toggle-btn" @click="showAllTags = !showAllTags">
-                {{ showAllTags ? t('resourceCenter.tagCollapse') : t('resourceCenter.tagExpand', { count: tagOptions.length }) }}
-              </button>
+              <BButton v-if="tagOptions.length > 14" class="tag-toggle-btn" @click="showAllTags = !showAllTags">
+                {{
+                  showAllTags
+                    ? t('resourceCenter.tagCollapse')
+                    : t('resourceCenter.tagExpand', { count: tagOptions.length })
+                }}
+              </BButton>
             </div>
           </div>
         </section>
 
-        <section class="batch-toolbar">
+        <section v-if="selectedIds.length" class="batch-toolbar">
           <div class="batch-left">
-            <b-button class="batch-btn" @click="toggleSelectAllVisible">
-              {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
-            </b-button>
             <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
           </div>
           <div class="batch-actions">
@@ -152,78 +170,89 @@
           </div>
         </section>
 
-        <div v-if="viewState.loading" class="result-skeleton" :class="{ 'result-skeleton--list': effectiveView === 'list' }">
-          <div v-for="n in 24" :key="n" class="result-sk-card">
-            <div class="result-sk-top">
-              <div class="result-sk-dot"></div>
-              <div class="result-sk-line result-sk-line--short"></div>
-            </div>
-            <div class="result-sk-line result-sk-line--title"></div>
-            <div class="result-sk-line result-sk-line--desc"></div>
-            <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
-            <div class="result-sk-meta">
-              <div class="result-sk-line result-sk-line--meta1"></div>
-              <div class="result-sk-line result-sk-line--meta2"></div>
+        <div class="result-scroll-area">
+          <div
+            v-if="viewState.loading"
+            class="result-skeleton"
+            :class="{ 'result-skeleton--list': effectiveView === 'list' }"
+          >
+            <div v-for="n in 24" :key="n" class="result-sk-card">
+              <div class="result-sk-top">
+                <div class="result-sk-dot"></div>
+                <div class="result-sk-line result-sk-line--short"></div>
+              </div>
+              <div class="result-sk-line result-sk-line--title"></div>
+              <div class="result-sk-line result-sk-line--desc"></div>
+              <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
+              <div class="result-sk-meta">
+                <div class="result-sk-line result-sk-line--meta1"></div>
+                <div class="result-sk-line result-sk-line--meta2"></div>
+              </div>
             </div>
           </div>
-        </div>
 
-        <template v-else-if="visibleGroups.length">
-          <section v-for="group in visibleGroups" :key="group.type" class="result-group">
-            <div class="group-header">
-              <span>{{ getSearchTypeLabel(t, group.type) }}</span>
-              <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
-            </div>
-            <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
-              <RightMenu :menu="item.type === 'tag' ? [deleteMenuLabel] : [addInboxMenuLabel, deleteMenuLabel]" @select="handleItemMenu($event, item)" v-for="item in group.items" :key="`${item.type}-${item.id}`">
-                <SearchResultItem
-                  :item="item"
-                  :type-label="getSearchTypeLabel(t, item.type)"
-                  :keyword="queryState.keyword"
-                  :selected="selectedIds.includes(getItemSelectionKey(item))"
-                  :selectable="true"
-                  :view="effectiveView"
-                  @open="openItem(item)"
-                  @toggle-select="toggleSelect(item)"
-                />
-              </RightMenu>
-            </div>
-          </section>
-        </template>
+          <template v-else-if="visibleGroups.length">
+            <section v-for="group in visibleGroups" :key="group.type" class="result-group">
+              <div class="group-header">
+                <span>{{ getSearchTypeLabel(t, group.type) }}</span>
+                <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
+              </div>
+              <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
+                <RightMenu
+                  :menu="item.type === 'tag' ? [deleteMenuLabel] : [addInboxMenuLabel, deleteMenuLabel]"
+                  @select="handleItemMenu($event, item)"
+                  v-for="item in group.items"
+                  :key="`${item.type}-${item.id}`"
+                >
+                  <SearchResultItem
+                    :item="item"
+                    :type-label="getSearchTypeLabel(t, item.type)"
+                    :keyword="queryState.keyword"
+                    :selected="selectedIds.includes(getItemSelectionKey(item))"
+                    :selectable="true"
+                    :view="effectiveView"
+                    @open="openItem(item)"
+                    @toggle-select="toggleSelect(item)"
+                  />
+                </RightMenu>
+              </div>
+            </section>
+          </template>
 
-        <div v-else class="empty-state">
-          <div class="empty-orbit"></div>
-          <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
-          <p>{{ t('resourceCenter.emptyDesc') }}</p>
-          <div class="empty-actions">
-            <button
-              class="empty-action-btn"
-              @click="router.push('/manage/editBookmark/add')"
-              v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
-            >
-              {{ t('resourceCenter.emptyActionBookmark') }}
-            </button>
-            <button
-              class="empty-action-btn"
-              @click="router.push('/noteLibrary/add')"
-              v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
-            >
-              {{ t('resourceCenter.emptyActionNote') }}
-            </button>
-            <button
-              class="empty-action-btn"
-              @click="router.push('/cloudSpace')"
-              v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
-            >
-              {{ t('resourceCenter.emptyActionFile') }}
-            </button>
-            <button
-              class="empty-action-btn"
-              @click="router.push('/manage/tagMg')"
-              v-click-log="{ module: '资源中心', operation: '空状态进入标签管理' }"
-            >
-              {{ t('resourceCenter.emptyActionTag') }}
-            </button>
+          <div v-else class="empty-state">
+            <div class="empty-orbit"></div>
+            <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
+            <p>{{ t('resourceCenter.emptyDesc') }}</p>
+            <div class="empty-actions">
+              <BButton
+                class="empty-action-btn"
+                @click="router.push('/manage/editBookmark/add')"
+                v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
+              >
+                {{ t('resourceCenter.emptyActionBookmark') }}
+              </BButton>
+              <BButton
+                class="empty-action-btn"
+                @click="router.push('/noteLibrary/add')"
+                v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
+              >
+                {{ t('resourceCenter.emptyActionNote') }}
+              </BButton>
+              <BButton
+                class="empty-action-btn"
+                @click="router.push('/cloudSpace')"
+                v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
+              >
+                {{ t('resourceCenter.emptyActionFile') }}
+              </BButton>
+              <BButton
+                class="empty-action-btn"
+                @click="router.push('/manage/tagMg')"
+                v-click-log="{ module: '资源中心', operation: '空状态进入标签管理' }"
+              >
+                {{ t('resourceCenter.emptyActionTag') }}
+              </BButton>
+            </div>
           </div>
         </div>
       </main>
@@ -308,7 +337,10 @@
     keyword: '',
     type: 'all',
     sort: (user.preferences.resourceSort as ResourceSort) || 'relevance',
-    view: (user.preferences.resourceView as ResourceView) || (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card',
+    view:
+      (user.preferences.resourceView as ResourceView) ||
+      (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) ||
+      'card',
     tags: [],
     date: 'all',
     untagged: false,
@@ -378,6 +410,13 @@
       selectableVisibleItems.value.every((item) => selectedIds.value.includes(getItemSelectionKey(item))),
   );
   const tagOptions = computed(() => collectTagOptions(mappedItems.value));
+  const hasActiveAdvancedFilters = computed(
+    () =>
+      queryState.tags.length > 0 ||
+      queryState.date !== 'all' ||
+      queryState.untagged ||
+      queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance'),
+  );
 
   // 标签筛选 chips 折叠:默认收起,标签较多时点「更多」展开(原 hero 统计卡已删,信息与左侧类型筛选栏重复)
   const showAllTags = ref(false);
@@ -419,7 +458,10 @@
     // URL 未带 view 时回退到用户偏好(设置页「资源中心视图」),再回退独立缓存,最后卡片——与 parseSort 对齐。
     // 此前漏了 user.preferences.resourceView:route 同步(line ~490 用 parseView 覆盖 queryState.view)时读不到设置值,
     // 刷新便退回陈旧的独立缓存 SEARCH_VIEW_STORAGE_KEY,表现为「设置改列表、刷新资源中心仍是卡片」。
-    const fallback = (user.preferences.resourceView as ResourceView) || (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) || 'card';
+    const fallback =
+      (user.preferences.resourceView as ResourceView) ||
+      (localStorage.getItem(SEARCH_VIEW_STORAGE_KEY) as ResourceView) ||
+      'card';
     const raw = String(value || fallback);
     return raw === 'list' ? 'list' : 'card';
   }
@@ -1436,14 +1478,335 @@
     background: var(--search-muted-bg);
   }
 
+  /* 桌面端工作区：顶部承担定位与搜索，筛选保持可见，仅让结果列表滚动。 */
+  @media (min-width: 901px) {
+    .search-page {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      padding: 16px 24px 20px;
+    }
+
+    .search-page-topbar {
+      flex: 0 0 auto;
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+    }
+
+    .section-switcher {
+      margin-bottom: 0;
+    }
+
+    .search-header {
+      flex: 0 0 auto;
+      min-height: 76px;
+      box-sizing: border-box;
+      padding: 13px 16px;
+      flex-direction: row;
+      align-items: center;
+      gap: 18px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px color-mix(in srgb, var(--search-card-shadow) 42%, transparent);
+    }
+
+    .search-header-copy {
+      flex: 0 1 460px;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .search-header-title {
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+
+    .search-header-sub {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .search-header-input {
+      flex: 1 1 560px;
+      min-width: 360px;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto auto;
+      gap: 8px;
+    }
+
+    :deep(.search-header-input .b-input) {
+      border-radius: 12px;
+    }
+
+    .refresh-btn,
+    .graph-entry {
+      height: 42px;
+      min-width: 72px;
+      padding: 0 13px;
+      border-radius: 11px;
+      font-weight: 600;
+    }
+
+    .refresh-btn {
+      color: var(--text-color);
+      background: var(--search-muted-bg);
+    }
+
+    .graph-entry {
+      min-width: 112px;
+      gap: 6px;
+      color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
+    }
+
+    .search-layout {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin-top: 0;
+      grid-template-columns: 188px minmax(0, 1fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .type-filter {
+      position: static;
+      align-self: stretch;
+      padding: 10px;
+      border-radius: 16px;
+      overflow: auto;
+    }
+
+    .filter-item {
+      height: auto;
+      min-height: 42px;
+      line-height: 1.2;
+      padding: 10px;
+      border-radius: 10px;
+      justify-content: initial;
+      background: transparent;
+    }
+
+    .filter-item.active {
+      color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 9%, var(--search-muted-bg));
+    }
+
+    .result-panel {
+      min-height: 0;
+      padding: 14px 14px 0;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .result-toolbar--summary {
+      flex: 0 0 auto;
+      min-height: 42px;
+      padding: 0 2px 10px;
+    }
+
+    .result-heading {
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .result-title {
+      flex: 0 0 auto;
+      font-size: 18px;
+    }
+
+    .result-subtitle {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .clear-btn {
+      height: 28px;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 9px;
+      background: transparent;
+    }
+
+    .advanced-filters {
+      flex: 0 0 auto;
+      margin-top: 10px;
+      padding: 9px 10px;
+      gap: 8px;
+      border: 0;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--search-muted-bg) 78%, transparent);
+    }
+
+    .filter-row {
+      flex-wrap: nowrap;
+      gap: 8px;
+    }
+
+    .select-wrap {
+      flex: 0 0 auto;
+    }
+
+    .filter-select {
+      min-width: 124px;
+    }
+
+    .view-switch {
+      flex: 0 0 auto;
+      height: 32px;
+      border-radius: 9px;
+    }
+
+    .view-btn,
+    .tagless-btn,
+    .select-visible-btn {
+      height: 30px;
+      min-height: 30px;
+      line-height: 1;
+      padding: 0 10px;
+      border-radius: 8px;
+      background: transparent;
+      font-size: 12px;
+    }
+
+    .view-btn.active {
+      border-radius: 8px;
+    }
+
+    .tagless-btn {
+      background: color-mix(in srgb, var(--background-color) 70%, transparent);
+    }
+
+    .select-visible-btn {
+      margin-left: auto;
+      color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 9%, var(--background-color));
+    }
+
+    .tag-filter-wrap {
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .tag-filter-label {
+      line-height: 26px;
+    }
+
+    .tag-filter-list {
+      gap: 6px;
+    }
+
+    .tag-filter-list--collapsed {
+      max-height: 28px;
+    }
+
+    .tag-chip {
+      min-height: 26px;
+      height: 26px;
+      line-height: 1;
+      padding: 0 9px;
+      background: color-mix(in srgb, var(--background-color) 74%, transparent);
+    }
+
+    .tag-toggle-btn {
+      height: 22px;
+      min-height: 22px;
+      padding: 0;
+      background: transparent;
+    }
+
+    .batch-toolbar {
+      flex: 0 0 auto;
+      min-height: 40px;
+      margin-top: 8px;
+      padding: 5px 8px 5px 12px;
+      border-radius: 11px;
+      background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
+      box-shadow: inset 3px 0 0 var(--primary-color);
+    }
+
+    .batch-actions :deep(.b_btn) {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .result-scroll-area {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden auto;
+      padding: 0 6px 28px 2px;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 18px), transparent 100%);
+    }
+
+    .result-group:first-child,
+    .result-skeleton {
+      margin-top: 12px;
+    }
+
+    .result-group:last-child {
+      margin-bottom: 6px;
+    }
+
+    .result-grid {
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+
+    .result-grid--list {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .empty-state {
+      min-height: 100%;
+    }
+  }
+
+  @media (min-width: 901px) and (max-width: 1180px) {
+    .search-header-copy {
+      flex-basis: 300px;
+      min-width: 220px;
+    }
+
+    .search-header-sub {
+      display: none;
+    }
+
+    .filter-row {
+      flex-wrap: wrap;
+    }
+
+    .select-visible-btn {
+      margin-left: 0;
+    }
+  }
+
   @media (max-width: 900px) {
     .search-page {
       padding: 12px;
+      display: block;
+      overflow-y: auto;
     }
 
     .search-header {
       padding: 14px 16px;
       border-radius: 16px;
+    }
+
+    .search-header-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
 
     h1 {
@@ -1455,7 +1818,12 @@
     }
 
     .search-header-input {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .graph-entry {
+      grid-column: 1 / -1;
+      width: 100%;
     }
 
     .type-filter {
@@ -1468,6 +1836,14 @@
     .tag-filter-wrap {
       grid-template-columns: 1fr;
       gap: 6px;
+    }
+
+    .result-panel {
+      overflow: visible;
+    }
+
+    .result-scroll-area {
+      overflow: visible;
     }
   }
 </style>

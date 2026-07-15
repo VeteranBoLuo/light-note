@@ -27,7 +27,8 @@ export default {
   notificationAdmin: {
     delete: 'Delete',
     deleteTitle: 'Delete notification',
-    deleteConfirm: 'Delete this notification? This also recalls it for every recipient and permanently removes it from the send history.',
+    deleteConfirm:
+      'Delete this notification? This also recalls it for every recipient and permanently removes it from the send history.',
     deleted: 'Deleted ({count} notifications)',
   },
   todo: 'Todo',
@@ -1401,7 +1402,7 @@ export default {
     workspaceEyebrow: 'Tag Workspace',
     createTag: 'New Tag',
     overview: 'Tag resource overview',
-    mobileOverview: 'Covers {bookmark} bookmarks, {note} notes, and {file} files',
+    mobileOverview: 'Tagged: {bookmark} bookmarks, {note} notes, and {file} files',
     searchPlaceholder: 'Search tag names',
     filtersTitle: 'Views',
     resultTitle: 'Tag Assets',
@@ -1417,6 +1418,9 @@ export default {
     sortNameAsc: 'Sort by name',
     sortEmptyFirst: 'Empty tags first',
     statTotal: 'Total Tags',
+    taggedBookmark: 'Tagged bookmarks',
+    taggedNote: 'Tagged notes',
+    taggedFile: 'Tagged files',
     statTotalDesc: 'Unified tag system',
     statBookmarkDesc: 'Tagged bookmarks covered',
     statNoteDesc: 'Tagged notes covered',
@@ -1557,6 +1561,8 @@ export default {
     badgeArchived: 'Archived',
     badgeSummary: 'AI Summary',
     badgeClickHint: 'Click to view archive / AI summary',
+    badgeArchivedHint: 'View the page text saved with this bookmark',
+    badgeSummaryHint: 'View the AI summary generated from the page archive',
     aiOrganizeBtn: 'AI Organize',
     aiOrganizeTitle: 'AI Organize · Auto-tag',
     aiOrganizeIntro:

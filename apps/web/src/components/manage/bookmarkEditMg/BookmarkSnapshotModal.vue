@@ -3,11 +3,26 @@
     <div class="bsnap">
       <p class="bsnap-hint">{{ $t('bookmarkMg.snapshotHint') }}</p>
       <div class="bsnap-bar">
-        <span v-if="snap?.update_time" class="bsnap-time">{{ $t('bookmarkMg.snapshotUpdatedAt', { t: fmtTime(snap.update_time) }) }}</span>
+        <span v-if="snap?.update_time" class="bsnap-time">{{
+          $t('bookmarkMg.snapshotUpdatedAt', { t: fmtTime(snap.update_time) })
+        }}</span>
         <span v-else class="bsnap-time"></span>
         <b-space v-if="!isGuest">
-          <b-button size="small" :loading="summarizing" :disabled="summarizing || !snap?.content" @click="aiSummarize">
-            🤖 {{ summarizing ? $t('bookmarkMg.aiSummarizing') : snap?.summary ? $t('bookmarkMg.aiResummary') : $t('bookmarkMg.aiSummary') }}
+          <b-button
+            class="bsnap-ai-button"
+            size="small"
+            :loading="summarizing"
+            :disabled="summarizing || !snap?.content"
+            @click="aiSummarize"
+          >
+            <SvgIcon :src="icon.ai.summary" size="15" />
+            {{
+              summarizing
+                ? $t('bookmarkMg.aiSummarizing')
+                : snap?.summary
+                  ? $t('bookmarkMg.aiResummary')
+                  : $t('bookmarkMg.aiSummary')
+            }}
           </b-button>
           <b-button size="small" type="primary" :loading="archiving" :disabled="archiving" @click="archive">
             {{ archiving ? $t('bookmarkMg.snapshotArchiving') : $t('bookmarkMg.snapshotArchive') }}
@@ -16,12 +31,23 @@
       </div>
 
       <div v-if="snap?.summary" class="bsnap-summary">
-        <div class="bsnap-summary-head">🤖 {{ $t('bookmarkMg.aiSummaryTitle') }} <span class="bsnap-tag">{{ $t('bookmarkMg.aiSummaryHint') }}</span></div>
+        <div class="bsnap-summary-head">
+          <span class="bsnap-heading-icon bsnap-heading-icon--summary"
+            ><SvgIcon :src="icon.ai.summary" size="15"
+          /></span>
+          <span>{{ $t('bookmarkMg.aiSummaryTitle') }}</span>
+          <span class="bsnap-tag">{{ $t('bookmarkMg.aiSummaryHint') }}</span>
+        </div>
         <div class="bsnap-summary-body">{{ snap.summary }}</div>
       </div>
       <div v-if="loading" class="bsnap-empty">…</div>
       <div v-else-if="snap?.content" class="bsnap-content">
-        <div class="bsnap-content-label">📄 {{ $t('bookmarkMg.snapshotFullText') }}</div>
+        <div class="bsnap-content-label">
+          <span class="bsnap-heading-icon bsnap-heading-icon--snapshot"
+            ><SvgIcon :src="icon.bookmarkManage.snapshot" size="14"
+          /></span>
+          <span>{{ $t('bookmarkMg.snapshotFullText') }}</span>
+        </div>
         <div v-if="snap.title" class="bsnap-doc-title">{{ snap.title }}</div>
         <div class="bsnap-text">{{ snap.content }}</div>
       </div>
@@ -39,6 +65,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { useUserStore } from '@/store';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const { t } = useI18n();
   const props = defineProps<{ bookmarkId?: string }>();
@@ -137,6 +165,9 @@
     font-size: 11.5px;
     color: var(--desc-color);
   }
+  .bsnap-ai-button {
+    gap: 6px;
+  }
   .bsnap-summary {
     padding: 10px 12px;
     border-radius: 10px;
@@ -144,6 +175,9 @@
     border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
   }
   .bsnap-summary-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     font-weight: 700;
     color: var(--primary-color);
@@ -159,10 +193,34 @@
     margin-left: 4px;
   }
   .bsnap-content-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     font-weight: 700;
     color: var(--desc-color);
     margin-bottom: 8px;
+  }
+  .bsnap-heading-icon {
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    flex: none;
+  }
+  .bsnap-heading-icon--summary {
+    color: var(--primary-color);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary-color) 15%, transparent),
+      color-mix(in srgb, var(--resource-tag-color) 10%, transparent)
+    );
+  }
+  .bsnap-heading-icon--snapshot {
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 12%, transparent);
   }
   .bsnap-summary,
   .bsnap-content {
