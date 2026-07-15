@@ -57,7 +57,7 @@ Paste a link and the title, description, and icon are fetched automatically. Tag
 ---
 
 **📝 Note library**  
-Rich-text editing — text, images, tables, and code blocks all supported. Multi-level folders, card/list dual views, export to PDF. Works on mobile too.
+Rich text | Markdown dual-mode editing with instant switching. Supports text, images, tables, and code blocks, plus multi-level folders, card/list dual views, PDF export, and mobile editing.
 
 <p align="center">
   <img src="apps/web/screenshots/note1.png" alt="Note library" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
@@ -92,7 +92,7 @@ Built-in conversational AI that can call tools to look up your bookmarks, notes,
 | Aspect | LightNote | Notion | Cubox | Raindrop |
 |------|------|--------|-------|----------|
 | Bookmarks | ✅ tags + search | ❌ too heavy | ✅ | ✅ |
-| Note writing | ✅ rich text | ✅ | ❌ | ❌ |
+| Note writing | ✅ rich text + Markdown | ✅ | ❌ | ❌ |
 | File storage | ✅ cloud + preview | ❌ paid | ❌ | ❌ |
 | Unified tags | ✅ **cross-type** | ⚠️ per module | ✅ | ❌ |
 | Hosted plan | 🆓 **free to use** | 💰 $10/mo | 💰 ¥10/mo | 💰 $3+/mo |
