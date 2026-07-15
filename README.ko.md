@@ -1,21 +1,27 @@
 <p align="center">
   <img src="https://img.shields.io/github/stars/VeteranBoLuo/light-note?style=for-the-badge&color=615ced" alt="stars">
+  <img src="https://img.shields.io/github/actions/workflow/status/VeteranBoLuo/light-note/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI">
+  <img src="https://img.shields.io/github/license/VeteranBoLuo/light-note?style=for-the-badge&color=00a884" alt="license">
   <img src="https://img.shields.io/badge/Vue_3-4FC08D?style=for-the-badge&logo=vuedotenv&logoColor=white" alt="Vue">
-  <img src="https://img.shields.io/badge/Express-000?style=for-the-badge&logo=express&logoColor=white" alt="Express">
-  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TS">
 </p>
 
 <h1 align="center">📦 轻笺 · LightNote</h1>
 
 <p align="center">
-  <b>당신의 디지털 라이프 정리함 — Notion보다 빠르고, Cubox보다 가볍게</b>
+  <b>북마크, 노트, 클라우드 파일을 위한 무료 온라인 서비스</b>
   <br>
-  <sub>북마크 · 노트 · 클라우드 파일 · AI 어시스턴트</sub>
+  <sub>북마크 · 노트 · 클라우드 파일 · AI 어시스턴트 · 기기 간 동기화</sub>
 </p>
 
 <p align="center">
   <a href="https://boluo66.top">
-    <img src="https://img.shields.io/badge/🚀_무료로_체험하기_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="무료로 체험하기">
+    <img src="https://img.shields.io/badge/🚀_온라인에서_무료로_사용_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="온라인에서 무료로 사용">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://boluo66.top">
+    <img src="apps/web/screenshots/hero.png" alt="북마크, 노트, 클라우드 파일과 태그를 관리하는 LightNote 작업 공간" width="92%" />
   </a>
 </p>
 
@@ -35,7 +41,7 @@
 ❝ 업무 파일이 채팅으로 오고 클라우드로 오가며 → **이리저리 옮기기만** ❞  
 
 **LightNote 는 이것들을 한곳에 모아줍니다.** 북마크는 자동 수집, 노트는 손쉽게 기록, 파일은 클라우드 저장. 통합 태그로 모두 연결.  
-브라우저만 열면 바로 사용, **무료 · 배포 불필요**.
+브라우저에서 바로 시작할 수 있습니다. 호스팅 서비스는 현재 **무료로 이용 가능**하며 직접 배포할 필요가 없습니다.
 
 <p align="center">
   <a href="https://boluo66.top"><b>👉 사용해 보기 → boluo66.top</b></a>
@@ -93,7 +99,7 @@
 | 노트 작성 | ✅ 리치 텍스트 | ✅ | ❌ | ❌ |
 | 파일 저장 | ✅ 클라우드 + 미리보기 | ❌ 유료 | ❌ | ❌ |
 | 통합 태그 | ✅ **유형 간** | ⚠️ 모듈별 | ✅ | ❌ |
-| 가격 | 🆓 **무료** | 💰 $10/월 | 💰 ¥10/월 | 💰 $3+/월 |
+| 온라인 서비스 | 🆓 **무료로 이용 가능** | 💰 $10/월 | 💰 ¥10/월 | 💰 $3+/월 |
 | 경험 | ⚡ **가볍고 빠름** | ❌ 느림 | ✅ 빠름 | ✅ 빠름 |
 
 **대형 플랫폼만큼 무겁지 않고, 단일 도구만큼 제한적이지도 않습니다.**
@@ -123,6 +129,18 @@
 
 ---
 
+## 💻 소스 코드와 개발자 안내
+
+LightNote 는 우선 일반 사용자를 위한 온라인 서비스입니다. 구현의 투명성, 문제 제보, 커뮤니티 기여를 위해 소스 코드도 공개합니다.
+
+- **LightNote 를 사용하려면:** 서버나 환경 설정 없이 **[boluo66.top](https://boluo66.top)** 에 접속하세요.
+- **개발에 참여하려면:** **[기여 가이드](CONTRIBUTING.md)** 와 **[개발 문서](docs/development.md)** 를 확인하세요.
+- **직접 배포하려면:** 운영 환경에는 데이터베이스, 오브젝트 스토리지, 캐시, 이메일, 외부 AI 서비스가 필요합니다. 현재 초보자를 위한 원클릭 셀프 호스팅 환경은 제공하지 않습니다.
+
+소스 코드는 [MIT License](LICENSE) 로 공개됩니다. 호스팅 서비스의 저장 공간, AI 기능, 사용 한도는 서비스 내 안내를 따릅니다.
+
+---
+
 <p align="center">
   <a href="https://boluo66.top">
     <img src="https://img.shields.io/badge/🌐_라이브_데모-615ced?style=for-the-badge&logoColor=white" alt="라이브 데모">
@@ -130,7 +148,7 @@
   <br><br>
   마음에 드셨다면 → ⭐ <b>Star</b> 로 응원해 주세요
   <br>
-  아이디어가 있다면 → <a href="https://github.com/VeteranBoLuo/light-note/issues">Issue</a> 나 PR 을
+  아이디어가 있다면 → <a href="https://github.com/VeteranBoLuo/light-note/issues">Issue</a> 또는 <a href="CONTRIBUTING.md">기여 가이드</a>로
   <br>
   <sub>별 하나하나가 밤샘 코딩의 힘이 됩니다 ✨</sub>
 </p>

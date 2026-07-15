@@ -1,21 +1,29 @@
 <p align="center">
   <img src="https://img.shields.io/github/stars/VeteranBoLuo/light-note?style=for-the-badge&color=615ced" alt="stars">
+  <img src="https://img.shields.io/github/actions/workflow/status/VeteranBoLuo/light-note/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI">
+  <img src="https://img.shields.io/github/license/VeteranBoLuo/light-note?style=for-the-badge&color=00a884" alt="license">
   <img src="https://img.shields.io/badge/Vue_3-4FC08D?style=for-the-badge&logo=vuedotenv&logoColor=white" alt="Vue">
-  <img src="https://img.shields.io/badge/Express-000?style=for-the-badge&logo=express&logoColor=white" alt="Express">
-  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TS">
 </p>
 
 <h1 align="center">📦 轻笺 · LightNote</h1>
 
 <p align="center">
-  <b>你的数字生活收纳盒 — 比 Notion 快，比 Cubox 省</b>
+  <b>免费的书签、笔记与云文件管理平台</b>
   <br>
-  <sub>书签 · 笔记 · 云文件 · AI 助手</sub>
+  <sub>书签 · 笔记 · 云文件 · AI 助手 · 跨设备同步</sub>
+  <br>
+  <sub>A free online workspace for bookmarks, notes, cloud files and AI-assisted organization.</sub>
 </p>
 
 <p align="center">
   <a href="https://boluo66.top">
-    <img src="https://img.shields.io/badge/🚀_免费体验_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="免费体验">
+    <img src="https://img.shields.io/badge/🚀_免费在线使用_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="免费在线使用">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://boluo66.top">
+    <img src="apps/web/screenshots/hero.png" alt="轻笺工作台：统一管理书签、笔记、云文件与标签" width="92%" />
   </a>
 </p>
 
@@ -35,7 +43,7 @@
 ❝ 工作文件在微信发来、网盘传去 → **来回倒腾** ❞  
 
 **轻笺把它们放到一个地方。** 书签自动抓取、笔记随手记录、文件云端存储，统一标签串联。  
-浏览器打开就能用，**免费，不需要部署**。
+浏览器打开就能用，当前提供**免费在线使用**，不需要自行部署。
 
 <p align="center">
   <a href="https://boluo66.top"><b>👉 去试试 → boluo66.top</b></a>
@@ -93,7 +101,7 @@
 | 笔记书写 | ✅ 富文本 | ✅ | ❌ | ❌ |
 | 文件存储 | ✅ 云端+预览 | ❌ 付费 | ❌ | ❌ |
 | 统一标签 | ✅ **跨类型** | ⚠️ 分模块 | ✅ | ❌ |
-| 费用 | 🆓 **免费** | 💰 $10/月 | 💰 ¥10/月 | 💰 $3+/月 |
+| 在线版 | 🆓 **免费使用** | 💰 $10/月 | 💰 ¥10/月 | 💰 $3+/月 |
 | 体验 | ⚡ **轻量快速** | ❌ 慢 | ✅ 快 | ✅ 快 |
 
 **没有大平台那么重，也没有单一工具那么局限。**
@@ -123,6 +131,18 @@
 
 ---
 
+## 💻 源码与开发者说明
+
+轻笺首先是一项面向用户的在线服务，本仓库同时开放源代码，方便了解实现、提交问题和参与改进。
+
+- **只想使用轻笺：** 直接访问 **[boluo66.top](https://boluo66.top)**，无需准备服务器或配置环境。
+- **想参与开发：** 请阅读 **[贡献指南](CONTRIBUTING.md)** 和 **[开发文档](docs/development.md)**。
+- **想自行部署：** 完整生产环境依赖数据库、对象存储、缓存、邮件及第三方 AI 服务，目前暂不提供面向普通用户的一键自托管方案。
+
+源代码采用 [MIT License](LICENSE)。线上服务的存储空间、AI 能力及使用额度以站内说明为准。
+
+---
+
 <p align="center">
   <a href="https://boluo66.top">
     <img src="https://img.shields.io/badge/🌐_在线体验-615ced?style=for-the-badge&logoColor=white" alt="体验">
@@ -130,7 +150,7 @@
   <br><br>
   觉得好用 → ⭐ <b>Star</b> 支持一下
   <br>
-  有想法 → 提 <a href="https://github.com/VeteranBoLuo/light-note/issues">Issue</a> 或 PR
+  有想法 → 提 <a href="https://github.com/VeteranBoLuo/light-note/issues">Issue</a> 或查看 <a href="CONTRIBUTING.md">贡献指南</a>
   <br>
   <sub>每一个 Star 都是深夜写代码的动力 ✨</sub>
 </p>

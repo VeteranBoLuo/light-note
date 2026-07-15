@@ -1,21 +1,29 @@
 <p align="center">
   <img src="https://img.shields.io/github/stars/VeteranBoLuo/light-note?style=for-the-badge&color=615ced" alt="stars">
+  <img src="https://img.shields.io/github/actions/workflow/status/VeteranBoLuo/light-note/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI">
+  <img src="https://img.shields.io/github/license/VeteranBoLuo/light-note?style=for-the-badge&color=00a884" alt="license">
   <img src="https://img.shields.io/badge/Vue_3-4FC08D?style=for-the-badge&logo=vuedotenv&logoColor=white" alt="Vue">
-  <img src="https://img.shields.io/badge/Express-000?style=for-the-badge&logo=express&logoColor=white" alt="Express">
-  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TS">
 </p>
 
 <h1 align="center">📦 轻笺 · LightNote</h1>
 
 <p align="center">
-  <b>Your digital life in one box — faster than Notion, leaner than Cubox</b>
+  <b>A free online workspace for bookmarks, notes, and cloud files</b>
   <br>
-  <sub>Bookmarks · Notes · Cloud files · AI assistant</sub>
+  <sub>Bookmarks · Notes · Cloud files · AI assistant · Cross-device sync</sub>
+  <br>
+  <sub>免费的书签、笔记与云文件管理平台</sub>
 </p>
 
 <p align="center">
   <a href="https://boluo66.top">
-    <img src="https://img.shields.io/badge/🚀_Try_it_free_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="Try it free">
+    <img src="https://img.shields.io/badge/🚀_Use_online_for_free_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="Use LightNote online for free">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://boluo66.top">
+    <img src="apps/web/screenshots/hero.png" alt="LightNote workspace for bookmarks, notes, cloud files, and tags" width="92%" />
   </a>
 </p>
 
@@ -35,7 +43,7 @@
 ❝ Work files arriving over chat, shuffled through cloud drives → **endless back-and-forth** ❞  
 
 **LightNote puts them all in one place.** Bookmarks auto-fetched, notes jotted on the fly, files stored in the cloud — all tied together by unified tags.  
-Just open your browser and go — **free, no deployment required**.
+Open it in your browser and get started. The hosted service is currently **free to use**, with no deployment required.
 
 <p align="center">
   <a href="https://boluo66.top"><b>👉 Give it a try → boluo66.top</b></a>
@@ -93,7 +101,7 @@ Built-in conversational AI that can call tools to look up your bookmarks, notes,
 | Note writing | ✅ rich text | ✅ | ❌ | ❌ |
 | File storage | ✅ cloud + preview | ❌ paid | ❌ | ❌ |
 | Unified tags | ✅ **cross-type** | ⚠️ per module | ✅ | ❌ |
-| Price | 🆓 **free** | 💰 $10/mo | 💰 ¥10/mo | 💰 $3+/mo |
+| Hosted plan | 🆓 **free to use** | 💰 $10/mo | 💰 ¥10/mo | 💰 $3+/mo |
 | Feel | ⚡ **light & fast** | ❌ slow | ✅ fast | ✅ fast |
 
 **Not as heavy as the big platforms, not as limited as the single-purpose tools.**
@@ -123,6 +131,18 @@ Deployment · Huawei Cloud · Nginx · PM2 · OBS object storage
 
 ---
 
+## 💻 Source code and development
+
+LightNote is first and foremost an online service for end users. Its source code is also available here for transparency, issue reporting, and community contributions.
+
+- **Want to use LightNote?** Visit **[boluo66.top](https://boluo66.top)** — no server or environment setup required.
+- **Want to contribute?** Read the **[contribution guide](CONTRIBUTING.md)** and **[development guide](docs/development.md)**.
+- **Want to deploy it yourself?** A production installation depends on a database, object storage, cache, email, and third-party AI services. A one-click, beginner-oriented self-hosting setup is not currently provided.
+
+The source code is available under the [MIT License](LICENSE). Storage, AI features, and usage quotas of the hosted service are subject to the information shown in the product.
+
+---
+
 <p align="center">
   <a href="https://boluo66.top">
     <img src="https://img.shields.io/badge/🌐_Live_demo-615ced?style=for-the-badge&logoColor=white" alt="Live demo">
@@ -130,7 +150,7 @@ Deployment · Huawei Cloud · Nginx · PM2 · OBS object storage
   <br><br>
   Like it? → ⭐ <b>Star</b> to show your support
   <br>
-  Got ideas? → open an <a href="https://github.com/VeteranBoLuo/light-note/issues">Issue</a> or PR
+  Got ideas? → open an <a href="https://github.com/VeteranBoLuo/light-note/issues">Issue</a> or read the <a href="CONTRIBUTING.md">contribution guide</a>
   <br>
   <sub>Every Star fuels another late-night coding session ✨</sub>
 </p>

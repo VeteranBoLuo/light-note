@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞报告
+    url: https://github.com/VeteranBoLuo/light-note/security/advisories/new
+    about: 请通过私密渠道报告安全问题，不要公开披露。
+  - name: 在线使用轻笺
+    url: https://boluo66.top
+    about: 直接打开轻笺在线服务，无需自行部署。

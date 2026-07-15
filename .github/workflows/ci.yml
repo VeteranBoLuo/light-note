@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: 类型检查、测试与构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # CI 只使用无权限占位配置，避免测试导入模块时连接生产数据库或真实 OBS。
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_USER: ci
+      DB_PASSWORD: ci
+      DB_NAME: light_note_ci
+      OBS_AK: ci-placeholder
+      OBS_SK: ci-placeholder
+      OBS_ENDPOINT: https://obs.example.invalid
+      OBS_BUCKET_NAME: light-note-ci
+    steps:
+      - name: 读取仓库内容
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 运行测试
+        run: pnpm test
+
+      - name: 构建前端
+        run: pnpm build:web
+        env:
+          SKIP_PRERENDER: '1'
