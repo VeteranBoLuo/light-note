@@ -2,6 +2,10 @@
 -- 这是线上数据写入脚本，不随结构迁移或 deploy.sh 自动执行。
 -- 执行前必须单独获得知识库数据变更授权。
 
+-- 线上 knowledge_base 使用 utf8mb4_unicode_ci；显式统一连接排序规则，避免
+-- MySQL 5.7 中用户变量默认 utf8mb4_general_ci 与 title 比较时报 1267。
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 START TRANSACTION;
 
 SET @inbox_doc_id = '5f83a51e-41b2-4ad7-993f-52aa40b8795f';
