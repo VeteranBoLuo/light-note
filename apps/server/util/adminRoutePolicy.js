@@ -235,6 +235,8 @@ declare(ADMIN_POLICIES.AI_USE, 'agent', [
   ['POST', '/chat/generateBookmarkMeta'],
   ['POST', '/chat/generateBookmarkDescription'],
   ['POST', '/chat/generateTagIcon'],
+  ['POST', '/tagIcon/search'],
+  ['POST', '/tagIcon/resolve'],
 ]);
 
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [

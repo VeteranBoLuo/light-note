@@ -8,26 +8,7 @@
             <b-input v-model:value="tag.name" />
           </div>
           <div class="tag-attr-item">
-            <div class="tag-attr-head">
-              <div class="tag-label-with-preview">
-                <span class="tag-attr-label">{{ $t('tagManage.icon') }}</span>
-                <span class="icon-preview-box" :class="{ empty: !iconPreviewSrc }">
-                  <svg-icon v-if="iconPreviewSrc" :src="iconPreviewSrc" size="18" />
-                  <svg-icon v-else :src="icon.nullImg" size="16" />
-                </span>
-              </div>
-              <BTooltip :title="$t('tagManage.generateIconDesc')">
-                <button type="button" class="generate-icon-action" @click="generateTagIcon" :class="{ loading: generatingIcon }">
-                  <svg-icon :src="icon.common.magicWand" :title="$t('tagManage.generateIconTitle')" />
-                  <span>{{ $t('tagManage.generateIconTitle') }}</span>
-                </button>
-              </BTooltip>
-            </div>
-            <b-input v-model:value="tag.iconUrl" :placeholder="$t('tagManage.iconPlaceholder')">
-              <template #suffix>
-                <svg-icon :src="icon.file_upload" class="dom-hover-click" size="20" style="height: 32px" @click.stop="uploadTagImg" />
-              </template>
-            </b-input>
+            <TagIconPicker v-model:value="tag.iconUrl" :tag-name="tag.name" />
           </div>
           <div class="tag-attr-item">
             <span class="tag-attr-label">{{ $t('tagManage.relatedTag') }}</span>
@@ -92,9 +73,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
+  import TagIconPicker from './TagIconPicker.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { RESOURCE_COLOR_HEX, type ResourceType } from '@/config/resourceColor.ts';
@@ -110,7 +89,6 @@
   const user = useUserStore();
   const { t } = useI18n();
   const loading = ref(false);
-  const generatingIcon = ref(false);
 
   const tag = ref<TagInterface>({
     id: '',
@@ -133,17 +111,6 @@
     bookmark: '',
     note: '',
     file: '',
-  });
-
-  const iconPreviewSrc = computed(() => {
-    const raw = String(tag.value.iconUrl || '').trim();
-    if (!raw) return '';
-    if (raw.startsWith('data:image/')) return raw;
-    if (raw.includes('<svg')) return raw;
-    if (/^[A-Za-z0-9+/=]+$/.test(raw) && raw.length > 64) {
-      return `data:image/svg+xml;base64,${raw}`;
-    }
-    return raw;
   });
 
   function normalizeIconUrl(input: string) {
@@ -263,53 +230,6 @@
     }
   }
 
-  function uploadTagImg() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.addEventListener('change', function (event: any) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const maxFileSize = 5000 * 1024;
-      if (file.size > maxFileSize) {
-        message.warning('图片大小不能超过5MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        tag.value.iconUrl = String(e.target?.result || '');
-      };
-      reader.readAsDataURL(file);
-    });
-    input.click();
-  }
-
-  async function generateTagIcon() {
-    if (!tag.value.name?.trim()) {
-      message.warning(t('tagManage.generateIconNeedName'));
-      return;
-    }
-    generatingIcon.value = true;
-    try {
-      const res = await apiBasePost('/api/chat/generateTagIcon', {
-        tagName: tag.value.name.trim(),
-      });
-      const iconUrl = String(res?.data?.iconUrl || '');
-      if (!iconUrl) {
-        message.warning(t('tagManage.generateIconInvalid'));
-        return;
-      }
-      tag.value.iconUrl = iconUrl;
-      recordOperation({ module: '标签详情', operation: `生成标签图标成功【${tag.value.name.trim()}】` });
-      message.success(t('tagManage.generateIconSuccess'));
-    } catch (error) {
-      console.error('generate tag icon failed', error);
-      message.error(t('tagManage.generateIconFailed'));
-    } finally {
-      generatingIcon.value = false;
-    }
-  }
-
   async function submit() {
     if (blockGuestWrite('add-tag')) return;
     if (loading.value) {
@@ -405,63 +325,6 @@
   .tag-attr-label {
     font-size: 13px;
     color: var(--desc-color);
-  }
-
-  .tag-attr-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .tag-label-with-preview {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .icon-preview-box {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-
-    &.empty {
-      opacity: 0.6;
-    }
-  }
-
-  .generate-icon-action {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 26%, var(--card-border-color));
-    background: color-mix(in srgb, var(--resource-tag-color) 8%, var(--background-color));
-    color: var(--resource-tag-color);
-    border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    transition:
-      transform 0.2s ease,
-      border-color 0.2s ease,
-      background-color 0.2s ease;
-
-    &:hover {
-      transform: translateY(-1px);
-      border-color: color-mix(in srgb, var(--resource-tag-color) 44%, var(--card-border-color));
-      background: color-mix(in srgb, var(--resource-tag-color) 12%, var(--background-color));
-    }
-
-    &.loading {
-      opacity: 0.72;
-      cursor: wait;
-    }
   }
 
   .summary-grid {
