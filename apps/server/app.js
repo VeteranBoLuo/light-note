@@ -15,6 +15,8 @@ import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { globalRateLimiter } from './util/requestRateLimit.js';
+import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
+import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -65,7 +67,6 @@ allRouter.forEach((item) => {
   app.use(item.path, item.router);
 });
 
-
 startSessionMaintenance();
 ensureSecurityTables().catch((err) => console.error('安全模块初始化失败:', err.message));
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败:', err.message));
@@ -74,6 +75,8 @@ await initLogExclude().catch((err) => console.error('日志白名单初始化失
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败:', err.message));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败:', err.message));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败:', err.message));
+ensureFeatureRequestTables().catch((err) => console.error('共建轻笺数据表初始化失败:', err.message));
+ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败:', err.message));
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

@@ -6,19 +6,23 @@
       </BButton>
     </div>
     <BPopover v-model:open="open" trigger="click" placement="top-left" overlay-class-name="ai-context-popover">
-      <BButton size="small" :disabled="modelValue.length >= 5">@ {{ t('ai.addContext') }}</BButton>
+      <BButton size="small">@ {{ t('ai.addContext') }}</BButton>
       <template #content>
         <div class="ai-context-panel">
           <BInput v-model:value="keyword" :placeholder="t('ai.searchContext')" clearable @enter="searchNow" />
           <div class="ai-context-results">
-            <BButton v-if="currentPageContext && !selected(currentPageContext)" @click="add(currentPageContext)">
+            <BButton
+              v-if="currentPageContext && !selected(currentPageContext)"
+              :disabled="modelValue.length >= 5"
+              @click="add(currentPageContext)"
+            >
               <span>{{ t('ai.currentPage') }}</span
               ><strong>{{ currentPageContext.title }}</strong>
             </BButton>
             <BButton
               v-for="item in results"
               :key="`${item.type}:${item.id}`"
-              :disabled="selected(item)"
+              :disabled="selected(item) || (item.type !== 'file' && modelValue.length >= 5)"
               @click="add(item)"
             >
               <span>{{ typeLabel(item.type) }}</span
@@ -50,7 +54,10 @@
   }
 
   const props = defineProps<{ modelValue: AiResourceContext[] }>();
-  const emit = defineEmits<{ 'update:modelValue': [value: AiResourceContext[]] }>();
+  const emit = defineEmits<{
+    'update:modelValue': [value: AiResourceContext[]];
+    fileSelected: [value: AiResourceContext];
+  }>();
   const { t } = useI18n();
   const route = useRoute();
   const open = ref(false);
@@ -108,6 +115,11 @@
     }
   }
   function add(item: AiResourceContext) {
+    if (item.type === 'file') {
+      emit('fileSelected', item);
+      open.value = false;
+      return;
+    }
     if (selected(item) || props.modelValue.length >= 5) return;
     emit('update:modelValue', [...props.modelValue, item]);
     open.value = false;
@@ -130,9 +142,9 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     min-width: 0;
-    margin-bottom: 10px;
   }
   .ai-context-chips {
     display: flex;

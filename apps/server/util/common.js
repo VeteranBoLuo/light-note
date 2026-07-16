@@ -17,6 +17,7 @@ import notificationRouter from '../router/notification.js';
 import inboxRouter from '../router/inbox.js';
 import todoRouter from '../router/todo.js';
 import tagIconRouter from '../router/tagIcon.js';
+import featureRequestRouter from '../router/featureRequest.js';
 
 // 内部账号角色:站长(root) + 测试号(test)。日志/统计中作为「非真实用户」过滤。
 export const INTERNAL_ROLES = ['root', 'test'];
@@ -37,7 +38,10 @@ export function reqLang(req) {
   const xl = String(req?.headers?.['x-lang'] || '').toLowerCase();
   if (xl.startsWith('zh')) return 'zh-CN';
   if (xl.startsWith('en')) return 'en-US';
-  const al = String(req?.headers?.['accept-language'] || '').split(',')[0].trim().toLowerCase();
+  const al = String(req?.headers?.['accept-language'] || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
   return al.startsWith('en') ? 'en-US' : 'zh-CN';
 }
 
@@ -150,16 +154,16 @@ export const generateUUID = function () {
   const EPOCH_OFFSET = 122192928000000000;
   const timestamp = Date.now() * 10000 + EPOCH_OFFSET;
 
-  const timeLow = (timestamp & 0xFFFFFFFF) >>> 0;
-  const timeMid = ((timestamp / 0x100000000) & 0xFFFF) >>> 0;
-  const timeHi = (((timestamp / 0x10000000000) & 0x0FFF) | 0x1000) >>> 0;
+  const timeLow = (timestamp & 0xffffffff) >>> 0;
+  const timeMid = ((timestamp / 0x100000000) & 0xffff) >>> 0;
+  const timeHi = (((timestamp / 0x10000000000) & 0x0fff) | 0x1000) >>> 0;
 
   const clockSeq = ((Math.random() * 0x4000) | 0x8000) >>> 0;
 
   const node = Array.from({ length: 6 }, () => Math.floor(Math.random() * 256));
 
   const h = (n, len) => n.toString(16).padStart(len, '0');
-  return `${h(timeLow, 8)}-${h(timeMid, 4)}-${h(timeHi, 4)}-${h(clockSeq, 4)}-${node.map(b => h(b, 2)).join('')}`;
+  return `${h(timeLow, 8)}-${h(timeMid, 4)}-${h(timeHi, 4)}-${h(clockSeq, 4)}-${node.map((b) => h(b, 2)).join('')}`;
 };
 
 // INSERT 专用：自动注入 UUID 并转 snake_case
@@ -239,6 +243,10 @@ export const baseRouter = [
   {
     path: '/todo',
     router: todoRouter,
+  },
+  {
+    path: '/featureRequest',
+    router: featureRequestRouter,
   },
   {
     path: '/tagIcon',

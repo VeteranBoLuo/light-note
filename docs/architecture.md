@@ -52,6 +52,7 @@ apps/server/
 │   ├── inbox.js           # 快速添加与待整理路由
 │   ├── todo.js            # 待处理中的待办与提醒路由
 │   ├── chat.js            # AI Agent、写操作确认与额度路由
+│   ├── featureRequest.js  # 共建轻笺公开需求与 Root 管理路由
 │   ├── user.js            # 用户路由
 │   ├── security.js        # 安全中心路由
 │   ├── trash.js           # 回收站路由
@@ -64,6 +65,8 @@ apps/server/
 │   ├── userHandle.js      # 登录/注册/GitHub OAuth
 │   ├── securityHandle.js  # 安全事件
 │   ├── trashHandle.js     # 回收站
+│   ├── aiDocumentHandle.js # AI 文件上传、挂载与解析状态
+│   ├── featureRequestHandle.js # 共建轻笺
 │   └── opinionHandle.js   # 反馈
 └── util/                   # 工具模块
     ├── auth.js            # Cookie session 认证
@@ -74,6 +77,7 @@ apps/server/
     ├── resourceTags.js    # 资源-标签关联管理
     ├── log.js             # API 请求日志中间件
     ├── agent/             # 轻笺智域 AI 代理
+    ├── aiDocument/       # AI 文档解析、任务、检索与生命周期
     ├── adminContextStore.js # Redis 管理员上下文（actor/subject 分离）
     ├── adminRoutePolicy.js  # 管理员上下文显式路由策略
     ├── resourceInbox.js     # 待整理关系与归属服务
@@ -173,6 +177,12 @@ src/
 | `conversion_events`                 | 游客转化事件             | 自增      |
 | `admin_context_audit`               | 管理员预览与内容维护审计 | UUID      |
 | `agent_logs`                        | AI 请求、用量和阶段追踪  | UUID      |
+| `ai_document_sources`               | AI 文档来源与解析状态    | UUID      |
+| `ai_document_chunks`                | AI 文档正文片段与定位    | 自增      |
+| `ai_document_jobs`                  | AI 文档异步解析任务      | 自增      |
+| `feature_requests`                  | 共建轻笺公开需求         | UUID      |
+| `feature_request_votes`             | 共建建议唯一投票         | 复合主键  |
+| `feature_request_updates`           | 共建建议公开时间线       | UUID      |
 | `opinion`                           | 用户反馈                 | UUID      |
 | `help_config` / `help_config_draft` | 帮助中心                 | UUID      |
 
@@ -200,6 +210,18 @@ src/
 - 笔记、书签、标签、回收站恢复和知识库写入必须复用 `util/services/`；Agent 工具不得再直接拼接这些业务 SQL，以保持事务、归属、成长、转化、快照和参数校验一致
 - SSE 使用 `start/tool_start/tool_result/tool_confirmation/sources/delta/done` 结构化事件，并保留 `requestId` 关联日志
 - 用户可为单条消息选择书签、笔记、文件或标签上下文；后端重新校验归属后读取，不信任前端正文
+- AI 输入区通过“上传文件”添加本地临时文件，或通过“添加资源”选择已有云空间文件；两种方式共用解析与引用，当前支持 TXT/Markdown/CSV/文本 PDF/DOCX，单轮最多一个附件
+- 文档正文由独立 `documentWorker.js` 从 OBS 拉取并解析，主 HTTP 进程只负责签名、鉴权、任务创建、状态查询和片段检索
+- 临时文件使用 `ai-temp/{userId}/{sourceId}/` 独立前缀并在 24 小时后清理；云文件永久删除、覆盖或重命名时同步使解析缓存失效
+- Agent 只接收服务端按问题检索出的受控片段，文件内容明确视为不可信资料；来源卡片由服务端生成真实定位
+
+## 共建轻笺
+
+- `/co-build` 和 `/co-build/:id` 对游客开放公开内容；提交、投票和补充要求登录，Root 负责审核、合并、回复、进度和上线关联
+- 桌面端游客入口位于顶部导航，登录后入口位于桌面端个人中心；移动端不主动展示入口但允许链接直达
+- `source_type=user` 表示真实用户建议，`source_type=official` 表示“轻笺团队”的官方规划，两者在接口和 UI 中始终明确区分
+- 私密意见反馈继续使用原 `opinion` 流程，不会被共建轻笺公共接口读取或自动公开
+- 投票明细表以 `(request_id, user_id)` 唯一约束，并在事务中重新计数；提交者和支持者可接收进度通知，用户可在设置中关闭
 
 ## 快速添加与待整理
 

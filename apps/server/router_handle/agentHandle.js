@@ -37,6 +37,7 @@ import {
   ToolConfirmationError,
 } from '../util/agent/confirmationStore.js';
 import * as aiQuota from '../util/aiQuota.js';
+import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -558,6 +559,7 @@ export async function agentChat(req, res) {
       aiStyle = '',
       history = [],
       contexts = [],
+      attachmentIds = [],
     } = req.body;
     stream = req.body.stream ?? false;
     // 回答风格 → temperature(仅作用最终回答);未识别则不设、走默认
@@ -579,6 +581,14 @@ export async function agentChat(req, res) {
     const logUserId = identity.billingUserId;
     const logUserAlias = req.adminActor?.alias || userAlias;
     logContext = { userId: logUserId, userAlias: logUserAlias, question: message };
+    // 附件和资源归属先于 AI 额度占位校验：无权、过期或仍在解析的附件应尽早失败，
+    // 不能因为尚未发生模型调用就消耗用户额度。
+    const resolvedContexts = enableTranslation
+      ? { text: '', sources: [] }
+      : await resolveResourceContexts(userId, contexts);
+    const resolvedAttachments = enableTranslation
+      ? { text: '', sources: [] }
+      : await resolveDocumentAttachments({ userId, sourceIds: attachmentIds, question: message });
 
     // ---- AI token 前置 gate ----
     // P0-A 灰度:dry-run 只记录用量、永不拦截(AI_GATE_ENFORCE=true 时才拦,P1 开启)。
@@ -654,10 +664,7 @@ export async function agentChat(req, res) {
       const sourceHint = source === 'auto' ? '' : `（源语言: ${langNames[source] || source}）`;
       userMessage = `请将以下内容翻译成${targetName}${sourceHint}：\n\n${message}`;
     }
-    const resolvedContexts = enableTranslation
-      ? { text: '', sources: [] }
-      : await resolveResourceContexts(userId, contexts);
-    userMessage += resolvedContexts.text;
+    userMessage += resolvedContexts.text + resolvedAttachments.text;
 
     // 构建 messages 数组:历史拼成真正的多轮 user/assistant 消息(而非塞进 system 的 JSON 块),模型才真有记忆。
     // 优先用前端带来的完整对话(显示=发送,一致);按字符预算截「最近」部分兜底防超长/超上下文窗口;
@@ -722,7 +729,7 @@ export async function agentChat(req, res) {
     const usedTools = [];
     usedToolsForLog = usedTools;
     const confirmations = [];
-    const sources = [...resolvedContexts.sources];
+    const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
     let finalContent = '';
     let apiCalls = 0;
     // 累计所有 DeepSeek 调用的 token 用量(totalUsage 已在 try 外声明,供 finally 回写额度)
@@ -1125,6 +1132,13 @@ export async function agentChat(req, res) {
     });
   } catch (error) {
     console.error('[Agent] 请求错误:', error.message);
+    const attachmentError =
+      String(error?.code || '').startsWith('ATTACHMENT_') || error?.code === 'TOO_MANY_ATTACHMENTS';
+    const safeErrorMessage = attachmentError
+      ? String(error.message || '')
+          .replace(/^[A-Z][A-Z0-9_]+:\s*/, '')
+          .slice(0, 300)
+      : 'AI 服务暂时不可用，请稍后重试。';
     if (logContext) {
       logAgentRequest({
         ...logContext,
@@ -1151,8 +1165,16 @@ export async function agentChat(req, res) {
     if (stream) {
       if (!agentAbortController.signal.aborted && !res.writableEnded) {
         try {
+          if (!res.headersSent) {
+            res.writeHead(200, {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache, no-transform',
+              Connection: 'keep-alive',
+              'X-Accel-Buffering': 'no',
+            });
+          }
           res.write(
-            `data: ${JSON.stringify({ event: 'error', requestId, error: 'AI_SERVICE_ERROR', message: 'AI 服务暂时不可用，请稍后重试。' })}\n\n`,
+            `data: ${JSON.stringify({ event: 'error', requestId, error: attachmentError ? error.code : 'AI_SERVICE_ERROR', message: safeErrorMessage })}\n\n`,
           );
           res.end();
         } catch (_) {
@@ -1160,7 +1182,9 @@ export async function agentChat(req, res) {
         }
       }
     } else if (!res.headersSent) {
-      res.status(500).send(resultData(null, 500, 'AI 服务暂时不可用，请稍后重试。'));
+      res
+        .status(attachmentError ? Number(error.status || 400) : 500)
+        .send(resultData(null, attachmentError ? Number(error.status || 400) : 500, safeErrorMessage));
     }
     res.removeListener('close', onClientClose);
   } finally {

@@ -11,7 +11,15 @@
       </header>
 
       <nav class="settings-anchors">
-        <button v-for="a in anchors" :key="a.id" type="button" class="anchor-chip" :class="{ active: activeAnchor === a.id }" @click="scrollToSection(a.id)">{{ a.label }}</button>
+        <button
+          v-for="a in anchors"
+          :key="a.id"
+          type="button"
+          class="anchor-chip"
+          :class="{ active: activeAnchor === a.id }"
+          @click="scrollToSection(a.id)"
+          >{{ a.label }}</button
+        >
       </nav>
 
       <div class="settings-body">
@@ -91,7 +99,15 @@
         <section class="settings-card" id="set-general">
           <div class="card-head">
             <span class="card-icon card-icon--general">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              >
                 <path d="M5 7h14M5 12h14M5 17h14" />
                 <circle cx="10" cy="7" r="1.7" fill="currentColor" stroke="none" />
                 <circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none" />
@@ -266,7 +282,6 @@
                 </button>
               </div>
             </div>
-
           </div>
         </section>
 
@@ -274,7 +289,16 @@
         <section class="settings-card" id="set-notification">
           <div class="card-head">
             <span class="card-icon card-icon--general">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.7 21a2 2 0 0 1-3.4 0" />
               </svg>
@@ -342,6 +366,17 @@
 
             <div class="field">
               <div class="field-head">
+                <span class="field-label">{{ t('settings.notifyFeatureRequest') }}</span>
+                <span class="field-desc">{{ t('settings.notifyFeatureRequestDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.notifyFeatureRequest !== false"
+                @change="set('notifyFeatureRequest', $event)"
+              />
+            </div>
+
+            <div class="field">
+              <div class="field-head">
                 <span class="field-label">{{ t('settings.notifyStreakRisk') }}</span>
                 <span class="field-desc">{{ t('settings.notifyStreakRiskDesc') }}</span>
               </div>
@@ -364,7 +399,16 @@
         <section v-if="!isGuestUser()" class="settings-card" id="set-account">
           <div class="card-head">
             <span class="card-icon card-icon--general">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
               </svg>
             </span>
@@ -382,7 +426,16 @@
         <section class="settings-card" id="set-ai">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <circle cx="12" cy="12" r="3.5" />
                 <path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18" />
               </svg>
@@ -452,7 +505,9 @@
                 <span class="field-label">{{ t('settings.quickSaveDrag') }}</span>
                 <span class="field-desc">{{ t('settings.quickSaveHint') }}</span>
               </div>
-              <a ref="bmRef" class="qs-bookmarklet" draggable="true" @click.prevent="onBmClick">🔖 {{ t('settings.quickSaveBtn') }}</a>
+              <a ref="bmRef" class="qs-bookmarklet" draggable="true" @click.prevent="onBmClick"
+                >🔖 {{ t('settings.quickSaveBtn') }}</a
+              >
             </div>
           </div>
         </section>
@@ -484,7 +539,13 @@
               <button class="export-btn" :disabled="importing" @click="triggerImport">
                 {{ importing ? t('settings.importing') : t('settings.importBtn') }}
               </button>
-              <input ref="importInputRef" type="file" accept="application/json,.json" style="display: none" @change="onImportFile" />
+              <input
+                ref="importInputRef"
+                type="file"
+                accept="application/json,.json"
+                style="display: none"
+                @change="onImportFile"
+              />
             </div>
           </div>
         </section>
@@ -509,6 +570,7 @@
   import { apiBasePost } from '@/http/request';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -652,7 +714,10 @@
             sk: (s.bookmarks?.skipped || 0) + (s.notes?.skipped || 0),
           }),
         );
-        recordOperation({ module: '设置', operation: `导入数据(书签+${s.bookmarks?.added || 0}、笔记+${s.notes?.added || 0})` });
+        recordOperation({
+          module: '设置',
+          operation: `导入数据(书签+${s.bookmarks?.added || 0}、笔记+${s.notes?.added || 0})`,
+        });
       } else {
         message.info(res?.msg || t('settings.importFail'));
       }
@@ -748,7 +813,8 @@
       const res = await apiBasePost('/api/chat/aiQuota', {});
       const d: any = res?.data;
       if (d?.exempt) quotaText.value = '不限(内部账号)';
-      else if (d && Number.isFinite(d.quota)) quotaText.value = `已用 ${fmtTokens(d.used)} / ${fmtTokens(d.quota)} tokens`;
+      else if (d && Number.isFinite(d.quota))
+        quotaText.value = `已用 ${fmtTokens(d.used)} / ${fmtTokens(d.quota)} tokens`;
       else quotaText.value = '—';
     } catch {
       quotaText.value = '—';

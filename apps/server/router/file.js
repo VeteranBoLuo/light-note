@@ -18,6 +18,7 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 import crypto from 'crypto';
 import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
+import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 const router = express.Router();
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
@@ -185,6 +186,7 @@ router.post('/confirmUpload', async (req, res) => {
           userId,
           items: [{ resourceType: 'file', resourceId: String(existingRows[0].id) }],
         });
+        await purgeDocumentSourcesForCloudFiles(connection, userId, [existingRows[0].id]);
         const deleteSql = 'DELETE FROM files WHERE id = ?';
         await connection.query(deleteSql, [existingRows[0].id]);
       }
@@ -477,6 +479,7 @@ router.post('/hermesBackup', backupUpload.single('file'), async (req, res) => {
         [HERMES_BACKUP_USER_ID, HERMES_BACKUP_FILENAME],
       );
       if (existing.length > 0) {
+        await purgeDocumentSourcesForCloudFiles(connection, HERMES_BACKUP_USER_ID, [existing[0].id]);
         await connection.query('DELETE FROM files WHERE id = ?', [existing[0].id]);
       }
 

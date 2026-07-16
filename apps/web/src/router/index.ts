@@ -20,6 +20,7 @@ import trashRouter from '@/router/modules/trash.ts';
 import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
+import coBuildRouter from '@/router/modules/coBuild.ts';
 import { getDesktopHomePath } from '@/utils/preferences.ts';
 
 const routes: RouteRecordRaw[] = [
@@ -50,6 +51,7 @@ const routes: RouteRecordRaw[] = [
       knowledgeBaseRouter,
       graphRouter,
       inboxRouter,
+      ...coBuildRouter,
       ...securityCenterRouter,
       notificationCenterRouter,
     ],
@@ -126,7 +128,8 @@ export function reloadOnceTo(target: string) {
 
 // 兜底:部分懒加载 chunk 请求失败不会经过 vite:preloadError(见 main.ts),
 // 而是直接以路由导航错误的形式出现,这里按错误信息匹配后自动刷新自愈。
-const CHUNK_ERROR_PATTERN = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+const CHUNK_ERROR_PATTERN =
+  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
 
 router.onError((error, to) => {
   if (!CHUNK_ERROR_PATTERN.test(error?.message || '')) return;

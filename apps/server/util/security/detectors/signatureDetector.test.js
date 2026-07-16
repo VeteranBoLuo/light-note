@@ -18,6 +18,7 @@ describe('请求参数异常检测', () => {
     ['/api/todo/list', 'smart'],
     ['/todo/list', 'due'],
     ['/inbox/list', 'oldest'],
+    ['/featureRequest/listPublic', 'popular'],
   ])('允许列表接口的合法排序枚举：%s %s', (path, sort) => {
     expect(detectNumericAnomalies(path, { sort, status: 'pending', keyword: '' })).toEqual([]);
   });

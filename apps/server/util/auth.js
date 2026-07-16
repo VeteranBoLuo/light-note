@@ -77,6 +77,8 @@ const AUTH_EXPIRED_SILENT_PATHS = [
   '/user/registerUser',
   '/user/sendEmail',
   '/user/verifyCode',
+  '/featureRequest/listPublic',
+  '/featureRequest/getPublicDetail',
 ];
 
 const shouldMarkAuthExpired = (req) => {
@@ -142,9 +144,7 @@ const attachUserToRequest = (req, res, user, sessionId = '', expiresInSeconds = 
 
 export const authMiddleware = async (req, res, next) => {
   const requestPath = String(req.originalUrl || req.path || '').split('?')[0];
-  const bodyContextToken = requestPath.endsWith('/user/adminContext/end')
-    ? req.body?.contextToken
-    : '';
+  const bodyContextToken = requestPath.endsWith('/user/adminContext/end') ? req.body?.contextToken : '';
   const adminContextToken = String(req.headers['x-admin-context'] || bodyContextToken || '').trim();
   try {
     // 每个请求显式初始化预览上下文，避免下游把普通请求误判为管理员预览。
@@ -207,9 +207,7 @@ export const authMiddleware = async (req, res, next) => {
         if (metadata?.context) {
           const staleContext = metadata.context;
           const belongsToActor =
-            actor.role === 'root' &&
-            staleContext.actorUserId === actor.id &&
-            staleContext.actorSessionId === sid;
+            actor.role === 'root' && staleContext.actorUserId === actor.id && staleContext.actorSessionId === sid;
           if (!belongsToActor) {
             recordAdminContextAudit({
               contextId: staleContext.id,
@@ -262,11 +260,7 @@ export const authMiddleware = async (req, res, next) => {
           msg: '管理员预览已过期，请关闭后重新进入。',
         });
       }
-      if (
-        actor.role !== 'root' ||
-        context.actorUserId !== actor.id ||
-        context.actorSessionId !== sid
-      ) {
+      if (actor.role !== 'root' || context.actorUserId !== actor.id || context.actorSessionId !== sid) {
         recordAdminContextAudit({
           contextId: context.id,
           actorUserId: actor.id,
@@ -289,10 +283,9 @@ export const authMiddleware = async (req, res, next) => {
           msg: '管理员预览令牌与当前登录会话不匹配。',
         });
       }
-      const [subjectRows] = await pool.query(
-        'SELECT id, alias, role, del_flag FROM user WHERE id = ? LIMIT 1',
-        [context.subjectUserId],
-      );
+      const [subjectRows] = await pool.query('SELECT id, alias, role, del_flag FROM user WHERE id = ? LIMIT 1', [
+        context.subjectUserId,
+      ]);
       const subject = subjectRows[0];
       if (!subject || subject.role === 'root') {
         recordAdminContextAudit({
@@ -392,10 +385,7 @@ export const requireRole = (...roles) => {
 // 用法：if (!ensureNotVisitor(req, res)) return; —— 事务函数须放在 pool.getConnection() 之前。
 export const ensureNotVisitor = (req, res) => {
   if (req.adminContext) {
-    if (
-      req.adminContext.mode === 'maintain' &&
-      req.adminCapability?.policy === 'content_write'
-    ) {
+    if (req.adminContext.mode === 'maintain' && req.adminCapability?.policy === 'content_write') {
       req.isVisitorWorkspaceContentWrite = req.adminContext.subjectRole === 'visitor';
       return true;
     }
@@ -408,7 +398,13 @@ export const ensureNotVisitor = (req, res) => {
   }
   if (!req.user?.id || req.user.role === 'visitor') {
     recordConversionEvent(req, 'wall_hit', req.path || ''); // 用 req.path(不含 query)避免把 token 等 PII 写进 context
-    res.send(resultData(null, 'preview', '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册后即可拥有你自己的轻笺，免费收藏书签、记笔记、存文件。'));
+    res.send(
+      resultData(
+        null,
+        'preview',
+        '预览模式仅支持浏览查看，新建、编辑、删除等操作需要注册。注册后即可拥有你自己的轻笺，免费收藏书签、记笔记、存文件。',
+      ),
+    );
     return false;
   }
   return true;
@@ -424,9 +420,7 @@ export const startSessionMaintenance = () => {
   setInterval(
     () => {
       cleanupExpiredSessions().catch((e) => console.error('清理过期登录态失败:', e.message));
-      cleanupLegacyElevatedVisitorSessions().catch((e) =>
-        console.error('清理历史游客提权会话失败:', e.message),
-      );
+      cleanupLegacyElevatedVisitorSessions().catch((e) => console.error('清理历史游客提权会话失败:', e.message));
     },
     60 * 60 * 1000,
   );

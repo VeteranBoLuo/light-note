@@ -26,6 +26,9 @@ export const bucketBaseUrl = normalizeBaseUrl();
 
 export const buildObjectKey = (userId, fileName) => `files/${userId}/${fileName}`;
 
+export const buildAiTemporaryObjectKey = (userId, sourceId, fileName) =>
+  `ai-temp/${userId}/${sourceId}/${encodeURIComponent(fileName)}`;
+
 export const createUploadSignedUrl = ({ objectKey, contentType, expires = 900 }) => {
   const fallbackContentType = contentType || 'application/octet-stream';
   const { SignedUrl, ActualSignedRequestHeaders } = obsClient.createSignedUrlSync({
@@ -95,6 +98,29 @@ export const putObjectToObs = async (objectKey, filePath, contentType = 'applica
     SourceFile: filePath,
     ContentType: contentType,
   });
+
+export const getObjectMetadataFromObs = async (objectKey) => {
+  const result = await wrapObsCall(obsClient.getObjectMetadata.bind(obsClient), {
+    Bucket: bucketName,
+    Key: objectKey,
+  });
+  return {
+    contentLength: Number(result?.InterfaceResult?.ContentLength || 0),
+    contentType: String(result?.InterfaceResult?.ContentType || ''),
+    etag: String(result?.InterfaceResult?.ETag || ''),
+  };
+};
+
+export const getObjectBufferFromObs = async (objectKey) => {
+  const result = await wrapObsCall(obsClient.getObject.bind(obsClient), {
+    Bucket: bucketName,
+    Key: objectKey,
+  });
+  const content = result?.InterfaceResult?.Content;
+  if (Buffer.isBuffer(content)) return content;
+  if (content instanceof Uint8Array) return Buffer.from(content);
+  return Buffer.from(content || '');
+};
 
 export const buildObjectUrl = (objectKey) => `${bucketBaseUrl}/${objectKey}`;
 

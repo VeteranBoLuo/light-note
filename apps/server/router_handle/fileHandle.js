@@ -4,8 +4,14 @@ import { resultData, snakeCaseKeys, insertData } from '../util/common.js';
 import { bucketBaseUrl, buildObjectKey, copyObjectInObs, deleteObjectFromObs } from '../util/obsClient.js';
 import { buildSignedDownloadUrl } from '../router/file.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
-import { queryTagsForResource, RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
+import {
+  queryTagsForResource,
+  RESOURCE_TYPE,
+  replaceResourceTagRelations,
+  validateUserTags,
+} from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 
 export const getFileInfo = async (req, res) => {
   try {
@@ -99,7 +105,14 @@ export const updateFile = async (req, res) => {
     }
 
     const updateSql = 'UPDATE files SET file_name = ?, obs_key = ?, directory = ? WHERE id = ? AND create_by = ?';
-    await pool.query(updateSql, [finalFileName, targetKey, `${bucketBaseUrl}/files/${file.create_by}/`, id, req.user.id]);
+    await pool.query(updateSql, [
+      finalFileName,
+      targetKey,
+      `${bucketBaseUrl}/files/${file.create_by}/`,
+      id,
+      req.user.id,
+    ]);
+    await purgeDocumentSourcesForCloudFiles(pool, req.user.id, [id]);
 
     res.send(resultData({ id, fileName: finalFileName }));
   } catch (e) {
@@ -178,10 +191,10 @@ export const associateFile = async (req, res) => {
       return res.send(resultData(null, 400, 'fileIds 必须是一个非空数组'));
     }
     if (folderId) {
-      const [folderRows] = await connection.query(
-        `SELECT id FROM folders WHERE id = ? AND create_by = ?`,
-        [folderId, userId],
-      );
+      const [folderRows] = await connection.query(`SELECT id FROM folders WHERE id = ? AND create_by = ?`, [
+        folderId,
+        userId,
+      ]);
       if (folderRows.length === 0) {
         return res.send(resultData(null, 404, '文件夹不存在或无权限'));
       }

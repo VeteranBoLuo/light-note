@@ -5,6 +5,7 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { promises as fsP } from 'node:fs';
 import path from 'node:path';
 import { restoreTrashResources } from '../util/services/trashService.js';
+import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 
 const NOTE_IMAGE_DIR = '/www/wwwroot/images';
 
@@ -97,6 +98,15 @@ async function cleanupExpiredFiles(connection, userId = null) {
     `DELETE FROM resource_tag_relations WHERE resource_type = 'file' AND resource_id IN (${placeholders})`,
     ids,
   );
+  const byUser = new Map();
+  for (const row of rows) {
+    const list = byUser.get(row.create_by) || [];
+    list.push(row.id);
+    byUser.set(row.create_by, list);
+  }
+  for (const [ownerId, ownerFileIds] of byUser) {
+    await purgeDocumentSourcesForCloudFiles(connection, ownerId, ownerFileIds);
+  }
   await connection.query(`DELETE FROM files WHERE id IN (${placeholders})`, ids);
 
   // 异步删 OBS，不阻塞
@@ -332,6 +342,11 @@ export const permanentDelete = async (req, res) => {
         [...ids, userId],
       );
       objsToDelete = files;
+      await purgeDocumentSourcesForCloudFiles(
+        connection,
+        userId,
+        files.map((file) => file.id),
+      );
     } else if (resourceType === 'note') {
       const [validNotes] = await connection.query(
         `SELECT id FROM note WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
@@ -407,6 +422,11 @@ export const emptyTrash = async (req, res) => {
     const [files] = await connection.query(
       `SELECT id, obs_key, create_by, file_name FROM files WHERE create_by = ? AND del_flag = 1`,
       [userId],
+    );
+    await purgeDocumentSourcesForCloudFiles(
+      connection,
+      userId,
+      files.map((file) => file.id),
     );
     // 笔记图片:先拿待清笔记的图片 URL 并删 note_images 行(下面循环会删 note 行)
     const [delNotes] = await connection.query(`SELECT id FROM note WHERE create_by = ? AND del_flag = 1`, [userId]);

@@ -196,6 +196,17 @@ declare(ADMIN_POLICIES.READ, 'notification', [
   ['POST', '/notification/list'],
   ['POST', '/notification/unreadCount'],
 ]);
+
+declare(ADMIN_POLICIES.READ, 'feature_request', [
+  ['POST', '/featureRequest/listPublic'],
+  ['POST', '/featureRequest/getPublicDetail'],
+]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'feature_request', [
+  ['POST', '/featureRequest/create'],
+  ['POST', '/featureRequest/listMine'],
+  ['POST', '/featureRequest/toggleVote'],
+  ['POST', '/featureRequest/addSubmitterUpdate'],
+]);
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'notification', [
   ['POST', '/notification/markRead'],
   ['POST', '/notification/markAllRead'],
@@ -233,6 +244,11 @@ declare(ADMIN_POLICIES.AI_USE, 'agent', [
   ['POST', '/chat/agent'],
   ['POST', '/chat/agent/confirm'],
   ['POST', '/chat/agent/confirm/reject'],
+  ['POST', '/chat/attachments/init'],
+  ['POST', '/chat/attachments/confirm'],
+  ['POST', '/chat/attachments/attachCloudFile'],
+  ['POST', '/chat/attachments/status'],
+  ['POST', '/chat/attachments/delete'],
   ['POST', '/chat/aiQuota'],
   ['POST', '/chat/generateBookmarkMeta'],
   ['POST', '/chat/generateBookmarkDescription'],
@@ -304,6 +320,13 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/knowledgeBase/batchUpdateCategory'],
   ['POST', '/knowledgeBase/batchDelete'],
   ['POST', '/knowledgeBase/categories'],
+  ['POST', '/featureRequest/admin/list'],
+  ['POST', '/featureRequest/admin/create'],
+  ['POST', '/featureRequest/admin/review'],
+  ['POST', '/featureRequest/admin/reply'],
+  ['POST', '/featureRequest/admin/updateStatus'],
+  ['POST', '/featureRequest/admin/merge'],
+  ['POST', '/featureRequest/admin/edit'],
 ]);
 
 const normalizePath = (req) => {
@@ -378,12 +401,7 @@ export function adminRoutePolicyMiddleware(req, res, next) {
     return next();
   }
 
-  return sendPolicyError(
-    res,
-    403,
-    'ADMIN_MAINTENANCE_FORBIDDEN',
-    '该操作不属于管理员内容维护允许范围。',
-  );
+  return sendPolicyError(res, 403, 'ADMIN_MAINTENANCE_FORBIDDEN', '该操作不属于管理员内容维护允许范围。');
 }
 
 export function getDeclaredAdminRoutePolicies() {

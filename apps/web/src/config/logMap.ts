@@ -27,6 +27,7 @@ export const OPERATION_LOG_MAP = {
     securityCenter: '安全中心',
     admin: '后台管理',
     aiAssistant: 'AI智能助手模块',
+    coBuild: '共建轻笺',
   }),
   login: createModule('登录', {
     previewMobile: '移动端预览',

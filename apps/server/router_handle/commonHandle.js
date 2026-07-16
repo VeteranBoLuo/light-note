@@ -15,7 +15,16 @@ import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/provid
 export const recordConversion = (req, res) => {
   // v1.1:新增 demo_enter/signup_open/signup_submit;cta_click 仅兼容旧客户端(新代码不再写入);
   // register/first_own_resource/signup_failed 仅后端记录,不接受客户端上报(防伪造激活/注册)
-  const ALLOWED = ['page_view', 'demo_enter', 'signup_open', 'signup_submit', 'wall_hit', 'share_view', 'share_cta_click', 'cta_click'];
+  const ALLOWED = [
+    'page_view',
+    'demo_enter',
+    'signup_open',
+    'signup_submit',
+    'wall_hit',
+    'share_view',
+    'share_cta_click',
+    'cta_click',
+  ];
   const event = String(req.body?.event || '');
   if (!ALLOWED.includes(event)) {
     return res.send(resultData(null, 400, '不支持的事件'));
@@ -73,7 +82,9 @@ export const getConversionFunnel = async (req, res) => {
     // 激活里程碑(按注册 cohort 归因):只算「本期注册的用户」里做过 first_own_resource 的去重数,
     // 用 register 关联,排除历史用户/内部账号的自建事件混入,避免激活率虚高甚至超过 100%。
     // (v1.1 不做「注册后 24h 内」时间窗约束——那属完整 V2,达触发条件再加)
-    const andTimeReg = timeCond.length ? ' AND ' + timeCond.map((c) => c.replace('create_time', 'r.create_time')).join(' AND ') : '';
+    const andTimeReg = timeCond.length
+      ? ' AND ' + timeCond.map((c) => c.replace('create_time', 'r.create_time')).join(' AND ')
+      : '';
     const [actRow] = await pool.query(
       `SELECT COUNT(DISTINCT r.user_id) AS activated
        FROM conversion_events r
@@ -118,7 +129,12 @@ export const getConversionFunnel = async (req, res) => {
         signupFailReasons: (failReasons || []).map((r) => ({ reason: r.reason, cnt: Number(r.cnt || 0) })),
         uniqueIps: Number(ipRow[0]?.ips || 0),
         hotspots,
-        trend: (trend || []).map((t) => ({ d: t.d, pv: Number(t.pv || 0), signupOpen: Number(t.signupOpen || 0), reg: Number(t.reg || 0) })),
+        trend: (trend || []).map((t) => ({
+          d: t.d,
+          pv: Number(t.pv || 0),
+          signupOpen: Number(t.signupOpen || 0),
+          reg: Number(t.reg || 0),
+        })),
       }),
     );
   } catch (e) {
@@ -361,9 +377,7 @@ export const recordOperationLogs = (req, res) => {
     if (!req.isVisitorWorkspace && isSelfTraffic(req)) return res.send(resultData(null));
     const log = {
       module: req.isVisitorWorkspace ? `游客内容维护/${moduleName}` : moduleName,
-      operation: req.isVisitorWorkspace
-        ? `${operationName}（目标游客：${req.user?.id || '未知'}）`
-        : operationName,
+      operation: req.isVisitorWorkspace ? `${operationName}（目标游客：${req.user?.id || '未知'}）` : operationName,
       create_by: userId,
       ip: req.ip || '',
       del_flag: 0,
@@ -401,9 +415,15 @@ export const getLogExclude = async (req, res) => {
 export const addLogExcludeFp = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
-    const fingerprint = String(req.body?.fingerprint || '').trim().slice(0, 128);
-    const deviceId = String(req.body?.deviceId || req.headers?.['x-log-device-id'] || '').trim().slice(0, 128);
-    const note = String(req.body?.note || '').trim().slice(0, 255);
+    const fingerprint = String(req.body?.fingerprint || '')
+      .trim()
+      .slice(0, 128);
+    const deviceId = String(req.body?.deviceId || req.headers?.['x-log-device-id'] || '')
+      .trim()
+      .slice(0, 128);
+    const note = String(req.body?.note || '')
+      .trim()
+      .slice(0, 255);
     if (!fingerprint) return res.send(resultData(null, 400, '缺少指纹'));
     await addLogExclude(fingerprint, deviceId, note);
     res.send(resultData(null));
@@ -799,7 +819,9 @@ export const runSql = async (req, res) => {
 
 export const getHelpConfig = async (req, res) => {
   try {
-    const [result] = await pool.query("SELECT id,title,content,sort FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' ORDER BY sort ASC, created_at ASC");
+    const [result] = await pool.query(
+      "SELECT id,title,content,sort FROM knowledge_base WHERE category = '帮助中心' AND status = 'public' ORDER BY sort ASC, created_at ASC",
+    );
     res.send(resultData(result, 200));
   } catch (e) {
     res.send(resultData(e.message, 200));
@@ -825,7 +847,10 @@ function parseAgentToolStatuses(value) {
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     // 兼容升级前仅保存逗号分隔工具名的历史日志。
-    return String(value).split(',').filter(Boolean).map((name) => ({ name, status: 'unknown' }));
+    return String(value)
+      .split(',')
+      .filter(Boolean)
+      .map((name) => ({ name, status: 'unknown' }));
   }
 }
 
@@ -898,34 +923,48 @@ export const getAgentLogsSummary = async (req, res) => {
       return values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
     };
 
-    res.send(resultData({
-      today: {
-        count: todayRow[0].count,
-        tokens: todayRow[0].tokens,
-        cost: Number(todayRow[0].cost).toFixed(4),
-      },
-      total: {
-        count: totalRow[0].count,
-        tokens: totalRow[0].tokens,
-        cost: Number(totalRow[0].cost).toFixed(4),
-      },
-      quality: {
-        sampleCount: metricRows.length,
-        errorRate: ratio(errorCount, metricRows.length),
-        durationP50: percentile(metricRows.map((row) => row.duration_ms), 0.5),
-        durationP95: percentile(metricRows.map((row) => row.duration_ms), 0.95),
-        firstTokenP50: percentile(metricRows.map((row) => row.first_token_ms), 0.5),
-        firstTokenP95: percentile(metricRows.map((row) => row.first_token_ms), 0.95),
-        plannerAvg: average('planner_ms'),
-        toolAvg: average('tool_ms'),
-        finalAvg: average('final_ms'),
-        toolHitRate: ratio(toolRows.length, metricRows.length),
-        toolErrorRate: ratio(toolErrors, toolRows.length),
-        confirmationRate: ratio(confirmationApproved, confirmationApproved + confirmationRejected),
-        directTaskCount: metricRows.filter((row) => row.task_type === 'note_assist').length,
-        agentTaskCount: metricRows.filter((row) => row.task_type === 'agent').length,
-      },
-    }));
+    res.send(
+      resultData({
+        today: {
+          count: todayRow[0].count,
+          tokens: todayRow[0].tokens,
+          cost: Number(todayRow[0].cost).toFixed(4),
+        },
+        total: {
+          count: totalRow[0].count,
+          tokens: totalRow[0].tokens,
+          cost: Number(totalRow[0].cost).toFixed(4),
+        },
+        quality: {
+          sampleCount: metricRows.length,
+          errorRate: ratio(errorCount, metricRows.length),
+          durationP50: percentile(
+            metricRows.map((row) => row.duration_ms),
+            0.5,
+          ),
+          durationP95: percentile(
+            metricRows.map((row) => row.duration_ms),
+            0.95,
+          ),
+          firstTokenP50: percentile(
+            metricRows.map((row) => row.first_token_ms),
+            0.5,
+          ),
+          firstTokenP95: percentile(
+            metricRows.map((row) => row.first_token_ms),
+            0.95,
+          ),
+          plannerAvg: average('planner_ms'),
+          toolAvg: average('tool_ms'),
+          finalAvg: average('final_ms'),
+          toolHitRate: ratio(toolRows.length, metricRows.length),
+          toolErrorRate: ratio(toolErrors, toolRows.length),
+          confirmationRate: ratio(confirmationApproved, confirmationApproved + confirmationRejected),
+          directTaskCount: metricRows.filter((row) => row.task_type === 'note_assist').length,
+          agentTaskCount: metricRows.filter((row) => row.task_type === 'agent').length,
+        },
+      }),
+    );
   } catch (e) {
     res.send(resultData(null, 500, '查询失败: ' + e.message));
   }
@@ -942,7 +981,9 @@ export const getAdminOverview = async (req, res) => {
     const irSql = INTERNAL_ROLES.map((r) => `'${r}'`).join(', ');
     const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
     const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
-    const notIntCreateBy = hideInternal ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+    const notIntCreateBy = hideInternal
+      ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
+      : '';
 
     // 用 Node 本地时间算今日与近7天序列(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
     const now = new Date();
@@ -960,7 +1001,7 @@ export const getAdminOverview = async (req, res) => {
     // 新日志由 logFunction 写入 routeMatched，能精确区分“业务路由返回 4xx”和“未知路径 404”。
     // 历史日志没有该标记，按已注册的业务路由前缀兼容判断，避免上线当天统计口径断层。
     const businessApiPrefixPattern =
-      '^/(user|notification|json|common|note|bookmark|opinion|file|chat|search|workbench|security|trash|knowledgeBase|growth|inbox|todo|tagIcon)(/|[?]|$)';
+      '^/(user|notification|json|common|note|bookmark|opinion|file|chat|search|workbench|security|trash|knowledgeBase|growth|inbox|todo|tagIcon|featureRequest)(/|[?]|$)';
     const legacyRouteUnclassifiedSql = `(COALESCE(system, '') NOT LIKE '%"routeMatched":%')`;
     const routeMatchedSql = `(COALESCE(system, '') LIKE '%"routeMatched":true%' OR (${legacyRouteUnclassifiedSql} AND url REGEXP '${businessApiPrefixPattern}'))`;
     const routeUnmatchedSql = `(COALESCE(system, '') LIKE '%"routeMatched":false%' OR (${legacyRouteUnclassifiedSql} AND NOT (url REGEXP '${businessApiPrefixPattern}')))`;
@@ -971,10 +1012,15 @@ export const getAdminOverview = async (req, res) => {
     const business4xxSql = `(status_code LIKE '4%' AND ${routeMatchedSql} AND NOT ${legacyUnknown404Sql})`;
     const invalid4xxSql = `(status_code LIKE '4%' AND (${routeUnmatchedSql} OR ${legacyUnknown404Sql}))`;
 
-    const [userAgg, resAgg, convAgg, opinionAgg, securityAgg, activeAgg, sysAgg, userTrendRows, contentTrendRows] = await Promise.all([
-      pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' + notIntRole, [today]),
-      pool.query(
-        `SELECT
+    const [userAgg, resAgg, convAgg, opinionAgg, securityAgg, activeAgg, sysAgg, userTrendRows, contentTrendRows] =
+      await Promise.all([
+        pool.query(
+          'SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' +
+            notIntRole,
+          [today],
+        ),
+        pool.query(
+          `SELECT
            (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${notIntUser}) AS bookmarkTotal,
            (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}) AS noteTotal,
            (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}) AS fileTotal,
@@ -984,73 +1030,87 @@ export const getAdminOverview = async (req, res) => {
            (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}) AS fileToday,
            COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}), 0) AS trashMb,
            (SELECT COUNT(*) FROM files WHERE del_flag = 1${notIntCreateBy}) AS trashCount`,
-        [today, today, today],
-      ),
-      pool.query(
-        `SELECT
+          [today, today, today],
+        ),
+        pool.query(
+          `SELECT
            COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
            COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
          FROM conversion_events`,
-      ),
-      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + notIntUser, [OPINION_STATUS.PENDING]),
-      pool
-        .query("SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')")
-        .catch(() => [[{ unhandled: 0 }]]),
-      // 活跃用户(会话表 last_active_time;排除游客会话)
-      pool
-        .query(
-          `SELECT
+        ),
+        pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + notIntUser, [
+          OPINION_STATUS.PENDING,
+        ]),
+        pool
+          .query(
+            "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
+          )
+          .catch(() => [[{ unhandled: 0 }]]),
+        // 活跃用户(会话表 last_active_time;排除游客会话)
+        pool
+          .query(
+            `SELECT
              COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS activeToday,
              COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS active7d
            FROM user_sessions WHERE role != 'visitor'${notIntRole}`,
-          [today, weekAgo],
-        )
-        .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
-      // 系统健康：业务 4xx、未知路径 4xx 与服务端 5xx 分开，避免外部探测 404 被误解为功能故障。
-      pool
-        .query(
-          `SELECT
+            [today, weekAgo],
+          )
+          .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
+        // 系统健康：业务 4xx、未知路径 4xx 与服务端 5xx 分开，避免外部探测 404 被误解为功能故障。
+        pool
+          .query(
+            `SELECT
              COALESCE(SUM(${validApiRequestSql}), 0) AS total,
              COALESCE(SUM(${business4xxSql}), 0) AS businessErrors,
              COALESCE(SUM(${invalid4xxSql}), 0) AS invalidRequests,
              COALESCE(SUM(status_code LIKE '5%'), 0) AS serverErrors
            FROM api_logs WHERE request_time >= ?`,
-          [today],
-        )
-        .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
-      // 近7天新增用户按天
-      pool
-        .query(
-          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" + notIntRole + ' GROUP BY d',
-          [weekAgo],
-        )
-        .catch(() => [[]]),
-      // 近7天新增内容(书签+笔记+文件合并)按天
-      pool
-        .query(
-          `SELECT d, SUM(c) AS c FROM (
+            [today],
+          )
+          .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
+        // 近7天新增用户按天
+        pool
+          .query(
+            "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" +
+              notIntRole +
+              ' GROUP BY d',
+            [weekAgo],
+          )
+          .catch(() => [[]]),
+        // 近7天新增内容(书签+笔记+文件合并)按天
+        pool
+          .query(
+            `SELECT d, SUM(c) AS c FROM (
              SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser} GROUP BY d
              UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy} GROUP BY d
              UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy} GROUP BY d
            ) t GROUP BY d`,
-          [weekAgo, weekAgo, weekAgo],
-        )
-        .catch(() => [[]]),
-    ]);
+            [weekAgo, weekAgo, weekAgo],
+          )
+          .catch(() => [[]]),
+      ]);
 
     // AI 消耗单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)
     let ai = { todayCount: 0, todayTokens: 0, todayCost: '0.0000', totalCount: 0, totalTokens: 0, totalCost: '0.0000' };
     try {
       const [[aiToday], [aiTotal]] = await Promise.all([
         pool.query(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)' + notIntUser,
+          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)' +
+            notIntUser,
           [today, today],
         ),
-        pool.query('SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE 1=1' + notIntUser),
+        pool.query(
+          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE 1=1' +
+            notIntUser,
+        ),
       ]);
       ai = {
-        todayCount: Number(aiToday[0].count), todayTokens: Number(aiToday[0].tokens), todayCost: Number(aiToday[0].cost).toFixed(4),
-        totalCount: Number(aiTotal[0].count), totalTokens: Number(aiTotal[0].tokens), totalCost: Number(aiTotal[0].cost).toFixed(4),
+        todayCount: Number(aiToday[0].count),
+        todayTokens: Number(aiToday[0].tokens),
+        todayCost: Number(aiToday[0].cost).toFixed(4),
+        totalCount: Number(aiTotal[0].count),
+        totalTokens: Number(aiTotal[0].tokens),
+        totalCost: Number(aiTotal[0].cost).toFixed(4),
       };
     } catch (aiErr) {
       console.error('[AdminOverview] AI 统计失败(忽略):', aiErr.message);
@@ -1061,15 +1121,27 @@ export const getAdminOverview = async (req, res) => {
     const contentMap = Object.fromEntries((contentTrendRows[0] || []).map((x) => [x.d, Number(x.c)]));
     const trend = days.map((d) => ({ d: d.slice(5), users: userMap[d] || 0, content: contentMap[d] || 0 }));
 
-    const u = userAgg[0][0], r = resAgg[0][0], c = convAgg[0][0], o = opinionAgg[0][0], s = securityAgg[0][0], a = activeAgg[0][0], sys = sysAgg[0][0];
+    const u = userAgg[0][0],
+      r = resAgg[0][0],
+      c = convAgg[0][0],
+      o = opinionAgg[0][0],
+      s = securityAgg[0][0],
+      a = activeAgg[0][0],
+      sys = sysAgg[0][0];
     res.send(
       resultData({
         users: { total: Number(u.total || 0), today: Number(u.today || 0) },
         active: { today: Number(a.activeToday || 0), week: Number(a.active7d || 0) },
         resources: {
-          bookmarkTotal: Number(r.bookmarkTotal || 0), noteTotal: Number(r.noteTotal || 0), fileTotal: Number(r.fileTotal || 0),
-          bookmarkToday: Number(r.bookmarkToday || 0), noteToday: Number(r.noteToday || 0), fileToday: Number(r.fileToday || 0),
-          storageMb: Number(r.storageMb || 0), trashMb: Number(r.trashMb || 0), trashCount: Number(r.trashCount || 0),
+          bookmarkTotal: Number(r.bookmarkTotal || 0),
+          noteTotal: Number(r.noteTotal || 0),
+          fileTotal: Number(r.fileTotal || 0),
+          bookmarkToday: Number(r.bookmarkToday || 0),
+          noteToday: Number(r.noteToday || 0),
+          fileToday: Number(r.fileToday || 0),
+          storageMb: Number(r.storageMb || 0),
+          trashMb: Number(r.trashMb || 0),
+          trashCount: Number(r.trashCount || 0),
         },
         ai,
         conversion: { visitors: Number(c.visitors || 0), registers: Number(c.registers || 0) },
@@ -1128,12 +1200,14 @@ export const getAgentLogs = async (req, res) => {
       ),
     ]);
 
-    res.send(resultData({
-      items: rows,
-      total: countRes[0].total,
-      currentPage,
-      pageSize: take,
-    }));
+    res.send(
+      resultData({
+        items: rows,
+        total: countRes[0].total,
+        currentPage,
+        pageSize: take,
+      }),
+    );
   } catch (e) {
     res.send(resultData(null, 500, '查询失败: ' + e.message));
   }

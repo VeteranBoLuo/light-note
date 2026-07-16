@@ -135,7 +135,9 @@
         :class="{ 'nav-avatar-frame--galaxy': equippedIsGalaxy }"
         :style="{ '--frame-ring': equippedFrameRing }"
       >
-        <span class="nav-avatar-clip"><svg-icon size="30" :src="user.headPicture || icon.navigation.user" class="dom-hover" /></span>
+        <span class="nav-avatar-clip"
+          ><svg-icon size="30" :src="user.headPicture || icon.navigation.user" class="dom-hover"
+        /></span>
       </span>
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
@@ -313,6 +315,13 @@
       icon: icon.help_document,
     },
     {
+      name: 'coBuild',
+      label: t('personCenter.coBuild'),
+      path: '/co-build',
+      icon: icon.coBuild.board,
+      authOnly: true,
+    },
+    {
       name: 'trash',
       label: t('trash.title'),
       path: '/trash',
@@ -331,10 +340,9 @@
     },
   ]);
   const menuOptions = computed(() => {
-    if (user.role === 'root') {
-      return options.value;
-    }
-    return options.value.filter((item) => item.role !== 'root');
+    return options.value.filter(
+      (item) => (user.role === 'root' || item.role !== 'root') && (!item.authOnly || user.role !== 'visitor'),
+    );
   });
 
   const userStats = computed(() => [
@@ -622,7 +630,6 @@
     &:hover {
       transform: translateY(-1px);
     }
-
   }
 
   .nav-avatar-dot {

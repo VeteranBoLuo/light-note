@@ -56,9 +56,11 @@
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
         :contexts="contexts"
+        :attachments="attachments"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
         @update:contexts="contexts = $event"
+        @update:attachments="attachments = $event"
       />
     </div>
   </div>
@@ -75,6 +77,7 @@
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import AiToolStatusList, { type AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
+  import type { AiAttachment } from '@/api/aiAttachmentApi';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
@@ -121,6 +124,7 @@
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
   const contexts = ref<AiResourceContext[]>([]);
+  const attachments = ref<AiAttachment[]>([]);
 
   // AI 今日额度(按成长等级下发;root/本机自测豁免返回 exempt)。进页与每轮回复结束后刷新,展示「已用 / 剩余」
   const aiQuota = ref<{ exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null>(
@@ -281,6 +285,7 @@
     stopResponse();
     sessionId = '';
     longChatHinted.value = false;
+    attachments.value = [];
     try {
       localStorage.removeItem(chatHistoryKey()); // 清空对话同时清掉当前账号的本地历史
     } catch {
@@ -436,6 +441,7 @@
       sessionId = '';
       currentMessageIndex = -1;
       contexts.value = [];
+      attachments.value = [];
       messages.value = [];
       if (!restoreHistory()) {
         messages.value = [
@@ -462,6 +468,8 @@
     const inputText = userInput.value.trim();
     if (!inputText) return;
     const contextSnapshot = contexts.value.map((item) => ({ ...item }));
+    const attachmentSnapshot = attachments.value.map((item) => ({ ...item }));
+    if (attachmentSnapshot.some((item) => item.status !== 'ready')) return;
 
     // 标记当前请求序号，防止旧请求的 finally 提前关闭 loading
     const thisRequestId = ++activeRequestId;
@@ -638,6 +646,7 @@
           aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
           history: historyForRequest,
           contexts: contextSnapshot,
+          attachmentIds: attachmentSnapshot.map((item) => item.id),
         },
         {
           headers: {
@@ -664,7 +673,7 @@
 
       // 后端流式返回错误帧：已有半截内容则保留并追加友好提示。
       if (streamError && thisRequestId === activeRequestId) {
-        const errText = t('ai.errorMessage');
+        const errText = streamError || t('ai.errorMessage');
         const current = messages.value[currentMessageIndex];
         current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }

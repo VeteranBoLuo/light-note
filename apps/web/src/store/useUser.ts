@@ -54,6 +54,7 @@ interface UserInfo {
     weeklyReport?: boolean; // 每周成长周报推送
     notifyLevelUp?: boolean; // 升级提醒通知推送
     notifyOpinionReply?: boolean; // 反馈回复通知推送
+    notifyFeatureRequest?: boolean; // 共建轻笺建议进度通知
   };
 }
 
@@ -91,6 +92,7 @@ const createDefaultUserState = (): UserState => ({
     lang: 'zh-CN', // 语言
     homePage: 'landing', // 默认首页（未设置时进官网）
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
+    notifyFeatureRequest: true,
   },
 });
 

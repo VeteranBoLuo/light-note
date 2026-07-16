@@ -33,6 +33,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'chat.js': '/chat',
       'common.js': '/common',
       'file.js': '/file',
+      'featureRequest.js': '/featureRequest',
       'growth.js': '/growth',
       'inbox.js': '/inbox',
       'todo.js': '/todo',
@@ -51,9 +52,7 @@ describe('adminRoutePolicyMiddleware', () => {
     const declared = getDeclaredAdminRoutePolicies();
     const missing = [];
     for (const [file, prefix] of Object.entries(prefixes)) {
-      const source = fs
-        .readFileSync(path.join(routerDir, file), 'utf8')
-        .replace(/^\s*\/\/.*$/gm, '');
+      const source = fs.readFileSync(path.join(routerDir, file), 'utf8').replace(/^\s*\/\/.*$/gm, '');
       const matcher = /router\.(get|post|put|patch|delete)\(\s*['"]([^'"]+)['"]/g;
       for (const match of source.matchAll(matcher)) {
         const key = `${match[1].toUpperCase()} ${prefix}${match[2]}`;
@@ -87,9 +86,7 @@ describe('adminRoutePolicyMiddleware', () => {
       const res = createRes();
       adminRoutePolicyMiddleware(createReq(path), res, next);
       expect(next).not.toHaveBeenCalled();
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { noop: true, adminContext: true } }),
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { noop: true, adminContext: true } }));
     }
   });
 
@@ -99,9 +96,7 @@ describe('adminRoutePolicyMiddleware', () => {
     adminRoutePolicyMiddleware(createReq('/note/updateNote'), res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
   });
 
   it('maintain 模式放行可逆内容写入并抑制成长/转化副作用', () => {
@@ -128,9 +123,7 @@ describe('adminRoutePolicyMiddleware', () => {
     const res = createRes();
     adminRoutePolicyMiddleware(createReq('/file/hermesBackup', 'POST', 'maintain', 'visitor'), res, next);
     expect(next).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
   });
 
   it('后台轮询/埋点在上下文内降级为空操作', () => {
@@ -146,8 +139,6 @@ describe('adminRoutePolicyMiddleware', () => {
     const res = createRes();
     adminRoutePolicyMiddleware(createReq('/unknown/action'), res, next);
     expect(next).not.toHaveBeenCalled();
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_POLICY_MISSING' } }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_POLICY_MISSING' } }));
   });
 });

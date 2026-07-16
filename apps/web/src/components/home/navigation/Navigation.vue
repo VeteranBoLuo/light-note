@@ -78,11 +78,20 @@
             @click="router.push('/search')"
             >{{ $t('navigation.resourceCenter') }}</div
           >
+          <div
+            v-if="user.role === 'visitor'"
+            :style="{ color: route.path.includes('/co-build') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.coBuild"
+            @click="router.push('/co-build')"
+            >{{ $t('navigation.coBuild') }}</div
+          >
           <b-dropdown v-if="user.role === 'root'" align="center" :menu-options="adminMenuOptions">
             <div
               :style="{ color: adminRouteActive ? '#615ced' : '' }"
               style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            >{{ $t('navigation.management') }}</div>
+              >{{ $t('navigation.management') }}</div
+            >
           </b-dropdown>
         </template>
       </div>
@@ -111,18 +120,43 @@
   const navigationFucVisible = computed(() => !bookmark.isMobile);
   const { t } = useI18n();
 
-  const adminRouteActive = computed(() =>
-    route.path.includes('/knowledgeBase') ||
-    route.path.includes('/admin') ||
-    route.path.includes('/securityCenter') ||
-    route.path.includes('/notificationCenter')
+  const adminRouteActive = computed(
+    () =>
+      route.path.includes('/knowledgeBase') ||
+      route.path.includes('/admin') ||
+      route.path.includes('/securityCenter') ||
+      route.path.includes('/notificationCenter'),
   );
 
   const adminMenuOptions = computed(() => [
-    { label: t('navigation.knowledgeBase'), function: () => { recordOperation({ module: '导航栏', operation: '知识库' }); router.push('/knowledgeBase'); } },
-    { label: t('navigation.admin'), function: () => { recordOperation({ module: '导航栏', operation: '后台管理' }); router.push('/admin'); } },
-    { label: t('navigation.securityCenter'), function: () => { recordOperation({ module: '导航栏', operation: '安全中心' }); router.push('/securityCenter'); } },
-    { label: t('navigation.notificationCenter'), function: () => { recordOperation({ module: '导航栏', operation: '通知中心' }); router.push('/notificationCenter'); } },
+    {
+      label: t('navigation.knowledgeBase'),
+      function: () => {
+        recordOperation({ module: '导航栏', operation: '知识库' });
+        router.push('/knowledgeBase');
+      },
+    },
+    {
+      label: t('navigation.admin'),
+      function: () => {
+        recordOperation({ module: '导航栏', operation: '后台管理' });
+        router.push('/admin');
+      },
+    },
+    {
+      label: t('navigation.securityCenter'),
+      function: () => {
+        recordOperation({ module: '导航栏', operation: '安全中心' });
+        router.push('/securityCenter');
+      },
+    },
+    {
+      label: t('navigation.notificationCenter'),
+      function: () => {
+        recordOperation({ module: '导航栏', operation: '通知中心' });
+        router.push('/notificationCenter');
+      },
+    },
   ]);
 
   const bookmark = bookmarkStore();

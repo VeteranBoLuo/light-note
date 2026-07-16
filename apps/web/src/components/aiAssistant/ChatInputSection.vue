@@ -10,7 +10,19 @@
       {{ quota.role === 'root' ? t('ai.quotaUnlimited') : t('ai.quotaExempt') }}
     </div>
     <div class="input-container">
-      <AiContextPicker :model-value="contexts" @update:model-value="$emit('update:contexts', $event)" />
+      <div class="context-actions">
+        <AiContextPicker
+          :model-value="contexts"
+          @update:model-value="$emit('update:contexts', $event)"
+          @file-selected="attachSelectedCloudFile"
+        />
+        <AiAttachmentPicker
+          ref="attachmentPicker"
+          :model-value="attachments"
+          @update:model-value="$emit('update:attachments', $event)"
+          @prompt="applyAttachmentPrompt"
+        />
+      </div>
       <BInput
         :value="modelValue"
         type="textarea"
@@ -35,7 +47,7 @@
           <BButton
             @click="isLoading ? stopFn() : sendFn()"
             v-click-log="{ module: 'AI助手', operation: isLoading ? '暂停' : '发送' }"
-            :disabled="!modelValue.trim() && !isLoading"
+            :disabled="(!modelValue.trim() || attachmentBlocked) && !isLoading"
             class="send-btn"
             :class="{ stop: isLoading }"
           >
@@ -54,6 +66,8 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
+  import AiAttachmentPicker from './AiAttachmentPicker.vue';
+  import type { AiAttachment } from '@/api/aiAttachmentApi';
 
   const { t } = useI18n();
 
@@ -68,6 +82,7 @@
     sendFn: () => void;
     stopFn: () => void;
     contexts: AiResourceContext[];
+    attachments: AiAttachment[];
   }>();
 
   const emit = defineEmits<{
@@ -75,9 +90,12 @@
     (e: 'update:enableTranslation', value: boolean): void;
     (e: 'update:translationConfig', value: { source: string; target: string }): void;
     (e: 'update:contexts', value: AiResourceContext[]): void;
+    (e: 'update:attachments', value: AiAttachment[]): void;
   }>();
 
   const textInput = ref<{ focus: () => void } | null>(null);
+  const attachmentPicker = ref<{ attachCloudFile: (fileId: string) => Promise<void> } | null>(null);
+  const attachmentBlocked = computed(() => props.attachments.some((attachment) => attachment.status !== 'ready'));
 
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
   const quotaPercent = computed(() => {
@@ -105,11 +123,21 @@
       if (props.isLoading) props.stopFn();
       return;
     }
+    if (attachmentBlocked.value) return;
 
     // 中断当前回复（如果有），然后发送新消息
     props.stopFn();
     props.sendFn();
   };
+
+  function applyAttachmentPrompt(value: string) {
+    emit('update:modelValue', value);
+    focus();
+  }
+
+  function attachSelectedCloudFile(item: AiResourceContext) {
+    void attachmentPicker.value?.attachCloudFile(item.id);
+  }
 
   onMounted(() => {
     adjustTextareaHeight();
@@ -162,6 +190,16 @@
     box-shadow:
       0 0 0 1px color-mix(in srgb, var(--primary-color) 48%, transparent),
       0 10px 28px rgba(15, 23, 42, 0.08);
+  }
+
+  .context-actions {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 10px;
   }
 
   .text-input {
