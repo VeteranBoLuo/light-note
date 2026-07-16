@@ -12,7 +12,7 @@
       <BViewer />
       <FloatQuestion v-if="aiVisible" />
       <GuestNudge />
-      <BGuide />
+      <DisplayScaleSuggestion />
       <AdminContextBanner />
       <QuickCaptureModal
         v-if="inbox.quickCaptureVisible"
@@ -41,7 +41,7 @@
   import { getAdminLoginPreviewPreferences, isAdminLoginPreview, hasLoggedInBefore } from '@/utils/authStorage.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import GuestNudge from '@/components/home/GuestNudge.vue';
-  import BGuide from '@/components/base/BasicComponents/BGuide.vue';
+  import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
   import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));

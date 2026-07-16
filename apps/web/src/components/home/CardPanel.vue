@@ -20,7 +20,7 @@
       </span>
       <strong>{{ $t('home.noBookmarks') }}</strong>
       <p>{{ $t('home.noBookmarksHint') }}</p>
-      <BButton data-guide="add-bookmark" type="primary" class="empty-add-button" @click="goAddBookmark">
+      <BButton type="primary" class="empty-add-button" @click="goAddBookmark">
         {{ $t('home.addBookmark') }}
       </BButton>
     </div>
@@ -62,8 +62,8 @@
 <script lang="ts" setup>
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
-  import { bookmarkStore, useUserStore } from '@/store';
-  import { computed, ref, watch, nextTick, onMounted } from 'vue';
+  import { bookmarkStore } from '@/store';
+  import { computed, ref, watch } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -74,14 +74,11 @@
   import { copyTextToClipboard } from '@/utils/common.ts';
   import { useI18n } from 'vue-i18n';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import { startGuide, guideDone, type GuideStep } from '@/composables/useGuide';
-  import { shouldStartCreateBookmarkGuide } from '@/utils/bookmarkGuide';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   const bookmark = bookmarkStore();
-  const user = useUserStore();
   const route = useRoute();
   const { t } = useI18n();
   const { addResourcesToInbox } = useInboxEnqueue();
@@ -98,58 +95,10 @@
     (loading, prev) => {
       if (prev && !loading) {
         hasLoaded.value = true;
-        maybeStartCreateBookmarkGuide();
       }
     },
   );
   const skeletonCount = computed(() => (bookmark.isMobile ? 8 : 24));
-
-  // 新手引导:桌面 + 书签为空 + 没引导过 → 教用户建第一个书签(跨页面:首页添加按钮 → 编辑页填网址 → 保存)
-  const CREATE_BOOKMARK_STEPS: GuideStep[] = [
-    { target: '[data-guide="bookmark-mg"]', title: t('guide.cbMgTitle'), content: t('guide.cbMgDesc') },
-    { target: '[data-guide="add-bookmark"]', title: t('guide.cbAddTitle'), content: t('guide.cbAddDesc') },
-    {
-      target: '[data-guide="bookmark-url"]',
-      title: t('guide.cbUrlTitle'),
-      content: t('guide.cbUrlDesc'),
-      route: '/manage/editBookmark/add',
-    },
-    {
-      target: '[data-guide="bookmark-tags"]',
-      title: t('guide.cbTagTitle'),
-      content: t('guide.cbTagDesc'),
-      route: '/manage/editBookmark/add',
-    },
-    {
-      target: '[data-guide="bookmark-save"]',
-      title: t('guide.cbSaveTitle'),
-      content: t('guide.cbSaveDesc'),
-      route: '/manage/editBookmark/add',
-    },
-    { target: '#nav-tag-entry', title: t('guide.cbNavTitle'), content: t('guide.cbNavDesc') },
-  ];
-  function maybeStartCreateBookmarkGuide() {
-    const hasCompleted = guideDone('create-bookmark');
-    if (
-      !shouldStartCreateBookmarkGuide({
-        isMobile: bookmark.isMobile,
-        isBookmarkRoot: route.path === '/home',
-        isAllView: bookmark.type === 'all',
-        isLoading: bookmark.bookmarkLoading,
-        isAllLoaded: bookmark.bookmarkAllLoaded,
-        bookmarkTotal: Number(user.bookmarkTotal),
-        visibleBookmarkCount: getBookList.value.length,
-        hasCompleted,
-      })
-    ) {
-      return;
-    }
-    nextTick(() => startGuide('create-bookmark', CREATE_BOOKMARK_STEPS));
-  }
-  // 状态驱动:进入书签页(onMounted)与书签加载完成(上面的 loading watch)各检查一次,
-  // 满足「桌面 + 书签空 + 没引导过」即启动。startGuide 内部幂等,切走切回/刷新都能正确恢复
-  // (不再依赖一次性事件——原串行方案在切页面导致 CardPanel 卸载时会丢事件,引导永不出现)。
-  onMounted(maybeStartCreateBookmarkGuide);
 
   // 首屏空状态引导:书签为空(含 seed 失败兜底)时引导添加第一个,而非一片空白
   function goAddBookmark() {

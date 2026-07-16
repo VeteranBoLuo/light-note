@@ -524,9 +524,8 @@
     padding: 20px;
 
     .empty-card {
-      background: var(--background-color, #fff);
-      border-radius: 12px;
-      padding: 24px;
+      background: transparent;
+      padding: 24px 12px;
       text-align: center;
       max-width: 200px;
       width: 100%;

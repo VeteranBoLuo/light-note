@@ -852,7 +852,8 @@
     container-type: inline-size;
 
     @supports (width: 1cqi) {
-      --note-card-min-width: clamp(320px, 18cqi, 460px);
+      // 以工作区宽度自适应:1470 左右保持可读卡宽,2560 左右自然落到 6 列。
+      --note-card-min-width: clamp(320px, 15cqi, 460px);
     }
   }
 

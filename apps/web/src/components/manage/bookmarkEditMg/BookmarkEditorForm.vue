@@ -1,7 +1,7 @@
 <template>
   <div class="bookmark-editor" :class="{ 'bookmark-editor--mobile': mobile }">
     <section class="bookmark-editor__form">
-      <div class="bookmark-field bookmark-field--url" data-guide="bookmark-url" :class="{ 'is-error': errors.url }">
+      <div class="bookmark-field bookmark-field--url" :class="{ 'is-error': errors.url }">
         <div class="bookmark-field__heading">
           <label for="bookmark-editor-url">
             {{ $t('bookmarkMg.bookmarkUrl') }} <span class="required-mark">*</span>
@@ -49,7 +49,7 @@
         <span v-if="errors.name" class="bookmark-field__error">{{ errors.name }}</span>
       </div>
 
-      <div class="bookmark-field" data-guide="bookmark-tags">
+      <div class="bookmark-field">
         <div class="bookmark-field__heading">
           <label>{{ $t('bookmarkMg.relatedTag') }}</label>
           <span class="bookmark-field__hint">{{ $t('bookmarkEditor.optional') }}</span>
@@ -110,7 +110,6 @@
         <BButton
           class="bookmark-editor__save-button"
           type="primary"
-          data-guide="bookmark-save"
           :loading="saving"
           @click="$emit('submit')"
         >

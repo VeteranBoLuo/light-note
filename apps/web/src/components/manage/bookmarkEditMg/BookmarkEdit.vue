@@ -44,7 +44,6 @@
           <BButton
             class="bookmark-edit-page__save"
             type="primary"
-            data-guide="bookmark-save"
             :loading="saving"
             @click="submit"
           >

@@ -22,7 +22,7 @@
             </template>
           </BInput>
         </div>
-        <BButton data-guide="bookmark-mg" class="bookmark-manage-action" @click="openBookmarkManagement">
+        <BButton class="bookmark-manage-action" @click="openBookmarkManagement">
           <SvgIcon :src="icon.manage_categoryBtn_bookmark" size="16" />
           {{ $t('navigation.bookmarkManagement') }}
         </BButton>
