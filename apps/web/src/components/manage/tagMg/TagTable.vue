@@ -4,6 +4,7 @@
       :title="t('tagManage.title')"
       :subtitle="t('tagManage.subtitle')"
       accent="tag"
+      layout="workspace"
       show-back
       @back="handleToBack"
     >

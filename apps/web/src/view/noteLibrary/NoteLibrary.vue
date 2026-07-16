@@ -3,6 +3,7 @@
     :title="$t('note.title')"
     :subtitle="$t('note.subtitle')"
     accent="note"
+    layout="workspace"
     :show-back="bookmark.isMobile"
     :title-actionable="!bookmark.isMobile"
     @back="backRouterPage"

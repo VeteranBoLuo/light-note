@@ -1,7 +1,11 @@
 <template>
   <section
     class="resource-page-shell"
-    :class="[`resource-page-shell--${accent}`, { 'resource-page-shell--with-back': showBack }]"
+    :class="[
+      `resource-page-shell--${accent}`,
+      `resource-page-shell--layout-${layout}`,
+      { 'resource-page-shell--with-back': showBack },
+    ]"
   >
     <header class="resource-page-header">
       <BButton
@@ -58,12 +62,14 @@
       title: string;
       subtitle?: string;
       accent?: 'bookmark' | 'note' | 'file' | 'tag' | 'neutral';
+      layout?: 'contained' | 'workspace';
       showBack?: boolean;
       titleActionable?: boolean;
     }>(),
     {
       subtitle: '',
       accent: 'bookmark',
+      layout: 'contained',
       showBack: false,
       titleActionable: false,
     },
@@ -79,6 +85,7 @@
 <style scoped lang="less">
   .resource-page-shell {
     --resource-page-accent: var(--primary-color);
+    --resource-page-content-width: min(100%, 1540px);
     width: 100%;
     height: 100%;
     padding: 18px clamp(16px, 2vw, 28px) 24px;
@@ -89,6 +96,11 @@
     overflow: hidden;
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
+  }
+
+  .resource-page-shell--layout-workspace {
+    --resource-page-content-width: 100%;
+    padding-inline: clamp(16px, 1.6vw, 40px);
   }
 
   .resource-page-shell--bookmark {
@@ -112,7 +124,7 @@
   }
 
   .resource-page-header {
-    width: min(100%, 1540px);
+    width: var(--resource-page-content-width);
     min-height: 54px;
     margin: 0 auto;
     display: flex;
@@ -234,7 +246,7 @@
   }
 
   .resource-page-body {
-    width: min(100%, 1540px);
+    width: var(--resource-page-content-width);
     min-height: 0;
     margin: 0 auto;
     flex: 1;

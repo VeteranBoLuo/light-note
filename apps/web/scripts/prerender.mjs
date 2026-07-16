@@ -57,14 +57,25 @@ const PAGES = [
     critical: false,
     head: {
       title: '更新日志 - 轻笺 | 版本更新历史与功能改进',
-      description:
-        '轻笺（Light Note）版本更新历史：书签管理、云笔记、云空间与 AI 功能的每一次迭代改进记录，持续更新。',
+      description: '轻笺（Light Note）版本更新历史：书签管理、云笔记、云空间与 AI 功能的每一次迭代改进记录，持续更新。',
     },
   },
 ];
 
-// 预渲染期间黑洞掉的埋点类接口:构建机不是真实访客,这些请求转发到生产会污染转化漏斗/操作日志
-const TRACKING_BLACKHOLE = ['/api/common/recordConversion', '/api/common/recordOperationLogs'];
+// 预渲染期间在本地直接返回的接口：构建机不是真实访客，不应产生埋点或角标查询。
+const PRERENDER_API_BLACKHOLES = Object.freeze([
+  { path: '/api/common/recordConversion', data: null },
+  { path: '/api/common/recordOperationLogs', data: null },
+  {
+    path: '/api/inbox/count',
+    data: {
+      pendingTotal: 0,
+      todoPendingTotal: 0,
+      actionTotal: 0,
+      typeTotals: { bookmark: 0, note: 0, file: 0 },
+    },
+  },
+]);
 
 if (process.env.SKIP_PRERENDER === '1') {
   console.log('⏭  SKIP_PRERENDER=1，跳过预渲染');
@@ -122,11 +133,12 @@ function startStaticServer() {
       const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
 
       // /api 代理到生产后端:预渲染需要真实数据(更新日志内容、访客身份),本地 dist 没有后端。
-      // 埋点类接口直接黑洞返回成功,不转发(构建机不是真实访客,别污染生产转化漏斗)。
+      // 埋点与角标接口直接黑洞返回成功，不转发（构建机不是真实访客）。
       if (urlPath.startsWith('/api/')) {
-        if (TRACKING_BLACKHOLE.some((p) => urlPath.startsWith(p))) {
+        const blackhole = PRERENDER_API_BLACKHOLES.find(({ path: apiPath }) => urlPath.startsWith(apiPath));
+        if (blackhole) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 200, msg: '', data: null }));
+          res.end(JSON.stringify({ status: 200, msg: '', data: blackhole.data }));
           return;
         }
         const chunks = [];
@@ -232,7 +244,9 @@ async function renderPage(browser, port, pageConf) {
     const outDir = path.join(DIST, route.replace(/^\//, ''));
     await mkdir(outDir, { recursive: true });
     await writeFile(path.join(outDir, 'index.html'), html, 'utf8');
-    console.log(`✅  ${route} 预渲染完成 → dist${route}/index.html（${(html.length / 1024).toFixed(0)}KB，正文 ${textLen} 字符）`);
+    console.log(
+      `✅  ${route} 预渲染完成 → dist${route}/index.html（${(html.length / 1024).toFixed(0)}KB，正文 ${textLen} 字符）`,
+    );
   } finally {
     await page.close().catch(() => {});
   }

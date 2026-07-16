@@ -634,12 +634,11 @@
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    padding: 18px clamp(16px, 2vw, 28px) 32px;
+    padding: 18px clamp(16px, 1.6vw, 40px) 32px;
   }
 
   .workbench-shell {
-    width: min(100%, 1540px);
-    margin: 0 auto;
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -948,7 +947,7 @@
 
   .primary-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.72fr) minmax(330px, 0.78fr);
+    grid-template-columns: minmax(0, 1fr) clamp(330px, 28vw, 460px);
     gap: 12px;
     align-items: stretch;
   }

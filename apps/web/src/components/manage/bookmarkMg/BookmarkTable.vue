@@ -4,6 +4,7 @@
       :title="$t('bookmarkMg.title')"
       :subtitle="$t('bookmarkMg.subtitle')"
       accent="bookmark"
+      layout="workspace"
       show-back
       @back="handleToBack"
     >
@@ -1110,7 +1111,7 @@
   // ── 卡片视图 ──
   .bookmark-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
     gap: 16px;
   }
 

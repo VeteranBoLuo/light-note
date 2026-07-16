@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { resultData, formatDateTime, insertData } from './common.js';
 import { isSelfTraffic } from './logExclude.js';
+import { shouldSkipApiLog } from './logPolicy.js';
 
 export async function logFunction(req, res, next) {
   try {
@@ -19,21 +20,8 @@ export async function logFunction(req, res, next) {
       next();
       return;
     }
-    // 跳过不记录的接口
-    const skipApi = [
-      'Logs',
-      'getUserInfo',
-      'getUserList',
-      'analyzeImgUrl',
-      'getRelatedTag',
-      'getOpinionNotice',
-      'noticeSummary',
-      'aiQuota',
-      '/me',
-      'unreadCount', // 通知未读数:铃铛角标每 120s 轮询,高频且无操作审计价值,不记 API 日志
-    ].some((key) => req.originalUrl.includes(key));
-
-    if (skipApi && !isVisitorWorkspaceWrite) {
+    // 跳过无操作审计价值的系统读取接口；游客工作区真实写入始终保留审计。
+    if (shouldSkipApiLog(req.originalUrl) && !isVisitorWorkspaceWrite) {
       next();
       return;
     }

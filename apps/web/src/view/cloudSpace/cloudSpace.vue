@@ -3,6 +3,7 @@
     :title="$t('cloudSpace.title')"
     :subtitle="$t('cloudSpace.subtitle')"
     accent="file"
+    layout="workspace"
     :show-back="bookmark.isMobile"
     :title-actionable="!bookmark.isMobile"
     @back="backRouterPage"

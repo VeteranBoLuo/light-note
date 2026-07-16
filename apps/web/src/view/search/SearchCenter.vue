@@ -1,5 +1,10 @@
 <template>
-  <ResourcePageShell :title="t('resourceCenter.title')" :subtitle="t('resourceCenter.subtitle')" accent="neutral">
+  <ResourcePageShell
+    :title="t('resourceCenter.title')"
+    :subtitle="t('resourceCenter.subtitle')"
+    accent="neutral"
+    layout="workspace"
+  >
     <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
       <div class="search-page-topbar">
         <ResourceCenterSectionNav class="section-switcher" />

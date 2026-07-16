@@ -4,6 +4,7 @@
       :title="$t('navigation.bookmark')"
       :subtitle="pageSubtitle"
       accent="bookmark"
+      layout="workspace"
       :title-actionable="!bookmark.isMobile"
       @title-click="resetBookmarkView"
     >

@@ -3,6 +3,7 @@
     :title="$t('trash.title')"
     :subtitle="pageSubtitle"
     accent="neutral"
+    layout="workspace"
     show-back
     @back="router.back()"
   >
