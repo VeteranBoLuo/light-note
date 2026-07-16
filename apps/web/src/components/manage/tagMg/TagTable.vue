@@ -24,14 +24,33 @@
         class="tag-manage-page"
         :class="{
           'tag-manage-page--night': user.currentTheme === 'night',
+          'tag-manage-page--compact': isCompactHeader,
         }"
       >
         <BCard as="section" variant="raised" padding="12px 16px" class="manage-header">
-          <div class="overview-strip" :aria-label="t('tagManage.overview')">
-            <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
-              <span class="overview-dot"></span>
-              <strong>{{ stat.value }}</strong>
-              <span>{{ stat.label }}</span>
+          <div class="overview-stage" :aria-label="t('tagManage.overview')">
+            <div class="overview-expanded" :aria-hidden="isCompactHeader">
+              <div
+                v-for="stat in stats"
+                :key="stat.key"
+                class="overview-card"
+                :class="`overview-card--${stat.key}`"
+              >
+                <span class="overview-dot"></span>
+                <div class="overview-card__copy">
+                  <span>{{ stat.label }}</span>
+                  <small>{{ stat.desc }}</small>
+                </div>
+                <strong>{{ stat.value }}</strong>
+              </div>
+            </div>
+
+            <div class="overview-strip" :aria-hidden="!isCompactHeader">
+              <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
+                <span class="overview-dot"></span>
+                <strong>{{ stat.value }}</strong>
+                <span>{{ stat.label }}</span>
+              </div>
             </div>
           </div>
         </BCard>
@@ -343,17 +362,40 @@
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
   const viewMode = ref<'card' | 'list'>((user.preferences.tagManageView as 'card' | 'list') || 'card');
+  const COMPACT_ENTER_SCROLL_TOP = 96;
+  const COMPACT_EXIT_SCROLL_TOP = 16;
   const resultScrollerRef = ref<HTMLElement>();
+  const isCompactHeader = ref(false);
   const hasScrollAbove = ref(false);
   const hasScrollBelow = ref(false);
   let resultResizeObserver: ResizeObserver | undefined;
   const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
 
   const stats = computed(() => [
-    { key: 'tag', label: t('tagManage.statTotal'), value: overview.value.tag },
-    { key: 'bookmark', label: t('tagManage.taggedBookmark'), value: overview.value.bookmark },
-    { key: 'note', label: t('tagManage.taggedNote'), value: overview.value.note },
-    { key: 'file', label: t('tagManage.taggedFile'), value: overview.value.file },
+    {
+      key: 'tag',
+      label: t('tagManage.statTotal'),
+      desc: t('tagManage.statTotalDesc'),
+      value: overview.value.tag,
+    },
+    {
+      key: 'bookmark',
+      label: t('tagManage.taggedBookmark'),
+      desc: t('tagManage.statBookmarkDesc'),
+      value: overview.value.bookmark,
+    },
+    {
+      key: 'note',
+      label: t('tagManage.taggedNote'),
+      desc: t('tagManage.statNoteDesc'),
+      value: overview.value.note,
+    },
+    {
+      key: 'file',
+      label: t('tagManage.taggedFile'),
+      desc: t('tagManage.statFileDesc'),
+      value: overview.value.file,
+    },
   ]);
 
   const filters = computed(() => [
@@ -391,6 +433,11 @@
     const remainingScroll = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
     hasScrollAbove.value = scroller.scrollTop > 4;
     hasScrollBelow.value = remainingScroll > 4;
+    if (isCompactHeader.value) {
+      if (scroller.scrollTop <= COMPACT_EXIT_SCROLL_TOP) isCompactHeader.value = false;
+    } else if (scroller.scrollTop >= COMPACT_ENTER_SCROLL_TOP) {
+      isCompactHeader.value = true;
+    }
   }
 
   function handleResultScroll() {
@@ -400,6 +447,7 @@
   function resetResultScroll() {
     const scroller = resultScrollerRef.value;
     if (scroller) scroller.scrollTop = 0;
+    isCompactHeader.value = false;
     hasScrollAbove.value = false;
     nextTick(updateScrollState);
   }
@@ -551,100 +599,6 @@
     }
   }
 
-  .manage-header__top {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .manage-copy-stage {
-    position: relative;
-    height: 60px;
-    min-width: 0;
-    transition: height 0.18s ease;
-  }
-
-  .manage-copy {
-    position: absolute;
-    inset: 0;
-    min-width: 0;
-    transition:
-      opacity 0.15s ease,
-      transform 0.18s ease,
-      visibility 0s linear 0s;
-  }
-
-  .manage-copy--full {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-
-    h1 {
-      margin: 1px 0 0;
-      font-size: 21px;
-      line-height: 1.2;
-    }
-
-    p {
-      margin: 3px 0 0;
-      max-width: 760px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 12px;
-      line-height: 1.4;
-      opacity: @muted-opacity;
-    }
-  }
-
-  .manage-copy--compact {
-    display: flex;
-    height: 100%;
-    align-items: center;
-    gap: 12px;
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(5px);
-    transition-delay: 0s, 0s, 0.15s;
-
-    h2 {
-      margin: 0;
-      font-size: 18px;
-      line-height: 1.25;
-      white-space: nowrap;
-    }
-  }
-
-  .compact-overview {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 5px;
-    min-width: 0;
-    padding-left: 12px;
-    border-left: 1px solid var(--tag-border-color);
-    color: var(--sub-text-color);
-    font-size: 12px;
-    white-space: nowrap;
-
-    strong {
-      color: var(--resource-tag-color);
-      font-size: 15px;
-      font-variant-numeric: tabular-nums;
-    }
-  }
-
-  .eyebrow {
-    color: var(--resource-tag-color);
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 14px;
-    letter-spacing: 0.08em;
-  }
-
-  .header-actions,
   .toolbar-actions,
   .view-switch,
   .filter-toolbar,
@@ -654,14 +608,107 @@
     align-items: center;
   }
 
-  .header-actions {
+  .overview-stage {
+    position: relative;
+    z-index: 1;
+    height: 70px;
+    min-width: 0;
+    transition: height 0.18s ease;
+  }
+
+  .overview-expanded,
+  .overview-strip {
+    position: absolute;
+    inset: 0;
+    transition:
+      opacity 0.15s ease,
+      transform 0.18s ease,
+      visibility 0s linear 0s;
+  }
+
+  .overview-expanded {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
-    flex-shrink: 0;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .overview-card {
+    --overview-color: var(--resource-tag-color);
+
+    position: relative;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--overview-color) 14%, var(--tag-border-color));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--overview-color) 4%, var(--card-background));
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--overview-color);
+      opacity: 0.72;
+    }
+
+    strong {
+      color: var(--text-color);
+      font-size: 22px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  .overview-card--bookmark {
+    --overview-color: var(--resource-bookmark-color);
+  }
+
+  .overview-card--note {
+    --overview-color: var(--resource-note-color);
+  }
+
+  .overview-card--file {
+    --overview-color: var(--resource-file-color);
+  }
+
+  .overview-card__copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    span,
+    small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      color: var(--text-color);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    small {
+      color: var(--desc-color);
+      font-size: 11px;
+      line-height: 1.3;
+    }
   }
 
   .overview-strip {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -674,16 +721,9 @@
     border-radius: 12px;
     border: 1px solid color-mix(in srgb, var(--resource-tag-color) 10%, var(--tag-border-color));
     background: color-mix(in srgb, var(--card-background) 78%, transparent);
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-    transition:
-      max-height 0.18s ease,
-      margin 0.18s ease,
-      padding 0.18s ease,
-      opacity 0.12s ease,
-      transform 0.18s ease,
-      visibility 0s linear 0s;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(5px);
   }
 
   .overview-item {
@@ -713,18 +753,21 @@
   }
 
   .overview-item--bookmark .overview-dot,
+  .overview-card--bookmark .overview-dot,
   .filter-chip--bookmark .filter-dot,
   .preview-chip--bookmark .preview-dot {
     background: var(--resource-bookmark-color);
   }
 
   .overview-item--note .overview-dot,
+  .overview-card--note .overview-dot,
   .filter-chip--note .filter-dot,
   .preview-chip--note .preview-dot {
     background: var(--resource-note-color);
   }
 
   .overview-item--file .overview-dot,
+  .overview-card--file .overview-dot,
   .filter-chip--file .filter-dot,
   .preview-chip--file .preview-dot {
     background: var(--resource-file-color);
@@ -894,36 +937,25 @@
 
   .tag-manage-page--compact {
     .manage-header {
-      padding: 10px 16px;
+      padding: 8px 16px;
     }
 
-    .manage-copy-stage {
-      height: 40px;
+    .overview-stage {
+      height: 34px;
     }
 
-    .manage-copy--full {
+    .overview-expanded {
       opacity: 0;
       visibility: hidden;
       transform: translateY(-5px);
       transition-delay: 0s, 0s, 0.15s;
     }
 
-    .manage-copy--compact {
+    .overview-strip {
       opacity: 1;
       visibility: visible;
       transform: translateY(0);
       transition-delay: 0.03s, 0.03s, 0s;
-    }
-
-    .overview-strip {
-      max-height: 0;
-      margin-top: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-      opacity: 0;
-      visibility: hidden;
-      transform: translateY(-4px);
-      transition-delay: 0s, 0s, 0s, 0s, 0s, 0.18s;
     }
   }
 
@@ -1287,8 +1319,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .manage-header,
-    .manage-copy-stage,
-    .manage-copy,
+    .overview-stage,
+    .overview-expanded,
     .overview-strip {
       transition: none;
     }
@@ -1320,8 +1352,12 @@
       flex-direction: column;
     }
 
-    .header-actions {
-      justify-content: flex-end;
+    .overview-stage {
+      height: 138px;
+    }
+
+    .overview-expanded {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .tag-search {

@@ -482,7 +482,7 @@
     width: 100%;
     padding: 20px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width, 320px), 1fr));
     column-gap: 24px;
     row-gap: 22px;
     overflow: auto;
@@ -528,7 +528,7 @@
   }
 
   .note-card-skeleton-wrap {
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width, 320px), 1fr));
   }
 
   .note-card-skeleton,
@@ -683,11 +683,6 @@
     }
   }
 
-  @media (min-width: 2000px) {
-    .note-library-body {
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    }
-  }
   .back-icon {
     display: flex;
     align-items: center;
@@ -843,6 +838,8 @@
   }
 
   .note-workspace {
+    --note-card-min-width: 320px;
+
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -852,12 +849,17 @@
     border-radius: 14px;
     background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
+    container-type: inline-size;
+
+    @supports (width: 1cqi) {
+      --note-card-min-width: clamp(320px, 18cqi, 460px);
+    }
   }
 
   .note-library-body {
     height: 100%;
     padding: 14px;
-    grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width), 1fr));
     gap: 14px;
     scrollbar-gutter: stable;
   }

@@ -1051,11 +1051,18 @@
 
 <style scoped lang="less">
   .field-list {
+    --file-card-min-width: 260px;
+
     flex: 1;
     min-height: 0;
     position: relative;
     display: flex;
     flex-direction: column;
+    container-type: inline-size;
+
+    @supports (width: 1cqi) {
+      --file-card-min-width: clamp(260px, 15cqi, 360px);
+    }
   }
   .download-progress-track {
     position: relative;
@@ -1314,7 +1321,7 @@
 
   .file-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--file-card-min-width), 1fr));
     gap: 14px;
     padding: 14px;
     overflow-y: auto;

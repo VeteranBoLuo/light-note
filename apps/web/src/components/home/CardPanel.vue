@@ -261,9 +261,16 @@
 
 <style lang="less" scoped>
   .card-panel-wrap {
+    --bookmark-card-min-width: 260px;
+
     min-height: 100%;
     display: flex;
     flex-direction: column;
+    container-type: inline-size;
+
+    @supports (width: 1cqi) {
+      --bookmark-card-min-width: clamp(260px, 15cqi, 360px);
+    }
   }
 
   /* 定位高亮:被全局搜索定位到的书签卡片,脉冲描边几下引导视线 */
@@ -284,7 +291,7 @@
   .card-panel {
     margin-top: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--bookmark-card-min-width), 1fr));
     padding: 16px;
     gap: 14px;
     align-content: start;

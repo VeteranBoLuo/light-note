@@ -209,14 +209,14 @@
     overflow: hidden;
     width: 100%;
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 18px;
     color: var(--desc-color);
     margin-top: 12px;
-    height: 40px;
+    height: 54px;
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
   }
 
   .footer-tag {
@@ -258,10 +258,10 @@
       bottom: 8px;
     }
     .card-description {
-      height: 2.4em;
+      height: 3.6em;
       line-height: 1.2;
-      -webkit-line-clamp: 2; /* 显示的行数，根据需要调整 */
-      line-clamp: 2;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
     }
   }
 </style>
