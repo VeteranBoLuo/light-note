@@ -1,6 +1,6 @@
 <template>
   <transition name="nudge-slide">
-    <div v-if="show" class="guest-browse-nudge">
+    <div v-if="visible" class="guest-browse-nudge">
       <span class="guest-browse-nudge__text">{{ $t('home.guestNudgeText') }}</span>
       <button class="guest-browse-nudge__cta" @click="register">{{ $t('home.freeRegister') }}</button>
       <button class="guest-browse-nudge__close" :aria-label="$t('common.close')" @click="dismiss">×</button>
@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onBeforeUnmount } from 'vue';
+  import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
 
   // 游客被动浏览软触发:停留够久或滚动够多后,一次会话弹一次注册软邀请,把「看完就走」的游客接进转化闭环
@@ -20,12 +20,12 @@
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const show = ref(false);
+  const isGuest = computed(() => !user.visitorWorkspace && (!user.id || user.role === 'visitor'));
+  const visible = computed(() => show.value && isGuest.value);
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let bindScrollTimer: ReturnType<typeof setTimeout> | null = null;
   let scrollEl: HTMLElement | null = null;
 
-  function isGuest() {
-    return !user.visitorWorkspace && (!user.id || user.role === 'visitor');
-  }
   function seen() {
     try {
       return sessionStorage.getItem(SESSION_KEY) === '1';
@@ -42,7 +42,7 @@
   }
 
   function trigger() {
-    if (show.value || !isGuest() || seen()) return;
+    if (show.value || !isGuest.value || seen()) return;
     cleanup();
     show.value = true;
   }
@@ -54,7 +54,24 @@
       clearTimeout(timer);
       timer = null;
     }
+    if (bindScrollTimer) {
+      clearTimeout(bindScrollTimer);
+      bindScrollTimer = null;
+    }
     if (scrollEl) scrollEl.removeEventListener('scroll', onScroll);
+    scrollEl = null;
+  }
+  function setupTriggers() {
+    cleanup();
+    if (!isGuest.value || seen()) return;
+    timer = setTimeout(trigger, DWELL_MS);
+    // ViewPanel 渲染后再拿滚动容器
+    bindScrollTimer = setTimeout(() => {
+      bindScrollTimer = null;
+      if (!isGuest.value || seen()) return;
+      scrollEl = document.getElementById('view-panel');
+      scrollEl?.addEventListener('scroll', onScroll, { passive: true });
+    }, 0);
   }
   function dismiss() {
     show.value = false;
@@ -67,15 +84,13 @@
     bookmark.openAuthModal('注册', 'browse_nudge');
   }
 
-  onMounted(() => {
-    if (!isGuest() || seen()) return;
-    timer = setTimeout(trigger, DWELL_MS);
-    // ViewPanel 渲染后再拿滚动容器
-    setTimeout(() => {
-      scrollEl = document.getElementById('view-panel');
-      scrollEl?.addEventListener('scroll', onScroll, { passive: true });
-    }, 0);
+  watch(isGuest, (guest) => {
+    show.value = false;
+    if (guest) setupTriggers();
+    else cleanup();
   });
+
+  onMounted(setupTriggers);
   onBeforeUnmount(cleanup);
 </script>
 

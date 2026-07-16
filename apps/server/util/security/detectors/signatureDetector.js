@@ -15,6 +15,20 @@ const createEvidence = ({ rule, field, value, message, scoreDelta, confidence })
   confidence: confidence ?? rule.confidence,
 });
 
+const ENUM_SORT_VALUES_BY_PATH = [
+  { pattern: /\/todo\/list\/?$/i, values: new Set(['smart', 'due', 'newest', 'oldest']) },
+  { pattern: /\/inbox\/list\/?$/i, values: new Set(['newest', 'oldest']) },
+];
+
+const isKnownSortEnum = (context, item) => {
+  const fieldName = String(item.field).split('.').pop();
+  if (fieldName?.toLowerCase() !== 'sort') return false;
+  const value = String(item.value).toLowerCase();
+  return ENUM_SORT_VALUES_BY_PATH.some(
+    ({ pattern, values }) => pattern.test(String(context.path || '')) && values.has(value),
+  );
+};
+
 const isRuleApplicable = (rule, context) => {
   if (rule.includedContexts && !rule.includedContexts.includes(context)) {
     return false;
@@ -192,6 +206,10 @@ const detectParameterAnomaly = (context) => {
   for (const item of fields) {
     const fieldContext = getFieldContext(item.field);
     if (fieldContext !== 'numeric') {
+      continue;
+    }
+    // 部分列表接口的 sort 是受服务端白名单约束的排序枚举，不是数据库数值排序位。
+    if (isKnownSortEnum(context, item)) {
       continue;
     }
     const value = String(item.value);
