@@ -22,6 +22,7 @@ import {
 } from '../util/adminContextStore.js';
 import { recordAdminContextAudit } from '../util/adminContextAudit.js';
 import { isSelfTraffic } from '../util/logExclude.js';
+import { recordServerOperation } from '../util/operationLog.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -197,6 +198,10 @@ export const submitAppeal = async (req, res) => {
       replyViewed: 0,
     });
     await pool.query('INSERT INTO opinion SET ?', [params]);
+    await recordServerOperation(req, {
+      module: '账号安全',
+      operation: '提交封禁申诉成功',
+    }).catch((error) => console.warn('记录封禁申诉操作失败:', error.message));
     res.send(resultData(L(req, '申诉已提交，我们会尽快处理', 'Your appeal has been submitted. We will handle it as soon as possible.')));
   } catch (err) {
     res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message));
@@ -730,6 +735,12 @@ export const revokeSession = async (req, res) => {
       targets = [match.sid];
     }
     for (const sid of targets) await removeSession(sid);
+    if (targets.length > 0) {
+      await recordServerOperation(req, {
+        module: '账号安全',
+        operation: others ? `下线其他设备成功【${targets.length}台】` : '下线单个设备成功',
+      }).catch((error) => console.warn('记录会话下线操作失败:', error.message));
+    }
     res.send(resultData({ revoked: targets.length }));
   } catch (e) {
     res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + e.message));
@@ -894,6 +905,10 @@ export const configPassword = async (req, res) => {
     pool
       .query('update user set password=?, password_method=? where id=?', [hashedPassword, 'scrypt', id])
       .then(async ([result]) => {
+        await recordServerOperation(req, {
+          module: '账号安全',
+          operation: type === 'update' ? '修改密码成功' : '设置密码成功',
+        }).catch((error) => console.warn('记录密码操作失败:', error.message));
         await removeUserSessions(id);
         await logoutCurrentSession(req, res);
         res.send(resultData(result));
@@ -959,17 +974,20 @@ export const verifyCode = async (req, res) => {
       res.send(resultData(null, 400, L(req, '验证码错误', 'Incorrect verification code.')));
       return;
     }
-    // 3. 验证成功后，删除已用验证码并且设置新密码
+    // 3. 验证成功后，确认账号存在，再消费验证码并设置新密码
+    const [users] = await pool.query('SELECT id FROM user WHERE email = ? LIMIT 1', [email]);
+    if (!users.length) {
+      return res.send(resultData(null, 404, L(req, '账号不存在', 'Account not found.')));
+    }
     await redisClient.del(`email:code:${email}`);
     const hashedPassword = hashPassword(password);
-    pool
-      .query('update user set password=?, password_method=? where email=?', [hashedPassword, 'scrypt', email])
-      .then(() => {
-        res.send(resultData(L(req, '重置密码成功', 'Password reset successfully.')));
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)); // 设置状态码为500
-      });
+    await pool.query('update user set password=?, password_method=? where email=?', [hashedPassword, 'scrypt', email]);
+    await recordServerOperation(req, {
+      module: '账号安全',
+      operation: '邮箱验证码重置密码成功',
+      userId: users[0].id,
+    }).catch((error) => console.warn('记录密码重置操作失败:', error.message));
+    res.send(resultData(L(req, '重置密码成功', 'Password reset successfully.')));
   } catch (e) {
     res.send(resultData(null, 500, L(req, '验证服务异常:', 'Verification service error: ') + e.message)); // 设置状态码为400
   }

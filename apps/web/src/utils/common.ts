@@ -206,6 +206,15 @@ export function fingerprint() {
   return createHash(fingerprintString);
 }
 
+// API 请求可早于 App.onMounted 发出；按需同步生成，保证首屏请求也携带指纹。
+export function getLogFingerprint() {
+  const cached = String((window as any).fingerprint || '').trim();
+  if (cached) return cached;
+  const value = fingerprint();
+  (window as any).fingerprint = value;
+  return value;
+}
+
 const LOG_DEVICE_ID_KEY = 'ln_log_device_id';
 
 // 日志排除使用的稳定设备标识。它只用于站长主动配置的日志白名单，不参与登录或权限判断。

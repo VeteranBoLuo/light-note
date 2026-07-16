@@ -29,8 +29,17 @@
               <div class="lh-item-url">{{ d.url }}</div>
             </div>
             <div class="lh-item-actions">
-              <button class="lh-act" :disabled="ignoring === d.id" @click="markNormal(d.id)">{{ $t('bookmarkMg.healthMarkNormal') }}</button>
-              <button class="lh-act snap" @click="viewSnapshot(d.id)">{{ d.hasSnapshot ? $t('bookmarkMg.healthViewSnapshot') : $t('bookmarkMg.snapshot') }}</button>
+              <BButton size="small" class="lh-act" :disabled="ignoring === d.id" @click="markNormal(d.id)">
+                {{ $t('bookmarkMg.healthMarkNormal') }}
+              </BButton>
+              <BButton
+                size="small"
+                class="lh-act snap"
+                @click="viewSnapshot(d.id)"
+                v-click-log="{ module: '书签管理', operation: `从死链体检查看网页存档【${d.name}】` }"
+              >
+                {{ d.hasSnapshot ? $t('bookmarkMg.healthViewSnapshot') : $t('bookmarkMg.snapshot') }}
+              </BButton>
             </div>
           </div>
         </div>
@@ -48,6 +57,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const visible = defineModel<boolean>('visible');
 
@@ -82,11 +92,15 @@
   // 全量检测:启动后台任务,再轮询进度(checked/total 与疑似列表实时增长),跑完自动停
   async function startCheck() {
     if (starting.value || running.value) return;
+    const isRecheck = allChecked.value;
     starting.value = true;
     try {
-      await apiBasePost('/api/bookmark/health/checkAll');
-      await loadSummary();
-      startPolling();
+      const res = await apiBasePost('/api/bookmark/health/checkAll');
+      if (res?.status === 200) {
+        recordOperation({ module: '书签管理', operation: isRecheck ? '重新开始死链体检' : '开始死链体检' });
+        await loadSummary();
+        startPolling();
+      }
     } finally {
       starting.value = false;
     }
@@ -97,17 +111,25 @@
     resetting.value = true;
     try {
       const res = await apiBasePost('/api/bookmark/health/reset');
-      if (res?.status === 200 && res.data) applySummary(res.data);
+      if (res?.status === 200 && res.data) {
+        applySummary(res.data);
+        recordOperation({ module: '书签管理', operation: '重置死链体检记录成功' });
+      }
     } finally {
       resetting.value = false;
     }
   }
   // 标记正常:消除误报(SPA/需登录等浏览器能开的),本地即时移除 + 后端置 alive
   async function markNormal(id: string) {
+    if (ignoring.value) return;
+    const bookmarkName = summary.value.suspect.find((item) => item.id === id)?.name || id;
     ignoring.value = id;
     try {
       const res = await apiBasePost('/api/bookmark/health/ignore', { id });
-      if (res?.status === 200) summary.value.suspect = summary.value.suspect.filter((s) => s.id !== id);
+      if (res?.status === 200) {
+        summary.value.suspect = summary.value.suspect.filter((s) => s.id !== id);
+        recordOperation({ module: '书签管理', operation: `死链体检标记正常成功【${bookmarkName}】` });
+      }
     } finally {
       ignoring.value = '';
     }

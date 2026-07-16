@@ -38,6 +38,7 @@
           <BButton
             class="trash-type-btn"
             :class="{ active: filterType === '' }"
+            v-click-log="{ module: '回收站', operation: '筛选全部资源' }"
             @click="
               filterType = '';
               onFilterChange();
@@ -47,6 +48,7 @@
           <BButton
             class="trash-type-btn"
             :class="{ active: filterType === 'bookmark' }"
+            v-click-log="{ module: '回收站', operation: '筛选书签' }"
             @click="
               filterType = 'bookmark';
               onFilterChange();
@@ -56,6 +58,7 @@
           <BButton
             class="trash-type-btn"
             :class="{ active: filterType === 'note' }"
+            v-click-log="{ module: '回收站', operation: '筛选笔记' }"
             @click="
               filterType = 'note';
               onFilterChange();
@@ -65,6 +68,7 @@
           <BButton
             class="trash-type-btn"
             :class="{ active: filterType === 'file' }"
+            v-click-log="{ module: '回收站', operation: '筛选文件' }"
             @click="
               filterType = 'file';
               onFilterChange();
@@ -153,6 +157,8 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const { t } = useI18n();
   const { growth, load: loadGrowth } = useGrowth();
@@ -252,6 +258,10 @@
       }
       if (success > 0) {
         message.success(t('trash.restoreSuccess'));
+        recordOperation({
+          ...OPERATION_LOG_MAP.trash.restore,
+          operation: `恢复回收站资源成功【${success}项】`,
+        });
         fetchList();
       }
     } catch (e: any) {
@@ -296,6 +306,13 @@
       const res = await apiBasePost('/api/trash/restoreAll', {});
       if (res.status === 200) {
         message.success(res.msg || '恢复成功');
+        const restored = Number(res.data?.restored || 0);
+        if (restored > 0) {
+          recordOperation({
+            ...OPERATION_LOG_MAP.trash.restoreAll,
+            operation: `一键恢复全部回收站资源成功【${restored}项】`,
+          });
+        }
         fetchList();
       }
     } catch (e: any) {
@@ -326,6 +343,10 @@
       }
       if (success > 0) {
         message.success(t('trash.permanentDeleteSuccess'));
+        recordOperation({
+          ...OPERATION_LOG_MAP.trash.permanentDelete,
+          operation: `永久删除回收站资源成功【${success}项】`,
+        });
         fetchList();
       }
     } catch (e: any) {
@@ -340,6 +361,13 @@
       const res = await apiBasePost('/api/trash/emptyAll', {});
       if (res.status === 200) {
         message.success(t('trash.emptyAllSuccess'));
+        const deleted = Number(res.data?.deleted || 0);
+        if (deleted > 0) {
+          recordOperation({
+            ...OPERATION_LOG_MAP.trash.emptyAll,
+            operation: `清空回收站成功【${deleted}项】`,
+          });
+        }
         fetchList();
       }
     } catch (e: any) {

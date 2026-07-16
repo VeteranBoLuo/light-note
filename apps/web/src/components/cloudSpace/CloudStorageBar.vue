@@ -38,7 +38,7 @@
   const statusClass = computed(() => {
     if (usageRatio.value >= 0.95) return 'progress-red';
     if (usageRatio.value >= 0.75) return 'progress-yellow';
-    return 'progress-green';
+    return 'progress-normal';
   });
 
   const formattedUsed = computed(() => formatStorageSize(cloud.usedSpace));
@@ -63,7 +63,7 @@
   }
 
   .storage-title {
-    color: #727785;
+    color: var(--desc-color);
     font-size: 12px;
     line-height: 1;
     white-space: nowrap;
@@ -77,7 +77,7 @@
   }
 
   .storage-value {
-    color: #2f3441;
+    color: var(--text-color);
     font-size: 12px;
     font-weight: 500;
     line-height: 1;
@@ -91,7 +91,7 @@
     font-size: 12px;
     font-weight: 600;
     line-height: 1;
-    color: #1fb487;
+    color: var(--resource-file-color, #ff8a00);
   }
 
   .storage-bar {
@@ -99,13 +99,13 @@
     overflow: hidden;
     height: 4px;
     border-radius: 999px;
-    background-color: rgba(111, 119, 138, 0.2);
+    background: color-mix(in srgb, var(--card-border-color) 70%, transparent);
   }
 
   .storage-bar-fill {
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, #1fb487 0%, #46cbac 100%);
+    background: var(--resource-file-color, #ff8a00);
     transition: width 0.3s ease;
   }
 

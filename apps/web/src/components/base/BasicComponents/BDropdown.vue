@@ -22,6 +22,7 @@
             v-for="item in menuOptions"
             :key="item.label"
             class="b-dropdown-item"
+            :class="{ 'b-dropdown-item--danger': item.danger }"
             @click="onItemClick(item)"
           >
             <svg-icon v-if="item.icon" :src="item.icon" />
@@ -43,6 +44,7 @@
   interface BDropdownOption {
     label: string;
     icon?: string;
+    danger?: boolean;
     function?: () => void;
   }
 
@@ -213,6 +215,12 @@
   }
   .b-dropdown-item:hover {
     background-color: var(--menu-item-h-bg-color);
+  }
+  .b-dropdown-item--danger {
+    color: var(--danger-color, #f04455);
+  }
+  .b-dropdown-item--danger:hover {
+    background: color-mix(in srgb, var(--danger-color, #f04455) 9%, var(--menu-body-bg-color));
   }
   .b-dropdown-fade-enter-active,
   .b-dropdown-fade-leave-active {

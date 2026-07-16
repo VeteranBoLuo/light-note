@@ -97,14 +97,27 @@ export function useNotification() {
   async function markAllRead() {
     unreadTotal.value = 0;
     unreadByType.value = {};
-    await notificationApi.markAllNotificationsRead().catch(() => {});
+    try {
+      const res = await notificationApi.markAllNotificationsRead();
+      if (res?.status !== 200) refreshUnread();
+      return res?.status === 200;
+    } catch {
+      refreshUnread();
+      return false;
+    }
   }
 
   // 删除(软删)指定通知,随后同步未读角标(被删的可能是未读)
   async function deleteNotifications(ids: string[]) {
-    if (!ids.length) return;
-    await notificationApi.deleteNotifications(ids).catch(() => {});
-    refreshUnread();
+    if (!ids.length) return false;
+    try {
+      const res = await notificationApi.deleteNotifications(ids);
+      return res?.status === 200;
+    } catch {
+      return false;
+    } finally {
+      refreshUnread();
+    }
   }
 
   return { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications };

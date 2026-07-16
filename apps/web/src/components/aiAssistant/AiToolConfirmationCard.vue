@@ -33,6 +33,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   interface Confirmation {
     token: string;
@@ -91,6 +93,10 @@
       status.value = 'confirmed';
       resultText.value = res.data?.summary || t('ai.confirmationCompleted');
       emit('resolved', resultText.value, Array.isArray(res.data?.sources) ? res.data.sources : []);
+      recordOperation({
+        ...OPERATION_LOG_MAP.aiAssistant.confirmTool,
+        operation: `确认执行 AI 工具成功【${toolLabel.value}】`,
+      });
       bMessage.success(t('ai.confirmationCompleted'));
     } catch (error: any) {
       status.value = 'failed';

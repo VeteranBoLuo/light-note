@@ -1,17 +1,7 @@
 <template>
   <div class="field-list">
-    <div v-if="viewMode === 'card'" class="card-toolbar">
-      <b-input
-        v-model:value="cloud.searchFileName"
-        :placeholder="$t('cloudSpace.fileName')"
-        @input="onSearchInput"
-        class="card-search-input"
-      >
-        <template #suffix>
-          <svg-icon class="dom-hover" :src="icon.navigation.search" size="16" @click="cloud.queryFieldList" />
-        </template>
-      </b-input>
-      <div v-if="batchMode" class="batch-actions">
+    <div v-if="viewMode === 'card' && batchMode" class="card-toolbar">
+      <div class="batch-actions">
         <b-space :size="10">
           <BCheckbox
             v-if="viewMode === 'card'"
@@ -90,9 +80,6 @@
                 @click.stop="handleDownloadFile(item)"
               />
             </BTooltip>
-            <BTooltip :title="$t('common.delete')">
-              <svg-icon class="overlay-btn" :src="icon.noteDetail.delete" size="18" @click.stop="handleDelFile(item)" />
-            </BTooltip>
           </div>
           <div v-if="!batchMode" class="file-card-more" @click.stop>
             <b-dropdown
@@ -123,6 +110,12 @@
                   label: $t('inbox.addExisting'),
                   icon: icon.common.more,
                   function: () => addFileToInbox(item),
+                },
+                {
+                  label: $t('common.delete'),
+                  icon: icon.noteDetail.delete,
+                  danger: true,
+                  function: () => handleDelFile(item),
                 },
               ]"
             >
@@ -164,22 +157,13 @@
           </BButton>
         </div>
       </div>
-      <a-progress :percent="downloadProgress.percent" :show-info="false" size="small" />
+      <div class="download-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="downloadProgress.percent">
+        <span :style="{ width: `${downloadProgress.percent}%` }"></span>
+      </div>
     </div>
     <div v-if="viewMode === 'table'" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <span class="field-header-label">{{ $t('cloudSpace.fileName') }}</span>
-        <b-input
-          v-model:value="cloud.searchFileName"
-          :placeholder="$t('cloudSpace.fileName')"
-          class="header-search-input"
-          height="28px"
-          @input="onSearchInput"
-        >
-          <template #suffix>
-            <svg-icon class="dom-hover" :src="icon.navigation.search" size="14" @click="cloud.queryFieldList" />
-          </template>
-        </b-input>
       </div>
       <div class="default-area" v-if="!bookmark.isMobile">
         <div>{{ $t('cloudSpace.folder') }}</div>
@@ -190,16 +174,7 @@
     </div>
     <div
       v-if="viewMode === 'table' && batchMode"
-      class="batch-actions"
-      style="
-        padding: 8px 20px;
-        background: var(--table-header-bg-color);
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-shrink: 0;
-      "
+      class="batch-actions table-batch-actions"
     >
       <BCheckbox
         :indeterminate="indeterminate"
@@ -226,8 +201,8 @@
         :draggable="canDragFile(item)"
         @dragstart="onFileDragStart($event, item)"
         @dragend="onFileDragEnd"
-        v-for="(item, index) in cloud.fileList"
-        :key="index"
+        v-for="item in cloud.fileList"
+        :key="item.id"
       >
         <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
           <span v-if="batchMode" class="row-checkbox" @click.stop>
@@ -281,13 +256,9 @@
                 v-click-log="{ module: '云空间', operation: `打开文件标签配置【${item.fileName}】` }"
               />
             </BTooltip>
-            <!-- 删除按钮 -->
-            <BTooltip :title="$t('common.delete')">
-              <svg-icon class="delete-icon" :src="icon.noteDetail.delete" size="20" @click="handleDelFile(item)" />
-            </BTooltip>
             <b-dropdown
-              v-if="!bookmark.isMobile"
               :trigger="'click'"
+              align="right"
               :menu-options="[
                 {
                   label: $t('cloudSpace.share'),
@@ -303,6 +274,12 @@
                   label: $t('inbox.addExisting'),
                   icon: icon.common.more,
                   function: () => addFileToInbox(item),
+                },
+                {
+                  label: $t('common.delete'),
+                  icon: icon.noteDetail.delete,
+                  danger: true,
+                  function: () => handleDelFile(item),
                 },
               ]"
             >
@@ -339,37 +316,14 @@
         </div>
       </div>
     </div>
-    <div
-      v-if="!cloud.loading && !cloud.fileList.length"
-      style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 64px 20px;
-        text-align: center;
-        color: var(--text-second-color, #888);
-      "
-    >
-      <div style="font-size: 44px; opacity: 0.7">📁</div>
-      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">还没有文件</p>
-      <p style="margin: 0; font-size: 13px">点下方按钮上传，或直接把文件拖拽到这里</p>
-      <BButton
-        type="primary"
-        @click="triggerUpload"
-        style="
-          margin-top: 6px;
-          border: 0;
-          cursor: pointer;
-          color: #fff;
-          background: #615ced;
-          font-size: 14px;
-          padding: 8px 18px;
-          border-radius: 8px;
-        "
-      >
-        上传文件
+    <div v-if="!cloud.loading && !cloud.fileList.length" class="file-empty-state">
+      <span class="file-empty-icon">
+        <SvgIcon :src="icon.file_upload" size="28" />
+      </span>
+      <strong>{{ $t('cloudSpace.emptyTitle') }}</strong>
+      <p>{{ $t('cloudSpace.emptyHint') }}</p>
+      <BButton v-if="!bookmark.isMobile" type="primary" class="file-empty-action" @click="triggerUpload">
+        {{ $t('cloudSpace.uploadFile') }}
       </BButton>
     </div>
     <b-loading :loading="cloud.loading" class="both-center" />
@@ -435,7 +389,6 @@
   import { deleteField, downloadField, shareField } from '@/http/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
-  import { debounce } from '@/utils/common';
   import { useI18n } from 'vue-i18n';
   import JSZip from 'jszip';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY, getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
@@ -528,7 +481,6 @@
   });
 
   const getFileCategory = (file: { category?: string }) => getCloudFileCategory(file);
-  const onSearchInput = debounce(() => cloud.queryFieldList(), 500);
   const getFileTypeLabel = (file: { category?: string }) => t(CLOUD_FILE_CATEGORY_LABEL_KEY[getFileCategory(file)]);
   const TEXT_PREVIEW_CHAR_LIMIT = 180;
   const TEXT_PREVIEW_LOAD_MAX = 32;
@@ -1099,23 +1051,37 @@
     display: flex;
     flex-direction: column;
   }
+  .download-progress-track {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card-border-color) 70%, transparent);
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--resource-file-color, #ff8a00);
+      transition: width 0.2s ease;
+    }
+  }
   .field-header {
+    min-height: 46px;
     display: flex;
     align-items: center;
-    padding: 0 20px 14px 20px;
-    border-bottom: 1px solid var(--folder-list-border-color);
-    font-weight: bold;
-    font-size: 15px;
+    padding: 0 16px;
+    box-sizing: border-box;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 68%, transparent);
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 2.5%, var(--menu-body-bg-color));
+    font-weight: 650;
+    font-size: 12px;
   }
   .field-header-label {
     flex-shrink: 0;
     line-height: 28px;
-  }
-  .header-search-input {
-    flex: 1;
-    margin-left: 8px;
-    min-width: 0;
-    max-width: 260px;
   }
   .header-checkbox {
     margin-right: 8px;
@@ -1131,6 +1097,15 @@
       color: var(--desc-color);
       font-size: 14px;
     }
+  }
+  .table-batch-actions {
+    margin: 8px 10px 0;
+    padding: 8px 10px;
+    gap: 8px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 6%, var(--menu-body-bg-color));
   }
   .download-progress-floating {
     position: absolute;
@@ -1167,18 +1142,23 @@
     }
   }
   .file-container {
-    height: calc(100% - 40px);
+    min-height: 0;
+    flex: 1;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
   .field-item {
-    height: 64px;
-    padding: 0 20px;
+    min-height: 58px;
+    padding: 0 16px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    border-bottom: 1px solid var(--folder-list-border-color);
-    transition: background-color 0.3s;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
+    content-visibility: auto;
+    contain-intrinsic-size: 58px;
+    transition: background-color 0.18s;
     &:hover {
-      background-color: var(--bl-input-noBorder-bg-color);
+      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 4%, var(--menu-body-bg-color));
       .handle-btn {
         opacity: 1;
       }
@@ -1207,17 +1187,19 @@
   .file-label {
     width: calc(100% - 100px);
     cursor: pointer;
-    gap: 5px;
+    gap: 8px;
+    color: var(--text-color);
+    font-weight: 520;
   }
   .row-checkbox {
     margin-right: 10px;
   }
   .default-area {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(86px, 0.7fr) minmax(130px, 1.15fr) minmax(74px, 0.55fr) minmax(130px, 0.9fr);
     align-items: center;
-    justify-content: space-between;
     flex: 1;
-    font-size: 14px;
+    font-size: 12px;
     color: var(--desc-color);
     div {
       flex: 1;
@@ -1286,8 +1268,8 @@
     border-radius: 999px;
     font-size: 12px;
     line-height: 18px;
-    color: var(--desc-color);
-    background: var(--common-tag-bg-color);
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 8%, var(--menu-body-bg-color));
     display: inline-block;
     cursor: pointer;
   }
@@ -1302,11 +1284,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 0 6px 14px;
-  }
-  .card-search-input {
-    max-width: 420px;
-    flex: 1;
+    padding: 10px 14px 0;
   }
   .card-toolbar .batch-actions {
     flex-shrink: 0;
@@ -1317,10 +1295,9 @@
 
   .file-card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
-    column-gap: 20px;
-    row-gap: 18px;
-    padding: 12px 6px 16px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    padding: 14px;
     overflow-y: auto;
     height: 100%;
     align-content: start;
@@ -1330,7 +1307,7 @@
     display: flex;
     flex-direction: column;
     min-height: 278px;
-    border-radius: 12px;
+    border-radius: 13px;
     border: 1px solid color-mix(in srgb, var(--folder-list-border-color) 82%, var(--desc-color) 18%);
     background: color-mix(in srgb, var(--card-bg-color) 94%, var(--bl-input-noBorder-bg-color) 6%);
     cursor: pointer;
@@ -1614,6 +1591,45 @@
     min-height: calc(1.4em * 2);
   }
 
+  .file-empty-state {
+    min-height: 300px;
+    padding: 48px 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--desc-color);
+    text-align: center;
+  }
+
+  .file-empty-icon {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 4px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 10%, var(--menu-body-bg-color));
+  }
+
+  .file-empty-state strong {
+    color: var(--text-color);
+    font-size: 16px;
+  }
+
+  .file-empty-state p {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .file-empty-action {
+    margin-top: 6px;
+  }
+
   .file-card-meta {
     font-size: 12px;
     color: var(--desc-color);
@@ -1650,7 +1666,7 @@
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       column-gap: 12px;
       row-gap: 12px;
-      padding: 8px 0 12px;
+      padding: 10px;
     }
 
     .file-card {

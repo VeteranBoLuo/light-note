@@ -2,18 +2,28 @@
   <div
     class="card-body"
     :class="{ 'has-top-badge': isTop, 'has-pending-badge': cardInfo.isPending }"
+    role="link"
+    tabindex="0"
     @click="toNewPage"
+    @keydown.enter="toNewPage"
+    @keydown.space.prevent="toNewPage"
   >
     <div v-if="isTop || cardInfo.isPending" class="card-status-badges">
       <span v-if="isTop" class="card-top-badge">{{ $t('common.pin') }}</span>
       <InboxPendingBadge v-if="cardInfo.isPending" />
     </div>
     <div class="card-title">
-      <div class="card-img-container">
-        <span v-if="cardInfo.iconLoading" class="card-icon-loading" aria-hidden="true"></span>
-        <img v-else :src="getIcon(cardInfo)" width="22" height="22" alt="" @error="handleIconError" />
+      <BookmarkFavicon
+        class="card-img-container"
+        :src="cardInfo.iconUrl"
+        :loading="cardInfo.iconLoading"
+        :size="22"
+        :tile-size="34"
+      />
+      <div class="card-title-copy">
+        <span class="card-title-text">{{ cardInfo.name }}</span>
+        <span class="card-domain">{{ displayDomain }}</span>
       </div>
-      <span class="card-title-text">{{ cardInfo.name }}</span>
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>
     <div class="footer-tag">
@@ -24,11 +34,9 @@
         :key="tag.id || tag.name"
       >
         <span class="tag-detail-label">{{ tag.name }}</span>
-        <button class="tag-detail-corner" type="button" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M6 4h6v6M12 4 5 11" />
-          </svg>
-        </button>
+        <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+          <SvgIcon :src="icon.cloudSpace.share" size="11" />
+        </BButton>
       </div>
     </div>
   </div>
@@ -42,6 +50,9 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import icon from '@/config/icon.ts';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
 
   const bookmark = bookmarkStore();
   const props = defineProps({
@@ -69,6 +80,13 @@
   });
 
   const isTop = computed(() => !!(props.cardInfo as any).isTop);
+  const displayDomain = computed(() => {
+    try {
+      return new URL(props.cardInfo.url).hostname.replace(/^www\./, '');
+    } catch {
+      return props.cardInfo.url || '';
+    }
+  });
 
   function toNewPage() {
     openBookmarkUrl(props.cardInfo.url);
@@ -87,66 +105,31 @@
     router.push(`/tag/${tag.id}`);
   }
 
-  function getIcon(bookmark: any) {
-    // 无图标时用站内默认图(地球),不再实时直连第三方 ico.kucat.cn:
-    // 本地网络访问它不稳会破图,线上也不该押注第三方的实时可用性。
-    // 真实 favicon 由后端异步抓取(analyzeImgUrl)存到站内并写回 iconUrl,抓到后自动显示。
-    return bookmark.iconUrl || icon.nullImg;
-  }
-
-  function handleIconError(event: Event) {
-    const image = event.currentTarget as HTMLImageElement;
-    if (image.src !== icon.nullImg) image.src = icon.nullImg;
-  }
 </script>
 
 <style lang="less" scoped>
   .card-body {
-    border: 1px solid var(--card-border-color);
-    height: 150px;
-    border-radius: 1rem;
-    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
+    height: 164px;
+    border-radius: 13px;
+    padding: 14px 15px;
     box-sizing: border-box;
     cursor: pointer;
     position: relative;
-    background-color: var(--background-color);
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--resource-bookmark-color, #615ced) 2.5%, var(--menu-body-bg-color)),
+      var(--menu-body-bg-color) 52%
+    );
+    box-shadow: 0 10px 24px -24px color-mix(in srgb, var(--text-color) 38%, transparent);
     transition:
       border-color 0.2s,
-      box-shadow 0.2s,
-      transform 0.2s;
+      box-shadow 0.2s;
     &:hover {
-      border-color: var(--primary-h-color);
-      box-shadow: var(--ant-table-boxShadow);
-      transform: translateY(-2px);
-    }
-    &:active {
-      transform: translateY(0);
+      border-color: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 38%, var(--card-border-color));
+      box-shadow: 0 16px 30px -24px color-mix(in srgb, var(--resource-bookmark-color, #615ced) 70%, transparent);
     }
   }
-  .card-icon-loading {
-    display: block;
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    background: linear-gradient(
-      100deg,
-      color-mix(in srgb, var(--primary-color) 7%, var(--card-border-color)) 20%,
-      color-mix(in srgb, var(--primary-color) 18%, var(--background-color)) 45%,
-      color-mix(in srgb, var(--primary-color) 7%, var(--card-border-color)) 70%
-    );
-    background-size: 220% 100%;
-    animation: bookmark-icon-loading 1.1s ease-in-out infinite;
-  }
-
-  @keyframes bookmark-icon-loading {
-    from {
-      background-position: 100% 0;
-    }
-    to {
-      background-position: -100% 0;
-    }
-  }
-
   /* 置顶:仅右上角徽章标识,不加描边(保持卡片干净) */
   .card-status-badges {
     position: absolute;
@@ -173,15 +156,35 @@
   .card-title {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 11px;
 
-    .card-title-text {
+    .card-title-copy {
       flex: 1;
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .card-title-text {
+      min-width: 0;
       overflow: hidden;
+      color: var(--text-color);
+      font-size: 15px;
+      font-weight: 650;
+      line-height: 20px;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+  }
+
+  .card-domain {
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 10.5px;
+    line-height: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* 置顶徽章浮在右上角(absolute 不占宽),给标题右侧留出空间,避免长标题被徽章遮住 */
@@ -198,30 +201,22 @@
   }
 
   .card-img-container {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.125rem;
-    border-radius: 0.5rem;
-    flex-shrink: 0;
     cursor: move;
   }
 
   .card-description {
-    word-break: break-all;
+    word-break: break-word;
     overflow: hidden;
     width: 100%;
     font-size: 12px;
     line-height: 1.5;
     color: var(--desc-color);
-    margin-top: 10px;
-    height: 54px;
+    margin-top: 12px;
+    height: 40px;
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3; /* 显示的行数，根据需要调整 */
-    line-clamp: 3;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 
   .footer-tag {
@@ -239,9 +234,19 @@
     }
   }
 
+  .tag-detail-corner {
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 999px;
+    color: currentColor;
+    background: transparent;
+  }
+
   @media (max-width: 1023px) {
     .card-body {
-      height: 140px;
+      height: 154px;
       &:hover {
         box-shadow: none; /* 移除 :hover 状态下的阴影 */
         border: 1px solid var(--card-border-color);

@@ -14,7 +14,7 @@ import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
-import rateLimit from 'express-rate-limit';
+import { globalRateLimiter } from './util/requestRateLimit.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -46,8 +46,9 @@ app.use(accountBanMiddleware);
 app.use(attackMonitor);
 // 日志记录中间件
 app.use(logFunction);
-// 全局速率限制：120次/分钟（与安全中心高频检测阈值一致）
-app.use(rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }));
+// 全站兜底限流按真实操作者分桶，避免一个页面的并发初始化请求或同一网络下的用户互相误伤。
+// 登录、注册等高风险接口仍在各自路由保留更严格的独立限制。
+app.use(globalRateLimiter);
 
 const allRouter = [
   ...baseRouter,

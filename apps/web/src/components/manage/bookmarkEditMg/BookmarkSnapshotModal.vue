@@ -67,6 +67,7 @@
   import { useUserStore } from '@/store';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
   const props = defineProps<{ bookmarkId?: string }>();
@@ -101,11 +102,16 @@
 
   async function archive() {
     if (!props.bookmarkId || archiving.value) return;
+    const isRearchive = !!snap.value?.content;
     archiving.value = true;
     try {
       const res = await apiBasePost('/api/bookmark/archive', { id: props.bookmarkId });
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('bookmarkMg.snapshotOk', { n: res.data.charCount }));
+        recordOperation({
+          module: '书签详情',
+          operation: `${isRearchive ? '重新归档' : '归档'}网页正文成功【${snap.value?.title || props.bookmarkId}】`,
+        });
         await loadSnap();
       } else {
         message.info(t('bookmarkMg.snapshotFail'));
@@ -117,12 +123,17 @@
 
   async function aiSummarize() {
     if (!props.bookmarkId || summarizing.value) return;
+    const isResummary = !!snap.value?.summary;
     summarizing.value = true;
     try {
       const res = await apiBasePost('/api/bookmark/summarize', { id: props.bookmarkId, force: !!snap.value?.summary });
       if (res?.status === 200 && res.data?.ok) {
         if (snap.value) snap.value.summary = res.data.summary;
         else await loadSnap();
+        recordOperation({
+          module: '书签详情',
+          operation: `${isResummary ? '重新生成' : '生成'}书签 AI 摘要成功【${snap.value?.title || props.bookmarkId}】`,
+        });
       } else {
         message.info(res?.data?.msg || t('bookmarkMg.snapshotFail'));
       }

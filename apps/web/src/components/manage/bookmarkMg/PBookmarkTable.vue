@@ -8,9 +8,7 @@
     <template #item="{ data }">
       <div class="bookmark-item-main">
         <div class="bookmark-item-title">
-          <div class="card-img-container">
-            <img v-if="data.iconUrl" :src="data.iconUrl" height="20" width="20" @error="onErrorImg" alt="" />
-          </div>
+          <BookmarkFavicon :src="data.iconUrl" :size="20" :tile-size="28" />
           <span class="bookmark-item-name">{{ data.name }}</span>
         </div>
         <div v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
@@ -20,6 +18,7 @@
             :label="$t('bookmarkMg.badgeArchived')"
             :tooltip="$t('bookmarkMg.badgeArchivedHint')"
             @click="openSnap(data.id)"
+            v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
           />
           <BookmarkCapabilityBadge
             v-if="data.hasSummary"
@@ -27,6 +26,7 @@
             :label="$t('bookmarkMg.badgeSummary')"
             :tooltip="$t('bookmarkMg.badgeSummaryHint')"
             @click="openSnap(data.id)"
+            v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
           />
         </div>
       </div>
@@ -55,8 +55,10 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
+  import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
   import { cloneDeep } from 'lodash-es';
   import { exportExcelFile } from '@/utils/excel';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const visible = defineModel<boolean>('visible');
   const user = useUserStore();
@@ -163,6 +165,10 @@
         '书签集合.xlsx',
       );
       message.success('Excel导出成功');
+      recordOperation({
+        ...OPERATION_LOG_MAP.bookmarkMg.exportToExcel,
+        operation: `导出 Excel 书签成功【${exportData.length}个】`,
+      });
     } catch (error: any) {
       message.error(`Excel导出失败：${error.message || '未知错误'}`);
     }
@@ -171,11 +177,6 @@
   function getIcon(bookmark) {
     // 无图标用站内默认图,不再直连第三方 ico.kucat.cn(真实 favicon 由后端抓取写回 iconUrl)
     return bookmark.iconUrl || icon.nullImg;
-  }
-
-  function onErrorImg(event) {
-    event.target.src =
-      'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjhlbSIgaGVpZ2h0PSIwLjhlbSIgdmlld0JveD0iMCAwIDIwIDIwIj48cGF0aCBmaWxsPSIjNWI1YjViIiBkPSJNMTAgMjBhMTAgMTAgMCAxIDEgMC0yMGExMCAxMCAwIDAgMSAwIDIwbTcuNzUtOGE4IDggMCAwIDAgMC00aC0zLjgyYTI5IDI5IDAgMCAxIDAgNHptLS44MiAyaC0zLjIyYTE0LjQgMTQuNCAwIDAgMS0uOTUgMy41MUE4LjAzIDguMDMgMCAwIDAgMTYuOTMgMTRtLTguODUtMmgzLjg0YTI0LjYgMjQuNiAwIDAgMCAwLTRIOC4wOGEyNC42IDI0LjYgMCAwIDAgMCA0bS4yNSAyYy40MSAyLjQgMS4xMyA0IDEuNjcgNHMxLjI2LTEuNiAxLjY3LTR6bS02LjA4LTJoMy44MmEyOSAyOSAwIDAgMSAwLTRIMi4yNWE4IDggMCAwIDAgMCA0bS44MiAyYTguMDMgOC4wMyAwIDAgMCA0LjE3IDMuNTFjLS40Mi0uOTYtLjc0LTIuMTYtLjk1LTMuNTF6bTEzLjg2LThhOC4wMyA4LjAzIDAgMCAwLTQuMTctMy41MWMuNDIuOTYuNzQgMi4xNi45NSAzLjUxem0tOC42IDBoMy4zNGMtLjQxLTIuNC0xLjEzLTQtMS42Ny00UzguNzQgMy42IDguMzMgNk0zLjA3IDZoMy4yMmMuMi0xLjM1LjUzLTIuNTUuOTUtMy41MUE4LjAzIDguMDMgMCAwIDAgMy4wNyA2Ii8+PC9zdmc+';
   }
 
   init();
@@ -266,16 +267,5 @@
   }
   .table-search-input {
     width: 100%;
-  }
-  .card-img-container {
-    width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.125rem;
-    background-color: rgb(255, 255, 255);
-    border-radius: 0.5rem;
-    flex-shrink: 0;
   }
 </style>

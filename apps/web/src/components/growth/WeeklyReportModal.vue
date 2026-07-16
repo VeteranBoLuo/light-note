@@ -75,6 +75,7 @@
 <script setup lang="ts">
   import { computed, ref, watch, nextTick } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const props = defineProps<{ visible: boolean; report: any }>();
   const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>();
@@ -206,6 +207,10 @@
       link.download = `轻笺周报-${props.report?.generatedAt || ''}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
+      recordOperation({
+        module: '成长',
+        operation: `导出成长周报图片成功【${props.report?.generatedAt || '本周'}】`,
+      });
     } catch (e) {
       console.error('导出周报失败:', e);
     } finally {

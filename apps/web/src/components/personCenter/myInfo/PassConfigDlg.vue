@@ -71,7 +71,6 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { checkEndCondition, EndCondition } from '@/utils/validator.ts';
   import { useI18n } from 'vue-i18n';
-  import { recordOperation } from '@/api/commonApi.ts';
   const user = useUserStore();
   const visible = defineModel('visible');
   const { t } = useI18n();
@@ -174,7 +173,6 @@
       if (res.status === 200) {
         user.password = forgotData.value.password;
         message.success(t('myInfo.resetPasswordSuccess'));
-        recordOperation({ module: '我的信息', operation: '邮箱验证码重置密码成功' });
         visible.value = false;
       }
     });
@@ -209,7 +207,6 @@
       if (res.status === 200) {
         user.password = formData.value.password;
         message.success(isUpdate ? t('myInfo.changePasswordSuccess') : t('myInfo.setPasswordSuccess'));
-        recordOperation({ module: '我的信息', operation: isUpdate ? '修改密码成功' : '设置密码成功' });
         visible.value = false;
         formData.value = { confirmPassword: '', password: '' };
       }

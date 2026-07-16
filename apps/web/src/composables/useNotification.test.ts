@@ -2,14 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getNotificationList = vi.fn();
 const getUnreadCount = vi.fn();
+const markAllNotificationsRead = vi.fn();
+const deleteNotifications = vi.fn();
 
 vi.mock('@/api/notificationApi.ts', () => ({
   default: {
     getNotificationList: (...args: any[]) => getNotificationList(...args),
     getUnreadCount: (...args: any[]) => getUnreadCount(...args),
     markNotificationsRead: vi.fn(),
-    markAllNotificationsRead: vi.fn(),
-    deleteNotifications: vi.fn(),
+    markAllNotificationsRead: (...args: any[]) => markAllNotificationsRead(...args),
+    deleteNotifications: (...args: any[]) => deleteNotifications(...args),
   },
 }));
 
@@ -23,6 +25,8 @@ describe('useNotification.fetchList', () => {
     resetNotification();
     getNotificationList.mockReset();
     getUnreadCount.mockReset();
+    markAllNotificationsRead.mockReset();
+    deleteNotifications.mockReset();
     user.id = 'user-1';
     user.role = 'user';
   });
@@ -55,5 +59,22 @@ describe('useNotification.fetchList', () => {
 
     expect(page.items).toEqual([]);
     expect(page).toMatchObject({ total: 0, currentPage: 1, pageSize: 20 });
+  });
+
+  it('只有后端确认成功时才返回通知状态变更成功', async () => {
+    markAllNotificationsRead.mockResolvedValue({ status: 200 });
+    deleteNotifications.mockResolvedValue({ status: 200 });
+    getUnreadCount.mockResolvedValue({ status: 200, data: { unreadTotal: 0, byType: {} } });
+    const notification = useNotification();
+
+    await expect(notification.markAllRead()).resolves.toBe(true);
+    await expect(notification.deleteNotifications(['n-1'])).resolves.toBe(true);
+  });
+
+  it('通知删除失败时返回 false，供界面回滚乐观更新', async () => {
+    deleteNotifications.mockRejectedValue(new Error('network'));
+    getUnreadCount.mockResolvedValue({ status: 200, data: { unreadTotal: 1, byType: { system: 1 } } });
+
+    await expect(useNotification().deleteNotifications(['n-1'])).resolves.toBe(false);
   });
 });

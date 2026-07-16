@@ -9,20 +9,6 @@
   >
     <div id="navigation-container" class="flex-align-center">
       <div class="navigation-title">
-        <svg-icon
-          :src="icon.navigation.menu"
-          size="25"
-          class="dom-hover"
-          v-if="isHomeDrawerLayout && bookmark.isFold"
-          @click="foldClick"
-        />
-        <svg-icon
-          :src="icon.navigation.close"
-          size="25"
-          class="dom-hover"
-          v-if="isHomeDrawerLayout && !bookmark.isFold"
-          @click="foldClick"
-        />
         <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
           <img src="/favicon.svg?v=7" :title="$t('navigation.title')" width="25" height="25" alt="" />
           <span style="font-size: 18px" v-if="!bookmark.isMobile">{{ $t('navigation.title') }}</span>
@@ -140,8 +126,6 @@
   ]);
 
   const bookmark = bookmarkStore();
-  const isHomeDrawerLayout = computed(() => route.path.includes('home') && bookmark.isMobile);
-
   async function handleToIndex() {
     bookmark.type = 'all';
     bookmark.refreshData();
@@ -160,21 +144,6 @@
   }
   function handleToCloudSpace() {
     router.push('/cloudSpace');
-  }
-
-  function foldClick() {
-    bookmark.isFold = !bookmark.isFold;
-    const body: any = document.getElementById('phone-filter-panel');
-    if (isHomeDrawerLayout.value) {
-      body.style.transition = 'all 0.3s';
-    } else {
-      body.style.transition = 'none';
-    }
-    if (bookmark.isFold) {
-      body.style.transform = 'translateX(-100%)';
-    } else {
-      body.style.transform = 'translateX(0)';
-    }
   }
 
   watch(
@@ -248,8 +217,8 @@
   }
   @media (max-width: 767px) {
     .navigation-title {
-      width: 104px;
-      gap: 14px;
+      width: 64px;
+      gap: 0;
       padding-left: 20px;
       position: relative;
       z-index: 100003;

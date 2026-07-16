@@ -1,21 +1,18 @@
 <template>
   <BPopover v-model:open="filterVisible" trigger="click" placement="bottom-right">
-    <b-button
+    <BButton
       class="noteType-select"
-      :style="{
-        background: filterVisible ? 'var(--noteType-hover-bg-color)' : '',
-        color: filterVisible ? 'var(--noteType-hover-color)' : '',
-      }"
+      :class="{ active: filterVisible || tag !== undefined }"
       v-click-log="OPERATION_LOG_MAP.noteLibrary.filterNote"
     >
-      <div class="text-hidden" style="max-width: 100px"> {{ viewNoteFilter }}</div>
+      <div class="filter-label text-hidden">{{ viewNoteFilter }}</div>
       <svg-icon :src="icon.arrow_left" :style="{ rotate: filterVisible ? '-90deg' : '90deg' }" />
-    </b-button>
+    </BButton>
     <template #content>
       <div class="filter-container">
         <div class="fixed-section">
           <div class="filter-header">
-            <b-input
+            <BInput
               class="tag-filter-input"
               size="small"
               :placeholder="$t('note.searchTag')"
@@ -62,7 +59,6 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { computed, ref } from 'vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
@@ -111,16 +107,27 @@
 
 <style lang="less" scoped>
   .noteType-select {
-    position: relative;
-    border-radius: 36px !important;
-    border: 1px solid var(--noteType-border-color) !important;
-    background-color: var(--background-color);
+    height: 36px;
+    padding: 0 11px;
+    border-radius: 10px;
+    color: var(--text-color);
+    background: var(--primary-btn-bg-color);
     display: flex;
-    gap: 5px;
+    gap: 6px;
+
     &:hover {
-      background-color: var(--noteType-hover-bg-color);
-      color: var(--noteType-hover-color);
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
     }
+
+    &.active {
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--menu-body-bg-color));
+    }
+  }
+
+  .filter-label {
+    max-width: 112px;
   }
   .filter-container {
     /* 背景/圆角/阴影由 BPopover 面板统一提供,这里只管尺寸与布局,避免双重卡片 */
@@ -160,7 +167,7 @@
     padding: 4px 6px;
     .clear-action {
       font-size: 12px;
-      color: var(--primary-color);
+      color: var(--resource-note-color, #00a884);
       cursor: pointer;
       white-space: nowrap;
     }
@@ -190,14 +197,14 @@
     cursor: pointer;
     @media (min-width: 600px) {
       &:hover {
-        background: #eeedff;
-        color: #605ce5;
+        background: color-mix(in srgb, var(--resource-note-color, #00a884) 9%, transparent);
+        color: var(--resource-note-color, #00a884);
       }
     }
   }
   [isFocus='true'] {
-    background: #eeedff;
-    color: #605ce5;
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
+    color: var(--resource-note-color, #00a884);
   }
   .filter-empty {
     padding: 8px 10px;
@@ -207,7 +214,7 @@
   .check-mark {
     margin-left: auto;
     padding-right: 10px;
-    color: #605ce5;
+    color: var(--resource-note-color, #00a884);
     font-size: 12px;
   }
 </style>

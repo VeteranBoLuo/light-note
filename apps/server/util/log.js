@@ -59,6 +59,9 @@ export async function logFunction(req, res, next) {
             browser: req.headers['browser'] ?? '未知',
             os: req.headers['os'] ?? '未知',
             fingerprint: req.headers['fingerprint'],
+            // finish 触发时 Express 已完成路由匹配；用于区分业务接口 4xx 与未知路径 404。
+            // 不存进攻方法或原始头信息，只保存布尔分类结果。
+            routeMatched: Boolean(req.route),
             ...(isVisitorWorkspaceWrite
               ? {
                   adminPreview: true,

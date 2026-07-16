@@ -99,7 +99,7 @@
     emit('onEnd', e);
   }
   const searchValue = ref('');
-  const listOptions = defineModel('listOptions');
+  const listOptions = defineModel<any[]>('listOptions', { default: () => [] });
   const emit = defineEmits(['node-click', 'onEnd']);
   const nodeCheckId = ref(props.checkId);
   function nodeClick(item) {

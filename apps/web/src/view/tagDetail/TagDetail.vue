@@ -127,7 +127,7 @@
             v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
           >
             <div class="bookmark-card-header">
-              <img :src="getBookmarkIcon(bm)" class="bookmark-card-icon" alt=" " @error="handleBookmarkIconError" />
+              <BookmarkFavicon :src="bm.iconUrl" :size="22" :tile-size="32" />
               <span class="bookmark-card-name text-hidden">{{ bm.name }}</span>
             </div>
             <div class="bookmark-card-desc text-hidden">{{ bm.description || bm.url }}</div>
@@ -212,6 +212,7 @@
   import { useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
   import icon from '@/config/icon.ts';
   import { RESOURCE_COLOR_HEX } from '@/config/resourceColor.ts';
   import { defineAsyncComponent } from 'vue';
@@ -592,18 +593,6 @@
     openBookmarkUrl(bm.url || '');
   }
 
-  function getBookmarkIcon(bookmark: any) {
-    // 无图标用站内默认图,不再直连第三方 ico.kucat.cn(真实 favicon 由后端抓取写回 iconUrl)
-    return bookmark.iconUrl || icon.nullImg;
-  }
-
-  function handleBookmarkIconError(event: Event) {
-    const target = event.target as HTMLImageElement | null;
-    if (target) {
-      target.src = icon.nullImg;
-    }
-  }
-
   function handleTagIconError() {
     tagIconLoadError.value = true;
   }
@@ -898,14 +887,6 @@
       align-items: center;
       gap: 10px;
       margin-bottom: 8px;
-    }
-
-    .bookmark-card-icon {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      object-fit: cover;
-      flex-shrink: 0;
     }
 
     .bookmark-card-name {

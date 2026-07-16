@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
-import { getBrowserType, getLogDeviceId, getUserOsInfo } from '@/utils/common.ts';
+import { getBrowserType, getLogDeviceId, getLogFingerprint, getUserOsInfo } from '@/utils/common.ts';
 import {
   clearAdminLoginPreview,
   getAdminContextToken,
@@ -167,7 +167,7 @@ request.interceptors.request.use(
       if (adminContextToken) {
         config.headers['X-Admin-Context'] = adminContextToken;
       }
-      config.headers['fingerprint'] = (window as any)['fingerprint'];
+      config.headers['fingerprint'] = getLogFingerprint();
       const logDeviceId = getLogDeviceId();
       if (logDeviceId) config.headers['X-Log-Device-Id'] = logDeviceId;
       const rememberedSid = localStorage.getItem('rememberedSid');
@@ -254,11 +254,17 @@ request.interceptors.response.use(
       const status = error.response.status;
       if (status === 429) {
         const msg = error.response.data?.msg || i18n.global.t('http.tooFrequent');
-        message.error(msg);
+        message.open({
+          key: 'http-rate-limit',
+          type: 'error',
+          content: msg,
+          duration: 5,
+        });
         return Promise.reject({
           code: 'HTTP_429',
           message: msg,
           status: 429,
+          retryAfter: Number(error.response.data?.data?.retryAfter || 0),
         });
       }
       if (status >= 500) {

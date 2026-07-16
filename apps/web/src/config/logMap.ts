@@ -39,6 +39,11 @@ export const OPERATION_LOG_MAP = {
   bookmarkMg: createModule('书签管理', {
     toAddBtn: '添加书签',
     exportToExcel: '导出书签',
+    importExport: '打开书签导入导出',
+    healthCheck: '打开死链体检',
+    aiOrganize: '打开 AI 智能整理',
+    viewSnapshot: '查看网页正文存档',
+    viewSummary: '查看书签 AI 摘要',
   }),
   bookmarkDetail: createModule('书签详情', {
     save: '保存书签',
@@ -56,6 +61,7 @@ export const OPERATION_LOG_MAP = {
     deleteNote: '删除笔记',
     filterNote: '筛选笔记',
     searchNote: '搜索笔记',
+    aiOrganize: '打开 AI 智能整理',
   }),
   note: createModule('笔记', {
     updateTag: '更新标签',
@@ -75,6 +81,26 @@ export const OPERATION_LOG_MAP = {
     deleteOne: '单条资源移入回收站',
     deleteBatch: '批量资源移入回收站',
     openResource: '打开原资源继续整理',
+  }),
+  quickSave: createModule('一键收藏', {
+    generateMeta: '智能识别书签信息成功',
+    createSuggestedTag: '创建 AI 建议标签成功',
+    save: '保存书签成功',
+  }),
+  notification: createModule('通知中心', {
+    deleteOne: '删除单条通知',
+  }),
+  settings: createModule('设置', {
+    exportData: '导出个人数据成功',
+  }),
+  trash: createModule('回收站', {
+    restore: '恢复资源成功',
+    permanentDelete: '永久删除资源成功',
+    restoreAll: '一键恢复全部资源成功',
+    emptyAll: '清空回收站成功',
+  }),
+  aiAssistant: createModule('AI助手', {
+    confirmTool: '确认执行 AI 工具成功',
   }),
   workbenches: createModule('工作台', {
     tag: '标签总览',

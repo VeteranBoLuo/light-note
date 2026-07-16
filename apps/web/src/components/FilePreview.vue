@@ -2,11 +2,14 @@
   <Teleport to="body">
     <div v-if="visible" class="fullscreen-preview">
       <div class="preview-header">
-        <span class="file-name">{{ fileInfo.fileName }}</span>
+        <div class="preview-title">
+          <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
+          <span class="file-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
+        </div>
         <div class="preview-actions">
-          <BTooltip title="关闭预览">
-            <BButton size="small" @click="handleClose" class="action-btn">
-              <CloseOutlined />
+          <BTooltip :title="t('cloudSpace.previewPanel.close')">
+            <BButton size="small" @click="handleClose" class="action-btn header-close-btn">
+              <SvgIcon :src="icon.common.close" size="17" />
             </BButton>
           </BTooltip>
         </div>
@@ -16,18 +19,18 @@
         <div v-if="loading" class="preview-loading">
           <div class="b-spin">
             <div class="b-spin-indicator"></div>
-            <div class="b-spin-tip">文件加载中...</div>
+            <div class="b-spin-tip">{{ t('cloudSpace.previewPanel.loading') }}</div>
           </div>
         </div>
 
         <!-- 错误状态 -->
         <div v-else-if="error" class="preview-error">
-          <FileUnknownOutlined class="error-icon" />
-          <h3>文件加载失败</h3>
+          <SvgIcon :src="icon.cloudSpace.preview.unknown" size="64" class="error-icon" />
+          <h3>{{ t('cloudSpace.previewPanel.loadFailed') }}</h3>
           <p>{{ errorMessage }}</p>
           <BButton type="primary" @click="retry" class="retry-btn">
-            <RedoOutlined />
-            重新加载
+            <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
+            {{ t('cloudSpace.previewPanel.retry') }}
           </BButton>
         </div>
 
@@ -117,24 +120,26 @@
           <!-- 7. 文本文件预览 -->
           <div v-else-if="previewType === 'text'" class="text-preview-container">
             <div class="text-toolbar">
-              <BSpace>
-                <BTooltip title="自动换行">
+              <div class="text-toolbar-actions">
+                <BTooltip :title="t('cloudSpace.previewPanel.autoWrap')">
                   <BButton
                     size="small"
                     @click="toggleWrap"
                     :type="wrapText ? 'primary' : 'default'"
                     class="toolbar-btn"
                   >
-                    <AlignLeftOutlined />
+                    <SvgIcon :src="icon.cloudSpace.preview.alignLeft" size="15" />
                   </BButton>
                 </BTooltip>
-                <BTooltip title="复制文本">
+                <BTooltip :title="t('cloudSpace.previewPanel.copyText')">
                   <BButton size="small" @click="copyText" class="toolbar-btn">
-                    <CopyOutlined />
+                    <SvgIcon :src="icon.cloudSpace.preview.copy" size="15" />
                   </BButton>
                 </BTooltip>
-                <span class="text-info">字数: {{ textContent.length }} 字符</span>
-              </BSpace>
+                <span class="text-info">{{
+                  t('cloudSpace.previewPanel.charCount', { count: textContent.length })
+                }}</span>
+              </div>
             </div>
             <template v-if="isHtmlText">
               <div v-html="textContent" class="html-container"></div>
@@ -161,69 +166,77 @@
           <div v-else-if="previewType === 'office-online'" class="online-preview-container">
             <iframe :src="microsoftOfficeViewerUrl" class="online-preview-iframe" @load="onLoad" @error="onError" />
             <div class="online-preview-notice">
-              <InfoCircleOutlined />
-              正在使用微软Office在线预览服务
+              <SvgIcon :src="icon.cloudSpace.preview.info" size="15" />
+              {{ t('cloudSpace.previewPanel.onlineNotice') }}
             </div>
           </div>
 
           <!-- 9. 不支持预览的文件类型 -->
           <div v-else-if="unsupportedTypes.includes(previewType)" class="unsupported-preview">
             <div class="unsupported-icon">
-              <FileUnknownOutlined />
+              <SvgIcon :src="icon.cloudSpace.preview.unknown" size="72" />
             </div>
-            <h3>不支持预览此文件类型</h3>
-            <p>当前文件格式暂不支持在线预览，您可以通过下载后查看</p>
+            <h3>{{ t('cloudSpace.previewPanel.unsupportedTitle') }}</h3>
+            <p>{{ t('cloudSpace.previewPanel.unsupportedDesc') }}</p>
             <div class="flex-center" style="gap: 8px">
               <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
-                <DownloadOutlined />
-                下载文件
+                <SvgIcon :src="icon.cloudSpace.download" size="16" />
+                {{ t('cloudSpace.previewPanel.download') }}
               </BButton>
               <BButton @click="tryOnlinePreview" v-if="canTryOnlinePreview">
-                <GlobalOutlined />
-                尝试在线预览
+                <SvgIcon :src="icon.cloudSpace.preview.globe" size="16" />
+                {{ t('cloudSpace.previewPanel.tryOnline') }}
               </BButton>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 预览控制栏 -->
-      <div class="preview-controls">
-        <BSpace>
-          <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
-          <BSpace :size="8">
-            <BTooltip title="上一个文件" v-if="showNext">
+        <!-- 预览控制栏：悬浮在内容区内，避免额外占用预览高度 -->
+        <div v-if="!loading && !error && !unsupportedTypes.includes(previewType)" class="preview-controls">
+          <div v-if="showNext" class="preview-control-group">
+            <BTooltip :title="t('cloudSpace.previewPanel.previous')">
               <BButton size="small" @click="handlePrev" class="action-btn">
-                <LeftOutlined />
+                <SvgIcon :src="icon.arrow_left" size="17" />
               </BButton>
             </BTooltip>
-            <BTooltip title="下一个文件" v-if="showNext">
+            <BTooltip :title="t('cloudSpace.previewPanel.next')">
               <BButton size="small" @click="handleNext" class="action-btn">
-                <RightOutlined />
+                <SvgIcon :src="icon.arrow_left" size="17" class="next-icon" />
               </BButton>
             </BTooltip>
-            <BTooltip title="下载文件">
-              <BButton size="small" @click="downloadFile" v-if="fileInfo.fileUrl" class="action-btn">
-                <DownloadOutlined />
+          </div>
+          <span v-if="showNext && fileInfo.fileUrl" class="control-divider"></span>
+          <div v-if="fileInfo.fileUrl" class="preview-control-group">
+            <BTooltip :title="t('cloudSpace.previewPanel.download')">
+              <BButton size="small" @click="downloadFile" class="action-btn">
+                <SvgIcon :src="icon.cloudSpace.download" size="17" />
               </BButton>
             </BTooltip>
-            <BTooltip title="放大（Ctrl + 滚轮）" v-if="previewType === 'image'">
-              <BButton size="small" @click="zoomIn" class="action-btn">
-                <ZoomInOutlined />
+          </div>
+          <span v-if="previewType === 'image' && (showNext || fileInfo.fileUrl)" class="control-divider"></span>
+          <div v-if="previewType === 'image'" class="preview-control-group image-control-group">
+            <BTooltip :title="t('cloudSpace.previewPanel.zoomOut')">
+              <BButton size="small" @click="zoomOut" :disabled="scale <= 0.1" class="action-btn">
+                <SvgIcon :src="icon.cloudSpace.preview.zoomOut" size="17" />
               </BButton>
             </BTooltip>
-            <BTooltip title="缩小（Ctrl + 滚轮）" v-if="previewType === 'image'">
-              <BButton size="small" @click="zoomOut" class="action-btn">
-                <ZoomOutOutlined />
+            <BTooltip :title="t('cloudSpace.previewPanel.resetZoom')">
+              <BButton size="small" @click="resetZoom" class="action-btn zoom-value-btn">
+                {{ zoomPercent }}
               </BButton>
             </BTooltip>
-            <BTooltip title="旋转图片" v-if="previewType === 'image'">
+            <BTooltip :title="t('cloudSpace.previewPanel.zoomIn')">
+              <BButton size="small" @click="zoomIn" :disabled="scale >= 5" class="action-btn">
+                <SvgIcon :src="icon.cloudSpace.preview.zoomIn" size="17" />
+              </BButton>
+            </BTooltip>
+            <BTooltip :title="t('cloudSpace.previewPanel.rotate')">
               <BButton size="small" @click="rotateImage" class="action-btn">
-                <RotateRightOutlined />
+                <SvgIcon :src="icon.cloudSpace.preview.rotate" size="17" />
               </BButton>
             </BTooltip>
-          </BSpace>
-        </BSpace>
+          </div>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -235,7 +248,9 @@
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,
@@ -245,24 +260,6 @@
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
   const VueOfficePptx = defineAsyncComponent(() => import('@vue-office/pptx/lib/v3/vue-office-pptx.mjs'));
-
-  // 引入Ant Design Vue图标
-  import {
-    AlignLeftOutlined,
-    CloseOutlined,
-    CopyOutlined,
-    DownloadOutlined,
-    FileUnknownOutlined,
-    GlobalOutlined,
-    InfoCircleOutlined,
-    LeftOutlined,
-    RedoOutlined,
-    ReloadOutlined,
-    RotateRightOutlined,
-    RightOutlined,
-    ZoomInOutlined,
-    ZoomOutOutlined,
-  } from '@ant-design/icons-vue';
 
   const props = defineProps<{
     visible: boolean;
@@ -310,6 +307,7 @@
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
   const previewType = computed(() => getCloudPreviewType(props.fileInfo));
+  const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`);
   const unsupportedTypes = ['unsupported'];
   const normalizedMimeType = computed(
     () =>
@@ -457,7 +455,7 @@
       }
     } catch (err) {
       error.value = true;
-      errorMessage.value = '文件加载失败';
+      errorMessage.value = t('cloudSpace.previewPanel.loadFailed');
       loading.value = false;
     }
   }
@@ -466,7 +464,7 @@
   async function loadPdfBlob(url?: string) {
     if (!url) {
       error.value = true;
-      errorMessage.value = '文件地址无效';
+      errorMessage.value = t('cloudSpace.previewPanel.invalidUrl');
       loading.value = false;
       return;
     }
@@ -489,7 +487,7 @@
     } catch (err) {
       console.error('加载PDF文件失败:', err);
       error.value = true;
-      errorMessage.value = 'PDF加载失败，请检查文件链接或格式';
+      errorMessage.value = t('cloudSpace.previewPanel.pdfLoadFailed');
       throw err;
     } finally {
       loading.value = false;
@@ -499,7 +497,7 @@
   // 加载文本内容
   async function loadTextContent(url?: string) {
     if (!url) {
-      textContent.value = '文件地址无效';
+      textContent.value = t('cloudSpace.previewPanel.invalidUrl');
       loading.value = false;
       return;
     }
@@ -512,13 +510,13 @@
       const content = await response.text();
 
       if (content.length > 1000000) {
-        textContent.value = content.substring(0, 1000000) + '\n\n... (内容过长，已截断)';
+        textContent.value = content.substring(0, 1000000) + `\n\n${t('cloudSpace.previewPanel.contentTruncated')}`;
       } else {
         textContent.value = content;
       }
     } catch (err) {
       console.error('加载文本文件失败:', err);
-      textContent.value = '抱歉，文件内容加载失败。';
+      textContent.value = t('cloudSpace.previewPanel.textLoadFailed');
       throw err;
     } finally {
       loading.value = false;
@@ -535,7 +533,7 @@
     console.error('预览加载失败:', err);
     loading.value = false;
     error.value = true;
-    errorMessage.value = err?.message || '文件加载失败，请检查文件链接或格式';
+    errorMessage.value = err?.message || t('cloudSpace.previewPanel.genericLoadFailed');
   }
 
   function onImageLoad() {
@@ -551,7 +549,9 @@
     console.error(`${previewType.value} 文档渲染失败:`, err);
     loading.value = false;
     error.value = true;
-    errorMessage.value = `文档渲染失败: ${err.message || '请检查文件链接或格式'}`;
+    errorMessage.value = t('cloudSpace.previewPanel.officeLoadFailed', {
+      message: err.message || t('cloudSpace.previewPanel.checkFile'),
+    });
   }
 
   // 工具函数
@@ -647,6 +647,10 @@
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    recordOperation({
+      module: '文件预览',
+      operation: `下载文件成功【${props.fileInfo.fileName || props.fileInfo.id}】`,
+    });
   }
 
   function retry() {
@@ -819,31 +823,59 @@
 <style lang="less" scoped>
   .fullscreen-preview {
     position: fixed;
-    /* inset:0 已铺满可视视口;去掉 100vw/100vh —— 缩放(zoom)下 vw/vh 会算小、反而露白。 */
     inset: 0;
-    background: white;
+    display: grid;
+    grid-template-rows: 48px minmax(0, 1fr);
+    background: var(--background-color);
+    color: var(--text-color);
     z-index: 200000;
     isolation: isolate;
+    overflow: hidden;
 
     .preview-header {
+      position: relative;
+      z-index: 30;
       display: flex;
       align-items: center;
       width: 100%;
-      background-color: white;
-      color: #000;
-      padding: 0 8px;
-      height: 32px;
+      min-width: 0;
+      background: color-mix(in srgb, var(--background-color) 94%, var(--primary-color) 6%);
+      color: var(--text-color);
+      padding: 0 14px;
       box-sizing: border-box;
       justify-content: center;
+      border-bottom: 1px solid var(--card-border-color);
+
+      .preview-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-width: 0;
+        max-width: min(720px, calc(100% - 96px));
+      }
+
       .file-name {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .file-type-badge {
+        flex: 0 0 auto;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+        color: var(--primary-color);
+        font-size: 11px;
+        font-weight: 600;
       }
 
       .preview-actions {
         position: absolute;
-        right: 8px;
+        right: 12px;
         display: flex;
         gap: 8px;
 
@@ -852,16 +884,30 @@
           align-items: center;
           justify-content: center;
         }
+
+        .header-close-btn {
+          width: 30px;
+          min-width: 30px;
+          height: 30px;
+          padding: 0;
+          border-radius: 9px;
+          color: var(--desc-color);
+        }
       }
     }
 
     .preview-content {
-      height: calc(100vh - 80px);
       position: relative;
+      min-width: 0;
+      min-height: 0;
       display: flex;
       justify-content: center;
       align-items: center;
-      overflow: auto;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--primary-color) 5%, transparent), transparent 30%),
+        var(--background-color);
+
       .preview-loading {
         position: absolute;
         z-index: 10;
@@ -891,33 +937,38 @@
       }
 
       .preview-error {
+        z-index: 10;
         text-align: center;
         padding: 40px;
         position: absolute;
         .error-icon {
-          font-size: 64px;
-          color: #ff4d4f;
+          color: var(--error-color, #ff4d4f);
           margin-bottom: 16px;
         }
 
         h3 {
           margin-bottom: 8px;
-          color: #666;
+          color: var(--text-color);
         }
 
         p {
-          color: #999;
+          color: var(--desc-color);
           margin-bottom: 20px;
         }
 
         .retry-btn {
+          display: inline-flex;
+          gap: 6px;
           margin-top: 16px;
         }
       }
 
       .preview-main {
+        position: relative;
         width: 100%;
         height: 100%;
+        min-width: 0;
+        min-height: 0;
 
         .preview-iframe {
           width: 100%;
@@ -957,19 +1008,23 @@
           display: flex;
           justify-content: center;
           align-items: center;
+          padding: 24px 24px 86px;
+          box-sizing: border-box;
+          overflow: hidden;
 
           .preview-image {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            box-shadow: 0 10px 30px color-mix(in srgb, #000 14%, transparent);
           }
         }
 
         .office-preview-container {
           width: 100%;
           height: 100%;
-          background: white;
+          background: var(--background-color);
           position: absolute;
           top: 0;
           left: 0;
@@ -986,20 +1041,29 @@
           height: 100%;
           display: flex;
           flex-direction: column;
-          background: white;
+          background: var(--background-color);
 
           .text-toolbar {
             padding: 12px 16px;
-            border-bottom: 1px solid #d9d9d9;
-            background: #fafafa;
+            border-bottom: 1px solid var(--card-border-color);
+            background: var(--menu-body-bg-color, var(--background-color));
+
+            .text-toolbar-actions {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
 
             .toolbar-btn {
               display: flex;
               align-items: center;
+              justify-content: center;
+              width: 28px;
+              padding: 0;
             }
 
             .text-info {
-              color: #666;
+              color: var(--desc-color);
               font-size: 12px;
             }
           }
@@ -1007,13 +1071,13 @@
           .preview-text {
             flex: 1;
             margin: 0;
-            padding: 16px;
+            padding: 16px 16px 86px;
             overflow: auto;
             background: var(--pre-bg-color);
             font-family: 'Monaco', 'Menlo', 'Consolas', 'Ubuntu Mono', monospace;
             font-size: 14px;
             line-height: 1.5;
-            color: #333;
+            color: var(--text-color);
           }
 
           .text-wrap {
@@ -1043,10 +1107,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #e6f7ff;
-            color: #1890ff;
+            gap: 6px;
+            background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
+            color: var(--primary-color);
             font-size: 12px;
-            border-top: 1px solid #91d5ff;
+            border-top: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
           }
         }
 
@@ -1055,18 +1120,17 @@
           padding: 60px 40px;
 
           .unsupported-icon {
-            font-size: 72px;
-            color: #d9d9d9;
+            color: var(--desc-color);
             margin-bottom: 24px;
           }
 
           h3 {
             margin-bottom: 12px;
-            color: #666;
+            color: var(--text-color);
           }
 
           p {
-            color: #999;
+            color: var(--desc-color);
             margin-bottom: 24px;
             max-width: 300px;
             margin-left: auto;
@@ -1077,26 +1141,69 @@
     }
 
     .preview-controls {
-      padding: 12px 16px;
-      border-top: 1px solid #d9d9d9;
-      background: #fafafa;
+      position: absolute;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      z-index: 25;
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      gap: 6px;
+      max-width: calc(100% - 28px);
+      padding: 7px;
+      box-sizing: border-box;
+      overflow-x: auto;
+      border: 1px solid color-mix(in srgb, var(--card-border-color) 86%, transparent);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--menu-body-bg-color, var(--background-color)) 88%, transparent);
+      box-shadow: 0 10px 30px color-mix(in srgb, #000 18%, transparent);
+      backdrop-filter: blur(16px) saturate(1.25);
+      transform: translateX(-50%);
+      scrollbar-width: none;
 
-      .file-type-badge {
-        padding: 4px 8px;
-        background: #1890ff;
-        color: white;
-        border-radius: 4px;
-        font-size: 12px;
+      &::-webkit-scrollbar {
+        display: none;
+      }
+
+      .preview-control-group {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .control-divider {
+        flex: 0 0 auto;
+        width: 1px;
+        height: 20px;
+        margin: 0 2px;
+        background: var(--card-border-color);
+      }
+
+      .action-btn {
+        width: 30px;
+        min-width: 30px;
+        height: 30px;
+        padding: 0;
+        border-radius: 9px;
+        color: var(--text-color);
+      }
+
+      .zoom-value-btn {
+        width: 54px;
+        min-width: 54px;
+        color: var(--desc-color);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .next-icon {
+        transform: rotate(180deg);
       }
     }
   }
 
   .html-container {
-    color: black;
-    padding: 9px;
+    color: var(--text-color);
+    padding: 9px 9px 86px;
     :deep(a) {
       text-decoration: underline !important;
       font-family: 'Arial', sans-serif;
@@ -1107,9 +1214,9 @@
   .markdown-container {
     flex: 1;
     margin: 0;
-    padding: 16px;
+    padding: 16px 16px 86px;
     overflow: auto;
-    color: #333;
+    color: var(--text-color);
     line-height: 1.7;
 
     :deep(h1),
@@ -1119,7 +1226,7 @@
     :deep(h5),
     :deep(h6) {
       margin: 0.9em 0 0.5em;
-      color: #222;
+      color: var(--text-color);
       font-weight: 600;
     }
 
@@ -1133,11 +1240,11 @@
     :deep(blockquote) {
       border-left: 4px solid #d9d9d9;
       padding-left: 12px;
-      color: #666;
+      color: var(--desc-color);
     }
 
     :deep(code) {
-      background: #f5f5f5;
+      background: var(--pre-bg-color);
       padding: 2px 6px;
       border-radius: 4px;
       font-family: 'Monaco', 'Menlo', 'Consolas', 'Ubuntu Mono', monospace;
@@ -1156,7 +1263,7 @@
     }
 
     :deep(a) {
-      color: #1677ff;
+      color: var(--primary-color);
       text-decoration: underline;
     }
 
@@ -1169,6 +1276,39 @@
   @keyframes b-spin-rotate {
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 600px) {
+    .fullscreen-preview {
+      grid-template-rows: 44px minmax(0, 1fr);
+
+      .preview-header {
+        padding: 0 10px;
+
+        .preview-title {
+          justify-content: flex-start;
+          max-width: calc(100% - 46px);
+          margin-right: auto;
+        }
+
+        .preview-actions {
+          right: 8px;
+        }
+      }
+
+      .preview-content {
+        .preview-main .preview-image-container {
+          padding: 14px 14px 78px;
+        }
+
+        .preview-controls {
+          bottom: max(10px, env(safe-area-inset-bottom));
+          max-width: calc(100% - 16px);
+          padding: 6px;
+          border-radius: 13px;
+        }
+      }
     }
   }
 </style>

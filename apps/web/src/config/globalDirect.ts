@@ -106,20 +106,21 @@ export default function (app) {
       el.onmousedown = null;
     };
   });
-  app.directive('click-log', (el, binding) => {
-    let isMouseDown = false;
-    el.onmousedown = () => {
-      isMouseDown = true;
-    };
-    el.onmouseup = () => {
-      if (isMouseDown) {
-        recordOperation(binding.value);
-      }
-      isMouseDown = false;
-    };
-    // 如果鼠标按下后移出元素再释放，也需要重置状态
-    el.onmouseleave = () => {
-      isMouseDown = false;
-    };
+  // 用 click 而不是 mousedown/mouseup：click 同时覆盖鼠标、触摸和键盘激活，
+  // 并且只在浏览器确认一次完整点击后记录，避免移动端入口长期漏记。
+  app.directive('click-log', {
+    mounted(el, binding) {
+      el.__clickLogValue = binding.value;
+      el.__clickLogHandler = () => recordOperation(el.__clickLogValue);
+      el.addEventListener('click', el.__clickLogHandler);
+    },
+    updated(el, binding) {
+      el.__clickLogValue = binding.value;
+    },
+    unmounted(el) {
+      if (el.__clickLogHandler) el.removeEventListener('click', el.__clickLogHandler);
+      delete el.__clickLogHandler;
+      delete el.__clickLogValue;
+    },
   });
 }

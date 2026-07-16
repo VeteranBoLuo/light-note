@@ -1,7 +1,10 @@
 <template>
   <div
     @click="router.push(`/noteLibrary/${note.id}`)"
+    @keydown.enter="router.push(`/noteLibrary/${note.id}`)"
     class="note-card"
+    role="button"
+    tabindex="0"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
     <div class="note-title-row">
@@ -20,11 +23,9 @@
           v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
         >
           <span class="tag-detail-label">{{ tag.name }}</span>
-          <button class="tag-detail-corner" type="button" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M6 4h6v6M12 4 5 11" />
-            </svg>
-          </button>
+          <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+            <SvgIcon :src="icon.cloudSpace.share" size="11" />
+          </BButton>
         </span>
         <span v-if="hiddenTagCount > 0" class="b-tag tag-more" :title="hiddenTagsLabel" @click.stop
           >+{{ hiddenTagCount }}</span
@@ -33,7 +34,7 @@
       <div v-else class="note-tags note-tags--empty"></div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
-    <div v-if="!bookmark.isMobile" class="checkBox" :style="{ visibility: note.isCheck === true ? 'visible' : '' }">
+    <div v-if="!bookmark.isMobile" class="checkBox" :style="{ visibility: note.isCheck === true ? 'visible' : 'hidden' }">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
   </div>
@@ -45,6 +46,9 @@
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   const props = defineProps<{ note: any }>();
 
   const bookmark = bookmarkStore();
@@ -122,18 +126,16 @@
     background: var(--note-card-bg);
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.02) inset,
-      0 8px 18px rgba(0, 0, 0, 0.08);
+      0 10px 24px -22px color-mix(in srgb, var(--text-color) 45%, transparent);
     transition:
-      transform 0.2s ease,
       box-shadow 0.2s ease,
       border-color 0.2s ease;
 
     &:hover {
-      transform: translateY(-2px);
       box-shadow:
         0 1px 0 rgba(255, 255, 255, 0.03) inset,
-        0 12px 28px rgba(0, 0, 0, 0.14);
-      border-color: color-mix(in srgb, var(--primary-color) 36%, var(--card-border-color));
+        0 14px 28px -20px color-mix(in srgb, var(--text-color) 48%, transparent);
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--card-border-color));
 
       .checkBox {
         visibility: visible;
@@ -219,19 +221,19 @@
     margin: -7px 0 7px;
 
     .b-tag {
-      background-color: #eeedff;
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
       padding: 3px 10px;
       max-width: 96px;
       text-align: center;
       border-radius: 20px;
       font-size: 12px;
-      color: #615ced;
+      color: var(--resource-note-color, #00a884);
       cursor: pointer;
       transition: all 0.2s ease;
       flex-shrink: 0;
 
       &:hover {
-        background-color: #615ced;
+        background: var(--resource-note-color, #00a884);
         color: #fff;
       }
     }
@@ -252,6 +254,17 @@
         color: var(--desc-color);
       }
     }
+  }
+
+  .tag-detail-corner {
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+    margin: -2px -7px -2px 1px;
+    padding: 0;
+    border-radius: 999px;
+    color: currentColor;
+    background: transparent;
   }
 
   .note-time {

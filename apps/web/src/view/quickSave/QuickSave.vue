@@ -36,7 +36,7 @@
         <div class="qs-label-row">
           <label class="qs-label" style="margin: 0">{{ $t('quickSave.tags') }}</label>
           <span v-if="aiRunning" class="qs-ai-hint">🤖 {{ $t('quickSave.aiRunning') }}</span>
-          <button v-else class="qs-ai-btn" type="button" @click="runAi">🤖 {{ $t('quickSave.aiRedo') }}</button>
+          <BButton v-else class="qs-ai-btn" @click="runAi('manual')">🤖 {{ $t('quickSave.aiRedo') }}</BButton>
         </div>
         <BSelect
           mode="multiple"
@@ -48,22 +48,20 @@
         />
         <div v-if="aiNewTags.length" class="qs-newtags">
           <span class="qs-newtags-label">{{ $t('quickSave.aiNewTags') }}</span>
-          <button
+          <BButton
             v-for="nt in aiNewTags"
             :key="nt"
-            type="button"
             class="qs-newtag"
             :disabled="creatingTag === nt"
             @click="createAndSelect(nt)"
           >
             ＋ {{ nt }}
-          </button>
+          </BButton>
         </div>
 
-        <label class="qs-check-line">
-          <input type="checkbox" v-model="form.saveSnapshot" />
-          <span>{{ $t('quickSave.saveSnapshot') }}</span>
-        </label>
+        <BCheckbox v-model="form.saveSnapshot" class="qs-check-line">
+          {{ $t('quickSave.saveSnapshot') }}
+        </BCheckbox>
 
         <BButton class="qs-save" type="primary" :loading="saving" :disabled="saving" @click="save">
           {{ saving ? $t('quickSave.saving') : $t('quickSave.save') }}
@@ -80,7 +78,10 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { useI18n } from 'vue-i18n';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const { t } = useI18n();
   const MAX_TAGS = 4; // 与后端 addBookmark 上限一致
@@ -102,6 +103,15 @@
     relatedTags: [] as string[],
     saveSnapshot: true,
   });
+
+  function getSafeBookmarkLabel(url: string) {
+    if (form.name.trim()) return form.name.trim();
+    try {
+      return new URL(url).hostname || '未命名书签';
+    } catch {
+      return '未命名书签';
+    }
+  }
 
   function q(name: string) {
     return new URLSearchParams(window.location.search).get(name) || '';
@@ -129,7 +139,7 @@
   }
 
   // AI 建议:抓网页 → 生成名称/描述 + 从已有标签匹配 + 建议新标签(复用现成接口)
-  async function runAi() {
+  async function runAi(source: 'auto' | 'manual' = 'manual') {
     const url = String(form.url || '').trim();
     if (!url || aiRunning.value) return;
     aiRunning.value = true;
@@ -144,6 +154,10 @@
           form.relatedTags = Array.from(new Set([...form.relatedTags, ...matched])).slice(0, MAX_TAGS);
         }
         aiNewTags.value = (res.data.newTags || []).slice(0, 3);
+        recordOperation({
+          ...OPERATION_LOG_MAP.quickSave.generateMeta,
+          operation: `${source === 'auto' ? '自动' : '重新'}智能识别书签信息成功【${getSafeBookmarkLabel(url)}】`,
+        });
       }
     } catch {
       /* AI 失败静默,用户仍可手动填 */
@@ -169,6 +183,10 @@
           form.relatedTags = [...form.relatedTags, created.value].slice(0, MAX_TAGS);
         }
         aiNewTags.value = aiNewTags.value.filter((t) => t !== name);
+        recordOperation({
+          ...OPERATION_LOG_MAP.quickSave.createSuggestedTag,
+          operation: `创建 AI 建议标签成功【${name}】`,
+        });
       } else {
         message.info(res?.msg || '新建标签失败');
       }
@@ -193,6 +211,10 @@
       });
       if (res?.status === 200) {
         saved.value = true;
+        recordOperation({
+          ...OPERATION_LOG_MAP.quickSave.save,
+          operation: `一键收藏书签成功【${form.name.trim()}】${form.saveSnapshot ? '（含网页存档）' : ''}`,
+        });
         setTimeout(() => window.close(), 1500); // 弹窗由脚本打开,可自动关闭
       } else if (res?.status === 401 || res?.status === 403) {
         isLoggedIn.value = false; // 打开时还在、保存时过期 → 回到登录提示
@@ -225,7 +247,7 @@
     }
     if (isLoggedIn.value) {
       await loadTags();
-      runAi();
+      runAi('auto');
     }
   });
 </script>
@@ -313,6 +335,8 @@
     font-size: 12px;
     cursor: pointer;
     padding: 0;
+    height: auto;
+    line-height: 1;
   }
   .qs-newtags {
     display: flex;
@@ -343,12 +367,6 @@
     gap: 8px;
     font-size: 13px;
     margin-top: 8px;
-    cursor: pointer;
-  }
-  .qs-check-line input {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--primary-color);
     cursor: pointer;
   }
   .qs-save {

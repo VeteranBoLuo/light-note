@@ -35,42 +35,50 @@
     <!-- 工具栏 -->
     <div class="trash-toolbar">
       <div class="trash-type-filter">
-        <button
+        <BButton
           class="trash-type-btn"
           :class="{ active: filterType === '' }"
+          v-click-log="{ module: '回收站', operation: '筛选全部资源' }"
           @click="
             filterType = '';
             onFilterChange();
           "
-          >{{ $t('trash.allType') }}</button
         >
-        <button
+          {{ $t('trash.allType') }}
+        </BButton>
+        <BButton
           class="trash-type-btn"
           :class="{ active: filterType === 'bookmark' }"
+          v-click-log="{ module: '回收站', operation: '筛选书签' }"
           @click="
             filterType = 'bookmark';
             onFilterChange();
           "
-          >{{ $t('trash.bookmark') }}</button
         >
-        <button
+          {{ $t('trash.bookmark') }}
+        </BButton>
+        <BButton
           class="trash-type-btn"
           :class="{ active: filterType === 'note' }"
+          v-click-log="{ module: '回收站', operation: '筛选笔记' }"
           @click="
             filterType = 'note';
             onFilterChange();
           "
-          >{{ $t('trash.note') }}</button
         >
-        <button
+          {{ $t('trash.note') }}
+        </BButton>
+        <BButton
           class="trash-type-btn"
           :class="{ active: filterType === 'file' }"
+          v-click-log="{ module: '回收站', operation: '筛选文件' }"
           @click="
             filterType = 'file';
             onFilterChange();
           "
-          >{{ $t('trash.file') }}</button
         >
+          {{ $t('trash.file') }}
+        </BButton>
       </div>
 
       <div class="trash-toolbar-right">
@@ -169,6 +177,8 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const { t } = useI18n();
   const { growth, load: loadGrowth } = useGrowth();
@@ -288,6 +298,10 @@
       }
       if (success > 0) {
         message.success(t('trash.restoreSuccess'));
+        recordOperation({
+          ...OPERATION_LOG_MAP.trash.restore,
+          operation: `恢复回收站资源成功【${success}项】`,
+        });
         selectedIds.value = [];
         fetchList();
       }
@@ -348,6 +362,10 @@
       }
       if (success > 0) {
         message.success(t('trash.permanentDeleteSuccess'));
+        recordOperation({
+          ...OPERATION_LOG_MAP.trash.permanentDelete,
+          operation: `永久删除回收站资源成功【${success}项】`,
+        });
         selectedIds.value = [];
         fetchList();
       }
@@ -373,6 +391,13 @@
       const res = await apiBasePost('/api/trash/restoreAll', {});
       if (res.status === 200) {
         message.success(res.msg || '恢复成功');
+        const restored = Number(res.data?.restored || 0);
+        if (restored > 0) {
+          recordOperation({
+            ...OPERATION_LOG_MAP.trash.restoreAll,
+            operation: `一键恢复全部回收站资源成功【${restored}项】`,
+          });
+        }
         selectedIds.value = [];
         fetchList();
       }
@@ -390,6 +415,13 @@
       const res = await apiBasePost('/api/trash/emptyAll', {});
       if (res.status === 200) {
         message.success(t('trash.emptyAllSuccess'));
+        const deleted = Number(res.data?.deleted || 0);
+        if (deleted > 0) {
+          recordOperation({
+            ...OPERATION_LOG_MAP.trash.emptyAll,
+            operation: `清空回收站成功【${deleted}项】`,
+          });
+        }
         selectedIds.value = [];
         fetchList();
       }
@@ -767,10 +799,12 @@
   }
 
   .trash-type-btn {
+    height: 32px;
     padding: 4px 16px;
     border: none;
     border-right: 1px solid var(--card-border-color, #6e6e77);
-    background: transparent;
+    border-radius: 0;
+    background: transparent !important;
     color: var(--text-color);
     font-size: 13px;
     cursor: pointer;
@@ -783,12 +817,12 @@
   }
 
   .trash-type-btn:hover {
-    background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent);
+    background: color-mix(in srgb, var(--primary-color, #615ced) 10%, transparent) !important;
     color: var(--primary-color, #615ced);
   }
 
   .trash-type-btn.active {
-    background: var(--primary-color, #615ced);
+    background: var(--primary-color, #615ced) !important;
     color: #fff;
   }
 </style>

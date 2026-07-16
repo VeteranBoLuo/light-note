@@ -4,8 +4,8 @@
     <!-- 上传按钮及提示 -->
     <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
       <b-upload multiple raw-file class="upload-btn" @change="handleChange" :max-total-size="500 * 1024 * 1024">
-        <b-button type="primary" :loading="uploadProgress.visible">
-          <UploadOutlined />
+        <b-button type="primary" class="upload-action" :loading="uploadProgress.visible">
+          <SvgIcon :src="icon.file_upload" size="17" />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
           <div class="upload-tip" v-if="bookmark.isDesktop">
             <div class="tip-content">{{ $t('cloudSpace.uploadTip') }}</div>
@@ -20,25 +20,20 @@
         <div class="progress-actions">
           <span class="progress-percent">{{ Math.round(uploadProgress.overall) }}%</span>
           <span class="progress-speed">{{ formatSpeed(uploadProgress.speed) }}</span>
-          <a-popconfirm
-            title="确认取消上传"
-            description="确定要取消当前的文件上传吗？"
-            ok-text="确定取消"
-            cancel-text="继续上传"
-            ok-type="danger"
-            @confirm="handleCancelConfirm"
-          >
-            <BButton size="small" class="cancel-btn">
-              <CloseOutlined />
-            </BButton>
-          </a-popconfirm>
+          <BButton size="small" class="cancel-btn" :title="$t('cloudSpace.cancelUpload')" @click="confirmCancelUpload">
+            <SvgIcon :src="icon.common.close" size="15" />
+          </BButton>
         </div>
       </div>
-      <a-progress :percent="uploadProgress.overall" :show-info="false" class="overall-progress" />
+      <div class="progress-track overall-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(uploadProgress.overall)">
+        <span :style="{ width: `${uploadProgress.overall}%` }"></span>
+      </div>
       <div class="file-progress-list" v-if="uploadProgress.files.length > 0">
         <div v-for="(file, index) in uploadProgress.files" :key="index" class="file-progress-item">
           <span class="file-name">{{ file.name }}</span>
-          <a-progress :percent="file.progress" size="small" :status="file.status" />
+          <div class="progress-track file-progress-track" :class="`file-progress-track--${file.status}`">
+            <span :style="{ width: `${file.progress}%` }"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -49,9 +44,7 @@
   import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
-  import { Popconfirm } from 'ant-design-vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { CloseOutlined, UploadOutlined } from '@ant-design/icons-vue';
   import axios from 'axios';
   import { reactive, ref } from 'vue';
   import icon from '@/config/icon';
@@ -59,11 +52,12 @@
   import { autoRename } from '@/utils/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { useI18n } from 'vue-i18n';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
-  const emit = defineEmits(['addFolder']);
-
+  const { t } = useI18n();
   // 格式化速度
   const formatSpeed = (speed: number) => {
     if (speed < 1024) return `${speed.toFixed(0)} B/s`;
@@ -364,6 +358,14 @@
       uploadProgress.visible = false;
       message.info('上传已取消');
     }
+  };
+
+  const confirmCancelUpload = () => {
+    Alert.alert({
+      title: t('cloudSpace.cancelUpload'),
+      content: t('cloudSpace.cancelUploadConfirm'),
+      onOk: handleCancelConfirm,
+    });
   };
 
   defineExpose({ uploadFiles });
@@ -721,6 +723,79 @@
       width: auto;
       max-width: none;
       z-index: 1001;
+    }
+  }
+
+  /* 资源页统一的紧凑上传入口；BButton 不依赖 Ant 内部结构。 */
+  .upload-action {
+    height: 36px;
+    padding: 0 14px;
+    gap: 7px;
+    border-radius: 10px;
+    background: var(--resource-file-color, #ff8a00);
+    box-shadow: 0 5px 14px color-mix(in srgb, var(--resource-file-color, #ff8a00) 22%, transparent);
+
+    &:hover {
+      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 88%, #ffffff);
+    }
+  }
+
+  .upload-container--mobile .upload-action {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 9px;
+    box-shadow: none;
+  }
+
+  .progress-track {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card-border-color) 68%, transparent);
+
+    > span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--resource-file-color, #ff8a00);
+      transition: width 0.2s ease;
+    }
+  }
+
+  .overall-progress {
+    margin-bottom: 14px;
+  }
+
+  .file-progress-track--success > span {
+    background: var(--resource-note-color, #00a884);
+  }
+
+  .file-progress-track--exception > span {
+    background: #ef4444;
+  }
+
+  .upload-progress {
+    color: var(--text-color);
+    background: color-mix(in srgb, var(--menu-body-bg-color) 94%, transparent);
+    border-color: color-mix(in srgb, var(--card-border-color) 76%, transparent);
+
+    .progress-header .progress-title {
+      color: var(--resource-file-color, #ff8a00);
+    }
+
+    .progress-header .progress-actions .progress-percent,
+    .progress-header .progress-actions .progress-speed,
+    .file-progress-list .file-progress-item .file-name {
+      color: var(--text-color);
+    }
+
+    .file-progress-list .file-progress-item {
+      background: color-mix(in srgb, var(--card-border-color) 22%, transparent);
+      border-color: color-mix(in srgb, var(--card-border-color) 65%, transparent);
     }
   }
 </style>

@@ -957,6 +957,20 @@ export const getAdminOverview = async (req, res) => {
     }
     const weekAgo = days[0];
 
+    // 新日志由 logFunction 写入 routeMatched，能精确区分“业务路由返回 4xx”和“未知路径 404”。
+    // 历史日志没有该标记，按已注册的业务路由前缀兼容判断，避免上线当天统计口径断层。
+    const businessApiPrefixPattern =
+      '^/(user|notification|json|common|note|bookmark|opinion|file|chat|search|workbench|security|trash|knowledgeBase|growth|inbox|todo|tagIcon)(/|[?]|$)';
+    const legacyRouteUnclassifiedSql = `(COALESCE(system, '') NOT LIKE '%"routeMatched":%')`;
+    const routeMatchedSql = `(COALESCE(system, '') LIKE '%"routeMatched":true%' OR (${legacyRouteUnclassifiedSql} AND url REGEXP '${businessApiPrefixPattern}'))`;
+    const routeUnmatchedSql = `(COALESCE(system, '') LIKE '%"routeMatched":false%' OR (${legacyRouteUnclassifiedSql} AND NOT (url REGEXP '${businessApiPrefixPattern}')))`;
+    // 历史 404 无法知道 Express 是否命中路由；现有数据主要是扫描不存在的路径，因此归为无效访问。
+    // 上线后有 routeMatched=true 的真实业务 404 仍会正确归入业务 4xx。
+    const legacyUnknown404Sql = `(status_code = '404' AND ${legacyRouteUnclassifiedSql})`;
+    const validApiRequestSql = `((${routeMatchedSql} AND NOT ${legacyUnknown404Sql}) OR status_code LIKE '5%')`;
+    const business4xxSql = `(status_code LIKE '4%' AND ${routeMatchedSql} AND NOT ${legacyUnknown404Sql})`;
+    const invalid4xxSql = `(status_code LIKE '4%' AND (${routeUnmatchedSql} OR ${legacyUnknown404Sql}))`;
+
     const [userAgg, resAgg, convAgg, opinionAgg, securityAgg, activeAgg, sysAgg, userTrendRows, contentTrendRows] = await Promise.all([
       pool.query('SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' + notIntRole, [today]),
       pool.query(
@@ -992,13 +1006,18 @@ export const getAdminOverview = async (req, res) => {
           [today, weekAgo],
         )
         .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
-      // 系统健康(今日 API 请求 / 错误;status_code 为 varchar,用 LIKE 判 4xx/5xx)
+      // 系统健康：业务 4xx、未知路径 4xx 与服务端 5xx 分开，避免外部探测 404 被误解为功能故障。
       pool
         .query(
-          "SELECT COUNT(*) AS total, COALESCE(SUM(status_code LIKE '4%' OR status_code LIKE '5%'), 0) AS errors FROM api_logs WHERE request_time >= ?",
+          `SELECT
+             COALESCE(SUM(${validApiRequestSql}), 0) AS total,
+             COALESCE(SUM(${business4xxSql}), 0) AS businessErrors,
+             COALESCE(SUM(${invalid4xxSql}), 0) AS invalidRequests,
+             COALESCE(SUM(status_code LIKE '5%'), 0) AS serverErrors
+           FROM api_logs WHERE request_time >= ?`,
           [today],
         )
-        .catch(() => [[{ total: 0, errors: 0 }]]),
+        .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
       // 近7天新增用户按天
       pool
         .query(
@@ -1054,7 +1073,14 @@ export const getAdminOverview = async (req, res) => {
         },
         ai,
         conversion: { visitors: Number(c.visitors || 0), registers: Number(c.registers || 0) },
-        system: { apiToday: Number(sys.total || 0), apiErrorsToday: Number(sys.errors || 0) },
+        system: {
+          apiToday: Number(sys.total || 0),
+          // 保留 apiErrorsToday 兼容旧前端，但只统计真正需要关注的业务 4xx + 服务端 5xx。
+          apiErrorsToday: Number(sys.businessErrors || 0) + Number(sys.serverErrors || 0),
+          apiBusinessErrorsToday: Number(sys.businessErrors || 0),
+          apiInvalidRequestsToday: Number(sys.invalidRequests || 0),
+          apiServerErrorsToday: Number(sys.serverErrors || 0),
+        },
         pending: { opinion: Number(o.pending || 0), security: Number(s.unhandled || 0) },
         trend,
         generatedAt: `${today} ${pad(now.getHours())}:${pad(now.getMinutes())}`,

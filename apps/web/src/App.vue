@@ -24,12 +24,12 @@
 <script setup lang="ts">
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
-  import { h, nextTick, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
+  import { h, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { getNoticeSummary } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
-  import { fingerprint } from '@/utils/common';
+  import { getLogFingerprint } from '@/utils/common';
   import { notification } from 'ant-design-vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { throttle } from 'lodash-es';
@@ -201,8 +201,8 @@
     // 偏好已在 setup 阶段同步恢复(见上方,早于子路由 setup),此处不再重复恢复,直接应用主题/缩放。
     applyTheme();
     applyScaleForRoute(); // 启动即应用缩放(仅应用内页;landing 等入口页不缩放)
-    // 设置指纹
-    window['fingerprint'] = fingerprint();
+    // 请求拦截器会在首个 API 前同步生成；这里复用同一结果，避免子组件先发请求时出现空指纹。
+    window['fingerprint'] = getLogFingerprint();
 
     // 游客访问量埋点:fingerprint 就绪后再上报,每浏览器会话一次(后端只对游客落库,已登录不计)
     try {
@@ -316,27 +316,6 @@
     setTimeout(() => {
       document.documentElement.classList.remove('disable-animations');
     }, 0);
-  }
-
-  // 设置动画
-  function setTransition(val) {
-    nextTick(() => {
-      const filter = document.getElementById('phone-filter-panel');
-      if (filter) {
-        handleFilterTransition(filter, val);
-      }
-    });
-  }
-
-  function handleFilterTransition(filter, val) {
-    if (val) {
-      filter.style.transition = 'none';
-      filter.style.transform = 'translateX(-100%)';
-    } else {
-      filter.style.transform = 'translateX(0)';
-      filter.style.transition = 'unset';
-      bookmark.isFold = true;
-    }
   }
 
   // 手机布局和桌面布局的路由不一样，切换断点后需要切换对应路由地址
@@ -682,7 +661,6 @@
     () => bookmark.isMobile,
     (val) => {
       handleRouteChange(val, router.currentRoute.value.path);
-      setTransition(val);
     },
   );
 

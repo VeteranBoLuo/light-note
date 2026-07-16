@@ -14,19 +14,27 @@
             <b-button v-if="viewMode === 'table' && selectedRows.length > 0" type="danger" @click="handleBatchDelete">{{
               $t('bookmarkMg.batchDelete')
             }}</b-button>
-            <b-button type="success" @click="showImportExportModal">
+            <b-button
+              type="success"
+              @click="showImportExportModal"
+              v-click-log="OPERATION_LOG_MAP.bookmarkMg.importExport"
+            >
               <svg-icon :src="icon.bookmarkManage.importExport" color="currentColor" size="18" style="margin-right: 6px" />
               {{ $t('bookmarkMg.importExport') }}
             </b-button>
-            <b-button @click="healthVisible = true">
+            <b-button @click="healthVisible = true" v-click-log="OPERATION_LOG_MAP.bookmarkMg.healthCheck">
               <svg-icon :src="icon.bookmarkManage.healthCheck" color="currentColor" size="18" style="margin-right: 6px" />
               {{ $t('bookmarkMg.healthCheck') }}
             </b-button>
-            <b-button @click="aiOrgVisible = true">
+            <b-button @click="aiOrgVisible = true" v-click-log="OPERATION_LOG_MAP.bookmarkMg.aiOrganize">
               <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
               {{ $t('bookmarkMg.aiOrganizeBtn') }}
             </b-button>
-            <b-button type="primary" @click="router.push({ path: `/manage/editBookmark/add` })">
+            <b-button
+              type="primary"
+              @click="router.push({ path: `/manage/editBookmark/add` })"
+              v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
+            >
               {{ $t('common.add') }}
             </b-button>
             <b-button @click="handleToBack">{{ $t('common.back') }}</b-button>
@@ -95,17 +103,7 @@
             <article v-for="bookmarkItem in filteredBookmarks" :key="bookmarkItem.id" class="bookmark-card">
               <div class="bookmark-card__head">
                 <div class="bookmark-identity">
-                  <div class="bookmark-icon-wrap">
-                    <img
-                      v-if="bookmarkItem.iconUrl"
-                      :src="bookmarkItem.iconUrl"
-                      width="24"
-                      height="24"
-                      @error="onErrorImg"
-                      alt=""
-                    />
-                    <svg-icon v-else :src="icon.manage_categoryBtn_bookmark" size="24" />
-                  </div>
+                  <BookmarkFavicon :src="bookmarkItem.iconUrl" :size="24" :tile-size="42" />
                   <div class="bookmark-meta">
                     <div class="bookmark-name">{{ bookmarkItem.name }}</div>
                     <div class="bookmark-url" :title="bookmarkItem.url">
@@ -118,6 +116,7 @@
                         :label="$t('bookmarkMg.badgeArchived')"
                         :tooltip="$t('bookmarkMg.badgeArchivedHint')"
                         @click="openSnap(bookmarkItem.id)"
+                        v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                       />
                       <BookmarkCapabilityBadge
                         v-if="bookmarkItem.hasSummary"
@@ -125,6 +124,7 @@
                         :label="$t('bookmarkMg.badgeSummary')"
                         :tooltip="$t('bookmarkMg.badgeSummaryHint')"
                         @click="openSnap(bookmarkItem.id)"
+                        v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
                       />
                     </div>
                   </div>
@@ -177,16 +177,7 @@
             <template #bodyCell="{ column, text, record }">
               <template v-if="column.key === 'name'">
                 <div style="display: flex; align-items: center; gap: 10px" :title="text">
-                  <div class="card-img-container">
-                    <img
-                      v-if="(record as BookmarkInterface).iconUrl"
-                      :src="(record as BookmarkInterface).iconUrl"
-                      height="20"
-                      width="20"
-                      @error="onErrorImg"
-                      alt=""
-                    />
-                  </div>
+                  <BookmarkFavicon :src="(record as BookmarkInterface).iconUrl" :size="20" :tile-size="28" />
                   <div class="text-hidden">{{ text }}</div>
                   <BookmarkCapabilityBadge
                     v-if="(record as BookmarkInterface).hasSnapshot"
@@ -195,6 +186,7 @@
                     :label="$t('bookmarkMg.badgeArchived')"
                     :tooltip="$t('bookmarkMg.badgeArchivedHint')"
                     @click="openSnap((record as BookmarkInterface).id)"
+                    v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                   />
                   <BookmarkCapabilityBadge
                     v-if="(record as BookmarkInterface).hasSummary"
@@ -203,6 +195,7 @@
                     :label="$t('bookmarkMg.badgeSummary')"
                     :tooltip="$t('bookmarkMg.badgeSummaryHint')"
                     @click="openSnap((record as BookmarkInterface).id)"
+                    v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
                   />
                 </div>
               </template>
@@ -282,6 +275,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import router from '@/router';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
   import icon from '@/config/icon.ts';
   import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
@@ -297,6 +291,7 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { cloneDeep } from 'lodash-es';
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -581,6 +576,10 @@
       );
       importExportModalVisible.value = false;
       message.success('Excel导出成功');
+      recordOperation({
+        ...OPERATION_LOG_MAP.bookmarkMg.exportToExcel,
+        operation: `导出 Excel 书签成功【${bookmarksToExport.length}个】`,
+      });
     } catch (error: any) {
       message.error(`Excel导出失败：${error.message || '未知错误'}`);
     } finally {
@@ -635,6 +634,7 @@
     URL.revokeObjectURL(url);
     importExportModalVisible.value = false;
     message.success('HTML书签导出成功');
+    recordOperation({ module: '书签管理', operation: `导出 HTML 书签成功【${bookmarksToExport.length}个】` });
     loading.value = false;
   }
 
@@ -649,11 +649,6 @@
   function getIcon(bookmarkItem: BookmarkInterface) {
     // 无图标用站内默认图,不再直连第三方 ico.kucat.cn(真实 favicon 由后端抓取写回 iconUrl)
     return bookmarkItem.iconUrl || icon.nullImg;
-  }
-
-  function onErrorImg(event: Event) {
-    (event.target as HTMLImageElement).src =
-      'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjhlbSIgaGVpZ2h0PSIwLjhlbSIgdmlld0JveD0iMCAwIDIwIDIwIj48cGF0aCBmaWxsPSIjNWI1YjViIiBkPSJNMTAgMjBhMTAgMTAgMCAxIDEgMC0yMGExMCAxMCAwIDAgMSAwIDIwbTcuNzUtOGE4IDggMCAwIDAgMC00aC0zLjgyYTI5IDI5IDAgMCAxIDAgNHptLS44MiAyaC0zLjIyYTE0LjQgMTQuNCAwIDAgMS0uOTUgMy41MUE4LjAzIDguMDMgMCAwIDAgMTYuOTMgMTRtLTguODUtMmgzLjg0YTI0LjYgMjQuNiAwIDAgMCAwLTRIOC4wOGEyNC42IDI0LjYgMCAwIDAgMCA0bS4yNSAyYy40MSAyLjQgMS4xMyA0IDEuNjcgNHMxLjI2LTEuNiAxLjY3LTR6bS02LjA4LTJoMy44MmEyOSAyOSAwIDAgMSAwLTRIMi4yNWE4IDggMCAwIDAgMCA0bS44MiAyYTguMDMgOC4wMyAwIDAgMCA0LjE3IDMuNTFjLS40Mi0uOTYtLjc0LTIuMTYtLjk1LTMuNTF6bTEzLjg2LThhOC4wMyA4LjAzIDAgMCAwLTQuMTctMy41MWMuNDIuOTYuNzQgMi4xNi45NSAzLjUxem0tOC42IDBoMy4zNGMtLjQxLTIuNC0xLjEzLTQtMS42Ny00UzguNzQgMy42IDguMzMgNk0zLjA3IDZoMy4yMmMuMi0xLjM1LjUzLTIuNTUuOTUtMy41MUE4LjAzIDguMDMgMCAwIDAgMy4wNyA2Ii8+PC9zdmc+';
   }
 
   const importFileInput = ref<HTMLInputElement | null>(null);
@@ -727,6 +722,15 @@
       } else {
         message.success(`导入成功！共导入 ${successCount} 个书签`);
       }
+      if (successCount > 0) {
+        recordOperation({
+          module: '书签管理',
+          operation:
+            failedCount > 0
+              ? `导入 Excel 书签部分成功【${successCount}成功/${failedCount}失败】`
+              : `导入 Excel 书签成功【${successCount}个】`,
+        });
+      }
     } catch (err: any) {
       message.error('文件处理失败: ' + err.message);
     } finally {
@@ -751,6 +755,10 @@
         message.success(
           `导入完成：解析 ${parsedTotal || 0}，新标签 ${createdTags || 0}，新书签 ${createdBookmarks || 0}，建立关联 ${boundRelations || 0}`,
         );
+        recordOperation({
+          module: '书签管理',
+          operation: `导入 HTML 书签成功【新增书签${createdBookmarks || 0}个/标签${createdTags || 0}个】`,
+        });
         await init();
       } else {
         message.error(res.msg || '导入失败');
@@ -1150,21 +1158,6 @@
     flex: 1;
   }
 
-  .bookmark-icon-wrap {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    padding: 4px;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
-    img {
-      border-radius: 6px;
-    }
-  }
-
   .bookmark-meta {
     min-width: 0;
   }
@@ -1314,18 +1307,6 @@
     align-items: center;
     gap: 10px;
   }
-  .card-img-container {
-    width: 22px;
-    height: 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.125rem;
-    background-color: rgb(255, 255, 255);
-    border-radius: 0.5rem;
-    flex-shrink: 0;
-  }
-
   @media (max-width: 1280px) {
     .hero-card {
       grid-template-columns: 1fr;

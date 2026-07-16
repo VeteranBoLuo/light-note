@@ -88,7 +88,11 @@
         <li class="admin-stat-card">
           <span class="admin-stat-label">今日 API 请求</span>
           <strong class="admin-stat-value">{{ n(data?.system.apiToday) }}</strong>
-          <span class="admin-stat-hint" :class="{ 'ov-err': (data?.system.apiErrorsToday || 0) > 0 }">错误 {{ n(data?.system.apiErrorsToday) }}</span>
+          <span class="admin-stat-hint ov-api-health">
+            <span :class="{ 'ov-warn': (data?.system.apiBusinessErrorsToday || 0) > 0 }">业务 4xx {{ n(data?.system.apiBusinessErrorsToday) }}</span>
+            <span :class="{ 'ov-muted-warn': (data?.system.apiInvalidRequestsToday || 0) > 0 }">无效访问 {{ n(data?.system.apiInvalidRequestsToday) }}</span>
+            <span :class="{ 'ov-err': (data?.system.apiServerErrorsToday || 0) > 0 }">服务 5xx {{ n(data?.system.apiServerErrorsToday) }}</span>
+          </span>
         </li>
         <li class="admin-stat-card ov-link" @click="go('agentLog')">
           <span class="admin-stat-label">AI 监控</span>
@@ -325,6 +329,21 @@
 
   .ov-err {
     color: #ef4444 !important;
+    font-weight: 600;
+  }
+
+  .ov-api-health {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 10px;
+    line-height: 1.45;
+  }
+  .ov-warn {
+    color: #f59e0b;
+    font-weight: 600;
+  }
+  .ov-muted-warn {
+    color: var(--sub-text-color, #7c8b9e);
     font-weight: 600;
   }
 

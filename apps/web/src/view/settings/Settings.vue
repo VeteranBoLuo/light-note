@@ -508,6 +508,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -605,6 +606,10 @@
         URL.revokeObjectURL(url);
         const c = res.data.counts || {};
         message.success(t('settings.exportOk', { b: c.bookmarks || 0, n: c.notes || 0, f: c.files || 0 }));
+        recordOperation({
+          ...OPERATION_LOG_MAP.settings.exportData,
+          operation: `导出个人数据成功【书签${c.bookmarks || 0}/笔记${c.notes || 0}/文件${c.files || 0}】`,
+        });
       } else {
         message.info(res?.msg || t('settings.exportFail'));
       }

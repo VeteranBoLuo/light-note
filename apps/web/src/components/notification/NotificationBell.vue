@@ -7,7 +7,7 @@
     @openChange="onOpenChange"
   >
     <BTooltip :title="t('notification.title')">
-      <div class="nt-bell dom-hover">
+      <div class="nt-bell dom-hover" v-click-log="{ module: '通知中心', operation: '打开通知铃铛' }">
         <svg
           viewBox="0 0 24 24"
           width="24"
@@ -64,6 +64,7 @@
                 class="nt-item dom-hover"
                 :class="{ unread: !n.isRead }"
                 @click="onItemClick(n)"
+                v-click-log="{ module: '通知中心', operation: `查看通知【${renderTitle(n)}】` }"
               >
                 <span class="nt-dot" :class="`type-${n.type}`"></span>
                 <div class="nt-item-main">
@@ -124,6 +125,8 @@
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -245,8 +248,11 @@
     if (v) load(true);
   }
   async function onMarkAll() {
-    await markAllRead();
-    items.value.forEach((n) => (n.isRead = 1));
+    const succeeded = await markAllRead();
+    if (succeeded) {
+      items.value.forEach((n) => (n.isRead = 1));
+      recordOperation({ module: '通知中心', operation: '全部通知标记已读成功' });
+    }
   }
   async function onItemClick(n: NotificationItem) {
     if (!n.isRead) {
@@ -273,10 +279,21 @@
     }
   }
   // 删除单条:本地即时移除 + 后端软删(未读的会由 refreshUnread 同步角标)
-  function onDelete(n: NotificationItem) {
+  async function onDelete(n: NotificationItem) {
+    const previousItems = items.value;
+    const previousTotal = total.value;
     items.value = items.value.filter((x) => x.id !== n.id);
     total.value = Math.max(0, total.value - 1);
-    deleteNotifications([n.id]);
+    const succeeded = await deleteNotifications([n.id]);
+    if (succeeded) {
+      recordOperation({
+        ...OPERATION_LOG_MAP.notification.deleteOne,
+        operation: `删除通知成功【${renderTitle(n)}】`,
+      });
+    } else {
+      items.value = previousItems;
+      total.value = previousTotal;
+    }
   }
 
   // 未读数:进来拉一次 + 定时轮询(2 分钟) + 切号刷新
@@ -333,7 +350,7 @@
 <!-- 面板样式不 scoped:BPopover 内容 teleport 到 body,scoped 命不中 -->
 <style lang="less">
   .notification-popover {
-    width: 350px;
+    width: 370px;
     max-width: calc(100vw - 24px);
     padding: 0;
     overflow: hidden;

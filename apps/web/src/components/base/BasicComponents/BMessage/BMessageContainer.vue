@@ -1,13 +1,25 @@
 <template>
   <Teleport to="body">
-    <div class="b-message-container" v-show="messageState.messages.length > 0">
+    <div
+      class="b-message-container"
+      v-show="messageState.messages.length > 0"
+      aria-live="polite"
+      aria-atomic="false"
+    >
       <TransitionGroup name="b-message">
         <div
           v-for="msg in messageState.messages"
           :key="msg.key || msg.id"
           :class="['b-message-item', `b-message-${msg.type}`]"
+          :role="msg.type === 'error' || msg.type === 'warning' ? 'alert' : 'status'"
         >
-          <span class="b-message-icon" v-html="icons[msg.type]"></span>
+          <span class="b-message-icon" aria-hidden="true">
+            <SvgIcon
+              :src="messageIcons[msg.type]"
+              size="17"
+              :class="{ 'b-message-spin': msg.type === 'loading' }"
+            />
+          </span>
           <span class="b-message-content">{{ msg.content }}</span>
         </div>
       </TransitionGroup>
@@ -16,76 +28,104 @@
 </template>
 
 <script lang="ts" setup>
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   import { messageState } from './messageState';
 
-  const icons: Record<string, string> = {
-    success: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
-    error: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
-    warning: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-    info: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
-    loading: `<svg class="b-message-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`,
-  };
+  const messageIcons = icon.message;
 </script>
 
 <style lang="less">
   .b-message-container {
     position: fixed;
-    top: 12px;
+    top: max(14px, env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
     z-index: 999999;
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 8px;
     pointer-events: none;
-    max-width: 90vw;
+    width: max-content;
+    max-width: min(520px, calc(100vw - 24px));
   }
 
   .b-message-item {
+    --message-accent: var(--message-info-color, #615ced);
+    position: relative;
+    width: max-content;
+    min-width: min(280px, calc(100vw - 24px));
+    max-width: min(520px, calc(100vw - 24px));
+    min-height: 48px;
+    overflow: hidden;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 16px;
-    border-radius: 8px;
-    background: var(--background-color);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.08);
+    gap: 10px;
+    padding: 9px 14px 9px 11px;
+    border: 1px solid color-mix(in srgb, var(--message-accent) 18%, var(--card-border-color));
+    border-radius: 12px;
+    background: color-mix(
+      in srgb,
+      var(--message-accent) 4%,
+      var(--message-surface-bg, var(--menu-body-bg-color, #ffffff))
+    );
+    box-shadow:
+      0 18px 48px -24px var(--message-shadow-color),
+      0 5px 16px -10px var(--message-shadow-color);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
     color: var(--text-color);
-    font-size: 14px;
-    line-height: 1.5;
-    margin-bottom: 8px;
+    font-size: 13.5px;
+    line-height: 1.45;
     pointer-events: auto;
-    border: 1px solid var(--card-border-color);
+  }
+
+  .b-message-item::before {
+    content: '';
+    position: absolute;
+    inset: 7px auto 7px 0;
+    width: 3px;
+    border-radius: 0 999px 999px 0;
+    background: var(--message-accent);
   }
 
   .b-message-icon {
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    color: var(--message-accent);
+    background: color-mix(in srgb, var(--message-accent) 12%, transparent);
     line-height: 0;
   }
 
-  .b-message-success .b-message-icon {
-    color: #52c41a;
+  .b-message-success {
+    --message-accent: var(--message-success-color, #22a447);
   }
 
-  .b-message-error .b-message-icon {
-    color: #ff4d4f;
+  .b-message-error {
+    --message-accent: var(--message-error-color, #df3f46);
   }
 
-  .b-message-warning .b-message-icon {
-    color: #faad14;
+  .b-message-warning {
+    --message-accent: var(--message-warning-color, #d88900);
   }
 
-  .b-message-info .b-message-icon {
-    color: #615ced;
-  }
-
-  .b-message-loading .b-message-icon {
-    color: #615ced;
+  .b-message-info,
+  .b-message-loading {
+    --message-accent: var(--message-info-color, #615ced);
   }
 
   .b-message-content {
+    min-width: 0;
+    max-width: 100%;
     word-break: break-word;
+    font-weight: 560;
   }
 
   /* Enter / leave animations */
@@ -115,5 +155,32 @@
   @keyframes b-message-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 600px) {
+    .b-message-container {
+      top: max(10px, env(safe-area-inset-top));
+      width: calc(100vw - 20px);
+      max-width: none;
+    }
+
+    .b-message-item {
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      padding-right: 12px;
+      font-size: 13px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .b-message-enter-active,
+    .b-message-leave-active {
+      transition: opacity 0.15s ease;
+    }
+
+    .b-message-spin {
+      animation-duration: 1.8s;
+    }
   }
 </style>

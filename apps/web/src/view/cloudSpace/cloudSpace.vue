@@ -1,5 +1,65 @@
 <template>
-  <CommonContainer :title="$t('cloudSpace.title')">
+  <ResourcePageShell
+    :title="$t('cloudSpace.title')"
+    :subtitle="$t('cloudSpace.subtitle')"
+    accent="file"
+    :show-back="bookmark.isMobile"
+    :title-actionable="!bookmark.isMobile"
+    :title-action-label="$t('common.resetAndRefresh')"
+    @back="backRouterPage"
+    @title-click="resetCloudSpace"
+  >
+    <template #meta>
+      <span class="cloud-count-chip">{{ $t('cloudSpace.fileCount', { count: cloud.fileList.length }) }}</span>
+    </template>
+
+    <template #actions>
+      <div class="cloud-view-toggle" :aria-label="$t('cloudSpace.viewMode')">
+        <BTooltip :title="$t('note.cardView')">
+          <BButton
+            class="cloud-view-button"
+            :class="{ active: viewMode === 'card' }"
+            @click="setViewMode('card')"
+          >
+            <SvgIcon :src="icon.navigation.portal" size="15" />
+          </BButton>
+        </BTooltip>
+        <BTooltip :title="$t('note.listView')">
+          <BButton
+            class="cloud-view-button"
+            :class="{ active: viewMode === 'table' }"
+            @click="setViewMode('table')"
+          >
+            <SvgIcon :src="icon.filterPanel.list" size="15" />
+          </BButton>
+        </BTooltip>
+      </div>
+      <BButton
+        v-if="!bookmark.isMobile"
+        class="batch-toggle-btn"
+        :class="{ active: batchMode }"
+        @click="toggleBatchMode"
+        v-click-log="{ module: '云空间', operation: batchMode ? '退出批量操作' : '开启批量操作' }"
+      >
+        {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
+      </BButton>
+      <FileTypeFilter />
+      <div class="cloud-search-action">
+        <BInput
+          v-model:value="cloud.searchFileName"
+          :placeholder="$t('cloudSpace.searchFile')"
+          clearable
+          @input="onCloudSearchInput"
+          @enter="cloud.queryFieldList()"
+        >
+          <template #prefix>
+            <SvgIcon :src="icon.navigation.search" size="16" />
+          </template>
+        </BInput>
+      </div>
+      <HandleBtnGroup ref="handleBtnGroup" class="header-handle-group" />
+    </template>
+
     <div
       class="cloud-container"
       @dragover.prevent="onDragOver"
@@ -15,51 +75,6 @@
         </div>
       </div>
 
-      <div class="header">
-        <div v-if="bookmark.isMobile" class="mobile-header">
-          <div class="mobile-tools">
-            <div class="view-toggle mobile-view-toggle">
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
-                <svg-icon :src="cardViewIcon" size="14" />
-              </button>
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">
-                <svg-icon :src="listViewIcon" size="14" />
-              </button>
-            </div>
-            <FileTypeFilter />
-            <HandleBtnGroup ref="handleBtnGroup" class="mobile-upload-actions" />
-          </div>
-        </div>
-        <div v-else class="header-pc">
-          <div
-            style="font-weight: 500; font-size: 20px; cursor: pointer; white-space: nowrap"
-            @click="initializeCloudSpace('')"
-            v-click-log="{ module: '云空间', operation: '刷新云空间' }"
-            class="dom-hover"
-            >{{ $t('cloudSpace.title') }}</div
-          >
-          <div class="header-spacer"></div>
-          <div class="header-toolbar">
-            <div class="view-toggle">
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
-                <svg-icon :src="cardViewIcon" size="14" />
-              </button>
-              <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">
-                <svg-icon :src="listViewIcon" size="14" />
-              </button>
-            </div>
-            <b-button
-              class="batch-toggle-btn"
-              @click="toggleBatchMode"
-              v-click-log="{ module: '云空间', operation: batchMode ? '退出批量操作' : '开启批量操作' }"
-            >
-              {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
-            </b-button>
-            <FileTypeFilter />
-            <HandleBtnGroup ref="handleBtnGroup" class="header-handle-group" />
-          </div>
-        </div>
-      </div>
       <div v-if="isOrganizingFromInbox" class="inbox-file-organizer">
         <span>{{ t('inbox.completeFileHint') }}</span>
         <BButton type="primary" size="small" :loading="completingInbox" @click="completeOrganizingFile">
@@ -112,7 +127,7 @@
       @next="previewNextFile"
       @close="closePreview"
     />
-  </CommonContainer>
+  </ResourcePageShell>
 </template>
 
 <script lang="ts" setup>
@@ -132,8 +147,13 @@
   import FieldList from '@/components/cloudSpace/fieldList.vue';
 
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
+  import { backRouterPage } from '@/utils/common.ts';
+  import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -176,9 +196,12 @@
     viewMode.value = mode;
     updatePreference({ cloudView: mode }).catch(() => {});
   }
-  const cardViewIcon =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></g></svg>';
-  const listViewIcon = icon.filterPanel.list;
+  let cloudSearchTimer = 0;
+  let suppressRouteFileNameWatch = false;
+  function onCloudSearchInput() {
+    window.clearTimeout(cloudSearchTimer);
+    cloudSearchTimer = window.setTimeout(() => cloud.queryFieldList(), 220);
+  }
 
   // 拖拽状态
   const dragActive = ref(false);
@@ -210,6 +233,35 @@
     cloud.queryFieldList();
     clearSelectionKey.value += 1;
     batchMode.value = false;
+  }
+
+  async function resetCloudSpace() {
+    window.clearTimeout(cloudSearchTimer);
+    suppressRouteFileNameWatch = true;
+    try {
+      if (route.path !== '/cloudSpace' || Object.keys(route.query).length) {
+        await router.replace({ path: '/cloudSpace', query: {} });
+      }
+    } finally {
+      suppressRouteFileNameWatch = false;
+    }
+
+    cloud.folder = {
+      name: '全部文件',
+      id: 'all',
+    };
+    cloud.searchFileName = '';
+    clearSelectionKey.value += 1;
+    batchMode.value = false;
+
+    const allTypes = [...CLOUD_FILE_CATEGORY_ORDER];
+    const alreadyShowingAllTypes =
+      cloud.typeCheckValue.length === allTypes.length && allTypes.every((type) => cloud.typeCheckValue.includes(type));
+    if (alreadyShowingAllTypes) {
+      cloud.queryFieldList();
+    } else {
+      cloud.typeCheckValue = allTypes;
+    }
   }
 
   const moveCfg = reactive({
@@ -373,6 +425,7 @@
   watch(
     () => route.query.fileName,
     () => {
+      if (suppressRouteFileNameWatch) return;
       if (!route.path.includes('/cloudSpace')) return;
       initializeCloudSpace();
     },
@@ -389,16 +442,73 @@
   onUnmounted(() => {
     // 移除window粘贴事件监听
     window.removeEventListener('paste', onPaste);
+    window.clearTimeout(cloudSearchTimer);
   });
 </script>
 
 <style lang="less" scoped>
+  .cloud-count-chip {
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 10%, transparent);
+    font-size: 11px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cloud-view-toggle {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--card-border-color) 42%, transparent);
+  }
+
+  .cloud-view-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    color: var(--desc-color);
+    background: transparent;
+  }
+
+  .cloud-view-button.active {
+    color: var(--resource-file-color, #ff8a00);
+    background: var(--menu-body-bg-color);
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--text-color) 12%, transparent);
+  }
+
+  .batch-toggle-btn {
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .batch-toggle-btn.active {
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 9%, var(--menu-body-bg-color));
+  }
+
+  .cloud-search-action {
+    width: 220px;
+  }
+
+  .cloud-search-action :deep(.b-input) {
+    height: 36px;
+    border-radius: 10px;
+  }
+
   .inbox-file-organizer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin: 0 20px 12px;
+    margin: 0 0 10px;
     padding: 9px 12px;
     border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
     border-radius: 8px;
@@ -407,47 +517,14 @@
     font-size: 13px;
   }
   .cloud-container {
-    padding: 20px 20px 0 20px;
+    padding: 0;
     width: 100%;
     height: 100%;
-    border-top: 1px solid var(--notePage-topBody-border-color);
     box-sizing: border-box;
     display: flex;
-    gap: 10px;
+    gap: 9px;
     flex-direction: column;
     position: relative;
-  }
-
-  .header {
-    min-height: 40px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-
-    .mobile-header {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .mobile-tools {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 6px;
-      min-width: 0;
-      width: 100%;
-    }
-
-    .mobile-tools {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
   }
 
   .content-area {
@@ -458,66 +535,8 @@
     gap: 14px;
   }
 
-  .file-type-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    flex: 1 1 0;
-    min-width: 200px;
-  }
-
-  .header-pc {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    gap: 10px;
-  }
-
-  .header-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .header-spacer {
-    width: 240px;
-    flex-shrink: 0;
-  }
-
   .header-handle-group {
-    margin-left: auto;
-  }
-
-  .view-toggle {
-    display: flex;
-    gap: 4px;
-    background: var(--bl-input-noBorder-bg-color);
-    border-radius: 8px;
-    padding: 3px;
-  }
-
-  .view-toggle-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 26px;
-    border: 0;
-    border-radius: 6px;
-    cursor: pointer;
-    color: var(--desc-color);
-    background: transparent;
-    transition: all 0.18s ease;
-    &.active {
-      background: var(--background-color);
-      color: var(--text-color);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    }
-    &:hover:not(.active) {
-      color: var(--text-color);
-    }
+    flex: 0 0 auto;
   }
 
   .mobile-folder-filter {
@@ -538,8 +557,8 @@
     min-width: fit-content;
     padding: 4px 12px;
     border-radius: 999px;
-    border: 1px solid var(--folder-list-border-color);
-    background: var(--card-bg-color);
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
+    background: var(--menu-body-bg-color);
     color: var(--text-color);
     font-size: 12px;
     line-height: 20px;
@@ -549,9 +568,29 @@
   }
 
   .mobile-folder-item.active {
-    border-color: var(--primary-color);
-    background: var(--category-item-ba-color);
-    color: var(--primary-color);
+    border-color: color-mix(in srgb, var(--resource-file-color, #ff8a00) 42%, var(--card-border-color));
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 9%, var(--menu-body-bg-color));
+    color: var(--resource-file-color, #ff8a00);
+  }
+
+  .content-area :deep(.folder-list) {
+    width: 230px;
+    padding: 12px;
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    border-radius: 14px;
+    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
+  }
+
+  .content-area :deep(.field-list) {
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    border-radius: 14px;
+    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
   }
 
   // 拖拽样式
@@ -584,38 +623,6 @@
   }
 
   @media (max-width: 1000px) {
-    .cloud-container {
-      padding: unset;
-    }
-    .header {
-      height: auto;
-      min-height: 40px;
-      display: flex;
-      justify-content: space-between;
-      align-items: stretch;
-      gap: 10px;
-
-      .batch-toggle-btn {
-        white-space: nowrap;
-      }
-    }
-
-    .mobile-tools {
-      .mobile-view-toggle {
-        margin-left: 0;
-      }
-
-      :deep(.filter-container) {
-        margin-left: 0;
-        flex: 1;
-        min-width: 0;
-      }
-    }
-
-    .mobile-upload-actions {
-      flex-shrink: 0;
-    }
-
     .mobile-folder-filter {
       margin-top: 0;
       margin-bottom: 6px;
@@ -635,6 +642,10 @@
     .content-area {
       flex: 1;
       min-height: 0;
+    }
+
+    .content-area :deep(.field-list) {
+      border-radius: 12px;
     }
 
     .file-container {
@@ -662,6 +673,31 @@
         gap: 12px;
         align-items: stretch;
       }
+    }
+  }
+
+  @media (max-width: 767px) {
+    .cloud-count-chip,
+    .cloud-search-action {
+      display: none;
+    }
+
+    .cloud-view-toggle {
+      flex: 0 0 auto;
+    }
+
+    .header-handle-group {
+      margin-left: auto;
+    }
+
+    .mobile-folder-list {
+      padding-bottom: 2px;
+    }
+
+    .content-area :deep(.field-list) {
+      border: 0;
+      box-shadow: none;
+      background: transparent;
     }
   }
 </style>

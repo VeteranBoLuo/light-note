@@ -1,70 +1,60 @@
 <template>
-  <div class="note-library-wrapper">
-    <div class="note-library-container">
-      <div class="note-library-header" v-if="bookmark.isMobile">
-        <div class="header-content">
-          <div class="back-icon" @click="backRouterPage">
-            <SvgIcon :src="icon.noteDetail.back" />
-          </div>
-          <div style="font-weight: 500; font-size: 20px" @click="getIndexNoteList">{{ $t('note.title') }}</div>
+  <ResourcePageShell
+    :title="$t('note.title')"
+    :subtitle="$t('note.subtitle')"
+    accent="note"
+    :show-back="bookmark.isMobile"
+    :title-actionable="!bookmark.isMobile"
+    :title-action-label="$t('common.resetAndRefresh')"
+    @back="backRouterPage"
+    @title-click="resetNoteLibrary"
+  >
+    <template #meta>
+      <span class="note-count-chip">{{
+        $t('note.visibleCount', { visible: visibleDragNoteList.length, total: noteList.length })
+      }}</span>
+    </template>
+
+    <template #actions>
+      <template v-if="hasCheck">
+        <BButton type="danger" class="note-action-button" @click="batchDeleteNote">
+          <SvgIcon :src="icon.noteDetail.delete" size="16" />
+          {{ $t('note.deleteSelected') }}
+        </BButton>
+        <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
+      </template>
+      <template v-else>
+        <TagFilterSelector :all-tags="visibleNoteTags" />
+        <ViewModeToggle v-if="!bookmark.isMobile" />
+        <div v-if="!bookmark.isMobile" class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
+          <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
+            <template #prefix>
+              <SvgIcon :src="icon.navigation.search" size="16" />
+            </template>
+          </BInput>
         </div>
-        <div class="handle-btn-group">
-          <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
-          <b-button
-            type="primary"
-            class="mobile-add-note-btn"
-            style="border-radius: 20px"
-            @click="showNewNotePicker"
-            v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-          >
-            {{ $t('note.newNote') }}
-          </b-button>
-        </div>
-      </div>
-      <div v-else class="flex-align-center" style="justify-content: space-between; padding: 0 20px">
-        <div style="font-weight: 500; font-size: 20px; cursor: pointer" @click="getIndexNoteList">{{
-          $t('note.title')
-        }}</div>
-        <div class="handle-btn-group">
-          <template v-if="hasCheck">
-            <span class="deleteText" @click="batchDeleteNote"
-              ><svg-icon :src="icon.noteDetail.delete" />{{ $t('note.deleteSelected') }}</span
-            >
-            <b-button type="primary" style="border-radius: 20px" @click="exitBatch">
-              {{ $t('note.exitBatch') }}
-            </b-button>
-          </template>
-          <template v-else>
-            <TagFilterSelector v-if="currentViewMode === 'card'" :allTags="visibleNoteTags" />
-            <ViewModeToggle />
-            <div
-              class="search-icon flex-center dom-hover"
-              :class="searchActive ? 'normal-input' : 'icon-input'"
-              @click="searchActive = true"
-              v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote"
-              :style="{ width: searchActive ? '200px' : '32px' }"
-            >
-              <b-input :placeholder="searchActive ? $t('note.searchNote') : ''" v-model:value="searchValue">
-                <template #prefix>
-                  <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" @click="focusSearchInput" />
-                </template>
-              </b-input>
-            </div>
-            <b-button style="border-radius: 20px" @click="aiOrgVisible = true">
-              <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
-              {{ $t('bookmarkMg.aiOrganizeBtn') }}
-            </b-button>
-            <b-button
-              type="primary"
-              style="border-radius: 20px"
-              @click="showNewNotePicker"
-              v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-            >
-              + {{ $t('note.newNote') }}
-            </b-button>
-          </template>
-        </div>
-      </div>
+        <BButton
+          v-if="!bookmark.isMobile"
+          class="note-action-button note-ai-button"
+          @click="aiOrgVisible = true"
+          v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
+        >
+          <SvgIcon :src="icon.ai.organize" size="17" />
+          {{ $t('bookmarkMg.aiOrganizeBtn') }}
+        </BButton>
+        <BButton
+          type="primary"
+          class="note-action-button note-create-button"
+          @click="showNewNotePicker"
+          v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+        >
+          <SvgIcon :src="icon.common.add" size="16" />
+          {{ $t('note.newNote') }}
+        </BButton>
+      </template>
+    </template>
+
+    <div class="note-workspace">
       <div v-if="loading && currentViewMode === 'card'" class="note-library-body note-card-skeleton-wrap">
         <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
           <div class="skeleton-line long"></div>
@@ -77,7 +67,7 @@
         </div>
       </div>
       <VueDraggable
-        v-else-if="currentViewMode === 'card'"
+        v-else-if="currentViewMode === 'card' && visibleDragNoteList.length"
         :disabled="!canDragNote"
         :animation="200"
         v-model="visibleDragNoteList"
@@ -101,45 +91,7 @@
           <note-card :note="note" @nodeTypeChange="handleNodeTypeChange" />
         </RightMenu>
       </VueDraggable>
-      <div v-if="currentViewMode === 'list'" class="note-library-body-list">
-        <div class="tag-sidebar">
-          <template v-if="loading">
-            <div class="tag-tree-skeleton">
-              <div class="skeleton-line"></div>
-              <div class="skeleton-line short"></div>
-              <div class="skeleton-line"></div>
-              <div class="skeleton-line medium"></div>
-              <div class="skeleton-line short"></div>
-            </div>
-          </template>
-          <template v-else>
-            <div
-              class="tag-item"
-              :class="{ active: selectedTag === null }"
-              @click="selectTag(null)"
-              v-click-log="{ module: '笔记库', operation: '筛选全部笔记' }"
-            >
-              {{ $t('note.allNote') }}
-            </div>
-            <div
-              class="tag-item"
-              :class="{ active: selectedTag === 'null' }"
-              @click="selectTag('null')"
-              v-click-log="{ module: '笔记库', operation: '筛选无标签笔记' }"
-            >
-              {{ $t('note.noTagNote') }}
-            </div>
-            <div
-              v-for="tag in visibleNoteTags"
-              class="tag-item"
-              :class="{ active: selectedTag === tag.id }"
-              @click="selectTag(tag)"
-              v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
-            >
-              {{ tag.name }}
-            </div>
-          </template>
-        </div>
+      <div v-if="currentViewMode === 'list' && (loading || visibleDragNoteList.length)" class="note-library-body-list">
         <div v-if="loading" class="note-list note-list-skeleton-wrap">
           <div v-for="n in 10" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
             <div class="skeleton-line long"></div>
@@ -171,18 +123,11 @@
           </RightMenu>
         </VueDraggable>
       </div>
-      <div
-        v-if="!loading && !visibleDragNoteList.length"
-      style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 64px 20px; text-align: center; color: var(--text-second-color, #888)"
-      >
-        <div style="font-size: 44px; opacity: 0.7">📝</div>
-        <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('note.empty') }}</p>
-        <p style="margin: 0; font-size: 13px">{{ $t('note.emptyHint') }}</p>
-        <BButton
-          type="primary"
-          @click="showNewNotePicker"
-        style="margin-top: 6px; border: 0; cursor: pointer; color: #fff; background: #615ced; font-size: 14px; padding: 8px 18px; border-radius: 8px"
-        >
+      <div v-if="!loading && !visibleDragNoteList.length" class="note-empty-state">
+        <span class="note-empty-icon"><SvgIcon :src="icon.resource.note" size="28" /></span>
+        <strong>{{ $t('note.empty') }}</strong>
+        <p>{{ $t('note.emptyHint') }}</p>
+        <BButton type="primary" class="note-create-button" @click="showNewNotePicker">
           {{ $t('note.newNote') }}
         </BButton>
       </div>
@@ -199,7 +144,7 @@
 
     <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
     <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
-  </div>
+  </ResourcePageShell>
 </template>
 
 <script lang="ts" setup>
@@ -207,20 +152,18 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { backRouterPage } from '@/utils/common';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
@@ -228,6 +171,7 @@
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -273,7 +217,6 @@
     addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
   }
   const user = useUserStore();
-  const selectedTag = computed(() => router.currentRoute.value.query.tag || null);
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
   init();
   async function init() {
@@ -297,10 +240,6 @@
       console.warn('fetchNoteTags fallback', error);
     }
   }
-  function getIndexNoteList() {
-    router.push('/noteLibrary');
-  }
-
   const searchValue = ref('');
   const debouncedSearch = ref('');
   const searchTimer = ref<number | null>(null);
@@ -329,10 +268,25 @@
       if (searchTimer.value) clearTimeout(searchTimer.value);
       searchTimer.value = window.setTimeout(() => {
         debouncedSearch.value = val.trim().toLowerCase();
+        searchTimer.value = null;
       }, 200);
     },
     { immediate: true },
   );
+
+  async function resetNoteLibrary() {
+    if (searchTimer.value) window.clearTimeout(searchTimer.value);
+    searchTimer.value = null;
+    searchValue.value = '';
+    debouncedSearch.value = '';
+    exitBatch();
+    await router.replace('/noteLibrary');
+    await init();
+  }
+
+  onBeforeUnmount(() => {
+    if (searchTimer.value) window.clearTimeout(searchTimer.value);
+  });
 
   const viewNoteList = computed(() => {
     const keyword = debouncedSearch.value;
@@ -367,10 +321,6 @@
     { immediate: true },
   );
 
-  function focusSearchInput() {
-    (document.querySelector('.b-input') as HTMLInputElement)?.focus();
-  }
-
   const allTags = ref<any[]>([]);
   const visibleNoteTags = computed(() => {
     return allTags.value.filter((tag) => Number(tag.noteCount || 0) > 0);
@@ -381,7 +331,7 @@
   });
 
   function exitBatch() {
-    viewNoteList.value.forEach((data) => {
+    noteList.value.forEach((data) => {
       data.isCheck = false;
     });
   }
@@ -406,8 +356,6 @@
     });
   }
 
-  const searchActive = ref(true);
-
   const handleNodeTypeChange = (tag) => {
     if (tag === null) {
       router.push('/noteLibrary');
@@ -415,16 +363,6 @@
       router.push(`/noteLibrary?tag=${tag.id}`);
     }
   };
-
-  function selectTag(tag) {
-    if (tag === null) {
-      router.push('/noteLibrary');
-    } else if (tag === 'null') {
-      router.push('/noteLibrary?tag=null');
-    } else {
-      router.push(`/noteLibrary?tag=${tag.id}`);
-    }
-  }
 
   function onStart() {
     document.body.style.userSelect = 'none';
@@ -553,9 +491,7 @@
     align-content: start;
 
     :deep(.note-card) {
-      will-change: transform;
       transition:
-        transform 0.2s ease,
         box-shadow 0.2s ease,
         border-color 0.2s ease,
         opacity 0.2s ease !important;
@@ -863,6 +799,161 @@
     .note-library-body > * {
       min-width: 0;
       max-width: 100%;
+    }
+  }
+
+  .note-count-chip {
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
+    font-size: 11px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .note-search {
+    width: min(220px, 18vw);
+  }
+
+  .note-search :deep(.b-input) {
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  .note-action-button {
+    height: 36px;
+    gap: 6px;
+    border-radius: 10px;
+  }
+
+  .note-ai-button {
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
+  }
+
+  .note-create-button {
+    background: var(--resource-note-color, #00a884);
+  }
+
+  .note-create-button:hover {
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 88%, #ffffff);
+  }
+
+  .note-workspace {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    border-radius: 14px;
+    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
+  }
+
+  .note-library-body {
+    height: 100%;
+    padding: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
+    gap: 14px;
+    scrollbar-gutter: stable;
+  }
+
+  .note-library-body > * {
+    min-width: 0;
+    content-visibility: auto;
+    contain-intrinsic-size: 282px;
+  }
+
+  .note-library-body-list {
+    width: 100%;
+    height: 100%;
+    padding: 12px;
+    gap: 0;
+  }
+
+  .note-library-body-list .note-list,
+  .note-library-body-list .note-list-skeleton-wrap {
+    width: 100%;
+    padding: 0 4px;
+    box-sizing: border-box;
+    scrollbar-gutter: stable;
+  }
+
+  .note-empty-state {
+    min-height: 100%;
+    padding: 56px 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    text-align: center;
+    color: var(--desc-color);
+  }
+
+  .note-empty-state strong {
+    color: var(--text-color);
+    font-size: 16px;
+  }
+
+  .note-empty-state p {
+    margin: 0 0 6px;
+    font-size: 13px;
+  }
+
+  .note-empty-icon {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
+  }
+
+  @media (max-width: 1200px) {
+    .note-ai-button {
+      font-size: 0;
+      width: 36px;
+      min-width: 36px;
+      padding: 0;
+    }
+
+    .note-search {
+      width: 180px;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .note-count-chip {
+      display: none;
+    }
+
+    .note-workspace {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: transparent;
+    }
+
+    .note-library-body {
+      height: 100%;
+      margin-top: 0;
+      padding: 0;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .note-action-button {
+      height: 34px;
     }
   }
 

@@ -24,21 +24,25 @@
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
-            <template #suffix>
+            <template v-if="!bookmark.isMobile" #suffix>
               <b-tooltip :title="hideEmptyTags ? $t('home.hideEmptyTags') : $t('home.showEmptyTags')">
                 <BSwitch v-model:checked="hideEmptyTags" />
               </b-tooltip>
             </template>
           </b-input>
-          <div
-            v-if="!bookmark.isMobile"
-            ref="manageEntryRef"
-            data-guide="bookmark-mg"
-            class="filter-manage-entry"
-            @click="router.push('/manage/bookmarkMg')"
+          <BButton
+            v-if="bookmark.isMobile"
+            class="filter-all-entry"
+            :class="{ active: bookmark.type === 'all' }"
+            @click="handleViewAll"
           >
-            <svg-icon size="15" :src="icon.manage_categoryBtn_bookmark" />
-            <span class="filter-manage-text">{{ $t('navigation.bookmarkManagement') }}</span>
+            <svg-icon size="18" :src="icon.resource.bookmark" />
+            <span class="filter-all-label">{{ $t('home.allBookmarks') }}</span>
+            <span class="filter-all-count">{{ user.bookmarkTotal || bookmark.bookmarkList.length }}</span>
+          </BButton>
+          <div v-if="bookmark.isMobile" class="mobile-empty-tag-toggle">
+            <span>{{ $t('home.hideEmptyTags') }}</span>
+            <BSwitch v-model:checked="hideEmptyTags" />
           </div>
         </div>
       </template>
@@ -63,7 +67,8 @@
               :src="item.iconUrl ? item.iconUrl : icon.manage_categoryBtn_tag"
               class="tag-item-icon"
             />
-            <span class="text-hidden" style="width: calc(100% - 28px)">{{ item.name }}</span>
+            <span class="text-hidden tag-item-name">{{ item.name }}</span>
+            <span v-if="bookmark.isMobile" class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
         </RightMenu>
         <b-input v-else class="edit-input" v-model:value="newName">
@@ -186,6 +191,7 @@
   }
 
   function handleClickTag(tag: TagInterface) {
+    bookmark.isFold = true;
     if (tag.id === router.currentRoute.value.params?.id) {
       bookmark.refreshData();
     } else {
@@ -194,6 +200,14 @@
         bookmark.refreshData();
       });
     }
+  }
+
+  function handleViewAll() {
+    bookmark.isFold = true;
+    bookmark.type = 'all';
+    bookmark.tagData = null;
+    bookmark.bookmarkSearch = '';
+    router.replace('/home').then(() => bookmark.refreshData());
   }
   function onStart() {
     document.body.style.userSelect = 'none';
@@ -287,15 +301,21 @@
 
 <style lang="less" scoped>
   .filter-panel {
-    min-width: 180px;
+    min-width: 0;
+    width: 100%;
     height: 100%;
   }
 
   .header-input {
-    width: 180px;
+    width: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
   .header-input :deep(.category-body) {
-    height: calc(100% - 88px) !important;
+    min-height: 0;
+    height: auto !important;
+    flex: 1;
   }
 
   .filter-tools {
@@ -304,59 +324,64 @@
     gap: 8px;
   }
 
-  .filter-manage-entry {
-    position: relative;
+  .filter-all-entry,
+  .mobile-empty-tag-toggle {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px 8px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    color: var(--desc-color);
-    background: linear-gradient(135deg, rgba(97, 92, 237, 0.04) 0%, rgba(97, 92, 237, 0.01) 100%);
-    transition: all 0.25s ease;
-    &::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 6px;
-      bottom: 6px;
-      width: 3px;
-      border-radius: 0 2px 2px 0;
-      background: linear-gradient(180deg, #615ced 0%, rgba(97, 92, 237, 0.3) 100%);
-      transition: all 0.25s ease;
-    }
-    &:hover {
-      color: var(--text-color);
-      background: linear-gradient(135deg, rgba(97, 92, 237, 0.08) 0%, rgba(97, 92, 237, 0.03) 100%);
-      box-shadow: 0 2px 8px rgba(97, 92, 237, 0.1);
-      transform: translateX(2px);
-      &::before {
-        width: 4px;
-        top: 4px;
-        bottom: 4px;
-      }
-    }
-  }
-  .filter-manage-text {
-    font-size: 13px;
-    font-weight: 500;
-    transition: color 0.25s ease;
   }
 
-  .empty-tag-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  .filter-all-entry {
+    height: 42px;
+    justify-content: flex-start;
+    gap: 9px;
+    padding: 0 10px;
+    color: var(--text-color);
+    background: transparent;
+
+    &.active {
+      color: var(--resource-bookmark-color, #615ced);
+      background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 10%, transparent);
+    }
+  }
+
+  .filter-all-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .filter-all-count,
+  .tag-item-count {
+    margin-left: auto;
     color: var(--desc-color);
-    cursor: pointer;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mobile-empty-tag-toggle {
+    min-height: 36px;
+    justify-content: space-between;
+    padding: 0 10px;
+    border-top: 1px solid color-mix(in srgb, var(--card-border-color) 58%, transparent);
+    color: var(--desc-color);
     font-size: 12px;
-    line-height: 18px;
-    user-select: none;
+  }
+
+  .tag-item-name {
+    min-width: 0;
+    flex: 1;
   }
 
   .tag-skeleton-wrap {
-    width: 180px;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -376,8 +401,9 @@
   }
 
   .skeleton-body {
-    height: 100vh;
+    height: auto;
     min-height: 260px;
+    flex: 1;
     border-radius: 10px;
     background:
       linear-gradient(rgba(120, 120, 120, 0.18) 0 0) 14px 16px / calc(100% - 28px) 16px no-repeat,
@@ -426,11 +452,8 @@
     .filter-panel {
       min-width: unset;
       width: 100%;
-      padding: 0 20px 20px 20px;
-    }
-
-    &.header-input {
-      width: unset;
+      height: 100%;
+      padding: 0;
     }
 
     .tag-skeleton-wrap {
@@ -439,6 +462,9 @@
 
     .category-item {
       width: 100%;
+      min-height: 44px;
+      margin: 2px 0;
+      padding: 7px 10px;
 
       &:hover {
         background-color: unset;

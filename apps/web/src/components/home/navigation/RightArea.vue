@@ -129,7 +129,7 @@
   }
   .phone-top-menu {
     position: absolute;
-    left: 104px;
+    left: 64px;
     right: 14px;
     width: unset !important;
     min-width: 0;

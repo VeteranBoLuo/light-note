@@ -341,12 +341,12 @@
     {
       label: t('navigation.bookmark'),
       value: user.bookmarkTotal,
-      icon: icon.workbenches.bookmark,
+      icon: icon.resource.bookmark,
     },
     {
       label: t('navigation.note'),
       value: user.noteTotal,
-      icon: icon.workbenches.note,
+      icon: icon.resource.note,
     },
     {
       label: t('personCenter.storageUsed'),

@@ -1,4 +1,27 @@
 export default {
+  // 轻笺自研资源图标：统一 24 × 24、圆角线性轮廓，颜色由资源语义色控制。
+  resource: {
+    bookmark:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7 4.75A2.25 2.25 0 0 1 9.25 2.5h5.5A2.25 2.25 0 0 1 17 4.75V20.5l-5-3.1l-5 3.1V4.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 7h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
+    note:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6.5 2.75h7.25l3.75 3.75v14.75h-11V2.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.75 2.75V6.5h3.75M9.25 10.5h5.5M9.25 14h5.5M9.25 17.5h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    file:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7.15 18.5h9.7a3.75 3.75 0 0 0 .62-7.45A5.8 5.8 0 0 0 6.25 9.5a4.5 4.5 0 0 0 .9 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.25 14.75h5.5M10.25 11.75h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".72"/></svg>',
+    tag:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 5.75A1.75 1.75 0 0 1 5.75 4h5.1l8.65 8.65a2.25 2.25 0 0 1 0 3.18l-3.67 3.67a2.25 2.25 0 0 1-3.18 0L4 10.85v-5.1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.25" stroke="currentColor" stroke-width="1.7"/><path d="m12.25 10.75l4.25 4.25" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
+  },
+  message: {
+    success:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8" opacity=".45"/><path d="m8.25 12.15l2.35 2.35l5.15-5.25" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    error:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8" opacity=".45"/><path d="m9 9l6 6m0-6l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    warning:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m12 3.75l9 16H3l9-16Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" opacity=".55"/><path d="M12 9v4.5M12 17v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    info:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8" opacity=".45"/><path d="M12 11v5M12 8v.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    loading:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M20 12a8 8 0 0 1-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".35"/></svg>',
+  },
   // 空白图片
   nullImg:
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjhlbSIgaGVpZ2h0PSIwLjhlbSIgdmlld0JveD0iMCAwIDIwIDIwIj48cGF0aCBmaWxsPSIjNWI1YjViIiBkPSJNMTAgMjBhMTAgMTAgMCAxIDEgMC0yMGExMCAxMCAwIDAgMSAwIDIwbTcuNzUtOGE4IDggMCAwIDAgMC00aC0zLjgyYTI5IDI5IDAgMCAxIDAgNHptLS44MiAyaC0zLjIyYTE0LjQgMTQuNCAwIDAgMS0uOTUgMy41MUE4LjAzIDguMDMgMCAwIDAgMTYuOTMgMTRtLTguODUtMmgzLjg0YTI0LjYgMjQuNiAwIDAgMCAwLTRIOC4wOGEyNC42IDI0LjYgMCAwIDAgMCA0bS4yNSAyYy40MSAyLjQgMS4xMyA0IDEuNjcgNHMxLjI2LTEuNiAxLjY3LTR6bS02LjA4LTJoMy44MmEyOSAyOSAwIDAgMSAwLTRIMi4yNWE4IDggMCAwIDAgMCA0bS44MiAyYTguMDMgOC4wMyAwIDAgMCA0LjE3IDMuNTFjLS40Mi0uOTYtLjc0LTIuMTYtLjk1LTMuNTF6bTEzLjg2LThhOC4wMyA4LjAzIDAgMCAwLTQuMTctMy41MWMuNDIuOTYuNzQgMi4xNi45NSAzLjUxem0tOC42IDBoMy4zNGMtLjQxLTIuNC0xLjEzLTQtMS42Ny00UzguNzQgMy42IDguMzMgNk0zLjA3IDZoMy4yMmMuMi0xLjM1LjUzLTIuNTUuOTUtMy41MUE4LjAzIDguMDMgMCAwIDAgMy4wNyA2Ii8+PC9zdmc+',
@@ -137,6 +160,24 @@ export default {
   cloudSpace: {
     download:
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIvPjxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNNSAxOWgxNGExIDEgMCAwIDEgMCAySDVhMSAxIDAgMCAxIDAtMm04LTUuODI1bDMuMjQzLTMuMjQybDEuNDE0IDEuNDE0TDEyIDE3LjAwNGwtNS42NTctNS42NTdsMS40MTQtMS40MTRMMTEgMTMuMTc1VjJoMnoiLz48L3N2Zz4=',
+    preview: {
+      zoomIn:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16l4 4M10.7 7.8v5.8M7.8 10.7h5.8"/></g></svg>',
+      zoomOut:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16l4 4M7.8 10.7h5.8"/></g></svg>',
+      rotate:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 5v6h-6"/></g></svg>',
+      alignLeft:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"><path d="M4 6h16M4 10h11M4 14h16M4 18h11"/></g></svg>',
+      copy: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"><rect width="12" height="12" x="8" y="8" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></g></svg>',
+      unknown:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M6 3.5h7l5 5V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V5a1.5 1.5 0 0 1 1-1.5"/><path d="M13 3.5V9h5M9.8 13a2.2 2.2 0 1 1 3.5 1.78c-.78.55-1.3.9-1.3 1.72M12 19h.01"/></g></svg>',
+      globe:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3c2.2 2.45 3.25 5.45 3.25 9S14.2 18.55 12 21M12 3C9.8 5.45 8.75 8.45 8.75 12S9.8 18.55 12 21"/></g></svg>',
+      retry:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 5v6h-6"/></g></svg>',
+      info: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></g></svg>',
+    },
     share:
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSJjdXJyZW50Q29sb3IiIGQ9Ik03LjUgMmEuNS41IDAgMCAxIDAgMWgtM0ExLjUgMS41IDAgMCAwIDMgNC41djdBMS41IDEuNSAwIDAgMCA0LjUgMTNoN2ExLjUgMS41IDAgMCAwIDEuNS0xLjV2LTJhLjUuNSAwIDAgMSAxIDB2MmEyLjUgMi41IDAgMCAxLTIuNSAyLjVoLTdBMi41IDIuNSAwIDAgMSAyIDExLjV2LTdBMi41IDIuNSAwIDAgMSA0LjUgMnptMy4yOC0uOTVhLjUuNSAwIDAgMSAuNTI3LjA1NWw0LjUgMy41YS41LjUgMCAwIDEgMCAuNzlsLTQuNSAzLjVBLjUuNSAwIDAgMSAxMC41IDguNVY3LjAyNWMtMi4yMzIuMjMtMy42MjQgMS45NzMtNC4zOTYgMy4zOTlsLS4xNTcuM0EuNS41IDAgMCAxIDUgMTAuNWMwLTIuMDc2LjUxOC0zLjk0MSAxLjUzNy01LjNjLjkzOC0xLjI1IDIuMjg2LTIuMDQ3IDMuOTYzLTIuMTc5VjEuNWEuNS41IDAgMCAxIC4yOC0uNDVtLjcyIDIuNDVhLjUuNSAwIDAgMS0uNS41Yy0xLjU5IDAtMi44MTcuNjczLTMuNjYyIDEuOGMtLjUzNy43MTYtLjkyOCAxLjYyNi0xLjE0NCAyLjY4QzcuMjIyIDcuMTk4IDguNzc1IDYgMTEgNmEuNS41IDAgMCAxIC41LjV2Ljk3OEwxNC42ODUgNUwxMS41IDIuNTIxeiIvPjwvc3ZnPg==',
     filter:

@@ -1,30 +1,31 @@
 <template>
-  <div class="view-mode-toggle">
-    <div
-      class="toggle-slider"
-      :style="{ transform: user.preferences.noteViewMode === 'card' ? 'translateX(0)' : 'translateX(100%)' }"
-    ></div>
-    <button @click="setMode('card')" :class="{ active: user.preferences.noteViewMode === 'card' }">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM9 7h6v2H9V7zm0 4h6v2H9v11z" />
-      </svg>
+  <div class="view-mode-toggle" :aria-label="$t('note.viewMode')">
+    <BButton
+      class="view-mode-button"
+      :class="{ active: user.preferences.noteViewMode === 'card' }"
+      @click="setMode('card')"
+    >
+      <SvgIcon :src="icon.navigation.portal" size="15" />
       {{ $t('note.cardView') }}
-    </button>
-    <button @click="setMode('list')" :class="{ active: user.preferences.noteViewMode === 'list' }">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z" />
-      </svg>
+    </BButton>
+    <BButton
+      class="view-mode-button"
+      :class="{ active: user.preferences.noteViewMode === 'list' }"
+      @click="setMode('list')"
+    >
+      <SvgIcon :src="icon.filterPanel.list" size="15" />
       {{ $t('note.listView') }}
-    </button>
+    </BButton>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { useI18n } from 'vue-i18n';
   import { useUserStore } from '@/store';
-  const { t } = useI18n();
   import { recordOperation } from '@/api/commonApi.ts';
   import { updatePreference, isGuestUser } from '@/utils/savePreference';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   const user = useUserStore();
   const setMode = async (mode: any) => {
     // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
@@ -39,63 +40,26 @@
 
 <style lang="less" scoped>
   .view-mode-toggle {
-    position: relative;
     display: flex;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    transition: box-shadow 0.3s ease;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--card-border-color) 42%, transparent);
+  }
 
-    &:hover {
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-    }
+  .view-mode-button {
+    height: 30px;
+    padding: 0 9px;
+    gap: 5px;
+    border-radius: 8px;
+    color: var(--desc-color);
+    background: transparent;
+    font-size: 12px;
+  }
 
-    .toggle-slider {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 50%;
-      height: 100%;
-      background: linear-gradient(135deg, var(--primary-color), var(--primary-color-light, #7c3aed));
-      border-radius: 19px;
-      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    }
-
-    button {
-      flex: 1;
-      padding: 6px 12px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      position: relative;
-      z-index: 1;
-      color: var(--text-color);
-      font-size: 14px;
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: color 0.3s ease;
-
-      svg {
-        transition: fill 0.3s ease;
-      }
-
-      &.active {
-        color: white;
-
-        svg {
-          fill: white;
-        }
-      }
-
-      &:hover:not(.active) {
-        color: var(--primary-color);
-      }
-    }
+  .view-mode-button.active {
+    color: var(--resource-note-color, #00a884);
+    background: var(--menu-body-bg-color);
+    box-shadow: 0 2px 7px color-mix(in srgb, var(--text-color) 12%, transparent);
   }
 </style>

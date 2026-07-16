@@ -14,22 +14,12 @@
         </div>
       </div>
     </div>
-    <div
-      v-else-if="!getBookList.length"
-      style="
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 64px 20px;
-        text-align: center;
-        color: var(--text-second-color, #888);
-      "
-    >
-      <div style="font-size: 44px; opacity: 0.7">🔖</div>
-      <p style="margin: 0; font-size: 16px; font-weight: 600; color: var(--text-color)">{{ $t('home.noBookmarks') }}</p>
-      <p style="margin: 0; font-size: 13px">{{ $t('home.noBookmarksHint') }}</p>
+    <div v-else-if="!getBookList.length" class="bookmark-empty-state">
+      <span class="bookmark-empty-icon">
+        <SvgIcon :src="icon.resource.bookmark" size="28" />
+      </span>
+      <strong>{{ $t('home.noBookmarks') }}</strong>
+      <p>{{ $t('home.noBookmarksHint') }}</p>
       <BButton data-guide="add-bookmark" type="primary" class="empty-add-button" @click="goAddBookmark">
         {{ $t('home.addBookmark') }}
       </BButton>
@@ -88,6 +78,8 @@
   import { shouldStartCreateBookmarkGuide } from '@/utils/bookmarkGuide';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const route = useRoute();
@@ -290,18 +282,54 @@
   }
 
   .card-panel {
-    margin-top: 16px;
+    margin-top: 0;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    padding: 0 16px;
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    padding: 16px;
+    gap: 14px;
     align-content: start;
   }
+
+  .bookmark-empty-state {
+    min-height: 300px;
+    padding: 48px 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--desc-color);
+    text-align: center;
+  }
+
+  .bookmark-empty-icon {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 4px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--resource-bookmark-color, #615ced);
+    background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 10%, var(--menu-body-bg-color));
+  }
+
+  .bookmark-empty-state strong {
+    color: var(--text-color);
+    font-size: 16px;
+  }
+
+  .bookmark-empty-state p {
+    margin: 0;
+    font-size: 13px;
+  }
+
   .empty-add-button {
     margin-top: 6px;
   }
   .skeleton-panel {
-    margin-top: 16px;
+    margin-top: 0;
   }
   .card-skeleton {
     border: 1px solid var(--card-border-color);
@@ -365,6 +393,8 @@
   }
   .card-panel > div {
     min-width: 0;
+    content-visibility: auto;
+    contain-intrinsic-size: 164px;
   }
   @keyframes skeleton-shine {
     0% {
@@ -377,7 +407,7 @@
   @media (max-width: 1200px) {
     .card-panel {
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 16px;
+      gap: 12px;
       padding: 0 12px;
     }
   }
@@ -385,8 +415,8 @@
     .card-panel {
       justify-content: center;
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 14px;
-      padding: 0 20px;
+      gap: 12px;
+      padding: 12px;
     }
   }
   .panel-loading {
@@ -425,6 +455,12 @@
   }
 
   @media (max-width: 768px) {
+    .card-panel {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 2px 2px 12px;
+      gap: 12px;
+    }
+
     .beian-wrap {
       padding: 14px 12px 10px;
       font-size: 11px;

@@ -1,41 +1,62 @@
 <template>
-  <div v-if="g" class="wg" @click="goGrowth">
-    <div class="wg-left">
-      <div class="wg-badge" :style="{ background: tierGradient(g.level) }">
-        <span class="wg-lv">Lv.{{ g.level }}</span>
-      </div>
-      <div class="wg-meta">
-        <div class="wg-name">
-          {{ g.name }}
-          <span v-if="g.isMax" class="wg-max">{{ t('growth.max') }}</span>
+  <div v-if="g" class="growth-card">
+    <div class="growth-header">
+      <div class="growth-identity">
+        <div class="growth-badge" :style="{ background: tierGradient(g.level) }">
+          <span>Lv.{{ g.level }}</span>
         </div>
-        <div class="wg-exp">{{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}</div>
+        <div class="growth-meta">
+          <div class="growth-name">
+            <strong>{{ g.name }}</strong>
+            <span v-if="g.isMax" class="max-badge">{{ t('growth.max') }}</span>
+          </div>
+          <span>{{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}</span>
+        </div>
       </div>
+      <BButton size="small" class="growth-link" @click="goGrowth">
+        {{ t('workbench.growth.view') }}
+      </BButton>
     </div>
 
-    <div class="wg-mid">
+    <div class="growth-progress-area">
       <template v-if="!g.isMax">
-        <div class="wg-progress" :title="`${g.progress}%`">
-          <div class="wg-progress-fill" :style="{ width: g.progress + '%' }"></div>
+        <div class="growth-progress-copy">
+          <span>{{ t('workbench.growth.progress') }}</span>
+          <strong>{{ g.progress }}%</strong>
         </div>
-        <div class="wg-tonext">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</div>
+        <div class="growth-progress" :title="`${g.progress}%`">
+          <span :style="{ width: `${g.progress}%` }"></span>
+        </div>
+        <span class="next-level">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</span>
       </template>
-      <div v-else class="wg-maxhint">{{ t('workbench.growth.maxHint', '已达满级 · 感谢一路同行') }}</div>
-      <div class="wg-streak">🔥 {{ t('growth.streak') }} {{ t('growth.daysVal', { n: g.streak }) }}</div>
+      <span v-else class="max-hint">{{ t('workbench.growth.maxHint') }}</span>
     </div>
 
-    <div class="wg-right">
-      <button
-        class="wg-checkin"
-        :class="{ done: g.checkedInToday }"
-        :disabled="g.checkedInToday || checking"
-        @click.stop="onCheckin"
-      >
-        {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
-      </button>
-      <button v-if="claimable > 0" class="wg-claim" :disabled="claiming" @click.stop="onClaimAll">
-        🎁 {{ t('growth.claimAll') }} · {{ claimable }}
-      </button>
+    <div class="growth-footer">
+      <span class="streak">{{ t('growth.streak') }} · {{ t('growth.daysVal', { n: g.streak }) }}</span>
+      <div class="growth-actions">
+        <BButton
+          size="small"
+          :type="g.checkedInToday ? '' : 'primary'"
+          :loading="checking"
+          :disabled="g.checkedInToday || checking"
+          class="checkin-button"
+          @click="onCheckin"
+        >
+          {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
+        </BButton>
+        <BButton
+          v-if="claimable > 0"
+          size="small"
+          type="success"
+          :loading="claiming"
+          :disabled="claiming"
+          class="claim-button"
+          @click="onClaimAll"
+        >
+          {{ t('growth.claimAll') }} · {{ claimable }}
+        </BButton>
+      </div>
     </div>
   </div>
 </template>
@@ -45,8 +66,9 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import { tierGradient } from '@/config/growthTier';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { tierGradient } from '@/config/growthTier.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 
@@ -60,9 +82,9 @@
   async function loadClaimable() {
     try {
       const res = await apiBaseGet('/api/growth/claimable');
-      if (res?.status === 200 && res.data) claimable.value = res.data.count || 0;
+      if (res?.status === 200 && res.data) claimable.value = Number(res.data.count || 0);
     } catch {
-      /* 忽略 */
+      // 成长奖励是增强信息，接口临时不可用时不阻断工作台。
     }
   }
 
@@ -74,26 +96,25 @@
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
           message.success(t('growth.claimAllOk', { n: res.data.points }));
-          recordOperation({ module: '工作台', operation: `一键领取成长奖励（${res.data.claimed} 项,+${res.data.points} 积分）` });
+          recordOperation({
+            module: '工作台',
+            operation: `一键领取成长奖励（${res.data.claimed} 项,+${res.data.points} 积分）`,
+          });
         } else {
           message.info(t('growth.claimAllNone'));
         }
         claimable.value = 0;
-        load(true); // 刷新积分余额等
+        load(true);
       }
-    } catch (err) {
-      console.error('一键领取失败:', err);
+    } catch (error) {
+      console.error('一键领取失败:', error);
     } finally {
       claiming.value = false;
     }
   }
 
-  onMounted(() => {
-    load(); // 共享单例,首次拉一次即可
-    loadClaimable();
-  });
-
   function goGrowth() {
+    recordOperation({ module: '工作台', operation: '查看成长中心' });
     router.push('/growth');
   }
 
@@ -116,176 +137,186 @@
           }
         }
       }
-      // 游客:doCheckin 后端返回 'preview',request 拦截统一弹注册引导
-    } catch (err) {
-      console.error('签到失败:', err);
+    } catch (error) {
+      console.error('签到失败:', error);
     } finally {
       checking.value = false;
     }
   }
+
+  onMounted(() => {
+    load();
+    loadClaimable();
+  });
 </script>
 
 <style scoped lang="less">
-  .wg {
+  .growth-card {
+    min-height: 148px;
+    padding: 14px;
+    box-sizing: border-box;
     display: flex;
-    align-items: center;
-    gap: 20px;
-    padding: 16px 20px;
-    margin-bottom: 16px;
-    border-radius: 16px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
+    border-radius: 14px;
+    color: var(--text-color);
     background: linear-gradient(
-      120deg,
-      color-mix(in srgb, var(--primary-color) 10%, var(--workbench-subcard-bg, var(--background-color))),
-      var(--workbench-subcard-bg, var(--background-color)) 60%
+      145deg,
+      color-mix(in srgb, var(--primary-color) 7%, var(--menu-body-bg-color)),
+      var(--menu-body-bg-color)
     );
-    cursor: pointer;
-    transition:
-      transform 0.18s ease,
-      box-shadow 0.18s ease;
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--primary-color) 70%, transparent);
   }
-  .wg:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 28px -20px color-mix(in srgb, var(--primary-color) 70%, transparent);
-  }
-  .wg-left {
+
+  .growth-header,
+  .growth-footer,
+  .growth-identity,
+  .growth-name,
+  .growth-progress-copy,
+  .growth-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex: 0 0 auto;
   }
-  .wg-badge {
-    width: 48px;
-    height: 48px;
-    border-radius: 13px;
+
+  .growth-header,
+  .growth-footer,
+  .growth-progress-copy {
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .growth-identity {
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .growth-badge {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #fff;
-    box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 9px 18px -13px rgba(0, 0, 0, 0.65);
   }
-  .wg-lv {
-    font-size: 14px;
+
+  .growth-badge span {
+    font-size: 12px;
     font-weight: 800;
-    letter-spacing: -0.02em;
   }
-  .wg-meta {
+
+  .growth-meta {
     min-width: 0;
-  }
-  .wg-name {
-    font-size: 15px;
-    font-weight: 700;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .growth-name {
     gap: 6px;
   }
-  .wg-max {
+
+  .growth-name strong {
+    min-width: 0;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .growth-meta > span,
+  .next-level,
+  .max-hint,
+  .streak,
+  .growth-progress-copy {
+    color: var(--desc-color);
     font-size: 10.5px;
-    font-weight: 600;
-    padding: 1px 7px;
+  }
+
+  .max-badge {
+    padding: 2px 6px;
     border-radius: 999px;
     color: #fff;
     background: linear-gradient(135deg, #f43f5e, #fb923c);
+    font-size: 9px;
+    font-weight: 700;
   }
-  .wg-exp {
-    font-size: 12px;
-    color: var(--desc-color);
+
+  .growth-link {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--menu-body-bg-color));
+  }
+
+  .growth-progress-area {
+    min-height: 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .growth-progress-copy strong {
+    color: var(--text-color);
+    font-size: 10.5px;
     font-variant-numeric: tabular-nums;
   }
-  .wg-mid {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .wg-progress {
-    height: 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--card-border-color) 45%, transparent);
+
+  .growth-progress {
+    height: 6px;
     overflow: hidden;
-  }
-  .wg-progress-fill {
-    height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 60%, #22d3ee));
-    transition: width 0.4s ease;
+    background: color-mix(in srgb, var(--card-border-color) 54%, transparent);
   }
-  .wg-tonext,
-  .wg-maxhint {
-    font-size: 12px;
-    color: var(--desc-color);
+
+  .growth-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 58%, #22d3ee));
+    transition: width 0.35s ease;
   }
-  .wg-streak {
-    font-size: 12.5px;
-    color: var(--text-color);
-    font-weight: 500;
+
+  .growth-footer {
+    margin-top: auto;
   }
-  .wg-right {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+
+  .streak {
+    white-space: nowrap;
+  }
+
+  .growth-actions {
+    justify-content: flex-end;
     gap: 6px;
   }
-  .wg-checkin {
-    padding: 8px 20px;
-    border-radius: 10px;
-    border: none;
-    font-size: 13px;
-    font-weight: 600;
-    color: #fff;
-    cursor: pointer;
-    background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 76%, #4b46cc));
-    box-shadow: 0 8px 18px -12px color-mix(in srgb, var(--primary-color) 80%, transparent);
-    transition: transform 0.15s;
+
+  .checkin-button,
+  .claim-button {
+    min-width: 62px;
   }
-  .wg-checkin:hover:not(:disabled) {
-    transform: translateY(-1px);
-  }
-  .wg-checkin.done,
-  .wg-checkin:disabled {
-    background: color-mix(in srgb, var(--card-border-color) 40%, transparent);
-    color: var(--desc-color);
-    cursor: default;
-    box-shadow: none;
-  }
-  .wg-claim {
-    padding: 5px 14px;
-    border-radius: 999px;
-    border: none;
-    font-size: 12px;
-    font-weight: 700;
-    color: #fff;
-    cursor: pointer;
+
+  .claim-button {
     background: linear-gradient(135deg, #f59e0b, #f97316);
-    box-shadow: 0 6px 14px -8px rgba(245, 158, 11, 0.9);
-    animation: wg-claim-pulse 1.6s infinite;
   }
-  .wg-claim:disabled {
-    opacity: 0.6;
-    cursor: default;
-    animation: none;
-  }
-  @keyframes wg-claim-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
-  .wg-more {
-    font-size: 12px;
-    color: var(--primary-color);
-  }
-  @media (max-width: 720px) {
-    .wg {
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    .wg-mid {
-      order: 3;
-      flex-basis: 100%;
-    }
-    .wg-right {
+
+  @media (max-width: 760px) {
+    .growth-footer {
       align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .growth-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .growth-progress span {
+      transition: none;
     }
   }
 </style>

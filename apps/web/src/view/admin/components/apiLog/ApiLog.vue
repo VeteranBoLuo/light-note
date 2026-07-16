@@ -116,11 +116,6 @@
         key: 'system',
         width: '110px',
       },
-      {
-        title: 'code',
-        key: 'statusCode',
-        width: '1fr',
-      },
     ];
   });
 

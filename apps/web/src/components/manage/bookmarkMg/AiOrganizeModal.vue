@@ -91,6 +91,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const visible = defineModel<boolean>('visible');
   const props = defineProps<{ initType?: 'bookmark' | 'note' }>();
@@ -144,6 +145,11 @@
     try {
       const res = await apiBasePost('/api/bookmark/ai/organize/run', { ids: quote.value.batchIds, resourceType: resourceType.value });
       if (res?.status === 200 && res.data?.ok) {
+        const processed = Number(res.data?.processed || 0);
+        recordOperation({
+          module: resourceType.value === 'note' ? '笔记库' : '书签管理',
+          operation: `AI 智能整理生成建议成功【${processed}项】`,
+        });
         suggestions.value = (res.data.suggestions || []).map((s: any) => ({
           ...s,
           include: true,
@@ -183,6 +189,12 @@
       const res = await apiBasePost('/api/bookmark/ai/organize/apply', { items, resourceType: resourceType.value });
       if (res?.status === 200) {
         appliedCount.value = res.data?.applied || 0;
+        if (appliedCount.value > 0) {
+          recordOperation({
+            module: resourceType.value === 'note' ? '笔记库' : '书签管理',
+            operation: `应用 AI 智能整理结果成功【${appliedCount.value}项】`,
+          });
+        }
         step.value = 'done';
         emit('applied');
       } else {

@@ -141,9 +141,6 @@
       { title: 'IP', key: 'ip', width: '120px' },
       { title: '最近活跃', key: 'lastActiveTime', width: '140px', sortable: true },
       { title: '注册时间', key: 'createTime', width: '140px' },
-      { title: '书签数', key: 'bookmarkTotal', width: '50px' },
-      { title: '笔记数', key: 'noteTotal', width: '70px' },
-      { title: '云空间(MB)', key: 'storageUsed', width: '110px' },
       { title: '操作', key: 'operation', width: '190px' },
     ];
   });

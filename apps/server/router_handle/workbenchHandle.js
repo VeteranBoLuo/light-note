@@ -84,11 +84,12 @@ async function queryWeeklyStats(userId) {
       SELECT
         (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)) AS bookmark,
         (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND COALESCE(update_time, create_time) >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)) AS note,
-        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)) AS file
+        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)) AS file,
+        (SELECT COUNT(*) FROM tag WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)) AS tag
     `,
-    [userId, userId, userId],
+    [userId, userId, userId, userId],
   );
-  return rows[0] || { bookmark: 0, note: 0, file: 0 };
+  return rows[0] || { bookmark: 0, note: 0, file: 0, tag: 0 };
 }
 
 async function queryTrend(userId) {

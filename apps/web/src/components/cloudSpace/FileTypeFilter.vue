@@ -1,11 +1,9 @@
 <template>
   <div class="filter-container">
-    <!-- 下拉筛选按钮 -->
-    <div class="filter-dropdown">
+    <BPopover v-model:open="showFilterMenu" trigger="click" placement="bottom-right">
       <b-button
         class="filter-button"
         :class="{ 'filter-button--active': showFilterMenu }"
-        @click="toggleFilterMenu"
         v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }"
       >
         <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
@@ -16,50 +14,51 @@
         <i :class="['arrow', { 'arrow-up': showFilterMenu }]"></i>
       </b-button>
 
-      <!-- 筛选菜单 -->
-      <div v-show="showFilterMenu" class="filter-menu">
-        <div class="filter-header">
-          <BCheckbox
-            :indeterminate="indeterminate"
-            v-model:checked="allTypesSelected"
-            @change="(checked: boolean) => toggleSelectAll({ target: { checked } })"
-          >
-            <span class="select-all-label">{{ $t('common.selectAll') }}</span>
-          </BCheckbox>
-          <span class="selected-info">{{ selectedCount }}/{{ fileTypes.length }}</span>
-        </div>
-        <div class="filter-options">
-          <BCheckbox
-            v-for="type in fileTypes"
-            :key="type.value"
-            :checked="cloud.typeCheckValue.includes(type.value)"
-            class="filter-option"
-            @change="
-              (checked: boolean) => {
-                if (checked) {
-                  if (!cloud.typeCheckValue.includes(type.value))
-                    cloud.typeCheckValue = [...cloud.typeCheckValue, type.value];
-                } else {
-                  cloud.typeCheckValue = cloud.typeCheckValue.filter((v) => v !== type.value);
+      <template #content>
+        <div class="filter-menu">
+          <div class="filter-header">
+            <BCheckbox
+              :indeterminate="indeterminate"
+              v-model:checked="allTypesSelected"
+              @change="(checked: boolean) => toggleSelectAll({ target: { checked } })"
+            >
+              <span class="select-all-label">{{ $t('common.selectAll') }}</span>
+            </BCheckbox>
+            <span class="selected-info">{{ selectedCount }}/{{ fileTypes.length }}</span>
+          </div>
+          <div class="filter-options">
+            <BCheckbox
+              v-for="type in fileTypes"
+              :key="type.value"
+              :checked="cloud.typeCheckValue.includes(type.value)"
+              class="filter-option"
+              @change="
+                (checked: boolean) => {
+                  if (checked) {
+                    if (!cloud.typeCheckValue.includes(type.value))
+                      cloud.typeCheckValue = [...cloud.typeCheckValue, type.value];
+                  } else {
+                    cloud.typeCheckValue = cloud.typeCheckValue.filter((v) => v !== type.value);
+                  }
                 }
-              }
-            "
-          >
-            {{ type.label }}
-          </BCheckbox>
+              "
+            >
+              {{ type.label }}
+            </BCheckbox>
+          </div>
         </div>
-      </div>
-    </div>
+      </template>
+    </BPopover>
   </div>
 </template>
 
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
-  import { closeOpenWindow } from '@/utils/common.ts';
   import icon from '@/config/icon.ts';
   import { cloudSpaceStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { useI18n } from 'vue-i18n';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     CLOUD_FILE_CATEGORY_ORDER,
@@ -100,14 +99,6 @@
       cloud.queryFieldList();
     },
   );
-  const toggleFilterMenu = () => {
-    showFilterMenu.value = !showFilterMenu.value;
-    if (showFilterMenu.value) {
-      closeOpenWindow('filter-container', showFilterMenu);
-    } else {
-      closeOpenWindow('filter-container', showFilterMenu, false);
-    }
-  };
 </script>
 
 <style scoped>
@@ -116,17 +107,13 @@
     position: relative;
   }
 
-  .filter-dropdown {
-    position: relative;
-  }
-
   .filter-button {
     display: flex;
     align-items: center;
     gap: 7px;
-    height: 32px;
+    height: 36px;
     padding: 0 12px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: 1px solid transparent;
     cursor: pointer;
     font-size: 14px;
@@ -141,9 +128,10 @@
   }
 
   .filter-button--active {
-    border-color: rgba(96, 108, 255, 0.35);
-    background-color: var(--primary-btn-h-bg-color);
-    box-shadow: 0 0 0 2px rgba(96, 108, 255, 0.1);
+    border-color: color-mix(in srgb, var(--resource-file-color, #ff8a00) 42%, transparent);
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 8%, var(--menu-body-bg-color));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--resource-file-color, #ff8a00) 11%, transparent);
   }
 
   .filter-icon {
@@ -161,7 +149,7 @@
     font-size: 11px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(120deg, #5f76ff 0%, #7b58ff 100%);
+    background: var(--resource-file-color, #ff8a00);
   }
 
   .arrow {
@@ -170,7 +158,7 @@
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 5px solid #666;
+    border-top: 5px solid currentColor;
     transition: transform 0.3s;
   }
 
@@ -179,23 +167,18 @@
   }
 
   .filter-menu {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 8px;
-    border-radius: 10px;
-    border: 1px solid var(--noteType-border-color);
-    box-shadow: 0 10px 24px rgba(19, 22, 35, 0.14);
-    z-index: 1000;
     width: 214px;
-    padding: 10px;
-    background-color: var(--menu-body-bg-color);
-    --ant-primary-color: #606cff;
-    --ant-primary-color-hover: #7b83ff;
-    --ant-primary-color-active: #4a55e0;
+    max-height: min(340px, calc(100dvh - 24px));
+    padding: 6px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    --primary-color: var(--resource-file-color, #ff8a00);
   }
 
   .filter-header {
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -241,9 +224,11 @@
     flex-direction: column;
     flex-wrap: nowrap;
     gap: 4px;
-    max-height: 290px;
+    min-height: 0;
+    max-height: none;
+    flex: 1;
     overflow-y: auto;
-    padding-right: 2px;
+    padding: 0 2px 2px 0;
   }
 
   .filter-option {
@@ -288,10 +273,6 @@
       min-width: 0;
     }
 
-    .filter-dropdown {
-      position: static;
-    }
-
     .filter-button {
       width: 100%;
       justify-content: center;
@@ -306,12 +287,10 @@
     }
 
     .filter-menu {
-      position: absolute;
-      left: -5px;
       width: min(320px, calc(100vw - 32px));
-      max-height: min(420px, calc(100vh - 170px));
+      max-height: min(420px, calc(100dvh - 24px));
       box-sizing: border-box;
-      overflow-y: auto;
+      overflow: hidden;
       padding: 12px;
     }
 
@@ -320,7 +299,7 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 6px;
       max-height: none;
-      overflow: visible;
+      overflow-y: auto;
       padding-right: 0;
     }
 

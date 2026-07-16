@@ -40,7 +40,7 @@
           <div class="type-center-label">{{ t('workbench.chart.fileTotal', '文件总数') }}</div>
         </div>
         <div class="type-legend">
-          <div v-for="item in fileTypeLegendItems" :key="item.type" class="type-legend-item">
+          <div v-for="item in displayedFileTypeLegendItems" :key="item.type" class="type-legend-item">
             <span
               class="type-legend-dot"
               :style="{ backgroundColor: item.color, boxShadow: `0 0 10px ${item.color}` }"
@@ -114,6 +114,7 @@
   let typeIsVisible = true;
   let lastTrendFrameAt = 0;
   let lastTypeFrameAt = 0;
+  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   const CHART_FRAME_INTERVAL = 48;
   const TYPE_LEGEND_WIDTH = 136;
@@ -189,6 +190,7 @@
       }))
       .sort((a, b) => b.value - a.value);
   });
+  const displayedFileTypeLegendItems = computed(() => fileTypeLegendItems.value.slice(0, 6));
 
   function destroyAll() {
     stopTrendAnimation();
@@ -406,6 +408,10 @@
 
   function startTrendAnimation() {
     stopTrendAnimation();
+    if (prefersReducedMotion) {
+      drawTrend(0);
+      return;
+    }
     const frame = (time: number) => {
       if (!trendIsVisible) {
         stopTrendAnimation();
@@ -542,6 +548,10 @@
 
   function startTypeAnimation() {
     stopTypeAnimation();
+    if (prefersReducedMotion) {
+      drawType(0);
+      return;
+    }
     const frame = (time: number) => {
       if (!typeIsVisible) {
         stopTypeAnimation();
@@ -610,7 +620,7 @@
     const lineWidth = Math.max(14, Math.min(20, radius * 0.22));
     const distance = Math.hypot(x - cx, y - cy);
     const angle = normalizeAngle(Math.atan2(y - cy, x - cx));
-    const segment = getTypeSegments(performance.now()).find((item) => {
+    const segment = getTypeSegments(prefersReducedMotion ? 0 : performance.now()).find((item) => {
       const start = normalizeAngle(item.start);
       const end = normalizeAngle(item.end);
       const inArc = start <= end ? angle >= start && angle <= end : angle >= start || angle <= end;
@@ -735,12 +745,13 @@
 
   .chart-card {
     position: relative;
-    border-radius: 12px;
-    padding: 12px;
-    height: 300px;
-    background: linear-gradient(150deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color));
-    border: 1px solid var(--bl-input-noBorder-bg-color);
-    box-shadow: var(--ant-table-boxShadow);
+    border-radius: 14px;
+    padding: 14px;
+    height: 270px;
+    box-sizing: border-box;
+    background: var(--menu-body-bg-color);
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -752,7 +763,7 @@
       border-radius: inherit;
       pointer-events: none;
       transition: opacity 0.2s ease;
-      opacity: 0.9;
+      opacity: 0.55;
     }
 
     &:hover::before {
@@ -761,30 +772,31 @@
   }
 
   .chart-card--day {
-    background:
-      linear-gradient(160deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color)),
-      linear-gradient(20deg, var(--noteType-hover-bg-color), var(--menu-body-bg-color));
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--primary-color) 2%, var(--menu-body-bg-color)),
+      var(--menu-body-bg-color)
+    );
 
     &::before {
       background:
-        radial-gradient(circle at 100% 0%, rgba(108, 99, 255, 0.1), transparent 44%),
-        radial-gradient(circle at 0% 100%, rgba(0, 194, 255, 0.09), transparent 50%);
+        radial-gradient(circle at 100% 0%, rgba(108, 99, 255, 0.07), transparent 44%),
+        radial-gradient(circle at 0% 100%, rgba(0, 194, 255, 0.05), transparent 50%);
     }
   }
 
   .chart-card--night {
-    background:
-      linear-gradient(155deg, var(--menu-body-bg-color), var(--bl-input-noBorder-bg-color)),
-      linear-gradient(20deg, var(--noteType-hover-bg-color), var(--menu-body-bg-color));
-    border-color: rgba(124, 92, 255, 0.25);
-    box-shadow:
-      0 0 0 1px rgba(124, 92, 255, 0.2),
-      0 16px 32px rgba(0, 0, 0, 0.35);
+    background: linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color)),
+      var(--menu-body-bg-color)
+    );
+    border-color: color-mix(in srgb, var(--primary-color) 20%, var(--card-border-color));
 
     &::before {
       background:
-        radial-gradient(circle at 100% 0%, rgba(124, 92, 255, 0.22), transparent 46%),
-        radial-gradient(circle at 0% 100%, rgba(0, 229, 255, 0.16), transparent 56%);
+        radial-gradient(circle at 100% 0%, rgba(124, 92, 255, 0.13), transparent 46%),
+        radial-gradient(circle at 0% 100%, rgba(0, 229, 255, 0.08), transparent 56%);
     }
   }
 
@@ -1066,9 +1078,17 @@
     }
   }
 
-  @media (max-width: 1200px) {
+  @media (max-width: 760px) {
     .chart-grid {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chart-card::before,
+    .chart-skeleton {
+      animation: none;
+      transition: none;
     }
   }
 </style>
