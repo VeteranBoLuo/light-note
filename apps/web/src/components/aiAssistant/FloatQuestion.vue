@@ -1,9 +1,5 @@
 <template>
-  <div
-    v-if="!isClosed"
-    class="float-question-container"
-    :class="{ 'container-peek': isPeeked, 'float-question-container--open': isOpen || containerActive }"
-  >
+  <div class="ai-edge-host" :class="{ 'ai-edge-host--open': isOpen }">
     <BDrawer
       :open="isOpen"
       :title="t('ai.title')"
@@ -20,230 +16,97 @@
       </div>
     </BDrawer>
 
-    <!-- 悬浮按钮保持不变 -->
     <BButton
       v-show="!isOpen"
-      class="float-button"
+      class="ai-edge-trigger"
       role="button"
       tabindex="0"
       :aria-label="t('ai.title')"
-      :class="{
-        'button-active': isOpen,
-        'button-minimized': !isOpen,
-      }"
-      @click="toggleModal"
-      @keydown.enter.space.prevent="toggleModal"
+      :title="t('ai.title')"
+      @click="openAssistant"
+      @keydown.enter.prevent="openAssistant"
+      @keydown.space.prevent="openAssistant"
       v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
-      @mouseenter="handleButtonMouseEnter"
-      @mouseleave="handleButtonMouseLeave"
     >
-      <div class="button-inner">
-        <div class="button-icon">
-          <svg class="ai-svg-icon" viewBox="0 0 100 100">
-            <circle
-              class="orbit orbit-1"
-              cx="50"
-              cy="50"
-              r="40"
-              fill="none"
-              stroke="white"
-              stroke-width="4"
-              stroke-dasharray="20 230"
-              stroke-linecap="round"
-            />
-            <circle
-              class="orbit orbit-2"
-              cx="50"
-              cy="50"
-              r="32"
-              fill="none"
-              stroke="white"
-              stroke-width="4"
-              stroke-dasharray="20 180"
-              stroke-linecap="round"
-            />
-            <circle
-              class="orbit orbit-3"
-              cx="50"
-              cy="50"
-              r="24"
-              fill="none"
-              stroke="white"
-              stroke-width="3"
-              stroke-dasharray="10 140"
-              stroke-linecap="round"
-            />
-            <circle class="core" cx="50" cy="50" r="10" fill="white" />
-          </svg>
-        </div>
-        <div class="pulse-ring"></div>
-        <div class="sparkle-container">
-          <div class="sparkle" v-for="i in 3" :key="i" :style="sparkleStyle(i)"></div>
-        </div>
-      </div>
+      <span class="ai-edge-surface" aria-hidden="true">
+        <span class="ai-edge-track"></span>
+        <span class="ai-edge-label">AI</span>
+      </span>
     </BButton>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted, computed, defineAsyncComponent } from 'vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-
-  // 状态管理
   const isOpen = ref(false);
-  const isClosed = ref(false);
-  const isPeeked = ref(true);
-  /** 容器保持激活状态直到动画播完（防止动画期间 z-index 掉落） */
-  const containerActive = ref(false);
-  let peekTimer: number | null = null;
+  const aiAssistantRef = ref<{ clearHistory?: () => void } | null>(null);
 
-  const aiAssistantRef = ref(null);
-
-  // 悬浮按钮动画状态
-  const isPulsing = ref(false);
-
-  // 火花样式计算
-  const sparkleStyle = (index: number) => ({
-    animationDelay: `${index * 0.3}s`,
-    left: `${20 + index * 20}%`,
-  });
-
-  // 切换弹窗
-  const toggleModal = () => {
-    if (isOpen.value) {
-      minimize();
-    } else {
-      isOpen.value = true;
-      containerActive.value = true;
-      isPeeked.value = false;
-      window.dispatchEvent(new CustomEvent('light-note:close-search')); // 打开 AI 时互斥收起全局搜索下拉
-    }
-  };
-
-  // 关闭弹窗（缩小到图标）
-  const minimize = () => {
-    isOpen.value = false;
-    containerActive.value = false;
-    if (bookmark.isMobile) {
-      isPeeked.value = true;
-      clearPeekTimer();
-      return;
-    }
-    isPeeked.value = false;
-    schedulePeek();
-  };
-
-  // 全局搜索打开时的互斥收起:仅当 AI 面板确实展开时才收拢。
-  // 不复用 minimize —— minimize 无条件 isPeeked=false(先露圆形再定时收),
-  // 在 AI 只是半隐藏(未展开)时反而把它唤出成圆形图标,这正是"点搜索框误触发 AI"的根因。
-  const handleCloseAi = () => {
-    if (!isOpen.value) return; // 未展开(半隐藏/图标态)→ 保持原状,绝不唤出
-    isOpen.value = false;
-    isPeeked.value = true; // 直接回半隐藏,不经圆形
-    clearPeekTimer();
-  };
-
-  const handleOpenAi = () => {
-    isOpen.value = true;
-    containerActive.value = true;
-    isPeeked.value = false;
-    clearPeekTimer();
-  };
-
-  // 新增：清空对话方法
-  const clearConversation = () => {
-    // 调用AiAssistant组件的清空方法
-    if (aiAssistantRef.value && aiAssistantRef.value.clearHistory) {
-      aiAssistantRef.value.clearHistory();
-      message.success(t('ai.newChart'));
-    }
-  };
-
-  // 按钮动画控制（保持不变）
-  const startButtonPulse = () => {
-    isPulsing.value = true;
-  };
-
-  const stopButtonPulse = () => {
-    isPulsing.value = false;
-  };
-
-  const clearPeekTimer = () => {
-    if (peekTimer) {
-      clearTimeout(peekTimer);
-      peekTimer = null;
-    }
-  };
-
-  const schedulePeek = () => {
+  function openAssistant() {
     if (isOpen.value) return;
-    clearPeekTimer();
-    peekTimer = window.setTimeout(() => {
-      if (!isOpen.value) {
-        isPeeked.value = true;
-      }
-    }, 2000);
-  };
+    isOpen.value = true;
+    window.dispatchEvent(new CustomEvent('light-note:close-search'));
+  }
 
-  const handleButtonMouseEnter = () => {
-    startButtonPulse();
-    clearPeekTimer();
-    isPeeked.value = false;
-  };
+  function minimize() {
+    isOpen.value = false;
+  }
 
-  const handleButtonMouseLeave = () => {
-    stopButtonPulse();
-    schedulePeek();
-  };
+  function clearConversation() {
+    aiAssistantRef.value?.clearHistory?.();
+    message.success(t('ai.newChart'));
+  }
 
   function shouldIgnoreEscape(event: KeyboardEvent) {
     return event.defaultPrevented || event.isComposing || event.keyCode === 229;
   }
 
-  const handleKeydown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && isOpen.value && !shouldIgnoreEscape(e)) {
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && isOpen.value && !shouldIgnoreEscape(event)) {
       minimize();
     }
-  };
+  }
 
-  // 生命周期（保持不变）
+  function handleCloseAi() {
+    if (isOpen.value) minimize();
+  }
+
+  function handleOpenAi() {
+    openAssistant();
+  }
+
   onMounted(() => {
-    // 预热智能助手 chunk，减少首次点击打开延迟;放到浏览器空闲时再拉,避免抢占首屏关键路径
-    // (否则预渲染的 networkidle 会等它下载完并把这个大 chunk 烘焙进首屏 modulepreload)
+    // 空闲时预热对话模块，避免首次打开抽屉等待；预渲染环境继续跳过。
     const warmChat = () => import('@/view/aiAssistant/ChatContainer.vue').catch(() => {});
-    // 预渲染(无头浏览器 navigator.webdriver=true)时跳过预热:否则 networkidle 会等这次 import 完成,
-    // 把 gzip 300KB+ 的 ChatContainer 烘焙进静态 landing 首屏 preload,拖累真实访客的 TBT/LCP。真实用户照常空闲预热。
     if (!(window as any).__PRERENDER__ && !navigator.webdriver) {
       if (typeof window.requestIdleCallback === 'function') {
         window.requestIdleCallback(warmChat);
       } else {
-        setTimeout(warmChat, 2000);
+        window.setTimeout(warmChat, 2000);
       }
     }
     document.addEventListener('keydown', handleKeydown);
-    window.addEventListener('light-note:close-ai', handleCloseAi); // 全局搜索下拉打开时互斥收起 AI 面板(仅在已展开时)
+    window.addEventListener('light-note:close-ai', handleCloseAi);
     window.addEventListener('light-note:open-ai', handleOpenAi);
-    schedulePeek();
   });
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('light-note:close-ai', handleCloseAi);
     window.removeEventListener('light-note:open-ai', handleOpenAi);
-    clearPeekTimer();
   });
 </script>
 
-<style scoped>
+<style scoped lang="less">
   .ai-drawer-content {
     display: flex;
     flex-direction: column;
@@ -256,497 +119,118 @@
     min-height: 0;
   }
 
-  .float-question-container {
+  .ai-edge-host {
     position: fixed;
+    right: 0;
+    bottom: 44px;
     z-index: 100;
-    bottom: 40px;
-    right: 40px;
-    transition: right 0.35s ease;
+    width: 44px;
+    height: 80px;
   }
 
-  .float-question-container--open {
+  .ai-edge-host--open {
     z-index: 200000;
   }
 
-  .container-peek {
-    right: 0;
-  }
-
-  /* 悬浮按钮样式 */
-  .float-button {
-    width: 50px;
-    height: 50px;
-    padding: 0;
-    line-height: normal;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow:
-      0 10px 40px rgba(102, 126, 234, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.1);
+  .ai-edge-trigger {
     position: relative;
-    overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  .container-peek .float-button {
-    transform: translateX(15px);
     width: 44px;
-    height: 110px;
-    border-radius: 22px 0 0 22px;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-right: none;
-    box-shadow:
-      -5px 0 25px rgba(0, 0, 0, 0.1),
-      inset 2px 0 2px rgba(255, 255, 255, 0.2);
+    min-width: 44px;
+    height: 80px;
+    padding: 0;
+    overflow: visible;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none !important;
+    line-height: normal;
   }
 
-  /* 隐藏原有内容 */
-  .container-peek .float-button .button-icon,
-  .container-peek .float-button .pulse-ring,
-  .container-peek .float-button .sparkle-container {
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  /* 新的能量条装饰 */
-  .container-peek .float-button::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 18px;
-    transform: translate(-50%, -50%);
-    width: 6px;
-    height: 60px;
-    border-radius: 10px;
-    background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%);
-    box-shadow: 0 0 15px rgba(0, 242, 254, 0.6);
-    animation: neon-breath 2s ease-in-out infinite;
-  }
-
-  @keyframes neon-breath {
-    0%,
-    100% {
-      height: 50px;
-      opacity: 0.7;
-      box-shadow: 0 0 15px rgba(0, 242, 254, 0.4);
-      filter: hue-rotate(0deg);
-    }
-    50% {
-      height: 80px;
-      opacity: 1;
-      box-shadow: 0 0 30px rgba(0, 242, 254, 0.8);
-      filter: hue-rotate(30deg);
-    }
-  }
-
-  .float-button::before {
-    content: '';
+  .ai-edge-surface {
     position: absolute;
     top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: left 0.6s;
+    right: -32px;
+    width: 44px;
+    height: 80px;
+    overflow: hidden;
+    border-radius: 18px 0 0 18px;
+    background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
+    box-shadow: -5px 0 18px color-mix(in srgb, var(--primary-color) 14%, transparent);
+    pointer-events: none;
+    transition:
+      right 0.2s ease,
+      background 0.2s ease,
+      box-shadow 0.2s ease;
   }
 
-  .float-button:hover::before {
-    left: 100%;
+  .ai-edge-track {
+    position: absolute;
+    top: 50%;
+    left: 4px;
+    width: 4px;
+    height: 48px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 55%, #9a8cff));
+    box-shadow: 0 0 10px color-mix(in srgb, var(--primary-color) 38%, transparent);
+    transform: translateY(-50%);
   }
 
-  .float-button:hover {
-    transform: scale(1.15) rotate(5deg);
-    box-shadow:
-      0 15px 50px rgba(102, 126, 234, 0.4),
-      0 0 30px rgba(255, 255, 255, 0.1);
+  .ai-edge-label {
+    position: absolute;
+    top: 50%;
+    left: 14px;
+    color: var(--primary-color);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.16s ease;
+    writing-mode: vertical-rl;
   }
 
-  .button-inner {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
+  .ai-edge-trigger:hover .ai-edge-surface,
+  .ai-edge-trigger:focus-visible .ai-edge-surface {
+    right: -18px;
+    background: color-mix(in srgb, var(--primary-color) 20%, var(--card-background));
+    box-shadow: -7px 0 22px color-mix(in srgb, var(--primary-color) 20%, transparent);
   }
 
-  .button-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
-    transition: all 0.3s ease;
-  }
-
-  .ai-svg-icon {
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-  }
-
-  .orbit {
-    transform-origin: 50% 50%;
+  .ai-edge-trigger:hover .ai-edge-label,
+  .ai-edge-trigger:focus-visible .ai-edge-label {
     opacity: 0.9;
   }
 
-  .orbit-1 {
-    animation: spin 4s linear infinite;
-  }
-  .orbit-2 {
-    animation: spin 5s linear infinite reverse;
-  }
-  .orbit-3 {
-    animation: spin 3s linear infinite;
-  }
-
-  .core {
-    transform-origin: 50% 50%;
-    animation: core-breath 2s ease-in-out infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes core-breath {
-    0%,
-    100% {
-      transform: scale(1);
-      opacity: 0.8;
-    }
-    50% {
-      transform: scale(1.3);
-      opacity: 1;
-      filter: drop-shadow(0 0 8px white);
-    }
-  }
-
-  .float-button:hover .button-icon {
-    transform: scale(1.15);
-    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
-  }
-
-  /* 脉冲光环 */
-  .pulse-ring {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    border-radius: 50%;
-    animation: pulse 2s ease-in-out infinite;
-    opacity: 0;
-  }
-
-  @keyframes pulse {
-    0% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(1.5);
-      opacity: 0;
-    }
-  }
-
-  /* 闪烁星星 */
-  .sparkle-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  .sparkle {
-    position: absolute;
-    width: 4px;
-    height: 4px;
-    background: white;
-    border-radius: 50%;
-    opacity: 0;
-    animation: sparkle 3s ease-in-out infinite;
-  }
-
-  @keyframes sparkle {
-    0%,
-    100% {
-      opacity: 0;
-      transform: scale(0);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  .button-active {
-    background: linear-gradient(135deg, #f093fb, #f575a5, #f5576c, #f87b8a, #f093fb, #8fc0ff, #a0d4ff, #f093fb);
-    background-size: 600% 600%;
-    transform: scale(1.1);
-    animation: gradient-flow 8s ease infinite;
-  }
-
-  @keyframes gradient-flow {
-    0% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-    100% {
-      background-position: 0% 50%;
-    }
-  }
-
-  .button-minimized {
-    transform: scale(0.9);
-    opacity: 0.8;
-  }
-
-  /* 弹窗样式 */
-  .question-modal {
-    position: fixed;
-    width: 80vw;
-    height: 90vh;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px) saturate(180%);
-    border-radius: 20px;
-    box-shadow:
-      0 25px 50px rgba(0, 0, 0, 0.15),
-      0 0 0 1px rgba(255, 255, 255, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    z-index: 10000;
-    transition:
-      transform 0.1s ease,
-      box-shadow 0.1s ease;
-  }
-
-  .glassmorphism {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-  }
-
-  /* 头部样式 */
-  .modal-header {
-    padding: 12px 25px;
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
-    backdrop-filter: blur(10px);
-    color: white;
-    user-select: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .title-section {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .ai-icon {
-    font-size: 24px;
-    animation: float 3s ease-in-out infinite;
-  }
-
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0px);
-    }
-    50% {
-      transform: translateY(-5px);
-    }
-  }
-
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    background: #4ade80;
-    border-radius: 50%;
-    animation: pulse-dot 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse-dot {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .action-btn {
-    width: 32px;
-    height: 32px;
-    border: none;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-    backdrop-filter: blur(10px);
-  }
-
-  .action-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-  }
-
-  .close-btn:hover {
-    background: rgba(239, 68, 68, 0.3);
-  }
-
-  /* 内容区域 */
-  .modal-content {
-    flex: 1;
-    overflow: auto;
-    padding: 0;
-  }
-
-  /* 底部装饰 */
-  .modal-footer {
-    height: 4px;
-    background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #f5576c);
-    background-size: 200% 100%;
-    animation: wave 3s ease infinite;
-  }
-
-  @keyframes wave {
-    0% {
-      background-position: 0% 50%;
-    }
-    50% {
-      background-position: 100% 50%;
-    }
-    100% {
-      background-position: 0% 50%;
-    }
-  }
-
-  .footer-wave {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-    animation: shimmer 2s ease-in-out infinite;
-  }
-
-  @keyframes shimmer {
-    0%,
-    100% {
-      transform: translateX(-100%);
-    }
-    50% {
-      transform: translateX(100%);
-    }
-  }
-
-  /* 动画效果 */
-  .modal-slide-enter-active {
-    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .modal-slide-leave-active {
-    transition: all 0.2s ease-out;
-  }
-
-  .modal-slide-enter-from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.92);
-  }
-
-  .modal-slide-leave-to {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.97);
-  }
-
-  /* 响应式设计 */
-  @media (max-width: 1024px) {
-    .question-modal {
-      width: 95vw;
-      height: 80vh;
-      left: 2.5vw !important;
-      top: 10vh !important;
-      transform: none !important;
-    }
-
-    .float-button {
-      width: 60px;
-      height: 60px;
-      bottom: 20px;
-      right: 20px;
-    }
-
-    .button-icon {
-      font-size: 24px;
-    }
+  .ai-edge-trigger:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary-color) 56%, transparent);
+    outline-offset: -2px;
   }
 
   @media (max-width: 600px) {
-    .float-question-container {
-      right: 10px;
+    .ai-edge-host {
       bottom: calc(72px + env(safe-area-inset-bottom));
-    }
-    .question-modal {
-      width: 100vw;
-      height: 100vh;
-      border-radius: 0;
-      left: 0 !important;
-      top: 0 !important;
+      height: 68px;
     }
 
-    .float-button {
-      width: 40px;
+    .ai-edge-trigger,
+    .ai-edge-surface {
+      height: 68px;
+    }
+
+    .ai-edge-surface {
+      right: -26px;
+      border-radius: 16px 0 0 16px;
+    }
+
+    .ai-edge-track {
       height: 40px;
-      bottom: 16px;
-      right: 16px;
-    }
-
-    .modal-header {
-      padding: 16px 20px;
     }
   }
 
-  /* 拖拽时的视觉反馈 */
-  .question-modal:active {
-    transition: none;
-    cursor: grabbing;
-  }
-
-  .drag-handle:active {
-    cursor: grabbing;
+  @media (prefers-reduced-motion: reduce) {
+    .ai-edge-surface,
+    .ai-edge-label {
+      transition: none;
+    }
   }
 </style>

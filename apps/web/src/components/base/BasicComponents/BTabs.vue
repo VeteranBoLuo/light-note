@@ -11,11 +11,7 @@
       @click="tabChange(tab)"
     >
       <span>{{ tab.label }}</span>
-      <span
-        v-if="tab.badge !== undefined"
-        class="tab-badge"
-        :class="{ 'is-zero': Number(tab.badge) === 0 }"
-      >
+      <span v-if="tab.badge !== undefined" class="tab-badge" :class="{ 'is-zero': Number(tab.badge) === 0 }">
         {{ tab.badge }}
       </span>
     </div>
@@ -36,7 +32,7 @@
   const props = withDefaults(
     defineProps<{
       options: (string | TabItem)[];
-      variant?: 'line' | 'pill';
+      variant?: 'line' | 'pill' | 'segment';
     }>(),
     {
       options: () => [],
@@ -54,16 +50,12 @@
   const activeValue = computed(() => {
     const active = activeTab.value;
     if (active == null) return '';
-    const matched = resolvedOptions.value.find(
-      (t) => t.key === active || t.label === active,
-    );
+    const matched = resolvedOptions.value.find((t) => t.key === active || t.label === active);
     return matched ? (matched.key ?? matched.label) : active;
   });
 
   function tabChange(tab: string | TabItem) {
-    const resolved = typeof tab === 'string'
-      ? resolvedOptions.value.find((t) => (t.key ?? t.label) === tab)
-      : tab;
+    const resolved = typeof tab === 'string' ? resolvedOptions.value.find((t) => (t.key ?? t.label) === tab) : tab;
     if (!resolved) return;
     const value = resolved.key ?? resolved.label;
     if (activeValue.value === value) {
@@ -185,5 +177,46 @@
     background: var(--primary-color);
     color: #fff;
     opacity: 1;
+  }
+
+  .tab-container.is-segment {
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 0;
+    background: var(--card-background, var(--background-color));
+  }
+
+  .is-segment .tab {
+    position: relative;
+    min-height: 32px;
+    margin: 0;
+    padding: 0 14px;
+    border-right: 1px solid var(--surface-border-color, var(--card-border-color));
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 32px;
+    transition:
+      color 0.16s ease,
+      background 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+
+  .is-segment .tab:last-of-type {
+    border-right: 0;
+  }
+
+  .is-segment .tab:hover {
+    color: var(--text-color);
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background));
+  }
+
+  .is-segment .tab.is-active {
+    color: var(--primary-color);
+    font-weight: 650;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+    box-shadow: inset 0 -2px 0 var(--primary-color);
   }
 </style>

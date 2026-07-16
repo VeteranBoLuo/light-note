@@ -1,75 +1,91 @@
 <template>
-  <div class="batch-page" :class="{ 'batch-page--night': user.currentTheme === 'night' }">
-    <section class="batch-header">
-      <div>
-        <h1>{{ pageTitle }}</h1>
-        <p>{{ t('resourceCenter.batch.workspaceSubtitle') }}</p>
-      </div>
-      <div class="header-actions">
-        <button class="secondary-btn" @click="goBack">{{ t('resourceCenter.cancel') }}</button>
-        <button class="primary-btn" :disabled="submitLoading" @click="submitBatch">{{ submitText }}</button>
-      </div>
-    </section>
-
-    <section class="batch-layout">
-      <article class="panel">
-        <div class="panel-title">{{ t('resourceCenter.batch.selectedResources') }}</div>
-        <div class="panel-subtitle">{{ t('resourceCenter.batch.selectedCount', { count: items.length }) }}</div>
-        <div class="summary-row">
-          <span v-for="entry in typeSummary" :key="entry.type" class="summary-chip" :class="`summary-chip--${entry.type}`">
-            <span class="summary-chip-dot"></span>
-            <span class="summary-chip-label">{{ getSearchTypeLabel(t, entry.type) }}</span>
-            <span class="summary-chip-count">{{ entry.count }}</span>
-          </span>
-        </div>
-        <div class="item-list">
-          <div v-for="item in items" :key="`${item.type}:${item.id}`" class="item-row">
-            <div class="item-main">
-              <span class="item-type-badge" :class="`item-type-badge--${item.type}`">{{ getSearchTypeLabel(t, item.type) }}</span>
-              <span class="item-title text-hidden">{{ item.title || item.id }}</span>
-            </div>
-            <div class="item-tags">
-              <span class="item-tags-label">{{ t('resourceCenter.batch.itemTags') }}</span>
-              <div v-if="getItemTags(item).length" class="item-tags-values">
-                <span v-for="tag in getItemTags(item)" :key="`${item.type}:${item.id}:${tag}`" class="item-tag-chip text-hidden">
-                  {{ tag }}
-                </span>
+  <ResourcePageShell
+    :title="pageTitle"
+    :subtitle="t('resourceCenter.batch.workspaceSubtitle')"
+    accent="tag"
+    show-back
+    @back="goBack"
+  >
+    <template #actions>
+      <BButton @click="goBack">{{ t('resourceCenter.cancel') }}</BButton>
+      <BButton type="primary" :loading="submitLoading" :disabled="submitLoading" @click="submitBatch">
+        {{ submitText }}
+      </BButton>
+    </template>
+    <div class="batch-page" :class="{ 'batch-page--night': user.currentTheme === 'night' }">
+      <section class="batch-layout">
+        <BCard as="article" variant="card" padding="16px" class="panel">
+          <div class="panel-title">{{ t('resourceCenter.batch.selectedResources') }}</div>
+          <div class="panel-subtitle">{{ t('resourceCenter.batch.selectedCount', { count: items.length }) }}</div>
+          <div class="summary-row">
+            <span
+              v-for="entry in typeSummary"
+              :key="entry.type"
+              class="summary-chip"
+              :class="`summary-chip--${entry.type}`"
+            >
+              <span class="summary-chip-dot"></span>
+              <span class="summary-chip-label">{{ getSearchTypeLabel(t, entry.type) }}</span>
+              <span class="summary-chip-count">{{ entry.count }}</span>
+            </span>
+          </div>
+          <div class="item-list">
+            <div v-for="item in items" :key="`${item.type}:${item.id}`" class="item-row">
+              <div class="item-main">
+                <span class="item-type-badge" :class="`item-type-badge--${item.type}`">{{
+                  getSearchTypeLabel(t, item.type)
+                }}</span>
+                <span class="item-title text-hidden">{{ item.title || item.id }}</span>
               </div>
-              <span v-else class="item-tags-value item-tags-value--empty">-</span>
+              <div class="item-tags">
+                <span class="item-tags-label">{{ t('resourceCenter.batch.itemTags') }}</span>
+                <div v-if="getItemTags(item).length" class="item-tags-values">
+                  <span
+                    v-for="tag in getItemTags(item)"
+                    :key="`${item.type}:${item.id}:${tag}`"
+                    class="item-tag-chip text-hidden"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+                <span v-else class="item-tags-value item-tags-value--empty">-</span>
+              </div>
             </div>
           </div>
-        </div>
-      </article>
+        </BCard>
 
-      <article class="panel">
-        <div class="panel-title">{{ t('resourceCenter.batch.selectTags') }}</div>
-        <div class="panel-subtitle">
-          {{ mode === 'remove' ? t('resourceCenter.batch.removeTagHint') : t('resourceCenter.batch.tagHint') }}
-        </div>
-        <div class="tag-list" v-if="displayTagList.length">
-          <button
-            v-for="tag in displayTagList"
-            :key="tag.id"
-            class="tag-chip"
-            :class="{ active: selectedTagIds.includes(tag.id) }"
-            @click="toggleTag(tag.id)"
-          >
-            {{ tag.name }}
-          </button>
-        </div>
-        <div class="empty-tip" v-else>{{ t('resourceCenter.batch.noTags') }}</div>
-
-        <div class="preview-box">
-          <div class="preview-title">{{ t('resourceCenter.batch.previewTitle') }}</div>
-          <div class="preview-line">{{ t('resourceCenter.batch.previewResources', { count: items.length }) }}</div>
-          <div class="preview-line">{{ t('resourceCenter.batch.previewTags', { count: selectedTagIds.length }) }}</div>
-          <div class="preview-line">
-            {{ t('resourceCenter.batch.previewRelations', { count: previewRelationCount }) }}
+        <BCard as="article" variant="card" padding="16px" class="panel">
+          <div class="panel-title">{{ t('resourceCenter.batch.selectTags') }}</div>
+          <div class="panel-subtitle">
+            {{ mode === 'remove' ? t('resourceCenter.batch.removeTagHint') : t('resourceCenter.batch.tagHint') }}
           </div>
-        </div>
-      </article>
-    </section>
-  </div>
+          <div class="tag-list" v-if="displayTagList.length">
+            <BButton
+              v-for="tag in displayTagList"
+              :key="tag.id"
+              class="tag-chip"
+              :class="{ active: selectedTagIds.includes(tag.id) }"
+              @click="toggleTag(tag.id)"
+            >
+              {{ tag.name }}
+            </BButton>
+          </div>
+          <div class="empty-tip" v-else>{{ t('resourceCenter.batch.noTags') }}</div>
+
+          <div class="preview-box">
+            <div class="preview-title">{{ t('resourceCenter.batch.previewTitle') }}</div>
+            <div class="preview-line">{{ t('resourceCenter.batch.previewResources', { count: items.length }) }}</div>
+            <div class="preview-line">{{
+              t('resourceCenter.batch.previewTags', { count: selectedTagIds.length })
+            }}</div>
+            <div class="preview-line">
+              {{ t('resourceCenter.batch.previewRelations', { count: previewRelationCount }) }}
+            </div>
+          </div>
+        </BCard>
+      </section>
+    </div>
+  </ResourcePageShell>
 </template>
 
 <script setup lang="ts">
@@ -83,6 +99,9 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import type { SearchType } from '@/api/search.ts';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
 
   interface BatchItem {
     id: string;
@@ -168,18 +187,23 @@
       message.error(workspaceRes.msg || t('resourceCenter.batch.submitFailed'));
       return false;
     }
-    selectedResourceTags.value = mapTagItems(Array.isArray(workspaceRes.data?.selectedResourceTags) ? workspaceRes.data.selectedResourceTags : []);
+    selectedResourceTags.value = mapTagItems(
+      Array.isArray(workspaceRes.data?.selectedResourceTags) ? workspaceRes.data.selectedResourceTags : [],
+    );
     tagList.value = mapTagItems(Array.isArray(workspaceRes.data?.allTags) ? workspaceRes.data.allTags : []);
     resourceTagsMap.value = workspaceRes.data?.resourceTagsMap || {};
     items.value = Array.isArray(workspaceRes.data?.items)
       ? workspaceRes.data.items.map((item: any) => ({
           id: String(item.id || '').trim(),
           type: String(item.type || '').trim() as SearchType,
-          title: items.value.find((raw) => raw.id === String(item.id || '').trim() && raw.type === item.type)?.title || '',
+          title:
+            items.value.find((raw) => raw.id === String(item.id || '').trim() && raw.type === item.type)?.title || '',
         }))
       : items.value;
     if (mode.value === 'remove') {
-      selectedTagIds.value = selectedTagIds.value.filter((id) => selectedResourceTags.value.some((tag) => tag.id === id));
+      selectedTagIds.value = selectedTagIds.value.filter((id) =>
+        selectedResourceTags.value.some((tag) => tag.id === id),
+      );
     }
     return true;
   }
@@ -187,7 +211,10 @@
   function getItemTags(item: BatchItem) {
     const key = `${item.type}:${item.id}`;
     const tags = resourceTagsMap.value[key] || [];
-    return tags.map((tag) => tag.name).filter(Boolean).slice(0, 4);
+    return tags
+      .map((tag) => tag.name)
+      .filter(Boolean)
+      .slice(0, 4);
   }
 
   function toggleTag(tagId: string) {
@@ -266,41 +293,11 @@
   .batch-page {
     height: 100%;
     overflow: auto;
-    padding: 24px;
+    padding: 0;
     box-sizing: border-box;
     color: var(--text-color);
   }
 
-  .batch-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: center;
-    padding: 20px;
-    border-radius: 18px;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    box-shadow: var(--ant-table-boxShadow);
-  }
-
-  h1 {
-    margin: 0 0 8px;
-    font-size: 28px;
-    line-height: 1.1;
-  }
-
-  p {
-    margin: 0;
-    color: var(--desc-color);
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 10px;
-  }
-
-  .primary-btn,
-  .secondary-btn,
   .tag-chip {
     border: 0;
     cursor: pointer;
@@ -308,40 +305,19 @@
     color: inherit;
   }
 
-  .primary-btn,
-  .secondary-btn {
-    min-height: 38px;
-    border-radius: 12px;
-    padding: 0 16px;
-  }
-
-  .primary-btn {
-    color: #fff;
-    background: var(--primary-color);
-  }
-
-  .primary-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .secondary-btn {
-    background: var(--bl-input-noBorder-bg-color);
-  }
-
   .batch-layout {
-    margin-top: 16px;
+    margin-top: 0;
     display: grid;
     gap: 16px;
     grid-template-columns: 1fr 1fr;
   }
 
   .panel {
+    --b-card-background: var(--card-background);
+    --b-card-border-color: var(--surface-border-color);
+    --b-card-shadow: var(--surface-card-shadow);
+
     border-radius: 18px;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    box-shadow: var(--ant-table-boxShadow);
-    padding: 16px;
   }
 
   .panel-title {
@@ -366,14 +342,14 @@
     min-height: 40px;
     padding: 8px 10px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 88%, var(--background-color));
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 88%, var(--card-background));
     color: var(--text-color);
     font-size: 12px;
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 6px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 88%, transparent);
+    border: 1px solid var(--surface-border-color);
   }
 
   .summary-chip-dot {
@@ -406,7 +382,7 @@
     justify-content: center;
     font-weight: 700;
     font-size: 13px;
-    background: color-mix(in srgb, var(--background-color) 90%, transparent);
+    background: color-mix(in srgb, var(--card-background) 90%, transparent);
   }
 
   .summary-chip--bookmark .summary-chip-count {
@@ -433,8 +409,8 @@
   .item-row {
     min-height: 78px;
     border-radius: 10px;
-    border: 1px solid var(--card-border-color);
-    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 76%, var(--background-color));
+    border: 1px solid var(--surface-border-color);
+    background: var(--workspace-panel-bg-color);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -446,8 +422,8 @@
   }
 
   .item-row:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--card-border-color));
-    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 66%, var(--background-color));
+    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 3%, var(--workspace-panel-bg-color));
   }
 
   .item-main {
@@ -557,10 +533,10 @@
 
   .preview-box {
     margin-top: 16px;
-    border: 1px solid var(--card-border-color);
+    border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     padding: 12px;
-    background: color-mix(in srgb, var(--background-color) 92%, transparent);
+    background: var(--workspace-panel-bg-color);
   }
 
   .preview-title {

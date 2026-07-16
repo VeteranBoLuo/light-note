@@ -3,7 +3,13 @@
     <!-- 列表视图:横向紧凑行(信息密度高,适合快速检索定位) -->
     <template v-if="view === 'list'">
       <label v-if="selectable" class="row-checkbox-wrap">
-        <input type="checkbox" class="result-checkbox" :checked="selected" @click.stop @change="emit('toggle-select')" />
+        <input
+          type="checkbox"
+          class="result-checkbox"
+          :checked="selected"
+          @click.stop
+          @change="emit('toggle-select')"
+        />
       </label>
       <button class="result-row" @click="emit('open')">
         <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
@@ -27,7 +33,13 @@
     <!-- 卡片视图:竖排卡片(舒适浏览) -->
     <template v-else>
       <label v-if="selectable" class="result-checkbox-wrap">
-        <input type="checkbox" class="result-checkbox" :checked="selected" @click.stop @change="emit('toggle-select')" />
+        <input
+          type="checkbox"
+          class="result-checkbox"
+          :checked="selected"
+          @click.stop
+          @change="emit('toggle-select')"
+        />
       </label>
 
       <button class="result-click-area" :class="{ 'result-click-area--selectable': selectable }" @click="emit('open')">
@@ -53,7 +65,9 @@
         <div class="item-meta">
           <span class="meta-line">
             <strong>{{ t('tagManage.relatedTag') }}:</strong>
-            <span class="meta-line-value" :class="{ 'meta-line-value--empty': !tagMetaText }">{{ tagMetaText || '-' }}</span>
+            <span class="meta-line-value" :class="{ 'meta-line-value--empty': !tagMetaText }">{{
+              tagMetaText || '-'
+            }}</span>
           </span>
           <span class="meta-line">
             <strong>{{ t('tagGraph.panel.updateTime') }}:</strong>
@@ -122,21 +136,20 @@
 <style scoped lang="less">
   .result-item {
     position: relative;
-    border: 1px solid var(--card-border-color);
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
     border-radius: 14px;
-    background: var(--background-color);
+    background: var(--card-background, var(--background-color));
+    box-shadow: var(--surface-card-shadow, none);
     transition:
       border-color 0.2s,
-      box-shadow 0.2s,
-      transform 0.2s;
+      box-shadow 0.2s;
     display: flex;
     min-width: 0;
   }
 
   .result-item:hover {
     border-color: var(--primary-h-color);
-    box-shadow: 0 12px 24px color-mix(in srgb, var(--primary-color) 18%, transparent);
-    transform: translateY(-2px);
+    box-shadow: var(--surface-hover-shadow, 0 12px 24px color-mix(in srgb, var(--primary-color) 18%, transparent));
   }
 
   .result-item--selected {

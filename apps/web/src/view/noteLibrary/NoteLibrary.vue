@@ -5,7 +5,6 @@
     accent="note"
     :show-back="bookmark.isMobile"
     :title-actionable="!bookmark.isMobile"
-    :title-action-label="$t('common.resetAndRefresh')"
     @back="backRouterPage"
     @title-click="resetNoteLibrary"
   >
@@ -257,9 +256,8 @@
     list.map((note: any) => ({
       ...note,
       __searchTitle: (note.title || '').toLowerCase(),
-      __searchContent: note.type === 'markdown'
-        ? (note.content || '').toLowerCase()
-        : toPlainText(note.content || '').toLowerCase(),
+      __searchContent:
+        note.type === 'markdown' ? (note.content || '').toLowerCase() : toPlainText(note.content || '').toLowerCase(),
     }));
 
   watch(
@@ -956,5 +954,4 @@
       height: 34px;
     }
   }
-
 </style>

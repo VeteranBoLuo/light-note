@@ -1,25 +1,6 @@
 <template>
   <div class="bookmark-editor" :class="{ 'bookmark-editor--mobile': mobile }">
-    <header v-if="!mobile" class="bookmark-editor__header">
-      <div>
-        <h1>{{ pageTitle }}</h1>
-      </div>
-      <div v-if="isEdit" class="bookmark-editor__header-actions">
-        <BButton size="small" @click="$emit('openSnapshot')">📸 {{ $t('bookmarkMg.snapshot') }}</BButton>
-        <BButton size="small" :loading="refreshingIcon" @click="$emit('refreshIcon')">
-          {{ $t('bookmarkMg.refreshIcon') }}
-        </BButton>
-      </div>
-    </header>
-
-    <div v-if="mobile && isEdit" class="bookmark-editor__mobile-actions">
-      <BButton size="small" @click="$emit('openSnapshot')">📸 {{ $t('bookmarkMg.snapshot') }}</BButton>
-      <BButton size="small" :loading="refreshingIcon" @click="$emit('refreshIcon')">
-        {{ $t('bookmarkMg.refreshIcon') }}
-      </BButton>
-    </div>
-
-    <section class="bookmark-editor__card">
+    <section class="bookmark-editor__form">
       <div class="bookmark-field bookmark-field--url" data-guide="bookmark-url" :class="{ 'is-error': errors.url }">
         <div class="bookmark-field__heading">
           <label for="bookmark-editor-url">
@@ -31,6 +12,8 @@
             id="bookmark-editor-url"
             v-model:value="bookmarkData.url"
             class="bookmark-url-input"
+            theme="al-day"
+            height="40px"
             :placeholder="$t('bookmarkEditor.urlPlaceholder')"
             clearable
             @enter="$emit('generate')"
@@ -38,7 +21,6 @@
           <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
             <BButton
               class="bookmark-generate-button"
-              type="function"
               :loading="generating"
               @click="$emit('generate')"
               v-click-log="{ module: '书签详情', operation: '点击智能生成' }"
@@ -59,6 +41,8 @@
         <BInput
           id="bookmark-editor-name"
           v-model:value="bookmarkData.name"
+          theme="al-day"
+          height="40px"
           :placeholder="$t('bookmarkEditor.namePlaceholder')"
           clearable
         />
@@ -72,6 +56,7 @@
         </div>
         <BSelect
           v-model:value="bookmarkData.relatedTags"
+          class="bookmark-tag-select"
           mode="multiple"
           :max-tag-count="3"
           :options="tagOptions"
@@ -85,14 +70,14 @@
               @click="$emit('addTag')"
               v-click-log="{ module: '书签详情', operation: '下拉里新增标签' }"
             >
-              <span class="bookmark-add-tag__plus">+</span>
+              <SvgIcon :src="icon.common.add" size="16" />
               <span>{{ $t('navigation.newTag') }}</span>
             </BButton>
           </template>
         </BSelect>
       </div>
 
-      <div class="bookmark-field">
+      <div class="bookmark-field bookmark-description-field">
         <div class="bookmark-field__heading">
           <label for="bookmark-editor-description">{{ $t('bookmarkMg.description') }}</label>
           <span class="bookmark-field__hint">{{ $t('bookmarkEditor.optional') }}</span>
@@ -101,28 +86,38 @@
           id="bookmark-editor-description"
           v-model:value="bookmarkData.description"
           type="textarea"
-          :rows="2"
+          :rows="3"
           :maxlength="1000"
           :placeholder="$t('bookmarkEditor.descriptionPlaceholder')"
         />
       </div>
 
       <div v-if="handleType === 'add'" class="bookmark-snapshot-setting">
-        <div class="bookmark-snapshot-setting__icon">📄</div>
+        <div class="bookmark-snapshot-setting__icon">
+          <SvgIcon :src="icon.bookmarkManage.snapshot" size="20" />
+        </div>
         <div class="bookmark-snapshot-setting__content">
           <strong>{{ $t('bookmarkMg.saveSnapshotOpt') }}</strong>
           <span>{{ $t('bookmarkMg.saveSnapshotOptDesc') }}</span>
         </div>
         <BSwitch v-model:checked="saveSnapshot" />
       </div>
-    </section>
 
-    <footer class="bookmark-editor__footer">
-      <BButton @click="$emit('cancel')">{{ $t('common.cancel') }}</BButton>
-      <BButton type="primary" data-guide="bookmark-save" :loading="saving" @click="$emit('submit')">
-        {{ saveLabel }}
-      </BButton>
-    </footer>
+      <footer v-if="showActions" class="bookmark-editor__footer">
+        <BButton class="bookmark-editor__cancel-button" @click="$emit('cancel')">
+          {{ $t('common.cancel') }}
+        </BButton>
+        <BButton
+          class="bookmark-editor__save-button"
+          type="primary"
+          data-guide="bookmark-save"
+          :loading="saving"
+          @click="$emit('submit')"
+        >
+          {{ saveLabel }}
+        </BButton>
+      </footer>
+    </section>
   </div>
 </template>
 
@@ -135,26 +130,20 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import icon from '@/config/icon';
-  import type {
-    BookmarkEditorData,
-    BookmarkEditorErrors,
-    BookmarkTagOption,
-  } from '@/composables/useBookmarkEditor';
+  import type { BookmarkEditorData, BookmarkEditorErrors, BookmarkTagOption } from '@/composables/useBookmarkEditor';
 
   withDefaults(
     defineProps<{
       mobile?: boolean;
+      showActions?: boolean;
       handleType: 'add' | 'edit';
-      isEdit: boolean;
-      pageTitle: string;
       saveLabel: string;
       saving: boolean;
       generating: boolean;
-      refreshingIcon: boolean;
       errors: BookmarkEditorErrors;
       tagOptions: BookmarkTagOption[];
     }>(),
-    { mobile: false },
+    { mobile: false, showActions: true },
   );
 
   const bookmarkData = defineModel<BookmarkEditorData>('bookmarkData', { required: true });
@@ -165,71 +154,35 @@
     submit: [];
     cancel: [];
     addTag: [];
-    openSnapshot: [];
-    refreshIcon: [];
   }>();
 </script>
 
 <style lang="less" scoped>
   .bookmark-editor {
-    width: min(780px, calc(100% - 48px));
+    width: min(800px, calc(100% - 48px));
     min-height: 100%;
     margin: 0 auto;
-    padding: 12px 0 8px;
+    padding: 18px 0 12px;
     box-sizing: border-box;
     color: var(--text-color);
   }
 
-  .bookmark-editor__header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 8px;
-
-    h1 {
-      margin: 2px 0 0;
-      font-size: 22px;
-      line-height: 1.35;
-    }
-  }
-
-  .bookmark-editor__header-actions,
-  .bookmark-editor__mobile-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-  }
-
-  .bookmark-editor__card {
+  .bookmark-editor__form {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 16px 20px;
-    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-border-color));
-    border-radius: 14px;
-    background: var(--menu-body-bg-color);
-    box-shadow: 0 10px 30px color-mix(in srgb, var(--resource-bookmark-color) 6%, transparent);
+    gap: 18px;
   }
 
   .bookmark-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 
     > label,
     .bookmark-field__heading label {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 650;
     }
-  }
-
-  .bookmark-field--url {
-    padding: 12px 14px;
-    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 20%, var(--card-border-color));
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--resource-bookmark-color) 4%, var(--menu-body-bg-color));
   }
 
   .bookmark-field__heading {
@@ -243,7 +196,7 @@
   .bookmark-ai-note {
     color: var(--desc-color);
     font-size: 12px;
-    line-height: 1.5;
+    line-height: 1.55;
   }
 
   .bookmark-url-row {
@@ -258,9 +211,18 @@
   }
 
   .bookmark-generate-button {
-    height: 32px;
-    min-width: 150px;
-    gap: 6px;
+    height: 40px;
+    min-width: 188px;
+    gap: 7px;
+    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 20%, var(--surface-border-color));
+    border-radius: 9px;
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--card-background)) !important;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--resource-bookmark-color) 38%, var(--surface-border-color));
+      background: color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-background)) !important;
+    }
   }
 
   .required-mark,
@@ -278,35 +240,53 @@
   }
 
   :deep(.b-textarea) {
-    min-height: 60px;
+    min-height: 88px;
     resize: vertical;
-    border-color: color-mix(in srgb, var(--card-border-color) 75%, transparent);
-    background: var(--bl-input-noBorder-bg-color) !important;
+    padding: 10px 12px !important;
+    border-color: var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--card-background) !important;
     font-family: inherit;
     line-height: 1.65;
+  }
+
+  :deep(.input-al-day) {
+    border-color: var(--surface-border-color) !important;
+    border-radius: 8px;
+    background: var(--card-background) !important;
+
+    &:hover,
+    &:focus-visible {
+      border-color: color-mix(in srgb, var(--resource-bookmark-color) 48%, var(--surface-border-color)) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent) !important;
+    }
+  }
+
+  :deep(.bookmark-tag-select .select-trigger) {
+    min-height: 40px;
+    border-color: var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--card-background);
   }
 
   .bookmark-add-tag {
     width: 100%;
     height: 32px;
     justify-content: flex-start;
+    gap: 7px;
     color: var(--primary-color);
     background: transparent;
-  }
-
-  .bookmark-add-tag__plus {
-    font-size: 17px;
-    font-weight: 700;
   }
 
   .bookmark-snapshot-setting {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
+    align-items: start;
     gap: 12px;
-    padding: 10px 12px;
+    padding: 14px 16px;
+    border: 1px solid color-mix(in srgb, var(--surface-border-color) 72%, transparent);
     border-radius: 10px;
-    background: var(--bl-input-noBorder-bg-color);
+    background: var(--workspace-panel-bg-color);
   }
 
   .bookmark-snapshot-setting__icon {
@@ -315,8 +295,9 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--menu-body-bg-color));
+    border-radius: 8px;
+    color: var(--resource-bookmark-color);
+    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--card-background));
   }
 
   .bookmark-snapshot-setting__content {
@@ -338,65 +319,74 @@
 
   .bookmark-editor__footer {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     gap: 10px;
-    margin-top: 6px;
-    padding: 8px 0 2px;
+    padding-top: 2px;
+  }
+
+  .bookmark-editor__cancel-button,
+  .bookmark-editor__save-button {
+    min-width: 92px;
+    height: 36px;
+    border-radius: 9px;
   }
 
   .bookmark-editor--mobile {
     width: 100%;
-    padding: 0 0 10px;
+    padding: 0 0 12px;
 
-    .bookmark-editor__mobile-actions {
-      justify-content: flex-end;
-      margin-bottom: 12px;
-    }
-
-    .bookmark-editor__card {
-      gap: 12px;
-      padding: 14px 12px;
-      border-radius: 12px;
-      box-shadow: none;
-    }
-
-    .bookmark-field--url {
-      padding: 12px;
+    .bookmark-editor__form {
+      gap: 16px;
     }
 
     .bookmark-url-row {
       flex-direction: column;
+      gap: 8px;
     }
 
     .bookmark-generate-button {
       width: 100%;
+      min-width: 0;
+      height: 42px;
       justify-content: center;
     }
 
-    .bookmark-snapshot-setting {
-      grid-template-columns: minmax(0, 1fr) auto;
+    :deep(.b-input),
+    :deep(.bookmark-tag-select .select-trigger) {
+      min-height: 44px;
+      height: 44px;
     }
 
-    .bookmark-snapshot-setting__icon {
-      display: none;
+    :deep(.b-textarea) {
+      min-height: 88px;
+    }
+
+    .bookmark-snapshot-setting {
+      margin-top: 0;
+      padding: 14px 12px;
     }
 
     .bookmark-editor__footer {
-      padding-bottom: 4px;
+      padding-top: 2px;
+    }
+
+    .bookmark-editor__cancel-button {
+      width: 96px;
+      min-width: 96px;
+      height: 42px;
+    }
+
+    .bookmark-editor__save-button {
+      width: auto;
+      min-width: 0;
+      height: 42px;
+      flex: 1;
     }
   }
 
   @media (max-width: 900px) {
     .bookmark-editor {
-      width: calc(100% - 32px);
-    }
-
-    .bookmark-editor__header {
-      flex-direction: column;
-    }
-
-    .bookmark-editor__card {
-      padding: 16px;
+      width: calc(100% - 24px);
     }
   }
 </style>

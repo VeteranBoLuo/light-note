@@ -5,7 +5,6 @@
     accent="file"
     :show-back="bookmark.isMobile"
     :title-actionable="!bookmark.isMobile"
-    :title-action-label="$t('common.resetAndRefresh')"
     @back="backRouterPage"
     @title-click="resetCloudSpace"
   >
@@ -16,20 +15,12 @@
     <template #actions>
       <div class="cloud-view-toggle" :aria-label="$t('cloudSpace.viewMode')">
         <BTooltip :title="$t('note.cardView')">
-          <BButton
-            class="cloud-view-button"
-            :class="{ active: viewMode === 'card' }"
-            @click="setViewMode('card')"
-          >
+          <BButton class="cloud-view-button" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
             <SvgIcon :src="icon.navigation.portal" size="15" />
           </BButton>
         </BTooltip>
         <BTooltip :title="$t('note.listView')">
-          <BButton
-            class="cloud-view-button"
-            :class="{ active: viewMode === 'table' }"
-            @click="setViewMode('table')"
-          >
+          <BButton class="cloud-view-button" :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">
             <SvgIcon :src="icon.filterPanel.list" size="15" />
           </BButton>
         </BTooltip>
@@ -589,7 +580,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
     border-radius: 14px;
-    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
+    background: var(--card-background, var(--menu-body-bg-color));
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
   }
 

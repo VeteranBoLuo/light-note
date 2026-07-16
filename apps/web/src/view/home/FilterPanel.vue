@@ -20,7 +20,7 @@
     >
       <template #input>
         <div class="filter-tools">
-          <b-input :placeholder="$t('home.tagSearch')" v-model:value="tagName" id="ref1">
+          <b-input id="ref1" v-model:value="tagName" class="tag-search-input" :placeholder="$t('home.tagSearch')">
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
@@ -88,7 +88,9 @@
             <h3>{{ $t('home.noTags') }}</h3>
             <div>{{ $t('home.createFirstTag') }}</div>
             <br />
-            <b-button size="small" type="primary" @click="router.push('/manage/editTag/add')">{{ $t('home.addTag') }}</b-button>
+            <b-button size="small" type="primary" @click="router.push('/manage/editTag/add')">{{
+              $t('home.addTag')
+            }}</b-button>
           </div>
         </div>
       </template>
@@ -322,6 +324,43 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  :deep(.tag-search-input .b-input) {
+    border: 1px solid color-mix(in srgb, var(--surface-border-color) 72%, transparent) !important;
+    background: color-mix(
+      in srgb,
+      var(--bl-input-noBorder-bg-color) 70%,
+      var(--bl-input-noBorder-hover-bg-color) 30%
+    ) !important;
+    box-shadow: none !important;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      background 0.18s ease;
+
+    &:hover {
+      border-color: color-mix(
+        in srgb,
+        var(--resource-bookmark-color, #615ced) 22%,
+        var(--surface-border-color)
+      ) !important;
+      background: color-mix(
+        in srgb,
+        var(--bl-input-noBorder-bg-color) 30%,
+        var(--bl-input-noBorder-hover-bg-color) 70%
+      ) !important;
+    }
+
+    &:focus-visible {
+      border-color: color-mix(
+        in srgb,
+        var(--resource-bookmark-color, #615ced) 48%,
+        var(--surface-border-color)
+      ) !important;
+      background: var(--bl-input-noBorder-hover-bg-color) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--resource-bookmark-color, #615ced) 8%, transparent) !important;
+    }
   }
 
   .filter-all-entry,

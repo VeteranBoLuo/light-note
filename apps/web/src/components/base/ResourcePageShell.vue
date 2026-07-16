@@ -1,7 +1,16 @@
 <template>
-  <section class="resource-page-shell" :class="`resource-page-shell--${accent}`">
+  <section
+    class="resource-page-shell"
+    :class="[`resource-page-shell--${accent}`, { 'resource-page-shell--with-back': showBack }]"
+  >
     <header class="resource-page-header">
-      <BButton v-if="showBack" class="resource-page-back" @click="emit('back')">
+      <BButton
+        v-if="showBack"
+        class="resource-page-back"
+        :aria-label="$t('common.back')"
+        :title="$t('common.back')"
+        @click="emit('back')"
+      >
         <SvgIcon :src="icon.noteDetail.back" size="20" />
       </BButton>
 
@@ -9,18 +18,17 @@
         <div class="resource-page-title-row">
           <span class="resource-page-accent" aria-hidden="true"></span>
           <h1>
-            <BTooltip v-if="titleActionable" :title="titleActionLabel">
-              <BButton
-                class="resource-page-title-action"
-                role="button"
-                tabindex="0"
-                @click="emit('titleClick')"
-                @keydown.enter="emit('titleClick')"
-                @keydown.space.prevent="emit('titleClick')"
-              >
-                {{ title }}
-              </BButton>
-            </BTooltip>
+            <BButton
+              v-if="titleActionable"
+              class="resource-page-title-action"
+              role="button"
+              tabindex="0"
+              @click="emit('titleClick')"
+              @keydown.enter="emit('titleClick')"
+              @keydown.space.prevent="emit('titleClick')"
+            >
+              {{ title }}
+            </BButton>
             <template v-else>{{ title }}</template>
           </h1>
           <slot name="meta" />
@@ -42,7 +50,6 @@
 <script setup lang="ts">
   import { useSlots } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
@@ -50,17 +57,15 @@
     defineProps<{
       title: string;
       subtitle?: string;
-      accent?: 'bookmark' | 'note' | 'file' | 'tag';
+      accent?: 'bookmark' | 'note' | 'file' | 'tag' | 'neutral';
       showBack?: boolean;
       titleActionable?: boolean;
-      titleActionLabel?: string;
     }>(),
     {
       subtitle: '',
       accent: 'bookmark',
       showBack: false,
       titleActionable: false,
-      titleActionLabel: '',
     },
   );
 
@@ -83,6 +88,7 @@
     gap: 14px;
     overflow: hidden;
     color: var(--text-color);
+    background: var(--surface-page-bg, var(--background-color));
   }
 
   .resource-page-shell--bookmark {
@@ -101,6 +107,10 @@
     --resource-page-accent: var(--resource-tag-color, #ec4899);
   }
 
+  .resource-page-shell--neutral {
+    --resource-page-accent: var(--desc-color);
+  }
+
   .resource-page-header {
     width: min(100%, 1540px);
     min-height: 54px;
@@ -112,13 +122,35 @@
   }
 
   .resource-page-back {
-    display: none;
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+    display: flex;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
     padding: 0;
+    border: 1px solid transparent;
+    border-radius: 9px;
     color: var(--text-color);
-    background: color-mix(in srgb, var(--card-border-color) 45%, transparent);
+    background: transparent !important;
+    transition:
+      color 0.18s ease,
+      border-color 0.18s ease,
+      background 0.18s ease;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--resource-page-accent);
+      border-color: color-mix(in srgb, var(--resource-page-accent) 22%, var(--surface-border-color));
+      background: color-mix(in srgb, var(--resource-page-accent) 7%, transparent) !important;
+      outline: none;
+    }
+  }
+
+  .resource-page-shell--with-back .resource-page-accent {
+    display: none;
+  }
+
+  .resource-page-shell--with-back .resource-page-heading p {
+    margin-left: 0;
   }
 
   .resource-page-heading {
@@ -222,7 +254,6 @@
     }
 
     .resource-page-back {
-      display: flex;
       width: 40px;
       min-width: 40px;
       height: 40px;

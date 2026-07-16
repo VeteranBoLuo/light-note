@@ -24,7 +24,10 @@
       </div>
       <!--标签-->
       <div class="inline-note-tags" v-if="visibleTags.length">
-        <span class="inline-note-tag" v-for="tag in visibleTags" :key="`${tag.id ?? tag.name}`">{{ tag.name }}</span>
+        <span class="inline-note-tag" v-for="tag in displayedTags" :key="`${tag.id ?? tag.name}`" :title="tag.name">
+          {{ tag.name }}
+        </span>
+        <span v-if="hiddenTagCount" class="inline-note-tag inline-note-tag--more">+{{ hiddenTagCount }}</span>
       </div>
     </div>
     <div class="flex-align-center" style="gap: 20px">
@@ -220,6 +223,8 @@
     }
     return normalizeTags(props.note?.tags || props.note?.tagList);
   });
+  const displayedTags = computed(() => visibleTags.value.slice(0, bookmark.isMobile ? 1 : 3));
+  const hiddenTagCount = computed(() => Math.max(0, visibleTags.value.length - displayedTags.value.length));
 
   watch(
     () => props.note?.id,
@@ -246,7 +251,10 @@
           return;
         }
         await generatePDF(props.note.title, selector);
-        recordOperation({ module: '笔记', operation: `导出PDF成功【${props.note.title || t('noteDetail.unnamedDoc')}】` });
+        recordOperation({
+          module: '笔记',
+          operation: `导出PDF成功【${props.note.title || t('noteDetail.unnamedDoc')}】`,
+        });
       },
     });
   };
@@ -373,29 +381,41 @@
   }
 
   .inline-note-tags {
-    margin-left: 10px;
+    margin-left: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     max-width: 320px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: hidden;
     white-space: nowrap;
   }
 
   .inline-note-tag {
-    background-color: var(--common-tag-bg-color);
-    border: 1px solid var(--card-border-color);
-    padding: 1px 6px;
-    max-width: 80px;
+    flex: 0 0 auto;
+    max-width: 108px;
+    height: 22px;
+    padding: 0 8px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--resource-tag-color, #ec4899) 22%, var(--surface-border-color));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--resource-tag-color, #ec4899) 8%, var(--note-header-bg-color));
+    color: color-mix(in srgb, var(--resource-tag-color, #ec4899) 76%, var(--text-color));
     text-align: left;
-    border-radius: 6px;
     font-size: 11px;
-    color: var(--desc-color);
+    font-weight: 600;
+    line-height: 1;
     cursor: default;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    opacity: 0.9;
+  }
+
+  .inline-note-tag--more {
+    max-width: none;
+    color: var(--desc-color);
+    border-color: var(--surface-border-color);
+    background: color-mix(in srgb, var(--resource-tag-color, #ec4899) 4%, var(--note-header-bg-color));
   }
 </style>

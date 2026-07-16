@@ -38,6 +38,9 @@
     content: string;
     noteType?: string;
   }>();
+  const emit = defineEmits<{
+    markdownHeadingClick: [index: number];
+  }>();
   const isMdMode = computed(() => props.noteType === 'markdown');
   const note = noteStore();
   const activeHeading = ref<number | null>(null);
@@ -46,28 +49,14 @@
 
   const scrollToHeading = async (index: number) => {
     if (isMdMode.value) {
-      // MD 模式：聚焦到 textarea 对应位置（粗略定位到标题行）
-      const mdTextarea = document.querySelector<HTMLTextAreaElement>('.md-textarea');
-      if (!mdTextarea) return;
-      const headings = note.headings;
-      if (!headings[index]) return;
+      if (!note.headings[index]) return;
+      manualScrolling = true;
       activeHeading.value = index;
-      // 在 textarea 中搜索第 index 个标题，移动到附近
-      const lines = mdTextarea.value.split('\n');
-      let lineCount = 0;
-      let hCount = 0;
-      for (let i = 0; i < lines.length; i++) {
-        if (/^#{1,6}\s/.test(lines[i])) {
-          if (hCount === index) {
-            lineCount = i;
-            break;
-          }
-          hCount++;
-        }
-      }
-      const lineHeight = 20;
-      mdTextarea.focus();
-      mdTextarea.scrollTop = Math.max(0, lineCount * lineHeight - 100);
+      emit('markdownHeadingClick', index);
+      if (bookmark.isMobile) isShowPhoneCategory.value = false;
+      window.setTimeout(() => {
+        manualScrolling = false;
+      }, 700);
       return;
     }
     manualScrolling = true;
@@ -93,24 +82,13 @@
     if (isMdMode.value) {
       const previewPane = document.querySelector('.md-preview');
       if (!previewPane) return;
-      const hTags = previewPane.querySelectorAll('h1, h2, h3, h4, h5, h6');
-      if (!hTags.length) return;
       const entries = new Map<Element, number>();
-      // 把预览区的 h 标签和目录的 heading 索引对应起来
-      let hIdx = 0;
-      hTags.forEach((el) => {
-        // 找第 hIdx 个有文本的头部
-        while (hIdx < note.headings.length) {
-          const mdText = note.headings[hIdx].text;
-          const domText = (el.textContent || '').trim();
-          if (domText.includes(mdText) || mdText.includes(domText)) {
-            entries.set(el, hIdx);
-            hIdx++;
-            return;
-          }
-          hIdx++;
+      note.headings.forEach((heading, index) => {
+        if (heading.element && previewPane.contains(heading.element)) {
+          entries.set(heading.element, index);
         }
       });
+      if (!entries.size) return;
       observer = new IntersectionObserver(
         (observed) => {
           if (manualScrolling) return;
@@ -130,7 +108,7 @@
         },
         { root: previewPane, rootMargin: '-10px 0px -40% 0px', threshold: 0 },
       );
-      hTags.forEach((el) => observer!.observe(el));
+      entries.forEach((_index, element) => observer!.observe(element));
       return;
     }
 
@@ -138,7 +116,9 @@
     const scrollContainer = document.querySelector('.note-editor-scroll');
     if (!scrollContainer) return;
     const entries = new Map<Element, number>();
-    note.headings.forEach((h, i) => entries.set(h.element, i));
+    note.headings.forEach((heading, index) => {
+      if (heading.element) entries.set(heading.element, index);
+    });
     observer = new IntersectionObserver(
       (observed) => {
         if (manualScrolling) return;
@@ -159,7 +139,7 @@
       },
       { root: scrollContainer, rootMargin: '-10px 0px -40% 0px', threshold: 0 },
     );
-    note.headings.forEach((h) => observer!.observe(h.element));
+    entries.forEach((_index, element) => observer!.observe(element));
   };
 
   const isShowPhoneCategory = ref(false);
@@ -186,16 +166,17 @@
   );
 
   watch(
-    () => props.content,
+    [() => props.content, () => props.noteType],
     async () => {
+      if (isMdMode.value) return;
       await nextTick();
-      note.generateTOC();
+      note.generateTOC(props.content, props.noteType);
     },
     { immediate: true, flush: 'post' },
   );
 
   watch(
-    () => note.headings.length,
+    () => note.headings,
     () => {
       nextTick(() => setupScrollSpy());
     },

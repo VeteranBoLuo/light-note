@@ -32,35 +32,36 @@
       <template v-else-if="step === 'review'">
         <div class="aio-review-head">
           <span>{{ $t('bookmarkMg.aiOrganizeReview', { n: chosenCount }) }}</span>
-          <label v-if="resourceType === 'bookmark'" class="aio-fill"><input type="checkbox" v-model="fillMeta" /> {{ $t('bookmarkMg.aiOrganizeFillMeta') }}</label>
+          <BCheckbox v-if="resourceType === 'bookmark'" v-model:checked="fillMeta" class="aio-fill">
+            {{ $t('bookmarkMg.aiOrganizeFillMeta') }}
+          </BCheckbox>
         </div>
         <div class="aio-list">
           <div v-for="s in suggestions" :key="s.id" class="aio-item" :class="{ off: !s.include }">
-            <label class="aio-item-head">
-              <input type="checkbox" v-model="s.include" />
+            <BCheckbox v-model:checked="s.include" class="aio-item-head">
               <span class="aio-item-name" :title="s.url">{{ s.currentName || s.suggestName || s.url }}</span>
-            </label>
+            </BCheckbox>
             <div class="aio-tags">
-              <button
+              <BButton
                 v-for="mt in s.matchedTags"
                 :key="mt.id"
-                type="button"
+                size="small"
                 class="aio-tag"
                 :class="{ sel: s.pickTags.includes(mt.id) }"
                 @click="toggle(s.pickTags, mt.id)"
               >
                 {{ mt.name }}
-              </button>
-              <button
+              </BButton>
+              <BButton
                 v-for="nt in s.newTags"
                 :key="'n' + nt"
-                type="button"
+                size="small"
                 class="aio-tag aio-tag--new"
                 :class="{ sel: s.pickNew.includes(nt) }"
                 @click="toggle(s.pickNew, nt)"
               >
                 {{ nt }}
-              </button>
+              </BButton>
               <span v-if="!s.matchedTags.length && !s.newTags.length" class="aio-muted">{{ $t('bookmarkMg.aiOrganizeNoTag') }}</span>
             </div>
           </div>
@@ -91,6 +92,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { recordOperation } from '@/api/commonApi.ts';
 
   const visible = defineModel<boolean>('visible');
@@ -296,9 +298,6 @@
     color: var(--desc-color);
     cursor: pointer;
   }
-  .aio-fill input {
-    accent-color: var(--primary-color);
-  }
   .aio-list {
     max-height: 46vh;
     overflow-y: auto;
@@ -322,10 +321,6 @@
     cursor: pointer;
     margin-bottom: 8px;
   }
-  .aio-item-head input {
-    accent-color: var(--primary-color);
-    flex-shrink: 0;
-  }
   .aio-item-name {
     font-size: 13px;
     font-weight: 600;
@@ -348,6 +343,8 @@
     font-size: 12px;
     cursor: pointer;
     transition: all 0.15s;
+    height: 26px;
+    line-height: 26px;
   }
   .aio-tag--new {
     border-style: dashed;

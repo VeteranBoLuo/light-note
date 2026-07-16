@@ -90,14 +90,14 @@
     align-items: flex-start;
     padding: 20px;
     margin-bottom: 15px;
-    background: var(--background-color);
-    border: 1px solid var(--card-border-color);
+    background: var(--card-background);
+    border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--surface-card-shadow);
     &:hover {
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-      border-color: var(--primary-color);
+      box-shadow: var(--surface-hover-shadow);
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--surface-border-color));
       .checkBox {
         visibility: visible;
       }

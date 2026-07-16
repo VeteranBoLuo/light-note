@@ -7,9 +7,11 @@
       :rows="rows"
       :maxlength="maxlength"
       :disabled="disabled"
+      :readonly="readonly"
       class="b-textarea"
       :value="value"
       @input="handleInput"
+      @scroll="$emit('scroll', $event)"
       @keydown.enter="handleEnter"
       @keydown.esc="handleEscape"
       :style="{
@@ -38,6 +40,7 @@
       :autocomplete="autocomplete"
       :maxlength="maxlength"
       :disabled="disabled"
+      :readonly="readonly"
       :placeholder="placeholder"
       @change="$emit('change')"
       @focus="$emit('focus')"
@@ -73,6 +76,7 @@
       clearable?: boolean;
       submitOnEnter?: boolean;
       disabled?: boolean;
+      readonly?: boolean;
     }>(),
     {
       id: () => Math.floor(Math.random() * 9000000).toString(),
@@ -86,10 +90,11 @@
       submitOnEnter: false,
       rows: 4,
       disabled: false,
+      readonly: false,
     },
   );
   const value: Ref<string | number | undefined> = defineModel('value');
-  const emit = defineEmits(['input', 'enter', 'focus', 'focusout', 'blur', 'change']);
+  const emit = defineEmits(['input', 'enter', 'focus', 'focusout', 'blur', 'change', 'scroll']);
   const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
   // 获取插槽内容

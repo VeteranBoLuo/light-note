@@ -157,7 +157,13 @@
           </BButton>
         </div>
       </div>
-      <div class="download-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="downloadProgress.percent">
+      <div
+        class="download-progress-track"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="downloadProgress.percent"
+      >
         <span :style="{ width: `${downloadProgress.percent}%` }"></span>
       </div>
     </div>
@@ -172,10 +178,7 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div
-      v-if="viewMode === 'table' && batchMode"
-      class="batch-actions table-batch-actions"
-    >
+    <div v-if="viewMode === 'table' && batchMode" class="batch-actions table-batch-actions">
       <BCheckbox
         :indeterminate="indeterminate"
         :checked="selectAll"
@@ -197,7 +200,10 @@
     <div v-if="viewMode === 'table'" class="file-container">
       <div
         class="field-item"
-        :class="{ 'field-item-draggable': canDragFile(item) }"
+        :class="{
+          'field-item-draggable': canDragFile(item),
+          'field-item--selected': batchMode && selectedRows.includes(item.id),
+        }"
         :draggable="canDragFile(item)"
         @dragstart="onFileDragStart($event, item)"
         @dragend="onFileDragEnd"
@@ -1073,9 +1079,9 @@
     align-items: center;
     padding: 0 16px;
     box-sizing: border-box;
-    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 68%, transparent);
+    border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 2.5%, var(--menu-body-bg-color));
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 1.5%, var(--card-background));
     font-weight: 650;
     font-size: 12px;
   }
@@ -1146,6 +1152,7 @@
     flex: 1;
     overflow-y: auto;
     scrollbar-gutter: stable;
+    background: var(--card-background);
   }
   .field-item {
     min-height: 58px;
@@ -1153,14 +1160,26 @@
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
+    border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--card-background);
     content-visibility: auto;
     contain-intrinsic-size: 58px;
-    transition: background-color 0.18s;
+    transition:
+      background-color 0.18s,
+      box-shadow 0.18s;
     &:hover {
-      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 4%, var(--menu-body-bg-color));
+      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 3%, var(--card-background));
       .handle-btn {
         opacity: 1;
+      }
+    }
+
+    &.field-item--selected {
+      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 7%, var(--card-background));
+      box-shadow: inset 3px 0 0 var(--resource-file-color, #ff8a00);
+
+      &:hover {
+        background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 9%, var(--card-background));
       }
     }
     .handle-btn {
@@ -1308,24 +1327,19 @@
     flex-direction: column;
     min-height: 278px;
     border-radius: 13px;
-    border: 1px solid color-mix(in srgb, var(--folder-list-border-color) 82%, var(--desc-color) 18%);
-    background: color-mix(in srgb, var(--card-bg-color) 94%, var(--bl-input-noBorder-bg-color) 6%);
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
     cursor: pointer;
     transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
     overflow: hidden;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.02) inset,
-      0 8px 18px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--surface-card-shadow);
     content-visibility: auto;
     contain: layout style paint;
     &:hover {
-      transform: translateY(-2px);
-      box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.03) inset,
-        0 12px 28px rgba(0, 0, 0, 0.14);
-      border-color: color-mix(in srgb, var(--resource-file-color) 26%, var(--folder-list-border-color));
+      box-shadow: var(--surface-hover-shadow);
+      border-color: color-mix(in srgb, var(--resource-file-color) 26%, var(--surface-border-color));
     }
   }
 
@@ -1693,7 +1707,7 @@
     &.file-card--selected {
       border-color: var(--primary-color);
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 30%, transparent);
-      background: color-mix(in srgb, var(--primary-color) 5%, var(--card-bg-color));
+      background: color-mix(in srgb, var(--primary-color) 5%, var(--card-background));
       &:hover {
         border-color: var(--primary-color);
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 40%, transparent);

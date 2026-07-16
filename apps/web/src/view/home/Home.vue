@@ -5,7 +5,6 @@
       :subtitle="pageSubtitle"
       accent="bookmark"
       :title-actionable="!bookmark.isMobile"
-      :title-action-label="$t('common.resetAndRefresh')"
       @title-click="resetBookmarkView"
     >
       <template #actions>
@@ -22,16 +21,6 @@
             </template>
           </BInput>
         </div>
-        <BTooltip v-if="!bookmark.isMobile" :title="$t('bookmarkMg.aiOrganizeBtn')">
-          <BButton
-            class="bookmark-ai-action"
-            @click="openBookmarkAiOrganize"
-            v-click-log="OPERATION_LOG_MAP.bookmarkMg.aiOrganize"
-          >
-            <SvgIcon :src="icon.ai.organize" size="17" />
-            <span>{{ $t('bookmarkMg.aiOrganizeBtn') }}</span>
-          </BButton>
-        </BTooltip>
         <BButton data-guide="bookmark-mg" class="bookmark-manage-action" @click="openBookmarkManagement">
           <SvgIcon :src="icon.manage_categoryBtn_bookmark" size="16" />
           {{ $t('navigation.bookmarkManagement') }}
@@ -65,7 +54,6 @@
     >
       <FilterPanel class="bookmark-mobile-filter" />
     </BDrawer>
-    <AiOrganizeModal v-model:visible="aiOrgVisible" @applied="handleBookmarkAiOrganized" />
     <GuestBrowseNudge />
   </div>
 </template>
@@ -84,12 +72,8 @@
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
-  import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
   const bookmark = bookmarkStore();
   const router = useRouter();
@@ -99,7 +83,6 @@
   const BOOKMARK_SEARCH_DEBOUNCE_MS = 280;
   const isHomeDrawerLayout = computed(() => bookmark.isMobile);
   const bookmarkSearchInput = ref('');
-  const aiOrgVisible = ref(false);
   let bookmarkSearchTimer = 0;
   let bookmarkRequestSequence = 0;
 
@@ -125,17 +108,7 @@
   }
 
   function openAddBookmark() {
-    if (blockGuestWrite('add-bookmark')) return;
     router.push('/manage/editBookmark/add');
-  }
-
-  function openBookmarkAiOrganize() {
-    if (blockGuestWrite('ai-organize-bookmarks')) return;
-    aiOrgVisible.value = true;
-  }
-
-  function handleBookmarkAiOrganized() {
-    bookmark.refreshTag();
   }
 
   function resetBookmarkView() {
@@ -380,17 +353,11 @@
   }
 
   .bookmark-manage-action,
-  .bookmark-ai-action,
   .bookmark-add-action,
   .bookmark-filter-action {
     height: 36px;
     gap: 7px;
     border-radius: 10px;
-  }
-
-  .bookmark-ai-action {
-    color: var(--resource-bookmark-color, #615ced);
-    background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 8%, var(--menu-body-bg-color));
   }
 
   .bookmark-workspace {
@@ -432,19 +399,6 @@
     height: 100%;
   }
 
-  @media (max-width: 1320px) and (min-width: 768px) {
-    .bookmark-ai-action {
-      width: 36px;
-      min-width: 36px;
-      padding: 0;
-      gap: 0;
-
-      span {
-        display: none;
-      }
-    }
-  }
-
   @media (max-width: 767px) {
     .bookmark-search-action,
     .bookmark-manage-action {
@@ -477,6 +431,5 @@
       min-width: 0;
       height: 100%;
     }
-
   }
 </style>

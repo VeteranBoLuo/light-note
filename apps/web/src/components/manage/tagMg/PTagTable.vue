@@ -1,8 +1,17 @@
 <template>
   <b-loading :loading="loading">
-    <CommonContainer :title="t('tagManage.title')">
+    <ResourcePageShell
+      :title="t('tagManage.title')"
+      :subtitle="t('tagManage.subtitle')"
+      accent="tag"
+      show-back
+      @back="router.back()"
+    >
+      <template #actions>
+        <BButton type="primary" @click="router.push('/manage/editTag/add')">{{ t('tagManage.createTag') }}</BButton>
+      </template>
       <div class="mobile-tag-page">
-        <section class="mobile-overview">
+        <BCard as="section" variant="raised" padding="14px 15px" class="mobile-overview">
           <div>
             <strong>{{ overview.tag }}</strong>
             <span>{{ t('tagManage.statTotal') }}</span>
@@ -16,21 +25,18 @@
               })
             }}
           </p>
-        </section>
+        </BCard>
 
         <div class="mobile-search-row">
-          <b-input v-model:value="keyword" class="mobile-search" :placeholder="t('tagManage.searchPlaceholder')">
+          <BInput v-model:value="keyword" class="mobile-search" :placeholder="t('tagManage.searchPlaceholder')">
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
-          </b-input>
-          <b-button type="primary" class="mobile-add" @click="router.push('/manage/editTag/add')">
-            {{ t('common.add') }}
-          </b-button>
+          </BInput>
         </div>
 
         <div class="mobile-filter-row no-scrollbar" :aria-label="t('tagManage.filtersTitle')">
-          <b-button
+          <BButton
             v-for="filter in filters"
             :key="filter.value"
             size="small"
@@ -42,7 +48,7 @@
             <span class="filter-dot"></span>
             <span>{{ filter.label }}</span>
             <span class="filter-count">{{ filter.count }}</span>
-          </b-button>
+          </BButton>
         </div>
 
         <div class="mobile-result-bar">
@@ -54,9 +60,13 @@
         </div>
 
         <div v-if="visibleTags.length" class="mobile-tag-list">
-          <article
+          <BCard
             v-for="tag in visibleTags"
             :key="tag.id"
+            as="article"
+            variant="card"
+            interactive
+            padding="0"
             class="mobile-tag-card"
             role="button"
             tabindex="0"
@@ -111,19 +121,19 @@
                 @click="handleDeleteTag(tag)"
               />
             </div>
-          </article>
+          </BCard>
         </div>
 
         <div v-else class="mobile-empty">
           <div class="empty-symbol">#</div>
           <strong>{{ t('tagManage.emptyTitle') }}</strong>
           <span>{{ t('tagManage.emptyDesc') }}</span>
-          <b-button v-if="!keyword" type="primary" @click="router.push('/manage/editTag/add')">
+          <BButton v-if="!keyword" type="primary" @click="router.push('/manage/editTag/add')">
             {{ t('tagManage.createTag') }}
-          </b-button>
+          </BButton>
         </div>
       </div>
-    </CommonContainer>
+    </ResourcePageShell>
   </b-loading>
 </template>
 
@@ -136,11 +146,12 @@
   import type { BaseOptions } from '@/config/bookmarkCfg.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -202,8 +213,9 @@
 
 <style lang="less" scoped>
   .mobile-tag-page {
-    --mobile-tag-card-bg: var(--menu-body-bg-color);
+    --mobile-tag-card-bg: var(--card-background);
     --mobile-tag-muted-bg: var(--bl-input-noBorder-bg-color);
+    --mobile-tag-border: var(--surface-border-color);
 
     min-height: 100%;
     padding-bottom: 22px;
@@ -211,10 +223,15 @@
   }
 
   .mobile-overview {
-    padding: 14px 15px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 18%, var(--workbench-border-color));
+    --b-card-background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--resource-tag-color) 5%, var(--card-background)),
+      var(--card-background)
+    );
+    --b-card-border-color: color-mix(in srgb, var(--resource-tag-color) 18%, var(--mobile-tag-border));
+    --b-card-shadow: var(--surface-raised-shadow);
+
     border-radius: 15px;
-    background: linear-gradient(135deg, color-mix(in srgb, var(--resource-tag-color) 8%, transparent), transparent);
 
     div {
       display: flex;
@@ -348,9 +365,12 @@
   }
 
   .mobile-tag-card {
-    border: 1px solid var(--workbench-border-color);
+    --b-card-background: var(--mobile-tag-card-bg);
+    --b-card-border-color: var(--mobile-tag-border);
+    --b-card-shadow: var(--surface-card-shadow);
+    --b-card-hover-shadow: var(--surface-hover-shadow);
+
     border-radius: 14px;
-    background: var(--mobile-tag-card-bg);
     overflow: hidden;
     transition:
       border-color 0.2s ease,
@@ -358,7 +378,7 @@
 
     &:active {
       transform: scale(0.995);
-      border-color: color-mix(in srgb, var(--resource-tag-color) 30%, var(--workbench-border-color));
+      border-color: color-mix(in srgb, var(--resource-tag-color) 30%, var(--mobile-tag-border));
     }
   }
 
@@ -495,7 +515,7 @@
     justify-content: flex-end;
     gap: 6px;
     padding: 8px 10px;
-    border-top: 1px solid var(--workbench-border-color);
+    border-top: 1px solid var(--mobile-tag-border);
   }
 
   .mobile-empty {

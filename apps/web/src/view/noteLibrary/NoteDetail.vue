@@ -23,7 +23,12 @@
         </BButton>
       </div>
       <div class="note-body" :class="{ 'note-body--organizing': isOrganizingFromInbox }">
-        <Catalog class="catalog-panel" :content="note.content" :note-type="note.type" />
+        <Catalog
+          class="catalog-panel"
+          :content="note.content"
+          :note-type="note.type"
+          @markdown-heading-click="scrollToMarkdownHeading"
+        />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
             <BInput
@@ -36,7 +41,7 @@
               @focusout="focusout"
               :placeholder="$t('noteDetail.titlePlaceholder')"
             />
-            <a-input
+            <BInput
               v-else
               :disabled="readonly"
               v-model:value="note.title"
@@ -57,6 +62,7 @@
             :ensure-note-id="ensureNoteId"
             @set-note-id="onEditorSetNoteId"
             @ready="refreshCatalog"
+            @markdown-rendered="refreshCatalog"
           />
         </div>
         <AiReply class="ai-panel" v-if="!bookmark.isMobile" />
@@ -267,6 +273,12 @@
 
   function refreshCatalog() {
     nStore.generateTOC(note.content, note.type);
+  }
+
+  function scrollToMarkdownHeading(index: number) {
+    const heading = nStore.headings[index];
+    if (!heading) return;
+    editorRef.value?.scrollToMarkdownHeading?.(index, heading.sourceOffset);
   }
 
   // 守卫式创建：同一时刻只允许一次"新建笔记"请求在途。

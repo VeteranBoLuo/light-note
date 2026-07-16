@@ -1,38 +1,46 @@
 <template>
   <b-loading :loading="loading">
-    <CommonContainer :title="title">
-      <div class="edit-list-container">
-        <b-input v-model:value="searchValue" class="table-search-input" :placeholder="placeholder || $t('common.searchContent')">
-          <template #prefix>
-            <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
-          </template>
-        </b-input>
-        <div class="list-body">
-          <div v-for="item in dataList" class="list-item flex-align-center">
-            <slot name="item" :data="item" />
-          </div>
-        </div>
-        <b-button
-          class="container-footer-btn"
-          style="width: 80%; margin-top: 15px; border-radius: 80px"
-          type="primary"
-          @click="$emit('add')"
-          v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
-          >{{ $t('common.add') }}</b-button
+    <ResourcePageShell :title="title" :subtitle="subtitle" accent="bookmark" show-back @back="backRouterPage">
+      <template #actions>
+        <BButton type="primary" @click="$emit('add')" v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn">
+          {{ $t('common.add') }}
+        </BButton>
+      </template>
+      <BCard variant="panel" padding="12px" class="edit-list-container">
+        <BInput
+          v-model:value="searchValue"
+          class="table-search-input"
+          :placeholder="placeholder || $t('common.searchContent')"
         >
-      </div>
-    </CommonContainer>
+          <template #prefix>
+            <SvgIcon color="var(--desc-color)" :src="icon.navigation.search" size="16" />
+          </template>
+        </BInput>
+        <div class="list-body">
+          <BCard
+            v-for="item in dataList"
+            :key="item.id || item.name"
+            variant="card"
+            padding="0 10px"
+            class="list-item flex-align-center"
+          >
+            <slot name="item" :data="item" />
+          </BCard>
+          <div v-if="!dataList.length" class="list-empty">{{ $t('bookmarkMg.emptyTitle') }}</div>
+        </div>
+      </BCard>
+    </ResourcePageShell>
   </b-loading>
 </template>
 
 <script lang="ts" setup>
-  import { bookmarkStore } from '@/store';
   import { computed, ref } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import icon from '@/config/icon.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { backRouterPage } from '@/utils/common';
@@ -50,15 +58,15 @@
       type: String,
       default: '',
     },
+    subtitle: {
+      type: String,
+      default: '',
+    },
     listData: {
       type: Array,
       default: () => [],
     },
   });
-  const visible = defineModel<boolean>('visible');
-
-  const bookmark = bookmarkStore();
-
   const searchValue = ref('');
   const dataList = computed(() => {
     if (searchValue.value) {
@@ -73,8 +81,14 @@
 
 <style lang="less" scoped>
   .edit-list-container {
+    --b-card-background: var(--workspace-panel-bg-color);
+    --b-card-border-color: var(--surface-border-color);
+
     height: 100%;
+    display: flex;
+    flex-direction: column;
     box-sizing: border-box;
+    border-radius: 14px;
   }
 
   .table-search-input {
@@ -82,15 +96,31 @@
   }
   .list-body {
     margin-top: 10px;
-    height: calc(100% - 92px);
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     overflow: auto;
-    border-radius: 8px;
+    border-radius: 10px;
   }
   .list-item {
+    --b-card-background: var(--card-background);
+    --b-card-border-color: var(--surface-border-color);
+    --b-card-shadow: var(--surface-card-shadow);
+
     position: relative;
     gap: 10px;
     height: 44px;
-    padding-left: 10px;
-    border-bottom: 1px solid var(--phone-menu-item-border-color);
+    flex: 0 0 auto;
+    border-radius: 10px;
+  }
+
+  .list-empty {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+    color: var(--desc-color);
+    font-size: 14px;
   }
 </style>

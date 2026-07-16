@@ -34,7 +34,11 @@
       <div v-else class="note-tags note-tags--empty"></div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
-    <div v-if="!bookmark.isMobile" class="checkBox" :style="{ visibility: note.isCheck === true ? 'visible' : 'hidden' }">
+    <div
+      v-if="!bookmark.isMobile"
+      class="checkBox"
+      :style="{ visibility: note.isCheck === true ? 'visible' : 'hidden' }"
+    >
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
   </div>
@@ -113,29 +117,25 @@
 
 <style lang="less" scoped>
   .note-card {
-    --note-card-bg: color-mix(in srgb, var(--background-color) 94%, var(--card-bg-color) 6%);
+    --note-card-bg: var(--card-background);
     display: flex;
     flex-direction: column;
     height: 282px;
     position: relative;
     border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, var(--desc-color) 18%);
+    border: 1px solid var(--surface-border-color);
     padding: 18px 20px 16px;
     box-sizing: border-box;
     cursor: pointer;
     background: var(--note-card-bg);
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.02) inset,
-      0 10px 24px -22px color-mix(in srgb, var(--text-color) 45%, transparent);
+    box-shadow: var(--surface-card-shadow);
     transition:
       box-shadow 0.2s ease,
       border-color 0.2s ease;
 
     &:hover {
-      box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.03) inset,
-        0 14px 28px -20px color-mix(in srgb, var(--text-color) 48%, transparent);
-      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--card-border-color));
+      box-shadow: var(--surface-hover-shadow);
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--surface-border-color));
 
       .checkBox {
         visibility: visible;
@@ -284,7 +284,7 @@
 
   @media (max-width: 1023px) {
     .note-card {
-      border-color: var(--card-border-color) !important;
+      border-color: var(--surface-border-color) !important;
       box-shadow: none;
       min-width: 0;
       overflow: hidden;

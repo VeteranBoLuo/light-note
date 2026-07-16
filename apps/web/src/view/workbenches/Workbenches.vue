@@ -6,18 +6,16 @@
           <div class="workbench-title-row">
             <span class="workbench-title-accent" aria-hidden="true"></span>
             <h1>
-              <BTooltip :title="t('common.refresh')">
-                <BButton
-                  class="workbench-title-action"
-                  role="button"
-                  tabindex="0"
-                  @click="refreshWorkbench"
-                  @keydown.enter="refreshWorkbench"
-                  @keydown.space.prevent="refreshWorkbench"
-                >
-                  {{ t('workbench.title') }}
-                </BButton>
-              </BTooltip>
+              <BButton
+                class="workbench-title-action"
+                role="button"
+                tabindex="0"
+                @click="refreshWorkbench"
+                @keydown.enter="refreshWorkbench"
+                @keydown.space.prevent="refreshWorkbench"
+              >
+                {{ t('workbench.title') }}
+              </BButton>
             </h1>
           </div>
           <p>{{ t('workbench.subtitle') }}</p>

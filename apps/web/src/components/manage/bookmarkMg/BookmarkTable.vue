@@ -1,268 +1,307 @@
 <template>
   <b-loading :loading="loading">
-    <div class="bookmark-manage-page" :class="{ 'bookmark-manage-page--night': user.currentTheme === 'night' }">
-      <!-- Hero 区域 -->
-      <section class="hero-card">
-        <div class="hero-copy">
-          <div class="eyebrow">{{ $t('navigation.bookmark') }}</div>
-          <h1>{{ $t('bookmarkMg.title') }}</h1>
-          <p>{{ $t('bookmarkMg.subtitle') }}</p>
-        </div>
+    <ResourcePageShell
+      :title="$t('bookmarkMg.title')"
+      :subtitle="$t('bookmarkMg.subtitle')"
+      accent="bookmark"
+      show-back
+      @back="handleToBack"
+    >
+      <template #actions>
+        <BButton v-if="viewMode === 'table' && selectedRows.length > 0" type="danger" @click="handleBatchDelete">
+          {{ $t('bookmarkMg.batchDelete') }}
+        </BButton>
+        <BButton
+          class="resource-action resource-action--utility"
+          @click="showImportExportModal"
+          v-click-log="OPERATION_LOG_MAP.bookmarkMg.importExport"
+        >
+          <SvgIcon :src="icon.bookmarkManage.importExport" color="currentColor" size="18" />
+          {{ $t('bookmarkMg.importExport') }}
+        </BButton>
+        <BButton
+          class="resource-action resource-action--utility"
+          @click="healthVisible = true"
+          v-click-log="OPERATION_LOG_MAP.bookmarkMg.healthCheck"
+        >
+          <SvgIcon :src="icon.bookmarkManage.healthCheck" color="currentColor" size="18" />
+          {{ $t('bookmarkMg.healthCheck') }}
+        </BButton>
+        <BButton
+          class="resource-action resource-action--ai"
+          @click="aiOrgVisible = true"
+          v-click-log="OPERATION_LOG_MAP.bookmarkMg.aiOrganize"
+        >
+          <SvgIcon :src="icon.ai.organize" color="currentColor" size="18" />
+          {{ $t('bookmarkMg.aiOrganizeBtn') }}
+        </BButton>
+        <BButton
+          class="resource-action resource-action--primary"
+          type="primary"
+          @click="router.push({ path: `/manage/editBookmark/add` })"
+          v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
+        >
+          <SvgIcon :src="icon.common.add" color="currentColor" size="17" />
+          {{ $t('common.add') }}
+        </BButton>
+      </template>
 
-        <div class="hero-actions">
-          <div class="hero-btns">
-            <b-button v-if="viewMode === 'table' && selectedRows.length > 0" type="danger" @click="handleBatchDelete">{{
-              $t('bookmarkMg.batchDelete')
-            }}</b-button>
-            <b-button
-              type="success"
-              @click="showImportExportModal"
-              v-click-log="OPERATION_LOG_MAP.bookmarkMg.importExport"
+      <div class="bookmark-manage-page" :class="{ 'bookmark-manage-page--night': user.currentTheme === 'night' }">
+        <section class="hero-stats-section">
+          <div class="hero-stats">
+            <BCard
+              v-for="stat in stats"
+              :key="stat.key"
+              as="article"
+              variant="raised"
+              padding="10px 14px"
+              class="stat-card"
+              :class="`stat-card--${stat.key}`"
             >
-              <svg-icon :src="icon.bookmarkManage.importExport" color="currentColor" size="18" style="margin-right: 6px" />
-              {{ $t('bookmarkMg.importExport') }}
-            </b-button>
-            <b-button @click="healthVisible = true" v-click-log="OPERATION_LOG_MAP.bookmarkMg.healthCheck">
-              <svg-icon :src="icon.bookmarkManage.healthCheck" color="currentColor" size="18" style="margin-right: 6px" />
-              {{ $t('bookmarkMg.healthCheck') }}
-            </b-button>
-            <b-button @click="aiOrgVisible = true" v-click-log="OPERATION_LOG_MAP.bookmarkMg.aiOrganize">
-              <svg-icon :src="icon.ai.organize" color="var(--primary-color)" size="18" style="margin-right: 6px" />
-              {{ $t('bookmarkMg.aiOrganizeBtn') }}
-            </b-button>
-            <b-button
-              type="primary"
-              @click="router.push({ path: `/manage/editBookmark/add` })"
-              v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn"
+              <div class="stat-label">{{ stat.label }}</div>
+              <div class="stat-value">{{ stat.value }}</div>
+              <div class="stat-desc">{{ stat.desc }}</div>
+            </BCard>
+          </div>
+        </section>
+
+        <!-- 内容区 -->
+        <section class="content-layout">
+          <BCard as="aside" variant="card" padding="16px" class="filter-panel">
+            <div class="filter-title">{{ $t('bookmarkMg.filtersTitle') }}</div>
+            <BButton
+              v-for="filter in filters"
+              :key="filter.value"
+              class="filter-item"
+              :class="{ active: activeFilter === filter.value }"
+              @click="activeFilter = filter.value"
             >
-              {{ $t('common.add') }}
-            </b-button>
-            <b-button @click="handleToBack">{{ $t('common.back') }}</b-button>
-          </div>
-        </div>
+              <span class="filter-left">
+                <span class="filter-dot" :class="`filter-dot--${filter.value}`"></span>
+                <span>{{ filter.label }}</span>
+              </span>
+              <span class="filter-count">{{ filter.count }}</span>
+            </BButton>
+          </BCard>
 
-        <div class="hero-stats">
-          <div v-for="stat in stats" :key="stat.key" class="stat-card" :class="`stat-card--${stat.key}`">
-            <div class="stat-label">{{ stat.label }}</div>
-            <div class="stat-value">{{ stat.value }}</div>
-            <div class="stat-desc">{{ stat.desc }}</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 内容区 -->
-      <section class="content-layout">
-        <aside class="filter-panel">
-          <div class="filter-title">{{ $t('bookmarkMg.filtersTitle') }}</div>
-          <button
-            v-for="filter in filters"
-            :key="filter.value"
-            class="filter-item"
-            :class="{ active: activeFilter === filter.value }"
-            @click="activeFilter = filter.value"
-          >
-            <span class="filter-left">
-              <span class="filter-dot" :class="`filter-dot--${filter.value}`"></span>
-              <span>{{ filter.label }}</span>
-            </span>
-            <span class="filter-count">{{ filter.count }}</span>
-          </button>
-        </aside>
-
-        <main class="result-panel">
-          <div class="result-toolbar">
-            <div class="result-toolbar-left">
-              <div class="view-toggle">
-                <button class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
-                  <svg-icon :src="icon.filterPanel.list" size="14" />
-                  <span>{{ $t('bookmarkMg.cardView') }}</span>
-                </button>
-                <button class="view-toggle-btn" :class="{ active: viewMode === 'table' }" @click="viewMode = 'table'">
-                  <svg-icon :src="icon.navigation.menu" size="14" />
-                  <span>{{ $t('bookmarkMg.tableView') }}</span>
-                </button>
+          <BCard as="main" variant="panel" padding="20px" class="result-panel">
+            <div class="result-toolbar">
+              <div class="result-toolbar-left">
+                <div class="view-toggle">
+                  <BButton class="view-toggle-btn" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">
+                    <svg-icon :src="icon.filterPanel.list" size="14" />
+                    <span>{{ $t('bookmarkMg.cardView') }}</span>
+                  </BButton>
+                  <BButton
+                    class="view-toggle-btn"
+                    :class="{ active: viewMode === 'table' }"
+                    @click="viewMode = 'table'"
+                  >
+                    <svg-icon :src="icon.navigation.menu" size="14" />
+                    <span>{{ $t('bookmarkMg.tableView') }}</span>
+                  </BButton>
+                </div>
+                <b-input
+                  v-model:value="tableSearchValue"
+                  class="result-search"
+                  :placeholder="$t('bookmarkMg.bookmarkSearch')"
+                >
+                  <template #prefix>
+                    <svg-icon :src="icon.navigation.search" size="16" />
+                  </template>
+                </b-input>
               </div>
-              <b-input
-                v-model:value="tableSearchValue"
-                class="result-search"
-                :placeholder="$t('bookmarkMg.bookmarkSearch')"
-              >
-                <template #prefix>
-                  <svg-icon :src="icon.navigation.search" size="16" />
-                </template>
-              </b-input>
+              <div class="result-toolbar-right">
+                <div class="result-title">{{ $t('bookmarkMg.resultTitle') }}</div>
+                <div class="result-subtitle">{{ resultSubtitle }}</div>
+              </div>
             </div>
-            <div class="result-toolbar-right">
-              <div class="result-title">{{ $t('bookmarkMg.resultTitle') }}</div>
-              <div class="result-subtitle">{{ resultSubtitle }}</div>
-            </div>
-          </div>
 
-          <!-- 卡片视图 -->
-          <div v-if="viewMode === 'card' && filteredBookmarks.length" class="bookmark-grid">
-            <article v-for="bookmarkItem in filteredBookmarks" :key="bookmarkItem.id" class="bookmark-card">
-              <div class="bookmark-card__head">
-                <div class="bookmark-identity">
-                  <BookmarkFavicon :src="bookmarkItem.iconUrl" :size="24" :tile-size="42" />
-                  <div class="bookmark-meta">
-                    <div class="bookmark-name">{{ bookmarkItem.name }}</div>
-                    <div class="bookmark-url" :title="bookmarkItem.url">
-                      <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
+            <!-- 卡片视图 -->
+            <div v-if="viewMode === 'card' && filteredBookmarks.length" class="bookmark-grid">
+              <BCard
+                v-for="bookmarkItem in filteredBookmarks"
+                :key="bookmarkItem.id"
+                as="article"
+                variant="card"
+                padding="18px"
+                class="bookmark-card"
+              >
+                <div class="bookmark-card__head">
+                  <div class="bookmark-identity">
+                    <BookmarkFavicon :src="bookmarkItem.iconUrl" :size="24" :tile-size="42" />
+                    <div class="bookmark-meta">
+                      <div class="bookmark-name">{{ bookmarkItem.name }}</div>
+                      <div class="bookmark-url" :title="bookmarkItem.url">
+                        <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
+                      </div>
+                      <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
+                        <BookmarkCapabilityBadge
+                          v-if="bookmarkItem.hasSnapshot"
+                          type="snapshot"
+                          :label="$t('bookmarkMg.badgeArchived')"
+                          :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+                          @click="openSnap(bookmarkItem.id)"
+                          v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
+                        />
+                        <BookmarkCapabilityBadge
+                          v-if="bookmarkItem.hasSummary"
+                          type="summary"
+                          :label="$t('bookmarkMg.badgeSummary')"
+                          :tooltip="$t('bookmarkMg.badgeSummaryHint')"
+                          @click="openSnap(bookmarkItem.id)"
+                          v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
+                        />
+                      </div>
                     </div>
-                    <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
-                      <BookmarkCapabilityBadge
-                        v-if="bookmarkItem.hasSnapshot"
-                        type="snapshot"
-                        :label="$t('bookmarkMg.badgeArchived')"
-                        :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                        @click="openSnap(bookmarkItem.id)"
-                        v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
-                      />
-                      <BookmarkCapabilityBadge
-                        v-if="bookmarkItem.hasSummary"
-                        type="summary"
-                        :label="$t('bookmarkMg.badgeSummary')"
-                        :tooltip="$t('bookmarkMg.badgeSummaryHint')"
-                        @click="openSnap(bookmarkItem.id)"
-                        v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
-                      />
-                    </div>
+                  </div>
+
+                  <div class="bookmark-actions">
+                    <BActionButton
+                      action="edit"
+                      :label="$t('common.edit')"
+                      :tooltip="$t('common.edit')"
+                      @click="edit(bookmarkItem.id)"
+                    />
+                    <BActionButton
+                      action="delete"
+                      :label="$t('common.delete')"
+                      :tooltip="$t('common.delete')"
+                      @click="handleDeleteTag(bookmarkItem)"
+                    />
                   </div>
                 </div>
 
-                <div class="bookmark-actions">
-                  <BActionButton action="edit" :label="$t('common.edit')" :tooltip="$t('common.edit')" @click="edit(bookmarkItem.id)" />
-                  <BActionButton
-                    action="delete"
-                    :label="$t('common.delete')"
-                    :tooltip="$t('common.delete')"
-                    @click="handleDeleteTag(bookmarkItem)"
-                  />
+                <div v-if="bookmarkItem.description" class="bookmark-desc">
+                  {{ bookmarkItem.description }}
                 </div>
-              </div>
 
-              <div v-if="bookmarkItem.description" class="bookmark-desc">
-                {{ bookmarkItem.description }}
-              </div>
-
-              <div class="section-block">
-                <div class="section-title">{{ $t('bookmarkMg.relatedTag') }}</div>
-                <div v-if="bookmarkItem.tagList?.length" class="chip-list">
-                  <span
-                    v-for="t in bookmarkItem.tagList"
-                    :key="t.id"
-                    class="common-chip common-chip--bookmark"
-                    :title="t.name"
-                    @click.stop="router.push(`/tag/${t.id}`)"
-                  >
-                    {{ t.name }}
-                  </span>
+                <div class="section-block">
+                  <div class="section-title">{{ $t('bookmarkMg.relatedTag') }}</div>
+                  <div v-if="bookmarkItem.tagList?.length" class="chip-list">
+                    <span
+                      v-for="t in bookmarkItem.tagList"
+                      :key="t.id"
+                      class="common-chip common-chip--bookmark"
+                      :title="t.name"
+                      @click.stop="router.push(`/tag/${t.id}`)"
+                    >
+                      {{ t.name }}
+                    </span>
+                  </div>
+                  <div v-else class="empty-inline">{{ $t('bookmarkMg.noTags') }}</div>
                 </div>
-                <div v-else class="empty-inline">{{ $t('bookmarkMg.noTags') }}</div>
-              </div>
-            </article>
-          </div>
+              </BCard>
+            </div>
 
-          <!-- 表格视图 -->
-          <BTable
-            v-if="viewMode === 'table'"
-            :data="filteredBookmarks"
-            :columns="tagColumns"
-            style="margin-top: 10px; width: 100%; height: calc(100% - 50px)"
-            :selectable="true"
-            :selectedRows="selectedRows"
-            :rowKey="'id'"
-            @selectionChange="handleSelectionChange"
-          >
-            <template #bodyCell="{ column, text, record }">
-              <template v-if="column.key === 'name'">
-                <div style="display: flex; align-items: center; gap: 10px" :title="text">
-                  <BookmarkFavicon :src="(record as BookmarkInterface).iconUrl" :size="20" :tile-size="28" />
-                  <div class="text-hidden">{{ text }}</div>
-                  <BookmarkCapabilityBadge
-                    v-if="(record as BookmarkInterface).hasSnapshot"
-                    type="snapshot"
-                    compact
-                    :label="$t('bookmarkMg.badgeArchived')"
-                    :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                    @click="openSnap((record as BookmarkInterface).id)"
-                    v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
-                  />
-                  <BookmarkCapabilityBadge
-                    v-if="(record as BookmarkInterface).hasSummary"
-                    type="summary"
-                    compact
-                    :label="$t('bookmarkMg.badgeSummary')"
-                    :tooltip="$t('bookmarkMg.badgeSummaryHint')"
-                    @click="openSnap((record as BookmarkInterface).id)"
-                    v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
-                  />
-                </div>
+            <!-- 表格视图 -->
+            <BTable
+              v-if="viewMode === 'table'"
+              :data="filteredBookmarks"
+              :columns="tagColumns"
+              style="margin-top: 10px; width: 100%; height: calc(100% - 50px)"
+              :selectable="true"
+              :selectedRows="selectedRows"
+              :rowKey="'id'"
+              @selectionChange="handleSelectionChange"
+            >
+              <template #bodyCell="{ column, text, record }">
+                <template v-if="column.key === 'name'">
+                  <div style="display: flex; align-items: center; gap: 10px" :title="text">
+                    <BookmarkFavicon :src="(record as BookmarkInterface).iconUrl" :size="20" :tile-size="28" />
+                    <div class="text-hidden">{{ text }}</div>
+                    <BookmarkCapabilityBadge
+                      v-if="(record as BookmarkInterface).hasSnapshot"
+                      type="snapshot"
+                      compact
+                      :label="$t('bookmarkMg.badgeArchived')"
+                      :tooltip="$t('bookmarkMg.badgeArchivedHint')"
+                      @click="openSnap((record as BookmarkInterface).id)"
+                      v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
+                    />
+                    <BookmarkCapabilityBadge
+                      v-if="(record as BookmarkInterface).hasSummary"
+                      type="summary"
+                      compact
+                      :label="$t('bookmarkMg.badgeSummary')"
+                      :tooltip="$t('bookmarkMg.badgeSummaryHint')"
+                      @click="openSnap((record as BookmarkInterface).id)"
+                      v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
+                    />
+                  </div>
+                </template>
+                <template v-else-if="column.key === 'tagList'">
+                  <div class="flex-align-center-gap">
+                    <span
+                      :title="t.name"
+                      class="common-tag dom-hover"
+                      v-for="t in (record as BookmarkInterface).tagList"
+                      :key="t.id"
+                      @click.stop="router.push(`/tag/${t.id}`)"
+                      >{{ t.name }}</span
+                    >
+                  </div>
+                </template>
+                <template v-else-if="column.key === 'url'">
+                  <div class="text-hidden">
+                    <a :href="withProtocol(text)" target="_blank">{{ text }}</a>
+                  </div>
+                </template>
+                <template v-else-if="column.key === 'operation'">
+                  <div class="edit-tag-operation">
+                    <BActionButton
+                      action="edit"
+                      :tooltip="$t('common.edit')"
+                      @click="edit((record as BookmarkInterface).id)"
+                    />
+                    <BActionButton
+                      action="delete"
+                      :tooltip="$t('common.delete')"
+                      @click="handleDeleteTag(record as BookmarkInterface)"
+                    />
+                  </div>
+                </template>
               </template>
-              <template v-else-if="column.key === 'tagList'">
-                <div class="flex-align-center-gap">
-                  <span
-                    :title="t.name"
-                    class="common-tag dom-hover"
-                    v-for="t in (record as BookmarkInterface).tagList"
-                    :key="t.id"
-                    @click.stop="router.push(`/tag/${t.id}`)"
-                    >{{ t.name }}</span
-                  >
-                </div>
-              </template>
-              <template v-else-if="column.key === 'url'">
-                <div class="text-hidden">
-                  <a :href="withProtocol(text)" target="_blank">{{ text }}</a>
-                </div>
-              </template>
-              <template v-else-if="column.key === 'operation'">
-                <div class="edit-tag-operation">
-                  <BActionButton
-                    action="edit"
-                    :tooltip="$t('common.edit')"
-                    @click="edit((record as BookmarkInterface).id)"
-                  />
-                  <BActionButton
-                    action="delete"
-                    :tooltip="$t('common.delete')"
-                    @click="handleDeleteTag(record as BookmarkInterface)"
-                  />
-                </div>
-              </template>
-            </template>
-          </BTable>
+            </BTable>
 
-          <!-- 空状态 -->
-          <div v-if="viewMode === 'card' && !filteredBookmarks.length" class="empty-state">
-            <div class="empty-orbit"></div>
-            <h3>{{ $t('bookmarkMg.emptyTitle') }}</h3>
-            <p>{{ $t('bookmarkMg.emptyDesc') }}</p>
-          </div>
-        </main>
-      </section>
+            <!-- 空状态 -->
+            <div v-if="viewMode === 'card' && !filteredBookmarks.length" class="empty-state">
+              <div class="empty-orbit"></div>
+              <h3>{{ $t('bookmarkMg.emptyTitle') }}</h3>
+              <p>{{ $t('bookmarkMg.emptyDesc') }}</p>
+            </div>
+          </BCard>
+        </section>
 
-      <!-- 隐藏的文件输入 -->
-      <input type="file" ref="importFileInput" accept=".xlsx" style="display: none" @change="handleFileChange" />
-      <input
-        type="file"
-        ref="importHTMLFileInput"
-        accept=".html,.htm"
-        style="display: none"
-        @change="handleHTMLFileChange"
-      />
+        <BUpload
+          ref="importFileInput"
+          class="hidden-upload"
+          accept=".xlsx"
+          :multiple="false"
+          raw-file
+          @change="handleExcelFiles"
+        />
+        <BUpload
+          ref="importHTMLFileInput"
+          class="hidden-upload"
+          accept=".html,.htm"
+          :multiple="false"
+          raw-file
+          @change="handleHtmlFiles"
+        />
 
-      <ActionCardModal
-        v-if="importExportModalVisible"
-        v-model:visible="importExportModalVisible"
-        :title="$t('bookmarkMg.importExport')"
-        :sections="importExportSections"
-        :note="$t('bookmarkMg.exportNote')"
-      />
-      <LinkHealthModal v-model:visible="healthVisible" />
-      <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
-      <AiOrganizeModal v-model:visible="aiOrgVisible" @applied="init" />
-    </div>
+        <ActionCardModal
+          v-if="importExportModalVisible"
+          v-model:visible="importExportModalVisible"
+          :title="$t('bookmarkMg.importExport')"
+          :sections="importExportSections"
+          :note="$t('bookmarkMg.exportNote')"
+        />
+        <LinkHealthModal v-model:visible="healthVisible" />
+        <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
+        <AiOrganizeModal v-model:visible="aiOrgVisible" @applied="init" />
+      </div>
+    </ResourcePageShell>
   </b-loading>
 </template>
 
@@ -270,9 +309,10 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, defineAsyncComponent, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { apiBasePost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCard from '@/components/base/BasicComponents/BCard.vue';
   import router from '@/router';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
@@ -281,15 +321,16 @@
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
+  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useI18n } from 'vue-i18n';
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
-  import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import { cloneDeep } from 'lodash-es';
+  import { useBookmarkManage } from '@/composables/useBookmarkManage.ts';
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
 
@@ -298,7 +339,7 @@
   const user = useUserStore();
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-  const loading = ref(false);
+  const { loading, bookmarks: tableData, reloadBookmarks: init, confirmDeleteBookmark } = useBookmarkManage();
   const selectedRows = ref<string[]>([]);
   const importExportModalVisible = ref(false);
   const healthVisible = ref(false);
@@ -312,7 +353,6 @@
   };
   const viewMode = ref<'card' | 'table'>('card');
   const tableSearchValue = ref('');
-  const tableData = ref<BookmarkInterface[]>([]);
 
   type FilterValue = 'all' | string;
   const activeFilter = ref<FilterValue>('all');
@@ -457,20 +497,7 @@
   };
 
   function handleDeleteTag(bookmarkItem: BookmarkInterface) {
-    if (blockGuestWrite('delete-bookmark')) return;
-    Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除书签【${bookmarkItem.name}】？`,
-      onOk() {
-        apiBasePost('/api/bookmark/delBookmark', { id: bookmarkItem.id }).then((res) => {
-          if (res.status == 200) {
-            recordOperation({ module: '书签管理', operation: `删除书签成功【${bookmarkItem.name}】` });
-            message.success('删除成功');
-            init();
-          }
-        });
-      },
-    });
+    confirmDeleteBookmark(bookmarkItem);
   }
 
   function handleToBack() {
@@ -646,28 +673,27 @@
     return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   }
 
-  function getIcon(bookmarkItem: BookmarkInterface) {
-    // 无图标用站内默认图,不再直连第三方 ico.kucat.cn(真实 favicon 由后端抓取写回 iconUrl)
-    return bookmarkItem.iconUrl || icon.nullImg;
-  }
-
-  const importFileInput = ref<HTMLInputElement | null>(null);
+  type BUploadExpose = { open: () => void };
+  const importFileInput = ref<BUploadExpose | null>(null);
   const handleImport = () => {
     if (blockGuestWrite('import-bookmark')) return;
-    importFileInput.value?.click();
+    importFileInput.value?.open();
     importExportModalVisible.value = false;
   };
 
-  const importHTMLFileInput = ref<HTMLInputElement | null>(null);
+  const importHTMLFileInput = ref<BUploadExpose | null>(null);
   const handleImportHTML = () => {
     if (blockGuestWrite('import-bookmark')) return;
-    importHTMLFileInput.value?.click();
+    importHTMLFileInput.value?.open();
     importExportModalVisible.value = false;
   };
 
-  const handleFileChange = async (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    const file = target.files?.[0];
+  const handleExcelFiles = (files: File[]) => {
+    const file = files?.[0];
+    if (file) handleFileChange(file);
+  };
+
+  const handleFileChange = async (file: File) => {
     if (!file) return;
     try {
       loading.value = true;
@@ -735,13 +761,15 @@
       message.error('文件处理失败: ' + err.message);
     } finally {
       loading.value = false;
-      target.value = '';
     }
   };
 
-  const handleHTMLFileChange = async (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    const file = target.files?.[0];
+  const handleHtmlFiles = (files: File[]) => {
+    const file = files?.[0];
+    if (file) handleHTMLFileChange(file);
+  };
+
+  const handleHTMLFileChange = async (file: File) => {
     if (!file) return;
     try {
       loading.value = true;
@@ -767,31 +795,8 @@
     } catch (err: any) {
       message.error('文件处理失败: ' + (err?.message || err));
       loading.value = false;
-    } finally {
-      target.value = '';
     }
   };
-
-  function init() {
-    loading.value = true;
-    apiQueryPost('/api/bookmark/getBookmarkList', { filters: { userId: user.id, type: 'all' } })
-      .then((res) => {
-        if (res.status === 200) {
-          tableData.value = cloneDeep(res.data.items);
-          tableData.value.forEach((item: BookmarkInterface) => {
-            item.iconUrl = getIcon(item);
-          });
-          // 渐进式:只抓无图标的,限并发逐个,抓到即回填(不再整批等最慢站)
-          loadBookmarkIconsProgressively(res.data.items, (id, icon) => {
-            const item = tableData.value.find((x: BookmarkInterface) => x.id === id);
-            if (item) item.iconUrl = icon;
-          });
-        }
-      })
-      .finally(() => {
-        loading.value = false;
-      });
-  }
 
   init();
 </script>
@@ -805,102 +810,86 @@
   @radius-sm: 10px;
 
   .bookmark-manage-page {
-    --bm-hero-bg: linear-gradient(135deg, var(--background-color), var(--menu-body-bg-color));
-    --bm-stat-bg: rgba(255, 255, 255, 0.48);
-    --bm-panel-bg: var(--background-color);
-    --bm-card-bg: var(--menu-body-bg-color);
+    --bm-panel-bg: var(--workspace-panel-bg-color);
+    --bm-card-bg: var(--card-background);
     --bm-muted-bg: var(--bl-input-noBorder-bg-color);
 
     height: 100%;
     display: flex;
     flex-direction: column;
-    padding: 16px;
     box-sizing: border-box;
     color: var(--text-color);
   }
 
   .bookmark-manage-page--night {
-    --bm-hero-bg: linear-gradient(135deg, #1b1c21, #24252a);
-    --bm-stat-bg: #27282e;
-    --bm-panel-bg: #1f2025;
-    --bm-card-bg: #26272d;
-    --bm-muted-bg: #2c2d34;
+    --bm-panel-bg: var(--workspace-panel-bg-color);
+    --bm-card-bg: var(--card-background);
+    --bm-muted-bg: var(--bl-input-noBorder-bg-color);
   }
 
-  // ── Hero ──
-  .hero-card {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
-    gap: 14px;
-    background: var(--bm-hero-bg);
-    border: 1px solid var(--workbench-border-color);
-    border-radius: 16px;
-    padding: 16px 20px;
-    overflow: hidden;
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: -60px;
-      right: -40px;
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
-      background: radial-gradient(
-        circle,
-        color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent) 0%,
-        transparent 70%
-      );
-      pointer-events: none;
-    }
-  }
-
-  .hero-copy {
-    display: flex;
-    flex-direction: column;
+  :deep(.resource-page-actions .b_btn) {
     gap: 6px;
-    h1 {
-      margin: 0;
-      font-size: 24px;
-      line-height: 1.1;
-    }
-    p {
-      margin: 0;
-      max-width: 640px;
-      font-size: 13px;
-      line-height: 1.5;
-      opacity: @opacity-primary;
+  }
+
+  :deep(.resource-page-actions .resource-action) {
+    height: 36px;
+    padding: 0 13px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    line-height: 36px;
+    transition:
+      color 0.18s ease,
+      border-color 0.18s ease,
+      background 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  :deep(.resource-page-actions .resource-action--utility) {
+    color: var(--text-color);
+    border-color: var(--surface-border-color);
+    background: var(--card-background);
+    box-shadow: var(--surface-card-shadow);
+
+    &:hover {
+      color: var(--resource-bookmark-color);
+      border-color: color-mix(in srgb, var(--resource-bookmark-color) 24%, var(--surface-border-color));
+      background: color-mix(in srgb, var(--resource-bookmark-color) 4%, var(--card-background));
     }
   }
 
-  .eyebrow {
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+  :deep(.resource-page-actions .resource-action--ai) {
     color: var(--resource-bookmark-color);
+    border-color: color-mix(in srgb, var(--resource-bookmark-color) 18%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--card-background));
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--resource-bookmark-color) 34%, var(--surface-border-color));
+      background: color-mix(in srgb, var(--resource-bookmark-color) 12%, var(--card-background));
+    }
   }
 
-  .hero-actions {
-    display: flex;
-    align-items: flex-end;
+  :deep(.resource-page-actions .resource-action--primary) {
+    box-shadow: 0 8px 18px -12px color-mix(in srgb, var(--resource-bookmark-color) 72%, transparent);
   }
 
-  .hero-btns {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-    width: 100%;
+  .hidden-upload {
+    display: none;
+  }
+
+  .hero-stats-section {
+    flex: 0 0 auto;
   }
 
   .result-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
     gap: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--card-background);
   }
 
   .result-toolbar-left {
@@ -940,6 +929,9 @@
     background: transparent;
     transition: all 0.18s ease;
     white-space: nowrap;
+    width: auto;
+    height: 28px;
+    line-height: 28px;
     &.active {
       background: var(--bm-card-bg);
       color: var(--text-color);
@@ -959,13 +951,16 @@
   }
 
   .stat-card {
+    --stat-accent: var(--resource-bookmark-color);
+    --b-card-background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--stat-accent) 5%, var(--card-background)),
+      var(--card-background)
+    );
+    --b-card-border-color: color-mix(in srgb, var(--stat-accent) 20%, var(--surface-border-color));
+    --b-card-shadow: 0 10px 26px -24px color-mix(in srgb, var(--stat-accent) 76%, transparent);
+
     border-radius: 12px;
-    padding: 10px 14px;
-    background: var(--bm-stat-bg);
-    border: 1px solid var(--workbench-border-color);
-    transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
     position: relative;
     overflow: hidden;
     &::before {
@@ -976,23 +971,23 @@
       right: 0;
       height: 3px;
     }
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
-    }
   }
 
-  .stat-card--bookmark::before {
-    background: var(--resource-bookmark-color);
+  .stat-card--bookmark {
+    --stat-accent: var(--resource-bookmark-color);
   }
-  .stat-card--tag::before {
-    background: var(--resource-tag-color);
+  .stat-card--tag {
+    --stat-accent: var(--resource-tag-color);
   }
-  .stat-card--note::before {
-    background: var(--resource-note-color);
+  .stat-card--note {
+    --stat-accent: var(--resource-note-color);
   }
-  .stat-card--file::before {
-    background: var(--resource-file-color);
+  .stat-card--file {
+    --stat-accent: var(--resource-file-color);
+  }
+
+  .stat-card::before {
+    background: var(--stat-accent);
   }
 
   .stat-label {
@@ -1022,14 +1017,14 @@
 
   .filter-panel,
   .result-panel {
-    background: var(--bm-panel-bg);
-    border: 1px solid var(--workbench-border-color);
+    --b-card-border-color: var(--surface-border-color);
+
     border-radius: @radius-card;
     overflow-y: auto;
   }
 
   .filter-panel {
-    padding: 16px;
+    --b-card-shadow: var(--surface-card-shadow);
   }
 
   .filter-title {
@@ -1054,6 +1049,9 @@
     justify-content: space-between;
     cursor: pointer;
     transition: all 0.18s ease;
+    height: auto;
+    min-height: 40px;
+    line-height: 1.3;
     & + & {
       margin-top: 4px;
     }
@@ -1090,7 +1088,13 @@
   }
 
   .result-panel {
-    padding: 20px;
+    --b-card-background: var(--bm-panel-bg);
+  }
+
+  .result-panel :deep(.table-container) {
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
+    box-shadow: var(--surface-card-shadow);
   }
 
   .result-title {
@@ -1111,12 +1115,12 @@
   }
 
   .bookmark-card {
-    background: var(--bm-card-bg);
-    border: 1px solid var(--workbench-border-color);
+    --b-card-background: var(--bm-card-bg);
+    --b-card-border-color: var(--surface-border-color);
+    --b-card-shadow: var(--surface-card-shadow);
+
     border-radius: @radius-card;
-    padding: 18px;
     transition:
-      transform 0.2s ease,
       box-shadow 0.2s ease,
       border-color 0.2s ease;
     position: relative;
@@ -1137,9 +1141,8 @@
       pointer-events: none;
     }
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-      border-color: color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
+      box-shadow: var(--surface-hover-shadow);
+      border-color: color-mix(in srgb, var(--resource-bookmark-color) 28%, var(--surface-border-color));
     }
   }
 
@@ -1308,9 +1311,6 @@
     gap: 10px;
   }
   @media (max-width: 1280px) {
-    .hero-card {
-      grid-template-columns: 1fr;
-    }
     .hero-stats {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

@@ -20,42 +20,21 @@
     <template v-else>
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
-          <span class="md-view-toggle">
-            <button
-              class="md-view-btn"
-              :class="{ active: mdView === 'edit' }"
-              @click="mdView = 'edit'"
-              :title="$t('note.mdEditOnly')"
-              >{{ $t('note.mdEdit') }}</button
-            >
-            <button
-              class="md-view-btn"
-              :class="{ active: mdView === 'split' }"
-              @click="mdView = 'split'"
-              :title="$t('note.mdSplit')"
-              >{{ $t('note.mdEditPreview') }}</button
-            >
-            <button
-              class="md-view-btn"
-              :class="{ active: mdView === 'preview' }"
-              @click="mdView = 'preview'"
-              :title="$t('note.mdPreviewOnly')"
-              >{{ $t('note.mdPreview') }}</button
-            >
-          </span>
+          <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="segment" />
         </div>
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
             <div class="md-editor-label">{{ $t('note.mdEdit') }}</div>
-            <textarea
-              ref="mdTextareaRef"
+            <BInput
+              ref="mdTextareaInputRef"
+              v-model:value="mdContent"
               class="md-textarea"
-              :value="mdContent"
+              type="textarea"
               @input="onMdInput"
               @scroll="syncMdScroll('edit')"
               :readonly="readonly"
               :placeholder="$t('note.mdPlaceholder')"
-            ></textarea>
+            />
           </div>
           <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
             <div class="md-editor-label">{{ $t('note.mdPreview') }}</div>
@@ -95,7 +74,10 @@
   import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import TurndownService from 'turndown';
+  import { scrollIntoContainer } from '@/utils/zoom.ts';
 
   const CODE_LANGUAGES = [
     { value: 'plaintext', text: 'Plain Text' },
@@ -153,6 +135,7 @@
     'ready',
     'update:type',
     'switch-backup-change',
+    'markdown-rendered',
   ]);
   const content = defineModel<string>('content');
   const editorRef = shallowRef<any>(null);
@@ -162,8 +145,14 @@
   const bookmark = bookmarkStore();
   const { t } = useI18n();
   const isMobile = computed(() => bookmark.isMobile);
+  type MarkdownView = 'edit' | 'split' | 'preview';
   // MD 编辑器视图：edit / split / preview
-  const mdView = ref(isMobile.value ? 'edit' : 'split');
+  const mdView = ref<MarkdownView>(isMobile.value ? 'edit' : 'split');
+  const mdViewOptions = computed(() => [
+    { key: 'edit', label: t('note.mdEdit') },
+    { key: 'split', label: t('note.mdEditPreview') },
+    { key: 'preview', label: t('note.mdPreview') },
+  ]);
   let visibilityObserver: IntersectionObserver | null = null;
 
   const currentType = ref(props.type);
@@ -191,15 +180,39 @@
   let dompurifyLib: any = null;
 
   // 滚动同步
-  const mdTextareaRef = ref<HTMLTextAreaElement | null>(null);
+  type BInputExpose = {
+    inputEl?: HTMLInputElement | HTMLTextAreaElement | null;
+  };
+  const mdTextareaInputRef = ref<BInputExpose | null>(null);
   const mdPreviewRef = ref<HTMLElement | null>(null);
   let isSyncingMdScroll = false;
+  let isProgrammaticMdScroll = false;
+  let mdScrollUnlockTimer: number | null = null;
+
+  function scheduleProgrammaticMarkdownScrollUnlock(delay = 180) {
+    if (mdScrollUnlockTimer) window.clearTimeout(mdScrollUnlockTimer);
+    mdScrollUnlockTimer = window.setTimeout(() => {
+      isProgrammaticMdScroll = false;
+      mdScrollUnlockTimer = null;
+    }, delay);
+  }
+
+  function getMdTextarea() {
+    const element = mdTextareaInputRef.value?.inputEl;
+    return element instanceof HTMLTextAreaElement ? element : null;
+  }
 
   function syncMdScroll(source: 'edit' | 'preview') {
+    if (isProgrammaticMdScroll) {
+      // 平滑定位期间两个面板都会连续触发 scroll。等最后一次滚动真正结束后再解锁，
+      // 避免百分比同步把刚刚精确定位到顶部的标题重新推回页面中部。
+      scheduleProgrammaticMarkdownScrollUnlock();
+      return;
+    }
     if (isSyncingMdScroll) return;
     isSyncingMdScroll = true;
 
-    const textarea = mdTextareaRef.value;
+    const textarea = getMdTextarea();
     const preview = mdPreviewRef.value;
     if (!textarea || !preview) {
       isSyncingMdScroll = false;
@@ -249,8 +262,8 @@
   const renderedMd = ref('');
   let mdRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function onMdInput(e: Event) {
-    const val = (e.target as HTMLTextAreaElement).value;
+  function onMdInput(value: string | number) {
+    const val = String(value ?? '');
     mdContent.value = val;
     content.value = val;
     debounceRenderMd();
@@ -271,6 +284,83 @@
     } catch {
       renderedMd.value = '<p>' + t('note.renderError') + '</p>';
     }
+    await nextTick();
+    emits('markdown-rendered');
+  }
+
+  function measureTextareaOffset(textarea: HTMLTextAreaElement, sourceOffset: number) {
+    const styles = window.getComputedStyle(textarea);
+    const mirror = document.createElement('div');
+    Object.assign(mirror.style, {
+      position: 'fixed',
+      top: '0',
+      left: '-10000px',
+      visibility: 'hidden',
+      pointerEvents: 'none',
+      boxSizing: 'border-box',
+      width: `${textarea.clientWidth}px`,
+      minHeight: '0',
+      padding: styles.padding,
+      border: styles.border,
+      font: styles.font,
+      fontFamily: styles.fontFamily,
+      fontSize: styles.fontSize,
+      fontWeight: styles.fontWeight,
+      fontStyle: styles.fontStyle,
+      lineHeight: styles.lineHeight,
+      letterSpacing: styles.letterSpacing,
+      textTransform: styles.textTransform,
+      textIndent: styles.textIndent,
+      tabSize: styles.tabSize,
+      whiteSpace: 'pre-wrap',
+      overflowWrap: 'break-word',
+      wordBreak: styles.wordBreak,
+    });
+    mirror.append(document.createTextNode(textarea.value.slice(0, sourceOffset)));
+    const marker = document.createElement('span');
+    marker.textContent = '\u200b';
+    mirror.append(marker);
+    document.body.append(mirror);
+    const top = marker.offsetTop;
+    mirror.remove();
+    return top;
+  }
+
+  function lockProgrammaticMarkdownScroll() {
+    isProgrammaticMdScroll = true;
+    // 若浏览器没有产生 scroll 事件，也能自动释放；有事件时会以上面的短防抖续期。
+    scheduleProgrammaticMarkdownScrollUnlock(900);
+  }
+
+  async function scrollToMarkdownHeading(index: number, sourceOffset?: number) {
+    if (currentType.value !== 'markdown') return false;
+    await nextTick();
+
+    const textarea = getMdTextarea();
+    const preview = mdPreviewRef.value;
+    const previewHeading = preview?.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')[index];
+    if (!textarea && (!preview || !previewHeading)) return false;
+
+    lockProgrammaticMarkdownScroll();
+
+    if (preview && previewHeading && preview.offsetParent !== null) {
+      scrollIntoContainer(preview, previewHeading, 5);
+    }
+
+    if (textarea && typeof sourceOffset === 'number') {
+      const safeOffset = Math.min(Math.max(0, sourceOffset), textarea.value.length);
+      const targetTop = measureTextareaOffset(textarea, safeOffset);
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(safeOffset, safeOffset);
+      window.requestAnimationFrame(() => {
+        textarea.scrollTo({
+          top: Math.max(0, targetTop - 8),
+          behavior: 'smooth',
+        });
+      });
+    }
+
+    return true;
   }
 
   // 切换模式
@@ -480,6 +570,7 @@
   defineExpose({
     focusToEnd,
     replaceContentWithUndo,
+    scrollToMarkdownHeading,
     hasSwitchBackup: switchBackup,
     triggerModeSwitch: () => handleModeSwitch(),
     triggerUndoSwitch: () => undoSwitch(),
@@ -921,6 +1012,8 @@
   });
 
   onBeforeUnmount(() => {
+    if (mdRenderTimer) clearTimeout(mdRenderTimer);
+    if (mdScrollUnlockTimer) window.clearTimeout(mdScrollUnlockTimer);
     if (visibilityObserver) {
       visibilityObserver.disconnect();
       visibilityObserver = null;
@@ -1015,38 +1108,14 @@
   .md-editor-toolbar {
     display: flex;
     align-items: center;
-    padding: 4px 10px;
+    min-height: 36px;
+    padding: 0 10px;
     border-bottom: 1px solid var(--card-border-color, #e8eaf2);
     background: var(--background-color);
     flex-shrink: 0;
   }
   .md-view-toggle {
-    display: inline-flex;
-    border: 1px solid var(--card-border-color, #e8eaf2);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-  .md-view-btn {
-    padding: 2px 10px;
-    border: none;
-    border-right: 1px solid var(--card-border-color, #e8eaf2);
-    background: transparent;
-    color: var(--desc-color, #888);
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-    &:last-child {
-      border-right: none;
-    }
-    &:hover {
-      color: var(--text-color);
-      background: var(--common-tag-bg-color, #f0f0f0);
-    }
-    &.active {
-      background: var(--primary-color, #615ced);
-      color: #fff;
-    }
+    flex: 0 0 auto;
   }
 
   /* Markdown 编辑器 */
@@ -1088,17 +1157,27 @@
   .md-textarea {
     flex: 1;
     min-height: 0;
-    resize: none;
-    border: none;
-    outline: none;
-    padding: 10px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    background: var(--background-color);
-    color: var(--text-color);
-    &::placeholder {
-      color: var(--desc-color, #999);
+    display: flex;
+    overflow: hidden;
+
+    .b-textarea {
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+      resize: none;
+      border: none !important;
+      border-radius: 0;
+      outline: none;
+      padding: 10px !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      background: var(--background-color) !important;
+      color: var(--text-color);
+
+      &::placeholder {
+        color: var(--desc-color, #999);
+      }
     }
   }
   .md-preview {
@@ -1412,7 +1491,7 @@
 
   /* 移动端 MD 视图：隐藏分栏按钮，用简单 tab */
   @media (max-width: 1024px) {
-    .md-view-toggle .md-view-btn:nth-child(2) {
+    .md-view-toggle .tab:nth-child(2) {
       display: none;
     }
     /* 富文本工具栏(TinyMCE inline + fixed_toolbar_container):窄屏下默认会把 9 个按钮组挤压,

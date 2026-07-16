@@ -3,6 +3,18 @@
   --bg-image2: linear-gradient(30deg, #ffecf9, #ffffff, #ffffff, #ffffff, #ffffff, #ffffff, #ffecf9);
   --pre-bg-color: rgba(55, 59, 66, 0.8) !important;
   --background-color: #ffffff;
+  --surface-page-bg: var(--background-color);
+  --surface-panel-bg: #f6f7fb;
+  --surface-card-bg: #ffffff;
+  --surface-raised-background: linear-gradient(145deg, #ffffff 0%, #f8f9ff 100%);
+  --surface-border-color: #e6e9f2;
+  --surface-divider-color: #edf0f6;
+  --surface-card-shadow: 0 12px 30px -28px rgba(38, 49, 95, 0.32);
+  --surface-raised-shadow: 0 16px 34px -28px rgba(76, 88, 196, 0.38);
+  --surface-hover-shadow: 0 16px 34px -24px rgba(45, 54, 100, 0.24);
+  --card-background: var(--surface-card-bg);
+  --card-bg-color: var(--card-background);
+  --hover-background: #f2f3f8;
   --text-color: #161824;
   --icon-color: #bfbfbf;
   --bl-input-border-h-color: #b2b5ba; // 输入框边框hover颜色
@@ -24,7 +36,7 @@
   --userCenter-right-bg-color: var(--background-color); // 用户中心右侧背景颜色
   --menu-container-bg-color: #ffffff;
   --menu-body-bg-color: #ffffff;
-  --workspace-panel-bg-color: #f8f8fa;
+  --workspace-panel-bg-color: var(--surface-panel-bg);
   --menu-item-bg-color: #f2f2f4;
   --menu-item-h-bg-color: #e4e4e6;
   --primary-btn-bg-color: #f2f2f4;
@@ -123,6 +135,18 @@
 
 [data-theme='night'] {
   --background-color: #222222;
+  --surface-page-bg: var(--background-color);
+  --surface-panel-bg: #282b33;
+  --surface-card-bg: #30343d;
+  --surface-raised-background: linear-gradient(145deg, #343a48 0%, #2d323e 100%);
+  --surface-border-color: #495269;
+  --surface-divider-color: #3c4251;
+  --surface-card-shadow: 0 14px 34px -28px rgba(0, 0, 0, 0.82);
+  --surface-raised-shadow: 0 18px 38px -28px rgba(0, 0, 0, 0.9);
+  --surface-hover-shadow: 0 18px 38px -24px rgba(0, 0, 0, 0.88);
+  --card-background: var(--surface-card-bg);
+  --card-bg-color: var(--card-background);
+  --hover-background: #393d47;
   --text-color: #ffffff;
   --icon-color: #ffffff;
   --pre-bg-color: rgba(53, 56, 63, 0.8) !important;
@@ -152,7 +176,7 @@
 
   --menu-container-bg-color: #4d5264;
   --menu-body-bg-color: #303033;
-  --workspace-panel-bg-color: #29292d;
+  --workspace-panel-bg-color: var(--surface-panel-bg);
   --menu-item-bg-color: #33343f;
   --menu-item-h-bg-color: #41424c;
   --text-night-color: white;

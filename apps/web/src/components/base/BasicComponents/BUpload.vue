@@ -93,6 +93,8 @@
     });
     input.click();
   }
+
+  defineExpose({ open: handleUpload });
 </script>
 
 <style lang="less" scoped></style>

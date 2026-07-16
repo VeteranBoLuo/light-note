@@ -3,6 +3,7 @@
     :loading="loading"
     :list-data="tableData"
     :title="$t('bookmarkMg.title')"
+    :subtitle="$t('bookmarkMg.subtitle')"
     @add="router.push('/manage/editBookmark/add')"
   >
     <template #item="{ data }">
@@ -37,7 +38,7 @@
           @click="edit(data.id)"
           v-click-log="{ module: '书签管理', operation: `点击编辑图标` }"
         />
-        <BActionButton action="delete" :tooltip="$t('common.delete')" @click="handleDeleteTag(data)" />
+        <BActionButton action="delete" :tooltip="$t('common.delete')" @click="confirmDeleteBookmark(data)" />
       </div>
     </template>
   </PhoneListMg>
@@ -45,26 +46,17 @@
 </template>
 
 <script lang="ts" setup>
-  import { bookmarkStore, useUserStore } from '@/store';
-  import { computed, ref } from 'vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { ref } from 'vue';
   import router from '@/router';
-  import icon from '@/config/icon.ts';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BookmarkCapabilityBadge from '@/components/manage/bookmarkMg/BookmarkCapabilityBadge.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
-  import { cloneDeep } from 'lodash-es';
-  import { exportExcelFile } from '@/utils/excel';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
+  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
+  import { useBookmarkManage } from '@/composables/useBookmarkManage.ts';
 
-  const visible = defineModel<boolean>('visible');
-  const user = useUserStore();
-
-  const bookmark = bookmarkStore();
-  const loading = ref(false);
+  const { loading, bookmarks: tableData, reloadBookmarks, confirmDeleteBookmark } = useBookmarkManage();
   // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
   const snapVisible = ref(false);
   const snapBookmarkId = ref('');
@@ -72,137 +64,11 @@
     snapBookmarkId.value = id;
     snapVisible.value = true;
   };
-  computed(() => {
-    let columns = [
-      {
-        title: '书签',
-        dataIndex: 'name',
-        ellipsis: true,
-      },
-      {
-        title: '操作',
-        dataIndex: 'operation',
-        ellipsis: true,
-        width: 100,
-      },
-    ];
-    if (!bookmark.isMobile) {
-      {
-        columns.splice(1, 0, {
-          title: '关联标签',
-          dataIndex: 'tagList',
-          ellipsis: true,
-        });
-      }
-    }
-    return columns;
-  });
   const edit = (id: string) => {
     router.push({ path: `/manage/editBookmark/${id}` });
   };
 
-  function handleDeleteTag(bookmark) {
-    if (blockGuestWrite('delete-bookmark')) return;
-    Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除标签【${bookmark.name}】？`,
-      onOk() {
-        apiBasePost('/api/bookmark/delBookmark', {
-          id: bookmark.id,
-        }).then((res) => {
-          if (res.status == 200) {
-            recordOperation({ module: '书签管理', operation: `删除书签成功【${bookmark.name}】` });
-            message.success('删除成功');
-            init();
-          }
-        });
-      },
-    });
-  }
-
-  const tableSearchValue = ref('');
-  const bookmarkList = computed(() => {
-    if (tableSearchValue.value) {
-      return tableData.value.filter((data: any) => {
-        return data.name.toLowerCase().includes(tableSearchValue.value.toLowerCase());
-      });
-    } else {
-      return tableData.value;
-    }
-  });
-
-  import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
-  import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
-  import { recordOperation, loadBookmarkIconsProgressively } from '@/api/commonApi.ts';
-  import { blockGuestWrite } from '@/composables/useGuestGuard';
-  async function exportBookmark() {
-    // 随便声明一个结果
-    const exportData = bookmarkList.value?.map((item: any) => {
-      return {
-        标签名: item.name,
-        网址: item.url,
-        描述: item?.description,
-        关联书签: item?.tagList?.map((tag) => tag.name).join(','),
-      };
-    });
-    // 创建一个新的工作簿
-    // 获取第一列和第二列的最大字符长度
-    const maxLen = [
-      Math.max(...exportData.map((item) => item.标签名.length)),
-      Math.max(...exportData.map((item) => item.网址.length)),
-      Math.max(...exportData.map((item) => item.描述?.length)),
-    ];
-
-    try {
-      await exportExcelFile(
-        exportData,
-        [
-          { header: '标签名', key: '标签名', width: Math.max(maxLen[0], 12) },
-          { header: '网址', key: '网址', width: Math.max(maxLen[1], 20) },
-          { header: '描述', key: '描述', width: 50 },
-          { header: '关联书签', key: '关联书签', width: 20 },
-        ],
-        '书签集合.xlsx',
-      );
-      message.success('Excel导出成功');
-      recordOperation({
-        ...OPERATION_LOG_MAP.bookmarkMg.exportToExcel,
-        operation: `导出 Excel 书签成功【${exportData.length}个】`,
-      });
-    } catch (error: any) {
-      message.error(`Excel导出失败：${error.message || '未知错误'}`);
-    }
-  }
-
-  function getIcon(bookmark) {
-    // 无图标用站内默认图,不再直连第三方 ico.kucat.cn(真实 favicon 由后端抓取写回 iconUrl)
-    return bookmark.iconUrl || icon.nullImg;
-  }
-
-  init();
-  const tableData = ref([{}]);
-  async function init() {
-    loading.value = true;
-    const allRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
-      filters: {
-        userId: user.id,
-        type: 'all',
-      },
-    });
-    if (allRes.status === 200) {
-      tableData.value = cloneDeep(allRes.data.items);
-      tableData.value.forEach((bookmark: any) => {
-        bookmark.iconUrl = getIcon(bookmark);
-      });
-      loading.value = false;
-      // 缓存图片 + 把抓取到的图标当次回填(不必刷新页面)
-      // 渐进式:只抓无图标的,限并发逐个,抓到即回填(不再整批等最慢站)
-      loadBookmarkIconsProgressively(allRes.data.items, (id, icon) => {
-        const b: any = tableData.value.find((x: any) => x.id === id);
-        if (b) b.iconUrl = icon;
-      });
-    }
-  }
+  reloadBookmarks();
 </script>
 
 <style lang="less" scoped>
