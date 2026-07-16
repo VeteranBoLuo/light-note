@@ -39,9 +39,8 @@
           {{ $t('home.recorded', { tags: user.tagTotal, bookmarks: user.bookmarkTotal }) }}
         </p>
         <p v-if="isGuest" class="guest-own-hint">
-          {{ $t('home.guestDemoPre') }}<span class="guest-own-link" @click="guestRegister">{{
-            $t('home.guestDemoLink')
-          }}</span
+          {{ $t('home.guestDemoPre')
+          }}<span class="guest-own-link" @click="guestRegister">{{ $t('home.guestDemoLink') }}</span
           >{{ $t('home.guestDemoPost') }}
         </p>
       </div>
@@ -92,6 +91,7 @@
   .category-panel {
     width: 100%;
     min-height: 88px;
+    flex: 0 0 auto;
     padding: 16px 18px;
     box-sizing: border-box;
     display: flex;
