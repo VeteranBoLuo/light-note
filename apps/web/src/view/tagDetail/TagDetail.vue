@@ -36,7 +36,7 @@
       <div class="summary-grid">
         <div class="summary-card" :style="{ '--summary-color': RESOURCE_COLOR_HEX.tag }">
           <div class="summary-label">{{ $t('tagManage.relatedTag') }}</div>
-          <div class="summary-value">{{ relatedTags.length }}</div>
+          <div class="summary-value">{{ relatedTagCount }}</div>
         </div>
         <div class="summary-card" :style="{ '--summary-color': RESOURCE_COLOR_HEX.bookmark }">
           <div class="summary-label">{{ $t('tagManage.bookmark') }}</div>
@@ -53,12 +53,12 @@
       </div>
 
       <div class="view-switch">
-        <button class="view-switch-btn" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
+        <b-button class="view-switch-btn" :class="{ active: viewMode === 'card' }" size="small" @click="setViewMode('card')">
           {{ t('tagGraph.viewMode.card') }}
-        </button>
-        <button class="view-switch-btn" :class="{ active: viewMode === 'graph' }" @click="setViewMode('graph')">
+        </b-button>
+        <b-button class="view-switch-btn" :class="{ active: viewMode === 'graph' }" size="small" @click="setViewMode('graph')">
           {{ t('tagGraph.viewMode.graph') }}
-        </button>
+        </b-button>
       </div>
 
       <section v-if="viewMode === 'graph'" class="tag-graph-section tag-graph-section--full">
@@ -66,8 +66,8 @@
           <TagGraphCanvas
             ref="tagGraphRef"
             style="position: relative"
-            :nodes="graphData?.nodes || []"
-            :edges="graphData?.edges || []"
+            :nodes="displayGraphNodes"
+            :edges="displayGraphEdges"
             :loading="graphLoading"
             :compact="false"
             :full-height="true"
@@ -78,9 +78,9 @@
           >
             <template #actions>
               <b-button size="small" @click="toggleGraphResources">
-                {{ graphFilters.includeResources ? t('tagGraph.hideResource') : t('tagGraph.showResource') }}
+                {{ graphFilters.includeResources ? t('tagGraph.hideOverview') : t('tagGraph.showOverview') }}
               </b-button>
-              <b-button size="small" type="primary" @click="reloadGraph">
+              <b-button size="small" type="primary" @click="resetGraphView">
                 {{ t('tagGraph.reset') }}
               </b-button>
             </template>
@@ -253,8 +253,112 @@
     resourceTypes: ['bookmark', 'note', 'file'] as GraphResourceType[],
   });
 
+  const relatedTagCount = computed(() => {
+    const graphCount = graphData.value?.nodes.filter((node) => node.type === 'tag' && !node.meta?.isCenter).length || 0;
+    return Math.max(relatedTags.value.length, graphCount);
+  });
+
+  const allGraphResources = computed<TagGraphNode[]>(() => [
+    ...bookmarks.value.map((bookmark) => ({
+      id: `bookmark:${bookmark.id}`,
+      rawId: bookmark.id,
+      type: 'bookmark' as const,
+      label: bookmark.name || t('tagGraph.unnamedBookmark'),
+      size: 22,
+      weight: 1,
+      iconUrl: bookmark.iconUrl,
+      meta: {
+        url: bookmark.url,
+        description: bookmark.description || bookmark.url,
+        updateTime: bookmark.updateTime || bookmark.createTime,
+      },
+    })),
+    ...notes.value.map((note) => ({
+      id: `note:${note.id}`,
+      rawId: note.id,
+      type: 'note' as const,
+      label: note.title || t('noteDetail.unnamedDoc', '未命名文档'),
+      size: 22,
+      weight: 1,
+      meta: {
+        description: getNoteDesc(note.content, note.type),
+        updateTime: note.updateTime || note.createTime,
+      },
+    })),
+    ...files.value.map((file) => ({
+      id: `file:${file.id}`,
+      rawId: file.id,
+      type: 'file' as const,
+      label: file.fileName || t('tagGraph.unnamedFile'),
+      size: 22,
+      weight: 1,
+      meta: {
+        fileType: file.fileType,
+        fileSize: file.fileSize,
+        category: file.category,
+        updateTime: file.updateTime || file.createTime || file.uploadTime,
+      },
+    })),
+  ]);
+
+  const displayGraphNodes = computed<TagGraphNode[]>(() => {
+    if (!graphData.value) return [];
+    const tagNodes = graphData.value.nodes.filter((node) => node.type === 'tag');
+    if (!graphFilters.includeResources) return tagNodes;
+    const centerTagId = String(graphData.value.centerTag.id);
+    const groupCounts: Record<GraphResourceType, number> = {
+      bookmark: bookmarks.value.length,
+      note: notes.value.length,
+      file: files.value.length,
+    };
+    const groupNodes = graphFilters.resourceTypes
+      .filter((type) => groupCounts[type] > 0)
+      .map((type) => ({
+        id: `aggregate:${type}`,
+        rawId: centerTagId,
+        type,
+        label: t('tagGraph.aggregateLabel', {
+          type: t(`tagGraph.nodeType.${type}`),
+          count: groupCounts[type],
+        }),
+        size: 38,
+        weight: groupCounts[type],
+        meta: {
+          isAggregate: true,
+          resourceCount: groupCounts[type],
+          description: t('tagGraph.aggregateHint', { type: t(`tagGraph.nodeType.${type}`) }),
+        },
+      }));
+    return [...tagNodes, ...groupNodes];
+  });
+
+  const displayGraphEdges = computed(() => {
+    if (!graphData.value) return [];
+    const tagEdges = graphData.value.edges.filter((edge) => edge.type === 'tag-tag');
+    if (!graphFilters.includeResources) return tagEdges;
+    const centerNode = graphData.value.nodes.find((node) => node.type === 'tag' && node.meta?.isCenter);
+    if (!centerNode) return tagEdges;
+    const aggregateEdges = displayGraphNodes.value
+      .filter((node) => node.meta?.isAggregate)
+      .map((node) => ({
+        id: `edge:${centerNode.id}:${node.id}`,
+        source: centerNode.id,
+        target: node.id,
+        type: `tag-${node.type}` as const,
+        weight: 2,
+      }));
+    return [...tagEdges, ...aggregateEdges];
+  });
+
   const graphConnectedResources = computed(() => {
-    if (!activeGraphNode.value || !graphData.value) return [];
+    if (!activeGraphNode.value) return [];
+    if (activeGraphNode.value.meta?.isAggregate) {
+      return allGraphResources.value.filter((node) => node.type === activeGraphNode.value!.type);
+    }
+    if (activeGraphNode.value.type === 'tag' && activeGraphNode.value.meta?.isCenter) {
+      return allGraphResources.value;
+    }
+    if (!graphData.value) return [];
     if (activeGraphNode.value.type === 'tag') {
       const { nodes, edges } = graphData.value;
       const connectedIds = new Set<string>();
@@ -327,7 +431,9 @@
         }));
       }
 
-      await loadTagGraph(tagId);
+      if (viewMode.value === 'graph') {
+        await loadTagGraph(tagId);
+      }
     } finally {
       if (requestSeq === tagDetailRequestSeq) {
         loading.value = false;
@@ -343,10 +449,10 @@
     try {
       const res = await fetchTagGraph({
         tagId,
-        includeResources: graphFilters.includeResources,
+        includeResources: true,
         resourceTypes: graphFilters.resourceTypes,
         limitRelatedTags: 12,
-        limitPerResourceType: 20,
+        limitPerResourceType: 50,
       });
       if (requestSeq !== tagGraphRequestSeq) return;
       if (res.status === 200) {
@@ -413,21 +519,24 @@
     };
   }
 
-  function reloadGraph() {
-    activeGraphNode.value = null;
+  function resetGraphView() {
     tagGraphRef.value?.resetView();
-    loadTagGraph();
   }
 
   function setViewMode(mode: 'graph' | 'card') {
     viewMode.value = mode;
     localStorage.setItem(TAG_DETAIL_VIEW_MODE_KEY, mode);
     updatePreference({ tagView: mode }).catch(() => {}); // 记忆到偏好:跨设备 + 设置页可改
+    if (mode === 'graph' && !graphData.value && !loading.value) {
+      loadTagGraph();
+    }
   }
 
   function toggleGraphResources() {
     graphFilters.includeResources = !graphFilters.includeResources;
-    reloadGraph();
+    if (!graphFilters.includeResources && activeGraphNode.value?.meta?.isAggregate) {
+      activeGraphNode.value = displayGraphNodes.value.find((node) => node.meta?.isCenter) || null;
+    }
   }
 
   function handleGraphNodeClick(node: TagGraphNode) {
@@ -446,8 +555,8 @@
     if (node.type !== 'tag') return;
     setViewMode('graph');
     if (String(route.params.id || '') === String(node.rawId || '')) {
-      reloadGraph();
-      message.info(t('tagGraph.panel.exploreCurrent'));
+      resetGraphView();
+      message.info(t('tagGraph.panel.openCurrent'));
       return;
     }
     goToTag(node.rawId);
@@ -632,28 +741,47 @@
   }
 
   .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--background-color) 96%, var(--primary-color));
   }
 
   .summary-card {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
     border-radius: 8px;
-    border: 1px solid var(--card-border-color);
-    border-top: 3px solid var(--summary-color);
-    padding: 14px 16px;
     background: var(--background-color);
+
+    &::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--summary-color);
+      flex-shrink: 0;
+    }
   }
 
   .summary-label {
+    min-width: 0;
+    flex: 1;
     font-size: 13px;
     color: var(--desc-color);
   }
 
   .summary-value {
-    margin-top: 6px;
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-color);
   }
 
   .view-switch {
@@ -668,20 +796,16 @@
   }
 
   .view-switch-btn {
-    border: 0;
-    background: transparent;
+    border: 0 !important;
+    background: transparent !important;
     color: var(--desc-color);
     border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 12px;
-    line-height: 16px;
-    cursor: pointer;
     transition: all 0.2s ease;
   }
 
   .view-switch-btn.active {
     color: var(--text-color);
-    background: color-mix(in srgb, var(--resource-tag-color) 14%, transparent);
+    background: color-mix(in srgb, var(--resource-tag-color) 14%, transparent) !important;
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--resource-tag-color) 32%, transparent);
   }
 
@@ -700,60 +824,9 @@
     min-height: 0;
   }
 
-  .tag-graph-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 16px 18px;
-    border-bottom: 1px solid var(--card-border-color);
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--resource-tag-color) 8%, transparent), transparent 46%),
-      var(--background-color);
-  }
-
-  .tag-graph-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text-color);
-  }
-
-  .tag-graph-subtitle {
-    margin-top: 4px;
-    font-size: 12px;
-    color: var(--desc-color);
-  }
-
-  .tag-graph-current {
-    margin-top: 8px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 320px;
-    color: var(--desc-color);
-    font-size: 11px;
-    opacity: 0.86;
-  }
-
-  .tag-graph-current-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--resource-tag-color);
-    flex-shrink: 0;
-  }
-
-  .tag-graph-current-text {
-    font-weight: 500;
-    color: var(--text-color);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   .tag-graph-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 320px;
     min-height: 460px;
   }
 
@@ -1008,17 +1081,35 @@
     }
 
     .summary-grid {
+      display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .tag-graph-header {
-      align-items: flex-start;
-      flex-direction: column;
     }
 
     .tag-graph-layout {
       grid-template-columns: minmax(0, 1fr);
       min-height: 0;
+    }
+
+    .tag-graph-layout :deep(.tag-graph-canvas) {
+      display: none;
+    }
+
+    .tag-detail-container--graph {
+      overflow-y: auto;
+    }
+
+    .tag-detail-container--graph .tag-content,
+    .tag-graph-section--full {
+      flex: none;
+    }
+
+    .tag-detail-container--graph .tag-graph-layout {
+      height: auto;
+    }
+
+    .tag-graph-section--full,
+    .tag-graph-layout :deep(.tag-graph-panel) {
+      overflow: visible;
     }
 
     .tag-header {
@@ -1052,9 +1143,7 @@
     }
   }
 
-  @media (max-width: 1200px) {
-    .summary-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+  @media (min-width: 768px) and (max-width: 1200px) {
+    .tag-graph-layout { grid-template-columns: minmax(0, 1fr) 300px; }
   }
 </style>

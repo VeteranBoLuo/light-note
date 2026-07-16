@@ -30,7 +30,9 @@ export interface TagGraphNode {
     description?: string;
     relatedCount?: number;
     resourceCount?: number;
+    sharedCount?: number;
     isCenter?: boolean;
+    isAggregate?: boolean;
   };
 }
 
@@ -40,6 +42,7 @@ export interface TagGraphEdge {
   target: string;
   type: GraphEdgeType;
   weight: number;
+  sharedCount?: number;
 }
 
 export interface TagGraphResponse {
@@ -69,10 +72,21 @@ export function fetchTagGraph(params: TagGraphRequest) {
 export interface GlobalGraphResponse {
   nodes: TagGraphNode[];
   edges: TagGraphEdge[];
-  stats: { tagCount: number; resourceCount: number; edgeCount: number; truncated: boolean };
+  stats: {
+    tagCount: number;
+    shownTagCount: number;
+    resourceCount: number;
+    totalResourceCount: number;
+    taggedResourceCount: number;
+    untaggedResourceCount: number;
+    emptyTagCount: number;
+    isolatedTagCount: number;
+    edgeCount: number;
+    truncated: boolean;
+  };
 }
 
-// 全局知识图谱(root 专属):本人全部标签 + 标签共现边
+// 全局知识地图:全部标签 + 标签共现边;资源在聚焦标签后通过 fetchTagGraph 按需加载。
 export function fetchGlobalGraph(params?: { minCoOccurrence?: number }) {
   return apiBasePost('/api/bookmark/getGlobalGraph', params || {}) as Promise<{
     status: number;

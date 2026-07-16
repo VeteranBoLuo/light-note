@@ -1,138 +1,117 @@
 <template>
-  <div class="admin-panel-container">
-    <section class="admin-panel user-mg__panel">
-      <header class="admin-header user-mg__header">
-        <div class="admin-title-block">
-          <p class="admin-eyebrow">Admin / Users</p>
-          <h2 class="admin-title">用户管理</h2>
-          <p class="admin-subtitle">管理系统用户账户和权限</p>
-        </div>
-      </header>
+  <AdminDataPage
+    eyebrow="Admin / Users"
+    title="用户管理"
+    subtitle="管理系统用户账户、权限与资源使用情况"
+    toolbar-hint="支持昵称或邮箱模糊匹配 · 停止输入 0.5s 自动查询"
+    :summary-count="total"
+  >
+    <template #toolbar>
+      <b-input v-model:value="searchValue" placeholder="搜索昵称或邮箱" class="log-search-input" @input="handleSearch">
+        <template #prefix>
+          <svg-icon :src="icon.navigation.search" size="16" />
+        </template>
+      </b-input>
+    </template>
 
-      <ul class="admin-stats">
-        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
-          <span class="admin-stat-label">{{ card.label }}</span>
-          <strong class="admin-stat-value">{{ card.value }}</strong>
-          <span class="admin-stat-hint">{{ card.hint }}</span>
-        </li>
-      </ul>
+    <BTable
+      fill
+      :data="userList"
+      :columns="userColumns"
+      :row-clickable="true"
+      :pagination="true"
+      :total="total"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
+      @row-click="onRowClick"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'operation'">
+          <BSpace>
+            <BTooltip :title="t('guest.userPreviewEntry')">
+              <svg-icon :src="icon.navigation.user" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
+            </BTooltip>
+            <BTooltip :title="t('guest.adminContextMaintainEntry')">
+              <BButton size="small" @click.stop="maintainAsUser(record)">{{
+                t('guest.adminContextMaintainShort')
+              }}</BButton>
+            </BTooltip>
+            <BActionButton action="edit" :tooltip="t('common.edit')" @click="editUser(record)" />
+            <BActionButton action="delete" :tooltip="t('common.delete')" @click="delUser(record)" />
+            <span
+              title="成长运营(发经验/调等级/送补签卡)"
+              class="dom-hover"
+              style="cursor: pointer; font-size: 15px; line-height: 1"
+              @click.stop="openGrowthAdmin(record)"
+              >🎖️</span
+            >
+          </BSpace>
+        </template>
+      </template>
+    </BTable>
+  </AdminDataPage>
 
-      <div class="admin-filters">
-        <div class="admin-filters-main">
-          <b-input
-            v-model:value="searchValue"
-            placeholder="昵称或邮箱..."
-            class="log-search-input"
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="16" />
-            </template>
-          </b-input>
-        </div>
-        <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
-      </div>
-
-      <div class="admin-table-card" ref="tableCardRef">
-        <BTable
-          :data="userList"
-          :columns="userColumns"
-          :row-clickable="true"
-          :pagination="true"
-          :total="total"
-          :current-page="currentPage"
-          :page-size="pageSize"
-          @page-change="onPageChange"
-          @size-change="onSizeChange"
-          @row-click="onRowClick"
+  <BModal v-model:visible="detailVisible" title="用户详情" width="500px" :show-footer="false" :mask-closable="true">
+    <div class="user-detail" v-if="selectedRecord">
+      <div class="user-detail__grid">
+        <div
+          ><label>昵称</label><p>{{ selectedRecord.alias }}</p></div
         >
-          <template #bodyCell="{ column, text, record }">
-            <template v-if="column.key === 'operation'">
-              <BSpace>
-                <BTooltip :title="t('guest.userPreviewEntry')">
-                  <svg-icon
-                    :src="icon.navigation.user"
-                    size="16"
-                    @click.stop="loginAsUser(record)"
-                    class="dom-hover"
-                  />
-                </BTooltip>
-                <BTooltip :title="t('guest.adminContextMaintainEntry')">
-                  <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
-                </BTooltip>
-                <BActionButton action="edit" :tooltip="t('common.edit')" @click="editUser(record)" />
-                <BActionButton action="delete" :tooltip="t('common.delete')" @click="delUser(record)" />
-                <span
-                  title="成长运营(发经验/调等级/送补签卡)"
-                  class="dom-hover"
-                  style="cursor: pointer; font-size: 15px; line-height: 1"
-                  @click.stop="openGrowthAdmin(record)"
-                  >🎖️</span
-                >
-              </BSpace>
-            </template>
-          </template>
-        </BTable>
+        <div
+          ><label>邮箱</label><p>{{ selectedRecord.email }}</p></div
+        >
+        <div
+          ><label>角色</label><p>{{ selectedRecord.role }}</p></div
+        >
+        <div
+          ><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div
+        >
+        <div
+          ><label>最近活跃</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div
+        >
+        <div
+          ><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div
+        >
+        <div
+          ><label>书签数</label><p>{{ selectedRecord.bookmarkTotal ?? 0 }}</p></div
+        >
+        <div
+          ><label>笔记数</label><p>{{ selectedRecord.noteTotal ?? 0 }}</p></div
+        >
+        <div
+          ><label>云空间</label><p>{{ selectedRecord.storageUsed ?? 0 }} MB</p></div
+        >
       </div>
+    </div>
+  </BModal>
 
-      <BModal v-model:visible="detailVisible" title="用户详情" width="500px" :show-footer="false" :mask-closable="true">
-        <div class="user-detail" v-if="selectedRecord">
-          <div class="user-detail__grid">
-            <div
-              ><label>昵称</label><p>{{ selectedRecord.alias }}</p></div
-            >
-            <div
-              ><label>邮箱</label><p>{{ selectedRecord.email }}</p></div
-            >
-            <div
-              ><label>角色</label><p>{{ selectedRecord.role }}</p></div
-            >
-            <div
-              ><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div
-            >
-            <div
-              ><label>最近活跃</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div
-            >
-            <div
-              ><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div
-            >
-            <div
-              ><label>书签数</label><p>{{ selectedRecord.bookmarkTotal ?? 0 }}</p></div
-            >
-            <div
-              ><label>笔记数</label><p>{{ selectedRecord.noteTotal ?? 0 }}</p></div
-            >
-            <div
-              ><label>云空间</label><p>{{ selectedRecord.storageUsed ?? 0 }} MB</p></div
-            >
-          </div>
-        </div>
-      </BModal>
+  <BModal
+    v-if="editVisible"
+    title="编辑用户信息"
+    width="600px"
+    v-model:visible="editVisible"
+    @close="editVisible = false"
+    @ok="saveUserInfo"
+  >
+    <div>
+      <BForm form-id="userEditForm" :form-data="editData" :fields="formFields" />
+    </div>
+  </BModal>
 
-      <BModal
-        v-if="editVisible"
-        title="编辑用户信息"
-        width="600px"
-        v-model:visible="editVisible"
-        @close="editVisible = false"
-        @ok="saveUserInfo"
-      >
-        <div>
-          <BForm form-id="userEditForm" :form-data="editData" :fields="formFields" />
-        </div>
-      </BModal>
-
-      <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
-      <GrowthAdminModal v-model:visible="growthAdminVisible" :user-id="growthAdminUser.id" :user-name="growthAdminUser.alias" />
-    </section>
-  </div>
+  <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
+  <GrowthAdminModal
+    v-model:visible="growthAdminVisible"
+    :user-id="growthAdminUser.id"
+    :user-name="growthAdminUser.alias"
+  />
 </template>
 
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiQueryPost } from '@/http/request.ts';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -150,11 +129,9 @@
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
 
   const { t } = useI18n();
-
-  const tableCardRef = ref<HTMLElement | null>(null);
-  useTableScrollY({ ref: tableCardRef });
 
   const userList = ref([]);
   const userColumns = computed(() => {
@@ -204,30 +181,6 @@
   }
 
   const total = ref(0);
-  const statCards = computed(() => {
-    const totalValue = total.value || 0;
-    const hasData = totalValue > 0;
-    const start = hasData ? (currentPage.value - 1) * pageSize.value + 1 : 0;
-    const end = hasData ? Math.min(totalValue, currentPage.value * pageSize.value) : 0;
-    return [
-      {
-        label: '当前展示区间',
-        value: `${start}-${end}`,
-        hint: '条记录',
-      },
-      {
-        label: '总用户数',
-        value: totalValue,
-        hint: '累计',
-      },
-      {
-        label: '分页尺寸',
-        value: pageSize.value,
-        hint: '条/页',
-      },
-    ];
-  });
-
   const editData = ref();
   const editVisible = ref(false);
   const previewVisible = ref(false);
@@ -336,21 +289,8 @@
 </script>
 
 <style lang="less" scoped>
-  @import '@/assets/css/admin-manage.less';
-
   .log-search-input {
     flex: 1;
-  }
-
-  .admin-table-card {
-    padding: 0;
-  }
-
-  :deep(.ant-select-selector .ant-select-selection-item) {
-    background-color: unset !important;
-  }
-
-  @media (max-width: 960px) {
   }
 
   .user-detail__grid {

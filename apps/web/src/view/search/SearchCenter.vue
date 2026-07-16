@@ -37,7 +37,7 @@
         <BButton
           class="graph-entry"
           @click="$router.push('/graph')"
-          v-click-log="{ module: '资源中心', operation: '进入知识图谱' }"
+          v-click-log="{ module: '资源中心', operation: '进入知识地图' }"
         >
           <svg-icon :src="icon.ai.internet" size="16" />
           {{ t('resourceCenter.knowledgeGraph') }}
@@ -409,7 +409,12 @@
       selectableVisibleItems.value.length > 0 &&
       selectableVisibleItems.value.every((item) => selectedIds.value.includes(getItemSelectionKey(item))),
   );
-  const tagOptions = computed(() => collectTagOptions(mappedItems.value));
+  const tagOptions = computed(() => {
+    const options = collectTagOptions(mappedItems.value);
+    const selected = new Set(queryState.tags);
+    // 从知识地图等入口携带标签筛选时，将已选项固定在折叠区最前面，确保过滤状态一眼可见。
+    return [...queryState.tags, ...options.filter((tag) => !selected.has(tag))];
+  });
   const hasActiveAdvancedFilters = computed(
     () =>
       queryState.tags.length > 0 ||

@@ -1,150 +1,144 @@
 <template>
-  <div class="admin-panel-container">
-    <section class="admin-panel">
-      <header class="admin-header">
-        <div class="admin-title-block">
-          <p class="admin-eyebrow">Admin / AI</p>
-          <h2 class="admin-title">AI 调用监控</h2>
-          <p class="admin-subtitle">大模型请求记录、Token 消耗与费用统计</p>
-        </div>
-      </header>
+  <AdminDataPage
+    eyebrow="Admin / AI"
+    title="AI 调用监控"
+    subtitle="大模型请求记录、Token 消耗与费用统计"
+    toolbar-hint="支持模糊匹配 · 回车或停止输入 0.5s 自动查询"
+    :summary-count="total"
+  >
+    <template #metrics>
+      <li class="admin-stat-card agent-balance-card">
+        <span class="admin-stat-label">{{ t('aiMonitor.balance.title') }}</span>
+        <strong class="admin-stat-value">{{ balanceDisplay }}</strong>
+        <span class="admin-stat-hint agent-balance-hint">
+          <span>{{ balanceHint || `累计费用 ¥${totalCost}` }}</span>
+          <BButton size="small" :loading="balanceLoading" @click="fetchBalance(true)">
+            {{ t('aiMonitor.balance.refresh') }}
+          </BButton>
+        </span>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">今日调用</span>
+        <strong class="admin-stat-value">{{ todayCount }}</strong>
+        <span class="admin-stat-hint">累计 {{ total }} 次请求</span>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">今日消耗</span>
+        <strong class="admin-stat-value">¥{{ todayCost }}</strong>
+        <span class="admin-stat-hint">{{ formatNumber(todayTokens) }} Token · 总计 ¥{{ totalCost }}</span>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">30 天质量</span>
+        <strong class="admin-stat-value">{{ quality.errorRate }}% 错误率</strong>
+        <span class="admin-stat-hint agent-quality-hint">
+          P95 {{ formatDuration(quality.durationP95) }} · 首字 P50 {{ formatDuration(quality.firstTokenP50) }} ·
+          工具错误 {{ quality.toolErrorRate }}% / 命中 {{ quality.toolHitRate }}%
+        </span>
+      </li>
+    </template>
 
-      <ul class="admin-stats">
-        <li class="admin-stat-card agent-balance-card">
-          <span class="admin-stat-label">{{ t('aiMonitor.balance.title') }}</span>
-          <strong class="admin-stat-value">{{ balanceDisplay }}</strong>
-          <span class="admin-stat-hint">
-            <span v-if="balanceHint">{{ balanceHint }}</span>
-            <BButton size="small" :loading="balanceLoading" @click="fetchBalance(true)">
-              {{ t('aiMonitor.balance.refresh') }}
-            </BButton>
-          </span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">总请求</span>
-          <strong class="admin-stat-value">{{ total }}</strong>
-          <span class="admin-stat-hint">累计</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">今日请求</span>
-          <strong class="admin-stat-value">{{ todayCount }}</strong>
-          <span class="admin-stat-hint">次</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">今日 Token</span>
-          <strong class="admin-stat-value">{{ formatNumber(todayTokens) }}</strong>
-          <span class="admin-stat-hint">tk</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">今日费用</span>
-          <strong class="admin-stat-value">¥{{ todayCost }}</strong>
-          <span class="admin-stat-hint">累计</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">总费用</span>
-          <strong class="admin-stat-value">¥{{ totalCost }}</strong>
-          <span class="admin-stat-hint">累计</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">30 天错误率</span>
-          <strong class="admin-stat-value">{{ quality.errorRate }}%</strong>
-          <span class="admin-stat-hint">{{ quality.sampleCount }} 次样本</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">完成耗时 P95</span>
-          <strong class="admin-stat-value">{{ formatDuration(quality.durationP95) }}</strong>
-          <span class="admin-stat-hint">P50 {{ formatDuration(quality.durationP50) }}</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">首字耗时 P50</span>
-          <strong class="admin-stat-value">{{ formatDuration(quality.firstTokenP50) }}</strong>
-          <span class="admin-stat-hint">P95 {{ formatDuration(quality.firstTokenP95) }}</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">工具错误率</span>
-          <strong class="admin-stat-value">{{ quality.toolErrorRate }}%</strong>
-          <span class="admin-stat-hint">命中率 {{ quality.toolHitRate }}%</span>
-        </li>
-      </ul>
+    <template #toolbar>
+      <b-input
+        v-model:value="searchValue"
+        placeholder="搜索用户 / 提问 / 工具"
+        class="log-search-input"
+        @input="handleSearch"
+      >
+        <template #prefix>
+          <svg-icon :src="icon.navigation.search" size="16" />
+        </template>
+      </b-input>
+      <span class="admin-toolbar-switch">
+        <BSwitch v-model:checked="hideInternal" @change="onToggleInternal" />
+        隐藏内部账号(管理员/测试)
+      </span>
+    </template>
 
-      <div class="admin-filters">
-        <div class="admin-filters-main">
-          <b-input
-            v-model:value="searchValue"
-            placeholder="搜索用户 / 提问 / 工具"
-            class="log-search-input"
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="16" />
-            </template>
-          </b-input>
-          <BSwitch v-model:checked="hideInternal" @change="onToggleInternal" />隐藏内部账号(管理员/测试)
-        </div>
-        <span class="admin-filters-hint">支持模糊匹配 · 回车或停止输入 0.5s 自动查询</span>
+    <BTable
+      fill
+      :data="logList"
+      :columns="columns"
+      :row-clickable="true"
+      :pagination="true"
+      :total="total"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
+      @row-click="onRowClick"
+    />
+  </AdminDataPage>
+
+  <BModal v-model:visible="detailVisible" title="调用详情" width="550px" :show-footer="false" :mask-closable="true">
+    <div class="agent-detail" v-if="selectedRecord">
+      <div class="agent-detail__grid">
+        <div
+          ><label>用户</label><p>{{ selectedRecord.userAlias || '-' }}</p></div
+        >
+        <div
+          ><label>状态</label><p>{{ selectedRecord.status || '-' }}</p></div
+        >
+        <div
+          ><label>供应商 / 模型</label
+          ><p>{{ selectedRecord.provider || '-' }} / {{ selectedRecord.model || '-' }}</p></div
+        >
+        <div
+          ><label>Request ID</label><p>{{ selectedRecord.requestId || '-' }}</p></div
+        >
+        <div
+          ><label>时间</label><p>{{ formatTime(selectedRecord.createdAt) }}</p></div
+        >
+        <div
+          ><label>耗时</label><p>{{ selectedRecord.durationMs }} ms</p></div
+        >
+        <div
+          ><label>首字耗时</label><p>{{ selectedRecord.firstTokenMs ?? '-' }} ms</p></div
+        >
+        <div
+          ><label>API 调用次数</label><p>{{ selectedRecord.iterations || 1 }} 次</p></div
+        >
+        <div
+          ><label>费用</label><p>¥{{ Number(selectedRecord.cost || 0).toFixed(6) }}</p></div
+        >
+        <div
+          ><label>Usage</label><p>{{ selectedRecord.usageStatus || '-' }}</p></div
+        >
+        <div
+          ><label>结束原因</label><p>{{ selectedRecord.finishReason || '-' }}</p></div
+        >
       </div>
-
-      <div class="admin-table-card">
-        <BTable
-          :data="logList"
-          :columns="columns"
-          :row-clickable="true"
-          :pagination="true"
-          :total="total"
-          :current-page="currentPage"
-          :page-size="pageSize"
-          @page-change="onPageChange"
-          @size-change="onSizeChange"
-          @row-click="onRowClick"
-        />
+      <div class="agent-detail__question">
+        <label>提问</label>
+        <p>{{ selectedRecord.question || '-' }}</p>
       </div>
-
-      <BModal v-model:visible="detailVisible" title="调用详情" width="550px" :show-footer="false" :mask-closable="true">
-        <div class="agent-detail" v-if="selectedRecord">
-          <div class="agent-detail__grid">
-            <div><label>用户</label><p>{{ selectedRecord.userAlias || '-' }}</p></div>
-            <div><label>状态</label><p>{{ selectedRecord.status || '-' }}</p></div>
-            <div><label>供应商 / 模型</label><p>{{ selectedRecord.provider || '-' }} / {{ selectedRecord.model || '-' }}</p></div>
-            <div><label>Request ID</label><p>{{ selectedRecord.requestId || '-' }}</p></div>
-            <div><label>时间</label><p>{{ formatTime(selectedRecord.createdAt) }}</p></div>
-            <div><label>耗时</label><p>{{ selectedRecord.durationMs }} ms</p></div>
-            <div><label>首字耗时</label><p>{{ selectedRecord.firstTokenMs ?? '-' }} ms</p></div>
-            <div><label>API 调用次数</label><p>{{ selectedRecord.iterations || 1 }} 次</p></div>
-            <div><label>费用</label><p>¥{{ Number(selectedRecord.cost || 0).toFixed(6) }}</p></div>
-            <div><label>Usage</label><p>{{ selectedRecord.usageStatus || '-' }}</p></div>
-            <div><label>结束原因</label><p>{{ selectedRecord.finishReason || '-' }}</p></div>
-          </div>
-          <div class="agent-detail__question">
-            <label>提问</label>
-            <p>{{ selectedRecord.question || '-' }}</p>
-          </div>
-          <div class="agent-detail__tools" v-if="selectedRecord.toolsUsed">
-            <label>调用工具</label>
-            <p>{{ formatToolsUsed(selectedRecord.toolsUsed) }}</p>
-          </div>
-          <div class="agent-detail__tools" v-if="selectedRecord.selectedTools">
-            <label>本轮候选工具</label>
-            <p>{{ formatSelectedTools(selectedRecord.selectedTools) }}</p>
-          </div>
-          <div class="agent-detail__tools">
-            <label>阶段耗时</label>
-            <p>Planner {{ selectedRecord.plannerMs ?? '-' }} ms · Tool {{ selectedRecord.toolMs ?? '-' }} ms · Final {{ selectedRecord.finalMs ?? '-' }} ms</p>
-          </div>
-          <div class="agent-detail__tokens">
-            <div class="token-bar">
-              <span>Prompt</span><span class="token-val">{{ formatNumber(selectedRecord.promptTokens) }} tk</span>
-              <span>输出</span><span class="token-val">{{ formatNumber(selectedRecord.completionTokens) }} tk</span>
-              <span>合计</span><span class="token-val">{{ formatNumber(selectedRecord.totalTokens) }} tk</span>
-            </div>
-          </div>
-          <div class="agent-detail__error" v-if="selectedRecord.errorMsg">
-            <label>错误信息</label>
-            <p>{{ selectedRecord.errorMsg }}</p>
-          </div>
+      <div class="agent-detail__tools" v-if="selectedRecord.toolsUsed">
+        <label>调用工具</label>
+        <p>{{ formatToolsUsed(selectedRecord.toolsUsed) }}</p>
+      </div>
+      <div class="agent-detail__tools" v-if="selectedRecord.selectedTools">
+        <label>本轮候选工具</label>
+        <p>{{ formatSelectedTools(selectedRecord.selectedTools) }}</p>
+      </div>
+      <div class="agent-detail__tools">
+        <label>阶段耗时</label>
+        <p
+          >Planner {{ selectedRecord.plannerMs ?? '-' }} ms · Tool {{ selectedRecord.toolMs ?? '-' }} ms · Final
+          {{ selectedRecord.finalMs ?? '-' }} ms</p
+        >
+      </div>
+      <div class="agent-detail__tokens">
+        <div class="token-bar">
+          <span>Prompt</span><span class="token-val">{{ formatNumber(selectedRecord.promptTokens) }} tk</span>
+          <span>输出</span><span class="token-val">{{ formatNumber(selectedRecord.completionTokens) }} tk</span>
+          <span>合计</span><span class="token-val">{{ formatNumber(selectedRecord.totalTokens) }} tk</span>
         </div>
-      </BModal>
-    </section>
-  </div>
+      </div>
+      <div class="agent-detail__error" v-if="selectedRecord.errorMsg">
+        <label>错误信息</label>
+        <p>{{ selectedRecord.errorMsg }}</p>
+      </div>
+    </div>
+  </BModal>
 </template>
 
 <script lang="ts" setup>
@@ -158,6 +152,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
 
   const { t } = useI18n();
 
@@ -211,13 +206,26 @@
     { title: '时间', key: 'createdAt', width: '1fr' },
   ];
 
-  function onPageChange(page: number) { currentPage.value = page; fetchLogs(); }
-  function onSizeChange(_: number, size: number) { currentPage.value = 1; pageSize.value = size; fetchLogs(); }
-  function onRowClick(record: any) { selectedRecord.value = record; detailVisible.value = true; }
+  function onPageChange(page: number) {
+    currentPage.value = page;
+    fetchLogs();
+  }
+  function onSizeChange(_: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+    fetchLogs();
+  }
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
 
   function handleSearch() {
     if (timer) clearTimeout(timer);
-    timer = window.setTimeout(() => { currentPage.value = 1; fetchLogs(); }, 500);
+    timer = window.setTimeout(() => {
+      currentPage.value = 1;
+      fetchLogs();
+    }, 500);
   }
 
   // 隐藏内部账号(root/test)开关:切换后列表与统计同步按新口径重查
@@ -245,18 +253,20 @@
   }
 
   function fetchTodaySummary() {
-    apiBasePost('/api/common/getAgentLogsSummary', { hideInternal: hideInternal.value }).then((res: any) => {
-      if (res.status === 200) {
-        const d = res.data;
-        todayCount.value = d.today?.count ?? 0;
-        todayTokens.value = d.today?.tokens ?? 0;
-        todayCost.value = d.today?.cost ?? '0';
-        totalCost.value = d.total?.cost ?? '0';
-        quality.value = { ...quality.value, ...(d.quality || {}) };
-      }
-    }).catch((err: any) => {
-      console.warn('获取汇总失败:', err);
-    });
+    apiBasePost('/api/common/getAgentLogsSummary', { hideInternal: hideInternal.value })
+      .then((res: any) => {
+        if (res.status === 200) {
+          const d = res.data;
+          todayCount.value = d.today?.count ?? 0;
+          todayTokens.value = d.today?.tokens ?? 0;
+          todayCost.value = d.today?.cost ?? '0';
+          totalCost.value = d.total?.cost ?? '0';
+          quality.value = { ...quality.value, ...(d.quality || {}) };
+        }
+      })
+      .catch((err: any) => {
+        console.warn('获取汇总失败:', err);
+      });
   }
 
   async function fetchBalance(forceRefresh = false) {
@@ -318,18 +328,38 @@
 </script>
 
 <style lang="less" scoped>
-  @import '@/assets/css/admin-manage.less';
-  .log-search-input { flex: 1; }
-  .admin-table-card { padding: 0; }
+  .log-search-input {
+    flex: 1;
+  }
   .agent-balance-card {
     border-color: color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
-    background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 9%, var(--card-background)), var(--card-background));
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--primary-color) 9%, var(--card-background)),
+      var(--card-background)
+    );
   }
-  .agent-balance-card .admin-stat-hint {
+  .agent-balance-hint {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    justify-content: space-between;
     gap: 6px;
+  }
+
+  .agent-quality-hint {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-toolbar-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-color);
+    font-size: 13px;
+    white-space: nowrap;
   }
 
   .agent-detail__grid {

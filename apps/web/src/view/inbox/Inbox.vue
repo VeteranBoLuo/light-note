@@ -305,16 +305,24 @@
   async function refreshList(resetScroll = false) {
     todo.keyword = inbox.keyword;
     if (inbox.filterType === 'todo') todo.sort = inbox.sort as TodoSort;
-    const refreshed =
-      inbox.filterType === 'todo'
-        ? await todo.refreshList()
-        : inbox.filterType === 'all'
-          ? (
-              await Promise.all([inbox.refreshList(), todo.refreshList({ status: 'pending', keyword: inbox.keyword })])
-            ).every(Boolean)
-          : await inbox.refreshList();
-    await inbox.refreshCount();
-    todo.pendingTotal = inbox.todoPendingTotal;
+    let refreshed = false;
+    let inboxCountsReady = false;
+    if (inbox.filterType === 'todo') {
+      refreshed = await todo.refreshList();
+      inboxCountsReady = await inbox.refreshCount();
+    } else if (inbox.filterType === 'all') {
+      const [inboxRefreshed, todoRefreshed] = await Promise.all([
+        inbox.refreshList(),
+        todo.refreshList({ status: 'pending', keyword: inbox.keyword }),
+      ]);
+      refreshed = inboxRefreshed && todoRefreshed;
+      inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+    } else {
+      const inboxRefreshed = await inbox.refreshList();
+      refreshed = inboxRefreshed;
+      inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+    }
+    if (inboxCountsReady) todo.pendingTotal = inbox.todoPendingTotal;
     await nextTick();
     if (resetScroll && scrollContainer.value) scrollContainer.value.scrollTop = 0;
     updateScrollFade();

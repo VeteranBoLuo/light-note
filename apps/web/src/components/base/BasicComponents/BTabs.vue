@@ -66,27 +66,33 @@
       : tab;
     if (!resolved) return;
     const value = resolved.key ?? resolved.label;
-    activeTab.value = value;
-    if (props.variant === 'line') {
-      const tabs = containerRef.value?.querySelectorAll<HTMLElement>('.tab');
-      const underline = containerRef.value?.querySelector<HTMLElement>('.underline');
-      const index = resolvedOptions.value.indexOf(resolved);
-      if (tabs?.[index] && underline) {
-        underline.style.width = `${tabs[index].offsetWidth}px`;
-        underline.style.left = `${tabs[index].offsetLeft}px`;
-      }
+    if (activeValue.value === value) {
+      syncUnderline(value);
+      return;
     }
+    activeTab.value = value;
     emit('change', value);
   }
 
+  function syncUnderline(value: string) {
+    if (props.variant !== 'line') return;
+    const tabs = containerRef.value?.querySelectorAll<HTMLElement>('.tab');
+    const underline = containerRef.value?.querySelector<HTMLElement>('.underline');
+    const index = resolvedOptions.value.findIndex((tab) => (tab.key ?? tab.label) === value);
+    if (index >= 0 && tabs?.[index] && underline) {
+      underline.style.width = `${tabs[index].offsetWidth}px`;
+      underline.style.left = `${tabs[index].offsetLeft}px`;
+    }
+  }
+
   watch(
-    () => activeTab.value,
-    (val) => {
-      if (val) {
-        nextTick(() => {
-          tabChange(val);
-        });
-      }
+    () => [
+      activeTab.value,
+      ...resolvedOptions.value.map((tab) => `${tab.key ?? tab.label}:${tab.label}:${tab.badge ?? ''}`),
+    ],
+    ([value]) => {
+      if (!value) return;
+      nextTick(() => syncUnderline(String(value)));
     },
     {
       immediate: true,

@@ -56,13 +56,28 @@ async function queryRelatedTags(userId, tagId, limit) {
         SELECT COUNT(*)
         FROM resource_tag_relations r
         WHERE r.tag_id = t.id AND r.user_id = ?
-      ) AS related_count
-     FROM tag_relations tr
-     INNER JOIN tag t ON tr.related_tag_id = t.id
-     WHERE tr.tag_id = ? AND t.user_id = ? AND t.del_flag = 0
-     ORDER BY related_count DESC, t.sort, t.create_time DESC
+      ) AS related_count,
+      COUNT(DISTINCT CASE
+        WHEN center_relation.tag_id IS NOT NULL
+        THEN CONCAT(candidate_relation.resource_type, ':', candidate_relation.resource_id)
+      END) AS shared_count,
+      MAX(CASE WHEN manual_relation.tag_id IS NOT NULL THEN 1 ELSE 0 END) AS manual_related
+     FROM tag t
+     LEFT JOIN resource_tag_relations candidate_relation
+       ON candidate_relation.tag_id = t.id AND candidate_relation.user_id = ?
+     LEFT JOIN resource_tag_relations center_relation
+       ON center_relation.user_id = candidate_relation.user_id
+      AND center_relation.resource_type = candidate_relation.resource_type
+      AND center_relation.resource_id = candidate_relation.resource_id
+      AND center_relation.tag_id = ?
+     LEFT JOIN tag_relations manual_relation
+       ON manual_relation.tag_id = ? AND manual_relation.related_tag_id = t.id
+     WHERE t.user_id = ? AND t.del_flag = 0 AND t.id <> ?
+     GROUP BY t.id, t.name, t.icon_url, t.sort, t.create_time
+     HAVING shared_count > 0 OR manual_related > 0
+     ORDER BY manual_related DESC, shared_count DESC, related_count DESC, t.sort, t.create_time DESC
      LIMIT ?`,
-    [userId, tagId, userId, limit],
+    [userId, userId, tagId, tagId, userId, tagId, limit],
   );
   return rows;
 }
@@ -173,6 +188,7 @@ export const getTagGraph = async (req, res) => {
     const relatedTags = await queryRelatedTags(userId, tagId, relatedTagLimit);
     relatedTags.forEach((tag) => {
       const relatedCount = Number(tag.related_count || 0);
+      const sharedCount = Number(tag.shared_count || 0);
       const relatedNodeId = toNodeId('tag', tag.id);
       pushNode(nodes, {
         id: relatedNodeId,
@@ -180,16 +196,17 @@ export const getTagGraph = async (req, res) => {
         type: 'tag',
         label: tag.name,
         size: getNodeSize('tag', relatedCount),
-        weight: relatedCount,
+        weight: Math.max(sharedCount, relatedCount),
         iconUrl: tag.icon_url,
-        meta: { relatedCount },
+        meta: { relatedCount, sharedCount },
       });
       pushEdge(edges, {
         id: `edge:tag-tag:${centerTag.id}:${tag.id}`,
         source: centerNodeId,
         target: relatedNodeId,
         type: 'tag-tag',
-        weight: 3,
+        weight: Math.min(6, 2 + sharedCount),
+        sharedCount,
       });
     });
 
@@ -304,14 +321,91 @@ export const getTagGraph = async (req, res) => {
 const MAX_GLOBAL_TAGS = 300;
 const MAX_GLOBAL_EDGES = 800;
 
-// 全局知识图谱(root 专属):本人全部标签为节点 + 标签共现边(俯瞰知识全貌,区别于按单标签展开的 getTagGraph)
+async function queryKnowledgeMapStats(userId) {
+  const [tagResult, resourceResult, taggedResult, emptyResult, isolatedResult] = await Promise.all([
+    pool.query(`SELECT COUNT(*) AS total FROM tag WHERE user_id = ? AND del_flag = 0`, [userId]),
+    pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0) +
+        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0) +
+        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0) AS total`,
+      [userId, userId, userId],
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS total
+       FROM (
+         SELECT DISTINCT b.id AS resource_id
+         FROM resource_tag_relations r
+         INNER JOIN bookmark b ON r.resource_id = b.id AND r.resource_type = 'bookmark'
+         WHERE r.user_id = ? AND b.user_id = ? AND b.del_flag = 0
+         UNION ALL
+         SELECT DISTINCT n.id AS resource_id
+         FROM resource_tag_relations r
+         INNER JOIN note n ON r.resource_id = n.id AND r.resource_type = 'note'
+         WHERE r.user_id = ? AND n.create_by = ? AND n.del_flag = 0
+         UNION ALL
+         SELECT DISTINCT f.id AS resource_id
+         FROM resource_tag_relations r
+         INNER JOIN files f ON r.resource_id = f.id AND r.resource_type = 'file'
+         WHERE r.user_id = ? AND f.create_by = ? AND f.del_flag = 0
+       ) tagged_resources`,
+      [userId, userId, userId, userId, userId, userId],
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS total
+       FROM tag t
+       WHERE t.user_id = ? AND t.del_flag = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM resource_tag_relations r
+           WHERE r.user_id = ? AND r.tag_id = t.id
+         )`,
+      [userId, userId],
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS total
+       FROM tag t
+       WHERE t.user_id = ? AND t.del_flag = 0
+         AND EXISTS (
+           SELECT 1 FROM resource_tag_relations r
+           WHERE r.user_id = ? AND r.tag_id = t.id
+         )
+         AND NOT EXISTS (
+           SELECT 1
+           FROM resource_tag_relations a
+           INNER JOIN resource_tag_relations b
+             ON a.user_id = b.user_id
+            AND a.resource_type = b.resource_type
+            AND a.resource_id = b.resource_id
+            AND a.tag_id <> b.tag_id
+           WHERE a.user_id = ? AND a.tag_id = t.id
+         )`,
+      [userId, userId, userId],
+    ),
+  ]);
+
+  const totalTagCount = Number(tagResult[0][0]?.total || 0);
+  const totalResourceCount = Number(resourceResult[0][0]?.total || 0);
+  const taggedResourceCount = Number(taggedResult[0][0]?.total || 0);
+  return {
+    totalTagCount,
+    totalResourceCount,
+    taggedResourceCount,
+    untaggedResourceCount: Math.max(0, totalResourceCount - taggedResourceCount),
+    emptyTagCount: Number(emptyResult[0][0]?.total || 0),
+    isolatedTagCount: Number(isolatedResult[0][0]?.total || 0),
+  };
+}
+
+// 全局知识地图:默认只返回标签节点与标签共现关系;具体资源在用户聚焦某个标签后按需查询。
 export const getGlobalGraph = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
     const minCo = Math.max(1, Math.min(Number(req.body?.minCoOccurrence) || 1, 10));
 
-    // 1. 全部标签作为节点,size/weight 由挂载资源数决定
+    const overviewStats = await queryKnowledgeMapStats(userId);
+
+    // 标签作为地图节点,size/weight 由挂载资源数决定。返回最多 300 个供搜索,前端首屏只渲染核心子集。
     const [tagRows] = await pool.query(
       `SELECT t.id, t.name, t.icon_url,
          (SELECT COUNT(*) FROM resource_tag_relations r WHERE r.tag_id = t.id AND r.user_id = ?) AS resource_count
@@ -337,7 +431,7 @@ export const getGlobalGraph = async (req, res) => {
       });
     });
 
-    // 2. 标签共现边:两个标签被打在同一批资源上,共现越多边越粗
+    // 标签共现边:两个标签被打在同一批资源上,共现越多关系越强。
     const [coRows] = await pool.query(
       `SELECT a.tag_id AS t1, b.tag_id AS t2, COUNT(*) AS co
        FROM resource_tag_relations a
@@ -362,71 +456,25 @@ export const getGlobalGraph = async (req, res) => {
         target,
         type: 'tag-tag',
         weight: Math.min(6, 1 + Number(r.co || 1)),
+        sharedCount: Number(r.co || 1),
       });
     });
-
-    const tagCount = nodes.size;
-
-    // 3. 资源节点 + 标签-资源边(只取有标签的资源):让图从"只有标签"变成丰满的多彩知识网
-    const RES_LINK_CAP = 100;
-    const resourceQueries = [
-      {
-        type: 'bookmark',
-        sql: `SELECT b.id, b.name AS label, b.icon_url AS iconUrl, b.url AS url, NULL AS fileType, r.tag_id AS tagId
-              FROM resource_tag_relations r
-              INNER JOIN bookmark b ON r.resource_id = b.id AND r.resource_type = 'bookmark'
-              WHERE b.user_id = ? AND b.del_flag = 0 LIMIT ?`,
-      },
-      {
-        type: 'note',
-        sql: `SELECT n.id, n.title AS label, NULL AS iconUrl, NULL AS url, NULL AS fileType, r.tag_id AS tagId
-              FROM resource_tag_relations r
-              INNER JOIN note n ON r.resource_id = n.id AND r.resource_type = 'note'
-              WHERE n.create_by = ? AND n.del_flag = 0 LIMIT ?`,
-      },
-      {
-        type: 'file',
-        sql: `SELECT f.id, f.file_name AS label, NULL AS iconUrl, NULL AS url, f.file_type AS fileType, r.tag_id AS tagId
-              FROM resource_tag_relations r
-              INNER JOIN files f ON r.resource_id = f.id AND r.resource_type = 'file'
-              WHERE f.create_by = ? AND f.del_flag = 0 LIMIT ?`,
-      },
-    ];
-    for (const q of resourceQueries) {
-      const [rows] = await pool.query(q.sql, [userId, RES_LINK_CAP]);
-      rows.forEach((row) => {
-        const tagNodeId = toNodeId('tag', row.tagId);
-        if (!nodes.has(tagNodeId)) return;
-        const nodeId = toNodeId(q.type, row.id);
-        pushNode(nodes, {
-          id: nodeId,
-          rawId: row.id,
-          type: q.type,
-          label: row.label || '未命名',
-          size: q.type === 'note' ? 18 : 16,
-          weight: 1,
-          iconUrl: row.iconUrl || undefined,
-          meta: { url: row.url || undefined, fileType: row.fileType || undefined },
-        });
-        pushEdge(edges, {
-          id: `edge:tag-${q.type}:${row.tagId}:${row.id}`,
-          source: tagNodeId,
-          target: nodeId,
-          type: `tag-${q.type}`,
-          weight: 1.4,
-        });
-      });
-    }
 
     res.send(
       resultData({
         nodes: Array.from(nodes.values()),
         edges: Array.from(edges.values()),
         stats: {
-          tagCount,
-          resourceCount: nodes.size - tagCount,
+          tagCount: overviewStats.totalTagCount,
+          shownTagCount: nodes.size,
+          resourceCount: overviewStats.taggedResourceCount,
+          totalResourceCount: overviewStats.totalResourceCount,
+          taggedResourceCount: overviewStats.taggedResourceCount,
+          untaggedResourceCount: overviewStats.untaggedResourceCount,
+          emptyTagCount: overviewStats.emptyTagCount,
+          isolatedTagCount: overviewStats.isolatedTagCount,
           edgeCount: edges.size,
-          truncated: tagRows.length >= MAX_GLOBAL_TAGS,
+          truncated: overviewStats.totalTagCount > nodes.size,
         },
       }),
     );

@@ -1,6 +1,6 @@
 <template>
   <CommonContainer title="操作日志" @backClick="router.push('/admin')">
-    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+    <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden">
       <b-space style="width: 100%; flex-shrink: 0">
         <b-input v-model:value="searchValue" placeholder="用户名或接口名..." @input="handleSearch">
           <template #prefix>
@@ -9,7 +9,8 @@
         </b-input>
         <b-button @click="clearOperationLogs" type="primary">清空</b-button>
       </b-space>
-      <BTable style="flex: 1; min-height: 0"
+      <BTable
+        style="flex: 1; min-height: 0"
         :data="logList"
         :columns="logColumns"
         :row-clickable="true"
@@ -52,6 +53,7 @@
   const logList = ref([]);
 
   const logColumns = [
+    { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
     { title: '操作名称', key: 'operation', width: '1fr' },
   ];
@@ -123,5 +125,4 @@
   });
 </script>
 
-<style lang="less" scoped>
-</style>
+<style lang="less" scoped></style>

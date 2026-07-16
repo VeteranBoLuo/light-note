@@ -3,21 +3,28 @@
     <template v-if="node">
       <div class="panel-kicker">
         <span class="node-dot" :style="{ backgroundColor: nodeColor }"></span>
-        {{ t(nodeTypeKey) }}
+        {{ node.meta?.isAggregate ? t('tagGraph.panel.resourceOverview') : t(nodeTypeKey) }}
       </div>
-      <div
-        class="panel-title"
-        :class="{ 'panel-title--clickable': node.type !== 'tag' }"
-        :title="node.label"
-        @click="node.type !== 'tag' && emit('open-resource', node)"
-      >{{ node.label }}</div>
+      <div class="panel-heading">
+        <div class="panel-title" :title="node.label">{{ node.label }}</div>
+        <b-button v-if="node.type !== 'tag' && !node.meta?.isAggregate" size="small" @click="emit('open-resource', node)">
+          {{ t('tagGraph.panel.open') }}
+        </b-button>
+      </div>
       <div v-if="node.meta?.description" class="panel-desc">{{ node.meta.description }}</div>
 
-      <div class="panel-meta-list">
-        <div v-if="node.type === 'tag'" class="panel-meta-item">
-          <span>{{ t('tagGraph.panel.relatedCount') }}</span>
+      <div v-if="node.type === 'tag'" class="panel-tag-meta">
+        <div class="panel-stat">
           <strong>{{ node.meta?.relatedCount || 0 }}</strong>
+          <span>{{ t('tagGraph.panel.relatedCount') }}</span>
         </div>
+        <div v-if="node.meta?.sharedCount" class="panel-stat">
+          <strong>{{ node.meta.sharedCount }}</strong>
+          <span>{{ t('tagGraph.panel.sharedCount') }}</span>
+        </div>
+      </div>
+
+      <div v-if="node.meta?.url || node.meta?.fileType || node.meta?.fileSize || node.meta?.updateTime" class="panel-meta-list">
         <div v-if="node.meta?.url" class="panel-meta-item">
           <span>{{ t('tagGraph.panel.url') }}</span>
           <strong class="text-hidden" :title="node.meta.url">{{ node.meta.url }}</strong>
@@ -36,41 +43,53 @@
         </div>
       </div>
 
-      <div class="panel-actions">
-        <b-button v-if="node.type === 'tag'" type="primary" @click="emit('explore-tag', node)">
+      <div v-if="node.type === 'tag' && !node.meta?.isCenter" class="panel-actions">
+        <b-button type="primary" @click="emit('explore-tag', node)">
           {{ t('tagGraph.panel.explore') }}
         </b-button>
       </div>
 
-      <!-- Connected resources for tag nodes -->
-      <template v-if="node.type === 'tag' && connectedResources.length">
+      <template v-if="showResourceBrowser">
         <div class="panel-divider"></div>
-        <div class="panel-resources">
-          <div
-            v-for="group in resourceGroups"
-            :key="group.type"
-            class="resource-group"
-          >
-            <div class="resource-group-header" :style="{ color: group.color }">
-              <span class="resource-group-dot" :style="{ background: group.color }"></span>
-              {{ t('tagGraph.nodeType.' + group.type) }}
-              <span class="resource-group-count">{{ group.items.length }}</span>
-            </div>
-            <div class="resource-group-list">
-              <div
-                v-for="item in group.items"
-                :key="item.id"
-                class="resource-item dom-hover"
-                @click="emit('open-resource', item)"
-              >
-                <span v-if="item.meta?.iconUrl" class="resource-item-icon">
-                  <img :src="item.meta.iconUrl" alt="" @error="($event.target as HTMLImageElement).style.display = 'none'" />
-                </span>
-                <span class="resource-item-label text-hidden">{{ item.label }}</span>
-              </div>
-            </div>
+        <div class="resource-browser-header">
+          <div>
+            <div class="resource-browser-title">{{ t('tagGraph.panel.linkedContent') }}</div>
+            <div class="resource-browser-count">{{ t('tagGraph.panel.resultCount', { count: filteredResources.length }) }}</div>
           </div>
         </div>
+        <div v-if="availableTypes.size > 1" class="resource-type-tabs">
+          <b-button
+            v-for="option in typeOptions"
+            :key="option.value"
+            size="small"
+            :class="{ 'resource-type-tab--active': activeType === option.value }"
+            @click="activeType = option.value"
+          >
+            {{ t(option.labelKey) }}
+          </b-button>
+        </div>
+        <b-input
+          v-model:value="keyword"
+          clearable
+          height="34px"
+          :placeholder="t('tagGraph.panel.searchPlaceholder')"
+        />
+        <div v-if="filteredResources.length" class="resource-list">
+          <div
+            v-for="item in filteredResources"
+            :key="item.id"
+            class="resource-item dom-hover"
+            @click="emit('open-resource', item)"
+          >
+            <span class="resource-item-dot" :style="{ background: resourceGroupColors[item.type] }"></span>
+            <div class="resource-item-body">
+              <div class="resource-item-label text-hidden">{{ item.label }}</div>
+              <div class="resource-item-type">{{ t('tagGraph.nodeType.' + item.type) }}</div>
+            </div>
+            <span class="resource-item-open">{{ t('tagGraph.panel.open') }}</span>
+          </div>
+        </div>
+        <div v-else class="resource-empty">{{ t('tagGraph.panel.noResources') }}</div>
       </template>
     </template>
     <div v-else class="panel-empty">
@@ -81,10 +100,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import type { TagGraphNode } from '@/api/tagGraph.ts';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import type { GraphResourceType, TagGraphNode } from '@/api/tagGraph.ts';
   import { formatGraphFileSize, GRAPH_NODE_COLOR, GRAPH_NODE_LABEL_KEY } from './shared.ts';
   import { RESOURCE_COLOR_HEX } from '@/config/resourceColor.ts';
 
@@ -99,222 +119,203 @@
   }>();
 
   const { t } = useI18n();
+  const keyword = ref('');
+  const activeType = ref<'all' | GraphResourceType>('all');
   const nodeColor = computed(() => (props.node ? GRAPH_NODE_COLOR[props.node.type] : 'var(--primary-color)'));
   const nodeTypeKey = computed(() => (props.node ? GRAPH_NODE_LABEL_KEY[props.node.type] : 'tagGraph.nodeType.tag'));
-
-  const resourceTypeOrder = ['bookmark', 'note', 'file'] as const;
-  const resourceGroupColors: Record<string, string> = {
+  const resourceGroupColors: Record<GraphResourceType, string> = {
     bookmark: RESOURCE_COLOR_HEX.bookmark,
     note: RESOURCE_COLOR_HEX.note,
     file: RESOURCE_COLOR_HEX.file,
   };
+  const typeOptions = [
+    { value: 'all' as const, labelKey: 'tagGraph.panel.all' },
+    { value: 'bookmark' as const, labelKey: 'tagGraph.nodeType.bookmark' },
+    { value: 'note' as const, labelKey: 'tagGraph.nodeType.note' },
+    { value: 'file' as const, labelKey: 'tagGraph.nodeType.file' },
+  ];
 
-  const resourceGroups = computed(() => {
-    const items = props.connectedResources || [];
-    return resourceTypeOrder
-      .map((type) => ({
-        type,
-        color: resourceGroupColors[type],
-        items: items.filter((n) => n.type === type),
-      }))
-      .filter((group) => group.items.length > 0);
+  const availableTypes = computed(() => new Set((props.connectedResources || []).map((item) => item.type)));
+  const showResourceBrowser = computed(
+    () => !!props.node && (props.node.type === 'tag' || !!props.node.meta?.isAggregate),
+  );
+  const filteredResources = computed(() => {
+    const normalizedKeyword = keyword.value.trim().toLocaleLowerCase();
+    return (props.connectedResources || []).filter((item) => {
+      if (activeType.value !== 'all' && item.type !== activeType.value) return false;
+      if (!normalizedKeyword) return true;
+      return `${item.label} ${item.meta?.description || ''} ${item.meta?.url || ''}`
+        .toLocaleLowerCase()
+        .includes(normalizedKeyword);
+    });
   });
+
+  watch(
+    () => props.node?.id,
+    () => {
+      keyword.value = '';
+      activeType.value = props.node?.meta?.isAggregate ? (props.node.type as GraphResourceType) : 'all';
+    },
+    { immediate: true },
+  );
 </script>
 
 <style scoped lang="less">
   .tag-graph-panel {
     min-width: 0;
-    border-left: 1px solid var(--card-border-color);
     padding: 22px;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--background-color) 97%, white), var(--background-color));
+    border-left: 1px solid var(--card-border-color);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--background-color) 97%, white), var(--background-color));
     box-sizing: border-box;
     overflow-y: auto;
+  }
+
+  .panel-kicker,
+  .resource-browser-count,
+  .resource-item-type {
+    color: var(--desc-color);
+    font-size: 12px;
   }
 
   .panel-kicker {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 12px;
-    font-size: 12px;
-    color: var(--desc-color);
+    margin-bottom: 10px;
   }
 
-  .node-dot {
+  .node-dot,
+  .resource-item-dot {
+    flex-shrink: 0;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    box-shadow: 0 0 6px currentColor;
+  }
+
+  .panel-heading,
+  .resource-browser-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
   }
 
   .panel-title {
-    font-size: 20px;
-    line-height: 1.35;
-    font-weight: 700;
+    min-width: 0;
     color: var(--text-color);
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.35;
     word-break: break-word;
-
-    &.panel-title--clickable {
-      cursor: pointer;
-      transition: color 0.15s;
-      color: var(--primary-color);
-
-      &:hover {
-        opacity: 0.8;
-      }
-    }
   }
 
   .panel-desc {
-    margin-top: 12px;
-    color: var(--desc-color);
-    line-height: 1.7;
-    font-size: 13px;
-    max-height: 110px;
+    max-height: 92px;
+    margin-top: 10px;
     overflow: auto;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.65;
   }
 
-  .panel-meta-list {
+  .panel-tag-meta {
     display: grid;
-    gap: 10px;
-    margin-top: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 16px;
   }
 
-  .panel-meta-item {
-    display: grid;
-    gap: 4px;
-    padding: 10px 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
-
-    span {
-      font-size: 12px;
-      color: var(--desc-color);
-    }
-
-    strong {
-      min-width: 0;
-      font-size: 13px;
-      color: var(--text-color);
-      font-weight: 600;
-    }
-  }
-
-  .panel-actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 22px;
-  }
-
-  .panel-divider {
-    height: 1px;
-    margin: 20px 0 18px;
-    background: var(--card-border-color);
-    opacity: 0.5;
-  }
-
-  .panel-resources {
-    display: grid;
-    gap: 16px;
-  }
-
-  .resource-group-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-
-  .resource-group-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .resource-group-count {
-    font-size: 11px;
-    font-weight: 400;
-    opacity: 0.7;
-    margin-left: auto;
-  }
-
-  .resource-group-list {
+  .panel-stat {
     display: grid;
     gap: 2px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--resource-tag-color) 8%, var(--background-color));
+
+    strong { color: var(--text-color); font-size: 18px; }
+    span { color: var(--desc-color); font-size: 11px; }
+  }
+
+  .panel-meta-list { display: grid; gap: 8px; margin-top: 16px; }
+  .panel-meta-item {
+    display: grid;
+    gap: 3px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
+    span { color: var(--desc-color); font-size: 11px; }
+    strong { min-width: 0; color: var(--text-color); font-size: 12px; }
+  }
+
+  .panel-actions { display: flex; margin-top: 16px; }
+  .panel-divider { height: 1px; margin: 18px 0; background: var(--card-border-color); opacity: 0.7; }
+  .resource-browser-title { color: var(--text-color); font-size: 14px; font-weight: 700; }
+  .resource-browser-count { margin-top: 3px; }
+
+  .resource-type-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 12px 0 10px;
+    flex-wrap: wrap;
+  }
+
+  :deep(.resource-type-tab--active) {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--background-color));
+  }
+
+  .resource-list {
+    display: grid;
+    gap: 4px;
+    margin-top: 10px;
   }
 
   .resource-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 10px;
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--text-color);
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background 0.15s;
-
-    &:hover {
-      background: color-mix(in srgb, var(--card-hover-color) 40%, transparent);
-    }
+    transition: background 0.15s ease;
+    &:hover { background: color-mix(in srgb, var(--card-hover-color) 45%, transparent); }
   }
 
-  .resource-item-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    border-radius: 3px;
-    overflow: hidden;
+  .resource-item-body { min-width: 0; flex: 1; }
+  .resource-item-label { color: var(--text-color); font-size: 13px; font-weight: 600; }
+  .resource-item-open { color: var(--primary-color); font-size: 11px; opacity: 0; transition: opacity 0.15s; }
+  .resource-item:hover .resource-item-open { opacity: 1; }
 
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
+  .resource-empty,
+  .panel-empty {
+    color: var(--desc-color);
+    text-align: center;
   }
 
-  .resource-item-label {
-    min-width: 0;
-  }
-
+  .resource-empty { padding: 28px 8px; font-size: 12px; }
   .panel-empty {
     height: 100%;
-    min-height: 420px;
+    min-height: 300px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    color: var(--desc-color);
-    text-align: center;
   }
 
   .panel-empty-mark {
     width: 42px;
     height: 42px;
-    border-radius: 50%;
     border: 1px solid var(--card-border-color);
+    border-radius: 50%;
     background:
       radial-gradient(circle at center, var(--resource-tag-color) 0 4px, transparent 5px),
       radial-gradient(circle at 28% 30%, var(--resource-bookmark-color) 0 3px, transparent 4px),
       radial-gradient(circle at 72% 35%, var(--resource-note-color) 0 3px, transparent 4px),
       radial-gradient(circle at 64% 74%, var(--resource-file-color) 0 3px, transparent 4px);
-    opacity: 0.85;
   }
 
   @media (max-width: 900px) {
-    .tag-graph-panel {
-      min-height: 0;
-      border-left: 0;
-      border-top: 1px solid var(--card-border-color);
-    }
-
-    .panel-empty {
-      min-height: 140px;
-    }
+    .tag-graph-panel { border-top: 0; border-left: 0; padding: 16px; }
+    .panel-empty { min-height: 140px; }
   }
 </style>

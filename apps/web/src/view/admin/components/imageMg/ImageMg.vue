@@ -1,74 +1,48 @@
 <template>
-  <div class="admin-panel-container">
-    <section class="admin-panel image-mg__panel">
-      <header class="admin-header image-mg__header">
-        <div class="admin-title-block">
-          <p class="admin-eyebrow">Admin / Media</p>
-          <h2 class="admin-title">图片管理</h2>
-          <p class="admin-subtitle">管理系统中的图片资源</p>
-        </div>
-      </header>
+  <AdminDataPage
+    eyebrow="Admin / Media"
+    title="图片管理"
+    subtitle="管理系统中的图片资源与失效文件"
+    toolbar-hint="支持文件名搜索 · 选择类型查看不同状态的图片"
+    :summary-count="imageTotal"
+  >
+    <template #toolbar>
+      <b-input v-model:value="searchValue" placeholder="搜索文件名" class="log-search-input" @input="handleSearch">
+        <template #prefix>
+          <svg-icon :src="icon.navigation.search" size="16" />
+        </template>
+      </b-input>
+      <BSelect class="image-mg__type-select" :options="imgOptions" v-model:value="imgType" @change="onTypeChange" />
+      <b-button type="danger" @click="clearApiImages">清理</b-button>
+    </template>
 
-      <ul class="admin-stats">
-        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
-          <span class="admin-stat-label image-mg__stat-label">{{ card.label }}</span>
-          <strong class="admin-stat-value image-mg__stat-value">{{ card.value }}</strong>
-          <span class="admin-stat-hint image-mg__stat-hint">{{ card.hint }}</span>
-        </li>
-      </ul>
-
-      <div class="admin-filters">
-        <div class="admin-filters-main">
-          <b-input v-model:value="searchValue" placeholder="文件名" class="log-search-input" @input="handleSearch">
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="16" />
-            </template>
-          </b-input>
-          <BSelect style="width: 100px" :options="imgOptions" v-model:value="imgType" />
-          <b-button @click="clearApiImages" type="primary">清理</b-button>
-        </div>
-        <span class="admin-filters-hint">支持文件名搜索 · 选择类型查看不同状态的图片</span>
-      </div>
-
-      <div class="admin-table-card" style="padding: 0" ref="tableCardRef">
-        <BTable
-          :data="allImg[imgType]"
-          :columns="imageColumns"
-          row-key="id"
-          :pagination="false"
-        >
-          <template #bodyCell="{ column, text, record }">
-            <template v-if="column.key === 'img'">
-              <div
-                style="
-                  width: 40px;
-                  height: 40px;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  padding: 0.125rem;
-                  background-color: rgb(255, 255, 255);
-                  border-radius: 0.5rem;
-                  flex-shrink: 0;
-                "
-                class="dom-hover"
-                @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
-              >
-                <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
-              </div>
-            </template>
-          </template>
-        </BTable>
-      </div>
-    </section>
-  </div>
+    <BTable
+      fill
+      :data="pagedImages"
+      :columns="imageColumns"
+      row-key="id"
+      :pagination="true"
+      :total="imageTotal"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'img'">
+          <div class="image-mg__preview dom-hover" @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))">
+            <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
+          </div>
+        </template>
+      </template>
+    </BTable>
+  </AdminDataPage>
 </template>
 
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
-  import { apiBaseGet, apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import { apiBasePost } from '@/http/request.ts';
   import { bookmarkStore } from '@/store';
-  import { useTableScrollY } from '@/composables/useTableScrollY';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -77,10 +51,8 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   const bookmark = bookmarkStore();
-  const tableCardRef = ref<HTMLElement | null>(null);
-  useTableScrollY({ ref: tableCardRef });
 
   const imgOptions = [
     { label: '使用中', value: 'usedImages' },
@@ -113,10 +85,10 @@
       content: `请确认是否要清理图片？`,
       onOk() {
         apiBasePost('/api/common/clearImages', {
-          images: allImg.value[imgType.value],
+          images: currentImages.value,
         }).then((res) => {
           if (res.status === 200) {
-            message.success('日志清空成功');
+            message.success('图片清理成功');
             searchApiImage();
           }
         });
@@ -130,28 +102,42 @@
       clearTimeout(timer.value);
     }
     timer.value = setTimeout(() => {
+      currentPage.value = 1;
       searchApiImage();
     }, 500);
   }
 
   const searchValue = ref('');
   const imgType = ref('usedImages');
-  const allImg = ref({});
-  const statCards = computed(() => {
-    const totalValue = allImg.value?.[imgType.value]?.length ?? 0;
-    return [
-      {
-        label: '总图片数',
-        value: totalValue,
-        hint: '累计',
-      },
-    ];
+  const allImg = ref<Record<string, any[]>>({});
+  const currentPage = ref(1);
+  const pageSize = ref(20);
+  const currentImages = computed(() => allImg.value?.[imgType.value] ?? []);
+  const imageTotal = computed(() => currentImages.value.length);
+  const pagedImages = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return currentImages.value.slice(start, start + pageSize.value);
   });
+
+  function onPageChange(page: number) {
+    currentPage.value = page;
+  }
+
+  function onSizeChange(_current: number, size: number) {
+    currentPage.value = 1;
+    pageSize.value = size;
+  }
+
+  function onTypeChange() {
+    currentPage.value = 1;
+  }
 
   function searchApiImage() {
     apiBasePost('/api/common/getImages', { name: searchValue.value }).then((res) => {
       if (res.status === 200) {
         allImg.value = res.data.items;
+        const maxPage = Math.max(1, Math.ceil(imageTotal.value / pageSize.value));
+        currentPage.value = Math.min(currentPage.value, maxPage);
       }
     });
   }
@@ -164,16 +150,30 @@
 </script>
 
 <style lang="less" scoped>
-  @import '@/assets/css/admin-manage.less';
-
   .log-search-input {
     flex: 1;
   }
 
+  .image-mg__type-select {
+    width: 120px;
+  }
+
+  .image-mg__preview {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    padding: 2px;
+    border-radius: 8px;
+    background: #fff;
+  }
+
   @media (max-width: 960px) {
-    .image-mg__filters-main {
-      flex-direction: column;
-      align-items: stretch;
+    .log-search-input,
+    .image-mg__type-select {
+      width: 100%;
     }
   }
 </style>

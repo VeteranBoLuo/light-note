@@ -44,7 +44,9 @@ export default defineConfig(({ mode }) => {
       // 读 PORT 环境变量(便于 CI / 多实例 / 预览工具用分配端口);缺省仍用 vite 默认端口
       port: process.env.PORT ? Number(process.env.PORT) : undefined,
       proxy: {
-        '/api':
+        // 只代理真正的 API 前缀。若使用 `/api` 的普通前缀匹配，移动端路由
+        // `/apiLog` 刷新时也会被代理到线上，返回带旧构建哈希的 HTML，随后本地资源 404。
+        '^/api(?:/|$)':
           env.VITE_ENV === 'local'
             ? {
                 target: 'http://127.0.0.1:9001',

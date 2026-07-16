@@ -5,10 +5,16 @@
     :style="{ marginLeft: 'auto', gap: bookmark.isMobile ? '15px' : '5px' }"
   >
     <GlobalSearch />
-    <BButton v-if="showQuickCapture" size="small" type="primary" class="quick-capture-btn" @click="openQuickCapture">
-      {{ $t('inbox.quickCapture') }}
-      <span v-if="inbox.actionTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
-    </BButton>
+    <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
+      <BButton
+        class="quick-capture-btn"
+        :aria-label="$t('inbox.quickCapture')"
+        @click="openQuickCapture"
+      >
+        <svg-icon size="21" :src="icon.common.add" />
+        <span v-if="inbox.actionTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
+      </BButton>
+    </BTooltip>
     <BTooltip v-if="!bookmark.isMobile" :title="$t('navigation.moreEntries')">
       <b-dropdown align="center" trigger="click" :menu-options="moreMenuOptions">
         <div class="more-menu-trigger">
@@ -158,22 +164,45 @@
     cursor: pointer;
   }
   .quick-capture-btn {
+    position: relative;
     flex: 0 0 auto;
-    gap: 6px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 9px;
+    line-height: 1;
+    color: var(--primary-color, #615ced);
+    background: color-mix(in srgb, var(--primary-color, #615ced) 10%, var(--background-color));
+    transition:
+      color 0.2s ease,
+      background-color 0.2s ease,
+      transform 0.2s ease;
+
+    &:hover {
+      color: var(--primary-color, #615ced);
+      background: color-mix(in srgb, var(--primary-color, #615ced) 18%, var(--background-color));
+      transform: translateY(-1px);
+    }
   }
   .quick-capture-count {
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
-    border-radius: 9px;
+    position: absolute;
+    top: -4px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: 999px;
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.22);
+    background: var(--primary-color, #615ced);
     color: #fff;
     font-size: 10px;
     line-height: 1;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    box-shadow: 0 0 0 2px var(--background-color);
   }
   .guest-register-link {
     font-size: 13px;

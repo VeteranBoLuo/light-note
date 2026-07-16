@@ -35,6 +35,11 @@ cd apps/web && npx vue-tsc --noEmit
 cd apps/server && node app.js
 ```
 
+### 本地路由与 API 代理
+
+- Vite 的 API 代理必须使用锚定规则 `^/api(?:/|$)`，不能用普通的 `/api` 前缀匹配。
+- 移动端后台存在 `/apiLog` 页面路由；普通 `/api` 前缀会误将该页面代理到线上，导致刷新后 HTML 与本地静态资源版本不一致并出现哈希文件 404。
+
 ## 代码规范
 
 ### 通用原则

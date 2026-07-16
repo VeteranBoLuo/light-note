@@ -1,8 +1,10 @@
 <template>
   <div class="global-graph-canvas">
-    <div v-if="loading && !nodes.length" class="gg-state"><div class="gg-spinner"></div><span>加载中…</span></div>
+    <div v-if="loading && !nodes.length" class="gg-state"
+      ><div class="gg-spinner"></div><span>{{ t('knowledgeMap.loading') }}</span></div
+    >
     <div v-else-if="!nodes.length" class="gg-state gg-state--empty">
-      还没有可展示的标签关联——多给书签/笔记/文件打些标签就会连起来
+      {{ t('knowledgeMap.empty') }}
     </div>
     <div v-show="nodes.length" ref="containerRef" class="gg-stage"></div>
   </div>
@@ -11,13 +13,15 @@
 <script setup lang="ts">
   import { Graph } from '@antv/g6';
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { TagGraphEdge, TagGraphNode } from '@/api/tagGraph.ts';
-  import { getEdgeColor, getNodeLabel, GRAPH_NODE_COLOR } from '@/components/tagGraph/shared.ts';
+  import { getEdgeColor, getNodeLabel, GRAPH_NODE_COLOR, isNeighbor } from '@/components/tagGraph/shared.ts';
 
   const props = defineProps<{
     nodes: TagGraphNode[];
     edges: TagGraphEdge[];
     loading?: boolean;
+    activeNodeId?: string;
   }>();
   const emit = defineEmits<{
     (e: 'node-click', node: TagGraphNode): void;
@@ -26,6 +30,7 @@
   }>();
 
   const containerRef = ref<HTMLElement | null>(null);
+  const { t } = useI18n();
   let graph: Graph | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
@@ -255,12 +260,9 @@
       graph = new Graph({
         container: containerRef.value,
         data: buildData(),
+        // 标签切换只更新高亮、不再重建数据，因此可以保留初次加载和筛选重排的过渡动画。
         animation: true,
-        behaviors: [
-          { type: 'drag-canvas' },
-          { type: 'zoom-canvas' },
-          { type: 'hover-activate', degree: 1 },
-        ],
+        behaviors: [{ type: 'drag-canvas' }, { type: 'zoom-canvas' }, { type: 'hover-activate', degree: 1 }],
         zoomRange: [0.12, 2.4],
       } as any);
       graph.on('node:click', (e: any) => {
@@ -273,10 +275,47 @@
       });
       graph.on('canvas:click', () => emit('canvas-click'));
       await graph.render();
+      await syncHighlight();
       return;
     }
     graph.setData(buildData());
     await graph.render();
+    await syncHighlight();
+  }
+
+  async function syncHighlight() {
+    if (!graph || !graph.rendered) return;
+    const activeId = props.activeNodeId;
+    const nodeUpdates = graph.getNodeData().map((node: any) => {
+      const active = !activeId || node.id === activeId || isNeighbor(String(node.id), activeId, props.edges);
+      return {
+        id: node.id,
+        style: {
+          opacity: active ? 1 : 0.16,
+          labelOpacity: active ? 1 : 0.16,
+          lineWidth: node.id === activeId ? 3 : 1.5,
+        },
+      };
+    });
+    const edgeUpdates = graph.getEdgeData().map((edge: any) => {
+      const active = !activeId || edge.source === activeId || edge.target === activeId;
+      return {
+        id: edge.id,
+        style: {
+          opacity: !activeId ? 0.34 : active ? 0.78 : 0.04,
+          lineWidth: active ? Math.max(1.6, Number(edge.data?.weight || 1)) : 1,
+        },
+      };
+    });
+    graph.updateNodeData(nodeUpdates);
+    graph.updateEdgeData(edgeUpdates);
+    await graph.draw();
+  }
+
+  function resetView() {
+    if (!graph) return;
+    graph.zoomTo(1);
+    graph.translateTo([0, 0]);
   }
 
   onMounted(async () => {
@@ -293,6 +332,12 @@
     () => [props.nodes, props.edges, props.loading],
     () => render(),
   );
+  watch(
+    () => props.activeNodeId,
+    () => syncHighlight(),
+  );
+
+  defineExpose({ resetView });
 </script>
 
 <style scoped lang="less">
@@ -305,7 +350,11 @@
     border-radius: 10px;
     border: 1px solid var(--card-border-color);
     background:
-      radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--resource-tag-color, #615ced) 8%, transparent), transparent 34%),
+      radial-gradient(
+        circle at 20% 15%,
+        color-mix(in srgb, var(--resource-tag-color, #615ced) 8%, transparent),
+        transparent 34%
+      ),
       linear-gradient(135deg, color-mix(in srgb, var(--background-color) 96%, white), var(--background-color));
     animation: gg-fade 0.8s ease both;
   }

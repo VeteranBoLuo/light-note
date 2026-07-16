@@ -1,5 +1,5 @@
 <template>
-  <div class="table-container">
+  <div class="table-container" :class="{ 'is-fill': props.fill, 'has-pagination': props.pagination }">
     <!-- 表头 -->
     <div class="table-header" :style="gridStyle">
       <div v-if="props.selectable" class="header-cell" style="width: 50px">
@@ -54,36 +54,35 @@
     </div>
 
     <!-- 表格内容 -->
-    <div class="table-body" :style="{ maxHeight: props.pagination ? 'calc(100% - 100px)' : '100%' }">
-      <div
-        v-for="(item, rowIndex) in sortedData"
-        :key="rowIndex"
-        class="table-row"
-        :class="{ 'is-clickable': props.rowClickable }"
-        :style="gridStyle"
-        @click="handleRowClick(item, rowIndex)"
-      >
-        <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
-          <BCheckbox :checked="isRowSelected(item)" @change="(checked) => handleRowSelectChange(item, checked)" />
+    <div class="table-body">
+      <template v-for="(item, rowIndex) in sortedData" :key="item[props.rowKey] ?? rowIndex">
+        <div
+          class="table-row"
+          :class="{ 'is-clickable': props.rowClickable }"
+          :style="gridStyle"
+          @click="handleRowClick(item, rowIndex)"
+        >
+          <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
+            <BCheckbox :checked="isRowSelected(item)" @change="(checked) => handleRowSelectChange(item, checked)" />
+          </div>
+          <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
+            <slot name="bodyCell" :text="item[col.key]" :record="item" :index="rowIndex" :column="col">
+              <BTooltip v-if="col.ellipsis !== false" :title="String(item[col.key] ?? '')">
+                <span class="cell-text">{{ item[col.key] }}</span>
+              </BTooltip>
+              <template v-else>{{ item[col.key] }}</template>
+            </slot>
+          </div>
         </div>
-        <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
-          <slot name="bodyCell" :text="item[col.key]" :record="item" :index="rowIndex" :column="col">
-            <BTooltip v-if="col.ellipsis !== false" :title="String(item[col.key] ?? '')">
-              <span class="cell-text">{{ item[col.key] }}</span>
-            </BTooltip>
-            <template v-else>{{ item[col.key] }}</template>
-          </slot>
+        <div
+          v-if="
+            props.expandedRows?.length && item[props.rowKey] != null && props.expandedRows.includes(item[props.rowKey])
+          "
+          class="table-expand-row"
+        >
+          <slot name="expandedRow" :record="item" />
         </div>
-      </div>
-      <!-- 展开行 -->
-      <div
-        v-if="
-          props.expandedRows?.length && item[props.rowKey] != null && props.expandedRows.includes(item[props.rowKey])
-        "
-        class="table-expand-row"
-      >
-        <slot name="expandedRow" :record="item" />
-      </div>
+      </template>
     </div>
 
     <!-- 分页器 -->
@@ -100,7 +99,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, useSlots, PropType, ref } from 'vue';
+  import { computed, PropType, ref } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -108,7 +107,7 @@
 
   const props = defineProps({
     data: {
-      type: Array,
+      type: Array as PropType<any[]>,
       default: () => [],
     },
     columns: {
@@ -151,11 +150,13 @@
       type: Array as PropType<string[]>,
       default: () => [],
     },
+    fill: {
+      type: Boolean,
+      default: false,
+    },
   });
 
   const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick']);
-  const slots = useSlots();
-
   // 生成网格列宽样式
   const gridStyle = computed(() => {
     const columns = props.selectable
@@ -249,6 +250,12 @@
     gap: 8px;
   }
 
+  .table-container.is-fill {
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+  }
+
   .table-header {
     display: grid;
     background-color: var(--table-header-bg-color);
@@ -311,6 +318,17 @@
     gap: 8px;
     overflow-y: auto;
     min-height: 100px;
+    max-height: 100%;
+  }
+
+  .table-container.has-pagination:not(.is-fill) .table-body {
+    max-height: calc(100% - 100px);
+  }
+
+  .table-container.is-fill .table-body {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
   }
 
   .table-row {

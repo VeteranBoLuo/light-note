@@ -9,17 +9,19 @@
     >
       <section class="manage-header">
         <div class="manage-header__top">
-          <div class="manage-copy">
-            <div class="eyebrow">{{ t('tagManage.workspaceEyebrow') }}</div>
-            <h1>{{ t('tagManage.title') }}</h1>
-            <p>{{ t('tagManage.subtitle') }}</p>
-          </div>
+          <div class="manage-copy-stage">
+            <div class="manage-copy manage-copy--full" :aria-hidden="isCompactHeader">
+              <div class="eyebrow">{{ t('tagManage.workspaceEyebrow') }}</div>
+              <h1>{{ t('tagManage.title') }}</h1>
+              <p>{{ t('tagManage.subtitle') }}</p>
+            </div>
 
-          <div class="overview-strip" :aria-label="t('tagManage.overview')">
-            <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
-              <span class="overview-dot"></span>
-              <strong>{{ stat.value }}</strong>
-              <span>{{ stat.label }}</span>
+            <div class="manage-copy manage-copy--compact" :aria-hidden="!isCompactHeader">
+              <h2>{{ t('tagManage.title') }}</h2>
+              <span class="compact-overview">
+                <strong>{{ overview.tag }}</strong>
+                {{ t('tagManage.statTotal') }}
+              </span>
             </div>
           </div>
 
@@ -34,6 +36,14 @@
             <b-button @click="handleToBack" v-click-log="{ module: '标签管理', operation: '返回' }">
               {{ t('common.back') }}
             </b-button>
+          </div>
+        </div>
+
+        <div class="overview-strip" :aria-label="t('tagManage.overview')" :aria-hidden="isCompactHeader">
+          <div v-for="stat in stats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
+            <span class="overview-dot"></span>
+            <strong>{{ stat.value }}</strong>
+            <span>{{ stat.label }}</span>
           </div>
         </div>
       </section>
@@ -330,6 +340,8 @@
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
   const viewMode = ref<'card' | 'list'>((user.preferences.tagManageView as 'card' | 'list') || 'card');
+  const COMPACT_ENTER_SCROLL_TOP = 96;
+  const COMPACT_EXIT_SCROLL_TOP = 16;
   const resultScrollerRef = ref<HTMLElement>();
   const isCompactHeader = ref(false);
   const hasScrollAbove = ref(false);
@@ -379,7 +391,11 @@
     const remainingScroll = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
     hasScrollAbove.value = scroller.scrollTop > 4;
     hasScrollBelow.value = remainingScroll > 4;
-    isCompactHeader.value = scroller.scrollTop > 28;
+    if (isCompactHeader.value) {
+      if (scroller.scrollTop <= COMPACT_EXIT_SCROLL_TOP) isCompactHeader.value = false;
+    } else if (scroller.scrollTop >= COMPACT_ENTER_SCROLL_TOP) {
+      isCompactHeader.value = true;
+    }
   }
 
   function handleResultScroll() {
@@ -521,9 +537,9 @@
     position: relative;
     flex-shrink: 0;
     border-radius: @radius-panel;
-    padding: 16px 18px;
+    padding: 12px 16px;
     overflow: hidden;
-    transition: padding 0.22s ease;
+    transition: padding 0.18s ease;
 
     &::after {
       content: '';
@@ -545,49 +561,94 @@
   .manage-header__top {
     position: relative;
     z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 14px 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .manage-copy-stage {
+    position: relative;
+    height: 60px;
+    min-width: 0;
+    transition: height 0.18s ease;
   }
 
   .manage-copy {
-    flex: 1;
+    position: absolute;
+    inset: 0;
     min-width: 0;
+    transition:
+      opacity 0.15s ease,
+      transform 0.18s ease,
+      visibility 0s linear 0s;
+  }
+
+  .manage-copy--full {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 
     h1 {
-      margin: 3px 0 0;
-      font-size: 22px;
-      line-height: 1.25;
-      transition: font-size 0.22s ease;
+      margin: 1px 0 0;
+      font-size: 21px;
+      line-height: 1.2;
     }
 
     p {
-      max-height: 48px;
-      margin: 6px 0 0;
-      max-width: 720px;
+      margin: 3px 0 0;
+      max-width: 760px;
       overflow: hidden;
-      font-size: 13px;
-      line-height: 1.55;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      line-height: 1.4;
       opacity: @muted-opacity;
-      transition:
-        max-height 0.22s ease,
-        margin 0.22s ease,
-        opacity 0.16s ease;
+    }
+  }
+
+  .manage-copy--compact {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(5px);
+    transition-delay: 0s, 0s, 0.15s;
+
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+  }
+
+  .compact-overview {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    padding-left: 12px;
+    border-left: 1px solid var(--workbench-border-color);
+    color: var(--sub-text-color);
+    font-size: 12px;
+    white-space: nowrap;
+
+    strong {
+      color: var(--resource-tag-color);
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
     }
   }
 
   .eyebrow {
-    max-height: 20px;
-    overflow: hidden;
     color: var(--resource-tag-color);
     font-size: 12px;
     font-weight: 700;
+    line-height: 14px;
     letter-spacing: 0.08em;
-    transition:
-      max-height 0.18s ease,
-      opacity 0.16s ease;
   }
 
   .header-actions,
@@ -608,19 +669,27 @@
   .overview-strip {
     position: relative;
     z-index: 1;
-    order: 3;
-    flex-basis: 100%;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px 22px;
-    margin-top: 0;
-    padding: 9px 12px;
+    gap: 8px 20px;
+    max-height: 34px;
+    margin-top: 6px;
+    padding: 7px 10px;
+    box-sizing: border-box;
+    overflow: hidden;
     border-radius: 12px;
     background: color-mix(in srgb, var(--tag-muted-bg) 72%, transparent);
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
     transition:
-      padding 0.22s ease,
-      background 0.22s ease;
+      max-height 0.18s ease,
+      margin 0.18s ease,
+      padding 0.18s ease,
+      opacity 0.12s ease,
+      transform 0.18s ease,
+      visibility 0s linear 0s;
   }
 
   .overview-item {
@@ -632,7 +701,7 @@
     white-space: nowrap;
 
     strong {
-      font-size: 17px;
+      font-size: 16px;
       color: var(--text-color);
       opacity: 1;
       font-variant-numeric: tabular-nums;
@@ -828,54 +897,36 @@
 
   .tag-manage-page--compact {
     .manage-header {
-      padding: 9px 14px;
+      padding: 10px 16px;
     }
 
-    .manage-header__top {
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: 16px;
+    .manage-copy-stage {
+      height: 40px;
     }
 
-    .manage-copy {
-      flex: 0 0 auto;
-
-      h1 {
-        margin: 0;
-        font-size: 18px;
-      }
-
-      p {
-        max-height: 0;
-        margin: 0;
-        opacity: 0;
-      }
-    }
-
-    .eyebrow {
-      max-height: 0;
+    .manage-copy--full {
       opacity: 0;
+      visibility: hidden;
+      transform: translateY(-5px);
+      transition-delay: 0s, 0s, 0.15s;
+    }
+
+    .manage-copy--compact {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+      transition-delay: 0.03s, 0.03s, 0s;
     }
 
     .overview-strip {
-      order: initial;
-      min-width: 0;
-      flex: 1;
-      flex-basis: auto;
-      flex-wrap: nowrap;
-      gap: 12px;
-      overflow: hidden;
-      padding: 0;
-      background: transparent;
-    }
-
-    .overview-item {
-      gap: 5px;
-      font-size: 11px;
-
-      strong {
-        font-size: 14px;
-      }
+      max-height: 0;
+      margin-top: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition-delay: 0s, 0s, 0s, 0s, 0s, 0.18s;
     }
   }
 
@@ -1233,6 +1284,15 @@
     background: color-mix(in srgb, var(--resource-tag-color) 10%, var(--tag-muted-bg));
     font-size: 28px;
     font-weight: 700;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .manage-header,
+    .manage-copy-stage,
+    .manage-copy,
+    .overview-strip {
+      transition: none;
+    }
   }
 
   @media (max-width: 1180px) {

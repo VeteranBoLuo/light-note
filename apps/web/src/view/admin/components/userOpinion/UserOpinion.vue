@@ -1,131 +1,125 @@
 <template>
-  <div class="admin-panel-container">
-    <section class="admin-panel user-opinion__panel">
-      <header class="admin-header user-opinion__header">
-        <div class="admin-title-block">
-          <p class="admin-eyebrow">Admin / Feedback</p>
-          <h2 class="admin-title">用户反馈</h2>
-          <p class="admin-subtitle">处理用户反馈、维护回复状态，并跟踪已查看进度。</p>
+  <AdminDataPage
+    eyebrow="Admin / Feedback"
+    title="用户反馈"
+    subtitle="处理用户反馈、维护回复状态，并跟踪已查看进度"
+    toolbar-hint="支持内容检索和状态筛选，回复后用户会收到未读提醒"
+    :summary-count="total"
+  >
+    <template #metrics>
+      <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
+        <span class="admin-stat-label">{{ card.label }}</span>
+        <strong class="admin-stat-value">{{ card.value }}</strong>
+        <span class="admin-stat-hint">{{ card.hint }}</span>
+      </li>
+    </template>
+
+    <template #toolbar>
+      <b-input
+        v-model:value="searchValue"
+        placeholder="用户、联系方式、反馈内容..."
+        class="log-search-input"
+        @input="handleSearch"
+      >
+        <template #prefix>
+          <svg-icon :src="icon.navigation.search" size="16" />
+        </template>
+      </b-input>
+      <BSelect
+        v-model:value="statusFilter"
+        class="user-opinion__status-filter"
+        :options="statusOptions"
+        @change="searchOpinionList"
+      />
+      <span class="user-opinion__hide-internal">
+        <BSwitch v-model:checked="hideInternal" @change="onToggleInternal" />
+        隐藏内部账号(管理员/测试)
+      </span>
+    </template>
+
+    <BTable
+      fill
+      :data="opinionList"
+      :columns="opinionColumns"
+      row-key="id"
+      :row-clickable="true"
+      :pagination="true"
+      :total="total"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
+      @row-click="onRowClick"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'status'">
+          <span class="user-opinion__status-tag" :class="`user-opinion__status-tag--${record.status || 'pending'}`">
+            {{ statusMeta(record.status).label }}
+          </span>
+        </template>
+        <template v-else-if="column.key === 'operation'">
+          <div class="user-opinion__operation">
+            <BActionButton action="delete" :tooltip="$t('common.delete')" @click="delOpinion(record)" />
+          </div>
+        </template>
+      </template>
+    </BTable>
+  </AdminDataPage>
+
+  <BModal v-model:visible="detailVisible" title="反馈详情" width="600px" :show-footer="false" :mask-closable="true">
+    <div class="opinion-detail" v-if="selectedRecord">
+      <div class="opinion-detail__grid">
+        <div>
+          <label>反馈内容</label>
+          <p>{{ selectedRecord.content }}</p>
         </div>
-      </header>
+        <div>
+          <label>提交时间</label>
+          <p>{{ selectedRecord.createTime }}</p>
+        </div>
+        <div>
+          <label>联系方式</label>
+          <p>{{ selectedRecord.phone || '-' }}</p>
+        </div>
+        <div>
+          <label>查看状态</label>
+          <p>{{ viewStatusText(selectedRecord) }}</p>
+        </div>
+      </div>
 
-      <ul class="admin-stats">
-        <li v-for="card in statCards" :key="card.label" class="admin-stat-card">
-          <span class="admin-stat-label">{{ card.label }}</span>
-          <strong class="admin-stat-value">{{ card.value }}</strong>
-          <span class="admin-stat-hint">{{ card.hint }}</span>
-        </li>
-      </ul>
-
-      <div class="admin-filters">
-        <div class="admin-filters-main">
-          <b-input
-            v-model:value="searchValue"
-            placeholder="用户、联系方式、反馈内容..."
-            class="log-search-input"
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="16" />
-            </template>
-          </b-input>
-          <BSelect
-            v-model:value="statusFilter"
-            class="user-opinion__status-filter"
-            :options="statusOptions"
-            @change="searchOpinionList"
+      <div>
+        <label>反馈图片</label>
+        <div class="opinion-detail__images" v-if="parseImgArray(selectedRecord.imgArray).length > 0">
+          <img
+            v-for="(src, index) in parseImgArray(selectedRecord.imgArray)"
+            :key="`${src}-${index}`"
+            :src="src"
+            alt=""
+            @click="bookmark.refreshViewer(src)"
           />
-          <label class="user-opinion__hide-internal">
-            <BSwitch v-model:checked="hideInternal" @change="onToggleInternal" />隐藏内部账号(管理员/测试)
-          </label>
         </div>
-        <span class="admin-filters-hint">支持内容检索和状态筛选，回复后用户会收到未读提醒。</span>
+        <p v-else>-</p>
       </div>
 
-      <div class="admin-table-card">
-        <BTable
-          :data="opinionList"
-          :columns="opinionColumns"
-          rowKey="id"
-          :row-clickable="true"
-          :pagination="true"
-          :total="total"
-          :current-page="currentPage"
-          :page-size="pageSize"
-          @page-change="onPageChange"
-          @size-change="onSizeChange"
-          @row-click="onRowClick"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'status'">
-              <span class="user-opinion__status-tag" :class="`user-opinion__status-tag--${record.status || 'pending'}`">
-                {{ statusMeta(record.status).label }}
-              </span>
-            </template>
-            <template v-else-if="column.key === 'operation'">
-              <div class="user-opinion__operation">
-                <BActionButton action="delete" :tooltip="$t('common.delete')" @click="delOpinion(record)" />
-              </div>
-            </template>
-          </template>
-        </BTable>
-      </div>
-
-      <BModal v-model:visible="detailVisible" title="反馈详情" width="600px" :show-footer="false" :mask-closable="true">
-        <div class="opinion-detail" v-if="selectedRecord">
-          <div class="opinion-detail__grid">
-            <div>
-              <label>反馈内容</label>
-              <p>{{ selectedRecord.content }}</p>
-            </div>
-            <div>
-              <label>提交时间</label>
-              <p>{{ selectedRecord.createTime }}</p>
-            </div>
-            <div>
-              <label>联系方式</label>
-              <p>{{ selectedRecord.phone || '-' }}</p>
-            </div>
-            <div>
-              <label>查看状态</label>
-              <p>{{ viewStatusText(selectedRecord) }}</p>
-            </div>
-          </div>
-
-          <div>
-            <label>反馈图片</label>
-            <div class="opinion-detail__images" v-if="parseImgArray(selectedRecord.imgArray).length > 0">
-              <img
-                v-for="(src, index) in parseImgArray(selectedRecord.imgArray)"
-                :key="`${src}-${index}`"
-                :src="src"
-                alt=""
-                @click="bookmark.refreshViewer(src)"
-              />
-            </div>
-            <p v-else>-</p>
-          </div>
-
-          <div class="opinion-reply-editor">
-            <div class="opinion-reply-editor__header">
-              <label>管理员回复</label>
-              <b-button type="primary" :loading="replying" @click="submitReply(selectedRecord)">保存回复</b-button>
-            </div>
-            <a-textarea
-              v-model:value="replyDrafts[selectedRecord.id]"
-              :rows="3"
-              :placeholder="selectedRecord.replyContent || '请输入回复内容，回复后该条反馈会切换为已回复状态'"
-            />
-            <div class="opinion-reply-editor__footer">
-              <span v-if="selectedRecord.replyTime" class="opinion-reply-editor__time">
-                上次回复时间：{{ selectedRecord.replyTime }}
-              </span>
-            </div>
-          </div>
+      <div class="opinion-reply-editor">
+        <div class="opinion-reply-editor__header">
+          <label>管理员回复</label>
+          <b-button type="primary" :loading="replying" @click="submitReply(selectedRecord)">保存回复</b-button>
         </div>
-      </BModal>
-    </section>
-  </div>
+        <BInput
+          type="textarea"
+          v-model:value="replyDrafts[selectedRecord.id]"
+          :rows="3"
+          :placeholder="selectedRecord.replyContent || '请输入回复内容，回复后该条反馈会切换为已回复状态'"
+        />
+        <div class="opinion-reply-editor__footer">
+          <span v-if="selectedRecord.replyTime" class="opinion-reply-editor__time">
+            上次回复时间：{{ selectedRecord.replyTime }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </BModal>
 </template>
 
 <script lang="ts" setup>
@@ -138,6 +132,7 @@
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -309,12 +304,6 @@
 </script>
 
 <style lang="less" scoped>
-  @import '@/assets/css/admin-manage.less';
-
-  .admin-table-card {
-    padding: 0;
-  }
-
   .log-search-input {
     flex: 1;
   }

@@ -41,13 +41,11 @@
               margin: 4px 0 0;
               max-height: 120px;
               overflow: auto;
-              background: var(--menu-item-h-bg-color);
               padding: 8px;
               border-radius: 6px;
               font-size: 12px;
             "
-            >{{ selectedRecord.req }}</pre
-          >
+            >{{ selectedRecord.req }}</pre>
         </div>
         <div>ip地址：{{ selectedRecord?.ip }}</div>
         <div>指纹：{{ selectedRecord.system?.fingerprint }}</div>
@@ -77,8 +75,8 @@
   const logList = ref([]);
 
   const logColumns = [
+    { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
-    { title: '系统', key: 'system', width: '80px' },
     { title: '时间', key: 'requestTime', width: '1fr' },
   ];
 
