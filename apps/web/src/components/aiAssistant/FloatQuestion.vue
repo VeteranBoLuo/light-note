@@ -3,7 +3,7 @@
     <BDrawer
       :open="isOpen"
       :title="t('ai.title')"
-      :width="bookmark.isMobile ? '100%' : '480px'"
+      :width="bookmark.isMobile ? '100%' : 'clamp(480px, 28vw, 720px)'"
       :full-screen="bookmark.isMobile || (bookmark.isDesktop && isMaximized)"
       mobile-full-screen
       @close="minimize"
