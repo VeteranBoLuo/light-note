@@ -251,14 +251,14 @@
 
 <style scoped>
   .message {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
     animation: fadeIn 0.3s ease;
   }
 
   .message-content {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 0.625rem;
     max-width: 90%;
   }
 
@@ -283,12 +283,12 @@
   }
 
   .bubble {
-    border-radius: 1.125rem;
+    border-radius: 1rem;
     max-width: 100%;
   }
 
   .message.user .bubble {
-    padding: 1rem 1.25rem;
+    padding: 0.625rem 0.875rem;
     background: var(--ai-user-background-color);
     color: var(--text-color);
     border-bottom-right-radius: 0.25rem;
@@ -309,13 +309,13 @@
   }
 
   .user-contexts {
-    margin-top: 10px;
-    padding-top: 9px;
+    margin-top: 8px;
+    padding-top: 7px;
     border-top: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
   }
 
   .user-contexts__title {
-    margin-bottom: 6px;
+    margin-bottom: 5px;
     color: var(--desc-color);
     font-size: 11px;
     line-height: 1.2;
@@ -488,7 +488,7 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    margin-top: 0.3rem;
+    margin-top: 0.2rem;
     padding: 0 0.15rem;
   }
 
@@ -501,8 +501,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     border: none;
     background: transparent;

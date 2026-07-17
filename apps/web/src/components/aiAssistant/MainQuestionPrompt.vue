@@ -117,18 +117,19 @@
 
 <style scoped lang="less">
   .recommendation-container {
-    padding: 0 1rem 0.5rem;
-    border-radius: 16px;
+    padding: 0 0.5rem 0.375rem;
+    border-radius: 14px;
   }
 
   .recommendation-title {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
     color: #10b981;
     font-weight: 600;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.375rem;
   }
 
   .recommendation-title::before {
@@ -138,16 +139,21 @@
   .recommendation-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .recommendation-item {
-    width: auto;
+    width: fit-content;
+    max-width: 100%;
     height: auto;
+    min-height: 30px;
     background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
-    padding: 0.5rem 1rem;
-    border-radius: 1rem;
+    padding: 6px 10px;
+    border-radius: 999px;
     font-size: 0.75rem;
+    line-height: 1.35;
+    text-align: left;
+    white-space: normal;
     color: #4b5563;
     border: 0;
     cursor: pointer;
@@ -164,6 +170,17 @@
     color: var(--desc-color);
     &:hover {
       color: var(--text-color);
+    }
+  }
+
+  @media (max-width: 600px) {
+    .recommendation-container {
+      padding-inline: 0.25rem;
+    }
+
+    .recommendation-item {
+      min-height: 40px;
+      padding: 8px 12px;
     }
   }
 </style>

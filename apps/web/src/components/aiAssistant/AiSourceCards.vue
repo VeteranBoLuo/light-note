@@ -92,27 +92,27 @@
 
 <style scoped lang="less">
   .ai-sources {
-    margin: -8px 0 20px 44px;
+    margin: -6px 0 16px 44px;
   }
   .ai-sources__title {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     color: var(--desc-color);
     font-size: 12px;
     font-weight: 600;
   }
   .ai-sources__list {
     display: grid;
-    gap: 6px;
+    gap: 5px;
   }
   .ai-source {
     --source-color: var(--resource-bookmark-color);
     width: 100%;
-    height: 60px;
-    min-height: 60px;
+    height: 54px;
+    min-height: 54px;
     justify-content: flex-start;
     text-align: left;
-    gap: 10px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 6px 9px;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
@@ -151,9 +151,9 @@
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
     background: color-mix(in srgb, var(--source-color) 10%, var(--card-background));
     color: var(--source-color);
   }
@@ -161,7 +161,7 @@
   .ai-source__copy {
     min-width: 0;
     display: grid;
-    gap: 3px;
+    gap: 2px;
     flex: 1;
   }
   .ai-source__copy strong,
@@ -193,8 +193,8 @@
     }
 
     .ai-source {
-      height: 58px;
-      min-height: 58px;
+      height: 52px;
+      min-height: 52px;
     }
   }
 </style>

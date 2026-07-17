@@ -1098,8 +1098,8 @@
   .ai-message-action-stack {
     display: grid;
     width: min(680px, calc(100% - 44px));
-    gap: 10px;
-    margin: -12px 0 20px 44px;
+    gap: 8px;
+    margin: -10px 0 16px 44px;
   }
 
   .ai-message-action-stack :deep(.ai-interaction-card),
@@ -1111,7 +1111,7 @@
   @container ai-chat (max-width: 520px) {
     .ai-message-action-stack {
       width: 100%;
-      margin: 4px 0 16px;
+      margin: 4px 0 14px;
     }
   }
 
