@@ -1,8 +1,8 @@
 const GROUPS = {
   base: ['search_content', 'search_knowledge_base', 'get_user_info', 'get_ai_quota'],
   bookmark: ['query_bookmarks', 'create_bookmark', 'query_link_health'],
-  note: ['query_notes', 'read_note', 'analyze_resource_images', 'create_note'],
-  file: ['query_files', 'get_storage_usage', 'analyze_resource_images'],
+  note: ['query_notes', 'read_note', 'analyze_resource_images', 'create_note', 'create_image_note'],
+  file: ['query_files', 'get_storage_usage', 'analyze_resource_images', 'save_attachment_to_cloud'],
   tag: ['query_tags', 'add_tag'],
   trash: ['query_trash', 'restore_trash'],
   url: ['read_url', 'create_bookmark'],

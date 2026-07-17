@@ -93,17 +93,28 @@ function getToolDefinitions(tools) {
 }
 
 const PUBLIC_TOOL_ERROR_CODES = new Set([
+  'ATTACHMENT_EXPIRED',
+  'ATTACHMENT_ID_REQUIRED',
+  'ATTACHMENT_NOT_FOUND',
+  'ATTACHMENT_NOT_IMAGE',
+  'ATTACHMENT_NOT_UPLOADED',
   'CONTENT_TOO_LONG',
   'DUPLICATE_NAME',
   'DUPLICATE_TITLE',
   'DUPLICATE_URL',
   'EMPTY_PATCH',
   'FILTER_REQUIRED',
+  'FILE_EXTENSION_MISMATCH',
+  'FILE_CONTENT_INVALID',
+  'FILE_NAME_CONFLICT',
+  'FILE_NAME_INVALID',
+  'FILE_SIZE_MISMATCH',
   'ID_REQUIRED',
   'INVALID_NOTE_TYPE',
   'INVALID_STATUS',
   'INVALID_TYPE',
   'NOT_FOUND',
+  'STORAGE_QUOTA_EXCEEDED',
   'TAG_DUPLICATE',
   'TAG_REQUIRED',
   'TAG_TOO_LONG',
@@ -241,11 +252,11 @@ function extractToolSources(name, raw) {
   const rows = Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : raw?.id ? [raw] : [];
   if (!rows.length) return [];
   const sourceType =
-    name === 'query_notes' || name === 'read_note' || name === 'create_note'
+    name === 'query_notes' || name === 'read_note' || name === 'create_note' || name === 'create_image_note'
       ? 'note'
       : name === 'query_bookmarks' || name === 'create_bookmark'
         ? 'bookmark'
-        : name === 'query_files'
+        : name === 'query_files' || name === 'save_attachment_to_cloud'
           ? 'file'
           : name === 'search_knowledge_base'
             ? 'knowledge'
@@ -254,7 +265,7 @@ function extractToolSources(name, raw) {
   return rows.slice(0, 10).map((row) => ({
     type: sourceType,
     id: String(row.id || row.slug || ''),
-    title: String(row.title || row.name || row.file_name || '未命名').slice(0, 160),
+    title: String(row.title || row.name || row.file_name || row.fileName || '未命名').slice(0, 160),
     url: sourceType === 'bookmark' ? String(row.url || '') : undefined,
     excerpt: plainText(row.content || row.description || '').slice(0, 240) || undefined,
   }));
@@ -659,13 +670,14 @@ export async function agentChat(req, res) {
       ? []
       : selectAgentTools(toolRegistry, {
           message,
-          contextTypes: (Array.isArray(contexts) ? contexts : [])
-            .map((item) => String(item?.type || ''))
-            .filter(Boolean),
+          contextTypes: [
+            ...(Array.isArray(contexts) ? contexts : []).map((item) => String(item?.type || '')).filter(Boolean),
+            ...(Array.isArray(attachmentIds) && attachmentIds.length ? ['file'] : []),
+          ],
           userRole,
           allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
           allowVisitorWrite: req.adminContext?.mode === 'maintain',
-          maxTools: 10,
+          maxTools: Array.isArray(attachmentIds) && attachmentIds.length ? 12 : 10,
         });
     trace.selectedTools = selectedTools.map((tool) => tool.name);
 

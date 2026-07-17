@@ -95,7 +95,10 @@
 
   const textInput = ref<{ focus: () => void } | null>(null);
   const attachmentPicker = ref<{ attachCloudFile: (fileId: string) => Promise<void> } | null>(null);
-  const attachmentBlocked = computed(() => props.attachments.some((attachment) => attachment.status !== 'ready'));
+  // 文件直传确认后原文件就已经可用；OCR/文字提取只影响总结问答，不再阻断发送、保存或插图。
+  const attachmentBlocked = computed(() =>
+    props.attachments.some((attachment) => attachment.status === 'awaiting_upload'),
+  );
 
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
   const quotaPercent = computed(() => {

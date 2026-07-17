@@ -13,6 +13,10 @@ const tools = [
   { name: 'read_note' },
   { name: 'analyze_resource_images' },
   { name: 'create_note', isWrite: true },
+  { name: 'create_image_note', isWrite: true },
+  { name: 'query_files' },
+  { name: 'get_storage_usage' },
+  { name: 'save_attachment_to_cloud', isWrite: true },
   { name: 'query_users', requireRoot: true },
   { name: 'get_security_events', requireRoot: true },
 ];
@@ -70,5 +74,22 @@ describe('selectAgentTools', () => {
       userRole: 'user',
     });
     expect(selected.some((tool) => tool.name === 'read_note')).toBe(true);
+  });
+
+  it('附件保存和图片笔记意图会提供对应的确认式写工具', () => {
+    const saveTools = selectAgentTools(registry, {
+      message: '把这个文件保存到云空间',
+      contextTypes: ['file'],
+      userRole: 'user',
+      maxTools: 12,
+    });
+    const noteTools = selectAgentTools(registry, {
+      message: '创建图片笔记并插入这张图',
+      contextTypes: ['file'],
+      userRole: 'user',
+      maxTools: 12,
+    });
+    expect(saveTools.some((tool) => tool.name === 'save_attachment_to_cloud')).toBe(true);
+    expect(noteTools.some((tool) => tool.name === 'create_image_note')).toBe(true);
   });
 });

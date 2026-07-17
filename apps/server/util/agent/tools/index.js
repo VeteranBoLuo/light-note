@@ -15,6 +15,8 @@ import queryOperationLogs from './query_operation_logs.js';
 import getActiveUsers from './get_active_users.js';
 import getTokenUsage from './get_token_usage.js';
 import createNote from './create_note.js';
+import createImageNote from './create_image_note.js';
+import saveAttachmentToCloud from './save_attachment_to_cloud.js';
 import queryTrash from './query_trash.js';
 import restoreTrash from './restore_trash.js';
 import addTag from './add_tag.js';
@@ -56,6 +58,8 @@ export default [
   getActiveUsers,
   getTokenUsage,
   createNote,
+  createImageNote,
+  saveAttachmentToCloud,
   queryTrash,
   restoreTrash,
   addTag,

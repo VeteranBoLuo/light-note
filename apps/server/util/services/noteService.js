@@ -15,6 +15,7 @@ export async function createNote({
   request,
   suppressUserRewards = false,
   maxContentLength = 1_000_000,
+  trustedImageUrls = [],
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const type = note.type === 'md' ? 'markdown' : String(note.type || 'html');
@@ -38,7 +39,11 @@ export async function createNote({
     const imageUrls = extractNoteImageUrls(content);
     if (imageUrls.length) {
       const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId, connection });
-      for (const url of ownedUrls) {
+      // trustedImageUrls 仅供已经完成原文件归属校验、并刚写入本站图片目录的内部服务使用。
+      // 仍与正文实际引用取交集，避免登记正文未使用的图片或任意外部 URL。
+      const trusted = new Set((Array.isArray(trustedImageUrls) ? trustedImageUrls : []).map(String));
+      const registeredUrls = [...new Set([...ownedUrls, ...imageUrls.filter((url) => trusted.has(url))])];
+      for (const url of registeredUrls) {
         await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: data.id, url })]);
       }
     }

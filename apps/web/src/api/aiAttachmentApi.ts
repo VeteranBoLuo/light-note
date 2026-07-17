@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { apiBasePost } from '@/http/request';
 
-export type AiAttachmentStatus = 'awaiting_upload' | 'queued' | 'parsing' | 'ready' | 'failed';
+export type AiAttachmentStatus = 'awaiting_upload' | 'queued' | 'parsing' | 'ready' | 'no_text' | 'failed';
 
 export interface AiAttachment {
   id: string;

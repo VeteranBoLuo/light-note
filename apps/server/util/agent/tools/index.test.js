@@ -16,7 +16,15 @@ describe('Agent 工具注册表', () => {
   it('所有写工具显式声明有效风险等级和确认策略', () => {
     const writeTools = tools.filter((tool) => tool.isWrite);
     expect(writeTools.map((tool) => tool.name).sort()).toEqual(
-      ['add_tag', 'create_bookmark', 'create_note', 'restore_trash', 'write_knowledge_base'].sort(),
+      [
+        'add_tag',
+        'create_bookmark',
+        'create_image_note',
+        'create_note',
+        'restore_trash',
+        'save_attachment_to_cloud',
+        'write_knowledge_base',
+      ].sort(),
     );
     for (const tool of writeTools) {
       expect(['low', 'medium', 'high']).toContain(tool.riskLevel);

@@ -71,4 +71,22 @@ describe('noteService.createNote', () => {
     expect(imageInsert[1][0].url).toBe(imgUrl); // 新笔记成为该图片的合法引用者,后续清理不会误删
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
+
+  it('已由内部服务验证并刚写入的图片可随新笔记在同一事务登记', async () => {
+    const imgUrl = 'https://boluo66.top/uploads/note-ai-safe.png';
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.includes('FROM note_images')) return [[]];
+      if (sql.includes('FROM note_template')) return [[{ n: 0 }]];
+      return [{ affectedRows: 1 }];
+    });
+    await createNote({
+      userId: 'user-1',
+      userRole: 'user',
+      note: { title: '图片笔记', content: `<img src="${imgUrl}">`, type: 'html' },
+      trustedImageUrls: [imgUrl, 'https://boluo66.top/uploads/not-in-content.png'],
+    });
+    const imageInserts = connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note_images SET ?');
+    expect(imageInserts).toHaveLength(1);
+    expect(imageInserts[0][1][0].url).toBe(imgUrl);
+  });
 });

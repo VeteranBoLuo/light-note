@@ -13,13 +13,25 @@
       <BButton size="small" :disabled="busy" @click="removeAttachment">{{ t('ai.removeAttachment') }}</BButton>
     </div>
 
-    <div v-if="readyAttachment" class="attachment-shortcuts">
-      <BButton size="small" @click="emit('prompt', t('ai.attachmentSummaryPrompt'))">
-        {{ t('ai.summarizeAttachment') }}
+    <div v-if="actionableAttachment" class="attachment-shortcuts">
+      <BButton
+        v-if="actionableAttachment.sourceType === 'temporary'"
+        size="small"
+        @click="emit('prompt', t('ai.attachmentSaveCloudPrompt'))"
+      >
+        {{ t('ai.saveAttachmentToCloud') }}
       </BButton>
-      <BButton size="small" @click="emit('prompt', t('ai.attachmentNotePrompt'))">
-        {{ t('ai.createNoteFromAttachment') }}
+      <BButton v-if="imageAttachment" size="small" @click="emit('prompt', t('ai.attachmentImageNotePrompt'))">
+        {{ t('ai.createImageNoteFromAttachment') }}
       </BButton>
+      <template v-if="textReadyAttachment">
+        <BButton size="small" @click="emit('prompt', t('ai.attachmentSummaryPrompt'))">
+          {{ t('ai.summarizeAttachment') }}
+        </BButton>
+        <BButton size="small" @click="emit('prompt', t('ai.attachmentNotePrompt'))">
+          {{ t('ai.createNoteFromAttachment') }}
+        </BButton>
+      </template>
     </div>
 
     <BUpload
@@ -65,7 +77,18 @@
   let pollTimer: number | null = null;
   let pollAttempts = 0;
 
-  const readyAttachment = computed(() => props.modelValue.find((item) => item.status === 'ready'));
+  const actionableAttachment = computed(() => props.modelValue.find((item) => item.status !== 'awaiting_upload'));
+  const textReadyAttachment = computed(() => props.modelValue.find((item) => item.status === 'ready'));
+  const imageAttachment = computed(() => {
+    const attachment = actionableAttachment.value;
+    return attachment && isImageAttachment(attachment) ? attachment : null;
+  });
+
+  function isImageAttachment(attachment: AiAttachment) {
+    return (
+      /^image\/(png|jpe?g|webp)$/i.test(attachment.fileType) || /\.(png|jpe?g|webp)$/i.test(attachment.fileName)
+    );
+  }
 
   watch(
     () => props.modelValue.map((item) => `${item.id}:${item.status}`).join(','),
@@ -85,7 +108,12 @@
 
   function statusLabel(attachment: AiAttachment) {
     if (attachment.status === 'ready') return `${formatBytes(attachment.fileSize)} · ${t('ai.attachmentReady')}`;
-    if (attachment.status === 'failed') return attachment.errorMessage || t('ai.attachmentFailed');
+    if (attachment.status === 'no_text')
+      return `${formatBytes(attachment.fileSize)} · ${t(
+        isImageAttachment(attachment) ? 'ai.attachmentStatus.no_text_image' : 'ai.attachmentStatus.no_text',
+      )}`;
+    if (attachment.status === 'failed')
+      return `${attachment.errorMessage || t('ai.attachmentFailed')} · ${t('ai.attachmentFailedUsable')}`;
     return `${formatBytes(attachment.fileSize)} · ${t(`ai.attachmentStatus.${attachment.status}`)}`;
   }
 
@@ -227,6 +255,9 @@
   }
   .attachment-card.is-failed {
     background: color-mix(in srgb, #ef4444 8%, var(--background-color));
+  }
+  .attachment-card.is-no_text {
+    background: color-mix(in srgb, #f59e0b 7%, var(--background-color));
   }
   .attachment-icon {
     display: grid;

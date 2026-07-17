@@ -497,7 +497,7 @@
     if (!inputText) return;
     const contextSnapshot = contexts.value.map((item) => ({ ...item }));
     const attachmentSnapshot = attachments.value.map((item) => ({ ...item }));
-    if (attachmentSnapshot.some((item) => item.status !== 'ready')) return;
+    if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
 
     // 标记当前请求序号，防止旧请求的 finally 提前关闭 loading
     const thisRequestId = ++activeRequestId;
