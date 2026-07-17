@@ -27,6 +27,7 @@
     defineProps<{
       usedQuestions?: string[];
       round?: number;
+      items?: string[] | null;
     }>(),
     {
       usedQuestions: () => [],
@@ -37,21 +38,70 @@
   const emit = defineEmits<{ 'recommendation-click': [item: string] }>();
 
   const recommendationItems = computed(() => {
-    const path = route.path;
-    let keys = ['recentBookmarks', 'linkHealth', 'crossSearch', 'myBookmarks', 'weeklyRecap', 'summarizeUrl'];
-    if (path.includes('/noteLibrary')) {
-      keys = ['myNotes', 'crossSearch', 'quickNote', 'howToEditNote', 'weeklyRecap', 'myTags'];
-    } else if (path.includes('/cloudSpace')) {
-      keys = ['storageUsage', 'trashContent', 'crossSearch', 'cloudSpaceUsage', 'myNotes', 'myBookmarks'];
-    } else if (path.includes('/tag')) {
-      keys = ['myTags', 'crossSearch', 'recentBookmarks', 'addTag', 'bookmarkTagUsage', 'myNotes'];
-    } else if (path.includes('/workbenches')) {
-      keys = ['weeklyRecap', 'growthStatus', 'recentBookmarks', 'myNotes', 'storageUsage', 'linkHealth'];
-    } else if (path.includes('/inbox')) {
-      keys = ['crossSearch', 'myTags', 'quickNote', 'weeklyRecap', 'linkHealth', 'recentBookmarks'];
+    const used = new Set(props.usedQuestions.map((question) => question.trim()));
+    if (Array.isArray(props.items)) {
+      return props.items
+        .map((item) => String(item || '').trim())
+        .filter((item, index, all) => item && !used.has(item) && all.indexOf(item) === index)
+        .slice(0, 3);
     }
 
-    const used = new Set(props.usedQuestions.map((question) => question.trim()));
+    const path = route.path;
+    let keys = [
+      'weeklyKnowledgeDigest',
+      'buriedRecap',
+      'linkHealth',
+      'recentKnowledgeDigest',
+      'weeklyRecap',
+      'tagUsageOverview',
+    ];
+    if (path.includes('/noteLibrary')) {
+      keys = [
+        'recentNoteDigest',
+        'noteActionItems',
+        'weeklyKnowledgeDigest',
+        'myNotes',
+        'weeklyRecap',
+        'tagUsageOverview',
+      ];
+    } else if (path.includes('/cloudSpace')) {
+      keys = [
+        'storageUsage',
+        'fileTypeOverview',
+        'recentCloudFiles',
+        'trashContent',
+        'cloudFolderOverview',
+        'weeklyKnowledgeDigest',
+      ];
+    } else if (path.includes('/tag')) {
+      keys = [
+        'tagUsageOverview',
+        'unusedTags',
+        'recentKnowledgeDigest',
+        'myTags',
+        'weeklyKnowledgeDigest',
+        'linkHealth',
+      ];
+    } else if (path.includes('/workbenches')) {
+      keys = [
+        'weeklyRecap',
+        'weeklyChallengeStatus',
+        'claimableGrowthRewards',
+        'recentKnowledgeDigest',
+        'linkHealth',
+        'storageUsage',
+      ];
+    } else if (path.includes('/inbox')) {
+      keys = [
+        'weeklyKnowledgeDigest',
+        'noteActionItems',
+        'linkHealth',
+        'recentKnowledgeDigest',
+        'unusedTags',
+        'buriedRecap',
+      ];
+    }
+
     const available = keys.map((key) => t(`ai.${key}`)).filter((question) => !used.has(question));
     if (!available.length) return [];
 

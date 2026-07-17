@@ -5,6 +5,7 @@ import * as chatHandle from '../router_handle/chatHandle.js';
 import {
   agentChat,
   confirmAgentTool,
+  generateAgentFollowUps,
   prepareAgentToolAction,
   rejectAgentTool,
   respondAgentInteraction,
@@ -66,7 +67,28 @@ const agentWriteActionLimiter = rateLimit({
     }),
 });
 
+// 回答后的相关问题会自动触发一次短模型调用，不占用户可见 AI 额度；独立限频避免重放 requestId 放大平台成本。
+const agentFollowUpLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  keyGenerator: (req) => {
+    const actor = req.billingUser || req.user || {};
+    return actor.isAuthenticated && actor.role !== 'visitor' && actor.id
+      ? `ai-follow-up:user:${actor.id}`
+      : `ai-follow-up:ip:${ipKeyGenerator(req.ip || 'unknown')}`;
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.send({
+      data: { code: 'RATE_LIMITED' },
+      status: 429,
+      msg: '相关问题生成过于频繁，请稍后再试',
+    }),
+});
+
 router.post('/agent', agentChat);
+router.post('/agent/follow-ups', agentFollowUpLimiter, generateAgentFollowUps);
 router.post('/agent/actions/prepare', agentWriteActionLimiter, prepareAgentToolAction);
 router.post('/agent/interactions/respond', agentWriteActionLimiter, respondAgentInteraction);
 router.post('/agent/confirm', agentWriteActionLimiter, confirmAgentTool);

@@ -13,6 +13,7 @@ export interface AiSseEvent {
   finishReason?: string | null;
   elapsedMs?: number;
   phase?: string;
+  followUpAvailable?: boolean;
   [key: string]: unknown;
 }
 

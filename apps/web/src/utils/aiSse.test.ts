@@ -18,6 +18,18 @@ describe('AI SSE v2 parser', () => {
     expect(result.events.at(-1)).toMatchObject({ finishReason: 'length' });
   });
 
+  it('保留回答完成后的动态追问可用标记与请求标识', () => {
+    const result = consumeAiSseChunk(
+      '',
+      'data: {"event":"done","requestId":"r-follow-up","followUpAvailable":true}\n\n',
+    );
+    expect(result.events[0]).toMatchObject({
+      event: 'done',
+      requestId: 'r-follow-up',
+      followUpAvailable: true,
+    });
+  });
+
   it('跨网络分片保留半行并在下一块完成解析', () => {
     const first = consumeAiSseChunk('', 'data: {"event":"delta","output":{"text":"你');
     expect(first.events).toEqual([]);

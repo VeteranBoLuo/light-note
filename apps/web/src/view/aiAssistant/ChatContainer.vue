@@ -57,6 +57,7 @@
           v-if="showRecommendation"
           :used-questions="usedQuestions"
           :round="conversationRound"
+          :items="displayRecommendationItems"
           @recommendation-click="handleRecommendationClick"
         />
       </main>
@@ -129,8 +130,9 @@
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
+  import { fetchAiFollowUps } from '@/api/aiFollowUpApi';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const emit = defineEmits<{
     (event: 'source-navigate', source?: AiSource): void;
@@ -170,6 +172,8 @@
     pendingInteractionIds?: string[];
     confirmationSucceeded?: boolean;
     persistAfterConfirmationSettlement?: boolean;
+    recommendations?: string[];
+    recommendationReady?: boolean;
   }
 
   // 响应式数据
@@ -212,10 +216,22 @@
       .map((message) => message.content.trim()),
   );
   const conversationRound = computed(() => usedQuestions.value.length);
+  const latestAssistantMessage = computed(() => {
+    const latest = messages.value[messages.value.length - 1];
+    return latest?.role === 'assistant' ? latest : null;
+  });
+  const displayRecommendationItems = computed<string[] | null>(() => {
+    if (conversationRound.value === 0) return null;
+    const latest = latestAssistantMessage.value;
+    if (!latest?.recommendationReady) return [];
+    return latest.recommendations?.length ? latest.recommendations : null;
+  });
   const showRecommendation = computed(() => {
     if (isLoading.value || !messages.value.length) return false;
-    const latest = messages.value[messages.value.length - 1];
-    return latest?.role === 'assistant' && !hasPendingAgentActions(latest);
+    const latest = latestAssistantMessage.value;
+    return Boolean(
+      latest && !hasPendingAgentActions(latest) && (conversationRound.value === 0 || latest.recommendationReady),
+    );
   });
 
   // 新增：是否为程序触发的滚动
@@ -298,6 +314,8 @@
           content: m.content,
           sources: m.sources || [],
           contexts: m.contexts || [],
+          recommendations: m.recommendations || [],
+          recommendationReady: Boolean(m.recommendationReady),
           timestamp: (m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).toISOString(),
         }));
       // 只有产生过真实对话(不止开场白一条)才存
@@ -314,7 +332,21 @@
       if (!raw) return false;
       const data = JSON.parse(raw);
       if (!Array.isArray(data.messages) || data.messages.length <= 1) return false;
-      messages.value = data.messages.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp), thoughts: [] }));
+      messages.value = data.messages.map((m: any) => ({
+        ...m,
+        timestamp: new Date(m.timestamp),
+        thoughts: [],
+        recommendations: Array.isArray(m.recommendations)
+          ? m.recommendations
+              .map((item: unknown) => String(item || '').trim())
+              .filter(Boolean)
+              .slice(0, 3)
+          : [],
+      }));
+      const latest = messages.value[messages.value.length - 1];
+      if (latest?.role === 'assistant' && typeof latest.recommendationReady !== 'boolean') {
+        latest.recommendationReady = true;
+      }
       if (data.sessionId) sessionId = data.sessionId; // 尽力续用服务端记忆(Redis 30min 后失效则当新会话)
       return true;
     } catch {
@@ -632,6 +664,8 @@
       thoughts: [],
       thinkingText: '',
       thinkingDisplay: '',
+      recommendations: [],
+      recommendationReady: false,
     };
     messages.value.push(aiMessage);
     currentMessageIndex = messages.value.length - 1;
@@ -650,6 +684,8 @@
     abortController.value = requestController;
 
     let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
+    let followUpRequestId = '';
+    let followUpAvailable = false;
     // 服务端已经按 token 流式输出，前端直接渲染增量；不再叠加第二层逐字打字机。
     const handleNewContent = async (content: string) => {
       if (!content) return;
@@ -746,6 +782,11 @@
             }
           }
 
+          if (data.event === 'done') {
+            followUpRequestId = String(data.requestId || '').trim();
+            followUpAvailable = data.followUpAvailable === true;
+          }
+
           const content = data.output?.text || data.text || data.content || '';
 
           if (content && typeof content === 'string') {
@@ -800,6 +841,7 @@
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
           clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
+          locale: locale.value,
         },
         {
           headers: {
@@ -853,7 +895,41 @@
         scrollToBottom('smooth');
       }
     }
+
+    if (!streamError && followUpAvailable && followUpRequestId) {
+      void loadFollowUpRecommendations({
+        requestId: followUpRequestId,
+        messageIndex: currentMessageIndex,
+        clientRequestId: thisRequestId,
+      });
+    }
   };
+
+  async function loadFollowUpRecommendations({
+    requestId,
+    messageIndex,
+    clientRequestId,
+  }: {
+    requestId: string;
+    messageIndex: number;
+    clientRequestId: number;
+  }) {
+    let suggestions: string[] = [];
+    try {
+      const result = await fetchAiFollowUps(requestId);
+      suggestions = result.suggestions;
+    } catch {
+      // 动态生成失败时恢复当前页面的高价值固定问题，不弹全局错误打断阅读。
+    }
+    if (clientRequestId !== activeRequestId) return;
+    const target = messages.value[messageIndex];
+    if (!target || target.role !== 'assistant' || target !== messages.value[messages.value.length - 1]) return;
+    target.recommendations = suggestions;
+    target.recommendationReady = true;
+    persistHistory();
+    await nextTick();
+    if (autoScrollEnabled.value && !userHasInterrupted.value) scrollToBottom('smooth');
+  }
 
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
   const handleRecommendationClick = createQuickQuestionDispatcher({

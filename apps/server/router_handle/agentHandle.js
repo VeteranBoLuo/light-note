@@ -53,6 +53,11 @@ import * as aiQuota from '../util/aiQuota.js';
 import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
 import { getPlannerMaxTokens, parseToolCallArguments, prepareToolArguments } from '../util/agent/toolArguments.js';
 import { buildNoteAiPayload, findOwnedNoteForAi } from '../util/noteAiService.js';
+import {
+  getFollowUpSuggestions,
+  shouldOfferFollowUps,
+  storeFollowUpContext,
+} from '../util/agent/followUpSuggestions.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -653,6 +658,7 @@ export async function agentChat(req, res) {
       contexts = [],
       attachmentIds = [],
       clientCapabilities = [],
+      locale = '',
     } = req.body;
     const canUseInteractions = supportsAgentInteractions(clientCapabilities);
     stream = req.body.stream ?? false;
@@ -1291,15 +1297,31 @@ export async function agentChat(req, res) {
       }
     }
 
+    const uniqueSources = sources.filter(
+      (source, index, all) => all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
+    );
+    const followUpAvailable =
+      shouldOfferFollowUps({
+        answer: finalContent,
+        confirmations,
+        interactions,
+        aborted: agentAbortController.signal.aborted,
+      }) &&
+      storeFollowUpContext({
+        ownerKey: identity.ownerKey,
+        requestId,
+        question: message,
+        answer: finalContent,
+        tools: usedTools,
+        sources: uniqueSources,
+        locale,
+      });
+
     // ---- 输出 ----
     if (stream) {
       // 客户端已断开则响应流已结束,继续 write 会对已关闭 socket 抛 EPIPE
       if (!res.writableEnded) {
-        if (sources.length) {
-          const uniqueSources = sources.filter(
-            (source, index, all) =>
-              all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
-          );
+        if (uniqueSources.length) {
           res.write(`data: ${JSON.stringify({ event: 'sources', requestId, sources: uniqueSources })}\n\n`);
         }
         if (!usedTools.length) {
@@ -1308,7 +1330,7 @@ export async function agentChat(req, res) {
           );
         }
         res.write(
-          `data: ${JSON.stringify({ event: 'done', requestId, output: { session_id: getSessionId(session) }, usage: totalUsage, usageStatus: trace.usageStatus })}\n\n`,
+          `data: ${JSON.stringify({ event: 'done', requestId, output: { session_id: getSessionId(session) }, usage: totalUsage, usageStatus: trace.usageStatus, followUpAvailable })}\n\n`,
         );
         res.write('data: [DONE]\n\n');
         res.end();
@@ -1321,9 +1343,10 @@ export async function agentChat(req, res) {
           sessionId: getSessionId(session),
           confirmations,
           interactions,
-          sources,
+          sources: uniqueSources,
           usage: totalUsage,
           requestId,
+          followUpAvailable,
         }),
       );
       res.removeListener('close', onClientClose);
@@ -1420,6 +1443,55 @@ export async function agentChat(req, res) {
     } catch (e) {
       console.warn('[Agent] AI 额度回写异常(忽略):', e.message);
     }
+  }
+}
+
+/**
+ * POST /api/chat/agent/follow-ups
+ *
+ * 主回答完成后异步生成 3 条上下文追问。上下文只能由 agentChat 写入并按 ownerKey 隔离，
+ * 客户端只提交不可预测的 requestId，不能伪造回答或借此读取其他账号内容。
+ */
+export async function generateAgentFollowUps(req, res) {
+  const startedAt = Date.now();
+  try {
+    const requestId = String(req.body?.requestId || '').trim();
+    const identity = getAgentIdentity(req);
+    const result = await getFollowUpSuggestions({ ownerKey: identity.ownerKey, requestId });
+    if (!result.cached) {
+      const providerInfo = getActiveProviderInfo();
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: `[自动追问] ${result.question || ''}`,
+        toolsUsed: [],
+        iterations: 1,
+        totalUsage: result.usage,
+        durationMs: Date.now() - startedAt,
+        status: result.strategy === 'ai' ? 'success' : 'fallback',
+        errorMsg: result.generationError,
+        trace: {
+          requestId: generateUUID(),
+          providerInfo,
+          taskType: 'followup_suggestions',
+          selectedTools: [],
+          finishReason: result.finishReason,
+          usageStatus: result.usageStatus,
+        },
+      });
+    }
+    return res.send(
+      resultData({
+        requestId,
+        suggestions: result.suggestions,
+        strategy: result.strategy,
+      }),
+    );
+  } catch (error) {
+    const code = String(error?.code || 'FOLLOW_UP_GENERATION_FAILED');
+    const status = ['FOLLOW_UP_REQUEST_INVALID', 'FOLLOW_UP_CONTEXT_NOT_FOUND'].includes(code) ? 404 : 500;
+    // 后台增强请求使用业务状态码并由前端静默降级，避免一条可选追问失败触发全局错误提示。
+    return res.send(resultData({ code }, status, '暂时无法生成相关问题'));
   }
 }
 
