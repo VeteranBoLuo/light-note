@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getPlannerMaxTokens, normalizeToolArguments, parseToolCallArguments } from './toolArguments.js';
+import {
+  getPlannerMaxTokens,
+  normalizeToolArguments,
+  parseToolCallArguments,
+  prepareToolArguments,
+} from './toolArguments.js';
 
 describe('Agent 工具参数处理', () => {
   it('解析标准 JSON 与供应商直接返回的对象参数', () => {
@@ -26,6 +31,21 @@ describe('Agent 工具参数处理', () => {
       title: '日报',
     });
     expect(() => normalizeToolArguments({ normalizeArgs: () => null }, {})).toThrow(/TOOL_ARGUMENTS_INVALID/);
+  });
+
+  it('工具可在归一化后异步解析账号内参数', async () => {
+    const tool = {
+      normalizeArgs: (args) => ({ folderName: String(args.folder_name || '').trim() }),
+      prepareArgs: async (args, ctx) => ({ ...args, folderId: ctx.folderId }),
+    };
+    await expect(prepareToolArguments(tool, { folder_name: '项目资料' }, { folderId: 'folder-1' })).resolves.toEqual({
+      folderName: '项目资料',
+      folderId: 'folder-1',
+    });
+  });
+
+  it('异步参数准备必须返回对象', async () => {
+    await expect(prepareToolArguments({ prepareArgs: async () => null }, {})).rejects.toThrow(/TOOL_ARGUMENTS_INVALID/);
   });
 
   it('仅对明确创建笔记或带附件的笔记请求扩大 Planner 输出预算', () => {

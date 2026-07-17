@@ -2,7 +2,15 @@ const GROUPS = {
   base: ['search_content', 'search_knowledge_base', 'get_user_info', 'get_ai_quota'],
   bookmark: ['query_bookmarks', 'create_bookmark', 'query_link_health'],
   note: ['query_notes', 'read_note', 'analyze_resource_images', 'create_note', 'create_image_note'],
-  file: ['query_files', 'get_storage_usage', 'analyze_resource_images', 'save_attachment_to_cloud'],
+  // 文件直达操作优先放在 12 工具上限内；图片笔记同时命中 note/file 时仍要保留文件夹选择能力。
+  file: [
+    'query_files',
+    'query_cloud_folders',
+    'save_attachment_to_cloud',
+    'create_image_note',
+    'get_storage_usage',
+    'analyze_resource_images',
+  ],
   tag: ['query_tags', 'add_tag'],
   trash: ['query_trash', 'restore_trash'],
   url: ['read_url', 'create_bookmark'],

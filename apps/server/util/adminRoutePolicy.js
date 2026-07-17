@@ -249,6 +249,8 @@ declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
 
 declare(ADMIN_POLICIES.AI_USE, 'agent', [
   ['POST', '/chat/agent'],
+  ['POST', '/chat/agent/actions/prepare'],
+  ['POST', '/chat/agent/interactions/respond'],
   ['POST', '/chat/agent/confirm'],
   ['POST', '/chat/agent/confirm/reject'],
   ['POST', '/chat/attachments/init'],

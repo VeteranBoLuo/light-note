@@ -32,20 +32,13 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import ReplyLoading from './ReplyLoading.vue';
+  import { AI_WRITE_TOOL_NAMES } from '@/config/aiTools';
 
   export interface AiToolStatusItem {
     name: string;
-    status: 'running' | 'success' | 'error' | 'confirmation_required';
+    status: 'running' | 'success' | 'error' | 'confirmation_required' | 'interaction_required';
     round?: number;
   }
-
-  const WRITE_TOOL_NAMES = new Set([
-    'create_note',
-    'create_bookmark',
-    'add_tag',
-    'restore_trash',
-    'write_knowledge_base',
-  ]);
 
   const props = defineProps<{
     items: AiToolStatusItem[];
@@ -64,7 +57,7 @@
   });
 
   const displayItems = computed(() =>
-    props.hasContent ? latestItems.value.filter((item) => !WRITE_TOOL_NAMES.has(item.name)) : latestItems.value,
+    props.hasContent ? latestItems.value.filter((item) => !AI_WRITE_TOOL_NAMES.has(item.name)) : latestItems.value,
   );
 
   const runningItem = computed(() => [...displayItems.value].reverse().find((item) => item.status === 'running'));
@@ -80,7 +73,7 @@
 
   const progressLabel = computed(() => {
     if (runningItem.value) {
-      const key = WRITE_TOOL_NAMES.has(runningItem.value.name)
+      const key = AI_WRITE_TOOL_NAMES.has(runningItem.value.name)
         ? 'ai.toolProgress.preparingAction'
         : 'ai.toolProgress.reading';
       return t(key, { target: toolLabel(runningItem.value.name) });
@@ -88,9 +81,12 @@
     if (displayItems.value.some((item) => item.status === 'confirmation_required')) {
       return t('ai.toolProgress.awaitingConfirmation');
     }
+    if (displayItems.value.some((item) => item.status === 'interaction_required')) {
+      return t('ai.toolProgress.awaitingChoice');
+    }
     if (errorCount.value) {
       return t(
-        displayItems.value.every((item) => WRITE_TOOL_NAMES.has(item.name))
+        displayItems.value.every((item) => AI_WRITE_TOOL_NAMES.has(item.name))
           ? 'ai.toolProgress.actionFailed'
           : 'ai.toolProgress.partialFailure',
       );
@@ -198,5 +194,9 @@
 
   .ai-tool-summary__dot.status-confirmation_required {
     background: var(--message-warning-color);
+  }
+
+  .ai-tool-summary__dot.status-interaction_required {
+    background: var(--primary-color);
   }
 </style>

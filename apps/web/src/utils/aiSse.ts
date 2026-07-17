@@ -1,10 +1,13 @@
+import type { AiAgentInteraction, AiToolConfirmation } from '@/types/aiAgent';
+
 export interface AiSseEvent {
   event?: string;
   requestId?: string;
   error?: string;
   message?: string;
   output?: { text?: string; session_id?: string; thoughts?: any[] };
-  confirmation?: any;
+  confirmation?: AiToolConfirmation;
+  interaction?: AiAgentInteraction;
   sources?: any[];
   usage?: Record<string, number>;
   finishReason?: string | null;
@@ -29,9 +32,7 @@ export function consumeAiSseChunk(buffer: string, chunk: string) {
   const combined = `${buffer || ''}${chunk || ''}`;
   const lines = combined.split(/\r?\n/);
   const nextBuffer = lines.pop() || '';
-  const events = lines
-    .map(parseAiSseDataLine)
-    .filter((event): event is AiSseEvent => Boolean(event));
+  const events = lines.map(parseAiSseDataLine).filter((event): event is AiSseEvent => Boolean(event));
   return { buffer: nextBuffer, events };
 }
 

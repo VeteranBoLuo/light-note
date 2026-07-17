@@ -39,13 +39,17 @@ async function analyzeNote(args, ctx) {
 
 async function analyzeDocument(args, ctx) {
   const [sources] = await pool.query(
-    `SELECT id, file_name, file_type, status
+    `SELECT id, file_name, file_type, status, error_code
        FROM ai_document_sources WHERE id = ? AND user_id = ? LIMIT 1`,
     [args.resourceId, ctx.userId],
   );
   const source = sources[0];
   if (!source) return null;
-  if (source.status !== 'ready') {
+  // 兼容 OCR 能力上线前已经落库的 failed + EMPTY_DOCUMENT；附件卡与图片分析必须给出同一 no_text 语义。
+  const noText =
+    (source.status === 'ready' && source.error_code === 'NO_TEXT_CONTENT') ||
+    (source.status === 'failed' && source.error_code === 'EMPTY_DOCUMENT');
+  if (source.status !== 'ready' && !noText) {
     return { error: 'ATTACHMENT_NOT_READY', message: '文件仍在解析中，请稍后再试。' };
   }
   if (
@@ -54,6 +58,15 @@ async function analyzeDocument(args, ctx) {
       .startsWith('image/')
   ) {
     return { error: 'INVALID_TYPE', message: '该资源不是图片文件，请使用文件正文解析结果。' };
+  }
+  if (noText) {
+    return {
+      resourceType: 'document',
+      resourceId: String(source.id),
+      title: source.file_name || '未命名图片',
+      totalImages: 1,
+      results: [{ order: 1, status: 'no_text', content: '', errorCode: 'NO_TEXT_CONTENT' }],
+    };
   }
   const [chunks] = await pool.query(
     `SELECT chunk_index, content, locator_value
@@ -119,6 +132,7 @@ export default {
       const label = result.alt || `第 ${result.order || 1} 张图片`;
       if (result.status === 'success') return `### ${label}\n${result.content}`;
       if (result.status === 'unsupported') return `### ${label}\n该图片不是可安全读取的轻笺资源。`;
+      if (result.status === 'no_text') return `### ${label}\n图片中没有识别到可提取的文字，原图片仍可正常使用。`;
       return `### ${label}\n图片文字暂未识别成功。`;
     });
     return `《${raw.title}》图片分析（共 ${raw.totalImages} 张）\n\n${lines.join('\n\n') || '没有可分析的图片。'}`;

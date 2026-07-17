@@ -24,12 +24,26 @@
             :sources="message.sources"
             @source-navigate="handleSourceNavigate"
           />
-          <AiToolConfirmationCard
-            v-for="confirmation in message.confirmations || []"
-            :key="confirmation.id"
-            :confirmation="confirmation"
-            @resolved="(summary, sources) => handleConfirmationResolved(index, summary, sources)"
-          />
+          <div
+            v-if="message.interactions?.length || message.confirmations?.length"
+            class="ai-message-action-stack"
+          >
+            <AiInteractionCard
+              v-for="interaction in message.interactions || []"
+              :key="interaction.id"
+              :interaction="interaction"
+              @resolved="(resolution) => handleInteractionResolved(index, interaction, resolution)"
+              @settled="(settlement) => handleInteractionSettled(index, settlement)"
+            />
+            <AiToolConfirmationCard
+              v-for="confirmation in message.confirmations || []"
+              :key="confirmation.id"
+              :confirmation="confirmation"
+              @resolved="(resolution) => handleConfirmationResolved(index, resolution)"
+              @edit="handleConfirmationEdit"
+              @settled="(settlement) => handleConfirmationSettled(index, settlement)"
+            />
+          </div>
         </template>
         <!-- 智能滚动提示  -->
         <ScrollPrompt
@@ -61,6 +75,7 @@
         :stop-fn="stopResponse"
         :contexts="contexts"
         :attachments="attachments"
+        :prepare-attachment-action-fn="prepareAttachmentAction"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
         @update:contexts="contexts = $event"
@@ -77,11 +92,38 @@
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
+  import AiInteractionCard from '@/components/aiAssistant/AiInteractionCard.vue';
   import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
-  import { clearAiTemporaryAttachments, type AiAttachment } from '@/api/aiAttachmentApi';
+  import {
+    clearAiTemporaryAttachments,
+    fetchAiAttachmentStatuses,
+    prepareAiAttachmentAction,
+    AI_AGENT_CLIENT_CAPABILITIES,
+    type AiAttachment,
+  } from '@/api/aiAttachmentApi';
+  import type { AiAttachmentActionRequest } from '@/components/aiAssistant/attachmentActions';
+  import {
+    hasPendingAgentActions,
+    markConversationConfirmationPending,
+    markConversationInteractionPending,
+    promoteConversationInteractionToConfirmation,
+    settleConversationConfirmation,
+    settleConversationInteraction,
+    shouldPersistConversationMessage,
+  } from '@/components/aiAssistant/aiConversationState';
+  import { mergePromptSuggestion } from '@/components/aiAssistant/attachmentActions';
+  import { isEditableAttachmentTool, type AiAttachmentDirectActionName } from '@/config/aiTools';
+  import type {
+    AiAgentInteraction,
+    AiAgentInteractionResolution,
+    AiAgentInteractionSettlement,
+    AiToolConfirmation,
+    AiToolConfirmationResolution,
+    AiToolConfirmationSettlement,
+  } from '@/types/aiAgent';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
@@ -117,19 +159,17 @@
     thoughts?: any[];
     thinkingText?: string; // 当前消息完整的思考过程文本
     thinkingDisplay?: string; // 当前消息用于展示的思考文本（打字机效果）
-    confirmations?: Array<{
-      token: string;
-      id: string;
-      sessionId: string;
-      toolName: string;
-      args: Record<string, unknown>;
-      expiresIn: number;
-      riskLevel?: 'low' | 'medium' | 'high';
-      preview?: { title?: string; target?: string; impact?: string };
-    }>;
+    confirmations?: AiToolConfirmation[];
+    interactions?: AiAgentInteraction[];
     sources?: AiSource[];
     toolEvents?: AiToolStatusItem[];
     contexts?: AiResourceContext[];
+    transient?: boolean;
+    transientGroupId?: string;
+    pendingConfirmationIds?: string[];
+    pendingInteractionIds?: string[];
+    confirmationSucceeded?: boolean;
+    persistAfterConfirmationSettlement?: boolean;
   }
 
   // 响应式数据
@@ -137,7 +177,10 @@
   const messages = ref<ChatMessage[]>([]);
   const isLoading = ref(false);
   const messagesContainer = ref<HTMLElement | null>(null);
-  const chatInputRef = ref<{ focus: () => void } | null>(null);
+  const chatInputRef = ref<{
+    focus: () => void;
+    openAttachmentAction: (toolName: AiAttachmentDirectActionName, args?: Record<string, unknown>) => boolean;
+  } | null>(null);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
   const contexts = ref<AiResourceContext[]>([]);
@@ -164,12 +207,15 @@
   const autoScrollEnabled = ref(true); // 是否启用自动滚动
   const showScrollToBottom = ref(false);
   const usedQuestions = computed(() =>
-    messages.value.filter((message) => message.role === 'user').map((message) => message.content.trim()),
+    messages.value
+      .filter((message) => message.role === 'user' && !message.transient)
+      .map((message) => message.content.trim()),
   );
   const conversationRound = computed(() => usedQuestions.value.length);
   const showRecommendation = computed(() => {
     if (isLoading.value || !messages.value.length) return false;
-    return messages.value[messages.value.length - 1]?.role === 'assistant';
+    const latest = messages.value[messages.value.length - 1];
+    return latest?.role === 'assistant' && !hasPendingAgentActions(latest);
   });
 
   // 新增：是否为程序触发的滚动
@@ -246,7 +292,7 @@
   function persistHistory() {
     try {
       const toSave = messages.value
-        .filter((m) => m.content) // 跳过生成中的空占位
+        .filter(shouldPersistConversationMessage) // 跳过生成中的空占位和未结算确认动作
         .map((m) => ({
           role: m.role,
           content: m.content,
@@ -460,6 +506,52 @@
   };
 
   let sessionId = '';
+
+  async function prepareAttachmentAction(request: AiAttachmentActionRequest) {
+    if (isLoading.value) throw new Error(t('ai.attachmentAction.waitForReply'));
+    const prepared = await prepareAiAttachmentAction({
+      sessionId,
+      toolName: request.toolName,
+      args: request.args,
+    });
+    sessionId = prepared.sessionId;
+
+    const confirmation = 'confirmation' in prepared ? prepared.confirmation : null;
+    const interaction = 'interaction' in prepared ? prepared.interaction : null;
+    const target =
+      confirmation?.preview?.target ||
+      String(request.args.fileName || request.args.title || t('ai.attachmentAction.currentAttachment'));
+    const actionId = confirmation?.id || interaction?.id;
+    if (!actionId) throw new Error(t('ai.attachmentAction.prepareFailed'));
+    const transientGroupId = `attachment-action:${actionId}`;
+    messages.value.push({
+      role: 'user',
+      content: t('ai.attachmentAction.requestSummary', {
+        action: t(`ai.tools.${request.toolName}`, request.toolName),
+        target,
+      }),
+      timestamp: new Date(),
+      transient: true,
+      transientGroupId,
+    });
+    messages.value.push({
+      role: 'assistant',
+      content: confirmation
+        ? t('ai.attachmentAction.confirmationReady')
+        : t('ai.attachmentAction.choiceRequired'),
+      timestamp: new Date(),
+      thoughts: [],
+      confirmations: confirmation ? [confirmation] : [],
+      interactions: interaction ? [interaction] : [],
+      transient: true,
+      transientGroupId,
+      pendingConfirmationIds: confirmation ? [confirmation.id] : [],
+      pendingInteractionIds: interaction ? [interaction.id] : [],
+    });
+    persistHistory();
+    resetScrollState();
+  }
+
   watch(
     () => user.id,
     (nextId, previousId) => {
@@ -511,7 +603,10 @@
     // 会话上下文快照:本轮问题「之前」的完整对话(显示多少发多少,保证 AI 记得的=你看得到的)。
     // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
     const historyForRequest = messages.value
-      .filter((m) => m.content && (m.role === 'user' || m.role === 'assistant'))
+      .filter(
+        (m) =>
+          m.content && !m.transient && !hasPendingAgentActions(m) && (m.role === 'user' || m.role === 'assistant'),
+      )
       .map((m) => ({ role: m.role, content: String(m.content) }));
     // 对话较长时提醒新建会话(一次性):更快、更省 AI 额度
     const histChars = historyForRequest.reduce((n, m) => n + m.content.length, 0);
@@ -574,6 +669,8 @@
       let processedLength = 0;
 
       const handleData = (data: AiSseEvent) => {
+        // 用户中断后可能仍收到最后一个网络分片；旧请求的工具/确认事件不能挂到新一轮消息上。
+        if (activeRequestId !== thisRequestId || requestController.signal.aborted) return;
         try {
           // 后端流式出错时会推送 { error, message } 帧：记下来、标记已开始(停思考流)，
           // 交给流结束后统一显示 —— 不在此直接改内容，避免与打字机争用当前消息
@@ -587,6 +684,31 @@
             const currentMsg = messages.value[currentMessageIndex];
             if (currentMsg) {
               currentMsg.confirmations = [...(currentMsg.confirmations || []), data.confirmation];
+              markConversationConfirmationPending(
+                messages.value,
+                currentMessageIndex - 1,
+                currentMessageIndex,
+                data.confirmation.id,
+                `agent-action:${thisRequestId}`,
+              );
+            }
+          }
+
+          if (data.event === 'interaction_required' && data.interaction) {
+            const currentMsg = messages.value[currentMessageIndex];
+            if (currentMsg) {
+              const interactions = [...(currentMsg.interactions || []), data.interaction];
+              currentMsg.interactions = interactions.filter(
+                (interaction, interactionIndex, all) =>
+                  all.findIndex((item) => item.id === interaction.id) === interactionIndex,
+              );
+              markConversationInteractionPending(
+                messages.value,
+                currentMessageIndex - 1,
+                currentMessageIndex,
+                data.interaction.id,
+                `agent-action:${thisRequestId}`,
+              );
             }
           }
 
@@ -599,6 +721,8 @@
                   ? 'running'
                   : data.status === 'confirmation_required'
                     ? 'confirmation_required'
+                    : data.status === 'interaction_required'
+                      ? 'interaction_required'
                     : data.status === 'success'
                       ? 'success'
                       : 'error';
@@ -675,6 +799,7 @@
           history: historyForRequest,
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
+          clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
         },
         {
           headers: {
@@ -732,9 +857,9 @@
 
   // 处理推荐点击
   const handleRecommendationClick = (item: string) => {
-    userInput.value = item;
+    userInput.value = mergePromptSuggestion(userInput.value, item);
     nextTick(() => {
-      sendMessage();
+      chatInputRef.value?.focus();
     });
   };
 
@@ -747,11 +872,83 @@
     });
   };
 
-  const handleConfirmationResolved = (index: number, summary: string, sources: AiSource[] = []) => {
+  const handleConfirmationResolved = async (index: number, resolution: AiToolConfirmationResolution) => {
     const target = messages.value[index];
-    if (!target || !summary) return;
-    target.content = `${target.content}${target.content ? '\n\n' : ''}${summary}`;
-    if (sources.length) target.sources = [...(target.sources || []), ...sources];
+    if (!target || !resolution.summary) return;
+    target.content = `${target.content}${target.content ? '\n\n' : ''}${resolution.summary}`;
+    const sources = resolution.sources.filter(
+      (source): source is AiSource =>
+        Boolean(source) && typeof source === 'object' && typeof (source as AiSource).type === 'string',
+    );
+    if (sources.length) {
+      const merged = [...(target.sources || []), ...sources];
+      target.sources = merged.filter(
+        (source, sourceIndex, all) =>
+          all.findIndex((item) => item.type === source.type && item.id === source.id) === sourceIndex,
+      );
+    }
+    if (resolution.toolName === 'save_attachment_to_cloud' && attachments.value.length) {
+      try {
+        const refreshed = await fetchAiAttachmentStatuses(attachments.value.map((attachment) => attachment.id));
+        if (refreshed.length) attachments.value = refreshed;
+      } catch {
+        // 保存操作本身已经成功，状态刷新失败不应把确认结果改成失败；后续轮询/重进会恢复。
+      }
+    }
+    persistHistory();
+  };
+
+  const handleInteractionResolved = (
+    index: number,
+    interaction: AiAgentInteraction,
+    resolution: AiAgentInteractionResolution,
+  ) => {
+    const target = messages.value[index];
+    if (!target) return;
+    if (resolution.state === 'confirmation_required') {
+      const confirmations = [...(target.confirmations || []), resolution.confirmation];
+      target.confirmations = confirmations.filter(
+        (confirmation, confirmationIndex, all) =>
+          all.findIndex((item) => item.id === confirmation.id) === confirmationIndex,
+      );
+      promoteConversationInteractionToConfirmation(
+        messages.value,
+        index,
+        interaction.id,
+        resolution.confirmation.id,
+      );
+      resetScrollState();
+      return;
+    }
+    if (resolution.state === 'edit_required') {
+      if (!isEditableAttachmentTool(resolution.toolName)) return;
+      const opened = chatInputRef.value?.openAttachmentAction(resolution.toolName, resolution.args) || false;
+      if (!opened) message.warning(t('ai.attachmentAction.attachmentUnavailable'));
+      else resetScrollState();
+      return;
+    }
+    if (resolution.state === 'resolved' && resolution.summary) {
+      target.content = `${target.content}${target.content ? '\n\n' : ''}${resolution.summary}`;
+    }
+  };
+
+  const handleInteractionSettled = (index: number, settlement: AiAgentInteractionSettlement) => {
+    settleConversationInteraction(messages.value, index, settlement);
+    persistHistory();
+  };
+
+  const handleConfirmationEdit = (confirmation: AiToolConfirmation) => {
+    if (!isEditableAttachmentTool(confirmation.toolName)) return;
+    const opened = chatInputRef.value?.openAttachmentAction(confirmation.toolName, confirmation.args) || false;
+    if (!opened) {
+      message.warning(t('ai.attachmentAction.attachmentUnavailable'));
+      return;
+    }
+    resetScrollState();
+  };
+
+  const handleConfirmationSettled = (index: number, settlement: AiToolConfirmationSettlement) => {
+    settleConversationConfirmation(messages.value, index, settlement);
     persistHistory();
   };
 
@@ -817,6 +1014,27 @@
     background: var(--background-color);
     border-radius: 16px;
     overflow: hidden;
+    container: ai-chat / inline-size;
+  }
+
+  .ai-message-action-stack {
+    display: grid;
+    width: min(680px, calc(100% - 44px));
+    gap: 10px;
+    margin: -12px 0 20px 44px;
+  }
+
+  .ai-message-action-stack :deep(.ai-interaction-card),
+  .ai-message-action-stack :deep(.tool-confirmation-card) {
+    width: 100%;
+    margin: 0;
+  }
+
+  @container ai-chat (max-width: 520px) {
+    .ai-message-action-stack {
+      width: 100%;
+      margin: 4px 0 16px;
+    }
   }
 
   .messages-container {

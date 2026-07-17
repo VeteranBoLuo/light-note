@@ -15,6 +15,7 @@ const tools = [
   { name: 'create_note', isWrite: true },
   { name: 'create_image_note', isWrite: true },
   { name: 'query_files' },
+  { name: 'query_cloud_folders' },
   { name: 'get_storage_usage' },
   { name: 'save_attachment_to_cloud', isWrite: true },
   { name: 'query_users', requireRoot: true },
@@ -90,6 +91,11 @@ describe('selectAgentTools', () => {
       maxTools: 12,
     });
     expect(saveTools.some((tool) => tool.name === 'save_attachment_to_cloud')).toBe(true);
+    expect(saveTools.some((tool) => tool.name === 'create_image_note')).toBe(true);
+    expect(saveTools.some((tool) => tool.name === 'query_cloud_folders')).toBe(true);
     expect(noteTools.some((tool) => tool.name === 'create_image_note')).toBe(true);
+    expect(noteTools.some((tool) => tool.name === 'save_attachment_to_cloud')).toBe(true);
+    expect(noteTools.some((tool) => tool.name === 'query_cloud_folders')).toBe(true);
+    expect(noteTools).toHaveLength(12);
   });
 });

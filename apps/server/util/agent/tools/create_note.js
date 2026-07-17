@@ -73,6 +73,7 @@ export default {
       request: ctx.request,
       suppressUserRewards: ctx.suppressUserRewards,
       maxContentLength: 60000,
+      idempotencyKey: ctx.idempotencyKey,
     });
     return { id: result.id, title: result.title, type: result.type };
   },

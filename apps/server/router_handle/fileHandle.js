@@ -130,7 +130,7 @@ export const queryFolder = async (req, res) => {
     const params = [userId];
     // 获取用户ID
     let query = `SELECT * FROM folders`;
-    let whereClauses = ['create_by = ?'];
+    let whereClauses = ['create_by = ?', 'del_flag = 0'];
 
     const key = filters?.name?.trim() || '';
 

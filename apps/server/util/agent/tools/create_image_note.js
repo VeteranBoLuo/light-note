@@ -1,4 +1,7 @@
-import { createImageNoteFromAttachment } from '../../services/attachmentActionService.js';
+import {
+  createImageNoteFromAttachment,
+  prepareCreateImageNoteFromAttachment,
+} from '../../services/attachmentActionService.js';
 
 function firstValue(args, keys) {
   for (const key of keys) {
@@ -24,6 +27,14 @@ function validateArgs(args) {
   return normalized;
 }
 
+function formatSize(bytes) {
+  const size = Number(bytes || 0);
+  if (!Number.isFinite(size) || size <= 0) return '未知';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export default {
   name: 'create_image_note',
   description:
@@ -39,15 +50,26 @@ export default {
   },
   requireRoot: false,
   isWrite: true,
+  directAction: true,
   riskLevel: 'low',
   confirmationPolicy: 'default',
   normalizeArgs: normalizeCreateImageNoteArgs,
-  preview(args) {
+  async prepareArgs(args, ctx) {
     const normalized = validateArgs(args);
+    return prepareCreateImageNoteFromAttachment({ userId: ctx.userId, ...normalized });
+  },
+  preview(args) {
+    const normalized = { ...args, ...validateArgs(args) };
     return {
       title: '创建图片笔记',
-      target: normalized.title || `附件 ${normalized.attachmentId}`,
+      target: normalized.title || normalized.sourceFileName || `附件 ${normalized.attachmentId}`,
       impact: '确认后将创建一篇 HTML 笔记，并把上传的原图插入正文；无需 OCR 识别到文字',
+      details: [
+        { key: 'originalFileName', value: normalized.sourceFileName || `附件 ${normalized.attachmentId}` },
+        { key: 'noteTitle', value: normalized.title || '使用图片文件名' },
+        { key: 'description', value: normalized.description || '无' },
+        { key: 'fileSize', value: formatSize(normalized.fileSize) },
+      ],
     };
   },
   async execute(args, ctx) {
@@ -58,6 +80,7 @@ export default {
       ...normalized,
       request: ctx.request,
       suppressUserRewards: ctx.suppressUserRewards,
+      idempotencyKey: ctx.idempotencyKey,
     });
   },
   transform(raw) {

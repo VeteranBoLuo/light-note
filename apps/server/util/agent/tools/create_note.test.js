@@ -27,7 +27,13 @@ describe('Agent create_note', () => {
     const request = { headers: { fingerprint: 'fp' } };
     const result = await createNoteTool.execute(
       { note_title: ' 日报 ', note_content: ' 今日完成 ' },
-      { userId: 'user-1', userRole: 'user', request, suppressUserRewards: false },
+      {
+        userId: 'user-1',
+        userRole: 'user',
+        request,
+        suppressUserRewards: false,
+        idempotencyKey: 'agent-write-v1:note-tool',
+      },
     );
 
     expect(createNoteService).toHaveBeenCalledWith(
@@ -37,6 +43,7 @@ describe('Agent create_note', () => {
         note: { title: '日报', content: '今日完成', type: 'markdown' },
         request,
         maxContentLength: 60000,
+        idempotencyKey: 'agent-write-v1:note-tool',
       }),
     );
     expect(result).toEqual({ id: 'note-1', title: '日报', type: 'markdown' });

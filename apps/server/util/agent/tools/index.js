@@ -4,6 +4,7 @@ import queryNotes from './query_notes.js';
 import readNote from './read_note.js';
 import analyzeResourceImages from './analyze_resource_images.js';
 import queryFiles from './query_files.js';
+import queryCloudFolders from './query_cloud_folders.js';
 import searchContent from './search_content.js';
 import getStorageUsage from './get_storage_usage.js';
 import getAiQuota from './get_ai_quota.js';
@@ -47,6 +48,7 @@ export default [
   readNote,
   analyzeResourceImages,
   queryFiles,
+  queryCloudFolders,
   searchContent,
   getStorageUsage,
   getAiQuota,

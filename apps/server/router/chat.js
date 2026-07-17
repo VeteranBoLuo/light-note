@@ -2,7 +2,13 @@ import express from 'express';
 const router = express.Router();
 
 import * as chatHandle from '../router_handle/chatHandle.js';
-import { agentChat, confirmAgentTool, rejectAgentTool } from '../router_handle/agentHandle.js';
+import {
+  agentChat,
+  confirmAgentTool,
+  prepareAgentToolAction,
+  rejectAgentTool,
+  respondAgentInteraction,
+} from '../router_handle/agentHandle.js';
 import * as aiQuota from '../util/aiQuota.js';
 import { resultData } from '../util/common.js';
 import * as aiDocumentHandle from '../router_handle/aiDocumentHandle.js';
@@ -32,8 +38,38 @@ const attachmentCreateLimiter = rateLimit({
   },
 });
 
+// 结构化附件动作不调用 LLM，但会校验附件/文件夹并写入一次性 Redis 确认。
+// 独立限频避免恶意反复点击制造大量待确认令牌，不占用文件上传的额度。
+const agentWriteActionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  // 准备与确认共享同一个计数桶：正常一次操作消耗 2 次，约允许每分钟完成 20 项写操作。
+  limit: 40,
+  keyGenerator: (req) => {
+    const actor = req.billingUser || req.user || {};
+    return actor.isAuthenticated && actor.role !== 'visitor' && actor.id
+      ? `ai-action:user:${actor.id}`
+      : `ai-action:ip:${ipKeyGenerator(req.ip || 'unknown')}`;
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.status(429).send({
+      data: {
+        code: 'RATE_LIMITED',
+        retryAfter:
+          req.rateLimit?.resetTime instanceof Date
+            ? Math.max(1, Math.ceil((req.rateLimit.resetTime.getTime() - Date.now()) / 1000))
+            : 0,
+      },
+      status: 429,
+      msg: 'AI 写操作过于频繁，请稍后再试',
+    }),
+});
+
 router.post('/agent', agentChat);
-router.post('/agent/confirm', confirmAgentTool);
+router.post('/agent/actions/prepare', agentWriteActionLimiter, prepareAgentToolAction);
+router.post('/agent/interactions/respond', agentWriteActionLimiter, respondAgentInteraction);
+router.post('/agent/confirm', agentWriteActionLimiter, confirmAgentTool);
 router.post('/agent/confirm/reject', rejectAgentTool);
 router.post('/attachments/init', attachmentCreateLimiter, aiDocumentHandle.initTemporaryUpload);
 router.post('/attachments/confirm', aiDocumentHandle.confirmTemporaryUpload);

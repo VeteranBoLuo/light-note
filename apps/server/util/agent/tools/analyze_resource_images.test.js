@@ -59,4 +59,44 @@ describe('analyze_resource_images 工具', () => {
     expect(raw).toMatchObject({ error: 'INVALID_TYPE' });
     expect(tool.transform(raw)).toBe('该资源不是图片文件，请使用文件正文解析结果。');
   });
+
+  it('ready 且无文字的图片显示 no_text，不误报为识别失败', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'doc-1',
+          file_name: '纯风景图.png',
+          file_type: 'image/png',
+          status: 'ready',
+          error_code: 'NO_TEXT_CONTENT',
+        },
+      ],
+    ]);
+
+    const raw = await tool.execute({ resourceType: 'document', resourceId: 'doc-1' }, { userId: 'user-1' });
+    expect(raw.results[0]).toMatchObject({ status: 'no_text', errorCode: 'NO_TEXT_CONTENT' });
+    expect(tool.transform(raw)).toContain('没有识别到可提取的文字');
+    expect(tool.transform(raw)).not.toContain('暂未识别成功');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('兼容上线前 failed + EMPTY_DOCUMENT 的无文字图片', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'doc-old',
+          file_name: '旧头像.png',
+          file_type: 'image/png',
+          status: 'failed',
+          error_code: 'EMPTY_DOCUMENT',
+        },
+      ],
+    ]);
+
+    const raw = await tool.execute({ resourceType: 'document', resourceId: 'doc-old' }, { userId: 'user-1' });
+    expect(raw.results[0]).toMatchObject({ status: 'no_text', errorCode: 'NO_TEXT_CONTENT' });
+    expect(tool.transform(raw)).toContain('没有识别到可提取的文字');
+    expect(tool.transform(raw)).not.toContain('仍在解析');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
 });

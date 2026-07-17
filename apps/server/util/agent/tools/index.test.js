@@ -31,4 +31,14 @@ describe('Agent 工具注册表', () => {
       expect(['default', 'always']).toContain(tool.confirmationPolicy);
     }
   });
+
+  it('附件直达工具声明服务端预处理，且文件夹查询已注册', () => {
+    expect(tools.some((tool) => tool.name === 'query_cloud_folders' && !tool.isWrite)).toBe(true);
+    for (const name of ['save_attachment_to_cloud', 'create_image_note']) {
+      const tool = tools.find((item) => item.name === name);
+      expect(tool?.directAction).toBe(true);
+      expect(typeof tool?.prepareArgs).toBe('function');
+      expect(typeof tool?.preview).toBe('function');
+    }
+  });
 });

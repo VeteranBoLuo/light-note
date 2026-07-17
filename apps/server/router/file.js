@@ -10,6 +10,7 @@ import {
   buildObjectUrl,
   createDownloadSignedUrl,
   createUploadSignedUrl,
+  deleteObjectFromObs,
   putObjectToObs,
 } from '../util/obsClient.js';
 import { FILE_CATEGORY_ORDER, getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
@@ -126,6 +127,7 @@ router.post('/uploadFiles', async (req, res) => {
 router.post('/confirmUpload', async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const connection = await pool.getConnection();
+  const supersededObjectKeys = new Set();
   try {
     const userId = req.user.id;
     const { files, folderId, addToInbox = false, inboxSource = 'quick_capture' } = req.body || {};
@@ -139,6 +141,9 @@ router.post('/confirmUpload', async (req, res) => {
     }
 
     await connection.beginTransaction();
+    // 与 AI“保存到云空间”共用账号行锁，串行化同一账号的选名、覆盖和容量核算。
+    // 否则普通直传与 AI 保存并发时，即使 OBS 对象键互不冲突，也可能写出两条同名文件记录。
+    await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
 
     // 容量强校验(权威:写库前拦截,补现有"只签 URL 不校验"缺口)。回收站不占(del_flag=1 不计入)。
     const incomingBytes = files.reduce((s, f) => s + (Number(f.fileSize) || 0), 0);
@@ -182,6 +187,9 @@ router.post('/confirmUpload', async (req, res) => {
       const [existingRows] = await connection.query(selectSql, [userId, fileName]);
 
       if (existingRows.length > 0) {
+        const existingObjectKey = existingRows[0].obs_key || buildObjectKey(userId, existingRows[0].file_name);
+        // AI 保存使用随机对象键；普通同名上传覆盖数据库记录后，提交成功再清理被替换的旧对象。
+        if (existingObjectKey && existingObjectKey !== objectKey) supersededObjectKeys.add(existingObjectKey);
         await removeInboxRelations(connection, {
           userId,
           items: [{ resourceType: 'file', resourceId: String(existingRows[0].id) }],
@@ -210,6 +218,15 @@ router.post('/confirmUpload', async (req, res) => {
     }
 
     await connection.commit();
+    if (supersededObjectKeys.size) {
+      const cleanupKeys = [...supersededObjectKeys];
+      const cleanupResults = await Promise.allSettled(cleanupKeys.map((objectKey) => deleteObjectFromObs(objectKey)));
+      cleanupResults.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn('[云空间] 清理被同名上传替换的旧对象失败:', cleanupKeys[index], result.reason?.message);
+        }
+      });
+    }
     res.send(resultData(results));
     recordFirstOwnResource(req, 'file'); // 激活里程碑:首次自建文件(直传回调写库成功)
     // 创造类发经验:仅对新增(非覆盖)文件,逐个按当日衰减发放(grantExp 内日顶 200 兜底)

@@ -19,15 +19,15 @@
         <AiAttachmentPicker
           ref="attachmentPicker"
           :model-value="attachments"
+          :prepare-action-fn="prepareAttachmentActionFn"
           @update:model-value="$emit('update:attachments', $event)"
           @prompt="applyAttachmentPrompt"
         />
       </div>
       <BInput
-        :value="modelValue"
+        v-model:value="inputValue"
         type="textarea"
         submit-on-enter
-        @input="onInput"
         @enter="handleSend"
         :placeholder="t('ai.inputPlaceholder')"
         :rows="1"
@@ -68,6 +68,8 @@
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
+  import type { AiAttachmentDirectActionName } from '@/config/aiTools';
+  import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
 
   const { t } = useI18n();
 
@@ -83,6 +85,7 @@
     stopFn: () => void;
     contexts: AiResourceContext[];
     attachments: AiAttachment[];
+    prepareAttachmentActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
   }>();
 
   const emit = defineEmits<{
@@ -94,7 +97,18 @@
   }>();
 
   const textInput = ref<{ focus: () => void } | null>(null);
-  const attachmentPicker = ref<{ attachCloudFile: (fileId: string) => Promise<void> } | null>(null);
+  const attachmentPicker = ref<{
+    attachCloudFile: (fileId: string) => Promise<void>;
+    openAction: (toolName: AiAttachmentDirectActionName, args?: Record<string, unknown>) => boolean;
+  } | null>(null);
+  const adjustTextareaHeight = () => {};
+  const inputValue = computed({
+    get: () => props.modelValue,
+    set: (value: string | number | undefined) => {
+      emit('update:modelValue', String(value ?? ''));
+      adjustTextareaHeight();
+    },
+  });
   // 文件直传确认后原文件就已经可用；OCR/文字提取只影响总结问答，不再阻断发送、保存或插图。
   const attachmentBlocked = computed(() =>
     props.attachments.some((attachment) => attachment.status === 'awaiting_upload'),
@@ -110,13 +124,6 @@
     const v = Number(n || 0);
     return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(v);
   }
-
-  const adjustTextareaHeight = () => {};
-
-  const onInput = (value: string) => {
-    emit('update:modelValue', value);
-    adjustTextareaHeight();
-  };
 
   const handleSend = (event: KeyboardEvent) => {
     if (event?.isComposing || event?.keyCode === 229) return;
@@ -134,8 +141,12 @@
   };
 
   function applyAttachmentPrompt(value: string) {
-    emit('update:modelValue', value);
+    emit('update:modelValue', mergePromptSuggestion(props.modelValue, value));
     focus();
+  }
+
+  function openAttachmentAction(toolName: AiAttachmentDirectActionName, args: Record<string, unknown> = {}) {
+    return attachmentPicker.value?.openAction(toolName, args) || false;
   }
 
   function attachSelectedCloudFile(item: AiResourceContext) {
@@ -161,7 +172,7 @@
     });
   }
 
-  defineExpose({ focus });
+  defineExpose({ focus, openAttachmentAction });
 </script>
 
 <style scoped>

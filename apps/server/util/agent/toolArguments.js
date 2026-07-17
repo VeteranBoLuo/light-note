@@ -41,6 +41,34 @@ export function normalizeToolArguments(tool, args) {
 }
 
 /**
+ * 归一化并补齐工具参数。
+ *
+ * prepareArgs 用于需要根据当前账号数据解析参数的工具，例如把自然语言中的
+ * 云空间文件夹名称解析为权威 folderId。它只允许做校验/解析，不能产生写入副作用；
+ * 返回值会作为后续预览、确认令牌和最终执行的唯一参数来源。
+ */
+export async function prepareToolArguments(tool, args, ctx = {}) {
+  const normalized = normalizeToolArguments(tool, args);
+  if (typeof tool?.prepareArgs !== 'function') return normalized;
+  let prepared;
+  try {
+    prepared = await tool.prepareArgs(normalized, ctx);
+  } catch (error) {
+    if (error && (typeof error === 'object' || typeof error === 'function')) {
+      Object.defineProperty(error, 'normalizedToolArgs', {
+        value: normalized,
+        configurable: true,
+      });
+    }
+    throw error;
+  }
+  if (!prepared || typeof prepared !== 'object' || Array.isArray(prepared)) {
+    throw new Error('TOOL_ARGUMENTS_INVALID: AI 生成的操作参数格式无效，请重新发起操作。');
+  }
+  return prepared;
+}
+
+/**
  * 创建长正文时，1200 token 容易把 function arguments 截断。
  * 仅对明确的笔记写入意图扩大 Planner 输出预算，普通查询仍保持原预算。
  */

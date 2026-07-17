@@ -15,24 +15,59 @@
 
     <div v-if="actionableAttachment" class="attachment-shortcuts">
       <BButton
-        v-if="actionableAttachment.sourceType === 'temporary'"
+        v-if="actionableAttachment.sourceType === 'temporary' && !actionableAttachment.fileId"
         size="small"
-        @click="emit('prompt', t('ai.attachmentSaveCloudPrompt'))"
+        role="button"
+        tabindex="0"
+        @click="openAction('save_attachment_to_cloud')"
+        @keydown.enter.prevent="openAction('save_attachment_to_cloud')"
+        @keydown.space.prevent="openAction('save_attachment_to_cloud')"
       >
         {{ t('ai.saveAttachmentToCloud') }}
       </BButton>
-      <BButton v-if="imageAttachment" size="small" @click="emit('prompt', t('ai.attachmentImageNotePrompt'))">
+      <BButton
+        v-if="imageAttachment"
+        size="small"
+        role="button"
+        tabindex="0"
+        @click="openAction('create_image_note')"
+        @keydown.enter.prevent="openAction('create_image_note')"
+        @keydown.space.prevent="openAction('create_image_note')"
+      >
         {{ t('ai.createImageNoteFromAttachment') }}
       </BButton>
       <template v-if="textReadyAttachment">
-        <BButton size="small" @click="emit('prompt', t('ai.attachmentSummaryPrompt'))">
+        <BButton
+          size="small"
+          role="button"
+          tabindex="0"
+          @click="emit('prompt', t('ai.attachmentSummaryPrompt'))"
+          @keydown.enter.prevent="emit('prompt', t('ai.attachmentSummaryPrompt'))"
+          @keydown.space.prevent="emit('prompt', t('ai.attachmentSummaryPrompt'))"
+        >
           {{ t('ai.summarizeAttachment') }}
         </BButton>
-        <BButton size="small" @click="emit('prompt', t('ai.attachmentNotePrompt'))">
+        <BButton
+          size="small"
+          role="button"
+          tabindex="0"
+          @click="emit('prompt', t('ai.attachmentNotePrompt'))"
+          @keydown.enter.prevent="emit('prompt', t('ai.attachmentNotePrompt'))"
+          @keydown.space.prevent="emit('prompt', t('ai.attachmentNotePrompt'))"
+        >
           {{ t('ai.createNoteFromAttachment') }}
         </BButton>
       </template>
     </div>
+
+    <AiAttachmentActionEditor
+      v-if="activeAction && activeActionAttachment"
+      :key="`${activeAction.toolName}:${activeAction.attachmentId}`"
+      :attachment="activeActionAttachment"
+      :initial-draft="activeAction"
+      :submit-fn="submitDirectAction"
+      @close="activeAction = null"
+    />
 
     <BUpload
       v-if="!modelValue.length"
@@ -58,6 +93,13 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
+  import type { AiAttachmentDirectActionName } from '@/config/aiTools';
+  import AiAttachmentActionEditor from './AiAttachmentActionEditor.vue';
+  import {
+    createAttachmentActionDraft,
+    type AiAttachmentActionDraft,
+    type AiAttachmentActionRequest,
+  } from './attachmentActions';
   import {
     attachAiCloudFile,
     deleteAiAttachment,
@@ -67,13 +109,17 @@
     type AiAttachment,
   } from '@/api/aiAttachmentApi';
 
-  const props = defineProps<{ modelValue: AiAttachment[] }>();
+  const props = defineProps<{
+    modelValue: AiAttachment[];
+    prepareActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
+  }>();
   const emit = defineEmits<{
     'update:modelValue': [value: AiAttachment[]];
     prompt: [value: string];
   }>();
   const { t } = useI18n();
   const busy = ref(false);
+  const activeAction = ref<AiAttachmentActionDraft | null>(null);
   let pollTimer: number | null = null;
   let pollAttempts = 0;
 
@@ -83,11 +129,13 @@
     const attachment = actionableAttachment.value;
     return attachment && isImageAttachment(attachment) ? attachment : null;
   });
+  const activeActionAttachment = computed(() => {
+    if (!activeAction.value) return null;
+    return props.modelValue.find((item) => item.id === activeAction.value?.attachmentId) || null;
+  });
 
   function isImageAttachment(attachment: AiAttachment) {
-    return (
-      /^image\/(png|jpe?g|webp)$/i.test(attachment.fileType) || /\.(png|jpe?g|webp)$/i.test(attachment.fileName)
-    );
+    return /^image\/(png|jpe?g|webp)$/i.test(attachment.fileType) || /\.(png|jpe?g|webp)$/i.test(attachment.fileName);
   }
 
   watch(
@@ -99,6 +147,13 @@
     { immediate: true },
   );
 
+  watch(
+    () => props.modelValue.map((item) => item.id).join(','),
+    () => {
+      if (activeAction.value && !activeActionAttachment.value) activeAction.value = null;
+    },
+  );
+
   function formatBytes(value: number) {
     const bytes = Number(value || 0);
     if (bytes < 1024) return `${bytes} B`;
@@ -107,14 +162,16 @@
   }
 
   function statusLabel(attachment: AiAttachment) {
-    if (attachment.status === 'ready') return `${formatBytes(attachment.fileSize)} · ${t('ai.attachmentReady')}`;
+    const savedLabel = attachment.fileId ? ` · ${t('ai.attachmentSavedToCloud')}` : '';
+    if (attachment.status === 'ready')
+      return `${formatBytes(attachment.fileSize)} · ${t('ai.attachmentReady')}${savedLabel}`;
     if (attachment.status === 'no_text')
       return `${formatBytes(attachment.fileSize)} · ${t(
         isImageAttachment(attachment) ? 'ai.attachmentStatus.no_text_image' : 'ai.attachmentStatus.no_text',
-      )}`;
+      )}${savedLabel}`;
     if (attachment.status === 'failed')
-      return `${attachment.errorMessage || t('ai.attachmentFailed')} · ${t('ai.attachmentFailedUsable')}`;
-    return `${formatBytes(attachment.fileSize)} · ${t(`ai.attachmentStatus.${attachment.status}`)}`;
+      return `${attachment.errorMessage || t('ai.attachmentFailed')} · ${t('ai.attachmentFailedUsable')}${savedLabel}`;
+    return `${formatBytes(attachment.fileSize)} · ${t(`ai.attachmentStatus.${attachment.status}`)}${savedLabel}`;
   }
 
   function showAttachmentError(error: any, fallback: string) {
@@ -191,6 +248,7 @@
     const attachment = props.modelValue[0];
     if (!attachment) return;
     busy.value = true;
+    activeAction.value = null;
     stopPolling();
     try {
       await deleteAiAttachment(attachment.id);
@@ -201,6 +259,22 @@
     } finally {
       busy.value = false;
     }
+  }
+
+  function openAction(toolName: AiAttachmentDirectActionName, initialArgs: Record<string, unknown> = {}) {
+    const requestedId = String(initialArgs.attachmentId || initialArgs.attachment_id || '');
+    const attachment =
+      props.modelValue.find((item) => (requestedId ? item.id === requestedId : item.status !== 'awaiting_upload')) ||
+      null;
+    if (!attachment) return false;
+    if (toolName === 'create_image_note' && !isImageAttachment(attachment)) return false;
+    activeAction.value = createAttachmentActionDraft(toolName, attachment, initialArgs);
+    return true;
+  }
+
+  async function submitDirectAction(request: AiAttachmentActionRequest) {
+    await props.prepareActionFn(request);
+    activeAction.value = null;
   }
 
   async function retryAttachment() {
@@ -222,7 +296,7 @@
     stopPolling();
   });
 
-  defineExpose({ attachCloudFile });
+  defineExpose({ attachCloudFile, openAction });
 </script>
 
 <style scoped lang="less">

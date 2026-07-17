@@ -29,14 +29,29 @@ import {
   shouldContinueToolPlanning,
 } from '../util/agent/secondRound.js';
 import {
-  consumeToolConfirmation,
+  acquireToolConfirmationAction,
+  claimToolConfirmationExecution,
   createToolConfirmation,
+  finalizeToolConfirmationAction,
+  inspectToolConfirmationExecution,
+  publicToolConfirmation,
   rejectToolConfirmation,
+  settleToolConfirmationExecution,
   ToolConfirmationError,
 } from '../util/agent/confirmationStore.js';
+import {
+  claimAgentInteractionResponse,
+  inspectAgentInteractionResponse,
+  settleAgentInteractionResponse,
+  AgentInteractionError,
+} from '../util/agent/interactionStore.js';
+import {
+  createFolderResolutionInteraction,
+  resolveAgentInteractionAction,
+} from '../util/agent/interactionResolvers.js';
 import * as aiQuota from '../util/aiQuota.js';
 import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
-import { getPlannerMaxTokens, normalizeToolArguments, parseToolCallArguments } from '../util/agent/toolArguments.js';
+import { getPlannerMaxTokens, parseToolCallArguments, prepareToolArguments } from '../util/agent/toolArguments.js';
 import { buildNoteAiPayload, findOwnedNoteForAi } from '../util/noteAiService.js';
 
 // ============================================================
@@ -109,6 +124,11 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'FILE_NAME_CONFLICT',
   'FILE_NAME_INVALID',
   'FILE_SIZE_MISMATCH',
+  'FOLDER_AMBIGUOUS',
+  'FOLDER_FORBIDDEN',
+  'FOLDER_ID_INVALID',
+  'FOLDER_NAME_INVALID',
+  'FOLDER_NOT_FOUND',
   'ID_REQUIRED',
   'INVALID_NOTE_TYPE',
   'INVALID_STATUS',
@@ -123,13 +143,31 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TOO_MANY_IDS',
   'TOO_MANY_TAGS',
   'TOOL_ARGUMENTS_INVALID',
+  'TOOL_ACTION_PENDING',
   'TYPE_REQUIRED',
   'URL_REQUIRED',
   'URL_TOO_LONG',
   'USER_REQUIRED',
 ]);
 
+const AGENT_INTERACTIONS_CAPABILITY = 'agent_interaction_v1';
+
+function supportsAgentInteractions(rawCapabilities) {
+  return (
+    Array.isArray(rawCapabilities) &&
+    rawCapabilities.some((capability) => String(capability || '').trim() === AGENT_INTERACTIONS_CAPABILITY)
+  );
+}
+
 function publicToolError(error, fallback = '操作失败，请稍后重试。') {
+  if (error?.code && PUBLIC_TOOL_ERROR_CODES.has(error.code)) {
+    const rawMessage = String(error.message || fallback);
+    const technicalPrefix = `${error.code}:`;
+    const message = rawMessage.startsWith(technicalPrefix)
+      ? rawMessage.slice(technicalPrefix.length).trim() || fallback
+      : rawMessage;
+    return { code: error.code, message: message.slice(0, 300) };
+  }
   const raw = String(error?.message || error || '');
   const match = /^([A-Z][A-Z0-9_]+):\s*(.+)$/.exec(raw);
   if (match && PUBLIC_TOOL_ERROR_CODES.has(match[1])) return { code: match[1], message: match[2].slice(0, 300) };
@@ -237,6 +275,7 @@ async function executeTool(name, args, ctx) {
       summary: publicError.message,
       error: publicError.code,
       params: args,
+      outcomeUnknown: Boolean(err?.commitOutcomeUnknown),
     };
   }
 }
@@ -306,6 +345,29 @@ function confirmationContext(req, identity) {
     adminContextId: req.adminContext?.id || null,
     adminMode: req.adminContext?.mode || null,
   };
+}
+
+async function createPendingWriteConfirmation({ tool, toolName, args, identity, req, session, token }) {
+  const preview =
+    typeof tool.preview === 'function'
+      ? await tool.preview(args, {
+          userId: identity.resourceUserId,
+          userRole: identity.resourceUserRole,
+          userAlias: identity.resourceUserAlias,
+          request: req,
+        })
+      : buildWritePreview(tool, args);
+  const pending = await createToolConfirmation({
+    ownerKey: identity.ownerKey,
+    sessionId: getSessionId(session),
+    toolName,
+    args,
+    context: confirmationContext(req, identity),
+    riskLevel: tool.riskLevel,
+    preview,
+    token,
+  });
+  return publicToolConfirmation(pending.token, pending.confirmation, pending.expiresIn);
 }
 
 // ============================================================
@@ -590,7 +652,9 @@ export async function agentChat(req, res) {
       history = [],
       contexts = [],
       attachmentIds = [],
+      clientCapabilities = [],
     } = req.body;
+    const canUseInteractions = supportsAgentInteractions(clientCapabilities);
     stream = req.body.stream ?? false;
     // 回答风格 → temperature(仅作用最终回答);未识别则不设、走默认
     const STYLE_TEMP = { strict: 0.3, balanced: 1.0, creative: 1.5 };
@@ -763,6 +827,7 @@ export async function agentChat(req, res) {
     const usedTools = [];
     usedToolsForLog = usedTools;
     const confirmations = [];
+    const interactions = [];
     const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
     let finalContent = '';
     let apiCalls = 0;
@@ -829,16 +894,51 @@ export async function agentChat(req, res) {
           let args = parsedArgs.args;
           const tool = toolRegistry.get(tc.function.name);
           let result;
+          let pendingInteraction = null;
           let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
-          if (!argumentError && tool) {
+          if (!argumentError && tool && selectedToolNames.has(tc.function.name)) {
             try {
-              args = normalizeToolArguments(tool, args);
+              args = await prepareToolArguments(tool, args, {
+                userId,
+                userRole,
+                userAlias,
+                billingUserId: identity.billingUserId,
+                billingUserRole: identity.billingUserRole,
+                request: req,
+              });
             } catch (error) {
-              const publicError = publicToolError(error, 'AI 生成的操作参数无效，请重新发起操作。');
-              argumentError = { code: publicError.code, message: publicError.message };
+              try {
+                if (!canUseInteractions) throw error;
+                const created = await createFolderResolutionInteraction({
+                  error,
+                  toolName: tc.function.name,
+                  fallbackArgs: args,
+                  ownerKey: identity.ownerKey,
+                  sessionId: getSessionId(session),
+                  context: confirmationContext(req, identity),
+                });
+                if (created?.interaction) {
+                  pendingInteraction = created.interaction;
+                  interactions.push(created.interaction);
+                  args = error.normalizedToolArgs || args;
+                } else {
+                  const publicError = publicToolError(error, 'AI 生成的操作参数无效，请重新发起操作。');
+                  argumentError = { code: publicError.code, message: publicError.message };
+                }
+              } catch (interactionError) {
+                const publicError = publicToolError(interactionError, '暂时无法准备选择项，请稍后重试。');
+                argumentError = { code: publicError.code, message: publicError.message };
+              }
             }
           }
-          if (argumentError) {
+          if (pendingInteraction) {
+            result = {
+              status: 'interaction_required',
+              summary: '目标文件夹需要由用户选择处理方式；选择本身不会立即写入数据。',
+              dataSummary: '等待用户选择',
+              params: args,
+            };
+          } else if (argumentError) {
             console.warn('[Agent] 工具参数无效，已阻止执行', {
               requestId,
               tool: tc.function.name,
@@ -861,29 +961,14 @@ export async function agentChat(req, res) {
             };
           } else if (tool.isWrite) {
             try {
-              const preview =
-                typeof tool.preview === 'function'
-                  ? await tool.preview(args, { userId, userRole, userAlias })
-                  : buildWritePreview(tool, args);
-              const pending = await createToolConfirmation({
-                ownerKey: identity.ownerKey,
-                sessionId: getSessionId(session),
+              const confirmation = await createPendingWriteConfirmation({
+                tool,
                 toolName: tc.function.name,
                 args,
-                context: confirmationContext(req, identity),
-                riskLevel: tool.riskLevel,
-                preview,
+                identity,
+                req,
+                session,
               });
-              const confirmation = {
-                token: pending.token,
-                id: pending.confirmation.id,
-                sessionId: pending.confirmation.sessionId,
-                toolName: tc.function.name,
-                args: pending.confirmation.args,
-                expiresIn: pending.expiresIn,
-                riskLevel: pending.confirmation.riskLevel,
-                preview: pending.confirmation.preview,
-              };
               confirmations.push(confirmation);
               result = {
                 status: 'confirmation_required',
@@ -941,6 +1026,13 @@ export async function agentChat(req, res) {
           );
         }
       }
+      if (stream && interactions.length) {
+        for (const interaction of interactions) {
+          res.write(
+            `data: ${JSON.stringify({ event: 'interaction_required', requestId, interaction, output: { session_id: getSessionId(session) } })}\n\n`,
+          );
+        }
+      }
 
       // 追加 tool 结果消息
       // 允许“结构化正文 → 图片分析”两类结果同时进入上下文；仍设置总上限，避免多轮工具挤爆模型窗口。
@@ -968,7 +1060,7 @@ export async function agentChat(req, res) {
         followUpEnabled &&
         round <= maxToolRounds &&
         followUpTools.length > 0 &&
-        shouldContinueToolPlanning(previousRoundResults, confirmations);
+        shouldContinueToolPlanning(previousRoundResults, [...confirmations, ...interactions]);
         round += 1
       ) {
         messages.push({ role: 'user', content: `${FOLLOW_UP_ROUND_INSTRUCTION}\n当前是第 ${round} 轮工具规划。` });
@@ -1008,7 +1100,14 @@ export async function agentChat(req, res) {
             let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
             if (!argumentError && tool) {
               try {
-                args = normalizeToolArguments(tool, args);
+                args = await prepareToolArguments(tool, args, {
+                  userId,
+                  userRole,
+                  userAlias,
+                  billingUserId: identity.billingUserId,
+                  billingUserRole: identity.billingUserRole,
+                  request: req,
+                });
               } catch (error) {
                 const publicError = publicToolError(error, 'AI 生成的查询参数无效，请重新提问。');
                 argumentError = { code: publicError.code, message: publicError.message };
@@ -1221,6 +1320,7 @@ export async function agentChat(req, res) {
           response: finalContent,
           sessionId: getSessionId(session),
           confirmations,
+          interactions,
           sources,
           usage: totalUsage,
           requestId,
@@ -1229,8 +1329,9 @@ export async function agentChat(req, res) {
       res.removeListener('close', onClientClose);
     }
 
-    // 记录本轮对话(客户端中途断开时 finalContent 只是半截,不写入会话记忆,避免污染后续上下文)
-    if (!agentAbortController.signal.aborted) {
+    // 中途断开或仍有待确认写操作时都不写入服务端会话记忆：确认卡无法跨刷新恢复，
+    // 提前记录会让下一轮误以为尚未执行的动作已经成为稳定上下文。结算结果由前端历史在后续请求带回。
+    if (!agentAbortController.signal.aborted && !confirmations.length && !interactions.length) {
       recordTurn(session, message, finalContent, usedTools);
     }
 
@@ -1246,7 +1347,7 @@ export async function agentChat(req, res) {
       iterations: apiCalls,
       totalUsage,
       durationMs: Date.now() - requestStartedAt,
-      status: confirmations.length ? 'confirmation_pending' : 'success',
+      status: confirmations.length ? 'confirmation_pending' : interactions.length ? 'interaction_pending' : 'success',
       trace,
     });
   } catch (error) {
@@ -1332,23 +1433,343 @@ function buildWritePreview(tool, args) {
 }
 
 /**
+ * POST /api/chat/agent/actions/prepare
+ *
+ * 为前端结构化附件动作生成与自然语言 Agent 完全相同的一次性确认令牌。
+ * 这里只开放工具显式声明的 directAction，不能借此绕过 Planner 准备任意写操作。
+ */
+export async function prepareAgentToolAction(req, res) {
+  const requestStartedAt = Date.now();
+  const requestId = generateUUID();
+  let identity = null;
+  let toolName = '';
+  let session = null;
+  try {
+    identity = getAgentIdentity(req);
+    toolName = String(req.body?.toolName || '').trim();
+    const rawArgs = req.body?.args ?? {};
+    if (!rawArgs || typeof rawArgs !== 'object' || Array.isArray(rawArgs)) {
+      throw new ToolConfirmationError('TOOL_ARGUMENTS_INVALID', '操作参数格式无效。');
+    }
+
+    const tool = toolRegistry.get(toolName);
+    if (!tool?.isWrite || tool.directAction !== true) {
+      throw new ToolConfirmationError('TOOL_DIRECT_ACTION_NOT_ALLOWED', '该操作不支持快捷确认。');
+    }
+    if (req.adminContext && req.adminContext.mode !== 'maintain') {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '只读代管模式不能准备写操作。', 403);
+    }
+    const allowVisitorMaintenance = req.adminContext?.mode === 'maintain';
+    if (
+      !allowVisitorMaintenance &&
+      (identity.resourceUserRole === 'visitor' || !identity.resourceUserId || identity.resourceUserId === 'visitor')
+    ) {
+      throw new ToolConfirmationError(
+        'GUEST_FORBIDDEN',
+        '预览模式仅支持浏览查看，保存文件和创建笔记需要先登录注册。',
+        403,
+      );
+    }
+    if (tool.requireRoot && identity.resourceUserRole !== 'root') {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '当前账号无权执行该操作。', 403);
+    }
+    if (Array.isArray(tool.allowedRoles) && !tool.allowedRoles.includes(identity.resourceUserRole)) {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '当前账号无权执行该操作。', 403);
+    }
+
+    session = await getOrCreateSession(identity.ownerKey, req.body?.sessionId);
+    let args;
+    try {
+      args = await prepareToolArguments(tool, rawArgs, {
+        userId: identity.resourceUserId,
+        userRole: identity.resourceUserRole,
+        userAlias: identity.resourceUserAlias,
+        billingUserId: identity.billingUserId,
+        billingUserRole: identity.billingUserRole,
+        request: req,
+      });
+    } catch (error) {
+      const created = supportsAgentInteractions(req.body?.clientCapabilities)
+        ? await createFolderResolutionInteraction({
+        error,
+        toolName,
+        fallbackArgs: rawArgs,
+        ownerKey: identity.ownerKey,
+        sessionId: getSessionId(session),
+        context: confirmationContext(req, identity),
+          })
+        : null;
+      if (!created?.interaction) throw error;
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: [{ name: toolName, status: 'interaction_required' }],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'interaction_pending',
+        trace: { requestId, taskType: 'agent_action_prepare', selectedTools: [toolName] },
+      });
+      return res.send(resultData({ sessionId: getSessionId(session), interaction: created.interaction }));
+    }
+    const confirmation = await createPendingWriteConfirmation({
+      tool,
+      toolName,
+      args,
+      identity,
+      req,
+      session,
+    });
+
+    logAgentRequest({
+      userId: identity.billingUserId,
+      userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+      question: '',
+      toolsUsed: [{ name: toolName, status: 'confirmation_required' }],
+      iterations: 0,
+      totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      durationMs: Date.now() - requestStartedAt,
+      status: 'confirmation_pending',
+      trace: { requestId, taskType: 'agent_action_prepare', selectedTools: [toolName] },
+    });
+    return res.send(resultData({ sessionId: getSessionId(session), confirmation }));
+  } catch (error) {
+    let status = 400;
+    let code = 'TOOL_ACTION_PREPARE_FAILED';
+    let message = '无法准备该操作，请检查参数后重试。';
+    if (error instanceof ToolConfirmationError) {
+      status = error.status;
+      code = error.code;
+      message = error.message;
+    } else {
+      const publicError = publicToolError(error, message);
+      code = publicError.code;
+      message = publicError.message;
+      if (code === 'FOLDER_FORBIDDEN') status = 403;
+      if (code === 'ATTACHMENT_NOT_FOUND' || code === 'FOLDER_NOT_FOUND') status = 404;
+      if (code === 'TOOL_EXECUTION_FAILED') {
+        status = 500;
+        console.error('[Agent] 准备快捷写操作失败:', error?.message || error);
+      }
+    }
+    if (identity) {
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: toolName ? [{ name: toolName, status: 'error' }] : [],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'error',
+        errorMsg: code,
+        trace: { requestId, taskType: 'agent_action_prepare', selectedTools: toolName ? [toolName] : [] },
+      });
+    }
+    return res.status(status).send(resultData({ code }, status, message));
+  }
+}
+
+function assertInteractionIdentity(interaction, identity, req) {
+  if (
+    interaction.resourceUserId !== identity.resourceUserId ||
+    interaction.resourceUserRole !== identity.resourceUserRole
+  ) {
+    throw new AgentInteractionError('AGENT_INTERACTION_FORBIDDEN', '交互与当前资源账号不匹配。', 403);
+  }
+  if (interaction.adminContextId) {
+    if (
+      req.adminContext?.id !== interaction.adminContextId ||
+      req.adminContext?.mode !== interaction.adminMode ||
+      interaction.adminMode !== 'maintain'
+    ) {
+      throw new AgentInteractionError('AGENT_INTERACTION_FORBIDDEN', '管理员内容代管上下文已变化。', 403);
+    }
+  } else if (req.adminContext) {
+    throw new AgentInteractionError('AGENT_INTERACTION_FORBIDDEN', '普通会话交互不能在管理员上下文中回答。', 403);
+  }
+}
+
+function restoreInteractionOutcomeToken(outcome, token) {
+  if (!outcome?.confirmation) return outcome;
+  return { ...outcome, confirmation: { ...outcome.confirmation, token } };
+}
+
+async function recoverPromotedInteractionConfirmation(token, identity, sessionId) {
+  try {
+    const attempt = await inspectToolConfirmationExecution(token, identity.ownerKey, sessionId);
+    const confirmation = publicToolConfirmation(token, attempt.confirmation, 5 * 60);
+    return { state: 'confirmation_required', confirmation };
+  } catch (error) {
+    if (error instanceof ToolConfirmationError && error.code === 'TOOL_CONFIRMATION_EXPIRED') return null;
+    throw error;
+  }
+}
+
+/**
+ * POST /api/chat/agent/interactions/respond
+ *
+ * 回答通用 Agent 选择卡。选择只解析服务器保存的白名单动作；涉及写入时仍会生成标准确认卡，
+ * 不在本接口执行真实写操作。同一交互 token 晋级为确认 token，响应丢失后可安全恢复。
+ */
+export async function respondAgentInteraction(req, res) {
+  const requestStartedAt = Date.now();
+  const requestId = generateUUID();
+  let identity = null;
+  let interaction = null;
+  let response = null;
+  const token = String(req.body?.interactionToken || '');
+  const sessionId = String(req.body?.sessionId || '');
+  try {
+    identity = getAgentIdentity(req);
+    let attempt = await inspectAgentInteractionResponse(token, identity.ownerKey, sessionId, {
+      cancelled: req.body?.cancelled === true,
+      selectedIds: req.body?.selectedIds,
+      customValue: req.body?.customValue,
+    });
+    interaction = attempt.interaction;
+    response = attempt.response;
+    assertInteractionIdentity(interaction, identity, req);
+
+    if (attempt.state === 'settled') {
+      return res.send(resultData(restoreInteractionOutcomeToken(attempt.outcome, token)));
+    }
+    if (attempt.state === 'running') {
+      const recovered = await recoverPromotedInteractionConfirmation(token, identity, sessionId);
+      if (recovered) return res.send(resultData(recovered));
+      return res.status(409).send(
+        resultData(
+          { code: 'AGENT_INTERACTION_IN_PROGRESS', retryable: true, retryAfter: 1 },
+          409,
+          '正在处理你的选择，请稍后安全重试。',
+        ),
+      );
+    }
+
+    attempt = await claimAgentInteractionResponse(interaction, response);
+    interaction = attempt.interaction;
+    response = attempt.response;
+    if (attempt.state === 'settled') {
+      return res.send(resultData(restoreInteractionOutcomeToken(attempt.outcome, token)));
+    }
+    if (attempt.state === 'running') {
+      const recovered = await recoverPromotedInteractionConfirmation(token, identity, sessionId);
+      if (recovered) return res.send(resultData(recovered));
+      return res.status(409).send(
+        resultData(
+          { code: 'AGENT_INTERACTION_IN_PROGRESS', retryable: true, retryAfter: 1 },
+          409,
+          '正在处理你的选择，请稍后安全重试。',
+        ),
+      );
+    }
+
+    const resolved = resolveAgentInteractionAction(interaction, response);
+    if (resolved.state === 'cancelled' || resolved.state === 'edit_required') {
+      await settleAgentInteractionResponse(interaction, response, resolved);
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: [{ name: interaction.action?.toolName || 'agent_interaction', status: resolved.state }],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: resolved.state === 'cancelled' ? 'interaction_cancelled' : 'interaction_resolved',
+        trace: { requestId, taskType: 'agent_interaction', selectedTools: [] },
+      });
+      return res.send(resultData(resolved));
+    }
+
+    const tool = toolRegistry.get(resolved.toolName);
+    if (!tool?.isWrite || tool.directAction !== true) {
+      throw new AgentInteractionError('AGENT_INTERACTION_RESOLVER_INVALID', '该选择不能继续执行。');
+    }
+    const preparedArgs = await prepareToolArguments(tool, resolved.args, {
+      userId: identity.resourceUserId,
+      userRole: identity.resourceUserRole,
+      userAlias: identity.resourceUserAlias,
+      billingUserId: identity.billingUserId,
+      billingUserRole: identity.billingUserRole,
+      request: req,
+    });
+    const confirmation = await createPendingWriteConfirmation({
+      tool,
+      toolName: resolved.toolName,
+      args: preparedArgs,
+      identity,
+      req,
+      session: { id: sessionId },
+      token,
+    });
+    const { token: _confirmationToken, ...cacheableConfirmation } = confirmation;
+    const outcome = { state: 'confirmation_required', confirmation: cacheableConfirmation };
+    await settleAgentInteractionResponse(interaction, response, outcome);
+    logAgentRequest({
+      userId: identity.billingUserId,
+      userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+      question: '',
+      toolsUsed: [{ name: resolved.toolName, status: 'confirmation_required' }],
+      iterations: 0,
+      totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      durationMs: Date.now() - requestStartedAt,
+      status: 'confirmation_pending',
+      trace: { requestId, taskType: 'agent_interaction', selectedTools: [resolved.toolName] },
+    });
+    return res.send(resultData({ ...outcome, confirmation }));
+  } catch (error) {
+    const known = error instanceof AgentInteractionError || error instanceof ToolConfirmationError;
+    const status = known ? error.status : 500;
+    const code = known ? error.code : 'AGENT_INTERACTION_FAILED';
+    const message = known ? error.message : '暂时无法处理你的选择，请稍后安全重试。';
+    if (!known) console.error('[Agent] 回答交互卡失败:', error?.message || error);
+    if (identity) {
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: [],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'error',
+        errorMsg: code,
+        trace: { requestId, taskType: 'agent_interaction', selectedTools: [] },
+      });
+    }
+    return res.status(status).send(resultData({ code, retryable: status >= 500 || status === 409 }, status, message));
+  }
+}
+
+/**
  * POST /api/chat/agent/confirm
- * 消费一次性确认令牌后执行单个写工具。令牌与用户/管理员上下文绑定，且只能使用一次。
+ * 原子认领一次性确认令牌后执行单个写工具。短期缓存确定结果，同一令牌重试只回放、不重复执行。
  */
 export async function confirmAgentTool(req, res) {
   const requestStartedAt = Date.now();
   const requestId = generateUUID();
   let identity = null;
   let toolName = '';
+  let confirmation = null;
+  let executionClaimed = false;
+  let executionSettled = false;
+  let toolExecutionStarted = false;
+  let resultSettlementStarted = false;
+  let actionLockAcquired = false;
   try {
     identity = getAgentIdentity(req);
-    const confirmation = await consumeToolConfirmation(
+    let attempt = await inspectToolConfirmationExecution(
       req.body?.confirmationToken,
       identity.ownerKey,
       req.body?.sessionId,
     );
+    confirmation = attempt.confirmation;
     toolName = confirmation.toolName;
-    if (confirmation.resourceUserId !== identity.resourceUserId) {
+    if (
+      confirmation.resourceUserId !== identity.resourceUserId ||
+      confirmation.resourceUserRole !== identity.resourceUserRole
+    ) {
       throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '操作确认与当前资源账号不匹配。', 403);
     }
     if (confirmation.adminContextId) {
@@ -1371,6 +1792,36 @@ export async function confirmAgentTool(req, res) {
     if (!tool?.isWrite) {
       throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '确认令牌对应的操作无效。');
     }
+
+    const sendOutcome = (outcome) => {
+      const body = resultData(outcome.data, outcome.httpStatus, outcome.message);
+      return outcome.httpStatus === 200 ? res.send(body) : res.status(outcome.httpStatus).send(body);
+    };
+    const sendInProgress = () =>
+      res.status(409).send(
+        resultData(
+          {
+            code: 'TOOL_CONFIRMATION_IN_PROGRESS',
+            toolName: confirmation.toolName,
+            retryable: true,
+            retryAfter: 1,
+          },
+          409,
+          '操作仍在执行中，请稍后安全重试；系统不会重复执行。',
+        ),
+      );
+
+    if (attempt.state === 'settled') return sendOutcome(attempt.outcome);
+    if (attempt.state === 'running') return sendInProgress();
+
+    attempt = await claimToolConfirmationExecution(confirmation);
+    confirmation = attempt.confirmation;
+    if (attempt.state === 'settled') return sendOutcome(attempt.outcome);
+    if (attempt.state === 'running') return sendInProgress();
+    executionClaimed = true;
+
+    actionLockAcquired = await acquireToolConfirmationAction(confirmation);
+    toolExecutionStarted = true;
     const result = await executeTool(confirmation.toolName, confirmation.args || {}, {
       userId: identity.resourceUserId,
       userRole: identity.resourceUserRole,
@@ -1380,8 +1831,28 @@ export async function confirmAgentTool(req, res) {
       allowVisitorMaintenance: req.adminContext?.mode === 'maintain' && identity.resourceUserRole === 'visitor',
       request: req,
       suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+      idempotencyKey: confirmation.idempotencyKey || null,
     });
     if (result.status !== 'success') {
+      if (result.outcomeUnknown) {
+        throw new ToolConfirmationError(
+          'TOOL_CONFIRMATION_RESULT_PENDING',
+          '写入结果仍在核验中，请稍后安全重试；系统不会重复执行。',
+          503,
+        );
+      }
+      const failureOutcome = {
+        httpStatus: 400,
+        data: { code: result.error || 'TOOL_EXECUTION_FAILED', toolName: confirmation.toolName },
+        message: result.summary,
+      };
+      resultSettlementStarted = true;
+      await settleToolConfirmationExecution(confirmation, failureOutcome);
+      executionSettled = true;
+      if (actionLockAcquired) {
+        await finalizeToolConfirmationAction(confirmation, { succeeded: false });
+        actionLockAcquired = false;
+      }
       logAgentRequest({
         userId: identity.billingUserId,
         userAlias: req.adminActor?.alias || identity.resourceUserAlias,
@@ -1394,15 +1865,24 @@ export async function confirmAgentTool(req, res) {
         errorMsg: result.error || 'TOOL_EXECUTION_FAILED',
         trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
       });
-      return res
-        .status(400)
-        .send(
-          resultData(
-            { code: result.error || 'TOOL_EXECUTION_FAILED', toolName: confirmation.toolName },
-            400,
-            result.summary,
-          ),
-        );
+      return sendOutcome(failureOutcome);
+    }
+    const successOutcome = {
+      httpStatus: 200,
+      data: {
+        toolName: confirmation.toolName,
+        summary: result.summary,
+        dataSummary: result.dataSummary,
+        sources: result.sources || [],
+      },
+      message: '',
+    };
+    resultSettlementStarted = true;
+    await settleToolConfirmationExecution(confirmation, successOutcome);
+    executionSettled = true;
+    if (actionLockAcquired) {
+      await finalizeToolConfirmationAction(confirmation, { succeeded: true });
+      actionLockAcquired = false;
     }
     logAgentRequest({
       userId: identity.billingUserId,
@@ -1415,17 +1895,38 @@ export async function confirmAgentTool(req, res) {
       status: 'success',
       trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
     });
-    return res.send(
-      resultData({
-        toolName: confirmation.toolName,
-        summary: result.summary,
-        dataSummary: result.dataSummary,
-        sources: result.sources || [],
-      }),
-    );
+    return sendOutcome(successOutcome);
   } catch (error) {
-    const status = error instanceof ToolConfirmationError ? error.status : 500;
-    const code = error instanceof ToolConfirmationError ? error.code : 'TOOL_CONFIRMATION_FAILED';
+    let status = error instanceof ToolConfirmationError ? error.status : 500;
+    let code = error instanceof ToolConfirmationError ? error.code : 'TOOL_CONFIRMATION_FAILED';
+    let message = error instanceof ToolConfirmationError ? error.message : '操作执行失败，请重新发起。';
+
+    // 只缓存尚未开始调用写工具时的确定失败。调用开始后的异常可能发生在落库之后，绝不能写成失败再允许重跑。
+    if (executionClaimed && !toolExecutionStarted && !resultSettlementStarted) {
+      const failureOutcome = {
+        httpStatus: status,
+        data: { code, toolName },
+        message,
+      };
+      try {
+        resultSettlementStarted = true;
+        await settleToolConfirmationExecution(confirmation, failureOutcome);
+        executionSettled = true;
+      } catch (settlementError) {
+        status = settlementError.status || 503;
+        code = settlementError.code || 'TOOL_CONFIRMATION_UNAVAILABLE';
+        message = settlementError.message || '操作结果暂未同步，请稍后安全重试。';
+      }
+    }
+    if (actionLockAcquired && executionSettled) {
+      await finalizeToolConfirmationAction(confirmation, { succeeded: false });
+      actionLockAcquired = false;
+    }
+    if (executionClaimed && !executionSettled && (toolExecutionStarted || resultSettlementStarted)) {
+      status = 503;
+      code = 'TOOL_CONFIRMATION_RESULT_PENDING';
+      message = '操作结果仍在同步中，请稍后安全重试；系统不会重复执行。';
+    }
     if (!(error instanceof ToolConfirmationError)) {
       console.error('[Agent] 确认写操作失败:', error.message);
     }
@@ -1443,15 +1944,7 @@ export async function confirmAgentTool(req, res) {
         trace: { requestId, taskType: 'agent_confirmation', selectedTools: toolName ? [toolName] : [] },
       });
     }
-    return res
-      .status(status)
-      .send(
-        resultData(
-          { code },
-          status,
-          error instanceof ToolConfirmationError ? error.message : '操作执行失败，请重新发起。',
-        ),
-      );
+    return res.status(status).send(resultData({ code }, status, message));
   }
 }
 

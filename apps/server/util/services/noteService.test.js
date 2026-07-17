@@ -7,7 +7,7 @@ const connection = {
   rollback: vi.fn(),
   release: vi.fn(),
 };
-const pool = { getConnection: vi.fn(() => connection) };
+const pool = { getConnection: vi.fn(() => connection), query: vi.fn() };
 const enqueueResources = vi.fn();
 const triggerResourceCreateEffects = vi.fn();
 
@@ -16,6 +16,7 @@ vi.mock('../resourceInbox.js', () => ({ enqueueResources }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects }));
 
 const { createNote } = await import('./noteService.js');
+const { actionIdempotencyUuid } = await import('../agent/actionIdempotency.js');
 
 describe('noteService.createNote', () => {
   beforeEach(() => {
@@ -24,6 +25,7 @@ describe('noteService.createNote', () => {
     connection.query.mockResolvedValue([{ affectedRows: 1 }]);
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
+    pool.query.mockReset();
     enqueueResources.mockResolvedValue({ changed: 1 });
   });
 
@@ -88,5 +90,118 @@ describe('noteService.createNote', () => {
     const imageInserts = connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note_images SET ?');
     expect(imageInserts).toHaveLength(1);
     expect(imageInserts[0][1][0].url).toBe(imgUrl);
+  });
+
+  it('commit 已落库但回包异常时按服务端 UUID 和用户核验后返回成功', async () => {
+    connection.commit.mockRejectedValueOnce(new Error('commit response lost'));
+    pool.query.mockImplementationOnce(async (sql, params) => {
+      expect(sql).toBe('SELECT id FROM note WHERE id = ? AND create_by = ? LIMIT 1');
+      expect(params[1]).toBe('user-1');
+      return [[{ id: params[0] }]];
+    });
+
+    const result = await createNote({
+      userId: 'user-1',
+      userRole: 'user',
+      note: { title: '提交结果核验', content: '', type: 'html' },
+    });
+
+    expect(result.id).toBeTruthy();
+    expect(pool.query).toHaveBeenCalledWith('SELECT id FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
+      result.id,
+      'user-1',
+    ]);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(triggerResourceCreateEffects).toHaveBeenCalledWith(expect.objectContaining({ resourceId: result.id }));
+  });
+
+  it('commit 失败且事务外核验无记录时保留原异常并判定为真实回滚', async () => {
+    const commitError = new Error('commit rejected');
+    connection.commit.mockRejectedValueOnce(commitError);
+    pool.query.mockResolvedValueOnce([[]]);
+
+    await expect(
+      createNote({ userId: 'user-1', note: { title: '未提交笔记', content: '', type: 'html' } }),
+    ).rejects.toBe(commitError);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(triggerResourceCreateEffects).not.toHaveBeenCalled();
+  });
+
+  it('commit 后无法核验时标记结果不明，供外部资源调用方禁止误删', async () => {
+    const commitError = new Error('commit response lost');
+    connection.commit.mockRejectedValueOnce(commitError);
+    pool.query.mockRejectedValueOnce(new Error('verification unavailable'));
+
+    await expect(
+      createNote({ userId: 'user-1', note: { title: '待核验笔记', content: '', type: 'html' } }),
+    ).rejects.toMatchObject({ commitOutcomeUnknown: true });
+
+    expect(triggerResourceCreateEffects).not.toHaveBeenCalled();
+  });
+
+  it('非 Error 的 commit 异常在核验不可用时仍可靠标记结果不明', async () => {
+    connection.commit.mockRejectedValueOnce('commit response lost');
+    pool.query.mockRejectedValueOnce(new Error('verification unavailable'));
+
+    await expect(
+      createNote({ userId: 'user-1', note: { title: '异常类型兼容', content: '', type: 'html' } }),
+    ).rejects.toMatchObject({ commitOutcomeUnknown: true, cause: 'commit response lost' });
+  });
+
+  it('笔记已提交后旁路副作用同步抛错仍返回成功', async () => {
+    triggerResourceCreateEffects.mockImplementationOnce(() => {
+      throw new Error('side effect failed');
+    });
+
+    await expect(
+      createNote({ userId: 'user-1', note: { title: '主事务已完成', content: '', type: 'html' } }),
+    ).resolves.toMatchObject({ title: '主事务已完成' });
+
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('提交前写入失败时直接回滚，不执行提交后核验', async () => {
+    const insertError = new Error('insert failed');
+    connection.query.mockRejectedValueOnce(insertError);
+
+    await expect(createNote({ userId: 'user-1', note: { title: '写入失败', content: '', type: 'html' } })).rejects.toBe(
+      insertError,
+    );
+
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('提交结果不明后以稳定笔记 ID 恢复，重新确认不再插入第二条笔记', async () => {
+    const idempotencyKey = 'agent-write-v1:retry-after-unknown-commit';
+    const stableId = actionIdempotencyUuid(idempotencyKey, 'note');
+    connection.commit.mockRejectedValueOnce(new Error('commit response lost'));
+    pool.query
+      .mockResolvedValueOnce([[]])
+      .mockRejectedValueOnce(new Error('verification unavailable'))
+      .mockResolvedValueOnce([[{ id: stableId, title: '已落库笔记', type: 'markdown' }]]);
+
+    await expect(
+      createNote({
+        userId: 'user-1',
+        userRole: 'user',
+        note: { title: '已落库笔记', content: '正文', type: 'markdown' },
+        idempotencyKey,
+      }),
+    ).rejects.toMatchObject({ commitOutcomeUnknown: true });
+
+    await expect(
+      createNote({
+        userId: 'user-1',
+        userRole: 'user',
+        note: { title: '已落库笔记', content: '正文', type: 'markdown' },
+        idempotencyKey,
+      }),
+    ).resolves.toEqual({ id: stableId, title: '已落库笔记', type: 'markdown', addedToInbox: false });
+
+    expect(connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note SET ?')).toHaveLength(1);
+    expect(pool.getConnection).toHaveBeenCalledTimes(1);
   });
 });
