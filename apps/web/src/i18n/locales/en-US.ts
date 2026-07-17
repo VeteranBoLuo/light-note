@@ -1621,7 +1621,7 @@ export default {
     attachmentStatus: {
       awaiting_upload: 'Awaiting upload',
       queued: 'Queued for parsing',
-      parsing: 'Parsing',
+      parsing: 'Extracting text (using OCR when needed)',
       ready: 'Ready',
       failed: 'Parsing failed',
     },

@@ -32,12 +32,16 @@ function assertSuccess(response: any): any {
 
 export async function uploadAiAttachment(file: File, sessionId = ''): Promise<AiAttachment> {
   const init = assertSuccess(
-    await apiBasePost('/api/chat/attachments/init', {
-      fileName: file.name,
-      fileType: file.type || 'application/octet-stream',
-      fileSize: file.size,
-      sessionId,
-    }),
+    await apiBasePost(
+      '/api/chat/attachments/init',
+      {
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        sessionId,
+      },
+      { silent: true },
+    ),
   ) as InitUploadResult;
   try {
     await axios.put(init.uploadUrl, file, {
@@ -45,7 +49,7 @@ export async function uploadAiAttachment(file: File, sessionId = ''): Promise<Ai
       timeout: 120_000,
     });
     return assertSuccess(
-      await apiBasePost('/api/chat/attachments/confirm', { attachmentId: init.attachment.id }),
+      await apiBasePost('/api/chat/attachments/confirm', { attachmentId: init.attachment.id }, { silent: true }),
     ) as AiAttachment;
   } catch (error) {
     void deleteAiAttachment(init.attachment.id).catch(() => {});
@@ -55,7 +59,7 @@ export async function uploadAiAttachment(file: File, sessionId = ''): Promise<Ai
 
 export async function attachAiCloudFile(fileId: string, sessionId = ''): Promise<AiAttachment> {
   return assertSuccess(
-    await apiBasePost('/api/chat/attachments/attachCloudFile', { fileId, sessionId }),
+    await apiBasePost('/api/chat/attachments/attachCloudFile', { fileId, sessionId }, { silent: true }),
   ) as AiAttachment;
 }
 
@@ -68,7 +72,7 @@ export async function fetchAiAttachmentStatuses(attachmentIds: string[]): Promis
 export async function retryAiAttachment(attachment: AiAttachment): Promise<AiAttachment> {
   if (attachment.sourceType === 'cloud' && attachment.fileId) return attachAiCloudFile(String(attachment.fileId));
   return assertSuccess(
-    await apiBasePost('/api/chat/attachments/confirm', { attachmentId: attachment.id }),
+    await apiBasePost('/api/chat/attachments/confirm', { attachmentId: attachment.id }, { silent: true }),
   ) as AiAttachment;
 }
 

@@ -1588,7 +1588,7 @@ export default {
     attachmentStatus: {
       awaiting_upload: '等待上传',
       queued: '等待解析',
-      parsing: '正在解析',
+      parsing: '正在提取文字（必要时自动 OCR）',
       ready: '已就绪',
       failed: '解析失败',
     },

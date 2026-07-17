@@ -46,4 +46,37 @@ describe('AI 文档解析器', () => {
       parseDocumentBuffer(buffer, { fileName: 'fake.txt', fileType: 'text/plain', fileSize: buffer.length }),
     ).rejects.toThrow(/FILE_CONTENT_INVALID/);
   });
+
+  it('图片型 PDF 没有文字层时自动使用本地 OCR 并保留页码', async () => {
+    const buffer = Buffer.from('%PDF-image-only');
+    const result = await parseDocumentBuffer(
+      buffer,
+      { fileName: 'scan.pdf', fileType: 'application/pdf', fileSize: buffer.length },
+      {
+        pdfParser: async () => ({ numpages: 1, text: '' }),
+        ocrProvider: {
+          recognizePdf: async () => [{ pageNumber: 1, content: 'OCR 识别出的页面文字' }],
+        },
+      },
+    );
+
+    expect(result.text).toBe('OCR 识别出的页面文字');
+    expect(result.chunks[0]).toEqual(expect.objectContaining({ locatorType: 'page', locatorValue: '第 1 页' }));
+  });
+
+  it('常见图片格式进入 OCR 流程', async () => {
+    const buffer = Buffer.from('image-bytes');
+    const result = await parseDocumentBuffer(
+      buffer,
+      { fileName: 'notice.png', fileType: 'image/png', fileSize: buffer.length },
+      {
+        ocrProvider: {
+          recognizeImage: async () => ({ content: '图片中的中英文 Text 123' }),
+        },
+      },
+    );
+
+    expect(result.text).toContain('Text 123');
+    expect(result.chunks[0]).toEqual(expect.objectContaining({ locatorType: 'page', locatorValue: '图片' }));
+  });
 });

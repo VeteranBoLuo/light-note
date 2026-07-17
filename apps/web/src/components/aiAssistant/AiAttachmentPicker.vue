@@ -26,7 +26,7 @@
       v-if="!modelValue.length"
       :multiple="false"
       raw-file
-      accept=".txt,.md,.markdown,.csv,.pdf,.docx"
+      accept=".txt,.md,.markdown,.csv,.pdf,.docx,.png,.jpg,.jpeg,.webp"
       :max-total-size="20 * 1024 * 1024"
       @change="uploadLocal"
     >

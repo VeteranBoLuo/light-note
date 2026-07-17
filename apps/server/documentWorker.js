@@ -1,6 +1,7 @@
 import os from 'node:os';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { cleanupExpiredDocumentSources, runSingleDocumentJob } from './util/aiDocument/service.js';
+import { inspectLocalOcrRuntime } from './util/aiDocument/localOcr.js';
 
 const workerId = `${os.hostname()}:${process.pid}`;
 let stopping = false;
@@ -10,6 +11,15 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function run() {
   await ensureAiDocumentSchema();
+  const ocrRuntime = await inspectLocalOcrRuntime();
+  if (ocrRuntime.ready) {
+    console.log(`[AI 文档] 本地 OCR 已就绪: ${ocrRuntime.languages.join('+')}`);
+  } else {
+    const detail = ocrRuntime.missingLanguages?.length
+      ? `缺少语言模型 ${ocrRuntime.missingLanguages.join(', ')}`
+      : ocrRuntime.errorCode || '运行环境不可用';
+    console.warn(`[AI 文档] 本地 OCR 暂不可用: ${detail}`);
+  }
   console.log(`[AI 文档] 解析 Worker 已启动: ${workerId}`);
   while (!stopping) {
     try {

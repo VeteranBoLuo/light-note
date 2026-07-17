@@ -5,6 +5,7 @@ import mammoth from 'mammoth';
 // 直接使用实际解析实现，避免导入时产生文件系统副作用。
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { parse as parseCsv } from 'csv-parse/sync';
+import { localOcrProvider } from './localOcr.js';
 
 export const AI_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
 export const AI_DOCUMENT_MAX_CHARS = 300_000;
@@ -16,6 +17,10 @@ const TYPE_BY_EXTENSION = Object.freeze({
   '.csv': 'text/csv',
   '.pdf': 'application/pdf',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
 });
 
 const ALLOWED_MIME_BY_EXTENSION = Object.freeze({
@@ -35,6 +40,10 @@ const ALLOWED_MIME_BY_EXTENSION = Object.freeze({
     'application/zip',
     'application/octet-stream',
   ]),
+  '.png': new Set(['image/png', 'application/octet-stream']),
+  '.jpg': new Set(['image/jpeg', 'image/jpg', 'application/octet-stream']),
+  '.jpeg': new Set(['image/jpeg', 'image/jpg', 'application/octet-stream']),
+  '.webp': new Set(['image/webp', 'application/octet-stream']),
 });
 
 function documentError(code, message) {
@@ -64,7 +73,9 @@ export function validateDocumentDescriptor({ fileName, fileType, fileSize }) {
     .trim()
     .toLowerCase();
   const size = Number(fileSize || 0);
-  if (!expectedType) throw documentError('UNSUPPORTED_FILE_TYPE', '暂时仅支持 TXT、Markdown、CSV、PDF 和 DOCX');
+  if (!expectedType) {
+    throw documentError('UNSUPPORTED_FILE_TYPE', '暂时仅支持 TXT、Markdown、CSV、PDF、DOCX、PNG、JPG 和 WebP');
+  }
   if (!ALLOWED_MIME_BY_EXTENSION[extension]?.has(normalizedType)) {
     throw documentError('FILE_TYPE_MISMATCH', '文件扩展名与 MIME 类型不一致');
   }
@@ -186,7 +197,11 @@ function finalizeChunks(segments) {
   }));
 }
 
-export async function parseDocumentBuffer(buffer, descriptor) {
+export async function parseDocumentBuffer(
+  buffer,
+  descriptor,
+  { ocrProvider = localOcrProvider, pdfParser = pdfParse, signal } = {},
+) {
   if (!Buffer.isBuffer(buffer) || !buffer.length) throw documentError('EMPTY_DOCUMENT', '文件内容为空');
   const meta = validateDocumentDescriptor(descriptor);
   let text = '';
@@ -197,7 +212,7 @@ export async function parseDocumentBuffer(buffer, descriptor) {
       throw documentError('FILE_CONTENT_INVALID', '文件内容与 PDF 格式不一致');
     }
     const pages = [];
-    const result = await pdfParse(buffer, {
+    const result = await pdfParser(buffer, {
       pagerender: async (pageData) => {
         const content = await pageData.getTextContent();
         const pageText = cleanText(content.items.map((item) => item.str || '').join(' '));
@@ -208,15 +223,32 @@ export async function parseDocumentBuffer(buffer, descriptor) {
     if (Number(result.numpages || pages.length) > 300) {
       throw documentError('DOCUMENT_TOO_LONG', 'PDF 页数不能超过 300 页');
     }
-    text = cutText(result.text || pages.join('\n\n'));
-    let remainingChars = AI_DOCUMENT_MAX_CHARS;
-    segments = pages
-      .map((content, index) => {
-        const pageText = cleanText(content).slice(0, Math.max(0, remainingChars));
-        remainingChars -= pageText.length;
-        return { content: pageText, locatorType: 'page', locatorValue: `第 ${index + 1} 页` };
-      })
-      .filter((item) => item.content);
+    const embeddedText = cleanText(result.text || pages.join('\n\n'));
+    if (embeddedText) {
+      text = cutText(embeddedText);
+      let remainingChars = AI_DOCUMENT_MAX_CHARS;
+      segments = pages
+        .map((content, index) => {
+          const pageText = cleanText(content).slice(0, Math.max(0, remainingChars));
+          remainingChars -= pageText.length;
+          return { content: pageText, locatorType: 'page', locatorValue: `第 ${index + 1} 页` };
+        })
+        .filter((item) => item.content);
+    } else {
+      const ocrPages = await ocrProvider.recognizePdf(buffer, {
+        pageCount: Number(result.numpages || pages.length),
+        signal,
+      });
+      text = cutText(ocrPages.map((page) => page.content).join('\n\n'));
+      let remainingChars = AI_DOCUMENT_MAX_CHARS;
+      segments = ocrPages
+        .map((page) => {
+          const pageText = cleanText(page.content).slice(0, Math.max(0, remainingChars));
+          remainingChars -= pageText.length;
+          return { content: pageText, locatorType: 'page', locatorValue: `第 ${page.pageNumber} 页` };
+        })
+        .filter((item) => item.content);
+    }
   } else if (meta.extension === '.docx') {
     if (buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
       throw documentError('FILE_CONTENT_INVALID', '文件内容与 DOCX 格式不一致');
@@ -224,6 +256,10 @@ export async function parseDocumentBuffer(buffer, descriptor) {
     const result = await mammoth.extractRawText({ buffer });
     text = cutText(result.value);
     segments = splitParagraphs(text);
+  } else if (meta.expectedType.startsWith('image/')) {
+    const result = await ocrProvider.recognizeImage(buffer, { extension: meta.extension, signal });
+    text = cutText(result.content);
+    segments = [{ content: text, locatorType: 'page', locatorValue: '图片' }];
   } else {
     text = cutText(decodeText(buffer));
     if (meta.extension === '.csv') segments = splitCsv(text);

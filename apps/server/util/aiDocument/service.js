@@ -11,7 +11,16 @@ import { AI_DOCUMENT_MAX_BYTES, parseDocumentBuffer, validateDocumentDescriptor 
 
 const TEMPORARY_RETENTION_HOURS = 24;
 const MAX_ATTACHMENT_IDS = 1;
-const PARSE_TIMEOUT_MS = 90_000;
+const PARSE_TIMEOUT_MS = 180_000;
+const NON_RETRYABLE_PARSE_ERRORS = new Set([
+  'EMPTY_DOCUMENT',
+  'FILE_CONTENT_INVALID',
+  'DOCUMENT_TOO_LONG',
+  'OCR_PAGE_LIMIT',
+  'OCR_IMAGE_TOO_LARGE',
+  'OCR_ENGINE_UNAVAILABLE',
+  'OCR_LANGUAGE_UNAVAILABLE',
+]);
 
 function serviceError(code, message, status = 400) {
   const error = new Error(`${code}: ${message}`);
@@ -444,7 +453,7 @@ function parseError(error) {
 
 async function markJobFailure(job, error) {
   const parsed = parseError(error);
-  const finalFailure = Number(job.attempts || 0) >= 3;
+  const finalFailure = NON_RETRYABLE_PARSE_ERRORS.has(parsed.code) || Number(job.attempts || 0) >= 3;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -489,20 +498,28 @@ export async function runSingleDocumentJob(workerId) {
       throw serviceError('FILE_SIZE_MISMATCH', '文件大小与记录不一致');
     }
     const buffer = await getObjectBufferFromObs(source.object_key);
+    const abortController = new AbortController();
     let timeout;
     const parsed = await Promise.race([
-      parseDocumentBuffer(buffer, {
-        fileName: source.file_name,
-        fileType: source.file_type,
-        fileSize: source.file_size,
-      }),
+      parseDocumentBuffer(
+        buffer,
+        {
+          fileName: source.file_name,
+          fileType: source.file_type,
+          fileSize: source.file_size,
+        },
+        { signal: abortController.signal },
+      ),
       new Promise((_, reject) => {
-        timeout = setTimeout(
-          () => reject(serviceError('DOCUMENT_PARSE_TIMEOUT', '文件解析超时，请缩小文件后重试')),
-          PARSE_TIMEOUT_MS,
-        );
+        timeout = setTimeout(() => {
+          abortController.abort();
+          reject(serviceError('DOCUMENT_PARSE_TIMEOUT', '文件解析超时，请缩小文件或减少页数后重试'));
+        }, PARSE_TIMEOUT_MS);
       }),
-    ]).finally(() => clearTimeout(timeout));
+    ]).finally(() => {
+      clearTimeout(timeout);
+      abortController.abort();
+    });
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
