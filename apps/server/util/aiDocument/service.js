@@ -10,6 +10,7 @@ import {
 import { AI_DOCUMENT_MAX_BYTES, parseDocumentBuffer, validateDocumentDescriptor } from './parser.js';
 
 const TEMPORARY_RETENTION_HOURS = 24;
+const MAX_ACTIVE_TEMPORARY_SOURCES = 8;
 const MAX_ATTACHMENT_IDS = 1;
 const PARSE_TIMEOUT_MS = 180_000;
 const NON_RETRYABLE_PARSE_ERRORS = new Set([
@@ -67,16 +68,35 @@ async function resetJob(db, sourceId) {
   );
 }
 
-export async function createTemporaryDocumentSource({ userId, sessionId = '', fileName, fileType, fileSize }) {
-  const descriptor = validateDocumentDescriptor({ fileName, fileType, fileSize });
-  const [[activeRow]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM ai_document_sources
-     WHERE user_id = ? AND source_type = 'temporary' AND expires_at > NOW()`,
+async function ensureTemporarySourceCapacity(userId) {
+  const [rows] = await pool.query(
+    `SELECT id, status, create_time FROM ai_document_sources
+     WHERE user_id = ? AND source_type = 'temporary' AND expires_at > NOW()
+     ORDER BY create_time ASC`,
     [userId],
   );
-  if (Number(activeRow?.total || 0) >= 8) {
-    throw serviceError('TOO_MANY_ACTIVE_ATTACHMENTS', '临时附件较多，请先移除不再使用的文件');
+  let activeCount = rows.length;
+  if (activeCount < MAX_ACTIVE_TEMPORARY_SOURCES) return;
+
+  const uploadGraceTime = Date.now() - 20 * 60_000;
+  const reclaimable = rows.filter((row) => {
+    if (['ready', 'failed'].includes(row.status)) return true;
+    return row.status === 'awaiting_upload' && new Date(row.create_time).getTime() < uploadGraceTime;
+  });
+  for (const row of reclaimable) {
+    try {
+      if (await deleteDocumentSource({ userId, sourceId: String(row.id) })) activeCount -= 1;
+    } catch (error) {
+      console.error(`[AI 文档] 自动回收临时文件失败 source=${row.id}:`, error?.message || error);
+    }
+    if (activeCount < MAX_ACTIVE_TEMPORARY_SOURCES) return;
   }
+  throw serviceError('TOO_MANY_PROCESSING_ATTACHMENTS', '当前正在处理的文件较多，请稍后再试');
+}
+
+export async function createTemporaryDocumentSource({ userId, sessionId = '', fileName, fileType, fileSize }) {
+  const descriptor = validateDocumentDescriptor({ fileName, fileType, fileSize });
+  await ensureTemporarySourceCapacity(userId);
   const id = crypto.randomUUID();
   const objectKey = buildAiTemporaryObjectKey(userId, id, descriptor.fileName);
   await pool.query(
@@ -286,6 +306,26 @@ export async function deleteDocumentSource({ userId, sourceId }) {
     connection.release();
   }
   return true;
+}
+
+export async function deleteTemporaryDocumentSources({ userId }) {
+  const [rows] = await pool.query(
+    `SELECT id FROM ai_document_sources
+     WHERE user_id = ? AND source_type = 'temporary'
+     ORDER BY create_time ASC`,
+    [userId],
+  );
+  let deleted = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      if (await deleteDocumentSource({ userId, sourceId: String(row.id) })) deleted += 1;
+    } catch (error) {
+      failed += 1;
+      console.error(`[AI 文档] 清理临时文件失败 source=${row.id}:`, error?.message || error);
+    }
+  }
+  return { deleted, failed };
 }
 
 export async function purgeDocumentSourcesForCloudFiles(connection, userId, fileIds) {

@@ -1618,7 +1618,9 @@ export default {
     attachmentFailed: 'Parsing failed',
     attachmentUploadFailed: 'File upload failed. Please try again.',
     attachmentAttachFailed: 'This cloud file cannot be used.',
+    attachmentRemoveFailed: 'The temporary file could not be removed. Please try again later.',
     removeCurrentAttachmentFirst: 'Remove the current file before choosing another Cloud Space file.',
+    newConversationCleanupFailed: 'A new conversation started, but temporary files could not be cleared.',
     attachmentStatus: {
       awaiting_upload: 'Awaiting upload',
       queued: 'Queued for parsing',

@@ -164,11 +164,12 @@
     if (!attachment) return;
     busy.value = true;
     stopPolling();
-    emit('update:modelValue', []);
     try {
       await deleteAiAttachment(attachment.id);
-    } catch {
-      // 从当前会话移除已经完成；服务端临时文件仍会按过期时间自动清理。
+      emit('update:modelValue', []);
+    } catch (error: any) {
+      showAttachmentError(error, t('ai.attachmentRemoveFailed'));
+      if (['queued', 'parsing'].includes(attachment.status)) startPolling();
     } finally {
       busy.value = false;
     }

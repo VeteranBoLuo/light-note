@@ -74,7 +74,7 @@
   const bookmark = bookmarkStore();
   const isOpen = ref(false);
   const isMaximized = ref(false);
-  const aiAssistantRef = ref<{ clearHistory?: () => void; focusInput?: () => void } | null>(null);
+  const aiAssistantRef = ref<{ clearHistory?: () => Promise<boolean>; focusInput?: () => void } | null>(null);
   const aiShortcutLabel = getGlobalShortcutLabel('aiAssistant');
   const aiTriggerTitle = computed(() => t('ai.openShortcutHint', { shortcut: aiShortcutLabel }));
 
@@ -121,9 +121,10 @@
     if (instance && isOpen.value) instance.focusInput?.();
   });
 
-  function clearConversation() {
-    aiAssistantRef.value?.clearHistory?.();
-    message.success(t('ai.newChart'));
+  async function clearConversation() {
+    const cleaned = (await aiAssistantRef.value?.clearHistory?.()) ?? true;
+    if (cleaned) message.success(t('ai.newChart'));
+    else message.warning(t('ai.newConversationCleanupFailed'));
   }
 
   function shouldIgnoreEscape(event: KeyboardEvent) {

@@ -40,6 +40,7 @@ router.post('/attachments/confirm', aiDocumentHandle.confirmTemporaryUpload);
 router.post('/attachments/attachCloudFile', attachmentCreateLimiter, aiDocumentHandle.attachCloudFile);
 router.post('/attachments/status', aiDocumentHandle.getStatuses);
 router.post('/attachments/delete', aiDocumentHandle.removeAttachment);
+router.post('/attachments/clearTemporary', aiDocumentHandle.clearTemporaryAttachments);
 // AI 今日额度状态(供助手展示「已用 / 剩余」);root/本机自测豁免返回 { exempt:true }
 router.post('/aiQuota', async (req, res) => {
   try {

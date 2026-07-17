@@ -5,6 +5,7 @@ import {
   confirmTemporaryDocumentSource,
   createTemporaryDocumentSource,
   deleteDocumentSource,
+  deleteTemporaryDocumentSources,
   getDocumentSourceStatuses,
 } from '../util/aiDocument/service.js';
 
@@ -92,4 +93,10 @@ export function removeAttachment(req, res) {
       sourceId: String(req.body?.attachmentId || ''),
     }),
   }));
+}
+
+export function clearTemporaryAttachments(req, res) {
+  const documentUser = getDocumentUser(req, res);
+  if (!documentUser) return;
+  return respond(res, () => deleteTemporaryDocumentSources({ userId: documentUser.id }));
 }

@@ -1585,7 +1585,9 @@ export default {
     attachmentFailed: '解析失败',
     attachmentUploadFailed: '文件上传失败，请重试',
     attachmentAttachFailed: '无法使用这个云文件',
+    attachmentRemoveFailed: '临时文件移除失败，请稍后重试',
     removeCurrentAttachmentFirst: '请先移除当前文件，再选择其他云空间文件',
+    newConversationCleanupFailed: '已开始新对话，但临时文件清理失败，请稍后重试',
     attachmentStatus: {
       awaiting_upload: '等待上传',
       queued: '等待解析',

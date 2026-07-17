@@ -256,6 +256,7 @@ declare(ADMIN_POLICIES.AI_USE, 'agent', [
   ['POST', '/chat/attachments/attachCloudFile'],
   ['POST', '/chat/attachments/status'],
   ['POST', '/chat/attachments/delete'],
+  ['POST', '/chat/attachments/clearTemporary'],
   ['POST', '/chat/aiQuota'],
   ['POST', '/chat/generateBookmarkMeta'],
   ['POST', '/chat/generateBookmarkDescription'],

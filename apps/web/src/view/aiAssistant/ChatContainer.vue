@@ -81,7 +81,7 @@
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
-  import type { AiAttachment } from '@/api/aiAttachmentApi';
+  import { clearAiTemporaryAttachments, type AiAttachment } from '@/api/aiAttachmentApi';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
@@ -302,7 +302,7 @@
   });
 
   // 清空对话
-  function clearHistory() {
+  async function clearHistory() {
     stopResponse();
     sessionId = '';
     longChatHinted.value = false;
@@ -322,6 +322,13 @@
       },
     ];
     resetScrollState();
+    if (!user.id || user.role === 'visitor') return true;
+    try {
+      const result = await clearAiTemporaryAttachments();
+      return result.failed === 0;
+    } catch {
+      return false;
+    }
   }
 
   // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动

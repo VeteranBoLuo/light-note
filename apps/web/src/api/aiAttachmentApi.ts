@@ -26,7 +26,12 @@ interface InitUploadResult {
 }
 
 function assertSuccess(response: any): any {
-  if (response?.status !== 200) throw new Error(response?.msg || '文件处理失败');
+  if (response?.status !== 200) {
+    const error = new Error(response?.msg || '文件处理失败') as Error & { code?: string; status?: number };
+    error.code = response?.data?.code || 'AI_DOCUMENT_FAILED';
+    error.status = Number(response?.status || 500);
+    throw error;
+  }
   return response.data;
 }
 
@@ -78,4 +83,8 @@ export async function retryAiAttachment(attachment: AiAttachment): Promise<AiAtt
 
 export async function deleteAiAttachment(attachmentId: string): Promise<void> {
   assertSuccess(await apiBasePost('/api/chat/attachments/delete', { attachmentId }, { silent: true }));
+}
+
+export async function clearAiTemporaryAttachments(): Promise<{ deleted: number; failed: number }> {
+  return assertSuccess(await apiBasePost('/api/chat/attachments/clearTemporary', {}, { silent: true }));
 }

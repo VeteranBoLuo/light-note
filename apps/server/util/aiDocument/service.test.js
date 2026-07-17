@@ -2,18 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const pool = { query: vi.fn(), getConnection: vi.fn() };
 const getObjectMetadataFromObs = vi.fn();
+const deleteObjectFromObs = vi.fn();
+const buildAiTemporaryObjectKey = vi.fn();
+const createUploadSignedUrl = vi.fn();
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../obsClient.js', () => ({
-  buildAiTemporaryObjectKey: vi.fn(),
-  createUploadSignedUrl: vi.fn(),
-  deleteObjectFromObs: vi.fn(),
+  buildAiTemporaryObjectKey,
+  createUploadSignedUrl,
+  deleteObjectFromObs,
   getObjectBufferFromObs: vi.fn(),
   getObjectMetadataFromObs,
 }));
 
-const { attachCloudDocumentSource, confirmTemporaryDocumentSource, resolveDocumentAttachments } =
-  await import('./service.js');
+const {
+  attachCloudDocumentSource,
+  confirmTemporaryDocumentSource,
+  createTemporaryDocumentSource,
+  deleteTemporaryDocumentSources,
+  resolveDocumentAttachments,
+} = await import('./service.js');
 
 describe('AI 文档服务', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -106,5 +114,91 @@ describe('AI 文档服务', () => {
     );
     expect(getObjectMetadataFromObs).not.toHaveBeenCalled();
     expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('达到保留上限时自动回收最旧的已完成文件后继续上传', async () => {
+    const rows = Array.from({ length: 8 }, (_, index) => ({
+      id: `source-${index + 1}`,
+      status: 'ready',
+      create_time: new Date(Date.now() - (8 - index) * 60_000),
+    }));
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_sources')) {
+          return [[{ id: 'source-1', source_type: 'temporary', object_key: 'tmp/source-1' }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    pool.query
+      .mockResolvedValueOnce([rows])
+      .mockResolvedValueOnce([[{ id: 'source-1', source_type: 'temporary', object_key: 'tmp/source-1' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    pool.getConnection.mockResolvedValue(connection);
+    deleteObjectFromObs.mockResolvedValue({});
+    buildAiTemporaryObjectKey.mockReturnValue('tmp/new-source');
+    createUploadSignedUrl.mockReturnValue({ url: 'https://upload.example', headers: {}, expiresIn: 900 });
+
+    const result = await createTemporaryDocumentSource({
+      userId: 'user-1',
+      fileName: 'next.md',
+      fileType: 'text/markdown',
+      fileSize: 10,
+    });
+
+    expect(deleteObjectFromObs).toHaveBeenCalledWith('tmp/source-1');
+    expect(result.uploadUrl).toBe('https://upload.example');
+    expect(pool.query.mock.calls.at(-1)?.[0]).toContain('INSERT INTO ai_document_sources');
+  });
+
+  it('达到上限且全部仍在处理中时不自动删除', async () => {
+    pool.query.mockResolvedValueOnce([
+      Array.from({ length: 8 }, (_, index) => ({
+        id: `source-${index + 1}`,
+        status: index % 2 ? 'queued' : 'parsing',
+        create_time: new Date(),
+      })),
+    ]);
+
+    await expect(
+      createTemporaryDocumentSource({
+        userId: 'user-1',
+        fileName: 'next.md',
+        fileType: 'text/markdown',
+        fileSize: 10,
+      }),
+    ).rejects.toThrow(/TOO_MANY_PROCESSING_ATTACHMENTS/);
+    expect(deleteObjectFromObs).not.toHaveBeenCalled();
+    expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('清空新会话临时文件时逐项删除并如实返回失败数', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_sources')) {
+          return [[{ id: 'source-1', source_type: 'temporary', object_key: 'tmp/source-1' }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    pool.query
+      .mockResolvedValueOnce([[{ id: 'source-1' }, { id: 'source-2' }]])
+      .mockResolvedValueOnce([[{ id: 'source-1', source_type: 'temporary', object_key: 'tmp/source-1' }]])
+      .mockResolvedValueOnce([[{ id: 'source-2', source_type: 'temporary', object_key: 'tmp/source-2' }]]);
+    pool.getConnection.mockResolvedValue(connection);
+    deleteObjectFromObs.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('OBS unavailable'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(deleteTemporaryDocumentSources({ userId: 'user-1' })).resolves.toEqual({ deleted: 1, failed: 1 });
+    expect(consoleSpy).toHaveBeenCalledOnce();
+    consoleSpy.mockRestore();
   });
 });
