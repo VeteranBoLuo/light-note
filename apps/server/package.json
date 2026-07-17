@@ -18,6 +18,7 @@
     "@lightnote/shared": "workspace:*",
     "axios": "^1.13.2",
     "body-parser": "^1.20.3",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "csv-parse": "^7.0.1",
     "dotenv": "^17.2.0",

@@ -1,10 +1,8 @@
 /**
  * Agent 聊天处理器
  *
- * 核心流程（两段式 Agent）：
- *   用户消息 → sync DeepSeek (带 tools) → 有 tool_calls?
- *     ├─ 是 → 执行工具 → stream DeepSeek (Final Reply) → 逐 chunk 推 SSE
- *     └─ 否 → sync DeepSeek content 直接作为回答 → 单块 SSE
+ * 核心流程（有界多轮 Agent）：
+ *   用户消息 → Planner → 工具结果声明仍需补充时继续规划（最多 3 轮工具）→ Final Reply
  *
  * 参考 ai-assistant 的 ReAct 模式，适配轻笺 Express 后端。
  */
@@ -25,10 +23,10 @@ import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import { selectAgentTools } from '../util/agent/toolRouter.js';
 import {
-  SECOND_ROUND_INSTRUCTION,
+  FOLLOW_UP_ROUND_INSTRUCTION,
   constrainSecondRoundToolCalls,
   selectSecondRoundTools,
-  shouldRunSecondPlanner,
+  shouldContinueToolPlanning,
 } from '../util/agent/secondRound.js';
 import {
   consumeToolConfirmation,
@@ -39,6 +37,7 @@ import {
 import * as aiQuota from '../util/aiQuota.js';
 import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
 import { getPlannerMaxTokens, normalizeToolArguments, parseToolCallArguments } from '../util/agent/toolArguments.js';
+import { buildNoteAiPayload, findOwnedNoteForAi } from '../util/noteAiService.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -216,6 +215,7 @@ async function executeTool(name, args, ctx) {
       dataSummary,
       params: args,
       sources: extractToolSources(name, raw),
+      nextActions: Array.isArray(raw?.nextActions) ? raw.nextActions.slice(0, 4) : [],
     };
   } catch (err) {
     if (err?.name === 'AbortError') throw err;
@@ -241,7 +241,7 @@ function extractToolSources(name, raw) {
   const rows = Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : raw?.id ? [raw] : [];
   if (!rows.length) return [];
   const sourceType =
-    name === 'query_notes' || name === 'create_note'
+    name === 'query_notes' || name === 'read_note' || name === 'create_note'
       ? 'note'
       : name === 'query_bookmarks' || name === 'create_bookmark'
         ? 'bookmark'
@@ -316,7 +316,7 @@ async function resolveUser(keyword) {
   return rows[0] || null;
 }
 
-async function resolveResourceContexts(userId, contexts) {
+async function resolveResourceContexts(userId, contexts, question = '') {
   if (!Array.isArray(contexts) || contexts.length === 0) return { text: '', sources: [] };
   const normalized = [];
   const seen = new Set();
@@ -331,18 +331,31 @@ async function resolveResourceContexts(userId, contexts) {
   }
   const blocks = [];
   const sources = [];
-  for (const item of normalized) {
+  let remainingBudget = 12_000;
+  for (let itemIndex = 0; itemIndex < normalized.length; itemIndex += 1) {
+    if (remainingBudget <= 0) break;
+    const item = normalized[itemIndex];
     let rows = [];
+    let notePayload = null;
     if (item.type === 'bookmark') {
       [rows] = await pool.query(
         'SELECT id, name AS title, url, LEFT(COALESCE(description, ?), 2000) AS content FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0',
         ['', item.id, userId],
       );
     } else if (item.type === 'note') {
-      [rows] = await pool.query(
-        'SELECT id, title, LEFT(COALESCE(content, ?), 4000) AS content FROM note WHERE id = ? AND create_by = ? AND del_flag = 0',
-        ['', item.id, userId],
-      );
+      const note = await findOwnedNoteForAi({ userId, noteId: item.id });
+      if (note) {
+        const itemBudget = Math.min(
+          remainingBudget,
+          Math.max(800, Math.floor(remainingBudget / Math.max(1, normalized.length - itemIndex))),
+        );
+        notePayload = await buildNoteAiPayload({
+          note,
+          question,
+          maxChars: itemBudget,
+        });
+        rows = [{ ...note, content: notePayload.content }];
+      }
     } else if (item.type === 'file') {
       [rows] = await pool.query(
         'SELECT CAST(id AS CHAR) AS id, file_name AS title, file_type, file_size FROM files WHERE id = ? AND create_by = ? AND del_flag = 0',
@@ -361,8 +374,12 @@ async function resolveResourceContexts(userId, contexts) {
         ? `文件类型：${row.file_type || '未知'}；大小：${Number(row.file_size || 0)} bytes`
         : item.type === 'tag'
           ? '用户选择的标签上下文'
-          : plainText(row.content || row.url || '').slice(0, 4000);
-    blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}\n${content}`);
+          : item.type === 'note'
+            ? String(row.content || '(笔记正文为空)')
+            : plainText(row.content || row.url || '').slice(0, 2000);
+    const boundedContent = content.slice(0, remainingBudget);
+    remainingBudget = Math.max(0, remainingBudget - boundedContent.length);
+    blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}\n${boundedContent}`);
     if (item.type !== 'tag') {
       sources.push({
         type: item.type,
@@ -587,7 +604,7 @@ export async function agentChat(req, res) {
     // 不能因为尚未发生模型调用就消耗用户额度。
     const resolvedContexts = enableTranslation
       ? { text: '', sources: [] }
-      : await resolveResourceContexts(userId, contexts);
+      : await resolveResourceContexts(userId, contexts, message);
     const resolvedAttachments = enableTranslation
       ? { text: '', sources: [] }
       : await resolveDocumentAttachments({ userId, sourceIds: attachmentIds, question: message });
@@ -642,6 +659,9 @@ export async function agentChat(req, res) {
       ? []
       : selectAgentTools(toolRegistry, {
           message,
+          contextTypes: (Array.isArray(contexts) ? contexts : [])
+            .map((item) => String(item?.type || ''))
+            .filter(Boolean),
           userRole,
           allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
           allowVisitorWrite: req.adminContext?.mode === 'maintain',
@@ -881,6 +901,7 @@ export async function agentChat(req, res) {
               signal: agentAbortController.signal,
               request: req,
               suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+              question: message,
             });
           }
           if (Array.isArray(result.sources)) sources.push(...result.sources);
@@ -910,7 +931,8 @@ export async function agentChat(req, res) {
       }
 
       // 追加 tool 结果消息
-      let remainingToolResultBudget = 12000;
+      // 允许“结构化正文 → 图片分析”两类结果同时进入上下文；仍设置总上限，避免多轮工具挤爆模型窗口。
+      let remainingToolResultBudget = 24000;
       for (const r of results) {
         const summary = String(r.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
         remainingToolResultBudget -= summary.length;
@@ -921,108 +943,112 @@ export async function agentChat(req, res) {
         });
       }
 
-      // 第一轮失败或空结果时，最多再进行一轮受限纠错。第二轮工具定义与实际调用均只允许
-      // 本轮已授权的只读工具，工具内容也明确视为不可信资料，不能借提示注入扩大权限。
-      const secondRoundTools = selectSecondRoundTools(selectedTools);
-      const secondRoundEnabled = process.env.AI_SECOND_ROUND_ENABLED !== 'false';
-      if (secondRoundEnabled && secondRoundTools.length > 0 && shouldRunSecondPlanner(results, confirmations)) {
-        messages.push({ role: 'user', content: SECOND_ROUND_INSTRUCTION });
-        const secondPlannerStartedAt = Date.now();
-        let secondPlannerResponse = await requestDeepSeek(messages, {
-          tools: getToolDefinitions(secondRoundTools),
+      // 工具链采用有界多轮：上一轮失败/空结果，或明确声明还有可选后续能力时，
+      // 让模型基于真实结果决定是否继续。后续轮只允许本轮已授权的只读工具，最多 3 轮，
+      // 防止无限循环、越权扩展和无意义 OCR。
+      const followUpTools = selectSecondRoundTools(selectedTools);
+      const followUpEnabled = process.env.AI_SECOND_ROUND_ENABLED !== 'false';
+      const configuredMaxRounds = Number(process.env.AI_MAX_TOOL_ROUNDS || 3);
+      const maxToolRounds = Math.max(1, Math.min(3, Number.isFinite(configuredMaxRounds) ? configuredMaxRounds : 3));
+      let previousRoundResults = results;
+      for (
+        let round = 2;
+        followUpEnabled &&
+        round <= maxToolRounds &&
+        followUpTools.length > 0 &&
+        shouldContinueToolPlanning(previousRoundResults, confirmations);
+        round += 1
+      ) {
+        messages.push({ role: 'user', content: `${FOLLOW_UP_ROUND_INSTRUCTION}\n当前是第 ${round} 轮工具规划。` });
+        const followUpPlannerStartedAt = Date.now();
+        let followUpPlannerResponse = await requestDeepSeek(messages, {
+          tools: getToolDefinitions(followUpTools),
           signal: agentAbortController.signal,
           maxTokens: 900,
         });
-        trace.plannerMs += Date.now() - secondPlannerStartedAt;
-        trace.finishReason = secondPlannerResponse.finishReason || trace.finishReason;
-        plannerUsageReported = plannerUsageReported && secondPlannerResponse.usageStatus === 'reported';
+        trace.plannerMs += Date.now() - followUpPlannerStartedAt;
+        trace.finishReason = followUpPlannerResponse.finishReason || trace.finishReason;
+        plannerUsageReported = plannerUsageReported && followUpPlannerResponse.usageStatus === 'reported';
         trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
         apiCalls++;
         apiCallsForLog = apiCalls;
-        totalUsage.promptTokens += secondPlannerResponse.usage.promptTokens;
-        totalUsage.completionTokens += secondPlannerResponse.usage.completionTokens;
-        totalUsage.totalTokens += secondPlannerResponse.usage.totalTokens;
+        totalUsage.promptTokens += followUpPlannerResponse.usage.promptTokens;
+        totalUsage.completionTokens += followUpPlannerResponse.usage.completionTokens;
+        totalUsage.totalTokens += followUpPlannerResponse.usage.totalTokens;
 
-        if (!secondPlannerResponse.toolCalls?.length && looksLikeLeakedToolCall(secondPlannerResponse.content)) {
-          secondPlannerResponse = {
-            ...secondPlannerResponse,
-            toolCalls: parseLeakedToolCalls(secondPlannerResponse.content),
+        if (!followUpPlannerResponse.toolCalls?.length && looksLikeLeakedToolCall(followUpPlannerResponse.content)) {
+          followUpPlannerResponse = {
+            ...followUpPlannerResponse,
+            toolCalls: parseLeakedToolCalls(followUpPlannerResponse.content),
             content: '',
           };
         }
-        const secondToolCalls = constrainSecondRoundToolCalls(secondPlannerResponse.toolCalls, secondRoundTools);
+        const followUpToolCalls = constrainSecondRoundToolCalls(followUpPlannerResponse.toolCalls, followUpTools);
+        if (!followUpToolCalls.length) break;
 
-        if (secondToolCalls.length > 0) {
-          messages.push({ role: 'assistant', content: null, tool_calls: secondToolCalls });
-          const secondToolStartedAt = Date.now();
-          const secondResults = await Promise.all(
-            secondToolCalls.map(async (tc) => {
-              const parsedArgs = parseToolCallArguments(tc);
-              let args = parsedArgs.args;
-              const tool = toolRegistry.get(tc.function.name);
-              let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
-              if (!argumentError && tool) {
-                try {
-                  args = normalizeToolArguments(tool, args);
-                } catch (error) {
-                  const publicError = publicToolError(error, 'AI 生成的查询参数无效，请重新提问。');
-                  argumentError = { code: publicError.code, message: publicError.message };
+        messages.push({ role: 'assistant', content: null, tool_calls: followUpToolCalls });
+        const followUpToolStartedAt = Date.now();
+        previousRoundResults = await Promise.all(
+          followUpToolCalls.map(async (tc) => {
+            const parsedArgs = parseToolCallArguments(tc);
+            let args = parsedArgs.args;
+            const tool = toolRegistry.get(tc.function.name);
+            let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
+            if (!argumentError && tool) {
+              try {
+                args = normalizeToolArguments(tool, args);
+              } catch (error) {
+                const publicError = publicToolError(error, 'AI 生成的查询参数无效，请重新提问。');
+                argumentError = { code: publicError.code, message: publicError.message };
+              }
+            }
+            if (stream && !res.writableEnded) {
+              res.write(
+                `data: ${JSON.stringify({ event: 'tool_start', requestId, tool: tc.function.name, round })}\n\n`,
+              );
+            }
+            const result = argumentError
+              ? {
+                  status: 'error',
+                  summary: argumentError.message,
+                  error: argumentError.code,
+                  params: args,
                 }
-              }
-              if (stream && !res.writableEnded) {
-                res.write(
-                  `data: ${JSON.stringify({ event: 'tool_start', requestId, tool: tc.function.name, round: 2 })}\n\n`,
-                );
-              }
-              const result = argumentError
-                ? {
-                    status: 'error',
-                    summary: argumentError.message,
-                    error: argumentError.code,
-                    params: args,
-                  }
-                : await executeTool(tc.function.name, args, {
-                    userId,
-                    userRole,
-                    userAlias,
-                    billingUserId: identity.billingUserId,
-                    billingUserRole: identity.billingUserRole,
-                    signal: agentAbortController.signal,
-                    request: req,
-                    suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
-                  });
-              if (Array.isArray(result.sources)) sources.push(...result.sources);
-              usedTools.push({
-                name: tc.function.name,
-                status: result.status,
-                params: args,
-                error: result.error,
-                dataSummary: result.dataSummary,
-              });
-              if (stream && !res.writableEnded) {
-                res.write(
-                  `data: ${JSON.stringify({ event: 'tool_result', requestId, tool: tc.function.name, status: result.status, round: 2 })}\n\n`,
-                );
-              }
-              return { toolCallId: tc.id, result };
-            }),
-          );
-          trace.toolMs += Date.now() - secondToolStartedAt;
-          for (const r of secondResults) {
-            const summary = String(r.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
-            remainingToolResultBudget -= summary.length;
-            messages.push({
-              role: 'tool',
-              tool_call_id: r.toolCallId,
-              content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
+              : await executeTool(tc.function.name, args, {
+                  userId,
+                  userRole,
+                  userAlias,
+                  billingUserId: identity.billingUserId,
+                  billingUserRole: identity.billingUserRole,
+                  signal: agentAbortController.signal,
+                  request: req,
+                  suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+                  question: message,
+                });
+            if (Array.isArray(result.sources)) sources.push(...result.sources);
+            usedTools.push({
+              name: tc.function.name,
+              status: result.status,
+              params: args,
+              error: result.error,
+              dataSummary: result.dataSummary,
             });
-          }
-        } else if (secondPlannerResponse.content) {
+            if (stream && !res.writableEnded) {
+              res.write(
+                `data: ${JSON.stringify({ event: 'tool_result', requestId, tool: tc.function.name, status: result.status, round })}\n\n`,
+              );
+            }
+            return { toolCallId: tc.id, result };
+          }),
+        );
+        trace.toolMs += Date.now() - followUpToolStartedAt;
+        for (const r of previousRoundResults) {
+          const summary = String(r.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
+          remainingToolResultBudget -= summary.length;
           messages.push({
-            role: 'assistant',
-            content: looksLikeLeakedToolCall(secondPlannerResponse.content)
-              ? '第二轮未获得可安全执行的只读工具调用。'
-              : secondPlannerResponse.content,
+            role: 'tool',
+            tool_call_id: r.toolCallId,
+            content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
           });
         }
       }

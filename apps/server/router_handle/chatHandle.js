@@ -179,6 +179,37 @@ async function logNoteAssist({ req, requestId, usage, usageStatus, providerInfo,
   }
 }
 
+const NOTE_ASSIST_HEARTBEAT_MS = 12_000;
+
+function writeNoteAssistSse(res, payload) {
+  if (res.writableEnded || res.destroyed) return false;
+  try {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 不透传供应商原始报错，避免将内部配置或上游细节显示给用户；仅给出可操作的分类提示。
+function getNoteAssistStreamError(error) {
+  if (error?.code === 'AI_FIRST_TOKEN_TIMEOUT') {
+    return { error: 'AI_FIRST_TOKEN_TIMEOUT', message: 'AI 首次响应超时，请重新生成。' };
+  }
+  if (error?.code === 'AI_STREAM_IDLE_TIMEOUT') {
+    return { error: 'AI_STREAM_IDLE_TIMEOUT', message: 'AI 生成中断过久，请重新生成。' };
+  }
+
+  const providerMessage = String(error?.message || '');
+  if (/429|rate[\s_-]*limit|busy|overload|服务繁忙/i.test(providerMessage)) {
+    return { error: 'AI_SERVICE_BUSY', message: 'AI 服务繁忙，请稍后重新生成。' };
+  }
+  if (/auth|api[\s_-]*key|invalid|unauthor|401|403|余额|balance|insufficient|quota|欠费|expired|过期/i.test(providerMessage)) {
+    return { error: 'AI_SERVICE_UNAVAILABLE', message: 'AI 生成服务暂不可用，请稍后重试。' };
+  }
+  return { error: 'AI_SERVICE_ERROR', message: 'AI 生成失败，请稍后重新生成。' };
+}
+
 /**
  * 笔记组手 —— AI 辅助编辑（润色、摘要、纠错、自定义处理等）
  * 与 receiveMessage 共享 DashScope 服务，不注入知识库上下文
@@ -201,8 +232,10 @@ export const assistNote = async (req, res) => {
   let finishReason = null;
   let logStatus = 'success';
   let logError = null;
+  let heartbeatTimer = null;
   try {
     providerInfo = getActiveProviderInfo();
+    const noteAssistMaxTokens = providerInfo.noteAssistMaxTokens || 4096;
     const message = String(req.body?.message || '');
     if (!message.trim()) {
       logStatus = 'invalid_request';
@@ -253,15 +286,23 @@ export const assistNote = async (req, res) => {
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
       });
-      res.write(`data: ${JSON.stringify({ event: 'start', requestId, output: { session_id: sessionId } })}\n\n`);
+      writeNoteAssistSse(res, { event: 'start', requestId, output: { session_id: sessionId } });
+      // 模型排队或首字较慢时，持续告知浏览器连接仍正常，同时避免中间代理把空闲 SSE 断开。
+      heartbeatTimer = setInterval(() => {
+        writeNoteAssistSse(res, {
+          event: 'heartbeat',
+          requestId,
+          elapsedMs: Date.now() - startedAt,
+          phase: firstTokenMs == null ? 'waiting_first_token' : 'streaming',
+          output: { session_id: sessionId },
+        });
+      }, NOTE_ASSIST_HEARTBEAT_MS);
       const result = await requestDeepSeekStream(messages, {
         signal: abortController.signal,
-        maxTokens: 4096,
+        maxTokens: noteAssistMaxTokens,
         onDelta: (text) => {
           if (firstTokenMs == null) firstTokenMs = Date.now() - startedAt;
-          if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ event: 'delta', requestId, output: { text, session_id: sessionId } })}\n\n`);
-          }
+          writeNoteAssistSse(res, { event: 'delta', requestId, output: { text, session_id: sessionId } });
         },
       });
       usageMissing = result.usageStatus === 'missing';
@@ -269,15 +310,15 @@ export const assistNote = async (req, res) => {
       usage.promptTokens += result.usage.promptTokens;
       usage.completionTokens += result.usage.completionTokens;
       usage.totalTokens += result.usage.totalTokens;
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ event: 'done', requestId, usage, output: { session_id: sessionId } })}\n\n`);
+      if (!res.writableEnded && !res.destroyed) {
+        writeNoteAssistSse(res, { event: 'done', requestId, usage, finishReason, output: { session_id: sessionId } });
         res.write('data: [DONE]\n\n');
         res.end();
       }
     } else {
       const result = await requestDeepSeek(messages, {
         signal: abortController.signal,
-        maxTokens: 4096,
+        maxTokens: noteAssistMaxTokens,
         toolChoice: 'none',
       });
       usageMissing = result.usageStatus === 'missing';
@@ -296,15 +337,16 @@ export const assistNote = async (req, res) => {
     logStatus = abortController.signal.aborted ? 'aborted' : 'error';
     logError = error?.message || String(error);
     console.error('笔记组手请求错误:', error.message);
-    if (stream && !abortController.signal.aborted && !res.writableEnded) {
+    if (stream && !abortController.signal.aborted && !res.writableEnded && !res.destroyed) {
       try {
-        res.write(`data: ${JSON.stringify({ event: 'error', requestId, error: 'AI_SERVICE_ERROR', message: 'AI 服务暂时不可用，请稍后重试。' })}\n\n`);
+        writeNoteAssistSse(res, { event: 'error', requestId, ...getNoteAssistStreamError(error) });
         res.end();
       } catch (e) {}
     } else if (!stream && !res.headersSent) {
       res.status(500).send(resultData(null, 500, 'AI 服务暂时不可用，请稍后重试。'));
     }
   } finally {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
     res.removeListener('close', onClose);
     const reconciledTokens = usageMissing
       ? Math.max(usage.totalTokens, Number(quotaHandle?.reserved || 0))

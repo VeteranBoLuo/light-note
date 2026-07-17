@@ -1,6 +1,8 @@
 import searchKnowledgeBase from './search_knowledge_base.js';
 import queryBookmarks from './query_bookmarks.js';
 import queryNotes from './query_notes.js';
+import readNote from './read_note.js';
+import analyzeResourceImages from './analyze_resource_images.js';
 import queryFiles from './query_files.js';
 import searchContent from './search_content.js';
 import getStorageUsage from './get_storage_usage.js';
@@ -40,6 +42,8 @@ export default [
   searchKnowledgeBase,
   queryBookmarks,
   queryNotes,
+  readNote,
+  analyzeResourceImages,
   queryFiles,
   searchContent,
   getStorageUsage,

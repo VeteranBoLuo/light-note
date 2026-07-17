@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   getActiveProviderPricing,
+  getNoteAssistMaxTokens,
   requestDeepSeek,
   requestDeepSeekStream,
   looksLikeLeakedToolCall,
@@ -11,6 +12,7 @@ const ORIGINAL_FETCH = globalThis.fetch;
 
 describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
   afterEach(() => {
+    vi.useRealTimers();
     process.env = { ...ORIGINAL_ENV };
     globalThis.fetch = ORIGINAL_FETCH;
   });
@@ -28,6 +30,19 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
   it('未知的 AGENT_LLM_PROVIDER 取值应报错,而不是静默回退', () => {
     process.env.AGENT_LLM_PROVIDER = 'unknown-vendor';
     expect(() => getActiveProviderPricing()).toThrow(/未知的 AGENT_LLM_PROVIDER/);
+  });
+
+  it('笔记助手默认给 8K 输出预算，且环境变量只能在供应商安全上限内调整', () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    delete process.env.DEEPSEEK_NOTE_ASSIST_MAX_TOKENS;
+    delete process.env.NOTE_ASSIST_MAX_TOKENS;
+    expect(getNoteAssistMaxTokens()).toBe(8192);
+
+    process.env.DEEPSEEK_NOTE_ASSIST_MAX_TOKENS = '2048';
+    expect(getNoteAssistMaxTokens()).toBe(2048);
+
+    process.env.DEEPSEEK_NOTE_ASSIST_MAX_TOKENS = '99999';
+    expect(getNoteAssistMaxTokens()).toBe(8192);
   });
 
   it('切到 qwen 但缺少 DASHSCOPE_API_KEY 时,requestDeepSeek 报错且不发起网络请求', async () => {
@@ -87,6 +102,24 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
       usageStatus: 'reported',
       usage: { promptTokens: 9, completionTokens: 2, totalTokens: 11 },
     });
+  });
+
+  it('首字长期未到时返回可识别的超时码，并清理流式计时器', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn((_url, options) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+      }),
+    );
+
+    const pending = requestDeepSeekStream([{ role: 'user', content: 'hi' }], { onDelta: () => {} });
+    // 先挂上 rejection handler，再推进假时钟，避免 Vitest 把预期中的超时视为未处理异常。
+    const timeoutExpectation = expect(pending).rejects.toMatchObject({ name: 'TimeoutError', code: 'AI_FIRST_TOKEN_TIMEOUT' });
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    await timeoutExpectation;
   });
 
   it('流式响应中的 DSML 标记被拆分时也不会泄漏给前端', async () => {

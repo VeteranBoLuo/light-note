@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { consumeAiSseChunk, flushAiSseBuffer, parseAiSseDataLine } from './aiSse';
 
 describe('AI SSE v2 parser', () => {
-  it('保持 start/tool/delta/usage/done 的到达顺序', () => {
+  it('保持 start/tool/delta/heartbeat/usage/done 的到达顺序与完成原因', () => {
     const payload = [
       { event: 'start', requestId: 'r1' },
       { event: 'tool_start', tool: 'query_notes' },
       { event: 'tool_result', tool: 'query_notes', status: 'success' },
       { event: 'delta', output: { text: '答案' } },
-      { event: 'done', usage: { totalTokens: 12 } },
+      { event: 'heartbeat', elapsedMs: 12000, phase: 'waiting_first_token' },
+      { event: 'done', usage: { totalTokens: 12 }, finishReason: 'length' },
     ].map((item) => `data: ${JSON.stringify(item)}\n\n`).join('');
     const result = consumeAiSseChunk('', payload);
     expect(result.events.map((item) => item.event)).toEqual([
-      'start', 'tool_start', 'tool_result', 'delta', 'done',
+      'start', 'tool_start', 'tool_result', 'delta', 'heartbeat', 'done',
     ]);
+    expect(result.events.at(-1)).toMatchObject({ finishReason: 'length' });
   });
 
   it('跨网络分片保留半行并在下一块完成解析', () => {

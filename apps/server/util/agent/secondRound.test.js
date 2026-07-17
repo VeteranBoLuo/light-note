@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  shouldContinueToolPlanning,
   constrainSecondRoundToolCalls,
   selectSecondRoundTools,
   shouldRunSecondPlanner,
@@ -13,6 +14,23 @@ describe('Agent 第二轮受限纠错', () => {
     expect(shouldRunSecondPlanner([{ result: { status: 'error', summary: '失败' } }], [{ id: 'confirm' }])).toBe(false);
   });
 
+  it('成功工具声明后续能力时继续规划，否则直接进入最终回答', () => {
+    expect(
+      shouldContinueToolPlanning([
+        {
+          result: {
+            status: 'success',
+            summary: '笔记正文已读取',
+            nextActions: [{ tool: 'analyze_resource_images', resourceId: 'note-1' }],
+          },
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      shouldContinueToolPlanning([{ result: { status: 'success', summary: '图片已识别', nextActions: [] } }]),
+    ).toBe(false);
+  });
+
   it('第二轮工具定义和调用都剔除写工具与越权工具', () => {
     const tools = [
       { name: 'query_notes', isWrite: false },
@@ -21,11 +39,14 @@ describe('Agent 第二轮受限纠错', () => {
     ];
     const readonly = selectSecondRoundTools(tools);
     expect(readonly.map((tool) => tool.name)).toEqual(['query_notes', 'search_content']);
-    const calls = constrainSecondRoundToolCalls([
-      { id: '1', function: { name: 'create_note' } },
-      { id: '2', function: { name: 'query_notes' } },
-      { id: '3', function: { name: 'unknown_tool' } },
-    ], readonly);
+    const calls = constrainSecondRoundToolCalls(
+      [
+        { id: '1', function: { name: 'create_note' } },
+        { id: '2', function: { name: 'query_notes' } },
+        { id: '3', function: { name: 'unknown_tool' } },
+      ],
+      readonly,
+    );
     expect(calls.map((call) => call.function.name)).toEqual(['query_notes']);
   });
 });

@@ -46,6 +46,8 @@ const PROVIDERS = {
     modelEnv: 'DEEPSEEK_MODEL',
     defaultModel: 'deepseek-v4-flash',
     price: { input: 1, output: 2 },
+    // 笔记改写、翻译等场景的结果通常接近原文长度，默认给足 8K 输出空间；可用环境变量下调。
+    noteAssistMaxTokens: 8192,
   },
   qwen: {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
@@ -53,6 +55,7 @@ const PROVIDERS = {
     modelEnv: 'QWEN_MODEL',
     defaultModel: 'qwen3.5-flash',
     price: { input: 0.2, output: 2 },
+    noteAssistMaxTokens: 8192,
     // qwen3.5-flash 默认开深度思考:实测一句简单问答就产生 1223/1255 的思考 token(占 97%),
     // 又慢又贵。它是应急备用模型,回复速度优先,强制关闭思考模式。
     extraBody: { enable_thinking: false },
@@ -76,6 +79,24 @@ function getModel(cfg) {
   return process.env[cfg.modelEnv] || cfg.defaultModel;
 }
 
+const NOTE_ASSIST_MIN_TOKENS = 1024;
+
+/**
+ * 笔记助手的输出预算按当前供应商配置，并允许用环境变量在不改代码的情况下收紧：
+ * - {PROVIDER}_NOTE_ASSIST_MAX_TOKENS（例如 DEEPSEEK_NOTE_ASSIST_MAX_TOKENS）优先
+ * - NOTE_ASSIST_MAX_TOKENS 作为通用兜底
+ *
+ * 上限始终不超过供应商配置，避免误配导致请求被模型拒绝。
+ */
+export function getNoteAssistMaxTokens(cfg = getProviderConfig()) {
+  const envKey = `${cfg.name.toUpperCase()}_NOTE_ASSIST_MAX_TOKENS`;
+  const configured = process.env[envKey] ?? process.env.NOTE_ASSIST_MAX_TOKENS ?? cfg.noteAssistMaxTokens;
+  const requested = Number.parseInt(String(configured), 10);
+  const fallback = cfg.noteAssistMaxTokens;
+  if (!Number.isFinite(requested)) return fallback;
+  return Math.min(Math.max(requested, NOTE_ASSIST_MIN_TOKENS), fallback);
+}
+
 // 供 agentHandle.js 的用量日志按当前生效供应商计费(不同供应商单价不同)
 export function getActiveProviderPricing() {
   const cfg = getProviderConfig();
@@ -84,7 +105,12 @@ export function getActiveProviderPricing() {
 
 export function getActiveProviderInfo() {
   const cfg = getProviderConfig();
-  return { provider: cfg.name, model: getModel(cfg), price: cfg.price };
+  return {
+    provider: cfg.name,
+    model: getModel(cfg),
+    price: cfg.price,
+    noteAssistMaxTokens: getNoteAssistMaxTokens(cfg),
+  };
 }
 
 // ---- 超时控制 ----
@@ -92,6 +118,14 @@ export function getActiveProviderInfo() {
 // 避免正常的长回答被绝对超时误杀,只拦截"连上却不吐字"的挂死。
 const PLANNER_TIMEOUT_MS = 90_000;
 const STREAM_IDLE_MS = 60_000;
+
+function createStreamTimeoutError(hasReceivedProviderChunk) {
+  const isFirstTokenTimeout = !hasReceivedProviderChunk;
+  const error = new Error(isFirstTokenTimeout ? 'AI 首次响应超时' : '流式响应空闲超时');
+  error.name = 'TimeoutError';
+  error.code = isFirstTokenTimeout ? 'AI_FIRST_TOKEN_TIMEOUT' : 'AI_STREAM_IDLE_TIMEOUT';
+  return error;
+}
 
 /**
  * 合并多个 AbortSignal:任一 abort,结果即 abort。
@@ -189,58 +223,60 @@ export async function requestDeepSeek(messages, options = {}) {
  * @param {AbortSignal} [options.signal]
  * @returns {Promise<{ content: string, leakedToolCall: boolean }>}
  */
-export async function requestDeepSeekStream(messages, options) {
+export async function requestDeepSeekStream(messages, options = {}) {
   const cfg = getProviderConfig();
 
   // 空闲超时:每收到一段数据就重置计时,连续 STREAM_IDLE_MS 无新数据视为挂死。
   // 只拦"连上却不吐字",正常持续输出的长回答不受影响(绝对超时会误杀长回答)。
   const idleController = new AbortController();
-  const abortIdle = () => idleController.abort(new DOMException('流式响应空闲超时', 'TimeoutError'));
+  let hasReceivedProviderChunk = false;
+  const abortIdle = () => idleController.abort(createStreamTimeoutError(hasReceivedProviderChunk));
   let idleTimer = setTimeout(abortIdle, STREAM_IDLE_MS);
   const resetIdle = () => {
     clearTimeout(idleTimer);
     idleTimer = setTimeout(abortIdle, STREAM_IDLE_MS);
   };
-
-  const res = await fetch(cfg.baseUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getApiKey(cfg)}`,
-    },
-    // 客户端断开(options.signal)与空闲超时,任一触发即中止
-    signal: combineSignals([options.signal, idleController.signal]),
-    body: JSON.stringify({
-      model: getModel(cfg),
-      messages,
-      stream: true,
-      stream_options: { include_usage: true },
-      ...(Number.isFinite(options.maxTokens) ? { max_tokens: options.maxTokens } : {}),
-      // 回答风格:调用方(agentHandle)按用户偏好传入并已 clamp;仅作用于最终回答,Planner 不设(保证工具选择稳定)
-      ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
-      ...cfg.extraBody,
-    }),
-  });
-
-  if (!res.ok) {
-    clearTimeout(idleTimer);
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error?.message || `${cfg.name} 流式请求失败：${res.status}`);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let fullContent = '';
-  let pendingContent = '';
-  let leakedToolCall = false;
-  const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
-  let finishReason = null;
-
   try {
+    const res = await fetch(cfg.baseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getApiKey(cfg)}`,
+      },
+      // 客户端断开(options.signal)与空闲超时,任一触发即中止
+      signal: combineSignals([options.signal, idleController.signal]),
+      body: JSON.stringify({
+        model: getModel(cfg),
+        messages,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...(Number.isFinite(options.maxTokens) ? { max_tokens: options.maxTokens } : {}),
+        // 回答风格:调用方(agentHandle)按用户偏好传入并已 clamp;仅作用于最终回答,Planner 不设(保证工具选择稳定)
+        ...(Number.isFinite(options.temperature) ? { temperature: options.temperature } : {}),
+        ...cfg.extraBody,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error?.message || `${cfg.name} 流式请求失败：${res.status}`);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error(`${cfg.name} 流式响应为空`);
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+    let pendingContent = '';
+    let leakedToolCall = false;
+    const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    let finishReason = null;
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (!value?.byteLength) continue;
+      hasReceivedProviderChunk = true;
       resetIdle(); // 收到新数据,重置空闲计时
 
       buffer += decoder.decode(value, { stream: true });
@@ -300,24 +336,24 @@ export async function requestDeepSeekStream(messages, options) {
         }
       }
     }
+    if (!leakedToolCall && pendingContent) {
+      fullContent += pendingContent;
+      options.onDelta(pendingContent);
+    }
+
+    return {
+      content: fullContent,
+      leakedToolCall,
+      usage,
+      usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
+      provider: cfg.name,
+      model: getModel(cfg),
+      finishReason,
+    };
   } finally {
-    clearTimeout(idleTimer); // 正常结束/异常/abort 都清掉计时器,防泄漏
+    // fetch 建连阶段抛错同样必须清理；旧实现只覆盖 reader 循环，会留下一个多余计时器。
+    clearTimeout(idleTimer);
   }
-
-  if (!leakedToolCall && pendingContent) {
-    fullContent += pendingContent;
-    options.onDelta(pendingContent);
-  }
-
-  return {
-    content: fullContent,
-    leakedToolCall,
-    usage,
-    usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
-    provider: cfg.name,
-    model: getModel(cfg),
-    finishReason,
-  };
 }
 
 /**

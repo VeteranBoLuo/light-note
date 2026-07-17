@@ -111,15 +111,48 @@ export const getObjectMetadataFromObs = async (objectKey) => {
   };
 };
 
+async function readObsBinaryContent(content) {
+  if (Buffer.isBuffer(content)) return Buffer.from(content);
+  if (content instanceof Uint8Array) return Buffer.from(content);
+  if (!content || typeof content[Symbol.asyncIterator] !== 'function') {
+    const error = new Error('OBS_DOWNLOAD_INVALID_CONTENT: OBS 未返回二进制下载流');
+    error.code = 'OBS_DOWNLOAD_INVALID_CONTENT';
+    throw error;
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  for await (const chunk of content) {
+    if (!Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) {
+      const error = new Error('OBS_DOWNLOAD_INVALID_CONTENT: OBS 下载流包含非二进制数据');
+      error.code = 'OBS_DOWNLOAD_INVALID_CONTENT';
+      throw error;
+    }
+    const binaryChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    chunks.push(binaryChunk);
+    totalBytes += binaryChunk.length;
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
 export const getObjectBufferFromObs = async (objectKey) => {
   const result = await wrapObsCall(obsClient.getObject.bind(obsClient), {
     Bucket: bucketName,
     Key: objectKey,
+    // SDK 默认把响应正文解码成字符串，会破坏 PDF、DOCX、图片等二进制文件。
+    SaveAsStream: true,
   });
-  const content = result?.InterfaceResult?.Content;
-  if (Buffer.isBuffer(content)) return content;
-  if (content instanceof Uint8Array) return Buffer.from(content);
-  return Buffer.from(content || '');
+  const interfaceResult = result?.InterfaceResult || {};
+  const buffer = await readObsBinaryContent(interfaceResult.Content);
+  const contentLength = Number(interfaceResult.ContentLength);
+  if (Number.isFinite(contentLength) && contentLength >= 0 && buffer.length !== contentLength) {
+    const error = new Error(
+      `OBS_DOWNLOAD_SIZE_MISMATCH: OBS 文件下载不完整（应为 ${contentLength} 字节，实际 ${buffer.length} 字节）`,
+    );
+    error.code = 'OBS_DOWNLOAD_SIZE_MISMATCH';
+    throw error;
+  }
+  return buffer;
 };
 
 export const buildObjectUrl = (objectKey) => `${bucketBaseUrl}/${objectKey}`;

@@ -105,7 +105,7 @@
             v-if="canApplyBody"
             style="max-width: 100px"
             class="ghost-btn text-hidden"
-            @click="insertToNote"
+            @click="requestApply('body')"
             :title="t('ai.reply.replaceContent')"
             v-click-log="{ module: '笔记-AI助手', operation: '插入到笔记' }"
             >{{ t('ai.reply.replaceContent') }}</BButton
@@ -114,7 +114,7 @@
             v-if="canApplyTitle"
             style="max-width: 100px"
             class="ghost-btn text-hidden"
-            @click="replaceTitle"
+            @click="requestApply('title')"
             :title="t('ai.reply.replaceTitle')"
             v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
             >{{ t('ai.reply.replaceTitle') }}</BButton
@@ -130,7 +130,28 @@
       <div v-if="formatInvalid" class="format-warning">
         {{ t('ai.reply.formatInvalid', { markers: missingMarkers.join(t('ai.reply.markerSeparator')) }) }}
       </div>
+      <div v-if="outputTruncated" class="truncation-warning" role="status">
+        <span>{{ t('ai.reply.truncatedHint') }}</span>
+        <div class="generation-feedback-actions">
+          <BButton class="status-action-btn" @click="retryGeneration">{{ t('ai.reply.retry') }}</BButton>
+          <BButton class="status-action-btn" @click="runAction('generateSummary')">{{ t('ai.reply.actions.generateSummary') }}</BButton>
+        </div>
+      </div>
+      <div v-if="showGenerationStatus" class="generation-status" role="status" aria-live="polite">
+        <BLoading inline :loading="true" :title="generationStatusText" />
+      </div>
+      <div v-if="generationFeedback" :class="['generation-feedback', `is-${generationFeedback.type}`]" role="status">
+        <span>{{ generationFeedback.text }}</span>
+        <BButton v-if="generationFeedback.retryable" class="status-action-btn" @click="retryGeneration">
+          {{ t('ai.reply.retry') }}
+        </BButton>
+      </div>
+      <div v-if="hasTitle && hasBody" class="title-suggestion">
+        <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
+        <span class="title-suggestion-value">{{ suggestedTitle }}</span>
+      </div>
       <TypewriterOutput
+        v-if="displayOutput || (!isLoading && !generationFeedback)"
         class="output-body"
         :typing-speed="1"
         :content="displayOutput"
@@ -143,11 +164,15 @@
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
       <div class="ai-preview">
+        <div v-if="hasTitle && hasBody" class="ai-preview-title">
+          <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
+          <span class="title-suggestion-value">{{ suggestedTitle }}</span>
+        </div>
         <div v-if="isMarkdownNote" class="ai-preview-body is-markdown" ref="previewBodyRef" v-text="previewTyped"></div>
         <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
         <div class="ai-preview-actions">
-          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="applyFromPreview('body')">{{ t('ai.reply.replaceContent') }}</BButton>
-          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="applyFromPreview('title')">{{ t('ai.reply.replaceTitle') }}</BButton>
+          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body', true)">{{ t('ai.reply.replaceContent') }}</BButton>
+          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title', true)">{{ t('ai.reply.replaceTitle') }}</BButton>
         </div>
       </div>
     </BModal>
@@ -155,24 +180,21 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, inject, nextTick, ref, watch, watchEffect } from 'vue';
+  import { computed, inject, nextTick, onBeforeUnmount, ref, watch, watchEffect } from 'vue';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import TypewriterOutput from '@/components/base/TypewriterOutput.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
 
   const { t } = useI18n();
-
-  // 后端输出封顶 4096 token(约 2500~3000 中文字)。对"输出≈输入长度"的动作(润色全文/自定义产出正文),
-  // 笔记正文超过此阈值时结果会被静默截断——生成前给一次非阻断提醒,让用户对残缺结果有预期。
-  const LONG_CONTENT_THRESHOLD = 2500;
 
   const note = inject<any>('note', null);
   const applyTitleFromAi = inject<((title: string) => void) | null>('applyTitleFromAi', null);
@@ -192,7 +214,34 @@
   const previewVisible = ref(false);
   const sessionId = ref('');
   const abortController = ref<AbortController | null>(null);
+  type GenerationPhase = 'idle' | 'connecting' | 'waiting' | 'slow' | 'streaming';
+  type GenerationFeedback = { type: 'error' | 'warning'; text: string; retryable: boolean };
+  const generationPhase = ref<GenerationPhase>('idle');
+  const generationFeedback = ref<GenerationFeedback | null>(null);
+  const outputTruncated = ref(false);
+  const lastGenerationMode = ref<'action' | 'custom'>('action');
+  let slowGenerationTimer: number | null = null;
   const isMarkdownNote = computed(() => note?.type === 'markdown');
+
+  const clearGenerationTimer = () => {
+    if (slowGenerationTimer !== null) {
+      clearTimeout(slowGenerationTimer);
+      slowGenerationTimer = null;
+    }
+  };
+  const scheduleSlowGenerationHint = () => {
+    clearGenerationTimer();
+    slowGenerationTimer = window.setTimeout(() => {
+      if (isLoading.value && (generationPhase.value === 'connecting' || generationPhase.value === 'waiting')) {
+        generationPhase.value = 'slow';
+      }
+    }, 12_000);
+  };
+  const generationStatusText = computed(() => {
+    if (generationPhase.value === 'connecting') return t('ai.reply.connecting');
+    if (generationPhase.value === 'slow') return t('ai.reply.responseSlow');
+    return t('ai.reply.waitingFirstToken');
+  });
 
   // 字数按"渲染后页面展示文本"计(html: DOM textContent; md: marked 渲染后取文本),与历史版本口径一致
   const textLength = ref(0);
@@ -334,43 +383,58 @@
     }
   };
 
+  const retryGeneration = () => {
+    if (isLoading.value) return;
+    void generate(lastGenerationMode.value);
+  };
+
   const generate = async (mode: 'custom' | 'action' = 'action') => {
     if (isLoading.value) return;
     if (mode === 'custom' && !prompt.value.trim()) return;
-    // "输出≈输入长度"的动作(润色全文/纠错/自定义)+ 长笔记:提醒结果可能被输出上限截断(不阻断)。
-    // 生成摘要/优化标题输出很短,不会截断,不提醒。
     const action = mode === 'action' ? lastAction.value || 'custom' : 'custom';
     const expectedFormat = actionConfig[action]?.format || 'both';
+    lastGenerationMode.value = mode;
     resultFormat.value = expectedFormat;
     requestCompleted.value = false;
-    const FULL_OUTPUT_ACTIONS = ['polishFull', 'correctErrors', 'continueWrite', 'translate', 'custom'];
-    if (FULL_OUTPUT_ACTIONS.includes(action) && textLength.value > LONG_CONTENT_THRESHOLD) {
-      message.warning(`笔记较长(约 ${textLength.value} 字),AI 输出可能被截断,建议分段处理或改用「生成摘要」`);
-    }
     outputFull.value = '';
+    outputTruncated.value = false;
+    generationFeedback.value = null;
+    generationPhase.value = 'connecting';
     isLoading.value = true;
+    scheduleSlowGenerationHint();
     const requestController = new AbortController();
     abortController.value = requestController;
+    let streamErrorMessage = '';
 
     try {
       const actionOverride = mode === 'custom' ? '自定义处理' : undefined;
       let buffer = '';
       let processedLength = 0;
       let receivedDone = false;
-      let streamErrorMessage = '';
 
       const handleNewContent = (content: string) => {
         if (!content) return;
+        generationPhase.value = 'streaming';
+        clearGenerationTimer();
         outputFull.value += content;
       };
 
       const handleData = (data: AiSseEvent) => {
         if (requestController.signal.aborted) return;
+        if (data.event === 'start') {
+          generationPhase.value = 'waiting';
+        }
+        if (data.event === 'heartbeat' && generationPhase.value === 'connecting') {
+          generationPhase.value = 'waiting';
+        }
         if (data.event === 'error') {
           streamErrorMessage = String(data.message || data.error || 'AI 流式响应异常');
           return;
         }
-        if (data.event === 'done') receivedDone = true;
+        if (data.event === 'done') {
+          receivedDone = true;
+          outputTruncated.value = data.finishReason === 'length';
+        }
         const content = data.output?.text || data.text || data.content || '';
         if (content && typeof content === 'string') handleNewContent(content);
         if (data.output?.session_id) sessionId.value = data.output.session_id;
@@ -416,13 +480,23 @@
       requestCompleted.value = true;
     } catch (error: any) {
       console.error('AI 回复生成失败:', error, axios.isCancel(error));
-      if (axios.isCancel(error)) {
-        outputFull.value += '\n[已停止]';
+      if (requestController.signal.aborted || axios.isCancel(error)) {
+        generationFeedback.value = {
+          type: 'warning',
+          text: t('ai.reply.generationStopped'),
+          retryable: true,
+        };
       } else {
-        outputFull.value = '请求失败，请稍后再试。';
+        generationFeedback.value = {
+          type: 'error',
+          text: streamErrorMessage || t('ai.reply.generationFailed'),
+          retryable: true,
+        };
       }
     } finally {
+      clearGenerationTimer();
       isLoading.value = false;
+      generationPhase.value = 'idle';
       if (abortController.value === requestController) abortController.value = null;
     }
   };
@@ -487,7 +561,17 @@
     });
   };
 
-  const hasTitle = computed(() => Boolean(extractSection(outputFull.value, '标题')));
+  // 预览与“替换标题”共用同一个首行，避免用户看到的建议与实际写入标题不一致。
+  const suggestedTitle = computed(() => {
+    const titleSection = extractSection(outputFull.value, '标题');
+    return (
+      titleSection
+        .split('\n')
+        .find((line) => line.trim())
+        ?.trim() || ''
+    );
+  });
+  const hasTitle = computed(() => Boolean(suggestedTitle.value));
   const hasBody = computed(() => Boolean(extractSection(outputFull.value, '正文')));
   const canApplyTitle = computed(() => requestCompleted.value && !isLoading.value && hasTitle.value);
   const canApplyBody = computed(() => requestCompleted.value && !isLoading.value && hasBody.value);
@@ -509,6 +593,7 @@
     const title = extractSection(outputFull.value, '标题');
     return title || outputFull.value;
   });
+  const showGenerationStatus = computed(() => isLoading.value && !displayOutput.value);
   watch(
     displayOutput,
     (content) => {
@@ -518,44 +603,66 @@
     { immediate: true },
   );
 
-  const insertToNote = async () => {
-    if (!note || !outputFull.value) return;
-    const content = buildBodyContent();
-    if (!content) return;
-    if (applyContentFromAi) {
-      await applyContentFromAi(content, isMarkdownNote.value ? 'markdown' : 'html');
-    } else {
-      note.content = content;
-    }
-    triggerSave?.();
-    focusEditorToEnd?.();
-  };
-
-  const replaceTitle = () => {
-    if (!note || !outputFull.value) return;
-    const titleSection = extractSection(outputFull.value, '标题');
-    const firstLine = titleSection.split('\n').find((line) => line.trim());
-    if (firstLine) {
-      if (applyTitleFromAi) {
-        applyTitleFromAi(firstLine.trim());
+  const applyResult = async (which: 'body' | 'title') => {
+    if (!note || !outputFull.value) return false;
+    if (which === 'body') {
+      const content = buildBodyContent();
+      if (!content) return false;
+      if (applyContentFromAi) {
+        await applyContentFromAi(content, isMarkdownNote.value ? 'markdown' : 'html');
       } else {
-        note.title = firstLine.trim();
+        note.content = content;
       }
       triggerSave?.();
+      focusEditorToEnd?.();
+      return true;
     }
+
+    if (!suggestedTitle.value) return false;
+    if (applyTitleFromAi) {
+      applyTitleFromAi(suggestedTitle.value);
+    } else {
+      note.title = suggestedTitle.value;
+    }
+    triggerSave?.();
+    return true;
+  };
+
+  const requestApply = (which: 'body' | 'title', closePreview = false) => {
+    const apply = async () => {
+      const applied = await applyResult(which);
+      if (applied && closePreview) previewVisible.value = false;
+    };
+    const runApply = () => {
+      void apply().catch((error) => console.error('应用 AI 建议失败:', error));
+    };
+
+    if (!outputTruncated.value) {
+      runApply();
+      return;
+    }
+
+    Alert.alert({
+      title: t('ai.reply.truncatedConfirmTitle'),
+      content: t('ai.reply.truncatedConfirmContent'),
+      okText: t('ai.reply.applyTruncated'),
+      cancelText: t('common.cancel'),
+      onOk: runApply,
+    });
   };
 
   const clearOutput = () => {
     outputFull.value = '';
     requestCompleted.value = false;
+    outputTruncated.value = false;
+    generationFeedback.value = null;
   };
 
-  // 放大窗内应用:应用后关闭大窗
-  const applyFromPreview = async (which: 'body' | 'title') => {
-    if (which === 'body') await insertToNote();
-    else replaceTitle();
-    previewVisible.value = false;
-  };
+  onBeforeUnmount(() => {
+    clearGenerationTimer();
+    stopPreviewTyping();
+    abortController.value?.abort();
+  });
 </script>
 
 <style lang="less" scoped>
@@ -809,6 +916,106 @@
     font-size: 11px;
     line-height: 1.5;
   }
+  .truncation-warning,
+  .generation-feedback,
+  .generation-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.08));
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .truncation-warning,
+  .generation-feedback {
+    justify-content: space-between;
+  }
+  .truncation-warning {
+    color: color-mix(in srgb, var(--message-warning-color) 78%, var(--text-color));
+    background: color-mix(in srgb, var(--message-warning-color) 9%, var(--card-background));
+    border-bottom-color: color-mix(in srgb, var(--message-warning-color) 24%, transparent);
+  }
+  .generation-status {
+    color: var(--sub-text-color);
+    background: color-mix(in srgb, var(--resource-note-color) 5%, var(--card-background));
+  }
+  .generation-status :deep(.b-loading-inline) {
+    min-height: 20px;
+    color: inherit;
+    font-size: inherit;
+  }
+  .generation-feedback {
+    color: var(--sub-text-color);
+  }
+  .generation-feedback.is-warning {
+    color: color-mix(in srgb, var(--message-warning-color) 78%, var(--text-color));
+    background: color-mix(in srgb, var(--message-warning-color) 9%, var(--card-background));
+    border-bottom-color: color-mix(in srgb, var(--message-warning-color) 24%, transparent);
+  }
+  .generation-feedback.is-error {
+    color: color-mix(in srgb, var(--message-error-color) 78%, var(--text-color));
+    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
+    border-bottom-color: color-mix(in srgb, var(--message-error-color) 24%, transparent);
+  }
+  .truncation-warning > span,
+  .generation-feedback > span {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .generation-feedback-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .status-action-btn {
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid var(--card-border-color, rgba(0, 0, 0, 0.1));
+    border-radius: 6px;
+    background: var(--card-background);
+    color: inherit;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .title-suggestion {
+    display: grid;
+    gap: 4px;
+    padding: 8px 12px 9px;
+    border-bottom: 1px solid color-mix(in srgb, var(--resource-note-color) 20%, transparent);
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--resource-note-color) 6%, var(--card-background)),
+      var(--card-background) 72%
+    );
+  }
+  .title-suggestion .title-suggestion-label {
+    width: fit-content;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+  }
+  .title-suggestion .title-suggestion-value {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .title-suggestion-label {
+    flex: 0 0 auto;
+    color: color-mix(in srgb, var(--resource-note-color) 78%, var(--text-color));
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .title-suggestion-value {
+    min-width: 0;
+    color: var(--text-color);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
   .output-body :deep(.typewriter-content) {
     margin: 0;
     white-space: pre-wrap;
@@ -905,6 +1112,18 @@
     width: 680px;
     max-width: 86vw;
     box-sizing: border-box;
+  }
+  .ai-preview-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--resource-note-color) 24%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--resource-note-color) 8%, var(--card-background));
+    font-size: 14px;
+    line-height: 1.5;
   }
   .ai-preview-body {
     max-height: 68vh;

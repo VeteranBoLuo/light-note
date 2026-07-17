@@ -35,10 +35,20 @@
           <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
           <div v-else class="text" v-html="formatAssistantMessage(message.content)" @click="handleLinkClick"></div>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
-            <span v-for="item in message.contexts" :key="`${item.type}:${item.id}`" :title="item.title">
-              <small>{{ t(`ai.sourceTypes.${item.type}`) }}</small>
-              <strong>{{ item.title }}</strong>
-            </span>
+            <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
+            <div class="user-contexts__list">
+              <span
+                v-for="item in message.contexts"
+                :key="`${item.type}:${item.id}`"
+                :class="['user-context-chip', `is-${item.type}`]"
+                :title="item.title"
+              >
+                <span class="user-context-chip__icon" aria-hidden="true">
+                  <SvgIcon :src="contextIcon(item.type)" size="13" />
+                </span>
+                <strong>{{ item.title }}</strong>
+              </span>
+            </div>
           </div>
         </div>
         <ReplyLoading v-else-if="!message.toolEvents?.length" />
@@ -147,6 +157,7 @@
   // 导致模板里的 message.content/role 全部指向该工具对象而恒为 undefined（消息一直转圈不显示）
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage';
   import { renderAssistantMarkdown } from '@/utils/aiMessageRender';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
   const { t } = useI18n();
 
@@ -203,6 +214,13 @@
   };
 
   const hasAnswerStarted = computed(() => props.hasAnswerStarted);
+
+  const contextIcon = (type: NonNullable<ChatMessage['contexts']>[number]['type']) => {
+    if (type === 'note') return icon.resource.note;
+    if (type === 'file') return icon.resource.file;
+    if (type === 'tag') return icon.resource.tag;
+    return icon.resource.bookmark;
+  };
 
   // 拦截链接点击：站内地址用 router.push SPA 跳转，外部链接新窗口打开
   const handleLinkClick = (event: MouseEvent) => {
@@ -291,31 +309,58 @@
   }
 
   .user-contexts {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 6px;
     margin-top: 10px;
     padding-top: 9px;
     border-top: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
   }
 
-  .user-contexts > span {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    min-width: 0;
-    max-width: 220px;
-    padding: 4px 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--primary-color) 9%, var(--background-color));
+  .user-contexts__title {
+    margin-bottom: 6px;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: right;
   }
 
-  .user-contexts small {
-    color: var(--primary-color);
-    font-size: 10px;
+  .user-contexts__list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
   }
-  .user-contexts strong {
+
+  .user-context-chip {
+    --context-color: var(--resource-bookmark-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: 180px;
+    padding: 4px 7px;
+    border: 1px solid color-mix(in srgb, var(--context-color) 18%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--context-color) 7%, var(--card-background));
+  }
+
+  .user-context-chip.is-note {
+    --context-color: var(--resource-note-color);
+  }
+
+  .user-context-chip.is-file {
+    --context-color: var(--resource-file-color);
+  }
+
+  .user-context-chip.is-tag {
+    --context-color: var(--resource-tag-color);
+  }
+
+  .user-context-chip__icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--context-color);
+  }
+
+  .user-context-chip strong {
     overflow: hidden;
     color: var(--text-color);
     font-size: 11px;

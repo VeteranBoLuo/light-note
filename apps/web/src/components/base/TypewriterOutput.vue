@@ -3,9 +3,9 @@
     class="typewriter-output"
     ref="containerRef"
     @scroll="handleScroll"
-    @wheel.passive="handleUserInteraction"
-    @touchstart.passive="handleUserInteraction"
-    @pointerdown.passive="handleUserInteraction"
+    @wheel.passive="handleWheel"
+    @touchstart.passive="handleTouchStart"
+    @touchmove.passive="handleTouchMove"
   >
     <div v-if="!displayContent" class="empty">{{ emptyText }}</div>
     <div v-else-if="renderAsText" class="typewriter-content" v-text="displayContent"></div>
@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import DOMPurify from 'dompurify';
 
   const props = defineProps<{
@@ -27,50 +27,90 @@
   const displayContent = ref('');
   const containerRef = ref<HTMLElement | null>(null);
 
-  const autoScrollEnabled = ref(true);
-  const userHasInterrupted = ref(false);
-  const lastScrollTop = ref(0);
+  // 只要用户仍在底部附近就跟随；离开底部马上暂停，滚回底部则自动恢复。
+  // 不用“已被打断”的粘滞标记，避免后续 wheel/touch 事件错误地再次锁死自动跟随。
+  const shouldFollow = ref(true);
   const SCROLL_THRESHOLD = 120;
 
   const typingSpeed = ref(props.typingSpeed ?? 10);
   let typingTimer: number | null = null;
+  let resolveTypingDelay: (() => void) | null = null;
   let typewriterQueue: string[] = [];
   let isTyping = false;
   let lastContent = '';
+  let typingRunId = 0;
+  let scrollFrame: number | null = null;
+  let lastTouchY: number | null = null;
 
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    if (!containerRef.value || userHasInterrupted.value) return;
+  const isNearBottom = () => {
     const container = containerRef.value;
-    const targetScrollTop = container.scrollHeight - container.clientHeight;
-    if (behavior === 'smooth') {
-      container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
-    } else {
-      container.scrollTop = targetScrollTop;
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_THRESHOLD;
+  };
+
+  const cancelScheduledScroll = () => {
+    if (scrollFrame !== null) {
+      window.cancelAnimationFrame(scrollFrame);
+      scrollFrame = null;
     }
+  };
+
+  const pauseFollowing = () => {
+    shouldFollow.value = false;
+    cancelScheduledScroll();
+    const container = containerRef.value;
+    // 取消浏览器尚未结束的 smooth 动画，避免用户已经上滚却被旧动画继续拉回底部。
+    if (container) container.scrollTo({ top: container.scrollTop, behavior: 'auto' });
+  };
+
+  const scheduleScrollToBottom = () => {
+    if (!containerRef.value || !shouldFollow.value || scrollFrame !== null) return;
+    // 每一帧最多滚一次，不能像旧实现那样每个字都叠加一个 smooth 动画。
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = null;
+      const container = containerRef.value;
+      if (!container || !shouldFollow.value) return;
+      container.scrollTop = container.scrollHeight;
+    });
+  };
+
+  const waitForNextCharacter = () =>
+    new Promise<void>((resolve) => {
+      resolveTypingDelay = () => {
+        resolveTypingDelay = null;
+        typingTimer = null;
+        resolve();
+      };
+      typingTimer = window.setTimeout(() => resolveTypingDelay?.(), typingSpeed.value);
+    });
+
+  const cancelTypingDelay = () => {
+    if (typingTimer !== null) {
+      clearTimeout(typingTimer);
+      typingTimer = null;
+    }
+    resolveTypingDelay?.();
   };
 
   const startTypewriter = async () => {
     if (isTyping) return;
     isTyping = true;
+    const runId = typingRunId;
 
-    while (typewriterQueue.length > 0) {
+    while (typewriterQueue.length > 0 && runId === typingRunId) {
       const textToType = typewriterQueue.shift();
       if (!textToType) continue;
 
-      for (let i = 0; i < textToType.length; i++) {
+      for (let i = 0; i < textToType.length && runId === typingRunId; i++) {
+        // 在内容变高之前判断，只有用户此前贴底才会继续跟随。
+        shouldFollow.value = shouldFollow.value && isNearBottom();
         displayContent.value += textToType[i];
-
-        if (autoScrollEnabled.value && !userHasInterrupted.value) {
-          scrollToBottom('smooth');
-        }
-
-        await new Promise((resolve) => {
-          typingTimer = window.setTimeout(resolve, typingSpeed.value);
-        });
+        if (shouldFollow.value) scheduleScrollToBottom();
+        await waitForNextCharacter();
       }
     }
 
-    isTyping = false;
+    if (runId === typingRunId) isTyping = false;
   };
 
   const enqueueContent = (text: string) => {
@@ -80,13 +120,13 @@
   };
 
   const resetTypewriter = () => {
+    typingRunId += 1;
     displayContent.value = '';
     typewriterQueue = [];
     isTyping = false;
-    if (typingTimer) {
-      clearTimeout(typingTimer);
-      typingTimer = null;
-    }
+    shouldFollow.value = true;
+    cancelScheduledScroll();
+    cancelTypingDelay();
   };
 
   watch(
@@ -118,25 +158,24 @@
   );
 
   const handleScroll = () => {
-    if (!containerRef.value) return;
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.value;
-    const scrollPosition = scrollHeight - scrollTop - clientHeight;
-    const scrollDelta = scrollTop - lastScrollTop.value;
-    lastScrollTop.value = scrollTop;
-
-    if (scrollDelta < 0) {
-      userHasInterrupted.value = true;
-      autoScrollEnabled.value = false;
-    } else if (scrollPosition <= SCROLL_THRESHOLD) {
-      autoScrollEnabled.value = true;
-      userHasInterrupted.value = false;
-    }
+    shouldFollow.value = isNearBottom();
+    if (!shouldFollow.value) cancelScheduledScroll();
   };
 
-  const handleUserInteraction = () => {
-    if (!autoScrollEnabled.value && userHasInterrupted.value) return;
-    userHasInterrupted.value = true;
-    autoScrollEnabled.value = false;
+  const handleWheel = (event: WheelEvent) => {
+    if (event.deltaY < 0) pauseFollowing();
+  };
+
+  const handleTouchStart = (event: TouchEvent) => {
+    lastTouchY = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchMove = (event: TouchEvent) => {
+    const touchY = event.touches[0]?.clientY;
+    if (typeof touchY !== 'number') return;
+    // 手指向下移动代表内容向上滚动，应立即停掉自动跟随。
+    if (lastTouchY !== null && touchY > lastTouchY) pauseFollowing();
+    lastTouchY = touchY;
   };
 
   const emptyText = computed(() => props.emptyText ?? '');
@@ -146,6 +185,12 @@
       ALLOWED_ATTR: [],
     }),
   );
+
+  onBeforeUnmount(() => {
+    typingRunId += 1;
+    cancelScheduledScroll();
+    cancelTypingDelay();
+  });
 </script>
 
 <style>

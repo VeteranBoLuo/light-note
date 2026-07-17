@@ -7,6 +7,9 @@ export interface AiSseEvent {
   confirmation?: any;
   sources?: any[];
   usage?: Record<string, number>;
+  finishReason?: string | null;
+  elapsedMs?: number;
+  phase?: string;
   [key: string]: unknown;
 }
 

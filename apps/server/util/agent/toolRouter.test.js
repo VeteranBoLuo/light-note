@@ -10,6 +10,8 @@ const tools = [
   { name: 'create_bookmark', isWrite: true },
   { name: 'query_link_health' },
   { name: 'query_notes' },
+  { name: 'read_note' },
+  { name: 'analyze_resource_images' },
   { name: 'create_note', isWrite: true },
   { name: 'query_users', requireRoot: true },
   { name: 'get_security_events', requireRoot: true },
@@ -59,5 +61,14 @@ describe('selectAgentTools', () => {
       allowVisitorWrite: true,
     });
     expect(selected.some((tool) => tool.name === 'create_note')).toBe(true);
+  });
+
+  it('用户显式选择笔记后，即使问题省略“笔记”二字也提供精确读取工具', () => {
+    const selected = selectAgentTools(registry, {
+      message: '这里面还有哪些没完成？',
+      contextTypes: ['note'],
+      userRole: 'user',
+    });
+    expect(selected.some((tool) => tool.name === 'read_note')).toBe(true);
   });
 });

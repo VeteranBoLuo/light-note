@@ -1,10 +1,5 @@
 <template>
-  <div
-    id="tag-container"
-    :style="{
-      backgroundImage: bgVisible,
-    }"
-  >
+  <div id="tag-container">
     <!-- 导航栏默认显示，少数页面通过配置隐藏 -->
     <Navigation v-if="showNavigation" />
     <router-view :style="viewStyle" />
@@ -31,9 +26,6 @@
     return !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value);
   });
 
-  // 背景图显示逻辑
-  const bgVisible = computed(() => (bookmark.isMobile || !showNavigation.value ? 'unset' : ''));
-
   const viewStyle = computed(() => ({
     position: 'fixed',
     top: showNavigation.value ? '60px' : '0',
@@ -48,6 +40,6 @@
     height: 100%;
     width: 100%;
     overflow: hidden;
-    background-image: var(--bg-image);
+    background: var(--background-color);
   }
 </style>

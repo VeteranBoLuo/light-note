@@ -1,8 +1,8 @@
 const GROUPS = {
   base: ['search_content', 'search_knowledge_base', 'get_user_info', 'get_ai_quota'],
   bookmark: ['query_bookmarks', 'create_bookmark', 'query_link_health'],
-  note: ['query_notes', 'create_note'],
-  file: ['query_files', 'get_storage_usage'],
+  note: ['query_notes', 'read_note', 'analyze_resource_images', 'create_note'],
+  file: ['query_files', 'get_storage_usage', 'analyze_resource_images'],
   tag: ['query_tags', 'add_tag'],
   trash: ['query_trash', 'restore_trash'],
   url: ['read_url', 'create_bookmark'],
@@ -47,12 +47,21 @@ function addGroup(names, group) {
   for (const name of GROUPS[group] || []) names.add(name);
 }
 
-export function selectAgentTools(registry, { message, userRole, allowWrite = true, allowVisitorWrite = false, maxTools = 10 }) {
+export function selectAgentTools(
+  registry,
+  { message, contextTypes = [], userRole, allowWrite = true, allowVisitorWrite = false, maxTools = 10 },
+) {
   const selectedNames = new Set();
   addGroup(selectedNames, 'base');
   for (const intent of INTENTS) {
     if (!intent.pattern.test(String(message || ''))) continue;
     for (const group of intent.groups) addGroup(selectedNames, group);
+  }
+  for (const type of new Set(Array.isArray(contextTypes) ? contextTypes : [])) {
+    if (type === 'bookmark') addGroup(selectedNames, 'bookmark');
+    else if (type === 'note') addGroup(selectedNames, 'note');
+    else if (type === 'file') addGroup(selectedNames, 'file');
+    else if (type === 'tag') addGroup(selectedNames, 'tag');
   }
 
   // 没命中具体资源时补最常用的两类查询，保证自然语言泛问仍有可用数据能力。

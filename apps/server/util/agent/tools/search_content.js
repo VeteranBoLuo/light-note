@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
 
 // 「问我的知识库」检索工具:在用户已收藏/记录的【内容正文】里找相关片段,交给模型据此作答并标注来源。
 // 覆盖 query_bookmarks 读不到的部分——书签的网页正文存档(bookmark_snapshot.content)、AI 摘要、描述;笔记正文同样纳入。
@@ -23,7 +24,10 @@ export default {
   parameters: {
     type: 'object',
     properties: {
-      keyword: { type: 'string', description: '要检索的关键词或主题,从用户问题里提炼,尽量用具体名词(如"Express""报销流程""番茄钟")' },
+      keyword: {
+        type: 'string',
+        description: '要检索的关键词或主题,从用户问题里提炼,尽量用具体名词(如"Express""报销流程""番茄钟")',
+      },
       limit: { type: 'integer', description: '返回条数,默认 6,最大 12' },
     },
     required: ['keyword'],
@@ -46,7 +50,7 @@ export default {
       [ctx.userId, like, like, like, like, take],
     );
     const [nt] = await pool.query(
-      `SELECT id, title, content FROM note
+      `SELECT id, title, content, type FROM note
         WHERE create_by = ? AND del_flag = 0 AND (title LIKE ? OR content LIKE ?)
         ORDER BY create_time DESC LIMIT ?`,
       [ctx.userId, like, like, take],
@@ -55,10 +59,18 @@ export default {
     const hits = [];
     for (const b of bm) {
       const body = b.content || b.summary || b.description || '';
-      hits.push({ type: 'bookmark', id: b.id, title: b.name || '无标题', url: b.url || '', summary: b.summary || '', excerpt: excerpt(body, kw) });
+      hits.push({
+        type: 'bookmark',
+        id: b.id,
+        title: b.name || '无标题',
+        url: b.url || '',
+        summary: b.summary || '',
+        excerpt: excerpt(body, kw),
+      });
     }
     for (const n of nt) {
-      const plain = String(n.content || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+      const document = parseNoteContent({ content: n.content, type: n.type });
+      const plain = renderNoteForAi(document, { maxChars: 12_000 });
       hits.push({ type: 'note', id: n.id, title: n.title || '无标题', excerpt: excerpt(plain, kw) });
     }
     return { keyword: kw, hits: hits.slice(0, take) };
