@@ -44,12 +44,28 @@ export interface FeatureRequestDetail extends FeatureRequestItem {
   mergedTo?: { id: string; title: string } | null;
 }
 
+export type FeatureRequestSummaryResponse = Partial<Record<FeatureRequestProgressStatus, number>> & {
+  inProgress?: number;
+};
+
 export interface FeatureRequestListResult {
   items: FeatureRequestItem[];
   total: number;
   currentPage: number;
   pageSize: number;
-  summary?: Record<FeatureRequestProgressStatus, number>;
+  summary?: FeatureRequestSummaryResponse;
+}
+
+export function normalizeFeatureRequestSummary(
+  summary?: FeatureRequestSummaryResponse | null,
+): Record<FeatureRequestProgressStatus, number> {
+  return {
+    evaluating: Number(summary?.evaluating ?? 0),
+    planned: Number(summary?.planned ?? 0),
+    in_progress: Number(summary?.inProgress ?? summary?.in_progress ?? 0),
+    released: Number(summary?.released ?? 0),
+    declined: Number(summary?.declined ?? 0),
+  };
 }
 
 export interface FeatureRequestDraft {

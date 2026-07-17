@@ -172,6 +172,7 @@
     listAdminFeatureRequests,
     listMyFeatureRequests,
     listPublicFeatureRequests,
+    normalizeFeatureRequestSummary,
     toggleFeatureRequestVote,
     type FeatureRequestCategory,
     type FeatureRequestItem,
@@ -290,7 +291,7 @@
       const data = res.data as FeatureRequestListResult;
       items.value = data.items || [];
       total.value = Number(data.total || 0);
-      if (data.summary) summary.value = { ...summary.value, ...data.summary };
+      if (data.summary) summary.value = normalizeFeatureRequestSummary(data.summary);
     } catch (error) {
       console.error('加载共建轻笺失败:', error);
       message.warning(t('coBuild.loadFailed'));
