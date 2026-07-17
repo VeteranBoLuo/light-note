@@ -1,11 +1,38 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 
 // growth.js 顶层 import pool from '../db/index.js';纯逻辑测试不碰库,mock 掉以免 import 期连真库
 vi.mock('../db/index.js', () => ({
   default: { query: vi.fn(), getConnection: vi.fn() },
 }));
+vi.mock('./points.js', () => ({
+  earnPoints: vi.fn(),
+  earnStorage: vi.fn(),
+  titleName: vi.fn(),
+}));
+vi.mock('./items.js', () => ({
+  grantItem: vi.fn(),
+}));
+vi.mock('./notification.js', () => ({
+  createNotification: vi.fn(),
+}));
 
-import { levelForExp, rankOf, RANKS, MAX_LEVEL } from './growth.js';
+import pool from '../db/index.js';
+import { grantItem } from './items.js';
+import { earnPoints } from './points.js';
+import { createNotification } from './notification.js';
+import {
+  adminAdjustGrowth,
+  getMakeupCandidateDays,
+  isMakeupCandidateDay,
+  levelForExp,
+  rankOf,
+  RANKS,
+  MAX_LEVEL,
+  MAKEUP_WINDOW_DAYS,
+  useProtectCard,
+} from './growth.js';
+
+afterEach(() => vi.useRealTimers());
 
 describe('growth 段位表', () => {
   it('15 级、cumExp 从 0 严格递增到 50000', () => {
@@ -55,5 +82,124 @@ describe('rankOf 越界钳制', () => {
     expect(rankOf(15).name).toBe('文圣');
     expect(rankOf(0).name).toBe('蒙童');
     expect(rankOf(99).name).toBe('文圣');
+  });
+});
+
+describe('补签窗口', () => {
+  it('只包含今天之前最近 3 个自然日，并可跨年', () => {
+    const now = new Date(2026, 0, 1, 12, 0, 0);
+    expect(MAKEUP_WINDOW_DAYS).toBe(3);
+    expect(getMakeupCandidateDays(now)).toEqual(['20251231', '20251230', '20251229']);
+  });
+
+  it('拒绝今天、未来、超窗和非法日期', () => {
+    const now = new Date(2026, 6, 17, 12, 0, 0);
+    expect(isMakeupCandidateDay('20260716', now)).toBe(true);
+    expect(isMakeupCandidateDay('20260714', now)).toBe(true);
+    expect(isMakeupCandidateDay('20260713', now)).toBe(false);
+    expect(isMakeupCandidateDay('20260717', now)).toBe(false);
+    expect(isMakeupCandidateDay('20260718', now)).toBe(false);
+    expect(isMakeupCandidateDay('20260230', now)).toBe(false);
+  });
+
+  it('按选定日期补签，只写零经验签到记录，不发积分或里程碑奖励', async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 17, 12, 0, 0));
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (sql.includes('SELECT streak, last_checkin_date'))
+          return [[{ streak: 1, last_checkin_date: '20260716', streak_protect_cards: 1 }]];
+        if (sql.includes('COUNT(*) AS c')) return [[{ c: 0 }]];
+        if (sql.includes('SELECT day FROM growth_events'))
+          return [[{ day: '20260716' }, { day: '20260715' }, { day: '20260714' }]];
+        return [{}];
+      }),
+    };
+    pool.getConnection.mockResolvedValue(connection);
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) {
+        return [
+          [
+            {
+              exp: 0,
+              streak: 3,
+              last_checkin_date: '20260716',
+              last_notified_level: 1,
+              streak_protect_cards: 0,
+              points: 0,
+              equipped_title: null,
+              equipped_frame: null,
+              storage_bonus_mb: 0,
+            },
+          ],
+        ];
+      }
+      if (sql.includes('SUM(amount)')) return [[{ s: 0 }]];
+      throw new Error(`未预期的 pool 查询: ${sql}`);
+    });
+
+    const result = await useProtectCard('user-1', { date: '20260715' });
+
+    expect(result).toMatchObject({ ok: true, date: '20260715', streak: 3 });
+    expect(connection.query).toHaveBeenCalledWith(
+      expect.stringContaining("VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)"),
+      ['user-1', '20260715', JSON.stringify({ protectCard: true })],
+    );
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('UPDATE growth_events SET amount'))).toBe(false);
+    expect(earnPoints).not.toHaveBeenCalled();
+    expect(grantItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('后台成长调整的升级通知', () => {
+  function makeConnection(preference = 'true') {
+    return {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (sql.includes('SELECT exp, streak_protect_cards')) return [[{ exp: 490, streak_protect_cards: 0 }]];
+        if (sql.includes('JSON_EXTRACT(preferences')) return [[{ v: preference }]];
+        return [{}];
+      }),
+    };
+  }
+
+  it('跨多级时只通知最终等级，不补发等级卡', async () => {
+    const connection = makeConnection();
+    pool.getConnection.mockResolvedValue(connection);
+
+    const result = await adminAdjustGrowth('user-1', { expDelta: 30_000 });
+
+    expect(result).toMatchObject({ ok: true, level: 12, leveledUp: true });
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    expect(createNotification).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        type: 'level_up',
+        link: '/growth',
+        meta: { level: 12, name: '大学士', source: 'admin_adjust' },
+      }),
+      connection,
+    );
+    expect(grantItem).not.toHaveBeenCalled();
+  });
+
+  it('用户关闭升级提醒时不创建通知', async () => {
+    vi.clearAllMocks();
+    const connection = makeConnection('false');
+    pool.getConnection.mockResolvedValue(connection);
+
+    const result = await adminAdjustGrowth('user-2', { expDelta: 600 });
+
+    expect(result).toMatchObject({ ok: true, level: 3, leveledUp: true });
+    expect(createNotification).not.toHaveBeenCalled();
+    expect(grantItem).not.toHaveBeenCalled();
   });
 });

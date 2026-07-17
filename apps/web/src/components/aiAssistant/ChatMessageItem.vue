@@ -41,7 +41,12 @@
             </span>
           </div>
         </div>
-        <ReplyLoading v-else />
+        <ReplyLoading v-else-if="!message.toolEvents?.length" />
+        <AiToolStatusList
+          v-if="message.role === 'assistant' && message.toolEvents?.length"
+          :items="message.toolEvents"
+          :has-content="Boolean(message.content)"
+        />
         <!-- 用户消息：操作条移到气泡外下方（纯图标 + 时间），整体右对齐，
              气泡因此只需包住文字即可自适应收窄，不再被这一行撑宽 -->
         <div class="msg-footer" v-if="message.role === 'user' && message.content">
@@ -133,6 +138,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
+  import AiToolStatusList, { type AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
@@ -155,6 +161,7 @@
     thinkingText?: string;
     thinkingDisplay?: string;
     contexts?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag'; id: string; title: string }>;
+    toolEvents?: AiToolStatusItem[];
   }
 
   const props = defineProps<{
@@ -166,6 +173,7 @@
   const emit = defineEmits<{
     (e: 'edit', content: string, contexts: NonNullable<ChatMessage['contexts']>): void;
     (e: 'regenerate'): void;
+    (e: 'source-navigate'): void;
   }>();
 
   // 复制这条消息内容到剪贴板
@@ -203,15 +211,15 @@
     if (!anchor || !anchor.href) return;
 
     const href = anchor.getAttribute('href') || '';
-    // 只处理 http 链接
-    if (!href.startsWith('http')) return;
+    if (!href || href.startsWith('#')) return;
     try {
-      const url = new URL(href);
-      const siteUrl = new URL(window.location.origin);
+      const url = new URL(href, window.location.origin);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
       // 判断是否为同一站点
-      if (url.host === siteUrl.host) {
+      if (url.origin === window.location.origin) {
         event.preventDefault();
-        router.push(url.pathname + url.search + url.hash);
+        emit('source-navigate');
+        void router.push(url.pathname + url.search + url.hash);
       } else {
         // 外部链接在新窗口打开
         event.preventDefault();

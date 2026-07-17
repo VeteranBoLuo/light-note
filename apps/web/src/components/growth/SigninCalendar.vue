@@ -3,9 +3,9 @@
     <div class="cal-head">
       <span class="cal-title">{{ t('growth.calTitle') }}</span>
       <div class="cal-nav">
-        <button class="cal-arrow" @click="prevMonth" aria-label="prev">‹</button>
+        <BButton class="cal-arrow" :aria-label="t('common.previous')" @click="prevMonth">‹</BButton>
         <span class="cal-month">{{ monthLabel }}</span>
-        <button class="cal-arrow" :disabled="atCurrentMonth" @click="nextMonth" aria-label="next">›</button>
+        <BButton class="cal-arrow" :aria-label="t('common.next')" :disabled="atCurrentMonth" @click="nextMonth">›</BButton>
       </div>
     </div>
 
@@ -21,13 +21,13 @@
           blank: cell === null,
           checked: cell !== null && isChecked(cell),
           today: cell !== null && isToday(cell),
-          'makeup-able': cell !== null && canMakeup && !isChecked(cell) && isYesterday(cell),
+          'makeup-able': cell !== null && isMakeupDay(cell),
         }"
         @click="cell !== null && onCellClick(cell)"
       >
         <template v-if="cell !== null">
           <span class="cal-cell-day">{{ cell }}</span>
-          <span v-if="canMakeup && !isChecked(cell) && isYesterday(cell)" class="cal-makeup-tag">补</span>
+          <span v-if="isMakeupDay(cell)" class="cal-makeup-tag">{{ t('growth.calMakeupTag') }}</span>
         </template>
       </span>
     </div>
@@ -42,9 +42,11 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 
-  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number; wide?: boolean; canMakeup?: boolean }>();
-const emit = defineEmits<{ makeup: [] }>();
+  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number; wide?: boolean; makeupDays?: string[] }>();
+  const emit = defineEmits<{ makeup: [date: string] }>();
   const { t, locale } = useI18n();
 
   const now = new Date();
@@ -68,6 +70,7 @@ const emit = defineEmits<{ makeup: [] }>();
   });
 
   const checkedSet = computed(() => new Set(props.checkinDays || []));
+  const makeupSet = computed(() => new Set(props.makeupDays || []));
   const pad = (n: number) => String(n).padStart(2, '0');
   const dayStr = (d: number) => `${viewYear.value}${pad(viewMonth.value + 1)}${pad(d)}`;
 
@@ -81,15 +84,14 @@ const emit = defineEmits<{ makeup: [] }>();
     return arr;
   });
 
-  function isYesterday(d: number) {
-    const y = new Date(now.getTime() - 86_400_000);
-    return viewYear.value === y.getFullYear() && viewMonth.value === y.getMonth() && d === y.getDate();
-  }
   function onCellClick(d: number) {
-    if (!props.canMakeup) return;
-    if (isChecked(d) || isToday(d)) return;
-    if (!isYesterday(d)) return;
-    emit('makeup');
+    if (!isMakeupDay(d)) return;
+    const date = dayStr(d);
+    Alert.alert({
+      title: t('growth.protectCardConfirmTitle'),
+      content: t('growth.protectCardConfirmContent', { date: formatDate(date) }),
+      onOk: () => emit('makeup', date),
+    });
   }
   function isToday(d: number) {
     return viewYear.value === now.getFullYear() && viewMonth.value === now.getMonth() && d === now.getDate();
@@ -105,6 +107,13 @@ const emit = defineEmits<{ makeup: [] }>();
       if (diff >= 0 && diff <= Math.max(1, props.streak || 1) - 1) return true;
     }
     return false;
+  }
+  function isMakeupDay(d: number) {
+    return !isChecked(d) && makeupSet.value.has(dayStr(d));
+  }
+  function formatDate(key: string) {
+    const date = new Date(Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8)));
+    return date.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric' });
   }
   const monthCheckinCount = computed(() => cells.value.filter((c): c is number => c !== null && isChecked(c)).length);
 
@@ -156,7 +165,9 @@ const emit = defineEmits<{ makeup: [] }>();
   }
   .cal-arrow {
     width: 24px;
-    height: 24px;
+    min-width: 24px;
+    height: 24px !important;
+    padding: 0 !important;
     border-radius: 7px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
     background: transparent;
@@ -165,11 +176,11 @@ const emit = defineEmits<{ makeup: [] }>();
     line-height: 1;
     font-size: 15px;
   }
-  .cal-arrow:hover:not(:disabled) {
+  .cal-arrow:hover:not(.disabled) {
     color: var(--primary-color);
     border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
   }
-  .cal-arrow:disabled {
+  .cal-arrow.disabled {
     opacity: 0.4;
     cursor: default;
   }
@@ -237,6 +248,7 @@ const emit = defineEmits<{ makeup: [] }>();
     background: color-mix(in srgb, var(--resource-bookmark-color) 15%, transparent);
     padding: 0 4px;
     border-radius: 3px;
+    white-space: nowrap;
   }
   .cal-foot {
     display: flex;

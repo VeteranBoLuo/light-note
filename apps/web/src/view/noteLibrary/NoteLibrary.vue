@@ -89,10 +89,15 @@
         <RightMenu
           v-for="note in visibleDragNoteList"
           :key="note.id"
-          :menu="[t('inbox.addExisting')]"
-          @select="addNoteToInbox(note)"
+          :menu="menuForNote(note)"
+          @select="handleNoteMenuSelect($event, note)"
         >
-          <note-card :note="note" :batch-mode="hasCheck" @nodeTypeChange="handleNodeTypeChange" />
+          <note-card
+            :note="note"
+            :batch-mode="hasCheck"
+            @nodeTypeChange="handleNodeTypeChange"
+            @action="handleNoteCardAction($event, note)"
+          />
         </RightMenu>
       </VueDraggable>
       <div v-if="currentViewMode === 'list' && (loading || visibleDragNoteList.length)" class="note-library-body-list">
@@ -120,8 +125,8 @@
           <RightMenu
             v-for="note in visibleDragNoteList"
             :key="note.id"
-            :menu="[t('inbox.addExisting')]"
-            @select="addNoteToInbox(note)"
+            :menu="menuForNote(note)"
+            @select="handleNoteMenuSelect($event, note)"
           >
             <note-list-item :note="note" @nodeTypeChange="handleNodeTypeChange" />
           </RightMenu>
@@ -142,12 +147,19 @@
       v-model:visible="showTypePicker"
       :mask-closable="false"
       :title="$t('note.pickEditor')"
+      width="min(760px, 80vw)"
       :sections="typePickerSections"
       :note="$t('note.pickEditorTip')"
     />
 
     <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
     <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
+    <NoteTagConfig
+      v-if="tagConfigVisible && activeTagNote"
+      v-model:visible="tagConfigVisible"
+      :note="activeTagNote"
+      @saveTag="handleNoteTagsSaved"
+    />
   </ResourcePageShell>
 </template>
 
@@ -156,7 +168,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
@@ -173,12 +185,23 @@
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
-  import { BUILTIN_NOTE_TEMPLATES } from '@/config/noteTemplates.ts';
+  import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
-  const { t } = useI18n();
+  const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
+  const TEMPLATE_ICONS: Record<string, string> = {
+    daily: icon.noteTemplate.daily,
+    weekly: icon.noteTemplate.weekly,
+    meeting: icon.noteTemplate.meeting,
+    reading: icon.noteTemplate.reading,
+    project: icon.noteTemplate.project,
+    review: icon.noteTemplate.review,
+    knowledge: icon.noteTemplate.knowledge,
+  };
+
+  const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const { addResourcesToInbox } = useInboxEnqueue();
   const noteList = ref([]);
@@ -186,6 +209,8 @@
   const loading = ref(false);
   const showTypePicker = ref(false);
   const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
+  const tagConfigVisible = ref(false);
+  const activeTagNote = ref<any | null>(null);
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -267,38 +292,43 @@
       hint: myTemplatesState.value === 'loading' ? t('note.tplLoading') : t('note.tplEmptyMine'),
     };
   });
-  const typePickerSections = computed(() => [
-    {
-      key: 'type',
-      title: t('note.pickMode'),
-      actions: [
-        {
-          key: 'html',
-          label: t('note.htmlLabel'),
-          description: t('note.htmlDesc'),
-          onClick: () => gotoNewNote({ type: 'html' }),
-        },
-        {
-          key: 'markdown',
-          label: t('note.mdLabel'),
-          description: t('note.mdDesc'),
-          onClick: () => gotoNewNote({ type: 'markdown' }),
-        },
-      ],
-    },
-    {
-      key: 'builtin',
-      title: t('note.tplBuiltinSection'),
-      actions: BUILTIN_NOTE_TEMPLATES.map((tpl) => ({
-        key: tpl.key,
-        label: t(tpl.nameKey),
-        description: t(tpl.descKey),
-        tag: templateTypeTag(tpl.type),
-        onClick: () => gotoNewNote({ type: tpl.type, builtin: tpl.key }),
-      })),
-    },
-    myTemplateSection.value,
-  ]);
+  const typePickerSections = computed(() => {
+    const templateLocale = pickTemplateLocale(locale.value);
+    return [
+      {
+        key: 'type',
+        title: t('note.pickMode'),
+        actions: [
+          {
+            key: 'html',
+            label: t('note.htmlLabel'),
+            description: t('note.htmlDesc'),
+            onClick: () => gotoNewNote({ type: 'html' }),
+          },
+          {
+            key: 'markdown',
+            label: t('note.mdLabel'),
+            description: t('note.mdDesc'),
+            onClick: () => gotoNewNote({ type: 'markdown' }),
+          },
+        ],
+      },
+      {
+        key: 'builtin',
+        title: t('note.tplBuiltinSection'),
+        actions: BUILTIN_NOTE_TEMPLATES.map((tpl) => ({
+          key: tpl.key,
+          label: t(tpl.nameKey),
+          description: t(tpl.descKey),
+          tag: templateTypeTag(tpl.type),
+          icon: TEMPLATE_ICONS[tpl.key] ?? icon.resource.note,
+          preview: tpl.preview[templateLocale],
+          onClick: () => gotoNewNote({ type: tpl.type, builtin: tpl.key }),
+        })),
+      },
+      myTemplateSection.value,
+    ];
+  });
 
   function showNewNotePicker() {
     showTypePicker.value = true;
@@ -306,6 +336,89 @@
   }
   function addNoteToInbox(note: any) {
     addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
+  }
+  function menuForNote(note: any) {
+    return [
+      {
+        key: 'toggleTop',
+        label: note.isTop ? t('common.unpin') : t('common.pin'),
+        icon: note.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
+      },
+      { key: 'relateTags', label: t('note.relateTags'), icon: icon.manage_categoryBtn_tag },
+      { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
+      { key: 'note-actions-divider', divider: true },
+      { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
+    ];
+  }
+
+  const togglingTopIds = new Set<string>();
+  const sortPinnedFirst = (notes: any[]) =>
+    [...notes].sort((a: any, b: any) => Number(Boolean(b.isTop)) - Number(Boolean(a.isTop)));
+
+  async function toggleNoteTop(note: any) {
+    if (blockGuestWrite('pin-note')) return;
+    const noteId = String(note?.id || '');
+    if (!noteId || togglingTopIds.has(noteId)) return;
+    togglingTopIds.add(noteId);
+    try {
+      const res = await apiBasePost('/api/note/toggleNoteTop', { id: noteId });
+      if (res.status !== 200) return;
+      note.isTop = Boolean(res.data?.isTop);
+      noteList.value = sortPinnedFirst(noteList.value);
+      message.success(note.isTop ? t('common.pinned') : t('common.unpinned'));
+      recordOperation({
+        module: '笔记库',
+        operation: `${note.isTop ? '置顶' : '取消置顶'}笔记【${note.title}】`,
+      });
+    } catch (error) {
+      console.error('Error toggling note pin:', error);
+    } finally {
+      togglingTopIds.delete(noteId);
+    }
+  }
+
+  function openNoteTagConfig(note: any) {
+    activeTagNote.value = note;
+    tagConfigVisible.value = true;
+  }
+
+  function handleNoteTagsSaved(tags: any[]) {
+    if (!activeTagNote.value) return;
+    activeTagNote.value.tags = tags;
+    getAllTags();
+  }
+
+  function deleteSingleNote(note: any) {
+    if (blockGuestWrite('delete-note')) return;
+    Alert.alert({
+      title: t('note.deleteOneTitle'),
+      content: t('note.deleteOneConfirm', { title: note.title || t('note.untitled') }),
+      footer: [
+        { label: t('common.cancel'), function: () => undefined },
+        {
+          label: t('note.moveToTrash'),
+          type: 'danger',
+          async function() {
+            const res = await apiBasePost('/api/note/delNote', { ids: [note.id] });
+            if (res.status !== 200) return;
+            message.success(t('common.deleteSuccess'));
+            recordOperation({ module: '笔记库', operation: `删除笔记成功【${note.title}】` });
+            await init();
+          },
+        },
+      ],
+    });
+  }
+
+  function handleNoteMenuSelect(action: string, note: any) {
+    if (action === 'toggleTop') toggleNoteTop(note);
+    else if (action === 'relateTags') openNoteTagConfig(note);
+    else if (action === 'addInbox') addNoteToInbox(note);
+    else if (action === 'delete') deleteSingleNote(note);
+  }
+
+  function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'addInbox' | 'delete', note: any) {
+    handleNoteMenuSelect(action, note);
   }
   const user = useUserStore();
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
@@ -529,15 +642,17 @@
         visibleDragNoteList.value = [...viewNoteList.value];
         return;
       }
+      // 置顶组始终位于普通组之前；组内仍保留用户刚完成的拖拽顺序。
+      const groupedNotes = sortPinnedFirst(mergedNotes);
       const sortedTags =
-        mergedNotes.map((note: any, index: number) => ({
+        groupedNotes.map((note: any, index: number) => ({
           sort: index,
           id: note.id,
         })) || [];
 
       const res = await apiBasePost('/api/note/updateNoteSort', { notes: sortedTags });
       if (res.status === 200) {
-        noteList.value = mergedNotes;
+        noteList.value = groupedNotes;
         recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
       } else {
         visibleDragNoteList.value = [...viewNoteList.value];

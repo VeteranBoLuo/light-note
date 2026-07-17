@@ -38,6 +38,7 @@ import {
 } from '../util/agent/confirmationStore.js';
 import * as aiQuota from '../util/aiQuota.js';
 import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
+import { getPlannerMaxTokens, normalizeToolArguments, parseToolCallArguments } from '../util/agent/toolArguments.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -111,6 +112,7 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TITLE_TOO_LONG',
   'TOO_MANY_IDS',
   'TOO_MANY_TAGS',
+  'TOOL_ARGUMENTS_INVALID',
   'TYPE_REQUIRED',
   'URL_REQUIRED',
   'URL_TOO_LONG',
@@ -739,7 +741,11 @@ export async function agentChat(req, res) {
     let plannerResponse = await requestDeepSeek(messages, {
       tools: toolDefs,
       signal: agentAbortController.signal,
-      maxTokens: 1200,
+      maxTokens: getPlannerMaxTokens({
+        message,
+        attachmentCount: attachmentIds.length,
+        selectedToolNames,
+      }),
     });
     trace.plannerMs = Date.now() - plannerStartedAt;
     trace.finishReason = plannerResponse.finishReason;
@@ -787,15 +793,34 @@ export async function agentChat(req, res) {
       const toolStartedAt = Date.now();
       const results = await Promise.all(
         toolCalls.map(async (tc) => {
-          let args = {};
-          try {
-            args = JSON.parse(tc.function.arguments || '{}');
-          } catch {
-            args = {};
-          }
+          const parsedArgs = parseToolCallArguments(tc);
+          let args = parsedArgs.args;
           const tool = toolRegistry.get(tc.function.name);
           let result;
-          if (!tool || !selectedToolNames.has(tc.function.name)) {
+          let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
+          if (!argumentError && tool) {
+            try {
+              args = normalizeToolArguments(tool, args);
+            } catch (error) {
+              const publicError = publicToolError(error, 'AI 生成的操作参数无效，请重新发起操作。');
+              argumentError = { code: publicError.code, message: publicError.message };
+            }
+          }
+          if (argumentError) {
+            console.warn('[Agent] 工具参数无效，已阻止执行', {
+              requestId,
+              tool: tc.function.name,
+              finishReason: plannerResponse.finishReason,
+              argumentLength: String(tc.function.arguments || '').length,
+              code: argumentError.code,
+            });
+            result = {
+              status: 'error',
+              summary: argumentError.message,
+              error: argumentError.code,
+              params: args,
+            };
+          } else if (!tool || !selectedToolNames.has(tc.function.name)) {
             result = {
               status: 'error',
               summary: '该工具不在本轮允许范围内，已拒绝执行。',
@@ -932,27 +957,40 @@ export async function agentChat(req, res) {
           const secondToolStartedAt = Date.now();
           const secondResults = await Promise.all(
             secondToolCalls.map(async (tc) => {
-              let args = {};
-              try {
-                args = JSON.parse(tc.function.arguments || '{}');
-              } catch {
-                args = {};
+              const parsedArgs = parseToolCallArguments(tc);
+              let args = parsedArgs.args;
+              const tool = toolRegistry.get(tc.function.name);
+              let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
+              if (!argumentError && tool) {
+                try {
+                  args = normalizeToolArguments(tool, args);
+                } catch (error) {
+                  const publicError = publicToolError(error, 'AI 生成的查询参数无效，请重新提问。');
+                  argumentError = { code: publicError.code, message: publicError.message };
+                }
               }
               if (stream && !res.writableEnded) {
                 res.write(
                   `data: ${JSON.stringify({ event: 'tool_start', requestId, tool: tc.function.name, round: 2 })}\n\n`,
                 );
               }
-              const result = await executeTool(tc.function.name, args, {
-                userId,
-                userRole,
-                userAlias,
-                billingUserId: identity.billingUserId,
-                billingUserRole: identity.billingUserRole,
-                signal: agentAbortController.signal,
-                request: req,
-                suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
-              });
+              const result = argumentError
+                ? {
+                    status: 'error',
+                    summary: argumentError.message,
+                    error: argumentError.code,
+                    params: args,
+                  }
+                : await executeTool(tc.function.name, args, {
+                    userId,
+                    userRole,
+                    userAlias,
+                    billingUserId: identity.billingUserId,
+                    billingUserRole: identity.billingUserRole,
+                    signal: agentAbortController.signal,
+                    request: req,
+                    suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+                  });
               if (Array.isArray(result.sources)) sources.push(...result.sources);
               usedTools.push({
                 name: tc.function.name,

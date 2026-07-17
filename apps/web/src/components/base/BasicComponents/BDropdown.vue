@@ -18,16 +18,18 @@
           @mouseenter="onPanelEnter"
           @mouseleave="onLeave"
         >
-          <div
-            v-for="item in menuOptions"
-            :key="item.label"
-            class="b-dropdown-item"
-            :class="{ 'b-dropdown-item--danger': item.danger }"
-            @click="onItemClick(item)"
-          >
-            <svg-icon v-if="item.icon" :src="item.icon" />
-            <span>{{ item.label }}</span>
-          </div>
+          <template v-for="(item, index) in menuOptions" :key="item.key || item.label || `divider-${index}`">
+            <div v-if="item.divider" class="b-dropdown-divider" />
+            <div
+              v-else
+              class="b-dropdown-item"
+              :class="{ 'b-dropdown-item--danger': item.danger }"
+              @click="onItemClick(item)"
+            >
+              <svg-icon v-if="item.icon" :src="item.icon" size="15" />
+              <span>{{ item.label }}</span>
+            </div>
+          </template>
         </div>
       </transition>
     </Teleport>
@@ -42,9 +44,11 @@
   type BDropdownTrigger = 'hover' | 'click';
 
   interface BDropdownOption {
-    label: string;
+    key?: string;
+    label?: string;
     icon?: string;
     danger?: boolean;
+    divider?: boolean;
     function?: () => void;
   }
 
@@ -166,6 +170,7 @@
   }
 
   function onItemClick(item: BDropdownOption) {
+    if (item.divider) return;
     item.function?.();
     close();
   }
@@ -221,6 +226,11 @@
   }
   .b-dropdown-item--danger:hover {
     background: color-mix(in srgb, var(--danger-color, #f04455) 9%, var(--menu-body-bg-color));
+  }
+  .b-dropdown-divider {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--card-border-color);
   }
   .b-dropdown-fade-enter-active,
   .b-dropdown-fade-leave-active {

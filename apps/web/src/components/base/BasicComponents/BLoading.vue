@@ -1,5 +1,19 @@
 <template>
-  <div class="loader-container" :style="{ opacity: loading ? '0.6' : '1', zIndex: hasSlotContent ? 'auto' : '-1' }">
+  <div v-if="inline" v-show="loading" class="b-loading-inline" role="status" aria-live="polite">
+    <span class="b-loading-inline__indicator" aria-hidden="true">
+      <i></i>
+      <i></i>
+      <i></i>
+    </span>
+    <span class="b-loading-inline__title">
+      <slot name="title">{{ title }}</slot>
+    </span>
+  </div>
+  <div
+    v-else
+    class="loader-container"
+    :style="{ opacity: loading ? '0.6' : '1', zIndex: hasSlotContent ? 'auto' : '-1' }"
+  >
     <div ref="slotContainerRef" style="height: 100%">
       <slot></slot>
     </div>
@@ -30,6 +44,10 @@
       type: String,
       default: '',
     },
+    inline: {
+      type: Boolean,
+      default: false,
+    },
   });
 
   const slotContainerRef = ref<HTMLElement>();
@@ -45,6 +63,57 @@
 </script>
 
 <style lang="less" scoped>
+  .b-loading-inline {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    gap: 9px;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+
+  .b-loading-inline__indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .b-loading-inline__indicator i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    animation: b-loading-inline-pulse 1.1s ease-in-out infinite;
+  }
+
+  .b-loading-inline__indicator i:nth-child(2) {
+    animation-delay: 0.14s;
+  }
+
+  .b-loading-inline__indicator i:nth-child(3) {
+    animation-delay: 0.28s;
+  }
+
+  @keyframes b-loading-inline-pulse {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .b-loading-inline__indicator i {
+      animation: none;
+      opacity: 0.65;
+    }
+  }
+
   .title {
     font-size: 12px;
   }

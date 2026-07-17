@@ -187,9 +187,10 @@
   }
 
   .input-container:focus-within {
+    background-color: color-mix(in srgb, var(--menu-container-bg-color) 97%, var(--primary-color));
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--primary-color) 48%, transparent),
-      0 10px 28px rgba(15, 23, 42, 0.08);
+      0 0 0 1px color-mix(in srgb, var(--text-color) 8%, transparent),
+      0 12px 30px color-mix(in srgb, var(--primary-color) 12%, transparent);
   }
 
   .context-actions {
@@ -216,10 +217,18 @@
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+    border-radius: 0.875rem;
+    background: var(--card-background);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-color) 10%, transparent);
+    transition: box-shadow 0.2s ease;
+  }
+
+  .text-input :deep(.input-container:focus-within) {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 62%, transparent);
   }
 
   .text-input :deep(.b-textarea) {
-    min-height: 40px;
+    min-height: 50px;
     max-height: 120px;
     resize: none;
     border: none;

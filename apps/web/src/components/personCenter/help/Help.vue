@@ -74,7 +74,10 @@
         </div>
         <div v-else class="help-article-content" v-html="renderedContent"></div>
       </div>
-      <div v-if="!isSearching && helpOutline.length" :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']">
+      <div
+        v-if="!isSearching && helpOutline.length"
+        :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']"
+      >
         <div class="help-outline-title">{{ t('help.outline') }}</div>
         <BButton
           v-for="heading in helpOutline"
@@ -125,10 +128,10 @@
   <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
   <li><strong>资源中心</strong>：一键检索书签、笔记、文件和标签，并在“全部资源”和“待整理”之间切换；按 <code>/</code> 键可快速唤起搜索</li>
   <li><strong>回收站</strong>：删除的书签、笔记、文件统一进入回收站，30 天内可随时恢复，过期自动清理</li>
-  <li><strong>轻笺智域</strong>：内置 AI 对话助手，可用 <code>@</code> 选择当前资源作为上下文；查询结果提供来源卡片，任何写入都会先展示目标与影响范围并等待确认</li>
+  <li><strong>轻笺智域</strong>：内置 AI 对话助手，电脑端按 <code>Ctrl/⌘ + /</code> 可随时打开；可用 <code>@</code> 选择当前资源作为上下文，查询结果提供来源卡片，任何写入都会先展示目标与影响范围并等待确认</li>
   <li><strong>工作台</strong>：聚合书签/笔记/文件总数、7 天活跃趋势、高频书签与标签热度排行，快捷操作一步直达</li>
 </ul>
-<p>更多功能：<b>键盘快捷键</b>（<code>/</code> 快速搜索、拖拽排序等）、<b>移动端</b>专属界面、<b>GitHub 快捷登录</b>，助你高效管理知识。</p>
+<p>更多功能：<b>全局快捷键</b>（<code>/</code> 快速搜索、<code>Ctrl/⌘ + /</code> 打开 AI 助手，可在“设置”中查看）、<b>移动端</b>专属界面、<b>GitHub 快捷登录</b>，助你高效管理知识。</p>
 
 <h3>🖥 多端体验</h3>
 <p>轻笺全面适配<b>PC、手机和平板</b>，各端界面与交互均做了针对性优化，数据云端同步，随时随地访问您的知识库。</p>
@@ -172,10 +175,10 @@
   <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
   <li><strong>Resource Center</strong>: Find bookmarks, notes, files, and tags in one place, and switch between All Resources and Inbox; press <code>/</code> to quickly activate search</li>
   <li><strong>Trash</strong>: Deleted bookmarks, notes, and files go to the trash for 30 days — recover anytime before automatic cleanup</li>
-  <li><strong>Light Note AI</strong>: Attach resources as per-message context, trace answers through source cards, and review the target and impact before any AI write is executed</li>
+  <li><strong>Light Note AI</strong>: Press <code>Ctrl/⌘ + /</code> on desktop to open it from anywhere, attach resources as per-message context, trace answers through source cards, and review the target and impact before any AI write is executed</li>
   <li><strong>Workbench</strong>: Aggregate bookmark/note/file totals, 7-day activity trends, top bookmarks and tag popularity rankings, and one-click quick actions</li>
 </ul>
-<p>More features: <b>Keyboard shortcuts</b> (<code>/</code> quick search, drag & drop sorting, etc.), <b>mobile</b> optimized interface, <b>GitHub quick login</b>.</p>
+<p>More features: <b>Global shortcuts</b> (<code>/</code> for search and <code>Ctrl/⌘ + /</code> for AI, listed in Settings), <b>mobile</b> optimized interface, <b>GitHub quick login</b>.</p>
 
 <h3>🖥 Multi-Device Experience</h3>
 <p>Light Note is fully optimized for <b>PC, mobile, and tablet</b>, with tailored interfaces and interactions for each device. Your data syncs via the cloud, so you can access your knowledge base anytime, anywhere.</p>

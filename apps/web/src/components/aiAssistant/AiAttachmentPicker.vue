@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-attachment-picker">
+  <div class="ai-attachment-picker" :class="{ 'has-attachment': modelValue.length > 0 }">
     <div v-if="modelValue.length" class="attachment-card" :class="`is-${modelValue[0].status}`">
       <span class="attachment-icon"><SvgIcon :src="icon.cloudSpace.preview.unknown" size="18" /></span>
       <span class="attachment-copy">
@@ -89,6 +89,12 @@
     return `${formatBytes(attachment.fileSize)} · ${t(`ai.attachmentStatus.${attachment.status}`)}`;
   }
 
+  function showAttachmentError(error: any, fallback: string) {
+    // HTTP 层已经对 429 做了带 key 的全局提示，这里不再重复弹第二条。
+    if (error?.code === 'HTTP_429') return;
+    message.error(error?.message || fallback);
+  }
+
   async function uploadLocal(files: File[]) {
     const file = files?.[0];
     if (!file || busy.value) return;
@@ -98,7 +104,7 @@
       emit('update:modelValue', [attachment]);
       startPolling();
     } catch (error: any) {
-      message.error(error?.message || t('ai.attachmentUploadFailed'));
+      showAttachmentError(error, t('ai.attachmentUploadFailed'));
     } finally {
       busy.value = false;
     }
@@ -118,7 +124,7 @@
       emit('update:modelValue', [attachment]);
       startPolling();
     } catch (error: any) {
-      message.error(error?.message || t('ai.attachmentAttachFailed'));
+      showAttachmentError(error, t('ai.attachmentAttachFailed'));
     } finally {
       busy.value = false;
     }
@@ -177,7 +183,7 @@
       emit('update:modelValue', [next]);
       startPolling();
     } catch (error: any) {
-      message.error(error?.message || t('ai.attachmentFailed'));
+      showAttachmentError(error, t('ai.attachmentFailed'));
     } finally {
       busy.value = false;
     }
@@ -200,6 +206,10 @@
     max-width: 100%;
     min-width: 0;
   }
+  .ai-attachment-picker.has-attachment {
+    flex: 0 0 100%;
+    width: 100%;
+  }
   .ai-attachment-picker :deep(.b_btn) {
     gap: 6px;
   }
@@ -207,7 +217,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    width: min(100%, 430px);
+    width: 100%;
     min-width: 0;
     padding: 7px 8px;
     border-radius: 10px;

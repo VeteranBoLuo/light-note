@@ -285,6 +285,34 @@
           </div>
         </section>
 
+        <!-- 全局快捷键 -->
+        <section class="settings-card" id="set-shortcuts">
+          <div class="card-head">
+            <span class="card-icon card-icon--shortcuts">
+              <SvgIcon :src="icon.settings.shortcuts" size="20" />
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.shortcutsTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.shortcutsDesc') }}</p>
+            </div>
+          </div>
+
+          <div class="fields">
+            <div v-for="item in shortcutItems" :key="item.id" class="field shortcut-field">
+              <div class="field-head">
+                <span class="field-label">{{ item.title }}</span>
+                <span class="field-desc">{{ item.description }}</span>
+              </div>
+              <div class="shortcut-keys" :aria-label="`${item.title}: ${item.label}`">
+                <template v-for="(key, index) in item.keys" :key="`${item.id}-${key}-${index}`">
+                  <span v-if="index" class="shortcut-plus" aria-hidden="true">+</span>
+                  <kbd class="shortcut-key">{{ key }}</kbd>
+                </template>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- 通知 -->
         <section class="settings-card" id="set-notification">
           <div class="card-head">
@@ -571,6 +599,7 @@
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
+  import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -580,6 +609,7 @@
     const list = [
       { id: 'set-appearance', label: t('settings.appearance') },
       { id: 'set-general', label: t('settings.general') },
+      { id: 'set-shortcuts', label: t('settings.shortcutsTitle') },
       { id: 'set-notification', label: t('settings.notification') },
     ];
     if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
@@ -632,6 +662,22 @@
     pageRef.value?.removeEventListener('scroll', onPageScroll);
   });
   const user = useUserStore();
+  const shortcutItems = computed(() => [
+    {
+      id: 'globalSearch',
+      title: t('settings.shortcutSearch'),
+      description: t('settings.shortcutSearchDesc'),
+      keys: getGlobalShortcutKeys('globalSearch'),
+      label: getGlobalShortcutLabel('globalSearch'),
+    },
+    {
+      id: 'aiAssistant',
+      title: t('settings.shortcutAi'),
+      description: t('settings.shortcutAiDesc'),
+      keys: getGlobalShortcutKeys('aiAssistant'),
+      label: getGlobalShortcutLabel('aiAssistant'),
+    },
+  ]);
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
   const bmRef = ref<HTMLAnchorElement | null>(null);
@@ -990,6 +1036,10 @@
     color: var(--resource-note-color);
     background: color-mix(in srgb, var(--resource-note-color) 12%, transparent);
   }
+  .card-icon--shortcuts {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  }
   .card-head-text {
     display: flex;
     flex-direction: column;
@@ -1037,6 +1087,35 @@
     font-size: 12px;
     line-height: 1.4;
     color: var(--desc-color);
+  }
+
+  .shortcut-keys {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .shortcut-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 30px;
+    padding: 0 9px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--card-border-color) 45%, transparent);
+    color: var(--text-color);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+  .shortcut-plus {
+    color: var(--desc-color);
+    font-size: 12px;
   }
 
   /* ---- segmented chips ---- */
@@ -1087,6 +1166,9 @@
     }
     .seg {
       justify-content: flex-start;
+    }
+    .shortcut-keys {
+      align-self: flex-start;
     }
   }
 

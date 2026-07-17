@@ -2,7 +2,7 @@
   <span class="b-tooltip-wrap" @mouseenter="show" @mouseleave="hide" ref="wrapRef">
     <slot />
     <Teleport to="body">
-      <div v-show="visible" class="b-tooltip-popup" ref="popupRef" :style="popupStyle">
+      <div v-show="visible" class="b-tooltip-popup" ref="popupRef" :style="resolvedPopupStyle">
         {{ title }}
       </div>
     </Teleport>
@@ -10,19 +10,21 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive } from 'vue';
+  import { computed, ref, reactive } from 'vue';
   import { getRootZoom } from '@/utils/zoom';
 
   const props = defineProps<{
     title: string;
     always?: boolean;
     delay?: number;
+    zIndex?: number;
   }>();
 
   const visible = ref(false);
   const popupRef = ref<HTMLElement>();
   const wrapRef = ref<HTMLElement>();
   const popupStyle = reactive({ top: '0px', left: '0px' });
+  const resolvedPopupStyle = computed(() => ({ ...popupStyle, zIndex: props.zIndex ?? 9999 }));
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function show() {
@@ -77,7 +79,7 @@
     line-height: 1.5;
     color: var(--text-color);
     background: var(--menu-body-bg-color);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     z-index: 9999;
     pointer-events: none;
     max-width: 280px;

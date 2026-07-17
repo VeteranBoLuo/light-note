@@ -11,20 +11,26 @@
             v-for="action in section.actions"
             :key="action.key"
             class="action-card"
+            :class="{
+              'action-card--with-icon': Boolean(action.icon),
+              'action-card--with-preview': Boolean(action.preview?.length),
+            }"
             @click="action.onClick ? action.onClick() : handleActionClick(section.key, action.key, action)"
           >
+            <div v-if="action.icon" class="card-icon">
+              <SvgIcon :src="action.icon" size="20" />
+            </div>
             <div class="card-content">
               <h4>
                 {{ action.label }}
                 <span v-if="action.tag" class="card-tag">{{ action.tag }}</span>
               </h4>
               <p v-if="action.description">{{ action.description }}</p>
+              <div v-if="action.preview?.length" class="card-preview">
+                <span v-for="line in action.preview ?? []" :key="line">{{ line }}</span>
+              </div>
             </div>
-            <div
-              v-if="action.removable && action.onRemove"
-              class="card-remove"
-              @click.stop="action.onRemove()"
-            >
+            <div v-if="action.removable && action.onRemove" class="card-remove" @click.stop="action.onRemove()">
               <SvgIcon :src="icon.noteDetail.delete" size="14" />
             </div>
           </div>
@@ -54,6 +60,10 @@
     description?: string;
     /** 标题旁的小标签(如内容类型),低饱和中性样式 */
     tag?: string;
+    /** 卡片左侧的语义图标，静态资源统一来自 icon.ts。 */
+    icon?: string;
+    /** 卡片内部的结构预览，用于帮助用户快速选择工作流模板。 */
+    preview?: string[];
     onClick?: () => void;
     /** 可移除卡片（如用户自存模板）：显示右上角删除按钮，点击只触发 onRemove 不触发卡片本体 */
     removable?: boolean;
@@ -138,6 +148,35 @@
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
+        &.action-card--with-icon {
+          align-items: flex-start;
+          min-height: 132px;
+          padding: 14px;
+        }
+
+        .card-icon {
+          flex: 0 0 auto;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border: 1px solid color-mix(in srgb, var(--resource-note-color) 18%, var(--card-border-color));
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--resource-note-color) 10%, var(--card-background));
+          color: var(--resource-note-color);
+          transition:
+            background-color 0.2s ease,
+            border-color 0.2s ease,
+            transform 0.2s ease;
+        }
+
+        &:hover .card-icon {
+          border-color: color-mix(in srgb, var(--resource-note-color) 34%, var(--card-border-color));
+          background: color-mix(in srgb, var(--resource-note-color) 16%, var(--card-background));
+          transform: scale(1.04);
+        }
+
         .card-remove {
           position: absolute;
           top: 6px;
@@ -160,6 +199,9 @@
         }
 
         .card-content {
+          flex: 1;
+          min-width: 0;
+
           h4 {
             display: flex;
             align-items: center;
@@ -185,6 +227,25 @@
             margin: 0;
             color: var(--desc-color);
             font-size: 12px;
+            line-height: 1.5;
+          }
+
+          .card-preview {
+            display: grid;
+            gap: 4px;
+            margin-top: 10px;
+
+            span {
+              display: block;
+              padding-left: 8px;
+              border-left: 2px solid color-mix(in srgb, var(--resource-note-color) 45%, transparent);
+              color: var(--sub-text-color);
+              font-size: 11px;
+              line-height: 1.35;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
           }
         }
       }

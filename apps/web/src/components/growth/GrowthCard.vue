@@ -15,9 +15,9 @@
           <span class="gc-points">· 🪙 {{ (g.points || 0).toLocaleString('en-US') }} {{ t('growth.points') }}</span>
         </div>
       </div>
-      <button class="gc-checkin" :class="{ done: g.checkedInToday }" :disabled="g.checkedInToday || checking" @click="onCheckin">
+      <BButton class="gc-checkin" :class="{ done: g.checkedInToday }" :disabled="g.checkedInToday || checking" @click="onCheckin">
         {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
-      </button>
+      </BButton>
     </div>
 
     <div v-if="!g.isMax" class="gc-progress" :title="`${g.progress}%`">
@@ -71,6 +71,8 @@
       :checkin-days="stats?.checkinDays || []"
       :checked-in-today="g.checkedInToday"
       :streak="g.streak"
+      :makeup-days="g.makeupDays || []"
+      @makeup="onUseCard"
     />
     <div v-else class="gc-earn">
       <div class="gc-earn-head">{{ t('growth.earnTitle') }}</div>
@@ -96,6 +98,7 @@
   import RankLadder from '@/components/growth/RankLadder.vue';
   import LevelUpOverlay from '@/components/growth/LevelUpOverlay.vue';
   import SigninCalendar from '@/components/growth/SigninCalendar.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
@@ -176,14 +179,14 @@
   }
 
   const usingCard = ref(false);
-  async function onUseCard() {
+  async function onUseCard(date: string) {
     if (usingCard.value) return;
     usingCard.value = true;
     try {
-      const res = await useProtectCard();
+      const res = await useProtectCard(date);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: `使用补签卡（连签续至 ${res.data.streak} 天）` });
+        recordOperation({ module: '成长', operation: `使用补签卡补签 ${date}（连签续至 ${res.data.streak} 天）` });
         loadDashboard();
       } else {
         message.info(t('growth.protectCardFail'));
@@ -298,7 +301,8 @@
   }
   .gc-checkin {
     flex: 0 0 auto;
-    padding: 8px 18px;
+    height: 36px !important;
+    padding: 0 18px !important;
     border-radius: 10px;
     border: none;
     font-size: 13px;
@@ -311,11 +315,11 @@
       transform 0.15s,
       opacity 0.15s;
   }
-  .gc-checkin:hover:not(:disabled) {
+  .gc-checkin:hover:not(.disabled) {
     transform: translateY(-1px);
   }
   .gc-checkin.done,
-  .gc-checkin:disabled {
+  .gc-checkin.disabled {
     background: color-mix(in srgb, var(--card-border-color) 40%, transparent);
     color: var(--desc-color);
     cursor: default;

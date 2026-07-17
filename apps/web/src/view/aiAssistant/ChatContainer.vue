@@ -17,9 +17,13 @@
             :has-answer-started="hasAnswerStarted"
             @edit="handleEditMessage"
             @regenerate="() => handleRegenerate(index)"
+            @source-navigate="handleMessageSourceNavigate"
           />
-          <AiToolStatusList v-if="message.toolEvents?.length" :items="message.toolEvents" />
-          <AiSourceCards v-if="message.sources?.length" :sources="message.sources" />
+          <AiSourceCards
+            v-if="message.sources?.length"
+            :sources="message.sources"
+            @source-navigate="handleSourceNavigate"
+          />
           <AiToolConfirmationCard
             v-for="confirmation in message.confirmations || []"
             :key="confirmation.id"
@@ -75,7 +79,7 @@
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
   import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
-  import AiToolStatusList, { type AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
+  import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import { useI18n } from 'vue-i18n';
@@ -86,12 +90,25 @@
 
   const { t } = useI18n();
 
+  const emit = defineEmits<{
+    (event: 'source-navigate', source?: AiSource): void;
+  }>();
+
   defineExpose({
     clearHistory,
+    focusInput,
   });
   const bookmark = bookmarkStore();
 
   const user = useUserStore();
+
+  function handleSourceNavigate(source: AiSource) {
+    emit('source-navigate', source);
+  }
+
+  function handleMessageSourceNavigate() {
+    emit('source-navigate');
+  }
 
   interface ChatMessage {
     role: 'user' | 'assistant';
@@ -125,6 +142,10 @@
   const translationConfig = ref({ source: 'auto', target: 'zh' });
   const contexts = ref<AiResourceContext[]>([]);
   const attachments = ref<AiAttachment[]>([]);
+
+  function focusInput() {
+    chatInputRef.value?.focus();
+  }
 
   // AI 今日额度(按成长等级下发;root/本机自测豁免返回 exempt)。进页与每轮回复结束后刷新,展示「已用 / 剩余」
   const aiQuota = ref<{ exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null>(

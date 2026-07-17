@@ -8,8 +8,8 @@ import pool from '../db/index.js';
 //    (earnPoints/earnStorage/grantExp),在「我的资产」展示。此文件不接管它们。
 //  - 消耗品类(AI 加油包等):存背包(user_item 表),用户手动「使用」才生效 —— 价值在于择时使用。
 //
-//  补签卡是特例:逻辑成熟(上限 2、补签时机判断、续连签),存储沿用 user_growth.streak_protect_cards,
-//  "使用"仍走 growth.useProtectCard(需要"昨天漏签"这个上下文)。这里只集中它的"发放写入口径"
+//  补签卡是特例:逻辑成熟(上限 2、最近 3 个自然日补签、续连签),存储沿用 user_growth.streak_protect_cards,
+//  "使用"仍走 growth.useProtectCard(需要"可补漏签日期"这个上下文)。这里只集中它的"发放写入口径"
 //  (grantItem)与"背包展示"(getInventory),不迁移其存储与使用流程,避免动到已验证的连签逻辑。
 //
 //  新增消耗品时:在 CONSUMABLES 加一条 + (如需特殊生效)在 useItem 加一个分支即可,发放/展示全通用。
@@ -40,8 +40,8 @@ export const CONSUMABLES = {
     icon: '🎫',
     backing: 'card_column',
     stackMax: 2,
-    desc: '漏签的次日可补回、续上连签(上限 2 张)。在签到日历处补签。',
-    action: 'makeup', // 前端:走「补签」(仅昨天漏签且有卡时可用)
+    desc: '可补最近 3 个自然日内的漏签、续上连签(上限 2 张)。补签不发经验、积分或额外奖励。',
+    action: 'makeup', // 前端:走「补签」(最近 3 个自然日内有漏签且有卡时可用)
   },
 };
 

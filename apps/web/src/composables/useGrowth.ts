@@ -13,6 +13,7 @@ export interface Growth {
   streak: number;
   protectCards?: number;
   canUseProtectCard?: boolean;
+  makeupDays?: string[]; // 当前可补的 YYYYMMDD，按由近到远排序
   points?: number; // 积分余额(消费货币)
   equippedTitle?: string | null; // 已佩戴称号 id
   equippedTitleName?: string | null; // 称号显示名
@@ -315,8 +316,8 @@ export function useGrowth() {
   }
 
   // 使用补签卡:成功则刷新成长快照(卡数/连签/可补签态更新)
-  async function useProtectCard() {
-    const res = await growthApi.useProtectCard();
+  async function useProtectCard(date?: string) {
+    const res = await growthApi.useProtectCard(date);
     if (res?.status === 200 && res.data?.growth) {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;

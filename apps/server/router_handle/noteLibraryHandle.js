@@ -203,7 +203,7 @@ export const queryNoteList = (req, res) => {
       sql += ` AND n.id IN (SELECT resource_id FROM resource_tag_relations WHERE tag_id = ? AND resource_type = 'note')`;
       params.push(tagId);
     }
-    sql += ` GROUP BY n.id ORDER BY n.sort, n.update_time DESC`;
+    sql += ` GROUP BY n.id ORDER BY n.is_top DESC, n.sort, n.update_time DESC`;
     pool
       .query(sql, params)
       .then(async ([result]) => {
@@ -300,6 +300,48 @@ export const updateNoteSort = async (req, res) => {
     res.send(resultData(null, 500, '服务器内部错误' + e)); // 设置状态码为400
   } finally {
     connection.release(); // 释放连接回连接池
+  }
+};
+
+export const toggleNoteTop = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const noteId = String(req.body?.id || '').trim();
+  if (!noteId) {
+    return res.send(resultData(null, 400, '参数错误'));
+  }
+
+  const userId = req.user.id;
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      'SELECT is_top FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
+      [noteId, userId],
+    );
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.send(resultData(null, 404, '笔记不存在'));
+    }
+
+    const isTop = rows[0].is_top ? 0 : 1;
+    // 置顶属于整理行为，不应把笔记伪装成刚编辑过；显式保留 update_time。
+    await connection.query(
+      'UPDATE note SET is_top = ?, update_time = update_time WHERE id = ? AND create_by = ? AND del_flag = 0',
+      [isTop, noteId, userId],
+    );
+    await connection.commit();
+    res.send(resultData({ id: noteId, isTop }));
+  } catch (e) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    console.error('[note] 切换置顶状态失败:', e);
+    res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+  } finally {
+    connection?.release();
   }
 };
 

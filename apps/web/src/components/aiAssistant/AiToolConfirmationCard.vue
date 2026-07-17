@@ -81,6 +81,10 @@
     return text === '{}' ? '' : text.slice(0, 1200);
   });
 
+  function requestErrorMessage(error: any) {
+    return error?.response?.data?.msg || error?.message || t('ai.confirmationFailed');
+  }
+
   async function confirm() {
     if (loading.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
     loading.value = true;
@@ -100,7 +104,7 @@
       bMessage.success(t('ai.confirmationCompleted'));
     } catch (error: any) {
       status.value = 'failed';
-      resultText.value = error?.message || t('ai.confirmationFailed');
+      resultText.value = requestErrorMessage(error);
       bMessage.error(resultText.value);
     } finally {
       loading.value = false;
@@ -120,7 +124,7 @@
       resultText.value = t('ai.confirmationCancelled');
     } catch (error: any) {
       status.value = 'failed';
-      resultText.value = error?.message || t('ai.confirmationFailed');
+      resultText.value = requestErrorMessage(error);
       bMessage.error(resultText.value);
     } finally {
       loading.value = false;

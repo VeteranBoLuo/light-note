@@ -9,8 +9,8 @@ export const checkin = () => apiBasePost('/api/growth/checkin');
 // 领取今日任务奖励(全部完成后)
 export const claimDailyBonus = () => apiBasePost('/api/growth/claimDailyBonus');
 
-// 使用补签卡(补回昨天漏签、续连签)
-export const useProtectCard = () => apiBasePost('/api/growth/useProtectCard');
+// 使用补签卡(补回最近 3 个自然日内指定的一天漏签、续连签)
+export const useProtectCard = (date?: string) => apiBasePost('/api/growth/useProtectCard', date ? { date } : {});
 
 // 段位表(「段位路线」总览用,公开只读)
 export const getRanks = () => apiBaseGet('/api/growth/ranks');

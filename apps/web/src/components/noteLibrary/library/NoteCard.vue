@@ -10,6 +10,7 @@
   >
     <div class="note-title-row">
       <div class="note-title" :title="note.title">{{ note.title }}</div>
+      <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
       <InboxPendingBadge v-if="note.isPending" />
     </div>
     <div class="note-content" v-html="extractAndConvertTags(note.content)" />
@@ -38,11 +39,19 @@
     <div v-if="!bookmark.isMobile" class="note-select-control">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
+    <div v-else-if="!batchMode" class="note-mobile-actions" @click.stop>
+      <BDropdown :trigger="'click'" :align="'right'" :menu-options="mobileMenuOptions">
+        <BButton class="note-more-button" :aria-label="$t('common.more')">
+          <SvgIcon :src="icon.common.more" size="18" />
+        </BButton>
+      </BDropdown>
+    </div>
   </div>
 </template>
 
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -50,11 +59,42 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
     batchMode: false,
   });
 
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
+  const emit = defineEmits<{
+    nodeTypeChange: [tag: any];
+    action: [action: 'toggleTop' | 'relateTags' | 'addInbox' | 'delete'];
+  }>();
+
+  const mobileMenuOptions = computed(() => [
+    {
+      label: props.note.isTop ? t('common.unpin') : t('common.pin'),
+      icon: props.note.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
+      function: () => emit('action', 'toggleTop'),
+    },
+    {
+      label: t('note.relateTags'),
+      icon: icon.manage_categoryBtn_tag,
+      function: () => emit('action', 'relateTags'),
+    },
+    {
+      label: t('inbox.addExisting'),
+      icon: icon.contextMenu.inbox,
+      function: () => emit('action', 'addInbox'),
+    },
+    { divider: true },
+    {
+      label: t('common.delete'),
+      icon: icon.table_delete,
+      danger: true,
+      function: () => emit('action', 'delete'),
+    },
+  ]);
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));
@@ -103,7 +143,6 @@
 
     return extractedContent;
   };
-  const emit = defineEmits(['nodeTypeChange']);
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -178,8 +217,22 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
     max-width: 100%;
+  }
+
+  .note-top-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 12%, transparent);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
   }
 
   .note-content {
@@ -308,6 +361,23 @@
       visibility 0.16s ease;
   }
 
+  .note-mobile-actions {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 3;
+  }
+
+  .note-more-button {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--card-background) 88%, transparent);
+  }
+
   @media (max-width: 1023px) {
     .note-card {
       border-color: var(--surface-border-color) !important;
@@ -319,6 +389,10 @@
         transform: none;
         box-shadow: none;
       }
+    }
+
+    .note-title-row {
+      padding-right: 34px;
     }
 
     .note-content {

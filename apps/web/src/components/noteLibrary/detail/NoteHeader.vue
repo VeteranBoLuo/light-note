@@ -46,7 +46,7 @@
       <!-- 存为模板:两端可用(移动端 header 图标区尚有余量;标签/导出/历史仍为桌面专属) -->
       <BTooltip :title="$t('note.saveAsTemplate')" v-if="!readonly">
         <div
-          class="note-header-title-icon"
+          class="note-header-title-icon note-header-title-icon--template"
           @click="$emit('saveAsTemplate')"
           v-click-log="OPERATION_LOG_MAP.note.saveAsTemplate"
         >
@@ -54,32 +54,41 @@
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && bookmark.isDesktop && note?.id">
-        <div class="note-header-title-icon" @click="$emit('history')">
+        <div class="note-header-title-icon note-header-title-icon--history" @click="$emit('history')">
           <SvgIcon :src="icon.noteDetail.history" />
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
-        <div class="note-header-title-icon" @click="updateTag" v-click-log="OPERATION_LOG_MAP.note.updateTag">
+        <div
+          class="note-header-title-icon note-header-title-icon--tag"
+          @click="updateTag"
+          v-click-log="OPERATION_LOG_MAP.note.updateTag"
+        >
           <SvgIcon :src="icon.manage_categoryBtn_tag" />
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
-        <div class="note-header-title-icon" @click="openExportModal">
-          <SvgIcon :src="icon.noteDetail.export" />
+        <div class="note-header-title-icon note-header-title-icon--export" @click="openExportModal">
+          <SvgIcon :src="icon.noteDetail.exportLine" />
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.delete')">
-        <div class="note-header-title-icon" @click="$emit('del')">
-          <SvgIcon :src="icon.noteDetail.delete" />
+        <div class="note-header-title-icon note-header-title-icon--danger" @click="$emit('del')">
+          <SvgIcon :src="icon.noteDetail.deleteLine" />
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.save')" v-if="!bookmark.isMobile">
-        <div class="note-header-title-icon" @click="$emit('save', true)">
-          <SvgIcon :src="icon.noteDetail.save" />
+        <div class="note-header-title-icon note-header-title-icon--save" @click="$emit('save', true)">
+          <SvgIcon :src="icon.noteDetail.saveLine" />
         </div>
       </BTooltip>
     </div>
-    <NoteTagConfig v-model:visible="tagConfDlgVisible" v-if="tagConfDlgVisible" @saveTag="handleTagSaved" />
+    <NoteTagConfig
+      v-if="tagConfDlgVisible"
+      v-model:visible="tagConfDlgVisible"
+      :note="note"
+      @saveTag="handleTagSaved"
+    />
     <ActionCardModal
       v-if="exportModalVisible"
       v-model:visible="exportModalVisible"
@@ -374,19 +383,65 @@
     }
   }
   .note-header-title-icon {
-    background-color: white;
     width: 36px;
     height: 36px;
-    border: 1px solid #e8eaf2;
-    border-radius: 36px;
+    box-sizing: border-box;
+    background: var(--card-background);
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: #222222;
-    transition: border-color 0.1s linear;
+    color: var(--sub-text-color);
+    transition:
+      color 0.16s ease,
+      background-color 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      transform 0.16s ease;
+
     &:hover {
       border-color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+      box-shadow: var(--surface-card-shadow, 0 5px 12px rgba(0, 0, 0, 0.08));
+      color: var(--primary-color);
+      transform: translateY(-1px);
+    }
+
+    &--template {
+      border-color: color-mix(in srgb, var(--resource-note-color) 26%, var(--card-border-color));
+      background: color-mix(in srgb, var(--resource-note-color) 8%, var(--card-background));
+      color: var(--resource-note-color);
+
+      &:hover {
+        border-color: var(--resource-note-color);
+        background: color-mix(in srgb, var(--resource-note-color) 14%, var(--card-background));
+        color: var(--resource-note-color);
+      }
+    }
+
+    &--tag:hover {
+      border-color: var(--resource-tag-color);
+      background: color-mix(in srgb, var(--resource-tag-color) 8%, var(--card-background));
+      color: var(--resource-tag-color);
+    }
+
+    &--danger:hover {
+      border-color: var(--error-color, #e5484d);
+      background: color-mix(in srgb, var(--error-color, #e5484d) 8%, var(--card-background));
+      color: var(--error-color, #e5484d);
+    }
+
+    &--save {
+      border-color: color-mix(in srgb, var(--primary-color) 30%, var(--card-border-color));
+      background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+      color: var(--primary-color);
+
+      &:hover {
+        background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
+        color: var(--primary-color);
+      }
     }
   }
 

@@ -125,12 +125,14 @@
   }
 
   const { t } = useI18n();
+  const props = defineProps<{ note?: any }>();
   const visible = defineModel('visible');
-  const emit = defineEmits(['saveTag']);
+  const emit = defineEmits<{ saveTag: [tags: TagItem[]] }>();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
-  const note: any = inject('note');
+  const injectedNote: any = inject('note', null);
+  const currentNote = computed(() => props.note ?? injectedNote);
 
   const allTags = ref<TagItem[]>([]);
   const noteTags = ref<TagItem[]>([]);
@@ -158,9 +160,9 @@
   }
 
   async function fetchNoteTags() {
-    if (!note?.id) return;
+    if (!currentNote.value?.id) return;
     try {
-      const res = await apiBasePost('/api/note/getNoteTags', { id: note.id });
+      const res = await apiBasePost('/api/note/getNoteTags', { id: currentNote.value.id });
       if (res.status === 200) {
         noteTags.value = (res.data ?? []).map(normalizeTag);
         initialNoteTags.value = [...noteTags.value];
@@ -180,9 +182,10 @@
   }
 
   function hydrateFromLocal() {
-    if (!note?.tags) return;
+    if (!currentNote.value?.tags) return;
     try {
-      const parsed = typeof note.tags === 'string' ? JSON.parse(note.tags) : note.tags;
+      const parsed =
+        typeof currentNote.value.tags === 'string' ? JSON.parse(currentNote.value.tags) : currentNote.value.tags;
       if (Array.isArray(parsed)) {
         const ids = parsed.map((v) => String(v?.id ?? v)).filter(Boolean);
         noteTags.value = allTags.value.filter((t) => ids.includes(t.id));
@@ -233,15 +236,15 @@
 
   async function handleOk() {
     if (blockGuestWrite('update-note-tags')) return;
-    if (!note?.id) {
+    if (!currentNote.value?.id) {
       message.warning(t('note.tagConfig.noteNotSaved'));
       return;
     }
     const newTagIds = noteTags.value.map((t) => t.id);
-    const res = await apiBasePost('/api/note/updateNoteTags', { noteId: note.id, tags: newTagIds });
+    const res = await apiBasePost('/api/note/updateNoteTags', { noteId: currentNote.value.id, tags: newTagIds });
     if (res.status === 200) {
       visible.value = false;
-      emit('saveTag');
+      emit('saveTag', [...noteTags.value]);
       message.success(t('note.tagConfig.saveSuccess'));
       recordOperation({ module: '笔记-标签配置', operation: `保存笔记标签成功【${noteTags.value.length}个】` });
     }

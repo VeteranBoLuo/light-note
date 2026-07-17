@@ -14,10 +14,21 @@
           }"
         >
           <div class="context-menu">
-            <!-- 循环遍历菜单项，显示出来 -->
-            <div @click="handleClick(label)" class="context-menu-item menu-item" v-for="label in menu" :key="label">
-              {{ label }}
-            </div>
+            <template v-for="(item, index) in normalizedMenu" :key="item.key || `divider-${index}`">
+              <div v-if="item.divider" class="context-menu-divider" />
+              <div
+                v-else
+                class="context-menu-item menu-item"
+                :class="{
+                  'context-menu-item--danger': item.danger,
+                  'context-menu-item--disabled': item.disabled,
+                }"
+                @click="handleClick(item)"
+              >
+                <SvgIcon v-if="item.icon" :src="item.icon" size="15" />
+                <span>{{ item.label }}</span>
+              </div>
+            </template>
           </div>
         </div>
       </Transition>
@@ -27,8 +38,9 @@
 
 <script setup>
   import bookmarkStore from '@/store/bookmark';
-  import { ref, onMounted, onUnmounted } from 'vue';
+  import { computed, ref, onMounted, onUnmounted } from 'vue';
   import { getRootZoom } from '@/utils/zoom';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   const bookmark = bookmarkStore();
   const showMenu = ref(false);
   const props = defineProps({
@@ -38,11 +50,25 @@
       default: () => [],
     },
   });
+  // 兼容历史字符串菜单，同时允许新页面使用稳定 key、图标、分隔线和危险态。
+  const normalizedMenu = computed(() =>
+    props.menu.map((item) => {
+      if (typeof item === 'string') return { key: item, label: item };
+      if (item?.divider) return { divider: true, key: item.key };
+      return {
+        ...item,
+        key: item?.key || item?.label,
+        label: item?.label || '',
+      };
+    }),
+  );
   // 声明一个事件，选中菜单项的时候返回数据
   const emit = defineEmits(['select']);
 
-  function handleClick(e) {
-    emit('select', e);
+  function handleClick(item) {
+    if (item.disabled) return;
+    showMenu.value = false;
+    emit('select', item.key);
   }
   function handleClose() {
     showMenu.value = false;
@@ -144,6 +170,25 @@
 
   .context-menu-item:hover {
     background: var(--menu-item-h-bg-color);
+  }
+
+  .context-menu-item--danger {
+    color: var(--danger-color, #f04455);
+  }
+
+  .context-menu-item--danger:hover {
+    background: color-mix(in srgb, var(--danger-color, #f04455) 9%, var(--menu-body-bg-color));
+  }
+
+  .context-menu-item--disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+  }
+
+  .context-menu-divider {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--card-border-color);
   }
 
   /*Transition样式设置*/

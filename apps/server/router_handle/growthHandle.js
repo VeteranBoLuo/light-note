@@ -33,11 +33,11 @@ export const doCheckin = async (req, res) => {
   }
 };
 
-// POST /growth/useProtectCard —— 使用补签卡补回昨天漏签、续连签(消耗 1 张卡)
+// POST /growth/useProtectCard —— 使用补签卡补回最近 3 个自然日内的漏签(消耗 1 张卡)
 export const doUseProtectCard = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const result = await useProtectCard(req.user.id, { userRole: req.user.role });
+    const result = await useProtectCard(req.user.id, { userRole: req.user.role, date: req.body?.date });
     res.send(resultData(result));
   } catch (error) {
     console.error('补签失败:', error);

@@ -48,7 +48,7 @@
       </template>
       <template #item="{ item }: { item: TagInterface }">
         <RightMenu
-          :menu="[$t('home.menuAddBookmark'), $t('common.reName'), $t('common.edit'), $t('common.delete')]"
+          :menu="tagContextMenu"
           @select="handleTagMenu($event, item)"
           v-if="!item.isRename"
         >
@@ -135,6 +135,13 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
+  const tagContextMenu = computed(() => [
+    { key: 'addBookmark', label: t('home.menuAddBookmark'), icon: icon.manage_categoryBtn_bookmark },
+    { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
+    { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
+    { key: 'tag-actions-divider', divider: true },
+    { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
+  ]);
 
   const hideEmptyTags = computed({
     get: () => user.preferences.hideEmptyTags ?? false,
@@ -144,19 +151,20 @@
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
 
-  function handleTagMenu(menu, tag: TagInterface) {
-    recordOperation({ module: '首页', operation: `右键${menu}标签【${tag.name}】` });
+  function handleTagMenu(action: string, tag: TagInterface) {
+    const actionLabel = tagContextMenu.value.find((item: any) => item.key === action)?.label || action;
+    recordOperation({ module: '首页', operation: `右键${actionLabel}标签【${tag.name}】` });
     rightTagData.value = tag;
     const actions = {
-      [t('common.reName')]: () => {
+      rename: () => {
         tag.isRename = true;
         newName.value = tag.name;
       },
-      [t('common.edit')]: () => router.push(`/manage/editTag/${tag.id}`),
-      [t('common.delete')]: () => handleDeleteTag(tag),
-      [t('home.menuAddBookmark')]: () => router.push(`/manage/editBookmark/add/${tag.id}`),
+      edit: () => router.push(`/manage/editTag/${tag.id}`),
+      delete: () => handleDeleteTag(tag),
+      addBookmark: () => router.push(`/manage/editBookmark/add/${tag.id}`),
     };
-    actions[menu]?.();
+    actions[action]?.();
   }
 
   const handleDeleteTag = (tag: TagInterface) => {

@@ -45,11 +45,11 @@
         </div>
         <div class="item-action">
           <!-- AI 加油包:直接使用(加今日额度) -->
-          <button v-if="it.action === 'use'" class="inv-btn" :disabled="it.qty < 1 || usingId === it.id" @click="onUse(it)">
+          <BButton v-if="it.action === 'use'" class="inv-btn" :disabled="it.qty < 1 || usingId === it.id" @click="onUse(it)">
             {{ usingId === it.id ? t('growth.itemUsing') : t('growth.itemUse') }}
-          </button>
-          <!-- 补签卡:补回昨天漏签(仅昨天漏签且有卡时可用) -->
-          <button
+          </BButton>
+          <!-- 补签卡:补回最近 3 个自然日内的漏签（默认补最近一天） -->
+          <BButton
             v-else-if="it.action === 'makeup'"
             class="inv-btn"
             :disabled="it.qty < 1 || !canMakeup || makingUp"
@@ -57,7 +57,7 @@
             @click="onMakeup"
           >
             {{ t('growth.itemGoMakeup') }}
-          </button>
+          </BButton>
         </div>
       </div>
     </div>
@@ -70,12 +70,15 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import type { InventoryItem } from '@/composables/useGrowth.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
 
-  const { t } = useI18n();
-  const { inventory, growth, loadInventory, useItem, useProtectCard } = useGrowth();
+  const { t, locale } = useI18n();
+  const { inventory, growth, loadInventory, loadDashboard, useItem, useProtectCard } = useGrowth();
   const inv = inventory;
-  const canMakeup = computed(() => !!growth.value?.canUseProtectCard);
+  const makeupDate = computed(() => growth.value?.makeupDays?.[0] || null);
+  const canMakeup = computed(() => !!makeupDate.value);
 
   const usingId = ref<string | null>(null);
   const makingUp = ref(false);
@@ -108,20 +111,35 @@
     }
   }
 
-  async function onMakeup() {
-    if (makingUp.value || !canMakeup.value) return;
+  function onMakeup() {
+    const date = makeupDate.value;
+    if (makingUp.value || !date) return;
+    Alert.alert({
+      title: t('growth.protectCardConfirmTitle'),
+      content: t('growth.protectCardConfirmContent', { date: formatDate(date) }),
+      onOk: () => performMakeup(date),
+    });
+  }
+
+  async function performMakeup(date: string) {
     makingUp.value = true;
     try {
-      const res = await useProtectCard();
+      const res = await useProtectCard(date);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: `使用补签卡（连签续至 ${res.data.streak} 天）` });
+        recordOperation({ module: '成长', operation: `使用补签卡补签 ${date}（连签续至 ${res.data.streak} 天）` });
+        await loadDashboard(); // 同步签到日历的逐日高亮与统计
       } else {
         message.info(t('growth.protectCardFail'));
       }
     } finally {
       makingUp.value = false;
     }
+  }
+
+  function formatDate(key: string) {
+    const date = new Date(Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8)));
+    return date.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric' });
   }
 
   onMounted(loadInventory);
@@ -256,8 +274,8 @@
   }
   .inv-btn {
     min-width: 60px;
-    height: 30px;
-    padding: 0 14px;
+    height: 30px !important;
+    padding: 0 14px !important;
     border-radius: 8px;
     border: 1px solid color-mix(in srgb, var(--primary-color) 45%, transparent);
     background: color-mix(in srgb, var(--primary-color) 10%, transparent);
@@ -269,10 +287,10 @@
       background 0.15s,
       opacity 0.15s;
   }
-  .inv-btn:hover:not(:disabled) {
+  .inv-btn:hover:not(.disabled) {
     background: color-mix(in srgb, var(--primary-color) 20%, transparent);
   }
-  .inv-btn:disabled {
+  .inv-btn.disabled {
     opacity: 0.45;
     cursor: not-allowed;
   }

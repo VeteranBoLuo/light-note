@@ -38,6 +38,7 @@ export const RANKS = [
 ];
 
 export const MAX_LEVEL = 15;
+export const MAKEUP_WINDOW_DAYS = 3;
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
 const DAILY_QUEST_BONUS = 15; // 今日任务全部完成的一次性奖励(每日一次;计入并受日顶 200 约束,不超上限)
 const DAILY_QUEST_POINTS = 30; // 今日任务全部完成额外发的积分(消费货币,不受经验日顶约束)
@@ -87,10 +88,71 @@ export function dayKey(d = new Date()) {
   return `${y}${m}${day}`;
 }
 
+function addCalendarDays(date, offset) {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  result.setDate(result.getDate() + offset);
+  return result;
+}
+
+function dateFromDayKey(key) {
+  if (typeof key !== 'string' || !/^\d{8}$/.test(key)) return null;
+  const date = new Date(Number(key.slice(0, 4)), Number(key.slice(4, 6)) - 1, Number(key.slice(6, 8)));
+  return dayKey(date) === key ? date : null;
+}
+
+// 补签候选:今天之前最近 3 个自然日，按由近到远排序。补签只补签到记录，不补经验/积分/里程碑。
+export function getMakeupCandidateDays(now = new Date()) {
+  return Array.from({ length: MAKEUP_WINDOW_DAYS }, (_, index) => dayKey(addCalendarDays(now, -(index + 1))));
+}
+
+export function isMakeupCandidateDay(key, now = new Date()) {
+  return !!dateFromDayKey(key) && getMakeupCandidateDays(now).includes(key);
+}
+
+function countStreakEndingAt(daySet, endDay) {
+  const endDate = dateFromDayKey(endDay);
+  if (!endDate) return 0;
+  let streak = 0;
+  for (let offset = 0; ; offset++) {
+    const day = dayKey(addCalendarDays(endDate, -offset));
+    if (!daySet.has(day)) break;
+    streak++;
+  }
+  return streak;
+}
+
 // 两个 YYYYMMDD 相差天数(a 晚于 b 为正)
 function daysBetween(aKey, bKey) {
   const toDate = (k) => new Date(Number(k.slice(0, 4)), Number(k.slice(4, 6)) - 1, Number(k.slice(6, 8)));
   return Math.round((toDate(aKey) - toDate(bKey)) / 86_400_000);
+}
+
+async function isLevelUpNotificationEnabled(conn, userId) {
+  const [[row]] = await conn.query(
+    "SELECT COALESCE(JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.notifyLevelUp')), 'true') AS v FROM `user` WHERE id = ?",
+    [userId],
+  );
+  return row?.v !== 'false';
+}
+
+// 升级通知统一从这里写入。正常成长可逐级通知；后台调整只发最终等级，避免一笔运营操作刷屏。
+async function writeLevelUpNotification(conn, userId, level, { source = null } = {}) {
+  const rankName = rankOf(level).name;
+  try {
+    await createNotification(
+      userId,
+      {
+        type: 'level_up',
+        title: `升级到 Lv.${level} ${rankName}`,
+        link: '/growth',
+        meta: { level, name: rankName, ...(source ? { source } : {}) },
+      },
+      conn,
+    );
+  } catch (notifyErr) {
+    // 通知故障绝不阻断成长主流程；通知中心表尚未就绪时也可安全降级。
+    console.error('写升级通知失败(不影响升级):', notifyErr.message);
+  }
 }
 
 /**
@@ -164,33 +226,17 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     if (toLevel > fromLevel) {
       leveledUp = true;
       // 尊重用户「升级提醒」开关(preferences.notifyLevelUp === 'false' 时不发升级通知,但里程碑账本照记)
-      const [[nluRow]] = await c.query(
-        "SELECT COALESCE(JSON_UNQUOTE(JSON_EXTRACT(preferences, '$.notifyLevelUp')), 'true') AS v FROM `user` WHERE id = ?",
-        [userId],
-      );
-      const notifyLevelUp = nluRow?.v !== 'false';
+      const notifyLevelUp = await isLevelUpNotificationEnabled(c, userId);
       // 每升 1 级奖励 1 张补签卡(上限 2),统一走 grantItem
       await grantItem(c, userId, 'makeup_card', toLevel - fromLevel);
       for (let L = fromLevel + 1; L <= toLevel; L++) {
         const rankName = rankOf(L).name;
         await c.query(
           `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
-           VALUES (?, 'milestone', ?, NULL, 0, 'granted', ?)`,
+          VALUES (?, 'milestone', ?, NULL, 0, 'granted', ?)`,
           [userId, `level_up_L${L}`, JSON.stringify({ from: L - 1, to: L, rank: rankName })],
         );
-        // 通知中心:同事务写一条升级通知(裸 SQL,避免 growth→notification→common 的循环 import)。
-        // 前端按 type=level_up + meta 渲染 i18n 文案;通知表未就绪时吞错,绝不回滚已发经验。
-        try {
-          if (notifyLevelUp) {
-            await c.query(
-              `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
-               VALUES (?, ?, 'level_up', ?, NULL, '/growth', ?, 0)`,
-              [crypto.randomUUID(), userId, `升级到 Lv.${L} ${rankName}`, JSON.stringify({ level: L, name: rankName })],
-            );
-          }
-        } catch (notifyErr) {
-          console.error('写升级通知失败(不影响升级):', notifyErr.message);
-        }
+        if (notifyLevelUp) await writeLevelUpNotification(c, userId, L);
       }
     }
 
@@ -258,6 +304,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let lastNotifiedLevel = 1;
   let protectCards = 0;
   let canUseProtectCard = false;
+  let makeupDays = [];
   let points = 0;
   let equippedTitle = null;
   let equippedFrame = null;
@@ -278,14 +325,18 @@ export async function getGrowth(userId, { userRole = null } = {}) {
       equippedFrame = rows[0].equipped_frame || null;
       storageBonus = Number(rows[0].storage_bonus_mb || 0);
     }
-    // 补签判定:有卡且昨天没有签到记录(不依赖 lastCheckin,今天签到了昨天漏签也能补)
+    // 补签判定:有卡时查今天之前最近 3 个自然日；今天是否签到不影响补历史漏签。
     if (protectCards > 0) {
-      const yesterdayKey = dayKey(new Date(Date.now() - 86_400_000));
-      const [[yRow]] = await pool.query(
-        "SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source='checkin' AND day=? AND status='granted'",
-        [userId, yesterdayKey],
+      const candidates = getMakeupCandidateDays();
+      const [checkedRows] = await pool.query(
+        `SELECT day FROM growth_events
+         WHERE user_id = ? AND source = 'checkin' AND status = 'granted'
+           AND day IN (${candidates.map(() => '?').join(',')})`,
+        [userId, ...candidates],
       );
-      canUseProtectCard = Number(yRow?.c || 0) === 0;
+      const checkedDays = new Set((checkedRows || []).map((row) => row.day));
+      makeupDays = candidates.filter((day) => !checkedDays.has(day));
+      canUseProtectCard = makeupDays.length > 0;
     }
   }
   let level = levelForExp(exp);
@@ -324,7 +375,8 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     equippedTitle, // 已佩戴称号 id
     equippedTitleName: titleName(equippedTitle), // 称号显示名
     equippedFrame, // 已佩戴头像框装扮 id
-    canUseProtectCard, // 昨天漏签且有卡 → 可补签续连签
+    canUseProtectCard, // 最近 3 个自然日内存在漏签且有卡
+    makeupDays, // 可补的 YYYYMMDD，按由近到远排序；前端仅展示这些日期
     checkedInToday: lastCheckin === dayKey(),
     levelStartExp: rank.cumExp,
     nextLevelExp: nextExp,
@@ -804,10 +856,12 @@ export async function checkin(userId, { userRole = null } = {}) {
   }
 }
 
-// 使用补签卡:补回昨天漏签、连签续上。不依赖 lastCheckin 日期(今天签到了昨天漏签也能补),消耗 1 张卡。
-export async function useProtectCard(userId, { userRole = null } = {}) {
+// 使用补签卡:可补今天之前最近 3 个自然日的任一漏签，补签到记录和连签，不发经验/积分/里程碑奖励。
+export async function useProtectCard(userId, { userRole = null, date = null } = {}) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
-  const yesterday = dayKey(new Date(Date.now() - 86_400_000));
+  // 未传日期时兼容旧客户端，默认仍尝试补昨天；新版前端会明确传入用户选择的日期。
+  const makeupDate = date || getMakeupCandidateDays()[0];
+  if (!isMakeupCandidateDay(makeupDate)) return { ok: false, reason: 'outside_window' };
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -820,48 +874,37 @@ export async function useProtectCard(userId, { userRole = null } = {}) {
       await conn.rollback();
       return { ok: false, reason: 'no_card' };
     }
-    // 查昨天是否有签到记录(已签则无需补)
-    const [[yRow]] = await conn.query(
+    // 目标日已有签到记录时无需补；唯一索引也作为并发兜底。
+    const [[targetRow]] = await conn.query(
       "SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source='checkin' AND day=? AND status='granted'",
-      [userId, yesterday],
+      [userId, makeupDate],
     );
-    if (Number(yRow?.c || 0) > 0) {
+    if (Number(targetRow?.c || 0) > 0) {
       await conn.rollback();
-      return { ok: false, reason: 'not_applicable' };
+      return { ok: false, reason: 'already_checked' };
     }
-    // 今天已签到的用户不覆盖 last_checkin_date(保持今天),否则设为昨天
-    if (g.last_checkin_date === dayKey()) {
-      await conn.query(
-        'UPDATE user_growth SET streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
-        [userId],
-      );
-    } else {
-      await conn.query(
-        'UPDATE user_growth SET last_checkin_date = ?, streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
-        [yesterday, userId],
-      );
-    }
-    // 补一条昨天的签到账本(不发经验,只续连签;唯一键去重防重复补)
+    // 最近签到日只能向前推进，不能因补更早的日期被回拨。
+    const lastCheckin = !g.last_checkin_date || makeupDate > g.last_checkin_date ? makeupDate : g.last_checkin_date;
+    await conn.query(
+      'UPDATE user_growth SET last_checkin_date = ?, streak_protect_cards = streak_protect_cards - 1 WHERE user_id = ?',
+      [lastCheckin, userId],
+    );
+    // 补一条目标日的签到账本（amount=0，不发经验/积分/里程碑奖励）。
     await conn.query(
       `INSERT IGNORE INTO growth_events (user_id, source, ref_id, day, amount, status, meta)
        VALUES (?, 'checkin', NULL, ?, 0, 'granted', ?)`,
-      [userId, yesterday, JSON.stringify({ protectCard: true })],
+      [userId, makeupDate, JSON.stringify({ protectCard: true })],
     );
-    // 重新计算连签:从今天往前数签到事件,直到断签
+    // 重新计算连签:从最近一次实际签到日往前数。未签到今天时不能从今天起算，否则补昨天后会错误归零。
     const [events] = await conn.query(
       "SELECT day FROM growth_events WHERE user_id=? AND source='checkin' AND status='granted' ORDER BY day DESC",
       [userId],
     );
-    const daySet = new Set((events || []).map(r => r.day));
-    let correctedStreak = 0;
-    for (let i = 0; ; i++) {
-      const d = dayKey(new Date(Date.now() - i * 86_400_000));
-      if (daySet.has(d)) correctedStreak++;
-      else break;
-    }
+    const daySet = new Set((events || []).map((row) => row.day));
+    const correctedStreak = countStreakEndingAt(daySet, events[0]?.day || null);
     await conn.query('UPDATE user_growth SET streak = ? WHERE user_id = ?', [correctedStreak, userId]);
     await conn.commit();
-    return { ok: true, streak: correctedStreak, growth: await getGrowth(userId, { userRole }) };
+    return { ok: true, date: makeupDate, streak: correctedStreak, growth: await getGrowth(userId, { userRole }) };
   } catch (e) {
     try {
       await conn.rollback();
@@ -875,7 +918,7 @@ export async function useProtectCard(userId, { userRole = null } = {}) {
 }
 
 // 管理员运营:直接调整目标用户成长(发/扣经验、设等级、增减补签卡)。
-// root 专用,绕过日顶与账本,直接改成长快照;设等级优先于发经验。
+// root 专用,绕过日顶与账本;升级时仅补发最终等级通知，不额外补等级卡或里程碑奖励。
 export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null, cardDelta = 0 } = {}) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'no_user' };
   const conn = await pool.getConnection();
@@ -892,6 +935,7 @@ export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null,
     }
     let exp = Number(g.exp || 0);
     let cards = Number(g.streak_protect_cards || 0);
+    const fromLevel = levelForExp(exp);
     if (setLevel != null && setLevel !== '') {
       const lv = Math.max(1, Math.min(MAX_LEVEL, Number(setLevel)));
       exp = RANKS[lv - 1].cumExp; // 设到该等级的起始经验
@@ -906,8 +950,11 @@ export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null,
       cards,
       userId,
     ]);
+    if (level > fromLevel && (await isLevelUpNotificationEnabled(conn, userId))) {
+      await writeLevelUpNotification(conn, userId, level, { source: 'admin_adjust' });
+    }
     await conn.commit();
-    return { ok: true, exp, level, name: rankOf(level).name, cards };
+    return { ok: true, exp, level, name: rankOf(level).name, cards, leveledUp: level > fromLevel };
   } catch (e) {
     try {
       await conn.rollback();

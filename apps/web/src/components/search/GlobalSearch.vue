@@ -178,6 +178,7 @@
   import { useI18n } from 'vue-i18n';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts.ts';
 
   const router = useRouter();
   const route = useRoute();
@@ -368,9 +369,8 @@
   }
 
   function handleShortcut(event: KeyboardEvent) {
-    if (event.key !== '/' || bookmark.isMobile) return;
-    const target = event.target as HTMLElement;
-    if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+    if (bookmark.isMobile || !matchesGlobalShortcut(event, 'globalSearch')) return;
+    if (isEditableShortcutTarget(event.target)) return;
     if (!isSearchAvailable.value) return;
     event.preventDefault();
     recordOperation({ module: '全局搜索', operation: '使用快捷键唤起搜索' });

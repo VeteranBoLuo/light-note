@@ -2,13 +2,13 @@
   <div class="growth-page">
     <div class="growth-container">
       <header class="growth-hero">
-        <button class="growth-back" @click="goBack">
+        <BButton class="growth-back" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
-        </button>
+        </BButton>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
-        <button class="growth-report-btn" @click="openWeeklyReport">📊 {{ t('growth.weeklyReportEntry') }}</button>
+        <BButton class="growth-report-btn" @click="openWeeklyReport">📊 {{ t('growth.weeklyReportEntry') }}</BButton>
       </header>
 
       <section class="growth-panel">
@@ -21,7 +21,7 @@
           :checkin-days="stats.checkinDays"
           :checked-in-today="growth?.checkedInToday"
           :streak="growth?.streak"
-          :can-makeup="growth?.canUseProtectCard"
+          :makeup-days="growth?.makeupDays || []"
           @makeup="handleCalendarMakeup"
         />
       </section>
@@ -95,6 +95,7 @@
   import MyInventory from '@/components/growth/MyInventory.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import RecapCard from '@/components/growth/RecapCard.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -203,14 +204,14 @@
   }
 
   const makingUp = ref(false);
-  async function handleCalendarMakeup() {
+  async function handleCalendarMakeup(date: string) {
     if (makingUp.value) return;
     makingUp.value = true;
     try {
-      const res = await apiUseProtectCard();
+      const res = await apiUseProtectCard(date);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: `使用补签卡（连签续至 ${res.data.streak} 天）` });
+        recordOperation({ module: '成长', operation: `使用补签卡补签 ${date}（连签续至 ${res.data.streak} 天）` });
         loadDashboard();
       } else {
         message.info(t('growth.protectCardFail'));
@@ -261,7 +262,8 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 5px 12px 5px 8px;
+    height: 30px !important;
+    padding: 0 12px 0 8px !important;
     margin-bottom: 8px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 70%, transparent);
@@ -293,7 +295,8 @@
   .growth-report-btn {
     align-self: flex-start;
     margin-top: 10px;
-    padding: 6px 14px;
+    height: 32px !important;
+    padding: 0 14px !important;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--primary-color) 40%, transparent);
     background: color-mix(in srgb, var(--primary-color) 8%, transparent);

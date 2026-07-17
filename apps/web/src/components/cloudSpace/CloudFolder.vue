@@ -27,7 +27,7 @@
     >
       <template #item="{ item }">
         <RightMenu
-          :menu="[$t('common.reName'), $t('common.delete'), $t('cloudSpace.uploadFile')]"
+          :menu="folderContextMenu"
           v-if="!item.isRename"
           @select="handleTagMenu($event, item)"
         >
@@ -72,7 +72,7 @@
   import RightMenu from '@/components/base/RightMenu.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
-  import { nextTick, ref } from 'vue';
+  import { computed, nextTick, ref } from 'vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
@@ -85,6 +85,12 @@
   const { t } = useI18n();
 
   const emit = defineEmits(['uploadFiles']);
+  const folderContextMenu = computed(() => [
+    { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
+    { key: 'upload', label: t('cloudSpace.uploadFile'), icon: icon.file_upload },
+    { key: 'folder-actions-divider', divider: true },
+    { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
+  ]);
 
   function isInnerFileDrag() {
     return Boolean(cloud.draggingFile?.id);
@@ -126,10 +132,11 @@
   }
 
   const newName = ref('');
-  function handleTagMenu(menu, folder: any) {
-    recordOperation({ module: '云空间', operation: `右键${menu}文件夹【${folder.name}】` });
-    const actions = [
-      () => {
+  function handleTagMenu(action: string, folder: any) {
+    const actionLabel = folderContextMenu.value.find((item: any) => item.key === action)?.label || action;
+    recordOperation({ module: '云空间', operation: `右键${actionLabel}文件夹【${folder.name}】` });
+    const actions = {
+      rename: () => {
         if (cloud.folderList.find((i) => !i.id || i.isRename)) {
           return;
         }
@@ -139,11 +146,10 @@
           (document.querySelector('.edit-input .b-input') as HTMLElement | null)?.focus();
         });
       },
-      () => handleDeleteFolder(folder),
-      () => handleUploadToFolder(folder),
-    ];
-    const idx = [t('common.reName'), t('common.delete'), t('cloudSpace.uploadFile')].indexOf(menu);
-    if (idx !== -1) actions[idx]();
+      upload: () => handleUploadToFolder(folder),
+      delete: () => handleDeleteFolder(folder),
+    };
+    actions[action]?.();
   }
 
   const currentFolderId = ref('');

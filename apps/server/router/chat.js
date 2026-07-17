@@ -8,7 +8,9 @@ import { resultData } from '../util/common.js';
 import * as aiDocumentHandle from '../router_handle/aiDocumentHandle.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
-const attachmentUploadLimiter = rateLimit({
+// 只限制“新增一个待解析文件”的用户意图。确认上传、删除附件属于同一次上传的
+// 后续步骤，若共用同一个计数桶，会让一次正常上传消耗 2～3 次额度。
+const attachmentCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 24,
   keyGenerator: (req) => {
@@ -19,18 +21,25 @@ const attachmentUploadLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (_req, res) =>
-    res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '文件操作过于频繁，请稍后再试' }),
+  handler: (req, res) => {
+    const resetAt = req.rateLimit?.resetTime;
+    const retryAfter = resetAt instanceof Date ? Math.max(1, Math.ceil((resetAt.getTime() - Date.now()) / 1000)) : 0;
+    return res.status(429).send({
+      data: { code: 'RATE_LIMITED', retryAfter },
+      status: 429,
+      msg: '文件操作过于频繁，请稍后再试',
+    });
+  },
 });
 
 router.post('/agent', agentChat);
 router.post('/agent/confirm', confirmAgentTool);
 router.post('/agent/confirm/reject', rejectAgentTool);
-router.post('/attachments/init', attachmentUploadLimiter, aiDocumentHandle.initTemporaryUpload);
-router.post('/attachments/confirm', attachmentUploadLimiter, aiDocumentHandle.confirmTemporaryUpload);
-router.post('/attachments/attachCloudFile', attachmentUploadLimiter, aiDocumentHandle.attachCloudFile);
+router.post('/attachments/init', attachmentCreateLimiter, aiDocumentHandle.initTemporaryUpload);
+router.post('/attachments/confirm', aiDocumentHandle.confirmTemporaryUpload);
+router.post('/attachments/attachCloudFile', attachmentCreateLimiter, aiDocumentHandle.attachCloudFile);
 router.post('/attachments/status', aiDocumentHandle.getStatuses);
-router.post('/attachments/delete', attachmentUploadLimiter, aiDocumentHandle.removeAttachment);
+router.post('/attachments/delete', aiDocumentHandle.removeAttachment);
 // AI 今日额度状态(供助手展示「已用 / 剩余」);root/本机自测豁免返回 { exempt:true }
 router.post('/aiQuota', async (req, res) => {
   try {

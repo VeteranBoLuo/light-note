@@ -6,7 +6,11 @@
         v-for="source in uniqueSources"
         :key="`${source.type}:${source.id}`"
         class="ai-source"
+        role="link"
+        tabindex="0"
         @click="openSource(source)"
+        @keydown.enter.prevent="openSource(source)"
+        @keydown.space.prevent="openSource(source)"
       >
         <span :class="['ai-source__type', `is-${source.type}`]">{{ typeLabel(source.type) }}</span>
         <span class="ai-source__copy">
@@ -40,6 +44,9 @@
   }
 
   const props = defineProps<{ sources: AiSource[] }>();
+  const emit = defineEmits<{
+    (event: 'source-navigate', source: AiSource): void;
+  }>();
   const { t } = useI18n();
   const router = useRouter();
   const sourceIdentity = (source: AiSource) => {
@@ -58,13 +65,18 @@
     });
   });
   const typeLabel = (type: AiSource['type']) => t(`ai.sourceTypes.${type}`);
+  function navigateInsideApp(source: AiSource, target: string | { path: string; query?: Record<string, string> }) {
+    emit('source-navigate', source);
+    void router.push(target);
+  }
+
   function openSource(source: AiSource) {
-    if (source.type === 'note') router.push(`/noteLibrary/${source.id}`);
+    if (source.type === 'note') navigateInsideApp(source, `/noteLibrary/${source.id}`);
     else if (source.type === 'file' || (source.type === 'document' && source.fileId))
-      router.push({ path: '/cloudSpace', query: { fileName: source.title } });
-    else if (source.type === 'knowledge') router.push({ path: '/help', query: { article: source.id } });
+      navigateInsideApp(source, { path: '/cloudSpace', query: { fileName: source.title } });
+    else if (source.type === 'knowledge') navigateInsideApp(source, { path: '/help', query: { article: source.id } });
     else if (source.url) window.open(source.url, '_blank', 'noopener,noreferrer');
-    else router.push(`/manage/editBookmark/${source.id}`);
+    else navigateInsideApp(source, `/manage/editBookmark/${source.id}`);
   }
 </script>
 

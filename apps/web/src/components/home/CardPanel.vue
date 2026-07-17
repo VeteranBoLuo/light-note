@@ -107,17 +107,23 @@
 
   function menuFor(item: any) {
     return [
-      item.isTop ? t('common.unpin') : t('common.pin'),
-      t('common.edit'),
-      t('common.copyLink'),
-      t('inbox.addExisting'),
-      t('common.delete'),
+      {
+        key: 'toggleTop',
+        label: item.isTop ? t('common.unpin') : t('common.pin'),
+        icon: item.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
+      },
+      { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
+      { key: 'copyLink', label: t('common.copyLink'), icon: icon.cloudSpace.preview.copy },
+      { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
+      { key: 'bookmark-actions-divider', divider: true },
+      { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
   }
 
-  function rightMenuClick(type, item) {
-    recordOperation({ module: '首页', operation: `右键${type}书签【${item.name}】` });
-    if (type === t('common.pin') || type === t('common.unpin')) {
+  function rightMenuClick(action: string, item: any) {
+    const actionLabel = menuFor(item).find((menuItem: any) => menuItem.key === action)?.label || action;
+    recordOperation({ module: '首页', operation: `右键${actionLabel}书签【${item.name}】` });
+    if (action === 'toggleTop') {
       apiBasePost('/api/bookmark/toggleBookmarkTop', { id: item.id }).then((res) => {
         if (res.status === 200) {
           message.success(res.data?.isTop ? t('common.pinned') : t('common.unpinned'));
@@ -126,18 +132,20 @@
       });
       return;
     }
-    if (type === t('common.copyLink')) {
+    if (action === 'copyLink') {
       copyTextToClipboard(item.url);
       message.success(t('common.linkCopied'));
       return;
     }
-    if (type === t('inbox.addExisting')) {
+    if (action === 'addInbox') {
       addResourcesToInbox([{ resourceType: 'bookmark', resourceId: String(item.id) }], '书签');
       return;
     }
-    if (type === t('common.edit')) {
+    if (action === 'edit') {
       router.push({ path: `/manage/editBookmark/${item.id}` });
-    } else {
+      return;
+    }
+    if (action === 'delete') {
       Alert.alert({
         title: t('common.defaultTitle'),
         content: t('home.delBookmarkConfirm', { name: item.name }),

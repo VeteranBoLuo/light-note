@@ -4,15 +4,34 @@
       :open="isOpen"
       :title="t('ai.title')"
       :width="bookmark.isMobile ? '100%' : '480px'"
-      :full-screen="bookmark.isMobile"
+      :full-screen="bookmark.isMobile || (bookmark.isDesktop && isMaximized)"
       mobile-full-screen
       @close="minimize"
     >
       <template #header-actions>
         <BButton size="small" @click="clearConversation">{{ t('ai.newConversation') }}</BButton>
+        <BTooltip
+          v-if="bookmark.isDesktop"
+          :title="isMaximized ? t('ai.restoreWindow') : t('ai.maximize')"
+          :z-index="200001"
+        >
+          <BButton
+            class="ai-window-toggle"
+            role="button"
+            tabindex="0"
+            :aria-label="isMaximized ? t('ai.restoreWindow') : t('ai.maximize')"
+            :aria-pressed="isMaximized"
+            @click="toggleMaximized"
+            @keydown.enter.prevent="toggleMaximized"
+            @keydown.space.prevent="toggleMaximized"
+            v-click-log="{ module: 'AI助手', operation: isMaximized ? '还原AI助手' : '最大化AI助手' }"
+          >
+            <SvgIcon :src="isMaximized ? icon.ai.restoreWindow : icon.ai.maximize" size="17" />
+          </BButton>
+        </BTooltip>
       </template>
-      <div class="ai-drawer-content">
-        <ChatContainer ref="aiAssistantRef" />
+      <div class="ai-drawer-content" :class="{ 'ai-drawer-content--maximized': isMaximized && bookmark.isDesktop }">
+        <ChatContainer ref="aiAssistantRef" @source-navigate="handleSourceNavigate" />
       </div>
     </BDrawer>
 
@@ -21,8 +40,8 @@
       class="ai-edge-trigger"
       role="button"
       tabindex="0"
-      :aria-label="t('ai.title')"
-      :title="t('ai.title')"
+      :aria-label="aiTriggerTitle"
+      :title="aiTriggerTitle"
       @click="openAssistant"
       @keydown.enter.prevent="openAssistant"
       @keydown.space.prevent="openAssistant"
@@ -37,29 +56,70 @@
 </template>
 
 <script setup lang="ts">
-  import { defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import icon from '@/config/icon';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { getGlobalShortcutLabel, matchesGlobalShortcut } from '@/config/keyboardShortcuts.ts';
 
   const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const isOpen = ref(false);
-  const aiAssistantRef = ref<{ clearHistory?: () => void } | null>(null);
+  const isMaximized = ref(false);
+  const aiAssistantRef = ref<{ clearHistory?: () => void; focusInput?: () => void } | null>(null);
+  const aiShortcutLabel = getGlobalShortcutLabel('aiAssistant');
+  const aiTriggerTitle = computed(() => t('ai.openShortcutHint', { shortcut: aiShortcutLabel }));
+
+  function focusAssistantInput() {
+    nextTick(() => {
+      window.requestAnimationFrame(() => aiAssistantRef.value?.focusInput?.());
+    });
+  }
 
   function openAssistant() {
-    if (isOpen.value) return;
-    isOpen.value = true;
-    window.dispatchEvent(new CustomEvent('light-note:close-search'));
+    if (!isOpen.value) {
+      isOpen.value = true;
+      window.dispatchEvent(new CustomEvent('light-note:close-search'));
+    }
+    focusAssistantInput();
   }
 
   function minimize() {
     isOpen.value = false;
+    isMaximized.value = false;
   }
+
+  function toggleMaximized() {
+    if (!bookmark.isDesktop) return;
+    isMaximized.value = !isMaximized.value;
+  }
+
+  function handleSourceNavigate() {
+    if (bookmark.isMobile) {
+      minimize();
+      return;
+    }
+    if (bookmark.isDesktop && isMaximized.value) isMaximized.value = false;
+  }
+
+  watch(
+    () => bookmark.isDesktop,
+    (isDesktop) => {
+      if (!isDesktop) isMaximized.value = false;
+    },
+  );
+
+  watch(aiAssistantRef, (instance) => {
+    if (instance && isOpen.value) instance.focusInput?.();
+  });
 
   function clearConversation() {
     aiAssistantRef.value?.clearHistory?.();
@@ -71,6 +131,15 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
+    if (bookmark.isDesktop && matchesGlobalShortcut(event, 'aiAssistant')) {
+      event.preventDefault();
+      recordOperation({
+        module: 'AI助手',
+        operation: isOpen.value ? '使用快捷键聚焦AI助手' : '使用快捷键唤起AI助手',
+      });
+      openAssistant();
+      return;
+    }
     if (event.key === 'Escape' && isOpen.value && !shouldIgnoreEscape(event)) {
       minimize();
     }
@@ -117,6 +186,32 @@
   .ai-drawer-content :deep(.ai-chat-container) {
     flex: 1;
     min-height: 0;
+  }
+
+  .ai-drawer-content--maximized {
+    width: min(960px, 100%);
+    margin: 0 auto;
+  }
+
+  .ai-window-toggle {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    color: var(--desc-color);
+    background: transparent;
+  }
+
+  .ai-window-toggle:hover,
+  .ai-window-toggle:focus-visible {
+    color: var(--text-color);
+    background: var(--menu-item-bg-color);
+  }
+
+  .ai-window-toggle:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary-color) 48%, transparent);
+    outline-offset: 1px;
   }
 
   .ai-edge-host {

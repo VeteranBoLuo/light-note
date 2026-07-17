@@ -11,6 +11,7 @@
     <div class="note-info">
       <div class="note-title-row">
         <div class="note-title">{{ note.title }}</div>
+        <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
         <InboxPendingBadge v-if="note.isPending" />
       </div>
       <div class="note-description" v-html="getDescription(note.content)"></div>
@@ -23,11 +24,9 @@
           v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
         >
           <span class="tag-detail-label">{{ tag.name }}</span>
-          <button class="tag-detail-corner" type="button" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M6 4h6v6M12 4 5 11" />
-            </svg>
-          </button>
+          <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+            <SvgIcon :src="icon.cloudSpace.share" size="11" />
+          </BButton>
         </span>
       </div>
       <div class="note-tags" v-else style="font-size: 12px">_</div>
@@ -41,6 +40,9 @@
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const props = defineProps<{ note: any }>();
   const bookmark = bookmarkStore();
@@ -135,16 +137,31 @@
         align-items: center;
         gap: 8px;
         min-width: 0;
+        margin-bottom: 8px;
       }
       .note-title {
         font-size: 18px;
         font-weight: 600;
         color: var(--text-color);
-        margin-bottom: 8px;
+        margin-bottom: 0;
         line-height: 1.4;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        flex: 0 1 auto;
+        min-width: 0;
+      }
+      .note-top-badge {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 7px;
+        border-radius: 999px;
+        color: var(--resource-note-color, #00a884);
+        background: color-mix(in srgb, var(--resource-note-color, #00a884) 12%, transparent);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 18px;
       }
       .note-description {
         font-size: 14px;
@@ -181,6 +198,16 @@
             color: white;
           }
         }
+      }
+      .tag-detail-corner {
+        width: 20px;
+        min-width: 20px;
+        height: 20px;
+        margin: -2px -7px -2px 1px;
+        padding: 0;
+        border-radius: 999px;
+        color: currentColor;
+        background: transparent;
       }
     }
     .note-time {

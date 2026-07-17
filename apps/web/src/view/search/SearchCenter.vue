@@ -197,7 +197,7 @@
                 </div>
                 <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
                   <RightMenu
-                    :menu="item.type === 'tag' ? [deleteMenuLabel] : [addInboxMenuLabel, deleteMenuLabel]"
+                    :menu="menuForSearchItem(item)"
                     @select="handleItemMenu($event, item)"
                     v-for="item in group.items"
                     :key="`${item.type}-${item.id}`"
@@ -445,8 +445,20 @@
     const prefix = q ? t('resourceCenter.keywordSummary', { keyword: q }) : t('resourceCenter.defaultSummary');
     return `${prefix} · ${t('resourceCenter.totalCount', { count: allVisibleItems.value.length })}`;
   });
-  const deleteMenuLabel = computed(() => t('common.delete'));
-  const addInboxMenuLabel = computed(() => t('inbox.addExisting'));
+  function menuForSearchItem(item: DisplaySearchItem) {
+    const deleteItem = {
+      key: 'delete',
+      label: t('common.delete'),
+      icon: icon.table_delete,
+      danger: true,
+    };
+    if (item.type === 'tag') return [deleteItem];
+    return [
+      { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
+      { key: 'resource-actions-divider', divider: true },
+      deleteItem,
+    ];
+  }
 
   function parseType(value: unknown): SearchType | 'all' {
     const raw = String(value || 'all');
@@ -784,12 +796,12 @@
     return '/api/bookmark/delTag';
   }
 
-  function handleItemMenu(menu: string, item: DisplaySearchItem) {
-    if (menu === addInboxMenuLabel.value && item.type !== 'tag') {
+  function handleItemMenu(action: string, item: DisplaySearchItem) {
+    if (action === 'addInbox' && item.type !== 'tag') {
       addItemsToInbox([item]);
       return;
     }
-    if (menu !== deleteMenuLabel.value) return;
+    if (action !== 'delete') return;
     const typeLabel = getSearchTypeLabel(t, item.type);
     const name = item.title || '-';
     Alert.alert({
