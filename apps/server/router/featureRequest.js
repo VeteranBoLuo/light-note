@@ -35,6 +35,7 @@ router.post('/admin/create', handle.adminCreate);
 router.post('/admin/review', handle.adminReview);
 router.post('/admin/reply', handle.adminReply);
 router.post('/admin/updateStatus', handle.adminUpdateStatus);
+router.post('/admin/deleteUpdate', handle.adminDeleteUpdate);
 router.post('/admin/merge', handle.adminMerge);
 router.post('/admin/edit', handle.adminEdit);
 

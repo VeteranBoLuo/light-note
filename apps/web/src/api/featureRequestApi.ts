@@ -120,6 +120,9 @@ export const updateFeatureRequestProgress = (
   releaseUrl = '',
 ) => apiBasePost('/api/featureRequest/admin/updateStatus', { id, progressStatus, releaseUrl });
 
+export const deleteFeatureRequestUpdate = (id: string, updateId: string) =>
+  apiBasePost('/api/featureRequest/admin/deleteUpdate', { id, updateId });
+
 export const mergeFeatureRequest = (id: string, targetRequestId: string, content = '') =>
   apiBasePost('/api/featureRequest/admin/merge', { id, targetRequestId, content });
 

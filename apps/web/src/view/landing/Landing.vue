@@ -91,7 +91,11 @@
                 </div>
                 <div class="mockup-carousel">
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
-                    <div v-for="(item, itemIndex) in previewItems" :key="item.key" class="mockup-screen">
+                    <div
+                      v-for="(item, itemIndex) in previewItems"
+                      :key="item.key"
+                      :class="['mockup-screen', { 'is-mobile-preview': item.key === 'mobile' }]"
+                    >
                       <div class="screen-glare"></div>
                       <img
                         :src="item.png"
@@ -376,6 +380,11 @@
       key: 'cloud',
       label: t('landing.tabCloud'),
       png: '/screenshots/cloud-space.png',
+    },
+    {
+      key: 'mobile',
+      label: t('landing.tabMobile'),
+      png: '/screenshots/mobile.png',
     },
     {
       key: 'co-build',
@@ -897,20 +906,36 @@
   .mockup-carousel {
     overflow: hidden;
     width: 100%;
+    aspect-ratio: 2940 / 1846;
   }
   .mockup-slides {
     display: flex;
+    height: 100%;
     transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .mockup-screen {
     flex: 0 0 100%;
+    height: 100%;
     overflow: hidden;
     background: #0a0a14;
     position: relative;
   }
   .mockup-screen img {
     width: 100%;
+    height: 100%;
     display: block;
+    object-fit: cover;
+  }
+  .mockup-screen.is-mobile-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(90deg, #f7f7fa 0 50%, #202124 50% 100%);
+  }
+  .mockup-screen.is-mobile-preview img {
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
   }
   .screen-glare {
     position: absolute;
@@ -948,13 +973,17 @@
     left: 50%;
     transform: translateX(-50%);
     display: flex;
+    width: max-content;
+    max-width: calc(100% - 16px);
     gap: 6px;
     z-index: 10;
   }
   .carousel-dot {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 5px;
+    min-width: 58px;
     padding: 4px 10px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.35);
@@ -962,6 +991,7 @@
     cursor: pointer;
     transition: all 0.3s ease;
     backdrop-filter: blur(4px);
+    white-space: nowrap;
   }
   .carousel-dot:hover {
     background: rgba(0, 0, 0, 0.5);
@@ -991,6 +1021,7 @@
     font-weight: 500;
     transition: color 0.3s ease;
     line-height: 1;
+    white-space: nowrap;
   }
   .carousel-dot.active .dot-label {
     color: #fff;
@@ -1014,6 +1045,14 @@
   @media (max-width: 768px) {
     .cover-mockup {
       width: 100%;
+    }
+  }
+  @media (max-width: 520px) {
+    .carousel-dot {
+      padding: 5px 7px;
+    }
+    .carousel-dot .dot-label {
+      display: none;
     }
   }
   .float-elements {

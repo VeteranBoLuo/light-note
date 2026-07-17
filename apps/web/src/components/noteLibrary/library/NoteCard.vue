@@ -3,6 +3,7 @@
     @click="router.push(`/noteLibrary/${note.id}`)"
     @keydown.enter="router.push(`/noteLibrary/${note.id}`)"
     class="note-card"
+    :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode }"
     role="button"
     tabindex="0"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
@@ -34,11 +35,7 @@
       <div v-else class="note-tags note-tags--empty"></div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
-    <div
-      v-if="!bookmark.isMobile"
-      class="checkBox"
-      :style="{ visibility: note.isCheck === true ? 'visible' : 'hidden' }"
-    >
+    <div v-if="!bookmark.isMobile" class="note-select-control">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
   </div>
@@ -53,7 +50,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  const props = defineProps<{ note: any }>();
+  const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
+    batchMode: false,
+  });
 
   const bookmark = bookmarkStore();
 
@@ -131,15 +130,35 @@
     box-shadow: var(--surface-card-shadow);
     transition:
       box-shadow 0.2s ease,
-      border-color 0.2s ease;
+      border-color 0.2s ease,
+      background 0.2s ease;
 
-    &:hover {
+    &:hover,
+    &:focus-visible {
       box-shadow: var(--surface-hover-shadow);
       border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--surface-border-color));
+    }
 
-      .checkBox {
+    &:hover,
+    &:focus-visible,
+    &.is-selected,
+    &.is-batch-mode {
+      .note-select-control {
+        opacity: 1;
         visibility: visible;
+        pointer-events: auto;
       }
+    }
+
+    &.is-selected {
+      --note-card-bg: color-mix(in srgb, var(--resource-note-color, #00a884) 4%, var(--card-background));
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 62%, var(--surface-border-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-note-color, #00a884) 18%, transparent);
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--resource-note-color, #00a884) 56%, transparent);
+      outline-offset: 2px;
     }
   }
 
@@ -275,11 +294,18 @@
     text-align: right;
   }
 
-  .checkBox {
+  .note-select-control {
+    --primary-color: var(--resource-note-color, #00a884);
+    opacity: 0;
     visibility: hidden;
+    pointer-events: none;
     position: absolute;
-    right: 18px;
-    top: 20px;
+    right: 14px;
+    top: 14px;
+    z-index: 2;
+    transition:
+      opacity 0.16s ease,
+      visibility 0.16s ease;
   }
 
   @media (max-width: 1023px) {

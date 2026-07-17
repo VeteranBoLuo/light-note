@@ -331,6 +331,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/featureRequest/admin/review'],
   ['POST', '/featureRequest/admin/reply'],
   ['POST', '/featureRequest/admin/updateStatus'],
+  ['POST', '/featureRequest/admin/deleteUpdate'],
   ['POST', '/featureRequest/admin/merge'],
   ['POST', '/featureRequest/admin/edit'],
 ]);

@@ -131,8 +131,7 @@
 支持桌面端 + 移动端，数据云端同步，走到哪跟到哪。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile1.png" alt="移动端" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/public/screenshots/mobile2.png" alt="移动端深色" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile.png" alt="移动端浅色与深色主题" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

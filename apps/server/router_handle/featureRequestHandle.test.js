@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listPublicFeatureRequests = vi.fn();
 const createFeatureRequest = vi.fn();
+const adminDeleteFeatureRequestUpdate = vi.fn();
 
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
@@ -9,6 +10,7 @@ vi.mock('../util/common.js', () => ({
 vi.mock('../util/services/featureRequestService.js', () => ({
   FeatureRequestError: class FeatureRequestError extends Error {},
   addSubmitterFeatureUpdate: vi.fn(),
+  adminDeleteFeatureRequestUpdate,
   adminEditFeatureRequest: vi.fn(),
   adminMergeFeatureRequest: vi.fn(),
   adminReplyFeatureRequest: vi.fn(),
@@ -23,7 +25,7 @@ vi.mock('../util/services/featureRequestService.js', () => ({
   toggleFeatureRequestVote: vi.fn(),
 }));
 
-const { adminCreate, create, listPublic } = await import('./featureRequestHandle.js');
+const { adminCreate, adminDeleteUpdate, create, listPublic } = await import('./featureRequestHandle.js');
 
 const mockRes = () => {
   const res = {};
@@ -37,6 +39,7 @@ describe('featureRequestHandle', () => {
     vi.clearAllMocks();
     listPublicFeatureRequests.mockResolvedValue({ items: [], total: 0 });
     createFeatureRequest.mockResolvedValue({ id: 'request-1' });
+    adminDeleteFeatureRequestUpdate.mockResolvedValue({ requestId: 'request-1', updateId: 'update-2' });
   });
 
   it('游客可浏览公开看板，且不会携带游客共享账号作为投票身份', async () => {
@@ -61,5 +64,28 @@ describe('featureRequestHandle', () => {
       input: req.body,
       sourceType: 'official',
     });
+  });
+
+  it('只有 Root 可以删除指定的进度记录', async () => {
+    const deniedRes = mockRes();
+    await adminDeleteUpdate(
+      { user: { id: 'user-1', role: 'user' }, body: { id: 'request-1', updateId: 'update-2' } },
+      deniedRes,
+    );
+    expect(deniedRes.status).toHaveBeenCalledWith(403);
+    expect(adminDeleteFeatureRequestUpdate).not.toHaveBeenCalled();
+
+    const rootRes = mockRes();
+    await adminDeleteUpdate(
+      { user: { id: 'root-1', role: 'root' }, body: { id: 'request-1', updateId: 'update-2' } },
+      rootRes,
+    );
+    expect(adminDeleteFeatureRequestUpdate).toHaveBeenCalledWith({
+      requestId: 'request-1',
+      updateId: 'update-2',
+    });
+    expect(rootRes.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 200, msg: '进度记录已删除' }),
+    );
   });
 });

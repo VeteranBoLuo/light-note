@@ -129,8 +129,7 @@
 デスクトップ + モバイル対応、データはクラウド同期。どこにいても付いてくる。
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile1.png" alt="モバイル" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/public/screenshots/mobile2.png" alt="モバイル（ダーク）" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile.png" alt="モバイルのライト / ダークテーマ" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

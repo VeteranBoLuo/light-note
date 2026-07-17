@@ -1,9 +1,13 @@
 <template>
   <div
     class="note-list-item"
+    :class="{ 'is-selected': note.isCheck, 'is-mobile': bookmark.isMobile }"
     @click="router.push(`/noteLibrary/${note.id}`)"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
+    <div v-if="!bookmark.isMobile" class="note-select-column">
+      <b-checkbox v-model:checked="note.isCheck" @click.stop />
+    </div>
     <div class="note-info">
       <div class="note-title-row">
         <div class="note-title">{{ note.title }}</div>
@@ -29,9 +33,6 @@
       <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>
     <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
-    <div class="checkBox" v-if="!bookmark.isMobile" :style="{ visibility: note.isCheck === true ? 'visible' : 'auto' }">
-      <b-checkbox v-model:checked="note.isCheck" @click.stop />
-    </div>
   </div>
 </template>
 
@@ -86,24 +87,48 @@
 
 <style lang="less" scoped>
   .note-list-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    column-gap: 12px;
     align-items: flex-start;
-    padding: 20px;
+    padding: 18px 20px;
     margin-bottom: 15px;
     background: var(--card-background);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
     cursor: pointer;
     box-shadow: var(--surface-card-shadow);
+    transition:
+      box-shadow 0.2s ease,
+      border-color 0.2s ease,
+      background 0.2s ease;
+
     &:hover {
       box-shadow: var(--surface-hover-shadow);
       border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--surface-border-color));
-      .checkBox {
-        visibility: visible;
-      }
     }
+
+    &.is-selected {
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 4%, var(--card-background));
+      border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 62%, var(--surface-border-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-note-color, #00a884) 18%, transparent);
+    }
+
+    &.is-mobile {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .note-select-column {
+      --primary-color: var(--resource-note-color, #00a884);
+      width: 28px;
+      min-width: 28px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      margin-top: -2px;
+    }
+
     .note-info {
-      flex: 1;
       min-width: 0;
       .note-title-row {
         display: flex;
@@ -161,13 +186,9 @@
     .note-time {
       font-size: 12px;
       color: var(--desc-color);
-      margin-right: 20px;
       white-space: nowrap;
       align-self: flex-start;
-    }
-    .checkBox {
-      visibility: hidden;
-      align-self: flex-start;
+      line-height: 26px;
     }
   }
 </style>

@@ -2,6 +2,7 @@ import { resultData } from '../util/common.js';
 import {
   FeatureRequestError,
   addSubmitterFeatureUpdate,
+  adminDeleteFeatureRequestUpdate,
   adminEditFeatureRequest,
   adminMergeFeatureRequest,
   adminReplyFeatureRequest,
@@ -203,6 +204,19 @@ export async function adminUpdateStatus(req, res) {
       excludeUserId: root.id,
     }).catch(() => {});
     return res.send(resultData(data));
+  } catch (error) {
+    return sendError(res, error);
+  }
+}
+
+export async function adminDeleteUpdate(req, res) {
+  if (!requireRoot(req, res)) return;
+  try {
+    const data = await adminDeleteFeatureRequestUpdate({
+      requestId: String(req.body?.id || ''),
+      updateId: String(req.body?.updateId || ''),
+    });
+    return res.send(resultData(data, 200, '进度记录已删除'));
   } catch (error) {
     return sendError(res, error);
   }

@@ -17,6 +17,10 @@
 
     <template #actions>
       <template v-if="hasCheck">
+        <span class="note-batch-summary">{{ $t('note.selectedCount', { count: selectedVisibleCount }) }}</span>
+        <BButton class="note-action-button" @click="toggleSelectAllVisible">
+          {{ allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent') }}
+        </BButton>
         <BButton type="danger" class="note-action-button" @click="batchDeleteNote">
           <SvgIcon :src="icon.noteDetail.delete" size="16" />
           {{ $t('note.deleteSelected') }}
@@ -88,7 +92,7 @@
           :menu="[t('inbox.addExisting')]"
           @select="addNoteToInbox(note)"
         >
-          <note-card :note="note" @nodeTypeChange="handleNodeTypeChange" />
+          <note-card :note="note" :batch-mode="hasCheck" @nodeTypeChange="handleNodeTypeChange" />
         </RightMenu>
       </VueDraggable>
       <div v-if="currentViewMode === 'list' && (loading || visibleDragNoteList.length)" class="note-library-body-list">
@@ -331,7 +335,11 @@
   const debouncedSearch = ref('');
   const searchTimer = ref<number | null>(null);
   const canDragNote = computed(
-    () => !bookmark.isMobile && !debouncedSearch.value && visibleDragNoteList.value.length > 1,
+    () =>
+      !bookmark.isMobile &&
+      !debouncedSearch.value &&
+      visibleDragNoteList.value.length > 1 &&
+      !noteList.value.some((note) => note.isCheck === true),
   );
 
   const toPlainText = (html: string) =>
@@ -402,6 +410,10 @@
   watch(
     viewNoteList,
     (val) => {
+      const visibleIds = new Set(val.map((note) => String(note.id)));
+      noteList.value.forEach((note) => {
+        if (!visibleIds.has(String(note.id))) note.isCheck = false;
+      });
       visibleDragNoteList.value = [...val];
     },
     { immediate: true },
@@ -412,9 +424,18 @@
     return allTags.value.filter((tag) => Number(tag.noteCount || 0) > 0);
   });
 
-  const hasCheck = computed(() => {
-    return viewNoteList.value.some((data) => data.isCheck === true);
-  });
+  const selectedVisibleCount = computed(() => viewNoteList.value.filter((data) => data.isCheck === true).length);
+  const hasCheck = computed(() => selectedVisibleCount.value > 0);
+  const allVisibleChecked = computed(
+    () => viewNoteList.value.length > 0 && selectedVisibleCount.value === viewNoteList.value.length,
+  );
+
+  function toggleSelectAllVisible() {
+    const nextChecked = !allVisibleChecked.value;
+    viewNoteList.value.forEach((note) => {
+      note.isCheck = nextChecked;
+    });
+  }
 
   function exitBatch() {
     noteList.value.forEach((data) => {
@@ -893,6 +914,20 @@
     background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
     font-size: 11px;
     font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .note-batch-summary {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 

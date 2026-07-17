@@ -450,6 +450,34 @@ export async function adminUpdateFeatureProgress({
   }
 }
 
+export async function adminDeleteFeatureRequestUpdate({ requestId, updateId, db = pool }) {
+  const safeRequestId = cleanText(requestId, 64);
+  const safeUpdateId = cleanText(updateId, 64);
+  if (!safeRequestId || !safeUpdateId) {
+    throw new FeatureRequestError('INVALID_UPDATE', '请选择要删除的进度记录');
+  }
+
+  const [[update]] = await db.query(
+    `SELECT fu.id,fu.type
+       FROM feature_request_updates fu
+       JOIN feature_requests fr ON fr.id = fu.request_id
+      WHERE fu.id = ? AND fu.request_id = ? AND fr.del_flag = 0
+      LIMIT 1`,
+    [safeUpdateId, safeRequestId],
+  );
+  if (!update) throw new FeatureRequestError('UPDATE_NOT_FOUND', '进度记录不存在', 404);
+  if (['submitted', 'official_created'].includes(update.type)) {
+    throw new FeatureRequestError('PROTECTED_UPDATE', '首次提交记录不能删除', 409);
+  }
+
+  const [result] = await db.query('DELETE FROM feature_request_updates WHERE id = ? AND request_id = ?', [
+    safeUpdateId,
+    safeRequestId,
+  ]);
+  if (!result?.affectedRows) throw new FeatureRequestError('UPDATE_NOT_FOUND', '进度记录不存在', 404);
+  return { requestId: safeRequestId, updateId: safeUpdateId, type: update.type };
+}
+
 export async function adminMergeFeatureRequest({ requestId, targetRequestId, content = '', actorUserId, db = pool }) {
   if (!requestId || !targetRequestId || requestId === targetRequestId) {
     throw new FeatureRequestError('INVALID_TARGET', '请选择另一条公开建议作为合并目标');

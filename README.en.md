@@ -131,8 +131,7 @@ See user suggestions, developer replies, and real progress in public. Follow wha
 Desktop + mobile, with cloud sync — it follows you wherever you go.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile1.png" alt="Mobile" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/public/screenshots/mobile2.png" alt="Mobile dark mode" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile.png" alt="Mobile light and dark themes" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

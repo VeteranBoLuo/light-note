@@ -129,8 +129,7 @@
 데스크톱 + 모바일 지원, 데이터는 클라우드 동기화. 어디서나 함께.
 
 <p align="center">
-  <img src="apps/web/public/screenshots/mobile1.png" alt="모바일" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/public/screenshots/mobile2.png" alt="모바일 다크 모드" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile.png" alt="모바일 라이트 및 다크 테마" width="58%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---

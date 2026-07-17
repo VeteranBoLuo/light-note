@@ -8,7 +8,7 @@ vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../agent/data.js', () => ({ generateUUID }));
 vi.mock('../notification.js', () => ({ createNotification }));
 
-const { createFeatureRequest, getFeatureRequestDetail, toggleFeatureRequestVote } =
+const { adminDeleteFeatureRequestUpdate, createFeatureRequest, getFeatureRequestDetail, toggleFeatureRequestVote } =
   await import('./featureRequestService.js');
 
 const createConnection = () => ({
@@ -96,5 +96,31 @@ describe('featureRequestService', () => {
     });
     expect(connection.query.mock.calls[4][1]).toEqual([3, 'request-1']);
     expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('Root 可删除指定需求下的单条非起始进度记录', async () => {
+    const db = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ id: 'update-2', type: 'developer_reply' }]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+    };
+
+    await expect(
+      adminDeleteFeatureRequestUpdate({ requestId: 'request-1', updateId: 'update-2', db }),
+    ).resolves.toEqual({ requestId: 'request-1', updateId: 'update-2', type: 'developer_reply' });
+    expect(db.query.mock.calls[1]).toEqual([
+      'DELETE FROM feature_request_updates WHERE id = ? AND request_id = ?',
+      ['update-2', 'request-1'],
+    ]);
+  });
+
+  it.each(['submitted', 'official_created'])('起始时间线记录 %s 受保护，不能被删除', async (type) => {
+    const db = { query: vi.fn().mockResolvedValueOnce([[{ id: 'update-1', type }]]) };
+
+    await expect(
+      adminDeleteFeatureRequestUpdate({ requestId: 'request-1', updateId: 'update-1', db }),
+    ).rejects.toMatchObject({ code: 'PROTECTED_UPDATE', status: 409 });
+    expect(db.query).toHaveBeenCalledTimes(1);
   });
 });

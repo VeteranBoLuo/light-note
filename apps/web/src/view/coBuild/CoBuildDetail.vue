@@ -191,7 +191,19 @@
                   <div class="timeline-body">
                     <div class="timeline-head">
                       <strong>{{ timelineTitle(update) }}</strong>
-                      <time>{{ formatDate(update.createTime) }}</time>
+                      <div class="timeline-meta">
+                        <time>{{ formatDate(update.createTime) }}</time>
+                        <BButton
+                          v-if="isRoot && canDeleteTimelineUpdate(update)"
+                          class="timeline-delete"
+                          size="small"
+                          :loading="deletingUpdateId === update.id"
+                          :title="t('coBuild.deleteTimeline')"
+                          @click="confirmDeleteTimelineUpdate(update)"
+                        >
+                          <SvgIcon :src="icon.table_delete" size="13" />
+                        </BButton>
+                      </div>
                     </div>
                     <p v-if="update.content">{{ update.content }}</p>
                     <span v-if="update.toStatus" class="timeline-status">
@@ -231,6 +243,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import {
     addFeatureRequestUpdate,
+    deleteFeatureRequestUpdate,
     editFeatureRequest,
     getFeatureRequestDetail,
     mergeFeatureRequest,
@@ -255,6 +268,7 @@
   const bookmark = bookmarkStore();
   const loading = ref(true);
   const saving = ref(false);
+  const deletingUpdateId = ref('');
   const detail = ref<FeatureRequestDetail | null>(null);
   const addition = ref('');
   const adminTab = ref<AdminTab>('review');
@@ -403,6 +417,33 @@
       console.error('补充建议说明失败:', error);
     } finally {
       saving.value = false;
+    }
+  }
+  function canDeleteTimelineUpdate(update: FeatureRequestUpdate) {
+    return !['submitted', 'official_created'].includes(update.type);
+  }
+  function confirmDeleteTimelineUpdate(update: FeatureRequestUpdate) {
+    if (!detail.value || !isRoot.value || !canDeleteTimelineUpdate(update) || deletingUpdateId.value) return;
+    Alert.alert({
+      title: t('coBuild.deleteTimelineTitle'),
+      content: t('coBuild.deleteTimelineConfirm'),
+      okText: t('common.delete'),
+      onOk: () => removeTimelineUpdate(update),
+    });
+  }
+  async function removeTimelineUpdate(update: FeatureRequestUpdate) {
+    if (!detail.value || deletingUpdateId.value) return;
+    deletingUpdateId.value = update.id;
+    try {
+      const res = await deleteFeatureRequestUpdate(detail.value.id, update.id);
+      if (res?.status !== 200) return;
+      message.success(t('coBuild.timelineDeleted'));
+      recordOperation({ module: '共建轻笺', operation: `删除进度记录【${timelineTitle(update)}】` });
+      await loadDetail();
+    } catch (error) {
+      console.error('删除共建进度记录失败:', error);
+    } finally {
+      deletingUpdateId.value = '';
     }
   }
   function openReleaseUrl() {
@@ -645,6 +686,24 @@
     color: var(--desc-color);
     font-size: 10px;
     white-space: nowrap;
+  }
+  .timeline-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .timeline-delete {
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 7px;
+    color: var(--desc-color);
+    background: transparent;
+  }
+  .timeline-delete:hover {
+    color: #fe2c55;
+    background: rgba(254, 44, 85, 0.1);
   }
   .timeline-body p {
     margin: 7px 0 8px;
