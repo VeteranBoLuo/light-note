@@ -352,7 +352,10 @@
       if (res?.status !== 200) return;
       item.viewerVoted = Boolean(res.data?.voted);
       item.voteCount = Number(res.data?.voteCount || 0);
-      recordOperation({ module: '共建轻笺', operation: item.viewerVoted ? '支持需求' : '取消支持需求' });
+      recordOperation({
+        module: '共建轻笺',
+        operation: `${item.viewerVoted ? '支持需求' : '取消支持需求'}【${item.title.slice(0, 40)}】`,
+      });
     } catch (error) {
       console.error('更新建议投票失败:', error);
     }

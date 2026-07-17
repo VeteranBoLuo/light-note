@@ -15,6 +15,7 @@
         @switch-mode="triggerEditorSwitch"
         @undo-switch="triggerEditorUndo"
         @history="versionHistoryVisible = true"
+        @save-as-template="saveTemplateVisible = true"
       />
       <div v-if="isOrganizingFromInbox" class="inbox-organize-banner">
         <span>{{ t('inbox.organizeEditorHint') }}</span>
@@ -76,6 +77,7 @@
       :note-type="note.type"
       @restored="onVersionRestored"
     />
+    <SaveTemplateModal v-if="saveTemplateVisible" v-model:visible="saveTemplateVisible" :note="note" />
   </div>
 </template>
 
@@ -92,6 +94,9 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
+  import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
+  import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
+  import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -102,7 +107,7 @@
   import TurndownService from 'turndown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const user = useUserStore();
   const { guardWrite } = useGuestGuard();
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
@@ -281,6 +286,65 @@
     editorRef.value?.scrollToMarkdownHeading?.(index, heading.sourceOffset);
   }
 
+  // —— 模板实例化(新建时从 query 读取模板并预填标题/正文) ——
+  const saveTemplateVisible = ref(false);
+  let appliedTemplateName = ''; // 创建成功日志附带模板名,便于区分模板使用情况
+  let templateTitleApplied = false; // 预填了标题时,isReady 后需同步桌面端 header 标题
+  // 不静默回落:明确告知加载失败,让用户选择返回还是从空白继续,避免不知情下当成模板在编辑;
+  // 接口非 200 与网络异常(catch)两个失败分支共用
+  function promptTemplateLoadFailure() {
+    Alert.alert({
+      title: t('common.defaultTitle'),
+      content: t('note.tplLoadFailedChoice'),
+      onOk() {
+        router.push('/noteLibrary');
+      },
+    });
+  }
+  async function applyTemplateFromQuery(query: Record<string, any>) {
+    const isUserTemplate = Boolean(query.templateId);
+    try {
+      let rawTitle = '';
+      let rawContent = '';
+      let tplType: NoteType = note.type as NoteType;
+      if (query.builtin) {
+        const tpl = findBuiltinNoteTemplate(String(query.builtin));
+        if (!tpl) return;
+        const tplLocale = pickTemplateLocale(String(locale.value));
+        rawTitle = tpl.titleTemplate[tplLocale];
+        rawContent = tpl.content[tplLocale];
+        tplType = tpl.type;
+        appliedTemplateName = t(tpl.nameKey);
+      } else if (query.templateId) {
+        const res = await apiBasePost('/api/note/getNoteTemplateDetail', { id: String(query.templateId) });
+        if (res.status !== 200 || !res.data) {
+          promptTemplateLoadFailure();
+          return;
+        }
+        // 默认标题优先用 titleTemplate(与模板库显示名 name 语义分离),老数据无该字段时回退 name
+        rawTitle = res.data.titleTemplate || res.data.name || '';
+        rawContent = res.data.content || '';
+        tplType = normalizeNoteType(res.data.type);
+        appliedTemplateName = res.data.name || '';
+      } else {
+        return;
+      }
+      const opts = { locale: String(locale.value) };
+      note.type = tplType;
+      note.content = renderNoteTemplate(rawContent, opts);
+      const renderedTitle = renderNoteTemplate(rawTitle, opts).trim();
+      if (renderedTitle) {
+        note.title = renderedTitle;
+        note.lastTitle = cloneDeep(note.title);
+        templateTitleApplied = true;
+      }
+    } catch (e) {
+      console.error('应用笔记模板失败:', e);
+      // 用户模板走网络请求,异常(断网/超时)同样明确提示,不静默留在空白页;内置模板为本地常量,异常仅记录
+      if (isUserTemplate) promptTemplateLoadFailure();
+    }
+  }
+
   // 守卫式创建：同一时刻只允许一次"新建笔记"请求在途。
   // 新建笔记时若并发触发（自动保存 + 粘贴图片同时想建），都复用这一个 Promise，绝不会建出多条。
   // 建成后写回 note.id，之后一律走 updateNote。
@@ -303,7 +367,10 @@
           }
           nodeType.value = 'edit';
           router.replace(`/noteLibrary/${note.id}`).then();
-          recordOperation({ module: '笔记', operation: `新建笔记成功【${note.title}】` });
+          recordOperation({
+            module: '笔记',
+            operation: `新建笔记成功【${note.title}】${appliedTemplateName ? `（模板：${appliedTemplateName}）` : ''}`,
+          });
           return note.id as string;
         }
         throw new Error('创建笔记失败');
@@ -496,18 +563,26 @@
     } else {
       nodeType.value = 'add';
       // 从 query 读取类型，默认 html
-      const qType = router.currentRoute.value.query.type;
+      const query = router.currentRoute.value.query;
+      const qType = query.type;
       note.type = qType === 'markdown' ? 'markdown' : 'html';
       if (note.type === 'markdown') {
         note.content = '';
       }
-      isReady.value = true;
-      watch(
-        () => note.content,
-        () => {
-          saveFunc();
-        },
-      );
+      // 模板预填必须先于注册 content watch:预填本身不触发自动保存,
+      // 选模板后不编辑直接退出便不会创建笔记(守卫式创建语义不变)
+      applyTemplateFromQuery(query).finally(() => {
+        isReady.value = true;
+        if (templateTitleApplied) {
+          nextTick(() => syncHeaderTitle());
+        }
+        watch(
+          () => note.content,
+          () => {
+            saveFunc();
+          },
+        );
+      });
     }
   });
   onUnmounted(() => {
@@ -527,23 +602,37 @@
     flex-direction: column;
   }
   .note-body-title {
-    .ant-input {
-      height: 50px;
-      padding: 0 15px;
-      display: flex;
-      align-items: center;
+    height: 56px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-border-color);
+    background: var(--note-editor-header-bg);
+    transition: background-color 0.18s ease;
+
+    &:focus-within {
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 4%, var(--note-editor-header-bg));
+    }
+
+    .input-container {
+      height: 100%;
+    }
+
+    .b-input {
+      height: 100%;
+      padding: 0 16px !important;
+      border: 0 !important;
       border-radius: 0;
-      box-sizing: border-box;
       outline: none;
-      transition: border-color 0.1s linear;
-      background-color: var(--bl-input-bg-color);
+      box-shadow: none !important;
+      background: transparent !important;
       color: var(--bl-input-color);
-      font-weight: 600;
-      border: none;
-      box-shadow: unset !important;
-      font-size: 25px;
-      &:focus {
-        border: none;
+      font-size: 21px;
+      font-weight: 650;
+
+      &:hover,
+      &:focus,
+      &:focus-visible {
+        background: transparent !important;
       }
     }
   }
@@ -605,8 +694,15 @@
     min-width: 0;
   }
   .editor-panel {
+    --note-editor-header-bg: var(--w-e-toolbar-bg-color, var(--surface-panel-bg));
+
     flex: 10;
     min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--background-color);
   }
 
   .ai-panel {
@@ -636,6 +732,7 @@
   .note-body-header {
     display: flex;
     flex-direction: column;
+    min-height: 0;
   }
   .tag-container {
     padding-left: 15px;
@@ -673,6 +770,12 @@
   }
 
   @media (max-width: 767px) {
+    .editor-panel {
+      border-right: 0;
+      border-left: 0;
+      border-radius: 0;
+    }
+
     .note-body-header {
       width: 100%;
       max-width: 100%;
@@ -680,9 +783,14 @@
     }
 
     .note-body-title {
+      height: 50px;
       width: 100%;
       padding-right: 52px;
       box-sizing: border-box;
+
+      .b-input {
+        font-size: 20px;
+      }
     }
   }
 </style>

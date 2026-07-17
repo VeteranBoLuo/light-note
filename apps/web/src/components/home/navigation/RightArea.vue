@@ -30,8 +30,9 @@
     </BButton>
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
-    <div :class="['navigation-icon']" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
-      <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+    <div :class="['navigation-icon', { 'has-frame': equippedFrameId }]" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
+      <AvatarFramePreview v-if="equippedFrameId" :frame-id="equippedFrameId" :src="user.headPicture || icon.navigation.user" :size="30" />
+      <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
     <!--pc端个人中心       -->
     <PersonCenter v-else />
@@ -45,6 +46,7 @@
   import PersonCenter from '@/view/personCenter/PersonCenter.vue';
   import NotificationBell from '@/components/notification/NotificationBell.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -55,13 +57,20 @@
   import { inboxStore } from '@/store';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useI18n } from 'vue-i18n';
-  import { computed } from 'vue';
+  import { computed, onMounted } from 'vue';
+  import { useGrowth } from '@/composables/useGrowth.ts';
+  import { frameVariant } from '@/config/growthFrames';
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { t } = useI18n();
 
   const user = useUserStore();
   const route = useRoute();
+  const { growth, load: loadGrowth } = useGrowth();
+  const equippedFrameId = computed(() => {
+    const id = growth.value?.equippedFrame;
+    return frameVariant(id) ? id : null;
+  });
   const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
   const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
@@ -70,6 +79,10 @@
     { label: t('home.toolbox'), icon: icon.toolkit, function: toolkitClick },
     { label: t('navigation.projectAddress'), icon: icon.github, function: githubClick },
   ]);
+
+  onMounted(() => {
+    loadGrowth();
+  });
 
   function githubClick() {
     window.open('https://github.com/VeteranBoLuo/light-note', '_blank', 'noopener,noreferrer');
@@ -117,6 +130,9 @@
     align-items: center;
     clip-path: circle(50% at 50% 50%);
     cursor: pointer;
+  }
+  .navigation-icon.has-frame {
+    clip-path: none;
   }
   .navigation-action-btn {
     border: 0;

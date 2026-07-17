@@ -187,7 +187,7 @@ export async function requestDeepSeek(messages, options = {}) {
  * @param {Object} options
  * @param {(chunk: string) => void} options.onDelta - 每个文本增量回调
  * @param {AbortSignal} [options.signal]
- * @returns {Promise<{ content: string }>}
+ * @returns {Promise<{ content: string, leakedToolCall: boolean }>}
  */
 export async function requestDeepSeekStream(messages, options) {
   const cfg = getProviderConfig();
@@ -232,6 +232,8 @@ export async function requestDeepSeekStream(messages, options) {
   const decoder = new TextDecoder();
   let buffer = '';
   let fullContent = '';
+  let pendingContent = '';
+  let leakedToolCall = false;
   const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   let finishReason = null;
 
@@ -272,16 +274,44 @@ export async function requestDeepSeekStream(messages, options) {
 
         const delta = chunk.choices?.[0]?.delta?.content || '';
         if (!delta) continue;
-        fullContent += delta;
-        options.onDelta(delta);
+        if (leakedToolCall) continue;
+
+        pendingContent += delta;
+        const leakedAt = findLeakedToolCallStart(pendingContent);
+        if (leakedAt >= 0) {
+          const safePrefix = pendingContent.slice(0, leakedAt);
+          if (safePrefix) {
+            fullContent += safePrefix;
+            options.onDelta(safePrefix);
+          }
+          pendingContent = '';
+          leakedToolCall = true;
+          continue;
+        }
+
+        // 保留短尾巴以识别被 SSE 分片拆开的 <｜｜DSML... / invoke name= 标记。
+        // 只增加很小的首字延迟，避免任何内部协议片段先被推送到浏览器后再发现。
+        const LEAK_GUARD_TAIL = 32;
+        if (pendingContent.length > LEAK_GUARD_TAIL) {
+          const safeContent = pendingContent.slice(0, -LEAK_GUARD_TAIL);
+          pendingContent = pendingContent.slice(-LEAK_GUARD_TAIL);
+          fullContent += safeContent;
+          options.onDelta(safeContent);
+        }
       }
     }
   } finally {
     clearTimeout(idleTimer); // 正常结束/异常/abort 都清掉计时器,防泄漏
   }
 
+  if (!leakedToolCall && pendingContent) {
+    fullContent += pendingContent;
+    options.onDelta(pendingContent);
+  }
+
   return {
     content: fullContent,
+    leakedToolCall,
     usage,
     usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
     provider: cfg.name,
@@ -299,8 +329,24 @@ export async function requestDeepSeekStream(messages, options) {
  * @returns {boolean}
  */
 export function looksLikeLeakedToolCall(content) {
-  if (!content || typeof content !== 'string') return false;
-  return /｜DSML｜|<｜tool|tool▁call|tool_calls?>|invoke name\s*=/i.test(content);
+  return findLeakedToolCallStart(content) >= 0;
+}
+
+function findLeakedToolCallStart(content) {
+  if (!content || typeof content !== 'string') return -1;
+  const patterns = [
+    /<[｜|]{1,2}DSML[｜|]{1,2}/i,
+    /<｜tool/i,
+    /tool▁call/i,
+    /<[^>\n]{0,80}tool_calls?>/i,
+    /tool_calls?>/i,
+    /<[^>\n]{0,80}invoke\s+name\s*=/i,
+    /invoke\s+name\s*=/i,
+  ];
+  return patterns.reduce((result, pattern) => {
+    const index = content.search(pattern);
+    return index < 0 ? result : result < 0 ? index : Math.min(result, index);
+  }, -1);
 }
 
 /**

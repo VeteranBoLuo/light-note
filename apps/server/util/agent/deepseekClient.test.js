@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { getActiveProviderPricing, requestDeepSeek, requestDeepSeekStream, looksLikeLeakedToolCall } from './deepseekClient.js';
+import {
+  getActiveProviderPricing,
+  requestDeepSeek,
+  requestDeepSeekStream,
+  looksLikeLeakedToolCall,
+} from './deepseekClient.js';
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -75,7 +80,7 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     const result = await requestDeepSeekStream([{ role: 'user', content: 'hi' }], {
       onDelta: (chunk) => chunks.push(chunk),
     });
-    expect(chunks).toEqual(['你', '好']);
+    expect(chunks.join('')).toBe('你好');
     expect(result).toMatchObject({
       content: '你好',
       finishReason: 'stop',
@@ -83,11 +88,34 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
       usage: { promptTokens: 9, completionTokens: 2, totalTokens: 11 },
     });
   });
+
+  it('流式响应中的 DSML 标记被拆分时也不会泄漏给前端', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"好的，我来整理。\\n"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"<｜｜DS"},"finish_reason":null}]}',
+      'data: {"choices":[{"delta":{"content":"ML｜｜tool_calls><｜｜invoke name=\\"get_growth\\">"},"finish_reason":"stop"}]}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(sse, { status: 200 }));
+    const chunks = [];
+    const result = await requestDeepSeekStream([{ role: 'user', content: '生成本周回顾' }], {
+      onDelta: (chunk) => chunks.push(chunk),
+    });
+    expect(chunks.join('')).toBe('好的，我来整理。\n');
+    expect(result).toMatchObject({
+      content: '好的，我来整理。\n',
+      leakedToolCall: true,
+    });
+  });
 });
 
 describe('looksLikeLeakedToolCall(工具调用协议泄漏检测)', () => {
   it('命中真实泄漏样例(用户线上遇到的原始文本)', () => {
-    const leaked = '你是管理员，我来查询用户列表。\n\n<｜｜DSML｜｜tool_calls>\n<｜｜invoke name="query_users">\n</｜｜invoke>\n</｜｜DSML｜｜tool_calls>';
+    const leaked =
+      '你是管理员，我来查询用户列表。\n\n<｜｜DSML｜｜tool_calls>\n<｜｜invoke name="query_users">\n</｜｜invoke>\n</｜｜DSML｜｜tool_calls>';
     expect(looksLikeLeakedToolCall(leaked)).toBe(true);
   });
 

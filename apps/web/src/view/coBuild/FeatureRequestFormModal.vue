@@ -113,7 +113,7 @@
       message.success(t(props.official ? 'coBuild.officialSubmitSuccess' : 'coBuild.submitSuccess'));
       recordOperation({
         module: '共建轻笺',
-        operation: props.official ? '发布官方规划' : '提交产品建议',
+        operation: `${props.official ? '发布官方规划' : '提交产品建议'}【${payload.title.slice(0, 40)}】`,
       });
       emit('saved');
       visible.value = false;

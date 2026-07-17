@@ -69,6 +69,7 @@ export const OPERATION_LOG_MAP = {
     exportPdf: '导出PDF',
     deleteNote: '删除笔记',
     saveNote: '保存笔记',
+    saveAsTemplate: '打开存为模板',
   }),
   cloudSpace: createModule('云空间', {}),
   inbox: createModule('待处理', {

@@ -2,6 +2,7 @@ import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
 import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
+import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
 
 const NOTE_TYPES = new Set(['html', 'markdown']);
 
@@ -31,6 +32,16 @@ export async function createNote({
   try {
     await connection.beginTransaction();
     await connection.query('INSERT INTO note SET ?', [data]);
+    // 正文引用本站上传图片时登记引用(引用计数语义,见 util/noteImages.js):
+    // 模板实例化/粘贴复用等路径创建的笔记也成为图片合法引用者,原笔记删除时不误删共享文件。
+    // 只登记确属当前用户的图片,防止把他人图片锚定为自己的引用。
+    const imageUrls = extractNoteImageUrls(content);
+    if (imageUrls.length) {
+      const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId, connection });
+      for (const url of ownedUrls) {
+        await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: data.id, url })]);
+      }
+    }
     if (addToInbox) {
       await enqueueResources(connection, {
         userId,

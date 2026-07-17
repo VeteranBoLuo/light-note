@@ -217,9 +217,19 @@
     --mobile-tag-muted-bg: var(--bl-input-noBorder-bg-color);
     --mobile-tag-border: var(--surface-border-color);
 
-    min-height: 100%;
+    height: 100%;
+    min-height: 0;
     padding-bottom: 22px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
     color: var(--text-color);
+  }
+
+  :deep(.resource-page-body) {
+    min-height: 0;
+    overflow: hidden;
   }
 
   .mobile-overview {

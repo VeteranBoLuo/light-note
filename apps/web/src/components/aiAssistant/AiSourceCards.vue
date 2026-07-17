@@ -1,9 +1,9 @@
 <template>
-  <div v-if="sources.length" class="ai-sources">
+  <div v-if="uniqueSources.length" class="ai-sources">
     <div class="ai-sources__title">{{ t('ai.sources') }}</div>
     <div class="ai-sources__list">
       <BButton
-        v-for="source in sources"
+        v-for="source in uniqueSources"
         :key="`${source.type}:${source.id}`"
         class="ai-source"
         @click="openSource(source)"
@@ -21,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -38,9 +39,24 @@
     locatorValue?: string;
   }
 
-  defineProps<{ sources: AiSource[] }>();
+  const props = defineProps<{ sources: AiSource[] }>();
   const { t } = useI18n();
   const router = useRouter();
+  const sourceIdentity = (source: AiSource) => {
+    if (source.type === 'document') {
+      return `document:${source.documentId || source.fileId || source.id.split(':')[0] || source.title}`;
+    }
+    return `${source.type}:${source.id}`;
+  };
+  const uniqueSources = computed(() => {
+    const seen = new Set<string>();
+    return props.sources.filter((source) => {
+      const key = sourceIdentity(source);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
   const typeLabel = (type: AiSource['type']) => t(`ai.sourceTypes.${type}`);
   function openSource(source: AiSource) {
     if (source.type === 'note') router.push(`/noteLibrary/${source.id}`);

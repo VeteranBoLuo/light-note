@@ -2,12 +2,9 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { deleteObjectFromObs, buildObjectKey } from '../util/obsClient.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { promises as fsP } from 'node:fs';
-import path from 'node:path';
 import { restoreTrashResources } from '../util/services/trashService.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
-
-const NOTE_IMAGE_DIR = '/www/wwwroot/images';
+import { cleanupOrphanNoteImages } from '../util/noteImages.js';
 
 // 彻底删除笔记时:删 note_images 行,返回其图片 URL(供事务提交后删磁盘文件)。
 // note_images 原本只增不删,笔记永久删除后图片文件会残留成孤儿。
@@ -26,15 +23,9 @@ async function purgeNoteVersions(connection, noteIds) {
   await connection.query(`DELETE FROM note_versions WHERE note_id IN (${ph})`, noteIds);
 }
 
-// 按 URL 删磁盘图片文件(不阻塞、失败忽略),与 OBS 清理同款 fire-and-forget
-function unlinkImageUrls(urls) {
-  for (const u of urls) {
-    try {
-      const fileName = new URL(u).pathname.split('/').pop();
-      if (fileName) fsP.unlink(path.join(NOTE_IMAGE_DIR, fileName)).catch(() => {});
-    } catch {}
-  }
-}
+// 物理文件清理统一走 util/noteImages.js 的 cleanupOrphanNoteImages:
+// 仅当 URL 既无其他笔记引用(note_images)、也无模板正文引用(note_template)时才删磁盘文件,
+// 且必须在删除事务提交之后调用(残留的 note_images 行=其他笔记仍在引用)。
 
 const RESOURCE_TYPES = ['bookmark', 'note', 'file'];
 
@@ -122,15 +113,15 @@ async function cleanupExpiredNotes(connection, userId = null) {
   const [notes] = await connection.query(
     `SELECT n.id FROM note n LEFT JOIN user_growth g ON g.user_id = n.create_by WHERE ${expiryWhere('n')}${userCond}`,
   );
-  if (notes.length === 0) return 0;
+  if (notes.length === 0) return { count: 0, imageUrls: [] };
   const ids = notes.map((n) => n.id);
   const ph = ids.map(() => '?').join(',');
   await purgeInboxRelations(connection, 'note', ids);
   const urls = await purgeNoteImages(connection, ids);
   await purgeNoteVersions(connection, ids);
   const [result] = await connection.query(`DELETE FROM note WHERE id IN (${ph})`, ids);
-  unlinkImageUrls(urls);
-  return result.affectedRows;
+  // 物理文件清理交由调用方在事务提交后执行(此处事务未提交,引用检查会读到旧数据)
+  return { count: result.affectedRows, imageUrls: urls };
 }
 
 async function cleanupExpiredBookmarks(connection, userId = null) {
@@ -166,9 +157,10 @@ export async function cleanupAllExpiredTrash() {
   try {
     await connection.beginTransaction();
     const bookmarkCount = await cleanupExpiredBookmarks(connection);
-    const noteCount = await cleanupExpiredNotes(connection);
+    const { count: noteCount, imageUrls } = await cleanupExpiredNotes(connection);
     const fileCount = await cleanupExpiredFiles(connection);
     await connection.commit();
+    cleanupOrphanNoteImages(imageUrls);
     console.log(`[回收站定时清理] 书签${bookmarkCount} 笔记${noteCount} 文件${fileCount}`);
   } catch (e) {
     await connection.rollback();
@@ -188,9 +180,10 @@ async function purgeExpiredItems(userId) {
   try {
     await connection.beginTransaction();
     await cleanupExpiredBookmarks(connection, userId);
-    await cleanupExpiredNotes(connection, userId);
+    const { imageUrls } = await cleanupExpiredNotes(connection, userId);
     await cleanupExpiredFiles(connection, userId);
     await connection.commit();
+    cleanupOrphanNoteImages(imageUrls);
   } catch (e) {
     await connection.rollback();
     console.error(`[回收站] 用户${userId}过期清理失败:`, e.message);
@@ -368,7 +361,7 @@ export const permanentDelete = async (req, res) => {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
       deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 删除失败: ${e.message}`));
     }
-    unlinkImageUrls(noteImageUrls);
+    cleanupOrphanNoteImages(noteImageUrls);
 
     res.send(resultData({ deleted: result.affectedRows }, 200, '彻底删除成功'));
   } catch (e) {
@@ -461,7 +454,7 @@ export const emptyTrash = async (req, res) => {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
       deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 删除失败: ${e.message}`));
     }
-    unlinkImageUrls(noteImageUrls);
+    cleanupOrphanNoteImages(noteImageUrls);
 
     res.send(resultData({ deleted: total }, 200, '回收站已清空'));
   } catch (e) {

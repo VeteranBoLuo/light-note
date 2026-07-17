@@ -49,7 +49,7 @@
 링크를 붙여넣으면 제목 · 설명 · 아이콘을 자동 수집. 왼쪽 태그 트리, 오른쪽 카드 월, 다중 태그 필터링.
 
 <p align="center">
-  <img src="apps/web/screenshots/bookmark.png" alt="북마크 관리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark.png" alt="북마크 관리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -58,7 +58,7 @@
 리치 텍스트｜Markdown 두 가지 편집 모드를 지원하며 실시간으로 전환할 수 있습니다. 텍스트 · 이미지 · 표 · 코드 블록, 다단계 폴더, 카드 / 리스트 두 가지 뷰, PDF 내보내기와 모바일 편집을 지원합니다.
 
 <p align="center">
-  <img src="apps/web/screenshots/note1.png" alt="노트 라이브러리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1.png" alt="노트 라이브러리" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -68,7 +68,7 @@
 폴더와 파일 형식별로 자료를 한곳에서 관리할 수 있습니다. 업로드, 검색, 온라인 미리보기, 드래그 앤 드롭 정리, 일괄 작업과 통합 태그를 지원하며, 저장 공간 사용량을 한눈에 확인하고 자주 쓰는 파일에 여러 기기에서 접근할 수 있습니다.
 
 <p align="center">
-  <img src="apps/web/screenshots/cloud-space.png" alt="클라우드 공간" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space.png" alt="클라우드 공간" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -77,7 +77,7 @@
 북마크 · 노트 · 태그 · 파일을 한 번에 통합 검색. 키워드 + 태그 필터로 몇 초 만에 찾기.
 
 <p align="center">
-  <img src="apps/web/screenshots/search.png" alt="전역 검색" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/search.png" alt="전역 검색" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -86,7 +86,17 @@
 대화형 AI 내장. 도구를 호출해 북마크 · 노트 · 성장 데이터를 조회하고, 웹 검색 · 심층 사고 · 스트리밍 응답을 지원.
 
 <p align="center">
-  <img src="apps/web/screenshots/ai-chat.png" alt="AI 어시스턴트" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI 어시스턴트" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**💡 [함께 만드는 LightNote](https://boluo66.top/co-build)**
+
+사용자 제안, 개발자 답변, 실제 진행 상황을 공개합니다. 계획 중·개발 중·출시된 요구 사항을 확인하고, 로그인 후에는 제안을 등록하거나 투표할 수 있습니다.
+
+<p align="center">
+  <img src="apps/web/public/screenshots/require.png" alt="함께 만드는 LightNote" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -119,8 +129,8 @@
 데스크톱 + 모바일 지원, 데이터는 클라우드 동기화. 어디서나 함께.
 
 <p align="center">
-  <img src="apps/web/screenshots/mobile1.png" alt="모바일" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/screenshots/mobile2.png" alt="모바일 다크 모드" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile1.png" alt="모바일" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile2.png" alt="모바일 다크 모드" height="320" style="border-radius:12px;margin:0 4px" />
 </p>
 
 ---

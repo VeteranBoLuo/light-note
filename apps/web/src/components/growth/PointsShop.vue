@@ -43,12 +43,19 @@
 
     <!-- 头像框装扮 -->
     <div v-if="frames.length" class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
-    <div class="ps-grid">
-      <div v-for="it in frames" :key="it.id" class="ps-item" :class="{ 'is-equipped': it.equipped }">
-        <div class="ps-frame-preview" :class="{ 'ps-frame-preview--galaxy': it.id === 'frame_galaxy' }" :style="frameWrapStyle(it.id, 4)"><span class="ps-frame-inner">🙂</span></div>
+    <div class="ps-grid ps-frame-grid">
+      <div
+        v-for="it in frames"
+        :key="it.id"
+        class="ps-item ps-frame-item"
+        :class="[`ps-frame-item--${frameVariant(it.id) || 'default'}`, { 'is-equipped': it.equipped }]"
+      >
+        <AvatarFramePreview class="ps-frame-preview" :frame-id="it.id" :src="avatarSrc" :size="64" />
         <div class="ps-item-body">
           <div class="ps-item-name">
             {{ itemName(it) }}
+            <span v-if="frameVariant(it.id)" class="ps-frame-style">{{ frameStyleName(it.id) }}</span>
+            <span v-if="it.id === 'frame_galaxy'" class="ps-frame-legendary">{{ t('growth.frameLegendary') }}</span>
             <span v-if="it.equipped" class="ps-tag-equipped">{{ t('growth.shopEquipped') }}</span>
           </div>
           <div class="ps-item-desc">{{ itemDesc(it) }}</div>
@@ -84,15 +91,20 @@
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth, type ShopItem } from '@/composables/useGrowth.ts';
+  import { useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import PointsLogModal from '@/components/growth/PointsLogModal.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { frameWrapStyle } from '@/config/growthFrames';
+  import { frameVariant } from '@/config/growthFrames';
 
   const { t, te } = useI18n();
   const { shop, loadShop, buyItem, equipFrame } = useGrowth();
+  const user = useUserStore();
+  const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
 
   // 商品图标(id → emoji);缺省兜底
   const ICONS: Record<string, string> = {
@@ -110,6 +122,11 @@
   function itemDesc(it: ShopItem) {
     const k = 'growth.shopItems.' + it.id + '.desc';
     return te(k) ? t(k) : it.desc;
+  }
+
+  function frameStyleName(frameId: string) {
+    const key = `growth.frameStyles.${frameId}`;
+    return te(key) ? t(key) : '';
   }
 
   const consumables = computed(() => shop.value?.items.filter((i) => i.type === 'consumable') || []);
@@ -311,60 +328,52 @@
     font-size: 26px;
     line-height: 1;
   }
-  .ps-frame-preview {
-    /* 父 .ps-item 是 flex column(默认 align-items:stretch),不加 align-self 会把预览拉满整行宽度,
-       叠加 border-radius:50% 会渲染成横向胶囊而非圆形头像框 */
-    align-self: flex-start;
-    line-height: 0;
-    position: relative;
+  .ps-frame-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   }
-  /* 渐变环单独放底层:旋转/色相动效只作用在这里,不波及中间的头像/表情 */
-  .ps-frame-preview::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: var(--frame-ring);
-    z-index: 0;
-    animation: ps-ring-spin 7s linear infinite;
-  }
-  /* 星河(conic 彩虹):旋转 + 亮度脉动(流光闪烁);不用色相流动以免出现绿色。只作用在环上,头像不受影响 */
-  .ps-frame-preview--galaxy::before {
-    animation:
-      ps-ring-spin 7s linear infinite,
-      ps-ring-glow 2.6s ease-in-out infinite;
-  }
-  .ps-frame-inner {
-    position: relative;
-    z-index: 1;
-    display: inline-flex;
+  .ps-frame-item {
+    display: grid;
+    grid-template-areas:
+      'preview body'
+      'preview foot';
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--background-color);
-    font-size: 24px;
+    column-gap: 15px;
+    row-gap: 10px;
+    min-height: 112px;
+    padding: 16px;
+    overflow: hidden;
   }
-  @keyframes ps-ring-spin {
-    to {
-      transform: rotate(360deg);
-    }
+  .ps-frame-item--gold {
+    background: linear-gradient(135deg, color-mix(in srgb, #f59e0b 11%, var(--background-color)), var(--background-color) 52%);
   }
-  @keyframes ps-ring-glow {
-    0%,
-    100% {
-      filter: brightness(1);
-    }
-    50% {
-      filter: brightness(1.35);
-    }
+  .ps-frame-item--sakura {
+    background: linear-gradient(135deg, color-mix(in srgb, #ec4899 10%, var(--background-color)), var(--background-color) 54%);
   }
-  /* 尊重系统「减少动态效果」偏好 */
-  @media (prefers-reduced-motion: reduce) {
-    .ps-frame-preview::before {
-      animation: none;
-    }
+  .ps-frame-item--neon {
+    background: linear-gradient(135deg, color-mix(in srgb, #6366f1 11%, var(--background-color)), var(--background-color) 54%);
+  }
+  .ps-frame-item--galaxy,
+  .ps-frame-item--galaxy.is-equipped {
+    background:
+      radial-gradient(circle at 87% 18%, rgba(255, 255, 255, 0.86) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 74% 77%, rgba(224, 231, 255, 0.72) 0 1px, transparent 1.5px),
+      linear-gradient(135deg, color-mix(in srgb, #7c3aed 16%, var(--background-color)), var(--background-color) 58%);
+  }
+  .ps-frame-item--galaxy:hover {
+    border-color: color-mix(in srgb, #a78bfa 68%, var(--card-border-color));
+    box-shadow: 0 12px 26px -18px rgba(91, 33, 182, 0.68);
+  }
+  .ps-frame-preview {
+    grid-area: preview;
+  }
+  .ps-frame-item .ps-item-body {
+    grid-area: body;
+    align-self: end;
+  }
+  .ps-frame-item .ps-item-foot {
+    grid-area: foot;
+    align-self: start;
   }
   .ps-item-body {
     flex: 1 1 auto;
@@ -377,6 +386,26 @@
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+  }
+  .ps-frame-style {
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .ps-frame-legendary {
+    padding: 2px 7px;
+    border: 1px solid rgba(196, 181, 253, 0.72);
+    border-radius: 999px;
+    color: #fef3c7;
+    background: linear-gradient(135deg, #7c3aed, #312e81);
+    box-shadow: 0 2px 8px -4px rgba(76, 29, 149, 0.92);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
   }
   .ps-tag-equipped {
     font-size: 10.5px;
@@ -418,5 +447,11 @@
     font-size: 14px;
     line-height: 1.6;
     padding: 4px 2px;
+  }
+  @media (max-width: 560px) {
+    .ps-frame-item {
+      column-gap: 12px;
+      padding: 14px;
+    }
   }
 </style>

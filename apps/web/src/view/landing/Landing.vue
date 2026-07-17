@@ -35,7 +35,13 @@
                 >
                   <span>{{ t('landing.ctaEnterApp') }}</span>
                   <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    <path
+                      d="M5 12h14M13 5l7 7-7 7"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
                   </svg>
                 </BButton>
                 <template v-else>
@@ -47,12 +53,21 @@
                   >
                     <span>{{ t('landing.ctaCreateSpace') }}</span>
                     <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                      <path
+                        d="M5 12h14M13 5l7 7-7 7"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
                     </svg>
                   </BButton>
-                  <BButton class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
-                    t('landing.ctaTryDemo')
-                  }}</BButton>
+                  <BButton
+                    class="btn-ghost"
+                    @click="goHome"
+                    v-click-log="{ module: '官网首页', operation: '先体验示例' }"
+                    >{{ t('landing.ctaTryDemo') }}</BButton
+                  >
                 </template>
               </div>
             </div>
@@ -71,45 +86,33 @@
                       <path d="M3.5 9h17M3.5 15h17" />
                       <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z" />
                     </svg>
-                    <span>{{ t('landing.brandShort') }} · {{ previewTabs[previewIndex] }}</span>
+                    <span>{{ t('landing.brandShort') }} · {{ previewItems[previewIndex]?.label }}</span>
                   </div>
                 </div>
                 <div class="mockup-carousel">
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
-                    <div class="mockup-screen">
+                    <div v-for="(item, itemIndex) in previewItems" :key="item.key" class="mockup-screen">
                       <div class="screen-glare"></div>
-                      <picture>
-                        <source srcset="/eg-bookmark.webp" type="image/webp" />
-                        <img src="/eg-bookmark.png" :alt="t('landing.tabBookmark')" />
-                      </picture>
-                    </div>
-                    <div class="mockup-screen">
-                      <div class="screen-glare"></div>
-                      <picture>
-                        <source srcset="/eg-note.webp" type="image/webp" />
-                        <img src="/eg-note.png" :alt="t('landing.tabNote')" />
-                      </picture>
-                    </div>
-                    <div class="mockup-screen">
-                      <div class="screen-glare"></div>
-                      <picture>
-                        <source srcset="/eg-cloudSpace.webp" type="image/webp" />
-                        <img src="/eg-cloudSpace.png" :alt="t('landing.tabCloud')" />
-                      </picture>
+                      <img
+                        :src="item.png"
+                        :alt="item.label"
+                        :loading="itemIndex === 0 ? 'eager' : 'lazy'"
+                        :fetchpriority="itemIndex === 0 ? 'high' : 'auto'"
+                      />
                     </div>
                   </div>
                 </div>
                 <div class="mockup-notch"></div>
                 <div class="carousel-dots">
                   <button
-                    v-for="(_, i) in 3"
-                    :key="i"
+                    v-for="(item, i) in previewItems"
+                    :key="item.key"
                     :class="['carousel-dot', { active: previewIndex === i }]"
                     @click="previewIndex = i"
                     v-click-log="{ module: '官网首页', operation: '切换预览图' }"
                   >
                     <span class="dot-indicator"></span>
-                    <span class="dot-label">{{ previewTabs[i] }}</span>
+                    <span class="dot-label">{{ item.label }}</span>
                   </button>
                 </div>
               </div>
@@ -228,7 +231,13 @@
               >
                 {{ t('landing.ctaEnterApp') }}
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  <path
+                    d="M5 12h14M13 5l7 7-7 7"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
                 </svg>
               </BButton>
               <template v-else>
@@ -240,12 +249,21 @@
                 >
                   {{ t('landing.ctaCreateSpace') }}
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    <path
+                      d="M5 12h14M13 5l7 7-7 7"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
                   </svg>
                 </BButton>
-                <BButton class="btn-ghost" @click="goHome" v-click-log="{ module: '官网首页', operation: '先体验示例' }">{{
-                  t('landing.ctaTryDemo')
-                }}</BButton>
+                <BButton
+                  class="btn-ghost"
+                  @click="goHome"
+                  v-click-log="{ module: '官网首页', operation: '先体验示例' }"
+                  >{{ t('landing.ctaTryDemo') }}</BButton
+                >
               </template>
             </div>
             <ul class="trust-badges">
@@ -343,7 +361,28 @@
   const feedbackContent = ref('');
   const submitting = ref(false);
 
-  const previewTabs = computed(() => [t('landing.tabBookmark'), t('landing.tabNote'), t('landing.tabCloud')]);
+  const previewItems = computed(() => [
+    {
+      key: 'bookmark',
+      label: t('landing.tabBookmark'),
+      png: '/screenshots/bookmark.png',
+    },
+    {
+      key: 'note',
+      label: t('landing.tabNote'),
+      png: '/screenshots/note1.png',
+    },
+    {
+      key: 'cloud',
+      label: t('landing.tabCloud'),
+      png: '/screenshots/cloud-space.png',
+    },
+    {
+      key: 'co-build',
+      label: t('landing.tabCoBuild'),
+      png: '/screenshots/require.png',
+    },
+  ]);
   const navLabels = computed(() => [
     t('landing.navCover'),
     t('landing.navCore'),

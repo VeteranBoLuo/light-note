@@ -1034,13 +1034,56 @@ export async function agentChat(req, res) {
           },
           signal: agentAbortController.signal,
         });
-        trace.finalMs = Date.now() - finalStartedAt;
         trace.finishReason = streamResult.finishReason || trace.finishReason;
         trace.usageStatus = plannerUsageReported && streamResult.usageStatus === 'reported' ? 'reported' : 'missing';
 
         totalUsage.promptTokens += streamResult.usage.promptTokens;
         totalUsage.completionTokens += streamResult.usage.completionTokens;
         totalUsage.totalTokens += streamResult.usage.totalTokens;
+
+        if (streamResult.leakedToolCall) {
+          console.warn('[Agent] 最终回答泄漏工具调用协议，已阻止原文并自动重试');
+          // 尚未送出的短前导语没有信息价值，直接丢弃，避免重试正文前后顺序颠倒。
+          if (isBuffering) {
+            bufferText = '';
+            isBuffering = false;
+          }
+          const retryResponse = await requestDeepSeek(
+            [
+              ...messages,
+              {
+                role: 'user',
+                content:
+                  '刚才的回答格式无效。现在只能基于已经提供的工具结果直接给出最终中文答复，禁止输出、描述或尝试任何工具调用、XML、DSML、函数名和内部协议标记。',
+              },
+            ],
+            {
+              toolChoice: 'none',
+              signal: agentAbortController.signal,
+              maxTokens: 2200,
+              temperature: styleTemperature,
+            },
+          );
+          apiCalls++;
+          apiCallsForLog = apiCalls;
+          totalUsage.promptTokens += retryResponse.usage.promptTokens;
+          totalUsage.completionTokens += retryResponse.usage.completionTokens;
+          totalUsage.totalTokens += retryResponse.usage.totalTokens;
+          trace.finishReason = retryResponse.finishReason || trace.finishReason;
+          trace.usageStatus =
+            trace.usageStatus === 'reported' && retryResponse.usageStatus === 'reported' ? 'reported' : 'missing';
+          const retryContent = looksLikeLeakedToolCall(retryResponse.content)
+            ? '抱歉，本次回答格式异常，请重新生成。'
+            : retryResponse.content || '抱歉，无法处理该请求。';
+          finalContent += retryContent;
+          if (!res.writableEnded) {
+            res.write(
+              `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: retryContent, session_id: getSessionId(session) } })}\n\n`,
+            );
+          }
+        }
+
+        trace.finalMs = Date.now() - finalStartedAt;
 
         if (isBuffering && bufferText) {
           finalContent += bufferText;

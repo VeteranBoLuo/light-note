@@ -43,6 +43,16 @@
           </BTooltip>
         </span>
       </span>
+      <!-- 存为模板:两端可用(移动端 header 图标区尚有余量;标签/导出/历史仍为桌面专属) -->
+      <BTooltip :title="$t('note.saveAsTemplate')" v-if="!readonly">
+        <div
+          class="note-header-title-icon"
+          @click="$emit('saveAsTemplate')"
+          v-click-log="OPERATION_LOG_MAP.note.saveAsTemplate"
+        >
+          <SvgIcon :src="icon.noteDetail.template" />
+        </div>
+      </BTooltip>
       <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && bookmark.isDesktop && note?.id">
         <div class="note-header-title-icon" @click="$emit('history')">
           <SvgIcon :src="icon.noteDetail.history" />
@@ -113,7 +123,7 @@
   }>();
 
   const { t } = useI18n();
-  const emit = defineEmits(['focusout', 'del', 'save', 'switchMode', 'undoSwitch', 'history']);
+  const emit = defineEmits(['focusout', 'del', 'save', 'switchMode', 'undoSwitch', 'history', 'saveAsTemplate']);
 
   const bookmark = bookmarkStore();
 
@@ -398,10 +408,10 @@
     box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color, #ec4899) 22%, var(--surface-border-color));
+    border: 0;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--resource-tag-color, #ec4899) 8%, var(--note-header-bg-color));
-    color: color-mix(in srgb, var(--resource-tag-color, #ec4899) 76%, var(--text-color));
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
+    color: var(--resource-note-color, #00a884);
     text-align: left;
     font-size: 11px;
     font-weight: 600;
@@ -415,7 +425,6 @@
   .inline-note-tag--more {
     max-width: none;
     color: var(--desc-color);
-    border-color: var(--surface-border-color);
-    background: color-mix(in srgb, var(--resource-tag-color, #ec4899) 4%, var(--note-header-bg-color));
+    background: var(--common-tag-bg-color, #f0f0f0);
   }
 </style>

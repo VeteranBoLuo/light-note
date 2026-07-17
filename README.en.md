@@ -51,7 +51,7 @@ Open it in your browser and get started. The hosted service is currently **free 
 Paste a link and the title, description, and icon are fetched automatically. Tag tree on the left, card wall on the right, multi-tag filtering.
 
 <p align="center">
-  <img src="apps/web/screenshots/bookmark.png" alt="Bookmark management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark.png" alt="Bookmark management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -60,7 +60,7 @@ Paste a link and the title, description, and icon are fetched automatically. Tag
 Rich text | Markdown dual-mode editing with instant switching. Supports text, images, tables, and code blocks, plus multi-level folders, card/list dual views, PDF export, and mobile editing.
 
 <p align="center">
-  <img src="apps/web/screenshots/note1.png" alt="Note library" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1.png" alt="Note library" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -70,7 +70,7 @@ Rich text | Markdown dual-mode editing with instant switching. Supports text, im
 Keep files organized by folder and type, with upload, search, online preview, drag-and-drop organization, bulk actions, and unified tags. Storage usage stays visible, and frequently used files remain available across devices.
 
 <p align="center">
-  <img src="apps/web/screenshots/cloud-space.png" alt="Cloud space" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space.png" alt="Cloud space" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -79,7 +79,7 @@ Keep files organized by folder and type, with upload, search, online preview, dr
 Search bookmarks, notes, tags, and files across every module at once — keyword + tag filtering, found in seconds.
 
 <p align="center">
-  <img src="apps/web/screenshots/search.png" alt="Global search" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/search.png" alt="Global search" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -88,7 +88,17 @@ Search bookmarks, notes, tags, and files across every module at once — keyword
 Built-in conversational AI that can call tools to look up your bookmarks, notes, and growth data — with web search, deep thinking, and streaming responses.
 
 <p align="center">
-  <img src="apps/web/screenshots/ai-chat.png" alt="AI assistant" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI assistant" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**💡 [Co-build LightNote](https://boluo66.top/co-build)**
+
+See user suggestions, developer replies, and real progress in public. Follow what is planned, in development, or already shipped — then sign in to submit ideas and vote.
+
+<p align="center">
+  <img src="apps/web/public/screenshots/require.png" alt="Co-build LightNote" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -121,8 +131,8 @@ Built-in conversational AI that can call tools to look up your bookmarks, notes,
 Desktop + mobile, with cloud sync — it follows you wherever you go.
 
 <p align="center">
-  <img src="apps/web/screenshots/mobile1.png" alt="Mobile" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/screenshots/mobile2.png" alt="Mobile dark mode" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile1.png" alt="Mobile" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile2.png" alt="Mobile dark mode" height="320" style="border-radius:12px;margin:0 4px" />
 </p>
 
 ---

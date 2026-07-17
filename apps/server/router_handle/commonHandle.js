@@ -10,6 +10,7 @@ import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
+import { collectUsedImageNames } from '../util/noteImages.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -702,10 +703,8 @@ export const analyzeImgUrl = async (req, res) => {
 };
 
 export const getImages = async (req, res) => {
-  // 后台图库(列全站书签图标 + 笔记图片 + 服务器图片目录)——仅 root 可查
+  // 后台图库(列全站书签图标 + 笔记图片 + 笔记模板图片 + 服务器图片目录)——仅 root 可查
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
-  const [bookmarkResult] = await pool.query('select icon_url from bookmark');
-  const [noteResult] = await pool.query('select url from note_images');
   // 指定要读取的目录路径
   const directoryPath = '/www/wwwroot/images';
 
@@ -733,19 +732,10 @@ export const getImages = async (req, res) => {
       };
     });
 
-    const bookmarkImages = bookmarkResult.map((bookmark) => bookmark.icon_url);
-    const noteImages = noteResult.map((note) => note.url);
-    const images = bookmarkImages.concat(noteImages);
-
-    // 从引用 URL 精确提取「文件名(不含扩展)」建 Set 精确比对——
-    // 避免子串误判(如 bookmark-5 命中 bookmark-50),真正无引用的孤儿才算失效
-    const usedNames = new Set();
-    for (const url of images) {
-      if (typeof url !== 'string' || !url) continue;
-      const seg = url.split('?')[0].split('/').pop() || '';
-      const base = seg.replace(/\.[^.]+$/, '');
-      if (base) usedNames.add(base);
-    }
+    // 引用集合统一由 util/noteImages.js 汇总(书签图标 + note_images + 模板正文),
+    // 精确按「文件名(不含扩展)」比对,避免子串误判(如 bookmark-5 命中 bookmark-50);
+    // 「仅被模板引用」的图片必须算已使用,否则 Root 清理会导致模板裂图
+    const usedNames = await collectUsedImageNames();
 
     if (req.body.name) {
       fileList = fileList.filter((file) => file.name.includes(req.body.name));
@@ -753,7 +743,6 @@ export const getImages = async (req, res) => {
     res.send(
       resultData({
         items: {
-          images: images,
           usedImages: fileList.filter((file) => usedNames.has(file.name)),
           unUsedImages: fileList.filter((file) => !usedNames.has(file.name)),
         },
@@ -762,6 +751,7 @@ export const getImages = async (req, res) => {
     );
   } catch (error) {
     console.error('读取目录时出错：', error);
+    res.send(resultData(null, 500, '读取图片目录失败'));
   }
 };
 
@@ -769,33 +759,51 @@ export const clearImages = async (req, res) => {
   const userId = await ensureRootRole(req, res);
   if (!userId) return;
   const directoryPath = '/www/wwwroot/images';
-  const images = req.body.images;
-
-  // 定义删除文件的函数
-  const deleteFile = async (filePath) => {
-    try {
-      await fsP.unlink(filePath);
-      console.log(`文件删除成功: ${filePath}`);
-    } catch (error) {
-      console.error(`删除文件失败: ${filePath}`, error);
-      throw error; // 抛出错误以便Promise.all捕获
-    }
-  };
-
-  // 构造所有需要删除的文件路径
-  const deletePromises = images.map(async (data) => {
-    const filePath = path.join(directoryPath, data.fullFileName);
-    return deleteFile(filePath);
-  });
+  const images = Array.isArray(req.body.images) ? req.body.images : [];
+  if (!images.length) {
+    return res.send(resultData(null, 400, '未指定要删除的图片'));
+  }
 
   try {
-    // 等待所有删除操作完成
-    await Promise.all(deletePromises);
-    res.send(resultData(req.body, 200, '删除成功'));
+    // 删除前服务端重建引用集合再次校验(不信任前端的"已失效"标记):
+    // 图库列表与实际清理之间存在时间差,期间图片可能已被笔记/模板重新引用
+    const usedNames = await collectUsedImageNames();
+    const deleted = [];
+    const skipped = [];
+    const failed = [];
+    for (const data of images) {
+      // basename 防路径穿越,只允许删除图片目录内的文件
+      const fullFileName = path.basename(String(data?.fullFileName || ''));
+      if (!fullFileName) continue;
+      const baseName = fullFileName.replace(/\.[^.]+$/, '');
+      if (usedNames.has(baseName)) {
+        skipped.push(fullFileName);
+        continue;
+      }
+      try {
+        await fsP.unlink(path.join(directoryPath, fullFileName));
+        deleted.push(fullFileName);
+      } catch (error) {
+        // 文件已不存在视为删除达成(幂等),其余失败如实上报,不谎报成功
+        if (error?.code === 'ENOENT') {
+          deleted.push(fullFileName);
+        } else {
+          console.error(`删除文件失败: ${fullFileName}`, error);
+          failed.push(fullFileName);
+        }
+      }
+    }
+    if (failed.length && !deleted.length && !skipped.length) {
+      return res.status(500).send(resultData({ deleted, skipped, failed }, 500, '删除失败'));
+    }
+    const msgParts = [];
+    if (deleted.length) msgParts.push(`已删除 ${deleted.length} 张`);
+    if (skipped.length) msgParts.push(`${skipped.length} 张仍被引用已跳过`);
+    if (failed.length) msgParts.push(`${failed.length} 张删除失败`);
+    res.send(resultData({ deleted, skipped, failed }, 200, msgParts.join('；') || '删除成功'));
   } catch (error) {
-    // 如果有任何删除操作失败，返回错误响应
     console.error('删除过程中出现错误:', error);
-    res.status(500).send(resultData(req.body, 500, '删除失败'));
+    res.status(500).send(resultData(null, 500, '删除失败'));
   }
 };
 

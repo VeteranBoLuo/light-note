@@ -138,9 +138,9 @@
     return [
       { title: '昵称', key: 'alias', width: '1fr' },
       { title: '邮箱', key: 'email', width: '1fr' },
-      { title: 'IP', key: 'ip', width: '120px' },
-      { title: '最近活跃', key: 'lastActiveTime', width: '140px', sortable: true },
-      { title: '注册时间', key: 'createTime', width: '140px' },
+      { title: 'IP', key: 'ip', width: '1fr' },
+      { title: '最近活跃', key: 'lastActiveTime', width: '1fr', sortable: true },
+      { title: '注册时间', key: 'createTime', width: '1fr' },
       { title: '操作', key: 'operation', width: '190px' },
     ];
   });

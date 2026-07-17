@@ -6,8 +6,18 @@
   >
     <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
       <div style="display: flex; gap: 20px; align-items: center">
-        <div class="navigation-icon" :style="{ color: user.iconColor }">
+        <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" :style="{ color: user.iconColor }">
+          <AvatarFramePreview
+            v-if="equippedFrameId"
+            :frame-id="equippedFrameId"
+            :src="user.headPicture || icon.navigation.user"
+            :size="44"
+            :decorative="false"
+            class="dom-hover"
+            @click="zoomImage"
+          />
           <svg-icon
+            v-else
             img-id="viewUserImg"
             @click="zoomImage"
             size="50"
@@ -38,6 +48,17 @@
         <span class="person-menu-item-title">{{ $t('personCenter.personalProfile') }}</span>
         <span class="person-menu-item-des"
           >{{ $t('personCenter.email_nickname') }}
+          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+        </span>
+      </div>
+      <div
+        class="person-menu-item"
+        @click="goGrowth"
+        v-click-log="{ module: '个人中心', operation: '打开我的成长' }"
+      >
+        <span class="person-menu-item-title">{{ $t('growth.entry') }}</span>
+        <span class="person-menu-item-des"
+          >Lv.{{ growthInfo?.level || 1 }} · 🪙 {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
           <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
         </span>
       </div>
@@ -178,10 +199,11 @@
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, defineAsyncComponent, ref } from 'vue';
+  import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import { updatePreference } from '@/utils/savePreference';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
@@ -190,6 +212,8 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
+  import { useGrowth } from '@/composables/useGrowth.ts';
+  import { frameVariant } from '@/config/growthFrames';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -200,7 +224,20 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   const userVisible = ref(false);
 
   const user = useUserStore();
+  const { growth: growthInfo, load: loadGrowth } = useGrowth();
+  const equippedFrameId = computed(() => {
+    const id = growthInfo.value?.equippedFrame;
+    return frameVariant(id) ? id : null;
+  });
   const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
+
+  onMounted(() => {
+    loadGrowth();
+  });
+
+  function goGrowth() {
+    router.push('/growth');
+  }
 
   function openQuickCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
@@ -312,6 +349,9 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
     align-items: center;
     clip-path: circle(50% at 50% 50%);
     cursor: pointer;
+  }
+  .navigation-icon.has-frame {
+    clip-path: none;
   }
 
   .handle-body {

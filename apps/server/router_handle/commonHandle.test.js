@@ -5,6 +5,11 @@ const query = vi.fn();
 const getConnection = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 
+// clearImages 用:文件删除与引用集合均可控
+const { unlinkSpy, collectUsedSpy } = vi.hoisted(() => ({ unlinkSpy: vi.fn(), collectUsedSpy: vi.fn() }));
+vi.mock('fs/promises', () => ({ default: { unlink: unlinkSpy } }));
+vi.mock('../util/noteImages.js', () => ({ collectUsedImageNames: collectUsedSpy }));
+
 // common.js ↔ router/common.js ↔ commonHandle.js 存在循环依赖:
 // 直接首个 import commonHandle.js 会拿到未初始化的导出而报错。
 // 先按应用真实顺序 import common.js,让 commonHandle.js 作为叶子完成初始化,规避循环。
@@ -17,6 +22,7 @@ const {
   clearLogsByIp,
   getIpLogStats,
   getAgentLogsSummary,
+  clearImages,
 } = await import('./commonHandle.js');
 
 function mockRes() {
@@ -408,5 +414,68 @@ describe('getAgentLogsSummary AI 质量指标', () => {
       toolErrorRate: 50,
       confirmationRate: 50,
     });
+  });
+});
+
+describe('clearImages 服务端校验与失败上报', () => {
+  const rootReq = (images) => ({ user: { id: 'root-1', role: 'root' }, body: { images } });
+  beforeEach(() => {
+    query.mockReset();
+    unlinkSpy.mockReset();
+    collectUsedSpy.mockReset();
+    // ensureRootRole 的复核查询
+    query.mockResolvedValue([[{ role: 'root', del_flag: 0 }]]);
+    collectUsedSpy.mockResolvedValue(new Set());
+    unlinkSpy.mockResolvedValue();
+  });
+
+  it('仍被引用的图片被跳过,不执行删除', async () => {
+    collectUsedSpy.mockResolvedValue(new Set(['note-1-used']));
+    const res = mockRes();
+    await clearImages(rootReq([{ fullFileName: 'note-1-used.png' }]), res);
+    expect(unlinkSpy).not.toHaveBeenCalled();
+    const sent = res.send.mock.calls.at(-1)[0];
+    expect(sent.status).toBe(200);
+    expect(sent.data.skipped).toEqual(['note-1-used.png']);
+    expect(sent.msg).toContain('仍被引用');
+  });
+
+  it('全部删除失败时返回 500,不谎报成功', async () => {
+    unlinkSpy.mockRejectedValue(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+    const res = mockRes();
+    await clearImages(rootReq([{ fullFileName: 'a.png' }, { fullFileName: 'b.png' }]), res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    const sent = res.send.mock.calls.at(-1)[0];
+    expect(sent.data.failed).toEqual(['a.png', 'b.png']);
+  });
+
+  it('部分失败时 200 但消息如实报告,ENOENT 视为幂等成功', async () => {
+    unlinkSpy
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }))
+      .mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
+    const res = mockRes();
+    await clearImages(rootReq([{ fullFileName: 'a.png' }, { fullFileName: 'gone.png' }, { fullFileName: 'c.png' }]), res);
+    const sent = res.send.mock.calls.at(-1)[0];
+    expect(sent.status).toBe(200);
+    expect(sent.data.deleted).toEqual(['a.png', 'gone.png']);
+    expect(sent.data.failed).toEqual(['c.png']);
+    expect(sent.msg).toContain('删除失败');
+  });
+
+  it('路径穿越被 basename 归一,只删图片目录内文件', async () => {
+    const res = mockRes();
+    await clearImages(rootReq([{ fullFileName: '../../etc/passwd' }]), res);
+    expect(unlinkSpy).toHaveBeenCalledTimes(1);
+    const target = unlinkSpy.mock.calls[0][0];
+    expect(target).toBe('/www/wwwroot/images/passwd');
+  });
+
+  it('非 root 直接拒绝', async () => {
+    const res = mockRes();
+    await clearImages({ user: { id: 'u1', role: 'user' }, body: { images: [{ fullFileName: 'a.png' }] } }, res);
+    expect(unlinkSpy).not.toHaveBeenCalled();
+    const sent = res.send.mock.calls.at(-1)[0];
+    expect(sent.status).toBe(403);
   });
 });

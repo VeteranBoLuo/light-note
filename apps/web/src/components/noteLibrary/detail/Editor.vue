@@ -20,11 +20,11 @@
     <template v-else>
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
-          <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="segment" />
+          <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="line" />
         </div>
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
-            <div class="md-editor-label">{{ $t('note.mdEdit') }}</div>
+            <div v-if="mdView === 'split'" class="md-editor-label">{{ $t('note.mdEdit') }}</div>
             <BInput
               ref="mdTextareaInputRef"
               v-model:value="mdContent"
@@ -37,7 +37,7 @@
             />
           </div>
           <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
-            <div class="md-editor-label">{{ $t('note.mdPreview') }}</div>
+            <div v-if="mdView === 'split'" class="md-editor-label">{{ $t('note.mdPreview') }}</div>
             <div ref="mdPreviewRef" class="md-preview" @scroll="syncMdScroll('preview')" v-html="renderedMd"></div>
           </div>
         </div>
@@ -148,11 +148,17 @@
   type MarkdownView = 'edit' | 'split' | 'preview';
   // MD 编辑器视图：edit / split / preview
   const mdView = ref<MarkdownView>(isMobile.value ? 'edit' : 'split');
-  const mdViewOptions = computed(() => [
-    { key: 'edit', label: t('note.mdEdit') },
-    { key: 'split', label: t('note.mdEditPreview') },
-    { key: 'preview', label: t('note.mdPreview') },
-  ]);
+  const mdViewOptions = computed(() => {
+    const options = [
+      { key: 'edit', label: t('note.mdEdit') },
+      { key: 'split', label: t('note.mdEditPreview') },
+      { key: 'preview', label: t('note.mdPreview') },
+    ];
+    return isMobile.value ? options.filter((option) => option.key !== 'split') : options;
+  });
+  watch(isMobile, (mobile) => {
+    if (mobile && mdView.value === 'split') mdView.value = 'edit';
+  });
   let visibilityObserver: IntersectionObserver | null = null;
 
   const currentType = ref(props.type);
@@ -1027,13 +1033,17 @@
 <style lang="less">
   #editor-container.note-editor {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
-    height: calc(100% - 60px);
+    height: auto;
+    min-height: 0;
     overflow: hidden;
   }
   .note-editor-toolbar {
-    border-bottom: 1px solid rgb(204, 204, 204);
-    background-color: var(--w-e-toolbar-bg-color);
+    flex-shrink: 0;
+    overflow: hidden;
+    border-bottom: 1px solid var(--surface-border-color);
+    background-color: var(--note-editor-header-bg, var(--w-e-toolbar-bg-color));
   }
   .note-editor-scroll {
     flex: 1;
@@ -1108,14 +1118,39 @@
   .md-editor-toolbar {
     display: flex;
     align-items: center;
-    min-height: 36px;
-    padding: 0 10px;
-    border-bottom: 1px solid var(--card-border-color, #e8eaf2);
-    background: var(--background-color);
+    min-height: 40px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--surface-border-color);
+    background: var(--note-editor-header-bg, var(--surface-panel-bg, var(--background-color)));
     flex-shrink: 0;
   }
   .md-view-toggle {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    width: 100%;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
+
+    .tab {
+      flex: 1 1 0;
+      min-width: 0;
+      justify-content: center;
+      padding: 9px 14px 8px;
+      color: var(--desc-color);
+      font-size: 12px;
+    }
+
+    .tab.is-active {
+      color: var(--resource-note-color, #00a884);
+      font-weight: 650;
+    }
+
+    .underline {
+      height: 2px;
+      border-radius: 0;
+      background: var(--resource-note-color, #00a884);
+    }
   }
 
   /* Markdown 编辑器 */
@@ -1240,11 +1275,16 @@
   .note-editor .tox .tox-toolbar,
   .note-editor .tox .tox-toolbar__primary,
   .note-editor .tox .tox-toolbar__overflow {
-    background-color: var(--w-e-toolbar-bg-color) !important;
+    background-color: var(--note-editor-header-bg, var(--w-e-toolbar-bg-color)) !important;
     border: none !important;
     box-shadow: none !important;
   }
-  .note-editor .tox .tox-editor-header,
+  .note-editor .tox .tox-editor-header {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background-color: var(--note-editor-header-bg, var(--w-e-toolbar-bg-color)) !important;
+  }
   .note-editor .tox .tox-toolbar__group {
     border: none !important;
     box-shadow: none !important;
@@ -1268,15 +1308,15 @@
   }
   [data-theme='night'] {
     .note-editor-toolbar {
-      border-bottom-color: #3a3d46;
-      background-color: #25262b;
+      border-bottom-color: var(--surface-border-color);
+      background-color: var(--note-editor-header-bg, #25262b);
     }
 
     .note-editor .tox .tox-toolbar,
     .note-editor .tox .tox-toolbar__primary,
     .note-editor .tox .tox-toolbar__overflow,
     .note-editor .tox .tox-editor-header {
-      background-color: #25262b !important;
+      background-color: var(--note-editor-header-bg, #25262b) !important;
     }
 
     .note-editor .tox .tox-toolbar__group {
@@ -1489,11 +1529,8 @@
     }
   }
 
-  /* 移动端 MD 视图：隐藏分栏按钮，用简单 tab */
+  /* 移动端 MD 视图由选项数据移除分栏，只保留编辑和预览。 */
   @media (max-width: 1024px) {
-    .md-view-toggle .tab:nth-child(2) {
-      display: none;
-    }
     /* 富文本工具栏(TinyMCE inline + fixed_toolbar_container):窄屏下默认会把 9 个按钮组挤压,
        组内按钮再竖向堆叠,呈现"网格状"多行错乱(真机移动端亦如此)。这里强制单行 + 横向滚动:
        组不收缩(flex-shrink:0)、组内不换行(nowrap),整条工具栏超宽时横向滚动。

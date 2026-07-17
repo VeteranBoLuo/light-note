@@ -5,6 +5,67 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createNote } from '../util/services/noteService.js';
 import { createTag } from '../util/services/tagService.js';
+import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
+import { promises as fsP } from 'node:fs';
+
+// multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
+// 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
+const discardUploadedFile = (file) => {
+  if (file?.path) fsP.unlink(file.path).catch(() => {});
+};
+
+// 模板接口的 500 统一收口:原始错误只进服务端日志,不把 e.message(可能含 SQL/表名)回给前端
+const sendTemplateServerError = (res, scene, error) => {
+  console.error(`[noteTemplate] ${scene}失败:`, error);
+  res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+};
+
+// 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
+// note_images 的归属可信度是图片引用计数体系的地基:
+// - 传入 noteId 必须校验属于当前用户,否则可向他人笔记挂图污染归属;
+// - 未传 noteId 时服务端用 insertData 先生成笔记 id(禁止 ORDER BY LIMIT 1 全局取最新),
+//   笔记与图片登记在同一事务内提交。
+export const uploadNoteImage = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    if (!req.file) {
+      return res.send(resultData(null, 400, '没有上传文件'));
+    }
+    const userId = req.user.id;
+    const fileUrl = `https://boluo66.top/uploads/${req.file.filename}`;
+    const noteId = String(req.body.noteId || '').trim();
+
+    if (noteId) {
+      const [own] = await pool.query('SELECT id FROM note WHERE id = ? AND create_by = ?', [noteId, userId]);
+      if (own.length === 0) {
+        discardUploadedFile(req.file);
+        return res.send(resultData(null, 404, '笔记不存在'));
+      }
+      await pool.query('INSERT INTO note_images SET ?', [insertData({ noteId, url: fileUrl })]);
+      return res.send(resultData({ url: fileUrl }));
+    }
+
+    const noteData = insertData({ title: '未命名文档', createBy: userId });
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query('INSERT INTO note SET ?', [noteData]);
+      await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: noteData.id, url: fileUrl })]);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    res.send(resultData({ url: fileUrl, noteId: noteData.id }));
+  } catch (e) {
+    // 登记失败(归属查询/写库/事务回滚)统一丢弃已落盘文件,不留孤儿
+    discardUploadedFile(req.file);
+    console.error('[noteImage] 上传登记失败:', e);
+    res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+  }
+};
 
 export const addNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
@@ -536,5 +597,136 @@ export const restoreNoteVersion = async (req, res) => {
     }
   } catch (e) {
     res.send(resultData(null, 400, '客户端请求异常' + e));
+  }
+};
+
+// —— 笔记模板(用户自存;内置模板由前端常量提供,不进库) ——
+const NOTE_TEMPLATE_LIMIT = 20; // 每人最多保存的模板数
+const NOTE_TEMPLATE_CONTENT_MAX = 1_000_000; // 与笔记正文同一上限
+const NOTE_TEMPLATE_TYPES = new Set(['html', 'markdown']);
+
+// 模板列表(轻量:不含 content,选择器只需要元信息;实例化时再按 id 取正文)
+export const queryNoteTemplates = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [rows] = await pool.query(
+      `SELECT id, name, title_template, description, type, update_time
+       FROM note_template
+       WHERE create_by = ?
+       ORDER BY update_time DESC, id DESC`,
+      [userId],
+    );
+    res.send(resultData(rows));
+  } catch (e) {
+    sendTemplateServerError(res, '查询模板列表', e);
+  }
+};
+
+// 单个模板内容(实例化用;归属校验防枚举他人模板)
+export const getNoteTemplateDetail = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const templateId = req.body.id;
+    if (!templateId) {
+      return res.send(resultData(null, 400, '参数错误'));
+    }
+    const [rows] = await pool.query(
+      'SELECT id, name, title_template, description, type, content FROM note_template WHERE id = ? AND create_by = ?',
+      [templateId, userId],
+    );
+    if (rows.length === 0) {
+      return res.send(resultData(null, 404, '模板不存在'));
+    }
+    res.send(resultData(rows[0]));
+  } catch (e) {
+    sendTemplateServerError(res, '查询模板详情', e);
+  }
+};
+
+// 存为模板(来自当前笔记的标题/正文/类型)
+export const addNoteTemplate = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const name = String(req.body.name || '').trim();
+    const titleTemplate = String(req.body.titleTemplate || '').trim();
+    const description = String(req.body.description || '').trim();
+    const type = req.body.type === 'md' ? 'markdown' : String(req.body.type || 'html');
+    const content = String(req.body.content || '');
+    if (!name) {
+      return res.send(resultData(null, 400, '模板名称不能为空'));
+    }
+    if (name.length > 60) {
+      return res.send(resultData(null, 400, '模板名称不能超过 60 个字符'));
+    }
+    if (titleTemplate.length > 255) {
+      return res.send(resultData(null, 400, '默认标题不能超过 255 个字符'));
+    }
+    if (description.length > 255) {
+      return res.send(resultData(null, 400, '模板描述不能超过 255 个字符'));
+    }
+    if (!NOTE_TEMPLATE_TYPES.has(type)) {
+      return res.send(resultData(null, 400, '模板类型仅支持 html 或 markdown'));
+    }
+    if (content.length > NOTE_TEMPLATE_CONTENT_MAX) {
+      return res.send(resultData(null, 400, '模板内容过长'));
+    }
+    // 正文引用本站上传图片时,校验全部属于当前用户(经其笔记登记于 note_images),
+    // 防止把他人图片 URL 写进模板绕过归属;外链图片不校验、不追踪。
+    const imageUrls = extractNoteImageUrls(content);
+    if (imageUrls.length) {
+      const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId });
+      if (ownedUrls.length !== imageUrls.length) {
+        return res.send(resultData(null, 400, '模板包含无权使用的图片,请先移除后重试'));
+      }
+    }
+    const [cntRows] = await pool.query('SELECT COUNT(*) AS n FROM note_template WHERE create_by = ?', [userId]);
+    if (cntRows[0].n >= NOTE_TEMPLATE_LIMIT) {
+      return res.send(resultData(null, 400, `最多保存 ${NOTE_TEMPLATE_LIMIT} 个模板,请先删除不用的模板`));
+    }
+    const data = insertData({
+      name,
+      titleTemplate: titleTemplate || null,
+      description: description || null,
+      type,
+      content,
+      createBy: userId,
+    });
+    await pool.query('INSERT INTO note_template SET ?', [data]);
+    res.send(resultData({ id: data.id, name }));
+  } catch (e) {
+    sendTemplateServerError(res, '保存模板', e);
+  }
+};
+
+// 删除模板(硬删除:模板是轻量可再生数据,不接回收站)
+export const delNoteTemplate = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const templateId = req.body.id;
+    if (!templateId) {
+      return res.send(resultData(null, 400, '参数错误'));
+    }
+    // 先取正文提取图片 URL:模板可能是这些文件的最后一个引用,删除成功后需触发孤儿清理
+    const [rows] = await pool.query('SELECT content FROM note_template WHERE id = ? AND create_by = ?', [
+      templateId,
+      userId,
+    ]);
+    if (rows.length === 0) {
+      return res.send(resultData(null, 404, '模板不存在'));
+    }
+    const imageUrls = extractNoteImageUrls(rows[0].content);
+    const [result] = await pool.query('DELETE FROM note_template WHERE id = ? AND create_by = ?', [
+      templateId,
+      userId,
+    ]);
+    if (result.affectedRows === 0) {
+      return res.send(resultData(null, 404, '模板不存在'));
+    }
+    cleanupOrphanNoteImages(imageUrls);
+    res.send(resultData('删除模板成功'));
+  } catch (e) {
+    sendTemplateServerError(res, '删除模板', e);
   }
 };

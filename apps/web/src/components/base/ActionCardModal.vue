@@ -5,7 +5,8 @@
         <div v-if="section.title" class="section-header">
           <h3>{{ section.title }}</h3>
         </div>
-        <div class="cards-grid" :style="{ gridTemplateColumns: bookmark.isMobile ? '1fr' : '1fr 1fr' }">
+        <div v-if="!section.actions.length && section.hint" class="section-hint">{{ section.hint }}</div>
+        <div v-else class="cards-grid" :style="{ gridTemplateColumns: bookmark.isMobile ? '1fr' : '1fr 1fr' }">
           <div
             v-for="action in section.actions"
             :key="action.key"
@@ -13,8 +14,18 @@
             @click="action.onClick ? action.onClick() : handleActionClick(section.key, action.key, action)"
           >
             <div class="card-content">
-              <h4>{{ action.label }}</h4>
+              <h4>
+                {{ action.label }}
+                <span v-if="action.tag" class="card-tag">{{ action.tag }}</span>
+              </h4>
               <p v-if="action.description">{{ action.description }}</p>
+            </div>
+            <div
+              v-if="action.removable && action.onRemove"
+              class="card-remove"
+              @click.stop="action.onRemove()"
+            >
+              <SvgIcon :src="icon.noteDetail.delete" size="14" />
             </div>
           </div>
         </div>
@@ -28,6 +39,8 @@
 
 <script setup lang="ts">
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   import { bookmarkStore } from '@/store';
 
   const visible = defineModel<boolean>('visible');
@@ -39,7 +52,12 @@
     key: string;
     label: string;
     description?: string;
+    /** 标题旁的小标签(如内容类型),低饱和中性样式 */
+    tag?: string;
     onClick?: () => void;
+    /** 可移除卡片（如用户自存模板）：显示右上角删除按钮，点击只触发 onRemove 不触发卡片本体 */
+    removable?: boolean;
+    onRemove?: () => void;
   }
 
   interface ActionSection {
@@ -47,6 +65,8 @@
     title?: string;
     class?: string;
     actions: ActionItem[];
+    /** actions 为空时显示的提示行(空态/加载中),无提示且无卡片则只渲染标题 */
+    hint?: string;
   }
 
   const props = defineProps<{
@@ -90,7 +110,17 @@
         gap: 16px;
       }
 
+      .section-hint {
+        padding: 12px 14px;
+        border-radius: 10px;
+        background-color: var(--menu-item-bg-color);
+        color: var(--desc-color);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
       .action-card {
+        position: relative;
         display: flex;
         align-items: center;
         gap: 12px;
@@ -108,12 +138,47 @@
           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
+        .card-remove {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          border-radius: 6px;
+          color: var(--sub-text-color);
+          opacity: 0.6;
+          transition: all 0.2s ease;
+
+          &:hover {
+            opacity: 1;
+            color: var(--error-color, #e5484d);
+            background-color: var(--menu-item-bg-color);
+          }
+        }
+
         .card-content {
           h4 {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             margin: 0 0 4px 0;
             color: var(--text-color);
             font-size: 14px;
             font-weight: 500;
+          }
+
+          .card-tag {
+            flex-shrink: 0;
+            padding: 1px 7px;
+            border-radius: 999px;
+            background-color: var(--menu-item-h-bg-color);
+            color: var(--sub-text-color);
+            font-size: 11px;
+            font-weight: 400;
+            line-height: 1.6;
           }
 
           p {

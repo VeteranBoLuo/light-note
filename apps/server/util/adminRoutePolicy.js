@@ -67,6 +67,8 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/getNoteTags'],
   ['POST', '/note/getNoteVersions'],
   ['POST', '/note/getNoteVersionDetail'],
+  ['POST', '/note/queryNoteTemplates'],
+  ['POST', '/note/getNoteTemplateDetail'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
@@ -80,7 +82,11 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/delNoteTag'],
   ['POST', '/note/updateNoteTags'],
   ['POST', '/note/restoreNoteVersion'],
+  ['POST', '/note/addNoteTemplate'],
 ]);
+
+// 模板为硬删除(轻量可再生数据不接回收站),按不可逆内容操作声明,maintain 模式不予放行
+declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'note', [['POST', '/note/delNoteTemplate']]);
 
 declare(ADMIN_POLICIES.AI_USE, 'note', [['POST', '/note/assist']]);
 

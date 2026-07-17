@@ -180,11 +180,14 @@ src/
 | `ai_document_sources`               | AI 文档来源与解析状态    | UUID      |
 | `ai_document_chunks`                | AI 文档正文片段与定位    | 自增      |
 | `ai_document_jobs`                  | AI 文档异步解析任务      | 自增      |
+| `note_template`                     | 用户自存笔记模板         | UUID      |
 | `feature_requests`                  | 共建轻笺公开需求         | UUID      |
 | `feature_request_votes`             | 共建建议唯一投票         | 复合主键  |
 | `feature_request_updates`           | 共建建议公开时间线       | UUID      |
 | `opinion`                           | 用户反馈                 | UUID      |
 | `help_config` / `help_config_draft` | 帮助中心                 | UUID      |
+
+笔记模板：内置模板（日报/周报/会议纪要/读书笔记）为前端常量（`config/noteTemplates.ts`，含 `{{date}}` 等占位变量的文案不进 i18n 文件）；用户自存模板存 `note_template`（每人上限 20，硬删除不接回收站），`name`（库内显示名）与 `title_template`（新笔记默认标题，可含变量）语义分离。笔记正文图片按引用计数清理：彻底删除笔记后，仅当 URL 既无 `note_images` 残留引用、也无模板正文引用时才删除物理文件；新建笔记与存为模板都会校验图片归属并登记引用。
 
 书签图标采用 stale-while-revalidate：`bookmark.icon_checked_at` 记录最近一次 favicon 抓取检查时间；已有图标满 30 天后在列表后台静默刷新，抓取失败保留旧图标，无图标记录按 24 小时冷却重试。书签站点主机变化时清空旧图标及检查时间，同站点路径变化以及普通标题、描述、标签编辑不清图标；编辑页支持主动刷新。
 

@@ -169,6 +169,7 @@
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
+  import { BUILTIN_NOTE_TEMPLATES } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
@@ -181,6 +182,87 @@
   const loading = ref(false);
   const showTypePicker = ref(false);
   const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
+  // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
+  const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
+  const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
+  let templatesRequestSeq = 0; // 防旧响应覆盖新响应
+  async function loadMyTemplates() {
+    const seq = ++templatesRequestSeq;
+    if (myTemplatesState.value !== 'success') myTemplatesState.value = 'loading';
+    try {
+      const res = await apiBasePost('/api/note/queryNoteTemplates');
+      if (seq !== templatesRequestSeq) return;
+      if (res.status === 200) {
+        myTemplates.value = res.data ?? [];
+        myTemplatesState.value = 'success';
+      } else {
+        myTemplatesState.value = 'error';
+      }
+    } catch {
+      if (seq === templatesRequestSeq) myTemplatesState.value = 'error';
+    }
+  }
+  function gotoNewNote(query: Record<string, string>) {
+    showTypePicker.value = false;
+    if (blockGuestWrite('add-note')) return;
+    router.push({ path: '/noteLibrary/add', query });
+  }
+  const templateTypeTag = (type: string) => (type === 'markdown' ? t('note.tplTypeMd') : t('note.tplTypeHtml'));
+  function confirmDeleteTemplate(tpl: { id: string; name: string }) {
+    Alert.alert({
+      title: t('common.defaultTitle'),
+      content: t('note.tplDeleteConfirm', { name: tpl.name }),
+      onOk() {
+        apiBasePost('/api/note/delNoteTemplate', { id: tpl.id }).then((res) => {
+          if (res.status === 200) {
+            recordOperation({ module: '笔记库', operation: `删除笔记模板【${tpl.name}】` });
+            message.success(t('note.tplDeleted'));
+            loadMyTemplates();
+          } else {
+            message.error(res.msg);
+          }
+        });
+      },
+    });
+  }
+  // "我的模板"区按状态渲染:加载/空态给提示行(hint),失败给可点重试卡,成功给模板卡
+  const myTemplateSection = computed(() => {
+    if (myTemplatesState.value === 'error') {
+      return {
+        key: 'mine',
+        title: t('note.tplMineSection'),
+        actions: [
+          {
+            key: 'retry',
+            label: t('note.tplRetryLabel'),
+            description: t('note.tplRetryDesc'),
+            onClick: () => loadMyTemplates(),
+          },
+        ],
+      };
+    }
+    if (myTemplatesState.value === 'success' && myTemplates.value.length) {
+      return {
+        key: 'mine',
+        title: t('note.tplMineSection'),
+        actions: myTemplates.value.map((tpl) => ({
+          key: tpl.id,
+          label: tpl.name,
+          description: tpl.description || '',
+          tag: templateTypeTag(tpl.type),
+          removable: true,
+          onRemove: () => confirmDeleteTemplate(tpl),
+          onClick: () => gotoNewNote({ type: tpl.type, templateId: tpl.id }),
+        })),
+      };
+    }
+    return {
+      key: 'mine',
+      title: t('note.tplMineSection'),
+      actions: [],
+      hint: myTemplatesState.value === 'loading' ? t('note.tplLoading') : t('note.tplEmptyMine'),
+    };
+  });
   const typePickerSections = computed(() => [
     {
       key: 'type',
@@ -190,28 +272,33 @@
           key: 'html',
           label: t('note.htmlLabel'),
           description: t('note.htmlDesc'),
-          onClick: () => {
-            showTypePicker.value = false;
-            if (blockGuestWrite('add-note')) return;
-            router.push('/noteLibrary/add?type=html');
-          },
+          onClick: () => gotoNewNote({ type: 'html' }),
         },
         {
           key: 'markdown',
           label: t('note.mdLabel'),
           description: t('note.mdDesc'),
-          onClick: () => {
-            showTypePicker.value = false;
-            if (blockGuestWrite('add-note')) return;
-            router.push('/noteLibrary/add?type=markdown');
-          },
+          onClick: () => gotoNewNote({ type: 'markdown' }),
         },
       ],
     },
+    {
+      key: 'builtin',
+      title: t('note.tplBuiltinSection'),
+      actions: BUILTIN_NOTE_TEMPLATES.map((tpl) => ({
+        key: tpl.key,
+        label: t(tpl.nameKey),
+        description: t(tpl.descKey),
+        tag: templateTypeTag(tpl.type),
+        onClick: () => gotoNewNote({ type: tpl.type, builtin: tpl.key }),
+      })),
+    },
+    myTemplateSection.value,
   ]);
 
   function showNewNotePicker() {
     showTypePicker.value = true;
+    loadMyTemplates();
   }
   function addNoteToInbox(note: any) {
     addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');

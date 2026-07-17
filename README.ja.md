@@ -49,7 +49,7 @@
 リンクを貼るだけでタイトル・説明・アイコンを自動取得。左にタグツリー、右にカードウォール、複数タグでの絞り込み。
 
 <p align="center">
-  <img src="apps/web/screenshots/bookmark.png" alt="ブックマーク管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark.png" alt="ブックマーク管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -58,7 +58,7 @@
 リッチテキスト｜Markdown の 2 モード編集に対応し、リアルタイムで切り替え可能。文章・画像・表・コードブロック、多階層フォルダ、カード / リストの 2 ビュー、PDF 書き出し、モバイル編集にも対応。
 
 <p align="center">
-  <img src="apps/web/screenshots/note1.png" alt="ノートライブラリ" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1.png" alt="ノートライブラリ" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -68,7 +68,7 @@
 フォルダとファイル形式ごとに資料をまとめて管理。アップロード、検索、オンラインプレビュー、ドラッグ＆ドロップ整理、一括操作、統一タグに対応しています。ストレージ使用量もひと目で確認でき、よく使うファイルへ複数のデバイスからアクセスできます。
 
 <p align="center">
-  <img src="apps/web/screenshots/cloud-space.png" alt="クラウドスペース" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space.png" alt="クラウドスペース" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -77,7 +77,7 @@
 ブックマーク・ノート・タグ・ファイルをまとめて横断検索。キーワード + タグの絞り込みで数秒で発見。
 
 <p align="center">
-  <img src="apps/web/screenshots/search.png" alt="グローバル検索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/search.png" alt="グローバル検索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -86,7 +86,17 @@
 対話型 AI を内蔵。ツールを呼び出してブックマーク・ノート・成長データを照会でき、Web 検索・深い思考・ストリーミング応答に対応。
 
 <p align="center">
-  <img src="apps/web/screenshots/ai-chat.png" alt="AI アシスタント" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI アシスタント" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**💡 [LightNote を共に育てる](https://boluo66.top/co-build)**
+
+ユーザーからの提案、開発者の返信、実際の進捗を公開しています。計画中・開発中・リリース済みの要望を確認でき、ログイン後は提案の投稿や投票もできます。
+
+<p align="center">
+  <img src="apps/web/public/screenshots/require.png" alt="LightNote を共に育てる" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -119,8 +129,8 @@
 デスクトップ + モバイル対応、データはクラウド同期。どこにいても付いてくる。
 
 <p align="center">
-  <img src="apps/web/screenshots/mobile1.png" alt="モバイル" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/screenshots/mobile2.png" alt="モバイル（ダーク）" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile1.png" alt="モバイル" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile2.png" alt="モバイル（ダーク）" height="320" style="border-radius:12px;margin:0 4px" />
 </p>
 
 ---

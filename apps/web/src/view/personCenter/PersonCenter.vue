@@ -16,13 +16,16 @@
       >
         <div class="user-top">
           <div class="avatar-ring" :class="user.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
-            <svg-icon
-              img-id="viewUserImg"
-              @click="zoomImage"
-              size="40"
+            <AvatarFramePreview
+              v-if="equippedFrameId"
+              :frame-id="equippedFrameId"
               :src="user.headPicture || icon.navigation.user"
+              :size="40"
+              :decorative="false"
               class="dom-hover"
+              @click="zoomImage"
             />
+            <svg-icon v-else img-id="viewUserImg" @click="zoomImage" size="40" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
           </div>
           <div class="user-meta">
             <div class="user-name-row">
@@ -123,22 +126,13 @@
     </template>
     <div
       class="navigation-icon"
-      :class="{ 'has-frame': equippedFrameRing }"
+      :class="{ 'has-frame': equippedFrameId }"
       style="margin-left: 5px; position: relative"
       @mouseenter="handleTriggerMouseEnter"
       @mouseleave="handleTriggerMouseLeave"
     >
       <!-- 佩戴头像框:关掉父级 clip,由框做圆环、内部头像单独裁圆,避免被裁 -->
-      <span
-        v-if="equippedFrameRing"
-        class="nav-avatar-frame"
-        :class="{ 'nav-avatar-frame--galaxy': equippedIsGalaxy }"
-        :style="{ '--frame-ring': equippedFrameRing }"
-      >
-        <span class="nav-avatar-clip"
-          ><svg-icon size="30" :src="user.headPicture || icon.navigation.user" class="dom-hover"
-        /></span>
-      </span>
+      <AvatarFramePreview v-if="equippedFrameId" :frame-id="equippedFrameId" :src="user.headPicture || icon.navigation.user" :size="30" />
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
@@ -150,9 +144,10 @@
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import { frameRing } from '@/config/growthFrames';
+  import { frameVariant } from '@/config/growthFrames';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import { formatStorageSize } from '@/utils/common';
@@ -182,8 +177,10 @@
 
   // 成长徽章:登录用户在头像旁展示当前等级(纯展示,管理成长走「设置」菜单入口)
   const { growth: growthInfo, load: loadGrowth } = useGrowth();
-  const equippedFrameRing = computed(() => frameRing(growthInfo.value?.equippedFrame));
-  const equippedIsGalaxy = computed(() => growthInfo.value?.equippedFrame === 'frame_galaxy');
+  const equippedFrameId = computed(() => {
+    const id = growthInfo.value?.equippedFrame;
+    return frameVariant(id) ? id : null;
+  });
   const badgeTier = computed(() => tierOf(growthInfo.value?.level || 1));
   onMounted(() => {
     loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
@@ -452,57 +449,6 @@
   .navigation-icon.has-frame {
     clip-path: none;
   }
-  .nav-avatar-frame {
-    display: inline-flex;
-    padding: 2px;
-    border-radius: 50%;
-    line-height: 0;
-    position: relative;
-  }
-  /* 渐变环单独放底层:旋转/色相动效只作用在环上,中间头像不转、不变色 */
-  .nav-avatar-frame::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: var(--frame-ring);
-    z-index: 0;
-    animation: nav-frame-spin 7s linear infinite;
-  }
-  .nav-avatar-frame--galaxy::before {
-    animation:
-      nav-frame-spin 7s linear infinite,
-      nav-frame-glow 2.6s ease-in-out infinite;
-  }
-  .nav-avatar-clip {
-    display: inline-flex;
-    border-radius: 50%;
-    overflow: hidden;
-    background: var(--background-color);
-    line-height: 0;
-    position: relative;
-    z-index: 1;
-  }
-  @keyframes nav-frame-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  @keyframes nav-frame-glow {
-    0%,
-    100% {
-      filter: brightness(1);
-    }
-    50% {
-      filter: brightness(1.35);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .nav-avatar-frame::before {
-      animation: none;
-    }
-  }
-
   .handle-body {
     display: none;
   }

@@ -1,8 +1,14 @@
 import express from 'express';
 const router = express.Router();
 import multer from 'multer';
-import path from 'path';
 import * as noteLibraryHandle from '../router_handle/noteLibraryHandle.js';
+import { ensureNotVisitor } from '../util/auth.js';
+
+// 游客拦截必须先于 multer 落盘,否则游客请求也会在磁盘留下孤儿文件
+const blockVisitorUpload = (req, res, next) => {
+  if (!ensureNotVisitor(req, res)) return;
+  next();
+};
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -16,63 +22,9 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
-import { resultData, snakeCaseKeys, insertData } from '../util/common.js';
-import pool from '../db/index.js';
-import { ensureNotVisitor } from '../util/auth.js';
 
-router.post('/uploadImage', upload.single('file'), async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
-  try {
-    if (!req.file) {
-      return res.send(resultData(null, 400, '没有上传文件'));
-    }
-    // 构建文件的URL
-    const fileUrl = `https://boluo66.top/uploads/${req.file.filename}`;
-    const userId = req.user.id;
-    const noteParams = {
-      createBy: userId,
-      title: '未命名文档',
-    };
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction(); // 开始事务
-      let noteId = '';
-      if (req.body.noteId) {
-        noteId = req.body.noteId;
-      } else {
-        await connection.query('INSERT INTO note SET ?', [insertData(noteParams)]);
-        // 获取新插入的标签ID
-        const getNoteSql = `SELECT id FROM note ORDER BY create_time DESC LIMIT 1`;
-        const [noteResult] = await connection.query(getNoteSql);
-        const insertedNoteId = noteResult[0].id;
-        noteId = insertedNoteId;
-      }
-      const params = {
-        noteId: noteId,
-        url: fileUrl,
-      };
-      pool
-        .query('INSERT INTO note_images set ?', [insertData(params)])
-        .then(() => {
-          if (!req.body.noteId) {
-            res.send(resultData({ url: fileUrl, noteId: noteId }));
-          } else {
-            res.send(resultData({ url: fileUrl }));
-          }
-        })
-        .catch((err) => {
-          res.send(resultData(null, 500, '服务器内部错误: ' + err.message)); // 设置状态码为500
-        });
-    } catch (error) {
-      await connection.rollback(); // 回滚事务
-      res.send(resultData(null, 500, '服务器内部错误: ' + error.message)); // 设置状态码为500
-    } finally {
-      connection.release(); // 释放连接
-    }
-  } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误' + e));
-  }
-});
+// 归属校验、事务与建档逻辑在 handler 层(uploadNoteImage);游客拦截前置于 multer
+router.post('/uploadImage', blockVisitorUpload, upload.single('file'), noteLibraryHandle.uploadNoteImage);
 
 router.post('/updateNote', noteLibraryHandle.updateNote);
 router.post('/addNote', noteLibraryHandle.addNote);
@@ -91,6 +43,11 @@ router.post('/updateNoteTags', noteLibraryHandle.updateNoteTags);
 router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);
 router.post('/getNoteVersionDetail', noteLibraryHandle.getNoteVersionDetail);
 router.post('/restoreNoteVersion', noteLibraryHandle.restoreNoteVersion);
+
+router.post('/queryNoteTemplates', noteLibraryHandle.queryNoteTemplates);
+router.post('/getNoteTemplateDetail', noteLibraryHandle.getNoteTemplateDetail);
+router.post('/addNoteTemplate', noteLibraryHandle.addNoteTemplate);
+router.post('/delNoteTemplate', noteLibraryHandle.delNoteTemplate);
 
 import { assistNote } from '../router_handle/chatHandle.js';
 

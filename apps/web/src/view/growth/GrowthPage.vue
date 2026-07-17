@@ -330,6 +330,23 @@
     min-width: 0;
   }
   @media (max-width: 720px) {
+    .growth-page {
+      padding: 18px 12px 36px;
+    }
+    .growth-container {
+      gap: 12px;
+    }
+    .growth-title {
+      font-size: 21px;
+    }
+    .growth-panel {
+      padding: 14px;
+      border-radius: 14px;
+
+      .cal {
+        width: 100%;
+      }
+    }
     .growth-row {
       flex-direction: column;
     }

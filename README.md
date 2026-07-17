@@ -51,7 +51,7 @@
 粘贴链接自动抓取标题、描述、图标。左侧标签树导航，右侧卡片墙，多标签联合过滤。
 
 <p align="center">
-  <img src="apps/web/screenshots/bookmark.png" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/bookmark.png" alt="书签管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -60,7 +60,7 @@
 富文本｜Markdown 双模式编辑，可实时切换；文字、图片、表格、代码块一应俱全。多级文件夹归类，卡片/列表双视图，支持导出 PDF，移动端也能随时记录。
 
 <p align="center">
-  <img src="apps/web/screenshots/note1.png" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/note1.png" alt="笔记库" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -70,7 +70,7 @@
 按文件夹和文件类型集中管理资料，支持上传、搜索、在线预览、拖放整理、批量操作与关联标签；存储空间用量清晰可见，常用文件随时跨设备访问。
 
 <p align="center">
-  <img src="apps/web/screenshots/cloud-space.png" alt="云空间" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/cloud-space.png" alt="云空间" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -79,7 +79,7 @@
 书签、笔记、标签、文件跨模块统一搜，关键词 + 标签联合过滤，几秒定位。
 
 <p align="center">
-  <img src="apps/web/screenshots/search.png" alt="全局搜索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/search.png" alt="全局搜索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -88,7 +88,17 @@
 内置对话式 AI，可调用工具帮你查询书签、笔记、成长数据，支持联网搜索、深度思考与流式响应。
 
 <p align="center">
-  <img src="apps/web/screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+  <img src="apps/web/public/screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
+**💡 [共建轻笺](https://boluo66.top/co-build)**
+
+公开查看用户建议、开发者回复与真实进度，了解哪些需求正在规划、开发或已经上线；登录后也可以提交建议和参与投票。
+
+<p align="center">
+  <img src="apps/web/public/screenshots/require.png" alt="共建轻笺" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
 </p>
 
 ---
@@ -121,8 +131,8 @@
 支持桌面端 + 移动端，数据云端同步，走到哪跟到哪。
 
 <p align="center">
-  <img src="apps/web/screenshots/mobile1.png" alt="移动端" height="320" style="border-radius:12px;margin:0 4px" />
-  <img src="apps/web/screenshots/mobile2.png" alt="移动端深色" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile1.png" alt="移动端" height="320" style="border-radius:12px;margin:0 4px" />
+  <img src="apps/web/public/screenshots/mobile2.png" alt="移动端深色" height="320" style="border-radius:12px;margin:0 4px" />
 </p>
 
 ---

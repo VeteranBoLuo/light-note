@@ -328,6 +328,10 @@
       if (res?.status !== 200) return;
       detail.value.viewerVoted = Boolean(res.data?.voted);
       detail.value.voteCount = Number(res.data?.voteCount || 0);
+      recordOperation({
+        module: '共建轻笺',
+        operation: `${detail.value.viewerVoted ? '支持需求' : '取消支持需求'}【${detail.value.title.slice(0, 40)}】`,
+      });
     } catch (error) {
       console.error('更新建议投票失败:', error);
     }
@@ -339,7 +343,10 @@
       const res = await action();
       if (res?.status !== 200) return;
       message.success(t('coBuild.adminSaved'));
-      recordOperation({ module: '共建轻笺', operation });
+      recordOperation({
+        module: '共建轻笺',
+        operation: `${operation}【${String(detail.value?.title || detail.value?.id || '').slice(0, 40)}】`,
+      });
       await loadDetail();
     } catch (error) {
       console.error('处理共建建议失败:', error);
@@ -390,6 +397,7 @@
       if (res?.status !== 200) return;
       addition.value = '';
       message.success(t('coBuild.updateAdded'));
+      recordOperation({ module: '共建轻笺', operation: `补充产品建议【${detail.value.title.slice(0, 40)}】` });
       await loadDetail();
     } catch (error) {
       console.error('补充建议说明失败:', error);
