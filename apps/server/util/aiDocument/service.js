@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import pool from '../../db/index.js';
 import {
   buildAiTemporaryObjectKey,
+  createDownloadSignedUrl,
   createUploadSignedUrl,
   deleteObjectFromObs,
   getObjectBufferFromObs,
@@ -13,6 +14,7 @@ const TEMPORARY_RETENTION_HOURS = 24;
 const MAX_ACTIVE_TEMPORARY_SOURCES = 8;
 const MAX_ATTACHMENT_IDS = 1;
 const PARSE_TIMEOUT_MS = 180_000;
+const TEMPORARY_SOURCE_PREVIEW_EXPIRES_SECONDS = 2 * 60 * 60;
 const NO_TEXT_ERROR_CODE = 'NO_TEXT_CONTENT';
 const NON_RETRYABLE_PARSE_ERRORS = new Set([
   'FILE_CONTENT_INVALID',
@@ -28,6 +30,20 @@ function serviceError(code, message, status = 400) {
   error.code = code;
   error.status = status;
   return error;
+}
+
+function createTemporarySourcePreviewUrl(source) {
+  if (source?.source_type !== 'temporary' || !source?.object_key) return undefined;
+  try {
+    return createDownloadSignedUrl({
+      objectKey: source.object_key,
+      expires: TEMPORARY_SOURCE_PREVIEW_EXPIRES_SECONDS,
+    })?.url;
+  } catch (error) {
+    // 预览是来源卡片的增强能力，签名服务异常不能反过来阻断文件总结或问答。
+    console.error(`[AI 文档] 生成临时来源预览地址失败 source=${source.id}:`, error?.message || error);
+    return undefined;
+  }
 }
 
 function formatSource(row) {
@@ -421,12 +437,16 @@ export async function resolveDocumentAttachments({ userId, sourceIds, question }
   }
 
   const formatted = formatSource(source);
+  // 临时附件没有云空间 fileId，来源卡需要使用短时只读签名 URL 预览。
+  // 归属与过期校验已在此之前完成；绝不能根据客户端传入的 sourceId 直接签名。
+  const temporaryPreviewUrl = createTemporarySourcePreviewUrl(source);
   const metadataSource = {
     type: 'document',
     id: String(source.id),
     documentId: String(source.id),
     fileId: source.file_id == null ? undefined : String(source.file_id),
     sourceType: source.source_type,
+    url: temporaryPreviewUrl,
     title: source.file_name,
     excerpt:
       formatted.status === 'no_text'
@@ -490,6 +510,7 @@ export async function resolveDocumentAttachments({ userId, sourceIds, question }
         documentId: String(source.id),
         fileId: source.file_id == null ? undefined : String(source.file_id),
         sourceType: source.source_type,
+        url: temporaryPreviewUrl,
         title: source.file_name,
         excerpt: content.slice(0, 240),
         locatorType: chunk.locator_type,

@@ -5,9 +5,10 @@
       <BButton
         v-for="source in uniqueSources"
         :key="`${source.type}:${source.id}`"
-        :class="['ai-source', `is-${source.type}`]"
-        role="link"
-        tabindex="0"
+        :class="['ai-source', `is-${source.type}`, { 'is-static': !isNavigableSource(source) }]"
+        :role="isNavigableSource(source) ? 'link' : undefined"
+        :tabindex="isNavigableSource(source) ? 0 : -1"
+        :aria-disabled="!isNavigableSource(source)"
         @click="openSource(source)"
         @keydown.enter.prevent="openSource(source)"
         @keydown.space.prevent="openSource(source)"
@@ -19,7 +20,7 @@
           <strong>{{ source.title }}</strong>
           <small>{{ sourceSubtitle(source) }}</small>
         </span>
-        <span class="ai-source__action" aria-hidden="true">
+        <span v-if="isNavigableSource(source)" class="ai-source__action" aria-hidden="true">
           <SvgIcon :src="isExternalSource(source) ? icon.ai.sourceExternal : icon.ai.sourceArrow" size="15" />
         </span>
       </BButton>
@@ -34,19 +35,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { resolveAiSourceNavigation, type AiSource, type AiSourceNavigation } from './aiSourceNavigation';
 
-  export interface AiSource {
-    type: 'note' | 'bookmark' | 'file' | 'knowledge' | 'document';
-    id: string;
-    title: string;
-    url?: string;
-    excerpt?: string;
-    documentId?: string;
-    fileId?: string;
-    sourceType?: 'temporary' | 'cloud';
-    locatorType?: 'page' | 'section' | 'row' | 'paragraph';
-    locatorValue?: string;
-  }
+  export type { AiSource } from './aiSourceNavigation';
 
   const props = defineProps<{ sources: AiSource[] }>();
   const emit = defineEmits<{
@@ -80,23 +71,22 @@
     const parts = [source.locatorValue, source.excerpt].filter(Boolean);
     return parts.length ? parts.join(' · ') : typeLabel(source.type);
   };
-  const isExternalSource = (source: AiSource) => {
-    if (!source.url || source.type === 'note' || source.type === 'file' || source.type === 'knowledge') return false;
-    if (source.type === 'document' && source.fileId) return false;
-    return true;
-  };
+  const sourceNavigation = (source: AiSource) => resolveAiSourceNavigation(source);
+  const isNavigableSource = (source: AiSource) => sourceNavigation(source).kind !== 'none';
+  const isExternalSource = (source: AiSource) => sourceNavigation(source).kind === 'external';
   function navigateInsideApp(source: AiSource, target: string | { path: string; query?: Record<string, string> }) {
     emit('source-navigate', source);
     void router.push(target);
   }
 
   function openSource(source: AiSource) {
-    if (source.type === 'note') navigateInsideApp(source, `/noteLibrary/${source.id}`);
-    else if (source.type === 'file' || (source.type === 'document' && source.fileId))
-      navigateInsideApp(source, { path: '/cloudSpace', query: { fileName: source.title } });
-    else if (source.type === 'knowledge') navigateInsideApp(source, { path: '/help', query: { article: source.id } });
-    else if (source.url) window.open(source.url, '_blank', 'noopener,noreferrer');
-    else navigateInsideApp(source, `/manage/editBookmark/${source.id}`);
+    const navigation: AiSourceNavigation = sourceNavigation(source);
+    if (navigation.kind === 'none') return;
+    if (navigation.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigateInsideApp(source, navigation.target);
   }
 </script>
 
@@ -134,9 +124,13 @@
       background-color 0.15s ease;
   }
 
-  .ai-source:hover {
+  .ai-source:not(.is-static):hover {
     border-color: color-mix(in srgb, var(--source-color) 38%, var(--surface-border-color));
     background: color-mix(in srgb, var(--source-color) 5%, var(--card-background));
+  }
+
+  .ai-source.is-static {
+    cursor: default;
   }
 
   .ai-source.is-note {

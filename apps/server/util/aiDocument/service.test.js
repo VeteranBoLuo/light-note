@@ -5,11 +5,13 @@ const getObjectMetadataFromObs = vi.fn();
 const getObjectBufferFromObs = vi.fn();
 const deleteObjectFromObs = vi.fn();
 const buildAiTemporaryObjectKey = vi.fn();
+const createDownloadSignedUrl = vi.fn();
 const createUploadSignedUrl = vi.fn();
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../obsClient.js', () => ({
   buildAiTemporaryObjectKey,
+  createDownloadSignedUrl,
   createUploadSignedUrl,
   deleteObjectFromObs,
   getObjectBufferFromObs,
@@ -31,6 +33,7 @@ describe('AI 文档服务', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('只允许读取当前用户拥有且已解析完成的附件', async () => {
+    createDownloadSignedUrl.mockReturnValue({ url: 'https://download.example/source-1', expiresIn: 7200 });
     pool.query
       .mockResolvedValueOnce([
         [
@@ -40,6 +43,7 @@ describe('AI 文档服务', () => {
             source_type: 'temporary',
             file_id: null,
             file_name: 'guide.md',
+            object_key: 'ai-temp/user-1/source-1/guide.md',
             status: 'ready',
             expires_at: new Date(Date.now() + 60_000),
           },
@@ -72,9 +76,19 @@ describe('AI 文档服务', () => {
     expect(result.text).toContain('轻笺支持文件解析');
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]).toEqual(
-      expect.objectContaining({ type: 'document', id: 'source-1', title: 'guide.md', locatorValue: '功能说明' }),
+      expect.objectContaining({
+        type: 'document',
+        id: 'source-1',
+        title: 'guide.md',
+        locatorValue: '功能说明',
+        url: 'https://download.example/source-1',
+      }),
     );
     expect(pool.query.mock.calls[0][1]).toEqual(['source-1', 'user-1']);
+    expect(createDownloadSignedUrl).toHaveBeenCalledWith({
+      objectKey: 'ai-temp/user-1/source-1/guide.md',
+      expires: 7200,
+    });
   });
 
   it('附件归属不匹配时不返回任何内容', async () => {
@@ -82,6 +96,84 @@ describe('AI 文档服务', () => {
     await expect(
       resolveDocumentAttachments({ userId: 'user-2', sourceIds: ['source-1'], question: '读取文件' }),
     ).rejects.toThrow(/ATTACHMENT_NOT_FOUND/);
+    expect(createDownloadSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('云来源保留 fileId，不生成临时附件预览签名 URL', async () => {
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'source-cloud',
+            user_id: 'user-1',
+            source_type: 'cloud',
+            file_id: 9,
+            file_name: 'cloud.md',
+            object_key: 'files/user-1/cloud.md',
+            status: 'ready',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[]]);
+
+    const result = await resolveDocumentAttachments({
+      userId: 'user-1',
+      sourceIds: ['source-cloud'],
+      question: '总结',
+    });
+
+    expect(result.sources).toEqual([
+      expect.objectContaining({ type: 'document', id: 'source-cloud', fileId: '9', url: undefined }),
+    ]);
+    expect(createDownloadSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('临时来源预览签名失败时仍可继续总结文件', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    createDownloadSignedUrl.mockImplementationOnce(() => {
+      throw new Error('sign unavailable');
+    });
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'source-sign-failed',
+            user_id: 'user-1',
+            source_type: 'temporary',
+            file_id: null,
+            file_name: 'guide.md',
+            object_key: 'ai-temp/user-1/source-sign-failed/guide.md',
+            status: 'ready',
+            expires_at: new Date(Date.now() + 60_000),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            chunk_index: 0,
+            content: '即使预览签名失败，这段正文仍应正常进入回答。',
+            locator_type: 'section',
+            locator_value: '正文',
+          },
+        ],
+      ]);
+
+    const result = await resolveDocumentAttachments({
+      userId: 'user-1',
+      sourceIds: ['source-sign-failed'],
+      question: '总结',
+    });
+
+    expect(result.text).toContain('即使预览签名失败');
+    expect(result.sources).toEqual([
+      expect.objectContaining({ type: 'document', id: 'source-sign-failed', url: undefined }),
+    ]);
+    expect(consoleError).toHaveBeenCalledWith(
+      '[AI 文档] 生成临时来源预览地址失败 source=source-sign-failed:',
+      'sign unavailable',
+    );
+    consoleError.mockRestore();
   });
 
   it('无文字图片映射为 no_text，仍允许发送并明确保留原文件操作', async () => {
