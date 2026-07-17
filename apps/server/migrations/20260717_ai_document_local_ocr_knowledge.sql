@@ -21,8 +21,25 @@ UPDATE knowledge_base
 SET content = @ai_document_content, category = '帮助中心', status = 'public', type = 'html', sort = 97, updated_by = NULL
 WHERE id = @ai_document_id OR title = @ai_document_title;
 
+SET @ocr_faq_id = 'd41b2c4e-4dc4-4baf-872b-620c9a393390';
+SET @ocr_faq_title = '图片型 PDF 与图片 OCR：为什么解析不到文字';
+SET @ocr_faq_content = '<h2>图片型 PDF 为什么没有文字</h2><p>扫描件或由截图生成的 PDF 通常没有可复制的文字层。轻笺会先尝试读取文字层；内容为空时，再在服务器本机将页面转成图片并用 Tesseract OCR 识别中文、英文和数字。</p><h2>支持范围</h2><p>可以直接上传 PDF、PNG、JPG、JPEG 和 WebP。单个附件不超过 20MB；图片型 PDF 默认最多 OCR 20 页，单张图片默认不超过 2400 万像素。</p><h2>仍然解析失败怎么办</h2><ul><li>确认文件没有加密、损坏或超过页数、体积、像素限制。</li><li>模糊、倾斜、低对比度、手写字和复杂表格可能无法稳定识别，建议换用更清晰的原文件。</li><li>点击附件卡片上的“重试”；如果仍失败，可把关键页面导出为清晰的 PNG 或 JPG 后重新上传。</li></ul><p>OCR 结果不能保证逐字准确。恢复码、密钥、账号和金额等关键内容必须回看原文件核对。</p>';
+
+INSERT INTO knowledge_base
+  (id, title, content, category, status, type, sort, created_by, updated_by)
+SELECT
+  @ocr_faq_id, @ocr_faq_title, @ocr_faq_content,
+  'FAQ', 'public', 'html', 100, NULL, NULL
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM knowledge_base WHERE title = @ocr_faq_title)
+  AND NOT EXISTS (SELECT 1 FROM knowledge_base WHERE id = @ocr_faq_id);
+
+UPDATE knowledge_base
+SET content = @ocr_faq_content, category = 'FAQ', status = 'public', type = 'html', sort = 100, updated_by = NULL
+WHERE id = @ocr_faq_id OR title = @ocr_faq_title;
+
 COMMIT;
 
 SELECT id, title, category, status, type, sort
 FROM knowledge_base
-WHERE id = @ai_document_id OR title = @ai_document_title;
+WHERE id IN (@ai_document_id, @ocr_faq_id) OR title IN (@ai_document_title, @ocr_faq_title);
