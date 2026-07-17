@@ -114,7 +114,7 @@
     settleConversationInteraction,
     shouldPersistConversationMessage,
   } from '@/components/aiAssistant/aiConversationState';
-  import { mergePromptSuggestion } from '@/components/aiAssistant/attachmentActions';
+  import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
   import { isEditableAttachmentTool, type AiAttachmentDirectActionName } from '@/config/aiTools';
   import type {
     AiAgentInteraction,
@@ -855,13 +855,15 @@
     }
   };
 
-  // 处理推荐点击
-  const handleRecommendationClick = (item: string) => {
-    userInput.value = mergePromptSuggestion(userInput.value, item);
-    nextTick(() => {
-      chatInputRef.value?.focus();
-    });
-  };
+  // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
+  const handleRecommendationClick = createQuickQuestionDispatcher({
+    isBusy: () => isLoading.value,
+    setInput: (value) => {
+      userInput.value = value;
+    },
+    afterInputChange: () => nextTick(),
+    send: sendMessage,
+  });
 
   // 编辑用户消息：把该条内容回填到输入框并聚焦，不自动发送（让用户改完再发）
   const handleEditMessage = (content: string, attachedContexts: AiResourceContext[] = []) => {
