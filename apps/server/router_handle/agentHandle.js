@@ -46,7 +46,7 @@ import {
   AgentInteractionError,
 } from '../util/agent/interactionStore.js';
 import {
-  createFolderResolutionInteraction,
+  createToolResolutionInteraction,
   resolveAgentInteractionAction,
 } from '../util/agent/interactionResolvers.js';
 import * as aiQuota from '../util/aiQuota.js';
@@ -151,7 +151,13 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TOOL_ACTION_PENDING',
   'TYPE_REQUIRED',
   'URL_REQUIRED',
+  'EMPTY',
+  'TOO_LONG',
   'URL_TOO_LONG',
+  'INVALID_FORMAT',
+  'UNSUPPORTED_PROTOCOL',
+  'CREDENTIALS_NOT_ALLOWED',
+  'CANDIDATE_CONFIRMATION_REQUIRED',
   'USER_REQUIRED',
 ]);
 
@@ -915,7 +921,7 @@ export async function agentChat(req, res) {
             } catch (error) {
               try {
                 if (!canUseInteractions) throw error;
-                const created = await createFolderResolutionInteraction({
+                const created = await createToolResolutionInteraction({
                   error,
                   toolName: tc.function.name,
                   fallbackArgs: args,
@@ -940,7 +946,7 @@ export async function agentChat(req, res) {
           if (pendingInteraction) {
             result = {
               status: 'interaction_required',
-              summary: '目标文件夹需要由用户选择处理方式；选择本身不会立即写入数据。',
+              summary: pendingInteraction.description || '需要由用户选择下一步处理方式；选择本身不会立即写入数据。',
               dataSummary: '等待用户选择',
               params: args,
             };
@@ -1562,13 +1568,13 @@ export async function prepareAgentToolAction(req, res) {
       });
     } catch (error) {
       const created = supportsAgentInteractions(req.body?.clientCapabilities)
-        ? await createFolderResolutionInteraction({
-        error,
-        toolName,
-        fallbackArgs: rawArgs,
-        ownerKey: identity.ownerKey,
-        sessionId: getSessionId(session),
-        context: confirmationContext(req, identity),
+        ? await createToolResolutionInteraction({
+            error,
+            toolName,
+            fallbackArgs: rawArgs,
+            ownerKey: identity.ownerKey,
+            sessionId: getSessionId(session),
+            context: confirmationContext(req, identity),
           })
         : null;
       if (!created?.interaction) throw error;

@@ -134,7 +134,13 @@
                     <div class="bookmark-meta">
                       <div class="bookmark-name">{{ bookmarkItem.name }}</div>
                       <div class="bookmark-url" :title="bookmarkItem.url">
-                        <a :href="withProtocol(bookmarkItem.url)" target="_blank" @click.stop>{{ bookmarkItem.url }}</a>
+                        <a
+                          :href="withProtocol(bookmarkItem.url)"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          @click.stop="handleStoredBookmarkClick($event, bookmarkItem.url)"
+                          >{{ bookmarkItem.url }}</a
+                        >
                       </div>
                       <div v-if="bookmarkItem.hasSnapshot || bookmarkItem.hasSummary" class="bm-badges">
                         <BookmarkCapabilityBadge
@@ -245,7 +251,13 @@
                 </template>
                 <template v-else-if="column.key === 'url'">
                   <div class="text-hidden">
-                    <a :href="withProtocol(text)" target="_blank">{{ text }}</a>
+                    <a
+                      :href="withProtocol(text)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      @click="handleStoredBookmarkClick($event, text)"
+                      >{{ text }}</a
+                    >
                   </div>
                 </template>
                 <template v-else-if="column.key === 'operation'">
@@ -334,6 +346,7 @@
   import { useBookmarkManage } from '@/composables/useBookmarkManage.ts';
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { resolveBookmarkUrlInput } from '@lightnote/shared';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -669,9 +682,22 @@
   // 兜底展示层:新增/编辑书签时后端已统一补协议头,但存量数据可能是补全前存的裸域名;
   // <a :href> 遇到裸域名会当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
   function withProtocol(url: string) {
-    const trimmed = String(url || '').trim();
-    if (!trimmed) return trimmed;
-    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return resolveBookmarkUrlInput(url, { allowTextExtraction: false }).canonicalUrl;
+  }
+
+  function handleStoredBookmarkClick(event: MouseEvent, url: string) {
+    if (withProtocol(url)) return;
+    event.preventDefault();
+    message.warning(t('bookmarkUrl.invalid'));
+  }
+
+  function escapeHtml(value: unknown) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   type BUploadExpose = { open: () => void };
@@ -717,7 +743,9 @@
       for (let index = 0; index < bookmarksToImport.length; index += 8) {
         const batch = bookmarksToImport.slice(index, index + 8);
         results.push(
-          ...(await Promise.allSettled(batch.map((bm: any) => apiBasePost('/api/bookmark/addBookmark', bm)))),
+          ...(await Promise.allSettled(
+            batch.map((bm: any) => apiBasePost('/api/bookmark/addBookmark', bm, { silent: true })),
+          )),
         );
       }
       results.forEach((result: any, index: number) => {
@@ -735,7 +763,10 @@
       await init();
       if (failedCount > 0) {
         const errorText = failedItems
-          .map((item) => `${item.name} (${item.url}): <span style="color: #ff5722">${item.error}</span>`)
+          .map(
+            (item) =>
+              `${escapeHtml(item.name)} (${escapeHtml(item.url)}): <span style="color: #ff5722">${escapeHtml(item.error)}</span>`,
+          )
           .join('<br/>');
         Alert.alert({
           title: `导入完成 (${successCount}成功/${failedCount}失败)`,
@@ -780,9 +811,9 @@
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (res.status === 200) {
-        const { parsedTotal, createdTags, createdBookmarks, boundRelations } = res.data || {};
+        const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls } = res.data || {};
         message.success(
-          `导入完成：解析 ${parsedTotal || 0}，新标签 ${createdTags || 0}，新书签 ${createdBookmarks || 0}，建立关联 ${boundRelations || 0}`,
+          `导入完成：解析 ${parsedTotal || 0}，新标签 ${createdTags || 0}，新书签 ${createdBookmarks || 0}，建立关联 ${boundRelations || 0}${skippedInvalidUrls ? `，跳过无效地址 ${skippedInvalidUrls}` : ''}`,
         );
         recordOperation({
           module: '书签管理',

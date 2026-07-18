@@ -82,6 +82,7 @@
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
 
   const { t } = useI18n();
   const MAX_TAGS = 4; // 与后端 addBookmark 上限一致
@@ -144,7 +145,10 @@
     if (!url || aiRunning.value) return;
     aiRunning.value = true;
     try {
-      const res = await apiBasePost('/api/chat/generateBookmarkMeta', { url });
+      const urlResult = await preflightBookmarkUrl(url, { checkLiveness: false });
+      if (!urlResult.ok || !urlResult.url) return;
+      form.url = urlResult.url;
+      const res = await apiBasePost('/api/chat/generateBookmarkMeta', { url: form.url });
       if (res?.status === 200 && res.data) {
         if (!form.name && res.data.name) form.name = res.data.name;
         if (!form.description && res.data.description) form.description = res.data.description;
@@ -158,6 +162,7 @@
           ...OPERATION_LOG_MAP.quickSave.generateMeta,
           operation: `${source === 'auto' ? '自动' : '重新'}智能识别书签信息成功【${getSafeBookmarkLabel(url)}】`,
         });
+        if (res.data.metadataSource === 'inferred') message.warning(t('bookmarkMeta.inferredWarning'));
       }
     } catch {
       /* AI 失败静默,用户仍可手动填 */
@@ -201,6 +206,9 @@
     if (!form.url.trim()) return message.warning(t('quickSave.needUrl'));
     saving.value = true;
     try {
+      const urlResult = await preflightBookmarkUrl(form.url, { checkLiveness: true });
+      if (!urlResult.ok || !urlResult.url) return;
+      form.url = urlResult.url;
       const res = await apiBasePost('/api/bookmark/addBookmark', {
         name: form.name.trim(),
         url: form.url.trim(),

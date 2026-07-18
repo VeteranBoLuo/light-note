@@ -25,7 +25,7 @@
         <div class="lh-list">
           <div v-for="d in summary.suspect" :key="d.id" class="lh-item">
             <div class="lh-item-main">
-              <a class="lh-item-name" :href="normalizeUrl(d.url)" target="_blank" rel="noopener">🔗 {{ d.name }}</a>
+              <a class="lh-item-name" :href="normalizeUrl(d.url) || undefined" target="_blank" rel="noopener">🔗 {{ d.name }}</a>
               <div class="lh-item-url">{{ d.url }}</div>
             </div>
             <div class="lh-item-actions">
@@ -58,6 +58,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { resolveBookmarkUrlInput } from '@lightnote/shared';
 
   const visible = defineModel<boolean>('visible');
 
@@ -74,7 +75,7 @@
   const allChecked = computed(() => summary.value.total > 0 && summary.value.checked >= summary.value.total);
 
   function normalizeUrl(u: string) {
-    return /^https?:\/\//i.test(u) ? u : 'https://' + u;
+    return resolveBookmarkUrlInput(u, { allowTextExtraction: false }).canonicalUrl;
   }
   function applySummary(d: any) {
     summary.value = { total: d.total || 0, checked: d.checked || 0, running: !!d.running, suspect: d.suspect || [] };

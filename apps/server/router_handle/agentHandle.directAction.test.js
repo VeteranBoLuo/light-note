@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   finalizeToolConfirmationAction: vi.fn(),
   executeImageNote: vi.fn(),
   getOrCreateSession: vi.fn(),
-  createFolderResolutionInteraction: vi.fn(),
+  createToolResolutionInteraction: vi.fn(),
   resolveAgentInteractionAction: vi.fn(),
   inspectAgentInteractionResponse: vi.fn(),
   claimAgentInteractionResponse: vi.fn(),
@@ -70,7 +70,7 @@ vi.mock('../util/agent/interactionStore.js', () => {
 });
 
 vi.mock('../util/agent/interactionResolvers.js', () => ({
-  createFolderResolutionInteraction: mocks.createFolderResolutionInteraction,
+  createToolResolutionInteraction: mocks.createToolResolutionInteraction,
   resolveAgentInteractionAction: mocks.resolveAgentInteractionAction,
 }));
 
@@ -317,7 +317,7 @@ describe('prepareAgentToolAction', () => {
 
     await prepareAgentToolAction(req, res);
 
-    expect(mocks.createFolderResolutionInteraction).not.toHaveBeenCalled();
+    expect(mocks.createToolResolutionInteraction).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: { code: 'FOLDER_NOT_FOUND' }, status: 404 }),
@@ -329,7 +329,7 @@ describe('prepareAgentToolAction', () => {
       code: 'FOLDER_NOT_FOUND',
     });
     mocks.prepareArgs.mockRejectedValueOnce(folderError);
-    mocks.createFolderResolutionInteraction.mockResolvedValueOnce({
+    mocks.createToolResolutionInteraction.mockResolvedValueOnce({
       interaction: {
         token: 'interaction-token',
         id: 'interaction-1',
@@ -351,7 +351,7 @@ describe('prepareAgentToolAction', () => {
 
     await prepareAgentToolAction(req, res);
 
-    expect(mocks.createFolderResolutionInteraction).toHaveBeenCalledWith(
+    expect(mocks.createToolResolutionInteraction).toHaveBeenCalledWith(
       expect.objectContaining({ toolName: 'save_attachment_to_cloud', ownerKey: 'user:user-1' }),
     );
     expect(res.send).toHaveBeenCalledWith(

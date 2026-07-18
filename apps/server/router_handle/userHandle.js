@@ -23,6 +23,7 @@ import {
 import { recordAdminContextAudit } from '../util/adminContextAudit.js';
 import { isSelfTraffic } from '../util/logExclude.js';
 import { recordServerOperation } from '../util/operationLog.js';
+import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -1060,11 +1061,7 @@ export const importData = async (req, res) => {
     const [tagRows] = await connection.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
     const [bmRows] = await connection.query('SELECT name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [userId]);
     const [noteRows] = await connection.query('SELECT title, content FROM note WHERE create_by = ? AND del_flag = 0', [userId]);
-    const normUrl = (u) => {
-      let s = String(u || '').trim();
-      if (s && !/^https?:\/\//i.test(s)) s = 'https://' + s;
-      return s;
-    };
+    const normUrl = (u) => inspectBookmarkUrl(u, { allowTextExtraction: false }).canonicalUrl;
     const noteKey = (t, c) => `${t}\u0000${c}`;
     const tagMap = new Map(tagRows.map((r) => [r.name, r.id]));
     const existUrls = new Set(bmRows.map((r) => normUrl(r.url)).filter(Boolean));
@@ -1084,7 +1081,7 @@ export const importData = async (req, res) => {
 
     const stat = {
       tags: { added: 0, reused: 0 },
-      bookmarks: { added: 0, skipped: 0 },
+      bookmarks: { added: 0, skipped: 0, invalid: 0 },
       notes: { added: 0, skipped: 0 },
       files: { skipped: 0 },
     };
@@ -1105,7 +1102,11 @@ export const importData = async (req, res) => {
     for (const b of Array.isArray(data.bookmarks) ? data.bookmarks : []) {
       const url = normUrl(b?.url);
       const name = String(b?.name || '').trim();
-      if (!name && !url) continue;
+      if (!url) {
+        stat.bookmarks.skipped++;
+        stat.bookmarks.invalid++;
+        continue;
+      }
       const bmName = name || url;
       // 与 addBookmark 的产品规则一致:同一用户下「网址」或「书签名」重复都跳过(避免重复收藏 / 同名冲突)
       if ((url && existUrls.has(url)) || (bmName && existNames.has(bmName))) {

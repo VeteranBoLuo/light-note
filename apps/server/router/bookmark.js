@@ -30,6 +30,8 @@ router.post('/updateTag', bookmarkHandle.updateTag);
 
 router.post('/addBookmark', bookmarkHandle.addBookmark);
 
+router.post('/resolveUrl', bookmarkHandle.resolveBookmarkUrl);
+
 router.post('/getBookmarkDetail', bookmarkHandle.getBookmarkDetail);
 
 router.post('/delBookmark', bookmarkHandle.delBookmark);

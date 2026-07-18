@@ -282,7 +282,12 @@ async function main() {
     }
   } finally {
     await browser.close();
-    server.close();
+    // 代理到线上接口的 keep-alive 连接可能在非关键页超时后继续占住事件循环。
+    // 先主动断开存量连接，再等待监听器完全关闭，避免构建已经完成却一直无法退出。
+    await new Promise((resolve) => {
+      server.close(resolve);
+      server.closeAllConnections?.();
+    });
   }
 }
 

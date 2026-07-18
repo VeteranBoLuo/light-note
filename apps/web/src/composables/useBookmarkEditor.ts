@@ -8,6 +8,7 @@ import { recordOperation, refreshBookmarkIcon } from '@/api/commonApi';
 import { blockGuestWrite } from '@/composables/useGuestGuard';
 import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
 import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
+import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
 import { useI18n } from 'vue-i18n';
 
 export interface BookmarkEditorData {
@@ -29,12 +30,6 @@ export interface BookmarkTagOption {
 export interface BookmarkEditorErrors {
   name: string;
   url: string;
-}
-
-function normalizeBookmarkUrl(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed || /^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
 }
 
 export function useBookmarkEditor() {
@@ -61,6 +56,7 @@ export function useBookmarkEditor() {
   const refreshingIcon = ref(false);
   const ready = ref(false);
   const initialSignature = ref('');
+  const initialUrl = ref('');
   const fieldErrors = reactive<BookmarkEditorErrors>({ name: '', url: '' });
   let allowLeave = false;
 
@@ -91,6 +87,7 @@ export function useBookmarkEditor() {
 
   function markPristine() {
     initialSignature.value = editorSignature.value;
+    initialUrl.value = bookmarkData.value.url;
   }
 
   async function getTagSelect(): Promise<BookmarkTagOption[]> {
@@ -129,18 +126,26 @@ export function useBookmarkEditor() {
       return;
     if (loading.value || saving.value || !validate()) return;
 
-    bookmarkData.value.name = bookmarkData.value.name.trim();
-    bookmarkData.value.url = normalizeBookmarkUrl(bookmarkData.value.url);
-    const params: Record<string, any> = JSON.parse(JSON.stringify(bookmarkData.value));
-    let endpoint = '/api/bookmark/updateBookmark';
-    if (handleType.value === 'add') {
-      endpoint = '/api/bookmark/addBookmark';
-      params.userId = user.id;
-      params.saveSnapshot = saveSnapshot.value;
-    }
-
     submitting.value = true;
     try {
+      const urlResult = await preflightBookmarkUrl(bookmarkData.value.url, {
+        checkLiveness: handleType.value === 'add' || bookmarkData.value.url.trim() !== initialUrl.value.trim(),
+        showError: false,
+      });
+      if (!urlResult.ok || !urlResult.url) {
+        if (!urlResult.cancelled) fieldErrors.url = urlResult.message || t('bookmarkUrl.invalid');
+        return;
+      }
+      fieldErrors.url = '';
+      bookmarkData.value.name = bookmarkData.value.name.trim();
+      bookmarkData.value.url = urlResult.url;
+      const params: Record<string, any> = JSON.parse(JSON.stringify(bookmarkData.value));
+      let endpoint = '/api/bookmark/updateBookmark';
+      if (handleType.value === 'add') {
+        endpoint = '/api/bookmark/addBookmark';
+        params.userId = user.id;
+        params.saveSnapshot = saveSnapshot.value;
+      }
       const res = await apiBasePost(endpoint, params);
       if (res.status !== 200) return;
       recordOperation({

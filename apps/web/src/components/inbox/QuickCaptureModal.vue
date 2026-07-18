@@ -86,8 +86,9 @@
     buildCaptureFileMeta,
     buildMarkdownNotePayload,
     detectInboxCaptureType,
-    normalizeCaptureUrl,
+    hasCaptureBookmarkCandidate,
   } from '@/utils/inboxCapture';
+  import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { createTodo, type TodoPayload } from '@/api/todoApi';
@@ -120,8 +121,7 @@
   const capturePlaceholder = computed(() =>
     captureType.value === 'bookmark' ? t('inbox.urlPlaceholder') : t('inbox.textPlaceholder'),
   );
-  const parsedUrl = computed(() => normalizeCaptureUrl(content.value));
-  const validUrl = computed(() => Boolean(parsedUrl.value));
+  const validUrl = computed(() => hasCaptureBookmarkCandidate(content.value));
   const canSubmit = computed(() =>
     captureType.value === 'file'
       ? files.value.length > 0
@@ -174,7 +174,14 @@
   }
 
   async function collectBookmark() {
-    const url = parsedUrl.value as URL;
+    const urlResult = await preflightBookmarkUrl(content.value, { checkLiveness: true });
+    if (!urlResult.ok || !urlResult.url) {
+      const error = new Error(urlResult.message || t('bookmarkUrl.invalid')) as Error & { code?: string };
+      if (urlResult.cancelled) error.code = 'BOOKMARK_URL_CANCELLED';
+      throw error;
+    }
+    const url = new URL(urlResult.url);
+    content.value = urlResult.url;
     const res = await apiBasePost('/api/bookmark/addBookmark', {
       name: url.hostname.replace(/^www\./, '') || url.href,
       url: url.href,
@@ -256,7 +263,7 @@
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
-      message.error(error?.message || t('inbox.captureFailed'));
+      if (error?.code !== 'BOOKMARK_URL_CANCELLED') message.error(error?.message || t('inbox.captureFailed'));
     } finally {
       submitting.value = false;
     }

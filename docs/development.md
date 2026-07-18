@@ -258,6 +258,7 @@ import icon from "@/config/icon.ts";
 - [ ] 状态码和 `resultData()` 格式正确
 - [ ] 多表写入使用事务
 - [ ] 用户输入全部参数化
+- [ ] 新增或修改书签入口必须复用共享 URL 解析器与服务端 `util/bookmarkUrl.js`；禁止自行用正则补 `https://`，AI 不得决定最终 URL
 - [ ] 权限判断正确（登录态、角色、用户隔离）
 - [ ] INSERT 使用正确的函数（insertData / snakeCaseKeys）
 - [ ] 笔记、书签、标签、回收站恢复和知识库写入复用 `util/services/`，页面 handler 与 Agent 工具不得各写一套 SQL 和副作用

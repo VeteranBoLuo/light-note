@@ -237,7 +237,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
  *  - 'skip':内网/被 SSRF 拦截
  * 流式请求:拿到状态码即丢弃响应体,不下载正文。复用 fetchWebMeta 的 guardedLookup agents 做 SSRF 防护。
  */
-export async function checkUrlLiveness(rawUrl) {
+export async function checkUrlLiveness(rawUrl, { timeout = LIVENESS_TIMEOUT } = {}) {
   let input = String(rawUrl || '').trim();
   if (!input) return { status: 'unknown', code: 'EMPTY' };
   if (!/^https?:\/\//i.test(input)) input = 'https://' + input;
@@ -252,7 +252,7 @@ export async function checkUrlLiveness(rawUrl) {
   if (net.isIP(literalHost) && isPrivateIp(literalHost)) return { status: 'skip', code: 'BLOCKED' };
   try {
     const resp = await axios.get(target.href, {
-      timeout: LIVENESS_TIMEOUT,
+      timeout,
       maxRedirects: MAX_REDIRECTS,
       validateStatus: () => true, // 接受所有状态码,自行按 code 判定
       httpAgent,

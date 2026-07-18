@@ -6,16 +6,17 @@ import { RESOURCE_TYPE, insertResourceTagRelations, validateUserTags } from '../
 import { archiveBookmark } from '../snapshot.js';
 import { ensureTag } from './tagService.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
+import { inspectBookmarkUrl, requireBookmarkUrl } from '../bookmarkUrl.js';
 
 export function normalizeBookmarkUrl(value) {
-  const url = String(value || '').trim();
-  if (!url) return '';
-  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  return requireBookmarkUrl(value).canonicalUrl;
 }
 
 export function shouldResetBookmarkIcon(existingUrl, nextUrl) {
-  const existing = normalizeBookmarkUrl(existingUrl);
-  const next = normalizeBookmarkUrl(nextUrl);
+  const existingResolution = inspectBookmarkUrl(existingUrl, { allowTextExtraction: false });
+  const nextResolution = inspectBookmarkUrl(nextUrl, { allowTextExtraction: false });
+  const existing = existingResolution.canonicalUrl || String(existingUrl || '').trim();
+  const next = nextResolution.canonicalUrl || String(nextUrl || '').trim();
   try {
     // favicon 通常跟站点主机绑定。同域名仅路径、参数或 http/https 变化时继续复用，
     // 域名（含端口）变化才立即判定旧图标失效。
@@ -50,8 +51,7 @@ export async function createBookmark({
   suppressUserRewards = false,
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
-  const url = normalizeBookmarkUrl(bookmark.url);
-  if (!url) throw new Error('URL_REQUIRED: 网址不能为空');
+  const url = requireBookmarkUrl(bookmark.url).canonicalUrl;
   let name = String(bookmark.name || '').trim();
   let description = String(bookmark.description || '').trim();
   if (fillMetadata && (!name || !description)) {

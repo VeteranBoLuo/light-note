@@ -3,6 +3,7 @@ import {
   buildCaptureFileMeta,
   buildMarkdownNotePayload,
   detectInboxCaptureType,
+  hasCaptureBookmarkCandidate,
   normalizeCaptureUrl,
 } from './inboxCapture';
 
@@ -12,6 +13,13 @@ describe('inboxCapture', () => {
     expect(normalizeCaptureUrl('https://boluo66.top')?.protocol).toBe('https:');
     expect(normalizeCaptureUrl('javascript:alert(1)')).toBeNull();
     expect(normalizeCaptureUrl('这是一段普通文字')).toBeNull();
+  });
+
+  it('分享文案先识别为书签候选，但不在未确认时静默选定地址', () => {
+    const sharedText = '网址放这里：https:// boluo66.top，欢迎体验';
+    expect(hasCaptureBookmarkCandidate(sharedText)).toBe(true);
+    expect(detectInboxCaptureType(sharedText)).toBe('bookmark');
+    expect(normalizeCaptureUrl(sharedText)).toBeNull();
   });
 
   it('文件优先于网址，普通文本识别为 Markdown 笔记', () => {

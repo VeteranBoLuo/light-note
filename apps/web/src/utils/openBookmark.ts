@@ -1,10 +1,10 @@
 import { useUserStore } from '@/store';
+import { resolveBookmarkUrlInput } from '@lightnote/shared';
+import message from '@/components/base/BasicComponents/BMessage/BMessage';
+import i18n from '@/i18n';
 
-/** 裸域名归一化:无协议头则补 https://(与各调用点原先的处理一致) */
 function normalizeUrl(url: string): string {
-  const u = String(url || '').trim();
-  if (!u) return u;
-  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+  return resolveBookmarkUrlInput(url, { allowTextExtraction: false }).canonicalUrl;
 }
 
 /**
@@ -15,7 +15,10 @@ function normalizeUrl(url: string): string {
  */
 export function openBookmarkUrl(url: string): void {
   const finalUrl = normalizeUrl(url);
-  if (!finalUrl) return;
+  if (!finalUrl) {
+    message.warning(i18n.global.t('bookmarkUrl.invalid'));
+    return;
+  }
   const openInCurrent = (useUserStore().preferences as any)?.openBookmarkIn === 'current';
   if (openInCurrent) {
     window.location.href = finalUrl;

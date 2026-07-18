@@ -8,13 +8,14 @@ const mocks = vi.hoisted(() => ({
   reserve: vi.fn(),
   reconcile: vi.fn(),
   poolQuery: vi.fn(),
+  suggestBookmarkMeta: vi.fn(),
 }));
 
 vi.mock('../util/common.js', () => ({
   resultData: (data, status = 200, message = '') => ({ data, status, message }),
 }));
 vi.mock('../db/index.js', () => ({ default: { query: mocks.poolQuery } }));
-vi.mock('../util/aiOrganize.js', () => ({ suggestBookmarkMeta: vi.fn() }));
+vi.mock('../util/aiOrganize.js', () => ({ suggestBookmarkMeta: mocks.suggestBookmarkMeta }));
 vi.mock('../util/agent/deepseekClient.js', () => ({
   getActiveProviderInfo: mocks.getActiveProviderInfo,
   requestDeepSeek: mocks.requestDeepSeek,
@@ -25,7 +26,7 @@ vi.mock('../util/aiQuota.js', () => ({
   reconcile: mocks.reconcile,
 }));
 
-const { assistNote } = await import('./chatHandle.js');
+const { assistNote, generateBookmarkMeta } = await import('./chatHandle.js');
 
 class MockResponse extends EventEmitter {
   writableEnded = false;
@@ -112,5 +113,50 @@ describe('assistNote SSE', () => {
     expect(res.writes.at(-1)).toBe('data: [DONE]\n\n');
     expect(heartbeatSpy).toHaveBeenCalledWith(expect.any(Function), 12_000);
     heartbeatSpy.mockRestore();
+  });
+});
+
+describe('generateBookmarkMeta URL gate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.poolQuery.mockResolvedValue([[]]);
+    mocks.suggestBookmarkMeta.mockResolvedValue({ name: '示例', description: '示例站点' });
+  });
+
+  it('非法地址不调用数据库、网页抓取或 AI', async () => {
+    const res = new MockResponse();
+    await generateBookmarkMeta({ body: { url: 'javascript:alert(1)' }, user: { id: 'u1' } }, res);
+    expect(res.payload).toMatchObject({ status: 400 });
+    expect(mocks.poolQuery).not.toHaveBeenCalled();
+    expect(mocks.suggestBookmarkMeta).not.toHaveBeenCalled();
+  });
+
+  it('分享文案返回候选选择，不让 AI 私自决定最终 URL', async () => {
+    const res = new MockResponse();
+    await generateBookmarkMeta(
+      { body: { url: '网址放这里：https:// boluo66.top，欢迎体验' }, user: { id: 'u1' } },
+      res,
+    );
+    expect(res.payload).toMatchObject({
+      status: 200,
+      data: {
+        requiresUrlConfirmation: true,
+        urlResolution: {
+          state: 'needs_confirmation',
+          candidates: [{ url: 'https://boluo66.top' }],
+        },
+      },
+    });
+    expect(mocks.suggestBookmarkMeta).not.toHaveBeenCalled();
+  });
+
+  it('确定地址规范化后才进入智能识别', async () => {
+    const res = new MockResponse();
+    await generateBookmarkMeta({ body: { url: 'boluo66.top' }, user: { id: 'u1' } }, res);
+    expect(mocks.suggestBookmarkMeta).toHaveBeenCalledWith({
+      url: 'https://boluo66.top',
+      userTags: [],
+    });
+    expect(res.payload).toMatchObject({ status: 200, data: { resolvedUrl: 'https://boluo66.top' } });
   });
 });

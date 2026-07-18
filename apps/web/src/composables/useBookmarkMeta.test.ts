@@ -4,6 +4,13 @@ import { ref } from 'vue';
 // mock composable 的外部依赖(HTTP / 提示 / 埋点 / 弹窗)
 const apiBasePost = vi.fn();
 vi.mock('@/http/request', () => ({ apiBasePost: (...a: any[]) => apiBasePost(...a) }));
+const preflightBookmarkUrl = vi.fn(async (url: string) => ({
+  ok: true,
+  url: /^https?:\/\//i.test(url) ? url : `https://${url}`,
+}));
+vi.mock('@/composables/useBookmarkUrlResolution', () => ({
+  preflightBookmarkUrl: (...args: any[]) => preflightBookmarkUrl(...args),
+}));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
@@ -26,6 +33,7 @@ function setup(tagOpts: any[] = []) {
 describe('useBookmarkMeta.generateBookmarkMeta', () => {
   beforeEach(() => {
     apiBasePost.mockReset();
+    preflightBookmarkUrl.mockClear();
     alertAlert.mockReset();
   });
 

@@ -14,6 +14,8 @@ vi.mock('./interactionStore.js', () => {
 
 const {
   canResolveFolderInteraction,
+  canResolveBookmarkUrlInteraction,
+  createBookmarkUrlResolutionInteraction,
   createFolderResolutionInteraction,
   resolveAgentInteractionAction,
 } = await import('./interactionResolvers.js');
@@ -22,6 +24,66 @@ describe('agent interactionResolvers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createAgentInteraction.mockImplementation(async (input) => input);
+  });
+
+  it('把书签分享文案候选转换成通用单选交互', async () => {
+    const error = {
+      code: 'CANDIDATE_CONFIRMATION_REQUIRED',
+      normalizedToolArgs: { url: 'example.com 或 openai.com', name: '资料' },
+      data: {
+        urlResolution: {
+          candidates: [
+            { url: 'https://example.com', source: 'domain' },
+            { url: 'https://openai.com', source: 'domain' },
+          ],
+        },
+      },
+    };
+    expect(canResolveBookmarkUrlInteraction(error, 'create_bookmark')).toBe(true);
+    expect(canResolveBookmarkUrlInteraction(error, 'create_note')).toBe(false);
+
+    const result = await createBookmarkUrlResolutionInteraction({
+      error,
+      toolName: 'create_bookmark',
+      ownerKey: 'user:user-1',
+      sessionId: 'session-1',
+      context: { resourceUserId: 'user-1', resourceUserRole: 'user' },
+    });
+    expect(result.spec).toMatchObject({
+      code: 'bookmark_url_candidate_selection',
+      type: 'single_choice',
+      minSelections: 1,
+      maxSelections: 1,
+    });
+    expect(result.spec.options.map((option) => option.id)).toEqual(['candidate_1', 'candidate_2']);
+    expect(result.action.candidates).toEqual([
+      { id: 'candidate_1', url: 'https://example.com' },
+      { id: 'candidate_2', url: 'https://openai.com' },
+    ]);
+  });
+
+  it('书签候选选择只使用服务端保存的白名单 URL', () => {
+    const interaction = {
+      action: {
+        resolver: 'create_bookmark_url_resolution',
+        toolName: 'create_bookmark',
+        args: { url: '原始文案', name: '资料' },
+        candidates: [{ id: 'candidate_1', url: 'https://example.com' }],
+      },
+    };
+    expect(
+      resolveAgentInteractionAction(interaction, { cancelled: false, selectedIds: ['candidate_1'] }),
+    ).toEqual({
+      state: 'confirmation_required',
+      toolName: 'create_bookmark',
+      args: { url: 'https://example.com', name: '资料' },
+    });
+    expect(() =>
+      resolveAgentInteractionAction(interaction, {
+        cancelled: false,
+        selectedIds: ['https://attacker.example'],
+      }),
+    ).toThrow('请选择一个可用的网址');
   });
 
   it('只处理保存附件工具的文件夹缺失/重名错误', () => {

@@ -34,17 +34,22 @@ describe('normalizeBookmarkUrl', () => {
   });
 
   it('大小写不敏感(HTTPS://)', () => {
-    expect(normalizeBookmarkUrl('HTTPS://keep.com')).toBe('HTTPS://keep.com');
+    expect(normalizeBookmarkUrl('HTTPS://keep.com')).toBe('https://keep.com');
   });
 
   it('去除首尾空格后再判断', () => {
     expect(normalizeBookmarkUrl('  keep.com  ')).toBe('https://keep.com');
   });
 
-  it('空值/空白字符串原样返回,不拼出裸协议头', () => {
-    expect(normalizeBookmarkUrl('')).toBe('');
-    expect(normalizeBookmarkUrl('   ')).toBe('');
-    expect(normalizeBookmarkUrl(undefined)).toBe('');
-    expect(normalizeBookmarkUrl(null)).toBe('');
+  it('显式传入空地址时直接拒绝', () => {
+    for (const value of ['', '   ', undefined, null]) {
+      expect(() => normalizeBookmarkUrl(value)).toThrow('网址不能为空');
+    }
+  });
+
+  it('拒绝错误拼接和分享文案，不能仅凭 https 前缀放行', () => {
+    expect(() => normalizeBookmarkUrl('https://%20keep.com')).toThrow('识别到候选地址');
+    expect(() => normalizeBookmarkUrl('https://网址放这里→ https:// keep.com')).toThrow('识别到候选地址');
+    expect(() => normalizeBookmarkUrl('javascript:alert(1)')).toThrow('仅支持 HTTP 或 HTTPS 地址');
   });
 });

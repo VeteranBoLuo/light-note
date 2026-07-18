@@ -90,4 +90,15 @@ describe('bookmarkService.createBookmark', () => {
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['', 'javascript:alert(1)', 'https:// bad.example.com'])('无效或待确认地址在取数据库连接前就被拒绝: %s', async (url) => {
+    await expect(
+      createBookmark({
+        userId: 'user-1',
+        bookmark: { url, name: 'Bad URL' },
+        saveSnapshot: false,
+      }),
+    ).rejects.toThrow();
+    expect(pool.getConnection).not.toHaveBeenCalled();
+  });
 });

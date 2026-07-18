@@ -26,10 +26,33 @@ import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '..
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
 import { createTag as createTagService } from '../util/services/tagService.js';
+import {
+  BookmarkUrlError,
+  bookmarkUrlErrorPayload,
+  inspectBookmarkUrl,
+  resolveBookmarkUrlForClient,
+} from '../util/bookmarkUrl.js';
 
-// 书签地址允许用户/导入数据不带协议头,统一在落库前补全 https://,
-// 避免前端 <a :href="url"> 把裸域名当相对路径解析,拼出 https://boluo66.top/xxx.com 这种坏链接
+// 书签地址由共享解析器确定性规范化；分享文案和异常拼接只返回候选，不在落库层静默猜测。
 export { normalizeBookmarkUrl };
+
+function sendBookmarkUrlError(res, error, fallbackStatus = 500) {
+  const payload = bookmarkUrlErrorPayload(error);
+  if (payload) return res.send(resultData(payload.data, payload.status, payload.message));
+  return res.send(resultData(null, fallbackStatus, String(error?.message || error)));
+}
+
+export const resolveBookmarkUrl = async (req, res) => {
+  try {
+    const resolution = await resolveBookmarkUrlForClient(req.body?.url, {
+      allowTextExtraction: req.body?.allowTextExtraction !== false,
+      checkLiveness: req.body?.checkLiveness === true,
+    });
+    res.send(resultData(resolution));
+  } catch (error) {
+    sendBookmarkUrlError(res, error);
+  }
+};
 
 export const queryTagList = (req, res) => {
   const userId = req.user.id;
@@ -650,6 +673,7 @@ export const addBookmark = async (req, res) => {
     });
     res.send(resultData(result));
   } catch (err) {
+    if (err instanceof BookmarkUrlError) return sendBookmarkUrlError(res, err);
     res.send(resultData(null, 500, String(err.message || err).replace(/^[A-Z_]+:\s*/, '')));
   }
 };
@@ -675,9 +699,14 @@ export const updateBookmark = async (req, res) => {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
     }
-    // 只在调用方确实传了 url 时才补协议头;不能无条件赋值,否则 url 缺省时会把 SET 子句里的 url 覆盖成空
-    if (req.body.url) {
+    // 只在调用方确实传了 url 时才做权威校验与规范化；缺省表示保留原地址，显式空值则直接拒绝。
+    if (req.body.url !== undefined) {
       req.body.url = normalizeBookmarkUrl(req.body.url);
+      const [urlDuplicates] = await connection.query(
+        'SELECT id, name FROM bookmark WHERE user_id = ? AND url = ? AND id <> ? AND del_flag = 0 LIMIT 1',
+        [userId, req.body.url, id],
+      );
+      if (urlDuplicates.length) throw new Error(`该网址已收藏为「${urlDuplicates[0].name}」`);
     }
     // 仅网址真正变化时清理旧 favicon。名称、描述、标签等普通编辑必须保留已经落库的图标，
     // 否则每次保存都会先显示默认地球，再等待异步抓图，造成明显闪烁和无意义的网络/写入。
@@ -716,6 +745,7 @@ export const updateBookmark = async (req, res) => {
     res.send(resultData(updateResult)); // 发送成功响应
   } catch (error) {
     await connection.rollback(); // 回滚事务
+    if (error instanceof BookmarkUrlError) return sendBookmarkUrlError(res, error);
     res.send(resultData(null, 500, error.message)); // 设置状态码为500
   } finally {
     await connection.release(); // 释放连接
@@ -915,17 +945,29 @@ export const importBookmarksHtml = async (req, res) => {
 
     // 预加载现有标签和书签
     const [tagRows] = await connection.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
-    const [bookmarkRows] = await connection.query('SELECT id, name FROM bookmark WHERE user_id = ? AND del_flag = 0', [
+    const [bookmarkRows] = await connection.query('SELECT id, name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [
       userId,
     ]);
     const tagMap = new Map(tagRows.map((row) => [row.name, row.id]));
     const bookmarkMap = new Map(bookmarkRows.map((row) => [row.name, row.id]));
+    const bookmarkUrlMap = new Map(
+      bookmarkRows
+        .map((row) => [inspectBookmarkUrl(row.url, { allowTextExtraction: false }).canonicalUrl, row.id])
+        .filter(([url]) => Boolean(url)),
+    );
 
     let createdTags = 0;
     let createdBookmarks = 0;
     let boundRelations = 0;
+    let skippedInvalidUrls = 0;
 
     for (const item of parsedBookmarks) {
+      const resolution = inspectBookmarkUrl(item.url, { allowTextExtraction: false });
+      if (!resolution.canonicalUrl) {
+        skippedInvalidUrls += 1;
+        continue;
+      }
+      const canonicalUrl = resolution.canonicalUrl;
       const tagName = (item.folder || '').trim();
       let tagId = null;
 
@@ -944,17 +986,18 @@ export const importBookmarksHtml = async (req, res) => {
           tagId = tagMap.get(tagName);
         }
       }
-      let bookmarkId = bookmarkMap.get(item.name);
+      let bookmarkId = bookmarkUrlMap.get(canonicalUrl) || bookmarkMap.get(item.name);
       if (!bookmarkId) {
         const bookmarkPayload = insertData({
           name: item.name,
           userId,
-          url: normalizeBookmarkUrl(item.url),
+          url: canonicalUrl,
           description: '',
         });
         await connection.query('INSERT INTO bookmark SET ?', [bookmarkPayload]);
         bookmarkId = bookmarkPayload.id;
         bookmarkMap.set(item.name, bookmarkId);
+        bookmarkUrlMap.set(canonicalUrl, bookmarkId);
         createdBookmarks++;
       }
       if (tagId && bookmarkId) {
@@ -978,6 +1021,7 @@ export const importBookmarksHtml = async (req, res) => {
         createdTags,
         createdBookmarks,
         boundRelations,
+        skippedInvalidUrls,
       }),
     );
     // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)

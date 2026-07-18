@@ -80,10 +80,14 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
   const hasMeta = !!(curName && curDesc);
 
   let pageInfo;
+  let metadataSource = 'provided';
+  let fetchReason = '';
   if (hasMeta) {
     pageInfo = [`网页名称:${curName}`, `网页描述:${curDesc}`].join('\n');
   } else {
     const meta = await fetchWebMeta(url);
+    metadataSource = meta.ok ? 'fetched' : 'inferred';
+    fetchReason = meta.ok ? '' : String(meta.reason || 'FETCH_FAILED');
     pageInfo = meta.ok
       ? [
           `网页标题:${meta.title || curName || '(无)'}`,
@@ -129,5 +133,7 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
     description: String(parsed.description || '').trim(),
     matchedTagIds,
     newTags,
+    metadataSource,
+    fetchReason,
   };
 }

@@ -1,21 +1,24 @@
+import { resolveBookmarkUrlInput } from '@lightnote/shared';
+
 export type InboxCaptureType = 'bookmark' | 'note' | 'file';
 
 export function normalizeCaptureUrl(input: string): URL | null {
-  let value = String(input || '').trim();
-  if (value && !/^[a-z][a-z\d+.-]*:\/\//i.test(value) && /^[\w.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(value)) {
-    value = `https://${value}`;
-  }
+  const resolution = resolveBookmarkUrlInput(input, { allowTextExtraction: false });
+  if (!resolution.canonicalUrl) return null;
   try {
-    const url = new URL(value);
-    return /^https?:$/.test(url.protocol) ? url : null;
+    return new URL(resolution.canonicalUrl);
   } catch {
     return null;
   }
 }
 
+export function hasCaptureBookmarkCandidate(input: string): boolean {
+  return resolveBookmarkUrlInput(input, { allowTextExtraction: true }).state !== 'invalid';
+}
+
 export function detectInboxCaptureType(input: string, files: File[] | ArrayLike<File> = []): InboxCaptureType {
   if (files.length > 0) return 'file';
-  return normalizeCaptureUrl(input) ? 'bookmark' : 'note';
+  return hasCaptureBookmarkCandidate(input) ? 'bookmark' : 'note';
 }
 
 export function buildMarkdownNotePayload(input: string, untitled: string) {

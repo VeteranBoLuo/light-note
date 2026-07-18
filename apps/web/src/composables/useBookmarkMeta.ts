@@ -4,6 +4,7 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
 import i18n from '@/i18n';
+import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
 
 interface TagOption {
   label: string;
@@ -81,10 +82,11 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       message.warning(i18n.global.t('bookmarkMeta.fillUrlFirst'));
       return;
     }
-    // 自动补协议头,和首页书签卡片"点击打开"的既有约定一致,允许用户只填 example.com
-    bookmarkData.value.url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
     generating.value = true;
     try {
+      const urlResult = await preflightBookmarkUrl(rawUrl, { checkLiveness: false });
+      if (!urlResult.ok || !urlResult.url) return;
+      bookmarkData.value.url = urlResult.url;
       const res = await apiBasePost('/api/chat/generateBookmarkMeta', {
         url: bookmarkData.value.url,
       });
@@ -111,15 +113,20 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       recordOperation({ module: '书签详情', operation: `生成书签信息成功【${bookmarkData.value.url}】` });
 
       const newTags: string[] = res.data.newTags || [];
-      if (matched.length) {
+      const inferred = res.data.metadataSource === 'inferred';
+      if (inferred) {
+        message.warning(i18n.global.t('bookmarkMeta.inferredWarning'));
+      } else if (matched.length) {
         message.success(i18n.global.t('bookmarkMeta.genWithTags'));
       } else if (newTags.length) {
-        // 已有标签都不合适：只建议第一个新标签，问用户是否新建
         message.success(i18n.global.t('bookmarkMeta.genNoTags'));
-        confirmCreateTag(newTags[0]);
       } else {
         message.success(i18n.global.t('bookmarkMeta.genOnly'));
       }
+      // 已有标签都不合适：只建议第一个新标签，问用户是否新建
+      if (!matched.length && newTags.length) confirmCreateTag(newTags[0]);
+    } catch (error: any) {
+      message.error(error?.message || i18n.global.t('bookmarkMeta.generateFailed'));
     } finally {
       generating.value = false;
     }

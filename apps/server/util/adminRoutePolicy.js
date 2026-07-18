@@ -28,6 +28,7 @@ declare(ADMIN_POLICIES.READ, 'bookmark', [
   ['POST', '/bookmark/getBookmarkList'],
   ['POST', '/bookmark/getBookmarkDetail'],
   ['POST', '/bookmark/getCommonBookmarks'],
+  ['POST', '/bookmark/resolveUrl'],
   ['POST', '/bookmark/snapshot'],
   ['GET', '/bookmark/health'],
 ]);

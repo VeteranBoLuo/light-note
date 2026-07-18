@@ -3,6 +3,8 @@ import { resultData } from '../util/common.js';
 import pool from '../db/index.js';
 import crypto from 'crypto';
 import { suggestBookmarkMeta } from '../util/aiOrganize.js';
+import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
+import { BOOKMARK_URL_STATE } from '@lightnote/shared';
 import { getActiveProviderInfo, requestDeepSeek, requestDeepSeekStream } from '../util/agent/deepseekClient.js';
 import * as aiQuota from '../util/aiQuota.js';
 
@@ -112,11 +114,14 @@ export const generateBookmarkMeta = async (req, res) => {
       return res.status(400).send(resultData(null, 400, '缺少URL参数'));
     }
 
-    // 验证URL格式
-    const urlRegex = /^https?:\/\/.+/;
-    if (!urlRegex.test(url)) {
-      return res.send(resultData(null, 400, '请输入正确的书签地址'));
+    const urlResolution = inspectBookmarkUrl(url, { allowTextExtraction: true });
+    if (urlResolution.state === BOOKMARK_URL_STATE.INVALID) {
+      return res.send(resultData({ urlResolution }, 400, '没有识别到有效的 HTTP 或 HTTPS 地址'));
     }
+    if (urlResolution.state === BOOKMARK_URL_STATE.NEEDS_CONFIRMATION) {
+      return res.send(resultData({ urlResolution, requiresUrlConfirmation: true }));
+    }
+    const resolvedUrl = urlResolution.canonicalUrl;
 
     // 拉取用户已有标签,让 AI 从中推荐关联标签(不够再建议新标签)。
     // 抓网页 + AI 生成的核心逻辑抽到 util/aiOrganize.suggestBookmarkMeta,与「批量整理」共用。
@@ -126,11 +131,11 @@ export const generateBookmarkMeta = async (req, res) => {
       const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [metaUserId]);
       userTags = tagRows;
     }
-    const result = await suggestBookmarkMeta({ url, userTags });
+    const result = await suggestBookmarkMeta({ url: resolvedUrl, userTags });
     if (!result) {
       return res.status(500).send(resultData(null, 500, 'AI 返回结果解析失败'));
     }
-    res.send(resultData(result));
+    res.send(resultData({ ...result, resolvedUrl }));
   } catch (error) {
     const providerMsg = error?.message || String(error);
     console.error('生成书签元信息错误:', providerMsg); // 完整错误(可能含供应商原文 / API key 片段)只进服务器日志
