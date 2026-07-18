@@ -18,8 +18,30 @@
       <div v-if="data && pendingTotal > 0" class="ov-todo">
         <span class="ov-todo-icon">🔔</span>
         <span class="ov-todo-text">待处理事项</span>
-        <button v-if="data.pending.opinion > 0" class="ov-todo-chip" @click="go('userOpinion')">待回复反馈 {{ data.pending.opinion }} 条</button>
-        <span v-if="data.pending.security > 0" class="ov-todo-chip danger">未处理高危安全事件 {{ data.pending.security }} 起</span>
+        <BButton
+          v-if="data.pending.opinion > 0"
+          size="small"
+          class="ov-todo-chip"
+          role="button"
+          tabindex="0"
+          @click="go('userOpinion')"
+          @keydown.enter.prevent="go('userOpinion')"
+          @keydown.space.prevent="go('userOpinion')"
+        >
+          待回复反馈 {{ data.pending.opinion }} 条
+        </BButton>
+        <BButton
+          v-if="data.pending.security > 0"
+          size="small"
+          class="ov-todo-chip danger"
+          role="button"
+          tabindex="0"
+          @click="goToSecurityEvents"
+          @keydown.enter.prevent="goToSecurityEvents"
+          @keydown.space.prevent="goToSecurityEvents"
+        >
+          未处理高危安全事件 {{ data.pending.security }} 起
+        </BButton>
       </div>
 
       <!-- 用户与内容:累计为主 + 今日增量 -->
@@ -175,8 +197,11 @@
   import { ref, computed, onMounted } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
   import router from '@/router';
+  import { bookmarkStore } from '@/store';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
 
+  const bookmark = bookmarkStore();
   const data = ref<any>(null);
   const hideInternal = ref(true);
 
@@ -242,7 +267,14 @@
   });
 
   function go(id: string) {
-    router.push('/admin/' + id);
+    router.push(bookmark.isMobile ? `/${id}` : `/admin/${id}`);
+  }
+
+  function goToSecurityEvents() {
+    router.push({
+      name: bookmark.isMobile ? 'securityEvents' : 'securityCenterEvents',
+      query: { handledStatus: 'unhandled' },
+    });
   }
 
   function load() {
@@ -314,17 +346,36 @@
     font-weight: 600;
   }
   .ov-todo-chip {
-    padding: 4px 10px;
+    min-height: 26px;
+    height: auto !important;
+    padding: 4px 10px !important;
     border: 0;
     border-radius: 999px;
     background: color-mix(in srgb, #f59e0b 22%, transparent);
     color: var(--text-color);
     font-size: 12.5px;
+    line-height: 1.35 !important;
     cursor: pointer;
+    transition:
+      background 0.16s ease,
+      box-shadow 0.16s ease,
+      transform 0.16s ease;
+
+    &:hover,
+    &:focus-visible {
+      outline: none;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px color-mix(in srgb, #f59e0b 18%, transparent);
+    }
   }
   .ov-todo-chip.danger {
     background: color-mix(in srgb, #ef4444 20%, transparent);
-    cursor: default;
+
+    &:hover,
+    &:focus-visible {
+      background: color-mix(in srgb, #ef4444 28%, transparent);
+      box-shadow: 0 3px 8px color-mix(in srgb, #ef4444 18%, transparent);
+    }
   }
 
   .ov-err {
