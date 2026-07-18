@@ -290,6 +290,7 @@
   .message.user .bubble {
     padding: 0.625rem 0.875rem;
     background: var(--ai-user-background-color);
+    border: 1px solid var(--ai-user-border-color);
     color: var(--text-color);
     border-bottom-right-radius: 0.25rem;
   }
@@ -311,13 +312,14 @@
   .user-contexts {
     margin-top: 8px;
     padding-top: 7px;
-    border-top: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
+    border-top: 1px solid var(--ai-user-context-divider-color);
   }
 
   .user-contexts__title {
     margin-bottom: 5px;
-    color: var(--desc-color);
+    color: color-mix(in srgb, var(--primary-color) 32%, var(--desc-color));
     font-size: 11px;
+    font-weight: 500;
     line-height: 1.2;
     text-align: right;
   }
@@ -337,9 +339,9 @@
     min-width: 0;
     max-width: 180px;
     padding: 4px 7px;
-    border: 1px solid color-mix(in srgb, var(--context-color) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--context-color) 24%, var(--ai-user-background-color));
     border-radius: 8px;
-    background: color-mix(in srgb, var(--context-color) 7%, var(--card-background));
+    background: color-mix(in srgb, var(--context-color) 9%, var(--ai-user-background-color));
   }
 
   .user-context-chip.is-note {
