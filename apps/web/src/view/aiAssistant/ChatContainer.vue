@@ -17,6 +17,7 @@
           <ChatMessageItem
             :message="message"
             :has-answer-started="hasAnswerStarted"
+            :is-streaming="isLoading && index === messages.length - 1 && message.role === 'assistant'"
             @edit="handleEditMessage"
             @regenerate="() => handleRegenerate(index)"
             @source-navigate="handleMessageSourceNavigate"
@@ -123,6 +124,7 @@
     shouldPauseAiChatFollow,
     shouldResumeAiChatFollow,
   } from '@/components/aiAssistant/aiAutoScroll';
+  import { createAiStreamTypewriter, type AiStreamTypewriter } from '@/components/aiAssistant/aiStreamTypewriter';
   import { isEditableAttachmentTool, type AiAttachmentDirectActionName } from '@/config/aiTools';
   import type {
     AiAgentInteraction,
@@ -248,6 +250,7 @@
 
   // 流式输出控制
   const abortController = ref<AbortController | null>(null);
+  let activeAnswerTypewriter: AiStreamTypewriter | null = null;
   let currentMessageIndex = -1;
   let activeRequestId = 0; // 请求计数器，隔离停止、切换账号与新请求之间的异步回调
 
@@ -521,6 +524,8 @@
   // 暂停响应
   const stopResponse = () => {
     if (!isLoading.value) return; // 已完成的消息不加暂停标记
+    activeAnswerTypewriter?.cancel();
+    activeAnswerTypewriter = null;
     if (abortController.value) {
       abortController.value.abort();
       abortController.value = null;
@@ -636,6 +641,8 @@
       abortController.value.abort();
       abortController.value = null;
     }
+    activeAnswerTypewriter?.cancel();
+    activeAnswerTypewriter = null;
 
     // 会话上下文快照:本轮问题「之前」的完整对话(显示多少发多少,保证 AI 记得的=你看得到的)。
     // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
@@ -674,30 +681,37 @@
     messages.value.push(aiMessage);
     currentMessageIndex = messages.value.length - 1;
 
+    // 先挂上中止控制器再进入生成态，用户即使在首个 nextTick 前点击暂停，也不会漏掉中止请求。
+    const requestController = new AbortController();
+    abortController.value = requestController;
+
     userInput.value = '';
     isLoading.value = true;
     await nextTick();
+    if (!isLoading.value || activeRequestId !== thisRequestId || requestController.signal.aborted) return;
     scheduleScrollToBottom();
 
-    // 创建中止控制器
-    const requestController = new AbortController();
-    abortController.value = requestController;
+    // 网络分片只负责入队，屏幕按固定绘制帧稳定吐字。这样即使 XHR 一次回调积攒了整段文本，
+    // 用户看到的仍是连续打字效果，而不是忽快忽慢的整段跳出。
+    const answerTypewriter = createAiStreamTypewriter({
+      onText: (content) => {
+        if (activeRequestId !== thisRequestId || requestController.signal.aborted) return;
+        aiMessage.content += content;
+        if (shouldFollowMessages.value) scheduleScrollToBottom();
+      },
+      // 后台标签页没有可见动画，直接排空，避免浏览器暂停 rAF 后请求迟迟无法完成清理。
+      shouldFlushImmediately: () => typeof document !== 'undefined' && document.visibilityState === 'hidden',
+    });
+    activeAnswerTypewriter = answerTypewriter;
 
     let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
     let followUpRequestId = '';
     let followUpAvailable = false;
-    // 服务端已经按 token 流式输出，前端直接渲染增量；不再叠加第二层逐字打字机。
-    const handleNewContent = async (content: string) => {
+    const handleNewContent = (content: string) => {
       if (!content) return;
       if (activeRequestId !== thisRequestId) return;
       if (requestController.signal.aborted) return;
-      const current = messages.value[currentMessageIndex];
-      if (!current) return;
-      current.content += content;
-      if (shouldFollowMessages.value) {
-        await nextTick();
-        scheduleScrollToBottom();
-      }
+      answerTypewriter.enqueue(content);
     };
 
     try {
@@ -790,8 +804,7 @@
           const content = data.output?.text || data.text || data.content || '';
 
           if (content && typeof content === 'string') {
-            // 使用新的内容处理函数
-            void handleNewContent(content);
+            handleNewContent(content);
             // 一旦答案开始输出，标记并停止后续思考流
             hasAnswerStarted.value = true;
           }
@@ -866,11 +879,14 @@
       // 处理缓冲区剩余数据
       flushAiSseBuffer(buffer).forEach(handleData);
 
+      // 后端结束不等于视觉输出结束；等逐帧队列排空后再切换为最终 Markdown，避免尾部突然跳出。
+      await answerTypewriter.drain();
+
       // 后端流式返回错误帧：已有半截内容则保留并追加友好提示。
       if (streamError && thisRequestId === activeRequestId) {
         const errText = streamError || t('ai.errorMessage');
         const current = messages.value[currentMessageIndex];
-        current.content = current.content ? `${current.content}\n\n${errText}` : errText;
+        if (current) current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }
       contexts.value = [];
     } catch (error: any) {
@@ -881,7 +897,10 @@
         // stopResponse 已处理消息标记，这里只需清理
       } else {
         console.error('请求失败:', error);
-        messages.value[currentMessageIndex].content = t('ai.errorMessage');
+        await answerTypewriter.drain();
+        const current = messages.value[currentMessageIndex];
+        const errorText = t('ai.errorMessage');
+        if (current) current.content = current.content ? `${current.content}\n\n${errorText}` : errorText;
       }
     } finally {
       // 仅最新请求才能更新状态，防止旧请求的 finally 提前关闭 loading
@@ -889,6 +908,7 @@
 
       isLoading.value = false;
       if (abortController.value === requestController) abortController.value = null;
+      if (activeAnswerTypewriter === answerTypewriter) activeAnswerTypewriter = null;
       // 最终滚动
       await nextTick();
       scheduleScrollToBottom();
@@ -1058,6 +1078,10 @@
   });
 
   onBeforeUnmount(() => {
+    activeAnswerTypewriter?.cancel();
+    activeAnswerTypewriter = null;
+    abortController.value?.abort();
+    abortController.value = null;
     cancelScheduledScroll();
   });
 </script>
@@ -1114,6 +1138,8 @@
   .messages-container {
     flex: 1;
     overflow-y: auto;
+    overscroll-behavior-y: contain;
+    overflow-anchor: none;
     padding: 0.75rem 1.5rem;
     position: relative;
     color: var(--text-color);

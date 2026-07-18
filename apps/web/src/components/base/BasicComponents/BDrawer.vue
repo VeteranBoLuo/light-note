@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="localVisible" class="b-drawer-wrapper" :class="{ 'is-entered': entered }">
+    <div v-if="localVisible" class="b-drawer-wrapper" :class="{ 'is-entered': entered, 'is-settled': settled }">
       <div class="b-drawer-mask" @click="handleMaskClick" />
       <div
         class="b-drawer-panel"
@@ -9,6 +9,7 @@
           'b-drawer-panel--mobile-fullscreen': mobileFullScreen,
         }"
         :style="panelStyle"
+        @transitionend="handlePanelTransitionEnd"
       >
         <div class="b-drawer-header">
           <span class="b-drawer-title">{{ title }}</span>
@@ -65,12 +66,14 @@
 
   const localVisible = ref(false);
   const entered = ref(false);
+  const settled = ref(false);
   let closing = false;
 
   // 打开：先渲染 DOM，下一帧触发滑入动画
   function doOpen() {
     localVisible.value = true;
     entered.value = false;
+    settled.value = false;
     nextTick(() => {
       // 强制回流后触发 enter 动画
       requestAnimationFrame(() => {
@@ -83,6 +86,7 @@
   function doClose() {
     if (closing) return;
     closing = true;
+    settled.value = false;
     entered.value = false;
     setTimeout(() => {
       localVisible.value = false;
@@ -122,6 +126,11 @@
 
   function handleClose() {
     emit('close');
+  }
+
+  function handlePanelTransitionEnd(event: TransitionEvent) {
+    if (event.target !== event.currentTarget || event.propertyName !== 'transform') return;
+    if (entered.value && props.open) settled.value = true;
   }
 </script>
 
@@ -205,6 +214,13 @@
 
     .b-drawer-panel {
       transform: translateX(0);
+    }
+  }
+
+  /* 滑入完成后移除恒驻 transform 合成层，避免长列表滚动时旧帧在部分 Chrome/GPU 上残影叠加。 */
+  .is-entered.is-settled {
+    .b-drawer-panel {
+      transform: none;
     }
   }
 

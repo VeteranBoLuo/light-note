@@ -33,6 +33,7 @@
           </div>
           <!-- Markdown 渲染内容 -->
           <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
+          <div v-else-if="isStreaming" class="text assistant-stream-text" v-text="message.content"></div>
           <div v-else class="text" v-html="formatAssistantMessage(message.content)" @click="handleLinkClick"></div>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
@@ -180,6 +181,7 @@
   const props = defineProps<{
     message: ChatMessage;
     hasAnswerStarted: boolean;
+    isStreaming?: boolean;
   }>();
 
   // 点“编辑”把这条用户消息内容抛给容器，回填到输入框
@@ -265,7 +267,7 @@
 <style scoped>
   .message {
     margin-bottom: 1.25rem;
-    animation: fadeIn 0.3s ease;
+    animation: message-fade-in 0.18s ease-out;
   }
 
   .message-content {
@@ -319,6 +321,11 @@
   }
 
   .user-text {
+    white-space: pre-wrap;
+  }
+
+  /* 流式阶段只更新一个文本节点，避免每个字都重建整棵 Markdown DOM、重新高亮代码并触发布局抖动。 */
+  .assistant-stream-text {
     white-space: pre-wrap;
   }
 
@@ -597,14 +604,12 @@
     color: #888;
   }
 
-  @keyframes fadeIn {
+  @keyframes message-fade-in {
     from {
       opacity: 0;
-      transform: translateY(10px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 </style>
