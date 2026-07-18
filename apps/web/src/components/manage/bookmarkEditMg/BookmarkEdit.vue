@@ -30,6 +30,7 @@
             :tag-options="tagOptions"
             :show-actions="false"
             @generate="generateBookmarkMeta"
+            @stop-generate="stopBookmarkMetaGeneration"
             @submit="submit"
             @cancel="requestCancel"
             @add-tag="goAddTag"
@@ -82,6 +83,7 @@
     saveLabel,
     saving,
     generateBookmarkMeta,
+    stopBookmarkMetaGeneration,
     submit,
     requestCancel,
     goAddTag,

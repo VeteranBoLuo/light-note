@@ -11,16 +11,29 @@ const preflightBookmarkUrl = vi.fn(async (url: string) => ({
 vi.mock('@/composables/useBookmarkUrlResolution', () => ({
   preflightBookmarkUrl: (...args: any[]) => preflightBookmarkUrl(...args),
 }));
+const messageSuccess = vi.fn();
+const messageWarning = vi.fn();
+const messageError = vi.fn();
+const messageInfo = vi.fn();
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
-  default: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
+  default: {
+    success: (...args: any[]) => messageSuccess(...args),
+    warning: (...args: any[]) => messageWarning(...args),
+    error: (...args: any[]) => messageError(...args),
+    info: (...args: any[]) => messageInfo(...args),
+  },
 }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
 const alertAlert = vi.fn();
 vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({
   default: { alert: (...a: any[]) => alertAlert(...a), destroy: vi.fn() },
 }));
+const requestBookmarkMetaOverwriteDecision = vi.fn();
+vi.mock('@/utils/bookmarkMetaOverwriteDecision', () => ({
+  requestBookmarkMetaOverwriteDecision: (...args: any[]) => requestBookmarkMetaOverwriteDecision(...args),
+}));
 
-const { useBookmarkMeta } = await import('@/composables/useBookmarkMeta');
+const { BOOKMARK_META_GENERATION_TIMEOUT_MS, useBookmarkMeta } = await import('@/composables/useBookmarkMeta');
 
 function setup(tagOpts: any[] = []) {
   const bookmarkData = ref<any>({ url: 'https://x.com', name: '', description: '', relatedTags: [] });
@@ -35,6 +48,11 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     apiBasePost.mockReset();
     preflightBookmarkUrl.mockClear();
     alertAlert.mockReset();
+    requestBookmarkMetaOverwriteDecision.mockReset();
+    messageSuccess.mockReset();
+    messageWarning.mockReset();
+    messageError.mockReset();
+    messageInfo.mockReset();
   });
 
   it('回填 name/description,只勾选候选内存在的推荐标签(白名单过滤)', async () => {
@@ -59,16 +77,21 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     t.bookmarkData.value.name = '当前名称';
     t.bookmarkData.value.description = '当前描述';
 
-    const generating = t.generateBookmarkMeta();
-    await vi.waitFor(() => expect(alertAlert).toHaveBeenCalledTimes(1));
-    alertAlert.mock.calls[0][0].footer[0].function();
-    await generating;
+    requestBookmarkMetaOverwriteDecision.mockResolvedValueOnce(null);
+    await t.generateBookmarkMeta();
 
     expect(t.bookmarkData.value.name).toBe('当前名称');
     expect(t.bookmarkData.value.description).toBe('当前描述');
+    expect(requestBookmarkMetaOverwriteDecision).toHaveBeenCalledWith(
+      [
+        { id: 'name', currentValue: '当前名称', generatedValue: 'AI 名称' },
+        { id: 'description', currentValue: '当前描述', generatedValue: 'AI 描述' },
+      ],
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
-  it('用户确认后应用 AI 识别结果', async () => {
+  it('覆盖预览支持逐字段选择，只应用用户勾选的识别结果', async () => {
     apiBasePost.mockResolvedValue({
       status: 200,
       data: { name: 'AI 名称', description: 'AI 描述', matchedTagIds: [], newTags: [] },
@@ -77,13 +100,11 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     t.bookmarkData.value.name = '当前名称';
     t.bookmarkData.value.description = '当前描述';
 
-    const generating = t.generateBookmarkMeta();
-    await vi.waitFor(() => expect(alertAlert).toHaveBeenCalledTimes(1));
-    alertAlert.mock.calls[0][0].footer[1].function();
-    await generating;
+    requestBookmarkMetaOverwriteDecision.mockResolvedValueOnce(['name']);
+    await t.generateBookmarkMeta();
 
     expect(t.bookmarkData.value.name).toBe('AI 名称');
-    expect(t.bookmarkData.value.description).toBe('AI 描述');
+    expect(t.bookmarkData.value.description).toBe('当前描述');
   });
 
   it('勾选标签遵守 ≤4 上限', async () => {
@@ -125,6 +146,61 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     t.bookmarkData.value.url = 'keep.com';
     await t.generateBookmarkMeta();
     expect(t.bookmarkData.value.url).toBe('https://keep.com');
-    expect(apiBasePost).toHaveBeenCalledWith('/api/chat/generateBookmarkMeta', { url: 'https://keep.com' });
+    expect(apiBasePost).toHaveBeenCalledWith(
+      '/api/chat/generateBookmarkMeta',
+      { url: 'https://keep.com' },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        silent: true,
+        timeout: BOOKMARK_META_GENERATION_TIMEOUT_MS + 5_000,
+      }),
+    );
+  });
+
+  it('用户点击停止后会真正中止请求，不回填任何识别结果', async () => {
+    let requestSignal: AbortSignal | undefined;
+    apiBasePost.mockImplementation((_url, _data, options) => {
+      requestSignal = options.signal;
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject({ code: 'ERR_CANCELED' }), { once: true });
+      });
+    });
+    const t = setup([]);
+
+    const pending = t.generateBookmarkMeta();
+    await vi.waitFor(() => expect(apiBasePost).toHaveBeenCalledTimes(1));
+    t.stopBookmarkMetaGeneration();
+    await pending;
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(t.generating.value).toBe(false);
+    expect(t.bookmarkData.value.name).toBe('');
+    expect(messageInfo).toHaveBeenCalledTimes(1);
+    expect(messageError).not.toHaveBeenCalled();
+  });
+
+  it('超过等待上限会自动中止并给出超时提示', async () => {
+    vi.useFakeTimers();
+    try {
+      apiBasePost.mockImplementation((_url, _data, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject({ code: 'ERR_CANCELED' }), { once: true });
+        }),
+      );
+      const t = setup([]);
+      const pending = t.generateBookmarkMeta();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(apiBasePost).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(BOOKMARK_META_GENERATION_TIMEOUT_MS);
+      await pending;
+
+      expect(t.generating.value).toBe(false);
+      expect(messageError).toHaveBeenCalledTimes(1);
+      expect(messageInfo).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

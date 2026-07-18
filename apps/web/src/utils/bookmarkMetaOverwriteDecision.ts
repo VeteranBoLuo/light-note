@@ -1,32 +1,25 @@
 import { createApp } from 'vue';
-import BookmarkUrlDecision from '@/components/bookmark/BookmarkUrlDecision.vue';
+import BookmarkMetaOverwriteDecision from '@/components/bookmark/BookmarkMetaOverwriteDecision.vue';
 import i18n from '@/i18n';
 
-interface BookmarkUrlDecisionOption {
-  id: string;
-  label: string;
-  description?: string;
-  recommended?: boolean;
+export type BookmarkMetaOverwriteFieldId = 'name' | 'description';
+
+export interface BookmarkMetaOverwriteField {
+  id: BookmarkMetaOverwriteFieldId;
+  currentValue: string;
+  generatedValue: string;
 }
 
-export interface BookmarkUrlDecisionConfig {
-  title: string;
-  description: string;
-  options: BookmarkUrlDecisionOption[];
-  cancelText: string;
-  recommendedText: string;
-}
-
-interface BookmarkUrlDecisionOptions {
+interface BookmarkMetaOverwriteDecisionOptions {
   signal?: AbortSignal;
 }
 
 let cancelActiveDecision: (() => void) | null = null;
 
-export function requestBookmarkUrlDecision(
-  config: BookmarkUrlDecisionConfig,
-  options: BookmarkUrlDecisionOptions = {},
-): Promise<string | null> {
+export function requestBookmarkMetaOverwriteDecision(
+  fields: BookmarkMetaOverwriteField[],
+  options: BookmarkMetaOverwriteDecisionOptions = {},
+): Promise<BookmarkMetaOverwriteFieldId[] | null> {
   if (options.signal?.aborted) return Promise.resolve(null);
   cancelActiveDecision?.();
   return new Promise((resolve) => {
@@ -35,7 +28,7 @@ export function requestBookmarkUrlDecision(
     let settled = false;
     let app: ReturnType<typeof createApp> | null = null;
 
-    const finish = (value: string | null) => {
+    const finish = (value: BookmarkMetaOverwriteFieldId[] | null) => {
       if (settled) return;
       settled = true;
       options.signal?.removeEventListener('abort', cancel);
@@ -48,9 +41,7 @@ export function requestBookmarkUrlDecision(
     const cancel = () => finish(null);
     cancelActiveDecision = cancel;
     options.signal?.addEventListener('abort', cancel, { once: true });
-    // 该弹窗由函数调用动态挂载，不在主 Vue 组件树中；必须显式安装 i18n，
-    // 否则 BModal 内的 useI18n() 取不到应用上下文，用户会一直停在“识别中”。
-    app = createApp(BookmarkUrlDecision, { ...config, onResolve: finish });
+    app = createApp(BookmarkMetaOverwriteDecision, { fields, onResolve: finish });
     app.use(i18n);
     app.mount(container);
   });

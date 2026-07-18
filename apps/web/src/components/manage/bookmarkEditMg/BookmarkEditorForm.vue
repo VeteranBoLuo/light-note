@@ -18,15 +18,23 @@
             clearable
             @enter="$emit('generate')"
           />
-          <BTooltip :title="$t('bookmarkMg.generateMetaDesc')">
+          <BTooltip
+            :title="generating ? $t('bookmarkEditor.stopGenerating') : $t('bookmarkMg.generateMetaDesc')"
+          >
             <BButton
               class="bookmark-generate-button"
-              :loading="generating"
-              @click="$emit('generate')"
-              v-click-log="{ module: '书签详情', operation: '点击智能生成' }"
+              :class="{ 'bookmark-generate-button--stop': generating }"
+              @click="handleGenerateClick"
+              v-click-log="{
+                module: '书签详情',
+                operation: generating ? '停止智能生成' : '点击智能生成',
+              }"
             >
-              <SvgIcon :src="icon.common.magicWand" color="currentColor" />
-              <span>{{ generating ? $t('bookmarkEditor.generating') : $t('bookmarkEditor.smartRecognize') }}</span>
+              <SvgIcon
+                :src="generating ? icon.common.stop : icon.common.magicWand"
+                color="currentColor"
+              />
+              <span>{{ generating ? $t('bookmarkEditor.stopGenerating') : $t('bookmarkEditor.smartRecognize') }}</span>
             </BButton>
           </BTooltip>
         </div>
@@ -131,7 +139,7 @@
   import icon from '@/config/icon';
   import type { BookmarkEditorData, BookmarkEditorErrors, BookmarkTagOption } from '@/composables/useBookmarkEditor';
 
-  withDefaults(
+  const props = withDefaults(
     defineProps<{
       mobile?: boolean;
       showActions?: boolean;
@@ -148,12 +156,17 @@
   const bookmarkData = defineModel<BookmarkEditorData>('bookmarkData', { required: true });
   const saveSnapshot = defineModel<boolean>('saveSnapshot', { default: true });
 
-  defineEmits<{
+  const emit = defineEmits<{
     generate: [];
+    stopGenerate: [];
     submit: [];
     cancel: [];
     addTag: [];
   }>();
+
+  function handleGenerateClick() {
+    emit(props.generating ? 'stopGenerate' : 'generate');
+  }
 </script>
 
 <style lang="less" scoped>
@@ -221,6 +234,17 @@
     &:hover {
       border-color: color-mix(in srgb, var(--resource-bookmark-color) 38%, var(--surface-border-color));
       background: color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-background)) !important;
+    }
+  }
+
+  .bookmark-generate-button--stop {
+    border-color: color-mix(in srgb, var(--message-error-color) 32%, var(--surface-border-color));
+    color: var(--message-error-color);
+    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background)) !important;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--message-error-color) 48%, var(--surface-border-color));
+      background: color-mix(in srgb, var(--message-error-color) 12%, var(--card-background)) !important;
     }
   }
 

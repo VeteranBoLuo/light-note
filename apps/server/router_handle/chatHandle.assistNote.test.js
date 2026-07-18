@@ -153,10 +153,64 @@ describe('generateBookmarkMeta URL gate', () => {
   it('确定地址规范化后才进入智能识别', async () => {
     const res = new MockResponse();
     await generateBookmarkMeta({ body: { url: 'boluo66.top' }, user: { id: 'u1' } }, res);
-    expect(mocks.suggestBookmarkMeta).toHaveBeenCalledWith({
-      url: 'https://boluo66.top',
-      userTags: [],
-    });
+    expect(mocks.suggestBookmarkMeta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://boluo66.top',
+        userTags: [],
+        signal: expect.any(AbortSignal),
+      }),
+    );
     expect(res.payload).toMatchObject({ status: 200, data: { resolvedUrl: 'https://boluo66.top' } });
+  });
+
+  it('客户端停止后向下游传播 abort，并且不再尝试写响应', async () => {
+    const req = new EventEmitter();
+    req.body = { url: 'boluo66.top' };
+    req.user = { id: 'u1' };
+    let receivedSignal;
+    mocks.suggestBookmarkMeta.mockImplementationOnce(
+      ({ signal }) =>
+        new Promise((_resolve, reject) => {
+          receivedSignal = signal;
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
+    const res = new MockResponse();
+    const pending = generateBookmarkMeta(req, res);
+    await vi.waitFor(() => expect(mocks.suggestBookmarkMeta).toHaveBeenCalledTimes(1));
+
+    req.emit('aborted');
+    await pending;
+
+    expect(receivedSignal.aborted).toBe(true);
+    expect(res.payload).toBeUndefined();
+    expect(res.writableEnded).toBe(false);
+  });
+
+  it('服务端超过等待上限会中止下游并返回 504 友好提示', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.suggestBookmarkMeta.mockImplementationOnce(
+        ({ signal }) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }),
+      );
+      const req = new EventEmitter();
+      req.body = { url: 'boluo66.top' };
+      req.user = { id: 'u1' };
+      const res = new MockResponse();
+      const pending = generateBookmarkMeta(req, res);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      await pending;
+
+      expect(res.statusCode).toBe(504);
+      expect(res.payload).toMatchObject({ status: 504, message: '智能识别等待时间过长，请重试' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

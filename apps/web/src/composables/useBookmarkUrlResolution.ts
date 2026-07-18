@@ -12,6 +12,12 @@ import {
 type LivenessResult = { status: 'alive' | 'suspect' | 'unknown' | 'skip'; code: string | number } | null;
 type ClientResolution = BookmarkUrlResolution & { liveness?: LivenessResult };
 
+interface BookmarkUrlPreflightOptions {
+  checkLiveness?: boolean;
+  showError?: boolean;
+  signal?: AbortSignal;
+}
+
 export interface BookmarkUrlPreflightResult {
   ok: boolean;
   cancelled?: boolean;
@@ -26,19 +32,22 @@ function candidateDescription(candidate: BookmarkUrlCandidate) {
     : i18n.global.t('bookmarkUrl.domainCandidate');
 }
 
-async function chooseCandidate(candidates: BookmarkUrlCandidate[]) {
-  return requestBookmarkUrlDecision({
-    title: i18n.global.t('bookmarkUrl.chooseTitle'),
-    description: i18n.global.t('bookmarkUrl.chooseDescription'),
-    options: candidates.map((candidate, index) => ({
-      id: candidate.url,
-      label: candidate.url,
-      description: candidateDescription(candidate),
-      recommended: candidates.length === 1 && index === 0,
-    })),
-    cancelText: i18n.global.t('bookmarkUrl.backToEdit'),
-    recommendedText: i18n.global.t('bookmarkUrl.recommended'),
-  });
+async function chooseCandidate(candidates: BookmarkUrlCandidate[], signal?: AbortSignal) {
+  return requestBookmarkUrlDecision(
+    {
+      title: i18n.global.t('bookmarkUrl.chooseTitle'),
+      description: i18n.global.t('bookmarkUrl.chooseDescription'),
+      options: candidates.map((candidate, index) => ({
+        id: candidate.url,
+        label: candidate.url,
+        description: candidateDescription(candidate),
+        recommended: candidates.length === 1 && index === 0,
+      })),
+      cancelText: i18n.global.t('bookmarkUrl.backToEdit'),
+      recommendedText: i18n.global.t('bookmarkUrl.recommended'),
+    },
+    { signal },
+  );
 }
 
 function livenessDescription(liveness: LivenessResult) {
@@ -58,33 +67,46 @@ function invalidResolutionMessage(resolution: ClientResolution) {
   return i18n.global.t(keyByCode[resolution.code] || 'bookmarkUrl.invalid');
 }
 
-async function confirmSuspectUrl(url: string, liveness: LivenessResult) {
-  const result = await requestBookmarkUrlDecision({
-    title: i18n.global.t('bookmarkUrl.suspectTitle'),
-    description: livenessDescription(liveness),
-    options: [
-      {
-        id: 'edit',
-        label: i18n.global.t('bookmarkUrl.backToEdit'),
-        description: i18n.global.t('bookmarkUrl.editRecommendedDescription'),
-        recommended: true,
-      },
-      {
-        id: 'save',
-        label: i18n.global.t('bookmarkUrl.saveAnyway'),
-        description: url,
-      },
-    ],
-    cancelText: i18n.global.t('common.cancel'),
-    recommendedText: i18n.global.t('bookmarkUrl.recommended'),
-  });
+async function confirmSuspectUrl(url: string, liveness: LivenessResult, signal?: AbortSignal) {
+  const result = await requestBookmarkUrlDecision(
+    {
+      title: i18n.global.t('bookmarkUrl.suspectTitle'),
+      description: livenessDescription(liveness),
+      options: [
+        {
+          id: 'edit',
+          label: i18n.global.t('bookmarkUrl.backToEdit'),
+          description: i18n.global.t('bookmarkUrl.editRecommendedDescription'),
+          recommended: true,
+        },
+        {
+          id: 'save',
+          label: i18n.global.t('bookmarkUrl.saveAnyway'),
+          description: url,
+        },
+      ],
+      cancelText: i18n.global.t('common.cancel'),
+      recommendedText: i18n.global.t('bookmarkUrl.recommended'),
+    },
+    { signal },
+  );
   return result === 'save';
+}
+
+function isRequestCancelled(error: any, signal?: AbortSignal) {
+  return (
+    signal?.aborted ||
+    error?.code === 'ERR_CANCELED' ||
+    error?.name === 'CanceledError' ||
+    error?.name === 'AbortError'
+  );
 }
 
 export async function preflightBookmarkUrl(
   rawUrl: string,
-  { checkLiveness = true, showError = true }: { checkLiveness?: boolean; showError?: boolean } = {},
+  { checkLiveness = true, showError = true, signal }: BookmarkUrlPreflightOptions = {},
 ): Promise<BookmarkUrlPreflightResult> {
+  if (signal?.aborted) return { ok: false, cancelled: true };
   let currentUrl = String(rawUrl || '').trim();
   // 危险协议、账号密码型 URL、超长输入等确定性错误先在本地拦截。
   // 这既能立即给出中文反馈，也避免请求在抵达应用前被 WAF 拦截成泛化的 403 网络错误；
@@ -101,9 +123,10 @@ export async function preflightBookmarkUrl(
       response = await apiBasePost(
         '/api/bookmark/resolveUrl',
         { url: currentUrl, allowTextExtraction: true, checkLiveness },
-        { silent: true },
+        { silent: true, signal },
       );
     } catch (error: any) {
+      if (isRequestCancelled(error, signal)) return { ok: false, cancelled: true };
       const errorMessage = error?.message || i18n.global.t('http.networkUnstable');
       if (showError) message.error(errorMessage);
       return { ok: false, message: errorMessage };
@@ -125,13 +148,13 @@ export async function preflightBookmarkUrl(
         if (showError) message.error(errorMessage);
         return { ok: false, resolution, message: errorMessage };
       }
-      const selectedUrl = await chooseCandidate(resolution.candidates);
+      const selectedUrl = await chooseCandidate(resolution.candidates, signal);
       if (!selectedUrl) return { ok: false, cancelled: true, resolution };
       currentUrl = selectedUrl;
       continue;
     }
     if (resolution.liveness?.status === 'suspect') {
-      const shouldSave = await confirmSuspectUrl(resolution.canonicalUrl, resolution.liveness);
+      const shouldSave = await confirmSuspectUrl(resolution.canonicalUrl, resolution.liveness, signal);
       if (!shouldSave) return { ok: false, cancelled: true, resolution };
     }
     return { ok: true, url: resolution.canonicalUrl, resolution };

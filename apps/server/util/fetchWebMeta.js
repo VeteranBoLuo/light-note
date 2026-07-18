@@ -203,6 +203,11 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
     }
     buf = Buffer.from(resp.data);
   } catch (e) {
+    // 用户主动停止或上游超时时必须继续向上传播，不能降级成 FETCH_FAILED 后又调用模型，
+    // 否则界面虽然显示“已停止”，服务器仍会在后台继续消耗资源。
+    if (signal?.aborted || e?.name === 'AbortError' || e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') {
+      throw e;
+    }
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) {
       return { ok: false, reason: 'BLOCKED_HOST' };
     }

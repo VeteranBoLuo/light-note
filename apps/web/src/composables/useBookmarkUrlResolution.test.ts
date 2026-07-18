@@ -103,4 +103,19 @@ describe('preflightBookmarkUrl', () => {
     });
     expect(errorMessage).toHaveBeenCalledWith('网络连接异常');
   });
+
+  it('外部停止信号会中止地址解析，并且不误报为网络异常', async () => {
+    apiBasePost.mockImplementationOnce((_url, _data, options) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject({ code: 'ERR_CANCELED' }), { once: true });
+      }),
+    );
+    const controller = new AbortController();
+    const pending = preflightBookmarkUrl('https://example.com', { signal: controller.signal });
+
+    controller.abort();
+
+    await expect(pending).resolves.toMatchObject({ ok: false, cancelled: true });
+    expect(errorMessage).not.toHaveBeenCalled();
+  });
 });

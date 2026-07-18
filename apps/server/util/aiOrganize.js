@@ -40,6 +40,14 @@ function mapTagSuggestion(parsed, userTags) {
   return { matchedTagIds, newTags };
 }
 
+function throwIfAborted(signal) {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  const error = new Error('请求已取消');
+  error.name = 'AbortError';
+  throw error;
+}
+
 // 从纯文本(如笔记标题+正文)推荐标签:只匹配/建议标签,不生成名称描述。供「AI 整理笔记」用。
 export async function suggestTagsFromText({ text, userTags = [] }) {
   const tagNameList = userTags.map((t) => t.name);
@@ -74,7 +82,8 @@ export async function suggestTagsFromText({ text, userTags = [] }) {
  * 抽自 chatHandle.generateBookmarkMeta,供「单条智能生成」与「批量整理」共用。
  * @returns {{name,description,matchedTagIds,newTags}|null} 解析失败返回 null
  */
-export async function suggestBookmarkMeta({ url, name = '', description = '', userTags = [] }) {
+export async function suggestBookmarkMeta({ url, name = '', description = '', userTags = [], signal }) {
+  throwIfAborted(signal);
   const curName = String(name || '').trim();
   const curDesc = String(description || '').trim();
   const hasMeta = !!(curName && curDesc);
@@ -85,7 +94,8 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
   if (hasMeta) {
     pageInfo = [`网页名称:${curName}`, `网页描述:${curDesc}`].join('\n');
   } else {
-    const meta = await fetchWebMeta(url);
+    const meta = await fetchWebMeta(url, { signal });
+    throwIfAborted(signal);
     metadataSource = meta.ok ? 'fetched' : 'inferred';
     fetchReason = meta.ok ? '' : String(meta.reason || 'FETCH_FAILED');
     pageInfo = meta.ok
@@ -117,10 +127,13 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
     '- 只输出 JSON 对象,格式必须是 {"name":"...","description":"...","matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
   ].join('\n');
 
-  const { content } = await requestDeepSeek([
-    { role: 'system', content: '你是书签整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
-    { role: 'user', content: userPrompt },
-  ]);
+  const { content } = await requestDeepSeek(
+    [
+      { role: 'system', content: '你是书签整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
+      { role: 'user', content: userPrompt },
+    ],
+    { signal },
+  );
   const parsed = parseAiJson(content);
   if (!parsed || (!parsed.name && !parsed.description && !Array.isArray(parsed.matchedTags))) return null;
   const mapped = mapTagSuggestion(parsed, userTags);

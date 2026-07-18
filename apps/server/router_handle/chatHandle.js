@@ -107,6 +107,18 @@ export const generateTagIcon = async (req, res) => {
   }
 };
 
+const BOOKMARK_META_TIMEOUT_MS = 45_000;
+
+function createBookmarkMetaAbortError(message, name = 'AbortError') {
+  const error = new Error(message);
+  error.name = name;
+  return error;
+}
+
+function canSendBookmarkMetaResponse(res) {
+  return !res.writableEnded && !res.destroyed;
+}
+
 export const generateBookmarkMeta = async (req, res) => {
   try {
     const { url } = req.body;
@@ -123,20 +135,59 @@ export const generateBookmarkMeta = async (req, res) => {
     }
     const resolvedUrl = urlResolution.canonicalUrl;
 
-    // 拉取用户已有标签,让 AI 从中推荐关联标签(不够再建议新标签)。
-    // 抓网页 + AI 生成的核心逻辑抽到 util/aiOrganize.suggestBookmarkMeta,与「批量整理」共用。
-    const metaUserId = req.user?.id;
-    let userTags = [];
-    if (metaUserId) {
-      const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [metaUserId]);
-      userTags = tagRows;
+    const controller = new AbortController();
+    let abortSource = '';
+    const abortGeneration = (source) => {
+      if (controller.signal.aborted) return;
+      abortSource = source;
+      controller.abort(
+        createBookmarkMetaAbortError(
+          source === 'timeout' ? '书签智能识别超时' : '客户端已停止书签智能识别',
+          source === 'timeout' ? 'TimeoutError' : 'AbortError',
+        ),
+      );
+    };
+    const handleRequestAborted = () => abortGeneration('client');
+    const handleResponseClosed = () => {
+      if (!res.writableEnded) abortGeneration('client');
+    };
+    req.once?.('aborted', handleRequestAborted);
+    res.once?.('close', handleResponseClosed);
+    const timeoutId = setTimeout(() => abortGeneration('timeout'), BOOKMARK_META_TIMEOUT_MS);
+
+    try {
+      // 拉取用户已有标签,让 AI 从中推荐关联标签(不够再建议新标签)。
+      // 抓网页 + AI 生成的核心逻辑抽到 util/aiOrganize.suggestBookmarkMeta,与「批量整理」共用。
+      const metaUserId = req.user?.id;
+      let userTags = [];
+      if (metaUserId) {
+        const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [metaUserId]);
+        userTags = tagRows;
+      }
+      if (controller.signal.aborted) throw controller.signal.reason;
+      const result = await suggestBookmarkMeta({ url: resolvedUrl, userTags, signal: controller.signal });
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (!result) {
+        return res.status(500).send(resultData(null, 500, 'AI 返回结果解析失败'));
+      }
+      if (canSendBookmarkMetaResponse(res)) {
+        return res.send(resultData({ ...result, resolvedUrl }));
+      }
+    } catch (error) {
+      if (controller.signal.aborted) {
+        if (abortSource === 'timeout' && canSendBookmarkMetaResponse(res)) {
+          return res.status(504).send(resultData(null, 504, '智能识别等待时间过长，请重试'));
+        }
+        return;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+      req.off?.('aborted', handleRequestAborted);
+      res.off?.('close', handleResponseClosed);
     }
-    const result = await suggestBookmarkMeta({ url: resolvedUrl, userTags });
-    if (!result) {
-      return res.status(500).send(resultData(null, 500, 'AI 返回结果解析失败'));
-    }
-    res.send(resultData({ ...result, resolvedUrl }));
   } catch (error) {
+    if (!canSendBookmarkMetaResponse(res)) return;
     const providerMsg = error?.message || String(error);
     console.error('生成书签元信息错误:', providerMsg); // 完整错误(可能含供应商原文 / API key 片段)只进服务器日志
     // 不把供应商原始报错透传前端(曾把 API key 尾号暴露到界面):鉴权/额度类给管理员可辨识的提示,其余归为通用失败
@@ -145,7 +196,7 @@ export const generateBookmarkMeta = async (req, res) => {
     const friendly = isAuthOrQuota
       ? 'AI 生成服务暂不可用(鉴权或额度异常),请联系管理员检查配置'
       : 'AI 生成失败,请稍后重试';
-    res.status(500).send(resultData(null, 500, friendly));
+    return res.status(500).send(resultData(null, 500, friendly));
   }
 };
 

@@ -37,6 +37,7 @@
 
 <script lang="ts" setup>
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { computed, onBeforeUnmount, onMounted, ref, useAttrs, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
 

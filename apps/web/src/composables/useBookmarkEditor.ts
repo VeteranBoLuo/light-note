@@ -102,7 +102,7 @@ export function useBookmarkEditor() {
     return tagOptions.value;
   }
 
-  const { generating, generateBookmarkMeta } = useBookmarkMeta({
+  const { generating, generateBookmarkMeta, stopBookmarkMetaGeneration } = useBookmarkMeta({
     bookmarkData,
     tagOptions,
     refreshTags: getTagSelect,
@@ -283,6 +283,7 @@ export function useBookmarkEditor() {
 
   onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
+    stopBookmarkMetaGeneration({ notify: false });
   });
 
   return {
@@ -301,6 +302,7 @@ export function useBookmarkEditor() {
     saveLabel,
     saving,
     generateBookmarkMeta,
+    stopBookmarkMetaGeneration,
     submit,
     requestCancel,
     goAddTag,
