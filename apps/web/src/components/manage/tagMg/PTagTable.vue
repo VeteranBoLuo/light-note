@@ -12,19 +12,30 @@
       </template>
       <div class="mobile-tag-page">
         <BCard as="section" variant="raised" padding="14px 15px" class="mobile-overview">
-          <div>
+          <div class="mobile-overview__total">
             <strong>{{ overview.tag }}</strong>
             <span>{{ t('tagManage.statTotal') }}</span>
           </div>
-          <p>
-            {{
-              t('tagManage.mobileOverview', {
-                bookmark: overview.bookmark,
-                note: overview.note,
-                file: overview.file,
-              })
-            }}
-          </p>
+          <div class="mobile-overview__coverage">
+            <span class="mobile-overview__coverage-label">{{ t('tagManage.coverageLabel') }}</span>
+            <div class="mobile-overview__metrics">
+              <span class="mobile-overview__metric mobile-overview__metric--bookmark">
+                <i></i>
+                <span>{{ t('tagManage.bookmarkShort') }}</span>
+                <strong>{{ overview.bookmark }}</strong>
+              </span>
+              <span class="mobile-overview__metric mobile-overview__metric--note">
+                <i></i>
+                <span>{{ t('tagManage.noteShort') }}</span>
+                <strong>{{ overview.note }}</strong>
+              </span>
+              <span class="mobile-overview__metric mobile-overview__metric--file">
+                <i></i>
+                <span>{{ t('tagManage.fileShort') }}</span>
+                <strong>{{ overview.file }}</strong>
+              </span>
+            </div>
+          </div>
         </BCard>
 
         <div class="mobile-search-row">
@@ -89,13 +100,19 @@
 
             <div class="mobile-resource-metrics">
               <span class="mobile-metric mobile-metric--bookmark">
-                {{ t('tagManage.bookmarkShort') }} <strong>{{ tag.bookmarkList?.length || 0 }}</strong>
+                <i></i>
+                <span>{{ t('tagManage.bookmarkShort') }}</span>
+                <strong>{{ tag.bookmarkList?.length || 0 }}</strong>
               </span>
               <span class="mobile-metric mobile-metric--note">
-                {{ t('tagManage.noteShort') }} <strong>{{ tag.noteList?.length || 0 }}</strong>
+                <i></i>
+                <span>{{ t('tagManage.noteShort') }}</span>
+                <strong>{{ tag.noteList?.length || 0 }}</strong>
               </span>
               <span class="mobile-metric mobile-metric--file">
-                {{ t('tagManage.fileShort') }} <strong>{{ tag.fileList?.length || 0 }}</strong>
+                <i></i>
+                <span>{{ t('tagManage.fileShort') }}</span>
+                <strong>{{ tag.fileList?.length || 0 }}</strong>
               </span>
             </div>
 
@@ -241,29 +258,93 @@
     --b-card-border-color: color-mix(in srgb, var(--resource-tag-color) 18%, var(--mobile-tag-border));
     --b-card-shadow: var(--surface-raised-shadow);
 
+    display: grid;
+    grid-template-columns: 78px minmax(0, 1fr);
+    align-items: center;
     border-radius: 15px;
+  }
 
-    div {
-      display: flex;
-      align-items: baseline;
-      gap: 7px;
+  .mobile-overview__total {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 12px;
+    border-right: 1px solid color-mix(in srgb, var(--resource-tag-color) 16%, var(--mobile-tag-border));
+
+    strong {
+      color: var(--resource-tag-color);
+      font-size: 23px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    span {
+      color: var(--sub-text-color);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+  }
+
+  .mobile-overview__coverage {
+    min-width: 0;
+    padding-left: 12px;
+  }
+
+  .mobile-overview__coverage-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-color);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .mobile-overview__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .mobile-overview__metric {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    gap: 4px;
+    color: var(--sub-text-color);
+    font-size: 10px;
+
+    i {
+      width: 5px;
+      height: 5px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      background: var(--resource-tag-color);
+    }
+
+    > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     strong {
-      font-size: 24px;
-      color: var(--resource-tag-color);
-    }
-
-    span,
-    p {
-      color: var(--sub-text-color);
+      margin-left: auto;
+      color: var(--text-color);
       font-size: 12px;
+      font-variant-numeric: tabular-nums;
     }
+  }
 
-    p {
-      margin: 6px 0 0;
-      line-height: 1.55;
-    }
+  .mobile-overview__metric--bookmark i {
+    background: var(--resource-bookmark-color);
+  }
+
+  .mobile-overview__metric--note i {
+    background: var(--resource-note-color);
+  }
+
+  .mobile-overview__metric--file i {
+    background: var(--resource-file-color);
   }
 
   .mobile-search-row {
@@ -450,33 +531,58 @@
   }
 
   .mobile-resource-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 0;
     padding: 0 12px 9px;
   }
 
   .mobile-metric {
-    display: flex;
-    justify-content: space-between;
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
     gap: 4px;
-    padding: 6px 8px;
-    border-radius: 8px;
+    padding: 0 8px;
     color: var(--sub-text-color);
-    background: var(--mobile-tag-muted-bg);
     font-size: 10px;
+
+    &:first-child {
+      padding-left: 0;
+    }
+
+    &:not(:last-child)::after {
+      content: '';
+      width: 1px;
+      height: 12px;
+      margin-left: 5px;
+      background: var(--mobile-tag-border);
+    }
+
+    i {
+      width: 5px;
+      height: 5px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      background: var(--resource-tag-color);
+    }
+
+    strong {
+      color: var(--text-color);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
   }
 
-  .mobile-metric--bookmark strong {
-    color: var(--resource-bookmark-color);
+  .mobile-metric--bookmark i {
+    background: var(--resource-bookmark-color);
   }
 
-  .mobile-metric--note strong {
-    color: var(--resource-note-color);
+  .mobile-metric--note i {
+    background: var(--resource-note-color);
   }
 
-  .mobile-metric--file strong {
-    color: var(--resource-file-color);
+  .mobile-metric--file i {
+    background: var(--resource-file-color);
   }
 
   .mobile-related {
