@@ -190,8 +190,12 @@
   }
 
   .ai-drawer-content--maximized {
-    width: min(960px, 100%);
+    width: min(100%, clamp(960px, 60vw, 1440px));
     margin: 0 auto;
+  }
+
+  .ai-drawer-content--maximized :deep(.chat-wrapper) {
+    max-width: none;
   }
 
   .ai-window-toggle {

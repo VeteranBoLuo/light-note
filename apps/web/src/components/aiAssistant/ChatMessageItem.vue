@@ -259,7 +259,7 @@
     display: flex;
     align-items: flex-start;
     gap: 0.625rem;
-    max-width: 90%;
+    max-width: min(90%, 1080px);
   }
 
   .message.user .message-content {
