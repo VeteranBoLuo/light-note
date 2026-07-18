@@ -224,6 +224,9 @@ const lotteryLoading = ref(false);
 let loadedOnce = false;
 let ranksLoaded = false;
 let ownerId: string | null = null; // 成长缓存归属的账号,切号即作废
+let growthRequest: Promise<Growth | null> | null = null;
+let growthRequestOwnerId: string | null = null;
+let growthRequestVersion = 0;
 
 // 登出/切换账号时作废用户成长缓存(ranks 段位表全局通用,与账号无关,不清)
 export function resetGrowth() {
@@ -236,6 +239,10 @@ export function resetGrowth() {
   recap.value = null;
   loadedOnce = false;
   ownerId = null;
+  growthRequest = null;
+  growthRequestOwnerId = null;
+  growthRequestVersion += 1;
+  loading.value = false;
 }
 
 // 积分余额单一事实源是 growth.points;商店/抽奖各自缓存了余额副本,
@@ -257,19 +264,37 @@ export function useGrowth() {
       ownerId = uid;
     }
     if (loadedOnce && !force) return growth.value;
+    // 多个首屏组件会同时读取成长信息。在同账号请求仍在进行时直接复用，
+    // 避免缓存尚未写入前重复调用 /growth/me；force 只跳过已完成缓存，不绕过在途合并。
+    if (growthRequest && growthRequestOwnerId === uid) return growthRequest;
+
     loading.value = true;
-    try {
-      const res = await growthApi.getMyGrowth();
-      if (res?.status === 200 && res.data) {
-        growth.value = res.data as Growth;
-        loadedOnce = true;
+    growthRequestOwnerId = uid;
+    const requestVersion = ++growthRequestVersion;
+    let request: Promise<Growth | null>;
+    // 延后一轮微任务再真正调用 API，确保共享 request 已赋值；即使 API 客户端同步抛错，finally 也能正常清理。
+    request = Promise.resolve().then(async () => {
+      try {
+        const res = await growthApi.getMyGrowth();
+        // 请求期间如果发生账号切换，旧账号响应不得覆盖新账号缓存。
+        if (growthRequestVersion === requestVersion && ownerId === uid && res?.status === 200 && res.data) {
+          growth.value = res.data as Growth;
+          loadedOnce = true;
+        }
+      } catch (err) {
+        console.warn('加载成长信息失败:', err);
+      } finally {
+        // 只允许当前最新请求清理共享状态，避免旧账号请求晚返回后干扰新账号加载态。
+        if (growthRequestVersion === requestVersion && growthRequest === request) {
+          growthRequest = null;
+          growthRequestOwnerId = null;
+          loading.value = false;
+        }
       }
-    } catch (err) {
-      console.warn('加载成长信息失败:', err);
-    } finally {
-      loading.value = false;
-    }
-    return growth.value;
+      return growthRequestVersion === requestVersion && ownerId === uid ? growth.value : null;
+    });
+    growthRequest = request;
+    return request;
   }
 
   // 成长看板(成就墙/统计/今日任务/时间线):每次进成长页强制刷新(数据随操作实时变化)
