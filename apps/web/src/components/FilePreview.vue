@@ -251,6 +251,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { acquireTopLayerEscapeLock } from '@/utils/topLayerEscape';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,
@@ -305,6 +306,7 @@
   let markdownParser: ((markdown: string) => string) | null = null;
   let markdownSanitizer: ((html: string) => string) | null = null;
   let previousBodyOverflow = '';
+  let releaseEscapeLock: (() => void) | null = null;
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
   const previewType = computed(() => getCloudPreviewType(props.fileInfo));
@@ -410,6 +412,7 @@
   watch(
     () => props.visible,
     async (newVisible) => {
+      syncEscapeLock(newVisible);
       if (newVisible && props.fileInfo) {
         activePreviewFileId = String(props.fileInfo.id || '');
         previousBodyOverflow = document.body.style.overflow;
@@ -429,6 +432,17 @@
     },
     { immediate: true },
   );
+
+  function syncEscapeLock(visible: boolean) {
+    if (visible && !releaseEscapeLock) {
+      releaseEscapeLock = acquireTopLayerEscapeLock();
+      return;
+    }
+    if (!visible && releaseEscapeLock) {
+      releaseEscapeLock();
+      releaseEscapeLock = null;
+    }
+  }
 
   watch(
     () => props.fileInfo?.id,
@@ -765,6 +779,8 @@
     if (!props.visible) return;
 
     if (e.key === 'Escape') {
+      e.preventDefault();
+      if (e.repeat) return;
       handleClose();
       return;
     }
@@ -818,6 +834,7 @@
   });
 
   onUnmounted(() => {
+    syncEscapeLock(false);
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('wheel', handleWheel);
     document.removeEventListener('mousedown', handleMiddleDblClick);

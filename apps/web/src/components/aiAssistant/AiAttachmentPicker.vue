@@ -1,12 +1,52 @@
 <template>
   <div class="ai-attachment-picker" :class="{ 'has-attachment': modelValue.length > 0 }">
-    <div v-if="modelValue.length" class="attachment-card" :class="`is-${modelValue[0].status}`">
+    <div
+      v-if="currentAttachment && attachmentPresentation"
+      class="attachment-card"
+      :class="[`is-${currentAttachment.status}`, { 'is-processing': attachmentPresentation.isProcessing }]"
+      :aria-busy="attachmentPresentation.isProcessing"
+    >
       <span class="attachment-icon"><SvgIcon :src="icon.cloudSpace.preview.unknown" size="18" /></span>
       <span class="attachment-copy">
-        <strong>{{ modelValue[0].fileName }}</strong>
-        <small>{{ statusLabel(modelValue[0]) }}</small>
+        <strong :title="currentAttachment.fileName">{{ currentAttachment.fileName }}</strong>
+        <span class="attachment-meta">
+          <span class="attachment-size">{{ formatBytes(currentAttachment.fileSize) }}</span>
+          <template v-if="attachmentPresentation.showOriginalReady">
+            <span class="attachment-separator" aria-hidden="true">·</span>
+            <span class="attachment-original-ready">{{ t('ai.attachmentOriginalReady') }}</span>
+          </template>
+          <template v-if="attachmentPresentation.isProcessing">
+            <span class="attachment-separator" aria-hidden="true">·</span>
+            <BLoading
+              inline
+              :loading="true"
+              :title="attachmentStatusText(currentAttachment)"
+              class="attachment-processing"
+            />
+          </template>
+          <template v-else>
+            <span class="attachment-separator" aria-hidden="true">·</span>
+            <span
+              class="attachment-status"
+              :class="`attachment-status--${attachmentPresentation.tone}`"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <SvgIcon v-if="attachmentStatusIcon" :src="attachmentStatusIcon" size="12" />
+              <span>{{ attachmentStatusText(currentAttachment) }}</span>
+            </span>
+          </template>
+          <template v-if="currentAttachment.fileId">
+            <span class="attachment-separator" aria-hidden="true">·</span>
+            <span class="attachment-saved">
+              <SvgIcon :src="icon.message.success" size="12" />
+              {{ t('ai.attachmentSavedToCloud') }}
+            </span>
+          </template>
+        </span>
       </span>
-      <BButton v-if="modelValue[0].status === 'failed'" size="small" :loading="busy" @click="retryAttachment">
+      <BButton v-if="currentAttachment.status === 'failed'" size="small" :loading="busy" @click="retryAttachment">
         <SvgIcon :src="icon.cloudSpace.preview.retry" size="13" />
         {{ t('ai.retryAttachment') }}
       </BButton>
@@ -89,12 +129,14 @@
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import AiAttachmentActionEditor from './AiAttachmentActionEditor.vue';
+  import { getAiAttachmentPresentation } from './attachmentPresentation';
   import {
     createAttachmentActionDraft,
     type AiAttachmentActionDraft,
@@ -123,6 +165,16 @@
   let pollTimer: number | null = null;
   let pollAttempts = 0;
 
+  const currentAttachment = computed(() => props.modelValue[0] || null);
+  const attachmentPresentation = computed(() =>
+    currentAttachment.value ? getAiAttachmentPresentation(currentAttachment.value.status) : null,
+  );
+  const attachmentStatusIcon = computed(() => {
+    if (attachmentPresentation.value?.tone === 'success') return icon.message.success;
+    if (attachmentPresentation.value?.tone === 'warning') return icon.message.warning;
+    if (attachmentPresentation.value?.tone === 'error') return icon.message.error;
+    return '';
+  });
   const actionableAttachment = computed(() => props.modelValue.find((item) => item.status !== 'awaiting_upload'));
   const textReadyAttachment = computed(() => props.modelValue.find((item) => item.status === 'ready'));
   const imageAttachment = computed(() => {
@@ -161,17 +213,12 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function statusLabel(attachment: AiAttachment) {
-    const savedLabel = attachment.fileId ? ` · ${t('ai.attachmentSavedToCloud')}` : '';
-    if (attachment.status === 'ready')
-      return `${formatBytes(attachment.fileSize)} · ${t('ai.attachmentReady')}${savedLabel}`;
-    if (attachment.status === 'no_text')
-      return `${formatBytes(attachment.fileSize)} · ${t(
-        isImageAttachment(attachment) ? 'ai.attachmentStatus.no_text_image' : 'ai.attachmentStatus.no_text',
-      )}${savedLabel}`;
-    if (attachment.status === 'failed')
-      return `${attachment.errorMessage || t('ai.attachmentFailed')} · ${t('ai.attachmentFailedUsable')}${savedLabel}`;
-    return `${formatBytes(attachment.fileSize)} · ${t(`ai.attachmentStatus.${attachment.status}`)}${savedLabel}`;
+  function attachmentStatusText(attachment: AiAttachment) {
+    if (attachment.status === 'failed') return attachment.errorMessage || t('ai.attachmentStatus.failed');
+    if (attachment.status === 'no_text' && isImageAttachment(attachment)) {
+      return t('ai.attachmentStatus.no_text_image');
+    }
+    return t(getAiAttachmentPresentation(attachment.status).statusKey);
   }
 
   function showAttachmentError(error: any, fallback: string) {
@@ -317,6 +364,7 @@
     gap: 6px;
   }
   .attachment-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -326,12 +374,20 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 7%, var(--background-color));
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 16%, transparent);
+    transition:
+      background 0.2s ease,
+      box-shadow 0.2s ease;
   }
   .attachment-card.is-failed {
-    background: color-mix(in srgb, #ef4444 8%, var(--background-color));
+    background: color-mix(in srgb, var(--message-error-color) 8%, var(--background-color));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--message-error-color) 22%, transparent);
   }
   .attachment-card.is-no_text {
-    background: color-mix(in srgb, #f59e0b 7%, var(--background-color));
+    background: color-mix(in srgb, var(--message-warning-color) 7%, var(--background-color));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--message-warning-color) 20%, transparent);
+  }
+  .attachment-card.is-ready {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--message-success-color) 20%, transparent);
   }
   .attachment-icon {
     display: grid;
@@ -346,24 +402,119 @@
     display: grid;
     flex: 1;
     min-width: 0;
-    gap: 1px;
+    gap: 2px;
   }
-  .attachment-copy strong,
-  .attachment-copy small {
+  .attachment-copy strong {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .attachment-copy strong {
     font-size: 12px;
   }
-  .attachment-copy small {
+  .attachment-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    min-width: 0;
+    column-gap: 4px;
+    row-gap: 2px;
     color: var(--desc-color);
     font-size: 11px;
+    line-height: 16px;
+  }
+  .attachment-size,
+  .attachment-original-ready,
+  .attachment-status,
+  .attachment-saved {
+    white-space: nowrap;
+  }
+  .attachment-separator {
+    color: color-mix(in srgb, var(--desc-color) 58%, transparent);
+  }
+  .attachment-status,
+  .attachment-saved {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .attachment-status--success,
+  .attachment-saved {
+    color: var(--message-success-color);
+  }
+  .attachment-status--success {
+    animation: attachment-ready-in 0.38s ease-out both;
+  }
+  .attachment-status--warning {
+    color: var(--message-warning-color);
+  }
+  .attachment-status--error {
+    color: var(--message-error-color);
+  }
+  :deep(.attachment-processing.b-loading-inline) {
+    min-height: 16px;
+    gap: 5px;
+    color: var(--primary-color);
+    font-size: 11px;
+  }
+  :deep(.attachment-processing .b-loading-inline__indicator) {
+    gap: 2px;
+  }
+  :deep(.attachment-processing .b-loading-inline__indicator i) {
+    width: 4px;
+    height: 4px;
+  }
+  :deep(.attachment-processing .b-loading-inline__title) {
+    animation: attachment-processing-text 1.65s ease-in-out infinite;
+  }
+  .attachment-card.is-processing .attachment-icon {
+    animation: attachment-processing-halo 1.65s ease-in-out infinite;
+  }
+  .attachment-card > :deep(.b_btn) {
+    flex: 0 0 auto;
   }
   .attachment-shortcuts {
     display: flex;
     gap: 5px;
     flex-wrap: wrap;
+  }
+
+  @keyframes attachment-processing-text {
+    0%,
+    100% {
+      opacity: 0.62;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes attachment-processing-halo {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary-color) 0%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 12%, transparent);
+    }
+  }
+
+  @keyframes attachment-ready-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .attachment-card,
+    .attachment-card.is-processing .attachment-icon,
+    .attachment-status--success,
+    :deep(.attachment-processing .b-loading-inline__title) {
+      animation: none;
+      transition: none;
+    }
   }
 </style>

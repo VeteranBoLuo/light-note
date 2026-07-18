@@ -67,6 +67,7 @@
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';
   import { getGlobalShortcutLabel, matchesGlobalShortcut } from '@/config/keyboardShortcuts.ts';
+  import { shouldIgnoreBackgroundEscape } from '@/utils/topLayerEscape';
 
   const ChatContainer = defineAsyncComponent(() => import('@/view/aiAssistant/ChatContainer.vue'));
 
@@ -127,10 +128,6 @@
     else message.warning(t('ai.newConversationCleanupFailed'));
   }
 
-  function shouldIgnoreEscape(event: KeyboardEvent) {
-    return event.defaultPrevented || event.isComposing || event.keyCode === 229;
-  }
-
   function handleKeydown(event: KeyboardEvent) {
     if (bookmark.isDesktop && matchesGlobalShortcut(event, 'aiAssistant')) {
       event.preventDefault();
@@ -141,7 +138,7 @@
       openAssistant();
       return;
     }
-    if (event.key === 'Escape' && isOpen.value && !shouldIgnoreEscape(event)) {
+    if (event.key === 'Escape' && isOpen.value && !shouldIgnoreBackgroundEscape(event)) {
       minimize();
     }
   }
