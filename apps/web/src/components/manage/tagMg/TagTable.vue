@@ -75,7 +75,12 @@
 
         <BCard as="section" variant="panel" padding="14px 16px 0" class="workspace-panel">
           <div class="primary-toolbar">
-            <BInput v-model:value="keyword" class="tag-search" :placeholder="t('tagManage.searchPlaceholder')">
+            <BInput
+              v-model:value="keyword"
+              height="42px"
+              class="tag-search"
+              :placeholder="t('tagManage.searchPlaceholder')"
+            >
               <template #prefix>
                 <svg-icon :src="icon.navigation.search" size="18" />
               </template>
@@ -854,7 +859,45 @@
   }
 
   .tag-search {
-    width: min(480px, 100%);
+    width: min(520px, 100%);
+
+    :deep(.b-input) {
+      border: 1px solid var(--tag-border-color) !important;
+      border-radius: 12px;
+      color: var(--text-color);
+      background: var(--tag-card-bg) !important;
+      box-shadow: 0 1px 2px color-mix(in srgb, var(--text-color) 4%, transparent) !important;
+      font-size: 14px;
+      transition:
+        border-color 0.18s ease,
+        background 0.18s ease,
+        box-shadow 0.18s ease;
+    }
+
+    :deep(.b-input::placeholder) {
+      color: var(--sub-text-color);
+      opacity: 0.88;
+    }
+
+    :deep(.prefix-icon) {
+      color: var(--sub-text-color);
+      transition: color 0.18s ease;
+    }
+
+    :deep(.b-input:hover) {
+      border-color: color-mix(in srgb, var(--resource-tag-color) 32%, var(--tag-border-color)) !important;
+      background: color-mix(in srgb, var(--resource-tag-color) 3%, var(--tag-card-bg)) !important;
+    }
+
+    :deep(.input-container:focus-within .b-input) {
+      border-color: var(--resource-tag-color) !important;
+      background: var(--tag-card-bg) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--resource-tag-color) 14%, transparent) !important;
+    }
+
+    :deep(.input-container:focus-within .prefix-icon) {
+      color: var(--resource-tag-color);
+    }
   }
 
   .toolbar-actions {
@@ -1103,11 +1146,21 @@
   .tag-row-actions {
     gap: 5px;
     flex-shrink: 0;
+    white-space: nowrap;
+
+    :deep(.b-action-button) {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
+    :deep(.b-action-button__label) {
+      white-space: nowrap;
+    }
   }
 
   .tag-card__tools {
     position: relative;
-    width: 72px;
+    width: 138px;
     height: 30px;
     flex-shrink: 0;
   }

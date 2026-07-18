@@ -39,7 +39,12 @@
         </BCard>
 
         <div class="mobile-search-row">
-          <BInput v-model:value="keyword" class="mobile-search" :placeholder="t('tagManage.searchPlaceholder')">
+          <BInput
+            v-model:value="keyword"
+            height="40px"
+            class="mobile-search"
+            :placeholder="t('tagManage.searchPlaceholder')"
+          >
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
@@ -356,6 +361,33 @@
   .mobile-search {
     flex: 1;
     min-width: 0;
+
+    :deep(.b-input) {
+      border: 1px solid var(--mobile-tag-border) !important;
+      border-radius: 11px;
+      color: var(--text-color);
+      background: var(--mobile-tag-card-bg) !important;
+      box-shadow: 0 1px 2px color-mix(in srgb, var(--text-color) 4%, transparent) !important;
+      font-size: 14px;
+    }
+
+    :deep(.b-input::placeholder) {
+      color: var(--sub-text-color);
+      opacity: 0.88;
+    }
+
+    :deep(.prefix-icon) {
+      color: var(--sub-text-color);
+    }
+
+    :deep(.input-container:focus-within .b-input) {
+      border-color: var(--resource-tag-color) !important;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--resource-tag-color) 14%, transparent) !important;
+    }
+
+    :deep(.input-container:focus-within .prefix-icon) {
+      color: var(--resource-tag-color);
+    }
   }
 
   .mobile-add {
@@ -632,6 +664,12 @@
     gap: 6px;
     padding: 8px 10px;
     border-top: 1px solid var(--mobile-tag-border);
+
+    :deep(.b-action-button),
+    :deep(.b-action-button__label) {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
   }
 
   .mobile-empty {
