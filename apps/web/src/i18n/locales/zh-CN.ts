@@ -2070,6 +2070,7 @@ export default {
     subtitle: '完善网址、名称、描述和标签，让收藏内容更容易再次找到。',
     urlPlaceholder: '例如：https://example.com',
     smartRecognize: '智能识别书签信息',
+    checkingUrl: '正在检查网址…',
     generating: '识别中…',
     stopGenerating: '停止生成',
     aiHint: '点击「智能识别书签信息」后，将自动补全名称和描述，并从已有标签中推荐关联项。',

@@ -2106,6 +2106,7 @@ export default {
     subtitle: 'Add the URL, name, description, and tags so this bookmark stays easy to find.',
     urlPlaceholder: 'For example: https://example.com',
     smartRecognize: 'Recognize bookmark details',
+    checkingUrl: 'Checking URL…',
     generating: 'Recognizing…',
     stopGenerating: 'Stop',
     aiHint:

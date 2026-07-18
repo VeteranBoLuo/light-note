@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue';
+import { computed, ref, type Ref } from 'vue';
 import { apiBasePost } from '@/http/request';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { recordOperation } from '@/api/commonApi';
@@ -35,6 +35,8 @@ interface ActiveGeneration {
   timeoutId: ReturnType<typeof setTimeout> | null;
 }
 
+type BookmarkMetaPhase = 'idle' | 'resolving-url' | 'generating';
+
 /**
  * 书签「AI 生成名称/描述 + 推荐关联标签」逻辑，PC 端与移动端共用。
  *
@@ -46,7 +48,9 @@ interface ActiveGeneration {
  * 标签只预选、不落库，真正的关联发生在书签保存时（addBookmark / updateBookmark）。
  */
 export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBookmarkMetaOptions) {
-  const generating = ref(false);
+  const phase = ref<BookmarkMetaPhase>('idle');
+  const resolvingUrl = computed(() => phase.value === 'resolving-url');
+  const generating = computed(() => phase.value === 'generating');
   let activeGeneration: ActiveGeneration | null = null;
   let activeOverwriteController: AbortController | null = null;
 
@@ -77,7 +81,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     if (activeGeneration?.controller !== controller) return;
     if (activeGeneration.timeoutId) clearTimeout(activeGeneration.timeoutId);
     activeGeneration = null;
-    generating.value = false;
+    phase.value = 'idle';
   }
 
   function isRequestCancelled(error: any, controller: AbortController) {
@@ -95,6 +99,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     let stopped = false;
     if (current && !current.controller.signal.aborted) {
       current.controller.abort();
+      clearActiveGeneration(current.controller);
       stopped = true;
     }
     if (overwriteController && !overwriteController.signal.aborted) {
@@ -111,7 +116,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
   }
 
   async function generateBookmarkMeta() {
-    if (generating.value) return;
+    if (activeGeneration || phase.value !== 'idle') return;
     if (activeOverwriteController && !activeOverwriteController.signal.aborted) {
       activeOverwriteController.abort();
     }
@@ -122,7 +127,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     }
     const controller = new AbortController();
     activeGeneration = { controller, timeoutId: null };
-    generating.value = true;
+    phase.value = 'resolving-url';
     try {
       const urlResult = await preflightBookmarkUrl(rawUrl, {
         checkLiveness: false,
@@ -131,6 +136,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       if (!urlResult.ok || !urlResult.url) return;
       bookmarkData.value.url = urlResult.url;
       if (controller.signal.aborted) return;
+      phase.value = 'generating';
 
       const currentGeneration = activeGeneration;
       if (currentGeneration?.controller === controller) {
@@ -253,5 +259,5 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
     });
   }
 
-  return { generating, generateBookmarkMeta, stopBookmarkMetaGeneration };
+  return { resolvingUrl, generating, generateBookmarkMeta, stopBookmarkMetaGeneration };
 }

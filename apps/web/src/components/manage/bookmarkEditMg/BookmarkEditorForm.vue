@@ -19,11 +19,19 @@
             @enter="$emit('generate')"
           />
           <BTooltip
-            :title="generating ? $t('bookmarkEditor.stopGenerating') : $t('bookmarkMg.generateMetaDesc')"
+            :title="
+              resolvingUrl
+                ? $t('bookmarkEditor.checkingUrl')
+                : generating
+                  ? $t('bookmarkEditor.stopGenerating')
+                  : $t('bookmarkMg.generateMetaDesc')
+            "
           >
             <BButton
               class="bookmark-generate-button"
               :class="{ 'bookmark-generate-button--stop': generating }"
+              :loading="resolvingUrl"
+              :disabled="resolvingUrl"
               @click="handleGenerateClick"
               v-click-log="{
                 module: '书签详情',
@@ -31,10 +39,19 @@
               }"
             >
               <SvgIcon
+                v-if="!resolvingUrl"
                 :src="generating ? icon.common.stop : icon.common.magicWand"
                 color="currentColor"
               />
-              <span>{{ generating ? $t('bookmarkEditor.stopGenerating') : $t('bookmarkEditor.smartRecognize') }}</span>
+              <span>
+                {{
+                  resolvingUrl
+                    ? $t('bookmarkEditor.checkingUrl')
+                    : generating
+                      ? $t('bookmarkEditor.stopGenerating')
+                      : $t('bookmarkEditor.smartRecognize')
+                }}
+              </span>
             </BButton>
           </BTooltip>
         </div>
@@ -146,6 +163,7 @@
       handleType: 'add' | 'edit';
       saveLabel: string;
       saving: boolean;
+      resolvingUrl: boolean;
       generating: boolean;
       errors: BookmarkEditorErrors;
       tagOptions: BookmarkTagOption[];
@@ -165,6 +183,7 @@
   }>();
 
   function handleGenerateClick() {
+    if (props.resolvingUrl) return;
     emit(props.generating ? 'stopGenerate' : 'generate');
   }
 </script>

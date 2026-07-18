@@ -25,6 +25,7 @@
             :handle-type="handleType"
             :save-label="saveLabel"
             :saving="saving"
+            :resolving-url="resolvingUrl"
             :generating="generating"
             :errors="fieldErrors"
             :tag-options="tagOptions"
@@ -73,6 +74,7 @@
     saveSnapshot,
     snapVisible,
     loading,
+    resolvingUrl,
     generating,
     refreshingIcon,
     fieldErrors,

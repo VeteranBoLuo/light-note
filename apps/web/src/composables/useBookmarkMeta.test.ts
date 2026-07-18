@@ -157,6 +157,48 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     );
   });
 
+  it('网址检查与确认阶段不冒充 AI 生成中，并阻止重复发起检查', async () => {
+    let finishPreflight: ((result: { ok: boolean; url?: string; cancelled?: boolean }) => void) | undefined;
+    preflightBookmarkUrl.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPreflight = resolve;
+        }),
+    );
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { name: '', description: '', matchedTagIds: [], newTags: [] },
+    });
+    const t = setup([]);
+
+    const pending = t.generateBookmarkMeta();
+    await vi.waitFor(() => expect(preflightBookmarkUrl).toHaveBeenCalledTimes(1));
+    expect(t.resolvingUrl.value).toBe(true);
+    expect(t.generating.value).toBe(false);
+    expect(apiBasePost).not.toHaveBeenCalled();
+
+    await t.generateBookmarkMeta();
+    expect(preflightBookmarkUrl).toHaveBeenCalledTimes(1);
+
+    finishPreflight?.({ ok: true, url: 'https://x.com' });
+    await vi.waitFor(() => expect(apiBasePost).toHaveBeenCalledTimes(1));
+    await pending;
+
+    expect(t.resolvingUrl.value).toBe(false);
+    expect(t.generating.value).toBe(false);
+  });
+
+  it('网址检查被取消后立即恢复空闲状态且不调用 AI', async () => {
+    preflightBookmarkUrl.mockResolvedValueOnce({ ok: false, cancelled: true });
+    const t = setup([]);
+
+    await t.generateBookmarkMeta();
+
+    expect(t.resolvingUrl.value).toBe(false);
+    expect(t.generating.value).toBe(false);
+    expect(apiBasePost).not.toHaveBeenCalled();
+  });
+
   it('用户点击停止后会真正中止请求，不回填任何识别结果', async () => {
     let requestSignal: AbortSignal | undefined;
     apiBasePost.mockImplementation((_url, _data, options) => {
@@ -169,6 +211,8 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
 
     const pending = t.generateBookmarkMeta();
     await vi.waitFor(() => expect(apiBasePost).toHaveBeenCalledTimes(1));
+    expect(t.resolvingUrl.value).toBe(false);
+    expect(t.generating.value).toBe(true);
     t.stopBookmarkMetaGeneration();
     await pending;
 

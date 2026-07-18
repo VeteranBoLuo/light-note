@@ -102,7 +102,7 @@ export function useBookmarkEditor() {
     return tagOptions.value;
   }
 
-  const { generating, generateBookmarkMeta, stopBookmarkMetaGeneration } = useBookmarkMeta({
+  const { resolvingUrl, generating, generateBookmarkMeta, stopBookmarkMetaGeneration } = useBookmarkMeta({
     bookmarkData,
     tagOptions,
     refreshTags: getTagSelect,
@@ -292,6 +292,7 @@ export function useBookmarkEditor() {
     saveSnapshot,
     snapVisible,
     loading,
+    resolvingUrl,
     generating,
     refreshingIcon,
     fieldErrors,
