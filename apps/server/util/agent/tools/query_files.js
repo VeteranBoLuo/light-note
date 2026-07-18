@@ -26,6 +26,7 @@ function normalizeArgs(args = {}) {
 
 export default {
   name: 'query_files',
+  sourceType: 'file',
   description:
     '查询用户云空间的文件。可按关键词(匹配文件名)、文件夹 ID/精确名称、文件类型(image图片/document文档/video视频/audio音频/archive压缩包/other其他)、时间范围筛选。folderId 与 folderName 同时存在时以 folderId 为准。' +
     '注意:file_type 存的是 MIME,类型按 MIME 归类;结果总会附带各类型数量分布 typeBreakdown,回答"各类文件有多少/除了图片还有什么"时直接看它,不要逐类猜。',

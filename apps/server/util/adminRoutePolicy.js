@@ -163,6 +163,7 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'trash', [
 declare(ADMIN_POLICIES.READ, 'common', [
   ['POST', '/common/getImages'],
   ['POST', '/common/getHelpConfig'],
+  ['POST', '/common/resolveHelpSources'],
   ['GET', '/common/noticeSummary'],
   ['POST', '/json/getConfigByName'],
   ['GET', '/helpCenter'],

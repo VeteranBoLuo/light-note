@@ -3,7 +3,9 @@ import { parseTimeRange } from '../timeRange.js';
 
 export default {
   name: 'query_bookmarks',
-  description: '查询用户的书签。可按关键词（匹配名称和URL）、标签名、时间范围筛选。跨类型搜索时可同时调用 query_notes 和 query_files。',
+  sourceType: 'bookmark',
+  description:
+    '查询用户的书签。可按关键词（匹配名称和URL）、标签名、时间范围筛选。跨类型搜索时可同时调用 query_notes 和 query_files。',
   parameters: {
     type: 'object',
     properties: {
@@ -44,10 +46,7 @@ export default {
         `SELECT b.id, b.name, b.url, b.create_time FROM bookmark b WHERE ${where} ORDER BY b.create_time DESC LIMIT ?`,
         [...baseParams, take],
       ),
-      pool.query(
-        `SELECT COUNT(*) as total FROM bookmark b WHERE ${where}`,
-        baseParams,
-      ),
+      pool.query(`SELECT COUNT(*) as total FROM bookmark b WHERE ${where}`, baseParams),
     ]);
 
     return { total: countRes[0].total, items: rows };

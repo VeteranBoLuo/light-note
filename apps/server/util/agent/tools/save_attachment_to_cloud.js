@@ -39,6 +39,7 @@ function formatSize(bytes) {
 
 export default {
   name: 'save_attachment_to_cloud',
+  sourceType: 'file',
   description:
     '把用户本轮已上传的附件原文件保存到当前账号的云空间。attachmentId 必须取自本轮 [attachment:ID] 上下文；fileName 可自定义文件名，folderId/folderName 可指定已有文件夹（ID 优先，名称必须精确匹配）；无需等待文字解析或 OCR 成功。已有云空间文件不会重复保存。',
   parameters: {

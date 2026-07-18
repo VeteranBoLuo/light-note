@@ -124,7 +124,7 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon';
-  import { computed, defineAsyncComponent, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -146,6 +146,7 @@
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
   import { backRouterPage } from '@/utils/common.ts';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
+  import { apiBasePost } from '@/http/request';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -159,6 +160,35 @@
     const value = route.query.fileId;
     return Array.isArray(value) ? String(value[0] || '') : String(value || '');
   });
+
+  function queryValue(value: unknown) {
+    return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+  }
+
+  function getRouteFileId() {
+    return queryValue(route.query.fileId);
+  }
+
+  function getRouteFolderId() {
+    return queryValue(route.query.folderId);
+  }
+
+  function routeQueryWith(key: 'fileId' | 'folderId', value = '') {
+    const query = { ...route.query };
+    if (value) query[key] = value;
+    else delete query[key];
+    return query;
+  }
+
+  function syncFileRoute(fileId = '') {
+    if (getRouteFileId() === fileId) return Promise.resolve();
+    return router.replace({ path: '/cloudSpace', query: routeQueryWith('fileId', fileId) });
+  }
+
+  function syncFolderRoute(folderId = '') {
+    if (getRouteFolderId() === folderId) return;
+    void router.replace({ path: '/cloudSpace', query: routeQueryWith('folderId', folderId) });
+  }
 
   async function completeOrganizingFile() {
     if (!organizingFileId.value) return;
@@ -190,6 +220,9 @@
   }
   let cloudSearchTimer = 0;
   let suppressRouteFileNameWatch = false;
+  let suppressFolderRouteWatch = Boolean(getRouteFolderId());
+  let folderListLoaded = cloud.folderList.length > 0;
+  let unavailableFolderId = '';
   function onCloudSearchInput() {
     window.clearTimeout(cloudSearchTimer);
     cloudSearchTimer = window.setTimeout(() => cloud.queryFieldList(), 220);
@@ -200,7 +233,7 @@
 
   function selectAllFolder() {
     cloud.folder = {
-      name: '全部文件',
+      name: t('cloudSpace.allFile'),
       id: 'all',
     };
     cloud.queryFieldList();
@@ -216,20 +249,56 @@
     return Array.isArray(value) ? String(value[0] || '') : String(value || '');
   }
 
+  async function applyFolderFromRoute() {
+    const folderId = getRouteFolderId();
+    if (folderId && !folderListLoaded) return;
+    const targetFolder = folderId ? cloud.folderList.find((folder) => String(folder.id) === folderId) : null;
+    if (folderId && !targetFolder) {
+      syncFolderRoute('');
+      if (unavailableFolderId !== folderId) {
+        unavailableFolderId = folderId;
+        message.warning(t('cloudSpace.folderUnavailable'));
+      }
+    } else {
+      unavailableFolderId = '';
+    }
+    const targetFolderId = targetFolder ? String(targetFolder.id) : 'all';
+    if (String(cloud.folder?.id || 'all') === targetFolderId) {
+      suppressFolderRouteWatch = false;
+      return;
+    }
+    suppressFolderRouteWatch = true;
+    cloud.folder = targetFolder
+      ? { name: targetFolder.name, id: String(targetFolder.id) }
+      : { name: t('cloudSpace.allFile'), id: 'all' };
+    cloud.queryFieldList();
+    await nextTick();
+    suppressFolderRouteWatch = false;
+  }
+
   function initializeCloudSpace(fileName = getRouteFileName()) {
+    suppressFolderRouteWatch = Boolean(getRouteFolderId());
     cloud.folder = {
-      name: '全部文件',
+      name: t('cloudSpace.allFile'),
       id: 'all',
     };
     cloud.searchFileName = fileName;
     cloud.queryFieldList();
     clearSelectionKey.value += 1;
     batchMode.value = false;
+    if (getRouteFolderId()) {
+      void applyFolderFromRoute();
+    } else {
+      void nextTick(() => {
+        suppressFolderRouteWatch = false;
+      });
+    }
   }
 
   async function resetCloudSpace() {
     window.clearTimeout(cloudSearchTimer);
     suppressRouteFileNameWatch = true;
+    suppressFolderRouteWatch = true;
     try {
       if (route.path !== '/cloudSpace' || Object.keys(route.query).length) {
         await router.replace({ path: '/cloudSpace', query: {} });
@@ -239,7 +308,7 @@
     }
 
     cloud.folder = {
-      name: '全部文件',
+      name: t('cloudSpace.allFile'),
       id: 'all',
     };
     cloud.searchFileName = '';
@@ -254,6 +323,8 @@
     } else {
       cloud.typeCheckValue = allTypes;
     }
+    await nextTick();
+    suppressFolderRouteWatch = false;
   }
 
   const moveCfg = reactive({
@@ -364,37 +435,89 @@
     fileUrl: '',
     category: 'other',
   });
+  let pendingLocalPreviewId = '';
+  let previewRequestId = 0;
+  let unavailableFileId = '';
+
+  function normalizeFileInfo(file: any): FileItem {
+    return {
+      ...file,
+      id: String(file?.id || ''),
+      fileName: file?.fileName || file?.file_name || '',
+      fileType: file?.fileType || file?.file_type || '',
+      fileUrl: file?.fileUrl || file?.file_url || '',
+      size: file?.size ?? file?.fileSize ?? file?.file_size,
+      category: file?.category || 'other',
+    };
+  }
+
+  async function openRouteFile(fileId = getRouteFileId()) {
+    if (!fileId || isOrganizingFromInbox.value || pendingLocalPreviewId === fileId) return;
+    const requestId = ++previewRequestId;
+    let res;
+    try {
+      res = await apiBasePost('/api/file/getFileInfo', { id: fileId }, { silent: true });
+    } catch {
+      res = null;
+    }
+    if (requestId !== previewRequestId || getRouteFileId() !== fileId) return;
+    if (res?.status !== 200 || !res.data) {
+      previewVisible.value = false;
+      if (unavailableFileId !== fileId) {
+        unavailableFileId = fileId;
+        message.warning(t('cloudSpace.fileUnavailable'));
+      }
+      await syncFileRoute('');
+      return;
+    }
+    unavailableFileId = '';
+    Object.assign(previewFileInfo, normalizeFileInfo(res.data));
+    previewVisible.value = true;
+  }
 
   // 文件预览函数
   async function previewFile(file: FileItem) {
     if (!file || !file.fileType) return;
-
-    // 设置文件信息
-    Object.assign(previewFileInfo, file);
+    const normalized = normalizeFileInfo(file);
+    pendingLocalPreviewId = normalized.id;
+    await syncFileRoute(normalized.id);
+    if (pendingLocalPreviewId !== normalized.id) return;
+    Object.assign(previewFileInfo, normalized);
     previewVisible.value = true;
+    pendingLocalPreviewId = '';
   }
 
-  function previewNextFile() {
+  async function previewNextFile() {
     const list = cloud.fileList || [];
     if (!list.length) return;
-    const currentIndex = list.findIndex((item) => item.id === previewFileInfo.id);
+    const currentIndex = list.findIndex((item) => String(item.id) === String(previewFileInfo.id));
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % list.length;
-    Object.assign(previewFileInfo, list[nextIndex]);
+    const target = normalizeFileInfo(list[nextIndex]);
+    pendingLocalPreviewId = target.id;
+    await syncFileRoute(target.id);
+    Object.assign(previewFileInfo, target);
     previewVisible.value = true;
+    pendingLocalPreviewId = '';
   }
 
-  function previewPrevFile() {
+  async function previewPrevFile() {
     const list = cloud.fileList || [];
     if (!list.length) return;
-    const currentIndex = list.findIndex((item) => item.id === previewFileInfo.id);
+    const currentIndex = list.findIndex((item) => String(item.id) === String(previewFileInfo.id));
     const prevIndex = currentIndex === -1 ? 0 : (currentIndex - 1 + list.length) % list.length;
-    Object.assign(previewFileInfo, list[prevIndex]);
+    const target = normalizeFileInfo(list[prevIndex]);
+    pendingLocalPreviewId = target.id;
+    await syncFileRoute(target.id);
+    Object.assign(previewFileInfo, target);
     previewVisible.value = true;
+    pendingLocalPreviewId = '';
   }
 
   // 关闭预览
-  function closePreview() {
+  async function closePreview() {
     previewVisible.value = false;
+    previewRequestId += 1;
+    if (!isOrganizingFromInbox.value) await syncFileRoute('');
   }
 
   function moveField(fileOrFiles: FileItem | FileItem[]) {
@@ -420,6 +543,43 @@
       if (suppressRouteFileNameWatch) return;
       if (!route.path.includes('/cloudSpace')) return;
       initializeCloudSpace();
+    },
+  );
+
+  watch(
+    () => [route.query.fileId, route.query.organize],
+    () => {
+      const fileId = getRouteFileId();
+      if (!fileId || isOrganizingFromInbox.value) {
+        if (!fileId) unavailableFileId = '';
+        previewRequestId += 1;
+        previewVisible.value = false;
+        return;
+      }
+      void openRouteFile(fileId);
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => route.query.folderId,
+    () => void applyFolderFromRoute(),
+  );
+
+  watch(
+    () => cloud.folderList,
+    (folders, previousFolders) => {
+      if (folders.length || previousFolders !== undefined) folderListLoaded = true;
+      if (getRouteFolderId()) void applyFolderFromRoute();
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => cloud.folder?.id,
+    (folderId) => {
+      if (suppressFolderRouteWatch) return;
+      syncFolderRoute(folderId && folderId !== 'all' ? String(folderId) : '');
     },
   );
 

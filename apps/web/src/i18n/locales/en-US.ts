@@ -807,6 +807,8 @@ export default {
     searchFile: 'Search files',
     emptyTitle: 'No files here yet',
     emptyHint: 'Upload files or drop them here to search and preview them anytime.',
+    fileUnavailable: 'This file does not exist, was deleted, or is unavailable to your account.',
+    folderUnavailable: 'This folder no longer exists. Showing all files instead.',
     cancelUpload: 'Cancel upload',
     cancelUploadConfirm: 'Cancel the current file upload?',
     uploadFile: 'Upload File',
@@ -1621,11 +1623,13 @@ export default {
       },
       folderAmbiguous: {
         title: 'More than one “{folderName}” folder exists',
-        description: 'To avoid the wrong location, return to file settings and select an exact folder, or use the root.',
+        description:
+          'To avoid the wrong location, return to file settings and select an exact folder, or use the root.',
       },
       bookmarkUrl: {
         title: 'Confirm the URL to save',
-        description: 'Candidate URLs were found in the input. Choose the correct one; this choice will not create a bookmark yet.',
+        description:
+          'Candidate URLs were found in the input. Choose the correct one; this choice will not create a bookmark yet.',
         options: {
           explicit: { description: 'Detected as a complete URL in the input' },
           domain: { description: 'Detected as a domain and completed with HTTPS' },
@@ -1669,6 +1673,8 @@ export default {
       file: 'File',
       knowledge: 'Help',
       tag: 'Tag',
+      folder: 'Folder',
+      web: 'Web page',
       document: 'Document',
     },
     addContext: 'Add context',
@@ -2251,6 +2257,7 @@ export default {
     searchResults: 'Found {count} results',
     searchEmpty: 'No results found, try different keywords',
     backToResults: 'Back to results',
+    articleUnavailable: 'This help article is unavailable or no longer published',
     title: 'Help Center',
     outline: 'Outline',
     introTitle: 'Welcome to Help Center',
@@ -2429,7 +2436,8 @@ export default {
     createTagFailed: 'Failed to create tag',
     tagCreatedSelected: 'Tag created and selected',
     generateFailed: 'Smart recognition failed. Try again later or enter the details manually',
-    inferredWarning: 'The page could not be read. The name and description were inferred from the URL; please verify them before saving',
+    inferredWarning:
+      'The page could not be read. The name and description were inferred from the URL; please verify them before saving',
   },
   bookmarkUrl: {
     invalid: 'No valid URL was found. Please check the address and try again',
@@ -2445,8 +2453,10 @@ export default {
     backToEdit: 'Back to edit',
     recommended: 'Recommended',
     suspectTitle: 'This URL may be incorrect or unavailable',
-    domainNotFound: 'The domain cannot be resolved. It may be misspelled or expired. Check it first, or save anyway if you are certain it is correct.',
-    pageNotFound: 'The address currently returns “page not found.” It may also require sign-in or browser access, so check it before continuing.',
+    domainNotFound:
+      'The domain cannot be resolved. It may be misspelled or expired. Check it first, or save anyway if you are certain it is correct.',
+    pageNotFound:
+      'The address currently returns “page not found.” It may also require sign-in or browser access, so check it before continuing.',
     maybeUnavailable: 'This address could not be verified. Check it before continuing.',
     editRecommendedDescription: 'Check the domain, path, and protocol for mistakes.',
     saveAnyway: 'Save anyway',

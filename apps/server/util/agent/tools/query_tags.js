@@ -2,6 +2,7 @@ import pool from '../../../db/index.js';
 
 export default {
   name: 'query_tags',
+  sourceType: 'tag',
   description: '查询用户的所有标签。可按关键词模糊匹配标签名称，返回每个标签关联的资源数量。仅查询，不创建或修改标签。',
   parameters: {
     type: 'object',
@@ -31,10 +32,7 @@ export default {
          ORDER BY t.create_time DESC LIMIT ?`,
         [...params, take],
       ),
-      pool.query(
-        `SELECT COUNT(*) as total FROM tag t WHERE ${where}`,
-        params,
-      ),
+      pool.query(`SELECT COUNT(*) as total FROM tag t WHERE ${where}`, params),
     ]);
 
     return { total: countRes[0].total, items: rows };
@@ -45,7 +43,9 @@ export default {
       const kw = raw.keyword ? `（关键词"${raw.keyword}"）` : '';
       return `没有找到标签${kw}`;
     }
-    const lines = items.map((r, i) => `${i + 1}. 「${r.name}」${r.resource_count > 0 ? `（${r.resource_count} 个资源）` : ''}`);
+    const lines = items.map(
+      (r, i) => `${i + 1}. 「${r.name}」${r.resource_count > 0 ? `（${r.resource_count} 个资源）` : ''}`,
+    );
     return `共 ${raw.total} 个标签：\n${lines.join('\n')}`;
   },
   summarize(raw) {

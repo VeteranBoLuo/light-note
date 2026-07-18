@@ -37,6 +37,7 @@ function formatSize(bytes) {
 
 export default {
   name: 'create_image_note',
+  sourceType: 'note',
   description:
     '把用户本轮上传的 PNG、JPG、JPEG 或 WebP 原图插入一篇新的 HTML 图片笔记。attachmentId 必须取自本轮 [attachment:ID] 上下文；不要求图片含文字，也不依赖 OCR 成功。',
   parameters: {

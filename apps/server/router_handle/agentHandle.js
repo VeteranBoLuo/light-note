@@ -45,10 +45,7 @@ import {
   settleAgentInteractionResponse,
   AgentInteractionError,
 } from '../util/agent/interactionStore.js';
-import {
-  createToolResolutionInteraction,
-  resolveAgentInteractionAction,
-} from '../util/agent/interactionResolvers.js';
+import { createToolResolutionInteraction, resolveAgentInteractionAction } from '../util/agent/interactionResolvers.js';
 import * as aiQuota from '../util/aiQuota.js';
 import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
 import { getPlannerMaxTokens, parseToolCallArguments, prepareToolArguments } from '../util/agent/toolArguments.js';
@@ -58,6 +55,7 @@ import {
   shouldOfferFollowUps,
   storeFollowUpContext,
 } from '../util/agent/followUpSuggestions.js';
+import { dedupeAgentSources, resolveToolSources } from '../util/agent/sourceUtils.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -274,7 +272,7 @@ async function executeTool(name, args, ctx) {
       summary,
       dataSummary,
       params: args,
-      sources: extractToolSources(name, raw),
+      sources: resolveToolSources(tool, raw, args, ctx),
       nextActions: Array.isArray(raw?.nextActions) ? raw.nextActions.slice(0, 4) : [],
     };
   } catch (err) {
@@ -296,29 +294,6 @@ function plainText(value) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function extractToolSources(name, raw) {
-  const rows = Array.isArray(raw) ? raw : Array.isArray(raw?.items) ? raw.items : raw?.id ? [raw] : [];
-  if (!rows.length) return [];
-  const sourceType =
-    name === 'query_notes' || name === 'read_note' || name === 'create_note' || name === 'create_image_note'
-      ? 'note'
-      : name === 'query_bookmarks' || name === 'create_bookmark'
-        ? 'bookmark'
-        : name === 'query_files' || name === 'save_attachment_to_cloud'
-          ? 'file'
-          : name === 'search_knowledge_base'
-            ? 'knowledge'
-            : null;
-  if (!sourceType) return [];
-  return rows.slice(0, 10).map((row) => ({
-    type: sourceType,
-    id: String(row.id || row.slug || ''),
-    title: String(row.title || row.name || row.file_name || row.fileName || '未命名').slice(0, 160),
-    url: sourceType === 'bookmark' ? String(row.url || '') : undefined,
-    excerpt: plainText(row.content || row.description || '').slice(0, 240) || undefined,
-  }));
 }
 
 function getAgentIdentity(req) {
@@ -464,15 +439,24 @@ async function resolveResourceContexts(userId, contexts, question = '') {
     const boundedContent = content.slice(0, remainingBudget);
     remainingBudget = Math.max(0, remainingBudget - boundedContent.length);
     blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}\n${boundedContent}`);
-    if (item.type !== 'tag') {
-      sources.push({
-        type: item.type,
-        id: String(row.id),
-        title: String(row.title || '未命名'),
-        url: item.type === 'bookmark' ? row.url : undefined,
-        excerpt: content.slice(0, 240),
-      });
-    }
+    const sourceUrl = item.type === 'bookmark' ? row.url : undefined;
+    sources.push({
+      type: item.type,
+      id: String(row.id),
+      title: String(row.title || '未命名'),
+      url: sourceUrl,
+      excerpt: content.slice(0, 240),
+      target:
+        item.type === 'note'
+          ? 'note-detail'
+          : item.type === 'bookmark'
+            ? sourceUrl
+              ? 'bookmark-url'
+              : 'bookmark-edit'
+            : item.type === 'file'
+              ? 'cloud-file'
+              : 'tag-detail',
+    });
   }
   return {
     text: blocks.length
@@ -1303,9 +1287,7 @@ export async function agentChat(req, res) {
       }
     }
 
-    const uniqueSources = sources.filter(
-      (source, index, all) => all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
-    );
+    const uniqueSources = dedupeAgentSources(sources);
     const followUpAvailable =
       shouldOfferFollowUps({
         answer: finalContent,
@@ -1716,13 +1698,15 @@ export async function respondAgentInteraction(req, res) {
     if (attempt.state === 'running') {
       const recovered = await recoverPromotedInteractionConfirmation(token, identity, sessionId);
       if (recovered) return res.send(resultData(recovered));
-      return res.status(409).send(
-        resultData(
-          { code: 'AGENT_INTERACTION_IN_PROGRESS', retryable: true, retryAfter: 1 },
-          409,
-          '正在处理你的选择，请稍后安全重试。',
-        ),
-      );
+      return res
+        .status(409)
+        .send(
+          resultData(
+            { code: 'AGENT_INTERACTION_IN_PROGRESS', retryable: true, retryAfter: 1 },
+            409,
+            '正在处理你的选择，请稍后安全重试。',
+          ),
+        );
     }
 
     attempt = await claimAgentInteractionResponse(interaction, response);
@@ -1734,13 +1718,15 @@ export async function respondAgentInteraction(req, res) {
     if (attempt.state === 'running') {
       const recovered = await recoverPromotedInteractionConfirmation(token, identity, sessionId);
       if (recovered) return res.send(resultData(recovered));
-      return res.status(409).send(
-        resultData(
-          { code: 'AGENT_INTERACTION_IN_PROGRESS', retryable: true, retryAfter: 1 },
-          409,
-          '正在处理你的选择，请稍后安全重试。',
-        ),
-      );
+      return res
+        .status(409)
+        .send(
+          resultData(
+            { code: 'AGENT_INTERACTION_IN_PROGRESS', retryable: true, retryAfter: 1 },
+            409,
+            '正在处理你的选择，请稍后安全重试。',
+          ),
+        );
     }
 
     const resolved = resolveAgentInteractionAction(interaction, response);

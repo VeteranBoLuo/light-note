@@ -22,6 +22,19 @@ export default {
   },
   requireRoot: false,
   isWrite: false,
+  toSources(raw) {
+    if (raw?.error || !raw?.url) return [];
+    return [
+      {
+        type: 'web',
+        id: raw.url,
+        title: raw.title || raw.siteName || raw.url,
+        url: raw.url,
+        excerpt: raw.description || raw.text,
+        target: 'web-url',
+      },
+    ];
+  },
   async execute(args, ctx) {
     let url = String(args.url || '').trim();
     if (!url) return { error: 'URL_REQUIRED', message: '网址不能为空' };

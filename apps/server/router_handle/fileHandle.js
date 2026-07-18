@@ -18,7 +18,7 @@ export const getFileInfo = async (req, res) => {
     const { id } = req.body;
     // 需要查出创建者的名字
     const sql =
-      'SELECT files.*, user.alias AS creatorName FROM files LEFT JOIN user ON files.create_by = user.id WHERE files.id = ?';
+      'SELECT files.*, user.alias AS creatorName FROM files LEFT JOIN user ON files.create_by = user.id WHERE files.id = ? AND files.del_flag = 0';
     const [results] = await pool.query(sql, [id]);
     if (results.length === 0) {
       return res.send(resultData(null, 404, '数据库中未找到文件'));

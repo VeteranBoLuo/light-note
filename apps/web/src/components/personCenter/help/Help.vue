@@ -105,12 +105,14 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { getHelpConfig } from '@/api/helpApi';
-  import { useRoute } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   import 'viewerjs/dist/viewer.css'; //样式文件不要忘了
 
   const { t, locale } = useI18n();
   const route = useRoute();
+  const router = useRouter();
   const helpInfo = {
     content:
       locale.value === 'zh-CN'
@@ -254,7 +256,7 @@
   });
   const renderedContent = computed(() => renderedHelp.value.html);
   const helpOutline = computed(() => renderedHelp.value.outline);
-  function logItem(item) {
+  function applyArticle(item: HelpItem) {
     checkId.value = item.id;
     activeOutlineId.value = '';
     nextTick(() => {
@@ -264,6 +266,41 @@
       }
     });
     node.value = item;
+  }
+
+  function routeArticleId() {
+    const value = route.query.article;
+    return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+  }
+
+  function articleQuery(articleId = '') {
+    const query = { ...route.query };
+    if (articleId) query.article = articleId;
+    else delete query.article;
+    return query;
+  }
+
+  function navigateToArticle(articleId: string, replace = false) {
+    if (routeArticleId() === articleId) return;
+    const navigation = { name: 'help', query: articleQuery(articleId) };
+    void (replace ? router.replace(navigation) : router.push(navigation));
+  }
+
+  function resetToIntro() {
+    checkId.value = '';
+    activeOutlineId.value = '';
+    node.value = helpInfo;
+    nextTick(() => {
+      const dom = document.getElementById('view-body');
+      if (dom) dom.scrollTop = 0;
+    });
+  }
+
+  function logItem(item: HelpItem) {
+    searchValue.value = '';
+    selectedFromSearch.value = false;
+    applyArticle(item);
+    navigateToArticle(String(item.id));
   }
   function scrollToHelpHeading(id: string) {
     activeOutlineId.value = id;
@@ -369,21 +406,26 @@
   /** 点击搜索结果 → 加载文章，保持搜索词 */
   function selectSearchResult(result: any) {
     selectedFromSearch.value = true;
-    logItem(result);
+    applyArticle(result);
+    navigateToArticle(String(result.id));
   }
 
   /** 返回搜索结果列表 */
   function backToSearchResults() {
     selectedFromSearch.value = false;
+    navigateToArticle('');
   }
 
   /** 搜索词变化时重置选中状态 */
-  watch(searchValue, () => {
-    if (!searchValue.value.trim()) {
+  watch(searchValue, (value, previousValue) => {
+    if (!value.trim()) {
       selectedFromSearch.value = false;
     } else if (selectedFromSearch.value) {
       // 搜索内容变化（未清空）→ 返回搜索结果，更新新关键词
       selectedFromSearch.value = false;
+    }
+    if (value.trim() && value !== previousValue && routeArticleId() && !selectedFromSearch.value) {
+      navigateToArticle('', true);
     }
   });
 
@@ -399,22 +441,41 @@
     }
   }
 
+  const helpConfigLoaded = ref(false);
+  let unavailableArticleId = '';
+
   async function loadHelpConfig() {
     const res = await getHelpConfig();
     if (res.status === 200 && Array.isArray(res.data) && res.data.length > 0) {
       serverOptions.value = res.data;
-      openArticleFromRoute();
     }
+    helpConfigLoaded.value = true;
+    openArticleFromRoute();
   }
 
   function openArticleFromRoute() {
-    const articleId = String(route.query.article || '');
-    if (!articleId) return;
+    if (!helpConfigLoaded.value) return;
+    const articleId = routeArticleId();
+    if (!articleId) {
+      unavailableArticleId = '';
+      resetToIntro();
+      return;
+    }
     const target = serverOptions.value.find((item) => String(item.id) === articleId);
-    if (!target) return;
+    if (!target) {
+      resetToIntro();
+      navigateToArticle('', true);
+      if (unavailableArticleId !== articleId) {
+        unavailableArticleId = articleId;
+        message.warning(t('help.articleUnavailable'));
+      }
+      return;
+    }
+    unavailableArticleId = '';
+    if (String(checkId.value) === articleId && (selectedFromSearch.value || !isSearching.value)) return;
     searchValue.value = '';
     selectedFromSearch.value = false;
-    logItem(target);
+    applyArticle(target);
   }
 
   watch(

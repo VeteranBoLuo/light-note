@@ -25,6 +25,7 @@ function validateCreateNoteArgs(args) {
 
 export default {
   name: 'create_note',
+  sourceType: 'note',
   description: '创建一条新笔记。参数 title 为笔记标题，content 为正文内容。仅创建笔记本身，不处理标签关联。',
   parameters: {
     type: 'object',

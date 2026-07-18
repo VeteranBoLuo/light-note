@@ -28,8 +28,8 @@
           <template v-else>
             <div v-for="item in listItems" :key="item.id" class="kb-list-item" :class="{ active: currentId === item.id }" @click="selectItem(item)">
               <div class="kb-list-item-left">
-                <input type="checkbox" :checked="selectedIds.includes(item.id)" @click.stop @change="toggleSelect(item.id)" class="kb-checkbox" />
-                <div class="kb-list-item-info" @click="selectItem(item)">
+                <BCheckbox :checked="selectedIds.includes(item.id)" @click.stop @change="toggleSelect(item.id)" class="kb-checkbox" />
+                <div class="kb-list-item-info">
                   <div class="kb-list-item-title">{{ item.title }}</div>
                   <div class="kb-list-item-meta">
                     <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
@@ -45,10 +45,10 @@
         <!-- Batch action bar -->
         <div v-if="selectedIds.length > 0" class="kb-batch-bar">
           <span class="kb-batch-count">已选 {{ selectedIds.length }} 项</span>
-          <button class="kb-batch-btn" @click="batchSetStatus('public')">公开</button>
-          <button class="kb-batch-btn" @click="batchSetStatus('internal')">内部</button>
-          <button class="kb-batch-btn" @click="showBatchCategory = true">改分类</button>
-          <button class="kb-batch-btn kb-batch-btn--danger" @click="batchDelete">删除</button>
+          <BButton size="small" class="kb-batch-btn" @click="batchSetStatus('public')">公开</BButton>
+          <BButton size="small" class="kb-batch-btn" @click="batchSetStatus('internal')">内部</BButton>
+          <BButton size="small" class="kb-batch-btn" @click="showBatchCategory = true">改分类</BButton>
+          <BButton size="small" class="kb-batch-btn kb-batch-btn--danger" @click="batchDelete">删除</BButton>
         </div>
       </div>
 
@@ -59,7 +59,7 @@
           <div class="kb-search-results">
             <div class="kb-search-results-header">
               <span class="kb-search-results-count">{{ t('knowledgeBase.searchResults', { count: searchResults.length }) }}</span>
-              <button class="kb-search-clear" @click="clearSearch">✕ {{ t('knowledgeBase.clearSearch') }}</button>
+              <BButton size="small" class="kb-search-clear" @click="clearSearch">✕ {{ t('knowledgeBase.clearSearch') }}</BButton>
             </div>
             <div v-if="searchResults.length === 0" class="kb-search-empty">{{ t('knowledgeBase.searchEmpty') }}</div>
             <div v-for="item in searchResults" :key="item.id" class="kb-search-card" @click="selectSearchResult(item)">
@@ -78,7 +78,7 @@
         <!-- 编辑器 -->
         <template v-else>
           <div v-if="returnToSearch" class="kb-return-bar">
-            <button class="kb-return-btn" @click="goBackToSearch">← {{ t('knowledgeBase.backToResults') }}</button>
+            <BButton size="small" class="kb-return-btn" @click="goBackToSearch">← {{ t('knowledgeBase.backToResults') }}</BButton>
           </div>
           <div v-if="currentItem" class="kb-editor">
             <div class="kb-editor-top">
@@ -103,17 +103,9 @@
       </div>
     </div>
 
-    <!-- Batch category modal -->
-    <div v-if="showBatchCategory" class="kb-modal-overlay" @click.self="showBatchCategory = false">
-      <div class="kb-modal">
-        <h3>修改分类</h3>
-        <BSelect v-model:value="batchCategoryValue" :options="categoryOptions" style="width:100%;margin:12px 0" />
-        <div class="kb-modal-actions">
-          <b-button @click="showBatchCategory = false">取消</b-button>
-          <b-button type="primary" @click="confirmBatchCategory">确定</b-button>
-        </div>
-      </div>
-    </div>
+    <BModal v-model:visible="showBatchCategory" title="修改分类" width="360px" @ok="confirmBatchCategory">
+      <BSelect v-model:value="batchCategoryValue" :options="categoryOptions" class="kb-batch-category-select" />
+    </BModal>
   </div>
 </template>
 
@@ -126,6 +118,8 @@ import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
 import BSelect from '@/components/base/BasicComponents/BSelect.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
+import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 import Editor from '@/components/noteLibrary/detail/Editor.vue';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -157,8 +151,27 @@ const batchCategoryValue = ref('帮助中心');
 const saving = ref(false);
 
 const categories = ref<string[]>(['帮助中心']);
+let unavailableArticleId = '';
 
-const categoryOptions = computed(() => categories.value.map(c => ({ value: c, label: c })));
+function routeArticleId() {
+  const value = route.query.article;
+  return Array.isArray(value) ? String(value[0] || '') : String(value || '');
+}
+
+function articleQuery(articleId = '') {
+  const query = { ...route.query };
+  if (articleId) query.article = articleId;
+  else delete query.article;
+  return query;
+}
+
+function syncArticleRoute(articleId: string, replace = false) {
+  if (routeArticleId() === articleId) return;
+  const navigation = { name: 'knowledgeBase', query: articleQuery(articleId) };
+  void (replace ? router.replace(navigation) : router.push(navigation));
+}
+
+const categoryOptions = computed(() => categories.value.map((c) => ({ value: c, label: c })));
 
 async function loadCategories() {
   const res = await apiBasePost('/api/knowledgeBase/categories');
@@ -174,14 +187,8 @@ const typeOptions = computed(() => [
   { value: 'html', label: 'HTML' },
   { value: 'markdown', label: 'Markdown' },
 ]);
-const categoryFilterOptions = computed(() => [
-  { value: '', label: '全部分类' },
-  ...categoryOptions.value,
-]);
-const statusFilterOptions = computed(() => [
-  { value: '', label: '全部状态' },
-  ...statusOptions.value,
-]);
+const categoryFilterOptions = computed(() => [{ value: '', label: '全部分类' }, ...categoryOptions.value]);
+const statusFilterOptions = computed(() => [{ value: '', label: '全部状态' }, ...statusOptions.value]);
 
 // Load list
 async function loadList() {
@@ -195,34 +202,68 @@ async function loadList() {
   });
   if (res.status === 200 && res.data) {
     listItems.value = res.data.items || [];
-    if (listItems.value.length > 0 && !currentId.value) {
-      selectItem(listItems.value[0]);
+    const articleId = routeArticleId();
+    if (articleId) {
+      await openArticleFromRoute();
+    } else if (listItems.value.length > 0 && !currentId.value && !currentItem.value) {
+      await selectItem(listItems.value[0], false);
     }
   }
 }
 
 // Select item
-function selectItem(item: any) {
-  currentId.value = item.id;
+async function selectItem(item: any, syncRoute = true) {
   returnToSearch.value = false;
   // 搜索模式下点左栏条目 → 退出搜索显示编辑器
   if (isSearchMode.value) {
     searchKeyword.value = '';
     isSearchMode.value = false;
   }
-  loadItem(item.id);
+  const loaded = await loadItem(String(item.id));
+  if (loaded && syncRoute) syncArticleRoute(String(item.id));
 }
 
 async function loadItem(id: string) {
   const res = await apiBasePost('/api/knowledgeBase/get', { id });
   if (res.status === 200 && res.data) {
+    currentId.value = String(res.data.id || id);
     currentItem.value = res.data;
     editTitle.value = res.data.title || '';
     editContent.value = res.data.content || '';
     editCategory.value = res.data.category || '帮助中心';
     editStatus.value = res.data.status || 'internal';
     editType.value = res.data.type || 'html';
+    return true;
   }
+  return false;
+}
+
+async function openArticleFromRoute() {
+  const articleId = routeArticleId();
+  if (!articleId) {
+    unavailableArticleId = '';
+    if (isSearchMode.value || (!currentId.value && currentItem.value)) return;
+    currentId.value = '';
+    currentItem.value = null;
+    if (listItems.value.length) await selectItem(listItems.value[0], false);
+    return;
+  }
+  if (currentId.value === articleId && currentItem.value) return;
+  searchKeyword.value = '';
+  isSearchMode.value = false;
+  returnToSearch.value = false;
+  if (await loadItem(articleId)) {
+    unavailableArticleId = '';
+    return;
+  }
+  currentId.value = '';
+  currentItem.value = null;
+  syncArticleRoute('', true);
+  if (unavailableArticleId !== articleId) {
+    unavailableArticleId = articleId;
+    message.warning('该知识条目不存在或已被删除');
+  }
+  if (listItems.value.length) await selectItem(listItems.value[0], false);
 }
 
 // Create new
@@ -235,6 +276,7 @@ function startCreate() {
   editCategory.value = '帮助中心';
   editStatus.value = 'internal';
   editType.value = 'html';
+  syncArticleRoute('', true);
 }
 
 // Save
@@ -265,6 +307,7 @@ async function saveItem() {
       });
       if (res.status === 200 && res.data?.id) {
         currentId.value = res.data.id;
+        syncArticleRoute(String(res.data.id), true);
         message.success('创建成功');
       }
     }
@@ -281,10 +324,13 @@ function deleteItem() {
     title: '确认删除',
     content: `确定删除「${editTitle.value}」吗？`,
     async onOk() {
-      await apiBasePost('/api/knowledgeBase/delete', { id: currentId.value });
+      const deletedId = currentId.value;
+      await apiBasePost('/api/knowledgeBase/delete', { id: deletedId });
       message.success('已删除');
+      listItems.value = listItems.value.filter((item) => String(item.id) !== deletedId);
       currentId.value = '';
       currentItem.value = null;
+      syncArticleRoute('', true);
       await loadList();
     },
   });
@@ -316,6 +362,7 @@ async function doSearch() {
     searchResults.value = res.data.items || [];
     isSearchMode.value = true;
     savedSearchKeyword.value = kw;
+    syncArticleRoute('', true);
   }
 }
 
@@ -323,6 +370,7 @@ function clearSearch() {
   searchKeyword.value = '';
   isSearchMode.value = false;
   returnToSearch.value = false;
+  syncArticleRoute('', true);
 }
 /** 后端已返回关键字上下文片段，直接高亮展示 */
 function getSearchSnippet(item: any, keyword: string): string {
@@ -332,7 +380,7 @@ function getSearchSnippet(item: any, keyword: string): string {
 }
 
 /** 点击搜索结果 → 加载文章，保留搜索状态以便返回 */
-function selectSearchResult(result: any) {
+async function selectSearchResult(result: any) {
   // Auto save current editing item
   if (currentId.value && editTitle.value?.trim()) {
     apiBasePost('/api/knowledgeBase/update', {
@@ -347,14 +395,14 @@ function selectSearchResult(result: any) {
   savedSearchKeyword.value = searchKeyword.value;
   returnToSearch.value = true;
   // 直接加载，不经过 selectItem（selectItem 会清空搜索）
-  currentId.value = result.id;
-  loadItem(result.id);
+  if (await loadItem(String(result.id))) syncArticleRoute(String(result.id));
 }
 
 function goBackToSearch() {
   searchKeyword.value = savedSearchKeyword.value;
   isSearchMode.value = true;
   returnToSearch.value = false;
+  syncArticleRoute('', true);
   doSearch();
 }
 
@@ -374,7 +422,10 @@ async function batchSetStatus(status: string) {
 }
 
 function confirmBatchCategory() {
-  apiBasePost('/api/knowledgeBase/batchUpdateCategory', { ids: selectedIds.value, category: batchCategoryValue.value }).then(() => {
+  apiBasePost('/api/knowledgeBase/batchUpdateCategory', {
+    ids: selectedIds.value,
+    category: batchCategoryValue.value,
+  }).then(() => {
     message.success(`已更新 ${selectedIds.value.length} 条分类`);
     selectedIds.value = [];
     showBatchCategory.value = false;
@@ -387,10 +438,17 @@ async function batchDelete() {
     title: '确认批量删除',
     content: `确定删除 ${selectedIds.value.length} 条知识吗？`,
     async onOk() {
-      await apiBasePost('/api/knowledgeBase/batchDelete', { ids: selectedIds.value });
-      message.success(`已删除 ${selectedIds.value.length} 条`);
+      const deletedIds = [...selectedIds.value];
+      await apiBasePost('/api/knowledgeBase/batchDelete', { ids: deletedIds });
+      message.success(`已删除 ${deletedIds.length} 条`);
+      listItems.value = listItems.value.filter((item) => !deletedIds.includes(String(item.id)));
+      if (deletedIds.includes(currentId.value)) {
+        currentId.value = '';
+        currentItem.value = null;
+        syncArticleRoute('', true);
+      }
       selectedIds.value = [];
-      loadList();
+      await loadList();
     },
   });
 }
@@ -407,6 +465,11 @@ onMounted(() => {
   loadList();
   loadCategories();
 });
+
+watch(
+  () => route.query.article,
+  () => void openArticleFromRoute(),
+);
 </script>
 
 <style lang="less" scoped>
@@ -477,7 +540,8 @@ onMounted(() => {
   gap: 8px;
   transition: background 0.15s;
 }
-.kb-list-item:hover, .kb-list-item.active {
+.kb-list-item:hover,
+.kb-list-item.active {
   background: var(--bl-input-noBorder-bg-color);
 }
 .kb-list-item-left {
@@ -489,7 +553,6 @@ onMounted(() => {
 }
 .kb-checkbox {
   margin-top: 3px;
-  accent-color: var(--primary-color);
   cursor: pointer;
 }
 .kb-list-item-info {
@@ -716,7 +779,9 @@ onMounted(() => {
   border: 1px solid var(--card-border-color);
   margin-bottom: 6px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 .kb-search-card:hover {
   border-color: var(--primary-color);
@@ -758,34 +823,8 @@ mark.kb-highlight {
   border-radius: 2px;
 }
 
-/* Modal */
-.kb-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.kb-modal {
-  background: var(--background-color);
-  border: 1px solid var(--card-border-color);
-  border-radius: 12px;
-  padding: 20px;
-  width: 360px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-}
-.kb-modal h3 {
-  margin: 0 0 8px;
-  font-size: 16px;
-  color: var(--text-color);
-}
-.kb-modal-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 12px;
+.kb-batch-category-select {
+  width: 100%;
 }
 
 .kb-empty {

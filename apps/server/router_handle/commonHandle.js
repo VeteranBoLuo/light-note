@@ -11,6 +11,7 @@ import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { collectUsedImageNames } from '../util/noteImages.js';
+import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -833,6 +834,54 @@ export const getHelpConfig = async (req, res) => {
     res.send(resultData(result, 200));
   } catch (e) {
     res.send(resultData(e.message, 200));
+  }
+};
+
+// 仅为旧 AI 会话补齐来源标识：按精确标题解析，不返回正文，也不允许普通用户探测内部知识。
+export const resolveHelpSources = async (req, res) => {
+  try {
+    if (!Array.isArray(req.body?.titles)) return res.send(resultData(null, 400, '来源标题格式无效'));
+    const titles = [
+      ...new Set(
+        req.body.titles
+          .map((title) =>
+            String(title || '')
+              .trim()
+              .slice(0, 255),
+          )
+          .filter(Boolean)
+          .slice(0, 20),
+      ),
+    ];
+    if (!titles.length) return res.send(resultData([], 200));
+    const placeholders = titles.map(() => '?').join(',');
+    const publicOnly = req.user?.role !== 'root';
+    const [rows] = await pool.query(
+      `SELECT id, title, category, status FROM knowledge_base
+       WHERE title IN (${placeholders})${publicOnly ? " AND status = 'public'" : ''}`,
+      titles,
+    );
+    const titleCounts = rows.reduce((counts, row) => {
+      counts.set(row.title, (counts.get(row.title) || 0) + 1);
+      return counts;
+    }, new Map());
+    res.send(
+      resultData(
+        rows
+          .filter((row) => titleCounts.get(row.title) === 1)
+          .map((row) => ({
+            id: String(row.id),
+            title: row.title,
+            category: row.category || '',
+            status: row.status || 'internal',
+            target: resolveKnowledgeSourceTarget(row, req.user?.role),
+          })),
+        200,
+      ),
+    );
+  } catch (error) {
+    console.error('[help] 旧来源解析失败:', error?.message || error);
+    res.send(resultData(null, 500, '来源解析失败'));
   }
 };
 

@@ -39,7 +39,7 @@ async function analyzeNote(args, ctx) {
 
 async function analyzeDocument(args, ctx) {
   const [sources] = await pool.query(
-    `SELECT id, file_name, file_type, status, error_code
+    `SELECT id, file_id, source_type, file_name, file_type, status, error_code
        FROM ai_document_sources WHERE id = ? AND user_id = ? LIMIT 1`,
     [args.resourceId, ctx.userId],
   );
@@ -63,6 +63,8 @@ async function analyzeDocument(args, ctx) {
     return {
       resourceType: 'document',
       resourceId: String(source.id),
+      fileId: source.file_id == null ? undefined : String(source.file_id),
+      sourceType: source.source_type,
       title: source.file_name || '未命名图片',
       totalImages: 1,
       results: [{ order: 1, status: 'no_text', content: '', errorCode: 'NO_TEXT_CONTENT' }],
@@ -76,6 +78,8 @@ async function analyzeDocument(args, ctx) {
   return {
     resourceType: 'document',
     resourceId: String(source.id),
+    fileId: source.file_id == null ? undefined : String(source.file_id),
+    sourceType: source.source_type,
     title: source.file_name || '未命名图片',
     totalImages: 1,
     results: chunks.length
@@ -120,6 +124,23 @@ export default {
   requireRoot: false,
   timeoutMs: 90_000,
   resultBudget: 14_000,
+  toSources(raw) {
+    if (!raw || raw.error || !raw.resourceId) return [];
+    if (raw.resourceType === 'note') {
+      return [{ type: 'note', id: raw.resourceId, title: raw.title, target: 'note-detail' }];
+    }
+    return [
+      {
+        type: 'document',
+        id: raw.resourceId,
+        documentId: raw.resourceId,
+        fileId: raw.fileId,
+        sourceType: raw.sourceType,
+        title: raw.title,
+        target: raw.fileId ? 'cloud-file' : undefined,
+      },
+    ];
+  },
   async execute(input, ctx) {
     const args = normalizeArgs(input);
     if (!args.resourceId) throw new Error('ID_REQUIRED: 请提供要分析的资源 ID');

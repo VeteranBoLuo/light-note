@@ -447,6 +447,12 @@ export async function resolveDocumentAttachments({ userId, sourceIds, question }
     fileId: source.file_id == null ? undefined : String(source.file_id),
     sourceType: source.source_type,
     url: temporaryPreviewUrl,
+    target:
+      source.source_type === 'cloud' && source.file_id != null
+        ? 'cloud-file'
+        : temporaryPreviewUrl
+          ? 'temporary-document'
+          : undefined,
     title: source.file_name,
     excerpt:
       formatted.status === 'no_text'
@@ -511,6 +517,12 @@ export async function resolveDocumentAttachments({ userId, sourceIds, question }
         fileId: source.file_id == null ? undefined : String(source.file_id),
         sourceType: source.source_type,
         url: temporaryPreviewUrl,
+        target:
+          source.source_type === 'cloud' && source.file_id != null
+            ? 'cloud-file'
+            : temporaryPreviewUrl
+              ? 'temporary-document'
+              : undefined,
         title: source.file_name,
         excerpt: content.slice(0, 240),
         locatorType: chunk.locator_type,

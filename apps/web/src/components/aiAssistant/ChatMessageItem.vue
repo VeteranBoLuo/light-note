@@ -37,17 +37,18 @@
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
             <div class="user-contexts__list">
-              <span
+              <BButton
                 v-for="item in message.contexts"
                 :key="`${item.type}:${item.id}`"
                 :class="['user-context-chip', `is-${item.type}`]"
                 :title="item.title"
+                @click="openContext(item)"
               >
                 <span class="user-context-chip__icon" aria-hidden="true">
                   <SvgIcon :src="contextIcon(item.type)" size="13" />
                 </span>
                 <strong>{{ item.title }}</strong>
-              </span>
+              </BButton>
             </div>
           </div>
         </div>
@@ -158,6 +159,7 @@
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage';
   import { renderAssistantMarkdown } from '@/utils/aiMessageRender';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { resolveAiSourceNavigation, type AiSource } from '@/components/aiAssistant/aiSourceNavigation';
 
   const { t } = useI18n();
 
@@ -221,6 +223,17 @@
     if (type === 'tag') return icon.resource.tag;
     return icon.resource.bookmark;
   };
+
+  function openContext(item: NonNullable<ChatMessage['contexts']>[number]) {
+    const source: AiSource = { type: item.type, id: item.id, title: item.title };
+    const navigation = resolveAiSourceNavigation(source);
+    if (navigation.kind === 'internal') {
+      emit('source-navigate');
+      void router.push(navigation.target);
+    } else if (navigation.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+    }
+  }
 
   // 拦截链接点击：站内地址用 router.push SPA 跳转，外部链接新窗口打开
   const handleLinkClick = (event: MouseEvent) => {
@@ -342,6 +355,14 @@
     border: 1px solid color-mix(in srgb, var(--context-color) 24%, var(--ai-user-background-color));
     border-radius: 8px;
     background: color-mix(in srgb, var(--context-color) 9%, var(--ai-user-background-color));
+    height: auto;
+    line-height: normal;
+    cursor: pointer;
+  }
+
+  .user-context-chip:hover {
+    border-color: color-mix(in srgb, var(--context-color) 46%, var(--ai-user-background-color));
+    background: color-mix(in srgb, var(--context-color) 14%, var(--ai-user-background-color));
   }
 
   .user-context-chip.is-note {

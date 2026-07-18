@@ -17,6 +17,7 @@ function normalizeArgs(args = {}) {
 
 export default {
   name: 'read_note',
+  sourceType: 'note',
   description:
     '精确读取某一篇笔记的结构化正文，可识别富文本和 Markdown 的标题、段落、普通列表、复选任务、表格、引用、代码、链接和图片引用；' +
     '本工具不执行图片识别。返回中存在图片引用且问题需要读取图中文字时，再调用 analyze_resource_images。' +

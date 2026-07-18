@@ -1,4 +1,5 @@
 import { findKnowledgeByTitle, upsertKnowledgeBase } from '../../services/knowledgeBaseService.js';
+import { resolveKnowledgeSourceTarget } from '../sourceUtils.js';
 
 export default {
   name: 'write_knowledge_base',
@@ -19,6 +20,17 @@ export default {
   isWrite: true,
   riskLevel: 'high',
   confirmationPolicy: 'always',
+  toSources(raw, args, ctx) {
+    if (raw?.error || !raw?.id) return [];
+    const source = {
+      type: 'knowledge',
+      id: raw.id,
+      title: raw.title,
+      category: String(args.category || '内部知识'),
+      status: String(args.status || 'internal'),
+    };
+    return [{ ...source, target: resolveKnowledgeSourceTarget(source, ctx.userRole) }];
+  },
   async preview(args) {
     const title = String(args.title || '').trim();
     if (!title) throw new Error('TITLE_REQUIRED: 标题不能为空');

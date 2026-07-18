@@ -12,6 +12,7 @@ function normalizeCreateBookmarkArgs(args = {}) {
 
 export default {
   name: 'create_bookmark',
+  sourceType: 'bookmark',
   description:
     '收藏一个网址为书签。参数 url 必填;name/description 可选(不传则自动抓取网页标题与描述补全);tags 可选(标签名数组,自动创建并关联,最多 4 个)。用于"帮我收藏这个链接"等请求。',
   parameters: {

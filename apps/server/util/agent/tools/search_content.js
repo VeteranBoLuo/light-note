@@ -33,6 +33,19 @@ export default {
     required: ['keyword'],
   },
   requireRoot: false,
+  toSources(raw) {
+    return (raw?.hits || []).map((hit) => ({
+      ...hit,
+      target:
+        hit.type === 'note'
+          ? 'note-detail'
+          : hit.hasSnapshot
+            ? 'bookmark-snapshot'
+            : hit.url
+              ? 'bookmark-url'
+              : 'bookmark-edit',
+    }));
+  },
   async execute(args, ctx) {
     const kw = String(args.keyword || '').trim();
     if (!kw) return { keyword: '', hits: [] };
@@ -66,6 +79,7 @@ export default {
         url: b.url || '',
         summary: b.summary || '',
         excerpt: excerpt(body, kw),
+        hasSnapshot: Boolean(b.content || b.summary),
       });
     }
     for (const n of nt) {

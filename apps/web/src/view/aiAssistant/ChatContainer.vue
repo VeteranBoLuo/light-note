@@ -24,10 +24,7 @@
             :sources="message.sources"
             @source-navigate="handleSourceNavigate"
           />
-          <div
-            v-if="message.interactions?.length || message.confirmations?.length"
-            class="ai-message-action-stack"
-          >
+          <div v-if="message.interactions?.length || message.confirmations?.length" class="ai-message-action-stack">
             <AiInteractionCard
               v-for="interaction in message.interactions || []"
               :key="interaction.id"
@@ -131,6 +128,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
   import { fetchAiFollowUps } from '@/api/aiFollowUpApi';
+  import { resolveHelpSources, type ResolvedHelpSource } from '@/api/helpApi';
 
   const { t, locale } = useI18n();
 
@@ -354,6 +352,37 @@
     }
   }
 
+  async function repairLegacyKnowledgeSources() {
+    const legacySources = messages.value
+      .flatMap((chatMessage) => chatMessage.sources || [])
+      .filter((source) => source.type === 'knowledge' && (!source.id || !source.target));
+    const titles = [...new Set(legacySources.map((source) => source.title.trim()).filter(Boolean))].slice(0, 20);
+    if (!titles.length) return;
+    try {
+      const response = await resolveHelpSources(titles);
+      if (response?.status !== 200 || !Array.isArray(response.data)) return;
+      const byTitle = new Map(
+        (response.data as ResolvedHelpSource[]).map((source) => [String(source.title || '').trim(), source]),
+      );
+      let repaired = false;
+      messages.value.forEach((chatMessage) => {
+        chatMessage.sources?.forEach((source) => {
+          if (source.type !== 'knowledge' || (source.id && source.target)) return;
+          const resolved = byTitle.get(source.title.trim());
+          if (!resolved) return;
+          source.id = resolved.id;
+          source.category = resolved.category;
+          source.status = resolved.status;
+          source.target = resolved.target;
+          repaired = true;
+        });
+      });
+      if (repaired) persistHistory();
+    } catch {
+      // 旧会话修复失败不影响聊天；下次进入页面仍会再次尝试。
+    }
+  }
+
   onMounted(() => {
     // 优先恢复本地历史;没有历史再显示开场白
     if (!restoreHistory()) {
@@ -365,6 +394,8 @@
           thoughts: [],
         },
       ];
+    } else {
+      void repairLegacyKnowledgeSources();
     }
     nextTick(() => {
       scrollToBottom('auto');
@@ -568,9 +599,7 @@
     });
     messages.value.push({
       role: 'assistant',
-      content: confirmation
-        ? t('ai.attachmentAction.confirmationReady')
-        : t('ai.attachmentAction.choiceRequired'),
+      content: confirmation ? t('ai.attachmentAction.confirmationReady') : t('ai.attachmentAction.choiceRequired'),
       timestamp: new Date(),
       thoughts: [],
       confirmations: confirmation ? [confirmation] : [],
@@ -604,6 +633,8 @@
             thoughts: [],
           },
         ];
+      } else {
+        void repairLegacyKnowledgeSources();
       }
     },
   );
@@ -636,8 +667,7 @@
     // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
     const historyForRequest = messages.value
       .filter(
-        (m) =>
-          m.content && !m.transient && !hasPendingAgentActions(m) && (m.role === 'user' || m.role === 'assistant'),
+        (m) => m.content && !m.transient && !hasPendingAgentActions(m) && (m.role === 'user' || m.role === 'assistant'),
       )
       .map((m) => ({ role: m.role, content: String(m.content) }));
     // 对话较长时提醒新建会话(一次性):更快、更省 AI 额度
@@ -759,9 +789,9 @@
                     ? 'confirmation_required'
                     : data.status === 'interaction_required'
                       ? 'interaction_required'
-                    : data.status === 'success'
-                      ? 'success'
-                      : 'error';
+                      : data.status === 'success'
+                        ? 'success'
+                        : 'error';
               const items = [...(currentMsg.toolEvents || [])];
               const existing = items.findIndex((item) => item.name === data.tool && Number(item.round || 1) === round);
               const nextItem: AiToolStatusItem = { name: data.tool, status, round };
@@ -989,12 +1019,7 @@
         (confirmation, confirmationIndex, all) =>
           all.findIndex((item) => item.id === confirmation.id) === confirmationIndex,
       );
-      promoteConversationInteractionToConfirmation(
-        messages.value,
-        index,
-        interaction.id,
-        resolution.confirmation.id,
-      );
+      promoteConversationInteractionToConfirmation(messages.value, index, interaction.id, resolution.confirmation.id);
       resetScrollState();
       return;
     }

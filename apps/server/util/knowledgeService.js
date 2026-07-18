@@ -94,30 +94,31 @@ function calculateScore(queryTokens, title, content) {
 }
 
 /** 获取知识库数据（带缓存） */
- async function getHelpRows(onlyPublic) {
-   const cacheKey = onlyPublic ? 'public' : 'all';
-   if (helpCache[cacheKey]) return helpCache[cacheKey];
+async function getHelpRows(onlyPublic) {
+  const cacheKey = onlyPublic ? 'public' : 'all';
+  if (helpCache[cacheKey]) return helpCache[cacheKey];
 
-   const whereClause = onlyPublic ? " WHERE status = 'public'" : '';
-   const [rows] = await pool.query(
-     `SELECT id, title, SUBSTRING(content, 1, 3000) AS content FROM knowledge_base${whereClause} ORDER BY sort ASC, created_at ASC`,
-   );
+  const whereClause = onlyPublic ? " WHERE status = 'public'" : '';
+  const [rows] = await pool.query(
+    `SELECT id, title, category, status, SUBSTRING(content, 1, 3000) AS content
+        FROM knowledge_base${whereClause} ORDER BY sort ASC, created_at ASC`,
+  );
 
-   helpCache[cacheKey] = rows;
-   helpCacheTimers[cacheKey] = setTimeout(() => invalidateCache(cacheKey), CACHE_TTL);
-   return rows;
- }
+  helpCache[cacheKey] = rows;
+  helpCacheTimers[cacheKey] = setTimeout(() => invalidateCache(cacheKey), CACHE_TTL);
+  return rows;
+}
 
- /**
-  * 检索与用户问题最相关的知识库条目
-  *
-  * @param {string} userId - 用户 ID（保留参数，暂未使用）
-  * @param {string} query  - 用户问题
-  * @param {number} topK   - 返回最相关的 N 条
-  * @param {boolean} onlyPublic - 是否只返回公开条目
-  * @returns {Promise<Array<{title: string, content: string, score: number}>>}
-  */
- export async function retrieve(userId, query, topK = 3, onlyPublic = true) {
+/**
+ * 检索与用户问题最相关的知识库条目
+ *
+ * @param {string} userId - 用户 ID（保留参数，暂未使用）
+ * @param {string} query  - 用户问题
+ * @param {number} topK   - 返回最相关的 N 条
+ * @param {boolean} onlyPublic - 是否只返回公开条目
+ * @returns {Promise<Array<{id: string, title: string, category: string, status: string, content: string, score: number}>>}
+ */
+export async function retrieve(userId, query, topK = 3, onlyPublic = true) {
   const rows = await getHelpRows(onlyPublic);
   if (rows.length === 0) return [];
 
@@ -128,7 +129,10 @@ function calculateScore(queryTokens, title, content) {
     const content = stripHtml(row.content || '');
     const title = row.title || '';
     return {
+      id: String(row.id || ''),
       title,
+      category: row.category || '',
+      status: row.status || 'internal',
       content: content.slice(0, 800),
       score: calculateScore(queryTokens, title, content),
     };

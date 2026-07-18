@@ -7,6 +7,16 @@ export default {
     '查询当前用户书签的死链体检结果:链接总数、已检测数,以及"疑似失效"(可能打不开)的书签清单。回答"我有哪些失效/打不开的书签""死链检测结果""哪些收藏链接坏了"。',
   parameters: { type: 'object', properties: {} },
   requireRoot: false,
+  toSources(raw) {
+    return (raw?.suspect || []).map((item) => ({
+      type: 'bookmark',
+      id: item.id,
+      title: item.name,
+      url: item.url,
+      hasSnapshot: Boolean(item.hasSnapshot),
+      target: item.hasSnapshot ? 'bookmark-snapshot' : 'bookmark-edit',
+    }));
+  },
   async execute(args, ctx) {
     return await getHealthSummary(ctx.userId);
   },

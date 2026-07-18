@@ -14,6 +14,10 @@ export default {
   isWrite: true,
   riskLevel: 'low',
   confirmationPolicy: 'default',
+  toSources(raw) {
+    if (raw?.error || !raw?.id) return [];
+    return [{ type: 'tag', id: raw.id, title: raw.tagName, target: 'tag-detail' }];
+  },
   async execute(args, ctx) {
     const tagName = (args.tagName || args.tag || '').trim();
     if (!tagName) {

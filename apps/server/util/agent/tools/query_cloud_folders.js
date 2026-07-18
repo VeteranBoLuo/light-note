@@ -11,6 +11,7 @@ function normalizeArgs(args = {}) {
 
 export default {
   name: 'query_cloud_folders',
+  sourceType: 'folder',
   description:
     '查询当前账号已有的云空间文件夹，返回可用于保存文件的 folderId 和准确名称。用户询问有哪些文件夹、要求选择保存位置，或没有给出明确目标时调用；已给出精确文件夹名的保存请求应直接传给 save_attachment_to_cloud.folderName。本工具只查询，不会新建文件夹。',
   parameters: {

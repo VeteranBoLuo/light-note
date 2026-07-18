@@ -298,6 +298,7 @@
   const previewHistoryActive = ref(false);
   const markdownContainerRef = ref<HTMLElement | null>(null);
   const markdownContent = ref('');
+  let activePreviewFileId = '';
 
   let officeStyleLoaded = false;
   let markdownLibLoaded = false;
@@ -410,6 +411,7 @@
     () => props.visible,
     async (newVisible) => {
       if (newVisible && props.fileInfo) {
+        activePreviewFileId = String(props.fileInfo.id || '');
         previousBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
         if (!previewHistoryActive.value) {
@@ -420,11 +422,21 @@
         return;
       }
       if (!newVisible) {
+        activePreviewFileId = '';
         document.body.style.overflow = previousBodyOverflow;
         previewHistoryActive.value = false;
       }
     },
     { immediate: true },
+  );
+
+  watch(
+    () => props.fileInfo?.id,
+    (fileId, previousFileId) => {
+      if (!props.visible || !fileId || fileId === previousFileId || activePreviewFileId === String(fileId)) return;
+      activePreviewFileId = String(fileId);
+      void startPreview(props.fileInfo);
+    },
   );
 
   watch(

@@ -37,10 +37,9 @@ router.post('/runSql', commonHandle.runSql);
 
 router.post('/getHelpConfig', commonHandle.getHelpConfig);
 
+router.post('/resolveHelpSources', commonHandle.resolveHelpSources);
+
 router.get('/noticeSummary', commonHandle.getNoticeSummary);
-
-
-
 
 // router.post('/updateFolder', commonHandle.updateFolder);
 // router.post('/deleteFolder', commonHandle.deleteFolder);

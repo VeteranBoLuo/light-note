@@ -34,6 +34,7 @@ describe('analyze_resource_images 工具', () => {
       expect.objectContaining({ imageNumbers: [2, 5, 7], limit: 3 }),
     );
     expect(tool.transform(raw)).toContain('第二张图的文字');
+    expect(tool.toSources(raw)).toEqual([{ type: 'note', id: 'note-1', title: '图文笔记', target: 'note-detail' }]);
   });
 
   it('已解析的上传图片按用户归属读取 OCR 分片', async () => {
@@ -48,6 +49,9 @@ describe('analyze_resource_images 工具', () => {
 
     expect(query.mock.calls[0][1]).toEqual(['doc-1', 'user-1']);
     expect(tool.transform(raw)).toContain('上传图片里的文字');
+    expect(tool.toSources(raw)).toEqual([
+      expect.objectContaining({ type: 'document', id: 'doc-1', documentId: 'doc-1' }),
+    ]);
   });
 
   it('非图片文档拒绝走图片分析链路', async () => {

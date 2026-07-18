@@ -49,6 +49,7 @@
     if (source.type === 'document') {
       return `document:${source.documentId || source.fileId || source.id.split(':')[0] || source.title}`;
     }
+    if (source.type === 'web') return `web:${source.url || source.id}`;
     return `${source.type}:${source.id}`;
   };
   const uniqueSources = computed(() => {
@@ -64,7 +65,10 @@
   const sourceIcon = (type: AiSource['type']) => {
     if (type === 'note') return icon.resource.note;
     if (type === 'file' || type === 'document') return icon.resource.file;
+    if (type === 'folder') return icon.common.folder;
+    if (type === 'tag') return icon.resource.tag;
     if (type === 'knowledge') return icon.noteTemplate.knowledge;
+    if (type === 'web') return icon.ai.internet;
     return icon.resource.bookmark;
   };
   const sourceSubtitle = (source: AiSource) => {
@@ -138,8 +142,13 @@
   }
 
   .ai-source.is-file,
-  .ai-source.is-document {
+  .ai-source.is-document,
+  .ai-source.is-folder {
     --source-color: var(--resource-file-color);
+  }
+
+  .ai-source.is-tag {
+    --source-color: var(--resource-tag-color);
   }
 
   .ai-source.is-knowledge {

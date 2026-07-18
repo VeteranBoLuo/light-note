@@ -142,12 +142,15 @@
     }
   }
 
-  watch(visible, (v) => {
-    if (v) {
+  watch(
+    [() => visible.value, () => props.bookmarkId],
+    ([isVisible]) => {
+      if (!isVisible) return;
       snap.value = null;
-      loadSnap();
-    }
-  });
+      void loadSnap();
+    },
+    { immediate: true },
+  );
 </script>
 
 <style scoped lang="less">

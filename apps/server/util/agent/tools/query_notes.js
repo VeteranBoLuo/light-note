@@ -4,6 +4,7 @@ import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
 
 export default {
   name: 'query_notes',
+  sourceType: 'note',
   description:
     '查询用户的笔记。可按关键词（匹配标题和内容）、时间范围筛选，返回笔记标题、内容片段和创建时间。管理员可通过 user 参数查询指定用户的笔记。',
   parameters: {

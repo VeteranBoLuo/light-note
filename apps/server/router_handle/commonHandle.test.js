@@ -23,6 +23,7 @@ const {
   getIpLogStats,
   getAgentLogsSummary,
   clearImages,
+  resolveHelpSources,
 } = await import('./commonHandle.js');
 
 function mockRes() {
@@ -65,7 +66,10 @@ describe('recordConversion 白名单', () => {
       query.mockReset();
       query.mockResolvedValue([[]]);
       const res = mockRes();
-      recordConversion({ user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event, source: 'nav' } }, res);
+      recordConversion(
+        { user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event, source: 'nav' } },
+        res,
+      );
       expect(query, `${event} 应写库`).toHaveBeenCalledTimes(1);
     }
   });
@@ -85,7 +89,11 @@ describe('recordConversion 白名单', () => {
     query.mockResolvedValue([[]]);
     const res = mockRes();
     recordConversion(
-      { user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event: 'signup_open', source: '/api/x?token=secret' } },
+      {
+        user: { role: 'visitor' },
+        headers: { fingerprint: 'fp' },
+        body: { event: 'signup_open', source: '/api/x?token=secret' },
+      },
       res,
     );
     // params: [fingerprint, userId, visitorType, event, context, ip];context(第 5 个)应为归一后的 unknown
@@ -97,10 +105,61 @@ describe('recordConversion 白名单', () => {
     query.mockResolvedValue([[]]);
     const res = mockRes();
     recordConversion(
-      { user: { role: 'visitor' }, headers: { fingerprint: 'fp' }, body: { event: 'wall_hit', source: 'add-bookmark' } },
+      {
+        user: { role: 'visitor' },
+        headers: { fingerprint: 'fp' },
+        body: { event: 'wall_hit', source: 'add-bookmark' },
+      },
       res,
     );
     expect(query.mock.calls[0][1][4]).toBe('add-bookmark');
+  });
+});
+
+describe('resolveHelpSources 旧来源安全补全', () => {
+  beforeEach(() => query.mockReset());
+
+  it('普通用户只查询公开知识，并忽略重名的歧义来源', async () => {
+    query.mockResolvedValueOnce([
+      [
+        { id: 'help-1', title: '唯一帮助', category: '帮助中心', status: 'public' },
+        { id: 'duplicate-1', title: '重名帮助', category: '帮助中心', status: 'public' },
+        { id: 'duplicate-2', title: '重名帮助', category: '帮助中心', status: 'public' },
+      ],
+    ]);
+    const res = mockRes();
+
+    await resolveHelpSources({ user: { role: 'user' }, body: { titles: ['唯一帮助', '重名帮助'] } }, res);
+
+    expect(query.mock.calls[0][0]).toContain("status = 'public'");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: [expect.objectContaining({ id: 'help-1', target: 'help-article' })],
+      }),
+    );
+  });
+
+  it('root 可以把内部知识补成管理员知识库深链', async () => {
+    query.mockResolvedValueOnce([[{ id: 'internal-1', title: '内部手册', category: '运维', status: 'internal' }]]);
+    const res = mockRes();
+
+    await resolveHelpSources({ user: { role: 'root' }, body: { titles: ['内部手册'] } }, res);
+
+    expect(query.mock.calls[0][0]).not.toContain("status = 'public'");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: [expect.objectContaining({ id: 'internal-1', target: 'knowledge-admin' })],
+      }),
+    );
+  });
+
+  it('拒绝非数组标题参数', async () => {
+    const res = mockRes();
+    await resolveHelpSources({ user: { role: 'user' }, body: { titles: '帮助' } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).not.toHaveBeenCalled();
   });
 });
 
@@ -258,7 +317,10 @@ describe('getConversionFunnel', () => {
       return Promise.resolve([[]]); // hotspots
     });
     const res = mockRes();
-    await getConversionFunnel({ user: { role: 'root' }, body: { startDate: '2026-06-01', endDate: '2026-06-30' } }, res);
+    await getConversionFunnel(
+      { user: { role: 'root' }, body: { startDate: '2026-06-01', endDate: '2026-06-30' } },
+      res,
+    );
     const arg = res.send.mock.calls[0][0];
     expect(arg.data).toMatchObject({ shareViewVisitors: 7, shareCtaClickVisitors: 2, activatedUsers: 5 });
     expect(arg.data.trend).toEqual([{ d: '2026-07-01', pv: 10, signupOpen: 3, reg: 1 }]);
@@ -391,12 +453,50 @@ describe('getAgentLogsSummary AI 质量指标', () => {
         return Promise.resolve([[{ count: 10, tokens: 500, cost: 0.1 }]]);
       }
       if (/SELECT a\.status, a\.duration_ms/.test(sql)) {
-        return Promise.resolve([[
-          { status: 'success', duration_ms: 100, first_token_ms: 30, planner_ms: 20, tool_ms: 10, final_ms: 70, task_type: 'agent', tools_used: '[{"name":"query_notes","status":"success"}]' },
-          { status: 'error', duration_ms: 900, first_token_ms: null, planner_ms: 100, tool_ms: 50, final_ms: null, task_type: 'agent', tools_used: '[{"name":"query_notes","status":"error"}]' },
-          { status: 'success', duration_ms: 300, first_token_ms: 80, planner_ms: null, tool_ms: null, final_ms: 300, task_type: 'agent_confirmation', tools_used: null },
-          { status: 'confirmation_rejected', duration_ms: 200, first_token_ms: null, planner_ms: null, tool_ms: null, final_ms: null, task_type: 'agent_confirmation', tools_used: null },
-        ]]);
+        return Promise.resolve([
+          [
+            {
+              status: 'success',
+              duration_ms: 100,
+              first_token_ms: 30,
+              planner_ms: 20,
+              tool_ms: 10,
+              final_ms: 70,
+              task_type: 'agent',
+              tools_used: '[{"name":"query_notes","status":"success"}]',
+            },
+            {
+              status: 'error',
+              duration_ms: 900,
+              first_token_ms: null,
+              planner_ms: 100,
+              tool_ms: 50,
+              final_ms: null,
+              task_type: 'agent',
+              tools_used: '[{"name":"query_notes","status":"error"}]',
+            },
+            {
+              status: 'success',
+              duration_ms: 300,
+              first_token_ms: 80,
+              planner_ms: null,
+              tool_ms: null,
+              final_ms: 300,
+              task_type: 'agent_confirmation',
+              tools_used: null,
+            },
+            {
+              status: 'confirmation_rejected',
+              duration_ms: 200,
+              first_token_ms: null,
+              planner_ms: null,
+              tool_ms: null,
+              final_ms: null,
+              task_type: 'agent_confirmation',
+              tools_used: null,
+            },
+          ],
+        ]);
       }
       return Promise.resolve([[]]);
     });
@@ -455,7 +555,10 @@ describe('clearImages 服务端校验与失败上报', () => {
       .mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }))
       .mockRejectedValueOnce(Object.assign(new Error('EACCES'), { code: 'EACCES' }));
     const res = mockRes();
-    await clearImages(rootReq([{ fullFileName: 'a.png' }, { fullFileName: 'gone.png' }, { fullFileName: 'c.png' }]), res);
+    await clearImages(
+      rootReq([{ fullFileName: 'a.png' }, { fullFileName: 'gone.png' }, { fullFileName: 'c.png' }]),
+      res,
+    );
     const sent = res.send.mock.calls.at(-1)[0];
     expect(sent.status).toBe(200);
     expect(sent.data.deleted).toEqual(['a.png', 'gone.png']);
