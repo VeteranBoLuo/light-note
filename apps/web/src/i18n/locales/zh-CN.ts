@@ -1630,6 +1630,8 @@ export default {
     },
     confirmationFailed: '操作执行失败，请重新发起',
     sources: '参考来源',
+    expandSources: '展开来源',
+    collapseSources: '收起来源',
     attachedResources: '引用资源',
     sourceTypes: {
       note: '笔记',

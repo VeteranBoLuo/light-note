@@ -15,6 +15,30 @@ export function shouldResumeAiChatFollow(distance: number): boolean {
   return distance <= AI_CHAT_SCROLL_RESUME_THRESHOLD;
 }
 
+export interface AiChatStableViewportState {
+  scrollTop: number;
+  shouldFollow: boolean;
+  showScrollToBottom: boolean;
+}
+
+/**
+ * 来源、推荐项等回答后内容插入时保留原阅读位置，只在新内容仍位于视口下方时提示用户主动查看。
+ */
+export function resolveAiChatStableViewport(
+  metrics: Pick<ScrollMetrics, 'scrollHeight' | 'clientHeight'>,
+  preservedScrollTop: number,
+): AiChatStableViewportState {
+  const maxScrollTop = Math.max(0, metrics.scrollHeight - metrics.clientHeight);
+  const scrollTop = Math.min(Math.max(0, preservedScrollTop), maxScrollTop);
+  const distance = getAiChatBottomDistance({ ...metrics, scrollTop });
+  const shouldFollow = shouldResumeAiChatFollow(distance);
+  return {
+    scrollTop,
+    shouldFollow,
+    showScrollToBottom: !shouldFollow,
+  };
+}
+
 export function isAiChatUpwardWheel(deltaY: number): boolean {
   return deltaY < 0;
 }

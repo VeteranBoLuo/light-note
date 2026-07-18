@@ -10,6 +10,7 @@ import {
   settleConversationConfirmation,
   settleConversationInteraction,
   shouldPersistConversationMessage,
+  shouldShowAiMessageSources,
 } from './aiConversationState';
 
 describe('aiConversationState', () => {
@@ -156,5 +157,17 @@ describe('aiConversationState', () => {
   it('追加待选择 ID 时去重', () => {
     expect(addPendingInteractionId(['interaction-1'], 'interaction-1')).toEqual(['interaction-1']);
     expect(addPendingInteractionId(['interaction-1'], 'interaction-2')).toEqual(['interaction-1', 'interaction-2']);
+  });
+
+  it('当前回答流式完成前隐藏来源，完成后再展示', () => {
+    const message = { role: 'assistant', sources: [{ id: 'note-1' }] };
+    expect(shouldShowAiMessageSources(message, 1, 2, true)).toBe(false);
+    expect(shouldShowAiMessageSources(message, 1, 2, false)).toBe(true);
+  });
+
+  it('最新回答流式输出时仍保留历史来源展示', () => {
+    const historicalMessage = { role: 'assistant', sources: [{ id: 'note-1' }] };
+    expect(shouldShowAiMessageSources(historicalMessage, 0, 2, true)).toBe(true);
+    expect(shouldShowAiMessageSources({ role: 'assistant' }, 1, 2, false)).toBe(false);
   });
 });

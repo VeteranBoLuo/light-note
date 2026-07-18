@@ -4,6 +4,7 @@ import {
   isAiChatUpwardScroll,
   isAiChatUpwardTouch,
   isAiChatUpwardWheel,
+  resolveAiChatStableViewport,
   shouldPauseAiChatFollow,
   shouldResumeAiChatFollow,
 } from './aiAutoScroll';
@@ -29,5 +30,18 @@ describe('aiAutoScroll', () => {
     expect(isAiChatUpwardTouch(120, 140)).toBe(true);
     expect(isAiChatUpwardTouch(140, 120)).toBe(false);
     expect(isAiChatUpwardTouch(null, 120)).toBe(false);
+  });
+
+  it('回答后附属内容出现时保留原位置，并在内容位于下方时提示用户', () => {
+    expect(resolveAiChatStableViewport({ scrollHeight: 1100, clientHeight: 300 }, 700)).toEqual({
+      scrollTop: 700,
+      shouldFollow: false,
+      showScrollToBottom: true,
+    });
+    expect(resolveAiChatStableViewport({ scrollHeight: 1000, clientHeight: 300 }, 695)).toEqual({
+      scrollTop: 695,
+      shouldFollow: true,
+      showScrollToBottom: false,
+    });
   });
 });

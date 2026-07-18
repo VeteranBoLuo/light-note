@@ -1,41 +1,62 @@
 <template>
   <div v-if="uniqueSources.length" class="ai-sources">
-    <div class="ai-sources__title">{{ t('ai.sources') }} · {{ uniqueSources.length }}</div>
-    <div class="ai-sources__list">
-      <BButton
-        v-for="source in uniqueSources"
-        :key="`${source.type}:${source.id}`"
-        :class="['ai-source', `is-${source.type}`, { 'is-static': !isNavigableSource(source) }]"
-        :role="isNavigableSource(source) ? 'link' : undefined"
-        :tabindex="isNavigableSource(source) ? 0 : -1"
-        :aria-disabled="!isNavigableSource(source)"
-        @click="openSource(source)"
-        @keydown.enter.prevent="openSource(source)"
-        @keydown.space.prevent="openSource(source)"
-      >
-        <span class="ai-source__icon" aria-hidden="true">
-          <SvgIcon :src="sourceIcon(source.type)" size="18" />
-        </span>
-        <span class="ai-source__copy">
-          <strong>{{ source.title }}</strong>
-          <small>{{ sourceSubtitle(source) }}</small>
-        </span>
-        <span v-if="isNavigableSource(source)" class="ai-source__action" aria-hidden="true">
-          <SvgIcon :src="isExternalSource(source) ? icon.ai.sourceExternal : icon.ai.sourceArrow" size="15" />
-        </span>
-      </BButton>
-    </div>
+    <BButton
+      v-if="isCollapsible"
+      :class="['ai-sources__summary', { 'is-expanded': isExpanded }]"
+      role="button"
+      tabindex="0"
+      :aria-expanded="isExpanded"
+      :aria-label="t(isExpanded ? 'ai.collapseSources' : 'ai.expandSources')"
+      v-click-log="{ module: 'AI助手', operation: isExpanded ? '收起参考来源' : '展开参考来源' }"
+      @click="toggleSources"
+      @keydown.enter.prevent="toggleSources"
+      @keydown.space.prevent="toggleSources"
+    >
+      <span class="ai-sources__summary-title">{{ t('ai.sources') }} · {{ uniqueSources.length }}</span>
+      <span class="ai-sources__summary-action">
+        {{ t(isExpanded ? 'ai.collapseSources' : 'ai.expandSources') }}
+        <SvgIcon class="ai-sources__summary-icon" :src="icon.ai.sourceArrow" size="14" />
+      </span>
+    </BButton>
+    <div v-else class="ai-sources__title">{{ t('ai.sources') }} · {{ uniqueSources.length }}</div>
+    <Transition name="ai-sources-list">
+      <div v-if="showSourceList" :class="['ai-sources__list', { 'is-after-summary': isCollapsible }]">
+        <BButton
+          v-for="source in uniqueSources"
+          :key="`${source.type}:${source.id}`"
+          :class="['ai-source', `is-${source.type}`, { 'is-static': !isNavigableSource(source) }]"
+          :role="isNavigableSource(source) ? 'link' : undefined"
+          :tabindex="isNavigableSource(source) ? 0 : -1"
+          :aria-disabled="!isNavigableSource(source)"
+          @click="openSource(source)"
+          @keydown.enter.prevent="openSource(source)"
+          @keydown.space.prevent="openSource(source)"
+        >
+          <span class="ai-source__icon" aria-hidden="true">
+            <SvgIcon :src="sourceIcon(source.type)" size="18" />
+          </span>
+          <span class="ai-source__copy">
+            <strong>{{ source.title }}</strong>
+            <small>{{ sourceSubtitle(source) }}</small>
+          </span>
+          <span v-if="isNavigableSource(source)" class="ai-source__action" aria-hidden="true">
+            <SvgIcon :src="isExternalSource(source) ? icon.ai.sourceExternal : icon.ai.sourceArrow" size="15" />
+          </span>
+        </BButton>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { resolveAiSourceNavigation, type AiSource, type AiSourceNavigation } from './aiSourceNavigation';
+  import { shouldCollapseAiSources } from './aiSourcePresentation';
 
   export type { AiSource } from './aiSourceNavigation';
 
@@ -45,6 +66,7 @@
   }>();
   const { t } = useI18n();
   const router = useRouter();
+  const isExpanded = ref(false);
   const sourceIdentity = (source: AiSource) => {
     if (source.type === 'document') {
       return `document:${source.documentId || source.fileId || source.id.split(':')[0] || source.title}`;
@@ -61,6 +83,12 @@
       return true;
     });
   });
+  const isCollapsible = computed(() => shouldCollapseAiSources(uniqueSources.value.length));
+  const showSourceList = computed(() => !isCollapsible.value || isExpanded.value);
+  const toggleSources = () => {
+    if (!isCollapsible.value) return;
+    isExpanded.value = !isExpanded.value;
+  };
   const typeLabel = (type: AiSource['type']) => t(`ai.sourceTypes.${type}`);
   const sourceIcon = (type: AiSource['type']) => {
     if (type === 'note') return icon.resource.note;
@@ -104,10 +132,81 @@
     font-size: 12px;
     font-weight: 600;
   }
+  .ai-sources__summary {
+    width: 100%;
+    height: 40px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+    color: var(--desc-color);
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+
+  .ai-sources__summary:hover {
+    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background));
+  }
+
+  .ai-sources__summary:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
+    outline-offset: 2px;
+  }
+
+  .ai-sources__summary-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+  }
+
+  .ai-sources__summary-action {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .ai-sources__summary-icon {
+    transform: rotate(90deg);
+    transition: transform 0.16s ease;
+  }
+
+  .ai-sources__summary.is-expanded .ai-sources__summary-icon {
+    transform: rotate(-90deg);
+  }
+
   .ai-sources__list {
     display: grid;
     gap: 5px;
   }
+
+  .ai-sources__list.is-after-summary {
+    margin-top: 6px;
+  }
+
+  .ai-sources-list-enter-active,
+  .ai-sources-list-leave-active {
+    transition:
+      opacity 0.16s ease,
+      transform 0.16s ease;
+  }
+
+  .ai-sources-list-enter-from,
+  .ai-sources-list-leave-to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
   .ai-source {
     --source-color: var(--resource-bookmark-color);
     width: 100%;
@@ -204,6 +303,18 @@
     .ai-source {
       height: 52px;
       min-height: 52px;
+    }
+
+    .ai-sources__summary {
+      height: 44px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-sources__summary-icon,
+    .ai-sources-list-enter-active,
+    .ai-sources-list-leave-active {
+      transition: none;
     }
   }
 </style>

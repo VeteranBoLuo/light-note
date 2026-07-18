@@ -1,13 +1,30 @@
 import type { AiAgentInteractionSettlement, AiToolConfirmationSettlement } from '@/types/aiAgent';
 
 export interface AiConversationStateMessage {
+  role?: string;
   content?: string;
+  sources?: unknown[];
   transient?: boolean;
   transientGroupId?: string;
   pendingConfirmationIds?: string[];
   pendingInteractionIds?: string[];
   confirmationSucceeded?: boolean;
   persistAfterConfirmationSettlement?: boolean;
+}
+
+/**
+ * 当前回答流式输出时先收集来源但不渲染，避免来源卡片中途插入导致正文跳动。
+ * 历史消息的来源不受影响；停止、失败或正常完成后 isLoading 会复位，来源随即展示。
+ */
+export function shouldShowAiMessageSources(
+  message: AiConversationStateMessage,
+  messageIndex: number,
+  messageCount: number,
+  isLoading: boolean,
+) {
+  if (!message.sources?.length) return false;
+  const isCurrentStreamingAnswer = isLoading && message.role === 'assistant' && messageIndex === messageCount - 1;
+  return !isCurrentStreamingAnswer;
 }
 
 export function addPendingConfirmationId(current: string[] | undefined, confirmationId: string) {
@@ -147,9 +164,7 @@ export function settleConversationInteraction<T extends AiConversationStateMessa
 ) {
   const target = messages[messageIndex];
   if (!target) return;
-  target.pendingInteractionIds = (target.pendingInteractionIds || []).filter(
-    (id) => id !== settlement.interactionId,
-  );
+  target.pendingInteractionIds = (target.pendingInteractionIds || []).filter((id) => id !== settlement.interactionId);
   if (
     !['advanced', 'resolved'].includes(settlement.status) &&
     settlement.summary &&

@@ -23,8 +23,8 @@
             @source-navigate="handleMessageSourceNavigate"
           />
           <AiSourceCards
-            v-if="message.sources?.length"
-            :sources="message.sources"
+            v-if="shouldShowAiMessageSources(message, index, messages.length, isLoading)"
+            :sources="message.sources || []"
             @source-navigate="handleSourceNavigate"
           />
           <div v-if="message.interactions?.length || message.confirmations?.length" class="ai-message-action-stack">
@@ -114,6 +114,7 @@
     settleConversationConfirmation,
     settleConversationInteraction,
     shouldPersistConversationMessage,
+    shouldShowAiMessageSources,
   } from '@/components/aiAssistant/aiConversationState';
   import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
   import {
@@ -121,6 +122,7 @@
     isAiChatUpwardScroll,
     isAiChatUpwardTouch,
     isAiChatUpwardWheel,
+    resolveAiChatStableViewport,
     shouldPauseAiChatFollow,
     shouldResumeAiChatFollow,
   } from '@/components/aiAssistant/aiAutoScroll';
@@ -458,6 +460,25 @@
     scrollFrame = null;
   };
 
+  // 回答后的来源、推荐项属于附属内容：插入前冻结当前阅读位置，插入后只提示用户主动查看。
+  const freezeViewportForPostAnswerContent = () => {
+    const container = messagesContainer.value;
+    const preservedScrollTop = container?.scrollTop ?? null;
+    shouldFollowMessages.value = false;
+    showScrollToBottom.value = false;
+    cancelScheduledScroll();
+
+    return () => {
+      const currentContainer = messagesContainer.value;
+      if (!currentContainer || preservedScrollTop === null) return;
+      const viewport = resolveAiChatStableViewport(currentContainer, preservedScrollTop);
+      currentContainer.scrollTop = viewport.scrollTop;
+      lastKnownScrollTop = viewport.scrollTop;
+      shouldFollowMessages.value = viewport.shouldFollow;
+      showScrollToBottom.value = viewport.showScrollToBottom;
+    };
+  };
+
   const pauseFollowing = () => {
     shouldFollowMessages.value = false;
     showScrollToBottom.value = true;
@@ -540,6 +561,7 @@
       return;
     }
     const currentMsg = messages.value[currentMessageIndex];
+    const restoreViewport = currentMsg?.sources?.length ? freezeViewportForPostAnswerContent() : null;
     if (currentMsg?.role === 'assistant') {
       const suffix = t('ai.responsePaused');
       if (!currentMsg.content || currentMsg.content === '') {
@@ -549,6 +571,7 @@
       }
     }
     isLoading.value = false;
+    if (restoreViewport) nextTick(restoreViewport);
   };
 
   let sessionId = '';
@@ -913,12 +936,18 @@
       // 仅最新请求才能更新状态，防止旧请求的 finally 提前关闭 loading
       if (thisRequestId !== activeRequestId) return;
 
+      const wasLoading = isLoading.value;
+      const currentMessage = messages.value[currentMessageIndex];
+      const restoreViewport =
+        wasLoading && currentMessage?.sources?.length ? freezeViewportForPostAnswerContent() : null;
       isLoading.value = false;
       if (abortController.value === requestController) abortController.value = null;
       if (activeAnswerTypewriter === answerTypewriter) activeAnswerTypewriter = null;
-      // 最终滚动
-      await nextTick();
-      scheduleScrollToBottom();
+      if (wasLoading) {
+        await nextTick();
+        if (restoreViewport) restoreViewport();
+        else scheduleScrollToBottom();
+      }
     }
 
     if (!streamError && followUpAvailable && followUpRequestId) {
@@ -949,11 +978,12 @@
     if (clientRequestId !== activeRequestId) return;
     const target = messages.value[messageIndex];
     if (!target || target.role !== 'assistant' || target !== messages.value[messages.value.length - 1]) return;
+    const restoreViewport = freezeViewportForPostAnswerContent();
     target.recommendations = suggestions;
     target.recommendationReady = true;
     persistHistory();
     await nextTick();
-    scheduleScrollToBottom();
+    restoreViewport();
   }
 
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。

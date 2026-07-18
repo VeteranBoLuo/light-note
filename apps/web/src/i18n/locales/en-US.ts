@@ -1666,6 +1666,8 @@ export default {
     },
     confirmationFailed: 'Operation failed. Please start it again.',
     sources: 'Sources',
+    expandSources: 'Show sources',
+    collapseSources: 'Hide sources',
     attachedResources: 'Attached resources',
     sourceTypes: {
       note: 'Note',
