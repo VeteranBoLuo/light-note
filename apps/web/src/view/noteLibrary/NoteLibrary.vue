@@ -1035,7 +1035,7 @@
   .note-batch-summary {
     height: 32px;
     padding: 0 10px;
-    border-radius: 999px;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     color: var(--resource-note-color, #00a884);
