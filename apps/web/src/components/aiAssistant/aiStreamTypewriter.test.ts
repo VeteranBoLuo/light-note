@@ -28,8 +28,8 @@ describe('aiStreamTypewriter', () => {
     expect(getAiStreamTypingBatchSize(0)).toBe(0);
     expect(getAiStreamTypingBatchSize(3)).toBe(1);
     expect(getAiStreamTypingBatchSize(24)).toBe(2);
-    expect(getAiStreamTypingBatchSize(240)).toBe(10);
-    expect(getAiStreamTypingBatchSize(5000)).toBe(32);
+    expect(getAiStreamTypingBatchSize(240)).toBe(5);
+    expect(getAiStreamTypingBatchSize(5000)).toBe(12);
   });
 
   it('不会拆坏 emoji 等 Unicode 字符', () => {

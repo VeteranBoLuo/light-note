@@ -18,8 +18,14 @@ interface CreateAiStreamTypewriterOptions {
 
 export function getAiStreamTypingBatchSize(pendingLength: number): number {
   if (pendingLength <= 0) return 0;
-  if (pendingLength <= 6) return 1;
-  return Math.min(32, Math.max(2, Math.ceil(pendingLength / 24)));
+  // 接近实时输出时坚持逐字；只有积压明显时才温和追赶。
+  // 单帧最多 12 字，避免 XHR 将整段响应合并后再次出现几十字一跳的卡顿感。
+  if (pendingLength <= 12) return 1;
+  if (pendingLength <= 60) return 2;
+  if (pendingLength <= 180) return 3;
+  if (pendingLength <= 400) return 5;
+  if (pendingLength <= 800) return 8;
+  return 12;
 }
 
 /** 按 Unicode 字符截取，避免把 emoji 的代理对拆成两个损坏字符。 */

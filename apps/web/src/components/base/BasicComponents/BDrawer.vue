@@ -39,7 +39,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch, nextTick } from 'vue';
+  import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const props = withDefaults(
@@ -68,16 +68,49 @@
   const entered = ref(false);
   const settled = ref(false);
   let closing = false;
+  let openFrame: number | null = null;
+  let settleTimer: number | null = null;
+  let closeTimer: number | null = null;
+
+  const clearOpenFrame = () => {
+    if (openFrame === null) return;
+    cancelAnimationFrame(openFrame);
+    openFrame = null;
+  };
+
+  const clearSettleTimer = () => {
+    if (settleTimer === null) return;
+    clearTimeout(settleTimer);
+    settleTimer = null;
+  };
+
+  const markSettled = () => {
+    if (!entered.value || !props.open || !localVisible.value) return;
+    settled.value = true;
+    clearSettleTimer();
+  };
 
   // 打开：先渲染 DOM，下一帧触发滑入动画
   function doOpen() {
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    closing = false;
+    clearOpenFrame();
+    clearSettleTimer();
     localVisible.value = true;
     entered.value = false;
     settled.value = false;
     nextTick(() => {
       // 强制回流后触发 enter 动画
-      requestAnimationFrame(() => {
+      openFrame = requestAnimationFrame(() => {
+        openFrame = null;
+        if (!props.open || !localVisible.value) return;
         entered.value = true;
+        // 首次挂载、系统减少动画或页面切换时，浏览器可能不派发 transitionend。
+        // 用略长于 CSS 动画的定时器兜底，确保最终一定移除常驻 transform 合成层。
+        settleTimer = window.setTimeout(markSettled, 240);
       });
     });
   }
@@ -86,9 +119,12 @@
   function doClose() {
     if (closing) return;
     closing = true;
+    clearOpenFrame();
+    clearSettleTimer();
     settled.value = false;
     entered.value = false;
-    setTimeout(() => {
+    closeTimer = window.setTimeout(() => {
+      closeTimer = null;
       localVisible.value = false;
       closing = false;
     }, 220); // 略长于 CSS transition 时长
@@ -130,8 +166,14 @@
 
   function handlePanelTransitionEnd(event: TransitionEvent) {
     if (event.target !== event.currentTarget || event.propertyName !== 'transform') return;
-    if (entered.value && props.open) settled.value = true;
+    markSettled();
   }
+
+  onBeforeUnmount(() => {
+    clearOpenFrame();
+    clearSettleTimer();
+    if (closeTimer !== null) clearTimeout(closeTimer);
+  });
 </script>
 
 <style lang="less">
