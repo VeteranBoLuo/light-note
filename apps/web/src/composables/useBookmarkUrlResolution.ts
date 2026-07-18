@@ -2,7 +2,12 @@ import { apiBasePost } from '@/http/request';
 import i18n from '@/i18n';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { requestBookmarkUrlDecision } from '@/utils/bookmarkUrlDecision';
-import { BOOKMARK_URL_CODE, type BookmarkUrlCandidate, type BookmarkUrlResolution } from '@lightnote/shared';
+import {
+  BOOKMARK_URL_CODE,
+  resolveBookmarkUrlInput,
+  type BookmarkUrlCandidate,
+  type BookmarkUrlResolution,
+} from '@lightnote/shared';
 
 type LivenessResult = { status: 'alive' | 'suspect' | 'unknown' | 'skip'; code: string | number } | null;
 type ClientResolution = BookmarkUrlResolution & { liveness?: LivenessResult };
@@ -81,6 +86,15 @@ export async function preflightBookmarkUrl(
   { checkLiveness = true, showError = true }: { checkLiveness?: boolean; showError?: boolean } = {},
 ): Promise<BookmarkUrlPreflightResult> {
   let currentUrl = String(rawUrl || '').trim();
+  // 危险协议、账号密码型 URL、超长输入等确定性错误先在本地拦截。
+  // 这既能立即给出中文反馈，也避免请求在抵达应用前被 WAF 拦截成泛化的 403 网络错误；
+  // 服务端仍会再次使用同一共享解析器校验，形成前后端双重兜底。
+  const localResolution = resolveBookmarkUrlInput(currentUrl, { allowTextExtraction: true }) as ClientResolution;
+  if (localResolution.state === 'invalid') {
+    const errorMessage = invalidResolutionMessage(localResolution);
+    if (showError) message.error(errorMessage);
+    return { ok: false, resolution: localResolution, message: errorMessage };
+  }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let response;
     try {

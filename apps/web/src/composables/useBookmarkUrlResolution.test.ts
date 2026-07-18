@@ -78,12 +78,19 @@ describe('preflightBookmarkUrl', () => {
     });
   });
 
-  it('无候选的非法地址硬拦截，不提供“仍然保存”', async () => {
-    apiBasePost.mockResolvedValueOnce({
-      status: 200,
-      data: { state: 'invalid', canonicalUrl: '', candidates: [] },
-    });
+  it('无候选的非法地址在请求前硬拦截，不提供“仍然保存”', async () => {
     await expect(preflightBookmarkUrl('不是网址')).resolves.toMatchObject({ ok: false });
+    expect(apiBasePost).not.toHaveBeenCalled();
+    expect(requestBookmarkUrlDecision).not.toHaveBeenCalled();
+    expect(errorMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('危险协议在请求前给出明确错误，避免被网关收口成 403', async () => {
+    await expect(preflightBookmarkUrl('javascript:alert(1)')).resolves.toMatchObject({
+      ok: false,
+      resolution: { state: 'invalid', code: 'UNSUPPORTED_PROTOCOL' },
+    });
+    expect(apiBasePost).not.toHaveBeenCalled();
     expect(requestBookmarkUrlDecision).not.toHaveBeenCalled();
     expect(errorMessage).toHaveBeenCalledTimes(1);
   });
