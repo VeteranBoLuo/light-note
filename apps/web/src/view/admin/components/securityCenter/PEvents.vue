@@ -133,6 +133,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import {
+    securityHandledStatusBatchRemark,
     securityHandledStatusConfirmText,
     statusText,
     statusPillClass,
@@ -232,7 +233,7 @@
         const res = await apiBasePost('/api/security/events/batchHandle', {
           eventIds: selectedEventIds.value,
           handledStatus,
-          remark: `管理员批量标记为${batchStatusText[handledStatus]}`,
+          remark: securityHandledStatusBatchRemark(handledStatus),
         }).finally(() => {
           batchLoading.value = false;
         });

@@ -130,6 +130,7 @@
     eventColumns,
     eventUserText,
     eventUserTooltip,
+    securityHandledStatusBatchRemark,
     securityHandledStatusConfirmText,
     securityHandledStatusOptions,
     statusText,
@@ -234,7 +235,7 @@
         const res = await apiBasePost('/api/security/events/batchHandle', {
           eventIds: selectedEventIds.value,
           handledStatus,
-          remark: `管理员批量标记为${batchStatusText[handledStatus]}`,
+          remark: securityHandledStatusBatchRemark(handledStatus),
         }).finally(() => {
           batchLoading.value = false;
         });

@@ -39,6 +39,10 @@ export function securityHandledStatusConfirmText(status: SecurityHandledStatus, 
   return `确认将${target}标记为已处理？如果此前标记为误报或授权测试，对应风险将重新计入。`;
 }
 
+export function securityHandledStatusBatchRemark(status: SecurityHandledStatus) {
+  return `管理员批量标记为${statusText(status)}`;
+}
+
 export function getRouteTab(routeName: string | symbol | undefined | null): SecurityTabKey {
   return securityTabs.find((tab) => tab.routeName === routeName)?.key || 'overview';
 }
