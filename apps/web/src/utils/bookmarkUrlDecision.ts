@@ -1,5 +1,6 @@
-import { createVNode, render } from 'vue';
+import { createApp } from 'vue';
 import BookmarkUrlDecision from '@/components/bookmark/BookmarkUrlDecision.vue';
+import i18n from '@/i18n';
 
 interface BookmarkUrlDecisionOption {
   id: string;
@@ -24,17 +25,23 @@ export function requestBookmarkUrlDecision(config: BookmarkUrlDecisionConfig): P
     const container = document.createElement('div');
     document.body.appendChild(container);
     let settled = false;
+    let app: ReturnType<typeof createApp> | null = null;
 
     const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
-      render(null, container);
+      app?.unmount();
+      app = null;
       container.remove();
       if (cancelActiveDecision === cancel) cancelActiveDecision = null;
       resolve(value);
     };
     const cancel = () => finish(null);
     cancelActiveDecision = cancel;
-    render(createVNode(BookmarkUrlDecision, { ...config, onResolve: finish }), container);
+    // 该弹窗由函数调用动态挂载，不在主 Vue 组件树中；必须显式安装 i18n，
+    // 否则 BModal 内的 useI18n() 取不到应用上下文，用户会一直停在“识别中”。
+    app = createApp(BookmarkUrlDecision, { ...config, onResolve: finish });
+    app.use(i18n);
+    app.mount(container);
   });
 }
