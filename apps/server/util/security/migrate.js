@@ -21,16 +21,8 @@ const ensureSecurityEventSchema = async () => {
     'ip_risk_reverted',
     'ip_risk_reverted BOOLEAN DEFAULT FALSE AFTER ip_risk_delta',
   );
-  await ensureColumn(
-    'security_events',
-    'ip_risk_reverted_at',
-    'ip_risk_reverted_at DATETIME AFTER ip_risk_reverted',
-  );
-  await ensureColumn(
-    'security_events',
-    'user_risk_delta',
-    'user_risk_delta INT DEFAULT 0 AFTER ip_risk_reverted_at',
-  );
+  await ensureColumn('security_events', 'ip_risk_reverted_at', 'ip_risk_reverted_at DATETIME AFTER ip_risk_reverted');
+  await ensureColumn('security_events', 'user_risk_delta', 'user_risk_delta INT DEFAULT 0 AFTER ip_risk_reverted_at');
   await ensureColumn(
     'security_events',
     'user_risk_reverted',
@@ -43,7 +35,7 @@ const ensureSecurityEventSchema = async () => {
   );
   await pool.query(`
     ALTER TABLE security_events
-    MODIFY handled_status ENUM('unhandled','processed','confirmed','false_positive','ignored','resolved') DEFAULT 'unhandled'
+    MODIFY handled_status ENUM('unhandled','processed','confirmed','false_positive','authorized_test','ignored','resolved') DEFAULT 'unhandled'
   `);
   await pool.query(`
     UPDATE security_events
@@ -52,7 +44,7 @@ const ensureSecurityEventSchema = async () => {
   `);
   await pool.query(`
     ALTER TABLE security_events
-    MODIFY handled_status ENUM('unhandled','processed','false_positive') DEFAULT 'unhandled'
+    MODIFY handled_status ENUM('unhandled','processed','false_positive','authorized_test') DEFAULT 'unhandled'
   `);
 };
 
@@ -87,7 +79,7 @@ export const ensureSecurityTables = async () => {
       ip_risk_reverted BOOLEAN DEFAULT FALSE,
       ip_risk_reverted_at DATETIME,
       decision_reason VARCHAR(255),
-      handled_status ENUM('unhandled','processed','false_positive') DEFAULT 'unhandled',
+      handled_status ENUM('unhandled','processed','false_positive','authorized_test') DEFAULT 'unhandled',
       handled_by VARCHAR(64),
       handled_at DATETIME,
       remark TEXT,

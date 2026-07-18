@@ -23,6 +23,7 @@
           <div class="event-batch-actions">
             <b-button size="small" type="primary" @click="confirmBatchHandle('processed')">已处理</b-button>
             <b-button size="small" @click="confirmBatchHandle('false_positive')">误报</b-button>
+            <b-button size="small" @click="confirmBatchHandle('authorized_test')">授权测试</b-button>
             <b-button size="small" @click="confirmBatchHandle('unhandled')">未处理</b-button>
             <b-button size="small" @click="selectedEventIds = []">取消</b-button>
           </div>
@@ -83,25 +84,35 @@
           </div>
           <div class="mobile-detail-row">
             <span class="detail-label">账号</span>
-            <span class="detail-value">{{ selectedRecord.alias || selectedRecord.email || selectedRecord.userId || '-' }}</span>
+            <span class="detail-value">{{
+              selectedRecord.alias || selectedRecord.email || selectedRecord.userId || '-'
+            }}</span>
           </div>
           <div class="mobile-detail-row">
             <span class="detail-label">拦截</span>
             <span class="detail-value">
-              <span class="security-pill" :class="selectedRecord.blocked ? 'is-high' : 'is-low'">{{ selectedRecord.blocked ? '已拦截' : '已放行' }}</span>
+              <span class="security-pill" :class="selectedRecord.blocked ? 'is-high' : 'is-low'">{{
+                selectedRecord.blocked ? '已拦截' : '已放行'
+              }}</span>
             </span>
           </div>
           <div class="mobile-detail-row">
             <span class="detail-label">状态</span>
             <span class="detail-value">
-              <span class="security-pill" :class="statusPillClass(selectedRecord.handledStatus)">{{ statusText(selectedRecord.handledStatus) }}</span>
+              <span class="security-pill" :class="statusPillClass(selectedRecord.handledStatus)">{{
+                statusText(selectedRecord.handledStatus)
+              }}</span>
             </span>
           </div>
           <div class="mobile-detail-actions">
             <b-button size="small" @click.stop="handleBanIp(selectedRecord.sourceIp)">封禁此IP 1小时</b-button>
             <b-button size="small" @click.stop="handleUnbanIp(selectedRecord.sourceIp)">解封此IP</b-button>
-            <b-button v-if="selectedRecord.userId" size="small" @click.stop="handleBanAccount(selectedRecord.userId)">封禁关联账号</b-button>
-            <b-button v-if="selectedRecord.userId" size="small" @click.stop="handleUnbanAccount(selectedRecord.userId)">解封关联账号</b-button>
+            <b-button v-if="selectedRecord.userId" size="small" @click.stop="handleBanAccount(selectedRecord.userId)"
+              >封禁关联账号</b-button
+            >
+            <b-button v-if="selectedRecord.userId" size="small" @click.stop="handleUnbanAccount(selectedRecord.userId)"
+              >解封关联账号</b-button
+            >
           </div>
         </div>
       </BModal>
@@ -110,327 +121,329 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, reactive, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-import { apiBasePost, apiQueryPost } from '@/http/request.ts';
-import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-import BButton from '@/components/base/BasicComponents/BButton.vue';
-import BInput from '@/components/base/BasicComponents/BInput.vue';
-import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-import { statusText, statusPillClass } from './securityShared';
+  import { onMounted, reactive, ref, watch } from 'vue';
+  import { useRoute, useRouter } from 'vue-router';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
+  import {
+    securityHandledStatusConfirmText,
+    statusText,
+    statusPillClass,
+    type SecurityHandledStatus,
+  } from './securityShared';
 
-const route = useRoute();
-const router = useRouter();
+  const route = useRoute();
+  const router = useRouter();
 
-const mobileEventColumns = [
-  { title: '等级', key: 'severity', width: '80px' },
-  { title: '规则-IP', key: 'ruleIp', width: '1fr' },
-];
+  const mobileEventColumns = [
+    { title: '等级', key: 'severity', width: '80px' },
+    { title: '规则-IP', key: 'ruleIp', width: '1fr' },
+  ];
 
-const events = ref<any[]>([]);
-const eventTotal = ref(0);
-const eventLoading = ref(false);
-const eventPage = reactive({ currentPage: 1, pageSize: 100 });
-const eventFilters = reactive<any>({
-  key: '',
-  severity: undefined,
-  actionTaken: undefined,
-  handledStatus: undefined,
-  userId: undefined,
-  userLabel: '',
-});
-const eventSearchTimer = ref<any>(null);
-const selectedEventIds = ref<string[]>([]);
-const batchLoading = ref(false);
-
-const detailVisible = ref(false);
-const selectedRecord = ref<any>(null);
-
-function onRowClick(record: any) {
-  selectedRecord.value = record;
-  detailVisible.value = true;
-}
-
-async function searchEvents() {
-  eventLoading.value = true;
-  const res = await apiQueryPost('/api/security/events', {
-    currentPage: eventPage.currentPage,
-    pageSize: eventPage.pageSize,
-    filters: {
-      key: eventFilters.key,
-      severity: eventFilters.severity,
-      actionTaken: eventFilters.actionTaken,
-      handledStatus: eventFilters.handledStatus,
-      userId: eventFilters.userId,
-    },
-  }).finally(() => {
-    eventLoading.value = false;
+  const events = ref<any[]>([]);
+  const eventTotal = ref(0);
+  const eventLoading = ref(false);
+  const eventPage = reactive({ currentPage: 1, pageSize: 100 });
+  const eventFilters = reactive<any>({
+    key: '',
+    severity: undefined,
+    actionTaken: undefined,
+    handledStatus: undefined,
+    userId: undefined,
+    userLabel: '',
   });
-  if (res.status === 200) {
-    events.value = res.data.items;
-    eventTotal.value = res.data.total;
-    selectedEventIds.value = selectedEventIds.value.filter((id) => events.value.some((event) => event.eventId === id));
+  const eventSearchTimer = ref<any>(null);
+  const selectedEventIds = ref<string[]>([]);
+  const batchLoading = ref(false);
+
+  const detailVisible = ref(false);
+  const selectedRecord = ref<any>(null);
+
+  function onRowClick(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
   }
-}
 
-function handleEventSearch() {
-  clearTimeout(eventSearchTimer.value);
-  eventSearchTimer.value = setTimeout(() => {
+  async function searchEvents() {
+    eventLoading.value = true;
+    const res = await apiQueryPost('/api/security/events', {
+      currentPage: eventPage.currentPage,
+      pageSize: eventPage.pageSize,
+      filters: {
+        key: eventFilters.key,
+        severity: eventFilters.severity,
+        actionTaken: eventFilters.actionTaken,
+        handledStatus: eventFilters.handledStatus,
+        userId: eventFilters.userId,
+      },
+    }).finally(() => {
+      eventLoading.value = false;
+    });
+    if (res.status === 200) {
+      events.value = res.data.items;
+      eventTotal.value = res.data.total;
+      selectedEventIds.value = selectedEventIds.value.filter((id) =>
+        events.value.some((event) => event.eventId === id),
+      );
+    }
+  }
+
+  function handleEventSearch() {
+    clearTimeout(eventSearchTimer.value);
+    eventSearchTimer.value = setTimeout(() => {
+      eventPage.currentPage = 1;
+      searchEvents();
+    }, 300);
+  }
+
+  function clearEventAccountFilter() {
+    eventFilters.userId = undefined;
+    eventFilters.userLabel = '';
     eventPage.currentPage = 1;
+    router.replace({ query: {} });
     searchEvents();
-  }, 300);
-}
+  }
 
-function clearEventAccountFilter() {
-  eventFilters.userId = undefined;
-  eventFilters.userLabel = '';
-  eventPage.currentPage = 1;
-  router.replace({ query: {} });
-  searchEvents();
-}
+  function applyRouteFilters() {
+    eventFilters.userId = route.query.userId ? String(route.query.userId) : undefined;
+    eventFilters.userLabel = route.query.userLabel ? String(route.query.userLabel) : '';
+    eventFilters.handledStatus = route.query.handledStatus
+      ? String(route.query.handledStatus)
+      : eventFilters.handledStatus;
+    eventFilters.severity = route.query.severity ? String(route.query.severity) : eventFilters.severity;
+  }
 
-function applyRouteFilters() {
-  eventFilters.userId = route.query.userId ? String(route.query.userId) : undefined;
-  eventFilters.userLabel = route.query.userLabel ? String(route.query.userLabel) : '';
-  eventFilters.handledStatus = route.query.handledStatus ? String(route.query.handledStatus) : eventFilters.handledStatus;
-  eventFilters.severity = route.query.severity ? String(route.query.severity) : eventFilters.severity;
-}
+  function confirmBatchHandle(handledStatus: SecurityHandledStatus) {
+    if (!selectedEventIds.value.length || batchLoading.value) return;
+    Alert.alert({
+      title: '批量处理攻击日志',
+      content: securityHandledStatusConfirmText(handledStatus, selectedEventIds.value.length),
+      okText: '确认处理',
+      cancelText: '取消',
+      onOk: async () => {
+        batchLoading.value = true;
+        const res = await apiBasePost('/api/security/events/batchHandle', {
+          eventIds: selectedEventIds.value,
+          handledStatus,
+          remark: `管理员批量标记为${batchStatusText[handledStatus]}`,
+        }).finally(() => {
+          batchLoading.value = false;
+        });
+        if (res.status === 200) {
+          message.success(res.msg || '批量处理成功');
+          selectedEventIds.value = [];
+          searchEvents();
+        }
+      },
+    });
+  }
 
-const batchStatusText = {
-  processed: '已处理',
-  false_positive: '误报',
-  unhandled: '未处理',
-};
+  function isWhitelistConflict(res: any) {
+    return res?.status === 409 && res?.data?.whitelistConflict;
+  }
 
-function confirmBatchHandle(handledStatus: 'processed' | 'false_positive' | 'unhandled') {
-  if (!selectedEventIds.value.length || batchLoading.value) return;
-  Alert.alert({
-    title: '批量处理攻击日志',
-    content:
-      handledStatus === 'false_positive'
-        ? `确认将选中的 ${selectedEventIds.value.length} 条攻击日志标记为误报？误报会回滚对应风险分。`
-        : `确认将选中的 ${selectedEventIds.value.length} 条攻击日志标记为${batchStatusText[handledStatus]}？`,
-    okText: '确认处理',
-    cancelText: '取消',
-    onOk: async () => {
-      batchLoading.value = true;
-      const res = await apiBasePost('/api/security/events/batchHandle', {
-        eventIds: selectedEventIds.value,
-        handledStatus,
-        remark: `管理员批量标记为${batchStatusText[handledStatus]}`,
-      }).finally(() => {
-        batchLoading.value = false;
+  function confirmWhitelistForce(content: string, onOk: () => Promise<void>) {
+    Alert.alert({
+      title: '移出白名单并封禁',
+      content,
+      okText: '移出白名单并封禁',
+      cancelText: '取消',
+      onOk,
+    });
+  }
+
+  async function handleBanIp(ip: string) {
+    if (!ip) return;
+    const submit = async (force = false) => {
+      const res = await apiBasePost('/api/security/ipBan', {
+        ip,
+        minutes: 60,
+        reason: '管理员在安全中心手动封禁',
+        force,
       });
       if (res.status === 200) {
-        message.success(res.msg || '批量处理成功');
-        selectedEventIds.value = [];
+        message.success('已封禁IP');
         searchEvents();
+        return;
       }
-    },
-  });
-}
-
-function isWhitelistConflict(res: any) {
-  return res?.status === 409 && res?.data?.whitelistConflict;
-}
-
-function confirmWhitelistForce(content: string, onOk: () => Promise<void>) {
-  Alert.alert({
-    title: '移出白名单并封禁',
-    content,
-    okText: '移出白名单并封禁',
-    cancelText: '取消',
-    onOk,
-  });
-}
-
-async function handleBanIp(ip: string) {
-  if (!ip) return;
-  const submit = async (force = false) => {
-    const res = await apiBasePost('/api/security/ipBan', {
-      ip,
-      minutes: 60,
-      reason: '管理员在安全中心手动封禁',
-      force,
+      if (isWhitelistConflict(res)) {
+        confirmWhitelistForce(`确认将 ${ip} 移出白名单并封禁 1 小时？`, () => submit(true));
+      }
+    };
+    Alert.alert({
+      title: '封禁IP',
+      content: `确认封禁 ${ip} 1小时？`,
+      okText: '确认封禁',
+      cancelText: '取消',
+      onOk: () => submit(),
     });
-    if (res.status === 200) {
-      message.success('已封禁IP');
-      searchEvents();
-      return;
-    }
-    if (isWhitelistConflict(res)) {
-      confirmWhitelistForce(`确认将 ${ip} 移出白名单并封禁 1 小时？`, () => submit(true));
-    }
-  };
-  Alert.alert({
-    title: '封禁IP',
-    content: `确认封禁 ${ip} 1小时？`,
-    okText: '确认封禁',
-    cancelText: '取消',
-    onOk: () => submit(),
-  });
-}
+  }
 
-async function handleUnbanIp(ip: string) {
-  if (!ip) return;
-  Alert.alert({
-    title: '解封IP',
-    content: `确认解封 ${ip}？`,
-    okText: '确认解封',
-    cancelText: '取消',
-    onOk: async () => {
-      const res = await apiBasePost('/api/security/ipUnban', { ip });
-      if (res.status === 200) {
-        message.success('已解封IP');
-        searchEvents();
-      }
-    },
-  });
-}
-
-async function handleBanAccount(userId: string) {
-  if (!userId) return;
-  const submit = async (force = false) => {
-    const res = await apiBasePost('/api/security/accountBan', {
-      userId,
-      reason: '管理员在安全中心手动封禁',
-      force,
+  async function handleUnbanIp(ip: string) {
+    if (!ip) return;
+    Alert.alert({
+      title: '解封IP',
+      content: `确认解封 ${ip}？`,
+      okText: '确认解封',
+      cancelText: '取消',
+      onOk: async () => {
+        const res = await apiBasePost('/api/security/ipUnban', { ip });
+        if (res.status === 200) {
+          message.success('已解封IP');
+          searchEvents();
+        }
+      },
     });
-    if (res.status === 200) {
-      message.success('已封禁账号');
-      detailVisible.value = false;
-      searchEvents();
-      return;
-    }
-    if (isWhitelistConflict(res)) {
-      confirmWhitelistForce(`确认将账号【${userId}】移出白名单并封禁？`, () => submit(true));
-    }
-  };
-  Alert.alert({
-    title: '封禁账号',
-    content: `确认封禁账号【${userId}】吗？`,
-    okText: '确认封禁',
-    cancelText: '取消',
-    onOk: () => submit(),
-  });
-}
+  }
 
-async function handleUnbanAccount(userId: string) {
-  if (!userId) return;
-  Alert.alert({
-    title: '解封账号',
-    content: `确认解封账号【${userId}】吗？`,
-    okText: '确认解封',
-    cancelText: '取消',
-    onOk: async () => {
-      const res = await apiBasePost('/api/security/accountUnban', { userId });
+  async function handleBanAccount(userId: string) {
+    if (!userId) return;
+    const submit = async (force = false) => {
+      const res = await apiBasePost('/api/security/accountBan', {
+        userId,
+        reason: '管理员在安全中心手动封禁',
+        force,
+      });
       if (res.status === 200) {
-        message.success('已解封账号');
+        message.success('已封禁账号');
+        detailVisible.value = false;
         searchEvents();
+        return;
       }
-    },
-  });
-}
+      if (isWhitelistConflict(res)) {
+        confirmWhitelistForce(`确认将账号【${userId}】移出白名单并封禁？`, () => submit(true));
+      }
+    };
+    Alert.alert({
+      title: '封禁账号',
+      content: `确认封禁账号【${userId}】吗？`,
+      okText: '确认封禁',
+      cancelText: '取消',
+      onOk: () => submit(),
+    });
+  }
 
-watch(
-  () => [route.query.userId, route.query.userLabel, route.query.handledStatus, route.query.severity],
-  () => {
+  async function handleUnbanAccount(userId: string) {
+    if (!userId) return;
+    Alert.alert({
+      title: '解封账号',
+      content: `确认解封账号【${userId}】吗？`,
+      okText: '确认解封',
+      cancelText: '取消',
+      onOk: async () => {
+        const res = await apiBasePost('/api/security/accountUnban', { userId });
+        if (res.status === 200) {
+          message.success('已解封账号');
+          searchEvents();
+        }
+      },
+    });
+  }
+
+  watch(
+    () => [route.query.userId, route.query.userLabel, route.query.handledStatus, route.query.severity],
+    () => {
+      applyRouteFilters();
+      eventPage.currentPage = 1;
+      searchEvents();
+    },
+  );
+
+  onMounted(() => {
     applyRouteFilters();
-    eventPage.currentPage = 1;
     searchEvents();
-  },
-);
-
-onMounted(() => {
-  applyRouteFilters();
-  searchEvents();
-});
+  });
 </script>
 
 <style lang="less" scoped>
-@import './securityCenter.less';
+  @import './securityCenter.less';
 
-.security-page-body {
-  position: fixed;
-  top: 60px;
-  left: 20px;
-  right: 20px;
-  bottom: 20px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+  .security-page-body {
+    position: fixed;
+    top: 60px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 
-.admin-filters {
-  flex-shrink: 0;
-}
+  .admin-filters {
+    flex-shrink: 0;
+  }
 
-.admin-table-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
+  .admin-table-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
 
-:deep(.loader-container) {
-  flex: 1;
-  min-height: 0;
-}
+  :deep(.loader-container) {
+    flex: 1;
+    min-height: 0;
+  }
 
-:deep(.table-container) {
-  flex: 1;
-  min-height: 0;
-}
+  :deep(.table-container) {
+    flex: 1;
+    min-height: 0;
+  }
 
-.mobile-detail {
-  padding: 4px 0;
-}
+  .mobile-detail {
+    padding: 4px 0;
+  }
 
-.mobile-detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--menu-item-h-bg-color);
-  &:last-child { border-bottom: none; }
-}
+  .mobile-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--menu-item-h-bg-color);
+    &:last-child {
+      border-bottom: none;
+    }
+  }
 
-.detail-label {
-  font-size: 12px;
-  color: var(--desc-color);
-  flex-shrink: 0;
-  width: 80px;
-}
+  .detail-label {
+    font-size: 12px;
+    color: var(--desc-color);
+    flex-shrink: 0;
+    width: 80px;
+  }
 
-.detail-value {
-  font-size: 13px;
-  color: var(--text-color);
-  text-align: right;
-  word-break: break-all;
-}
+  .detail-value {
+    font-size: 13px;
+    color: var(--text-color);
+    text-align: right;
+    word-break: break-all;
+  }
 
-.mobile-detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-top: 12px;
-}
+  .mobile-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 12px;
+  }
 
-.rule-ip-cell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
+  .rule-ip-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
 
-.rule-ip-sub {
-  font-size: 11px;
-  color: var(--desc-color);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+  .rule-ip-sub {
+    font-size: 11px;
+    color: var(--desc-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 </style>

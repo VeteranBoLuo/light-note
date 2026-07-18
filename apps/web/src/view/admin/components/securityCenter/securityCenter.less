@@ -574,6 +574,56 @@ code {
   color: color-mix(in srgb, var(--resource-bookmark-color) 82%, var(--text-color));
 }
 
+.security-pill.is-authorized-test {
+  border-color: color-mix(in srgb, var(--resource-file-color) 42%, transparent);
+  background: color-mix(in srgb, var(--resource-file-color) 12%, var(--background-color));
+  color: color-mix(in srgb, var(--resource-file-color) 82%, var(--text-color));
+}
+
+.security-evidence-list {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.security-evidence-item {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.security-evidence-item p {
+  margin: 4px 0 8px;
+  color: var(--desc-color);
+}
+
+.security-evidence-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--security-low);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--security-low) 16%, transparent);
+}
+
+.security-evidence-dot.is-medium {
+  background: var(--security-medium);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--security-medium) 16%, transparent);
+}
+
+.security-evidence-dot.is-high {
+  background: var(--security-high);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--security-high) 16%, transparent);
+}
+
+.security-evidence-dot.is-critical {
+  background: var(--security-critical);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--security-critical) 16%, transparent);
+}
+
 .account-cell {
   display: flex;
   min-width: 0;

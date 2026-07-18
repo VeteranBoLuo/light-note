@@ -1,14 +1,19 @@
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { validateQueryParams } from '../util/request.js';
-import { rebuildIpReputationFromEvents, revertIpReputationImpact, setIpBan } from '../util/security/services/ipReputation.js';
-import { rebuildAccountReputationFromEvents, revertAccountReputationImpact } from '../util/security/services/accountReputation.js';
+import { setIpBan } from '../util/security/services/ipReputation.js';
 import {
   disableSecurityWhitelist,
   isSecurityWhitelisted,
   normalizeWhitelistType,
 } from '../util/security/services/whitelist.js';
 import { removeUserSessions } from '../util/sessionStore.js';
+import {
+  SECURITY_HANDLED_STATUSES,
+  normalizeSecurityHandledStatus,
+  securityHandledStatusSuccessMessage,
+} from '../util/security/handledStatus.js';
+import { applySecurityEventHandle } from '../util/security/services/securityEventHandling.js';
 
 const ensureRootRole = async (req, res) => {
   if (!req.user?.id || req.user?.role !== 'root') {
@@ -55,67 +60,6 @@ const buildHourlyTrend = (rows = []) => {
       blocked: Number(row.blocked || 0),
     };
   });
-};
-
-const normalizeSecurityHandledStatus = (handledStatus = 'processed') => {
-  const statusMap = {
-    confirmed: 'processed',
-    resolved: 'processed',
-    ignored: 'processed',
-    processed: 'processed',
-    false_positive: 'false_positive',
-    unhandled: 'unhandled',
-  };
-  return statusMap[handledStatus];
-};
-
-const applySecurityEventHandle = async ({ connection, event, normalizedStatus, remark, operatorId }) => {
-  await connection.query(
-    `UPDATE security_events
-     SET handled_status = ?, remark = ?, handled_by = ?, handled_at = NOW()
-     WHERE event_id = ?`,
-    [normalizedStatus, remark, operatorId, event.event_id],
-  );
-
-  if (normalizedStatus === 'false_positive' && !event.ip_risk_reverted) {
-    if (Number(event.ip_risk_delta || 0) > 0) {
-      await revertIpReputationImpact({
-        ip: event.source_ip,
-        attackType: event.attack_type,
-        severity: event.severity,
-        riskDelta: event.ip_risk_delta,
-        connection,
-      });
-    } else {
-      await rebuildIpReputationFromEvents({ ip: event.source_ip, connection });
-    }
-    await connection.query(
-      `UPDATE security_events
-       SET ip_risk_reverted = 1, ip_risk_reverted_at = NOW()
-       WHERE event_id = ?`,
-      [event.event_id],
-    );
-  }
-
-  if (normalizedStatus === 'false_positive' && event.user_id && !event.user_risk_reverted) {
-    if (Number(event.user_risk_delta || 0) > 0) {
-      await revertAccountReputationImpact({
-        userId: event.user_id,
-        attackType: event.attack_type,
-        severity: event.severity,
-        riskDelta: event.user_risk_delta,
-        connection,
-      });
-    } else {
-      await rebuildAccountReputationFromEvents({ userId: event.user_id, connection });
-    }
-    await connection.query(
-      `UPDATE security_events
-       SET user_risk_reverted = 1, user_risk_reverted_at = NOW()
-       WHERE event_id = ?`,
-      [event.event_id],
-    );
-  }
 };
 
 const buildWhitelistWhere = (filters = {}) => {
@@ -376,7 +320,9 @@ export const getSecurityEventDetail = async (req, res) => {
     }
     let userInfo = null;
     if (event.user_id) {
-      const [uRows] = await pool.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [event.user_id]);
+      const [uRows] = await pool.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [
+        event.user_id,
+      ]);
       if (uRows[0]) {
         userInfo = uRows[0];
         parseJsonField(userInfo, 'attack_type_breakdown', {});
@@ -395,13 +341,14 @@ export const handleSecurityEvent = async (req, res) => {
     const { eventId } = req.params;
     const { handledStatus = 'processed', remark = '' } = req.body || {};
     const normalizedStatus = normalizeSecurityHandledStatus(handledStatus);
-    const allowed = ['unhandled', 'processed', 'false_positive'];
-    if (!allowed.includes(normalizedStatus)) {
+    if (!SECURITY_HANDLED_STATUSES.includes(normalizedStatus)) {
       return res.send(resultData(null, 400, '无效的处理状态'));
     }
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const [rows] = await connection.query('SELECT * FROM security_events WHERE event_id = ? LIMIT 1 FOR UPDATE', [eventId]);
+    const [rows] = await connection.query('SELECT * FROM security_events WHERE event_id = ? LIMIT 1 FOR UPDATE', [
+      eventId,
+    ]);
     const event = rows[0];
     if (!event) {
       await connection.rollback();
@@ -410,7 +357,7 @@ export const handleSecurityEvent = async (req, res) => {
 
     await applySecurityEventHandle({ connection, event, normalizedStatus, remark, operatorId: req.user.id });
     await connection.commit();
-    res.send(resultData(null, 200, normalizedStatus === 'false_positive' ? '已标记误报并回滚风险影响' : '处理状态已更新'));
+    res.send(resultData(null, 200, securityHandledStatusSuccessMessage(normalizedStatus)));
   } catch (e) {
     if (connection) await connection.rollback().catch(() => {});
     res.send(resultData(null, 500, '更新处理状态失败：' + e.message));
@@ -424,7 +371,9 @@ export const batchHandleSecurityEvents = async (req, res) => {
   try {
     if (!(await ensureRootRole(req, res))) return;
     const { eventIds = [], handledStatus = 'processed', remark = '' } = req.body || {};
-    const ids = Array.from(new Set((Array.isArray(eventIds) ? eventIds : []).map((id) => String(id).trim()).filter(Boolean)));
+    const ids = Array.from(
+      new Set((Array.isArray(eventIds) ? eventIds : []).map((id) => String(id).trim()).filter(Boolean)),
+    );
     if (!ids.length) {
       return res.send(resultData(null, 400, '请选择要处理的安全事件'));
     }
@@ -432,8 +381,7 @@ export const batchHandleSecurityEvents = async (req, res) => {
       return res.send(resultData(null, 400, '单次最多批量处理100条安全事件'));
     }
     const normalizedStatus = normalizeSecurityHandledStatus(handledStatus);
-    const allowed = ['unhandled', 'processed', 'false_positive'];
-    if (!allowed.includes(normalizedStatus)) {
+    if (!SECURITY_HANDLED_STATUSES.includes(normalizedStatus)) {
       return res.send(resultData(null, 400, '无效的处理状态'));
     }
 
@@ -592,7 +540,9 @@ export const getAccountBanList = async (req, res) => {
     const params = [];
     const conditions = ['u.del_flag = 1'];
     if (filters.key) {
-      conditions.push('(u.id LIKE CONCAT("%", ?, "%") OR u.alias LIKE CONCAT("%", ?, "%") OR u.email LIKE CONCAT("%", ?, "%") OR b.ban_reason LIKE CONCAT("%", ?, "%"))');
+      conditions.push(
+        '(u.id LIKE CONCAT("%", ?, "%") OR u.alias LIKE CONCAT("%", ?, "%") OR u.email LIKE CONCAT("%", ?, "%") OR b.ban_reason LIKE CONCAT("%", ?, "%"))',
+      );
       params.push(filters.key, filters.key, filters.key, filters.key);
     }
     const where = conditions.join(' AND ');

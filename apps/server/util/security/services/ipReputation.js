@@ -48,7 +48,14 @@ export const getIpReputation = async (ip) => {
   }
 };
 
-export const updateIpReputation = async ({ ip, attackType, severity, threatScore, shouldBan = false, banMinutes = 30 }) => {
+export const updateIpReputation = async ({
+  ip,
+  attackType,
+  severity,
+  threatScore,
+  shouldBan = false,
+  banMinutes = 30,
+}) => {
   if (!ip) return { riskDelta: 0 };
 
   // 直接读 DB，绕过缓存，避免并发 read-modify-write 竞态
@@ -68,8 +75,7 @@ export const updateIpReputation = async ({ ip, attackType, severity, threatScore
   const currentRiskScore = Number(current.risk_score || 0);
   // 纯高频(FLOOD)不累积到自动封禁:正常用户刷新页面也会高频,只在 app 层限流(429)+ 记录即可,
   // 不应因此封 IP。自动封禁留给有明确攻击特征的类型(注入/XSS/扫描/爆破/IP信誉)。
-  const theoreticalRiskDelta =
-    attackType === 'FLOOD' ? 0 : Math.max(3, Math.ceil(Number(threatScore || 0) / 10));
+  const theoreticalRiskDelta = attackType === 'FLOOD' ? 0 : Math.max(3, Math.ceil(Number(threatScore || 0) / 10));
   const predictedScore = Math.min(100, currentRiskScore + theoreticalRiskDelta);
 
   const currentBanActive =
@@ -172,7 +178,8 @@ export const revertIpReputationImpact = async ({ ip, attackType, severity, riskD
   const highRisk = ['high', 'critical'].includes(severity) ? 1 : 0;
   const critical = severity === 'critical' ? 1 : 0;
   const nextRiskScore = Math.max(0, Number(current.risk_score || 0) - Math.max(0, Number(riskDelta || 0)));
-  const clearAutoBan = isAutoBanReason(current.ban_reason) && nextRiskScore < Number(SECURITY_CONFIG.ipAutoBanRiskScore || 80);
+  const clearAutoBan =
+    isAutoBanReason(current.ban_reason) && nextRiskScore < Number(SECURITY_CONFIG.ipAutoBanRiskScore || 80);
   await executor.query(
     `UPDATE security_ip_reputation
      SET total_attacks = GREATEST(0, total_attacks - 1),
@@ -209,7 +216,7 @@ export const rebuildIpReputationFromEvents = async ({ ip, connection = null }) =
     `SELECT attack_type, severity, threat_score, ip_risk_delta, created_at
      FROM security_events
      WHERE source_ip = ?
-       AND handled_status <> 'false_positive'
+       AND handled_status NOT IN ('false_positive', 'authorized_test')
        AND COALESCE(ip_risk_reverted, 0) = 0
        AND threat_score >= 20
      ORDER BY created_at ASC, id ASC`,
@@ -235,7 +242,8 @@ export const rebuildIpReputationFromEvents = async ({ ip, connection = null }) =
     lastAttackTime = event.created_at;
   }
 
-  const clearAutoBan = isAutoBanReason(current.ban_reason) && riskScore < Number(SECURITY_CONFIG.ipAutoBanRiskScore || 80);
+  const clearAutoBan =
+    isAutoBanReason(current.ban_reason) && riskScore < Number(SECURITY_CONFIG.ipAutoBanRiskScore || 80);
   await executor.query(
     `INSERT INTO security_ip_reputation
       (ip,total_requests,total_attacks,high_risk_count,critical_count,risk_score,attack_type_breakdown,is_banned,banned_until,ban_reason,first_seen_at,last_seen_at,last_attack_time)
@@ -302,11 +310,19 @@ export const ensureIpLocation = async (ip) => {
     locationPending.set(ip, true);
     const data = await new Promise((resolve) => {
       const url = `https://restapi.amap.com/v3/ip?ip=${encodeURIComponent(ip)}&key=${process.env.AMAP_API_KEY || ''}`;
-      https.get(url, (res) => {
-        let body = '';
-        res.on('data', (chunk) => (body += chunk));
-        res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
-      }).on('error', () => resolve(null));
+      https
+        .get(url, (res) => {
+          let body = '';
+          res.on('data', (chunk) => (body += chunk));
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              resolve(null);
+            }
+          });
+        })
+        .on('error', () => resolve(null));
     });
     if (data?.status === '1') {
       const location = JSON.stringify({

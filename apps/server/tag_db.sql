@@ -343,7 +343,7 @@ CREATE TABLE `security_events` (
   `user_risk_reverted` tinyint(1) DEFAULT '0',
   `user_risk_reverted_at` datetime DEFAULT NULL,
   `decision_reason` varchar(255) DEFAULT NULL COMMENT '系统做出处置动作的原因说明',
-  `handled_status` enum('unhandled','processed','false_positive') DEFAULT 'unhandled',
+  `handled_status` enum('unhandled','processed','false_positive','authorized_test') DEFAULT 'unhandled',
   `handled_by` varchar(64) DEFAULT NULL COMMENT '处理人用户ID',
   `handled_at` datetime DEFAULT NULL COMMENT '人工处理时间',
   `remark` text COMMENT '人工处理备注',

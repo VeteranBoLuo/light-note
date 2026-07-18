@@ -3,13 +3,20 @@ import { parseTimeRange } from '../timeRange.js';
 
 export default {
   name: 'get_security_events',
-  description: '查询安全攻击事件记录。可按攻击类型、源IP、处理状态（handled/unhandled）、时间范围筛选。',
+  description: '查询安全攻击事件记录。可按攻击类型、源IP、处理状态和时间范围筛选。',
   parameters: {
     type: 'object',
     properties: {
-      type: { type: 'string', description: '攻击类型筛选，如：SQL_INJECTION、XSS、COMMAND_INJECTION、PATH_TRAVERSAL、RATE_LIMIT、AUTH_FAIL' },
+      type: {
+        type: 'string',
+        description: '攻击类型筛选，如：SQL_INJECTION、XSS、COMMAND_INJECTION、PATH_TRAVERSAL、RATE_LIMIT、AUTH_FAIL',
+      },
       ip: { type: 'string', description: '源IP地址筛选' },
-      status: { type: 'string', description: '处理状态：handled(已处理)、unhandled(未处理)' },
+      status: {
+        type: 'string',
+        enum: ['unhandled', 'processed', 'false_positive', 'authorized_test'],
+        description: '处理状态：未处理、已处理、误报或授权测试',
+      },
       timeRange: { type: 'string', description: '时间范围' },
       limit: { type: 'integer', description: '返回条数，默认20，最大100' },
     },
@@ -56,7 +63,7 @@ export default {
   },
   summarize(rows) {
     if (!rows?.length) return '安全事件：无记录';
-    const types = [...new Set(rows.map(r => r.attack_type))];
+    const types = [...new Set(rows.map((r) => r.attack_type))];
     return `安全事件：共 ${rows.length} 条，类型：${types.join('、')}`;
   },
 };

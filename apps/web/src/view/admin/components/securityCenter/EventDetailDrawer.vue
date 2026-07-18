@@ -17,18 +17,26 @@
             +{{ eventDetail.event.ipRiskDelta || 0 }}
             <em>{{ eventDetail.event.ipRiskReverted ? '已回滚' : '未回滚' }}</em>
           </strong>
+          <span>账号风险影响</span
+          ><strong>
+            +{{ eventDetail.event.userRiskDelta || 0 }}
+            <em>{{ eventDetail.event.userRiskReverted ? '已回滚' : '未回滚' }}</em>
+          </strong>
         </div>
       </section>
 
       <section>
         <h3>命中证据</h3>
-        <a-timeline>
-          <a-timeline-item v-for="item in eventDetail.evidence" :key="item.id" :color="severityColor(item.severity)">
-            <strong>{{ item.ruleName }}</strong>
-            <p>{{ item.evidenceMessage }}</p>
-            <code>{{ item.matchedField }}: {{ item.matchedValuePreview }}</code>
-          </a-timeline-item>
-        </a-timeline>
+        <ol class="security-evidence-list">
+          <li v-for="item in eventDetail.evidence" :key="item.id" class="security-evidence-item">
+            <span class="security-evidence-dot" :class="`is-${item.severity}`" aria-hidden="true"></span>
+            <div>
+              <strong>{{ item.ruleName }}</strong>
+              <p>{{ item.evidenceMessage }}</p>
+              <code>{{ item.matchedField }}: {{ item.matchedValuePreview }}</code>
+            </div>
+          </li>
+        </ol>
       </section>
 
       <section>
@@ -64,99 +72,114 @@
 </template>
 
 <script lang="ts" setup>
-import { inject, reactive, watch } from 'vue';
-import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-import { apiBaseGet, apiBasePost } from '@/http/request.ts';
-import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-import BButton from '@/components/base/BasicComponents/BButton.vue';
-import BInput from '@/components/base/BasicComponents/BInput.vue';
-import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-import { BAN_IP, UNBAN_IP, BAN_ACCOUNT, UNBAN_ACCOUNT, severityColor, ipRecentColumns } from './securityShared';
+  import { inject, reactive, watch } from 'vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { apiBaseGet, apiBasePost } from '@/http/request.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import {
+    BAN_IP,
+    UNBAN_IP,
+    BAN_ACCOUNT,
+    UNBAN_ACCOUNT,
+    excludesSecurityEventRisk,
+    ipRecentColumns,
+    securityHandledStatusConfirmText,
+    securityHandledStatusOptions,
+    type SecurityHandledStatus,
+  } from './securityShared';
 
-const props = defineProps<{ visible: boolean; eventId: string | null }>();
-const emit = defineEmits<{
-  close: [];
-  saved: [];
-}>();
+  const props = defineProps<{ visible: boolean; eventId: string | null }>();
+  const emit = defineEmits<{
+    close: [];
+    saved: [];
+  }>();
 
-const banIp = inject(BAN_IP);
-const unbanIp = inject(UNBAN_IP);
-const banAccount = inject(BAN_ACCOUNT);
-const unbanAccount = inject(UNBAN_ACCOUNT);
+  const banIp = inject(BAN_IP);
+  const unbanIp = inject(UNBAN_IP);
+  const banAccount = inject(BAN_ACCOUNT);
+  const unbanAccount = inject(UNBAN_ACCOUNT);
 
-const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
-const handleForm = reactive({ handledStatus: 'processed', remark: '' });
-const handleStatusOptions = [
-  { value: 'unhandled', label: '未处理' },
-  { value: 'processed', label: '已处理' },
-  { value: 'false_positive', label: '误报' },
-];
+  const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
+  const handleForm = reactive<{ handledStatus: SecurityHandledStatus; remark: string }>({
+    handledStatus: 'processed',
+    remark: '',
+  });
+  const handleStatusOptions = securityHandledStatusOptions;
 
-async function loadDetail() {
-  if (!props.eventId) return;
-  const res = await apiBaseGet(`/api/security/events/${props.eventId}`);
-  if (res.status === 200) {
-    Object.assign(eventDetail, res.data);
-    handleForm.handledStatus =
-      {
+  async function loadDetail() {
+    if (!props.eventId) return;
+    const res = await apiBaseGet(`/api/security/events/${props.eventId}`);
+    if (res.status === 200) {
+      Object.assign(eventDetail, res.data);
+      handleForm.handledStatus = ({
         confirmed: 'processed',
         resolved: 'processed',
         ignored: 'processed',
       }[res.data.event.handledStatus] ||
-      res.data.event.handledStatus ||
-      'processed';
-    handleForm.remark = res.data.event.remark || '';
-  }
-}
-
-async function doSubmitHandle() {
-  if (!eventDetail.event?.eventId) return;
-  const res = await apiBasePost(`/api/security/events/${eventDetail.event.eventId}/handle`, handleForm);
-  if (res.status === 200) {
-    message.success(res.msg || '处置状态已保存');
-    emit('saved');
-    emit('close');
-  }
-}
-
-async function submitHandle() {
-  if (!eventDetail.event?.eventId) return;
-  const riskParts: string[] = [];
-  if (Number(eventDetail.event.ipRiskDelta || 0) > 0 && !eventDetail.event.ipRiskReverted) {
-    riskParts.push(`${eventDetail.event.ipRiskDelta} 分 IP风险`);
-  }
-  if (Number(eventDetail.event.userRiskDelta || 0) > 0 && !eventDetail.event.userRiskReverted) {
-    riskParts.push(`${eventDetail.event.userRiskDelta} 分 账号风险`);
-  }
-  const riskText = riskParts.length > 0 ? `，并撤销本次事件带来的 ${riskParts.join('、')}影响` : '';
-  if (handleForm.handledStatus === 'false_positive' && riskParts.length > 0) {
-    Alert.alert({
-      title: '标记为误报',
-      content: `确认标记为误报？系统会保留攻击日志${riskText}。`,
-      okText: '确认误报',
-      cancelText: '取消',
-      onOk: doSubmitHandle,
-    });
-    return;
-  }
-  await doSubmitHandle();
-}
-
-watch(
-  () => props.visible,
-  (v) => {
-    if (v && props.eventId) {
-      loadDetail();
-    } else if (!v) {
-      Object.assign(eventDetail, { event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
+        res.data.event.handledStatus ||
+        'processed') as SecurityHandledStatus;
+      handleForm.remark = res.data.event.remark || '';
     }
-  },
-  { immediate: true },
-);
+  }
+
+  async function doSubmitHandle() {
+    if (!eventDetail.event?.eventId) return;
+    const res = await apiBasePost(`/api/security/events/${eventDetail.event.eventId}/handle`, handleForm);
+    if (res.status === 200) {
+      message.success(res.msg || '处置状态已保存');
+      emit('saved');
+      emit('close');
+    }
+  }
+
+  async function submitHandle() {
+    if (!eventDetail.event?.eventId) return;
+    const riskParts: string[] = [];
+    if (Number(eventDetail.event.ipRiskDelta || 0) > 0 && !eventDetail.event.ipRiskReverted) {
+      riskParts.push(`${eventDetail.event.ipRiskDelta} 分 IP风险`);
+    }
+    if (Number(eventDetail.event.userRiskDelta || 0) > 0 && !eventDetail.event.userRiskReverted) {
+      riskParts.push(`${eventDetail.event.userRiskDelta} 分 账号风险`);
+    }
+    const currentStatus = eventDetail.event.handledStatus || 'unhandled';
+    const shouldExcludeRisk = excludesSecurityEventRisk(handleForm.handledStatus);
+    const restoresRisk = excludesSecurityEventRisk(currentStatus) && !shouldExcludeRisk;
+    if (shouldExcludeRisk || restoresRisk) {
+      const riskText =
+        riskParts.length > 0
+          ? shouldExcludeRisk
+            ? ` 本次将回滚 ${riskParts.join('、')}。`
+            : ` 本次将重新计入 ${riskParts.join('、')}。`
+          : '';
+      Alert.alert({
+        title: handleForm.handledStatus === 'authorized_test' ? '标记为授权测试' : '确认处置状态',
+        content: `${securityHandledStatusConfirmText(handleForm.handledStatus)}${riskText}`,
+        okText: '确认保存',
+        cancelText: '取消',
+        onOk: doSubmitHandle,
+      });
+      return;
+    }
+    await doSubmitHandle();
+  }
+
+  watch(
+    () => props.visible,
+    (v) => {
+      if (v && props.eventId) {
+        loadDetail();
+      } else if (!v) {
+        Object.assign(eventDetail, { event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
+      }
+    },
+    { immediate: true },
+  );
 </script>
 
 <style lang="less" scoped>
-@import './securityCenter.less';
+  @import './securityCenter.less';
 </style>
-

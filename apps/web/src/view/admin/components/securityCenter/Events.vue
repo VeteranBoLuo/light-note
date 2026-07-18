@@ -49,6 +49,7 @@
         <div class="event-batch-actions">
           <b-button size="small" type="primary" @click="confirmBatchHandle('processed')">标记已处理</b-button>
           <b-button size="small" @click="confirmBatchHandle('false_positive')">标记误报</b-button>
+          <b-button size="small" @click="confirmBatchHandle('authorized_test')">标记授权测试</b-button>
           <b-button size="small" @click="confirmBatchHandle('unhandled')">改为未处理</b-button>
           <b-button size="small" @click="selectedEventIds = []">取消选择</b-button>
         </div>
@@ -129,8 +130,11 @@
     eventColumns,
     eventUserText,
     eventUserTooltip,
+    securityHandledStatusConfirmText,
+    securityHandledStatusOptions,
     statusText,
     statusPillClass,
+    type SecurityHandledStatus,
   } from './securityShared';
 
   const openEventDetail = inject(OPEN_EVENT_DETAIL);
@@ -160,11 +164,7 @@
     { value: 'log', label: '记录' },
     { value: 'block', label: '拦截' },
   ];
-  const statusOptions = [
-    { value: 'unhandled', label: '未处理' },
-    { value: 'processed', label: '已处理' },
-    { value: 'false_positive', label: '误报' },
-  ];
+  const statusOptions = securityHandledStatusOptions;
   const eventSearchTimer = ref<any>(null);
   const selectedEventIds = ref<string[]>([]);
   const batchLoading = ref(false);
@@ -222,20 +222,11 @@
     eventFilters.severity = route.query.severity ? String(route.query.severity) : eventFilters.severity;
   }
 
-  const batchStatusText = {
-    processed: '已处理',
-    false_positive: '误报',
-    unhandled: '未处理',
-  };
-
-  function confirmBatchHandle(handledStatus: 'processed' | 'false_positive' | 'unhandled') {
+  function confirmBatchHandle(handledStatus: SecurityHandledStatus) {
     if (!selectedEventIds.value.length || batchLoading.value) return;
     Alert.alert({
       title: '批量处理攻击日志',
-      content:
-        handledStatus === 'false_positive'
-          ? `确认将选中的 ${selectedEventIds.value.length} 条攻击日志标记为误报？误报会回滚对应风险分。`
-          : `确认将选中的 ${selectedEventIds.value.length} 条攻击日志标记为${batchStatusText[handledStatus]}？`,
+      content: securityHandledStatusConfirmText(handledStatus, selectedEventIds.value.length),
       okText: '确认处理',
       cancelText: '取消',
       onOk: async () => {

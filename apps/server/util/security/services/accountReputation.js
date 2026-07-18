@@ -29,10 +29,7 @@ export const getAccountReputation = async (userId) => {
     return cached.value;
   }
   try {
-    const [rows] = await pool.query(
-      'SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1',
-      [userId],
-    );
+    const [rows] = await pool.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [userId]);
     const value = rows[0] || defaultReputation(userId);
     value.attack_type_breakdown = parseAttackTypeBreakdown(value.attack_type_breakdown);
     cache.set(userId, { value, expiresAt: Date.now() + CACHE_TTL });
@@ -48,10 +45,7 @@ export const updateAccountReputation = async ({ userId, attackType, severity, th
   // 直接读 DB，绕过缓存，避免并发 read-modify-write 竞态
   let current;
   try {
-    const [rows] = await pool.query(
-      'SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1',
-      [userId],
-    );
+    const [rows] = await pool.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [userId]);
     current = rows[0] || defaultReputation(userId);
     current.attack_type_breakdown = parseAttackTypeBreakdown(current.attack_type_breakdown);
   } catch (e) {
@@ -94,7 +88,9 @@ export const updateAccountReputation = async ({ userId, attackType, severity, th
   let actualRiskDelta = theoreticalRiskDelta;
   if (currentRiskScore + theoreticalRiskDelta > 100) {
     try {
-      const [newRows] = await pool.query('SELECT risk_score FROM security_account_reputation WHERE user_id = ?', [userId]);
+      const [newRows] = await pool.query('SELECT risk_score FROM security_account_reputation WHERE user_id = ?', [
+        userId,
+      ]);
       actualRiskDelta = Math.max(0, Number(newRows[0]?.risk_score || 0) - currentRiskScore);
     } catch (e) {
       // 读取失败，回退到理论值
@@ -104,13 +100,16 @@ export const updateAccountReputation = async ({ userId, attackType, severity, th
   return { riskDelta: actualRiskDelta, theoreticalRiskDelta, nextRiskScore: predictedScore, highRisk, critical };
 };
 
-export const revertAccountReputationImpact = async ({ userId, attackType, severity, riskDelta = 0, connection = null }) => {
+export const revertAccountReputationImpact = async ({
+  userId,
+  attackType,
+  severity,
+  riskDelta = 0,
+  connection = null,
+}) => {
   if (!userId) return false;
   const executor = connection || pool;
-  const [rows] = await executor.query(
-    'SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1',
-    [userId],
-  );
+  const [rows] = await executor.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [userId]);
   const current = rows[0];
   if (!current) {
     cache.delete(userId);
@@ -138,13 +137,7 @@ export const revertAccountReputationImpact = async ({ userId, attackType, severi
          attack_type_breakdown = ?,
          last_event_at = NOW()
      WHERE user_id = ?`,
-    [
-      highRisk,
-      critical,
-      Math.max(0, Number(riskDelta || 0)),
-      JSON.stringify(breakdown),
-      userId,
-    ],
+    [highRisk, critical, Math.max(0, Number(riskDelta || 0)), JSON.stringify(breakdown), userId],
   );
   cache.delete(userId);
   return true;
@@ -153,16 +146,15 @@ export const revertAccountReputationImpact = async ({ userId, attackType, severi
 export const rebuildAccountReputationFromEvents = async ({ userId, connection = null }) => {
   if (!userId) return false;
   const executor = connection || pool;
-  const [currentRows] = await executor.query(
-    'SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1',
-    [userId],
-  );
+  const [currentRows] = await executor.query('SELECT * FROM security_account_reputation WHERE user_id = ? LIMIT 1', [
+    userId,
+  ]);
   const current = currentRows[0] || defaultReputation(userId);
   const [events] = await executor.query(
     `SELECT attack_type, severity, threat_score, user_risk_delta, created_at
      FROM security_events
      WHERE user_id = ?
-       AND handled_status <> 'false_positive'
+       AND handled_status NOT IN ('false_positive', 'authorized_test')
        AND COALESCE(user_risk_reverted, 0) = 0
        AND threat_score >= 20
        AND user_id IS NOT NULL AND user_id <> ''
