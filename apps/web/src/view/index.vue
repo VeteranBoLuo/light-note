@@ -2,7 +2,7 @@
   <div id="tag-container">
     <!-- 导航栏默认显示，少数页面通过配置隐藏 -->
     <Navigation v-if="showNavigation" />
-    <router-view :style="viewStyle" />
+    <router-view :key="routeViewKey" :style="viewStyle" />
   </div>
 </template>
 
@@ -12,11 +12,13 @@
   import { useRoute } from 'vue-router';
   import { computed } from 'vue';
   import { NAVIGATION_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
+  import { getMainRouteViewKey } from '@/utils/routeViewKey.ts';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
 
   const routeName = computed(() => String(route.name || ''));
+  const routeViewKey = computed(() => getMainRouteViewKey(route));
 
   // 导航栏显示逻辑
   const showNavigation = computed(() => {
