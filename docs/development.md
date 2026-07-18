@@ -268,7 +268,7 @@ import icon from "@/config/icon.ts";
 
 AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `knowledge_base` 表（工具 `search_knowledge_base` → `util/knowledgeService.js`）。**每次上线用户可见的新功能或较大改动，必须同步更新知识库**，否则 AI 会答"没有该功能 / 机制"（例：积分系统上线后未同步，AI 答不出"AI 额度"）。
 
-- **检索机制**：关键词二字词打分（非向量），`title` 命中权重高于 `content`，所以标题要含核心词；有 5 分钟内存缓存，写入后需 `pm2 restart app`（或等 5 分钟）才生效。
+- **检索机制**：本地 MiniSearch BM25+（不调用第三方检索 API）。完整 HTML/Markdown 正文会按标题与段落切块，中文使用相邻二字词、英文使用单词；`title`、章节标题和正文分级加权，依次执行精确、内置同义词、英文一次编辑距离的保守降级，并过滤低置信度结果。同一知识条目只返回最相关片段一次。索引有 5 分钟安全 TTL，经统一知识库写服务或管理接口增删改后会立即失效重建；异常时自动回退旧算法，也可设置 `KNOWLEDGE_SEARCH_ENGINE=legacy` 主动回滚。
 - **字段**：`title` / `content`（html 或 markdown）/ `category`（帮助中心 · 内部知识 · FAQ · 系统行为）/ `status`（`public` 普通用户可搜、`internal` 仅 root）。
 - **写入方式**：root 让 AI 用 `write_knowledge_base` 工具；或写 `.mjs` 脚本 `import { generateUUID }` + INSERT `knowledge_base`（title 已存在则 UPDATE，幂等），放服务器 `node` 跑。
 - **配套**：若新功能涉及"可查询的实时数据"（如额度、用量），除知识库说明外，考虑给 Agent 加对应查询工具（见 `util/agent/tools/`，如 `get_ai_quota`）。

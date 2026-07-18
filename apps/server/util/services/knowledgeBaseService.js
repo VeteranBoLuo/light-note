@@ -1,5 +1,6 @@
 import pool from '../../db/index.js';
 import { generateUUID } from '../agent/data.js';
+import { invalidateKnowledgeCache } from '../knowledgeService.js';
 
 const STATUSES = new Set(['public', 'internal']);
 const TYPES = new Set(['html', 'markdown']);
@@ -52,6 +53,7 @@ export async function upsertKnowledgeBase({ userId, input, createOnly = false, m
         [value.content, value.category, value.status, value.type, userId, existing.id],
       );
       await connection.commit();
+      invalidateKnowledgeCache();
       return { id: existing.id, title: value.title, action: 'updated' };
     }
     const id = generateUUID();
@@ -73,6 +75,7 @@ export async function upsertKnowledgeBase({ userId, input, createOnly = false, m
       ],
     );
     await connection.commit();
+    invalidateKnowledgeCache();
     return { id, title: value.title, action: 'created' };
   } catch (error) {
     await connection.rollback();
@@ -129,5 +132,6 @@ export async function updateKnowledgeBaseById({ userId, id, patch = {}, maxConte
   params.push(userId, id);
   const [result] = await pool.query(`UPDATE knowledge_base SET ${fields.join(', ')} WHERE id = ?`, params);
   if (!result.affectedRows) throw new Error('NOT_FOUND: 知识条目不存在');
+  invalidateKnowledgeCache();
   return { id };
 }

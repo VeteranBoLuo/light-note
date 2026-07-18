@@ -2,6 +2,7 @@ import { resultData } from '../util/common.js';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { upsertKnowledgeBase, updateKnowledgeBaseById } from '../util/services/knowledgeBaseService.js';
+import { invalidateKnowledgeCache } from '../util/knowledgeService.js';
 
 const KNOWLEDGE_CLIENT_ERRORS = new Set([
   'CONTENT_TOO_LONG',
@@ -186,6 +187,7 @@ export const deleteKnowledgeBase = async (req, res) => {
     const { id } = req.body;
     if (!id) return res.send(resultData(null, 400, '缺少 ID'));
     await pool.query('DELETE FROM knowledge_base WHERE id = ?', [id]);
+    invalidateKnowledgeCache();
     res.send(resultData(null));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
@@ -201,6 +203,7 @@ export const batchUpdateKnowledgeStatus = async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) return res.send(resultData(null, 400, '请选择条目'));
     if (!['public', 'internal'].includes(status)) return res.send(resultData(null, 400, '状态无效'));
     await pool.query('UPDATE knowledge_base SET status = ?, updated_by = ? WHERE id IN (?)', [status, userId, ids]);
+    invalidateKnowledgeCache();
     res.send(resultData({ updated: ids.length }));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
@@ -220,6 +223,7 @@ export const batchUpdateKnowledgeCategory = async (req, res) => {
       userId,
       ids,
     ]);
+    invalidateKnowledgeCache();
     res.send(resultData({ updated: ids.length }));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
@@ -234,6 +238,7 @@ export const batchDeleteKnowledgeBase = async (req, res) => {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.send(resultData(null, 400, '请选择条目'));
     await pool.query('DELETE FROM knowledge_base WHERE id IN (?)', [ids]);
+    invalidateKnowledgeCache();
     res.send(resultData({ deleted: ids.length }));
   } catch (e) {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
