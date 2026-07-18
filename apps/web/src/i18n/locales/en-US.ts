@@ -1582,10 +1582,6 @@ export default {
       actionFailed: 'The action could not be prepared. Please try again.',
       awaitingConfirmation: 'Waiting for your confirmation…',
       awaitingChoice: 'Choose how you want to continue…',
-      summary: 'Referenced {count} data sources',
-      summaryPartial: 'Read {success} of {total} data sources',
-      viewDetails: 'View details',
-      hideDetails: 'Hide details',
     },
     interaction: {
       recommended: 'Recommended',
@@ -1668,6 +1664,7 @@ export default {
     sources: 'Sources',
     expandSources: 'Show sources',
     collapseSources: 'Hide sources',
+    viewAllSources: 'All {count}',
     attachedResources: 'Attached resources',
     sourceTypes: {
       note: 'Note',

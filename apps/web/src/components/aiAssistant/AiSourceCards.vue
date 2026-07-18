@@ -1,72 +1,126 @@
 <template>
-  <div v-if="uniqueSources.length" class="ai-sources">
-    <BButton
-      v-if="isCollapsible"
-      :class="['ai-sources__summary', { 'is-expanded': isExpanded }]"
-      role="button"
-      tabindex="0"
-      :aria-expanded="isExpanded"
-      :aria-label="t(isExpanded ? 'ai.collapseSources' : 'ai.expandSources')"
-      v-click-log="{ module: 'AI助手', operation: isExpanded ? '收起参考来源' : '展开参考来源' }"
-      @click="toggleSources"
-      @keydown.enter.prevent="toggleSources"
-      @keydown.space.prevent="toggleSources"
-    >
-      <span class="ai-sources__summary-title">{{ t('ai.sources') }} · {{ uniqueSources.length }}</span>
-      <span class="ai-sources__summary-action">
-        {{ t(isExpanded ? 'ai.collapseSources' : 'ai.expandSources') }}
-        <SvgIcon class="ai-sources__summary-icon" :src="icon.ai.sourceArrow" size="14" />
-      </span>
-    </BButton>
-    <div v-else class="ai-sources__title">{{ t('ai.sources') }} · {{ uniqueSources.length }}</div>
-    <Transition name="ai-sources-list">
-      <div v-if="showSourceList" :class="['ai-sources__list', { 'is-after-summary': isCollapsible }]">
+  <div v-if="uniqueSources.length" :class="['ai-sources', { 'is-pending': !revealed }]" :aria-hidden="!revealed">
+    <div class="ai-sources__rail">
+      <span class="ai-sources__label">{{ t('ai.sources') }} · {{ uniqueSources.length }}</span>
+
+      <BButton
+        v-for="source in previewSources"
+        :key="`${source.type}:${source.id}`"
+        :class="['ai-sources__compact', `is-${source.type}`, { 'is-static': !isNavigableSource(source) }]"
+        :role="isNavigableSource(source) ? 'link' : undefined"
+        :tabindex="isNavigableSource(source) ? 0 : -1"
+        :aria-disabled="!isNavigableSource(source)"
+        @click="openSource(source)"
+        @keydown.enter.prevent="openSource(source)"
+        @keydown.space.prevent="openSource(source)"
+      >
+        <span class="ai-sources__compact-icon" aria-hidden="true">
+          <SvgIcon :src="sourceIcon(source.type)" size="15" />
+        </span>
+        <span class="ai-sources__compact-title">{{ source.title || typeLabel(source.type) }}</span>
+        <SvgIcon
+          v-if="isNavigableSource(source)"
+          class="ai-sources__compact-action"
+          :src="isExternalSource(source) ? icon.ai.sourceExternal : icon.ai.sourceArrow"
+          size="13"
+          aria-hidden="true"
+        />
+      </BButton>
+
+      <BPopover
+        v-if="hasOverflow && !isMobile"
+        v-model:open="sourcePanelOpen"
+        trigger="click"
+        placement="top-right"
+        overlay-class-name="ai-sources-popover"
+      >
         <BButton
-          v-for="source in uniqueSources"
-          :key="`${source.type}:${source.id}`"
-          :class="['ai-source', `is-${source.type}`, { 'is-static': !isNavigableSource(source) }]"
-          :role="isNavigableSource(source) ? 'link' : undefined"
-          :tabindex="isNavigableSource(source) ? 0 : -1"
-          :aria-disabled="!isNavigableSource(source)"
-          @click="openSource(source)"
-          @keydown.enter.prevent="openSource(source)"
-          @keydown.space.prevent="openSource(source)"
+          class="ai-sources__more"
+          role="button"
+          tabindex="0"
+          aria-haspopup="dialog"
+          :aria-expanded="sourcePanelOpen"
+          :aria-label="`${t('ai.sources')}，${t('ai.viewAllSources', { count: uniqueSources.length })}`"
+          v-click-log="{ module: 'AI助手', operation: '查看全部参考来源' }"
+          @keydown.enter.prevent="sourcePanelOpen = !sourcePanelOpen"
+          @keydown.space.prevent="sourcePanelOpen = !sourcePanelOpen"
         >
-          <span class="ai-source__icon" aria-hidden="true">
-            <SvgIcon :src="sourceIcon(source.type)" size="18" />
-          </span>
-          <span class="ai-source__copy">
-            <strong>{{ source.title }}</strong>
-            <small>{{ sourceSubtitle(source) }}</small>
-          </span>
-          <span v-if="isNavigableSource(source)" class="ai-source__action" aria-hidden="true">
-            <SvgIcon :src="isExternalSource(source) ? icon.ai.sourceExternal : icon.ai.sourceArrow" size="15" />
-          </span>
+          {{ t('ai.viewAllSources', { count: uniqueSources.length }) }}
+          <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
         </BButton>
+        <template #content>
+          <div class="ai-sources__panel" role="dialog" :aria-label="t('ai.sources')">
+            <div class="ai-sources__panel-title">{{ t('ai.sources') }} · {{ uniqueSources.length }}</div>
+            <AiSourceList :sources="uniqueSources" @select="openSource" />
+          </div>
+        </template>
+      </BPopover>
+
+      <BButton
+        v-else-if="hasOverflow"
+        class="ai-sources__more"
+        role="button"
+        tabindex="0"
+        aria-haspopup="dialog"
+        :aria-label="`${t('ai.sources')}，${t('ai.viewAllSources', { count: uniqueSources.length })}`"
+        v-click-log="{ module: 'AI助手', operation: '查看全部参考来源' }"
+        @click="mobileSourceVisible = true"
+        @keydown.enter.prevent="mobileSourceVisible = true"
+        @keydown.space.prevent="mobileSourceVisible = true"
+      >
+        {{ t('ai.viewAllSources', { count: uniqueSources.length }) }}
+        <SvgIcon :src="icon.ai.sourceArrow" size="13" aria-hidden="true" />
+      </BButton>
+    </div>
+
+    <BModal
+      v-if="isMobile"
+      v-model:visible="mobileSourceVisible"
+      :title="`${t('ai.sources')} · ${uniqueSources.length}`"
+      :show-footer="false"
+      width="min(440px, 92vw)"
+    >
+      <div class="ai-sources__mobile-list">
+        <AiSourceList :sources="uniqueSources" @select="openSource" />
       </div>
-    </Transition>
+    </BModal>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import AiSourceList from './AiSourceList.vue';
   import { resolveAiSourceNavigation, type AiSource, type AiSourceNavigation } from './aiSourceNavigation';
-  import { shouldCollapseAiSources } from './aiSourcePresentation';
+  import { getAiSourceCompactPreviewCount, shouldCollapseAiSources } from './aiSourcePresentation';
 
   export type { AiSource } from './aiSourceNavigation';
 
-  const props = defineProps<{ sources: AiSource[] }>();
+  const props = withDefaults(
+    defineProps<{
+      sources: AiSource[];
+      isMobile?: boolean;
+      revealed?: boolean;
+    }>(),
+    {
+      isMobile: false,
+      revealed: true,
+    },
+  );
   const emit = defineEmits<{
     (event: 'source-navigate', source: AiSource): void;
   }>();
   const { t } = useI18n();
   const router = useRouter();
-  const isExpanded = ref(false);
+  const sourcePanelOpen = ref(false);
+  const mobileSourceVisible = ref(false);
+
   const sourceIdentity = (source: AiSource) => {
     if (source.type === 'document') {
       return `document:${source.documentId || source.fileId || source.id.split(':')[0] || source.title}`;
@@ -83,12 +137,10 @@
       return true;
     });
   });
-  const isCollapsible = computed(() => shouldCollapseAiSources(uniqueSources.value.length));
-  const showSourceList = computed(() => !isCollapsible.value || isExpanded.value);
-  const toggleSources = () => {
-    if (!isCollapsible.value) return;
-    isExpanded.value = !isExpanded.value;
-  };
+  const previewSources = computed(() =>
+    uniqueSources.value.slice(0, getAiSourceCompactPreviewCount(uniqueSources.value.length)),
+  );
+  const hasOverflow = computed(() => shouldCollapseAiSources(uniqueSources.value.length));
   const typeLabel = (type: AiSource['type']) => t(`ai.sourceTypes.${type}`);
   const sourceIcon = (type: AiSource['type']) => {
     if (type === 'note') return icon.resource.note;
@@ -99,13 +151,23 @@
     if (type === 'web') return icon.ai.internet;
     return icon.resource.bookmark;
   };
-  const sourceSubtitle = (source: AiSource) => {
-    const parts = [source.locatorValue, source.excerpt].filter(Boolean);
-    return parts.length ? parts.join(' · ') : typeLabel(source.type);
-  };
   const sourceNavigation = (source: AiSource) => resolveAiSourceNavigation(source);
   const isNavigableSource = (source: AiSource) => sourceNavigation(source).kind !== 'none';
   const isExternalSource = (source: AiSource) => sourceNavigation(source).kind === 'external';
+
+  watch(
+    () => [props.isMobile, uniqueSources.value.map(sourceIdentity).join('|')],
+    () => {
+      sourcePanelOpen.value = false;
+      mobileSourceVisible.value = false;
+    },
+  );
+
+  function closeSourcePanels() {
+    sourcePanelOpen.value = false;
+    mobileSourceVisible.value = false;
+  }
+
   function navigateInsideApp(source: AiSource, target: string | { path: string; query?: Record<string, string> }) {
     emit('source-navigate', source);
     void router.push(target);
@@ -114,6 +176,7 @@
   function openSource(source: AiSource) {
     const navigation: AiSourceNavigation = sourceNavigation(source);
     if (navigation.kind === 'none') return;
+    closeSourcePanels();
     if (navigation.kind === 'external') {
       window.open(navigation.url, '_blank', 'noopener,noreferrer');
       return;
@@ -124,196 +187,174 @@
 
 <style scoped lang="less">
   .ai-sources {
+    min-height: 40px;
     margin: -6px 0 16px 44px;
   }
-  .ai-sources__title {
-    margin-bottom: 6px;
+
+  .ai-sources__rail {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 40px;
+    gap: 6px;
+    overflow: hidden;
+    opacity: 1;
+    transition: opacity 0.16s ease;
+  }
+
+  .ai-sources.is-pending .ai-sources__rail {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .ai-sources__label {
+    flex: 0 0 auto;
     color: var(--desc-color);
     font-size: 12px;
     font-weight: 600;
+    white-space: nowrap;
   }
-  .ai-sources__summary {
-    width: 100%;
-    height: 40px;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 0 10px;
+
+  .ai-sources__compact {
+    --source-color: var(--resource-bookmark-color);
+    min-width: 0;
+    width: auto;
+    height: 36px;
+    flex: 1 1 0;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 0 8px;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     background: var(--card-background);
-    color: var(--desc-color);
+    color: var(--text-color);
     transition:
       border-color 0.15s ease,
       background-color 0.15s ease;
   }
 
-  .ai-sources__summary:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
-    background: color-mix(in srgb, var(--primary-color) 4%, var(--card-background));
+  .ai-sources__compact:not(.is-static):hover {
+    border-color: color-mix(in srgb, var(--source-color) 38%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--source-color) 5%, var(--card-background));
   }
 
-  .ai-sources__summary:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
-    outline-offset: 2px;
+  .ai-sources__compact.is-static {
+    cursor: default;
   }
 
-  .ai-sources__summary-title {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--desc-color);
-    font-size: 12px;
-    font-weight: 600;
-    text-overflow: ellipsis;
+  .ai-sources__compact.is-note {
+    --source-color: var(--resource-note-color);
   }
 
-  .ai-sources__summary-action {
+  .ai-sources__compact.is-file,
+  .ai-sources__compact.is-document,
+  .ai-sources__compact.is-folder {
+    --source-color: var(--resource-file-color);
+  }
+
+  .ai-sources__compact.is-tag {
+    --source-color: var(--resource-tag-color);
+  }
+
+  .ai-sources__compact.is-knowledge {
+    --source-color: var(--primary-color);
+  }
+
+  .ai-sources__compact-icon {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--source-color) 10%, var(--card-background));
+    color: var(--source-color);
+  }
+
+  .ai-sources__compact-title {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ai-sources__compact-action {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+  }
+
+  .ai-sources__more {
+    width: auto;
+    height: 36px;
+    flex: 0 0 auto;
     gap: 4px;
+    padding: 0 9px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--card-background));
     color: var(--primary-color);
     font-size: 12px;
     font-weight: 500;
   }
 
-  .ai-sources__summary-icon {
-    transform: rotate(90deg);
-    transition: transform 0.16s ease;
+  .ai-sources__panel {
+    width: 396px;
+    max-height: 360px;
+    padding: 12px;
+    overflow-y: auto;
   }
 
-  .ai-sources__summary.is-expanded .ai-sources__summary-icon {
-    transform: rotate(-90deg);
-  }
-
-  .ai-sources__list {
-    display: grid;
-    gap: 5px;
-  }
-
-  .ai-sources__list.is-after-summary {
-    margin-top: 6px;
-  }
-
-  .ai-sources-list-enter-active,
-  .ai-sources-list-leave-active {
-    transition:
-      opacity 0.16s ease,
-      transform 0.16s ease;
-  }
-
-  .ai-sources-list-enter-from,
-  .ai-sources-list-leave-to {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  .ai-source {
-    --source-color: var(--resource-bookmark-color);
-    width: 100%;
-    height: 54px;
-    min-height: 54px;
-    justify-content: flex-start;
-    text-align: left;
-    gap: 8px;
-    padding: 6px 9px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 10px;
-    background: var(--card-background);
-    color: var(--text-color);
-    line-height: 1.3;
-    white-space: normal;
-    transition:
-      border-color 0.15s ease,
-      background-color 0.15s ease;
-  }
-
-  .ai-source:not(.is-static):hover {
-    border-color: color-mix(in srgb, var(--source-color) 38%, var(--surface-border-color));
-    background: color-mix(in srgb, var(--source-color) 5%, var(--card-background));
-  }
-
-  .ai-source.is-static {
-    cursor: default;
-  }
-
-  .ai-source.is-note {
-    --source-color: var(--resource-note-color);
-  }
-
-  .ai-source.is-file,
-  .ai-source.is-document,
-  .ai-source.is-folder {
-    --source-color: var(--resource-file-color);
-  }
-
-  .ai-source.is-tag {
-    --source-color: var(--resource-tag-color);
-  }
-
-  .ai-source.is-knowledge {
-    --source-color: var(--primary-color);
-  }
-
-  .ai-source__icon {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--source-color) 10%, var(--card-background));
-    color: var(--source-color);
-  }
-
-  .ai-source__copy {
-    min-width: 0;
-    display: grid;
-    gap: 2px;
-    flex: 1;
-  }
-  .ai-source__copy strong,
-  .ai-source__copy small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ai-source__copy small {
+  .ai-sources__panel-title {
+    margin-bottom: 8px;
     color: var(--desc-color);
-    font-size: 11px;
-    font-weight: 400;
-  }
-
-  .ai-source__copy strong {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
   }
 
-  .ai-source__action {
-    display: inline-flex;
+  .ai-sources__mobile-list {
+    width: min(392px, 80vw);
+    max-height: 65vh;
+    overflow-y: auto;
+  }
+
+  :deep(.b-popover-trigger) {
+    min-width: 0;
     flex: 0 0 auto;
-    color: var(--desc-color);
+  }
+
+  :global(.ai-sources-popover) {
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
   }
 
   @media (max-width: 768px) {
     .ai-sources {
+      min-height: 44px;
       margin-left: 0;
     }
 
-    .ai-source {
-      height: 52px;
-      min-height: 52px;
+    .ai-sources__rail {
+      height: 44px;
     }
 
-    .ai-sources__summary {
-      height: 44px;
+    .ai-sources__compact,
+    .ai-sources__more {
+      height: 40px;
+    }
+
+    .ai-sources__label {
+      font-size: 11px;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ai-sources__summary-icon,
-    .ai-sources-list-enter-active,
-    .ai-sources-list-leave-active {
+    .ai-sources__rail {
       transition: none;
     }
   }

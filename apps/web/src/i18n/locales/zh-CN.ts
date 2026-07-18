@@ -1549,10 +1549,6 @@ export default {
       actionFailed: '操作准备失败，请稍后重试',
       awaitingConfirmation: '正在等待你确认操作…',
       awaitingChoice: '需要你选择下一步处理方式…',
-      summary: '已参考 {count} 项数据',
-      summaryPartial: '已读取 {success}/{total} 项数据',
-      viewDetails: '查看详情',
-      hideDetails: '收起详情',
     },
     interaction: {
       recommended: '推荐',
@@ -1632,6 +1628,7 @@ export default {
     sources: '参考来源',
     expandSources: '展开来源',
     collapseSources: '收起来源',
+    viewAllSources: '全部 {count} 个',
     attachedResources: '引用资源',
     sourceTypes: {
       note: '笔记',

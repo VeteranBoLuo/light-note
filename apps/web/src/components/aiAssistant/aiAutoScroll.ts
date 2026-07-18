@@ -1,5 +1,6 @@
 export const AI_CHAT_SCROLL_PAUSE_THRESHOLD = 120;
 export const AI_CHAT_SCROLL_RESUME_THRESHOLD = 8;
+export const AI_CHAT_TOUCH_INTENT_THRESHOLD = 24;
 
 export type ScrollMetrics = Pick<HTMLElement, 'scrollHeight' | 'scrollTop' | 'clientHeight'>;
 
@@ -13,6 +14,11 @@ export function shouldPauseAiChatFollow(distance: number): boolean {
 
 export function shouldResumeAiChatFollow(distance: number): boolean {
   return distance <= AI_CHAT_SCROLL_RESUME_THRESHOLD;
+}
+
+/** 已暂停跟随且确实离开底部一段距离后，才提示用户回到底部。 */
+export function shouldShowAiChatScrollPrompt(distance: number, shouldFollow: boolean): boolean {
+  return !shouldFollow && shouldPauseAiChatFollow(distance);
 }
 
 export interface AiChatStableViewportState {
@@ -39,6 +45,23 @@ export function resolveAiChatStableViewport(
   };
 }
 
+/**
+ * 回答结束后插入来源等附属内容时：原本跟随底部的用户继续跟随，
+ * 只有已经主动离开底部的用户才保留阅读位置。
+ */
+export function resolveAiChatPostAnswerViewport(
+  metrics: Pick<ScrollMetrics, 'scrollHeight' | 'clientHeight'>,
+  preservedScrollTop: number,
+  wasFollowing: boolean,
+): AiChatStableViewportState {
+  if (!wasFollowing) return resolveAiChatStableViewport(metrics, preservedScrollTop);
+  return {
+    scrollTop: Math.max(0, metrics.scrollHeight - metrics.clientHeight),
+    shouldFollow: true,
+    showScrollToBottom: false,
+  };
+}
+
 export function isAiChatUpwardWheel(deltaY: number): boolean {
   return deltaY < 0;
 }
@@ -47,7 +70,11 @@ export function isAiChatUpwardScroll(previousTop: number, currentTop: number): b
   return currentTop < previousTop;
 }
 
-/** 手指向下移动代表内容在向上滚动。 */
-export function isAiChatUpwardTouch(previousY: number | null, currentY: number): boolean {
-  return previousY !== null && currentY > previousY;
+/** 手指向下移动代表内容在向上滚动；越过触摸意图阈值后才暂停自动跟随。 */
+export function isAiChatUpwardTouch(
+  gestureStartY: number | null,
+  currentY: number,
+  threshold = AI_CHAT_TOUCH_INTENT_THRESHOLD,
+): boolean {
+  return gestureStartY !== null && currentY - gestureStartY >= threshold;
 }

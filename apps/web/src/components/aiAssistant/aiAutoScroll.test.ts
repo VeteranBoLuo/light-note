@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AI_CHAT_TOUCH_INTENT_THRESHOLD,
   getAiChatBottomDistance,
   isAiChatUpwardScroll,
   isAiChatUpwardTouch,
   isAiChatUpwardWheel,
+  resolveAiChatPostAnswerViewport,
   resolveAiChatStableViewport,
   shouldPauseAiChatFollow,
   shouldResumeAiChatFollow,
+  shouldShowAiChatScrollPrompt,
 } from './aiAutoScroll';
 
 describe('aiAutoScroll', () => {
@@ -22,12 +25,21 @@ describe('aiAutoScroll', () => {
     expect(shouldResumeAiChatFollow(9)).toBe(false);
   });
 
-  it('只把明确向上浏览的滚轮和触摸动作当作用户中断', () => {
+  it('移动端轻微上滑可以暂停跟随，但不会过早显示回到底部按钮', () => {
+    expect(shouldShowAiChatScrollPrompt(24, false)).toBe(false);
+    expect(shouldShowAiChatScrollPrompt(120, false)).toBe(false);
+    expect(shouldShowAiChatScrollPrompt(121, false)).toBe(true);
+    expect(shouldShowAiChatScrollPrompt(121, true)).toBe(false);
+  });
+
+  it('只把明确向上浏览的滚轮和越过阈值的触摸动作当作用户中断', () => {
     expect(isAiChatUpwardWheel(-1)).toBe(true);
     expect(isAiChatUpwardWheel(1)).toBe(false);
     expect(isAiChatUpwardScroll(320, 280)).toBe(true);
     expect(isAiChatUpwardScroll(280, 320)).toBe(false);
-    expect(isAiChatUpwardTouch(120, 140)).toBe(true);
+    expect(AI_CHAT_TOUCH_INTENT_THRESHOLD).toBe(24);
+    expect(isAiChatUpwardTouch(120, 143)).toBe(false);
+    expect(isAiChatUpwardTouch(120, 144)).toBe(true);
     expect(isAiChatUpwardTouch(140, 120)).toBe(false);
     expect(isAiChatUpwardTouch(null, 120)).toBe(false);
   });
@@ -42,6 +54,19 @@ describe('aiAutoScroll', () => {
       scrollTop: 695,
       shouldFollow: true,
       showScrollToBottom: false,
+    });
+  });
+
+  it('回答结束时只对已离开底部的用户冻结位置', () => {
+    expect(resolveAiChatPostAnswerViewport({ scrollHeight: 1100, clientHeight: 300 }, 700, true)).toEqual({
+      scrollTop: 800,
+      shouldFollow: true,
+      showScrollToBottom: false,
+    });
+    expect(resolveAiChatPostAnswerViewport({ scrollHeight: 1100, clientHeight: 300 }, 700, false)).toEqual({
+      scrollTop: 700,
+      shouldFollow: false,
+      showScrollToBottom: true,
     });
   });
 });

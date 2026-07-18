@@ -117,43 +117,59 @@
 
 <style scoped lang="less">
   .recommendation-container {
-    padding: 0 0.5rem 0.375rem;
-    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 48px;
+    min-width: 0;
+    gap: 10px;
+    overflow: hidden;
   }
 
   .recommendation-title {
-    font-size: 0.8125rem;
-    line-height: 1.35;
-    color: #10b981;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    display: flex;
+    display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
-    gap: 0.375rem;
-  }
-
-  .recommendation-title::before {
-    content: '🔖';
+    margin: 0;
+    color: var(--resource-note-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
   }
 
   .recommendation-list {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    min-width: 0;
+    flex: 1;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+
+  .recommendation-list::-webkit-scrollbar {
+    display: none;
   }
 
   .recommendation-item {
-    width: fit-content;
-    max-width: 100%;
-    height: auto;
-    min-height: 30px;
+    width: max-content;
+    max-width: min(280px, 80%);
+    height: 32px;
+    min-height: 32px;
+    flex: 0 0 auto;
+    overflow: hidden;
     background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
-    padding: 6px 10px;
+    padding: 0 10px;
     border-radius: 999px;
     font-size: 0.75rem;
     line-height: 1.35;
+    scroll-snap-align: start;
     text-align: left;
-    white-space: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: #4b5563;
     border: 0;
     cursor: pointer;
@@ -162,7 +178,7 @@
   }
 
   .recommendation-item:hover {
-    color: #10b981;
+    color: var(--resource-note-color);
   }
 
   [data-theme='night'] .recommendation-item {
@@ -175,12 +191,19 @@
 
   @media (max-width: 600px) {
     .recommendation-container {
-      padding-inline: 0.25rem;
+      height: 48px;
+      gap: 8px;
+    }
+
+    .recommendation-title {
+      font-size: 0.6875rem;
     }
 
     .recommendation-item {
+      height: 40px;
       min-height: 40px;
-      padding: 8px 12px;
+      max-width: 82%;
+      padding: 0 12px;
     }
   }
 </style>

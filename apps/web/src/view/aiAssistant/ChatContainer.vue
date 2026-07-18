@@ -23,8 +23,10 @@
             @source-navigate="handleMessageSourceNavigate"
           />
           <AiSourceCards
-            v-if="shouldShowAiMessageSources(message, index, messages.length, isLoading)"
+            v-if="message.sources?.length"
             :sources="message.sources || []"
+            :is-mobile="bookmark.isMobile"
+            :revealed="shouldShowAiMessageSources(message, index, messages.length, isLoading)"
             @source-navigate="handleSourceNavigate"
           />
           <div v-if="message.interactions?.length || message.confirmations?.length" class="ai-message-action-stack">
@@ -51,16 +53,20 @@
           :is-loading="isLoading"
           @scroll-to-bottom-click="handleScrollToBottomClick"
         />
-
-        <!-- 常见问题提示 -->
-        <MainQuestionPrompt
-          v-if="showRecommendation"
-          :used-questions="usedQuestions"
-          :round="conversationRound"
-          :items="displayRecommendationItems"
-          @recommendation-click="handleRecommendationClick"
-        />
       </main>
+
+      <!-- 回答后的快捷提问固定在输入区上方，不再异步撑高消息滚动区。 -->
+      <div v-if="showRecommendationDock" class="recommendation-dock">
+        <Transition name="ai-recommendation-fade">
+          <MainQuestionPrompt
+            v-if="showRecommendation"
+            :used-questions="usedQuestions"
+            :round="conversationRound"
+            :items="displayRecommendationItems"
+            @recommendation-click="handleRecommendationClick"
+          />
+        </Transition>
+      </div>
 
       <!-- 输入区域 -->
       <ChatInputSection
@@ -122,9 +128,10 @@
     isAiChatUpwardScroll,
     isAiChatUpwardTouch,
     isAiChatUpwardWheel,
-    resolveAiChatStableViewport,
+    resolveAiChatPostAnswerViewport,
     shouldPauseAiChatFollow,
     shouldResumeAiChatFollow,
+    shouldShowAiChatScrollPrompt,
   } from '@/components/aiAssistant/aiAutoScroll';
   import {
     appendAiStreamMessageContent,
@@ -190,6 +197,7 @@
     persistAfterConfirmationSettlement?: boolean;
     recommendations?: string[];
     recommendationReady?: boolean;
+    recommendationPending?: boolean;
   }
 
   // 响应式数据
@@ -242,6 +250,13 @@
     if (!latest?.recommendationReady) return [];
     return latest.recommendations?.length ? latest.recommendations : null;
   });
+  const showRecommendationDock = computed(() => {
+    const latest = latestAssistantMessage.value;
+    if (!latest || hasPendingAgentActions(latest)) return false;
+    return Boolean(
+      conversationRound.value === 0 || isLoading.value || latest.recommendationPending || latest.recommendationReady,
+    );
+  });
   const showRecommendation = computed(() => {
     if (isLoading.value || !messages.value.length) return false;
     const latest = latestAssistantMessage.value;
@@ -251,7 +266,7 @@
   });
 
   let scrollFrame: number | null = null;
-  let lastTouchY: number | null = null;
+  let touchStartY: number | null = null;
   let lastKnownScrollTop = 0;
 
   // 流式输出控制
@@ -348,6 +363,7 @@
         ...m,
         timestamp: new Date(m.timestamp),
         thoughts: [],
+        recommendationPending: false,
         recommendations: Array.isArray(m.recommendations)
           ? m.recommendations
               .map((item: unknown) => String(item || '').trim())
@@ -460,18 +476,19 @@
     scrollFrame = null;
   };
 
-  // 回答后的来源、推荐项属于附属内容：插入前冻结当前阅读位置，插入后只提示用户主动查看。
-  const freezeViewportForPostAnswerContent = () => {
+  // 回答后的来源属于正文尾部：原本在底部就继续跟随，主动向上阅读时才冻结位置。
+  const prepareViewportForPostAnswerContent = () => {
     const container = messagesContainer.value;
     const preservedScrollTop = container?.scrollTop ?? null;
-    shouldFollowMessages.value = false;
-    showScrollToBottom.value = false;
+    const wasFollowing = Boolean(
+      shouldFollowMessages.value || (container && shouldResumeAiChatFollow(getAiChatBottomDistance(container))),
+    );
     cancelScheduledScroll();
 
     return () => {
       const currentContainer = messagesContainer.value;
       if (!currentContainer || preservedScrollTop === null) return;
-      const viewport = resolveAiChatStableViewport(currentContainer, preservedScrollTop);
+      const viewport = resolveAiChatPostAnswerViewport(currentContainer, preservedScrollTop, wasFollowing);
       currentContainer.scrollTop = viewport.scrollTop;
       lastKnownScrollTop = viewport.scrollTop;
       shouldFollowMessages.value = viewport.shouldFollow;
@@ -481,7 +498,10 @@
 
   const pauseFollowing = () => {
     shouldFollowMessages.value = false;
-    showScrollToBottom.value = true;
+    const container = messagesContainer.value;
+    showScrollToBottom.value = Boolean(
+      container && shouldShowAiChatScrollPrompt(getAiChatBottomDistance(container), false),
+    );
     cancelScheduledScroll();
   };
 
@@ -504,13 +524,14 @@
     const distance = getAiChatBottomDistance(container);
     const movedUp = isAiChatUpwardScroll(lastKnownScrollTop, container.scrollTop);
     lastKnownScrollTop = container.scrollTop;
-    if (movedUp) {
+    // 触摸设备由累计手势阈值判断意图，避免回弹或几像素抖动立即弹出“到底部”。
+    if (movedUp && touchStartY === null && !bookmark.isTouchDevice) {
       pauseFollowing();
       return;
     }
     if (shouldResumeAiChatFollow(distance)) shouldFollowMessages.value = true;
     else if (shouldPauseAiChatFollow(distance)) shouldFollowMessages.value = false;
-    showScrollToBottom.value = !shouldFollowMessages.value;
+    showScrollToBottom.value = shouldShowAiChatScrollPrompt(distance, shouldFollowMessages.value);
   };
 
   const handleWheel = (event: WheelEvent) => {
@@ -518,18 +539,17 @@
   };
 
   const handleTouchStart = (event: TouchEvent) => {
-    lastTouchY = event.touches[0]?.clientY ?? null;
+    touchStartY = event.touches[0]?.clientY ?? null;
   };
 
   const handleTouchMove = (event: TouchEvent) => {
     const currentY = event.touches[0]?.clientY;
     if (typeof currentY !== 'number') return;
-    if (isAiChatUpwardTouch(lastTouchY, currentY)) pauseFollowing();
-    lastTouchY = currentY;
+    if (isAiChatUpwardTouch(touchStartY, currentY)) pauseFollowing();
   };
 
   const handleTouchEnd = () => {
-    lastTouchY = null;
+    touchStartY = null;
   };
 
   // 处理点击跳转到底部
@@ -561,7 +581,7 @@
       return;
     }
     const currentMsg = messages.value[currentMessageIndex];
-    const restoreViewport = currentMsg?.sources?.length ? freezeViewportForPostAnswerContent() : null;
+    const restoreViewport = currentMsg?.sources?.length ? prepareViewportForPostAnswerContent() : null;
     if (currentMsg?.role === 'assistant') {
       const suffix = t('ai.responsePaused');
       if (!currentMsg.content || currentMsg.content === '') {
@@ -569,6 +589,9 @@
       } else if (!currentMsg.content.endsWith(suffix)) {
         currentMsg.content += suffix;
       }
+      currentMsg.recommendationPending = false;
+      currentMsg.recommendationReady = true;
+      currentMsg.recommendations = [];
     }
     isLoading.value = false;
     if (restoreViewport) nextTick(restoreViewport);
@@ -704,6 +727,7 @@
       thinkingDisplay: '',
       recommendations: [],
       recommendationReady: false,
+      recommendationPending: true,
     };
     messages.value.push(aiMessage);
     const aiMessageIndex = messages.value.length - 1;
@@ -737,6 +761,7 @@
     let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
     let followUpRequestId = '';
     let followUpAvailable = false;
+    let shouldLoadFollowUp = false;
     const handleNewContent = (content: string) => {
       if (!content) return;
       if (activeRequestId !== thisRequestId) return;
@@ -823,6 +848,7 @@
                 (source, index, all) =>
                   all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
               );
+              if (shouldFollowMessages.value) void nextTick(() => scheduleScrollToBottom());
             }
           }
 
@@ -938,8 +964,16 @@
 
       const wasLoading = isLoading.value;
       const currentMessage = messages.value[currentMessageIndex];
+      shouldLoadFollowUp = Boolean(!streamError && followUpAvailable && followUpRequestId);
+      if (currentMessage) {
+        currentMessage.recommendationPending = shouldLoadFollowUp;
+        if (!shouldLoadFollowUp) {
+          currentMessage.recommendationReady = true;
+          currentMessage.recommendations = [];
+        }
+      }
       const restoreViewport =
-        wasLoading && currentMessage?.sources?.length ? freezeViewportForPostAnswerContent() : null;
+        wasLoading && currentMessage?.sources?.length ? prepareViewportForPostAnswerContent() : null;
       isLoading.value = false;
       if (abortController.value === requestController) abortController.value = null;
       if (activeAnswerTypewriter === answerTypewriter) activeAnswerTypewriter = null;
@@ -950,7 +984,7 @@
       }
     }
 
-    if (!streamError && followUpAvailable && followUpRequestId) {
+    if (shouldLoadFollowUp) {
       void loadFollowUpRecommendations({
         requestId: followUpRequestId,
         messageIndex: currentMessageIndex,
@@ -978,12 +1012,10 @@
     if (clientRequestId !== activeRequestId) return;
     const target = messages.value[messageIndex];
     if (!target || target.role !== 'assistant' || target !== messages.value[messages.value.length - 1]) return;
-    const restoreViewport = freezeViewportForPostAnswerContent();
     target.recommendations = suggestions;
+    target.recommendationPending = false;
     target.recommendationReady = true;
     persistHistory();
-    await nextTick();
-    restoreViewport();
   }
 
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
@@ -1183,6 +1215,34 @@
     scroll-behavior: auto;
   }
 
+  .recommendation-dock {
+    display: flex;
+    min-width: 0;
+    min-height: 54px;
+    flex: 0 0 54px;
+    align-items: center;
+    padding: 0 1.5rem 6px;
+    box-sizing: border-box;
+    overflow: hidden;
+    background: var(--background-color);
+  }
+
+  .ai-recommendation-fade-enter-active,
+  .ai-recommendation-fade-leave-active {
+    transition: opacity 0.16s ease;
+  }
+
+  .ai-recommendation-fade-enter-from,
+  .ai-recommendation-fade-leave-to {
+    opacity: 0;
+  }
+
+  @container ai-chat (max-width: 520px) {
+    .recommendation-dock {
+      padding-inline: 0.5rem;
+    }
+  }
+
   .thinking-indicator {
     display: flex;
     align-items: center;
@@ -1334,6 +1394,13 @@
     .scroll-prompt {
       bottom: 70px;
       right: 10px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-recommendation-fade-enter-active,
+    .ai-recommendation-fade-leave-active {
+      transition: none;
     }
   }
 </style>
