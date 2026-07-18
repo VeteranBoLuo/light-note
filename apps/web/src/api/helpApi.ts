@@ -9,7 +9,7 @@ export type ResolvedHelpSource = {
   title: string;
   category: string;
   status: 'public' | 'internal';
-  target: 'help-article' | 'public-knowledge' | 'knowledge-admin';
+  target: 'help-article' | 'knowledge-admin';
 };
 
 export function resolveHelpSources(titles: string[]) {

@@ -8,7 +8,6 @@ const SOURCE_TARGETS = new Set([
   'cloud-file',
   'cloud-folder',
   'help-article',
-  'public-knowledge',
   'knowledge-admin',
   'tag-detail',
   'web-url',
@@ -22,7 +21,6 @@ const TARGETS_REQUIRING_ID = new Set([
   'cloud-file',
   'cloud-folder',
   'help-article',
-  'public-knowledge',
   'knowledge-admin',
   'tag-detail',
 ]);
@@ -58,8 +56,8 @@ function inferTarget(type, url) {
 
 export function resolveKnowledgeSourceTarget(source, userRole) {
   if (source?.status === 'public' && source?.category === '帮助中心') return 'help-article';
-  if (source?.status === 'public') return 'public-knowledge';
-  return userRole === 'root' ? 'knowledge-admin' : undefined;
+  if (source?.status === 'internal' && userRole === 'root') return 'knowledge-admin';
+  return undefined;
 }
 
 export function normalizeAgentSource(input) {

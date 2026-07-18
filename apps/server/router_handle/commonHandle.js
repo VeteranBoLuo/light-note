@@ -837,7 +837,7 @@ export const getHelpConfig = async (req, res) => {
   }
 };
 
-// 仅为旧 AI 会话补齐来源标识：按精确标题解析，不返回正文，也不允许普通用户探测内部知识。
+// 仅为旧 AI 会话补齐可导航来源：普通用户只能解析帮助中心公开文章，不返回正文。
 export const resolveHelpSources = async (req, res) => {
   try {
     if (!Array.isArray(req.body?.titles)) return res.send(resultData(null, 400, '来源标题格式无效'));
@@ -858,7 +858,7 @@ export const resolveHelpSources = async (req, res) => {
     const publicOnly = req.user?.role !== 'root';
     const [rows] = await pool.query(
       `SELECT id, title, category, status FROM knowledge_base
-       WHERE title IN (${placeholders})${publicOnly ? " AND status = 'public'" : ''}`,
+       WHERE title IN (${placeholders})${publicOnly ? " AND status = 'public' AND category = '帮助中心'" : ''}`,
       titles,
     );
     const titleCounts = rows.reduce((counts, row) => {
@@ -869,13 +869,18 @@ export const resolveHelpSources = async (req, res) => {
       resultData(
         rows
           .filter((row) => titleCounts.get(row.title) === 1)
-          .map((row) => ({
-            id: String(row.id),
-            title: row.title,
-            category: row.category || '',
-            status: row.status || 'internal',
-            target: resolveKnowledgeSourceTarget(row, req.user?.role),
-          })),
+          .map((row) => {
+            const target = resolveKnowledgeSourceTarget(row, req.user?.role);
+            if (!target) return null;
+            return {
+              id: String(row.id),
+              title: row.title,
+              category: row.category || '',
+              status: row.status || 'internal',
+              target,
+            };
+          })
+          .filter(Boolean),
         200,
       ),
     );

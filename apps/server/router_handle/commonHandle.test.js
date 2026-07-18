@@ -119,19 +119,21 @@ describe('recordConversion 白名单', () => {
 describe('resolveHelpSources 旧来源安全补全', () => {
   beforeEach(() => query.mockReset());
 
-  it('普通用户只查询公开知识，并忽略重名的歧义来源', async () => {
+  it('普通用户只补全帮助中心公开文章，并忽略非帮助文章和重名来源', async () => {
     query.mockResolvedValueOnce([
       [
         { id: 'help-1', title: '唯一帮助', category: '帮助中心', status: 'public' },
+        { id: 'faq-1', title: '公开 FAQ', category: 'FAQ', status: 'public' },
         { id: 'duplicate-1', title: '重名帮助', category: '帮助中心', status: 'public' },
         { id: 'duplicate-2', title: '重名帮助', category: '帮助中心', status: 'public' },
       ],
     ]);
     const res = mockRes();
 
-    await resolveHelpSources({ user: { role: 'user' }, body: { titles: ['唯一帮助', '重名帮助'] } }, res);
+    await resolveHelpSources({ user: { role: 'user' }, body: { titles: ['唯一帮助', '公开 FAQ', '重名帮助'] } }, res);
 
     expect(query.mock.calls[0][0]).toContain("status = 'public'");
+    expect(query.mock.calls[0][0]).toContain("category = '帮助中心'");
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 200,

@@ -55,11 +55,27 @@ describe('AI 来源标准化', () => {
     });
   });
 
-  it('知识来源根据可见性与用户角色分配正确目标', () => {
+  it('只有帮助中心公开文章和 Root 内部知识具有导航目标', () => {
     expect(resolveKnowledgeSourceTarget({ status: 'public', category: '帮助中心' }, 'user')).toBe('help-article');
-    expect(resolveKnowledgeSourceTarget({ status: 'public', category: '使用指南' }, 'user')).toBe('public-knowledge');
+    expect(resolveKnowledgeSourceTarget({ status: 'public', category: '使用指南' }, 'user')).toBeUndefined();
+    expect(resolveKnowledgeSourceTarget({ status: 'public', category: 'FAQ' }, 'root')).toBeUndefined();
     expect(resolveKnowledgeSourceTarget({ status: 'internal', category: '运维' }, 'root')).toBe('knowledge-admin');
     expect(resolveKnowledgeSourceTarget({ status: 'internal', category: '运维' }, 'user')).toBeUndefined();
+  });
+
+  it('不再接受公开知识 SEO 跳转目标', () => {
+    expect(
+      normalizeAgentSource({
+        type: 'knowledge',
+        id: 'public-knowledge-id',
+        title: '公开知识',
+        target: 'public-knowledge',
+      }),
+    ).toEqual({
+      type: 'knowledge',
+      id: 'public-knowledge-id',
+      title: '公开知识',
+    });
   });
 
   it('统一读取工具声明的来源并隔离单个工具的提取异常', () => {

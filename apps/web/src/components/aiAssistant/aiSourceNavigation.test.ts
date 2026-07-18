@@ -41,7 +41,7 @@ describe('resolveAiSourceNavigation', () => {
     expect(resolveAiSourceNavigation(source)).toEqual({ kind: 'internal', target });
   });
 
-  it('公开的非帮助中心知识打开公开知识页', () => {
+  it('旧会话中的公开知识 SEO 目标保持静态', () => {
     expect(
       resolveAiSourceNavigation({
         type: 'knowledge',
@@ -49,7 +49,7 @@ describe('resolveAiSourceNavigation', () => {
         title: 'Guide',
         target: 'public-knowledge',
       }),
-    ).toEqual({ kind: 'external', url: '/helpCenter/public-id' });
+    ).toEqual({ kind: 'none' });
   });
 
   it('书签原网页与检索网页只接受 HTTP(S) 地址', () => {
@@ -94,7 +94,7 @@ describe('resolveAiSourceNavigation', () => {
     ).toEqual({ kind: 'none' });
   });
 
-  it('兼容旧会话中的云文件、知识、书签与标签来源', () => {
+  it('兼容旧会话中的云文件、书签与标签来源，未知知识来源保持静态', () => {
     expect(
       resolveAiSourceNavigation({
         type: 'document',
@@ -104,8 +104,19 @@ describe('resolveAiSourceNavigation', () => {
       }),
     ).toEqual({ kind: 'internal', target: { path: '/cloudSpace', query: { fileId: 'cloud-file-id' } } });
     expect(resolveAiSourceNavigation({ type: 'knowledge', id: 'faq-id', title: 'FAQ' })).toEqual({
+      kind: 'none',
+    });
+    expect(
+      resolveAiSourceNavigation({
+        type: 'knowledge',
+        id: 'help-id',
+        title: '帮助文章',
+        status: 'public',
+        category: '帮助中心',
+      }),
+    ).toEqual({
       kind: 'internal',
-      target: { path: '/help', query: { article: 'faq-id' } },
+      target: { path: '/help', query: { article: 'help-id' } },
     });
     expect(resolveAiSourceNavigation({ type: 'bookmark', id: 'bookmark-id', title: 'Bookmark' })).toEqual({
       kind: 'internal',
@@ -117,7 +128,7 @@ describe('resolveAiSourceNavigation', () => {
     });
   });
 
-  it('公开旧知识根据分类进入公开知识页', () => {
+  it('公开但非帮助中心的旧知识保持静态', () => {
     expect(
       resolveAiSourceNavigation({
         type: 'knowledge',
@@ -126,7 +137,7 @@ describe('resolveAiSourceNavigation', () => {
         status: 'public',
         category: '使用指南',
       }),
-    ).toEqual({ kind: 'external', url: '/helpCenter/guide-id' });
+    ).toEqual({ kind: 'none' });
   });
 
   it('缺少稳定标识的来源保持不可导航', () => {

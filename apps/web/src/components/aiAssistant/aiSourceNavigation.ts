@@ -8,6 +8,7 @@ export type AiSourceTarget =
   | 'cloud-file'
   | 'cloud-folder'
   | 'help-article'
+  // 仅兼容已保存在浏览器中的旧来源；公开知识不再跳转 SEO 页面。
   | 'public-knowledge'
   | 'knowledge-admin'
   | 'tag-detail'
@@ -77,8 +78,7 @@ function resolveExplicitTarget(source: AiSource): AiSourceNavigation | null {
   if (source.target === 'cloud-folder')
     return source.id ? internal('/cloudSpace', { folderId: source.id }) : { kind: 'none' };
   if (source.target === 'help-article') return source.id ? internal('/help', { article: source.id }) : { kind: 'none' };
-  if (source.target === 'public-knowledge')
-    return source.id ? external(`/helpCenter/${encodeURIComponent(source.id)}`) : { kind: 'none' };
+  if (source.target === 'public-knowledge') return { kind: 'none' };
   if (source.target === 'knowledge-admin')
     return source.id ? internal('/knowledgeBase', { article: source.id }) : { kind: 'none' };
   if (source.target === 'tag-detail') return source.id ? internal(`/tag/${source.id}`) : { kind: 'none' };
@@ -101,10 +101,10 @@ export function resolveAiSourceNavigation(source: AiSource): AiSourceNavigation 
   }
   if (source.type === 'knowledge') {
     if (!source.id) return { kind: 'none' };
-    if (source.status === 'public' && source.category && source.category !== '帮助中心') {
-      return external(`/helpCenter/${encodeURIComponent(source.id)}`);
+    if (source.status === 'public' && source.category === '帮助中心') {
+      return internal('/help', { article: source.id });
     }
-    return internal('/help', { article: source.id });
+    return { kind: 'none' };
   }
   if (source.type === 'bookmark') {
     const urlNavigation = external(source.url);
