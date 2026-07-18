@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createAiStreamTypewriter, getAiStreamTypingBatchSize, splitAiStreamTypingBatch } from './aiStreamTypewriter';
+import { nextTick, ref, watchEffect } from 'vue';
+import {
+  appendAiStreamMessageContent,
+  createAiStreamTypewriter,
+  getAiStreamTypingBatchSize,
+  splitAiStreamTypingBatch,
+} from './aiStreamTypewriter';
 
 function createManualFrameScheduler() {
   let nextId = 1;
@@ -24,6 +30,26 @@ function createManualFrameScheduler() {
 }
 
 describe('aiStreamTypewriter', () => {
+  it('逐帧修改响应式数组中的消息并触发每次视图更新', async () => {
+    const rawMessage = { role: 'assistant', content: '' };
+    const messages = ref([rawMessage]);
+    const rendered: string[] = [];
+    const stop = watchEffect(() => rendered.push(messages.value[0].content));
+
+    expect(appendAiStreamMessageContent(messages.value, 0, '你')).toBe(true);
+    await nextTick();
+    expect(appendAiStreamMessageContent(messages.value, 0, '好')).toBe(true);
+    await nextTick();
+
+    expect(rendered).toEqual(['', '你', '你好']);
+    stop();
+  });
+
+  it('不会把流式正文写入用户消息或无效位置', () => {
+    expect(appendAiStreamMessageContent([{ role: 'user', content: '' }], 0, '误写')).toBe(false);
+    expect(appendAiStreamMessageContent([], 0, '误写')).toBe(false);
+  });
+
   it('积压越多时逐帧追赶，但保留可见的打字过程', () => {
     expect(getAiStreamTypingBatchSize(0)).toBe(0);
     expect(getAiStreamTypingBatchSize(3)).toBe(1);
@@ -57,6 +83,30 @@ describe('aiStreamTypewriter', () => {
     }
     await drained;
     expect(visible).toBe('这是一个需要平滑显示的网络分片');
+  });
+
+  it('即使网络一次返回整段正文，Vue 也会跨多帧连续渲染而不是结束时整段出现', async () => {
+    const scheduler = createManualFrameScheduler();
+    const messages = ref([{ role: 'assistant', content: '' }]);
+    const rendered: string[] = [];
+    const stop = watchEffect(() => rendered.push(messages.value[0].content));
+    const typewriter = createAiStreamTypewriter({
+      onText: (text) => appendAiStreamMessageContent(messages.value, 0, text),
+      scheduleFrame: scheduler.schedule,
+      cancelFrame: scheduler.cancel,
+    });
+
+    const completeText = '一次返回的完整答案也必须呈现为连续增长的打字过程';
+    typewriter.enqueue(completeText);
+    const drained = typewriter.drain();
+    while (scheduler.runNext()) await nextTick();
+    await drained;
+
+    expect(rendered.length).toBeGreaterThan(4);
+    expect(rendered[1]).not.toBe(completeText);
+    expect(rendered.at(-1)).toBe(completeText);
+    expect(rendered.every((content, index) => index === 0 || content.startsWith(rendered[index - 1]))).toBe(true);
+    stop();
   });
 
   it('取消后丢弃尚未显示的缓冲并立即结束 drain', async () => {

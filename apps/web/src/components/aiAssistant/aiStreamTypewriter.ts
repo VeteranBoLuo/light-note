@@ -16,6 +16,27 @@ interface CreateAiStreamTypewriterOptions {
   shouldFlushImmediately?: () => boolean;
 }
 
+interface AiStreamMessageTarget {
+  role: string;
+  content: string;
+}
+
+/**
+ * 必须通过响应式消息数组取出目标后再追加内容。
+ * Vue 会在数组访问时返回 Proxy；直接修改 push 前保留的原始对象不会触发视图更新。
+ */
+export function appendAiStreamMessageContent(
+  messages: AiStreamMessageTarget[],
+  messageIndex: number,
+  content: string,
+): boolean {
+  if (!content || !Number.isInteger(messageIndex) || messageIndex < 0) return false;
+  const target = messages[messageIndex];
+  if (!target || target.role !== 'assistant') return false;
+  target.content += content;
+  return true;
+}
+
 export function getAiStreamTypingBatchSize(pendingLength: number): number {
   if (pendingLength <= 0) return 0;
   // 接近实时输出时坚持逐字；只有积压明显时才温和追赶。

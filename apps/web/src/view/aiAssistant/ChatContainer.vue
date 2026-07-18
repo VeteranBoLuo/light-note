@@ -124,7 +124,11 @@
     shouldPauseAiChatFollow,
     shouldResumeAiChatFollow,
   } from '@/components/aiAssistant/aiAutoScroll';
-  import { createAiStreamTypewriter, type AiStreamTypewriter } from '@/components/aiAssistant/aiStreamTypewriter';
+  import {
+    appendAiStreamMessageContent,
+    createAiStreamTypewriter,
+    type AiStreamTypewriter,
+  } from '@/components/aiAssistant/aiStreamTypewriter';
   import { isEditableAttachmentTool, type AiAttachmentDirectActionName } from '@/config/aiTools';
   import type {
     AiAgentInteraction,
@@ -679,7 +683,8 @@
       recommendationReady: false,
     };
     messages.value.push(aiMessage);
-    currentMessageIndex = messages.value.length - 1;
+    const aiMessageIndex = messages.value.length - 1;
+    currentMessageIndex = aiMessageIndex;
 
     // 先挂上中止控制器再进入生成态，用户即使在首个 nextTick 前点击暂停，也不会漏掉中止请求。
     const requestController = new AbortController();
@@ -696,7 +701,9 @@
     const answerTypewriter = createAiStreamTypewriter({
       onText: (content) => {
         if (activeRequestId !== thisRequestId || requestController.signal.aborted) return;
-        aiMessage.content += content;
+        // aiMessage 是 push 前的普通对象；必须从响应式数组中取 Proxy 再修改，否则内容只会在
+        // isLoading 结束时一次性渲染，用户看不到逐帧打字过程。
+        if (!appendAiStreamMessageContent(messages.value, aiMessageIndex, content)) return;
         if (shouldFollowMessages.value) scheduleScrollToBottom();
       },
       // 后台标签页没有可见动画，直接排空，避免浏览器暂停 rAF 后请求迟迟无法完成清理。
