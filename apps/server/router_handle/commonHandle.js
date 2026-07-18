@@ -6,6 +6,7 @@ import http from 'http';
 import fs from 'fs';
 import fsP from 'fs/promises';
 import path from 'path';
+import { createHash, randomUUID } from 'crypto';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
@@ -577,8 +578,57 @@ const imageMimeTypes = {
   'image/vnd.microsoft.icon': 'ico',
 };
 
-// 默认图片路径（可选）
-const defaultImagePath = '/uploads/default-icon.png';
+const BOOKMARK_ICON_UPLOAD_DIR = '/www/wwwroot/images';
+const BOOKMARK_ICON_AFTER_SAVE_COOLDOWN_MS = 60 * 60 * 1000;
+const bookmarkIconRefreshInFlight = new Map();
+
+export function isBookmarkIconCheckRecent(
+  checkedAt,
+  now = Date.now(),
+  cooldownMs = BOOKMARK_ICON_AFTER_SAVE_COOLDOWN_MS,
+) {
+  if (!checkedAt) return false;
+  const timestamp = checkedAt instanceof Date ? checkedAt.getTime() : Date.parse(String(checkedAt).replace(' ', 'T'));
+  return Number.isFinite(timestamp) && now - timestamp < cooldownMs;
+}
+
+export function bookmarkIconBuffersEqual(existingBuffer, fetchedBuffer) {
+  return Buffer.isBuffer(existingBuffer) && Buffer.isBuffer(fetchedBuffer) && existingBuffer.equals(fetchedBuffer);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getLocalBookmarkIconPath(iconUrl, bookmarkId) {
+  if (!iconUrl || !bookmarkId) return '';
+  try {
+    const pathname = new URL(iconUrl, 'https://light-note.local').pathname;
+    if (!pathname.startsWith('/uploads/')) return '';
+    const fileName = path.basename(decodeURIComponent(pathname));
+    const validName = new RegExp(
+      `^bookmark-${escapeRegExp(bookmarkId)}(?:-[a-f0-9]{12})?\\.(?:png|svg|jpe?g|gif|webp|ico)$`,
+      'i',
+    );
+    return validName.test(fileName) ? path.join(BOOKMARK_ICON_UPLOAD_DIR, fileName) : '';
+  } catch {
+    return '';
+  }
+}
+
+async function readCurrentBookmarkIcon(connection, bookmarkId, userId, fallbackCheckedAt) {
+  const [rows] = await connection.query(
+    'SELECT icon_url, icon_checked_at FROM bookmark WHERE id=? AND user_id=? AND del_flag=0 LIMIT 1',
+    [bookmarkId, userId],
+  );
+  return {
+    id: bookmarkId,
+    iconUrl: rows[0]?.icon_url || '',
+    iconCheckedAt: rows[0]?.icon_checked_at || fallbackCheckedAt,
+    changed: false,
+    stale: true,
+  };
+}
 
 // 图标获取:统一走同机工具箱 favimg(hub :3480)。favimg 抓网页解析 <link icon> + 站点自身 favicon.ico,
 // 直连失败(强反爬/超时)再兜底公网聚合源(favicone/yandex);内置 SSRF 防护/缓存。返回 {buffer, contentType} 或 null。
@@ -622,15 +672,20 @@ export const analyzeImgUrl = async (req, res) => {
     return res.send(resultData(null, 400, '请求参数格式错误'));
   }
 
-  const requestedIds = [
-    ...new Set(
-      req.body
-        .slice(0, 50)
-        .filter((item) => item?.noCache)
-        .map((item) => String(item?.id || '').trim())
-        .filter(Boolean),
-    ),
-  ];
+  const requestModeById = new Map();
+  req.body.slice(0, 50).forEach((item) => {
+    const id = String(item?.id || '').trim();
+    const refreshMode =
+      item?.refreshMode === 'after_save'
+        ? 'after_save'
+        : item?.refreshMode === 'periodic' || item?.noCache
+          ? 'periodic'
+          : '';
+    if (!id || !refreshMode) return;
+    // 同一请求里定期刷新优先：它本身已由 30 天/24 小时周期筛选，不再受保存后一小时限频影响。
+    if (!requestModeById.has(id) || refreshMode === 'periodic') requestModeById.set(id, refreshMode);
+  });
+  const requestedIds = [...requestModeById.keys()];
   if (requestedIds.length === 0) {
     return res.send(resultData([]));
   }
@@ -640,62 +695,126 @@ export const analyzeImgUrl = async (req, res) => {
     // URL 与归属均以数据库为准，不信任客户端传来的 id/url；防止越权改图标或借图标抓取请求任意地址。
     const placeholders = requestedIds.map(() => '?').join(',');
     const [ownedBookmarks] = await connection.query(
-      `SELECT id, url
+      `SELECT id, url, icon_url, icon_checked_at
        FROM bookmark
        WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
       [req.user.id, ...requestedIds],
     );
     const results = await Promise.all(
       ownedBookmarks.map(async (bookmark) => {
-        // 抓不到 → 空 iconUrl,前端用内置地球图标(icon.nullImg)兜底;不再指向线上并不存在的 /uploads/default-icon.png(避免 404)
+        const refreshMode = requestModeById.get(String(bookmark.id));
         const checkedAt = new Date().toISOString();
-        const markChecked = async () => {
-          await connection.query('UPDATE bookmark SET icon_checked_at=NOW() WHERE id=? AND user_id=?', [
-            bookmark.id,
-            req.user.id,
-          ]);
-          return { id: bookmark.id, iconUrl: '', iconCheckedAt: checkedAt };
-        };
-        // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
-        const fetched = await fetchIconFromFavimg(bookmark.url);
-        if (!fetched) return markChecked();
-        try {
-          let fileExtension = 'png';
-          const mimeType = Object.entries(imageMimeTypes).find(([key]) => fetched.contentType?.includes(key))?.[1];
-          if (mimeType) fileExtension = mimeType;
+        if (refreshMode === 'after_save' && isBookmarkIconCheckRecent(bookmark.icon_checked_at)) {
+          return {
+            id: bookmark.id,
+            iconUrl: bookmark.icon_url || '',
+            iconCheckedAt: bookmark.icon_checked_at || checkedAt,
+            changed: false,
+            throttled: true,
+          };
+        }
 
-          const fileName = `bookmark-${bookmark.id}.${fileExtension}`;
-          const uploadDir = '/www/wwwroot/images';
-          const finalPath = path.join(uploadDir, fileName);
-          const tempPath = path.join(uploadDir, `.bookmark-${bookmark.id}-${Date.now()}.tmp`);
-          await fsP.mkdir(uploadDir, { recursive: true });
-          // 先写临时文件，再原子替换目标文件。写入失败时旧图标仍在，不能为了刷新把可用图标删掉。
-          await fsP.writeFile(tempPath, fetched.buffer);
-          await fsP.rename(tempPath, finalPath);
-          // query 版本号用于主动绕过浏览器缓存；文件名不变时也能立刻看到网站的新 favicon。
-          const imageUrl = `https://${req.get('host')}/uploads/${fileName}?v=${Date.now()}`;
-          await connection.query('UPDATE bookmark SET icon_url=?, icon_checked_at=NOW() WHERE id=? AND user_id=?', [
-            imageUrl,
-            bookmark.id,
-            req.user.id,
-          ]);
-          // 数据库已经指向新文件后，再清理其他扩展名的历史文件。
-          await Promise.all(
-            ['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp']
-              .filter((extension) => extension !== fileExtension)
-              .map((extension) =>
-                fsP.unlink(path.join(uploadDir, `bookmark-${bookmark.id}.${extension}`)).catch(() => {}),
-              ),
-          );
-          // 返回 {id, iconUrl},供前端把新图标回填到当前列表项(不必刷新页面)
-          return { id: bookmark.id, iconUrl: imageUrl, iconCheckedAt: checkedAt };
-        } catch (err) {
-          console.error('图标落盘失败:', err.message);
-          return markChecked();
+        const refreshKey = `${req.user.id}:${bookmark.id}:${bookmark.url}`;
+        const existingRefresh = bookmarkIconRefreshInFlight.get(refreshKey);
+        if (existingRefresh) return existingRefresh;
+
+        const refreshPromise = (async () => {
+          const markChecked = async () => {
+            const [updateResult] = await connection.query(
+              'UPDATE bookmark SET icon_checked_at=NOW() WHERE id=? AND user_id=? AND url=?',
+              [bookmark.id, req.user.id, bookmark.url],
+            );
+            if (!updateResult?.affectedRows) {
+              return readCurrentBookmarkIcon(connection, bookmark.id, req.user.id, checkedAt);
+            }
+            return {
+              id: bookmark.id,
+              iconUrl: bookmark.icon_url || '',
+              iconCheckedAt: checkedAt,
+              changed: false,
+            };
+          };
+          // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
+          const fetched = await fetchIconFromFavimg(bookmark.url);
+          if (!fetched) return markChecked();
+          let tempPath = '';
+          let finalPath = '';
+          try {
+            let fileExtension = 'png';
+            const mimeType = Object.entries(imageMimeTypes).find(([key]) => fetched.contentType?.includes(key))?.[1];
+            if (mimeType) fileExtension = mimeType;
+
+            const oldFilePath = getLocalBookmarkIconPath(bookmark.icon_url, bookmark.id);
+            if (oldFilePath) {
+              const existingBuffer = await fsP.readFile(oldFilePath).catch(() => null);
+              if (bookmarkIconBuffersEqual(existingBuffer, fetched.buffer)) {
+                const [updateResult] = await connection.query(
+                  'UPDATE bookmark SET icon_checked_at=NOW() WHERE id=? AND user_id=? AND url=?',
+                  [bookmark.id, req.user.id, bookmark.url],
+                );
+                if (!updateResult?.affectedRows) {
+                  return readCurrentBookmarkIcon(connection, bookmark.id, req.user.id, checkedAt);
+                }
+                return {
+                  id: bookmark.id,
+                  iconUrl: bookmark.icon_url || '',
+                  iconCheckedAt: checkedAt,
+                  changed: false,
+                };
+              }
+            }
+
+            // 内容变化才生成内容寻址文件；URL 不变意味着浏览器缓存也不需要被无意义击穿。
+            const contentHash = createHash('sha256').update(fetched.buffer).digest('hex').slice(0, 12);
+            const fileName = `bookmark-${bookmark.id}-${contentHash}.${fileExtension}`;
+            finalPath = path.join(BOOKMARK_ICON_UPLOAD_DIR, fileName);
+            tempPath = path.join(BOOKMARK_ICON_UPLOAD_DIR, `.bookmark-${bookmark.id}-${randomUUID()}.tmp`);
+            await fsP.mkdir(BOOKMARK_ICON_UPLOAD_DIR, { recursive: true });
+            // 先写临时文件，再原子替换目标文件。写入失败时旧图标仍在，不能为了刷新把可用图标删掉。
+            const existingFinalBuffer = await fsP.readFile(finalPath).catch(() => null);
+            if (!bookmarkIconBuffersEqual(existingFinalBuffer, fetched.buffer)) {
+              await fsP.writeFile(tempPath, fetched.buffer);
+              await fsP.rename(tempPath, finalPath);
+            }
+            const requestHost = typeof req.get === 'function' ? req.get('host') : req.headers?.host;
+            const imageUrl = `https://${requestHost}/uploads/${fileName}`;
+            const [updateResult] = await connection.query(
+              'UPDATE bookmark SET icon_url=?, icon_checked_at=NOW() WHERE id=? AND user_id=? AND url=?',
+              [imageUrl, bookmark.id, req.user.id, bookmark.url],
+            );
+            // 抓取期间书签可能刚好改成另一站点；条件更新失败时不覆盖新站点状态。
+            // 内容寻址文件即使暂时无引用也留给现有图库清理任务处理，避免误删并发请求刚复用的同内容文件。
+            if (!updateResult?.affectedRows) {
+              return readCurrentBookmarkIcon(connection, bookmark.id, req.user.id, checkedAt);
+            }
+            // 数据库已经指向新文件后，再清理上一版文件及固定文件名时代的历史文件。
+            const cleanupPaths = new Set(
+              [
+                oldFilePath,
+                ...['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp'].map((extension) =>
+                  path.join(BOOKMARK_ICON_UPLOAD_DIR, `bookmark-${bookmark.id}.${extension}`),
+                ),
+              ].filter((filePath) => filePath && filePath !== finalPath),
+            );
+            await Promise.all([...cleanupPaths].map((filePath) => fsP.unlink(filePath).catch(() => {})));
+            return { id: bookmark.id, iconUrl: imageUrl, iconCheckedAt: checkedAt, changed: true };
+          } catch (err) {
+            if (tempPath) await fsP.unlink(tempPath).catch(() => {});
+            console.error('图标落盘失败:', err.message);
+            return markChecked();
+          }
+        })();
+        bookmarkIconRefreshInFlight.set(refreshKey, refreshPromise);
+        try {
+          return await refreshPromise;
+        } finally {
+          if (bookmarkIconRefreshInFlight.get(refreshKey) === refreshPromise) {
+            bookmarkIconRefreshInFlight.delete(refreshKey);
+          }
         }
       }),
     );
-    res.send(resultData(results.filter(Boolean), 200, '所有图标已更新成功'));
+    res.send(resultData(results.filter(Boolean), 200, '图标检查完成'));
   } catch (err) {
     res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
   } finally {

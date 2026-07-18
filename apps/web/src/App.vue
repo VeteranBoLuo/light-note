@@ -27,7 +27,7 @@
   import { h, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
-  import { getNoticeSummary } from '@/api/commonApi.ts';
+  import { getNoticeSummary, resetBookmarkIconRefreshRequests } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { getLogFingerprint } from '@/utils/common';
   import { notification } from 'ant-design-vue';
@@ -43,6 +43,7 @@
   import GuestNudge from '@/components/home/GuestNudge.vue';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
   import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
+  import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -97,6 +98,8 @@
   watch(
     () => user.id,
     () => {
+      resetBookmarkIconRefreshRequests();
+      resetBookmarkIconRuntime();
       useGrowth().load(true);
     },
   );

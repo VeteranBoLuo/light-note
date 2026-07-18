@@ -2133,9 +2133,6 @@ export default {
     deleteConfirm: 'Delete bookmark “{name}”? You can restore it from Trash.',
     bookmarkName: 'Bookmark Name',
     bookmarkUrl: 'Bookmark URL',
-    refreshIcon: 'Refresh site icon',
-    refreshIconSuccess: 'Site icon updated',
-    refreshIconFailed: 'No new icon found; the existing icon was kept',
     snapshot: 'Snapshot',
     saveSnapshotOpt: 'Save page snapshot',
     saveSnapshotOptDesc:

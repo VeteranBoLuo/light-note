@@ -9,7 +9,7 @@
     <template #item="{ data }">
       <div class="bookmark-item-main">
         <div class="bookmark-item-title">
-          <BookmarkFavicon :src="data.iconUrl" :size="20" :tile-size="28" />
+          <BookmarkFavicon :bookmark-id="data.id" :src="data.iconUrl" :size="20" :tile-size="28" />
           <span class="bookmark-item-name">{{ data.name }}</span>
         </div>
         <div v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">

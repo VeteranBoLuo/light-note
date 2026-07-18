@@ -85,7 +85,7 @@
               @click="openBookmark(bm)"
               v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
             >
-              <BookmarkFavicon :src="bm.iconUrl" :size="20" :tile-size="28" />
+              <BookmarkFavicon :bookmark-id="bm.id" :src="bm.iconUrl" :size="20" :tile-size="28" />
               <span class="p-bookmark-name text-hidden">{{ bm.name }}</span>
             </div>
           </div>

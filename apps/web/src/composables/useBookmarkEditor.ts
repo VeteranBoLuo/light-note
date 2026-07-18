@@ -4,7 +4,7 @@ import { apiBasePost, apiQueryPost } from '@/http/request';
 import { bookmarkStore, useUserStore } from '@/store';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
-import { recordOperation, refreshBookmarkIcon } from '@/api/commonApi';
+import { recordOperation, refreshBookmarkIconAfterSave } from '@/api/commonApi';
 import { blockGuestWrite } from '@/composables/useGuestGuard';
 import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
 import { useBookmarkMeta } from '@/composables/useBookmarkMeta';
@@ -53,7 +53,6 @@ export function useBookmarkEditor() {
   const snapVisible = ref(false);
   const loading = ref(false);
   const submitting = ref(false);
-  const refreshingIcon = ref(false);
   const ready = ref(false);
   const initialSignature = ref('');
   const initialUrl = ref('');
@@ -88,6 +87,14 @@ export function useBookmarkEditor() {
   function markPristine() {
     initialSignature.value = editorSignature.value;
     initialUrl.value = bookmarkData.value.url;
+  }
+
+  function hasBookmarkHostChanged(previousUrl: string, nextUrl: string) {
+    try {
+      return new URL(previousUrl).host.toLowerCase() !== new URL(nextUrl).host.toLowerCase();
+    } catch {
+      return previousUrl.trim() !== nextUrl.trim();
+    }
   }
 
   async function getTagSelect(): Promise<BookmarkTagOption[]> {
@@ -139,6 +146,8 @@ export function useBookmarkEditor() {
       fieldErrors.url = '';
       bookmarkData.value.name = bookmarkData.value.name.trim();
       bookmarkData.value.url = urlResult.url;
+      const previousUrl = initialUrl.value;
+      const previousIconUrl = bookmarkData.value.iconUrl || '';
       const params: Record<string, any> = JSON.parse(JSON.stringify(bookmarkData.value));
       let endpoint = '/api/bookmark/updateBookmark';
       if (handleType.value === 'add') {
@@ -152,6 +161,13 @@ export function useBookmarkEditor() {
         module: '书签详情',
         operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || params.url}】`,
       });
+      if (handleType.value === 'edit') {
+        // 保存成功后立即发起后台校验，不阻塞返回列表；跨站点时旧图标不再继续冒充新站点图标。
+        void refreshBookmarkIconAfterSave(
+          { ...bookmarkData.value, iconUrl: previousIconUrl },
+          { clearExisting: hasBookmarkHostChanged(previousUrl, bookmarkData.value.url) },
+        );
+      }
       markPristine();
 
       if (isOrganizingFromInbox.value && handleType.value === 'edit') {
@@ -180,18 +196,6 @@ export function useBookmarkEditor() {
 
   function goAddTag() {
     router.push('/manage/editTag/add');
-  }
-
-  async function handleRefreshIcon() {
-    if (!bookmarkData.value.id || refreshingIcon.value) return;
-    refreshingIcon.value = true;
-    try {
-      const iconUrl = await refreshBookmarkIcon(bookmarkData.value);
-      if (iconUrl) message.success(t('bookmarkMg.refreshIconSuccess'));
-      else message.warning(t('bookmarkMg.refreshIconFailed'));
-    } finally {
-      refreshingIcon.value = false;
-    }
   }
 
   function confirmDiscardChanges(): Promise<boolean> {
@@ -294,7 +298,6 @@ export function useBookmarkEditor() {
     loading,
     resolvingUrl,
     generating,
-    refreshingIcon,
     fieldErrors,
     handleType,
     isEdit,
@@ -307,6 +310,5 @@ export function useBookmarkEditor() {
     submit,
     requestCancel,
     goAddTag,
-    handleRefreshIcon,
   };
 }

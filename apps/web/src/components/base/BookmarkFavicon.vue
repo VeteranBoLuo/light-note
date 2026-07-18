@@ -1,23 +1,26 @@
 <template>
   <span class="bookmark-favicon" :style="faviconStyle" aria-hidden="true">
-    <span v-if="loading" class="bookmark-favicon__loading"></span>
-    <img v-else :src="src || icon.nullImg" alt="" @error="handleError" />
+    <span v-if="resolvedLoading" class="bookmark-favicon__loading"></span>
+    <img v-else :src="resolvedSrc || icon.nullImg" alt="" @error="handleError" />
   </span>
 </template>
 
 <script setup lang="ts">
   import { computed } from 'vue';
   import icon from '@/config/icon.ts';
+  import { getBookmarkIconRuntimeState, resolveBookmarkIconSource } from '@/composables/bookmarkIconRuntime.ts';
 
   const props = withDefaults(
     defineProps<{
       src?: string;
+      bookmarkId?: string;
       size?: number;
       tileSize?: number;
       loading?: boolean;
     }>(),
     {
       src: '',
+      bookmarkId: '',
       size: 22,
       tileSize: 34,
       loading: false,
@@ -28,6 +31,12 @@
     '--bookmark-favicon-size': `${props.size}px`,
     '--bookmark-favicon-tile-size': `${props.tileSize}px`,
   }));
+  const runtimeState = computed(() => getBookmarkIconRuntimeState(props.bookmarkId));
+  const resolvedSrc = computed(() => resolveBookmarkIconSource(props.bookmarkId, props.src));
+  // 刷新已有图标时继续展示旧图；只有当前确实没有可用图标时才展示加载态。
+  const resolvedLoading = computed(
+    () => !resolvedSrc.value && (props.loading || Boolean(runtimeState.value?.refreshing)),
+  );
 
   function handleError(event: Event) {
     const image = event.currentTarget as HTMLImageElement;

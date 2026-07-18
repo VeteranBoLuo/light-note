@@ -130,7 +130,12 @@
               >
                 <div class="bookmark-card__head">
                   <div class="bookmark-identity">
-                    <BookmarkFavicon :src="bookmarkItem.iconUrl" :size="24" :tile-size="42" />
+                    <BookmarkFavicon
+                      :bookmark-id="bookmarkItem.id"
+                      :src="bookmarkItem.iconUrl"
+                      :size="24"
+                      :tile-size="42"
+                    />
                     <div class="bookmark-meta">
                       <div class="bookmark-name">{{ bookmarkItem.name }}</div>
                       <div class="bookmark-url" :title="bookmarkItem.url">
@@ -215,7 +220,12 @@
               <template #bodyCell="{ column, text, record }">
                 <template v-if="column.key === 'name'">
                   <div style="display: flex; align-items: center; gap: 10px" :title="text">
-                    <BookmarkFavicon :src="(record as BookmarkInterface).iconUrl" :size="20" :tile-size="28" />
+                    <BookmarkFavicon
+                      :bookmark-id="(record as BookmarkInterface).id"
+                      :src="(record as BookmarkInterface).iconUrl"
+                      :size="20"
+                      :tile-size="28"
+                    />
                     <div class="text-hidden">{{ text }}</div>
                     <BookmarkCapabilityBadge
                       v-if="(record as BookmarkInterface).hasSnapshot"

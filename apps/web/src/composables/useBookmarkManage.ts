@@ -5,7 +5,6 @@ import { useUserStore } from '@/store';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-import icon from '@/config/icon.ts';
 import type { BookmarkInterface } from '@/config/bookmarkCfg.ts';
 import { loadBookmarkIconsProgressively, recordOperation } from '@/api/commonApi.ts';
 import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -16,10 +15,6 @@ export function useBookmarkManage() {
   const loading = ref(false);
   const bookmarks = ref<BookmarkInterface[]>([]);
 
-  function normalizedIcon(bookmark: BookmarkInterface) {
-    return bookmark.iconUrl || icon.nullImg;
-  }
-
   async function reloadBookmarks() {
     loading.value = true;
     try {
@@ -29,9 +24,6 @@ export function useBookmarkManage() {
       if (response.status !== 200) return;
 
       bookmarks.value = cloneDeep(response.data?.items || []);
-      bookmarks.value.forEach((bookmark) => {
-        bookmark.iconUrl = normalizedIcon(bookmark);
-      });
 
       loadBookmarkIconsProgressively(response.data?.items || [], (id, favicon) => {
         const bookmark = bookmarks.value.find((item) => item.id === id);

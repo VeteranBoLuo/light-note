@@ -127,7 +127,7 @@
             v-click-log="{ module: '标签详情', operation: `打开书签【${bm.name}】` }"
           >
             <div class="bookmark-card-header">
-              <BookmarkFavicon :src="bm.iconUrl" :size="22" :tile-size="32" />
+              <BookmarkFavicon :bookmark-id="bm.id" :src="bm.iconUrl" :size="22" :tile-size="32" />
               <span class="bookmark-card-name text-hidden">{{ bm.name }}</span>
             </div>
             <div class="bookmark-card-desc text-hidden">{{ bm.description || bm.url }}</div>

@@ -1,6 +1,7 @@
 import { apiBaseGet, apiBasePost } from '@/http/request.ts';
 import { isAdminLoginPreview } from '@/utils/authStorage.ts';
 import useUserStore from '@/store/useUser.ts';
+import { beginBookmarkIconRefresh, finishBookmarkIconRefresh } from '@/composables/bookmarkIconRuntime.ts';
 
 const isReadOnlyAdminPreview = () => isAdminLoginPreview() && !useUserStore().visitorWorkspace;
 const BOOKMARK_ICON_REFRESH_MS = 30 * 24 * 60 * 60 * 1000;
@@ -12,6 +13,12 @@ type BookmarkIconItem = {
   iconUrl?: string;
   iconCheckedAt?: string;
 };
+
+const bookmarkIconAfterSaveRequests = new Map<string, Promise<string>>();
+
+export function resetBookmarkIconRefreshRequests() {
+  bookmarkIconAfterSaveRequests.clear();
+}
 
 export function needsBookmarkIconRefresh(item: BookmarkIconItem, now = Date.now()) {
   if (!item?.url || !item?.id) return false;
@@ -51,6 +58,16 @@ export async function loadBookmarkIconsProgressively(
   if (isReadOnlyAdminPreview()) return;
   const targets = (items || []).filter((item) => needsBookmarkIconRefresh(item));
   if (!targets.length) return;
+  const targetById = new Map(targets.map((item) => [item.id, item]));
+  const requestTokens = new Map(
+    targets.map((item) => [
+      item.id,
+      beginBookmarkIconRefresh(item.id, {
+        clearExisting: !item.iconUrl,
+        previousIconUrl: item.iconUrl || '',
+      }),
+    ]),
+  );
   // 每批 batchSize 个书签合并成 1 个请求;总请求数 ≈ ceil(targets/batchSize),远低于限流阈值
   const batches: Array<typeof targets> = [];
   for (let i = 0; i < targets.length; i += batchSize) {
@@ -60,39 +77,81 @@ export async function loadBookmarkIconsProgressively(
   const worker = async () => {
     while (bi < batches.length) {
       const batch = batches[bi++];
+      const settledIds = new Set<string>();
       try {
         const res = await apiBasePost(
           '/api/common/analyzeImgUrl',
-          batch.map((it) => ({ url: it.url, id: it.id, noCache: true })),
+          batch.map((it) => ({ id: it.id, refreshMode: 'periodic' })),
+          { silent: true },
         );
         if (res?.status === 200 && Array.isArray(res.data)) {
           for (const r of res.data) {
-            const target = targets.find((item) => item.id === r?.id);
+            const target = targetById.get(r?.id);
             if (target && r?.iconCheckedAt) target.iconCheckedAt = r.iconCheckedAt;
-            // 抓取失败时 iconUrl 为空：只更新时间，不覆盖当前仍可用的旧图标。
-            if (r?.id && r?.iconUrl) applyIcon(r.id, r.iconUrl); // 逐批到手即回填
+            // 失败时后端可能返回当前旧图，也可能返回空值；空值绝不覆盖仍可用的旧图标。
+            if (r?.id && target) {
+              if (r.iconUrl) {
+                target.iconUrl = r.iconUrl;
+                applyIcon(r.id, r.iconUrl); // 逐批到手即回填
+              }
+              finishBookmarkIconRefresh(r.id, requestTokens.get(r.id), r.iconUrl || '');
+              settledIds.add(r.id);
+            }
           }
         }
       } catch {
         /* 整批失败忽略,不影响其余批 */
+      } finally {
+        batch.forEach((item) => {
+          if (!settledIds.has(item.id)) finishBookmarkIconRefresh(item.id, requestTokens.get(item.id));
+        });
       }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, () => worker()));
 }
 
-export async function refreshBookmarkIcon(item: BookmarkIconItem): Promise<string> {
-  if (!item?.id) return '';
-  try {
-    const res = await apiBasePost('/api/common/analyzeImgUrl', [{ id: item.id, noCache: true }]);
-    const result = Array.isArray(res?.data) ? res.data.find((entry) => entry?.id === item.id) : null;
-    if (result?.iconCheckedAt) item.iconCheckedAt = result.iconCheckedAt;
-    if (!result?.iconUrl) return '';
-    item.iconUrl = result.iconUrl;
-    return result.iconUrl;
-  } catch {
-    return '';
-  }
+export function refreshBookmarkIconAfterSave(
+  item: BookmarkIconItem,
+  { clearExisting = false }: { clearExisting?: boolean } = {},
+): Promise<string> {
+  const id = String(item?.id || '').trim();
+  if (!id) return Promise.resolve('');
+  const requestKey = `${id}:${String(item.url || '')}`;
+  const pendingRequest = bookmarkIconAfterSaveRequests.get(requestKey);
+  if (pendingRequest) return pendingRequest;
+
+  const requestToken = beginBookmarkIconRefresh(id, {
+    clearExisting,
+    previousIconUrl: item.iconUrl || '',
+  });
+  let request!: Promise<string>;
+  request = (async () => {
+    let iconUrl = '';
+    try {
+      const res = await apiBasePost(
+        '/api/common/analyzeImgUrl',
+        [{ id, refreshMode: 'after_save' }],
+        { silent: true },
+      );
+      const result = Array.isArray(res?.data) ? res.data.find((entry) => entry?.id === id) : null;
+      if (result?.iconCheckedAt) item.iconCheckedAt = result.iconCheckedAt;
+      if (result?.iconUrl) {
+        iconUrl = result.iconUrl;
+        item.iconUrl = iconUrl;
+      }
+      return iconUrl;
+    } catch {
+      return '';
+    } finally {
+      finishBookmarkIconRefresh(id, requestToken, iconUrl);
+      if (bookmarkIconAfterSaveRequests.get(requestKey) === request) {
+        bookmarkIconAfterSaveRequests.delete(requestKey);
+      }
+    }
+  })();
+  bookmarkIconAfterSaveRequests.set(requestKey, request);
+  return request;
 }
 
 // 日志白名单(自己人设备免记录 api/操作/转化):仅 root 可用

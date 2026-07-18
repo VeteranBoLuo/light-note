@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getBookmarkIconRuntimeState, resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
 
 const mocks = vi.hoisted(() => ({
   apiBasePost: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('@/store/useUser.ts', () => ({
   default: () => mocks.user,
 }));
 
-import { loadBookmarkIconsProgressively, needsBookmarkIconRefresh } from './commonApi.ts';
+import { loadBookmarkIconsProgressively, needsBookmarkIconRefresh, refreshBookmarkIconAfterSave } from './commonApi.ts';
 
 describe('needsBookmarkIconRefresh', () => {
   const now = Date.parse('2026-07-15T12:00:00Z');
@@ -50,16 +51,14 @@ describe('loadBookmarkIconsProgressively', () => {
     mocks.apiBasePost.mockReset();
     mocks.isAdminLoginPreview.mockReset();
     mocks.user.visitorWorkspace = false;
+    resetBookmarkIconRuntime();
   });
 
   it('普通用户的管理员只读预览不触发图标写入请求', async () => {
     mocks.isAdminLoginPreview.mockReturnValue(true);
     const applyIcon = vi.fn();
 
-    await loadBookmarkIconsProgressively(
-      [{ id: 'bookmark-1', url: 'https://example.com' }],
-      applyIcon,
-    );
+    await loadBookmarkIconsProgressively([{ id: 'bookmark-1', url: 'https://example.com' }], applyIcon);
 
     expect(mocks.apiBasePost).not.toHaveBeenCalled();
     expect(applyIcon).not.toHaveBeenCalled();
@@ -74,12 +73,14 @@ describe('loadBookmarkIconsProgressively', () => {
     });
     const applyIcon = vi.fn();
 
-    await loadBookmarkIconsProgressively(
-      [{ id: 'bookmark-1', url: 'https://example.com' }],
-      applyIcon,
-    );
+    await loadBookmarkIconsProgressively([{ id: 'bookmark-1', url: 'https://example.com' }], applyIcon);
 
     expect(mocks.apiBasePost).toHaveBeenCalledOnce();
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/common/analyzeImgUrl',
+      [{ id: 'bookmark-1', refreshMode: 'periodic' }],
+      { silent: true },
+    );
     expect(applyIcon).toHaveBeenCalledWith('bookmark-1', 'https://example.com/favicon.ico');
   });
 
@@ -102,5 +103,53 @@ describe('loadBookmarkIconsProgressively', () => {
     expect(applyIcon).not.toHaveBeenCalled();
     expect(item.iconUrl).toBe('https://example.com/old.ico');
     expect(item.iconCheckedAt).toBe('2026-07-15T12:00:00Z');
+  });
+});
+
+describe('refreshBookmarkIconAfterSave', () => {
+  beforeEach(() => {
+    mocks.apiBasePost.mockReset();
+    resetBookmarkIconRuntime();
+  });
+
+  it('同一书签的重复保存后请求会复用在途任务，并把结果回填到运行态', async () => {
+    let resolveRequest: (value: unknown) => void = () => {};
+    mocks.apiBasePost.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
+    const item = {
+      id: 'bookmark-1',
+      url: 'https://example.com',
+      iconUrl: '/uploads/old.png',
+    };
+
+    const firstRequest = refreshBookmarkIconAfterSave(item);
+    const secondRequest = refreshBookmarkIconAfterSave(item);
+
+    expect(mocks.apiBasePost).toHaveBeenCalledOnce();
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/common/analyzeImgUrl',
+      [{ id: 'bookmark-1', refreshMode: 'after_save' }],
+      { silent: true },
+    );
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.refreshing).toBe(true);
+
+    resolveRequest({
+      status: 200,
+      data: [{ id: 'bookmark-1', iconUrl: '/uploads/new.png', iconCheckedAt: '2026-07-19T00:00:00Z' }],
+    });
+
+    await expect(firstRequest).resolves.toBe('/uploads/new.png');
+    await expect(secondRequest).resolves.toBe('/uploads/new.png');
+    expect(item.iconUrl).toBe('/uploads/new.png');
+    expect(item.iconCheckedAt).toBe('2026-07-19T00:00:00Z');
+    expect(getBookmarkIconRuntimeState('bookmark-1')).toMatchObject({
+      refreshing: false,
+      iconUrl: '/uploads/new.png',
+      hasIconOverride: true,
+    });
   });
 });

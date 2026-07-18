@@ -15,6 +15,7 @@
     <div class="card-title">
       <BookmarkFavicon
         class="card-img-container"
+        :bookmark-id="cardInfo.id"
         :src="cardInfo.iconUrl"
         :loading="cardInfo.iconLoading"
         :size="22"

@@ -11,9 +11,6 @@
         <SvgIcon :src="icon.bookmarkManage.snapshot" size="16" />
         {{ $t('bookmarkMg.snapshot') }}
       </BButton>
-      <BButton size="small" :loading="refreshingIcon" @click="handleRefreshIcon">
-        {{ $t('bookmarkMg.refreshIcon') }}
-      </BButton>
     </template>
     <BLoading :loading="loading" style="height: unset">
       <BookmarkEditorForm
@@ -56,7 +53,6 @@
     loading,
     resolvingUrl,
     generating,
-    refreshingIcon,
     fieldErrors,
     handleType,
     isEdit,
@@ -69,6 +65,5 @@
     submit,
     requestCancel,
     goAddTag,
-    handleRefreshIcon,
   } = useBookmarkEditor();
 </script>
