@@ -7,9 +7,11 @@
         class="messages-container"
         ref="messagesContainer"
         @scroll="handleScroll"
-        @wheel.passive="handleUserInteraction"
-        @touchstart.passive="handleUserInteraction"
-        @pointerdown.passive="handleUserInteraction"
+        @wheel.passive="handleWheel"
+        @touchstart.passive="handleTouchStart"
+        @touchmove.passive="handleTouchMove"
+        @touchend.passive="handleTouchEnd"
+        @touchcancel.passive="handleTouchEnd"
       >
         <template v-for="(message, index) in messages" :key="index">
           <ChatMessageItem
@@ -84,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, onMounted, nextTick, watch } from 'vue';
+  import { computed, ref, onBeforeUnmount, onMounted, nextTick, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import ChatMessageItem from '@/components/aiAssistant/ChatMessageItem.vue';
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
@@ -113,6 +115,14 @@
     shouldPersistConversationMessage,
   } from '@/components/aiAssistant/aiConversationState';
   import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
+  import {
+    getAiChatBottomDistance,
+    isAiChatUpwardScroll,
+    isAiChatUpwardTouch,
+    isAiChatUpwardWheel,
+    shouldPauseAiChatFollow,
+    shouldResumeAiChatFollow,
+  } from '@/components/aiAssistant/aiAutoScroll';
   import { isEditableAttachmentTool, type AiAttachmentDirectActionName } from '@/config/aiTools';
   import type {
     AiAgentInteraction,
@@ -205,8 +215,8 @@
     }
   }
 
-  // 智能滚动相关状态 - 简化状态管理
-  const autoScrollEnabled = ref(true); // 是否启用自动滚动
+  // 默认跟随流式正文；只有用户明确向上浏览时暂停，回到底部后自动恢复。
+  const shouldFollowMessages = ref(true);
   const showScrollToBottom = ref(false);
   const usedQuestions = computed(() =>
     messages.value
@@ -232,14 +242,9 @@
     );
   });
 
-  // 新增：是否为程序触发的滚动
-  const isProgrammaticScroll = ref(false);
-  let programmaticResetTimer: number | null = null;
-
-  // 简化用户干预检测，只使用一个核心标志
-  const userHasInterrupted = ref(false); // 用户是否手动干预了滚动
-  const lastScrollTop = ref(0);
-  const SCROLL_THRESHOLD = 200; // 距离底部200px时显示提示
+  let scrollFrame: number | null = null;
+  let lastTouchY: number | null = null;
+  let lastKnownScrollTop = 0;
 
   // 流式输出控制
   const abortController = ref<AbortController | null>(null);
@@ -285,10 +290,10 @@
 
         msg.thinkingDisplay = shown + full.charAt(shown.length);
 
-        // 思考打字时，如果未被用户干预且允许自动滚动，则跟随到底部
-        if (autoScrollEnabled.value && !userHasInterrupted.value) {
+        // 思考打字时与正文使用同一套逐帧跟随，避免叠加 smooth 动画。
+        if (shouldFollowMessages.value) {
           await nextTick();
-          scrollToBottom('smooth');
+          scheduleScrollToBottom();
         }
 
         await new Promise((resolve) => setTimeout(resolve, TYPING_SPEED));
@@ -398,7 +403,7 @@
       void repairLegacyKnowledgeSources();
     }
     nextTick(() => {
-      scrollToBottom('auto');
+      scheduleScrollToBottom(true);
     });
     fetchAiQuota();
   });
@@ -440,108 +445,77 @@
     }
   }
 
-  // 重新设计滚动处理逻辑，确保用户手动滚动时立即取消自动滚动
+  const cancelScheduledScroll = () => {
+    if (scrollFrame === null) return;
+    window.cancelAnimationFrame(scrollFrame);
+    scrollFrame = null;
+  };
+
+  const pauseFollowing = () => {
+    shouldFollowMessages.value = false;
+    showScrollToBottom.value = true;
+    cancelScheduledScroll();
+  };
+
+  // 一帧最多滚动一次，连续 token 不再叠加多个 smooth 动画。
+  const scheduleScrollToBottom = (force = false) => {
+    if (!messagesContainer.value || (!force && !shouldFollowMessages.value) || scrollFrame !== null) return;
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = null;
+      const container = messagesContainer.value;
+      if (!container || (!force && !shouldFollowMessages.value)) return;
+      container.scrollTop = container.scrollHeight;
+      lastKnownScrollTop = container.scrollTop;
+      showScrollToBottom.value = false;
+    });
+  };
+
   const handleScroll = () => {
-    if (!messagesContainer.value) return;
-    // 程序触发的平滑滚动动画帧不处理，防止误判为用户行为
-    if (isProgrammaticScroll.value) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
-    const scrollPosition = scrollHeight - scrollTop - clientHeight;
-
-    // 检测滚动方向 - 关键修改：不再需要距离阈值，直接判断方向
-    const scrollDelta = scrollTop - lastScrollTop.value;
-    lastScrollTop.value = scrollTop;
-    // 用户向上滚动（无论距离多小）立即停止自动滚动
-    if (scrollDelta < 0) {
-      userHasInterrupted.value = true;
-      autoScrollEnabled.value = false;
-      isProgrammaticScroll.value = false;
-    } else {
-      // 更新滚动提示状态
-      if (scrollPosition <= SCROLL_THRESHOLD) {
-        // 用户滚动到底部，恢复自动滚动
-        autoScrollEnabled.value = true;
-        userHasInterrupted.value = false;
-        showScrollToBottom.value = false;
-      }
-    }
-    if (scrollPosition > SCROLL_THRESHOLD) {
-      showScrollToBottom.value = true;
-    }
-  };
-
-  // 用户交互时立即取消自动滚动（用于移动端与平滑滚动冲突）
-  const handleUserInteraction = () => {
-    if (!autoScrollEnabled.value && userHasInterrupted.value) return;
-    userHasInterrupted.value = true;
-    autoScrollEnabled.value = false;
-    isProgrammaticScroll.value = false;
-    if (programmaticResetTimer) {
-      clearTimeout(programmaticResetTimer);
-      programmaticResetTimer = null;
-    }
-  };
-
-  // 设置是否显示跳转底部图标
-  function checkScrollPosition() {
-    if (!messagesContainer.value) return;
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
-    const scrollPosition = scrollHeight - scrollTop - clientHeight;
-    if (scrollPosition > SCROLL_THRESHOLD) {
-      showScrollToBottom.value = true;
-    }
-  }
-
-  // 简化自动滚动函数，确保在用户干预时不执行自动滚动
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    if (!messagesContainer.value || userHasInterrupted.value) {
-      return; // 用户干预时不再自动滚动
-    }
-
-    isProgrammaticScroll.value = true; // 标记为程序滚动
     const container = messagesContainer.value;
-    const targetScrollTop = container.scrollHeight - container.clientHeight;
-
-    // 移动端优先使用即时滚动，避免惯性与自动滚动冲突
-    const finalBehavior: ScrollBehavior = bookmark.isMobile ? 'auto' : behavior;
-
-    if (finalBehavior === 'smooth') {
-      container.scrollTo({
-        top: targetScrollTop,
-        behavior: 'smooth',
-      });
-      if (programmaticResetTimer) {
-        clearTimeout(programmaticResetTimer);
-      }
-      // 延迟重置标志，等待 smooth 动画完成
-      programmaticResetTimer = window.setTimeout(() => {
-        isProgrammaticScroll.value = false;
-        programmaticResetTimer = null;
-      }, 600);
-    } else {
-      // 立即滚动
-      container.scrollTop = targetScrollTop;
-      // 立即重置（同步滚动）
-      isProgrammaticScroll.value = false;
+    if (!container) return;
+    const distance = getAiChatBottomDistance(container);
+    const movedUp = isAiChatUpwardScroll(lastKnownScrollTop, container.scrollTop);
+    lastKnownScrollTop = container.scrollTop;
+    if (movedUp) {
+      pauseFollowing();
+      return;
     }
+    if (shouldResumeAiChatFollow(distance)) shouldFollowMessages.value = true;
+    else if (shouldPauseAiChatFollow(distance)) shouldFollowMessages.value = false;
+    showScrollToBottom.value = !shouldFollowMessages.value;
+  };
+
+  const handleWheel = (event: WheelEvent) => {
+    if (isAiChatUpwardWheel(event.deltaY)) pauseFollowing();
+  };
+
+  const handleTouchStart = (event: TouchEvent) => {
+    lastTouchY = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchMove = (event: TouchEvent) => {
+    const currentY = event.touches[0]?.clientY;
+    if (typeof currentY !== 'number') return;
+    if (isAiChatUpwardTouch(lastTouchY, currentY)) pauseFollowing();
+    lastTouchY = currentY;
+  };
+
+  const handleTouchEnd = () => {
+    lastTouchY = null;
   };
 
   // 处理点击跳转到底部
   const handleScrollToBottomClick = () => {
-    // 用户点击滚动按钮，明确要求回到底部，重置干预状态
-    userHasInterrupted.value = false;
-    autoScrollEnabled.value = true;
+    shouldFollowMessages.value = true;
     showScrollToBottom.value = false;
-    scrollToBottom('smooth');
+    scheduleScrollToBottom(true);
   };
 
   // 重置滚动状态
   const resetScrollState = () => {
-    autoScrollEnabled.value = true;
-    userHasInterrupted.value = false;
+    shouldFollowMessages.value = true;
     showScrollToBottom.value = false;
-    nextTick(() => scrollToBottom('auto'));
+    nextTick(() => scheduleScrollToBottom(true));
   };
 
   // 暂停响应
@@ -636,14 +610,14 @@
       } else {
         void repairLegacyKnowledgeSources();
       }
+      resetScrollState();
     },
   );
   const longChatHinted = ref(false); // 超长对话「新建会话」提示只弹一次(每段会话)
   // 重新设计打字机效果，确保内容完整且逐字显示
   const sendMessage = async () => {
     // 每次开始新的提问时，重置自动滚动状态，确保本轮对话自动跟随到底部
-    autoScrollEnabled.value = true;
-    userHasInterrupted.value = false;
+    shouldFollowMessages.value = true;
     showScrollToBottom.value = false;
     // 重置当前轮消息的思考状态，仅影响新创建的AI消息
     hasAnswerStarted.value = false;
@@ -702,12 +676,8 @@
 
     userInput.value = '';
     isLoading.value = true;
-    userHasInterrupted.value = false;
-
-    if (!userHasInterrupted.value) {
-      await nextTick();
-      scrollToBottom('auto');
-    }
+    await nextTick();
+    scheduleScrollToBottom();
 
     // 创建中止控制器
     const requestController = new AbortController();
@@ -724,9 +694,9 @@
       const current = messages.value[currentMessageIndex];
       if (!current) return;
       current.content += content;
-      if (autoScrollEnabled.value && !userHasInterrupted.value) {
+      if (shouldFollowMessages.value) {
         await nextTick();
-        scrollToBottom('smooth');
+        scheduleScrollToBottom();
       }
     };
 
@@ -921,9 +891,7 @@
       if (abortController.value === requestController) abortController.value = null;
       // 最终滚动
       await nextTick();
-      if (autoScrollEnabled.value && !userHasInterrupted.value) {
-        scrollToBottom('smooth');
-      }
+      scheduleScrollToBottom();
     }
 
     if (!streamError && followUpAvailable && followUpRequestId) {
@@ -958,7 +926,7 @@
     target.recommendationReady = true;
     persistHistory();
     await nextTick();
-    if (autoScrollEnabled.value && !userHasInterrupted.value) scrollToBottom('smooth');
+    scheduleScrollToBottom();
   }
 
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
@@ -1069,25 +1037,28 @@
     sendMessage();
   };
 
-  // 简化消息监听逻辑，避免冲突
+  // 新消息、确认卡等块级内容出现时跟随一次；正文增量由 handleNewContent 逐帧调度。
   watch(
-    () => messages.value,
+    () => messages.value.length,
     async (newLength, oldLength) => {
-      checkScrollPosition();
-      if (newLength > oldLength && autoScrollEnabled.value && !userHasInterrupted.value) {
+      if (newLength > oldLength && shouldFollowMessages.value) {
         await nextTick();
-        scrollToBottom('smooth');
+        scheduleScrollToBottom();
       }
     },
-    { flush: 'post', deep: true },
+    { flush: 'post' },
   );
 
-  // 监听isLoading状态，在生成内容时保持自动滚动（尊重用户干预）
+  // 进入生成态时把刚插入的用户消息和回答占位带入视口。
   watch(isLoading, async (newVal) => {
-    if (newVal && !userHasInterrupted.value) {
+    if (newVal && shouldFollowMessages.value) {
       await nextTick();
-      scrollToBottom('auto');
+      scheduleScrollToBottom();
     }
+  });
+
+  onBeforeUnmount(() => {
+    cancelScheduledScroll();
   });
 </script>
 
@@ -1146,7 +1117,7 @@
     padding: 0.75rem 1.5rem;
     position: relative;
     color: var(--text-color);
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
   }
 
   .thinking-indicator {

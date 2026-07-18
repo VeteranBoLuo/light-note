@@ -12,7 +12,6 @@ import crypto from 'node:crypto';
 import { resultData, generateUUID } from '../util/agent/data.js';
 import {
   requestDeepSeek,
-  requestDeepSeekStream,
   getActiveProviderInfo,
   looksLikeLeakedToolCall,
   parseLeakedToolCalls,
@@ -56,6 +55,7 @@ import {
   storeFollowUpContext,
 } from '../util/agent/followUpSuggestions.js';
 import { dedupeAgentSources, resolveToolSources } from '../util/agent/sourceUtils.js';
+import { generateFinalReply } from '../util/agent/finalReply.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -831,27 +831,36 @@ export async function agentChat(req, res) {
 
     // ---- 第1步：Planner（带工具定义，让 LLM 决定是否调工具） ----
     const plannerStartedAt = Date.now();
-    let plannerResponse = await requestDeepSeek(messages, {
-      tools: toolDefs,
-      signal: agentAbortController.signal,
-      maxTokens: getPlannerMaxTokens({
-        message,
-        attachmentCount: attachmentIds.length,
-        selectedToolNames,
-      }),
-    });
+    let plannerResponse = {
+      content: 'DIRECT_REPLY',
+      toolCalls: [],
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      usageStatus: 'reported',
+      finishReason: null,
+    };
+    if (toolDefs.length) {
+      plannerResponse = await requestDeepSeek(messages, {
+        tools: toolDefs,
+        signal: agentAbortController.signal,
+        maxTokens: getPlannerMaxTokens({
+          message,
+          attachmentCount: attachmentIds.length,
+          selectedToolNames,
+        }),
+      });
+      apiCalls++;
+      apiCallsForLog = apiCalls;
+      totalUsage.promptTokens += plannerResponse.usage.promptTokens;
+      totalUsage.completionTokens += plannerResponse.usage.completionTokens;
+      totalUsage.totalTokens += plannerResponse.usage.totalTokens;
+    }
     trace.plannerMs = Date.now() - plannerStartedAt;
     trace.finishReason = plannerResponse.finishReason;
     let plannerUsageReported = plannerResponse.usageStatus === 'reported';
     trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
-    apiCalls++;
-    apiCallsForLog = apiCalls;
-    totalUsage.promptTokens += plannerResponse.usage.promptTokens;
-    totalUsage.completionTokens += plannerResponse.usage.completionTokens;
-    totalUsage.totalTokens += plannerResponse.usage.totalTokens;
 
     // DeepSeek 偶发把工具调用标记吐进 content。优先本地解析，解析失败直接给友好提示；
-    // 不额外重试 Planner，确保单轮最多“规划 + 最终回答”两次模型调用。
+    // 不额外重试 Planner，异常恢复只发生在最终回答阶段。
     if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCall(plannerResponse.content)) {
       const leaked = parseLeakedToolCalls(plannerResponse.content);
       if (leaked.length) {
@@ -862,13 +871,9 @@ export async function agentChat(req, res) {
       }
     }
 
-    if (!plannerResponse.toolCalls?.length) {
-      // 无工具调用 → 直接当作回答，跳过 Final Reply。
-      // 若重试后仍是泄漏的调用标记,不把原文暴露给用户,改回友好提示。
-      finalContent = looksLikeLeakedToolCall(plannerResponse.content)
-        ? '抱歉，我刚才没能正确处理这个请求，请换个说法或稍后再试一次。'
-        : plannerResponse.content || '';
-    } else {
+    // Planner 只决定是否调用工具。普通问答也必须进入 Final Reply，
+    // 否则同步 Planner 的完整 content 只能在 SSE 末尾一次性发出，前端看不到真实流式增量。
+    if (plannerResponse.toolCalls?.length) {
       // 兜底:只取前 MAX_PARALLEL_TOOLS 个 tool_calls,防 LLM 极端情况一次吐一堆
       // (含重复查询)并发打满 DB 连接池。assistant 消息与实际执行必须用同一批——
       // OpenAI 协议要求每个 tool_call 都有对应的 tool 结果,否则下一轮请求会报错。
@@ -1159,133 +1164,47 @@ export async function agentChat(req, res) {
           });
         }
       }
-
-      // ---- 第2步：Final Reply ----
-      messages.push({
-        role: 'user',
-        content: '请基于上述工具结果给出简洁的总结。',
-      });
-
-      if (stream) {
-        // 流式：首批 buffer 掩盖 DeepSeek token 间隔 gap
-        let bufferStart = 0;
-        let bufferText = '';
-        let isBuffering = true;
-        const BUFFER_MS = 150;
-        const BUFFER_CHARS = 12;
-
-        const finalStartedAt = Date.now();
-        trace.usageStatus = 'missing';
-        const streamResult = await requestDeepSeekStream(messages, {
-          temperature: styleTemperature,
-          maxTokens: 2200,
-          onDelta: (chunk) => {
-            if (trace.firstTokenMs == null) trace.firstTokenMs = Date.now() - requestStartedAt;
-            if (isBuffering && bufferStart === 0) {
-              bufferStart = Date.now();
-            }
-
-            if (isBuffering) {
-              bufferText += chunk;
-              const elapsed = Date.now() - bufferStart;
-              if (elapsed >= BUFFER_MS || bufferText.length >= BUFFER_CHARS) {
-                finalContent += bufferText;
-                res.write(
-                  `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: bufferText, session_id: getSessionId(session) } })}\n\n`,
-                );
-                isBuffering = false;
-              }
-              return;
-            }
-
-            finalContent += chunk;
-            res.write(
-              `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: chunk, session_id: getSessionId(session) } })}\n\n`,
-            );
-          },
-          signal: agentAbortController.signal,
-        });
-        trace.finishReason = streamResult.finishReason || trace.finishReason;
-        trace.usageStatus = plannerUsageReported && streamResult.usageStatus === 'reported' ? 'reported' : 'missing';
-
-        totalUsage.promptTokens += streamResult.usage.promptTokens;
-        totalUsage.completionTokens += streamResult.usage.completionTokens;
-        totalUsage.totalTokens += streamResult.usage.totalTokens;
-
-        if (streamResult.leakedToolCall) {
-          console.warn('[Agent] 最终回答泄漏工具调用协议，已阻止原文并自动重试');
-          // 尚未送出的短前导语没有信息价值，直接丢弃，避免重试正文前后顺序颠倒。
-          if (isBuffering) {
-            bufferText = '';
-            isBuffering = false;
-          }
-          const retryResponse = await requestDeepSeek(
-            [
-              ...messages,
-              {
-                role: 'user',
-                content:
-                  '刚才的回答格式无效。现在只能基于已经提供的工具结果直接给出最终中文答复，禁止输出、描述或尝试任何工具调用、XML、DSML、函数名和内部协议标记。',
-              },
-            ],
-            {
-              toolChoice: 'none',
-              signal: agentAbortController.signal,
-              maxTokens: 2200,
-              temperature: styleTemperature,
-            },
-          );
-          apiCalls++;
-          apiCallsForLog = apiCalls;
-          totalUsage.promptTokens += retryResponse.usage.promptTokens;
-          totalUsage.completionTokens += retryResponse.usage.completionTokens;
-          totalUsage.totalTokens += retryResponse.usage.totalTokens;
-          trace.finishReason = retryResponse.finishReason || trace.finishReason;
-          trace.usageStatus =
-            trace.usageStatus === 'reported' && retryResponse.usageStatus === 'reported' ? 'reported' : 'missing';
-          const retryContent = looksLikeLeakedToolCall(retryResponse.content)
-            ? '抱歉，本次回答格式异常，请重新生成。'
-            : retryResponse.content || '抱歉，无法处理该请求。';
-          finalContent += retryContent;
-          if (!res.writableEnded) {
-            res.write(
-              `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: retryContent, session_id: getSessionId(session) } })}\n\n`,
-            );
-          }
-        }
-
-        trace.finalMs = Date.now() - finalStartedAt;
-
-        if (isBuffering && bufferText) {
-          finalContent += bufferText;
-          res.write(
-            `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: bufferText, session_id: getSessionId(session) } })}\n\n`,
-          );
-        }
-
-        apiCalls++;
-        apiCallsForLog = apiCalls;
-        if (!finalContent) finalContent = '抱歉，无法处理该请求。';
-      } else {
-        const finalStartedAt = Date.now();
-        trace.usageStatus = 'missing';
-        const finalResponse = await requestDeepSeek(messages, {
-          toolChoice: 'none',
-          signal: agentAbortController.signal,
-          maxTokens: 2200,
-          temperature: styleTemperature,
-        });
-        trace.finalMs = Date.now() - finalStartedAt;
-        trace.finishReason = finalResponse.finishReason || trace.finishReason;
-        trace.usageStatus = plannerUsageReported && finalResponse.usageStatus === 'reported' ? 'reported' : 'missing';
-        apiCalls++;
-        apiCallsForLog = apiCalls;
-        totalUsage.promptTokens += finalResponse.usage.promptTokens;
-        totalUsage.completionTokens += finalResponse.usage.completionTokens;
-        totalUsage.totalTokens += finalResponse.usage.totalTokens;
-        finalContent = finalResponse.content || '抱歉，无法处理该请求。';
-      }
     }
+
+    // ---- 第2步：Final Reply ----
+    // 有工具时总结真实结果；无工具时重新基于原始对话直接作答。两条路径统一从供应商流式接口输出正文。
+    const finalPrompt = buildPlannerPrompt([], userRole, { phase: 'final' });
+    const finalSystemContent = session.lastTool
+      ? `${finalPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
+      : finalPrompt;
+    const finalMessages = [
+      { role: 'system', content: finalSystemContent },
+      ...messages.slice(1),
+      {
+        role: 'user',
+        content: usedTools.length
+          ? '请基于上述工具结果回答此前用户提出的原始问题，保持简洁，并严格使用原始问题要求的语言。'
+          : '请直接回答此前用户提出的原始问题，严格使用原始问题要求的语言，不要提及内部规划过程。',
+      },
+    ];
+    const finalStartedAt = Date.now();
+    const finalReply = await generateFinalReply({
+      messages: finalMessages,
+      stream,
+      temperature: styleTemperature,
+      signal: agentAbortController.signal,
+      onDelta: (chunk) => {
+        if (trace.firstTokenMs == null) trace.firstTokenMs = Date.now() - requestStartedAt;
+        if (res.writableEnded) return;
+        res.write(
+          `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: chunk, session_id: getSessionId(session) } })}\n\n`,
+        );
+      },
+    });
+    trace.finalMs = Date.now() - finalStartedAt;
+    trace.finishReason = finalReply.finishReason || trace.finishReason;
+    trace.usageStatus = plannerUsageReported && finalReply.usageStatus === 'reported' ? 'reported' : 'missing';
+    apiCalls += finalReply.apiCalls;
+    apiCallsForLog = apiCalls;
+    totalUsage.promptTokens += finalReply.usage.promptTokens;
+    totalUsage.completionTokens += finalReply.usage.completionTokens;
+    totalUsage.totalTokens += finalReply.usage.totalTokens;
+    finalContent = finalReply.content;
 
     const uniqueSources = dedupeAgentSources(sources);
     const followUpAvailable =
@@ -1311,11 +1230,6 @@ export async function agentChat(req, res) {
       if (!res.writableEnded) {
         if (uniqueSources.length) {
           res.write(`data: ${JSON.stringify({ event: 'sources', requestId, sources: uniqueSources })}\n\n`);
-        }
-        if (!usedTools.length) {
-          res.write(
-            `data: ${JSON.stringify({ event: 'delta', requestId, output: { text: finalContent, session_id: getSessionId(session) } })}\n\n`,
-          );
         }
         res.write(
           `data: ${JSON.stringify({ event: 'done', requestId, output: { session_id: getSessionId(session) }, usage: totalUsage, usageStatus: trace.usageStatus, followUpAvailable })}\n\n`,

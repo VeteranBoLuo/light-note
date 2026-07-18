@@ -24,23 +24,34 @@ const BASE_PROMPT = `你是轻笺（Light Note）的 AI 助手。轻笺是一个
 
 ## 时间范围
 涉及时间查询时，使用以下表达式之一：最近N天、昨天、前天、本周、上周、本月、上个月、今年、全部。
-
-## 工具使用提示
-以下说明各工具的调用场景和使用方法：
-
 `;
 
 /**
  * 动态构建 Planner system prompt
  * @param {Map<string, object>|object[]} availableTools 当前请求经过权限与意图筛选后可见的工具
  * @param {'root'|'visitor'|string} userRole
+ * @param {{ phase?: 'planner'|'final' }} [options]
  * @returns {string}
  */
-export function buildPlannerPrompt(availableTools, userRole) {
+export function buildPlannerPrompt(availableTools, userRole, { phase = 'planner' } = {}) {
   const isRoot = userRole === 'root';
   const lines = [];
   const tools = Array.isArray(availableTools) ? availableTools : [...availableTools.values()];
 
+  if (phase === 'final') {
+    return `${BASE_PROMPT}
+### 当前阶段：最终回答
+工具规划与执行已经结束。请直接生成用户可见的最终答复，不要输出、描述或尝试任何工具调用、XML、DSML、函数名和内部协议标记。`;
+  }
+
+  lines.push('### 当前阶段：内部规划');
+  lines.push('你只负责判断本轮是否需要工具并准备工具调用，不负责生成用户可见的最终正文。');
+  lines.push('需要工具时只返回标准工具调用；不需要工具时只输出 DIRECT_REPLY，不要提前撰写答案。');
+  lines.push('');
+
+  lines.push('## 工具使用提示');
+  lines.push('以下说明各工具的调用场景和使用方法：');
+  lines.push('');
   lines.push('### 本轮可用的数据与操作能力');
   for (const tool of tools) {
     if (tool.requireRoot) continue;
