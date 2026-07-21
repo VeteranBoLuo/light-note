@@ -56,7 +56,19 @@
           </BTooltip>
         </div>
         <span v-if="errors.url" class="bookmark-field__error">{{ errors.url }}</span>
-        <div class="bookmark-ai-note">{{ $t('bookmarkEditor.aiHint') }}</div>
+        <div class="bookmark-field__hints">
+          <div class="bookmark-ai-note">{{ $t('bookmarkEditor.aiHint') }}</div>
+          <!-- 编辑时:网页快照入口紧挨网址(快照存的就是该网址的正文),比原来藏在页面右上角更易发现 -->
+          <button
+            v-if="handleType === 'edit'"
+            type="button"
+            class="bookmark-snapshot-entry"
+            @click="$emit('viewSnapshot')"
+          >
+            <SvgIcon :src="icon.bookmarkManage.snapshot" size="14" color="currentColor" />
+            <span>{{ $t('bookmarkMg.snapshot') }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="bookmark-field" :class="{ 'is-error': errors.name }">
@@ -180,6 +192,7 @@
     submit: [];
     cancel: [];
     addTag: [];
+    viewSnapshot: [];
   }>();
 
   function handleGenerateClick() {
@@ -241,6 +254,38 @@
     min-width: 0;
   }
 
+  .bookmark-field__hints {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .bookmark-field__hints .bookmark-ai-note {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .bookmark-snapshot-entry {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+    padding: 5px 11px;
+    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 22%, var(--surface-border-color));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--resource-bookmark-color) 8%, var(--card-background));
+    color: var(--resource-bookmark-color);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .bookmark-snapshot-entry:hover {
+    border-color: color-mix(in srgb, var(--resource-bookmark-color) 40%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-background));
+  }
+
   .bookmark-generate-button {
     height: 40px;
     min-width: 188px;
@@ -257,6 +302,8 @@
   }
 
   .bookmark-generate-button--stop {
+    position: relative;
+    overflow: hidden;
     border-color: color-mix(in srgb, var(--message-error-color) 32%, var(--surface-border-color));
     color: var(--message-error-color);
     background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background)) !important;
@@ -264,6 +311,34 @@
     &:hover {
       border-color: color-mix(in srgb, var(--message-error-color) 48%, var(--surface-border-color));
       background: color-mix(in srgb, var(--message-error-color) 12%, var(--card-background)) !important;
+    }
+
+    /* 生成中:底部一条红色进度光带循环流动,明确「正在生成、没卡住」,按钮本身仍可点击停止 */
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 40%;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--message-error-color);
+      animation: bookmark-generate-flow 1.1s ease-in-out infinite;
+    }
+  }
+
+  @keyframes bookmark-generate-flow {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(350%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bookmark-generate-button--stop::after {
+      animation-duration: 2.4s;
     }
   }
 

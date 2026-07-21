@@ -8,6 +8,7 @@
     @touchmove.passive="handleTouchMove"
   >
     <div v-if="!displayContent" class="empty">{{ emptyText }}</div>
+    <div v-else-if="markdown" class="typewriter-content" v-html="renderedMarkdown"></div>
     <div v-else-if="renderAsText" class="typewriter-content" v-text="displayContent"></div>
     <div v-else class="typewriter-content" v-html="safeDisplayContent"></div>
   </div>
@@ -16,12 +17,15 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import DOMPurify from 'dompurify';
+  import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
 
   const props = defineProps<{
     content: string;
     typingSpeed?: number;
     emptyText?: string;
     renderAsText?: boolean;
+    // markdown 模式:把逐字缓冲的 md 源实时渲染成 html(补全未闭合标记 + 高亮 + 净化),用于 AI 预览「渲染后」效果
+    markdown?: boolean;
   }>();
 
   const displayContent = ref('');
@@ -178,6 +182,7 @@
   };
 
   const emptyText = computed(() => props.emptyText ?? '');
+  const renderedMarkdown = computed(() => renderStreamingMarkdown(displayContent.value));
   const safeDisplayContent = computed(() =>
     DOMPurify.sanitize(displayContent.value, {
       ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],

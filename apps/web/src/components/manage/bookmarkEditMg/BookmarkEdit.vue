@@ -7,12 +7,6 @@
     show-back
     @back="requestCancel"
   >
-    <template v-if="isEdit" #actions>
-      <BButton size="small" @click="snapVisible = true">
-        <SvgIcon :src="icon.bookmarkManage.snapshot" size="16" />
-        {{ $t('bookmarkMg.snapshot') }}
-      </BButton>
-    </template>
     <div class="bookmark-edit-page">
       <div class="bookmark-edit-page__scroll">
         <BLoading :loading="loading">
@@ -32,6 +26,7 @@
             @submit="submit"
             @cancel="requestCancel"
             @add-tag="goAddTag"
+            @view-snapshot="snapVisible = true"
           />
         </BLoading>
       </div>
@@ -62,8 +57,6 @@
   import { useBookmarkEditor } from '@/composables/useBookmarkEditor';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
 
   const {
     bookmarkData,

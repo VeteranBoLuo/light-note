@@ -114,7 +114,7 @@
         });
         await loadSnap();
       } else {
-        message.info(t('bookmarkMg.snapshotFail'));
+        message.info(res?.data?.msg || t('bookmarkMg.snapshotFail'));
       }
     } finally {
       archiving.value = false;

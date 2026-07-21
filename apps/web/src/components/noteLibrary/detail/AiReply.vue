@@ -192,7 +192,7 @@
         class="output-body"
         :typing-speed="16"
         :content="displayOutput"
-        :render-as-text="isMarkdownNote"
+        :markdown="isMarkdownNote"
         :empty-text="t('ai.reply.emptyMessage')"
       />
     </div>
@@ -200,17 +200,22 @@
     <!-- 放大预览:输出区太窄小时,一键弹大窗舒服阅读,并可直接应用。
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
-      <div class="ai-preview" :class="{ 'ai-preview--split': isMarkdownNote }">
+      <div class="ai-preview ai-preview--split">
         <div v-if="hasTitle && hasBody" class="ai-preview-title">
           <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
           <span class="title-suggestion-value">{{ suggestedTitle }}</span>
         </div>
-        <!-- markdown 笔记:左侧 markdown 原文、右侧渲染预览,让用户看清替换后的实际效果 -->
-        <div v-if="isMarkdownNote" class="ai-preview-split">
-          <pre class="ai-preview-md" ref="previewMdRef" @scroll="syncPreviewScroll('md')">{{ previewTyped }}</pre>
-          <div class="ai-preview-body" ref="previewBodyRef" @scroll="syncPreviewScroll('rendered')" v-html="previewRenderedHtml"></div>
+        <!-- 左栏=笔记原文(改动前)、右栏=AI 生成(改动后),都渲染后展示,方便对比再决定替换 -->
+        <div class="ai-preview-split">
+          <div class="ai-preview-col ai-preview-col--origin">
+            <div class="ai-preview-col-head">{{ t('ai.reply.previewOrigin') }}</div>
+            <div class="ai-preview-body" v-html="originRenderedHtml"></div>
+          </div>
+          <div class="ai-preview-col">
+            <div class="ai-preview-col-head">{{ t('ai.reply.previewGenerated') }}</div>
+            <div class="ai-preview-body" ref="previewBodyRef" v-html="generatedRenderedHtml"></div>
+          </div>
         </div>
-        <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
         <div class="ai-preview-followup">
           <BInput
             v-model:value="followupPrompt"
@@ -228,10 +233,10 @@
           >
         </div>
         <div class="ai-preview-actions">
-          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body', true)">{{
+          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body')">{{
             t('ai.reply.replaceContent')
           }}</BButton>
-          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title', true)">{{
+          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title')">{{
             t('ai.reply.replaceTitle')
           }}</BButton>
         </div>
@@ -254,6 +259,7 @@
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
   import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
 
   const { t } = useI18n();
@@ -316,25 +322,7 @@
   // 是则内容增长后贴到底;上滚离开则自然停住;滚回底部附近下一段又自动恢复。判断每次都基于真实滚动位置,
   // 无粘滞状态、无 wheel 监听,恢复必然可靠(旧写法用 interrupted 标志+wheel,回底后会被紧接的滚轮事件再次关掉)。
   const previewBodyRef = ref<HTMLElement | null>(null);
-  const previewMdRef = ref<HTMLElement | null>(null);
   const PREVIEW_SCROLL_THRESHOLD = 120;
-
-  // md 放大预览左右两栏滚动联动:一侧滚动按比例同步另一侧;scrollSyncing 防止相互触发形成死循环
-  let scrollSyncing = false;
-  function syncPreviewScroll(source: 'md' | 'rendered') {
-    if (scrollSyncing) return;
-    const from = source === 'md' ? previewMdRef.value : previewBodyRef.value;
-    const to = source === 'md' ? previewBodyRef.value : previewMdRef.value;
-    if (!from || !to) return;
-    const fromRange = from.scrollHeight - from.clientHeight;
-    const toRange = to.scrollHeight - to.clientHeight;
-    if (fromRange <= 0 || toRange <= 0) return;
-    scrollSyncing = true;
-    to.scrollTop = (from.scrollTop / fromRange) * toRange;
-    requestAnimationFrame(() => {
-      scrollSyncing = false;
-    });
-  }
 
   const isPreviewNearBottom = () => {
     const el = previewBodyRef.value;
@@ -375,6 +363,18 @@
   );
   // markdown 笔记放大预览右侧的渲染结果(复用 AI 流式 markdown 渲染:补全未闭合标记 + 高亮 + 净化)
   const previewRenderedHtml = computed(() => renderStreamingMarkdown(previewTyped.value || ''));
+  const SNAPSHOT_HTML_TAGS = ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'];
+  // 放大预览左栏「原文」= 笔记当前内容(改动前),同样渲染后展示:md 走流式 md 渲染,html 直接净化;
+  // 与右栏「AI 生成」形成改动前后对比,让用户看清 AI 到底改了什么再决定替换。
+  const originRenderedHtml = computed(() => {
+    const raw = note?.content || '';
+    if (!raw) return '';
+    return isMarkdownNote.value
+      ? renderStreamingMarkdown(raw)
+      : DOMPurify.sanitize(raw, { ALLOWED_TAGS: SNAPSHOT_HTML_TAGS, ALLOWED_ATTR: [] });
+  });
+  // 右栏「AI 生成」渲染结果:md 用流式 md 渲染,html 用净化后的片段
+  const generatedRenderedHtml = computed(() => (isMarkdownNote.value ? previewRenderedHtml.value : safePreviewTyped.value));
   const previewSource = ref('');
   let previewTypingTimer: number | null = null;
   const stopPreviewTyping = () => {
@@ -729,7 +729,10 @@
     const body = extractSection(outputFull.value, '正文');
     if (body) return isMarkdownNote.value ? unwrapMarkdownFence(body) : body;
     const title = extractSection(outputFull.value, '标题');
-    return title || outputFull.value;
+    if (title) return title;
+    // 还没解析到【标题】/【正文】标记:生成中先别显示含标记的原始流(否则标记逐字到达时会闪现"【正文】"),
+    // 等标记到齐再显示提取后的内容;生成已结束仍无标记 = 模型没按格式输出,才兜底显示原文让用户至少看到内容。
+    return isLoading.value ? '' : outputFull.value;
   });
   const showGenerationStatus = computed(() => isLoading.value && !displayOutput.value);
   watch(
@@ -753,6 +756,7 @@
       }
       triggerSave?.();
       focusEditorToEnd?.();
+      message.success(t('ai.reply.replacedBody'));
       return true;
     }
 
@@ -763,6 +767,7 @@
       note.title = suggestedTitle.value;
     }
     triggerSave?.();
+    message.success(t('ai.reply.replacedTitle'));
     return true;
   };
 
@@ -1251,40 +1256,40 @@
     max-width: 86vw;
     box-sizing: border-box;
   }
-  /* md 笔记放大预览:左 Markdown 原文 / 右渲染 对比,窗口更宽 */
+  /* 放大预览:左「原文」/ 右「AI 生成」对比,窗口更宽 */
   .ai-preview--split {
     width: min(980px, 92vw);
   }
   .ai-preview-split {
     display: grid;
-    /* minmax(0,1fr) 而非 1fr:grid item 默认 min-width:auto,右列 v-html 里的宽元素(code/表格)会按 min-content
-       把右列撑大、把左列挤没。minmax(0,…) 强制两列可收缩到 0 再均分,左侧 md 原文才有稳定的一半宽度。 */
+    /* minmax(0,1fr) 而非 1fr:grid item 默认 min-width:auto,列内 v-html 的宽元素(code/表格)会按 min-content
+       把本列撑大、把另一列挤没。minmax(0,…) 强制两列可收缩到 0 再均分,两栏才各占稳定的一半宽度。 */
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 14px;
-    align-items: start;
+    align-items: stretch;
   }
-  .ai-preview-md {
-    margin: 0;
+  /* 每栏 = 列头 + 内容区,整栏定高 68vh、内容区撑满并各自滚动(左右是不同内容,不做联动) */
+  .ai-preview-col {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
-    /* 固定为最大高度:内容随生成增长时高度不再变动,避免弹框忽大忽小 */
-    min-height: 68vh;
-    max-height: 68vh;
-    overflow: auto;
-    padding: 10px 12px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 8px;
+    height: 68vh;
+  }
+  .ai-preview-col-head {
+    flex: 0 0 auto;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--card-border-color);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--desc-color);
+  }
+  .ai-preview-col--origin .ai-preview-body {
     background: var(--workbench-subcard-bg, var(--card-background));
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: 'Fira Code', 'Courier New', monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    color: var(--text-color) !important;
+    border-radius: 8px;
+    padding: 10px 12px;
   }
-  .ai-preview-split .ai-preview-body {
-    min-width: 0;
-  }
-  /* 窄屏/移动端:单栏只保留渲染预览(md 原文在小窗输出区已可见),避免挤压 */
+  /* 窄屏/移动端:单栏只保留「AI 生成」(原文可回编辑器看),避免两栏挤压 */
   @media (max-width: 768px) {
     .ai-preview--split {
       width: min(680px, 86vw);
@@ -1292,8 +1297,14 @@
     .ai-preview-split {
       grid-template-columns: 1fr;
     }
-    .ai-preview-md {
+    .ai-preview-col {
+      height: auto;
+    }
+    .ai-preview-col--origin {
       display: none;
+    }
+    .ai-preview-body {
+      max-height: 60vh;
     }
   }
   /* 放大预览里的「追问迭代」输入区 */
@@ -1323,8 +1334,8 @@
     line-height: 1.5;
   }
   .ai-preview-body {
-    min-height: 68vh;
-    max-height: 68vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     /* 内容是 v-html 渲染的 HTML 片段,不能用 pre-wrap——否则 AI 输出里标签间的源码换行
        (<li>…</li> 之间的 \n、标题到列表之间的空行)会被当成可见换行,把行/段间距撑得很大。

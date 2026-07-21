@@ -2513,6 +2513,10 @@ export default {
       replaceTitle: 'Replace Title',
       clear: 'Clear',
       expand: 'Expand',
+      previewOrigin: 'Original',
+      previewGenerated: 'AI Result',
+      replacedBody: 'Note content replaced',
+      replacedTitle: 'Title replaced',
       emptyMessage: 'No content yet, click the operations above to start.',
       formatInvalid:
         'The AI response is missing {markers}. To prevent an incorrect replacement, this result cannot be applied directly. Please generate it again.',
