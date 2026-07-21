@@ -20,6 +20,8 @@ export const AI_OCR_PDF_DPI = boundedInteger(process.env.AI_OCR_PDF_DPI, 180, 12
 const PDFTOPPM_BIN = String(process.env.AI_OCR_PDFTOPPM_BIN || 'pdftoppm').trim();
 const TESSERACT_BIN = String(process.env.AI_OCR_TESSERACT_BIN || 'tesseract').trim();
 const OCR_LANGUAGES = String(process.env.AI_OCR_LANGUAGES || 'chi_sim+eng').trim();
+const MAGICK_BIN = String(process.env.AI_OCR_MAGICK_BIN || 'convert').trim();
+const OCR_PREPROCESS = String(process.env.AI_OCR_PREPROCESS ?? '1').trim() !== '0';
 const RENDER_TIMEOUT_MS = boundedInteger(process.env.AI_OCR_RENDER_TIMEOUT_MS, 60_000, 10_000, 180_000);
 const PAGE_TIMEOUT_MS = boundedInteger(process.env.AI_OCR_PAGE_TIMEOUT_MS, 25_000, 5_000, 90_000);
 const COMMAND_MAX_BUFFER = 8 * 1024 * 1024;
@@ -102,13 +104,50 @@ export function inspectOcrImage(buffer, extension) {
   return { width, height, type: dimensions.type };
 }
 
-async function recognizeImagePath(imagePath, { signal, runner = runCommand } = {}) {
+async function recognizeImagePath(imagePath, { signal, runner = runCommand, psm = '3' } = {}) {
   const { stdout } = await runner(
     TESSERACT_BIN,
-    [imagePath, 'stdout', '-l', OCR_LANGUAGES, '--oem', '1', '--psm', '3'],
+    [imagePath, 'stdout', '-l', OCR_LANGUAGES, '--oem', '1', '--psm', String(psm)],
     { timeout: PAGE_TIMEOUT_MS, signal },
   );
   return cleanOcrText(stdout);
+}
+
+// Tesseract OSD 检测方向:仅在明确 90/180/270 且置信度足够时返回旋转角度(避免把正图转歪);任何异常都返回 0 不旋转。
+async function detectOcrRotation(imagePath, { signal, runner = runCommand } = {}) {
+  try {
+    const { stdout = '', stderr = '' } = await runner(TESSERACT_BIN, [imagePath, 'stdout', '--psm', '0'], {
+      timeout: PAGE_TIMEOUT_MS,
+      signal,
+    });
+    const text = `${stdout}\n${stderr}`;
+    const rotate = Number(/Rotate:\s*(\d+)/i.exec(text)?.[1] || 0);
+    const confidence = Number(/Orientation confidence:\s*([\d.]+)/i.exec(text)?.[1] || 0);
+    if ([90, 180, 270].includes(rotate) && confidence >= 1) return rotate;
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ImageMagick 预处理:灰度 + 深色主题自动反色 + 放大小图 + 对比归一化,大幅改善深色/小字截图的 OCR 质量。
+// 与 tesseract/pdftoppm 一样走系统 CLI(execFile),契合「本地打包 rsync」的部署模式(不引入平台相关的 native node 库)。
+async function preprocessOcrImage(inputPath, outputPath, { signal, runner = runCommand } = {}) {
+  let isDark = false;
+  try {
+    const { stdout } = await runner(MAGICK_BIN, [inputPath, '-colorspace', 'Gray', '-format', '%[fx:mean]', 'info:'], {
+      timeout: PAGE_TIMEOUT_MS,
+      signal,
+    });
+    const mean = parseFloat(stdout);
+    isDark = Number.isFinite(mean) && mean < 0.5; // 灰度均值偏低 = 深色底(如代码编辑器暗色主题)
+  } catch {
+    // 测不到亮度就按非深色处理,不影响后续
+  }
+  const args = [inputPath, '-auto-orient', '-colorspace', 'Gray'];
+  if (isDark) args.push('-negate'); // 深色底反相成「浅底深字」,Tesseract 才认
+  args.push('-resize', '1800x1800<', '-normalize', outputPath); // 「<」只放大小图、不缩大图(免超像素上限)
+  await runner(MAGICK_BIN, args, { timeout: RENDER_TIMEOUT_MS, signal });
 }
 
 function pageNumberFromFileName(fileName) {
@@ -165,7 +204,32 @@ export async function recognizeImageWithLocalOcr(
   try {
     const inputPath = path.join(tempDir, `input${String(extension || '').toLowerCase()}`);
     await writeFile(inputPath, buffer, { mode: 0o600 });
-    const content = await recognizeImagePath(inputPath, { signal, runner });
+
+    // 预处理(灰度/深色反色/放大/归一)+ 方向校正,提升深色主题、旋转、小字截图的识别率;
+    // 预处理不可用(未装 ImageMagick)或失败时静默回退原图,保证 OCR 不因预处理挂掉。
+    let ocrPath = inputPath;
+    if (OCR_PREPROCESS) {
+      try {
+        const processedPath = path.join(tempDir, 'processed.png');
+        await preprocessOcrImage(inputPath, processedPath, { signal, runner });
+        const rotate = await detectOcrRotation(processedPath, { signal, runner });
+        if (rotate) {
+          const rotatedPath = path.join(tempDir, 'rotated.png');
+          await runner(MAGICK_BIN, [processedPath, '-rotate', String(rotate), rotatedPath], {
+            timeout: RENDER_TIMEOUT_MS,
+            signal,
+          });
+          ocrPath = rotatedPath;
+        } else {
+          ocrPath = processedPath;
+        }
+      } catch {
+        ocrPath = inputPath;
+      }
+    }
+
+    // 截图/代码类用 --psm 6(整块统一文本)通常优于文档式的 --psm 3
+    const content = await recognizeImagePath(ocrPath, { signal, runner, psm: '6' });
     if (!content) throw ocrError('EMPTY_DOCUMENT', 'OCR 未能从图片中识别出文字');
     return { content };
   } finally {
