@@ -8,6 +8,7 @@ import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 // 复用 fetchWebMeta(带 SSRF 防护/编码探测),快照用大上限抓更完整正文;一书签一份快照(重复归档覆盖)。
 
 const SNAPSHOT_LIMIT = 200_000; // 存档正文上限 ~200K 字符,够完整留存又不至于爆库
+const MIN_SNAPSHOT_CHARS = 100; // 正文少于此视为没真正抓到(SPA 空壳/纯导航残渣),不存空快照骗人
 
 async function columnMissing(table, col) {
   const [rows] = await pool.query(
@@ -65,6 +66,10 @@ export async function archiveBookmark(userId, bookmarkId) {
     return { ok: false, reason: meta.reason || 'fetch_failed', msg: MSG[meta.reason] || '归档失败' };
   }
   const content = meta.bodyText || '';
+  // 正文太短(SPA 需 JS 渲染、纯导航/空壳)→ 不存空快照,明确返回失败,避免「有快照却打开是空的」
+  if (content.trim().length < MIN_SNAPSHOT_CHARS) {
+    return { ok: false, reason: 'empty_content', msg: '未能提取到正文(可能是需 JS 渲染的页面),未生成快照' };
+  }
   const title = (meta.title || rows[0].name || '').slice(0, 512);
   const u = String(url).slice(0, 2048);
   await pool.query(
@@ -74,6 +79,24 @@ export async function archiveBookmark(userId, bookmarkId) {
   );
   await invalidatePersonalKnowledgeCache(userId);
   return { ok: true, charCount: content.length, title };
+}
+
+// 新增书签时的后台归档:失败(偶发网络/站点未热/反爬)自动隔几秒重试一次,仍失败记 warn 便于排查。
+// 整体吞掉异常、不阻塞新增流程——但不再像旧写法那样静默 .catch(() => {}) 丢掉所有失败信息。
+export async function archiveBookmarkBackground(userId, bookmarkId) {
+  try {
+    let r = await archiveBookmark(userId, bookmarkId);
+    // 无意义的失败(没网址/书签不存在)不重试;抓取类失败(反爬/超时/空正文)才重试一次
+    if (!r.ok && r.reason !== 'no_url' && r.reason !== 'not_found') {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      r = await archiveBookmark(userId, bookmarkId);
+    }
+    if (!r.ok) {
+      console.warn(`[snapshot] 书签 ${bookmarkId} 归档失败: ${r.reason || 'unknown'} ${r.msg || ''}`.trim());
+    }
+  } catch (e) {
+    console.warn(`[snapshot] 书签 ${bookmarkId} 归档异常:`, safeAgentError(e));
+  }
 }
 
 export async function getBookmarkSnapshot(userId, bookmarkId) {

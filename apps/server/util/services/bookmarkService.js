@@ -3,7 +3,7 @@ import { insertData } from '../agent/data.js';
 import { fetchWebMeta } from '../fetchWebMeta.js';
 import { enqueueResources } from '../resourceInbox.js';
 import { RESOURCE_TYPE, insertResourceTagRelations, validateUserTags } from '../resourceTags.js';
-import { archiveBookmark } from '../snapshot.js';
+import { archiveBookmarkBackground } from '../snapshot.js';
 import { ensureTag } from './tagService.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { inspectBookmarkUrl, requireBookmarkUrl } from '../bookmarkUrl.js';
@@ -146,7 +146,7 @@ export async function createBookmark({
     url,
     suppressUserRewards,
   });
-  if (saveSnapshot) archiveBookmark(userId, data.id).catch(() => {});
+  if (saveSnapshot) archiveBookmarkBackground(userId, data.id);
   return {
     id: data.id,
     name,
