@@ -1210,6 +1210,8 @@ export default {
       cloudHistory: '云端会话历史',
       cloudHistoryDescription:
         '关闭后，新消息只保存在当前设备，不再创建或续写云端会话；已有云端历史不会自动删除，可在会话中心单独管理。',
+      rememberDrawerWidth: '记住抽屉宽度',
+      rememberDrawerWidthDescription: '记住桌面 AI 助手抽屉拖拽调整后的宽度（仅本设备生效）。',
       quota: '今日 AI 额度',
       quotaDescription: '按成长等级每日发放',
       quotaLoading: '加载中…',

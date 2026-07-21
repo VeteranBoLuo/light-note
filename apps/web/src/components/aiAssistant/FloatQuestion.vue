@@ -3,16 +3,18 @@
     <BDrawer
       :open="isOpen"
       :title="t('ai.title')"
-      :width="bookmark.isMobile ? '100%' : '560px'"
+      :width="drawerWidth"
       :full-screen="bookmark.isMobile || (bookmark.isDesktop && isMaximized)"
       mobile-full-screen
       :modal="bookmark.isMobile || isMaximized"
       :resizable="bookmark.isDesktop && !isMaximized"
+      :close-on-click-outside="bookmark.isDesktop && !isMaximized"
       :min-width="440"
       :max-width="720"
       :destroy-on-close="false"
       body-padding="0"
       @close="minimize"
+      @resize="handleDrawerResize"
     >
       <template #header-actions>
         <BTooltip :title="t('ai.conversations.title')">
@@ -264,6 +266,44 @@
     isOpen.value = false;
     isMaximized.value = false;
   }
+
+  // —— AI 抽屉宽度记忆(纯本地:抽屉宽度是设备相关偏好,不跨设备同步;开关在 设置→AI 设置,默认关)——
+  const REMEMBER_FLAG_KEY = 'light-note:ai-remember-drawer-width';
+  const REMEMBER_WIDTH_KEY = 'light-note:ai-drawer-width';
+  function rememberWidthEnabled() {
+    try {
+      return localStorage.getItem(REMEMBER_FLAG_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  }
+  const drawerWidth = ref('560px');
+  function refreshDrawerWidth() {
+    if (bookmark.isMobile) {
+      drawerWidth.value = '100%';
+      return;
+    }
+    if (rememberWidthEnabled()) {
+      try {
+        const saved = Number(localStorage.getItem(REMEMBER_WIDTH_KEY));
+        if (Number.isFinite(saved) && saved > 0) {
+          drawerWidth.value = `${saved}px`;
+          return;
+        }
+      } catch {}
+    }
+    drawerWidth.value = '560px';
+  }
+  function handleDrawerResize(width: number) {
+    if (!rememberWidthEnabled()) return;
+    try {
+      localStorage.setItem(REMEMBER_WIDTH_KEY, String(Math.round(width)));
+    } catch {}
+  }
+  refreshDrawerWidth();
+  watch(isOpen, (open) => {
+    if (open) refreshDrawerWidth();
+  });
 
   function toggleMaximized() {
     if (!bookmark.isDesktop || activeMode.value !== 'ask') return;

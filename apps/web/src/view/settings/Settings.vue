@@ -505,6 +505,17 @@
             </div>
             <div class="field">
               <div class="field-head">
+                <span class="field-label">{{ t('settings.ai.rememberDrawerWidth') }}</span>
+                <span class="field-desc">{{ t('settings.ai.rememberDrawerWidthDescription') }}</span>
+              </div>
+              <BSwitch
+                :checked="rememberDrawerWidth"
+                :aria-label="t('settings.ai.rememberDrawerWidth')"
+                @change="setRememberDrawerWidth"
+              />
+            </div>
+            <div class="field">
+              <div class="field-head">
                 <span class="field-label">{{ t('settings.ai.quota') }}</span>
                 <span class="field-desc">{{ t('settings.ai.quotaDescription') }}</span>
               </div>
@@ -835,6 +846,20 @@
     } catch {
       message.warning(t('settings.saveFailed'));
     }
+  }
+
+  // 记住 AI 抽屉宽度:纯本地开关(抽屉宽度是设备相关偏好,不入账号 preferences、不跨设备同步)
+  const REMEMBER_DRAWER_FLAG = 'light-note:ai-remember-drawer-width';
+  const rememberDrawerWidth = ref(false);
+  try {
+    rememberDrawerWidth.value = localStorage.getItem(REMEMBER_DRAWER_FLAG) === 'true';
+  } catch {}
+  function setRememberDrawerWidth(value: boolean) {
+    rememberDrawerWidth.value = value;
+    try {
+      localStorage.setItem(REMEMBER_DRAWER_FLAG, String(value));
+      if (!value) localStorage.removeItem('light-note:ai-drawer-width');
+    } catch {}
   }
 
   // AI 回答风格(映射后端 temperature:严谨0.3/平衡1.0/发散1.5)

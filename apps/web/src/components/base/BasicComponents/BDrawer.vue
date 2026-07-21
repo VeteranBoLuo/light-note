@@ -86,6 +86,7 @@
       maxWidth?: number;
       resizeLabel?: string;
       bodyPadding?: string;
+      closeOnClickOutside?: boolean;
     }>(),
     {
       title: '',
@@ -102,11 +103,13 @@
       minWidth: 440,
       maxWidth: 720,
       resizeLabel: '',
+      closeOnClickOutside: false,
     },
   );
 
   const emit = defineEmits<{
     close: [];
+    resize: [width: number];
   }>();
 
   const localVisible = ref(false);
@@ -310,6 +313,7 @@
     window.removeEventListener('pointermove', handleResizeMove);
     window.removeEventListener('pointerup', stopResize);
     window.removeEventListener('pointercancel', stopResize);
+    emit('resize', currentWidth.value);
   }
 
   function startResize(event: PointerEvent) {
@@ -338,6 +342,43 @@
     }
   }
 
+  // 无蒙层抽屉的「点击外部关闭」:排除面板本身,以及抽屉内会 teleport 到 body 的浮层(下拉/气泡/弹框/提示等),
+  // 避免点这些浮层时误关抽屉。
+  const FLOATING_KEEP_OPEN =
+    '.select-dropdown, .b-popover-panel, .b-dropdown-panel, .mask-container, .bAlert-bg, .b-tooltip-popup, .b-message, [data-drawer-keep-open]';
+  let outsideBindFrame: number | null = null;
+  function handleOutsidePointer(event: PointerEvent) {
+    const panel = panelRef.value;
+    if (!panel) return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (panel.contains(target)) return;
+    if (target.closest?.(FLOATING_KEEP_OPEN)) return;
+    handleClose();
+  }
+  function bindOutside() {
+    unbindOutside();
+    // 延迟一帧再绑,避免「打开抽屉的那次点击」冒泡到 document 立即触发关闭
+    outsideBindFrame = requestAnimationFrame(() => {
+      document.addEventListener('pointerdown', handleOutsidePointer, true);
+    });
+  }
+  function unbindOutside() {
+    if (outsideBindFrame !== null) {
+      cancelAnimationFrame(outsideBindFrame);
+      outsideBindFrame = null;
+    }
+    document.removeEventListener('pointerdown', handleOutsidePointer, true);
+  }
+  watch(
+    () => props.open && props.closeOnClickOutside && !props.modal && !props.fullScreen,
+    (active) => {
+      if (active) bindOutside();
+      else unbindOutside();
+    },
+    { immediate: true },
+  );
+
   function handlePanelTransitionEnd(event: TransitionEvent) {
     if (event.target !== event.currentTarget || event.propertyName !== 'transform') return;
     markSettled();
@@ -353,6 +394,7 @@
     clearSettleTimer();
     if (closeTimer !== null) clearTimeout(closeTimer);
     stopResize();
+    unbindOutside();
     window.removeEventListener('resize', syncLayoutViewportWidth);
   });
 </script>

@@ -1229,6 +1229,8 @@ export default {
       cloudHistory: 'Cloud conversation history',
       cloudHistoryDescription:
         'When off, new messages stay on this device and no cloud conversation is created or continued. Existing cloud history is kept until you manage it in Conversation Center.',
+      rememberDrawerWidth: 'Remember drawer width',
+      rememberDrawerWidthDescription: 'Remember the desktop AI assistant drawer width after resizing (this device only).',
       quota: 'Today’s AI quota',
       quotaDescription: 'Allocated daily based on growth level.',
       quotaLoading: 'Loading…',
