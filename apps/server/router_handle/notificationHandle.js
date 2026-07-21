@@ -267,3 +267,27 @@ export const adminDelete = async (req, res) => {
     res.send(resultData(null, 500, '删除通知记录失败: ' + e.message));
   }
 };
+
+// POST /notification/admin/recipients —— 某批次的接收者与已读明细(仅 root)
+// 用于发送记录里「点击查看发给谁、谁已读谁未读」。含 recalled(软删)行,便于撤回后回看当时的接收者。
+export const adminBatchRecipients = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  const { batchId } = req.body || {};
+  if (!batchId) return res.send(resultData(null, 400, '缺少批次标识'));
+  try {
+    const typePlaceholders = ADMIN_TYPES.map(() => '?').join(',');
+    // 兼容 legacy 单条(无 batch_id,批次键即自身 id):batch_id 命中 或 id 命中。未读在前,方便催阅。
+    const [items] = await pool.query(
+      `SELECT n.user_id AS userId, n.is_read AS isRead, n.read_time AS readTime, u.alias, u.email, u.role
+       FROM notification n
+       LEFT JOIN user u ON u.id = n.user_id
+       WHERE (n.batch_id = ? OR n.id = ?) AND n.type IN (${typePlaceholders})
+       ORDER BY n.is_read ASC, n.read_time DESC, u.alias ASC`,
+      [batchId, batchId, ...ADMIN_TYPES],
+    );
+    const readCount = items.reduce((acc, r) => acc + (Number(r.isRead) === 1 ? 1 : 0), 0);
+    res.send(resultData({ items, total: items.length, readCount }));
+  } catch (e) {
+    res.send(resultData(null, 500, '获取接收明细失败: ' + e.message));
+  }
+};

@@ -42,6 +42,10 @@ export const recallNotification = (batchId: string) => apiBasePost('/api/notific
 export const deleteAdminNotification = (batchId: string) =>
   apiBasePost('/api/notification/admin/delete', { batchId });
 
+// 后台通知中心(仅 root):某批次接收者与已读明细(发给谁、谁已读谁未读)
+export const getBatchRecipients = (batchId: string) =>
+  apiBasePost('/api/notification/admin/recipients', { batchId });
+
 export default {
   getNotificationList,
   getUnreadCount,
@@ -53,4 +57,5 @@ export default {
   getAdminList,
   recallNotification,
   deleteAdminNotification,
+  getBatchRecipients,
 };

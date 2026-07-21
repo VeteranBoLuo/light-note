@@ -346,6 +346,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/notification/admin/list'],
   ['POST', '/notification/admin/recall'],
   ['POST', '/notification/admin/delete'],
+  ['POST', '/notification/admin/recipients'],
   ['POST', '/opinion/getOpinionList'],
   ['POST', '/opinion/replyOpinion'],
   ['POST', '/opinion/delOpinion'],

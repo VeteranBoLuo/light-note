@@ -78,12 +78,12 @@
             <time :datetime="conversation.lastMessageAt">{{ relativeTime(conversation.lastMessageAt) }}</time>
           </BButton>
           <div class="ai-conversation-center__actions">
-            <BTooltip :title="t('ai.conversations.rename')">
+            <BTooltip :title="t('ai.conversations.rename')" always :z-index="200001">
               <BButton :aria-label="t('ai.conversations.rename')" @click="startRename(conversation)">
                 <SvgIcon :src="icon.ai.messageEdit" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
-            <BTooltip :title="t('ai.conversations.retentionSettings')">
+            <BTooltip :title="t('ai.conversations.retentionSettings')" always :z-index="200001">
               <BButton
                 :aria-label="t('ai.conversations.retentionSettings')"
                 :aria-expanded="retentionEditingId === conversation.id"
@@ -93,6 +93,8 @@
               </BButton>
             </BTooltip>
             <BTooltip
+              always
+              :z-index="200001"
               :title="
                 conversation.status === 'archived' ? t('ai.conversations.restore') : t('ai.conversations.archive')
               "
@@ -107,7 +109,7 @@
                 <SvgIcon :src="icon.common.folder" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
-            <BTooltip :title="t('common.delete')">
+            <BTooltip :title="t('common.delete')" always :z-index="200001">
               <BButton :aria-label="t('common.delete')" class="is-danger" @click="confirmDelete(conversation)">
                 <SvgIcon :src="icon.noteDetail.delete" size="14" aria-hidden="true" />
               </BButton>
@@ -564,8 +566,10 @@
     height: auto;
     justify-content: space-between;
     gap: 8px;
-    padding: 2px;
+    /* 内边距别太小:hover 背景块会紧贴标题/时间等文字,显得拥挤;留出呼吸再配圆角 */
+    padding: 7px 9px;
     border: 0;
+    border-radius: 8px;
     background: transparent;
     text-align: left;
   }

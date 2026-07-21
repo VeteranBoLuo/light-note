@@ -26,7 +26,7 @@
               :disabled="modelValue.length >= 5"
               @click="add(currentPageContext)"
             >
-              <span>{{ t('ai.currentPage') }}</span
+              <span class="ai-context-type ai-context-type--current">{{ t('ai.currentPage') }}</span
               ><strong>{{ currentPageContext.title }}</strong>
             </BButton>
             <BButton
@@ -35,7 +35,7 @@
               :disabled="selected(item) || (item.type !== 'file' && modelValue.length >= 5)"
               @click="add(item)"
             >
-              <span>{{ typeLabel(item.type) }}</span
+              <span class="ai-context-type" :style="{ color: typeColor(item.type) }">{{ typeLabel(item.type) }}</span
               ><strong>{{ item.title }}</strong>
             </BButton>
             <span v-if="!loading && !results.length && !currentPageContext" class="ai-context-empty">{{
@@ -59,6 +59,7 @@
   import icon from '@/config/icon.ts';
   import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search';
   import { noteStore } from '@/store';
+  import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
 
   export interface AiResourceContext {
     type: SearchType;
@@ -93,6 +94,10 @@
     return null;
   });
   const typeLabel = (type: SearchType) => t(`ai.sourceTypes.${type}`);
+  const typeColor = (type: SearchType) => {
+    const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];
+    return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
+  };
   function resourceIcon(type: SearchType) {
     if (type === 'note') return icon.resource.note;
     if (type === 'file') return icon.resource.file;
@@ -224,8 +229,17 @@
     text-align: left;
   }
   .ai-context-results span {
-    color: var(--desc-color);
     font-size: 11px;
+  }
+  .ai-context-results .ai-context-type {
+    font-weight: 600;
+  }
+  /* 「当前页面」是特殊入口,用独立于四种资源色(尤其别撞书签=主色 #615ced)的强调色 + 淡底 pill,最突出 */
+  .ai-context-results .ai-context-type--current {
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: #0ea5e9;
+    background: color-mix(in srgb, #0ea5e9 14%, transparent);
   }
   .ai-context-results strong {
     overflow: hidden;

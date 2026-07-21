@@ -115,6 +115,8 @@
           :total="total"
           :current-page="currentPage"
           :page-size="pageSize"
+          :row-clickable="true"
+          @row-click="onRowClick"
           @page-change="onPageChange"
           @size-change="onSizeChange"
         >
@@ -142,7 +144,7 @@
               <span class="nc-time">{{ fmtTime(asBatch(record).createTime) }}</span>
             </template>
             <template v-else-if="column.key === 'operation'">
-              <BSpace class="nc-actions" :size="6">
+              <BSpace class="nc-actions" :size="6" @click.stop>
                 <span v-if="Number(asBatch(record).recalled) === 1" class="nc-recalled-tag">已撤回</span>
                 <BButton v-else class="nc-recall-btn" size="small" @click="onRecall(asBatch(record))">撤回</BButton>
                 <BButton
@@ -161,6 +163,30 @@
         </BTable>
       </section>
     </div>
+
+    <BModal v-model:visible="recipientsVisible" :title="recipientsTitle" width="min(560px, 94vw)" :show-footer="false">
+      <div class="nc-recipients">
+        <div class="nc-recipients-head">
+          <span class="nc-recipients-count">已读 <b>{{ recipientsRead }}</b> / 共 <b>{{ recipientsList.length }}</b> 人</span>
+        </div>
+        <div v-if="recipientsLoading" class="nc-recipients-empty">加载中…</div>
+        <div v-else-if="!recipientsList.length" class="nc-recipients-empty">暂无接收记录</div>
+        <div v-else class="nc-recipients-list">
+          <div v-for="r in recipientsList" :key="r.userId" class="nc-recipient">
+            <span class="nc-recipient-main">
+              <span class="nc-recipient-name">{{ r.alias || '未命名' }}</span>
+              <span class="nc-recipient-mail">{{ r.email || r.userId }}</span>
+            </span>
+            <span class="nc-recipient-meta">
+              <span class="nc-recipient-status" :class="Number(r.isRead) === 1 ? 'is-read' : 'is-unread'">
+                {{ Number(r.isRead) === 1 ? '已读' : '未读' }}
+              </span>
+              <span v-if="Number(r.isRead) === 1 && r.readTime" class="nc-recipient-time">{{ fmtTime(r.readTime) }}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </BModal>
   </div>
 </template>
 
@@ -174,6 +200,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -195,6 +222,14 @@
     readCount: number;
     recalled: number;
     createTime: string;
+  }
+  interface Recipient {
+    userId: string;
+    isRead: number;
+    readTime: string | null;
+    alias: string | null;
+    email: string | null;
+    role: string | null;
   }
 
   const loading = ref(false);
@@ -413,6 +448,37 @@
           });
       },
     });
+  }
+
+  // —— 接收明细弹框(发给谁 / 谁已读谁未读) ——
+  const recipientsVisible = ref(false);
+  const recipientsLoading = ref(false);
+  const recipientsList = ref<Recipient[]>([]);
+  const recipientsBatch = ref<Batch | null>(null);
+  const recipientsRead = ref(0);
+  const recipientsTitle = computed(() =>
+    recipientsBatch.value ? `接收明细 · ${recipientsBatch.value.title}` : '接收明细',
+  );
+  async function openRecipients(batch: Batch) {
+    recipientsBatch.value = batch;
+    recipientsVisible.value = true;
+    recipientsLoading.value = true;
+    recipientsList.value = [];
+    try {
+      const res = await notificationApi.getBatchRecipients(batch.batchId);
+      if (res?.status === 200 && res.data) {
+        recipientsList.value = res.data.items || [];
+        recipientsRead.value = Number(res.data.readCount || 0);
+      }
+    } catch {
+      message.warning('获取接收明细失败');
+    } finally {
+      recipientsLoading.value = false;
+    }
+  }
+  // 点击整行(操作按钮已 @click.stop 排除)查看接收明细
+  function onRowClick(item: unknown) {
+    openRecipients(asBatch(item));
   }
 
   onMounted(() => {
@@ -758,5 +824,87 @@
   }
   .nc-delete-btn {
     min-width: 48px;
+  }
+
+  /* 接收明细弹框 */
+  .nc-recipients {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .nc-recipients-count {
+    font-size: 13px;
+    color: var(--text-color);
+  }
+  .nc-recipients-count b {
+    color: var(--primary-color);
+    font-variant-numeric: tabular-nums;
+  }
+  .nc-recipients-empty {
+    padding: 22px;
+    text-align: center;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+  .nc-recipients-list {
+    display: flex;
+    flex-direction: column;
+    max-height: min(420px, 58vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .nc-recipient {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 4px;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
+  }
+  .nc-recipient:last-child {
+    border-bottom: none;
+  }
+  .nc-recipient-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .nc-recipient-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color);
+  }
+  .nc-recipient-mail {
+    font-size: 12px;
+    color: var(--desc-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nc-recipient-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+  .nc-recipient-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-radius: 999px;
+  }
+  .nc-recipient-status.is-read {
+    color: #16a34a;
+    background: color-mix(in srgb, #16a34a 14%, transparent);
+  }
+  .nc-recipient-status.is-unread {
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--card-border-color) 40%, transparent);
+  }
+  .nc-recipient-time {
+    font-size: 11.5px;
+    color: var(--desc-color);
+    font-variant-numeric: tabular-nums;
   }
 </style>

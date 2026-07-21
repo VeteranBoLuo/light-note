@@ -773,12 +773,8 @@
   .ai-feedback-form,
   .ai-result-reuse {
     display: grid;
-    width: min(620px, 84vw);
+    width: 100%;
     gap: 10px;
-  }
-
-  .ai-feedback-form {
-    min-width: min(400px, 78vw);
   }
 
   .ai-feedback-form label,
@@ -971,11 +967,6 @@
     .ai-result-actions__button,
     .ai-result-actions__text {
       min-height: 44px;
-    }
-
-    .ai-feedback-form,
-    .ai-result-reuse {
-      width: 82vw;
     }
 
     .ai-result-reuse__preview dl > div {
