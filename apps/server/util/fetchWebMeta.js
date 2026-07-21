@@ -156,7 +156,7 @@ function decodeBuffer(buf, charset) {
  *   | { ok: false, reason: string }
  * >}
  */
-export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal } = {}) {
+export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal, timeout = FETCH_TIMEOUT } = {}) {
   // 归一化:无协议头补 https://(与 read_url 一致)。老书签/导入的 URL 常不带协议,
   // 不补会直接 new URL() 抛错 → INVALID_URL,导致归档失败/死链误报。
   let input = String(rawUrl || '').trim();
@@ -182,7 +182,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
   let contentType = '';
   try {
     const resp = await axios.get(target.href, {
-      timeout: FETCH_TIMEOUT,
+      timeout,
       maxRedirects: MAX_REDIRECTS,
       maxContentLength: MAX_CONTENT_BYTES,
       responseType: 'arraybuffer',

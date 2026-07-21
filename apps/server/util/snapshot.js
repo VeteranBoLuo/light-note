@@ -9,6 +9,7 @@ import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 
 const SNAPSHOT_LIMIT = 200_000; // 存档正文上限 ~200K 字符,够完整留存又不至于爆库
 const MIN_SNAPSHOT_CHARS = 100; // 正文少于此视为没真正抓到(SPA 空壳/纯导航残渣),不存空快照骗人
+const SNAPSHOT_FETCH_TIMEOUT = 15000; // 快照是后台/手动任务、不阻塞用户,给更宽松超时(实时 AI 抓取仍用默认 8s)
 
 async function columnMissing(table, col) {
   const [rows] = await pool.query(
@@ -53,7 +54,12 @@ export async function archiveBookmark(userId, bookmarkId) {
   if (!rows.length) return { ok: false, reason: 'not_found', msg: '书签不存在' };
   const url = rows[0].url;
   if (!url) return { ok: false, reason: 'no_url', msg: '该书签没有网址' };
-  const meta = await fetchWebMeta(url, { bodyLimit: SNAPSHOT_LIMIT });
+  let meta = await fetchWebMeta(url, { bodyLimit: SNAPSHOT_LIMIT, timeout: SNAPSHOT_FETCH_TIMEOUT });
+  // 抓取类失败(网络抖动/反爬/超时偶发)短暂重试一次:很多站"时好时坏",一次重试能明显提升成功率
+  if (!meta.ok && meta.reason === 'FETCH_FAILED') {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    meta = await fetchWebMeta(url, { bodyLimit: SNAPSHOT_LIMIT, timeout: SNAPSHOT_FETCH_TIMEOUT });
+  }
   if (!meta.ok) {
     // 归档失败给出更贴切的原因(SPA/需登录常见)
     const MSG = {
@@ -85,12 +91,8 @@ export async function archiveBookmark(userId, bookmarkId) {
 // 整体吞掉异常、不阻塞新增流程——但不再像旧写法那样静默 .catch(() => {}) 丢掉所有失败信息。
 export async function archiveBookmarkBackground(userId, bookmarkId) {
   try {
-    let r = await archiveBookmark(userId, bookmarkId);
-    // 无意义的失败(没网址/书签不存在)不重试;抓取类失败(反爬/超时/空正文)才重试一次
-    if (!r.ok && r.reason !== 'no_url' && r.reason !== 'not_found') {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      r = await archiveBookmark(userId, bookmarkId);
-    }
+    // 抓取失败的重试已下沉到 archiveBookmark 内部,这里只负责吞异常 + 记 warn,不阻塞新增流程
+    const r = await archiveBookmark(userId, bookmarkId);
     if (!r.ok) {
       console.warn(`[snapshot] 书签 ${bookmarkId} 归档失败: ${r.reason || 'unknown'} ${r.msg || ''}`.trim());
     }
