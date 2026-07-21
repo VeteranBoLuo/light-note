@@ -2453,6 +2453,8 @@ export default {
       processButton: '开始处理',
       processing: '处理中...',
       outputTitle: 'AI 建议',
+      followupPlaceholder: '继续追问，如「再精简一半」「改成列表」…',
+      followupSend: '追问',
       suggestedTitle: '标题建议',
       replaceContent: '替换笔记内容',
       replaceTitle: '替换标题',

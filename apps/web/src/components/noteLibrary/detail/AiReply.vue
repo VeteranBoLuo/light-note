@@ -174,6 +174,22 @@
           <div class="ai-preview-body" ref="previewBodyRef" v-html="previewRenderedHtml"></div>
         </div>
         <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
+        <div class="ai-preview-followup">
+          <BInput
+            v-model:value="followupPrompt"
+            :placeholder="t('ai.reply.followupPlaceholder')"
+            :disabled="isLoading"
+            @enter="runFollowup"
+          />
+          <BButton
+            class="ghost-btn ai-preview-followup__send"
+            :loading="isLoading"
+            :disabled="!followupPrompt.trim() || !outputFull"
+            @click="runFollowup"
+            v-click-log="{ module: '笔记-AI助手', operation: '追问迭代' }"
+            >{{ t('ai.reply.followupSend') }}</BButton
+          >
+        </div>
         <div class="ai-preview-actions">
           <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body', true)">{{ t('ai.reply.replaceContent') }}</BButton>
           <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title', true)">{{ t('ai.reply.replaceTitle') }}</BButton>
@@ -210,6 +226,7 @@
   const triggerSave = inject<(() => void) | null>('triggerSave', null);
   const focusEditorToEnd = inject<(() => void) | null>('focusEditorToEnd', null);
   const prompt = ref('');
+  const followupPrompt = ref('');
   const outputFull = ref('');
   const lastAction = ref('');
   const isLoading = ref(false);
@@ -358,7 +375,11 @@
     return `禁止输出引导语、解释或结尾说明，只能严格按以下结构输出；【标题】和【正文】标记必须原样保留；${bodyRequirement}\n【标题】\n<一行标题建议>\n【正文】\n${bodyPlaceholder}`;
   };
 
-  const buildMessage = (actionOverride?: string) => {
+  const buildMessage = (actionOverride?: string, baseContent?: string, followupReq?: string) => {
+    // 追问迭代:后端单轮无状态,故把「上一版生成结果」作为原内容喂回 + 追问要求,基于它继续修改
+    if (baseContent !== undefined) {
+      return `任务：请根据补充要求修改下面这份内容，保持同样的【标题】/【正文】段落标记不变\n原内容：\n${baseContent}\n补充要求：${followupReq || '无'}\n\n${buildFormatHint(resultFormat.value || 'both')}`;
+    }
     const title = note?.title || t('ai.reply.untitled');
     const action = actionOverride || lastAction.value || 'custom';
     const requirement = prompt.value ? prompt.value : '无';
@@ -383,6 +404,12 @@
     generate('action');
   };
 
+  // 放大预览里的「追问迭代」:基于当前生成结果继续修改,新版替换旧版
+  const runFollowup = () => {
+    if (isLoading.value || !followupPrompt.value.trim() || !outputFull.value.trim()) return;
+    void generate('followup');
+  };
+
   const stopGenerating = () => {
     if (abortController.value) {
       abortController.value.abort();
@@ -395,15 +422,20 @@
     void generate(lastGenerationMode.value);
   };
 
-  const generate = async (mode: 'custom' | 'action' = 'action') => {
+  const generate = async (mode: 'custom' | 'action' | 'followup' = 'action') => {
     if (isLoading.value) return;
     if (mode === 'custom' && !prompt.value.trim()) return;
+    if (mode === 'followup' && (!followupPrompt.value.trim() || !outputFull.value.trim())) return;
     const action = mode === 'action' ? lastAction.value || 'custom' : 'custom';
-    const expectedFormat = actionConfig[action]?.format || 'both';
-    lastGenerationMode.value = mode;
+    // 追问:在清空前抓取上一版结果与追问要求作为快照,格式沿用上一版
+    const baseContent = mode === 'followup' ? outputFull.value : undefined;
+    const followupReq = mode === 'followup' ? followupPrompt.value.trim() : '';
+    const expectedFormat = mode === 'followup' ? resultFormat.value || 'both' : actionConfig[action]?.format || 'both';
+    if (mode !== 'followup') lastGenerationMode.value = mode;
     resultFormat.value = expectedFormat;
     requestCompleted.value = false;
     outputFull.value = '';
+    if (mode === 'followup') followupPrompt.value = '';
     outputTruncated.value = false;
     generationFeedback.value = null;
     generationPhase.value = 'connecting';
@@ -414,7 +446,7 @@
     let streamErrorMessage = '';
 
     try {
-      const actionOverride = mode === 'custom' ? '自定义处理' : undefined;
+      const actionOverride = mode === 'custom' ? '自定义处理' : mode === 'followup' ? '继续修改' : undefined;
       let buffer = '';
       let processedLength = 0;
       let receivedDone = false;
@@ -456,7 +488,7 @@
       await apiBasePost(
         '/api/note/assist',
         {
-          message: buildMessage(actionOverride),
+          message: buildMessage(actionOverride, baseContent, followupReq),
           stream: true,
           sessionId: sessionId.value,
           responseFormat: expectedFormat,
@@ -1156,6 +1188,20 @@
     .ai-preview-md {
       display: none;
     }
+  }
+  /* 放大预览里的「追问迭代」输入区 */
+  .ai-preview-followup {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--card-border-color);
+  }
+  .ai-preview-followup :deep(.b-input) {
+    flex: 1;
+  }
+  .ai-preview-followup__send {
+    flex: 0 0 auto;
   }
   .ai-preview-title {
     display: flex;

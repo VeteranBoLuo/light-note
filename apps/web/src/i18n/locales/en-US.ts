@@ -2506,6 +2506,8 @@ export default {
       processButton: 'Start Processing',
       processing: 'Processing...',
       outputTitle: 'AI Suggestions',
+      followupPlaceholder: 'Follow up, e.g. "make it shorter", "use a list"…',
+      followupSend: 'Refine',
       suggestedTitle: 'Suggested title',
       replaceContent: 'Replace Note Content',
       replaceTitle: 'Replace Title',
