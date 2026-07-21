@@ -308,7 +308,9 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey) {
       lockedSubjects.push({ ...subject, used: Math.max(0, Number(rows[0]?.tokens_used || 0)) });
     }
 
-    const blocked = ENFORCE && lockedSubjects.some((item) => item.used + RESERVE_TOKENS > item.quota);
+    // 只要发起前「已用 < 上限」就放行(哪怕这次预留/实际用量会超上限),已用达到或超过上限才拦——
+    // 避免"还剩一点额度却不让发起对话";超出的部分由结算(reconcile)按真实用量校正记账。
+    const blocked = ENFORCE && lockedSubjects.some((item) => item.used >= item.quota);
     if (!blocked) {
       for (const subject of lockedSubjects) {
         const [updateResult] = await connection.query(

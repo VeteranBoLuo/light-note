@@ -287,10 +287,13 @@ export const registerUser = async (req, res) => {
 
     // 准备用户数据(字段白名单:绝不接受客户端传入的 role/del_flag/github_id 等,
     // 否则 POST {role:'root'} 就能自助注册成管理员越权提权)
+    // 昵称(alias)可选:前端非空则 trim + 限长采用,留空统一用「默认昵称」(仍走字段白名单,不接受 role/del_flag 等越权字段)
+    const rawAlias = typeof req.body?.alias === 'string' ? req.body.alias.trim() : '';
     const params = {
       email: req.body.email,
       password: req.body.password,
       role: 'user', // 角色服务端强制写死,不信任客户端
+      alias: rawAlias ? rawAlias.slice(0, 20) : L(req, '默认昵称', 'Default Nickname'),
     };
     // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
     params.preferences = JSON.stringify({
