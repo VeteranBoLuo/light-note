@@ -2227,6 +2227,7 @@ export default {
     collapseSources: 'Hide sources',
     viewAllSources: 'All {count}',
     attachedResources: 'Attached resources',
+    attachedFiles: 'Uploaded files',
     sourceTypes: {
       note: 'Note',
       bookmark: 'Bookmark',
@@ -2506,7 +2507,7 @@ export default {
       processButton: 'Start Processing',
       processing: 'Processing...',
       outputTitle: 'AI Suggestions',
-      followupPlaceholder: 'Follow up, e.g. "make it shorter", "use a list"…',
+      followupPlaceholder: 'Follow up, e.g. "make it shorter", "more formal tone"…',
       followupSend: 'Refine',
       suggestedTitle: 'Suggested title',
       replaceContent: 'Replace Note Content',

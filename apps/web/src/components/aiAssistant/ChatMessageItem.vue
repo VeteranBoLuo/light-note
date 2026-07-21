@@ -38,6 +38,23 @@
               </BButton>
             </div>
           </div>
+          <!-- 本地上传文件:与「引用资源」对称地显示在用户气泡上,让用户看清这条问题用了哪些文件 -->
+          <div v-if="message.role === 'user' && message.attachmentRefs?.length" class="user-contexts">
+            <div class="user-contexts__title">{{ t('ai.attachedFiles') }} · {{ message.attachmentRefs.length }}</div>
+            <div class="user-contexts__list">
+              <span
+                v-for="item in message.attachmentRefs"
+                :key="item.id"
+                class="user-context-chip is-file"
+                :title="item.fileName"
+              >
+                <span class="user-context-chip__icon" aria-hidden="true">
+                  <SvgIcon :src="contextIcon('file')" size="13" />
+                </span>
+                <strong>{{ item.fileName }}</strong>
+              </span>
+            </div>
+          </div>
         </div>
         <ReplyLoading v-else-if="!message.toolEvents?.length" />
         <p

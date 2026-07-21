@@ -1510,7 +1510,8 @@
         const current = messages.value.find((item) => item.id === aiMessage.id);
         if (current) current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }
-      if (options.clearComposer !== false) contexts.value = [];
+      // @资源改为粘性(与本地上传文件一致):回答后不再自动清除,chip 保留在输入框、每轮继续随请求携带,
+      // 后端每轮重新注入正文 → AI 后续轮持续可见;用户可手动移除。输入框文本仍在发送前清空(见 clearComposer 分支)。
     } catch (error: any) {
       // 旧请求的异常，不再修改当前消息
       if (!aiAssistant.isRequestCurrent(requestLease)) return;
