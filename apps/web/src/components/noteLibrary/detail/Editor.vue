@@ -550,8 +550,26 @@
               headingStyle: 'atx',
               codeBlockStyle: 'fenced',
             }).turndown(value || '');
-      mdContent.value = md;
-      content.value = md;
+      // 用 execCommand('insertText') 替换 textarea 全文,让浏览器把这次替换记入原生撤销栈,
+      // 使 AI 替换后能像 html(TinyMCE undoManager)一样 Ctrl+Z 撤回;不支持时退回直接赋值(内容正确,仅撤回失效)。
+      const textarea = getMdTextarea();
+      let undoable = false;
+      if (textarea) {
+        textarea.focus({ preventScroll: true });
+        textarea.select();
+        try {
+          undoable = document.execCommand('insertText', false, md);
+        } catch {
+          undoable = false;
+        }
+      }
+      if (undoable && textarea) {
+        mdContent.value = textarea.value;
+        content.value = textarea.value;
+      } else {
+        mdContent.value = md;
+        content.value = md;
+      }
       await renderMd();
       return true;
     }

@@ -35,7 +35,7 @@
   const typingSpeed = ref(props.typingSpeed ?? 10);
   let typingTimer: number | null = null;
   let resolveTypingDelay: (() => void) | null = null;
-  let typewriterQueue: string[] = [];
+  let pending = '';
   let isTyping = false;
   let lastContent = '';
   let typingRunId = 0;
@@ -97,17 +97,16 @@
     isTyping = true;
     const runId = typingRunId;
 
-    while (typewriterQueue.length > 0 && runId === typingRunId) {
-      const textToType = typewriterQueue.shift();
-      if (!textToType) continue;
-
-      for (let i = 0; i < textToType.length && runId === typingRunId; i++) {
-        // 在内容变高之前判断，只有用户此前贴底才会继续跟随。
-        shouldFollow.value = shouldFollow.value && isNearBottom();
-        displayContent.value += textToType[i];
-        if (shouldFollow.value) scheduleScrollToBottom();
-        await waitForNextCharacter();
-      }
+    while (pending.length > 0 && runId === typingRunId) {
+      // 落后越多追越快、接近时放慢:与放大预览 pump 同逻辑,保证小窗与弹框逐字速度一致,
+      // 不再一帧只吐一个字导致弹框都生成完了小窗还在慢慢打。
+      const step = Math.max(2, Math.floor(pending.length / 20));
+      // 在内容变高之前判断，只有用户此前贴底才会继续跟随。
+      shouldFollow.value = shouldFollow.value && isNearBottom();
+      displayContent.value += pending.slice(0, step);
+      pending = pending.slice(step);
+      if (shouldFollow.value) scheduleScrollToBottom();
+      await waitForNextCharacter();
     }
 
     if (runId === typingRunId) isTyping = false;
@@ -115,14 +114,14 @@
 
   const enqueueContent = (text: string) => {
     if (!text) return;
-    typewriterQueue.push(text);
+    pending += text;
     if (!isTyping) startTypewriter();
   };
 
   const resetTypewriter = () => {
     typingRunId += 1;
     displayContent.value = '';
-    typewriterQueue = [];
+    pending = '';
     isTyping = false;
     shouldFollow.value = true;
     cancelScheduledScroll();

@@ -81,7 +81,13 @@
     <div class="ai-input">
       <div class="input-label">{{ t('ai.reply.inputLabel') }}</div>
       <BInput v-model:value="prompt" type="textarea" :rows="2" :placeholder="t('ai.reply.inputPlaceholder')" />
-      <BButton v-if="isLoading" class="stop-btn" @click="stopGenerating" :title="t('ai.reply.stop', '停止生成')" v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }">
+      <BButton
+        v-if="isLoading"
+        class="stop-btn"
+        @click="stopGenerating"
+        :title="t('ai.reply.stop', '停止生成')"
+        v-click-log="{ module: '笔记-AI助手', operation: '停止生成' }"
+      >
         <span class="stop-icon"></span>
         {{ t('ai.reply.stop', '停止生成') }}
       </BButton>
@@ -119,11 +125,40 @@
             v-click-log="{ module: '笔记-AI助手', operation: '替换标题' }"
             >{{ t('ai.reply.replaceTitle') }}</BButton
           >
-          <BButton class="ghost-btn icon-btn" @click="previewVisible = true" :title="t('ai.reply.expand')" v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+          <BButton
+            class="ghost-btn icon-btn"
+            @click="previewVisible = true"
+            :title="t('ai.reply.expand')"
+            v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
           </BButton>
-          <BButton class="ghost-btn icon-btn" :disabled="isLoading" @click="clearOutput" :title="t('ai.reply.clear')" v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg>
+          <BButton
+            class="ghost-btn icon-btn"
+            :disabled="isLoading"
+            @click="clearOutput"
+            :title="t('ai.reply.clear')"
+            v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+            </svg>
           </BButton>
         </div>
       </div>
@@ -134,7 +169,9 @@
         <span>{{ t('ai.reply.truncatedHint') }}</span>
         <div class="generation-feedback-actions">
           <BButton class="status-action-btn" @click="retryGeneration">{{ t('ai.reply.retry') }}</BButton>
-          <BButton class="status-action-btn" @click="runAction('generateSummary')">{{ t('ai.reply.actions.generateSummary') }}</BButton>
+          <BButton class="status-action-btn" @click="runAction('generateSummary')">{{
+            t('ai.reply.actions.generateSummary')
+          }}</BButton>
         </div>
       </div>
       <div v-if="showGenerationStatus" class="generation-status" role="status" aria-live="polite">
@@ -153,7 +190,7 @@
       <TypewriterOutput
         v-if="displayOutput || (!isLoading && !generationFeedback)"
         class="output-body"
-        :typing-speed="1"
+        :typing-speed="16"
         :content="displayOutput"
         :render-as-text="isMarkdownNote"
         :empty-text="t('ai.reply.emptyMessage')"
@@ -170,8 +207,8 @@
         </div>
         <!-- markdown 笔记:左侧 markdown 原文、右侧渲染预览,让用户看清替换后的实际效果 -->
         <div v-if="isMarkdownNote" class="ai-preview-split">
-          <pre class="ai-preview-md">{{ previewTyped }}</pre>
-          <div class="ai-preview-body" ref="previewBodyRef" v-html="previewRenderedHtml"></div>
+          <pre class="ai-preview-md" ref="previewMdRef" @scroll="syncPreviewScroll('md')">{{ previewTyped }}</pre>
+          <div class="ai-preview-body" ref="previewBodyRef" @scroll="syncPreviewScroll('rendered')" v-html="previewRenderedHtml"></div>
         </div>
         <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
         <div class="ai-preview-followup">
@@ -191,8 +228,12 @@
           >
         </div>
         <div class="ai-preview-actions">
-          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body', true)">{{ t('ai.reply.replaceContent') }}</BButton>
-          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title', true)">{{ t('ai.reply.replaceTitle') }}</BButton>
+          <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body', true)">{{
+            t('ai.reply.replaceContent')
+          }}</BButton>
+          <BButton class="ghost-btn" :disabled="!canApplyTitle" @click="requestApply('title', true)">{{
+            t('ai.reply.replaceTitle')
+          }}</BButton>
         </div>
       </div>
     </BModal>
@@ -275,7 +316,25 @@
   // 是则内容增长后贴到底;上滚离开则自然停住;滚回底部附近下一段又自动恢复。判断每次都基于真实滚动位置,
   // 无粘滞状态、无 wheel 监听,恢复必然可靠(旧写法用 interrupted 标志+wheel,回底后会被紧接的滚轮事件再次关掉)。
   const previewBodyRef = ref<HTMLElement | null>(null);
+  const previewMdRef = ref<HTMLElement | null>(null);
   const PREVIEW_SCROLL_THRESHOLD = 120;
+
+  // md 放大预览左右两栏滚动联动:一侧滚动按比例同步另一侧;scrollSyncing 防止相互触发形成死循环
+  let scrollSyncing = false;
+  function syncPreviewScroll(source: 'md' | 'rendered') {
+    if (scrollSyncing) return;
+    const from = source === 'md' ? previewMdRef.value : previewBodyRef.value;
+    const to = source === 'md' ? previewBodyRef.value : previewMdRef.value;
+    if (!from || !to) return;
+    const fromRange = from.scrollHeight - from.clientHeight;
+    const toRange = to.scrollHeight - to.clientHeight;
+    if (fromRange <= 0 || toRange <= 0) return;
+    scrollSyncing = true;
+    to.scrollTop = (from.scrollTop / fromRange) * toRange;
+    requestAnimationFrame(() => {
+      scrollSyncing = false;
+    });
+  }
 
   const isPreviewNearBottom = () => {
     const el = previewBodyRef.value;
@@ -293,7 +352,24 @@
   const previewTyped = ref('');
   const safePreviewTyped = computed(() =>
     DOMPurify.sanitize(previewTyped.value, {
-      ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],
+      ALLOWED_TAGS: [
+        'p',
+        'br',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'strong',
+        'em',
+        'ul',
+        'ol',
+        'li',
+        'blockquote',
+        'code',
+        'pre',
+      ],
       ALLOWED_ATTR: [],
     }),
   );
@@ -356,8 +432,10 @@
 
   // 部分动作需要给模型额外说明(泛化的"任务名"不足以表达期望)
   const ACTION_INSTRUCTION: Record<string, string> = {
-    continueWrite: '请在完整保留原文的前提下,顺着语义自然地往下续写 1~3 段;【正文】必须输出「原文 + 续写」拼接后的完整内容。',
-    translate: '请在中文与英文之间翻译(中文内容译成英文,英文内容译成中文,混合则以主要语言为准);【正文】输出翻译后的完整内容,保持段落结构。',
+    continueWrite:
+      '请在完整保留原文的前提下,顺着语义自然地往下续写 1~3 段;【正文】必须输出「原文 + 续写」拼接后的完整内容。',
+    translate:
+      '请在中文与英文之间翻译(中文内容译成英文,英文内容译成中文,混合则以主要语言为准);【正文】输出翻译后的完整内容,保持段落结构。',
     outline: '请为内容提炼一份层级清晰的大纲(用标题层级 + 有序/无序列表)。',
   };
 
@@ -599,7 +677,24 @@
           .map((line) => `<p>${line}</p>`)
           .join('');
     return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'],
+      ALLOWED_TAGS: [
+        'p',
+        'br',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'strong',
+        'em',
+        'ul',
+        'ol',
+        'li',
+        'blockquote',
+        'code',
+        'pre',
+      ],
       ALLOWED_ATTR: [],
     });
   };
@@ -1171,8 +1266,8 @@
   .ai-preview-md {
     margin: 0;
     min-width: 0;
-    /* 追问会先清空内容再流式填充,给个最低高度避免内容区瞬间塌缩、弹框忽大忽小 */
-    min-height: min(240px, 40vh);
+    /* 固定为最大高度:内容随生成增长时高度不再变动,避免弹框忽大忽小 */
+    min-height: 68vh;
     max-height: 68vh;
     overflow: auto;
     padding: 10px 12px;
@@ -1184,7 +1279,7 @@
     font-family: 'Fira Code', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.6;
-    color: var(--text-color);
+    color: var(--text-color) !important;
   }
   .ai-preview-split .ai-preview-body {
     min-width: 0;
@@ -1228,7 +1323,7 @@
     line-height: 1.5;
   }
   .ai-preview-body {
-    min-height: min(240px, 40vh);
+    min-height: 68vh;
     max-height: 68vh;
     overflow-y: auto;
     /* 内容是 v-html 渲染的 HTML 片段,不能用 pre-wrap——否则 AI 输出里标签间的源码换行
