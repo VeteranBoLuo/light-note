@@ -629,7 +629,7 @@
 
   .select-dropdown {
     position: fixed;
-    z-index: 200000;
+    z-index: 900;
     box-sizing: border-box;
     padding: 4px;
     border-radius: 6px;

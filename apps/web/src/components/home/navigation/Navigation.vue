@@ -224,10 +224,10 @@
     width: 100%;
     position: fixed;
     top: 0;
-    z-index: 900;
+    z-index: 200;
   }
   .navigation--search-open {
-    z-index: 300000;
+    z-index: 1000;
   }
   .navigation-title {
     height: 100%;
@@ -255,7 +255,7 @@
       gap: 0;
       padding-left: 20px;
       position: relative;
-      z-index: 100003;
+      z-index: 2;
 
       .navigation-title-link {
         width: 25px;

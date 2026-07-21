@@ -234,12 +234,9 @@
   .ai-context-results .ai-context-type {
     font-weight: 600;
   }
-  /* 「当前页面」是特殊入口,用独立于四种资源色(尤其别撞书签=主色 #615ced)的强调色 + 淡底 pill,最突出 */
+  /* 「当前页面」是特殊入口,用独立于四种资源色(尤其别撞书签=主色 #615ced)的强调色文字突出,不加背景 */
   .ai-context-results .ai-context-type--current {
-    padding: 1px 6px;
-    border-radius: 5px;
     color: #0ea5e9;
-    background: color-mix(in srgb, #0ea5e9 14%, transparent);
   }
   .ai-context-results strong {
     overflow: hidden;

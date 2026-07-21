@@ -758,7 +758,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 300;
     backdrop-filter: blur(5px);
     transition: all 0.3s ease;
   }

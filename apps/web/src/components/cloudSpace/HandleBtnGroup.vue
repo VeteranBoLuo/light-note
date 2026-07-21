@@ -484,7 +484,7 @@
     position: fixed;
     top: 70px;
     right: 20px;
-    z-index: 1000;
+    z-index: 300;
     width: 320px;
     padding: 20px;
     background: rgba(255, 255, 255, 0.95);
@@ -670,7 +670,7 @@
     line-height: 1.6;
     white-space: pre-wrap;
     width: 200px;
-    z-index: 1000;
+    z-index: 300;
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
@@ -722,7 +722,7 @@
       right: 10px;
       width: auto;
       max-width: none;
-      z-index: 1001;
+      z-index: 301;
     }
   }
 

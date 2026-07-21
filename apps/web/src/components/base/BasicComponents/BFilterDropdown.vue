@@ -160,7 +160,7 @@
     margin-top: 5px;
     border-radius: 8px;
     box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
-    z-index: 1000;
+    z-index: 300;
     width: 200px;
     padding: 12px;
     background-color: var(--menu-body-bg-color);

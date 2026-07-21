@@ -78,12 +78,12 @@
             <time :datetime="conversation.lastMessageAt">{{ relativeTime(conversation.lastMessageAt) }}</time>
           </BButton>
           <div class="ai-conversation-center__actions">
-            <BTooltip :title="t('ai.conversations.rename')" always :z-index="200001">
+            <BTooltip :title="t('ai.conversations.rename')" always>
               <BButton :aria-label="t('ai.conversations.rename')" @click="startRename(conversation)">
                 <SvgIcon :src="icon.ai.messageEdit" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
-            <BTooltip :title="t('ai.conversations.retentionSettings')" always :z-index="200001">
+            <BTooltip :title="t('ai.conversations.retentionSettings')" always>
               <BButton
                 :aria-label="t('ai.conversations.retentionSettings')"
                 :aria-expanded="retentionEditingId === conversation.id"
@@ -94,7 +94,6 @@
             </BTooltip>
             <BTooltip
               always
-              :z-index="200001"
               :title="
                 conversation.status === 'archived' ? t('ai.conversations.restore') : t('ai.conversations.archive')
               "
@@ -109,7 +108,7 @@
                 <SvgIcon :src="icon.common.folder" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
-            <BTooltip :title="t('common.delete')" always :z-index="200001">
+            <BTooltip :title="t('common.delete')" always>
               <BButton :aria-label="t('common.delete')" class="is-danger" @click="confirmDelete(conversation)">
                 <SvgIcon :src="icon.noteDetail.delete" size="14" aria-hidden="true" />
               </BButton>

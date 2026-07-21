@@ -308,7 +308,7 @@
   }
 
   .bpagination__sizer-dropdown {
-    z-index: 1050;
+    z-index: 300;
     background: var(--ant-select-dropdown-bg-color);
     border: 1px solid var(--menu-item-h-bg-color);
     border-radius: 8px;

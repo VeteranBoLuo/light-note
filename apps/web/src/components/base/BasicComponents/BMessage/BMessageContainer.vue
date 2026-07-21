@@ -41,7 +41,7 @@
     top: max(14px, env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
-    z-index: 999999;
+    z-index: 1200;
     display: flex;
     flex-direction: column;
     align-items: center;

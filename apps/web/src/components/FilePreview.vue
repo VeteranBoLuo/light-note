@@ -857,7 +857,7 @@
     grid-template-rows: 48px minmax(0, 1fr);
     background: var(--background-color);
     color: var(--text-color);
-    z-index: 200000;
+    z-index: 900;
     isolation: isolate;
     overflow: hidden;
 

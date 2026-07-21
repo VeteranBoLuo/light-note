@@ -171,7 +171,7 @@
     position: fixed;
     inset: 0;
     background-color: rgba(0, 0, 0, 0.8);
-    z-index: 99999999;
+    z-index: 1300;
   }
   .bAlert {
     position: relative;
@@ -183,7 +183,7 @@
     height: 180px;
     //box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.12);
     border-radius: 16px;
-    z-index: 9999;
+    z-index: 1;
     box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
     background-color: var(--background-color);
     animation: in-animation 0.3s ease;

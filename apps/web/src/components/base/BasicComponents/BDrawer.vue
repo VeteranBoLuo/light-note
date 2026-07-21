@@ -123,6 +123,8 @@
   const currentWidth = ref(0);
   const layoutViewportWidth = ref(readLayoutViewportWidth());
   let resizing = false;
+  let resizeStartX = 0;
+  let resizeStartWidth = 0;
 
   const clearOpenFrame = () => {
     if (openFrame === null) return;
@@ -294,15 +296,11 @@
     return Math.round(Math.max(resolvedMinWidth.value, Math.min(resolvedMaxWidth.value, value)));
   }
 
-  function resizeAt(clientX: number) {
-    syncLayoutViewportWidth();
-    const normalizedClientX = clientX / getRootZoom();
-    currentWidth.value = clampWidth(readLayoutViewportWidth() - normalizedClientX);
-  }
-
   function handleResizeMove(event: PointerEvent) {
     if (!resizing) return;
-    resizeAt(event.clientX);
+    // 右侧抽屉:鼠标相对起点左移(clientX 变小)→ 宽度增大;按位移增量算,保证 1:1 跟手
+    const delta = (resizeStartX - event.clientX) / getRootZoom();
+    currentWidth.value = clampWidth(resizeStartWidth + delta);
   }
 
   function stopResize() {
@@ -318,8 +316,12 @@
     if (!props.resizable || props.fullScreen) return;
     event.preventDefault();
     resizing = true;
+    // 记录拖拽起点与起始宽度,之后按位移增量调整 —— 不在按下时改宽度(避免"按一下就跳变/闪一下")
+    syncLayoutViewportWidth();
+    resizeStartX = event.clientX;
+    resizeStartWidth =
+      currentWidth.value || clampWidth(Number.parseFloat(panelWidth.value) || resolvedMinWidth.value);
     document.body.classList.add('b-drawer-is-resizing');
-    resizeAt(event.clientX);
     window.addEventListener('pointermove', handleResizeMove);
     window.addEventListener('pointerup', stopResize);
     window.addEventListener('pointercancel', stopResize);
@@ -359,7 +361,7 @@
   .b-drawer-wrapper {
     position: fixed;
     inset: 0;
-    z-index: 99999;
+    z-index: 600;
   }
 
   .b-drawer-wrapper.is-hidden {

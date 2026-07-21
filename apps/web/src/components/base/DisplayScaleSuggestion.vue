@@ -155,7 +155,7 @@
     position: fixed;
     left: 50%;
     bottom: 22px;
-    z-index: 2600;
+    z-index: 400;
     width: min(820px, calc(100% - 40px));
     min-height: 74px;
     transform: translateX(-50%);

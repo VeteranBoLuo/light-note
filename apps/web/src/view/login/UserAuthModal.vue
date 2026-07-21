@@ -192,7 +192,7 @@
 
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: 700;
     display: grid;
     place-items: center;
     padding: 20px;

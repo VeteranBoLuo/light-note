@@ -235,7 +235,7 @@
     box-sizing: border-box;
     color: white;
     cursor: pointer;
-    z-index: 999;
+    z-index: 100;
   }
   .catalog {
     border-left: 1px solid #e8eaf2;
@@ -246,7 +246,7 @@
     position: fixed;
     top: 116px;
     right: 14px;
-    z-index: 999;
+    z-index: 100;
     background: var(--menu-container-bg-color);
     width: min(260px, calc(100vw - 28px));
     border-radius: 8px;

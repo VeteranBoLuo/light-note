@@ -687,11 +687,11 @@
   }
 
   :global(.user-setting-dropdown) {
-    z-index: 100001;
+    z-index: 800;
   }
 
   :global(.user-center-popover) {
-    z-index: 100001;
+    z-index: 800;
   }
 
   :global(.user-center-popover .ant-popover-inner) {

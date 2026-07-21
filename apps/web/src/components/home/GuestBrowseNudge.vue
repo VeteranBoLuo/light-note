@@ -100,7 +100,7 @@
     left: 50%;
     bottom: 24px;
     transform: translateX(-50%);
-    z-index: 2000;
+    z-index: 400;
     display: flex;
     align-items: center;
     gap: 12px;

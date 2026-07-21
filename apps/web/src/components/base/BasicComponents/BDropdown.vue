@@ -195,7 +195,7 @@
 <style lang="less">
   /* 非 scoped:面板 Teleport 到 body/自定义容器,scoped 选择器命不中 */
   .b-dropdown-panel {
-    z-index: 100050; /* 高于导航栏 */
+    z-index: 800; /* 高于导航栏 */
     padding: 4px;
     border-radius: 8px;
     background: var(--menu-body-bg-color);

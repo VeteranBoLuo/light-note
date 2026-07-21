@@ -24,7 +24,7 @@
   const popupRef = ref<HTMLElement>();
   const wrapRef = ref<HTMLElement>();
   const popupStyle = reactive({ top: '0px', left: '0px' });
-  const resolvedPopupStyle = computed(() => ({ ...popupStyle, zIndex: props.zIndex ?? 9999 }));
+  const resolvedPopupStyle = computed(() => ({ ...popupStyle, zIndex: props.zIndex ?? 1100 }));
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   function show() {
@@ -79,9 +79,9 @@
     line-height: 1.5;
     color: var(--text-color);
     background: var(--menu-body-bg-color);
-    /* 高于 BModal(100000)/BDrawer(99999):否则弹框或抽屉内元素的 tooltip 会被盖住看不见。 */
+    /* 固定 1100,高于所有容器(弹框 700 / 抽屉 600 / 覆盖层 900 / 搜索 1000):任何容器内的 tooltip 都不会被盖。 */
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    z-index: 100060;
+    z-index: 1100;
     pointer-events: none;
     max-width: 280px;
     white-space: normal;

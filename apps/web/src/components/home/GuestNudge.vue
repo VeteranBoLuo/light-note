@@ -40,7 +40,7 @@
     position: fixed;
     right: 20px;
     bottom: 20px;
-    z-index: 3000;
+    z-index: 400;
     width: 300px;
     max-width: calc(100vw - 32px);
     padding: 14px 16px;

@@ -90,7 +90,7 @@
     position: fixed;
     top: 8px;
     left: 50%;
-    z-index: 990;
+    z-index: 200;
     transform: translateX(-50%);
     display: flex;
     align-items: center;

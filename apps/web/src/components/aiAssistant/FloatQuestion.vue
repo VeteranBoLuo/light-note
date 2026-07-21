@@ -15,7 +15,7 @@
       @close="minimize"
     >
       <template #header-actions>
-        <BTooltip :title="t('ai.conversations.title')" :z-index="200001">
+        <BTooltip :title="t('ai.conversations.title')">
           <BButton
             class="ai-window-toggle"
             :class="{ 'ai-window-toggle--active': activePanel === 'conversations' }"
@@ -30,7 +30,6 @@
         <BTooltip
           v-if="bookmark.isDesktop && activeMode === 'ask'"
           :title="isMaximized ? t('ai.restoreWindow') : t('ai.maximize')"
-          :z-index="200001"
         >
           <BButton
             class="ai-window-toggle"
@@ -557,7 +556,7 @@
   }
 
   .ai-edge-host--open {
-    z-index: 200000;
+    z-index: 900;
   }
 
   .ai-edge-trigger {

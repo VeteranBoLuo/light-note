@@ -431,7 +431,7 @@
   }
 
   .global-search-box--open {
-    z-index: 300000;
+    z-index: 1000;
   }
 
   :deep(.b-input) {
@@ -487,7 +487,7 @@
     background: var(--menu-body-bg-color);
     box-shadow: 0 20px 60px rgba(20, 20, 43, 0.22);
     border: 1px solid var(--card-border-color);
-    z-index: 300001;
+    z-index: 1000;
   }
 
   .suggest-head {
@@ -722,7 +722,7 @@
   .mobile-search-layer {
     position: fixed;
     inset: 0;
-    z-index: 300001;
+    z-index: 1000;
     background: var(--background-color);
     padding: 14px;
     box-sizing: border-box;

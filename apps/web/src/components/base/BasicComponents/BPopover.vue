@@ -200,7 +200,7 @@
 <style lang="less">
   /* 非 scoped:面板 Teleport 到 body/自定义容器,scoped 选择器命不中 */
   .b-popover-panel {
-    z-index: 100050;
+    z-index: 800;
     border-radius: 12px;
     background: var(--menu-body-bg-color, var(--background-color));
     color: var(--text-color);

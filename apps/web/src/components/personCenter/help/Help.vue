@@ -720,7 +720,7 @@
     position: fixed;
     right: 16px;
     bottom: 18px;
-    z-index: 900;
+    z-index: 300;
     width: min(240px, calc(100vw - 32px));
     max-height: 42vh;
     padding: 10px 0;

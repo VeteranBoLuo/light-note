@@ -87,7 +87,7 @@
   .lvup-mask {
     position: fixed;
     inset: 0;
-    z-index: 999999; /* 高于全局搜索下拉(300001)与 AI 助手(200000),庆祝动画盖住一切 */
+    z-index: 1200; /* 高于全局搜索(1000)与 AI 助手(900),庆祝动画盖住一切 */
     display: flex;
     align-items: center;
     justify-content: center;
