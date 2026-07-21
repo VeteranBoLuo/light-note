@@ -113,7 +113,9 @@
         </Transition>
       </div>
 
+      <!-- 移动端隐藏「回答范围」条:占位高、与上方快捷问答贴太近;已选材料在输入区 @添加资源 的 chips 里可查看/移除 -->
       <AiContextLens
+        v-if="!bookmark.isMobile"
         :contexts="contexts"
         :attachments="attachments"
         @update:contexts="contexts = $event"

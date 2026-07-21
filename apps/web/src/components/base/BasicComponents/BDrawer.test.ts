@@ -209,7 +209,15 @@ describe('BDrawer compositor cleanup', () => {
     Object.defineProperty(pointerDown, 'clientX', { value: 500 });
     separator?.dispatchEvent(pointerDown);
     await nextTick();
-    expect(panel?.style.width).toBe('560px');
+    // 按下不改宽度(修复「按一下就跳变/闪」):仍是初始 640
+    expect(panel?.style.width).toBe('640px');
+
+    // 拖动:向左移(clientX 减小)增宽;位移经 root zoom 归一化(50 / 1.25 = 40)→ 640 + 40 = 680
+    const pointerMove = new Event('pointermove', { bubbles: true });
+    Object.defineProperty(pointerMove, 'clientX', { value: 450 });
+    window.dispatchEvent(pointerMove);
+    await nextTick();
+    expect(panel?.style.width).toBe('680px');
 
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 400 });
     window.dispatchEvent(new Event('resize'));

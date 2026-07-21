@@ -508,6 +508,13 @@
     }
   }
 
+  @media (pointer: coarse) {
+    /* 无附件时的「上传文件」触发按钮统一到 36px,与左侧 @添加资源 触发按钮等高 */
+    .ai-attachment-picker:not(.has-attachment) :deep(.b_btn) {
+      min-height: 36px;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .attachment-card,
     .attachment-card.is-processing .attachment-icon,

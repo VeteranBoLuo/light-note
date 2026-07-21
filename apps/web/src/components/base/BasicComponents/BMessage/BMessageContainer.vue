@@ -158,8 +158,11 @@
   }
 
   @media (max-width: 600px) {
+    /* 移动端改为底部弹出:顶部常是页面/抽屉的标题与操作区(如 AI 助手全屏),顶部 toast 会把它们遮住;
+       底部弹出更符合移动端习惯,也不挡顶部操作。 */
     .b-message-container {
-      top: max(10px, env(safe-area-inset-top));
+      top: auto;
+      bottom: max(14px, env(safe-area-inset-bottom));
       width: calc(100vw - 20px);
       max-width: none;
     }
@@ -170,6 +173,15 @@
       max-width: none;
       padding-right: 12px;
       font-size: 13px;
+    }
+
+    /* 底部弹出:进出动画改为从下方滑入/滑出 */
+    .b-message-enter-from {
+      transform: translateY(20px) scale(0.96);
+    }
+
+    .b-message-leave-to {
+      transform: translateY(10px) scale(0.97);
     }
   }
 

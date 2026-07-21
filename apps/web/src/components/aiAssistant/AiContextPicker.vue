@@ -251,7 +251,11 @@
   }
 
   @media (pointer: coarse) {
-    .ai-context-picker :deep(.b_btn),
+    /* 触发按钮(@添加资源)压到 36px,与右侧「上传文件」一致、不再突兀过高;
+       下拉结果列表项仍保留 44px 便于触屏点选 */
+    .ai-context-picker :deep(.b_btn) {
+      min-height: 36px;
+    }
     .ai-context-results :deep(.b_btn) {
       min-height: 44px;
     }

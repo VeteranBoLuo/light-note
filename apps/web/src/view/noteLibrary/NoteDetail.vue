@@ -100,6 +100,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import { markNoteDraftPromoted } from '@/utils/routeViewKey';
   import { recordOperation } from '@/api/commonApi.ts';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
@@ -388,6 +389,8 @@
             note.title = params.title;
           }
           nodeType.value = 'edit';
+          // 先登记「草稿已提升」再改地址:让 router-view key 保持不变,新建首存不重挂载编辑器子树(不闪)
+          markNoteDraftPromoted(note.id as string);
           router.replace(`/noteLibrary/${note.id}`).then();
           recordOperation({
             module: '笔记',
@@ -413,6 +416,7 @@
       note.id = id;
       note.createBy = user.id;
       nodeType.value = 'edit';
+      markNoteDraftPromoted(note.id);
       router.replace(`/noteLibrary/${note.id}`).then();
     }
   }
@@ -604,6 +608,8 @@
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyDown);
     nStore.headings = [];
+    // 离开笔记时清除「草稿已提升」登记,避免影响下一篇/新建笔记的 key 判断
+    markNoteDraftPromoted(null);
   });
 </script>
 

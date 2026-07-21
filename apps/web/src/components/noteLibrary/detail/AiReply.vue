@@ -163,12 +163,16 @@
     <!-- 放大预览:输出区太窄小时,一键弹大窗舒服阅读,并可直接应用。
          必须放在 .ai-container 内部 —— 若作为第二个根节点会使组件变多根,导致父级 class="ai-panel"(定宽)无法继承,面板会被内容撑宽。 -->
     <BModal v-model:visible="previewVisible" :title="t('ai.reply.outputTitle')" :show-footer="false" width="auto">
-      <div class="ai-preview">
+      <div class="ai-preview" :class="{ 'ai-preview--split': isMarkdownNote }">
         <div v-if="hasTitle && hasBody" class="ai-preview-title">
           <span class="title-suggestion-label">{{ t('ai.reply.suggestedTitle') }}</span>
           <span class="title-suggestion-value">{{ suggestedTitle }}</span>
         </div>
-        <div v-if="isMarkdownNote" class="ai-preview-body is-markdown" ref="previewBodyRef" v-text="previewTyped"></div>
+        <!-- markdown 笔记:左侧 markdown 原文、右侧渲染预览,让用户看清替换后的实际效果 -->
+        <div v-if="isMarkdownNote" class="ai-preview-split">
+          <pre class="ai-preview-md">{{ previewTyped }}</pre>
+          <div class="ai-preview-body" ref="previewBodyRef" v-html="previewRenderedHtml"></div>
+        </div>
         <div v-else class="ai-preview-body" ref="previewBodyRef" v-html="safePreviewTyped"></div>
         <div class="ai-preview-actions">
           <BButton class="ghost-btn" :disabled="!canApplyBody" @click="requestApply('body', true)">{{ t('ai.reply.replaceContent') }}</BButton>
@@ -192,6 +196,7 @@
   import { apiBasePost } from '@/http/request';
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
+  import { renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
 
   const { t } = useI18n();
@@ -275,6 +280,8 @@
       ALLOWED_ATTR: [],
     }),
   );
+  // markdown 笔记放大预览右侧的渲染结果(复用 AI 流式 markdown 渲染:补全未闭合标记 + 高亮 + 净化)
+  const previewRenderedHtml = computed(() => renderStreamingMarkdown(previewTyped.value || ''));
   const previewSource = ref('');
   let previewTypingTimer: number | null = null;
   const stopPreviewTyping = () => {
@@ -1112,6 +1119,43 @@
     width: 680px;
     max-width: 86vw;
     box-sizing: border-box;
+  }
+  /* md 笔记放大预览:左 Markdown 原文 / 右渲染 对比,窗口更宽 */
+  .ai-preview--split {
+    width: min(980px, 92vw);
+  }
+  .ai-preview-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  .ai-preview-md {
+    margin: 0;
+    max-height: 68vh;
+    overflow: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    background: var(--workbench-subcard-bg, var(--card-background));
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--desc-color);
+  }
+  /* 窄屏/移动端:单栏只保留渲染预览(md 原文在小窗输出区已可见),避免挤压 */
+  @media (max-width: 768px) {
+    .ai-preview--split {
+      width: min(680px, 86vw);
+    }
+    .ai-preview-split {
+      grid-template-columns: 1fr;
+    }
+    .ai-preview-md {
+      display: none;
+    }
   }
   .ai-preview-title {
     display: flex;
