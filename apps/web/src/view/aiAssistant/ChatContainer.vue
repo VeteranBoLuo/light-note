@@ -2,6 +2,11 @@
   <div class="ai-chat-container">
     <!-- 主聊天容器 -->
     <div class="chat-wrapper">
+      <AiConversationLineageNavigator
+        v-if="conversationId"
+        :conversation-id="conversationId"
+        @open="openConversation"
+      />
       <!-- 消息区域 -->
       <main
         class="messages-container"
@@ -13,21 +18,61 @@
         @touchend.passive="handleTouchEnd"
         @touchcancel.passive="handleTouchEnd"
       >
-        <template v-for="(message, index) in messages" :key="index">
+        <template v-for="(message, index) in messages" :key="message.id">
           <ChatMessageItem
             :message="message"
-            :has-answer-started="hasAnswerStarted"
+            :data-ai-message-id="message.cloudId || message.id"
+            tabindex="-1"
             :is-streaming="isLoading && index === messages.length - 1 && message.role === 'assistant'"
+            :can-regenerate="!regenerationPreparing && (!cloudHistoryEnabled() || Boolean(message.cloudId))"
             @edit="handleEditMessage"
             @regenerate="() => handleRegenerate(index)"
             @source-navigate="handleMessageSourceNavigate"
+            @open-memory-ledger="emit('open-memory-ledger')"
+          />
+          <AiAnswerVersionSwitcher
+            v-if="message.role === 'assistant' && message.cloudId && message.versionGroupId && conversationId"
+            :conversation-id="conversationId"
+            :message-id="message.cloudId"
+            :version-group-id="message.versionGroupId"
+            :refresh-token="answerVersionRefreshToken(message.versionGroupId)"
+            :is-mobile="bookmark.isMobile"
+            @navigate="focusAiAnswerVersion"
+          />
+          <AiActivitySummary
+            v-if="message.role === 'assistant' && (message.activity?.length || message.toolEvents?.length)"
+            :activity="message.activity || []"
+            :tool-events="message.toolEvents || []"
+            :streaming="isLoading && index === messages.length - 1"
           />
           <AiSourceCards
-            v-if="message.sources?.length"
+            v-if="message.sources?.length || message.evidence?.length || message.coverage"
             :sources="message.sources || []"
+            :evidence="message.evidence || []"
+            :coverage="messageCoverage(message)"
+            :anchor-scope="message.id"
             :is-mobile="bookmark.isMobile"
             :revealed="shouldShowAiMessageSources(message, index, messages.length, isLoading)"
             @source-navigate="handleSourceNavigate"
+          />
+          <AiResultActions
+            v-if="
+              message.role === 'assistant' &&
+              message.cloudId &&
+              conversationId &&
+              !(isLoading && index === messages.length - 1) &&
+              !hasPendingAgentActions(message)
+            "
+            :conversation-id="conversationId"
+            :message-id="message.cloudId"
+            :feedback="message.feedback"
+            :busy="isLoading"
+            :content="message.content"
+            :content-length="message.content.length"
+            :source-count="message.sources?.length || 0"
+            :evidence-count="message.evidence?.length || 0"
+            @feedback="message.feedback = $event"
+            @branched="openConversation"
           />
           <div v-if="message.interactions?.length || message.confirmations?.length" class="ai-message-action-stack">
             <AiInteractionCard
@@ -68,6 +113,13 @@
         </Transition>
       </div>
 
+      <AiContextLens
+        :contexts="contexts"
+        :attachments="attachments"
+        @update:contexts="contexts = $event"
+        @update:attachments="attachments = $event"
+      />
+
       <!-- 输入区域 -->
       <ChatInputSection
         ref="chatInputRef"
@@ -94,14 +146,21 @@
 
 <script setup lang="ts">
   import { computed, ref, onBeforeUnmount, onMounted, nextTick, watch } from 'vue';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { storeToRefs } from 'pinia';
+  import { bookmarkStore, useAiAssistantStore, useUserStore } from '@/store';
   import ChatMessageItem from '@/components/aiAssistant/ChatMessageItem.vue';
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
   import AiInteractionCard from '@/components/aiAssistant/AiInteractionCard.vue';
   import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
+  import AiActivitySummary from '@/components/aiAssistant/AiActivitySummary.vue';
+  import AiAnswerVersionSwitcher from '@/components/aiAssistant/AiAnswerVersionSwitcher.vue';
+  import AiConversationLineageNavigator from '@/components/aiAssistant/AiConversationLineageNavigator.vue';
+  import AiResultActions from '@/components/aiAssistant/AiResultActions.vue';
+  import AiContextLens from '@/components/aiAssistant/AiContextLens.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
+  import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
   import {
@@ -109,7 +168,6 @@
     fetchAiAttachmentStatuses,
     prepareAiAttachmentAction,
     AI_AGENT_CLIENT_CAPABILITIES,
-    type AiAttachment,
   } from '@/api/aiAttachmentApi';
   import type { AiAttachmentActionRequest } from '@/components/aiAssistant/attachmentActions';
   import {
@@ -119,10 +177,10 @@
     promoteConversationInteractionToConfirmation,
     settleConversationConfirmation,
     settleConversationInteraction,
-    shouldPersistConversationMessage,
     shouldShowAiMessageSources,
   } from '@/components/aiAssistant/aiConversationState';
   import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
+  import { shouldUseAiCloudHistory } from '@/components/aiAssistant/aiUiContracts';
   import {
     getAiChatBottomDistance,
     isAiChatUpwardScroll,
@@ -153,17 +211,50 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
   import { fetchAiFollowUps } from '@/api/aiFollowUpApi';
+  import {
+    createAiConversation as createAiCloudConversation,
+    getAiConversation as getAiCloudConversation,
+    listAiConversations as listAiCloudConversations,
+    prepareAiMessageVersionGroup,
+    recoverAiAgentResponse,
+    saveAiCloudMessage,
+    type AiCloudMessage,
+    type AiPersistedSource,
+  } from '@/api/aiWorkspaceApi';
+  import {
+    aiDurationBucket,
+    aiLengthBucket,
+    recordAiProductEvent,
+    type AiProductEventDimensions,
+  } from '@/api/aiTelemetry';
   import { resolveHelpSources, type ResolvedHelpSource } from '@/api/helpApi';
+  import {
+    buildAiAssistantRuntimeIdentityKey,
+    createAiAssistantMaterialSnapshot,
+    createAiAssistantMessageId,
+    resolveAiAssistantRequestEdgeStatus,
+    resolveAiAssistantIdentity,
+    type AiAssistantMaterialSnapshot,
+    type AiAssistantMessage,
+    type AiAssistantRequestLease,
+  } from '@/store/aiAssistant';
+  import type { AiAssistantLaunchPayload } from '@/utils/aiEntry';
+  import { applyAiRecoverySnapshot, shouldAttemptAiStreamRecovery } from '@/utils/aiStreamRecovery';
+  import { toAiMemoryInfluenceActivity } from '@/utils/aiMemoryInfluence';
+  import { scrollIntoContainer } from '@/utils/zoom';
 
   const { t, locale } = useI18n();
 
   const emit = defineEmits<{
     (event: 'source-navigate', source?: AiSource): void;
+    (event: 'open-memory-ledger'): void;
   }>();
 
   defineExpose({
+    applyLaunchContext,
     clearHistory,
     focusInput,
+    openConversation,
   });
   const bookmark = bookmarkStore();
 
@@ -177,33 +268,37 @@
     emit('source-navigate');
   }
 
-  interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: Date;
-    thoughts?: any[];
-    thinkingText?: string; // 当前消息完整的思考过程文本
-    thinkingDisplay?: string; // 当前消息用于展示的思考文本（打字机效果）
-    confirmations?: AiToolConfirmation[];
-    interactions?: AiAgentInteraction[];
-    sources?: AiSource[];
-    toolEvents?: AiToolStatusItem[];
-    contexts?: AiResourceContext[];
-    transient?: boolean;
-    transientGroupId?: string;
-    pendingConfirmationIds?: string[];
-    pendingInteractionIds?: string[];
-    confirmationSucceeded?: boolean;
-    persistAfterConfirmationSettlement?: boolean;
-    recommendations?: string[];
-    recommendationReady?: boolean;
-    recommendationPending?: boolean;
+  function messageCoverage(message: ChatMessage): AiCoverageReport | null {
+    const value = message.coverage;
+    if (!value || typeof value !== 'object') return null;
+    const documents = Array.isArray(value.documents) ? value.documents : [];
+    const overall = value.overall && typeof value.overall === 'object' ? value.overall : null;
+    if (!documents.length && !overall) return null;
+    return value as unknown as AiCoverageReport;
   }
 
-  // 响应式数据
-  const userInput = ref('');
-  const messages = ref<ChatMessage[]>([]);
-  const isLoading = ref(false);
+  type ChatMessage = AiAssistantMessage;
+
+  const aiAssistant = useAiAssistantStore();
+  const {
+    draft: userInput,
+    messages,
+    isLoading,
+    hasAnswerStarted,
+    contextRefs: contexts,
+    attachmentRefs: attachments,
+    shouldFollowMessages,
+    showScrollToBottom,
+    scrollTop,
+    sessionId,
+    conversationId,
+    longChatHinted,
+    scopeMode,
+    temporarySession,
+    activeAssistantMessageId,
+  } = storeToRefs(aiAssistant);
+
+  // 仅 DOM 引用和当前组件显示偏好留在组件内；可恢复的会话态统一由 Pinia 管理。
   const messagesContainer = ref<HTMLElement | null>(null);
   const chatInputRef = ref<{
     focus: () => void;
@@ -211,11 +306,35 @@
   } | null>(null);
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
-  const contexts = ref<AiResourceContext[]>([]);
-  const attachments = ref<AiAttachment[]>([]);
+  const regenerationPreparing = ref(false);
 
   function focusInput() {
     chatInputRef.value?.focus();
+  }
+
+  function applyLaunchContext(payload: AiAssistantLaunchPayload = {}) {
+    if (payload.contextRefs?.length) {
+      const merged = [...payload.contextRefs, ...contexts.value];
+      contexts.value = merged
+        .filter(
+          (item, index, all) =>
+            all.findIndex((candidate) => candidate.type === item.type && candidate.id === item.id) === index,
+        )
+        .slice(0, 5);
+    }
+    if (payload.attachmentRefs?.length) {
+      const merged = [...payload.attachmentRefs, ...attachments.value];
+      attachments.value = merged
+        .filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index)
+        .slice(0, 5);
+    }
+    if (payload.suggestedIntent) {
+      const key = `ai.intentPrompts.${payload.suggestedIntent}`;
+      userInput.value = t(key, { query: payload.query || '' });
+    } else if (payload.query) {
+      userInput.value = t('ai.intentPrompts.find', { query: payload.query });
+    }
+    focusInput();
   }
 
   // AI 今日额度(按成长等级下发;root/本机自测豁免返回 exempt)。进页与每轮回复结束后刷新,展示「已用 / 剩余」
@@ -232,8 +351,6 @@
   }
 
   // 默认跟随流式正文；只有用户明确向上浏览时暂停，回到底部后自动恢复。
-  const shouldFollowMessages = ref(true);
-  const showScrollToBottom = ref(false);
   const usedQuestions = computed(() =>
     messages.value
       .filter((message) => message.role === 'user' && !message.transient)
@@ -253,6 +370,8 @@
   const showRecommendationDock = computed(() => {
     const latest = latestAssistantMessage.value;
     if (!latest || hasPendingAgentActions(latest)) return false;
+    // 用户开始输入时收起追问 dock,把纵向空间让给回答区(方案 §8.6:进入对话后不长期占用输入区高度)。
+    if (userInput.value.trim()) return false;
     return Boolean(
       conversationRound.value === 0 || isLoading.value || latest.recommendationPending || latest.recommendationReady,
     );
@@ -267,119 +386,140 @@
 
   let scrollFrame: number | null = null;
   let touchStartY: number | null = null;
-  let lastKnownScrollTop = 0;
 
   // 流式输出控制
-  const abortController = ref<AbortController | null>(null);
   let activeAnswerTypewriter: AiStreamTypewriter | null = null;
-  let currentMessageIndex = -1;
-  let activeRequestId = 0; // 请求计数器，隔离停止、切换账号与新请求之间的异步回调
 
-  // 当前这一轮对话是否已经开始输出答案正文
-  const hasAnswerStarted = ref(false);
-
-  // 打字机速度（毫秒/字符）
-  const TYPING_SPEED = 10;
-
-  // 思考打字机状态（仅作用于当前回答消息）
-  let thinkingTyping = false;
-
-  // 推荐提示
-
-  // 启动当前消息的思考打字机（按字符逐步将 thinkingText 显示到 thinkingDisplay）
-  const startThinkingTypewriter = () => {
-    if (thinkingTyping) return;
-
-    thinkingTyping = true;
-
-    const run = async () => {
-      while (true) {
-        const msg = currentMessageIndex >= 0 ? messages.value[currentMessageIndex] : null;
-        if (!msg) break;
-
-        const full = msg.thinkingText || '';
-        const shown = msg.thinkingDisplay || '';
-
-        // 一旦答案正文开始输出，立即结束思考打字效果，直接展示最终思考内容
-        if (hasAnswerStarted.value) {
-          msg.thinkingDisplay = full;
-          break;
-        }
-
-        // 已全部展示或已停止加载时，直接同步并结束
-        if (!isLoading.value || shown.length >= full.length) {
-          msg.thinkingDisplay = full;
-          break;
-        }
-
-        msg.thinkingDisplay = shown + full.charAt(shown.length);
-
-        // 思考打字时与正文使用同一套逐帧跟随，避免叠加 smooth 动画。
-        if (shouldFollowMessages.value) {
-          await nextTick();
-          scheduleScrollToBottom();
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, TYPING_SPEED));
-      }
-
-      thinkingTyping = false;
-    };
-
-    run();
+  type AiRoundTelemetry = {
+    assistantMessageId: string;
+    startedAt: number;
+    requestId: string;
+    materialCount: number;
+    materialType: NonNullable<AiProductEventDimensions['materialType']>;
+    scopeMode: NonNullable<AiProductEventDimensions['scopeMode']>;
+    firstActivityRecorded: boolean;
+    firstTokenRecorded: boolean;
+    finalized: boolean;
   };
 
-  // 初始化
-  // 对话历史本地持久化:刷新 / 重进不丢当前会话(多会话切换是后续更大的功能,暂不含)
-  const chatHistoryKey = () => `ai-chat-history:${user.id || 'visitor'}`;
-  function persistHistory() {
-    try {
-      const toSave = messages.value
-        .filter(shouldPersistConversationMessage) // 跳过生成中的空占位和未结算确认动作
-        .map((m) => ({
-          role: m.role,
-          content: m.content,
-          sources: m.sources || [],
-          contexts: m.contexts || [],
-          recommendations: m.recommendations || [],
-          recommendationReady: Boolean(m.recommendationReady),
-          timestamp: (m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).toISOString(),
-        }));
-      // 只有产生过真实对话(不止开场白一条)才存
-      if (toSave.length > 1) {
-        localStorage.setItem(chatHistoryKey(), JSON.stringify({ messages: toSave, sessionId }));
-      }
-    } catch {
-      /* 隐私模式 / 超额写入失败不影响主流程 */
-    }
+  let activeRoundTelemetry: AiRoundTelemetry | null = null;
+
+  function aiTelemetryDevice(): NonNullable<AiProductEventDimensions['device']> {
+    if (bookmark.isMobile) return 'mobile';
+    if (bookmark.isTablet) return 'tablet';
+    if (bookmark.isDesktop) return 'desktop';
+    return 'unknown';
   }
-  function restoreHistory() {
-    try {
-      const raw = localStorage.getItem(chatHistoryKey());
-      if (!raw) return false;
-      const data = JSON.parse(raw);
-      if (!Array.isArray(data.messages) || data.messages.length <= 1) return false;
-      messages.value = data.messages.map((m: any) => ({
-        ...m,
-        timestamp: new Date(m.timestamp),
-        thoughts: [],
-        recommendationPending: false,
-        recommendations: Array.isArray(m.recommendations)
-          ? m.recommendations
-              .map((item: unknown) => String(item || '').trim())
-              .filter(Boolean)
-              .slice(0, 3)
-          : [],
-      }));
-      const latest = messages.value[messages.value.length - 1];
-      if (latest?.role === 'assistant' && typeof latest.recommendationReady !== 'boolean') {
-        latest.recommendationReady = true;
-      }
-      if (data.sessionId) sessionId = data.sessionId; // 尽力续用服务端记忆(Redis 30min 后失效则当新会话)
-      return true;
-    } catch {
-      return false;
+
+  function aiTelemetryMaterialType(
+    contextSnapshot: AiResourceContext[],
+    attachmentCount: number,
+  ): NonNullable<AiProductEventDimensions['materialType']> {
+    const types = new Set<string>(contextSnapshot.map((item) => item.type));
+    if (attachmentCount > 0) types.add('attachment');
+    if (!types.size) return 'unknown';
+    if (types.size > 1) return 'mixed';
+    const only = [...types][0];
+    return ['note', 'bookmark', 'file', 'tag', 'attachment'].includes(only)
+      ? (only as NonNullable<AiProductEventDimensions['materialType']>)
+      : 'unknown';
+  }
+
+  function aiTelemetryStage(data: AiSseEvent): NonNullable<AiProductEventDimensions['stage']> {
+    const raw = String(data.stage || data.phase || data.event || '').toLowerCase();
+    if (raw.includes('fail') || raw === 'error') return 'failed';
+    if (raw.includes('complete') || raw === 'done') return 'completed';
+    if (raw.includes('answer') || raw.includes('final') || raw === 'delta') return 'answering';
+    if (raw.includes('read') || raw.includes('parse')) return 'reading';
+    if (raw.includes('retriev') || raw.includes('search') || raw.includes('tool') || raw === 'sources') {
+      return 'retrieving';
     }
+    return 'planning';
+  }
+
+  function aiRoundDimensions(round: AiRoundTelemetry): AiProductEventDimensions {
+    return {
+      surface: 'conversation',
+      device: aiTelemetryDevice(),
+      mode: 'ask',
+      intent: 'ask',
+      materialType: round.materialType,
+      scopeMode: round.scopeMode,
+      materialCount: round.materialCount,
+      temporarySession: temporarySession.value,
+      externalWeb: false,
+      messageId: round.assistantMessageId,
+      ...(conversationId.value ? { conversationId: conversationId.value } : {}),
+      ...(round.requestId ? { requestId: round.requestId } : {}),
+    };
+  }
+
+  function updateAiRoundRequestId(requestId: unknown) {
+    const normalized = String(requestId || '').trim();
+    if (activeRoundTelemetry && normalized) activeRoundTelemetry.requestId = normalized;
+  }
+
+  function markAiFirstActivity(data: AiSseEvent) {
+    const round = activeRoundTelemetry;
+    if (!round || round.firstActivityRecorded || round.finalized) return;
+    round.firstActivityRecorded = true;
+    void recordAiProductEvent('ai_first_activity', {
+      ...aiRoundDimensions(round),
+      durationBucket: aiDurationBucket(Date.now() - round.startedAt),
+      stage: aiTelemetryStage(data),
+    });
+  }
+
+  function markAiFirstToken() {
+    const round = activeRoundTelemetry;
+    if (!round || round.firstTokenRecorded || round.finalized) return;
+    round.firstTokenRecorded = true;
+    void recordAiProductEvent('ai_first_token', {
+      ...aiRoundDimensions(round),
+      durationBucket: aiDurationBucket(Date.now() - round.startedAt),
+      stage: 'answering',
+    });
+  }
+
+  function safeAiErrorCode(value: unknown) {
+    const normalized = String(value || 'AI_STREAM_FAILED')
+      .trim()
+      .replace(/[^A-Za-z0-9._:@/-]/g, '_')
+      .slice(0, 128);
+    return normalized || 'AI_STREAM_FAILED';
+  }
+
+  function finalizeAiRound(
+    status: 'completed' | 'failed' | 'stopped',
+    currentMessage: ChatMessage | null,
+    options: { errorCode?: unknown; cancelled?: boolean } = {},
+  ) {
+    const round = activeRoundTelemetry;
+    if (!round || round.finalized) return;
+    round.finalized = true;
+    // 身份切换、切会话与组件卸载不是用户主动“停止”；不跨主体补发产品事件。
+    if (options.cancelled) {
+      if (activeRoundTelemetry === round) activeRoundTelemetry = null;
+      return;
+    }
+    const dimensions: AiProductEventDimensions = {
+      ...aiRoundDimensions(round),
+      durationBucket: aiDurationBucket(Date.now() - round.startedAt),
+      lengthBucket: aiLengthBucket(currentMessage?.content.length || 0),
+      sourceCount: currentMessage?.sources?.length || 0,
+      stage: status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'answering',
+      outcome: status === 'completed' ? 'success' : status === 'failed' ? 'failed' : 'stopped',
+      ...(status === 'failed' ? { errorCode: safeAiErrorCode(options.errorCode) } : {}),
+    };
+    void recordAiProductEvent(status === 'stopped' ? 'ai_stopped' : 'ai_completed', dimensions);
+    if (activeRoundTelemetry === round) activeRoundTelemetry = null;
+  }
+
+  const conversationIdentity = computed(() => resolveAiAssistantIdentity(user));
+  const conversationRuntimeIdentityKey = computed(() => buildAiAssistantRuntimeIdentityKey(conversationIdentity.value));
+
+  function persistHistory() {
+    aiAssistant.persistCurrentConversation();
   }
 
   async function repairLegacyKnowledgeSources() {
@@ -413,25 +553,340 @@
     }
   }
 
-  onMounted(() => {
-    // 优先恢复本地历史;没有历史再显示开场白
-    if (!restoreHistory()) {
-      messages.value = [
-        {
-          role: 'assistant',
-          content: t('ai.greeting'),
-          timestamp: new Date(),
-          thoughts: [],
-        },
-      ];
-    } else {
-      void repairLegacyKnowledgeSources();
-    }
+  function restoreConversationViewport() {
     nextTick(() => {
+      const container = messagesContainer.value;
+      if (!container) return;
+      if (scrollTop.value > 0) {
+        container.scrollTop = scrollTop.value;
+        return;
+      }
       scheduleScrollToBottom(true);
     });
+  }
+
+  function activateConversation() {
+    const nextRuntimeIdentityKey = conversationRuntimeIdentityKey.value;
+    if (aiAssistant.initialized && aiAssistant.runtimeIdentityKey !== nextRuntimeIdentityKey && isLoading.value) {
+      stopResponse('cancelled');
+    }
+    const switched = aiAssistant.switchConversation(conversationIdentity.value, t('ai.greeting'));
+    if (!cloudHistoryEnabled()) aiAssistant.setCloudConversationId('');
+    if (!switched) {
+      void hydrateCloudConversation(nextRuntimeIdentityKey);
+      return;
+    }
+    activeAnswerTypewriter = null;
+    void repairLegacyKnowledgeSources();
+    restoreConversationViewport();
+    void hydrateCloudConversation(nextRuntimeIdentityKey);
+  }
+
+  let cloudConversationCreation: { runtimeKey: string; promise: Promise<string | null> } | null = null;
+
+  function cloudHistoryEnabled() {
+    return shouldUseAiCloudHistory(user.id, user.role, user.preferences.aiCloudHistory);
+  }
+
+  async function ensureCloudConversation(runtimeKey: string) {
+    if (!cloudHistoryEnabled() || aiAssistant.runtimeIdentityKey !== runtimeKey) return null;
+    if (conversationId.value) return conversationId.value;
+    if (cloudConversationCreation?.runtimeKey === runtimeKey) return cloudConversationCreation.promise;
+    // 不传本地化的"未命名"标题:让后端用固定哨兵默认标题(新会话),这样首条用户消息保存时
+    // 后端的"标题==默认→改成首句提问"自动改名才会触发(修复会话全叫"新对话"、无法区分的问题)。
+    const promise = createAiCloudConversation({ retentionMode: 'standard' })
+      .then((created) => {
+        if (aiAssistant.runtimeIdentityKey !== runtimeKey) return null;
+        aiAssistant.setCloudConversationId(created.id);
+        return created.id;
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (cloudConversationCreation?.promise === promise) cloudConversationCreation = null;
+      });
+    cloudConversationCreation = { runtimeKey, promise };
+    return promise;
+  }
+
+  function persistedSourceToLocal(source: AiPersistedSource): AiSource {
+    const target = source.target && typeof source.target === 'object' ? source.target : null;
+    return {
+      type: source.resourceType as AiSource['type'],
+      id: String(source.resourceId || source.sourceId),
+      title: source.title,
+      sourceId: source.sourceId,
+      resourceId: source.resourceId || undefined,
+      resourceVersion: source.resourceVersion || undefined,
+      target: (typeof source.target === 'string' ? source.target : target?.type) as AiSource['target'],
+      url: typeof target?.url === 'string' ? target.url : undefined,
+      fileId: typeof target?.fileId === 'string' ? target.fileId : undefined,
+      coverage: persistedCoverageToLocal(source.coverage),
+    };
+  }
+
+  function persistedCoverageToLocal(value: Record<string, unknown> | null): AiSourceCoverage | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const countGroup = (raw: unknown) => {
+      const group = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      return {
+        chars: Math.max(0, Number(group.chars || 0)),
+        pages: Math.max(0, Number(group.pages || 0)),
+        chunks: Math.max(0, Number(group.chunks || 0)),
+      };
+    };
+    const ratioValue = value.coverageRatio == null ? null : Number(value.coverageRatio);
+    return {
+      metadataAvailable: value.metadataAvailable !== false,
+      complete: value.complete === true,
+      truncated: value.truncated === true,
+      coverageRatio: Number.isFinite(ratioValue) ? Math.max(0, Math.min(1, Number(ratioValue))) : null,
+      total: countGroup(value.total),
+      processed: countGroup(value.processed),
+      failedRanges: Array.isArray(value.failedRanges) ? (value.failedRanges as AiSourceCoverage['failedRanges']) : [],
+      reasons: Array.isArray(value.reasons) ? (value.reasons as AiSourceCoverage['reasons']) : [],
+      parserVersion: typeof value.parserVersion === 'string' ? value.parserVersion : undefined,
+    };
+  }
+
+  function cloudMessageToLocal(cloudMessage: AiCloudMessage): ChatMessage | null {
+    if (cloudMessage.role !== 'user' && cloudMessage.role !== 'assistant') return null;
+    const contexts = (cloudMessage.contextRefs || [])
+      .filter((item) => item && ['bookmark', 'note', 'file', 'tag'].includes(String(item.type)))
+      .map((item) => ({
+        type: item.type as AiResourceContext['type'],
+        id: String(item.id),
+        title: String(item.title || ''),
+      }));
+    return {
+      id: cloudMessage.id,
+      cloudId: cloudMessage.id,
+      parentMessageId: cloudMessage.parentMessageId || undefined,
+      versionGroupId: cloudMessage.versionGroupId || undefined,
+      role: cloudMessage.role,
+      content: cloudMessage.content,
+      timestamp: new Date(cloudMessage.createdAt),
+      contexts,
+      contextRefs: contexts,
+      attachmentRefs: (cloudMessage.attachmentRefs || [])
+        .filter(
+          (item) =>
+            item && ['temporary', 'cloud'].includes(String(item.sourceType)) && Boolean(String(item.id || '').trim()),
+        )
+        .map((item) => ({
+          id: String(item.id),
+          sourceType: item.sourceType === 'cloud' ? 'cloud' : 'temporary',
+          fileId: item.fileId == null ? null : String(item.fileId),
+          fileName: String(item.fileName || ''),
+          fileType: String(item.fileType || ''),
+          fileSize: Math.max(0, Number(item.fileSize || 0)),
+          status: ['awaiting_upload', 'queued', 'parsing', 'ready', 'no_text', 'failed'].includes(String(item.status))
+            ? (item.status as NonNullable<ChatMessage['attachmentRefs']>[number]['status'])
+            : 'failed',
+        })),
+      sources: (cloudMessage.sources || []).map(persistedSourceToLocal),
+      evidence: cloudMessage.evidence || [],
+      feedback: cloudMessage.feedback || undefined,
+      coverage: cloudMessage.coverage,
+      activity: cloudMessage.activity,
+      requestId: cloudMessage.requestId || undefined,
+      traceId: cloudMessage.traceId || undefined,
+      recovered: cloudMessage.modelMeta?.recovered === true,
+      stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
+      terminal:
+        cloudMessage.modelMeta?.terminal && typeof cloudMessage.modelMeta.terminal === 'object'
+          ? (cloudMessage.modelMeta.terminal as ChatMessage['terminal'])
+          : undefined,
+      recommendations: [],
+      recommendationReady: true,
+      recommendationPending: false,
+    };
+  }
+
+  function normalizeVisibleVersionGroups(items: ChatMessage[]) {
+    const anchors = new Map(
+      items.filter((item) => item.role === 'assistant' && item.cloudId).map((item) => [item.cloudId!, item]),
+    );
+    for (const item of items) {
+      if (item.role !== 'assistant' || !item.versionGroupId) continue;
+      const anchor = anchors.get(item.versionGroupId);
+      if (anchor && !anchor.versionGroupId) anchor.versionGroupId = item.versionGroupId;
+    }
+    return items;
+  }
+
+  async function hydrateCloudConversation(runtimeKey: string) {
+    if (!cloudHistoryEnabled() || aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return;
+    const localHasUnsyncedMessages = messages.value.slice(1).some((item) => item.content && !item.cloudId);
+    if (localHasUnsyncedMessages) return;
+    try {
+      let cloudId = conversationId.value;
+      if (!cloudId) {
+        const listed = await listAiCloudConversations({ status: 'active', limit: 1 });
+        cloudId = listed.items[0]?.id || '';
+      }
+      if (!cloudId || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
+      await loadCloudConversation(cloudId, runtimeKey);
+    } catch {
+      // 云端历史不可用时保留本地会话，聊天主流程继续可用。
+    }
+  }
+
+  async function loadCloudConversation(cloudId: string, runtimeKey = aiAssistant.runtimeIdentityKey) {
+    const cloudConversation = await getAiCloudConversation(cloudId, 200);
+    if (aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return false;
+    const cloudMessages = normalizeVisibleVersionGroups(
+      cloudConversation.messages.map(cloudMessageToLocal).filter((item): item is ChatMessage => Boolean(item)),
+    );
+    aiAssistant.setCloudConversationId(cloudConversation.id);
+    messages.value = cloudMessages.length
+      ? cloudMessages
+      : [
+          {
+            id: createAiAssistantMessageId('greeting'),
+            role: 'assistant',
+            content: t('ai.greeting'),
+            timestamp: new Date(),
+            recommendationReady: true,
+            recommendations: [],
+          },
+        ];
+    persistHistory();
+    restoreConversationViewport();
+    return true;
+  }
+
+  async function openConversation(cloudId: string) {
+    const normalizedId = String(cloudId || '').trim();
+    if (!normalizedId) return false;
+    if (isLoading.value) stopResponse('cancelled');
+    try {
+      return await loadCloudConversation(normalizedId);
+    } catch {
+      message.warning(t('ai.conversations.loadFailed'));
+      return false;
+    }
+  }
+
+  function answerVersionRefreshToken(versionGroupId: string) {
+    return messages.value
+      .filter((item) => item.role === 'assistant' && item.versionGroupId === versionGroupId)
+      .map((item) => item.cloudId || item.id)
+      .join('|');
+  }
+
+  async function focusAiAnswerVersion(messageId: string) {
+    await nextTick();
+    const container = messagesContainer.value;
+    if (!container) return;
+    const target = Array.from(container.querySelectorAll<HTMLElement>('[data-ai-message-id]')).find(
+      (element) => element.dataset.aiMessageId === messageId,
+    );
+    if (!target) {
+      message.warning(t('ai.versions.unavailable'));
+      return;
+    }
+    scrollIntoContainer(container, target, 12);
+    target.focus({ preventScroll: true });
+  }
+
+  function localSourceToCloud(source: AiSource) {
+    const extended = source as AiSource & {
+      sourceId?: string;
+      resourceId?: string;
+      resourceVersion?: string;
+      coverage?: Record<string, unknown>;
+    };
+    return {
+      sourceId: extended.sourceId || `${source.type}:${extended.resourceId || source.id}`,
+      resourceType: source.type,
+      resourceId: extended.resourceId || source.id,
+      resourceVersion: extended.resourceVersion || null,
+      title: source.title,
+      target: source.target || null,
+      url: source.url,
+      fileId: source.fileId,
+      coverage: extended.coverage || null,
+    };
+  }
+
+  async function persistCloudUserMessage(runtimeKey: string, chatMessage: ChatMessage) {
+    const cloudConversationId = await ensureCloudConversation(runtimeKey);
+    if (!cloudConversationId || aiAssistant.runtimeIdentityKey !== runtimeKey) return null;
+    try {
+      const saved = await saveAiCloudMessage(cloudConversationId, {
+        parentMessageId: chatMessage.parentMessageId,
+        requestId: `user:${chatMessage.id}`,
+        role: 'user',
+        content: chatMessage.content,
+        status: 'completed',
+        contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
+        attachmentRefs: chatMessage.attachmentRefs || [],
+      });
+      if (aiAssistant.runtimeIdentityKey === runtimeKey) chatMessage.cloudId = saved.id;
+      return saved;
+    } catch {
+      return null;
+    }
+  }
+
+  async function persistCloudAssistantMessage(
+    runtimeKey: string,
+    cloudConversationId: string | null,
+    chatMessage: ChatMessage,
+    status: 'completed' | 'failed' | 'stopped',
+  ) {
+    if (!cloudConversationId || aiAssistant.runtimeIdentityKey !== runtimeKey || !chatMessage.content) return null;
+    const sources = (chatMessage.sources || []).map(localSourceToCloud);
+    const knownSourceIds = new Set(sources.map((source) => source.sourceId));
+    const evidence = (chatMessage.evidence || []).filter((item) => knownSourceIds.has(item.sourceId));
+    try {
+      const saved = await saveAiCloudMessage(cloudConversationId, {
+        requestId: chatMessage.requestId || `assistant:${chatMessage.id}`,
+        parentMessageId: chatMessage.parentMessageId,
+        versionGroupId: chatMessage.versionGroupId,
+        traceId: chatMessage.traceId,
+        role: 'assistant',
+        content: chatMessage.content,
+        status,
+        activity: chatMessage.activity || [],
+        coverage: chatMessage.coverage || null,
+        modelMeta: chatMessage.recovered
+          ? { recovered: true, stage: chatMessage.stage || null, terminal: chatMessage.terminal || null }
+          : null,
+        sources,
+        evidence,
+      });
+      if (aiAssistant.runtimeIdentityKey === runtimeKey) {
+        chatMessage.cloudId = saved.id;
+        chatMessage.versionGroupId = saved.versionGroupId || chatMessage.versionGroupId;
+      }
+      return saved;
+    } catch {
+      // 云端保存失败只影响跨端历史；本地持久化仍保留当前结果。
+      return null;
+    }
+  }
+
+  onMounted(() => {
+    aiAssistant.initializePersistence();
+    activateConversation();
     fetchAiQuota();
+    void nextTick(() => startFollowObservers());
   });
+
+  watch(conversationRuntimeIdentityKey, () => {
+    activateConversation();
+  });
+
+  watch(
+    () => user.preferences.aiCloudHistory,
+    (enabled) => {
+      if (enabled !== false) return;
+      cloudConversationCreation = null;
+      aiAssistant.setCloudConversationId('');
+    },
+  );
+
   // 每轮回复结束(isLoading 落定)后刷新额度,数字实时反映本次消耗
   watch(isLoading, (v) => {
     if (!v) {
@@ -442,29 +897,13 @@
 
   // 清空对话
   async function clearHistory() {
-    stopResponse();
-    sessionId = '';
-    longChatHinted.value = false;
-    attachments.value = [];
-    try {
-      localStorage.removeItem(chatHistoryKey()); // 清空对话同时清掉当前账号的本地历史
-    } catch {
-      /* ignore */
-    }
-    if (isLoading.value) return;
-    messages.value = [
-      {
-        role: 'assistant',
-        content: t('ai.greeting'),
-        timestamp: new Date(),
-        thoughts: [],
-      },
-    ];
+    activeAnswerTypewriter = null;
+    aiAssistant.clearCurrentConversation(t('ai.greeting'));
     resetScrollState();
     if (!user.id || user.role === 'visitor') return true;
     try {
-      const result = await clearAiTemporaryAttachments();
-      return result.failed === 0;
+      const attachmentResult = await clearAiTemporaryAttachments();
+      return attachmentResult.failed === 0;
     } catch {
       return false;
     }
@@ -490,7 +929,7 @@
       if (!currentContainer || preservedScrollTop === null) return;
       const viewport = resolveAiChatPostAnswerViewport(currentContainer, preservedScrollTop, wasFollowing);
       currentContainer.scrollTop = viewport.scrollTop;
-      lastKnownScrollTop = viewport.scrollTop;
+      scrollTop.value = viewport.scrollTop;
       shouldFollowMessages.value = viewport.shouldFollow;
       showScrollToBottom.value = viewport.showScrollToBottom;
     };
@@ -505,6 +944,16 @@
     cancelScheduledScroll();
   };
 
+  // 流式渲染每帧全量重建消息 DOM,Markdown 结构在中途变化(表格成型、标题/代码块闭合等)会让渲染高度
+  // 偶发非单调,把 scrollTop 瞬时 clamp 变小 —— handleScroll 会把这类抖动误判成"用户上滚"而暂停跟随。
+  // 凡内容重渲染/程序滚动都标记一小段"抑制暂停"窗口:窗口内不据 scroll 事件暂停(但仍允许贴底 resume);
+  // 用户真正的上滚由 wheel/touch 事件即时捕获(见 handleWheel/handleTouchMove),不受此窗口影响。
+  const AI_SCROLL_PAUSE_SUPPRESS_MS = 250;
+  let suppressScrollPauseUntil = 0;
+  const suppressScrollPause = () => {
+    suppressScrollPauseUntil = performance.now() + AI_SCROLL_PAUSE_SUPPRESS_MS;
+  };
+
   // 一帧最多滚动一次，连续 token 不再叠加多个 smooth 动画。
   const scheduleScrollToBottom = (force = false) => {
     if (!messagesContainer.value || (!force && !shouldFollowMessages.value) || scrollFrame !== null) return;
@@ -513,24 +962,60 @@
       const container = messagesContainer.value;
       if (!container || (!force && !shouldFollowMessages.value)) return;
       container.scrollTop = container.scrollHeight;
-      lastKnownScrollTop = container.scrollTop;
+      scrollTop.value = container.scrollTop;
       showScrollToBottom.value = false;
+      suppressScrollPause();
     });
+  };
+
+  // 回答落定后,来源揭示、以及 cloudId 落库后才挂出的操作按钮(点赞/保存笔记等)会在"消息条数不变"的
+  // 情况下撑高当前这条消息 —— messages.length 监听器看不到、单次滚动也够不到,这正是"回答完看不到底部按钮"
+  // 的根因。用 MutationObserver 盯消息区 DOM 变化(揭示/挂按钮)+ ResizeObserver 盯滚动区被兄弟节点
+  // (推荐条/@材料区/输入框)挤矮:只要用户仍在跟随底部,任何后到内容都续贴到底;用户一上滚
+  // (shouldFollowMessages 置否)即自动停贴,不打扰主动向上阅读。
+  let followMutation: MutationObserver | null = null;
+  let followResize: ResizeObserver | null = null;
+  const startFollowObservers = () => {
+    const container = messagesContainer.value;
+    if (!container) return;
+    if (!followMutation && typeof MutationObserver !== 'undefined') {
+      followMutation = new MutationObserver(() => {
+        suppressScrollPause();
+        if (shouldFollowMessages.value) scheduleScrollToBottom();
+      });
+      followMutation.observe(container, { childList: true, subtree: true, characterData: true });
+    }
+    if (!followResize && typeof ResizeObserver !== 'undefined') {
+      followResize = new ResizeObserver(() => {
+        suppressScrollPause();
+        if (shouldFollowMessages.value) scheduleScrollToBottom();
+      });
+      followResize.observe(container);
+    }
+  };
+  const stopFollowObservers = () => {
+    followMutation?.disconnect();
+    followMutation = null;
+    followResize?.disconnect();
+    followResize = null;
   };
 
   const handleScroll = () => {
     const container = messagesContainer.value;
     if (!container) return;
     const distance = getAiChatBottomDistance(container);
-    const movedUp = isAiChatUpwardScroll(lastKnownScrollTop, container.scrollTop);
-    lastKnownScrollTop = container.scrollTop;
+    const movedUp = isAiChatUpwardScroll(scrollTop.value, container.scrollTop);
+    scrollTop.value = container.scrollTop;
+    // 流式重渲染/程序滚动引起的 scrollTop 抖动不当作用户上滚(见 suppressScrollPause 注释);
+    // 但仍保留"贴底即恢复跟随",这样抖动后 distance 仍≤阈值时会稳稳留在跟随态。
+    const suppressPause = performance.now() < suppressScrollPauseUntil;
     // 触摸设备由累计手势阈值判断意图，避免回弹或几像素抖动立即弹出“到底部”。
-    if (movedUp && touchStartY === null && !bookmark.isTouchDevice) {
+    if (movedUp && !suppressPause && touchStartY === null && !bookmark.isTouchDevice) {
       pauseFollowing();
       return;
     }
     if (shouldResumeAiChatFollow(distance)) shouldFollowMessages.value = true;
-    else if (shouldPauseAiChatFollow(distance)) shouldFollowMessages.value = false;
+    else if (shouldPauseAiChatFollow(distance) && !suppressPause) shouldFollowMessages.value = false;
     showScrollToBottom.value = shouldShowAiChatScrollPrompt(distance, shouldFollowMessages.value);
   };
 
@@ -567,21 +1052,14 @@
   };
 
   // 暂停响应
-  const stopResponse = () => {
+  const stopResponse = (reason: 'user' | 'cancelled' = 'user') => {
     if (!isLoading.value) return; // 已完成的消息不加暂停标记
-    activeAnswerTypewriter?.cancel();
-    activeAnswerTypewriter = null;
-    if (abortController.value) {
-      abortController.value.abort();
-      abortController.value = null;
-    }
-    // 只给正在生成的 AI 回复加终止标记（currentMessageIndex 指向的），不影响之前的消息
-    if (currentMessageIndex < 0) {
-      isLoading.value = false;
-      return;
-    }
-    const currentMsg = messages.value[currentMessageIndex];
+    const currentMessageId = activeAssistantMessageId.value;
+    const currentMsg = currentMessageId ? messages.value.find((item) => item.id === currentMessageId) : null;
     const restoreViewport = currentMsg?.sources?.length ? prepareViewportForPostAnswerContent() : null;
+    finalizeAiRound('stopped', currentMsg || null, { cancelled: reason === 'cancelled' });
+    aiAssistant.abortActiveRequest();
+    activeAnswerTypewriter = null;
     if (currentMsg?.role === 'assistant') {
       const suffix = t('ai.responsePaused');
       if (!currentMsg.content || currentMsg.content === '') {
@@ -593,20 +1071,22 @@
       currentMsg.recommendationReady = true;
       currentMsg.recommendations = [];
     }
-    isLoading.value = false;
     if (restoreViewport) nextTick(restoreViewport);
+    persistHistory();
   };
-
-  let sessionId = '';
 
   async function prepareAttachmentAction(request: AiAttachmentActionRequest) {
     if (isLoading.value) throw new Error(t('ai.attachmentAction.waitForReply'));
+    const runtimeKey = aiAssistant.runtimeIdentityKey;
     const prepared = await prepareAiAttachmentAction({
-      sessionId,
+      sessionId: sessionId.value,
       toolName: request.toolName,
       args: request.args,
     });
-    sessionId = prepared.sessionId;
+    // 往返期间若发生身份切换(管理员切换代管上下文 / 登录态刷新 / 退出),旧主体的确认卡与 sessionId
+    // 不得写入已切换到新主体的 UI(四维隔离:旧请求晚到不进新 subject)。
+    if (aiAssistant.runtimeIdentityKey !== runtimeKey) return;
+    sessionId.value = prepared.sessionId;
 
     const confirmation = 'confirmation' in prepared ? prepared.confirmation : null;
     const interaction = 'interaction' in prepared ? prepared.interaction : null;
@@ -617,6 +1097,7 @@
     if (!actionId) throw new Error(t('ai.attachmentAction.prepareFailed'));
     const transientGroupId = `attachment-action:${actionId}`;
     messages.value.push({
+      id: createAiAssistantMessageId('user'),
       role: 'user',
       content: t('ai.attachmentAction.requestSummary', {
         action: t(`ai.tools.${request.toolName}`, request.toolName),
@@ -627,10 +1108,10 @@
       transientGroupId,
     });
     messages.value.push({
+      id: createAiAssistantMessageId('assistant'),
       role: 'assistant',
       content: confirmation ? t('ai.attachmentAction.confirmationReady') : t('ai.attachmentAction.choiceRequired'),
       timestamp: new Date(),
-      thoughts: [],
       confirmations: confirmation ? [confirmation] : [],
       interactions: interaction ? [interaction] : [],
       transient: true,
@@ -638,65 +1119,41 @@
       pendingConfirmationIds: confirmation ? [confirmation.id] : [],
       pendingInteractionIds: interaction ? [interaction.id] : [],
     });
+    aiAssistant.markEdgeNeedsAttention();
     persistHistory();
     resetScrollState();
   }
 
-  watch(
-    () => user.id,
-    (nextId, previousId) => {
-      if (nextId === previousId) return;
-      stopResponse();
-      activeRequestId += 1;
-      sessionId = '';
-      currentMessageIndex = -1;
-      contexts.value = [];
-      attachments.value = [];
-      messages.value = [];
-      if (!restoreHistory()) {
-        messages.value = [
-          {
-            role: 'assistant',
-            content: t('ai.greeting'),
-            timestamp: new Date(),
-            thoughts: [],
-          },
-        ];
-      } else {
-        void repairLegacyKnowledgeSources();
-      }
-      resetScrollState();
-    },
-  );
-  const longChatHinted = ref(false); // 超长对话「新建会话」提示只弹一次(每段会话)
   // 重新设计打字机效果，确保内容完整且逐字显示
-  const sendMessage = async () => {
+  const sendMessage = async (
+    options: {
+      inputText?: string;
+      materialSnapshot?: AiAssistantMaterialSnapshot;
+      clearComposer?: boolean;
+      parentMessageId?: string;
+      versionGroupId?: string;
+      historySnapshot?: ChatMessage[];
+    } = {},
+  ) => {
+    if (isLoading.value) return;
     // 每次开始新的提问时，重置自动滚动状态，确保本轮对话自动跟随到底部
     shouldFollowMessages.value = true;
     showScrollToBottom.value = false;
     // 重置当前轮消息的思考状态，仅影响新创建的AI消息
     hasAnswerStarted.value = false;
-    thinkingTyping = false;
-    const inputText = userInput.value.trim();
+    const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
-    const contextSnapshot = contexts.value.map((item) => ({ ...item }));
-    const attachmentSnapshot = attachments.value.map((item) => ({ ...item }));
+    const materialSnapshot =
+      options.materialSnapshot || createAiAssistantMaterialSnapshot(contexts.value, attachments.value);
+    const contextSnapshot = materialSnapshot.contextRefs;
+    const attachmentSnapshot = materialSnapshot.attachmentRefs;
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
-
-    // 标记当前请求序号，防止旧请求的 finally 提前关闭 loading
-    const thisRequestId = ++activeRequestId;
-
-    // 如果上一个请求未完全清理，补刀（stopFn 已处理大部分情况）
-    if (abortController.value) {
-      abortController.value.abort();
-      abortController.value = null;
-    }
     activeAnswerTypewriter?.cancel();
     activeAnswerTypewriter = null;
 
     // 会话上下文快照:本轮问题「之前」的完整对话(显示多少发多少,保证 AI 记得的=你看得到的)。
     // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
-    const historyForRequest = messages.value
+    const historyForRequest = (options.historySnapshot || messages.value)
       .filter(
         (m) => m.content && !m.transient && !hasPendingAgentActions(m) && (m.role === 'user' || m.role === 'assistant'),
       )
@@ -705,67 +1162,95 @@
     const histChars = historyForRequest.reduce((n, m) => n + m.content.length, 0);
     if (histChars > 11000 && !longChatHinted.value) {
       longChatHinted.value = true;
-      message.info('对话较长,新建会话回答更快、更省 AI 额度');
+      message.info(t('ai.longConversationHint'));
     }
 
     // 添加用户消息
     const userMessage: ChatMessage = {
+      id: createAiAssistantMessageId('user'),
       role: 'user',
       content: inputText,
       timestamp: new Date(),
-      contexts: contextSnapshot,
+      contexts: contextSnapshot.map((item) => ({ ...item })),
+      contextRefs: contextSnapshot,
+      attachmentRefs: attachmentSnapshot,
+      parentMessageId: options.parentMessageId,
     };
     messages.value.push(userMessage);
 
     // 添加AI消息占位
     const aiMessage: ChatMessage = {
+      id: createAiAssistantMessageId('assistant'),
       role: 'assistant',
       content: '',
       timestamp: new Date(),
-      thoughts: [],
-      thinkingText: '',
-      thinkingDisplay: '',
       recommendations: [],
       recommendationReady: false,
       recommendationPending: true,
+      parentMessageId: userMessage.id,
+      versionGroupId: options.versionGroupId,
     };
     messages.value.push(aiMessage);
-    const aiMessageIndex = messages.value.length - 1;
-    currentMessageIndex = aiMessageIndex;
+    const requestLease = aiAssistant.beginRequest(aiMessage.id);
+    const requestController = requestLease.controller;
+    const cloudRuntimeKey = requestLease.runtimeIdentityKey;
+    const cloudUserSavePromise = persistCloudUserMessage(cloudRuntimeKey, userMessage);
+    let savedCloudUserMessage: AiCloudMessage | null = null;
+    activeRoundTelemetry = {
+      assistantMessageId: aiMessage.id,
+      startedAt: Date.now(),
+      requestId: '',
+      materialCount: contextSnapshot.length + attachmentSnapshot.length,
+      materialType: aiTelemetryMaterialType(contextSnapshot, attachmentSnapshot.length),
+      scopeMode: scopeMode.value === 'workspace' ? 'all_resources' : 'selected',
+      firstActivityRecorded: false,
+      firstTokenRecorded: false,
+      finalized: false,
+    };
+    void recordAiProductEvent('ai_prompt_submitted', {
+      ...aiRoundDimensions(activeRoundTelemetry),
+      lengthBucket: aiLengthBucket(inputText.length),
+      stage: 'planning',
+    });
 
-    // 先挂上中止控制器再进入生成态，用户即使在首个 nextTick 前点击暂停，也不会漏掉中止请求。
-    const requestController = new AbortController();
-    abortController.value = requestController;
-
-    userInput.value = '';
-    isLoading.value = true;
+    if (options.clearComposer !== false) userInput.value = '';
     await nextTick();
-    if (!isLoading.value || activeRequestId !== thisRequestId || requestController.signal.aborted) return;
+    if (!aiAssistant.isRequestCurrent(requestLease)) return;
     scheduleScrollToBottom();
 
     // 网络分片只负责入队，屏幕按固定绘制帧稳定吐字。这样即使 XHR 一次回调积攒了整段文本，
     // 用户看到的仍是连续打字效果，而不是忽快忽慢的整段跳出。
     const answerTypewriter = createAiStreamTypewriter({
       onText: (content) => {
-        if (activeRequestId !== thisRequestId || requestController.signal.aborted) return;
+        if (!aiAssistant.isRequestCurrent(requestLease)) return;
         // aiMessage 是 push 前的普通对象；必须从响应式数组中取 Proxy 再修改，否则内容只会在
         // isLoading 结束时一次性渲染，用户看不到逐帧打字过程。
+        const aiMessageIndex = messages.value.findIndex((item) => item.id === aiMessage.id);
         if (!appendAiStreamMessageContent(messages.value, aiMessageIndex, content)) return;
         if (shouldFollowMessages.value) scheduleScrollToBottom();
       },
       // 后台标签页没有可见动画，直接排空，避免浏览器暂停 rAF 后请求迟迟无法完成清理。
-      shouldFlushImmediately: () => typeof document !== 'undefined' && document.visibilityState === 'hidden',
+      shouldFlushImmediately: () =>
+        (typeof document !== 'undefined' && document.visibilityState === 'hidden') ||
+        (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true),
     });
     activeAnswerTypewriter = answerTypewriter;
+    aiAssistant.attachRequestTypewriter(requestLease, answerTypewriter);
 
     let streamError: string | null = null; // 后端流式返回的错误帧(data.error)，流结束后统一处理
+    let responseStatus: 'completed' | 'failed' | 'stopped' = 'completed';
     let followUpRequestId = '';
     let followUpAvailable = false;
     let shouldLoadFollowUp = false;
+    let lastEventId = 0;
+    let reliableTerminalReceived = false;
+    let recoveryAttempted = false;
+    let recoveryApplied = false;
+    let authoritativeAnswerSnapshot: string | null = null;
+    let terminalErrorCode: unknown = '';
     const handleNewContent = (content: string) => {
       if (!content) return;
-      if (activeRequestId !== thisRequestId) return;
-      if (requestController.signal.aborted) return;
+      if (!aiAssistant.isRequestCurrent(requestLease)) return;
       answerTypewriter.enqueue(content);
     };
 
@@ -775,32 +1260,81 @@
 
       const handleData = (data: AiSseEvent) => {
         // 用户中断后可能仍收到最后一个网络分片；旧请求的工具/确认事件不能挂到新一轮消息上。
-        if (activeRequestId !== thisRequestId || requestController.signal.aborted) return;
+        if (!aiAssistant.isRequestCurrent(requestLease)) return;
+        const aiMessageIndex = messages.value.findIndex((item) => item.id === aiMessage.id);
+        const userMessageIndex = messages.value.findIndex((item) => item.id === userMessage.id);
+        if (aiMessageIndex < 0) return;
         try {
+          const currentMsg = messages.value[aiMessageIndex];
+          if (currentMsg && data.requestId) currentMsg.requestId = String(data.requestId);
+          updateAiRoundRequestId(data.requestId);
+          const eventId = Number(data.eventId);
+          if (Number.isSafeInteger(eventId) && eventId > lastEventId) lastEventId = eventId;
+          if (['response.completed', 'done', 'response.failed', 'error'].includes(String(data.event || ''))) {
+            reliableTerminalReceived = true;
+          }
+          if (data.event === 'response.failed' || data.event === 'error') {
+            responseStatus = 'failed';
+            terminalErrorCode = data.error || 'AI_RESPONSE_FAILED';
+            if (data.message) streamError = data.message;
+          }
+          if (data.event !== 'heartbeat') markAiFirstActivity(data);
+
           // 后端流式出错时会推送 { error, message } 帧：记下来、标记已开始(停思考流)，
           // 交给流结束后统一显示 —— 不在此直接改内容，避免与打字机争用当前消息
           if (data.error) {
             streamError = data.message || data.error || t('ai.errorMessage');
+            terminalErrorCode = data.error;
+            responseStatus = 'failed';
             hasAnswerStarted.value = true;
             return;
           }
 
+          if (currentMsg && (data.event === 'stage.changed' || data.event === 'heartbeat') && data.stage) {
+            const activity = [...(currentMsg.activity || [])];
+            const existing = activity.findIndex(
+              (item) => typeof item === 'object' && item.kind === 'stage' && item.stage === data.stage,
+            );
+            const nextActivity = {
+              kind: 'stage',
+              stage: data.stage,
+              status: data.event === 'heartbeat' ? 'running' : 'started',
+              elapsedMs: Number(data.elapsedMs || 0),
+            };
+            if (existing >= 0) activity[existing] = nextActivity;
+            else activity.push(nextActivity);
+            currentMsg.activity = activity;
+          }
+
+          if (currentMsg && data.event === 'memory_context') {
+            const memoryActivity = toAiMemoryInfluenceActivity(data);
+            if (memoryActivity) {
+              currentMsg.activity = [
+                ...(currentMsg.activity || []).filter(
+                  (item) => typeof item !== 'object' || String(item.event || '') !== 'memory_context',
+                ),
+                memoryActivity,
+              ];
+            }
+          }
+
           if (data.event === 'tool_confirmation' && data.confirmation) {
-            const currentMsg = messages.value[currentMessageIndex];
-            if (currentMsg) {
+            const currentMsg = messages.value[aiMessageIndex];
+            // 按 id 去重:SSE 重连/重放/后端补发时,同一确认不重复入列(避免重复 Vue key 与重复渲染)。
+            if (currentMsg && !(currentMsg.confirmations || []).some((item) => item.id === data.confirmation.id)) {
               currentMsg.confirmations = [...(currentMsg.confirmations || []), data.confirmation];
               markConversationConfirmationPending(
                 messages.value,
-                currentMessageIndex - 1,
-                currentMessageIndex,
+                userMessageIndex,
+                aiMessageIndex,
                 data.confirmation.id,
-                `agent-action:${thisRequestId}`,
+                `agent-action:${requestLease.epoch}`,
               );
             }
           }
 
           if (data.event === 'interaction_required' && data.interaction) {
-            const currentMsg = messages.value[currentMessageIndex];
+            const currentMsg = messages.value[aiMessageIndex];
             if (currentMsg) {
               const interactions = [...(currentMsg.interactions || []), data.interaction];
               currentMsg.interactions = interactions.filter(
@@ -809,16 +1343,16 @@
               );
               markConversationInteractionPending(
                 messages.value,
-                currentMessageIndex - 1,
-                currentMessageIndex,
+                userMessageIndex,
+                aiMessageIndex,
                 data.interaction.id,
-                `agent-action:${thisRequestId}`,
+                `agent-action:${requestLease.epoch}`,
               );
             }
           }
 
           if ((data.event === 'tool_start' || data.event === 'tool_result') && typeof data.tool === 'string') {
-            const currentMsg = messages.value[currentMessageIndex];
+            const currentMsg = messages.value[aiMessageIndex];
             if (currentMsg) {
               const round = Number(data.round || 1);
               const status =
@@ -841,15 +1375,38 @@
           }
 
           if (data.event === 'sources' && Array.isArray(data.sources)) {
-            const currentMsg = messages.value[currentMessageIndex];
             if (currentMsg) {
               const merged = [...(currentMsg.sources || []), ...data.sources];
               currentMsg.sources = merged.filter(
                 (source, index, all) =>
                   all.findIndex((item) => item.type === source.type && item.id === source.id) === index,
               );
+              if (Array.isArray(data.evidence)) {
+                const mergedEvidence = [...(currentMsg.evidence || []), ...data.evidence];
+                currentMsg.evidence = mergedEvidence.filter(
+                  (item, index, all) =>
+                    all.findIndex((candidate) => candidate.evidenceRef === item.evidenceRef) === index,
+                );
+              }
+              if (data.coverage && typeof data.coverage === 'object') currentMsg.coverage = data.coverage;
+              if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
               if (shouldFollowMessages.value) void nextTick(() => scheduleScrollToBottom());
             }
+          }
+
+          if (currentMsg && data.event === 'citations' && Array.isArray(data.evidence)) {
+            currentMsg.evidence = data.evidence;
+            if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
+          }
+
+          if (currentMsg && data.event === 'coverage' && data.coverage && typeof data.coverage === 'object') {
+            currentMsg.coverage = data.coverage;
+          }
+
+          if (currentMsg && data.event === 'response.completed') {
+            if (data.coverage && typeof data.coverage === 'object') currentMsg.coverage = data.coverage;
+            if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
+            if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
           }
 
           if (data.event === 'done') {
@@ -860,30 +1417,14 @@
           const content = data.output?.text || data.text || data.content || '';
 
           if (content && typeof content === 'string') {
+            markAiFirstToken();
             handleNewContent(content);
             // 一旦答案开始输出，标记并停止后续思考流
             hasAnswerStarted.value = true;
           }
 
-          // 只有在答案尚未开始输出时，才继续流式展示思考过程
-          if (!hasAnswerStarted.value && data.output?.thoughts && Array.isArray(data.output.thoughts)) {
-            const currentMsg = messages.value[currentMessageIndex];
-            if (currentMsg) {
-              currentMsg.thoughts = data.output.thoughts;
-              // 取本次推送中的 reasoning 片段，按顺序直接追加到完整思考文本
-              const reasoningParts = data.output.thoughts
-                .filter((t) => t.action_type === 'reasoning' && (t.thought || t.response))
-                .map((t) => (t.thought || t.response) as string);
-              if (reasoningParts.length) {
-                currentMsg.thinkingText = (currentMsg.thinkingText || '') + reasoningParts.join('');
-                // 触发/继续思考打字机，仅作用于当前消息
-                startThinkingTypewriter();
-              }
-            }
-          }
-
           if (data.output?.session_id) {
-            sessionId = data.output.session_id;
+            aiAssistant.setSessionIdForRequest(requestLease, data.output.session_id);
           }
         } catch (e) {
           console.warn('处理 AI 流式事件失败，已跳过:', data.event || 'unknown');
@@ -897,18 +1438,29 @@
       };
 
       // Agent 模式：统一走 DeepSeek，不再区分 DashScope
+      // 候选记忆只允许引用服务端已归属校验的云端消息；保存失败时保持普通聊天，不下发伪造的本地 ID。
+      savedCloudUserMessage = await cloudUserSavePromise;
+      if (!aiAssistant.isRequestCurrent(requestLease)) return;
       await apiBasePost(
         '/api/chat/agent',
         {
           message: inputText,
           stream: true,
-          sessionId: sessionId,
+          sessionId: sessionId.value,
           enableTranslation: enableTranslation.value,
           translationConfig: translationConfig.value,
           aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
           history: historyForRequest,
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
+          scope: { mode: scopeMode.value, externalWeb: false },
+          memoryMode: temporarySession.value ? 'temporary' : 'active',
+          ...(savedCloudUserMessage?.conversationId && savedCloudUserMessage.id
+            ? {
+                conversationId: savedCloudUserMessage.conversationId,
+                sourceMessageId: savedCloudUserMessage.id,
+              }
+            : {}),
           clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
           locale: locale.value,
         },
@@ -935,36 +1487,124 @@
       // 处理缓冲区剩余数据
       flushAiSseBuffer(buffer).forEach(handleData);
 
+      // HTTP 正常结束但缺少协议终态同样属于流异常，不能把截断回答误标成成功。
+      if (!reliableTerminalReceived) {
+        const terminalError = new Error('AI stream ended without a terminal event') as Error & { code?: string };
+        terminalError.code = 'AI_STREAM_TERMINAL_MISSING';
+        throw terminalError;
+      }
+
       // 后端结束不等于视觉输出结束；等逐帧队列排空后再切换为最终 Markdown，避免尾部突然跳出。
       await answerTypewriter.drain();
+      if (!aiAssistant.isRequestCurrent(requestLease)) return;
+      if (authoritativeAnswerSnapshot !== null) {
+        const current = messages.value.find((item) => item.id === aiMessage.id);
+        if (current) current.content = authoritativeAnswerSnapshot;
+      }
 
       // 后端流式返回错误帧：已有半截内容则保留并追加友好提示。
-      if (streamError && thisRequestId === activeRequestId) {
+      if (streamError && aiAssistant.isRequestCurrent(requestLease)) {
         const errText = streamError || t('ai.errorMessage');
-        const current = messages.value[currentMessageIndex];
+        const current = messages.value.find((item) => item.id === aiMessage.id);
         if (current) current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }
-      contexts.value = [];
+      if (options.clearComposer !== false) contexts.value = [];
     } catch (error: any) {
       // 旧请求的异常，不再修改当前消息
-      if (thisRequestId !== activeRequestId) return;
+      if (!aiAssistant.isRequestCurrent(requestLease)) return;
 
-      if (axios.isCancel(error)) {
+      if (axios.isCancel(error) || error?.code === 'ERR_CANCELED' || requestController.signal.aborted) {
+        responseStatus = 'stopped';
         // stopResponse 已处理消息标记，这里只需清理
       } else {
-        console.error('请求失败:', error);
+        responseStatus = 'failed';
+        terminalErrorCode = error?.code || 'AI_STREAM_FAILED';
+        console.warn('AI 流异常:', safeAiErrorCode(terminalErrorCode));
         await answerTypewriter.drain();
-        const current = messages.value[currentMessageIndex];
-        const errorText = t('ai.errorMessage');
-        if (current) current.content = current.content ? `${current.content}\n\n${errorText}` : errorText;
+        if (!aiAssistant.isRequestCurrent(requestLease)) return;
+        const current = messages.value.find((item) => item.id === aiMessage.id);
+        const recoveryRequestId = String(current?.requestId || activeRoundTelemetry?.requestId || '').trim();
+        if (
+          current &&
+          shouldAttemptAiStreamRecovery({
+            attempted: recoveryAttempted,
+            requestCurrent: aiAssistant.isRequestCurrent(requestLease),
+            requestId: recoveryRequestId,
+            reliableTerminalReceived,
+            cancelled: requestController.signal.aborted,
+          })
+        ) {
+          recoveryAttempted = true;
+          // 给服务端 close → 终态聚合 → 短期快照落库留出一个很小的窗口；仍只发起一次恢复请求。
+          await new Promise((resolve) => setTimeout(resolve, 160));
+          if (aiAssistant.isRequestCurrent(requestLease)) {
+            try {
+              const recovered = await recoverAiAgentResponse(
+                { requestId: recoveryRequestId, ...(lastEventId > 0 ? { lastEventId } : {}) },
+                { signal: requestController.signal },
+              );
+              if (
+                recovered.recovered !== true ||
+                recovered.requestId !== recoveryRequestId ||
+                recovered.snapshot.requestId !== recoveryRequestId
+              ) {
+                throw new Error('AI_RESPONSE_RECOVERY_REQUEST_MISMATCH');
+              }
+              if (!aiAssistant.isRequestCurrent(requestLease)) return;
+              answerTypewriter.cancel();
+              responseStatus = applyAiRecoverySnapshot(current, recovered.snapshot);
+              recoveryApplied = true;
+              reliableTerminalReceived = true;
+              lastEventId = Math.max(lastEventId, Number(recovered.lastEventId || recovered.snapshot.lastEventId || 0));
+              updateAiRoundRequestId(recoveryRequestId);
+              if (recovered.snapshot.sessionId) {
+                aiAssistant.setSessionIdForRequest(requestLease, recovered.snapshot.sessionId);
+              }
+              if (current.content) {
+                hasAnswerStarted.value = true;
+                markAiFirstToken();
+              }
+              terminalErrorCode = recovered.snapshot.terminal.error || terminalErrorCode;
+              streamError =
+                responseStatus === 'failed'
+                  ? recovered.snapshot.terminal.message || streamError || t('ai.errorMessage')
+                  : null;
+              const round = activeRoundTelemetry;
+              if (round) {
+                void recordAiProductEvent('ai_error_recovered', {
+                  ...aiRoundDimensions(round),
+                  durationBucket: aiDurationBucket(Date.now() - round.startedAt),
+                  lengthBucket: aiLengthBucket(current.content.length),
+                  sourceCount: current.sources?.length || 0,
+                  stage: responseStatus === 'completed' ? 'completed' : 'failed',
+                  outcome: responseStatus === 'completed' ? 'recovered' : 'failed',
+                  retryable: false,
+                });
+              }
+            } catch {
+              // 快照不存在、尚未形成终态、过期或再次断网时，保留原始流错误与已显示的部分内容。
+            }
+          }
+        }
+
+        if (!aiAssistant.isRequestCurrent(requestLease)) return;
+        if (!recoveryApplied || responseStatus === 'failed') {
+          const errorText = streamError || t('ai.errorMessage');
+          if (current && errorText && !current.content.endsWith(errorText)) {
+            current.content = current.content ? `${current.content}\n\n${errorText}` : errorText;
+          }
+        }
       }
     } finally {
       // 仅最新请求才能更新状态，防止旧请求的 finally 提前关闭 loading
-      if (thisRequestId !== activeRequestId) return;
+      if (!aiAssistant.isRequestCurrent(requestLease)) return;
 
       const wasLoading = isLoading.value;
-      const currentMessage = messages.value[currentMessageIndex];
-      shouldLoadFollowUp = Boolean(!streamError && followUpAvailable && followUpRequestId);
+      let followAtRoundEnd = false;
+      const currentMessage = messages.value.find((item) => item.id === aiMessage.id);
+      shouldLoadFollowUp = Boolean(
+        responseStatus === 'completed' && !streamError && followUpAvailable && followUpRequestId,
+      );
       if (currentMessage) {
         currentMessage.recommendationPending = shouldLoadFollowUp;
         if (!shouldLoadFollowUp) {
@@ -974,33 +1614,65 @@
       }
       const restoreViewport =
         wasLoading && currentMessage?.sources?.length ? prepareViewportForPostAnswerContent() : null;
-      isLoading.value = false;
-      if (abortController.value === requestController) abortController.value = null;
+      finalizeAiRound(responseStatus, currentMessage || null, { errorCode: terminalErrorCode });
+      aiAssistant.finishRequest(
+        requestLease,
+        resolveAiAssistantRequestEdgeStatus(
+          responseStatus,
+          Boolean(currentMessage && hasPendingAgentActions(currentMessage)),
+        ),
+      );
       if (activeAnswerTypewriter === answerTypewriter) activeAnswerTypewriter = null;
+      aiAssistant.clearRequestTypewriter(requestLease, answerTypewriter);
       if (wasLoading) {
         await nextTick();
         if (restoreViewport) restoreViewport();
         else scheduleScrollToBottom();
+        // 记住"回答结束这一刻是否在跟随底部":cloudId 落库挂出按钮后据此决定要不要补滚到底(见下方持久化回调)。
+        followAtRoundEnd = shouldFollowMessages.value;
+      }
+      if (currentMessage && !hasPendingAgentActions(currentMessage)) {
+        if (savedCloudUserMessage?.id) currentMessage.parentMessageId = savedCloudUserMessage.id;
+        const persistence = persistCloudAssistantMessage(
+          cloudRuntimeKey,
+          savedCloudUserMessage?.conversationId || conversationId.value || null,
+          currentMessage,
+          responseStatus,
+        );
+        // AiResultActions(点赞/点踩/保存/追加/合并)要等 cloudId 落定后才渲染;此前的滚动只到"参考来源"为止,
+        // 之后这些按钮出现在折叠线以下就滚不到了。cloudId 落定后若用户仍在跟随底部,补滚一次让按钮进入视野。
+        void persistence
+          .then(() => {
+            if (!aiAssistant.isRequestCurrent(requestLease)) return;
+            // cloudId 落库这拍才挂出操作按钮。若回答结束时用户仍在跟随底部,则复位跟随态并补滚一次,
+            // 保证按钮进入视野(其余后到内容由上面的 MutationObserver/ResizeObserver 兜住)。
+            if (followAtRoundEnd) {
+              shouldFollowMessages.value = true;
+              void nextTick(() => scheduleScrollToBottom());
+            }
+          })
+          .catch(() => {});
+        if (recoveryApplied) await persistence;
       }
     }
 
     if (shouldLoadFollowUp) {
       void loadFollowUpRecommendations({
         requestId: followUpRequestId,
-        messageIndex: currentMessageIndex,
-        clientRequestId: thisRequestId,
+        messageId: aiMessage.id,
+        requestLease,
       });
     }
   };
 
   async function loadFollowUpRecommendations({
     requestId,
-    messageIndex,
-    clientRequestId,
+    messageId,
+    requestLease,
   }: {
     requestId: string;
-    messageIndex: number;
-    clientRequestId: number;
+    messageId: string;
+    requestLease: AiAssistantRequestLease;
   }) {
     let suggestions: string[] = [];
     try {
@@ -1009,8 +1681,8 @@
     } catch {
       // 动态生成失败时恢复当前页面的高价值固定问题，不弹全局错误打断阅读。
     }
-    if (clientRequestId !== activeRequestId) return;
-    const target = messages.value[messageIndex];
+    if (!aiAssistant.isRequestCurrent(requestLease)) return;
+    const target = messages.value.find((item) => item.id === messageId);
     if (!target || target.role !== 'assistant' || target !== messages.value[messages.value.length - 1]) return;
     target.recommendations = suggestions;
     target.recommendationPending = false;
@@ -1112,18 +1784,42 @@
     persistHistory();
   };
 
-  // 重新生成：回到该 AI 回答对应的那轮提问，截断后用原问题重发（复用完整发送流程）
-  const handleRegenerate = (index: number) => {
-    if (isLoading.value) return; // 生成中不打断
+  // 重新生成保留旧答案，并用原消息的不可变材料快照创建同一版本组的新分支。
+  const handleRegenerate = async (index: number) => {
+    if (isLoading.value || regenerationPreparing.value) return; // 生成中不打断
     let userIdx = index - 1;
     while (userIdx >= 0 && messages.value[userIdx].role !== 'user') userIdx--;
     if (userIdx < 0) return;
-    const userContent = messages.value[userIdx].content;
-    const userContexts = messages.value[userIdx].contexts || [];
-    messages.value.splice(userIdx); // 移除这轮 user + 其后所有消息，再用原问题重发
-    userInput.value = userContent;
-    contexts.value = userContexts.map((item) => ({ ...item }));
-    sendMessage();
+    const originalUserMessage = messages.value[userIdx];
+    const originalAnswer = messages.value[index];
+    const materialSnapshot = createAiAssistantMaterialSnapshot(
+      originalUserMessage.contextRefs || originalUserMessage.contexts || [],
+      originalUserMessage.attachmentRefs || [],
+    );
+    regenerationPreparing.value = true;
+    try {
+      let versionGroupId = originalAnswer.versionGroupId || originalAnswer.cloudId || originalAnswer.id;
+      if (cloudHistoryEnabled() && conversationId.value && originalAnswer.cloudId) {
+        try {
+          const prepared = await prepareAiMessageVersionGroup(conversationId.value, originalAnswer.cloudId);
+          versionGroupId = prepared.versionGroupId;
+        } catch {
+          message.warning(t('ai.versions.prepareFailed'));
+          return;
+        }
+      }
+      originalAnswer.versionGroupId = versionGroupId;
+      await sendMessage({
+        inputText: originalUserMessage.content,
+        materialSnapshot,
+        clearComposer: false,
+        parentMessageId: originalUserMessage.cloudId || originalUserMessage.id,
+        versionGroupId,
+        historySnapshot: messages.value.slice(0, userIdx),
+      });
+    } finally {
+      regenerationPreparing.value = false;
+    }
   };
 
   // 新消息、确认卡等块级内容出现时跟随一次；正文增量由 handleNewContent 逐帧调度。
@@ -1147,11 +1843,15 @@
   });
 
   onBeforeUnmount(() => {
-    activeAnswerTypewriter?.cancel();
+    const activeMessage = activeAssistantMessageId.value
+      ? messages.value.find((item) => item.id === activeAssistantMessageId.value) || null
+      : null;
+    finalizeAiRound('stopped', activeMessage, { cancelled: true });
     activeAnswerTypewriter = null;
-    abortController.value?.abort();
-    abortController.value = null;
+    aiAssistant.abortActiveRequest();
+    aiAssistant.flushPersistence();
     cancelScheduledScroll();
+    stopFollowObservers();
   });
 </script>
 
@@ -1209,7 +1909,7 @@
     overflow-y: auto;
     overscroll-behavior-y: contain;
     overflow-anchor: none;
-    padding: 0.75rem 1.5rem;
+    padding: 0.6rem 1.5rem;
     position: relative;
     color: var(--text-color);
     scroll-behavior: auto;
@@ -1218,10 +1918,10 @@
   .recommendation-dock {
     display: flex;
     min-width: 0;
-    min-height: 54px;
-    flex: 0 0 54px;
+    min-height: 40px;
+    flex: 0 0 40px;
     align-items: center;
-    padding: 0 1.5rem 6px;
+    padding: 0 1.5rem 4px;
     box-sizing: border-box;
     overflow: hidden;
     background: var(--background-color);
@@ -1240,47 +1940,6 @@
   @container ai-chat (max-width: 520px) {
     .recommendation-dock {
       padding-inline: 0.5rem;
-    }
-  }
-
-  .thinking-indicator {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem 0;
-    color: #6b7280;
-  }
-
-  .typing-dots {
-    display: flex;
-    gap: 0.25rem;
-    margin-right: 0.5rem;
-  }
-
-  .typing-dots span {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #3b82f6;
-    animation: typing 1.4s infinite ease-in-out;
-  }
-
-  .typing-dots span:nth-child(2) {
-    animation-delay: 0.2s;
-  }
-  .typing-dots span:nth-child(3) {
-    animation-delay: 0.4s;
-  }
-
-  @keyframes typing {
-    0%,
-    100% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    50% {
-      transform: scale(1.2);
-      opacity: 0.7;
     }
   }
 
@@ -1350,44 +2009,6 @@
       bottom: 80px;
       right: 15px;
     }
-  }
-
-  /* 深度思考样式 */
-  .thoughts {
-    margin-bottom: 1rem;
-    padding: 0.5rem;
-    line-height: 1.4;
-    /* 夜间主题下使用更深的背景以提高对比度，白天主题保持浅色 */
-    background: rgba(0, 0, 0, 0.25);
-    border-radius: 0.5rem;
-    border-left: 3px solid var(--primary-color);
-  }
-
-  .thoughts-header {
-    font-weight: bold;
-    color: var(--primary-color);
-    margin-bottom: 0.5rem;
-  }
-
-  .thought {
-    margin: 0.5rem 0;
-    font-size: 0.9rem;
-  }
-
-  .reasoning {
-    /* 夜间主题下使用高对比白色，白天主题使用深色以确保可读性 */
-    color: rgba(255, 255, 255, 0.95);
-    font-size: 0.85rem;
-  }
-
-  .rag {
-    color: #007bff;
-  }
-
-  .observation {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-    color: #888;
   }
 
   @media (max-width: 480px) {

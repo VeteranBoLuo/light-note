@@ -15,7 +15,16 @@
         <SvgIcon :src="sourceIcon(source.type)" size="18" />
       </span>
       <span class="ai-source-list__copy">
-        <strong>{{ source.title }}</strong>
+        <span class="ai-source-list__heading">
+          <strong>{{ source.title }}</strong>
+          <span
+            v-if="source.coverage"
+            :class="['ai-source-list__coverage', `is-${coverageState(source)}`]"
+            :aria-label="t('ai.coverage.statusLabel', { state: coverageLabel(source) })"
+          >
+            {{ coverageLabel(source) }}
+          </span>
+        </span>
         <small>{{ sourceSubtitle(source) }}</small>
       </span>
       <span v-if="isNavigableSource(source)" class="ai-source-list__action" aria-hidden="true">
@@ -30,7 +39,12 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { resolveAiSourceNavigation, type AiSource } from './aiSourceNavigation';
+  import {
+    formatAiEvidenceLocator,
+    resolveAiCoverageState,
+    resolveAiSourceNavigation,
+    type AiSource,
+  } from './aiSourceNavigation';
 
   defineProps<{ sources: AiSource[] }>();
   const emit = defineEmits<{ select: [source: AiSource] }>();
@@ -43,13 +57,31 @@
     if (type === 'folder') return icon.common.folder;
     if (type === 'tag') return icon.resource.tag;
     if (type === 'knowledge') return icon.noteTemplate.knowledge;
+    if (type === 'todo') return icon.contextMenu.inbox;
     if (type === 'web') return icon.ai.internet;
     return icon.resource.bookmark;
   };
   const sourceSubtitle = (source: AiSource) => {
-    const parts = [source.locatorValue, source.excerpt].filter(Boolean);
+    const parts = [
+      formatAiEvidenceLocator(source.locator, {
+        types: {
+          page: t('ai.evidence.locator.types.page'),
+          section: t('ai.evidence.locator.types.section'),
+          paragraph: t('ai.evidence.locator.types.paragraph'),
+          row: t('ai.evidence.locator.types.row'),
+          chunk: t('ai.evidence.locator.types.chunk'),
+          status: t('ai.evidence.locator.types.status'),
+        },
+        pageValue: (value) => t('ai.evidence.locator.pageValue', { value }),
+        sectionValue: (value) => t('ai.evidence.locator.sectionValue', { value }),
+        paragraphValue: (value) => t('ai.evidence.locator.paragraphValue', { value }),
+      }) || source.locatorValue,
+      source.excerpt,
+    ].filter(Boolean);
     return parts.length ? parts.join(' · ') : typeLabel(source.type);
   };
+  const coverageState = (source: AiSource) => resolveAiCoverageState(source.coverage);
+  const coverageLabel = (source: AiSource) => t(`ai.coverage.states.${coverageState(source)}`);
   const isNavigableSource = (source: AiSource) => resolveAiSourceNavigation(source).kind !== 'none';
   const isExternalSource = (source: AiSource) => resolveAiSourceNavigation(source).kind === 'external';
 
@@ -112,6 +144,10 @@
     --source-color: var(--primary-color);
   }
 
+  .ai-source-list__item.is-todo {
+    --source-color: var(--message-info-color);
+  }
+
   .ai-source-list__icon {
     display: inline-flex;
     flex: 0 0 auto;
@@ -131,16 +167,53 @@
     gap: 2px;
   }
 
-  .ai-source-list__copy strong,
+  .ai-source-list__heading strong,
   .ai-source-list__copy small {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .ai-source-list__copy strong {
+  .ai-source-list__heading {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .ai-source-list__heading strong {
+    min-width: 0;
+    flex: 1;
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .ai-source-list__coverage {
+    --coverage-state-color: var(--message-info-color);
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 18px;
+    padding: 0 6px;
+    border: 1px solid color-mix(in srgb, var(--coverage-state-color) 25%, var(--surface-border-color));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--coverage-state-color) 7%, var(--card-background));
+    color: var(--coverage-state-color);
+    font-size: 9px;
+    font-weight: 650;
+    line-height: 1;
+  }
+
+  .ai-source-list__coverage.is-complete {
+    --coverage-state-color: var(--message-success-color);
+  }
+
+  .ai-source-list__coverage.is-partial {
+    --coverage-state-color: var(--message-warning-color);
+  }
+
+  .ai-source-list__coverage.is-failed {
+    --coverage-state-color: var(--message-error-color);
   }
 
   .ai-source-list__copy small {
@@ -159,6 +232,12 @@
     .ai-source-list__item {
       height: 52px;
       min-height: 52px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-source-list__item {
+      transition: none;
     }
   }
 </style>

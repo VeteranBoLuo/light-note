@@ -125,7 +125,9 @@
        导致遮罩盖不满、右/下露白;inset:0 由固定定位的包含块(视口)约束,缩放下始终铺满。 */
     inset: 0;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
+    /* 必须高于 BDrawer(99999):否则从抽屉里打开的弹框(如 AI「选段应用到笔记」)会被抽屉整个遮住、全屏时完全看不见。
+       仍低于 BPopover/BDropdown(100050)、BSelect(200000)、BAlert,使这些下拉/确认框在弹框内照常盖在弹框之上。 */
+    z-index: 100000;
     animation: mask-in 0.2s ease;
   }
 
@@ -138,14 +140,14 @@
     background-color: var(--background-color);
     padding: 0;
     border-radius: 12px;
-    min-width: max-content;
+    min-width: 0;
     min-height: 100px;
     max-width: 90%;
     max-height: calc(100% - 32px);
     width: max-content;
     display: flex;
     flex-direction: column;
-    z-index: 1000;
+    z-index: 100000;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     animation: in-animation 0.25s ease;
   }

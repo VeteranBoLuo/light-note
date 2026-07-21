@@ -1,6 +1,8 @@
 import pool from '../db/index.js';
 import { fetchWebMeta } from './fetchWebMeta.js';
-import { requestDeepSeek } from './agent/deepseekClient.js';
+import { requestAi } from './agent/aiGateway.js';
+import { safeAgentError } from './agent/logSafety.js';
+import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 
 // 网页快照·防死链:收藏时(异步)抓取网页正文存档,原链失效(404/删文)也能读到当时内容。
 // 复用 fetchWebMeta(带 SSRF 防护/编码探测),快照用大上限抓更完整正文;一书签一份快照(重复归档覆盖)。
@@ -35,13 +37,18 @@ export async function ensureBookmarkSnapshotTable() {
     await pool.query('ALTER TABLE `bookmark_snapshot` ADD COLUMN `summary` TEXT DEFAULT NULL COMMENT "AI 摘要"');
   }
   if (await columnMissing('bookmark_snapshot', 'summary_at')) {
-    await pool.query('ALTER TABLE `bookmark_snapshot` ADD COLUMN `summary_at` DATETIME DEFAULT NULL COMMENT "摘要生成时间"');
+    await pool.query(
+      'ALTER TABLE `bookmark_snapshot` ADD COLUMN `summary_at` DATETIME DEFAULT NULL COMMENT "摘要生成时间"',
+    );
   }
 }
 
 // 归档指定书签的网页正文(抓取 + 落库,幂等覆盖)。校验书签归属当前用户。
 export async function archiveBookmark(userId, bookmarkId) {
-  const [rows] = await pool.query('SELECT id, url, name FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [bookmarkId, userId]);
+  const [rows] = await pool.query('SELECT id, url, name FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
+    bookmarkId,
+    userId,
+  ]);
   if (!rows.length) return { ok: false, reason: 'not_found', msg: '书签不存在' };
   const url = rows[0].url;
   if (!url) return { ok: false, reason: 'no_url', msg: '该书签没有网址' };
@@ -65,6 +72,7 @@ export async function archiveBookmark(userId, bookmarkId) {
      ON DUPLICATE KEY UPDATE url = ?, title = ?, content = ?, char_count = ?, update_time = CURRENT_TIMESTAMP`,
     [bookmarkId, userId, u, title, content, content.length, u, title, content, content.length],
   );
+  await invalidatePersonalKnowledgeCache(userId);
   return { ok: true, charCount: content.length, title };
 }
 
@@ -76,10 +84,10 @@ export async function getBookmarkSnapshot(userId, bookmarkId) {
   return rows[0] || null;
 }
 
-// AI 一键摘要:基于已存快照正文调 DeepSeek 生成摘要,缓存到 summary 列。
+// AI 一键摘要:基于已存快照正文经统一 AI Gateway 生成摘要,缓存到 summary 列。
 // 无快照先归档;已有摘要且非 force 直接返回缓存(省 token)。正文截断到 ~6000 字喂模型。
 const SUMMARY_INPUT_LIMIT = 6000;
-export async function summarizeBookmark(userId, bookmarkId, { force = false } = {}) {
+export async function summarizeBookmark(userId, bookmarkId, { force = false, trace, governance } = {}) {
   let snap = await getBookmarkSnapshot(userId, bookmarkId);
   if (!snap || !snap.content) {
     const arc = await archiveBookmark(userId, bookmarkId); // 无快照先抓一次
@@ -101,13 +109,30 @@ export async function summarizeBookmark(userId, bookmarkId, { force = false } = 
   ];
   let summary = '';
   try {
-    const resp = await requestDeepSeek(messages);
+    const resp = await requestAi(messages, {
+      toolChoice: 'none',
+      maxTokens: 800,
+      temperature: 0.2,
+      trace: { ...trace, taskType: 'bookmark_summary', stage: 'bookmark_summary' },
+      governance: {
+        quotaPolicy: 'system',
+        systemId: 'bookmark_summary',
+        ...governance,
+        taskType: 'bookmark_summary',
+      },
+    });
     summary = (resp.content || '').trim();
   } catch (e) {
-    console.warn('[snapshot] AI 摘要调用失败:', e.message);
+    console.warn('[snapshot] AI 摘要调用失败:', safeAgentError(e));
+    if (e?.code === 'AI_QUOTA_EXCEEDED') {
+      return { ok: false, reason: 'quota_exceeded', msg: '今日 AI 额度已用完，请明天再试' };
+    }
     return { ok: false, reason: 'ai_error', msg: 'AI 服务暂时不可用,请稍后再试' };
   }
   if (!summary) return { ok: false, reason: 'empty', msg: '摘要生成失败' };
-  await pool.query('UPDATE bookmark_snapshot SET summary = ?, summary_at = CURRENT_TIMESTAMP WHERE bookmark_id = ? AND user_id = ?', [summary, bookmarkId, userId]);
+  await pool.query(
+    'UPDATE bookmark_snapshot SET summary = ?, summary_at = CURRENT_TIMESTAMP WHERE bookmark_id = ? AND user_id = ?',
+    [summary, bookmarkId, userId],
+  );
   return { ok: true, summary, cached: false };
 }

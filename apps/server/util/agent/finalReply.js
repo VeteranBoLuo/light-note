@@ -1,4 +1,5 @@
-import { looksLikeLeakedToolCall, requestDeepSeek, requestDeepSeekStream } from './deepseekClient.js';
+import { requestAi, requestAiStream } from './aiGateway.js';
+import { looksLikeLeakedToolCall } from './deepseekClient.js';
 
 const DEFAULT_FALLBACK = '抱歉，无法处理该请求。';
 const LEAK_RETRY_INSTRUCTION =
@@ -32,6 +33,7 @@ export async function generateFinalReply({
   signal,
   temperature,
   maxTokens = 2200,
+  trace,
 }) {
   const usage = emptyUsage();
   let apiCalls = 0;
@@ -40,11 +42,12 @@ export async function generateFinalReply({
   let usageStatus = 'reported';
 
   if (!stream) {
-    const response = await requestDeepSeek(messages, {
+    const response = await requestAi(messages, {
       toolChoice: 'none',
       signal,
       maxTokens,
       temperature,
+      trace: { ...trace, stage: 'final' },
     });
     apiCalls += 1;
     addUsage(usage, response.usage);
@@ -54,10 +57,11 @@ export async function generateFinalReply({
     return { content, usage, apiCalls, finishReason, usageStatus };
   }
 
-  const streamResult = await requestDeepSeekStream(messages, {
+  const streamResult = await requestAiStream(messages, {
     temperature,
     maxTokens,
     signal,
+    trace: { ...trace, stage: 'final_stream' },
     onDelta: (chunk) => {
       if (!chunk) return;
       content += chunk;
@@ -70,11 +74,12 @@ export async function generateFinalReply({
   usageStatus = streamResult.usageStatus === 'reported' ? 'reported' : 'missing';
 
   if (streamResult.leakedToolCall) {
-    const retryResponse = await requestDeepSeek([...messages, { role: 'user', content: LEAK_RETRY_INSTRUCTION }], {
+    const retryResponse = await requestAi([...messages, { role: 'user', content: LEAK_RETRY_INSTRUCTION }], {
       toolChoice: 'none',
       signal,
       maxTokens,
       temperature,
+      trace: { ...trace, stage: 'final_leak_retry' },
     });
     apiCalls += 1;
     addUsage(usage, retryResponse.usage);

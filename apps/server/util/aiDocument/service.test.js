@@ -8,6 +8,26 @@ const buildAiTemporaryObjectKey = vi.fn();
 const createDownloadSignedUrl = vi.fn();
 const createUploadSignedUrl = vi.fn();
 
+function coverageMetadata({ chars = 100, pages = 1, chunks = 1, ratio = 1, truncated = false } = {}) {
+  const processedChars = Math.round(chars * ratio);
+  const processedPages = pages ? Math.round(pages * ratio) : 0;
+  const processedChunks = chunks ? Math.round(chunks * ratio) : 0;
+  return {
+    version: 1,
+    metadataAvailable: true,
+    total: { chars, pages, chunks },
+    parsed: { chars: processedChars, pages: processedPages, chunks: processedChunks },
+    processed: { chars: processedChars, pages: processedPages, chunks: processedChunks },
+    truncated,
+    complete: !truncated && ratio === 1,
+    coverageRatio: ratio,
+    failedRanges: truncated
+      ? [{ unit: 'characters', start: processedChars + 1, end: chars, code: 'CHAR_LIMIT', reason: '截断' }]
+      : [],
+    reasons: truncated ? [{ code: 'CHAR_LIMIT', message: '截断' }] : [],
+  };
+}
+
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../obsClient.js', () => ({
   buildAiTemporaryObjectKey,
@@ -170,8 +190,9 @@ describe('AI 文档服务', () => {
       expect.objectContaining({ type: 'document', id: 'source-sign-failed', url: undefined }),
     ]);
     expect(consoleError).toHaveBeenCalledWith(
-      '[AI 文档] 生成临时来源预览地址失败 source=source-sign-failed:',
-      'sign unavailable',
+      '[AI 文档] 生成临时来源预览地址失败 source=%s code=%s',
+      'source-sign-failed',
+      'AI_PROVIDER_ERROR',
     );
     consoleError.mockRestore();
   });
@@ -276,11 +297,207 @@ describe('AI 文档服务', () => {
     expect(deleteObjectFromObs).toHaveBeenCalledWith(existing.object_key);
   });
 
-  it('首期每轮只允许一个文件，避免上下文失控', async () => {
+  it('每轮最多允许五个文件，避免上下文失控', async () => {
     await expect(
-      resolveDocumentAttachments({ userId: 'user-1', sourceIds: ['one', 'two'], question: '总结' }),
+      resolveDocumentAttachments({
+        userId: 'user-1',
+        sourceIds: ['one', 'two', 'three', 'four', 'five', 'six'],
+        question: '总结',
+      }),
     ).rejects.toThrow(/TOO_MANY_ATTACHMENTS/);
     expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('全文总结扫描全部分块，后半段关键内容不会因固定取前八段而丢失', async () => {
+    const chunks = Array.from({ length: 12 }, (_, index) => ({
+      source_id: 'source-long',
+      chunk_index: index,
+      content:
+        index === 11
+          ? `${'后半段背景资料'.repeat(180)}。关键结论在后半段：发布前必须完成人工复核。`
+          : `第 ${index + 1} 段背景资料。`,
+      locator_type: 'section',
+      locator_value: `章节 ${index + 1}`,
+    }));
+    const chars = chunks.reduce((total, chunk) => total + chunk.content.length, 0);
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'source-long',
+            user_id: 'user-1',
+            source_type: 'cloud',
+            file_name: 'long.md',
+            status: 'ready',
+            extracted_chars: chars,
+            chunk_count: chunks.length,
+            coverage_metadata: coverageMetadata({ chars, chunks: chunks.length }),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([chunks]);
+
+    const result = await resolveDocumentAttachments({
+      userId: 'user-1',
+      sourceIds: ['source-long'],
+      question: '请总结全文',
+    });
+
+    expect(result.text).toContain('关键结论在后半段');
+    expect(result.text).toContain('Map → 章节 Reduce → 文档 Reduce');
+    expect(result.coverage.documents[0].selection).toEqual(
+      expect.objectContaining({
+        mode: 'hierarchical-summary',
+        scanned: expect.objectContaining({ chunks: 12 }),
+        scanRatio: 1,
+      }),
+    );
+    expect(result.coverage.documents[0].fullDocumentClaimAllowed).toBe(true);
+    expect(result.text.length).toBeLessThanOrEqual(12_000);
+  });
+
+  it('解析被截断时拒绝全文声明并把失败范围返回给调用方', async () => {
+    const coverage = coverageMetadata({ chars: 1_000, chunks: 4, ratio: 0.4, truncated: true });
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'source-truncated',
+            user_id: 'user-1',
+            source_type: 'cloud',
+            file_name: 'partial.txt',
+            status: 'ready',
+            extracted_chars: 400,
+            chunk_count: 2,
+            coverage_metadata: JSON.stringify(coverage),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            source_id: 'source-truncated',
+            chunk_index: 0,
+            content: '这里只是文件前部。',
+            locator_type: 'paragraph',
+            locator_value: '第 1 段',
+          },
+        ],
+      ]);
+
+    const result = await resolveDocumentAttachments({
+      userId: 'user-1',
+      sourceIds: ['source-truncated'],
+      question: '总结全文',
+    });
+
+    expect(result.text).toContain('覆盖不足');
+    expect(result.text).toContain('禁止声称已完成“全文总结”');
+    expect(result.coverage.documents[0].parse.failedRanges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'CHAR_LIMIT' })]),
+    );
+    expect(result.coverage.documents[0].fullDocumentClaimAllowed).toBe(false);
+    expect(result.coverage.overall.fullDocumentClaimAllowed).toBe(false);
+  });
+
+  it('多文档总结按文件返回覆盖率并计算整体覆盖率', async () => {
+    const firstCoverage = coverageMetadata({ chars: 120, chunks: 1 });
+    const secondCoverage = coverageMetadata({ chars: 80, chunks: 1 });
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'source-a',
+            user_id: 'user-1',
+            source_type: 'cloud',
+            file_name: 'a.md',
+            status: 'ready',
+            coverage_metadata: firstCoverage,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'source-b',
+            user_id: 'user-1',
+            source_type: 'cloud',
+            file_name: 'b.md',
+            status: 'ready',
+            coverage_metadata: secondCoverage,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            source_id: 'source-a',
+            chunk_index: 0,
+            content: 'A 文件结论。',
+            locator_type: 'section',
+            locator_value: 'A 章节',
+          },
+          {
+            source_id: 'source-b',
+            chunk_index: 0,
+            content: 'B 文件结论。',
+            locator_type: 'section',
+            locator_value: 'B 章节',
+          },
+        ],
+      ]);
+
+    const result = await resolveDocumentAttachments({
+      userId: 'user-1',
+      sourceIds: ['source-a', 'source-b'],
+      question: '总结这些文件',
+    });
+
+    expect(result.text).toContain('A 文件结论');
+    expect(result.text).toContain('B 文件结论');
+    expect(result.sources).toHaveLength(2);
+    expect(result.coverage.documents).toHaveLength(2);
+    expect(result.coverage.overall).toEqual(
+      expect.objectContaining({ documentCount: 2, coverageRatio: 1, complete: true }),
+    );
+    expect(result.coverage.overall.total.chars).toBe(200);
+  });
+
+  it('状态接口返回已持久化覆盖元数据，旧记录则明确标记覆盖未知', async () => {
+    const coverage = coverageMetadata({ chars: 90, chunks: 2, ratio: 0.5, truncated: true });
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'new-source',
+          user_id: 'user-1',
+          source_type: 'cloud',
+          file_name: 'new.md',
+          status: 'ready',
+          extracted_chars: 45,
+          chunk_count: 1,
+          coverage_metadata: coverage,
+        },
+        {
+          id: 'legacy-source',
+          user_id: 'user-1',
+          source_type: 'cloud',
+          file_name: 'legacy.md',
+          status: 'ready',
+          extracted_chars: 80,
+          chunk_count: 1,
+        },
+      ],
+    ]);
+
+    const statuses = await getDocumentSourceStatuses({
+      userId: 'user-1',
+      sourceIds: ['new-source', 'legacy-source'],
+    });
+
+    expect(statuses[0].coverage).toEqual(expect.objectContaining({ coverageRatio: 0.5, truncated: true }));
+    expect(statuses[1].coverage).toEqual(
+      expect.objectContaining({ metadataAvailable: false, coverageRatio: null, complete: false }),
+    );
   });
 
   it('云文件变更只清理云来源缓存，不误删已另存副本的临时附件', async () => {
@@ -444,6 +661,169 @@ describe('AI 文档服务', () => {
       'source-empty',
     ]);
     expect(finishConnection.query.mock.calls.some(([sql]) => String(sql).includes("status = 'failed'"))).toBe(false);
+    const coverageUpdate = finishConnection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('coverage_metadata = ?'),
+    );
+    expect(JSON.parse(coverageUpdate[1][0]).reasons).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'NO_TEXT_CONTENT' })]),
+    );
     infoSpy.mockRestore();
+  });
+
+  it('解析成功时在同一事务持久化完整覆盖元数据', async () => {
+    const content = Buffer.from('第一段。\n\n第二段。');
+    const claimConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_jobs')) {
+          return [[{ id: 8, source_id: 'source-ready', attempts: 0 }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const finishConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_sources')) return [[{ id: 'source-ready' }]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(finishConnection);
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'source-ready',
+          object_key: 'tmp/source-ready',
+          file_name: 'ready.txt',
+          file_type: 'text/plain',
+          file_size: content.length,
+          status: 'parsing',
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+    ]);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
+    getObjectBufferFromObs.mockResolvedValue(content);
+
+    await expect(runSingleDocumentJob('worker-success')).resolves.toBe(true);
+
+    const coverageUpdate = finishConnection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('coverage_metadata = ?'),
+    );
+    const persisted = JSON.parse(coverageUpdate[1][0]);
+    expect(persisted).toEqual(
+      expect.objectContaining({ metadataAvailable: true, coverageRatio: 1, complete: true, truncated: false }),
+    );
+    expect(finishConnection.commit).toHaveBeenCalledOnce();
+  });
+
+  it('解析失败时持久化失败范围和原因', async () => {
+    const content = Buffer.alloc(128, 0);
+    const claimConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_jobs')) {
+          return [[{ id: 9, source_id: 'source-failed', attempts: 0 }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const failureConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+    };
+    pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(failureConnection);
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'source-failed',
+          object_key: 'tmp/source-failed',
+          file_name: 'failed.txt',
+          file_type: 'text/plain',
+          file_size: content.length,
+          status: 'parsing',
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+    ]);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
+    getObjectBufferFromObs.mockResolvedValue(content);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(runSingleDocumentJob('worker-failure')).resolves.toBe(true);
+
+    const coverageUpdate = failureConnection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('coverage_metadata = ?'),
+    );
+    const persisted = JSON.parse(coverageUpdate[1][0]);
+    expect(persisted.complete).toBe(false);
+    expect(persisted.coverageRatio).toBe(0);
+    expect(persisted.failedRanges).toHaveLength(1);
+    expect(persisted.reasons[0].code).toBe('FILE_CONTENT_INVALID');
+    errorSpy.mockRestore();
+  });
+
+  it('覆盖字段迁移尚未执行时主解析任务仍可完成并提交', async () => {
+    const content = Buffer.from('兼容滚动升级');
+    const missingColumnError = Object.assign(new Error('Unknown column coverage_metadata'), {
+      code: 'ER_BAD_FIELD_ERROR',
+    });
+    const claimConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_jobs')) {
+          return [[{ id: 10, source_id: 'source-rolling', attempts: 0 }]];
+        }
+        if (String(sql).includes('coverage_metadata = NULL')) throw missingColumnError;
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    const finishConnection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id FROM ai_document_sources')) return [[{ id: 'source-rolling' }]];
+        if (String(sql).includes('coverage_metadata = ?')) throw missingColumnError;
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    pool.getConnection.mockResolvedValueOnce(claimConnection).mockResolvedValueOnce(finishConnection);
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'source-rolling',
+          object_key: 'tmp/source-rolling',
+          file_name: 'rolling.txt',
+          file_type: 'text/plain',
+          file_size: content.length,
+          status: 'parsing',
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+    ]);
+    getObjectMetadataFromObs.mockResolvedValue({ contentLength: content.length });
+    getObjectBufferFromObs.mockResolvedValue(content);
+
+    await expect(runSingleDocumentJob('worker-rolling')).resolves.toBe(true);
+    expect(claimConnection.commit).toHaveBeenCalledOnce();
+    expect(finishConnection.commit).toHaveBeenCalledOnce();
+    expect(finishConnection.rollback).not.toHaveBeenCalled();
   });
 });

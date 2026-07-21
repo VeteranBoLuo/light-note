@@ -4,9 +4,9 @@
     <div class="recommendation-list">
       <BButton
         v-for="item in recommendationItems"
-        :key="item"
+        :key="round + ':' + item"
         class="recommendation-item"
-        @click="handleRecommendationClick(item)"
+        @click="handleRecommendationClick(item, $event)"
         v-click-log="{ module: 'AI助手', operation: `点击推荐问题【${item}】` }"
       >
         {{ item }}
@@ -110,7 +110,10 @@
     return [...available.slice(offset), ...available.slice(0, offset)].slice(0, 3);
   });
 
-  function handleRecommendationClick(item: string) {
+  function handleRecommendationClick(item: string, event?: MouseEvent) {
+    // 点击后主动失焦:button 点击会保持 :focus,回答后新一轮快捷提问若复用相同位置的 DOM,残留的
+    // :focus-visible 绿色描边会让"新的对应位置那一颗"错误地显示成已选中。配合 key 带上 round 重建节点,双保险。
+    (event?.currentTarget as HTMLElement | null)?.blur?.();
     emit('recommendation-click', item);
   }
 </script>
@@ -200,8 +203,8 @@
     }
 
     .recommendation-item {
-      height: 40px;
-      min-height: 40px;
+      height: 44px;
+      min-height: 44px;
       max-width: 82%;
       padding: 0 12px;
     }

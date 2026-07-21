@@ -66,6 +66,12 @@ apps/server/
 │   ├── securityHandle.js  # 安全事件
 │   ├── trashHandle.js     # 回收站
 │   ├── aiDocumentHandle.js # AI 文件上传、挂载与解析状态
+│   ├── aiConversationHandle.js # AI 持久会话、消息、反馈、导出与结果复用
+│   ├── aiChangeSetHandle.js # AI 可审阅变更集、执行与撤销
+│   ├── aiChangeSetProposalHandle.js # 模型整理建议到受限 Change Set 草稿
+│   ├── aiMemoryHandle.js   # AI 候选记忆与记忆账本
+│   ├── aiResponseHandle.js # AI SSE 终态恢复
+│   ├── aiTelemetryHandle.js # 无正文 AI 产品事件接收
 │   ├── featureRequestHandle.js # 共建轻笺
 │   └── opinionHandle.js   # 反馈
 └── util/                   # 工具模块
@@ -78,6 +84,14 @@ apps/server/
     ├── log.js             # API 请求日志中间件
     ├── agent/             # 轻笺智域 AI 代理
     ├── aiDocument/       # AI 文档解析、任务、检索与生命周期
+    ├── aiConversationService.js # 持久会话、消息、来源、证据、反馈与保留期
+    ├── aiChangeSetService.js # 变更预览、乐观锁、回执与撤销
+    ├── aiMemoryService.js # 候选记忆、确认、范围与过期控制
+    ├── aiResponseRecoveryService.js # SSE 终态短期快照与恢复
+    ├── aiProductTelemetry.js # 无正文 AI 产品事件与保留期
+    ├── aiArtifactRetention.js # Change Set 可选产物 TTL
+    ├── aiUserDataExport.js # 账号级 AI 数据 JSON 导出与排除清单
+    ├── personalKnowledgeSearch.js # 个人知识统一词法检索
     ├── adminContextStore.js # Redis 管理员上下文（actor/subject 分离）
     ├── adminRoutePolicy.js  # 管理员上下文显式路由策略
     ├── resourceInbox.js     # 待整理关系与归属服务
@@ -158,34 +172,44 @@ src/
 
 ## 数据库核心表
 
-| 表                                  | 作用                     | 主键类型  |
-| ----------------------------------- | ------------------------ | --------- |
-| `user`                              | 用户                     | UUID      |
-| `bookmark`                          | 书签                     | UUID      |
-| `note`                              | 笔记                     | UUID      |
-| `files`                             | 云空间文件               | 自增      |
-| `folder`                            | 云空间文件夹             | 自增      |
-| `tag`                               | 标签                     | UUID      |
-| `resource_tag_relations`            | 资源-标签关联            | 无独立 id |
-| `resource_inbox`                    | 书签/笔记/文件待整理关系 | UUID      |
-| `todo_items`                        | 待处理中的待办事项       | UUID      |
-| `todo_reminders`                    | 待办提醒调度记录         | UUID      |
-| `tag_relations`                     | 标签-标签关联            | 无独立 id |
-| `api_logs`                          | API 请求日志             | UUID      |
-| `operation_logs`                    | 操作日志                 | UUID      |
-| `security_events`                   | 安全事件                 | 自增      |
-| `conversion_events`                 | 游客转化事件             | 自增      |
-| `admin_context_audit`               | 管理员预览与内容维护审计 | UUID      |
-| `agent_logs`                        | AI 请求、用量和阶段追踪  | UUID      |
-| `ai_document_sources`               | AI 文档来源与解析状态    | UUID      |
-| `ai_document_chunks`                | AI 文档正文片段与定位    | 自增      |
-| `ai_document_jobs`                  | AI 文档异步解析任务      | 自增      |
-| `note_template`                     | 用户自存笔记模板         | UUID      |
-| `feature_requests`                  | 共建轻笺公开需求         | UUID      |
-| `feature_request_votes`             | 共建建议唯一投票         | 复合主键  |
-| `feature_request_updates`           | 共建建议公开时间线       | UUID      |
-| `opinion`                           | 用户反馈                 | UUID      |
-| `help_config` / `help_config_draft` | 帮助中心                 | UUID      |
+| 表                                             | 作用                          | 主键类型      |
+| ---------------------------------------------- | ----------------------------- | ------------- |
+| `user`                                         | 用户                          | UUID          |
+| `bookmark`                                     | 书签                          | UUID          |
+| `note`                                         | 笔记                          | UUID          |
+| `files`                                        | 云空间文件                    | 自增          |
+| `folder`                                       | 云空间文件夹                  | 自增          |
+| `tag`                                          | 标签                          | UUID          |
+| `resource_tag_relations`                       | 资源-标签关联                 | 无独立 id     |
+| `resource_inbox`                               | 书签/笔记/文件待整理关系      | UUID          |
+| `todo_items`                                   | 待处理中的待办事项            | UUID          |
+| `todo_reminders`                               | 待办提醒调度记录              | UUID          |
+| `tag_relations`                                | 标签-标签关联                 | 无独立 id     |
+| `api_logs`                                     | API 请求日志                  | UUID          |
+| `operation_logs`                               | 操作日志                      | UUID          |
+| `security_events`                              | 安全事件                      | 自增          |
+| `conversion_events`                            | 游客转化事件                  | 自增          |
+| `admin_context_audit`                          | 管理员预览与内容维护审计      | UUID          |
+| `agent_logs`                                   | AI 请求、用量和阶段追踪       | UUID          |
+| `ai_token_usage` / `ai_token_reservations`     | AI 日额度账本与请求级原子占位 | 复合键 / 自增 |
+| `ai_document_sources`                          | AI 文档来源与解析状态         | UUID          |
+| `ai_document_chunks`                           | AI 文档正文片段与定位         | 自增          |
+| `ai_document_jobs`                             | AI 文档异步解析任务           | 自增          |
+| `ai_conversations` / `ai_messages`             | AI 持久会话与消息快照         | UUID          |
+| `ai_message_sources` / `ai_message_evidence`   | 消息来源与不可变证据片段      | 自增          |
+| `ai_feedback`                                  | AI 回答反馈与原因             | UUID          |
+| `ai_content_chunks`                            | 个人知识统一词法索引元数据    | 自增          |
+| `ai_content_generations`                       | 个人知识索引的账号级失效代际  | 账号 ID       |
+| `ai_change_sets` / `ai_change_items`           | 可审阅变更集、执行回执与撤销  | UUID          |
+| `ai_memories`                                  | 候选、已确认与临时记忆        | UUID          |
+| `ai_response_events`                           | SSE 终态短期恢复事件          | 自增          |
+| `ai_product_events`                            | 无正文 AI 产品学习事件        | UUID          |
+| `note_template`                                | 用户自存笔记模板              | UUID          |
+| `feature_requests`                             | 共建轻笺公开需求              | UUID          |
+| `feature_request_votes`                        | 共建建议唯一投票              | 复合主键      |
+| `feature_request_updates`                      | 共建建议公开时间线            | UUID          |
+| `opinion`                                      | 用户反馈                      | UUID          |
+| `help_config` / `help_config_draft`            | 帮助中心                      | UUID          |
 
 笔记模板：内置模板（日报/周报/会议纪要/读书笔记/项目计划/复盘/知识卡片）为前端常量（`config/noteTemplates.ts`，含 `{{date}}` 等占位变量的文案不进 i18n 文件）；用户自存模板存 `note_template`（每人上限 20，硬删除不接回收站），`name`（库内显示名）与 `title_template`（新笔记默认标题，可含变量）语义分离。笔记正文图片按引用计数清理：彻底删除笔记后，仅当 URL 既无 `note_images` 残留引用、也无模板正文引用时才删除物理文件；新建笔记与存为模板都会校验图片归属并登记引用。
 
@@ -237,6 +261,58 @@ src/
 - 笔记正文进入 Agent 前由 `util/noteSemantic.js` 统一解析 HTML/Markdown，保留标题、段落、普通列表、复选任务、表格、引用、代码、链接和图片引用；`[x]`/`[ ]` 状态直接以正文中的复选框为准，普通列表不计入任务统计
 - 单篇笔记细读使用 `read_note`，图片文字识别拆为通用只读工具 `analyze_resource_images`。前者只返回结构化正文和图片引用，后者按资源归属按需复用本地 OCR；本站笔记图片还必须命中 `note_images` 登记，单轮最多识别 3 张并使用内容哈希缓存
 - 工具调用是结果驱动的有界多轮链路：上一轮失败、空结果或声明存在可选后续能力时，模型才能继续规划；后续仅允许已授权只读工具，默认最多 3 轮工具调用，最后再生成回答
+
+### AI 工作区与持久对象
+
+AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、滚动位置和活动请求租约，`AiWorkspaceShell` 承载问答产品界面。Store v3 的持久键与运行时 lease 都包含 actor、subject、mode、context ID 四维；切换同一 subject/mode 的管理员授权 context 也会中止旧请求并进入全新本地域。旧 v2 三维状态只允许普通 self 账号一次性安全迁移，管理员旧状态不复用。普通桌面问答使用无蒙层、可调宽且关闭不销毁的 `BDrawer`，移动端继续使用全屏容器。笔记详情、笔记库、全局搜索、书签管理、云空间和标签详情通过统一的 `AiEntry` 事件传递受控 `contextRefs`、建议意图和查询：书签/云文件单项入口默认 summarize，批量入口默认 compare，一次只带前 5 个权威 type/ID/title 并明确提示截断；标签详情携带当前 tag 的权威 ID/name 并建议 find-related；既有专用书签整理弹窗继续保留。服务端仍重新校验资源归属，不能把入口 payload、title 或前端选择状态当作权限依据。系统分享尚未接入统一入口。
+
+所有需要按会话身份隔离的 AI 工作区顶层对象使用四维 owner 域：
+
+```text
+(actor_user_id, subject_user_id, admin_context_mode, admin_context_id)
+```
+
+- 普通上下文要求 actor 等于 subject，且 `admin_context_id IS NULL`；管理员上下文要求 Root、有效上下文 ID 和明确的 `readonly` / `maintain` 模式。
+- SQL 查询使用 `admin_context_id <=> ?` 做 NULL-safe 精确匹配，不能只按 actor、subject 或 mode 查询。
+- 消息、来源、证据和 Change Item 等子表通过已经完成四维校验的父对象访问；`ai_content_chunks` 等账号派生索引按 subject 隔离，`agent_logs` 与配额账本按各自安全主体模型隔离。不能为了复用四维模板而伪造不存在的列，也不能因子表没有重复 owner 列就绕过父对象校验。
+- `readonly` 只允许读取已存在的会话、变更集和记忆；创建、更新、删除、反馈等持久状态写入由独立 `AI_STATE_WRITE` / `ACCOUNT_WRITE` / `CONTENT_WRITE` 策略阻断。
+
+持久会话链路包括：
+
+- `ai_conversations` 保存标题、范围、归档状态、保留策略和分支谱系；`ai_messages` 保存消息、请求/追踪 ID、材料快照、活动、覆盖度和答案版本组。
+- 来源和证据分别进入 `ai_message_sources` 与 `ai_message_evidence`；客户端提交的消息 ID 不被信任，服务端生成 UUID，并仅以 `(conversation_id, request_id, role)` 做 owner 内幂等。
+- 会话中心支持列表、搜索、重命名、归档、单条删除/撤销、导出和“清除全部 AI 数据”。单条删除先在服务端改为隐藏状态，默认提供 15 秒（可配置 5 秒～2 分钟）的权威撤销窗口；窗口结束后定时器会事务清理关联记忆、Change Set 与会话子表，应用重启或定时器丢失时由会话保留调度器兜底。UI 用 `BCard` 展示撤销条，但是否可恢复最终由服务端状态与时间判断。总清除是无撤销事务：普通 self/normal 账号按 `subject_user_id` 清除该主体全部可控 AI 对象，包含曾由管理员授权上下文为该主体产生的对象，响应 `scope=subject_user`；管理员 `maintain` 调用只清当前 actor + subject + mode + context 四维域，响应 `scope=owner_domain`，`readonly` 不能调用。两种范围都覆盖会话、记忆、Change Set、产品事件与 SSE 恢复事件；普通 self 还会在同一事务推进 `ai_content_generations` 并删除 `ai_content_chunks`，提交后只驱逐本进程缓存，代际/schema 失败会让整个清除回滚；owner-domain 清除不触碰 subject 级索引代际。`agent_logs`、配额用量和请求占位账本按独立安全/运营保留策略保留。任何必需 AI 表或字段缺失时，总清除返回 `AI_DATA_CLEAR_SCHEMA_UNAVAILABLE`（503）、回滚整个事务，不会把“未检查”误报为“已清空”。
+- 会话谱系以 `root_conversation_id / parent_conversation_id / branch_from_message_id` 保存，并由 owner 四维 + live retention 查询；从指定消息创建分支会在同一事务克隆截至该点的消息与 parent 映射，继承 retention/expire 后立即打开，超过 200 条安全上限则返回 `CONVERSATION_BRANCH_TOO_LARGE`（409）且不部分写。fresh schema 的 root 为 NOT NULL；既有库增量迁移保持 nullable，使滚动/回滚旧后端可继续插入 NULL 独立根，新版查询同时按 root ID 或自身 ID 兼容。UI 用 B 组件展示最多 200 节点的分支树和前后导航；遗留会话只回填 `root=id`，不从标题/正文推断历史关系。
+- 重新生成保留全部旧答案，并用 `versionGroupId` 形成同会话版本组；版本 API 只读取 owner 内同 conversation 的 completed assistant 消息，最多 50 个。回答下方切换器只滚动/聚焦已保存版本，不隐藏、覆盖或删除旧答案；目标不在当前最多 200 条已加载消息时明确提示不可定位。`aiCloudHistory=false` 仍阻断自动 hydrate/create/save，但不误伤用户显式打开历史、谱系、分支和版本管理。
+- 账号 Settings 的“全量数据” JSON 导出同样按 `subject_user_id` 覆盖该账号的会话/消息/来源/证据/反馈、记忆、Change Set、产品事件、`agent_logs` 和配额用量，并返回 schema 版本、分域计数、不可用分域和排除清单。可重建内容/文档索引、10 分钟 SSE 恢复事件与请求级配额占位不具可移植性，因此显式列为排除项。普通 self 总清除和导出虽然都是 subject 级，包含/排除与保留政策仍不同；管理员 maintain 清除则是更窄的 owner 域。接口和产品文案必须以返回的 scope 与 retained/exclusions 解释，不能混用。
+- 会话中心已用 `BSelect` 提供逐会话 `standard` / `temporary` / `indefinite` 保留策略；temporary 可选 1、7、30 天，显示权威到期时间及自动级联会话、消息、来源/证据、记忆、Change Set 的范围。服务端严格校验 patch，回显时只映射最近合法档位；temporary 由启动/周期调度器物理删除，同一调度器也收口超过撤销窗口的软删除会话。standard/indefinite 的长期产品政策仍需验收。
+- 登录账号的 Settings AI 区提供 `aiCloudHistory` 云端会话历史开关，使用账号 preferences 同步。关闭后 `ChatContainer` 不再自动 hydrate/create/save 云会话并清除当前 `cloudConversationId`；服务端 create/save 自动持久化 handler 也会按 subject 权威读取偏好，关闭或主体不可验证时失败关闭并返回 `AI_CLOUD_HISTORY_DISABLED`（409）。缺少该偏好字段默认开启，以兼容既有账号。本地 v3 Store 历史继续保留，既有云端历史不会因切换而删除；Change Set 等显式后台成果的直接 Service 写入、分支创建和历史管理不被自动持久化门禁误伤。仍需真实账号和多设备偏好传播验证。草稿和尚未发送的材料始终是本地窗口状态，不能被当作长期记忆。
+
+### 证据与检索
+
+- Agent 将资源级 `sourceId` 与本轮不可变的 `evidenceRef` 分开；证据包含资源版本、locator、短摘录及摘要哈希，正文只把真实存在的 citation key 渲染成可交互引用。
+- Final 完成后会审计引用编号，移除不存在的编号，并把权威正文、证据、覆盖度和审计结果放入终态事件。该检查证明“引用存在”，不等同于自然语言蕴含正确；蕴含质量仍需人工标注和抽检。
+- `personalKnowledgeSearch.js` 从笔记、书签快照、已解析文件/OCR、待办和标签关系建立按用户隔离的 MiniSearch 词法索引；标题、标签、章节和正文分级加权，每个资源限制命中片段数。`ai_content_chunks` 是可审计的持久分块镜像，运行时索引仍从权威业务表重建；资源更新通过共享 Service 主动失效，3 分钟 TTL 只作为进程内缓存寿命，不承担跨实例正确性。
+- 个人索引失效协议支持在业务事务中递增 `ai_content_generations` 的 per-subject 代际并物理删除该账号持久 chunk；总清除已使用强原子路径，Change Set 等 AI 安全写闭环也必须复用该路径。缓存命中、构建前后和 chunk 持久化都会核对数据库代际；持久化事务对代际行 `FOR UPDATE` 并执行 CAS，旧实例构建出的快照不能覆盖新状态。候选命中返回前还会按 owner、`del_flag` 与 `resourceVersion` 重新查询权威业务表，校验不可用时失败关闭，不把已删除、转移归属或旧版本缓存正文作为证据。跨实例旧快照回写和已删除资源命中已有回归测试；但部分 legacy 笔记、书签、文件、快照和创建后副作用仍在业务提交后才旁路推进代际，尚未证明所有入口与资源写同事务。这些入口的剩余风险主要是新内容短时漏召回或缓存重建延迟；上线前仍要逐入口审计/迁移并验证 MySQL 5.7 锁竞争、故障恢复和大账号性能，不能把现有机制表述成全局强一致。
+
+### Change Set 与记忆
+
+- 整理模式先读取并校验用户拥有的笔记、书签和文件，再让模型只生成白名单草稿；模型返回的资源、标签和文件夹 ID 会与服务端允许集合再次求交，不能借 Prompt 注入新增目标。
+- `ai_change_sets` / `ai_change_items` 支持设置标签、移动文件、更新笔记元信息/正文、更新书签元信息和创建待办。执行前比较权威状态哈希；冲突时拒绝写入。执行后保存逐项回执，可在资源未再次变化时执行补偿撤销。
+- Change Set 的首次 apply 和失败后 retry 都是整批单事务：任何一项或最终提交失败都会回滚全部资源写，变更集保持 `draft`，UI 只能显示阶段与“已提交 0/N”；成功 commit 后才显示 N/N 并保存逐项回执，不能把事务内已尝试数量伪装成部分成功。失败诊断只保存稳定错误码、阶段、失败项 ID、已尝试数量（明确均已回滚）、冻结选择、时间和 `previewRevision`，不保存 raw message 或正文。用户必须先触发四维 owner + maintain 约束下的 revalidate，服务端重读权威资源、刷新 before/hash 并递增 revision，仍冻结原选择；再次二次确认后，retry 只采用服务端快照中的 item IDs 和客户端提交的 expected revision。任何预览编辑都会清掉旧 retry 并递增 revision。apply/undo 还会在资源事务内严格推进个人索引 generation 并清 chunk，失败返回稳定 503 且整体回滚；commit 后只驱逐本进程缓存。
+- 回答可保存为新笔记，或以追加、智能合并、选段应用三种方式生成 `update_note_content` Change Set；正文保留来源与证据。选段清单由服务端从 owner 校验后的已持久化完成回答解析，块 ID 同时绑定顺序与内容摘要；客户端只提交 ID，服务端重新解析并拒绝伪造/过期选择，再进行目标笔记版本校验、预览、确认、回执与安全撤销。这里的“选段”是选择 AI 回答结构块追加到目标笔记，编辑器光标位置、指定章节以及原文选区的就地 Apply/Reject 仍未统一接入。
+- `ai_memories` 使用“候选 → 用户确认 → 生效”流程，区分全局、会话和资源范围，支持暂停、更正、过期、删除和全部清除；临时会话请求显式关闭记忆读写。管理员代管上下文不把目标账号记忆注入 Agent。
+- 正常 Agent 轮次会发送经过白名单收敛的 `memory_context` 透明度事件：只披露 `used/not_used`、0～20 的使用数量、有限类型/范围枚举和未使用原因，不含记忆 ID/HMAC、正文、来源、时间或底层错误。`used` 元数据与实际注入 Prompt 的 `getActiveAiMemoriesForPrompt` 结果来自同一份快照，后者只含当前四维 owner 下已确认、active、未过期、可信来源且范围匹配的记忆；访客、翻译、管理员代管和临时会话不注入。事件会在 SSE、会话 activity 持久化、客户端 Store 与恢复链分别再次归一化，回答下方用 `BButton` 和 `icon.ai.memory` 展示并可键盘进入记忆账本；旧历史缺少元数据时不补造说明。它证明“哪些已确认记忆进入本轮上下文”，不证明模型答案一定受其因果影响，也不替代记忆冲突检测。
+- `AiMemoryLedger` 还会在当前 owner 的最多 100 条 live 记忆内提供基础重叠复核：仅把 `candidate/active/paused` 中 scope type、结构化 scope 与 memory type 相同、规范化正文不同的记录列为 peers，并展示其正文和状态。UI 明示这些内容“不一定冲突”、系统不会自动覆盖，最终更正、暂停或删除仍由用户决定；这是可解释的同范围分组，不是语义判冲、自动解冲或质量结论。
+
+### SSE 终态恢复、产品事件与评测
+
+- Agent SSE 协议版本为 `2.0`。所有事件带单调递增 `eventId`、`requestId` 和 `protocolVersion`，包括开始、阶段、heartbeat、工具、增量、来源/引用、完成与失败；前端收到权威 `response.completed.answer` 后替换流式临时正文。
+- `ai_response_events` 只在形成 `completed` / `failed` 终态后保存本轮事件与权威快照，TTL 为 10 分钟。客户端在连接异常且没有可靠终态时只尝试一次 `/chat/agent/recover`，恢复结果按 owner 四维精确校验并整体替换本地聚合状态，不与半截 delta 叠加。应用启动链已注册恢复事件批量清理，运行时是否按期执行仍要由预发布日志和 TTL 数据验证。
+- `ai_product_events` 只接受事件名和白名单枚举、布尔值、数量与标识维度；标识使用 `AI_TELEMETRY_HMAC_SECRET` 做 HMAC，错误只保留稳定类别，不保存问题、回答、标题或摘录。默认保留期为 180 天（可在 30～730 天内配置），应用启动链已注册受控多批清理：默认每轮最多 25 批、每批 10000 行，代码上限 100 批，并返回 `batches` / `backlogRemaining`；启动或周期清理达到上限仍有积压时只输出无正文警告。预发布仍需用到期数据和数据库指标证明调度真实执行且批量删除不会影响请求链。
+- `aiArtifactRetention.js` 提供 Change Set 单域可选 TTL，天数变量必须显式配置 1～3650 的正整数才启用，默认关闭；共享调度默认每日一次、限制 10 分钟～7 天。每批在事务内 `FOR UPDATE`、删除前重验状态并有界处理，支持多实例竞争、幂等、缺表跳过和 backlog。Change Set 只清 `applied/undone/expired`，在选择和删除时排除 indefinite 会话。清理器已接启动链，但具体天数未经产品/隐私批准，不能默认启用。
+- 文档 Worker、标签图标、路由装载、文件与笔记库等本轮 AI 可达错误路径已移除 raw `error.message/stack` 输出；file/note AI 相关读写路由也不再把对象存储 key 或原始异常返回客户端，Conversation/Recovery 调度日志统一为稳定错误码。这次代码扫描不能替代预发布合成 canary 和真实进程日志采集，新增路径仍须遵守同一 scrub 规则。
+- `evaluation/ai-assistant/` 的 schema v2 提供 267 条完全合成任务、49 个合成来源和六维确定性评分器，覆盖 10 个能力域且每域至少 20 条；owner 四维、请求 lifecycle、反凑数校验和生成器 `--check` 都进入数据契约。它不加载 `.env`、不连接数据库/Redis/模型、也不访问网络；`.github/workflows/ci.yml` 已在测试后运行生成器一致性检查与 `eval:ai-assistant`，本地结构化数量和静态 CI 门槛已经达到。仍缺真实 Agent adapter/回放、自然语言有用性评测和人工引用蕴含标注。
 
 ## 共建轻笺
 

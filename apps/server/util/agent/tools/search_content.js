@@ -1,106 +1,102 @@
-import pool from '../../../db/index.js';
-import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
+import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 
-// 「问我的知识库」检索工具:在用户已收藏/记录的【内容正文】里找相关片段,交给模型据此作答并标注来源。
-// 覆盖 query_bookmarks 读不到的部分——书签的网页正文存档(bookmark_snapshot.content)、AI 摘要、描述;笔记正文同样纳入。
-// v1 用关键词全文匹配(LIKE)+ 命中处摘录,个人规模足够;不返回整篇(按 ±radius 截取,控 token)。
-
-function excerpt(text, kw, radius = 300) {
-  const s = String(text || '');
-  if (!s) return '';
-  const i = s.toLowerCase().indexOf(String(kw).toLowerCase());
-  if (i < 0) return s.slice(0, radius * 2) + (s.length > radius * 2 ? '…' : ''); // 命中在别的字段(如标题/描述)时,取正文开头
-  const start = Math.max(0, i - radius);
-  const end = Math.min(s.length, i + String(kw).length + radius);
-  return (start > 0 ? '…' : '') + s.slice(start, end) + (end < s.length ? '…' : '');
+function coverageWarning(coverage) {
+  if (!coverage || typeof coverage !== 'object') return '';
+  if (coverage.truncated || coverage.complete === false || Number(coverage.coverageRatio) < 1) {
+    const ratio = Number(coverage.coverageRatio);
+    return Number.isFinite(ratio) ? `覆盖约 ${Math.round(ratio * 100)}%，内容不完整` : '来源覆盖不完整';
+  }
+  return '';
 }
 
 export default {
   name: 'search_content',
+  sourceType: 'mixed',
   description:
-    '在用户"已收藏/记录的内容正文"里检索并回答问题:书签的网页正文存档、AI 摘要、描述,以及笔记正文。' +
-    '当用户问"我收藏/存过的关于 X 的资料/文章里怎么说""我之前记的关于 X 的内容"等涉及【自己收藏内容的具体信息】时,用这个工具,' +
-    '并在回答里用"来源N《标题》"标注出处。它与 query_bookmarks/query_notes 的区别:那两个用于"列清单/数数量",本工具用于"读正文回答问题"。',
+    '在用户明确选择的范围或个人知识中检索真实正文片段，覆盖笔记、书签快照、已解析文件/OCR 和待办。' +
+    '适合回答“我保存的资料里怎么说”、跨资料查找和比较；返回精确 evidenceRef、定位和覆盖度。',
   parameters: {
     type: 'object',
+    additionalProperties: false,
     properties: {
-      keyword: {
-        type: 'string',
-        description: '要检索的关键词或主题,从用户问题里提炼,尽量用具体名词(如"Express""报销流程""番茄钟")',
+      keyword: { type: 'string', minLength: 1, maxLength: 500, description: '从用户问题中提炼的检索主题' },
+      limit: { type: 'integer', minimum: 1, maximum: 20, description: '返回证据片段数，默认 8' },
+      resourceTypes: {
+        type: 'array',
+        maxItems: 4,
+        items: { type: 'string', enum: ['note', 'bookmark', 'file', 'todo'] },
+        description: '可选的材料类型范围',
       },
-      limit: { type: 'integer', description: '返回条数,默认 6,最大 12' },
+      resourceIds: {
+        type: 'array',
+        maxItems: 500,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { type: { type: 'string', enum: ['note', 'bookmark', 'file', 'todo'] }, id: { type: 'string' } },
+          required: ['type', 'id'],
+        },
+        description: '用户已选择的具体材料范围；存在时不得检索范围外资源',
+      },
     },
     required: ['keyword'],
   },
   requireRoot: false,
+  allowedRoles: ['visitor', 'user', 'test', 'root'],
+  riskLevel: 'low',
+  confirmationPolicy: 'none',
+  timeoutMs: 12_000,
+  resultBudget: 10_000,
   toSources(raw) {
     return (raw?.hits || []).map((hit) => ({
-      ...hit,
-      target:
-        hit.type === 'note'
-          ? 'note-detail'
-          : hit.hasSnapshot
-            ? 'bookmark-snapshot'
-            : hit.url
-              ? 'bookmark-url'
-              : 'bookmark-edit',
+      id: hit.sourceId,
+      sourceId: hit.sourceId,
+      evidenceRef: hit.evidenceRef,
+      citationKey: hit.citationKey,
+      type: hit.type,
+      resourceType: hit.type,
+      resourceId: hit.id,
+      title: hit.title,
+      excerpt: hit.excerpt,
+      locator: hit.locator,
+      target: hit.target,
+      resourceVersion: hit.resourceVersion,
+      coverage: hit.coverage,
     }));
   },
   async execute(args, ctx) {
-    const kw = String(args.keyword || '').trim();
-    if (!kw) return { keyword: '', hits: [] };
-    const take = Math.min(Math.max(args.limit || 6, 1), 12);
-    const like = `%${kw}%`;
-
-    const [bm] = await pool.query(
-      `SELECT b.id, b.name, b.url, b.description, s.summary, s.content
-         FROM bookmark b
-         LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id
-        WHERE b.user_id = ? AND b.del_flag = 0
-          AND (b.name LIKE ? OR b.description LIKE ? OR s.summary LIKE ? OR s.content LIKE ?)
-        ORDER BY (s.content IS NOT NULL) DESC, b.create_time DESC
-        LIMIT ?`,
-      [ctx.userId, like, like, like, like, take],
-    );
-    const [nt] = await pool.query(
-      `SELECT id, title, content, type FROM note
-        WHERE create_by = ? AND del_flag = 0 AND (title LIKE ? OR content LIKE ?)
-        ORDER BY create_time DESC LIMIT ?`,
-      [ctx.userId, like, like, take],
-    );
-
-    const hits = [];
-    for (const b of bm) {
-      const body = b.content || b.summary || b.description || '';
-      hits.push({
-        type: 'bookmark',
-        id: b.id,
-        title: b.name || '无标题',
-        url: b.url || '',
-        summary: b.summary || '',
-        excerpt: excerpt(body, kw),
-        hasSnapshot: Boolean(b.content || b.summary),
-      });
-    }
-    for (const n of nt) {
-      const document = parseNoteContent({ content: n.content, type: n.type });
-      const plain = renderNoteForAi(document, { maxChars: 12_000 });
-      hits.push({ type: 'note', id: n.id, title: n.title || '无标题', excerpt: excerpt(plain, kw) });
-    }
-    return { keyword: kw, hits: hits.slice(0, take) };
+    // selected 模式仅在确有已选材料时收窄到材料;未选材料则不收窄(null),按全库检索,避免空 allowlist 变成零结果。
+    const enforcedScope =
+      ctx.agentContentScope?.mode === 'selected' && ctx.agentContentScope.resourceIds?.length
+        ? ctx.agentContentScope.resourceIds
+        : null;
+    return searchPersonalKnowledge({
+      userId: ctx.userId,
+      query: args.keyword,
+      limit: args.limit,
+      scope: {
+        types: args.resourceTypes,
+        resourceIds: enforcedScope === null ? args.resourceIds : enforcedScope,
+      },
+    });
   },
   transform(raw) {
     const hits = raw?.hits || [];
-    if (!hits.length) return `没有在你收藏/记录的内容里找到与"${raw?.keyword || ''}"相关的资料。`;
-    const lines = hits.map((h, i) => {
-      const tag = h.type === 'bookmark' ? '书签' : '笔记';
-      const src = h.type === 'bookmark' && h.url ? ` — ${h.url}` : '';
-      const sum = h.summary ? `\n   摘要:${h.summary}` : '';
-      return `[来源${i + 1}·${tag}]《${h.title}》${src}${sum}\n   正文摘录:${h.excerpt || '(无正文)'}`;
+    if (!hits.length) return `没有在当前材料范围中找到与“${raw?.query || ''}”相关的可靠片段。`;
+    const lines = hits.map((hit) => {
+      const location = hit.locator?.value ? ` · ${hit.locator.value}` : '';
+      const warning = coverageWarning(hit.coverage);
+      return `[${hit.citationKey}] [evidence:${hit.evidenceRef}]《${hit.title}》${location}${warning ? ` · ⚠ ${warning}` : ''}\n${hit.excerpt}`;
     });
-    return `已在你的收藏/笔记里找到 ${hits.length} 条相关资料,请据此作答并用"来源N"标注出处:\n\n${lines.join('\n\n')}`;
+    return (
+      `已从 ${new Set(hits.map((hit) => hit.sourceId)).size} 个实际来源检索到 ${hits.length} 条证据。` +
+      '回答中的可验证事实只能引用下列 evidenceRef；若证据不足，必须明确说明。\n\n' +
+      lines.join('\n\n')
+    );
   },
   summarize(raw) {
-    return `内容检索:命中 ${raw?.hits?.length || 0} 条`;
+    const hits = raw?.hits || [];
+    const incomplete = hits.filter((hit) => coverageWarning(hit.coverage)).length;
+    return `个人知识检索：${hits.length} 条证据${incomplete ? `，${incomplete} 条覆盖不完整` : ''}`;
   },
 };

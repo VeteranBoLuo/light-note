@@ -1,23 +1,31 @@
 <template>
-  <div class="scroll-prompt" @click="$emit('scrollToBottomClick')" v-click-log="{ module: 'AI助手', operation: '滚动到底部' }">
-    <div class="prompt-icon">
-      <div
-        class="loading-spinner"
-        :style="{
-          borderTop: isLoading ? '2px solid #3b82f6' : '',
-        }"
-      >
-      </div>
-      <span class="both-center">⌵</span>
-    </div>
+  <div class="scroll-prompt">
+    <BButton
+      class="prompt-icon"
+      :class="{ 'is-loading': isLoading }"
+      :title="t('ai.scrollToBottom')"
+      :aria-label="t('ai.scrollToBottom')"
+      @click="$emit('scrollToBottomClick')"
+      v-click-log="{ module: 'AI助手', operation: '滚动到底部' }"
+    >
+      <span class="loading-spinner" aria-hidden="true"></span>
+      <SvgIcon class="both-center" :src="icon.ai.scrollDown" size="17" aria-hidden="true" />
+    </BButton>
   </div>
 </template>
 <script setup lang="ts">
-  const props = defineProps<{
+  import { useI18n } from 'vue-i18n';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+
+  const { t } = useI18n();
+
+  defineProps<{
     isLoading: boolean;
   }>();
 
-  const emit = defineEmits(['scrollToBottomClick']);
+  defineEmits(['scrollToBottomClick']);
 </script>
 
 <style scoped lang="less">
@@ -34,22 +42,28 @@
   }
 
   .prompt-icon {
-    font-size: 1.1rem;
     position: relative;
-    cursor: pointer;
-    color: #343434;
-    width: 25px;
-    height: 25px;
-    display: inline-block;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
+    border-radius: 50%;
+    background: var(--card-background);
+    color: var(--text-color);
+    box-shadow: 0 1px 16px color-mix(in srgb, var(--text-color) 18%, transparent);
   }
 
   .loading-spinner {
-    width: 25px;
-    height: 25px;
+    position: absolute;
+    inset: 0;
     border: 2px solid transparent;
-    background-color: white;
-    box-shadow: 0 1px 16px rgba(0, 0, 0, 0.2);
     border-radius: 50%;
+  }
+
+  .prompt-icon.is-loading .loading-spinner {
+    border-top-color: var(--primary-color);
     animation: spin 1s linear infinite;
   }
 
@@ -57,20 +71,12 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-40%, -50%);
+    transform: translate(-50%, -50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
     pointer-events: none;
-  }
-
-  .prompt-text {
-    font-weight: 500;
-  }
-
-  .prompt-content.loading .prompt-text {
-    color: #3b82f6;
   }
 
   @keyframes spin {
@@ -79,6 +85,21 @@
     }
     100% {
       transform: rotate(360deg);
+    }
+  }
+
+  @media (pointer: coarse) {
+    .prompt-icon {
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scroll-prompt,
+    .prompt-icon.is-loading .loading-spinner {
+      animation: none;
     }
   }
 </style>

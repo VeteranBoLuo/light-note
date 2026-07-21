@@ -21,7 +21,7 @@ jobs:
     # CI 只使用无权限占位配置，避免测试导入模块时连接生产数据库或真实 OBS。
     env:
       DB_HOST: 127.0.0.1
-      DB_PORT: '3306'
+      DB_PORT: "3306"
       DB_USER: ci
       DB_PASSWORD: ci
       DB_NAME: light_note_ci
@@ -41,7 +41,7 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -54,7 +54,12 @@ jobs:
       - name: 运行测试
         run: pnpm test
 
+      - name: 校验 AI 助手黄金矩阵
+        run: |
+          node apps/server/evaluation/ai-assistant/generate-golden-tasks.js --check
+          pnpm --filter server run eval:ai-assistant
+
       - name: 构建前端
         run: pnpm build:web
         env:
-          SKIP_PRERENDER: '1'
+          SKIP_PRERENDER: "1"

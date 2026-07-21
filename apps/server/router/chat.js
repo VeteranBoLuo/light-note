@@ -13,6 +13,11 @@ import {
 import * as aiQuota from '../util/aiQuota.js';
 import { resultData } from '../util/common.js';
 import * as aiDocumentHandle from '../router_handle/aiDocumentHandle.js';
+import * as aiConversationHandle from '../router_handle/aiConversationHandle.js';
+import * as aiChangeSetHandle from '../router_handle/aiChangeSetHandle.js';
+import * as aiChangeSetProposalHandle from '../router_handle/aiChangeSetProposalHandle.js';
+import * as aiMemoryHandle from '../router_handle/aiMemoryHandle.js';
+import * as aiResponseHandle from '../router_handle/aiResponseHandle.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // 只限制“新增一个待解析文件”的用户意图。确认上传、删除附件属于同一次上传的
@@ -87,7 +92,62 @@ const agentFollowUpLimiter = rateLimit({
     }),
 });
 
+// 变更集「生成建议」是一次重后端调用(读全笔记 + 走模型),按操作者分桶限流,避免连点刷爆。
+const changeSetProposeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 12,
+  keyGenerator: (req) => {
+    const actor = req.billingUser || req.user || {};
+    return actor.isAuthenticated && actor.role !== 'visitor' && actor.id
+      ? `ai-change-set-propose:user:${actor.id}`
+      : `ai-change-set-propose:ip:${ipKeyGenerator(req.ip || 'unknown')}`;
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.status(429).send({
+      data: { code: 'RATE_LIMITED' },
+      status: 429,
+      msg: '操作过于频繁，请稍后再试',
+    }),
+});
+
 router.post('/agent', agentChat);
+router.post('/agent/recover', aiResponseHandle.recoverAgentResponse);
+router.post('/conversations/create', aiConversationHandle.createConversation);
+router.post('/conversations/list', aiConversationHandle.listConversations);
+router.post('/conversations/get', aiConversationHandle.getConversation);
+router.post('/conversations/lineage', aiConversationHandle.getConversationLineage);
+router.post('/conversations/update', aiConversationHandle.updateConversation);
+router.post('/conversations/delete', aiConversationHandle.removeConversation);
+router.post('/conversations/restore', aiConversationHandle.restoreConversation);
+router.post('/conversations/clear', aiConversationHandle.clearConversations);
+router.post('/conversations/clear-all-data', agentWriteActionLimiter, aiConversationHandle.clearAllAiData);
+router.post('/conversations/export', aiConversationHandle.exportConversations);
+router.post('/conversations/messages/save', aiConversationHandle.saveMessage);
+router.post('/conversations/messages/versions', aiConversationHandle.listMessageVersions);
+router.post('/conversations/messages/version-group', aiConversationHandle.prepareMessageVersionGroup);
+router.post('/conversations/branch', aiConversationHandle.branchConversation);
+router.post('/conversations/feedback', aiConversationHandle.submitFeedback);
+router.post('/conversations/note-targets', aiConversationHandle.listResultNoteTargets);
+router.post('/conversations/reuse-note/blocks', aiConversationHandle.listMessageReusableBlocks);
+router.post('/conversations/reuse-note/prepare', agentWriteActionLimiter, aiConversationHandle.prepareMessageNoteReuse);
+router.post('/conversations/save-note', agentWriteActionLimiter, aiConversationHandle.saveMessageAsNote);
+router.post('/change-sets/create', aiChangeSetHandle.createChangeSet);
+router.post('/change-sets/propose', changeSetProposeLimiter, aiChangeSetProposalHandle.proposeChangeSet);
+router.post('/change-sets/list', aiChangeSetHandle.listChangeSets);
+router.post('/change-sets/get', aiChangeSetHandle.getChangeSet);
+router.post('/change-sets/update', aiChangeSetHandle.updateChangeSet);
+router.post('/change-sets/apply', agentWriteActionLimiter, aiChangeSetHandle.applyChangeSet);
+router.post('/change-sets/revalidate-retry', agentWriteActionLimiter, aiChangeSetHandle.revalidateChangeSetRetry);
+router.post('/change-sets/retry', agentWriteActionLimiter, aiChangeSetHandle.retryChangeSet);
+router.post('/change-sets/undo', agentWriteActionLimiter, aiChangeSetHandle.undoChangeSet);
+router.post('/memories/list', aiMemoryHandle.listMemories);
+router.post('/memories/create', agentWriteActionLimiter, aiMemoryHandle.createMemoryCandidate);
+router.post('/memories/confirm', agentWriteActionLimiter, aiMemoryHandle.confirmMemory);
+router.post('/memories/update', agentWriteActionLimiter, aiMemoryHandle.updateMemory);
+router.post('/memories/delete', agentWriteActionLimiter, aiMemoryHandle.removeMemory);
+router.post('/memories/clear', agentWriteActionLimiter, aiMemoryHandle.clearMemories);
 router.post('/agent/follow-ups', agentFollowUpLimiter, generateAgentFollowUps);
 router.post('/agent/actions/prepare', agentWriteActionLimiter, prepareAgentToolAction);
 router.post('/agent/interactions/respond', agentWriteActionLimiter, respondAgentInteraction);
@@ -99,14 +159,14 @@ router.post('/attachments/attachCloudFile', attachmentCreateLimiter, aiDocumentH
 router.post('/attachments/status', aiDocumentHandle.getStatuses);
 router.post('/attachments/delete', aiDocumentHandle.removeAttachment);
 router.post('/attachments/clearTemporary', aiDocumentHandle.clearTemporaryAttachments);
-// AI 今日额度状态(供助手展示「已用 / 剩余」);root/本机自测豁免返回 { exempt:true }
+// AI 今日额度状态（供助手展示“已用 / 剩余”）；所有角色均受额度约束。
 router.post('/aiQuota', async (req, res) => {
   try {
     const quotaUser = req.billingUser || req.user;
     const ctx = { userId: quotaUser?.id || 'visitor', userRole: quotaUser?.role || 'visitor' };
     res.send(resultData(await aiQuota.getStatus(req, ctx)));
-  } catch (e) {
-    console.error('获取 AI 额度失败:', e.message);
+  } catch {
+    console.error('获取 AI 额度失败: AI_QUOTA_STATUS_FAILED');
     res.send(resultData(null, 500, '获取额度失败'));
   }
 });

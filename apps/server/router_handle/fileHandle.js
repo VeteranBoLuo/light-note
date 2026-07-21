@@ -12,6 +12,7 @@ import {
 } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
+import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 
 export const getFileInfo = async (req, res) => {
   try {
@@ -113,6 +114,7 @@ export const updateFile = async (req, res) => {
       req.user.id,
     ]);
     await purgeDocumentSourcesForCloudFiles(pool, req.user.id, [id]);
+    await invalidatePersonalKnowledgeCache(req.user.id);
 
     res.send(resultData({ id, fileName: finalFileName }));
   } catch (e) {

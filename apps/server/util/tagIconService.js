@@ -1,4 +1,5 @@
-import { requestDeepSeek } from './agent/deepseekClient.js';
+import { requestAi } from './agent/aiGateway.js';
+import { safeAgentError } from './agent/logSafety.js';
 
 const ICONIFY_API = 'https://api.iconify.design';
 const SEARCH_PREFIXES = ['simple-icons', 'material-symbols', 'material-symbols-light', 'lucide', 'tabler'];
@@ -101,14 +102,14 @@ export function parseKeywordResponse(content) {
   }
 }
 
-async function translateToIconKeywords(query) {
+async function translateToIconKeywords(query, trace, governance) {
   const cacheKey = query.toLowerCase();
   const cached = getCached(keywordCache, cacheKey);
   if (cached) return cached;
   const localKeywords = getLocalKeywords(query);
   let aiKeywords = [];
   try {
-    const result = await requestDeepSeek(
+    const result = await requestAi(
       [
         {
           role: 'system',
@@ -117,11 +118,22 @@ async function translateToIconKeywords(query) {
         },
         { role: 'user', content: query },
       ],
-      { maxTokens: 120, temperature: 0.1 },
+      {
+        toolChoice: 'none',
+        maxTokens: 120,
+        temperature: 0.1,
+        trace: { ...trace, taskType: 'tag_icon_search', stage: 'tag_icon_keywords' },
+        governance: {
+          quotaPolicy: 'system',
+          systemId: 'tag_icon_search',
+          ...governance,
+          taskType: 'tag_icon_search',
+        },
+      },
     );
     aiKeywords = parseKeywordResponse(result.content);
   } catch (error) {
-    console.warn('[tag-icon] AI 关键词转换失败，使用本地关键词降级:', error.message);
+    console.warn('[tag-icon] AI 关键词转换失败，使用本地关键词降级:', safeAgentError(error));
   }
   const asciiWords = query.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
   const keywords = uniqueKeywords([...asciiWords, ...aiKeywords, ...localKeywords]);
@@ -176,7 +188,7 @@ function rankIcons(icons, keywords) {
     .map((item) => item.icon);
 }
 
-export async function searchTagIcons({ query, page = 0 } = {}) {
+export async function searchTagIcons({ query, page = 0, trace, governance } = {}) {
   const normalizedQuery = normalizeIconQuery(query);
   if (!normalizedQuery) throw new Error('ICON_QUERY_REQUIRED');
   const normalizedPage = Math.max(0, Math.min(20, Number(page) || 0));
@@ -185,7 +197,9 @@ export async function searchTagIcons({ query, page = 0 } = {}) {
   const cacheHit = !!result;
 
   if (!result) {
-    const keywords = containsCjk(normalizedQuery) ? await translateToIconKeywords(normalizedQuery) : [normalizedQuery];
+    const keywords = containsCjk(normalizedQuery)
+      ? await translateToIconKeywords(normalizedQuery, trace, governance)
+      : [normalizedQuery];
     const asciiWords = normalizedQuery.match(/[a-z][a-z0-9.+#-]{1,}/gi) || [];
     const searchTerms = uniqueKeywords([...asciiWords, ...keywords]).slice(0, 3);
     const settled = await Promise.allSettled(searchTerms.map(searchOneKeyword));

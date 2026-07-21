@@ -7,6 +7,8 @@ import { createNote } from '../util/services/noteService.js';
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
 import { promises as fsP } from 'node:fs';
+import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 // multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
 // 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
@@ -16,8 +18,13 @@ const discardUploadedFile = (file) => {
 
 // 模板接口的 500 统一收口:原始错误只进服务端日志,不把 e.message(可能含 SQL/表名)回给前端
 const sendTemplateServerError = (res, scene, error) => {
-  console.error(`[noteTemplate] ${scene}失败:`, error);
-  res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+  console.error('[note-template] %s failed code=%s', scene, stableAgentErrorCode(error));
+  return res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+};
+
+const sendNoteServerError = (res, scene, error) => {
+  console.error('[note-library] %s failed code=%s', scene, stableAgentErrorCode(error));
+  return res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
 };
 
 // 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
@@ -62,8 +69,7 @@ export const uploadNoteImage = async (req, res) => {
   } catch (e) {
     // 登记失败(归属查询/写库/事务回滚)统一丢弃已落盘文件,不留孤儿
     discardUploadedFile(req.file);
-    console.error('[noteImage] 上传登记失败:', e);
-    res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+    return sendNoteServerError(res, 'register-note-image', e);
   }
 };
 
@@ -83,7 +89,7 @@ export const addNote = async (req, res) => {
     });
     res.send(resultData({ id: result.id, addedToInbox: result.addedToInbox }));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    return sendNoteServerError(res, 'add-note', e);
   }
 };
 
@@ -171,15 +177,17 @@ export const updateNote = async (req, res) => {
         });
       }
       await connection.commit();
+      await invalidatePersonalKnowledgeCache(userId);
       res.send(resultData('更新笔记成功'));
     } catch (error) {
       await connection.rollback();
-      res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+      return sendNoteServerError(res, 'update-note', error);
     } finally {
       connection.release();
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] update note rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -215,15 +223,17 @@ export const queryNoteList = (req, res) => {
         try {
           await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
         } catch (error) {
-          console.warn('[待整理角标] 笔记状态回填失败(忽略):', error.message);
+          console.warn('[待整理角标] 笔记状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
         }
         res.send(resultData(result));
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+        console.error('[note-library] list failed code=%s', String(err?.code || 'NOTE_LIBRARY_LIST_FAILED'));
+        res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
       });
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] request rejected code=%s', String(e?.code || 'NOTE_LIBRARY_REQUEST_INVALID'));
+    res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -240,10 +250,11 @@ export const getNoteDetail = (req, res) => {
         res.send(resultData(result[0]));
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+        return sendNoteServerError(res, 'get-note-detail', err);
       });
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] get detail rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -269,6 +280,7 @@ export const delNote = async (req, res) => {
         items: ids.map((id) => ({ resourceType: 'note', resourceId: String(id) })),
       });
       await connection.commit();
+      await invalidatePersonalKnowledgeCache(userId);
       res.send(resultData(updateResult));
     } catch (error) {
       await connection.rollback();
@@ -277,7 +289,8 @@ export const delNote = async (req, res) => {
       connection.release();
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常: ' + e.message));
+    console.warn('[note-library] batch delete rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求异常'));
   }
 };
 
@@ -297,7 +310,7 @@ export const updateNoteSort = async (req, res) => {
     res.send(resultData(null, 200, 'Sort updated successfully'));
   } catch (e) {
     await connection.rollback(); // 如果发生错误，回滚事务
-    res.send(resultData(null, 500, '服务器内部错误' + e)); // 设置状态码为400
+    return sendNoteServerError(res, 'update-note-sort', e);
   } finally {
     connection.release(); // 释放连接回连接池
   }
@@ -338,8 +351,7 @@ export const toggleNoteTop = async (req, res) => {
         await connection.rollback();
       } catch {}
     }
-    console.error('[note] 切换置顶状态失败:', e);
-    res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+    return sendNoteServerError(res, 'toggle-note-top', e);
   } finally {
     connection?.release();
   }
@@ -357,10 +369,14 @@ export const addNoteTag = async (req, res) => {
       const createdTag = await createTag({ userId, name });
       res.send(resultData({ id: createdTag.id, name: createdTag.name }));
     } catch (err) {
-      res.send(resultData(null, 500, '服务器内部错误: ' + String(err.message || err).replace(/^[A-Z_]+:\s*/, '')));
+      if (String(err?.message || '').startsWith('TAG_DUPLICATE:')) {
+        return res.send(resultData(null, 409, '标签已存在'));
+      }
+      return sendNoteServerError(res, 'add-note-tag', err);
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] add tag rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -394,12 +410,16 @@ export const editNoteTag = async (req, res) => {
       res.send(resultData(result));
     } catch (err) {
       await connection.rollback();
-      res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+      if (String(err?.message || '') === '标签已存在') {
+        return res.send(resultData(null, 409, '标签已存在'));
+      }
+      return sendNoteServerError(res, 'edit-note-tag', err);
     } finally {
       connection.release();
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] edit tag rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -427,10 +447,11 @@ export const queryNoteTagList = (req, res) => {
         res.send(resultData(result));
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+        return sendNoteServerError(res, 'query-note-tag-list', err);
       });
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] query tags rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -457,7 +478,7 @@ export const getNoteTags = async (req, res) => {
     );
     res.send(resultData(result));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    return sendNoteServerError(res, 'query-note-tags', e);
   }
 };
 
@@ -472,10 +493,11 @@ export const delNoteTag = (req, res) => {
         res.send(resultData('删除标签成功'));
       })
       .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+        return sendNoteServerError(res, 'delete-note-tag', err);
       });
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] delete tag rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -513,12 +535,13 @@ export const updateNoteTags = async (req, res) => {
       res.send(resultData('更新标签成功'));
     } catch (error) {
       await connection.rollback();
-      res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+      return sendNoteServerError(res, 'update-note-tags', error);
     } finally {
       connection.release();
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] update tags rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -549,7 +572,7 @@ export const getNoteVersions = async (req, res) => {
     // 回传 content + type,字数与预览渲染都交给前端(按渲染后展示文本计,html/md 口径一致)
     res.send(resultData(rows));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    return sendNoteServerError(res, 'list-note-versions', e);
   }
 };
 
@@ -574,7 +597,7 @@ export const getNoteVersionDetail = async (req, res) => {
     }
     res.send(resultData(rows[0]));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    return sendNoteServerError(res, 'get-note-version', e);
   }
 };
 
@@ -630,15 +653,17 @@ export const restoreNoteVersion = async (req, res) => {
       ]);
       await pruneNoteVersions(connection, noteId);
       await connection.commit();
+      await invalidatePersonalKnowledgeCache(userId);
       res.send(resultData({ id: noteId, title: verTitle, content: verContent, type: verType }));
     } catch (error) {
       await connection.rollback();
-      res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+      return sendNoteServerError(res, 'restore-note-version', error);
     } finally {
       connection.release();
     }
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e));
+    console.warn('[note-library] restore version rejected code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 400, '客户端请求参数无效'));
   }
 };
 
@@ -759,10 +784,7 @@ export const delNoteTemplate = async (req, res) => {
       return res.send(resultData(null, 404, '模板不存在'));
     }
     const imageUrls = extractNoteImageUrls(rows[0].content);
-    const [result] = await pool.query('DELETE FROM note_template WHERE id = ? AND create_by = ?', [
-      templateId,
-      userId,
-    ]);
+    const [result] = await pool.query('DELETE FROM note_template WHERE id = ? AND create_by = ?', [templateId, userId]);
     if (result.affectedRows === 0) {
       return res.send(resultData(null, 404, '模板不存在'));
     }

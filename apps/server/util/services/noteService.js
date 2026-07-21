@@ -6,6 +6,14 @@ import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
 import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
 
 const NOTE_TYPES = new Set(['html', 'markdown']);
+const NOTE_VERSION_KEEP = 20;
+
+function noteServiceError(code, message, status = 400) {
+  const error = new Error(`${code}: ${message}`);
+  error.code = code;
+  error.status = status;
+  return error;
+}
 
 function markCommitOutcomeUnknown(error) {
   if (error && (typeof error === 'object' || typeof error === 'function')) {
@@ -23,10 +31,10 @@ function markCommitOutcomeUnknown(error) {
 }
 
 async function findOwnedNoteById({ userId, noteId }) {
-  const [rows] = await pool.query(
-    'SELECT id, title, type FROM note WHERE id = ? AND create_by = ? LIMIT 1',
-    [noteId, userId],
-  );
+  const [rows] = await pool.query('SELECT id, title, type FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
+    noteId,
+    userId,
+  ]);
   return rows[0] || null;
 }
 
@@ -158,4 +166,91 @@ export async function createNote({
     }
   }
   return { id: data.id, title, type, addedToInbox: Boolean(addToInbox) };
+}
+
+/**
+ * 在调用方已经开启的事务内更新一篇归属明确的笔记正文。
+ *
+ * AI Change Set 使用它把“版本校验后的补偿式写入”落到普通笔记领域服务：
+ * - 再次校验 owner 与当前正文，避免未来调用方遗漏归属或拿陈旧快照写入；
+ * - 写入前强制保存历史版本，保留笔记库自己的恢复入口；
+ * - 新增的本站图片只登记当前用户确实拥有的引用。
+ */
+export async function applyOwnedNoteContentChange(
+  connection,
+  { userId, actorUserId, noteId, before, after, maxContentLength = 1_000_000 } = {},
+) {
+  if (!connection?.query) throw noteServiceError('CONNECTION_REQUIRED', '缺少事务连接', 500);
+  if (!userId || !noteId) throw noteServiceError('NOTE_OWNER_REQUIRED', '缺少笔记归属信息');
+
+  const nextType = after?.type === 'md' ? 'markdown' : String(after?.type || '');
+  const nextContent = String(after?.content ?? '');
+  if (!NOTE_TYPES.has(nextType)) throw noteServiceError('INVALID_NOTE_TYPE', '笔记类型仅支持 html 或 markdown');
+  if (nextContent.length > maxContentLength) {
+    throw noteServiceError('CONTENT_TOO_LONG', `笔记正文不能超过 ${maxContentLength} 个字符`);
+  }
+
+  const [rows] = await connection.query(
+    'SELECT title, content, type FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
+    [String(noteId), String(userId)],
+  );
+  if (!rows.length) throw noteServiceError('RESOURCE_NOT_FOUND', '笔记不存在或无权操作', 404);
+
+  const current = {
+    title: rows[0].title || '',
+    content: rows[0].content || '',
+    type: rows[0].type === 'md' ? 'markdown' : rows[0].type || 'html',
+  };
+  const expected = {
+    title: String(before?.title || ''),
+    content: String(before?.content ?? ''),
+    type: before?.type === 'md' ? 'markdown' : String(before?.type || 'html'),
+  };
+  if (current.title !== expected.title || current.content !== expected.content || current.type !== expected.type) {
+    throw noteServiceError('NOTE_VERSION_CONFLICT', '笔记在预览后已发生变化，请重新生成差异', 409);
+  }
+
+  await connection.query('INSERT INTO note_versions SET ?', [
+    insertData({
+      noteId: String(noteId),
+      title: current.title,
+      content: current.content,
+      type: current.type,
+      createBy: String(userId),
+    }),
+  ]);
+
+  const [versionRows] = await connection.query(
+    'SELECT id FROM note_versions WHERE note_id = ? ORDER BY create_time DESC, id DESC',
+    [String(noteId)],
+  );
+  const staleVersionIds = versionRows.slice(NOTE_VERSION_KEEP).map((row) => row.id);
+  if (staleVersionIds.length) {
+    const placeholders = staleVersionIds.map(() => '?').join(',');
+    await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, staleVersionIds);
+  }
+
+  const [updateResult] = await connection.query(
+    'UPDATE note SET content = ?, type = ?, update_by = ? WHERE id = ? AND create_by = ? AND del_flag = 0',
+    [nextContent, nextType, String(actorUserId || userId), String(noteId), String(userId)],
+  );
+  if (Number(updateResult?.affectedRows || 0) !== 1) {
+    throw noteServiceError('NOTE_UPDATE_FAILED', '笔记更新失败，请重新加载后再试', 409);
+  }
+
+  const imageUrls = extractNoteImageUrls(nextContent);
+  if (imageUrls.length) {
+    // 单个 mysql2 connection 上串行执行，避免同一事务连接的并发查询互相排队时产生不确定顺序。
+    const [registeredRows] = await connection.query('SELECT url FROM note_images WHERE note_id = ?', [String(noteId)]);
+    const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId: String(userId), connection });
+    const registered = new Set(registeredRows.map((row) => String(row.url)));
+    for (const url of ownedUrls) {
+      if (!registered.has(url)) {
+        await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: String(noteId), url })]);
+        registered.add(url);
+      }
+    }
+  }
+
+  return { title: current.title, content: nextContent, type: nextType };
 }

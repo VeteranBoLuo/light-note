@@ -4,5 +4,6 @@ import bookmarkStore from './bookmark.ts';
 import noteStore from './note.ts';
 import inboxStore from './inbox.ts';
 import todoStore from './todo.ts';
+import useAiAssistantStore from './aiAssistant.ts';
 
-export { cloudSpaceStore, useUserStore, bookmarkStore, noteStore, inboxStore, todoStore };
+export { cloudSpaceStore, useUserStore, bookmarkStore, noteStore, inboxStore, todoStore, useAiAssistantStore };

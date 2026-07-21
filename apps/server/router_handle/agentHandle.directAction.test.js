@@ -40,7 +40,11 @@ vi.mock('../util/agent/secondRound.js', () => ({
   selectSecondRoundTools: vi.fn(() => []),
   shouldContinueToolPlanning: vi.fn(() => false),
 }));
-vi.mock('../util/aiQuota.js', () => ({ reserve: vi.fn(), reconcile: vi.fn() }));
+vi.mock('../util/aiQuota.js', () => ({
+  reserve: vi.fn(),
+  reconcile: vi.fn(),
+  resolveFingerprint: vi.fn((req) => String(req?.headers?.fingerprint || req?.ip || 'test')),
+}));
 vi.mock('../util/aiDocument/service.js', () => ({ resolveDocumentAttachments: vi.fn() }));
 vi.mock('../util/noteAiService.js', () => ({
   buildNoteAiPayload: vi.fn(),
@@ -109,7 +113,17 @@ vi.mock('../util/agent/tools/index.js', () => ({
     {
       name: 'save_attachment_to_cloud',
       description: '保存附件',
-      parameters: { type: 'object', properties: {} },
+      parameters: {
+        type: 'object',
+        properties: {
+          attachmentId: { type: 'string' },
+          fileName: { type: 'string' },
+          folderId: { type: 'string' },
+          folderName: { type: 'string' },
+          folderStrategy: { type: 'string' },
+        },
+      },
+      argumentAliases: ['attachment_id', 'file_name'],
       isWrite: true,
       directAction: true,
       riskLevel: 'low',
@@ -125,7 +139,10 @@ vi.mock('../util/agent/tools/index.js', () => ({
     {
       name: 'create_image_note',
       description: '创建图片笔记',
-      parameters: { type: 'object', properties: {} },
+      parameters: {
+        type: 'object',
+        properties: { attachmentId: { type: 'string' }, title: { type: 'string' } },
+      },
       isWrite: true,
       directAction: true,
       riskLevel: 'low',
@@ -135,7 +152,7 @@ vi.mock('../util/agent/tools/index.js', () => ({
     {
       name: 'create_note',
       description: '创建笔记',
-      parameters: { type: 'object', properties: {} },
+      parameters: { type: 'object', properties: { title: { type: 'string' } } },
       isWrite: true,
       directAction: false,
       riskLevel: 'low',
@@ -319,9 +336,7 @@ describe('prepareAgentToolAction', () => {
 
     expect(mocks.createToolResolutionInteraction).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'FOLDER_NOT_FOUND' }, status: 404 }),
-    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'FOLDER_NOT_FOUND' }, status: 404 }));
   });
 
   it('声明 interaction 能力后，文件夹不存在返回选择卡而不是普通错误', async () => {

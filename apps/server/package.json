@@ -8,6 +8,7 @@
     "start": "node app.js",
     "worker:documents": "node documentWorker.js",
     "check:ocr": "node scripts/checkOcrRuntime.js",
+    "eval:ai-assistant": "node evaluation/ai-assistant/runner.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

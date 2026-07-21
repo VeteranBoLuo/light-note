@@ -454,64 +454,59 @@
         <section class="settings-card" id="set-ai">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">
-              <svg
-                viewBox="0 0 24 24"
-                width="20"
-                height="20"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <circle cx="12" cy="12" r="3.5" />
-                <path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18" />
-              </svg>
+              <SvgIcon :src="icon.settings.ai" size="20" aria-hidden="true" />
             </span>
             <div class="card-head-text">
-              <h2 class="card-title">AI 设置</h2>
-              <p class="card-sub">回答风格与今日额度</p>
+              <h2 class="card-title">{{ t('settings.ai.title') }}</h2>
+              <p class="card-sub">{{ t('settings.ai.description') }}</p>
             </div>
           </div>
           <div class="fields">
             <div class="field">
               <div class="field-head">
-                <span class="field-label">回答风格</span>
-                <span class="field-desc">越「发散」每次回答越不同,越「严谨」越稳定一致</span>
+                <span class="field-label">{{ t('settings.ai.style') }}</span>
+                <span class="field-desc">{{ t('settings.ai.styleDescription') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in aiStyleOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: ((user.preferences as any).aiStyle || 'balanced') === o.v }"
+                  :type="((user.preferences as any).aiStyle || 'balanced') === o.v ? 'primary' : undefined"
+                  :aria-pressed="((user.preferences as any).aiStyle || 'balanced') === o.v"
                   @click="set('aiStyle', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
             <div class="field">
               <div class="field-head">
-                <span class="field-label">AI 开关</span>
-                <span class="field-desc">关闭后隐藏 AI 助手入口</span>
+                <span class="field-label">{{ t('settings.ai.enabled') }}</span>
+                <span class="field-desc">{{ t('settings.ai.enabledDescription') }}</span>
               </div>
-              <div class="seg">
-                <button
-                  v-for="o in onOffOpts"
-                  :key="String(o.v)"
-                  class="seg-btn"
-                  :class="{ active: ((user.preferences as any).aiEnabled ?? true) === o.v }"
-                  @click="set('aiEnabled', o.v)"
-                >
-                  {{ o.label }}
-                </button>
+              <BSwitch
+                :checked="user.preferences.aiEnabled !== false"
+                :aria-label="t('settings.ai.enabled')"
+                @change="set('aiEnabled', $event)"
+              />
+            </div>
+            <div v-if="!isGuestUser()" class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.ai.cloudHistory') }}</span>
+                <span class="field-desc">{{ t('settings.ai.cloudHistoryDescription') }}</span>
               </div>
+              <BSwitch
+                :checked="user.preferences.aiCloudHistory !== false"
+                :aria-label="t('settings.ai.cloudHistory')"
+                @change="set('aiCloudHistory', $event)"
+              />
             </div>
             <div class="field">
               <div class="field-head">
-                <span class="field-label">今日 AI 额度</span>
-                <span class="field-desc">按成长等级每日发放</span>
+                <span class="field-label">{{ t('settings.ai.quota') }}</span>
+                <span class="field-desc">{{ t('settings.ai.quotaDescription') }}</span>
               </div>
               <span class="field-desc" style="color: var(--text-color)">{{ quotaText }}</span>
             </div>
@@ -599,6 +594,7 @@
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
 
   const { t } = useI18n();
@@ -842,14 +838,14 @@
   }
 
   // AI 回答风格(映射后端 temperature:严谨0.3/平衡1.0/发散1.5)
-  const aiStyleOpts = [
-    { v: 'strict', label: '严谨' },
-    { v: 'balanced', label: '平衡' },
-    { v: 'creative', label: '发散' },
-  ];
+  const aiStyleOpts = computed(() => [
+    { v: 'strict', label: t('settings.ai.styleStrict') },
+    { v: 'balanced', label: t('settings.ai.styleBalanced') },
+    { v: 'creative', label: t('settings.ai.styleCreative') },
+  ]);
 
   // 今日 AI 额度
-  const quotaText = ref('加载中…');
+  const quotaText = ref(t('settings.ai.quotaLoading'));
   function fmtTokens(n: number) {
     if (!Number.isFinite(n)) return '—';
     return n >= 10000 ? `${(n / 10000).toFixed(n % 10000 === 0 ? 0 : 1)}万` : String(n);
@@ -858,9 +854,9 @@
     try {
       const res = await apiBasePost('/api/chat/aiQuota', {});
       const d: any = res?.data;
-      if (d?.exempt) quotaText.value = '不限(内部账号)';
+      if (d?.exempt) quotaText.value = t('settings.ai.quotaUnlimited');
       else if (d && Number.isFinite(d.quota))
-        quotaText.value = `已用 ${fmtTokens(d.used)} / ${fmtTokens(d.quota)} tokens`;
+        quotaText.value = t('settings.ai.quotaUsage', { used: fmtTokens(d.used), quota: fmtTokens(d.quota) });
       else quotaText.value = '—';
     } catch {
       quotaText.value = '—';

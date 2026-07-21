@@ -11,7 +11,7 @@ const options = [
 
 let cleanup: (() => void) | undefined;
 
-function mountSelect(showSearch = false) {
+function mountSelect(showSearch = false, accessibility: { ariaLabel?: string; ariaLabelledby?: string } = {}) {
   const value = ref('');
   const host = document.createElement('div');
   document.body.append(host);
@@ -21,6 +21,7 @@ function mountSelect(showSearch = false) {
         h(BSelect, {
           options,
           showSearch,
+          ...accessibility,
           value: value.value,
           'onUpdate:value': (nextValue: string) => {
             value.value = nextValue;
@@ -82,10 +83,11 @@ describe('BSelect keyboard interaction', () => {
   });
 
   it('exposes the searchable trigger as a combobox and supports keyboard selection', async () => {
-    const { host, value } = mountSelect(true);
+    const { host, value } = mountSelect(true, { ariaLabel: 'Choose scope' });
     const input = host.querySelector<HTMLInputElement>('.select-search-inline');
     expect(input).not.toBeNull();
     expect(input!.getAttribute('role')).toBe('combobox');
+    expect(input!.getAttribute('aria-label')).toBe('Choose scope');
 
     pressKey(input!, 'ArrowDown');
     await nextTick();
@@ -95,5 +97,11 @@ describe('BSelect keyboard interaction', () => {
     pressKey(input!, 'Enter');
     await nextTick();
     expect(value.value).toBe('first');
+  });
+
+  it('forwards an aria-labelledby relationship to a non-searchable combobox', () => {
+    const { host } = mountSelect(false, { ariaLabelledby: 'scope-label' });
+    const trigger = host.querySelector<HTMLElement>('.select-trigger');
+    expect(trigger?.getAttribute('aria-labelledby')).toBe('scope-label');
   });
 });

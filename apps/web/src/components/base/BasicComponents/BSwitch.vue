@@ -1,5 +1,15 @@
 <template>
-  <label class="b-switch" :class="{ 'is-checked': localChecked, 'is-disabled': disabled }" @click="toggle">
+  <label
+    class="b-switch"
+    :class="{ 'is-checked': localChecked, 'is-disabled': disabled }"
+    role="switch"
+    :tabindex="disabled ? -1 : 0"
+    :aria-checked="localChecked"
+    :aria-disabled="disabled || undefined"
+    @click="toggle"
+    @keydown.enter.prevent="toggle"
+    @keydown.space.prevent="toggle"
+  >
     <span class="b-switch__track">
       <span class="b-switch__thumb" />
     </span>

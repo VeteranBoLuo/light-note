@@ -52,7 +52,7 @@
       <div>
         请求参数：
         <pre
-          style="margin: 4px 0 0; max-height: 120px; overflow: auto; padding: 8px; border-radius: 6px; font-size: 12px"
+          style="margin: 4px 0 0; max-height: 120px; overflow: auto; padding: 8px; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-all"
           >{{ selectedRecord.req }}</pre>
       </div>
       <div>ip地址：{{ selectedRecord?.ip }}</div>

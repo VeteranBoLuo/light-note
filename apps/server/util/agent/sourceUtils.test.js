@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  auditAgentCitations,
   dedupeAgentSources,
   normalizeAgentSource,
   normalizeSourceUrl,
+  removeInvalidAgentCitations,
   resolveKnowledgeSourceTarget,
   resolveToolSources,
 } from './sourceUtils.js';
@@ -53,6 +55,68 @@ describe('AI 来源标准化', () => {
       title: '未完成保存的文件',
       sourceType: 'cloud',
     });
+  });
+
+  it('保留并约束文档覆盖率元数据，供最终证据链披露全文边界', () => {
+    expect(
+      normalizeAgentSource({
+        type: 'document',
+        id: 'document-id',
+        title: '长文档',
+        coverage: {
+          metadataAvailable: true,
+          complete: false,
+          truncated: true,
+          coverageRatio: 1.5,
+          total: { chars: 1000, pages: 10, chunks: 8 },
+          processed: { chars: 600, pages: 6, chunks: 5 },
+          failedRanges: [{ unit: 'page', start: 7, end: 10, code: 'OCR_PAGE_FAILED', reason: '无法识别' }],
+          reasons: [{ code: 'CHUNK_LIMIT', message: '<b>仅处理部分分块</b>' }],
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        coverage: {
+          metadataAvailable: true,
+          complete: false,
+          truncated: true,
+          coverageRatio: 1,
+          total: { chars: 1000, pages: 10, chunks: 8 },
+          processed: { chars: 600, pages: 6, chunks: 5 },
+          failedRanges: [{ unit: 'page', start: 7, end: 10, code: 'OCR_PAGE_FAILED', reason: '无法识别' }],
+          reasons: [{ code: 'CHUNK_LIMIT', message: '仅处理部分分块' }],
+        },
+      }),
+    );
+  });
+
+  it('保留统一个人检索产生的 evidenceRef、定位和资源版本，同时使用真实资源 ID 导航', () => {
+    expect(
+      normalizeAgentSource({
+        type: 'note',
+        id: 'note:note-1',
+        sourceId: 'note:note-1',
+        resourceId: 'note-1',
+        evidenceRef: 'ev-1',
+        citationKey: '1',
+        title: '证据笔记',
+        locator: { type: 'section', value: '结论' },
+        resourceVersion: 'v2',
+        target: { type: 'note-detail', id: 'note-1' },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        id: 'note-1',
+        sourceId: 'note:note-1',
+        resourceId: 'note-1',
+        evidenceRef: 'ev-1',
+        citationKey: '1',
+        locatorType: 'section',
+        locatorValue: '结论',
+        resourceVersion: 'v2',
+        target: 'note-detail',
+      }),
+    );
   });
 
   it('只有帮助中心公开文章和 Root 内部知识具有导航目标', () => {
@@ -107,5 +171,41 @@ describe('AI 来源标准化', () => {
     ).toEqual([]);
     expect(errorSpy).toHaveBeenCalledOnce();
     errorSpy.mockRestore();
+  });
+
+  it('审计并移除不存在的引用编号，但不破坏代码和数字链接', () => {
+    const content = [
+      '已核验结论 [1]，错误编号 [9]。',
+      '行内代码 `const first = rows[9]`。',
+      '```js',
+      'const second = rows[9];',
+      '```',
+      '数字链接 [9](https://example.com) 不是证据编号。',
+    ].join('\n');
+    const audit = auditAgentCitations(content, [{ citationKey: '1' }]);
+
+    expect(audit).toEqual({
+      citedKeys: ['1'],
+      invalidKeys: ['9'],
+      verifiedCitationCount: 1,
+      evidenceCount: 1,
+    });
+    const sanitized = removeInvalidAgentCitations(content, audit.invalidKeys);
+    expect(sanitized).toContain('已核验结论 [1]，错误编号 。');
+    expect(sanitized).toContain('`const first = rows[9]`');
+    expect(sanitized).toContain('const second = rows[9];');
+    expect(sanitized).toContain('[9](https://example.com)');
+  });
+
+  it('识别并清洗连写引用 [3][4]，不再漏掉第一个', () => {
+    const content = '合法连写 [1][2]。越界连写 [3][4]。';
+    const audit = auditAgentCitations(content, [{ citationKey: '1' }, { citationKey: '2' }]);
+    expect(audit.citedKeys).toEqual(['1', '2']);
+    expect(audit.verifiedCitationCount).toBe(2);
+    expect(audit.invalidKeys).toEqual(['3', '4']);
+    const sanitized = removeInvalidAgentCitations(content, audit.invalidKeys);
+    expect(sanitized).toContain('合法连写 [1][2]。');
+    expect(sanitized).not.toContain('[3]');
+    expect(sanitized).not.toContain('[4]');
   });
 });

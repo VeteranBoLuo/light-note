@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getActiveProviderInfo: vi.fn(),
-  requestDeepSeek: vi.fn(),
-  requestDeepSeekStream: vi.fn(),
+  requestAi: vi.fn(),
+  requestAiStream: vi.fn(),
   reserve: vi.fn(),
   reconcile: vi.fn(),
   poolQuery: vi.fn(),
   suggestBookmarkMeta: vi.fn(),
+  searchTagIcons: vi.fn(),
+  resolveTagIcon: vi.fn(),
 }));
 
 vi.mock('../util/common.js', () => ({
@@ -16,17 +18,23 @@ vi.mock('../util/common.js', () => ({
 }));
 vi.mock('../db/index.js', () => ({ default: { query: mocks.poolQuery } }));
 vi.mock('../util/aiOrganize.js', () => ({ suggestBookmarkMeta: mocks.suggestBookmarkMeta }));
+vi.mock('../util/tagIconService.js', () => ({
+  searchTagIcons: mocks.searchTagIcons,
+  resolveTagIcon: mocks.resolveTagIcon,
+}));
 vi.mock('../util/agent/deepseekClient.js', () => ({
   getActiveProviderInfo: mocks.getActiveProviderInfo,
-  requestDeepSeek: mocks.requestDeepSeek,
-  requestDeepSeekStream: mocks.requestDeepSeekStream,
+}));
+vi.mock('../util/agent/aiGateway.js', () => ({
+  requestAi: mocks.requestAi,
+  requestAiStream: mocks.requestAiStream,
 }));
 vi.mock('../util/aiQuota.js', () => ({
   reserve: mocks.reserve,
   reconcile: mocks.reconcile,
 }));
 
-const { assistNote, generateBookmarkMeta } = await import('./chatHandle.js');
+const { assistNote, generateBookmarkMeta, generateTagIcon } = await import('./chatHandle.js');
 
 class MockResponse extends EventEmitter {
   writableEnded = false;
@@ -65,9 +73,7 @@ class MockResponse extends EventEmitter {
 }
 
 function parseSseEvents(writes) {
-  return writes
-    .filter((chunk) => chunk.startsWith('data: {'))
-    .map((chunk) => JSON.parse(chunk.slice(5).trim()));
+  return writes.filter((chunk) => chunk.startsWith('data: {')).map((chunk) => JSON.parse(chunk.slice(5).trim()));
 }
 
 describe('assistNote SSE', () => {
@@ -86,7 +92,7 @@ describe('assistNote SSE', () => {
 
   it('把真实完成原因回传给前端，并采用笔记助手的输出预算', async () => {
     const heartbeatSpy = vi.spyOn(global, 'setInterval');
-    mocks.requestDeepSeekStream.mockImplementation(async (_messages, options) => {
+    mocks.requestAiStream.mockImplementation(async (_messages, options) => {
       options.onDelta('【正文】这是被截断前的内容');
       return {
         usage: { promptTokens: 20, completionTokens: 8192, totalTokens: 8212 },
@@ -103,9 +109,14 @@ describe('assistNote SSE', () => {
 
     await assistNote(req, res);
 
-    expect(mocks.requestDeepSeekStream).toHaveBeenCalledWith(
+    expect(mocks.requestAiStream).toHaveBeenCalledWith(
       expect.any(Array),
-      expect.objectContaining({ maxTokens: 8192, signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        maxTokens: 8192,
+        signal: expect.any(AbortSignal),
+        toolChoice: 'none',
+        trace: expect.objectContaining({ taskType: 'note_assist', stage: 'note_assist_stream' }),
+      }),
     );
     const events = parseSseEvents(res.writes);
     expect(events.map((event) => event.event)).toEqual(['start', 'delta', 'done']);
@@ -113,6 +124,80 @@ describe('assistNote SSE', () => {
     expect(res.writes.at(-1)).toBe('data: [DONE]\n\n');
     expect(heartbeatSpy).toHaveBeenCalledWith(expect.any(Function), 12_000);
     heartbeatSpy.mockRestore();
+  });
+
+  it('非流式笔记助手也经过同一 Gateway 并关联 requestId trace', async () => {
+    mocks.requestAi.mockResolvedValue({
+      content: '【正文】润色结果',
+      usage: { promptTokens: 12, completionTokens: 8, totalTokens: 20 },
+      usageStatus: 'reported',
+      finishReason: 'stop',
+    });
+    const req = {
+      body: { message: '请润色这篇笔记', stream: false, responseFormat: 'body' },
+      user: { id: 'user-1', role: 'user', alias: 'tester' },
+      setTimeout: vi.fn(),
+    };
+    const res = new MockResponse();
+
+    await assistNote(req, res);
+
+    const options = mocks.requestAi.mock.calls[0][1];
+    expect(options).toEqual(
+      expect.objectContaining({
+        toolChoice: 'none',
+        maxTokens: 8192,
+        trace: expect.objectContaining({ taskType: 'note_assist', stage: 'note_assist_complete' }),
+      }),
+    );
+    expect(options.trace.traceId).toBe(res.payload.data.requestId);
+    expect(res.payload).toMatchObject({ status: 200, data: { response: '【正文】润色结果' } });
+  });
+});
+
+describe('generateTagIcon legacy compatibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.searchTagIcons.mockResolvedValue({ icons: ['lucide:database'], keywords: ['database'] });
+    mocks.resolveTagIcon.mockResolvedValue({
+      icon: 'lucide:database',
+      svg: '<svg><path d="M0 0"/></svg>',
+      iconUrl: 'data:image/svg+xml;base64,c2FmZQ==',
+    });
+  });
+
+  it('只返回白名单图标结果，不透传上游 SVG 正文', async () => {
+    const res = new MockResponse();
+    await generateTagIcon({ body: { tagName: '数据库' } }, res);
+
+    expect(mocks.searchTagIcons).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: '数据库',
+        trace: expect.objectContaining({ taskType: 'tag_icon_search' }),
+        governance: expect.objectContaining({ quotaPolicy: 'user', taskType: 'tag_icon_search' }),
+      }),
+    );
+    expect(mocks.resolveTagIcon).toHaveBeenCalledWith('lucide:database');
+    expect(res.payload).toMatchObject({
+      status: 200,
+      data: {
+        icon: 'lucide:database',
+        iconUrl: 'data:image/svg+xml;base64,c2FmZQ==',
+        generationMode: 'iconify_allowlist',
+        deprecatedEndpoint: true,
+      },
+    });
+    expect(res.payload.data).not.toHaveProperty('svg');
+  });
+
+  it('没有白名单候选时返回 404，不尝试解析任意图标', async () => {
+    mocks.searchTagIcons.mockResolvedValueOnce({ icons: [], keywords: ['unknown'] });
+    const res = new MockResponse();
+
+    await generateTagIcon({ body: { tagName: '不存在的语义' } }, res);
+
+    expect(res.statusCode).toBe(404);
+    expect(mocks.resolveTagIcon).not.toHaveBeenCalled();
   });
 });
 
@@ -158,9 +243,27 @@ describe('generateBookmarkMeta URL gate', () => {
         url: 'https://boluo66.top',
         userTags: [],
         signal: expect.any(AbortSignal),
+        trace: expect.objectContaining({ taskType: 'bookmark_meta', stage: 'organize_bookmark_meta' }),
+        governance: expect.objectContaining({ quotaPolicy: 'user', taskType: 'organize_bookmark_meta' }),
       }),
     );
     expect(res.payload).toMatchObject({ status: 200, data: { resolvedUrl: 'https://boluo66.top' } });
+    expect(mocks.suggestBookmarkMeta.mock.calls[0][0].trace.traceId).toBe(res.payload.data.requestId);
+    expect(mocks.suggestBookmarkMeta.mock.calls[0][0].governance.requestId).toBe(res.payload.data.requestId);
+  });
+
+  it('Gateway 额度 gate 拒绝时返回 429 稳定错误', async () => {
+    mocks.suggestBookmarkMeta.mockRejectedValueOnce(
+      Object.assign(new Error('今日 AI 额度已用完'), { code: 'AI_QUOTA_EXCEEDED' }),
+    );
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = new MockResponse();
+
+    await generateBookmarkMeta({ body: { url: 'boluo66.top' }, user: { id: 'u1' } }, res);
+
+    expect(res.statusCode).toBe(429);
+    expect(res.payload).toMatchObject({ status: 429, message: '今日 AI 额度已用完，请明天再试。' });
+    log.mockRestore();
   });
 
   it('客户端停止后向下游传播 abort，并且不再尝试写响应', async () => {

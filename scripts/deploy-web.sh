@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 前端部署:本地增量构建 → tar → scp → 服务器原子切换(滚动保留 1 个旧 dist 备份,可回滚且不累积)
 set -euo pipefail
-HOST="root@139.9.83.16"
+HOST="root@113.45.143.76"
 KEY="$HOME/.ssh/hermes_server"
 REMOTE="/www/wwwroot"
 TS="$(date +%Y%m%d%H%M%S)"

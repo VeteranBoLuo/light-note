@@ -16,24 +16,10 @@
         </div>
       </div>
       <div class="bubble-col">
-        <div class="bubble" v-if="message.content || (message.thoughts && message.thoughts.length)">
-          <!-- 深度思考过程 -->
-          <div v-if="message.thoughts && message.thoughts.length" class="thoughts">
-            <div class="thoughts-header">{{
-              message.thinkingText && hasAnswerStarted ? '思考完毕' : '深度思考中...'
-            }}</div>
-            <div v-if="message.thoughts.some((t) => t.action_type === 'reasoning')" class="reasoning">
-              <strong>思考：</strong>{{ message.thinkingDisplay || message.thinkingText || '' }}
-            </div>
-            <div v-for="(thought, index) in message.thoughts" :key="index" class="thought">
-              <div v-if="thought.action_type === 'agentRag'" class="rag">
-                <strong>知识检索</strong>
-              </div>
-            </div>
-          </div>
+        <div class="bubble" v-if="message.content">
           <!-- Markdown 渲染内容 -->
           <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
-          <div v-else-if="isStreaming" class="text assistant-stream-text" v-text="message.content"></div>
+          <div v-else-if="isStreaming" class="text" v-html="streamingHtml" @click="handleLinkClick"></div>
           <div v-else class="text" v-html="formatAssistantMessage(message.content)" @click="handleLinkClick"></div>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
@@ -54,6 +40,12 @@
           </div>
         </div>
         <ReplyLoading v-else-if="!message.toolEvents?.length" />
+        <p
+          v-if="message.role === 'assistant' && message.citationAudit?.invalidKeys?.length"
+          class="citation-audit-notice"
+        >
+          {{ t('ai.evidence.invalidCitationsRemoved', { count: message.citationAudit.invalidKeys.length }) }}
+        </p>
         <AiToolStatusList
           v-if="message.role === 'assistant' && message.toolEvents?.length"
           :items="message.toolEvents"
@@ -64,36 +56,10 @@
         <div class="msg-footer" v-if="message.role === 'user' && message.content">
           <div class="msg-actions">
             <BButton class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
-              <svg
-                viewBox="0 0 24 24"
-                width="15"
-                height="15"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
+              <SvgIcon :src="icon.ai.messageCopy" size="15" aria-hidden="true" />
             </BButton>
             <BButton class="msg-action-btn" :title="t('ai.edit')" @click="handleEdit">
-              <svg
-                viewBox="0 0 24 24"
-                width="15"
-                height="15"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 20h9"></path>
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
-              </svg>
+              <SvgIcon :src="icon.ai.messageEdit" size="15" aria-hidden="true" />
             </BButton>
           </div>
           <span class="time">{{ formatTime(message.timestamp) }}</span>
@@ -106,36 +72,15 @@
         >
           <div class="msg-actions">
             <BButton class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
-              <svg
-                viewBox="0 0 24 24"
-                width="15"
-                height="15"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
+              <SvgIcon :src="icon.ai.messageCopy" size="15" aria-hidden="true" />
             </BButton>
-            <BButton class="msg-action-btn" :title="t('ai.regenerate')" @click="handleRegenerate">
-              <svg
-                viewBox="0 0 24 24"
-                width="15"
-                height="15"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M23 4v6h-6"></path>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-              </svg>
+            <BButton
+              class="msg-action-btn"
+              :title="t('ai.regenerate')"
+              :disabled="!canRegenerate"
+              @click="handleRegenerate"
+            >
+              <SvgIcon :src="icon.ai.messageRetry" size="15" aria-hidden="true" />
             </BButton>
           </div>
         </div>
@@ -146,7 +91,6 @@
 
 <script setup lang="ts">
   import { computed } from 'vue';
-  import 'highlight.js/styles/github.css';
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
@@ -158,9 +102,14 @@
   // 注意：本组件有名为 message 的 prop，这里必须改名，否则导入会遮蔽 prop，
   // 导致模板里的 message.content/role 全部指向该工具对象而恒为 undefined（消息一直转圈不显示）
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage';
-  import { renderAssistantMarkdown } from '@/utils/aiMessageRender';
+  import { getAiEvidenceAnchorId, renderAssistantMarkdown, renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { resolveAiSourceNavigation, type AiSource } from '@/components/aiAssistant/aiSourceNavigation';
+  import {
+    resolveAiSourceNavigation,
+    type AiEvidenceReference,
+    type AiSource,
+  } from '@/components/aiAssistant/aiSourceNavigation';
+  import { extractAiMemoryInfluence } from '@/utils/aiMemoryInfluence';
 
   const { t } = useI18n();
 
@@ -168,28 +117,70 @@
   const user = useUserStore();
 
   interface ChatMessage {
+    id: string;
     role: 'user' | 'assistant';
     content: string;
     timestamp: Date;
-    thoughts?: any[];
-    thinkingText?: string;
-    thinkingDisplay?: string;
     contexts?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag'; id: string; title: string }>;
     toolEvents?: AiToolStatusItem[];
+    sources?: AiSource[];
+    evidence?: AiEvidenceReference[];
+    citationAudit?: {
+      citedKeys: string[];
+      invalidKeys: string[];
+      verifiedCitationCount: number;
+      evidenceCount: number;
+    };
+    activity?: Array<Record<string, unknown> | string>;
   }
 
   const props = defineProps<{
     message: ChatMessage;
-    hasAnswerStarted: boolean;
     isStreaming?: boolean;
+    canRegenerate?: boolean;
   }>();
+
+  const canRegenerate = computed(() => props.canRegenerate !== false);
+
+  // 流式阶段就实时渲染 Markdown(轻量路径:补全未闭合语法 → marked → DOMPurify,跳过高亮与引用装饰),
+  // 不再显示原始 ##/**/``` 符号。打字机逐帧更新 content,computed 依赖追踪天然每帧至多算一次。
+  const streamingHtml = computed(() => renderStreamingMarkdown(props.message.content));
 
   // 点“编辑”把这条用户消息内容抛给容器，回填到输入框
   const emit = defineEmits<{
     (e: 'edit', content: string, contexts: NonNullable<ChatMessage['contexts']>): void;
     (e: 'regenerate'): void;
     (e: 'source-navigate'): void;
+    (e: 'open-memory-ledger'): void;
   }>();
+
+  const memoryInfluence = computed(() => extractAiMemoryInfluence(props.message.activity));
+  const memoryInfluenceSummary = computed(() => {
+    const influence = memoryInfluence.value;
+    if (!influence) return '';
+    return influence.status === 'used'
+      ? t('ai.memory.influence.used', { count: influence.count })
+      : t('ai.memory.influence.notUsed');
+  });
+  const memoryInfluenceDetails = computed(() => {
+    const influence = memoryInfluence.value;
+    if (!influence) return '';
+    if (influence.status === 'not_used') return t(`ai.memory.influence.reasons.${influence.reason}`);
+    const types = influence.types.length
+      ? influence.types.map((type) => t(`ai.memory.types.${type}`)).join(t('ai.memory.influence.separator'))
+      : t('ai.memory.influence.typeUnavailable');
+    const scopes = influence.scopes.length
+      ? influence.scopes.map((scope) => t(`ai.memory.scopes.${scope}`)).join(t('ai.memory.influence.separator'))
+      : t('ai.memory.influence.scopeUnavailable');
+    return t('ai.memory.influence.details', { types, scopes });
+  });
+  const memoryInfluenceAccessibleLabel = computed(() =>
+    t('ai.memory.influence.accessibleLabel', {
+      summary: memoryInfluenceSummary.value,
+      details: memoryInfluenceDetails.value,
+      action: t('ai.memory.influence.openLedger'),
+    }),
+  );
 
   // 复制这条消息内容到剪贴板
   const handleCopy = () => {
@@ -208,16 +199,23 @@
     emit('regenerate');
   };
 
-  const formatAssistantMessage = renderAssistantMarkdown;
+  const formatAssistantMessage = (content: string) => {
+    const citationKeys = [
+      ...(props.message.evidence || []).map((item) => item.citationKey),
+      ...(props.message.sources || []).flatMap((source) => [
+        source.citationKey || '',
+        ...(source.evidence || []).map((item) => item.citationKey),
+      ]),
+    ];
+    return renderAssistantMarkdown(content, [...new Set(citationKeys.filter(Boolean))], props.message.id);
+  };
 
   const formatTime = (date: Date): string => {
-    return date.toLocaleTimeString('zh-CN', {
+    return date.toLocaleTimeString(undefined, {
       hour: '2-digit',
       minute: '2-digit',
     });
   };
-
-  const hasAnswerStarted = computed(() => props.hasAnswerStarted);
 
   const contextIcon = (type: NonNullable<ChatMessage['contexts']>[number]['type']) => {
     if (type === 'note') return icon.resource.note;
@@ -242,6 +240,15 @@
     const target = event.target as HTMLElement;
     const anchor = target.closest<HTMLAnchorElement>('a');
     if (!anchor || !anchor.href) return;
+
+    const citationKey = String(anchor.dataset.citationKey || '').trim();
+    if (citationKey) {
+      event.preventDefault();
+      const evidenceGroup = document.getElementById(getAiEvidenceAnchorId(citationKey, props.message.id));
+      evidenceGroup?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      evidenceGroup?.focus({ preventScroll: true });
+      return;
+    }
 
     const href = anchor.getAttribute('href') || '';
     if (!href || href.startsWith('#')) return;
@@ -293,10 +300,6 @@
     flex-shrink: 0;
   }
 
-  .message.assistant .avatar {
-    background: #7b79d3;
-  }
-
   .bubble {
     border-radius: 1rem;
     max-width: 100%;
@@ -324,9 +327,73 @@
     white-space: pre-wrap;
   }
 
-  /* 流式阶段只更新一个文本节点，避免每个字都重建整棵 Markdown DOM、重新高亮代码并触发布局抖动。 */
-  .assistant-stream-text {
-    white-space: pre-wrap;
+  .citation-audit-notice {
+    margin: 0.35rem 0 0;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--warning-color, #c47f17) 32%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--warning-color, #c47f17) 8%, var(--card-background));
+    color: color-mix(in srgb, var(--warning-color, #c47f17) 72%, var(--text-color));
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .memory-influence {
+    display: flex;
+    width: 100%;
+    min-height: 38px;
+    /* 覆盖 BButton .b_btn 的 height:32px / line-height:32px —— 否则双行文案(标题+说明)被 32px 行高
+       各自撑高,卡片变得很高、两行离得老远,而 6px 内边距相对巨大的行高又显得文字贴着上下边框。 */
+    height: auto;
+    line-height: 1.35;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+    margin-top: 7px;
+    padding: 6px 9px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--card-background));
+    color: var(--primary-color);
+    text-align: left;
+  }
+
+  .memory-influence.is-not_used {
+    border-color: var(--surface-border-color);
+    background: var(--workspace-panel-bg-color, var(--card-background));
+    color: var(--desc-color);
+  }
+
+  .memory-influence__copy {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 1px;
+  }
+
+  .memory-influence__copy strong,
+  .memory-influence__copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .memory-influence__copy strong {
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .memory-influence__copy small,
+  .memory-influence__action {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .memory-influence__action {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+    font-weight: 600;
   }
 
   .user-contexts {
@@ -407,13 +474,13 @@
   .text h6 {
     margin-top: 1.2em;
     margin-bottom: 0.6em;
-    color: #2d3748;
+    color: var(--text-color);
     font-weight: 600;
   }
 
   .text h1 {
     font-size: 1.5em;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--surface-border-color);
     padding-bottom: 0.3em;
   }
 
@@ -426,8 +493,8 @@
   }
 
   .text pre {
-    background: #f6f8fa;
-    border: 1px solid #e1e5e9;
+    background: color-mix(in srgb, var(--card-background) 88%, var(--text-color) 12%);
+    border: 1px solid var(--surface-border-color);
     border-radius: 6px;
     padding: 12px;
     overflow-x: auto;
@@ -435,7 +502,7 @@
   }
 
   .text code {
-    background: #f1f3f4;
+    background: color-mix(in srgb, var(--card-background) 88%, var(--text-color) 12%);
     padding: 2px 6px;
     border-radius: 3px;
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -458,10 +525,10 @@
   }
 
   .text blockquote {
-    border-left: 4px solid #e2e8f0;
+    border-left: 4px solid var(--surface-border-color);
     padding-left: 1em;
     margin: 1em 0;
-    color: #4a5568;
+    color: var(--desc-color);
     font-style: italic;
   }
 
@@ -473,23 +540,89 @@
 
   .text th,
   .text td {
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--surface-border-color);
     padding: 8px 12px;
     text-align: left;
   }
 
   .text th {
-    background: #f7fafc;
+    background: color-mix(in srgb, var(--card-background) 90%, var(--primary-color) 10%);
     font-weight: 600;
   }
 
   .text a {
-    color: #3b82f6;
+    color: var(--primary-color);
     text-decoration: none;
   }
 
   .text a:hover {
     text-decoration: underline;
+  }
+
+  .text :deep(.ai-inline-citation) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    margin: 0 1px;
+    padding: 0 5px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 28%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--card-background));
+    color: var(--primary-color);
+    font-size: 0.84em;
+    font-weight: 700;
+    line-height: 1.35;
+    text-decoration: none;
+    vertical-align: 0.06em;
+  }
+
+  .text :deep(.ai-inline-citation:hover),
+  .text :deep(.ai-inline-citation:focus-visible) {
+    border-color: color-mix(in srgb, var(--primary-color) 52%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
+    outline: none;
+    text-decoration: none;
+  }
+
+  /* 使用主题变量替代 highlight.js 的固定亮色主题，避免暗色模式下代码不可读。 */
+  .text :deep(.hljs-comment),
+  .text :deep(.hljs-quote) {
+    color: var(--desc-color);
+    font-style: italic;
+  }
+
+  .text :deep(.hljs-keyword),
+  .text :deep(.hljs-selector-tag),
+  .text :deep(.hljs-literal),
+  .text :deep(.hljs-section),
+  .text :deep(.hljs-link) {
+    color: color-mix(in srgb, var(--primary-color) 78%, #7c3aed);
+  }
+
+  .text :deep(.hljs-string),
+  .text :deep(.hljs-title),
+  .text :deep(.hljs-name),
+  .text :deep(.hljs-type),
+  .text :deep(.hljs-attribute),
+  .text :deep(.hljs-symbol),
+  .text :deep(.hljs-bullet),
+  .text :deep(.hljs-addition),
+  .text :deep(.hljs-variable),
+  .text :deep(.hljs-template-tag),
+  .text :deep(.hljs-template-variable) {
+    color: color-mix(in srgb, var(--success-color, #2e8b57) 78%, var(--text-color));
+  }
+
+  .text :deep(.hljs-number),
+  .text :deep(.hljs-meta),
+  .text :deep(.hljs-built_in),
+  .text :deep(.hljs-builtin-name),
+  .text :deep(.hljs-params) {
+    color: color-mix(in srgb, var(--warning-color, #c47f17) 80%, var(--text-color));
+  }
+
+  .text :deep(.hljs-deletion) {
+    color: var(--danger-color, #d14343);
   }
 
   .time {
@@ -511,6 +644,16 @@
 
   .message.assistant .bubble-col {
     align-items: flex-start;
+  }
+
+  @media (max-width: 520px) {
+    .memory-influence {
+      min-height: 44px;
+    }
+
+    .memory-influence__action {
+      display: none;
+    }
   }
 
   /* 用户消息：气泡外下方的操作条（图标在前、时间在后），整体右对齐 */
@@ -546,15 +689,18 @@
       color 0.15s;
   }
 
+  @media (pointer: coarse) {
+    .msg-action-btn {
+      width: 44px;
+      height: 44px;
+    }
+  }
+
   .msg-action-btn:hover {
     opacity: 1;
     color: var(--primary-color);
     /* 灰阶半透明，暗色/亮色主题下都可见 */
     background: rgba(127, 127, 127, 0.15);
-  }
-
-  .msg-action-btn svg {
-    display: block;
   }
 
   /* 桌面端（可 hover）图标默认隐藏，鼠标移到该条消息才淡入，减少干扰；
@@ -569,47 +715,22 @@
     }
   }
 
-  .thoughts {
-    margin-bottom: 1rem;
-    padding: 0.5rem;
-    line-height: 1.4;
-    background: rgba(189, 177, 177, 0.25);
-    border-radius: 0.5rem;
-    border-left: 3px solid var(--primary-color);
-  }
-
-  .thoughts-header {
-    font-weight: bold;
-    color: var(--primary-color);
-    margin-bottom: 0.5rem;
-  }
-
-  .thought {
-    margin: 0.5rem 0;
-    font-size: 0.9rem;
-  }
-
-  .reasoning {
-    color: #888;
-    font-size: 0.85rem;
-  }
-
-  .rag {
-    color: #007bff;
-  }
-
-  .observation {
-    margin-top: 0.25rem;
-    font-size: 0.8rem;
-    color: #888;
-  }
-
   @keyframes message-fade-in {
     from {
       opacity: 0;
     }
     to {
       opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .message {
+      animation: none;
+    }
+
+    .msg-action-btn {
+      transition: none;
     }
   }
 </style>

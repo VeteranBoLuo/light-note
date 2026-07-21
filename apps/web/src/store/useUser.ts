@@ -55,6 +55,9 @@ interface UserInfo {
     notifyLevelUp?: boolean; // 升级提醒通知推送
     notifyOpinionReply?: boolean; // 反馈回复通知推送
     notifyFeatureRequest?: boolean; // 共建轻笺建议进度通知
+    aiEnabled?: boolean; // 是否显示 AI 助手入口
+    aiStyle?: 'strict' | 'balanced' | 'creative'; // AI 回答风格
+    aiCloudHistory?: boolean; // 是否把新 AI 对话同步到云端
   };
 }
 
@@ -93,6 +96,9 @@ const createDefaultUserState = (): UserState => ({
     homePage: 'landing', // 默认首页（未设置时进官网）
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
     notifyFeatureRequest: true,
+    aiEnabled: true,
+    aiStyle: 'balanced',
+    aiCloudHistory: true,
   },
 });
 

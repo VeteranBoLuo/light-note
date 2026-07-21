@@ -54,7 +54,7 @@
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && bookmark.isDesktop && note?.id">
-        <div class="note-header-title-icon note-header-title-icon--history" @click="$emit('history')">
+        <div class="note-header-title-icon note-header-title-icon--history" @click="$emit('history')" v-click-log="OPERATION_LOG_MAP.note.history">
           <SvgIcon :src="icon.noteDetail.history" />
         </div>
       </BTooltip>
@@ -68,7 +68,7 @@
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
-        <div class="note-header-title-icon note-header-title-icon--export" @click="openExportModal">
+        <div class="note-header-title-icon note-header-title-icon--export" @click="openExportModal" v-click-log="OPERATION_LOG_MAP.note.exportNote">
           <SvgIcon :src="icon.noteDetail.exportLine" />
         </div>
       </BTooltip>

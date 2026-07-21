@@ -1,6 +1,7 @@
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { resolveTagIcon, searchTagIcons } from '../util/tagIconService.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 function ensureIconAccess(req, res) {
   // 管理员上下文已由 adminRoutePolicy 的 AI_USE 策略校验；搜索与解析本身不写用户数据。
@@ -20,9 +21,17 @@ function friendlyError(req, error) {
 export async function search(req, res) {
   if (!ensureIconAccess(req, res)) return;
   try {
-    return res.send(resultData(await searchTagIcons({ query: req.body?.query, page: req.body?.page })));
+    return res.send(
+      resultData(
+        await searchTagIcons({
+          query: req.body?.query,
+          page: req.body?.page,
+          governance: { request: req, quotaPolicy: 'user', taskType: 'tag_icon_search' },
+        }),
+      ),
+    );
   } catch (error) {
-    console.error('[tag-icon] 搜索失败:', error.message);
+    console.error('[tag-icon] 搜索失败 code=%s', stableAgentErrorCode(error));
     return res.status(500).send(resultData(null, 500, friendlyError(req, error)));
   }
 }
@@ -32,7 +41,7 @@ export async function resolve(req, res) {
   try {
     return res.send(resultData(await resolveTagIcon(req.body?.icon)));
   } catch (error) {
-    console.error('[tag-icon] 获取图标失败:', error.message);
+    console.error('[tag-icon] 获取图标失败 code=%s', stableAgentErrorCode(error));
     const status = ['ICON_NAME_INVALID', 'ICON_NOT_FOUND'].includes(error.message) ? 400 : 500;
     return res.status(status).send(resultData(null, status, friendlyError(req, error)));
   }

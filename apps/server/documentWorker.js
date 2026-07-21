@@ -2,6 +2,7 @@ import os from 'node:os';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { cleanupExpiredDocumentSources, runSingleDocumentJob } from './util/aiDocument/service.js';
 import { inspectLocalOcrRuntime } from './util/aiDocument/localOcr.js';
+import { stableAgentErrorCode } from './util/agent/logSafety.js';
 
 const workerId = `${os.hostname()}:${process.pid}`;
 let stopping = false;
@@ -31,7 +32,7 @@ async function run() {
       const handled = await runSingleDocumentJob(workerId);
       if (!handled) await wait(1200);
     } catch (error) {
-      console.error('[AI 文档] Worker 循环异常:', error.message);
+      console.error('[AI 文档] Worker 循环异常 code=%s', stableAgentErrorCode(error));
       await wait(3000);
     }
   }
@@ -46,6 +47,6 @@ process.on('SIGTERM', stop);
 process.on('SIGINT', stop);
 
 run().catch((error) => {
-  console.error('[AI 文档] Worker 启动失败:', error);
+  console.error('[AI 文档] Worker 启动失败 code=%s', stableAgentErrorCode(error));
   process.exitCode = 1;
 });

@@ -21,6 +21,14 @@
         <BButton class="note-action-button" @click="toggleSelectAllVisible">
           {{ allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent') }}
         </BButton>
+        <BButton class="note-action-button" @click="openSelectedNotesAi('compare')">
+          <SvgIcon :src="icon.ai.ask" size="16" />
+          {{ $t('ai.entry.compareSelected') }}
+        </BButton>
+        <BButton class="note-action-button" @click="openSelectedNotesAi('organize')">
+          <SvgIcon :src="icon.ai.organize" size="16" />
+          {{ $t('ai.entry.organizeSelected') }}
+        </BButton>
         <BButton type="danger" class="note-action-button" @click="batchDeleteNote">
           <SvgIcon :src="icon.noteDetail.delete" size="16" />
           {{ $t('note.deleteSelected') }}
@@ -190,6 +198,7 @@
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
+  import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -538,6 +547,21 @@
   });
 
   const selectedVisibleCount = computed(() => viewNoteList.value.filter((data) => data.isCheck === true).length);
+
+  function openSelectedNotesAi(intent: AiAssistantIntent) {
+    const checked = viewNoteList.value.filter((data: any) => data.isCheck === true);
+    if (checked.length > 5) message.info(t('ai.materialLimit', { count: 5 }));
+    const selected = checked.slice(0, 5);
+    openAiAssistant({
+      surface: 'note_library',
+      suggestedIntent: intent,
+      contextRefs: selected.map((item: any) => ({
+        type: 'note',
+        id: String(item.id),
+        title: String(item.title || ''),
+      })),
+    });
+  }
   const hasCheck = computed(() => selectedVisibleCount.value > 0);
   const allVisibleChecked = computed(
     () => viewNoteList.value.length > 0 && selectedVisibleCount.value === viewNoteList.value.length,

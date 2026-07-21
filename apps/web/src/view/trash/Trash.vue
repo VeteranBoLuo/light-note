@@ -614,12 +614,13 @@
       flex: 1;
     }
 
+    // 移动端每条已是独立卡片,外层不再套"带边框背景的盒子"(卡片套卡片),
+    // 只保留极小的横向留白避免卡片阴影被裁,把宽度让给内容。
     .trash-table-scroll {
-      padding: 10px;
+      padding: 2px 2px 0;
       box-sizing: border-box;
-      border: 1px solid var(--surface-border-color);
-      border-radius: 12px;
-      background: var(--workspace-panel-bg-color);
+      border: none;
+      background: transparent;
     }
 
     .trash-info-bar,

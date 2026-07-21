@@ -15,7 +15,7 @@ vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects }));
 
-const { createNote } = await import('./noteService.js');
+const { applyOwnedNoteContentChange, createNote } = await import('./noteService.js');
 const { actionIdempotencyUuid } = await import('../agent/actionIdempotency.js');
 
 describe('noteService.createNote', () => {
@@ -203,5 +203,62 @@ describe('noteService.createNote', () => {
 
     expect(connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note SET ?')).toHaveLength(1);
     expect(pool.getConnection).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('noteService.applyOwnedNoteContentChange', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('在同一事务内再次校验 owner/正文版本，先保存历史再写入新正文', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.startsWith('SELECT title, content, type FROM note')) {
+        return [[{ title: '目标笔记', content: '旧正文', type: 'markdown' }]];
+      }
+      if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
+      if (sql.startsWith('UPDATE note SET content')) return [{ affectedRows: 1 }];
+      return [{ affectedRows: 1 }];
+    });
+
+    await expect(
+      applyOwnedNoteContentChange(connection, {
+        userId: 'subject-1',
+        actorUserId: 'actor-1',
+        noteId: 'note-1',
+        before: { title: '目标笔记', content: '旧正文', type: 'markdown' },
+        after: { title: '目标笔记', content: '旧正文\n\n新增内容', type: 'markdown' },
+      }),
+    ).resolves.toEqual({ title: '目标笔记', content: '旧正文\n\n新增内容', type: 'markdown' });
+
+    expect(connection.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE'),
+      ['note-1', 'subject-1'],
+    );
+    const snapshot = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?')?.[1]?.[0];
+    expect(snapshot).toMatchObject({ note_id: 'note-1', content: '旧正文', create_by: 'subject-1' });
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE note SET content = ?'), [
+      '旧正文\n\n新增内容',
+      'markdown',
+      'actor-1',
+      'note-1',
+      'subject-1',
+    ]);
+  });
+
+  it('正文与预览快照不一致时拒绝写入，不生成历史快照', async () => {
+    connection.query.mockResolvedValueOnce([[{ title: '目标笔记', content: '用户刚刚编辑', type: 'markdown' }]]);
+
+    await expect(
+      applyOwnedNoteContentChange(connection, {
+        userId: 'subject-1',
+        noteId: 'note-1',
+        before: { title: '目标笔记', content: '旧正文', type: 'markdown' },
+        after: { title: '目标笔记', content: 'AI 内容', type: 'markdown' },
+      }),
+    ).rejects.toMatchObject({ code: 'NOTE_VERSION_CONFLICT', status: 409 });
+
+    expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO note_versions SET ?')).toBe(false);
+    expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE note SET content'))).toBe(false);
   });
 });

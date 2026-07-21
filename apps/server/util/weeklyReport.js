@@ -53,6 +53,12 @@ export async function buildWeeklyReport(userId, userRole = null) {
 // 生成所有符合条件用户的上周周报并推送通知(定时任务调用)
 export async function generateWeeklyReports() {
   try {
+    // 本周周一(本地时区)作为幂等键:同一用户同一周只发一份周报,避免定时任务重复执行、
+    // 或多实例(如本地 dev 与线上同时连同一库)并发时给同一用户重复推送两份。
+    const monday = new Date();
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weekKey = formatDateTime(monday).slice(0, 10);
     // 上周有成长活动、非 root、未在设置里关闭周报(preferences.weeklyReport !== false)的用户
     const [users] = await pool.query(
       `SELECT ge.user_id,
@@ -67,6 +73,11 @@ export async function generateWeeklyReports() {
     let count = 0;
     for (const { user_id: userId, lang } of users) {
       try {
+        // 幂等 ID = 本周周一 + 用户:本周已发过则跳过;INSERT 再以 ON DUPLICATE 兜住并发竞态,
+        // 确保同一用户本周最多一条周报通知(修复"重复发两份")。
+        const notificationId = crypto.createHash('md5').update(`weekly:${weekKey}:${userId}`).digest('hex');
+        const [[existing]] = await pool.query('SELECT 1 FROM notification WHERE id = ? LIMIT 1', [notificationId]);
+        if (existing) continue;
         const report = await buildWeeklyReport(userId);
         // 无实质活动不发空周报
         if (report.bookmarks + report.notes + report.files + report.exp + report.checkinDays === 0) continue;
@@ -77,8 +88,9 @@ export async function generateWeeklyReports() {
         const title = isEn ? '📊 Your weekly growth report' : '📊 你的本周成长周报';
         await pool.query(
           `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
-           VALUES (?, ?, 'system', ?, ?, '/growth', ?, 0)`,
-          [crypto.randomUUID(), userId, title, content, JSON.stringify({ weeklyReport: report })],
+           VALUES (?, ?, 'system', ?, ?, '/growth', ?, 0)
+           ON DUPLICATE KEY UPDATE id = id`,
+          [notificationId, userId, title, content, JSON.stringify({ weeklyReport: report })],
         );
         count++;
       } catch (e) {

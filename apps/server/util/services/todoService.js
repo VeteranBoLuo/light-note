@@ -1,5 +1,6 @@
 import { insertData } from '../agent/data.js';
 import crypto from 'crypto';
+import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const SORT_SQL = Object.freeze({
@@ -189,7 +190,7 @@ async function syncReminder(connection, { todoId, userId, reminder }) {
   }
 }
 
-export async function createTodo(connection, userId, values) {
+export async function createTodo(connection, userId, values, { invalidateSearch = true } = {}) {
   const todo = normalizeTodo(values);
   const row = insertData({
     userId,
@@ -203,6 +204,7 @@ export async function createTodo(connection, userId, values) {
   });
   await connection.query('INSERT INTO todo_items SET ?', [row]);
   await syncReminder(connection, { todoId: row.id, userId, reminder: todo.reminder });
+  if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id: row.id };
 }
 
@@ -236,6 +238,7 @@ export async function updateTodo(connection, userId, id, values) {
     [todo.title, todo.description || null, JSON.stringify(todo.checklist), todo.priority, todo.dueAt, id, userId],
   );
   await syncReminder(connection, { todoId: id, userId, reminder: todo.reminder });
+  await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id };
 }
 
@@ -254,10 +257,11 @@ export async function setTodoStatus(connection, userId, id, status) {
       [id, userId],
     );
   }
+  if (result.affectedRows) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return Number(result.affectedRows || 0);
 }
 
-export async function deleteTodo(connection, userId, id) {
+export async function deleteTodo(connection, userId, id, { invalidateSearch = true } = {}) {
   const [result] = await connection.query(
     `UPDATE todo_items SET del_flag = 1, deleted_at = NOW(), update_time = NOW()
      WHERE id = ? AND user_id = ? AND del_flag = 0`,
@@ -269,6 +273,7 @@ export async function deleteTodo(connection, userId, id) {
        WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
       [id, userId],
     );
+    if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   }
   return Number(result.affectedRows || 0);
 }

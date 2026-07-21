@@ -1,8 +1,15 @@
 <template>
-  <div class="b_btn" :style="{ border }" :class="[btnClass, sizeClass, { loading: loading, disabled: disabled }]">
-    <span v-if="loading" class="btn-spinner"></span>
+  <button
+    class="b_btn"
+    :type="nativeType"
+    :style="{ border }"
+    :class="[btnClass, sizeClass, { loading, disabled }]"
+    :disabled="disabled || loading"
+    :aria-busy="loading || undefined"
+  >
+    <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
     <slot></slot>
-  </div>
+  </button>
 </template>
 
 <script lang="ts" setup>
@@ -28,6 +35,10 @@
     disabled: {
       type: Boolean,
       default: false,
+    },
+    nativeType: {
+      type: String as PropType<'button' | 'submit' | 'reset'>,
+      default: 'button',
     },
   });
 
@@ -58,6 +69,8 @@
 
 <style scoped lang="less">
   .b_btn {
+    appearance: none;
+    border: none;
     border-radius: 6px;
     white-space: nowrap;
     text-align: center;
@@ -72,6 +85,12 @@
     align-items: center;
     padding: 0 15px;
     font-size: 14px;
+    font-family: inherit;
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color, #615ced);
+      outline-offset: 2px;
+    }
   }
   .primary_btn {
     background-color: #615ced;
@@ -129,14 +148,12 @@
     font-size: 16px;
   }
 
-  &.loading {
+  .b_btn.loading {
     opacity: 0.6;
-    pointer-events: none;
   }
-  &.disabled {
+  .b_btn.disabled {
     opacity: 0.45;
     cursor: not-allowed;
-    pointer-events: none;
   }
 
   .btn-spinner {
@@ -152,6 +169,23 @@
   }
 
   @keyframes btn-spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .b_btn,
+    .primary_btn,
+    .danger_btn,
+    .success_btn,
+    .default_btn,
+    .function_btn {
+      transition: none;
+    }
+
+    .btn-spinner {
+      animation-duration: 1.2s;
+    }
   }
 </style>

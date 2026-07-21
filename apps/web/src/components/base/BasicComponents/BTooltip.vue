@@ -79,8 +79,9 @@
     line-height: 1.5;
     color: var(--text-color);
     background: var(--menu-body-bg-color);
+    /* 高于 BModal(100000)/BDrawer(99999):否则弹框或抽屉内元素的 tooltip 会被盖住看不见。 */
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-    z-index: 9999;
+    z-index: 100060;
     pointer-events: none;
     max-width: 280px;
     white-space: normal;

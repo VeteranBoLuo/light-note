@@ -47,8 +47,7 @@ export default {
   common: {
     close:
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIvPjxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZD0ibTEyIDEzLjRsLTQuOSA0LjlxLS4yNzUuMjc1LS43LjI3NXQtLjctLjI3NXQtLjI3NS0uN3QuMjc1LS43bDQuOS00LjlsLTQuOS00LjlxLS4yNzUtLjI3NS0uMjc1LS43dC4yNzUtLjd0LjctLjI3NXQuNy4yNzVsNC45IDQuOWw0LjktNC45cS4yNzUtLjI3NS43LS4yNzV0LjcuMjc1dC4yNzUuN3QtLjI3NS43TDEzLjQgMTJsNC45IDQuOXEuMjc1LjI3NS4yNzUuN3QtLjI3NS43dC0uNy4yNzV0LS43LS4yNzV6Ii8+PC9zdmc+',
-    stop:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
+    stop: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>',
     add: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIvPjxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZD0iTTE5IDNINWEyIDIgMCAwIDAtMiAydjE0YTIgMiAwIDAgMCAyIDJoMTRjMS4xIDAgMi0uOSAyLTJWNWMwLTEuMS0uOS0yLTItMm0wIDE2SDVWNWgxNHptLTgtMmgydi00aDR2LTJoLTRWN2gtMnY0SDd2Mmg0eiIvPjwvc3ZnPg==',
     folder:
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgNDggNDgiPjxyZWN0IHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgZmlsbD0ibm9uZSIvPjxwYXRoIGZpbGw9IiNmZmEwMDAiIGQ9Ik00MCAxMkgyMmwtNC00SDhjLTIuMiAwLTQgMS44LTQgNHY4aDQwdi00YzAtMi4yLTEuOC00LTQtNCIvPjxwYXRoIGZpbGw9IiNmZmNhMjgiIGQ9Ik00MCAxMkg4Yy0yLjIgMC00IDEuOC00IDR2MjBjMCAyLjIgMS44IDQgNCA0aDMyYzIuMiAwIDQtMS44IDQtNFYxNmMwLTIuMi0xLjgtNC00LTQiLz48L3N2Zz4=',
@@ -73,6 +72,7 @@ export default {
   settings: {
     shortcuts:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect width="19" height="13.5" x="2.5" y="5.25" rx="2.5"/><path d="M6.5 9h.01M10.15 9h.01M13.8 9h.01M17.45 9h.01M6.5 12.75h.01M10.15 12.75h.01M13.8 12.75h3.65M7.25 16.25h9.5"/></g></svg>',
+    ai: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18"/></g></svg>',
   },
 
   // 登录页面图标
@@ -279,6 +279,32 @@ export default {
   },
 
   ai: {
+    ask: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.75A2.75 2.75 0 0 1 6.75 3h10.5A2.75 2.75 0 0 1 20 5.75v7.5A2.75 2.75 0 0 1 17.25 16H10l-4.8 4v-4.3A2.75 2.75 0 0 1 4 13.25Z"/><path d="M8 8h8M8 11.5h5"/></g></svg>',
+    findRelated:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.3 15.3l4.2 4.2M10.5 7.5v6M7.5 10.5h6"/></g></svg>',
+    conversations:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4.5A2.5 2.5 0 0 1 4 12.5Z"/><path d="M8 7.5h8M8 10.5h5"/></g></svg>',
+    memory:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M8 4.5A3.5 3.5 0 0 0 4.5 8c0 .8.27 1.54.72 2.13A4 4 0 0 0 7 17.7V20h5V6.5A3.5 3.5 0 0 0 8.5 3c-.8 0-1.54.27-2.13.72"/><path d="M16 4.5A3.5 3.5 0 0 1 19.5 8c0 .8-.27 1.54-.72 2.13A4 4 0 0 1 17 17.7V20h-5V6.5A3.5 3.5 0 0 1 15.5 3c.8 0 1.54.27 2.13.72M8 9.5h4m0 4h4"/></g></svg>',
+    pending:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M5.6 5.6l-2-2"/></g></svg>',
+    branch:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 11h4a6 6 0 0 0 6-2"/></g></svg>',
+    feedbackUp:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M8 10v10H4V10zM8 18h8.2a2 2 0 0 0 1.94-1.52l1.4-5.5A2 2 0 0 0 17.6 8.5H14l.5-3a2 2 0 0 0-1.98-2.33L8 10"/></g></svg>',
+    feedbackDown:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M8 14V4H4v10zM8 6h8.2a2 2 0 0 1 1.94 1.52l1.4 5.5A2 2 0 0 1 17.6 15.5H14l.5 3a2 2 0 0 1-1.98 2.33L8 14"/></g></svg>',
+    play: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path d="m8 5l11 7l-11 7z" fill="currentColor"/></svg>',
+    pause:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path d="M7 5h3v14H7zm7 0h3v14h-3z" fill="currentColor"/></svg>',
+    messageCopy:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"><rect width="12" height="12" x="8" y="8" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></g></svg>',
+    messageEdit:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1l1-4Z"/></g></svg>',
+    messageRetry:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 5v6h-6"/></g></svg>',
+    scrollDown:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M12 4v14M6.5 12.5L12 18l5.5-5.5"/></g></svg>',
     maximize:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M8.5 4H4v4.5M4 4l5.25 5.25M15.5 4H20v4.5M20 4l-5.25 5.25M8.5 20H4v-4.5M4 20l5.25-5.25M15.5 20H20v-4.5M20 20l-5.25-5.25"/></g></svg>',
     restoreWindow:

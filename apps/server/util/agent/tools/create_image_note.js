@@ -54,6 +54,19 @@ export default {
   directAction: true,
   riskLevel: 'low',
   confirmationPolicy: 'default',
+  argumentAliases: [
+    'attachment_id',
+    'sourceId',
+    'source_id',
+    'documentId',
+    'noteTitle',
+    'note_title',
+    'name',
+    'content',
+    'caption',
+    'noteContent',
+    'note_content',
+  ],
   normalizeArgs: normalizeCreateImageNoteArgs,
   async prepareArgs(args, ctx) {
     const normalized = validateArgs(args);

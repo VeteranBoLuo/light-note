@@ -30,10 +30,11 @@ export const replaceResourceTagRelations = async (
   connection,
   { tagIds = [], resourceType, resourceId, userId, source = 'manual' },
 ) => {
-  await connection.query('DELETE FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ?', [
-    resourceType,
-    String(resourceId),
-  ]);
+  if (!userId) throw new Error('缺少资源归属用户');
+  await connection.query(
+    'DELETE FROM resource_tag_relations WHERE resource_type = ? AND resource_id = ? AND user_id = ?',
+    [resourceType, String(resourceId), userId],
+  );
 
   return insertResourceTagRelations(connection, {
     tagIds,
@@ -63,9 +64,11 @@ export const replaceTagResourceRelations = async (
   connection,
   { tagId, resourceType, resourceIds = [], userId, source = 'manual' },
 ) => {
-  await connection.query('DELETE FROM resource_tag_relations WHERE tag_id = ? AND resource_type = ?', [
+  if (!userId) throw new Error('缺少资源归属用户');
+  await connection.query('DELETE FROM resource_tag_relations WHERE tag_id = ? AND resource_type = ? AND user_id = ?', [
     tagId,
     resourceType,
+    userId,
   ]);
 
   return insertTagResourceRelations(connection, {

@@ -75,7 +75,7 @@
         </slot>
         <div
           style="color: var(--desc-color); font-size: 14px; overflow: auto; height: calc(100% - 70px)"
-          v-html="content"
+          v-html="safeContent"
         />
         <div
           style="
@@ -112,7 +112,8 @@
 <script lang="ts" setup>
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import bAlert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { ref } from 'vue';
+  import { computed, ref } from 'vue';
+  import DOMPurify from 'dompurify';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import { bookmarkStore } from '@/store';
   import i18n from '@/i18n';
@@ -141,6 +142,9 @@
       footer: () => [],
     },
   );
+  // 弹框内容在桌面端以 v-html 渲染;部分调用方会拼入用户可控文本(文件/书签/会话标题),必须净化防 XSS:
+  // 保留 <br>/<div> 等良性格式,剥离 <script>/onerror 等脚本与事件处理器。
+  const safeContent = computed(() => DOMPurify.sanitize(String(props.content || '')));
   const isExit = ref(false);
   function obClose(time = 200) {
     isExit.value = true;

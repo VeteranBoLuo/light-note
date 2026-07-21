@@ -31,6 +31,7 @@
           v-model:value="draft.folderId"
           :options="folderOptions"
           :placeholder="t('ai.attachmentAction.rootFolder')"
+          :aria-label="t('ai.attachmentAction.targetFolder')"
           show-search
           @change="handleFolderSelect"
         />

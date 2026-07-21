@@ -32,6 +32,7 @@ import {
   inspectBookmarkUrl,
   resolveBookmarkUrlForClient,
 } from '../util/bookmarkUrl.js';
+import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 
 // 书签地址由共享解析器确定性规范化；分享文案和异常拼接只返回候选，不在落库层静默猜测。
 export { normalizeBookmarkUrl };
@@ -401,6 +402,7 @@ export const updateTag = async (req, res) => {
     }
 
     await connection.commit(); // 提交事务
+    await invalidatePersonalKnowledgeCache(userId);
     res.send(resultData(updateResult)); // 发送成功响应
   } catch (error) {
     await connection.rollback(); // 回滚事务
@@ -557,7 +559,13 @@ export const doSummarizeBookmark = async (req, res) => {
   try {
     const { id, force } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
-    const result = await summarizeBookmark(req.user.id, id, { force: force === true });
+    const result = await summarizeBookmark(req.user.id, id, {
+      force: force === true,
+      governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
+    });
+    if (result?.reason === 'quota_exceeded') {
+      return res.status(429).send(resultData(result, 429, result.msg));
+    }
     res.send(resultData(result));
   } catch (error) {
     console.error('AI 摘要失败:', error);
@@ -691,10 +699,10 @@ export const updateBookmark = async (req, res) => {
       throw new Error('书签已存在');
     }
     // 归属校验：确认书签属于当前用户，避免越权改动及破坏关系表
-    const [own] = await connection.query('SELECT id, url, icon_url FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0', [
-      id,
-      userId,
-    ]);
+    const [own] = await connection.query(
+      'SELECT id, url, icon_url FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0',
+      [id, userId],
+    );
     if (own.length === 0) {
       await connection.rollback();
       return res.send(resultData(null, 403, '无权限操作'));
@@ -742,6 +750,7 @@ export const updateBookmark = async (req, res) => {
       });
     }
     await connection.commit(); // 提交事务
+    await invalidatePersonalKnowledgeCache(userId);
     res.send(resultData(updateResult)); // 发送成功响应
   } catch (error) {
     await connection.rollback(); // 回滚事务
@@ -817,6 +826,7 @@ export const delBookmark = async (req, res) => {
       items: [{ resourceType: 'bookmark', resourceId: String(id) }],
     });
     await connection.commit();
+    await invalidatePersonalKnowledgeCache(userId);
 
     res.send(resultData(updateResult));
   } catch (e) {
@@ -945,9 +955,10 @@ export const importBookmarksHtml = async (req, res) => {
 
     // 预加载现有标签和书签
     const [tagRows] = await connection.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
-    const [bookmarkRows] = await connection.query('SELECT id, name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [
-      userId,
-    ]);
+    const [bookmarkRows] = await connection.query(
+      'SELECT id, name, url FROM bookmark WHERE user_id = ? AND del_flag = 0',
+      [userId],
+    );
     const tagMap = new Map(tagRows.map((row) => [row.name, row.id]));
     const bookmarkMap = new Map(bookmarkRows.map((row) => [row.name, row.id]));
     const bookmarkUrlMap = new Map(
@@ -1133,6 +1144,7 @@ export const doOrganizeRun = async (req, res) => {
     const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
     const toMatched = (ids) => tagRows.filter((t) => ids.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));
     const suggestions = [];
+    let quotaBlocked = false;
 
     if (resourceType === 'note') {
       const [rows] = await pool.query(
@@ -1144,7 +1156,11 @@ export const doOrganizeRun = async (req, res) => {
       await organizePool(targets, 3, async (n) => {
         try {
           const text = `标题:${n.title || '(无)'}\n正文:${stripHtml(n.content).slice(0, 1200)}`;
-          const r = await suggestTagsFromText({ text, userTags: tagRows });
+          const r = await suggestTagsFromText({
+            text,
+            userTags: tagRows,
+            governance: { request: req, quotaPolicy: 'user', taskType: 'organize_note_tags' },
+          });
           if (!r || (!r.matchedTagIds.length && !r.newTags.length)) return;
           suggestions.push({
             id: n.id,
@@ -1156,7 +1172,8 @@ export const doOrganizeRun = async (req, res) => {
             matchedTags: toMatched(r.matchedTagIds),
             newTags: r.newTags || [],
           });
-        } catch {
+        } catch (error) {
+          if (error?.code === 'AI_QUOTA_EXCEEDED') quotaBlocked = true;
           /* 单条失败跳过 */
         }
       });
@@ -1174,6 +1191,7 @@ export const doOrganizeRun = async (req, res) => {
             name: b.name,
             description: b.description,
             userTags: tagRows,
+            governance: { request: req, quotaPolicy: 'user', taskType: 'organize_bookmark_meta' },
           });
           if (!r) return;
           if (!r.matchedTagIds.length && !r.newTags.length && !r.name && !r.description) return;
@@ -1187,10 +1205,22 @@ export const doOrganizeRun = async (req, res) => {
             matchedTags: toMatched(r.matchedTagIds),
             newTags: r.newTags || [],
           });
-        } catch {
+        } catch (error) {
+          if (error?.code === 'AI_QUOTA_EXCEEDED') quotaBlocked = true;
           /* 单条失败跳过 */
         }
       });
+    }
+    if (quotaBlocked) {
+      return res
+        .status(429)
+        .send(
+          resultData(
+            { ok: false, code: 'AI_QUOTA_EXCEEDED', processed: suggestions.length, suggestions },
+            429,
+            '今日 AI 额度已用完，已保留本轮完成的建议',
+          ),
+        );
     }
     res.send(resultData({ ok: true, processed: suggestions.length, suggestions }));
   } catch (e) {

@@ -1,5 +1,13 @@
 import pool from '../db/index.js';
-import { resultData, snakeCaseKeys, mergeExistingProperties, insertData, generateUUID, L, reqLang } from '../util/common.js';
+import {
+  resultData,
+  snakeCaseKeys,
+  mergeExistingProperties,
+  insertData,
+  generateUUID,
+  L,
+  reqLang,
+} from '../util/common.js';
 import { grantExp } from '../util/growth.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
@@ -24,6 +32,7 @@ import { recordAdminContextAudit } from '../util/adminContextAudit.js';
 import { isSelfTraffic } from '../util/logExclude.js';
 import { recordServerOperation } from '../util/operationLog.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
+import { exportAiUserData } from '../util/aiUserDataExport.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -143,16 +152,25 @@ export const login = async (req, res) => {
         ip: req.ip || '',
         userAgent: req.headers['user-agent'] || '',
       });
-      res.send(resultData({ appealToken }, 423, L(req, '账号已被封禁，请登录其他账号或联系管理员', 'This account has been banned. Please sign in with another account or contact an administrator.')));
+      res.send(
+        resultData(
+          { appealToken },
+          423,
+          L(
+            req,
+            '账号已被封禁，请登录其他账号或联系管理员',
+            'This account has been banned. Please sign in with another account or contact an administrator.',
+          ),
+        ),
+      );
       return;
     }
     // 透明升级：老明文密码 → scrypt 哈希
     if (result[0].password_method === 'plain' && result[0].password) {
       const upgradedHash = hashPassword(result[0].password);
-      pool.query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?", [
-        upgradedHash,
-        result[0].id,
-      ]).catch(() => {}); // 非关键操作，静默忽略
+      pool
+        .query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?", [upgradedHash, result[0].id])
+        .catch(() => {}); // 非关键操作，静默忽略
     }
     const sid = await issueLoginSession(req, res, result[0], Boolean(rememberMe));
     const userInfo = await queryUserInfoById(result[0].id);
@@ -171,8 +189,12 @@ export const submitAppeal = async (req, res) => {
     if (!userId || req.user?.role === 'visitor') {
       return res.send(resultData(null, 403, L(req, '请先登录', 'Please sign in first.')));
     }
-    const content = String(req.body?.content || '').trim().slice(0, 500);
-    const phone = String(req.body?.phone || '').trim().slice(0, 50);
+    const content = String(req.body?.content || '')
+      .trim()
+      .slice(0, 500);
+    const phone = String(req.body?.phone || '')
+      .trim()
+      .slice(0, 50);
     if (!content) {
       return res.send(resultData(null, 400, L(req, '请填写申诉内容', 'Please enter your appeal details.')));
     }
@@ -186,7 +208,11 @@ export const submitAppeal = async (req, res) => {
         resultData(
           null,
           429,
-          L(req, '已有多条申诉待处理，请耐心等待管理员回复', 'You already have several pending appeals. Please wait for an administrator to reply.'),
+          L(
+            req,
+            '已有多条申诉待处理，请耐心等待管理员回复',
+            'You already have several pending appeals. Please wait for an administrator to reply.',
+          ),
         ),
       );
     }
@@ -203,7 +229,11 @@ export const submitAppeal = async (req, res) => {
       module: '账号安全',
       operation: '提交封禁申诉成功',
     }).catch((error) => console.warn('记录封禁申诉操作失败:', error.message));
-    res.send(resultData(L(req, '申诉已提交，我们会尽快处理', 'Your appeal has been submitted. We will handle it as soon as possible.')));
+    res.send(
+      resultData(
+        L(req, '申诉已提交，我们会尽快处理', 'Your appeal has been submitted. We will handle it as soon as possible.'),
+      ),
+    );
   } catch (err) {
     res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message));
   }
@@ -211,7 +241,10 @@ export const submitAppeal = async (req, res) => {
 
 // 注册默认语言:按浏览器 Accept-Language 首选项判断(zh 开头→中文,其余→英文),让老外注册即英文、不必手动切
 function detectLangFromReq(req) {
-  const first = String(req.headers['accept-language'] || '').split(',')[0].trim().toLowerCase();
+  const first = String(req.headers['accept-language'] || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
   return first.startsWith('zh') ? 'zh-CN' : 'en-US';
 }
 
@@ -260,7 +293,12 @@ export const registerUser = async (req, res) => {
       role: 'user', // 角色服务端强制写死,不信任客户端
     };
     // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
-    params.preferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark', lang: detectLangFromReq(req) });
+    params.preferences = JSON.stringify({
+      theme: 'day',
+      noteViewMode: 'card',
+      homePage: 'bookmark',
+      lang: detectLangFromReq(req),
+    });
     if (params.password) {
       params.password = hashPassword(params.password);
       params.password_method = 'scrypt';
@@ -340,11 +378,7 @@ export const getUserInfo = async (req, res) => {
         rectangle: data.rectangle ?? '接口错误，获取失败',
       };
       try {
-        await pool.query('update user set location=? , ip=? where id=?', [
-          JSON.stringify(location),
-          clientIp,
-          id,
-        ]);
+        await pool.query('update user set location=? , ip=? where id=?', [JSON.stringify(location), clientIp, id]);
       } catch (e) {
         console.error('地理信息配置失败:', e.message);
         // 不发送响应，继续执行获取用户信息
@@ -356,7 +390,17 @@ export const getUserInfo = async (req, res) => {
       return;
     }
     if (Number(result.del_flag) === 1 && result.role !== 'root') {
-      res.send(resultData(null, 423, L(req, '账号已被封禁，请登录其他账号或联系管理员', 'This account has been banned. Please sign in with another account or contact an administrator.')));
+      res.send(
+        resultData(
+          null,
+          423,
+          L(
+            req,
+            '账号已被封禁，请登录其他账号或联系管理员',
+            'This account has been banned. Please sign in with another account or contact an administrator.',
+          ),
+        ),
+      );
       return;
     }
     const safeUser = sanitizeUser(result);
@@ -486,7 +530,9 @@ export const endAdminContext = async (req, res) => {
 export const getUserList = (req, res) => {
   try {
     if (req.user?.role !== 'root') {
-      return res.send(resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')));
+      return res.send(
+        resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
+      );
     }
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const key = filters.key;
@@ -576,17 +622,12 @@ export const saveUserInfo = (req, res) => {
     const isRoot = req.user?.role === 'root';
     const id = isRoot ? targetId : req.user?.id;
     if (!id || (!isRoot && req.body.id && req.body.id !== req.user?.id)) {
-      return res.send(resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')));
+      return res.send(
+        resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
+      );
     }
     // 定义允许更新的字段列表
-    const selfAllowedFields = [
-      'alias',
-      'email',
-      'phone_number',
-      'location',
-      'preferences',
-      'head_picture',
-    ];
+    const selfAllowedFields = ['alias', 'email', 'phone_number', 'location', 'preferences', 'head_picture'];
     const rootAllowedFields = [
       ...selfAllowedFields,
       // 注:不含 password —— 编辑弹框直接改 password 会明文写库、绕过 scrypt,导致该用户登录失败。
@@ -627,7 +668,9 @@ export const saveUserInfo = (req, res) => {
 export const deleteUserById = (req, res) => {
   try {
     if (req.user?.role !== 'root') {
-      return res.send(resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')));
+      return res.send(
+        resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
+      );
     }
     pool
       .query('update user set del_flag=1 where id=?', [req.query.id])
@@ -665,7 +708,7 @@ export const github = async (req, res) => {
 
     res.send(
       resultData({
-        ...({ sid }),
+        ...{ sid },
         user_info: {
           id: user.id,
           alias: user.alias,
@@ -732,7 +775,10 @@ export const revokeSession = async (req, res) => {
     } else {
       const match = rows.find((r) => sessionHandle(r.sid) === id);
       if (!match) return res.send(resultData(null, 400, L(req, '会话不存在', 'Session not found.')));
-      if (match.sid === currentSid) return res.send(resultData(null, 400, L(req, '不能在此下线当前设备,请用退出登录', 'Use sign out for the current device.')));
+      if (match.sid === currentSid)
+        return res.send(
+          resultData(null, 400, L(req, '不能在此下线当前设备,请用退出登录', 'Use sign out for the current device.')),
+        );
       targets = [match.sid];
     }
     for (const sid of targets) await removeSession(sid);
@@ -859,12 +905,25 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   const githubUserId = generateUUID();
   const githubHashedPassword = hashPassword('123456');
   // 与邮箱注册对齐:role 服务端写死 'user'(缺失会让新用户 role=null → 全站 403 无权限),并给默认 preferences
-  const defaultPreferences = JSON.stringify({ theme: 'day', noteViewMode: 'card', homePage: 'bookmark', lang: detectLangFromReq(req) });
+  const defaultPreferences = JSON.stringify({
+    theme: 'day',
+    noteViewMode: 'card',
+    homePage: 'bookmark',
+    lang: detectLangFromReq(req),
+  });
   await pool.query(
     `INSERT INTO user
       (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
      VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'user', ?)`,
-    [githubUserId, safeEmail, githubUser.id, githubUser.avatar_url, githubHashedPassword, githubUser.login, defaultPreferences],
+    [
+      githubUserId,
+      safeEmail,
+      githubUser.id,
+      githubUser.avatar_url,
+      githubHashedPassword,
+      githubUser.login,
+      defaultPreferences,
+    ],
   );
   const [result] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
 
@@ -950,7 +1009,9 @@ export const sendEmail = async (req, res) => {
     // 原样把 SMTP 内部错误(如 QQ 535 Login fail)抛给用户既不友好也泄露实现;
     // 面向用户给稳定文案,真实错误只进服务端日志便于排查。
     console.error('邮件发送异常:', e?.message || e);
-    res.send(resultData(null, 500, L(req, '验证码发送失败,请稍后重试', 'Failed to send the code. Please try again later.')));
+    res.send(
+      resultData(null, 500, L(req, '验证码发送失败,请稍后重试', 'Failed to send the code. Please try again later.')),
+    );
   }
 };
 
@@ -968,7 +1029,9 @@ export const verifyCode = async (req, res) => {
 
     // 2. 验证逻辑
     if (!storedCode) {
-      res.send(resultData(null, 400, L(req, '验证码已过期或未发送', 'The verification code has expired or was never sent.')));
+      res.send(
+        resultData(null, 400, L(req, '验证码已过期或未发送', 'The verification code has expired or was never sent.')),
+      );
       return;
     }
     if (storedCode !== code) {
@@ -994,14 +1057,17 @@ export const verifyCode = async (req, res) => {
   }
 };
 
-// POST /user/exportData —— 一键导出/备份当前用户全部数据(书签/笔记/文件元信息 + 标签),前端下成 JSON。
+// POST /user/exportData —— 一键导出/备份当前用户全部数据（书签/笔记/文件元信息/标签 + 可移植 AI 数据），前端下成 JSON。
 // 仅本人数据(游客拦截);文件只导元信息(名称/大小/时间),不含二进制。
 export const exportData = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
     const [[acct]] = await pool.query('SELECT alias, email FROM user WHERE id = ?', [userId]);
-    const [tags] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0 ORDER BY create_time', [userId]);
+    const [tags] = await pool.query(
+      'SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0 ORDER BY create_time',
+      [userId],
+    );
     const [bookmarks] = await pool.query(
       'SELECT id, name, url, description, create_time FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC',
       [userId],
@@ -1027,19 +1093,30 @@ export const exportData = async (req, res) => {
       (m[r.resource_id] = m[r.resource_id] || []).push(r.name);
     }
     const attach = (rows, type) => rows.map((x) => ({ ...x, tags: tagMap[type][x.id] || [] }));
+    const ai = await exportAiUserData(userId, pool);
     res.send(
       resultData({
         exportedAt: new Date().toISOString(),
         account: acct ? { alias: acct.alias, email: acct.email } : null,
-        counts: { bookmarks: bookmarks.length, notes: notes.length, files: files.length, tags: tags.length },
+        counts: {
+          bookmarks: bookmarks.length,
+          notes: notes.length,
+          files: files.length,
+          tags: tags.length,
+          aiConversations: ai.counts.conversations,
+          aiMessages: ai.counts.messages,
+          aiMemories: ai.counts.memories,
+        },
         tags,
         bookmarks: attach(bookmarks, 'bookmark'),
         notes: attach(notes, 'note'),
         files: attach(files, 'file'),
+        ai,
       }),
     );
   } catch (e) {
-    res.send(resultData(null, 500, L(req, '导出失败: ', 'Export failed: ') + e.message));
+    console.error('[user-export] failed code=%s', String(e?.code || 'USER_EXPORT_FAILED'));
+    res.send(resultData(null, 500, L(req, '导出失败，请稍后重试', 'Export failed. Please try again later.')));
   }
 };
 
@@ -1049,8 +1126,22 @@ export const exportData = async (req, res) => {
 export const importData = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const data = req.body?.data && typeof req.body.data === 'object' ? req.body.data : req.body;
-  if (!data || typeof data !== 'object' || (!Array.isArray(data.bookmarks) && !Array.isArray(data.notes) && !Array.isArray(data.tags))) {
-    return res.send(resultData(null, 400, L(req, '文件格式无效,请选择轻笺导出的备份 JSON', 'Invalid file, please choose a backup JSON exported from LightNote')));
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    (!Array.isArray(data.bookmarks) && !Array.isArray(data.notes) && !Array.isArray(data.tags))
+  ) {
+    return res.send(
+      resultData(
+        null,
+        400,
+        L(
+          req,
+          '文件格式无效,请选择轻笺导出的备份 JSON',
+          'Invalid file, please choose a backup JSON exported from LightNote',
+        ),
+      ),
+    );
   }
   const connection = await pool.getConnection();
   try {
@@ -1059,8 +1150,12 @@ export const importData = async (req, res) => {
 
     // 预加载现有数据用于去重:标签 name→id、书签网址集、笔记「标题+内容」集
     const [tagRows] = await connection.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
-    const [bmRows] = await connection.query('SELECT name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [userId]);
-    const [noteRows] = await connection.query('SELECT title, content FROM note WHERE create_by = ? AND del_flag = 0', [userId]);
+    const [bmRows] = await connection.query('SELECT name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [
+      userId,
+    ]);
+    const [noteRows] = await connection.query('SELECT title, content FROM note WHERE create_by = ? AND del_flag = 0', [
+      userId,
+    ]);
     const normUrl = (u) => inspectBookmarkUrl(u, { allowTextExtraction: false }).canonicalUrl;
     const noteKey = (t, c) => `${t}\u0000${c}`;
     const tagMap = new Map(tagRows.map((r) => [r.name, r.id]));
@@ -1113,7 +1208,13 @@ export const importData = async (req, res) => {
         stat.bookmarks.skipped++;
         continue;
       }
-      const payload = insertData({ name: bmName, url, description: b?.description || '', userId, ...(b?.createTime ? { createTime: b.createTime } : {}) });
+      const payload = insertData({
+        name: bmName,
+        url,
+        description: b?.description || '',
+        userId,
+        ...(b?.createTime ? { createTime: b.createTime } : {}),
+      });
       await connection.query('INSERT INTO bookmark SET ?', [payload]);
       if (url) existUrls.add(url);
       if (bmName) existNames.add(bmName);
@@ -1124,7 +1225,13 @@ export const importData = async (req, res) => {
         if (id) tagIds.push(id);
       }
       if (tagIds.length) {
-        await insertResourceTagRelations(connection, { tagIds, resourceType: RESOURCE_TYPE.BOOKMARK, resourceId: payload.id, userId, source: 'import' });
+        await insertResourceTagRelations(connection, {
+          tagIds,
+          resourceType: RESOURCE_TYPE.BOOKMARK,
+          resourceId: payload.id,
+          userId,
+          source: 'import',
+        });
       }
     }
 
@@ -1138,7 +1245,13 @@ export const importData = async (req, res) => {
         stat.notes.skipped++;
         continue;
       }
-      const payload = insertData({ title: title || 'Untitled', content, type: n?.type || 'html', createBy: userId, ...(n?.createTime ? { createTime: n.createTime } : {}) });
+      const payload = insertData({
+        title: title || 'Untitled',
+        content,
+        type: n?.type || 'html',
+        createBy: userId,
+        ...(n?.createTime ? { createTime: n.createTime } : {}),
+      });
       await connection.query('INSERT INTO note SET ?', [payload]);
       existNotes.add(k);
       stat.notes.added++;
@@ -1148,7 +1261,13 @@ export const importData = async (req, res) => {
         if (id) tagIds.push(id);
       }
       if (tagIds.length) {
-        await insertResourceTagRelations(connection, { tagIds, resourceType: RESOURCE_TYPE.NOTE, resourceId: payload.id, userId, source: 'import' });
+        await insertResourceTagRelations(connection, {
+          tagIds,
+          resourceType: RESOURCE_TYPE.NOTE,
+          resourceId: payload.id,
+          userId,
+          source: 'import',
+        });
       }
     }
 

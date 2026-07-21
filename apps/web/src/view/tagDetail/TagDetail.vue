@@ -17,6 +17,16 @@
           v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }"
           >{{ tag.name }}</span
         >
+        <BButton
+          v-if="tag.id"
+          class="tag-ai-entry"
+          :aria-label="$t('tagManage.openInAi')"
+          :title="$t('tagManage.openInAi')"
+          @click="openTagInAi"
+        >
+          <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
+          {{ $t('tagManage.askAi') }}
+        </BButton>
       </div>
       <div v-if="relatedTags.length" class="tag-related">
         <span class="related-label">{{ $t('tagManage.relatedTag') }}:</span>
@@ -53,10 +63,20 @@
       </div>
 
       <div class="view-switch">
-        <b-button class="view-switch-btn" :class="{ active: viewMode === 'card' }" size="small" @click="setViewMode('card')">
+        <b-button
+          class="view-switch-btn"
+          :class="{ active: viewMode === 'card' }"
+          size="small"
+          @click="setViewMode('card')"
+        >
           {{ t('tagGraph.viewMode.card') }}
         </b-button>
-        <b-button class="view-switch-btn" :class="{ active: viewMode === 'graph' }" size="small" @click="setViewMode('graph')">
+        <b-button
+          class="view-switch-btn"
+          :class="{ active: viewMode === 'graph' }"
+          size="small"
+          @click="setViewMode('graph')"
+        >
           {{ t('tagGraph.viewMode.graph') }}
         </b-button>
       </div>
@@ -222,6 +242,7 @@
   import { fetchTagGraph, type GraphResourceType, type TagGraphNode, type TagGraphResponse } from '@/api/tagGraph.ts';
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { openAiAssistant } from '@/utils/aiEntry';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
@@ -258,6 +279,16 @@
     const graphCount = graphData.value?.nodes.filter((node) => node.type === 'tag' && !node.meta?.isCenter).length || 0;
     return Math.max(relatedTags.value.length, graphCount);
   });
+
+  function openTagInAi() {
+    const id = String(tag.value?.id || route.params.id || '').trim();
+    if (!id) return;
+    openAiAssistant({
+      contextRefs: [{ type: 'tag', id, title: String(tag.value?.name || t('tagManage.unnamedTag')).slice(0, 255) }],
+      suggestedIntent: 'find_related',
+      surface: 'tag_detail',
+    });
+  }
 
   const allGraphResources = computed<TagGraphNode[]>(() => [
     ...bookmarks.value.map((bookmark) => ({
@@ -690,6 +721,12 @@
 
     .tag-name:hover {
       color: color-mix(in srgb, var(--primary-color) 82%, white);
+    }
+
+    .tag-ai-entry {
+      min-height: 32px;
+      gap: 5px;
+      color: var(--primary-color);
     }
 
     .tag-related {
@@ -1125,6 +1162,8 @@
   }
 
   @media (min-width: 768px) and (max-width: 1200px) {
-    .tag-graph-layout { grid-template-columns: minmax(0, 1fr) 300px; }
+    .tag-graph-layout {
+      grid-template-columns: minmax(0, 1fr) 300px;
+    }
   }
 </style>

@@ -39,6 +39,7 @@ export default {
   isWrite: true,
   riskLevel: 'low',
   confirmationPolicy: 'default',
+  argumentAliases: ['noteTitle', 'note_title', 'name', 'noteContent', 'note_content', 'body', 'markdown'],
   normalizeArgs: normalizeCreateNoteArgs,
   preview(args) {
     const { title, content } = validateCreateNoteArgs(args);

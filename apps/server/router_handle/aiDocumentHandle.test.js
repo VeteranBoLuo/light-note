@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const ensureNotVisitor = vi.fn();
 const createTemporaryDocumentSource = vi.fn();
 const deleteTemporaryDocumentSources = vi.fn();
+const getDocumentSourceStatuses = vi.fn();
 
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
@@ -14,10 +15,10 @@ vi.mock('../util/aiDocument/service.js', () => ({
   createTemporaryDocumentSource,
   deleteDocumentSource: vi.fn(),
   deleteTemporaryDocumentSources,
-  getDocumentSourceStatuses: vi.fn(),
+  getDocumentSourceStatuses,
 }));
 
-const { clearTemporaryAttachments, initTemporaryUpload } = await import('./aiDocumentHandle.js');
+const { clearTemporaryAttachments, getStatuses, initTemporaryUpload } = await import('./aiDocumentHandle.js');
 
 function response() {
   const res = {};
@@ -31,6 +32,7 @@ describe('aiDocumentHandle', () => {
     vi.clearAllMocks();
     createTemporaryDocumentSource.mockResolvedValue({ attachment: { id: 'source-1' } });
     deleteTemporaryDocumentSources.mockResolvedValue({ deleted: 2, failed: 0 });
+    getDocumentSourceStatuses.mockResolvedValue([]);
   });
 
   it('普通游客由统一游客写守卫拦截', async () => {
@@ -64,5 +66,24 @@ describe('aiDocumentHandle', () => {
     await clearTemporaryAttachments({ user: { id: 'user-1', role: 'user' }, body: {} }, res);
     expect(deleteTemporaryDocumentSources).toHaveBeenCalledWith({ userId: 'user-1' });
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: { deleted: 2, failed: 0 } }));
+  });
+
+  it('状态接口透传解析覆盖率、截断原因和失败范围', async () => {
+    ensureNotVisitor.mockReturnValue(true);
+    const coverage = {
+      metadataAvailable: true,
+      coverageRatio: 0.5,
+      truncated: true,
+      failedRanges: [{ unit: 'characters', start: 51, end: 100, code: 'CHAR_LIMIT' }],
+    };
+    getDocumentSourceStatuses.mockResolvedValue([{ id: 'source-1', status: 'ready', coverage }]);
+    const res = response();
+
+    await getStatuses({ user: { id: 'user-1', role: 'user' }, body: { attachmentIds: ['source-1'] } }, res);
+
+    expect(getDocumentSourceStatuses).toHaveBeenCalledWith({ userId: 'user-1', sourceIds: ['source-1'] });
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ id: 'source-1', coverage })] }),
+    );
   });
 });

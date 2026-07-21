@@ -69,6 +69,18 @@ describe('followUpSuggestions', () => {
     expect(first.cached).toBe(false);
     expect(second.cached).toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        trace: expect.objectContaining({ traceId: requestId, taskType: 'follow_up' }),
+        governance: {
+          quotaPolicy: 'system',
+          systemId: 'follow_up',
+          taskType: 'follow_up',
+          requestId,
+        },
+      }),
+    );
   });
 
   it('不同所有者不能读取同一 requestId 的上下文', async () => {

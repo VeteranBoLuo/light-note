@@ -1,5 +1,6 @@
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import {
   attachCloudDocumentSource,
   confirmTemporaryDocumentSource,
@@ -39,7 +40,7 @@ async function respond(res, task) {
     res.send(resultData(await task()));
   } catch (error) {
     const parsed = publicError(error);
-    if (parsed.status >= 500) console.error('[AI 文档] 接口处理失败:', error);
+    if (parsed.status >= 500) console.error('[ai-document] request failed code=%s', stableAgentErrorCode(error));
     res.send(resultData({ code: parsed.code }, parsed.status, parsed.message));
   }
 }

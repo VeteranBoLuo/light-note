@@ -120,6 +120,7 @@ export default {
     },
     required: ['resourceType', 'resourceId'],
   },
+  argumentAliases: ['type', 'noteId', 'documentId', 'id'],
   normalizeArgs,
   requireRoot: false,
   timeoutMs: 90_000,

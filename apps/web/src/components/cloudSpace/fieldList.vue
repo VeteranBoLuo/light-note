@@ -11,6 +11,10 @@
             class="batch-select-all"
           />
           <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+          <BButton size="small" :disabled="!hasSelection" @click="openSelectedFilesInAi">
+            <SvgIcon :src="icon.ai.ask" size="14" aria-hidden="true" />
+            {{ $t('cloudSpace.aiUseSelected') }}
+          </BButton>
           <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
           <b-button
             size="small"
@@ -107,6 +111,11 @@
                   function: () => openTagDialog(item),
                 },
                 {
+                  label: $t('cloudSpace.aiUseFile'),
+                  icon: icon.ai.ask,
+                  function: () => openFilesInAi([item]),
+                },
+                {
                   label: $t('inbox.addExisting'),
                   icon: icon.common.more,
                   function: () => addFileToInbox(item),
@@ -185,6 +194,10 @@
         @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
       />
       <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+      <BButton size="small" :disabled="!hasSelection" @click="openSelectedFilesInAi">
+        <SvgIcon :src="icon.ai.ask" size="14" aria-hidden="true" />
+        {{ $t('cloudSpace.aiUseSelected') }}
+      </BButton>
       <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
       <b-button
         size="small"
@@ -402,6 +415,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
+  import { openAiAssistant } from '@/utils/aiEntry';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -453,6 +467,26 @@
       emit('previewFile', item);
     }
   };
+
+  function openFilesInAi(files: any[]) {
+    const available = files.filter((file) => String(file?.id || '').trim());
+    if (!available.length) return;
+    if (available.length > 5) message.info(t('cloudSpace.aiMaterialLimit', { count: 5 }));
+    const contexts = available.slice(0, 5).map((file) => ({
+      type: 'file' as const,
+      id: String(file.id),
+      title: String(file.fileName || file.name || t('cloudSpace.fileName')).slice(0, 255),
+    }));
+    openAiAssistant({
+      contextRefs: contexts,
+      suggestedIntent: contexts.length > 1 ? 'compare' : 'summarize',
+      surface: 'cloud_space',
+    });
+  }
+
+  function openSelectedFilesInAi() {
+    openFilesInAi(cloud.fileList.filter((file) => selectedRows.value.includes(file.id)));
+  }
 
   const goToTagDetail = (tagId: string) => {
     if (!tagId) return;

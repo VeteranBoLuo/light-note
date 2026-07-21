@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import redisClient from '../redisClient.js';
-import { requestDeepSeek } from './deepseekClient.js';
+import { requestAi } from './aiGateway.js';
 
 const CONTEXT_PREFIX = 'agent:follow-up:context:';
 const RESULT_PREFIX = 'agent:follow-up:result:';
@@ -283,7 +283,7 @@ function buildPrompt(context) {
   ];
 }
 
-async function generateForContext(context, request) {
+async function generateForContext(context, request, requestId) {
   const fallback = buildFallbackQuestions(context);
   try {
     const response = await request(buildPrompt(context), {
@@ -291,6 +291,13 @@ async function generateForContext(context, request) {
       maxTokens: 180,
       temperature: 0.5,
       signal: AbortSignal.timeout(GENERATION_TIMEOUT_MS),
+      trace: { traceId: requestId, taskType: 'follow_up', stage: 'follow_up_generation' },
+      governance: {
+        quotaPolicy: 'system',
+        systemId: 'follow_up',
+        taskType: 'follow_up',
+        requestId,
+      },
     });
     const suggestions = parseFollowUpQuestions(response.content, {
       originalQuestion: context.question,
@@ -318,7 +325,7 @@ async function generateForContext(context, request) {
   }
 }
 
-export async function getFollowUpSuggestions({ ownerKey, requestId, request = requestDeepSeek }) {
+export async function getFollowUpSuggestions({ ownerKey, requestId, request = requestAi }) {
   if (!REQUEST_ID_PATTERN.test(String(requestId || ''))) {
     const error = new Error('追问请求标识无效');
     error.code = 'FOLLOW_UP_REQUEST_INVALID';
@@ -341,7 +348,7 @@ export async function getFollowUpSuggestions({ ownerKey, requestId, request = re
       error.code = 'FOLLOW_UP_CONTEXT_NOT_FOUND';
       throw error;
     }
-    const generated = await generateForContext(context, request);
+    const generated = await generateForContext(context, request, requestId);
     const cachedValue = {
       suggestions: generated.suggestions,
       strategy: generated.strategy,

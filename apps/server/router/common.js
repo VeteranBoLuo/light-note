@@ -2,12 +2,15 @@ import express from 'express';
 const router = express.Router();
 
 import * as commonHandle from '../router_handle/commonHandle.js';
+import { recordAiEvent } from '../router_handle/aiTelemetryHandle.js';
 
 router.post('/getApiLogs', commonHandle.getApiLogs);
 
 router.get('/clearApiLogs', commonHandle.clearApiLogs);
 
 router.post('/recordOperationLogs', commonHandle.recordOperationLogs);
+
+router.post('/recordAiEvent', recordAiEvent);
 
 router.post('/recordConversion', commonHandle.recordConversion);
 

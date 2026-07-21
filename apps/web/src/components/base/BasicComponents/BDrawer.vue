@@ -1,36 +1,56 @@
 <template>
   <Teleport to="body">
-    <div v-if="localVisible" class="b-drawer-wrapper" :class="{ 'is-entered': entered, 'is-settled': settled }">
-      <div class="b-drawer-mask" @click="handleMaskClick" />
+    <div
+      v-if="localVisible"
+      class="b-drawer-wrapper"
+      :class="{
+        'is-entered': entered,
+        'is-settled': settled,
+        'is-hidden': dormant,
+        'is-non-modal': !modal,
+      }"
+      :aria-hidden="!open || undefined"
+    >
+      <div v-if="modal" class="b-drawer-mask" aria-hidden="true" @click="handleMaskClick" />
       <div
+        ref="panelRef"
         class="b-drawer-panel"
         :class="{
           'b-drawer-panel--fullscreen': fullScreen,
           'b-drawer-panel--mobile-fullscreen': mobileFullScreen,
         }"
         :style="panelStyle"
+        role="dialog"
+        :aria-modal="modal ? 'true' : undefined"
+        :aria-labelledby="title ? drawerTitleId : undefined"
+        :aria-label="!title ? ariaLabel || undefined : undefined"
+        tabindex="-1"
+        @keydown="handleKeydown"
         @transitionend="handlePanelTransitionEnd"
       >
+        <div
+          v-if="resizable && !fullScreen"
+          class="b-drawer-resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          :aria-label="resizeLabel || t('common.resize')"
+          :aria-valuemin="resolvedMinWidth"
+          :aria-valuemax="resolvedMaxWidth"
+          :aria-valuenow="currentWidth"
+          tabindex="0"
+          @pointerdown="startResize"
+          @keydown="handleResizeKeydown"
+        />
         <div class="b-drawer-header">
-          <span class="b-drawer-title">{{ title }}</span>
+          <span :id="drawerTitleId" class="b-drawer-title">{{ title }}</span>
           <div class="b-drawer-header-actions">
             <slot name="header-actions" />
-            <BButton class="b-drawer-close" @click="handleClose">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
+            <BButton class="b-drawer-close" :aria-label="closeLabel || t('common.close')" @click="handleClose">
+              <SvgIcon size="18" :src="icon.common.close" aria-hidden="true" />
             </BButton>
           </div>
         </div>
-        <div class="b-drawer-body">
+        <div class="b-drawer-body" :style="bodyPadding !== undefined ? { padding: bodyPadding } : undefined">
           <slot />
         </div>
       </div>
@@ -39,8 +59,14 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue';
+  import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted, getCurrentInstance } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
+  import { getRootZoom } from '@/utils/zoom';
+
+  const { t } = useI18n();
 
   const props = withDefaults(
     defineProps<{
@@ -50,6 +76,16 @@
       maskClosable?: boolean;
       fullScreen?: boolean;
       mobileFullScreen?: boolean;
+      destroyOnClose?: boolean;
+      keyboard?: boolean;
+      ariaLabel?: string;
+      closeLabel?: string;
+      modal?: boolean;
+      resizable?: boolean;
+      minWidth?: number;
+      maxWidth?: number;
+      resizeLabel?: string;
+      bodyPadding?: string;
     }>(),
     {
       title: '',
@@ -57,6 +93,15 @@
       maskClosable: true,
       fullScreen: false,
       mobileFullScreen: false,
+      destroyOnClose: true,
+      keyboard: true,
+      ariaLabel: '',
+      closeLabel: '',
+      modal: true,
+      resizable: false,
+      minWidth: 440,
+      maxWidth: 720,
+      resizeLabel: '',
     },
   );
 
@@ -67,10 +112,17 @@
   const localVisible = ref(false);
   const entered = ref(false);
   const settled = ref(false);
+  const dormant = ref(false);
+  const panelRef = ref<HTMLElement | null>(null);
+  const drawerTitleId = `b-drawer-title-${getCurrentInstance()?.uid ?? Math.random().toString(36).slice(2)}`;
   let closing = false;
+  let previouslyFocused: HTMLElement | null = null;
   let openFrame: number | null = null;
   let settleTimer: number | null = null;
   let closeTimer: number | null = null;
+  const currentWidth = ref(0);
+  const layoutViewportWidth = ref(readLayoutViewportWidth());
+  let resizing = false;
 
   const clearOpenFrame = () => {
     if (openFrame === null) return;
@@ -97,17 +149,20 @@
       closeTimer = null;
     }
     closing = false;
+    dormant.value = false;
     clearOpenFrame();
     clearSettleTimer();
     localVisible.value = true;
     entered.value = false;
     settled.value = false;
+    previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     nextTick(() => {
       // 强制回流后触发 enter 动画
       openFrame = requestAnimationFrame(() => {
         openFrame = null;
         if (!props.open || !localVisible.value) return;
         entered.value = true;
+        if (props.modal) panelRef.value?.focus({ preventScroll: true });
         // 首次挂载、系统减少动画或页面切换时，浏览器可能不派发 transitionend。
         // 用略长于 CSS 动画的定时器兜底，确保最终一定移除常驻 transform 合成层。
         settleTimer = window.setTimeout(markSettled, 240);
@@ -123,9 +178,14 @@
     clearSettleTimer();
     settled.value = false;
     entered.value = false;
+    // 立即把焦点移回触发元素:aria-hidden 随 open=false 立刻置真,须先让焦点离开抽屉,
+    // 否则焦点短暂停留在 aria-hidden 子树内(Chrome 报 Blocked aria-hidden 并可能强移焦点)。
+    if (props.modal && previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
+    previouslyFocused = null;
     closeTimer = window.setTimeout(() => {
       closeTimer = null;
-      localVisible.value = false;
+      if (props.destroyOnClose) localVisible.value = false;
+      else dormant.value = true;
       closing = false;
     }, 220); // 略长于 CSS transition 时长
   }
@@ -146,12 +206,43 @@
     const w = props.width;
     return isNumeric(w) ? `${w}px` : w;
   });
+  const availablePanelWidth = computed(() => Math.max(1, Math.floor(layoutViewportWidth.value * 0.9)));
+  const resolvedMinWidth = computed(() => Math.min(props.minWidth, availablePanelWidth.value));
+  const resolvedMaxWidth = computed(() =>
+    Math.max(resolvedMinWidth.value, Math.min(props.maxWidth, availablePanelWidth.value)),
+  );
+  watch(
+    () => props.width,
+    () => {
+      const parsed = Number.parseFloat(panelWidth.value);
+      if (Number.isFinite(parsed)) currentWidth.value = clampWidth(parsed);
+    },
+    { immediate: true },
+  );
+  watch(layoutViewportWidth, () => {
+    if (currentWidth.value) currentWidth.value = clampWidth(currentWidth.value);
+  });
   const panelStyle = computed(() =>
-    props.fullScreen ? { width: '100%', minWidth: '100%', maxWidth: '100%' } : { width: panelWidth.value },
+    props.fullScreen
+      ? { width: '100%', minWidth: '100%', maxWidth: '100%' }
+      : {
+          width: props.resizable && currentWidth.value ? `${currentWidth.value}px` : panelWidth.value,
+          minWidth: props.resizable ? `${resolvedMinWidth.value}px` : undefined,
+          maxWidth: props.resizable ? `${resolvedMaxWidth.value}px` : undefined,
+        },
   );
 
   function isNumeric(v: string): boolean {
     return /^\d+$/.test(v);
+  }
+
+  function readLayoutViewportWidth() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return props.maxWidth;
+    return document.documentElement.clientWidth || Math.max(1, Math.round(window.innerWidth / getRootZoom()));
+  }
+
+  function syncLayoutViewportWidth() {
+    layoutViewportWidth.value = readLayoutViewportWidth();
   }
 
   function handleMaskClick(e: MouseEvent) {
@@ -164,15 +255,103 @@
     emit('close');
   }
 
+  const focusableSelector = [
+    'a[href]',
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',');
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && props.keyboard) {
+      event.preventDefault();
+      handleClose();
+      return;
+    }
+    if (!props.modal || event.key !== 'Tab' || !panelRef.value) return;
+    const focusable = Array.from(panelRef.value.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+      (element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true',
+    );
+    if (!focusable.length) {
+      event.preventDefault();
+      panelRef.value.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function clampWidth(value: number) {
+    return Math.round(Math.max(resolvedMinWidth.value, Math.min(resolvedMaxWidth.value, value)));
+  }
+
+  function resizeAt(clientX: number) {
+    syncLayoutViewportWidth();
+    const normalizedClientX = clientX / getRootZoom();
+    currentWidth.value = clampWidth(readLayoutViewportWidth() - normalizedClientX);
+  }
+
+  function handleResizeMove(event: PointerEvent) {
+    if (!resizing) return;
+    resizeAt(event.clientX);
+  }
+
+  function stopResize() {
+    if (!resizing) return;
+    resizing = false;
+    document.body.classList.remove('b-drawer-is-resizing');
+    window.removeEventListener('pointermove', handleResizeMove);
+    window.removeEventListener('pointerup', stopResize);
+    window.removeEventListener('pointercancel', stopResize);
+  }
+
+  function startResize(event: PointerEvent) {
+    if (!props.resizable || props.fullScreen) return;
+    event.preventDefault();
+    resizing = true;
+    document.body.classList.add('b-drawer-is-resizing');
+    resizeAt(event.clientX);
+    window.addEventListener('pointermove', handleResizeMove);
+    window.addEventListener('pointerup', stopResize);
+    window.addEventListener('pointercancel', stopResize);
+  }
+
+  function handleResizeKeydown(event: KeyboardEvent) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Home') currentWidth.value = resolvedMinWidth.value;
+    else if (event.key === 'End') currentWidth.value = resolvedMaxWidth.value;
+    else {
+      const step = event.shiftKey ? 40 : 16;
+      currentWidth.value = clampWidth(currentWidth.value + (event.key === 'ArrowLeft' ? step : -step));
+    }
+  }
+
   function handlePanelTransitionEnd(event: TransitionEvent) {
     if (event.target !== event.currentTarget || event.propertyName !== 'transform') return;
     markSettled();
   }
 
+  onMounted(() => {
+    syncLayoutViewportWidth();
+    window.addEventListener('resize', syncLayoutViewportWidth);
+  });
+
   onBeforeUnmount(() => {
     clearOpenFrame();
     clearSettleTimer();
     if (closeTimer !== null) clearTimeout(closeTimer);
+    stopResize();
+    window.removeEventListener('resize', syncLayoutViewportWidth);
   });
 </script>
 
@@ -181,6 +360,19 @@
     position: fixed;
     inset: 0;
     z-index: 99999;
+  }
+
+  .b-drawer-wrapper.is-hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .b-drawer-wrapper.is-non-modal {
+    pointer-events: none;
+
+    .b-drawer-panel {
+      pointer-events: auto;
+    }
   }
 
   .b-drawer-mask {
@@ -204,6 +396,10 @@
     min-width: 300px;
     max-width: 90vw;
 
+    &:focus {
+      outline: none;
+    }
+
     /* 滚动条主题 */
     ::-webkit-scrollbar {
       width: 6px;
@@ -212,6 +408,42 @@
       background: var(--scrollbar-color, rgba(144, 147, 153, 0.3));
       border-radius: 3px;
     }
+  }
+
+  .b-drawer-resize-handle {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    left: -6px;
+    width: 12px;
+    cursor: col-resize;
+    touch-action: none;
+
+    &::after {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 5px;
+      width: 2px;
+      background: transparent;
+      content: '';
+      transition: background-color 0.16s ease;
+    }
+
+    &:hover::after,
+    &:focus-visible::after {
+      background: color-mix(in srgb, var(--primary-color) 52%, transparent);
+    }
+
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  body.b-drawer-is-resizing {
+    cursor: col-resize !important;
+    user-select: none !important;
   }
 
   .fullscreen-drawer() {
@@ -244,6 +476,10 @@
   }
 
   @media (max-width: 767px) {
+    .b-drawer-resize-handle {
+      display: none;
+    }
+
     .b-drawer-panel--mobile-fullscreen {
       .fullscreen-drawer();
     }
@@ -317,5 +553,12 @@
     flex: 1;
     overflow-y: auto;
     padding: 24px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .b-drawer-mask,
+    .b-drawer-panel {
+      transition-duration: 0.01ms;
+    }
   }
 </style>

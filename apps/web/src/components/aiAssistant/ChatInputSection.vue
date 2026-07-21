@@ -1,13 +1,10 @@
 <template>
   <footer class="input-section">
-    <div v-if="quota && !quota.exempt && quota.quota" class="ai-quota" :title="t('ai.quotaTip')">
+    <div v-if="showQuota && quota" class="ai-quota" :title="t('ai.quotaTip')">
       <span class="ai-quota-txt"
         >{{ t('ai.quotaToday') }} {{ fmtTokens(quota.used) }} / {{ fmtTokens(quota.quota) }}</span
       >
       <div class="ai-quota-bar"><div class="ai-quota-fill" :style="{ width: quotaPercent + '%' }"></div></div>
-    </div>
-    <div v-else-if="quota && quota.exempt" class="ai-quota ai-quota--free">
-      {{ quota.role === 'root' ? t('ai.quotaUnlimited') : t('ai.quotaExempt') }}
     </div>
     <div class="input-container">
       <div class="context-actions">
@@ -120,6 +117,11 @@
     if (!q || !q.quota) return 0;
     return Math.min(100, Math.round(((q.used || 0) / q.quota) * 100));
   });
+  // 额度充足或豁免(root/本机)时不再常驻一整行,仅在接近上限(已用 ≥ 80%)时展示提示条,把纵向空间让给回答区(方案 §8.6)。
+  const showQuota = computed(() => {
+    const q = props.quota;
+    return Boolean(q && !q.exempt && q.quota && quotaPercent.value >= 80);
+  });
   function fmtTokens(n?: number) {
     const v = Number(n || 0);
     return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(v);
@@ -178,7 +180,7 @@
 <style scoped>
   .input-section {
     background: var(--background-color);
-    padding: 0.5rem 1.25rem 0.75rem;
+    padding: 0.4rem 1.25rem 0.55rem;
     flex-shrink: 0;
     min-width: 0;
     box-sizing: border-box;
@@ -214,7 +216,7 @@
     gap: 6px;
     width: 100%;
     min-width: 0;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
 
   .text-input {
@@ -361,6 +363,11 @@
 
     .composer-toolbar {
       justify-content: flex-end;
+    }
+
+    .send-btn {
+      min-width: 64px;
+      height: 44px;
     }
   }
 </style>

@@ -1,10 +1,10 @@
 import { fetchWebMeta } from './fetchWebMeta.js';
-import { requestDeepSeek } from './agent/deepseekClient.js';
+import { requestAi } from './agent/aiGateway.js';
 
 // AI 自动整理:批量给书签生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
 // 与单条「智能生成」保持一致——【免费】,不扣积分、不设每日固定次数;仅用单次条数上限防跑量,
 // 可分批多次运行。真正的积分出口在商店(AI 加油包/扩容/称号/头像框)与抽奖,不在这个高频提效功能上设卡。
-// AI 用量统一受 aiQuota 观测(当前 dry-run);未来若开启 AI_GATE_ENFORCE,所有 AI 功能一并按 token 额度限流。
+// AI 用量统一进入 AI Gateway / aiQuota；配额默认强制执行，只有显式配置才进入观测模式。
 
 export const ORGANIZE_MAX_BATCH = 20; // 单次最多处理条数(控制单次时长;整完可继续下一批)
 
@@ -30,7 +30,10 @@ function parseAiJson(content) {
 
 // 把 AI 的 matchedTags(标签名)映射为已有标签 id;newTags 过滤掉与已有重名的
 function mapTagSuggestion(parsed, userTags) {
-  const norm = (s) => String(s || '').trim().toLowerCase();
+  const norm = (s) =>
+    String(s || '')
+      .trim()
+      .toLowerCase();
   const matchedNames = Array.isArray(parsed?.matchedTags) ? parsed.matchedTags : [];
   const matchedTagIds = userTags.filter((t) => matchedNames.some((n) => norm(n) === norm(t.name))).map((t) => t.id);
   const newTags = (Array.isArray(parsed?.newTags) ? parsed.newTags : [])
@@ -49,7 +52,7 @@ function throwIfAborted(signal) {
 }
 
 // 从纯文本(如笔记标题+正文)推荐标签:只匹配/建议标签,不生成名称描述。供「AI 整理笔记」用。
-export async function suggestTagsFromText({ text, userTags = [] }) {
+export async function suggestTagsFromText({ text, userTags = [], trace, governance }) {
   const tagNameList = userTags.map((t) => t.name);
   const userPrompt = [
     '请根据下面的内容,为它推荐关联标签。',
@@ -62,10 +65,24 @@ export async function suggestTagsFromText({ text, userTags = [] }) {
     )}。从"已有标签"里挑最相关的放进 matchedTags(必须与列表文字完全一致);不足或都不合适时,在 newTags 给建议新增的简短标签名(2-6 个字)。**matchedTags 与 newTags 合计最多 3 个,只保留最相关的,宁少勿多,优先复用已有标签。**`,
     '只输出 JSON 对象:{"matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
   ].join('\n');
-  const { content } = await requestDeepSeek([
-    { role: 'system', content: '你是内容整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
-    { role: 'user', content: userPrompt },
-  ]);
+  const { content } = await requestAi(
+    [
+      { role: 'system', content: '你是内容整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
+      { role: 'user', content: userPrompt },
+    ],
+    {
+      toolChoice: 'none',
+      maxTokens: 400,
+      temperature: 0.1,
+      trace: { ...trace, taskType: 'organize', stage: 'organize_note_tags' },
+      governance: {
+        quotaPolicy: 'system',
+        systemId: 'organize',
+        ...governance,
+        taskType: 'organize_note_tags',
+      },
+    },
+  );
   const parsed = parseAiJson(content);
   if (!parsed) return null;
   const mapped = mapTagSuggestion(parsed, userTags);
@@ -82,7 +99,15 @@ export async function suggestTagsFromText({ text, userTags = [] }) {
  * 抽自 chatHandle.generateBookmarkMeta,供「单条智能生成」与「批量整理」共用。
  * @returns {{name,description,matchedTagIds,newTags}|null} 解析失败返回 null
  */
-export async function suggestBookmarkMeta({ url, name = '', description = '', userTags = [], signal }) {
+export async function suggestBookmarkMeta({
+  url,
+  name = '',
+  description = '',
+  userTags = [],
+  signal,
+  trace,
+  governance,
+}) {
   throwIfAborted(signal);
   const curName = String(name || '').trim();
   const curDesc = String(description || '').trim();
@@ -127,12 +152,24 @@ export async function suggestBookmarkMeta({ url, name = '', description = '', us
     '- 只输出 JSON 对象,格式必须是 {"name":"...","description":"...","matchedTags":["..."],"newTags":["..."]},不要输出 markdown、代码块或多余解释。',
   ].join('\n');
 
-  const { content } = await requestDeepSeek(
+  const { content } = await requestAi(
     [
       { role: 'system', content: '你是书签整理助手,只输出符合要求的 JSON,不输出任何多余内容。' },
       { role: 'user', content: userPrompt },
     ],
-    { signal },
+    {
+      signal,
+      toolChoice: 'none',
+      maxTokens: 600,
+      temperature: 0.1,
+      trace: { ...trace, taskType: 'organize', stage: 'organize_bookmark_meta' },
+      governance: {
+        quotaPolicy: 'system',
+        systemId: 'organize',
+        ...governance,
+        taskType: 'organize_bookmark_meta',
+      },
+    },
   );
   const parsed = parseAiJson(content);
   if (!parsed || (!parsed.name && !parsed.description && !Array.isArray(parsed.matchedTags))) return null;

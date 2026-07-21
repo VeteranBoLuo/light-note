@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 后端部署:本地 pnpm deploy(--legacy)打平自包含 node_modules → 服务器备份 → rsync 增量(--delete) → pm2 restart
 set -euo pipefail
-HOST="root@139.9.83.16"
+HOST="root@113.45.143.76"
 KEY="$HOME/.ssh/hermes_server"
 REMOTE="/www/wwwroot/light-note-back"
 PM2="app"                     # pm2 进程名(实测,非 light-note-back)

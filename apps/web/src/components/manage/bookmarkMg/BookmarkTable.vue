@@ -9,6 +9,10 @@
       @back="handleToBack"
     >
       <template #actions>
+        <BButton v-if="viewMode === 'table' && selectedRows.length > 0" @click="openSelectedBookmarksInAi">
+          <SvgIcon :src="icon.ai.ask" color="currentColor" size="16" aria-hidden="true" />
+          {{ $t('bookmarkMg.aiUseSelected') }}
+        </BButton>
         <BButton v-if="viewMode === 'table' && selectedRows.length > 0" type="danger" @click="handleBatchDelete">
           {{ $t('bookmarkMg.batchDelete') }}
         </BButton>
@@ -169,6 +173,14 @@
                   </div>
 
                   <div class="bookmark-actions">
+                    <BButton
+                      class="bookmark-ai-action"
+                      :aria-label="$t('bookmarkMg.aiUseBookmark')"
+                      :title="$t('bookmarkMg.aiUseBookmark')"
+                      @click="openBookmarksInAi([bookmarkItem])"
+                    >
+                      <SvgIcon :src="icon.ai.ask" color="currentColor" size="16" aria-hidden="true" />
+                    </BButton>
                     <BActionButton
                       action="edit"
                       :label="$t('common.edit')"
@@ -357,6 +369,7 @@
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
+  import { openAiAssistant } from '@/utils/aiEntry';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -384,6 +397,26 @@
   const handleSelectionChange = (selected: string[]) => {
     selectedRows.value = selected;
   };
+
+  function openBookmarksInAi(items: BookmarkInterface[]) {
+    const available = items.filter((item) => String(item?.id || '').trim());
+    if (!available.length) return;
+    if (available.length > 5) message.info(t('bookmarkMg.aiMaterialLimit', { count: 5 }));
+    const contexts = available.slice(0, 5).map((item) => ({
+      type: 'bookmark' as const,
+      id: String(item.id),
+      title: String(item.name || item.url || t('bookmarkMg.untitled')).slice(0, 255),
+    }));
+    openAiAssistant({
+      contextRefs: contexts,
+      suggestedIntent: contexts.length > 1 ? 'compare' : 'summarize',
+      surface: 'bookmark_manage',
+    });
+  }
+
+  function openSelectedBookmarksInAi() {
+    openBookmarksInAi(filteredBookmarks.value.filter((item) => selectedRows.value.includes(item.id)));
+  }
   const showImportExportModal = () => {
     importExportModalVisible.value = true;
   };
@@ -1252,6 +1285,14 @@
     display: flex;
     gap: 6px;
     flex-shrink: 0;
+  }
+
+  .bookmark-ai-action {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--primary-color);
   }
 
   // ── 卡片内区块 ──

@@ -66,7 +66,9 @@ export const OPERATION_LOG_MAP = {
   }),
   note: createModule('笔记', {
     updateTag: '更新标签',
+    history: '打开历史版本',
     exportPdf: '导出PDF',
+    exportNote: '打开导出',
     deleteNote: '删除笔记',
     saveNote: '保存笔记',
     saveAsTemplate: '打开存为模板',

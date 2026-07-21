@@ -51,7 +51,7 @@ const PROVIDERS = {
   },
   qwen: {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-    apiKeyEnv: 'DASHSCOPE_API_KEY', // 复用项目里已有的阿里云百炼 key(chatHandle.js 的 App Completion 接口也用它)
+    apiKeyEnv: 'DASHSCOPE_API_KEY', // 千问备用供应商密钥；所有业务入口统一经 AI Gateway 调用
     modelEnv: 'QWEN_MODEL',
     defaultModel: 'qwen3.5-flash',
     price: { input: 0.2, output: 2 },
@@ -73,6 +73,17 @@ function getApiKey(cfg) {
   const key = process.env[cfg.apiKeyEnv];
   if (!key) throw new Error(`未配置 ${cfg.apiKeyEnv}，请检查 .env 文件`);
   return key;
+}
+
+function getProviderFetch() {
+  const fetchImpl = globalThis.fetch;
+  if (typeof fetchImpl !== 'function') throw new Error('当前运行时不支持 fetch');
+  if (process.env.NODE_ENV === 'test' && fetchImpl._isMockFunction !== true) {
+    const error = new Error('TEST_PROVIDER_NETWORK_DISABLED: 测试必须 mock Provider fetch，禁止真实模型请求');
+    error.code = 'TEST_PROVIDER_NETWORK_DISABLED';
+    throw error;
+  }
+  return fetchImpl;
 }
 
 function getModel(cfg) {
@@ -161,6 +172,8 @@ function combineSignals(signals) {
  */
 export async function requestDeepSeek(messages, options = {}) {
   const cfg = getProviderConfig();
+  const apiKey = getApiKey(cfg);
+  const providerFetch = getProviderFetch();
   const body = {
     model: getModel(cfg),
     messages,
@@ -175,11 +188,11 @@ export async function requestDeepSeek(messages, options = {}) {
     body.tool_choice = options.toolChoice ?? 'auto';
   }
 
-  const res = await fetch(cfg.baseUrl, {
+  const res = await providerFetch(cfg.baseUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${getApiKey(cfg)}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     // 客户端断开(options.signal)与 90s 整体超时,任一触发即中止
     signal: combineSignals([options.signal, AbortSignal.timeout(PLANNER_TIMEOUT_MS)]),
@@ -225,6 +238,8 @@ export async function requestDeepSeek(messages, options = {}) {
  */
 export async function requestDeepSeekStream(messages, options = {}) {
   const cfg = getProviderConfig();
+  const apiKey = getApiKey(cfg);
+  const providerFetch = getProviderFetch();
 
   // 空闲超时:每收到一段数据就重置计时,连续 STREAM_IDLE_MS 无新数据视为挂死。
   // 只拦"连上却不吐字",正常持续输出的长回答不受影响(绝对超时会误杀长回答)。
@@ -237,11 +252,11 @@ export async function requestDeepSeekStream(messages, options = {}) {
     idleTimer = setTimeout(abortIdle, STREAM_IDLE_MS);
   };
   try {
-    const res = await fetch(cfg.baseUrl, {
+    const res = await providerFetch(cfg.baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${getApiKey(cfg)}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       // 客户端断开(options.signal)与空闲超时,任一触发即中止
       signal: combineSignals([options.signal, idleController.signal]),

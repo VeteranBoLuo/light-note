@@ -1,3 +1,5 @@
+import { isToolRoleAllowed } from './toolPolicy.js';
+
 const GROUPS = {
   base: ['search_content', 'search_knowledge_base', 'get_user_info', 'get_ai_quota'],
   bookmark: ['query_bookmarks', 'create_bookmark', 'query_link_health'],
@@ -82,7 +84,7 @@ export function selectAgentTools(
   for (const name of selectedNames) {
     const tool = registry.get(name);
     if (!tool) continue;
-    if (tool.requireRoot && userRole !== 'root') continue;
+    if (!isToolRoleAllowed(tool, userRole)) continue;
     if (tool.isWrite && (!allowWrite || (userRole === 'visitor' && !allowVisitorWrite))) continue;
     selected.push(tool);
     if (selected.length >= Math.min(12, Math.max(1, maxTools))) break;

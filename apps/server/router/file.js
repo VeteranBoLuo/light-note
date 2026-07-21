@@ -20,7 +20,13 @@ import { recordFirstOwnResource } from '../util/conversion.js';
 import crypto from 'crypto';
 import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 const router = express.Router();
+
+function sendFileServerError(res, scene, error, message = '服务器暂时无法处理，请稍后重试') {
+  console.error('[file] %s failed code=%s', scene, stableAgentErrorCode(error));
+  return res.send(resultData(null, 500, message));
+}
 
 const backupUpload = multer({ dest: os.tmpdir(), limits: { fileSize: 200 * 1024 * 1024 } });
 
@@ -119,7 +125,7 @@ router.post('/uploadFiles', async (req, res) => {
 
     res.send(resultData(results));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    return sendFileServerError(res, 'prepare-upload', e);
   }
 });
 
@@ -221,9 +227,9 @@ router.post('/confirmUpload', async (req, res) => {
     if (supersededObjectKeys.size) {
       const cleanupKeys = [...supersededObjectKeys];
       const cleanupResults = await Promise.allSettled(cleanupKeys.map((objectKey) => deleteObjectFromObs(objectKey)));
-      cleanupResults.forEach((result, index) => {
+      cleanupResults.forEach((result) => {
         if (result.status === 'rejected') {
-          console.warn('[云空间] 清理被同名上传替换的旧对象失败:', cleanupKeys[index], result.reason?.message);
+          console.warn('[file] superseded object cleanup failed code=%s', stableAgentErrorCode(result.reason));
         }
       });
     }
@@ -237,7 +243,7 @@ router.post('/confirmUpload', async (req, res) => {
     }
   } catch (error) {
     await connection.rollback();
-    res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+    return sendFileServerError(res, 'confirm-upload', error);
   } finally {
     connection.release();
   }
@@ -285,7 +291,7 @@ router.post('/queryFiles', async (req, res) => {
     try {
       await attachPendingStatus(pool, { userId, resourceType: 'file', items: formattedFiles });
     } catch (error) {
-      console.warn('[待整理角标] 文件状态回填失败(忽略):', error.message);
+      console.warn('[待整理角标] 文件状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
     }
 
     // 3. 应用文件名过滤
@@ -306,8 +312,7 @@ router.post('/queryFiles', async (req, res) => {
     }
     res.send(resultData(formattedFiles));
   } catch (error) {
-    console.error('查询文件时出错:', error);
-    res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+    return sendFileServerError(res, 'query-files', error);
   }
 });
 
@@ -355,8 +360,7 @@ router.post('/downloadFileById', async (req, res) => {
       }),
     );
   } catch (error) {
-    console.error('下载文件时出错:', error);
-    res.send(resultData(null, 500, '服务器内部错误')); // 设置状态码为500
+    return sendFileServerError(res, 'download-file', error); // 设置状态码为500
   }
 });
 
@@ -395,8 +399,7 @@ router.post('/deleteFileById', async (req, res) => {
     res.send(resultData({ deletedIds: fileIds, count: result.affectedRows }, 200, '删除成功'));
   } catch (e) {
     await connection.rollback();
-    console.error('删除文件时出错:', e);
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    return sendFileServerError(res, 'delete-file', e);
   } finally {
     connection.release();
   }
@@ -425,7 +428,7 @@ router.post('/checkFileNames', async (req, res) => {
     const allNames = allRows.map((r) => r.file_name);
     res.send(resultData({ check: result, allNames }, 200));
   } catch (e) {
-    res.send(resultData(null, 500, '检查文件名时出错: ' + e.message));
+    return sendFileServerError(res, 'check-file-names', e, '检查文件名失败，请稍后重试');
   }
 });
 
@@ -445,8 +448,7 @@ router.post('/queryTotalFileSize', async (req, res) => {
     res.send(resultData({ totalSizeMB, quotaMB }));
   } catch (error) {
     // 处理错误
-    console.error('查询文件总大小时出错:', error);
-    res.send(resultData(null, 500, '服务器内部错误: ' + error.message));
+    return sendFileServerError(res, 'query-total-size', error);
   }
 });
 
@@ -521,8 +523,7 @@ router.post('/hermesBackup', backupUpload.single('file'), async (req, res) => {
       connection.release();
     }
   } catch (e) {
-    console.error('[HermesBackup] 上传失败:', e.message);
-    res.send(resultData(null, 500, '备份上传失败: ' + e.message));
+    return sendFileServerError(res, 'hermes-backup', e, '备份上传失败，请稍后重试');
   } finally {
     // 清理临时文件
     if (filePath) {

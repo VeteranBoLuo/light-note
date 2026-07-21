@@ -39,6 +39,7 @@ export default {
       },
     },
   },
+  argumentAliases: ['id', 'name', 'keyword', 'mode', 'status'],
   normalizeArgs,
   requireRoot: false,
   timeoutMs: 60_000,

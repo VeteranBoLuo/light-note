@@ -135,6 +135,83 @@ try {
 - Root 操作用 `ensureRootRole(req, res)`
 - 不要用 `requireRole()` 中间件
 
+### AI 助手开发硬约束
+
+**Owner 四维隔离：**
+
+- AI 持久会话、Change Set、记忆和 SSE 恢复等顶层工作区对象统一使用 `(actorUserId, subjectUserId, adminContextMode, adminContextId)` 作为 owner 域；消息、来源、证据和 Change Item 等子表必须经已校验的父对象访问。账号派生索引、日志与配额账本沿用各自明确的主体模型，不能假装存在四维列。
+- actor/subject/context 必须从认证后的 `req.billingUser`、`req.resourceUser`、`req.adminContext` 解析，禁止接受请求 body 中的用户 ID 或上下文 ID。
+- 普通上下文必须满足 actor 等于 subject 且 `adminContextId = null`；管理员上下文必须有 Root actor、有效 context ID 和明确模式。数据库查询必须同时带四个谓词，并用 `admin_context_id <=> ?` 区分普通 NULL 域，不能用 `COALESCE`、仅 mode 或前三维代替。
+- owner 条件必须进入读、写、幂等查询、删除、回执、恢复和最终结果回查。客户端提供的消息/任务 ID 只可作为候选标识，不能通过 `ON DUPLICATE KEY UPDATE` 修改 owner 未确认的行。
+- 前端本地会话键和活动请求租约也必须包含 actor、subject、mode 和管理员 context ID。切换任一维度时先中止旧请求，再原子切换草稿、材料、附件、消息、session 和 conversation；旧请求晚到结果不得进入新域。
+- 本地持久格式升级时只迁移能证明 owner 等价的状态。旧三维键可以迁移到普通 self 四维域，但不得猜测管理员 context ID 或把旧管理员草稿带入新授权上下文；迁移成功后删除旧键，失败时宁可丢弃管理员临时状态也不能串域。
+- 会话谱系读取必须同时约束 owner 四维、live retention 和 root；parent/root/message 关系不能靠标题或正文推断。fresh schema 可要求 root NOT NULL，既有库 additive 升级须允许旧后端滚动写 NULL 独立根，并让新版查询用 `root_conversation_id = ? OR id = ?` 兼容。分支克隆必须单事务、重建 parent message 映射并继承 retention/expire；超过 200 条时明确 409，禁止静默截断或部分写。
+- 答案版本只在同 owner、同 conversation、completed assistant 的 `versionGroupId` 内读取；旧答案必须保留。切换器只定位已加载版本，不得隐藏/删除其他版本或把另一个 conversation 的消息拼入组；谱系/版本列表均需有界并披露 truncated/unavailable。
+
+**Readonly 与写策略：**
+
+- 每个管理员上下文路由必须在 `adminRoutePolicy.js` 声明明确语义；未声明继续默认拒绝。
+- 列表、详情、导出、状态查询归入 `READ`；会话/变更集持久状态归入 `AI_STATE_WRITE`；记忆归入 `ACCOUNT_WRITE`；真实资源修改归入 `CONTENT_WRITE`。
+- `readonly` 只允许 `READ` 和不会产生持久副作用的 AI 使用。写路由除中间件阻断外，Service 入口仍必须独立断言，防止内部调用绕过 HTTP policy。
+- 管理员上下文中的 Agent 不读取、不生成目标账号长期记忆。
+
+**上下文入口：**
+
+- 笔记、书签、云文件、标签、搜索结果等内容表面统一调用 `openAiAssistant()` / `AiEntry`，只传受控 `contextRefs`、意图、查询和 surface，不在页面散落自然语言 Prompt、权限判断或持久化逻辑。单项可建议 summarize、多项可建议 compare、标签可建议 find-related，但建议意图不能绕过 Agent Tool Policy。
+- 入口只携带后端可重新校验的资源 type/ID；title/name 仅用于本地展示，不能成为资源身份。批量入口有界取前 5 个并向用户明确提示，禁止静默把超限选择扩成全库范围。新增系统分享等入口时要补 owner、0/1/5/>5、移动端和中英文回归。
+
+**SSE 生命周期与终态：**
+
+- Agent 流式响应统一通过 `createAgentSseLifecycle()` 发送，不在旁路自行拼 `data:`、递增 ID 或提前 `res.end()`。
+- 每个事件都带协议版本、request ID 和严格单调的 event ID；请求开始后立即发可见阶段，并按约定发送 heartbeat。不得把原始思维链放入阶段或活动事件。
+- 每个已开始的流必须且只能形成一次可靠终态：`response.completed + done` 或 `response.failed + error`。HTTP 正常关闭但缺少协议终态在客户端按失败处理，不能把半截答案标成完成。
+- 完成事件中的 `answer`、证据、覆盖和 citation audit 是权威快照。流式正文经过最终引用审计或其他清洗后，客户端必须用权威正文替换临时 delta 聚合；断线恢复同样整体替换，不与旧增量合并。
+- 只持久化 completed/failed 终态恢复快照；恢复读取必须按 owner 四维校验并限制 TTL、事件数和 lastEventId。用户主动停止不伪装成可自动恢复的网络错误。
+- `memory_context` 是面向用户的隐私边界事件，只允许 `status/count/types/scopes/reason` 的有界协议，禁止携带记忆 ID、HMAC、正文、来源、时间或错误详情。`used` 元数据必须和实际注入 Prompt 的已确认记忆来自同一次权威查询；SSE 发送、终态 activity、会话读写、客户端 Store 和恢复链都要重复归一化，不能信任任一中间层保存的任意对象。
+- 临时会话必须从请求开始就显式关闭记忆读写并展示稳定的未使用原因；访客、翻译和管理员代管上下文也不得注入目标账号记忆。旧消息没有 `memory_context` 时保持无说明，禁止根据当前账本反推历史使用情况。UI 只解释“上下文是否注入”，不得宣称某段答案由某条记忆因果产生。
+- 记忆账本的“需一起复核”只能在当前 owner 内按相同 scope type、规范化 scope、memory type 和不同正文做确定性分组，并限制状态、总读取量与每条展示数；不得把这种重叠分组命名为确定冲突，也不得据此自动覆盖、暂停或删除。真正的语义判冲/取舍必须保留给用户或另行经过可评测的方案评审。
+
+**草稿、确认、回执与撤销：**
+
+- 模型只能生成建议或 Change Set 草稿，不能直接修改笔记、书签、文件、标签、待办或知识库。服务端必须将模型返回的资源 ID、标签 ID、文件夹 ID 和操作类型与 owner 已验证白名单重新求交。
+- 预览必须包含目标稳定 ID、前后状态、权威版本/内容哈希、选择项、风险和可撤销性。用户确认后冻结选择与参数；执行阶段不得再次让模型自由改参。
+- 真实写入必须复用 `util/services/` 及既有确认/幂等能力，并保存逐项回执。预览后对象变化时返回冲突并要求重新生成，不允许静默覆盖。
+- Change Set 批量 apply/retry 必须保持单事务全有或全无；任一项失败时已经执行的项也要回滚，UI 的 committed 计数保持 0/N，只有 commit 后才变为 N/N。可以显示 validating/applying/revalidating 等阶段，但禁止把 `processedCount` 当作已提交条数。
+- 失败快照只保存稳定错误码、阶段、失败项 ID、已尝试数、冻结选择、时间和 preview revision，不保存 raw error/message、before/after 正文或工具参数。失败后必须先按四维 owner + maintain 重新读取权威状态并刷新 before/hash、提升 revision，再让用户二次确认；retry 只接受服务端冻结范围和 expected revision，客户端不得重传/扩大 item IDs。编辑预览必须使旧 retry 失效。
+- Change Set 的 apply/undo 属于 AI 安全写闭环，资源写、`ai_content_generations` 推进和 `ai_content_chunks` 清理必须共享事务并失败关闭；提交后只驱逐本机缓存。嵌套的 todo 等域 Service 应允许上层统一失效，避免同一批次重复推进代际。
+- 撤销是带版本检查的补偿动作，不承诺无条件回滚。创建新笔记等不能安全自动撤销的动作必须明确说明恢复路径，不能显示虚假的“可撤销”。
+**日志、埋点与隐私：**
+
+- `agent_logs`、产品事件和普通错误日志默认不记录用户问题、回答、标题、推荐文本、来源摘录、Prompt 或工具原始参数。只记录 intent/任务类型、长度桶、枚举、数量、耗时、成本、稳定错误码和必要关联 ID。
+- AI 产品事件只能接受服务端白名单维度。关联 ID 入库前用独立 `AI_TELEMETRY_HMAC_SECRET` 做 HMAC；错误码折叠为稳定错误类别。禁止把 HMAC 当作权限依据。
+- Token、Cookie、Authorization、邮箱、连接串、URL 凭据和 Provider 原始错误先经过 scrubber；日志中不得直接输出数据库/网络异常的 message 或 stack。
+- 对象存储内部 key、临时路径和底层 SDK error 也属于内部敏感实现，不得直接进入客户端错误响应或普通日志。file/note/worker/cleanup 等异步边界统一映射稳定错误码；新增 handler 要同时检查成功响应、catch 和 scheduler `.catch()`，不能只修主 Agent。
+- 生产环境必须配置独立且稳定的 `AI_TELEMETRY_HMAC_SECRET` 与 `AI_QUOTA_HASH_SECRET`。轮换会切断历史关联或重新分桶，只能按运行手册安排，不能在普通重启时随机变化。
+
+**数据导出、清除与保留：**
+
+- 必须区分调用身份和数据政策：账号 Settings 的全量 JSON 导出按 `subject_user_id` 汇总可移植 AI 数据；普通 self/normal 的“清除全部 AI 数据”也按 subject 清除全部可控 AI 对象，包括管理员授权上下文曾为该主体产生的对象；管理员 `maintain` 清除只限当前 `(actor, subject, mode, contextId)` owner 四维域，`readonly` 禁止调用。接口、确认框、回执和帮助文档必须展示服务端返回的 `scope=subject_user|owner_domain`，不能由前端自行猜测。
+- 两种清除范围都必须在单个数据库事务内覆盖会话、记忆、Change Set、产品事件和 SSE 恢复事件；普通 self 还要在该事务内推进 `ai_content_generations` 并删除 `ai_content_chunks`，commit 后只做本进程缓存驱逐，任何代际推进/清理失败都必须回滚全部分域。owner-domain 清除不得推进 subject 级代际。任何必需表或字段缺失时必须以稳定 503 错误失败关闭并回滚，禁止把未检查分域计为删除 0 条。新增 AI 持久表时，必须同步决定它属于 subject 清除、owner 清除、独立安全账本还是不可移植派生数据，并补两种 scope 的回归，不能默认为遗漏。
+- `agent_logs`、配额用量和请求级配额占位属于独立安全/运营账本，不随上述清除删除。产品必须在确认前披露保留项和独立保留策略；不得用“永久清除全部记录”掩盖这些例外。subject 级导出包含其中可导出的审计/用量数据，也不意味着 subject 清除会删除它们。
+- 单条会话删除与“清除全部 AI 数据”语义不同：前者先进入服务端软删除状态并提供短时恢复，后者是用户再次确认后的事务永久清除，不提供伪撤销。撤销期限必须由服务端校验；前端计时器只负责提示。窗口到期后的关联数据清理由事务执行，并有启动/周期调度兜底，不能只依赖单进程 `setTimeout`。
+- 账号导出要返回 schema 版本、生成时间、各分域计数、迁移未就绪的不可用分域和排除清单。可重建内容/文档索引、短期 SSE 恢复事件与请求级配额占位不具可移植性，可以排除，但必须用稳定原因码明示。
+- `aiCloudHistory` 是账号云同步偏好，也是自动云会话持久化的双门禁：前端关闭后不得 hydrate/create/save，并清当前 cloud conversation ID；服务端 create/save handler 仍须按 subject 权威读取 preferences，明确关闭或主体不可验证时返回稳定 409。缺少偏好字段为兼容既有账号可默认开启，但不能把请求 body 的开关当作权威值。
+- 云历史开关只控制自动持久化，不删除既有云记录、不清本地 v3 Store，也不得误伤用户显式触发的 Change Set 成果、分支创建和历史管理。若未来要扩大为服务端全域写策略，必须另行评审语义与迁移，不能在共享 Service 入口直接一刀切。
+- 资源写入或删除触发个人检索失效时，要清本地缓存，并在数据库事务内递增 `ai_content_generations` 的 per-subject 代际、物理删除 `ai_content_chunks`。构建前后、缓存命中和持久化事务都要核对该代际；持久化必须锁定代际行并做 CAS，禁止旧实例快照回写。新增资源写入口必须接入同一失效 Service 并补并发回归。
+- 上述是新增入口和 AI 安全写闭环的目标不变量，不代表历史入口已经全部迁移。当前仍有 legacy 资源路径在业务 commit 后执行旁路失效；完成逐入口审计前必须在发布文档保留“新内容可能短时漏召回/重建延迟”的边界。返回命中仍须做权威复核，确保已删除、转移归属或旧版本缓存失败关闭，不能用这道返回前防线反过来掩盖写侧时序债务。
+- 个人检索结果返回前必须按 subject owner、`del_flag` 和资源版本向权威业务表复核；复核查询失败时返回空证据并记录稳定错误码，禁止失败开放。派生镜像不是事实源，不允许它在原资源删除、转移归属或更新版本后继续作为答案依据。
+- 会话、记忆、产品事件、恢复事件和 Change Set 必须逐域定义自动 TTL、用户删除、账号导出、审计保留和级联边界。自动清理采用小批次、幂等、可观测任务；达到单轮批次上限时要返回可观测的 backlog 状态并以无正文稳定告警提示，不能静默积压。安全账本和未结算配额占位不得盲删。
+- Change Set 产物 TTL 默认关闭；只有 `AI_CHANGE_SET_RETENTION_DAYS` 为 1～3650 的显式正整数时才启用。清理必须事务锁候选并在 DELETE 前重验：Change Set 仅 applied/undone/expired 且排除 indefinite 会话。任何状态集合或期限变化都需要产品/隐私评审与迁移/回归，不能仅改环境变量扩大删除范围。
+
+**测试与发布门槛：**
+
+- AI 单测在 `NODE_ENV=test` 下不得加载真实 `.env`，不得建立真实 DB/Redis/Provider 或外网连接；通过注入 adapter、mock pool 和受控夹具覆盖失败路径。
+- 至少覆盖 owner A → B → A、readonly 写阻断、schema 外参数、并发额度、重复请求、SSE 缺终态/断线恢复、记忆影响元数据去敏与临时会话禁用、假引用、长文档后半部、Change Set 冲突/撤销和临时数据过期。
+- 离线黄金集只能使用不可回推真实用户的合成材料。静态 Runner 通过不等于自然语言质量通过；真实发布还需要人工引用蕴含抽检和预发布任务验收。
+- AI 黄金矩阵变更必须同时通过生成器 `--check` 和 `eval:ai-assistant`；两步已是 CI 阻断项，禁止改为 `continue-on-error` 或只在本地手工运行。静态 CI 不调用网络、模型或数据库，真实 Agent adapter/回放应作为独立层接入，不能污染确定性门槛。
+- AI 数据库迁移、环境变量、schema assertions、灰度和回滚步骤见 `docs/plan/ai-assistant-rollout-runbook.md`。
+- 用新唯一索引替换旧唯一索引时，先按新索引的归一化表达式做重复键 preflight，再 `ADD UNIQUE`，确认成功后才 `DROP` 旧索引；顺序不可反转。迁移后 assertion 要同时证明新索引列序/唯一性正确且旧索引已移除，不能只检查脚本退出码。
+
 ### 前端规范
 
 **组件选择（铁律：有 B 组件必用 B 组件，禁原生控件，不新增 Ant Design）：**
@@ -189,6 +266,7 @@ import icon from "@/config/icon.ts";
 
 - 所有固定展示文案用 `$t()` 或 vue-i18n 的 `t()`
 - 新增 key 需同步更新 `zh-CN.ts` 和 `en-US.ts`
+- `apps/web/src/i18n/locales/localeParity.test.ts` 会递归校验中英文所有 leaf key 对称；新增/删除/移动 key 必须让该测试通过，不能用空字符串或复制错误命名空间规避。该测试是永久回归门槛，不只覆盖 AI 页面。
 
 **主题：**
 

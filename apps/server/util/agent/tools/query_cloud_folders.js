@@ -21,6 +21,7 @@ export default {
       limit: { type: 'integer', description: '返回数量，默认 20，最大 50' },
     },
   },
+  argumentAliases: ['name', 'folderName', 'folder_name'],
   normalizeArgs,
   requireRoot: false,
   async execute(input, ctx) {

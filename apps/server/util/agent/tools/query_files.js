@@ -12,7 +12,6 @@ function normalizeArgs(args = {}) {
     folderId = String(value);
   }
   return {
-    ...args,
     keyword: String(args.keyword || '')
       .trim()
       .slice(0, 255),
@@ -20,7 +19,10 @@ function normalizeArgs(args = {}) {
     folderName: String(args.folderName || args.folder_name || args.folder || '')
       .trim()
       .slice(0, 255),
+    type: String(args.type || '').trim(),
+    timeRange: String(args.timeRange || '').trim(),
     limit: Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 50) : 10,
+    user: String(args.user || '').trim(),
   };
 }
 
@@ -46,6 +48,7 @@ export default {
       user: { type: 'string', description: '可选，指定查询的用户（昵称/邮箱/ID），仅管理员可用。不填则查自己的数据' },
     },
   },
+  argumentAliases: ['folder_id', 'directoryId', 'directory_id', 'folder_name', 'folder'],
   normalizeArgs,
   requireRoot: false,
   async execute(input, ctx) {

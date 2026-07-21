@@ -99,13 +99,92 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
   });
 
+  it('AI 整理"应用"是内容写:readonly 阻断、maintain 放行;只读的 quote/run 仍放行', () => {
+    // apply = 真实写(建标签/关系/补名称),必须 maintain-only
+    const denyNext = vi.fn();
+    const denyRes = createRes();
+    adminRoutePolicyMiddleware(createReq('/bookmark/ai/organize/apply', 'POST', 'readonly'), denyRes, denyNext);
+    expect(denyNext).not.toHaveBeenCalled();
+    expect(denyRes.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }),
+    );
+
+    const allowNext = vi.fn();
+    const allowReq = createReq('/bookmark/ai/organize/apply', 'POST', 'maintain');
+    adminRoutePolicyMiddleware(allowReq, createRes(), allowNext);
+    expect(allowNext).toHaveBeenCalledTimes(1);
+    expect(allowReq.suppressUserRewards).toBe(true);
+
+    // quote/run 只产建议、不落库,仍属 AI_USE,readonly 可用
+    for (const path of ['/bookmark/ai/organize/quote', '/bookmark/ai/organize/run']) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path, 'POST', 'readonly'), createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('readonly 仅放行 Agent 问答和 AI 持久对象读取，拒绝所有状态写入', () => {
+    for (const path of [
+      '/chat/conversations/list',
+      '/chat/conversations/get',
+      '/chat/conversations/lineage',
+      '/chat/conversations/messages/versions',
+      '/chat/conversations/export',
+      '/chat/conversations/reuse-note/blocks',
+      '/chat/change-sets/list',
+      '/chat/change-sets/get',
+      '/chat/memories/list',
+    ]) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path), createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+    for (const path of [
+      '/chat/conversations/create',
+      '/chat/conversations/update',
+      '/chat/conversations/delete',
+      '/chat/conversations/restore',
+      '/chat/conversations/clear',
+      '/chat/conversations/clear-all-data',
+      '/chat/conversations/messages/save',
+      '/chat/conversations/messages/version-group',
+      '/chat/conversations/branch',
+      '/chat/conversations/feedback',
+      '/chat/conversations/reuse-note/prepare',
+      '/chat/change-sets/create',
+      '/chat/change-sets/propose',
+      '/chat/change-sets/update',
+      '/chat/change-sets/revalidate-retry',
+      '/chat/change-sets/retry',
+    ]) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
+    }
+  });
+
+  it('maintain 可管理当前上下文 AI 状态', () => {
+    for (const path of ['/chat/conversations/create', '/chat/change-sets/propose']) {
+      const next = vi.fn();
+      const req = createReq(path, 'POST', 'maintain');
+      adminRoutePolicyMiddleware(req, createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(req.suppressUserRewards).toBe(true);
+      expect(req.suppressConversionTracking).toBe(true);
+    }
+  });
+
   it('maintain 模式放行可逆内容写入并抑制成长/转化副作用', () => {
-    const next = vi.fn();
-    const req = createReq('/bookmark/updateBookmark', 'POST', 'maintain');
-    adminRoutePolicyMiddleware(req, createRes(), next);
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(req.suppressUserRewards).toBe(true);
-    expect(req.suppressConversionTracking).toBe(true);
+    for (const path of ['/bookmark/updateBookmark', '/chat/change-sets/revalidate-retry', '/chat/change-sets/retry']) {
+      const next = vi.fn();
+      const req = createReq(path, 'POST', 'maintain');
+      adminRoutePolicyMiddleware(req, createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(req.suppressUserRewards).toBe(true);
+      expect(req.suppressConversionTracking).toBe(true);
+    }
   });
 
   it('游客维护上下文允许云空间可逆写入并继续抑制副作用', () => {

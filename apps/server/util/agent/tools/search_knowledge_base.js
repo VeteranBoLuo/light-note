@@ -14,17 +14,21 @@ export default {
   },
   requireRoot: false,
   toSources(rows, args, ctx) {
-    return (Array.isArray(rows) ? rows : []).map((row) => {
-      return {
-        type: 'knowledge',
-        id: row.id,
-        title: row.title,
-        excerpt: row.content,
-        category: row.category,
-        status: row.status,
-        target: resolveKnowledgeSourceTarget(row, ctx.userRole),
-      };
-    });
+    return (Array.isArray(rows) ? rows : [])
+      // 内部知识(status=internal)是 AI 的系统知识,只供其生成答案参考,不作为面向用户的参考来源展示
+      // (root 会检索到 internal,会误把它当来源并跳知识库管理页;普通用户 onlyPublic 本就检索不到)。
+      .filter((row) => row?.status !== 'internal')
+      .map((row) => {
+        return {
+          type: 'knowledge',
+          id: row.id,
+          title: row.title,
+          excerpt: row.content,
+          category: row.category,
+          status: row.status,
+          target: resolveKnowledgeSourceTarget(row, ctx.userRole),
+        };
+      });
   },
   async execute(args, ctx) {
     const onlyPublic = ctx.userRole !== 'root';

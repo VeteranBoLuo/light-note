@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef" class="flex-align-center-gap tab-container" :class="`is-${variant}`">
+  <div ref="containerRef" class="flex-align-center-gap tab-container" :class="`is-${variant}`" role="tablist">
     <div
       class="dom-hover tab"
       v-for="tab in resolvedOptions"
@@ -8,7 +8,11 @@
         'is-active': activeValue === (tab.key ?? tab.label),
         'has-badge': tab.badge !== undefined,
       }"
+      role="tab"
+      :tabindex="activeValue === (tab.key ?? tab.label) ? 0 : -1"
+      :aria-selected="activeValue === (tab.key ?? tab.label)"
       @click="tabChange(tab)"
+      @keydown="handleTabKeydown($event, tab, resolvedOptions.indexOf(tab))"
     >
       <span>{{ tab.label }}</span>
       <span v-if="tab.badge !== undefined" class="tab-badge" :class="{ 'is-zero': Number(tab.badge) === 0 }">
@@ -64,6 +68,29 @@
     }
     activeTab.value = value;
     emit('change', value);
+  }
+
+  function handleTabKeydown(event: KeyboardEvent, tab: TabItem, index: number) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      tabChange(tab);
+      return;
+    }
+    const horizontalKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+    if (!horizontalKey && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const count = resolvedOptions.value.length;
+    if (!count) return;
+    const targetIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? count - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + count) % count;
+    const target = resolvedOptions.value[targetIndex];
+    if (!target) return;
+    tabChange(target);
+    nextTick(() => containerRef.value?.querySelectorAll<HTMLElement>('[role="tab"]')[targetIndex]?.focus());
   }
 
   function syncUnderline(value: string) {

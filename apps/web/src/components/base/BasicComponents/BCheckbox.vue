@@ -6,14 +6,41 @@
       'is-indeterminate': indeterminate,
       'is-disabled': disabled,
     }"
+    role="checkbox"
+    :tabindex="disabled ? -1 : 0"
+    :aria-checked="indeterminate ? 'mixed' : localChecked"
+    :aria-disabled="disabled || undefined"
     @click="handleClick"
+    @keydown.enter.prevent="handleClick"
+    @keydown.space.prevent="handleClick"
   >
     <span class="b-checkbox__input">
       <span class="b-checkbox__inner">
-        <svg v-if="indeterminate" class="b-checkbox__icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+        <svg
+          v-if="indeterminate"
+          class="b-checkbox__icon"
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+        >
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        <svg v-else-if="localChecked" class="b-checkbox__icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          v-else-if="localChecked"
+          class="b-checkbox__icon"
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <polyline points="4 12 10 18 20 6" />
         </svg>
       </span>
@@ -37,8 +64,10 @@
       disabled?: boolean;
     }>(),
     {
-      modelValue: false,
-      checked: false,
+      // 显式保留 undefined，才能区分未传旧 checked 与传入 false；
+      // 否则 Vue 会把可选 Boolean 缺省转换为 false，覆盖 modelValue。
+      modelValue: undefined,
+      checked: undefined,
       indeterminate: false,
       disabled: false,
     },
@@ -52,20 +81,20 @@
 
   // 本地状态，乐观更新
   // 优先取 checked（显式绑定），再取 modelValue（v-model 兼容）
-  const localChecked = ref(props.checked ?? props.modelValue);
+  const localChecked = ref(props.checked ?? props.modelValue ?? false);
 
   // 外部 prop 变化时同步：分别 watch checked 和 modelValue
   watch(
     () => props.checked,
     (val) => {
-      localChecked.value = val;
+      if (val !== undefined) localChecked.value = val;
     },
     { immediate: true },
   );
   watch(
     () => props.modelValue,
     (val) => {
-      localChecked.value = val;
+      if (props.checked === undefined && val !== undefined) localChecked.value = val;
     },
   );
 

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import redisClient from '../redisClient.js';
 import { createAgentActionIdempotencyKey } from './actionIdempotency.js';
+import { stableAgentErrorCode } from './logSafety.js';
 
 const PREFIX = 'agent:confirm:';
 const TTL_SECONDS = 5 * 60;
@@ -276,7 +277,7 @@ export async function claimToolConfirmationExecution(confirmation) {
       arguments: [raw, runningRaw, String(EXECUTION_TTL_SECONDS)],
     });
   } catch (error) {
-    console.warn('[Agent] 认领确认写操作失败:', error?.message || error);
+    console.warn('[Agent] confirmation claim failed code=%s', stableAgentErrorCode(error));
     throw new ToolConfirmationError('TOOL_CONFIRMATION_UNAVAILABLE', '安全确认服务暂不可用，请稍后重试。', 503);
   }
   if (Number(claimed) === 1) {
@@ -320,7 +321,7 @@ export async function settleToolConfirmationExecution(confirmation, outcome) {
       arguments: [runningRaw, JSON.stringify(settled), String(EXECUTION_TTL_SECONDS)],
     });
   } catch (error) {
-    console.warn('[Agent] 缓存确认写操作结果失败:', error?.message || error);
+    console.warn('[Agent] confirmation settlement failed code=%s', stableAgentErrorCode(error));
     throw new ToolConfirmationError('TOOL_CONFIRMATION_UNAVAILABLE', '操作结果暂未同步，请稍后安全重试。', 503);
   }
   if (Number(updated) !== 1) {
@@ -347,7 +348,7 @@ export async function acquireToolConfirmationAction(confirmation) {
       EX: ACTION_LOCK_TTL_SECONDS,
     });
   } catch (error) {
-    console.warn('[Agent] 获取附件动作锁失败:', error?.message || error);
+    console.warn('[Agent] action lock failed code=%s', stableAgentErrorCode(error));
     throw new ToolConfirmationError('TOOL_CONFIRMATION_UNAVAILABLE', '安全确认服务暂不可用，请稍后重试。', 503);
   }
   if (acquired !== 'OK') {
@@ -418,7 +419,7 @@ export async function finalizeToolConfirmationAction(confirmation, { succeeded =
       arguments: [confirmation.id, succeeded ? 'expire' : 'delete', String(cooldownSeconds)],
     });
   } catch (error) {
-    console.warn('[Agent] 更新附件动作锁失败（等待自动过期）:', error?.message || error);
+    console.warn('[Agent] action lock finalization failed code=%s', stableAgentErrorCode(error));
   }
 }
 

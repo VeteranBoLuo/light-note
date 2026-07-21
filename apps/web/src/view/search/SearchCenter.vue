@@ -40,6 +40,14 @@
             <svg-icon :src="icon.ai.internet" size="16" />
             {{ t('resourceCenter.knowledgeGraph') }}
           </BButton>
+          <BButton
+            class="search-ai-entry"
+            :disabled="!queryState.keyword.trim() && !selectedIds.length"
+            @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
+          >
+            <svg-icon :src="icon.ai.ask" size="16" />
+            {{ t('ai.entry.askSearch') }}
+          </BButton>
         </div>
       </BCard>
 
@@ -161,6 +169,14 @@
               <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
             </div>
             <div class="batch-actions">
+              <b-button @click="openSearchAi('compare')">
+                <SvgIcon :src="icon.ai.ask" size="15" />
+                {{ t('ai.entry.compareSelected') }}
+              </b-button>
+              <b-button @click="openSearchAi('organize')">
+                <SvgIcon :src="icon.ai.organize" size="15" />
+                {{ t('ai.entry.organizeSelected') }}
+              </b-button>
               <b-button @click="batchAddToInbox">{{ t('inbox.addExisting') }}</b-button>
               <b-button type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</b-button>
               <b-button type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</b-button>
@@ -302,6 +318,7 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
+  import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
@@ -741,6 +758,17 @@
     const merged = new Set(selectedIds.value);
     selectableVisibleItems.value.forEach((item) => merged.add(getItemSelectionKey(item)));
     selectedIds.value = Array.from(merged);
+  }
+
+  function openSearchAi(intent: AiAssistantIntent) {
+    const selected = mappedItems.value.filter((item) => selectedIds.value.includes(getItemSelectionKey(item)));
+    if (selected.length > 5) message.info(t('ai.materialLimit', { count: 5 }));
+    openAiAssistant({
+      surface: 'search',
+      suggestedIntent: intent,
+      query: queryState.keyword.trim() || undefined,
+      contextRefs: selected.slice(0, 5).map((item) => ({ type: item.type, id: String(item.id), title: item.title })),
+    });
   }
 
   function getSelectedItemsByTypes(types: SearchType[]) {

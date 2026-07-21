@@ -44,6 +44,8 @@
               padding: 8px;
               border-radius: 6px;
               font-size: 12px;
+              white-space: pre-wrap;
+              word-break: break-all;
             "
             >{{ selectedRecord.req }}</pre>
         </div>

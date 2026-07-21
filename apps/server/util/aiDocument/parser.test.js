@@ -17,6 +17,15 @@ describe('AI 文档解析器', () => {
         expect.objectContaining({ locatorType: 'section', locatorValue: '安全' }),
       ]),
     );
+    expect(result.coverage).toEqual(
+      expect.objectContaining({
+        metadataAvailable: true,
+        complete: true,
+        truncated: false,
+        coverageRatio: 1,
+      }),
+    );
+    expect(result.coverage.total.chars).toBe(result.coverage.processed.chars);
   });
 
   it('解析 CSV 时返回行号定位', async () => {
@@ -78,5 +87,95 @@ describe('AI 文档解析器', () => {
 
     expect(result.text).toContain('Text 123');
     expect(result.chunks[0]).toEqual(expect.objectContaining({ locatorType: 'page', locatorValue: '图片' }));
+  });
+
+  it('超过字符上限时显式记录未处理字符范围，而不是静默截断', async () => {
+    const content = `前部结论\n\n${'后续内容'.repeat(80_000)}`;
+    const buffer = Buffer.from(content);
+    const result = await parseDocumentBuffer(buffer, {
+      fileName: 'long.txt',
+      fileType: 'text/plain',
+      fileSize: buffer.length,
+    });
+
+    expect(result.coverage.truncated).toBe(true);
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.coverageRatio).toBeLessThan(1);
+    expect(result.coverage.total.chars).toBeGreaterThan(result.coverage.processed.chars);
+    expect(result.coverage.failedRanges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ unit: 'characters', code: 'CHAR_LIMIT' })]),
+    );
+  });
+
+  it('超过分块上限时保存总分块数、处理分块数和失败范围', async () => {
+    const rows = ['name,status', ...Array.from({ length: 260 }, (_, index) => `项目${index + 1},active`)];
+    const content = rows.join('\n');
+    const buffer = Buffer.from(content);
+    const result = await parseDocumentBuffer(buffer, {
+      fileName: 'many-rows.csv',
+      fileType: 'text/csv',
+      fileSize: buffer.length,
+    });
+
+    expect(result.chunks).toHaveLength(220);
+    expect(result.coverage.total.chunks).toBe(260);
+    expect(result.coverage.processed.chunks).toBe(220);
+    expect(result.coverage.reasons).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'CHUNK_LIMIT' })]));
+  });
+
+  it('OCR 部分页无文字时按页记录失败范围和覆盖比例', async () => {
+    const buffer = Buffer.from('%PDF-image-only');
+    const result = await parseDocumentBuffer(
+      buffer,
+      { fileName: 'partial.pdf', fileType: 'application/pdf', fileSize: buffer.length },
+      {
+        pdfParser: async () => ({ numpages: 3, text: '' }),
+        ocrProvider: {
+          recognizePdf: async () => [
+            { pageNumber: 1, content: '第一页' },
+            { pageNumber: 3, content: '第三页' },
+          ],
+        },
+      },
+    );
+
+    expect(result.coverage.total.pages).toBe(3);
+    expect(result.coverage.processed.pages).toBe(2);
+    expect(result.coverage.coverageRatio).toBeCloseTo(2 / 3, 3);
+    expect(result.coverage.failedRanges).toContainEqual(
+      expect.objectContaining({ unit: 'pages', start: 2, end: 2, code: 'OCR_PAGE_NO_TEXT' }),
+    );
+  });
+
+  it('解析失败和空文档错误也携带可序列化覆盖元数据', async () => {
+    const invalidPdf = Buffer.from('%PDF-broken');
+    let parseFailure;
+    try {
+      await parseDocumentBuffer(
+        invalidPdf,
+        { fileName: 'broken.pdf', fileType: 'application/pdf', fileSize: invalidPdf.length },
+        { pdfParser: async () => Promise.reject(new Error('parser crashed')) },
+      );
+    } catch (error) {
+      parseFailure = error;
+    }
+    expect(parseFailure?.coverage).toEqual(
+      expect.objectContaining({ metadataAvailable: true, complete: false, truncated: false, coverageRatio: 0 }),
+    );
+    expect(() => JSON.stringify(parseFailure.coverage)).not.toThrow();
+
+    let emptyFailure;
+    try {
+      await parseDocumentBuffer(Buffer.alloc(0), {
+        fileName: 'empty.txt',
+        fileType: 'text/plain',
+        fileSize: 0,
+      });
+    } catch (error) {
+      emptyFailure = error;
+    }
+    expect(emptyFailure?.coverage.reasons).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'EMPTY_DOCUMENT' })]),
+    );
   });
 });

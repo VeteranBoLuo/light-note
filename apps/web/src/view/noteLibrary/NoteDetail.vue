@@ -113,13 +113,26 @@
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const DEFAULT_NOTE_TITLE = '未命名文档';
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
+  // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
+  // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
+  // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
+  const resolveInitialNoteType = (): 'html' | 'markdown' => {
+    const query = router.currentRoute.value.query;
+    if (query.type === 'markdown') return 'markdown';
+    if (query.builtin) {
+      const tpl = findBuiltinNoteTemplate(String(query.builtin));
+      if (tpl?.type === 'markdown') return 'markdown';
+    }
+    return 'html';
+  };
+  const initialNoteType = resolveInitialNoteType();
   const note = reactive({
     id: '',
     title: DEFAULT_NOTE_TITLE,
     lastTitle: DEFAULT_NOTE_TITLE,
-    content: DEFAULT_NOTE_CONTENT,
+    content: initialNoteType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
     createBy: '',
-    type: 'html',
+    type: initialNoteType,
   });
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
   const hasSwitchBackup = ref(false);
@@ -244,6 +257,15 @@
   const isCurrentSave = ref(false);
   const updateTime = ref('');
   const nStore = noteStore();
+  // 把当前笔记标题同步给 note store,供全局 AI 抽屉「@当前页面」显示真实笔记名
+  // (抽屉是全局组件、拿不到详情页的响应式 note;离开笔记页后该值不再被读到,无需清理)。
+  watch(
+    () => note.title,
+    (title) => {
+      nStore.currentTitle = title || '';
+    },
+    { immediate: true },
+  );
   async function syncHeaderTitle() {
     if (bookmark.isMobile) return;
     await nextTick();
@@ -562,15 +584,9 @@
         });
     } else {
       nodeType.value = 'add';
-      // 从 query 读取类型，默认 html
       const query = router.currentRoute.value.query;
-      const qType = query.type;
-      note.type = qType === 'markdown' ? 'markdown' : 'html';
-      if (note.type === 'markdown') {
-        note.content = '';
-      }
-      // 模板预填必须先于注册 content watch:预填本身不触发自动保存,
-      // 选模板后不编辑直接退出便不会创建笔记(守卫式创建语义不变)
+      // 编辑器类型已在 note 初始化时按 query 同步定好(早于 Editor 挂载,避免 markdown 模板正文被富文本转义),此处只预填正文。
+      // 模板预填必须先于注册 content watch:预填本身不触发自动保存,选模板后不编辑直接退出便不会创建笔记。
       applyTemplateFromQuery(query).finally(() => {
         isReady.value = true;
         if (templateTitleApplied) {

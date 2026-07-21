@@ -13,6 +13,8 @@
       :aria-controls="showSearch ? undefined : listboxId"
       :aria-haspopup="showSearch ? undefined : 'listbox'"
       :aria-activedescendant="showSearch ? undefined : activeOptionDomId"
+      :aria-label="showSearch ? undefined : ariaLabel || undefined"
+      :aria-labelledby="showSearch ? undefined : ariaLabelledby || undefined"
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
       @mouseenter="isHovering = true"
@@ -31,6 +33,8 @@
           :aria-expanded="isOpen"
           :aria-controls="listboxId"
           :aria-activedescendant="activeOptionDomId"
+          :aria-label="ariaLabel || undefined"
+          :aria-labelledby="ariaLabelledby || undefined"
           @click.stop
           @input="keepOpen"
           @focus="keepOpen"
@@ -81,6 +85,8 @@
             :aria-expanded="isOpen"
             :aria-controls="listboxId"
             :aria-activedescendant="activeOptionDomId"
+            :aria-label="ariaLabel || undefined"
+            :aria-labelledby="ariaLabelledby || undefined"
             @click.stop
             @input="keepOpen"
             @keydown.stop="handleTriggerKeydown"
@@ -131,6 +137,8 @@
       showSearch?: boolean;
       filterOption?: (value: string, option: BaseOptions) => boolean;
       maxTagCount?: number;
+      ariaLabel?: string;
+      ariaLabelledby?: string;
     }>(),
     {
       options: () => [],
@@ -139,6 +147,8 @@
       mode: 'single',
       showSearch: false,
       maxTagCount: 0,
+      ariaLabel: '',
+      ariaLabelledby: '',
     },
   );
 
@@ -290,6 +300,8 @@
     }
     if (event.key === 'Escape' && isOpen.value) {
       event.preventDefault();
+      // 收起下拉时阻止冒泡:否则 Esc 会继续冒泡到外层(如 BDrawer)把整个抽屉一起关掉。
+      event.stopPropagation();
       isOpen.value = false;
       return;
     }

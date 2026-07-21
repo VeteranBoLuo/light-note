@@ -5,6 +5,7 @@ export const ADMIN_POLICIES = Object.freeze({
   CONTENT_WRITE: 'content_write',
   BACKGROUND_WRITE: 'background_write',
   AI_USE: 'ai_use',
+  AI_STATE_WRITE: 'ai_state_write',
   CONTENT_DESTRUCTIVE: 'content_destructive',
   ACCOUNT_WRITE: 'account_write',
   ENTITLEMENT_WRITE: 'entitlement_write',
@@ -46,13 +47,15 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
   ['POST', '/bookmark/importBookmarksHtml'],
   ['POST', '/bookmark/archive'],
   ['POST', '/bookmark/health/ignore'],
+  // AI 整理"应用"是对 subject 的真实内容写(建标签/加关系/补书签名称),必须 maintain-only、readonly 阻断,
+  // 不能归 AI_USE(否则只读预览代管也能落库,违反"readonly 阻断写")。
+  ['POST', '/bookmark/ai/organize/apply'],
 ]);
 
 declare(ADMIN_POLICIES.AI_USE, 'bookmark', [
   ['POST', '/bookmark/summarize'],
   ['POST', '/bookmark/ai/organize/quote'],
   ['POST', '/bookmark/ai/organize/run'],
-  ['POST', '/bookmark/ai/organize/apply'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
@@ -173,6 +176,7 @@ declare(ADMIN_POLICIES.READ, 'common', [
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'common', [['POST', '/common/analyzeImgUrl']]);
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'telemetry', [
   ['POST', '/common/recordOperationLogs'],
+  ['POST', '/common/recordAiEvent'],
   ['POST', '/common/recordConversion'],
 ]);
 
@@ -251,23 +255,72 @@ declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
 
 declare(ADMIN_POLICIES.AI_USE, 'agent', [
   ['POST', '/chat/agent'],
+  ['POST', '/chat/agent/recover'],
   ['POST', '/chat/agent/follow-ups'],
-  ['POST', '/chat/agent/actions/prepare'],
   ['POST', '/chat/agent/interactions/respond'],
-  ['POST', '/chat/agent/confirm'],
-  ['POST', '/chat/agent/confirm/reject'],
-  ['POST', '/chat/attachments/init'],
-  ['POST', '/chat/attachments/confirm'],
-  ['POST', '/chat/attachments/attachCloudFile'],
-  ['POST', '/chat/attachments/status'],
-  ['POST', '/chat/attachments/delete'],
-  ['POST', '/chat/attachments/clearTemporary'],
-  ['POST', '/chat/aiQuota'],
   ['POST', '/chat/generateBookmarkMeta'],
   ['POST', '/chat/generateBookmarkDescription'],
   ['POST', '/chat/generateTagIcon'],
   ['POST', '/tagIcon/search'],
   ['POST', '/tagIcon/resolve'],
+]);
+
+declare(ADMIN_POLICIES.READ, 'agent', [
+  ['POST', '/chat/conversations/list'],
+  ['POST', '/chat/conversations/get'],
+  ['POST', '/chat/conversations/lineage'],
+  ['POST', '/chat/conversations/messages/versions'],
+  ['POST', '/chat/conversations/export'],
+  ['POST', '/chat/conversations/note-targets'],
+  ['POST', '/chat/conversations/reuse-note/blocks'],
+  ['POST', '/chat/change-sets/list'],
+  ['POST', '/chat/change-sets/get'],
+  ['POST', '/chat/memories/list'],
+  ['POST', '/chat/attachments/status'],
+  ['POST', '/chat/aiQuota'],
+]);
+
+declare(ADMIN_POLICIES.AI_STATE_WRITE, 'agent', [
+  ['POST', '/chat/conversations/create'],
+  ['POST', '/chat/conversations/update'],
+  ['POST', '/chat/conversations/delete'],
+  ['POST', '/chat/conversations/restore'],
+  ['POST', '/chat/conversations/clear'],
+  ['POST', '/chat/conversations/clear-all-data'],
+  ['POST', '/chat/conversations/messages/save'],
+  ['POST', '/chat/conversations/messages/version-group'],
+  ['POST', '/chat/conversations/branch'],
+  ['POST', '/chat/conversations/feedback'],
+  ['POST', '/chat/conversations/reuse-note/prepare'],
+  ['POST', '/chat/change-sets/create'],
+  ['POST', '/chat/change-sets/propose'],
+  ['POST', '/chat/change-sets/update'],
+  ['POST', '/chat/change-sets/revalidate-retry'],
+]);
+
+declare(ADMIN_POLICIES.CONTENT_WRITE, 'agent', [
+  ['POST', '/chat/agent/actions/prepare'],
+  ['POST', '/chat/agent/confirm'],
+  ['POST', '/chat/agent/confirm/reject'],
+  ['POST', '/chat/attachments/init'],
+  ['POST', '/chat/attachments/confirm'],
+  ['POST', '/chat/attachments/attachCloudFile'],
+  ['POST', '/chat/attachments/delete'],
+  ['POST', '/chat/attachments/clearTemporary'],
+]);
+
+declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [['POST', '/chat/conversations/save-note']]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'ai_memory', [
+  ['POST', '/chat/memories/create'],
+  ['POST', '/chat/memories/confirm'],
+  ['POST', '/chat/memories/update'],
+  ['POST', '/chat/memories/delete'],
+  ['POST', '/chat/memories/clear'],
+]);
+declare(ADMIN_POLICIES.CONTENT_WRITE, 'agent', [
+  ['POST', '/chat/change-sets/apply'],
+  ['POST', '/chat/change-sets/retry'],
+  ['POST', '/chat/change-sets/undo'],
 ]);
 
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
@@ -406,6 +459,15 @@ export function adminRoutePolicyMiddleware(req, res, next) {
     req.suppressUserRewards = true;
     req.suppressConversionTracking = true;
     req.isVisitorWorkspaceContentWrite = req.adminContext.subjectRole === 'visitor';
+    return next();
+  }
+
+  if (capability.policy === ADMIN_POLICIES.AI_STATE_WRITE) {
+    if (req.adminContext.mode !== 'maintain') {
+      return sendPolicyError(res, 403, 'ADMIN_PREVIEW_READONLY', '管理员当前处于只读预览模式。');
+    }
+    req.suppressUserRewards = true;
+    req.suppressConversionTracking = true;
     return next();
   }
 

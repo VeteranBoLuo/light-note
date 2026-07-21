@@ -11,11 +11,14 @@ export interface Heading {
 
 interface NoteState {
   headings: Heading[];
+  // 当前正在编辑的笔记标题:供全局 AI 抽屉的「@当前页面」显示真实笔记名(抽屉是全局组件,拿不到详情页的响应式 note)。
+  currentTitle: string;
 }
 
 export default defineStore('note', {
   state: (): NoteState => ({
     headings: [],
+    currentTitle: '',
   }),
   getters: {},
   actions: {

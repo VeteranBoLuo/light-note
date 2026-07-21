@@ -1,6 +1,10 @@
 <template>
-  <div v-if="uniqueSources.length" :class="['ai-sources', { 'is-pending': !revealed }]" :aria-hidden="!revealed">
-    <div class="ai-sources__rail">
+  <div
+    v-if="uniqueSources.length || hasCoverageDetails"
+    :class="['ai-sources', { 'is-pending': !revealed }]"
+    :aria-hidden="!revealed"
+  >
+    <div v-if="uniqueSources.length" class="ai-sources__rail">
       <span class="ai-sources__label">{{ t('ai.sources') }} · {{ uniqueSources.length }}</span>
 
       <BButton
@@ -73,6 +77,10 @@
       </BButton>
     </div>
 
+    <div v-if="hasCoverageDetails" class="ai-sources__details">
+      <AiCoverageDisclosure :sources="sources" :coverage="coverage" />
+    </div>
+
     <BModal
       v-if="isMobile"
       v-model:visible="mobileSourceVisible"
@@ -96,8 +104,19 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { recordAiProductEvent } from '@/api/aiTelemetry';
+  import AiCoverageDisclosure from './AiCoverageDisclosure.vue';
+  import AiEvidenceLedger from './AiEvidenceLedger.vue';
   import AiSourceList from './AiSourceList.vue';
-  import { resolveAiSourceNavigation, type AiSource, type AiSourceNavigation } from './aiSourceNavigation';
+  import {
+    resolveAiSourceNavigation,
+    groupAiEvidence,
+    type AiCoverageReport,
+    type AiEvidenceReference,
+    type AiResolvedEvidence,
+    type AiSource,
+    type AiSourceNavigation,
+  } from './aiSourceNavigation';
   import { getAiSourceCompactPreviewCount, shouldCollapseAiSources } from './aiSourcePresentation';
 
   export type { AiSource } from './aiSourceNavigation';
@@ -105,12 +124,16 @@
   const props = withDefaults(
     defineProps<{
       sources: AiSource[];
+      evidence?: AiEvidenceReference[];
+      coverage?: AiCoverageReport | null;
+      anchorScope?: string;
       isMobile?: boolean;
       revealed?: boolean;
     }>(),
     {
       isMobile: false,
       revealed: true,
+      anchorScope: '',
     },
   );
   const emit = defineEmits<{
@@ -141,6 +164,11 @@
     uniqueSources.value.slice(0, getAiSourceCompactPreviewCount(uniqueSources.value.length)),
   );
   const hasOverflow = computed(() => shouldCollapseAiSources(uniqueSources.value.length));
+  // 文档覆盖降级为"仅警告":只在确有材料未被完整读取(截断/不完整)时展示,提示可信度;
+  // 普通问答或材料已完整覆盖时不再显示"0 份文件·0%"这类噪音。证据账本已下线。
+  const hasCoverageDetails = computed(() =>
+    props.sources.some((source) => source.coverage?.truncated || source.coverage?.complete === false),
+  );
   const typeLabel = (type: AiSource['type']) => t(`ai.sourceTypes.${type}`);
   const sourceIcon = (type: AiSource['type']) => {
     if (type === 'note') return icon.resource.note;
@@ -148,6 +176,7 @@
     if (type === 'folder') return icon.common.folder;
     if (type === 'tag') return icon.resource.tag;
     if (type === 'knowledge') return icon.noteTemplate.knowledge;
+    if (type === 'todo') return icon.contextMenu.inbox;
     if (type === 'web') return icon.ai.internet;
     return icon.resource.bookmark;
   };
@@ -173,9 +202,16 @@
     void router.push(target);
   }
 
-  function openSource(source: AiSource) {
+  function openSource(source: AiSource, recordTelemetry = true) {
     const navigation: AiSourceNavigation = sourceNavigation(source);
     if (navigation.kind === 'none') return;
+    if (recordTelemetry) {
+      void recordAiProductEvent('ai_source_opened', {
+        surface: 'workspace',
+        sourceId: source.sourceId || `${source.type}:${source.id}`,
+        actionType: 'open',
+      });
+    }
     closeSourcePanels();
     if (navigation.kind === 'external') {
       window.open(navigation.url, '_blank', 'noopener,noreferrer');
@@ -183,10 +219,16 @@
     }
     navigateInsideApp(source, navigation.target);
   }
+
+  function openEvidenceSource(source: AiSource, _evidence: AiResolvedEvidence) {
+    openSource(source, false);
+  }
 </script>
 
 <style scoped lang="less">
   .ai-sources {
+    display: grid;
+    gap: 8px;
     min-height: 40px;
     margin: -6px 0 16px 44px;
   }
@@ -202,10 +244,25 @@
     transition: opacity 0.16s ease;
   }
 
-  .ai-sources.is-pending .ai-sources__rail {
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
+  /* 流式未完成(pending)时整块不占位。原来用 visibility:hidden —— 会"隐形但仍占满高度":
+     coverage/证据数据在流式中途(coverage/citations 帧)就到达,AiSourceCards 随即渲染,
+     于是回答还没生成完,下方就被"来源/文档覆盖/证据账本"的高度撑出一大片空白,直到 revealed 才显形。
+     改为 display:none —— 未 revealed 时完全不占空间,回答完成后再自然出现在正文下方(符合"来源在答案之后"的预期)。 */
+  .ai-sources.is-pending {
+    display: none;
+  }
+
+  .ai-sources__details {
+    display: grid;
+    width: min(760px, 100%);
+    box-sizing: border-box;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--workspace-panel-bg-color) 88%, transparent);
+    opacity: 1;
+    transition: opacity 0.16s ease;
   }
 
   .ai-sources__label {
@@ -259,6 +316,10 @@
 
   .ai-sources__compact.is-knowledge {
     --source-color: var(--primary-color);
+  }
+
+  .ai-sources__compact.is-todo {
+    --source-color: var(--message-info-color);
   }
 
   .ai-sources__compact-icon {
@@ -339,13 +400,18 @@
       margin-left: 0;
     }
 
+    .ai-sources__details {
+      width: 100%;
+      padding: 9px;
+    }
+
     .ai-sources__rail {
       height: 44px;
     }
 
     .ai-sources__compact,
     .ai-sources__more {
-      height: 40px;
+      height: 44px;
     }
 
     .ai-sources__label {
@@ -354,7 +420,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ai-sources__rail {
+    .ai-sources__rail,
+    .ai-sources__details {
       transition: none;
     }
   }

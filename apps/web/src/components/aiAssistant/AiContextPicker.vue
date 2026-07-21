@@ -1,8 +1,18 @@
 <template>
   <div class="ai-context-picker">
     <div v-if="modelValue.length" class="ai-context-chips">
-      <BButton v-for="item in modelValue" :key="`${item.type}:${item.id}`" size="small" @click="remove(item)">
-        @{{ item.title }} ×
+      <BButton
+        v-for="item in modelValue"
+        :key="`${item.type}:${item.id}`"
+        size="small"
+        class="ai-context-chip"
+        :title="item.title"
+        :aria-label="t('ai.contextLens.removeMaterial')"
+        @click="remove(item)"
+      >
+        <SvgIcon :src="resourceIcon(item.type)" size="12" aria-hidden="true" />
+        <span class="ai-context-chip__title">{{ item.title }}</span>
+        <SvgIcon class="ai-context-chip__x" :src="icon.common.close" size="10" aria-hidden="true" />
       </BButton>
     </div>
     <BPopover v-model:open="open" trigger="click" placement="top-left" overlay-class-name="ai-context-popover">
@@ -45,7 +55,10 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search';
+  import { noteStore } from '@/store';
 
   export interface AiResourceContext {
     type: SearchType;
@@ -60,6 +73,7 @@
   }>();
   const { t } = useI18n();
   const route = useRoute();
+  const nStore = noteStore();
   const open = ref(false);
   const keyword = ref('');
   const results = ref<AiResourceContext[]>([]);
@@ -69,14 +83,22 @@
 
   const currentPageContext = computed<AiResourceContext | null>(() => {
     const id = String(route.params.id || '');
+    // 不用 document.title(整站标题「轻笺-轻量级知识管理工具」,会让用户误以为@的是整个项目);
+    // 笔记优先用 note store 里同步的真实标题,拿不到再退固定文案;书签/标签用固定文案。
     if (route.path.startsWith('/noteLibrary/') && id && id !== 'add')
-      return { type: 'note', id, title: document.title || t('ai.currentNote') };
+      return { type: 'note', id, title: nStore.currentTitle || t('ai.currentNote') };
     if (route.path.startsWith('/manage/editBookmark/') && id && id !== 'add')
-      return { type: 'bookmark', id, title: document.title || t('ai.currentBookmark') };
-    if (route.path.startsWith('/tag/') && id) return { type: 'tag', id, title: document.title || t('ai.currentTag') };
+      return { type: 'bookmark', id, title: t('ai.currentBookmark') };
+    if (route.path.startsWith('/tag/') && id) return { type: 'tag', id, title: t('ai.currentTag') };
     return null;
   });
   const typeLabel = (type: SearchType) => t(`ai.sourceTypes.${type}`);
+  function resourceIcon(type: SearchType) {
+    if (type === 'note') return icon.resource.note;
+    if (type === 'file') return icon.resource.file;
+    if (type === 'tag') return icon.resource.tag;
+    return icon.resource.bookmark;
+  }
   const selected = (item: AiResourceContext) =>
     props.modelValue.some((value) => value.type === item.type && value.id === item.id);
 
@@ -152,6 +174,28 @@
     flex-wrap: wrap;
     min-width: 0;
   }
+  /* 已选材料 = 带主色调的"标签",跟右边中性的「@添加资源 / 上传文件」按钮明显区分,
+     一眼能看出这是"选中的内容"而非可点的操作按钮。 */
+  .ai-context-chips :deep(.b_btn) {
+    gap: 4px;
+    height: auto;
+    min-height: 24px;
+    padding: 2px 7px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 32%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+  .ai-context-chip__title {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ai-context-chip__x {
+    opacity: 0.55;
+  }
   .ai-context-panel {
     display: flex;
     flex-direction: column;
@@ -193,5 +237,12 @@
     padding: 14px;
     color: var(--desc-color);
     text-align: center;
+  }
+
+  @media (pointer: coarse) {
+    .ai-context-picker :deep(.b_btn),
+    .ai-context-results :deep(.b_btn) {
+      min-height: 44px;
+    }
   }
 </style>

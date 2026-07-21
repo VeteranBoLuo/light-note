@@ -59,6 +59,15 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     );
   });
 
+  it('测试环境即使存在密钥也禁止使用原生 fetch 连接真实 Provider', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'should-never-leave-test';
+    globalThis.fetch = ORIGINAL_FETCH;
+    await expect(requestDeepSeek([{ role: 'user', content: 'hi' }])).rejects.toMatchObject({
+      code: 'TEST_PROVIDER_NETWORK_DISABLED',
+    });
+  });
+
   it('同步请求返回供应商、模型、finish reason 与真实 usage', async () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';
@@ -108,15 +117,19 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';
     vi.useFakeTimers();
-    globalThis.fetch = vi.fn((_url, options) =>
-      new Promise((_resolve, reject) => {
-        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
-      }),
+    globalThis.fetch = vi.fn(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+        }),
     );
 
     const pending = requestDeepSeekStream([{ role: 'user', content: 'hi' }], { onDelta: () => {} });
     // 先挂上 rejection handler，再推进假时钟，避免 Vitest 把预期中的超时视为未处理异常。
-    const timeoutExpectation = expect(pending).rejects.toMatchObject({ name: 'TimeoutError', code: 'AI_FIRST_TOKEN_TIMEOUT' });
+    const timeoutExpectation = expect(pending).rejects.toMatchObject({
+      name: 'TimeoutError',
+      code: 'AI_FIRST_TOKEN_TIMEOUT',
+    });
     await vi.advanceTimersByTimeAsync(60_000);
 
     await timeoutExpectation;

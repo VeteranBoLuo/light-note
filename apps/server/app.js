@@ -17,6 +17,11 @@ import { startTodoReminderScheduler } from './util/todoReminder.js';
 import { globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
+import { startAiConversationRetentionScheduler } from './util/aiConversationService.js';
+import { startAiProductEventRetentionScheduler } from './util/aiProductTelemetry.js';
+import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecoveryService.js';
+import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from './util/aiArtifactRetention.js';
+import { stableAgentErrorCode } from './util/agent/logSafety.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -76,7 +81,28 @@ ensurePointsSchema().catch((err) => console.error('积分表初始化失败:', e
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败:', err.message));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败:', err.message));
 ensureFeatureRequestTables().catch((err) => console.error('共建轻笺数据表初始化失败:', err.message));
-ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败:', err.message));
+ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+startAiConversationRetentionScheduler().catch((err) =>
+  console.error('AI 临时会话清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+);
+startAiProductEventRetentionScheduler().catch((err) =>
+  console.error('AI 产品事件清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+);
+startAiResponseRecoveryCleanupScheduler().catch((err) =>
+  console.error('AI 响应恢复清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+);
+const aiArtifactRetentionConfig = getAiArtifactRetentionConfig();
+if (!aiArtifactRetentionConfig.enabledDomains.length && aiArtifactRetentionConfig.invalidDomains.length) {
+  console.warn(
+    'AI 产物保留清理配置无效 code=AI_ARTIFACT_RETENTION_CONFIG_INVALID domains=%s',
+    aiArtifactRetentionConfig.invalidDomains.join(','),
+  );
+}
+if (aiArtifactRetentionConfig.enabledDomains.length) {
+  startAiArtifactRetentionScheduler().catch((err) =>
+    console.error('AI 产物保留清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+  );
+}
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {
