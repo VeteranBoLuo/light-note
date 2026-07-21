@@ -435,6 +435,10 @@
     resultFormat.value = expectedFormat;
     requestCompleted.value = false;
     outputFull.value = '';
+    // 重置放大预览的逐字状态:否则追问时「上一版满内容」还留在 previewTyped 里,
+    // 会因 previewTyped.length >= previewSource.length 卡住 pump,弹框要等新版长度追上旧版才更新
+    previewTyped.value = '';
+    previewSource.value = '';
     if (mode === 'followup') followupPrompt.value = '';
     outputTruncated.value = false;
     generationFeedback.value = null;
@@ -1158,12 +1162,17 @@
   }
   .ai-preview-split {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    /* minmax(0,1fr) 而非 1fr:grid item 默认 min-width:auto,右列 v-html 里的宽元素(code/表格)会按 min-content
+       把右列撑大、把左列挤没。minmax(0,…) 强制两列可收缩到 0 再均分,左侧 md 原文才有稳定的一半宽度。 */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 14px;
     align-items: start;
   }
   .ai-preview-md {
     margin: 0;
+    min-width: 0;
+    /* 追问会先清空内容再流式填充,给个最低高度避免内容区瞬间塌缩、弹框忽大忽小 */
+    min-height: min(240px, 40vh);
     max-height: 68vh;
     overflow: auto;
     padding: 10px 12px;
@@ -1175,7 +1184,10 @@
     font-family: 'Fira Code', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.6;
-    color: var(--desc-color);
+    color: var(--text-color);
+  }
+  .ai-preview-split .ai-preview-body {
+    min-width: 0;
   }
   /* 窄屏/移动端:单栏只保留渲染预览(md 原文在小窗输出区已可见),避免挤压 */
   @media (max-width: 768px) {
@@ -1216,6 +1228,7 @@
     line-height: 1.5;
   }
   .ai-preview-body {
+    min-height: min(240px, 40vh);
     max-height: 68vh;
     overflow-y: auto;
     /* 内容是 v-html 渲染的 HTML 片段,不能用 pre-wrap——否则 AI 输出里标签间的源码换行
