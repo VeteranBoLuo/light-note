@@ -1,6 +1,22 @@
 <template>
   <div class="auth-panel">
     <div class="auth-fields">
+      <label class="auth-field" for="auth-register-alias">
+        <span class="auth-field__label">{{ t('auth.nickname') }}</span>
+        <BInput
+          id="auth-register-alias"
+          v-model:value="formData.alias"
+          class="auth-input"
+          height="48px"
+          maxlength="20"
+          :placeholder="t('auth.nicknameOptional')"
+        >
+          <template #prefix>
+            <SvgIcon :src="icon.navigation.user" size="16" />
+          </template>
+        </BInput>
+      </label>
+
       <label class="auth-field" for="auth-register-email">
         <span class="auth-field__label">{{ t('auth.email') }}</span>
         <BInput
@@ -75,7 +91,7 @@
   type AuthMode = '登录' | '注册' | '重置';
 
   const title = defineModel<AuthMode>('title', { required: true });
-  const formData = reactive({ password: '', email: '', role: 'user' });
+  const formData = reactive({ password: '', email: '', role: 'user', alias: '' });
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -113,6 +129,7 @@
     const source = bookmark.authModalSource || 'unknown';
     trackConversion('signup_submit', source);
     const params = { ...cloneDeep(formData), signupSource: source };
+    params.alias = (params.alias || '').trim(); // 去首尾空格;纯空格 → 空,由后端兜底成「默认昵称」
 
     try {
       const res: any = await apiBasePost('/api/user/registerUser', params);

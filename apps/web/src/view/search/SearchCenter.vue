@@ -169,10 +169,6 @@
               <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
             </div>
             <div class="batch-actions">
-              <b-button @click="openSearchAi('compare')">
-                <SvgIcon :src="icon.ai.ask" size="15" />
-                {{ t('ai.entry.compareSelected') }}
-              </b-button>
               <b-button @click="openSearchAi('organize')">
                 <SvgIcon :src="icon.ai.organize" size="15" />
                 {{ t('ai.entry.organizeSelected') }}

@@ -1706,7 +1706,7 @@ export default {
       reuse: {
         done: '完成',
         noteTitle: '新笔记标题',
-        noteTitlePlaceholder: '留空则使用当前会话标题',
+        noteTitlePlaceholder: '留空则使用「AI 研究笔记」',
         defaultTitle: 'AI 研究笔记',
         searchTarget: '搜索目标笔记',
         searchTargetPlaceholder: '输入标题关键词',
@@ -3091,6 +3091,8 @@ export default {
     password: '密码',
     passwordPlaceholder: '输入密码',
     passwordRulePlaceholder: '设置 6–16 位密码',
+    nickname: '昵称',
+    nicknameOptional: '可选',
     passwordRequired: '请输入密码',
     forgotPassword: '忘记密码？',
     rememberMe: '记住账号',

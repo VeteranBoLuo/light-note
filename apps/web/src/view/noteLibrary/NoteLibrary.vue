@@ -21,10 +21,6 @@
         <BButton class="note-action-button" @click="toggleSelectAllVisible">
           {{ allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent') }}
         </BButton>
-        <BButton class="note-action-button" @click="openSelectedNotesAi('compare')">
-          <SvgIcon :src="icon.ai.ask" size="16" />
-          {{ $t('ai.entry.compareSelected') }}
-        </BButton>
         <BButton class="note-action-button" @click="openSelectedNotesAi('organize')">
           <SvgIcon :src="icon.ai.organize" size="16" />
           {{ $t('ai.entry.organizeSelected') }}

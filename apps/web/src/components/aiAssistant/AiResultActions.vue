@@ -618,7 +618,8 @@
         const result = await saveAiMessageAsNote(
           props.conversationId,
           props.messageId,
-          noteTitle.value.trim() || undefined,
+          // 留空时兜底成「AI 研究笔记」,与确认弹窗提示一致(否则后端会落到会话标题=内容截断)
+          noteTitle.value.trim() || t('ai.resultActions.reuse.defaultTitle'),
         );
         reuseResult.value = {
           kind: 'create',

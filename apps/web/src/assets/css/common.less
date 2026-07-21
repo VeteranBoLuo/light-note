@@ -42,6 +42,12 @@
   }
 }
 
+/* 原生复选框(笔记正文待办、搜索结果多选等)统一强调色为主题靛蓝,
+   避免 accent-color 缺省时跟随系统强调色,在 Windows 上渲染成红色。 */
+input[type='checkbox'] {
+  accent-color: var(--primary-color);
+}
+
 .element-primary {
   background-color: #33343f;
   color: #fff8e8;

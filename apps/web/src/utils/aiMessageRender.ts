@@ -127,9 +127,10 @@ export function decorateAiCitations(html: string, citationKeys: string[] = [], a
       const knownKey = knownKeys.get(match[1].trim().toLocaleLowerCase());
       if (!knownKey) continue;
       if (match.index > cursor) fragment.append(value.slice(cursor, match.index));
-      const anchor = document.createElement('a');
+      // 角标改为不可点的 span(去掉 href 与点击跳转):证据账本已下线、点击无意义;
+      // hover 由 ChatMessageItem 用主题 tooltip 显示来源名(读 data-citation-key)。
+      const anchor = document.createElement('span');
       anchor.className = 'ai-inline-citation';
-      anchor.href = `#${getAiEvidenceAnchorId(knownKey, anchorScope)}`;
       anchor.dataset.citationKey = knownKey;
       anchor.setAttribute('aria-label', i18n.global.t('ai.citationAriaLabel', { key: knownKey }));
       anchor.textContent = `[${knownKey}]`;

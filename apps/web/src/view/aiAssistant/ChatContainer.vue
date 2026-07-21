@@ -113,14 +113,7 @@
         </Transition>
       </div>
 
-      <!-- 移动端隐藏「回答范围」条:占位高、与上方快捷问答贴太近;已选材料在输入区 @添加资源 的 chips 里可查看/移除 -->
-      <AiContextLens
-        v-if="!bookmark.isMobile"
-        :contexts="contexts"
-        :attachments="attachments"
-        @update:contexts="contexts = $event"
-        @update:attachments="attachments = $event"
-      />
+      <!-- 「回答范围」条已整块移除:联网检索未上线只剩占位,已选材料在输入区 @添加资源 的 chips 里即可查看/移除(桌面+移动一致) -->
 
       <!-- 输入区域 -->
       <ChatInputSection
@@ -160,7 +153,6 @@
   import AiAnswerVersionSwitcher from '@/components/aiAssistant/AiAnswerVersionSwitcher.vue';
   import AiConversationLineageNavigator from '@/components/aiAssistant/AiConversationLineageNavigator.vue';
   import AiResultActions from '@/components/aiAssistant/AiResultActions.vue';
-  import AiContextLens from '@/components/aiAssistant/AiContextLens.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';

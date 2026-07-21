@@ -1737,7 +1737,7 @@ export default {
       reuse: {
         done: 'Done',
         noteTitle: 'New note title',
-        noteTitlePlaceholder: 'Leave blank to use the conversation title',
+        noteTitlePlaceholder: 'Leave blank to use "AI Research Notes"',
         defaultTitle: 'AI research note',
         searchTarget: 'Search destination notes',
         searchTargetPlaceholder: 'Enter title keywords',
@@ -3158,6 +3158,8 @@ export default {
     password: 'Password',
     passwordPlaceholder: 'Enter your password',
     passwordRulePlaceholder: 'Create a 6–16 character password',
+    nickname: 'Nickname',
+    nicknameOptional: 'Optional',
     passwordRequired: 'Please enter your password',
     forgotPassword: 'Forgot password?',
     rememberMe: 'Remember me',

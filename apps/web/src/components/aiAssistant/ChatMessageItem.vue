@@ -19,8 +19,22 @@
         <div class="bubble" v-if="message.content">
           <!-- Markdown 渲染内容 -->
           <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
-          <div v-else-if="isStreaming" class="text" v-html="streamingHtml" @click="handleLinkClick"></div>
-          <div v-else class="text" v-html="formatAssistantMessage(message.content)" @click="handleLinkClick"></div>
+          <div
+            v-else-if="isStreaming"
+            class="text"
+            v-html="streamingHtml"
+            @click="handleLinkClick"
+            @mouseover="showCitationTip"
+            @mouseout="hideCitationTip"
+          ></div>
+          <div
+            v-else
+            class="text"
+            v-html="formatAssistantMessage(message.content)"
+            @click="handleLinkClick"
+            @mouseover="showCitationTip"
+            @mouseout="hideCitationTip"
+          ></div>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
             <div class="user-contexts__list">
@@ -103,11 +117,21 @@
         </div>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="citationTip.visible"
+        class="ai-citation-tip"
+        :style="{ left: citationTip.x + 'px', top: citationTip.y + 'px' }"
+      >
+        {{ citationTip.text }}
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
@@ -119,14 +143,16 @@
   // 注意：本组件有名为 message 的 prop，这里必须改名，否则导入会遮蔽 prop，
   // 导致模板里的 message.content/role 全部指向该工具对象而恒为 undefined（消息一直转圈不显示）
   import bMessage from '@/components/base/BasicComponents/BMessage/BMessage';
-  import { getAiEvidenceAnchorId, renderAssistantMarkdown, renderStreamingMarkdown } from '@/utils/aiMessageRender';
+  import { renderAssistantMarkdown, renderStreamingMarkdown } from '@/utils/aiMessageRender';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
     resolveAiSourceNavigation,
+    groupAiEvidence,
     type AiEvidenceReference,
     type AiSource,
   } from '@/components/aiAssistant/aiSourceNavigation';
   import { extractAiMemoryInfluence } from '@/utils/aiMemoryInfluence';
+  import { getRootZoom } from '@/utils/zoom';
 
   const { t } = useI18n();
 
@@ -227,6 +253,32 @@
     return renderAssistantMarkdown(content, [...new Set(citationKeys.filter(Boolean))], props.message.id);
   };
 
+  // 角标 hover 用的「citationKey → 来源标题」映射(复用证据分组)
+  const citationTitleMap = computed<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const group of groupAiEvidence(props.message.sources || [], props.message.evidence || [])) {
+      const title = group.items?.find((it) => it.sourceTitle)?.sourceTitle;
+      if (group.citationKey && title) map[group.citationKey] = title;
+    }
+    return map;
+  });
+
+  // 角标改成不可点后,hover 用轻笺自己的 tooltip 浮层显示来源名(角标是 v-html 注入的、套不了 BTooltip,故事件委托 + 命令式浮层)
+  const citationTip = ref({ visible: false, text: '', x: 0, y: 0 });
+  const showCitationTip = (event: MouseEvent) => {
+    const el = (event.target as HTMLElement)?.closest?.('.ai-inline-citation') as HTMLElement | null;
+    if (!el) return;
+    const title = citationTitleMap.value[String(el.dataset.citationKey || '').trim()];
+    if (!title) return;
+    const rect = el.getBoundingClientRect();
+    // 界面缩放(<html> CSS zoom)下 getBoundingClientRect 是视觉坐标,写 fixed 定位要 ÷ 缩放比,否则 tooltip 错位(见 utils/zoom)
+    const zoom = getRootZoom();
+    citationTip.value = { visible: true, text: title, x: (rect.left + rect.width / 2) / zoom, y: rect.top / zoom };
+  };
+  const hideCitationTip = (event: MouseEvent) => {
+    if ((event.target as HTMLElement)?.closest?.('.ai-inline-citation')) citationTip.value.visible = false;
+  };
+
   const formatTime = (date: Date): string => {
     return date.toLocaleTimeString(undefined, {
       hour: '2-digit',
@@ -257,15 +309,6 @@
     const target = event.target as HTMLElement;
     const anchor = target.closest<HTMLAnchorElement>('a');
     if (!anchor || !anchor.href) return;
-
-    const citationKey = String(anchor.dataset.citationKey || '').trim();
-    if (citationKey) {
-      event.preventDefault();
-      const evidenceGroup = document.getElementById(getAiEvidenceAnchorId(citationKey, props.message.id));
-      evidenceGroup?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      evidenceGroup?.focus({ preventScroll: true });
-      return;
-    }
 
     const href = anchor.getAttribute('href') || '';
     if (!href || href.startsWith('#')) return;
@@ -591,14 +634,32 @@
     line-height: 1.35;
     text-decoration: none;
     vertical-align: 0.06em;
+    cursor: help;
   }
 
-  .text :deep(.ai-inline-citation:hover),
-  .text :deep(.ai-inline-citation:focus-visible) {
+  .text :deep(.ai-inline-citation:hover) {
     border-color: color-mix(in srgb, var(--primary-color) 52%, transparent);
     background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
-    outline: none;
     text-decoration: none;
+  }
+
+  /* 角标 hover tooltip(Teleport 到 body,scoped 下靠 data-v 属性生效;浮在角标上方居中,不挡鼠标) */
+  .ai-citation-tip {
+    position: fixed;
+    z-index: 100060;
+    transform: translate(-50%, calc(-100% - 8px));
+    max-width: 260px;
+    padding: 5px 10px;
+    border-radius: 7px;
+    background: rgba(30, 34, 44, 0.94);
+    color: #fff;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+    pointer-events: none;
   }
 
   /* 使用主题变量替代 highlight.js 的固定亮色主题，避免暗色模式下代码不可读。 */

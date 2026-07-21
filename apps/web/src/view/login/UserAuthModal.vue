@@ -3,7 +3,7 @@
     <div class="auth-overlay" :class="{ 'auth-overlay--landing': isLanding }" @click.self="closeModal">
       <section
         class="auth-card"
-        :class="{ 'auth-card--reset': title === '重置' }"
+        :class="{ 'auth-card--reset': title === '重置', 'auth-card--compact': title === '注册' }"
         role="dialog"
         aria-modal="true"
         :aria-label="panelMeta.title"
@@ -406,6 +406,33 @@
   }
 
   .auth-card--reset .auth-assurance {
+    margin-top: 14px;
+  }
+
+  /* 注册页字段最多(昵称+邮箱+密码 + GitHub + 切换),用紧凑间距把多出的昵称行"吃回来",正常屏不出滚动条 */
+  .auth-card--compact .auth-heading {
+    margin: 22px 0 16px;
+  }
+  .auth-card--compact :deep(.auth-fields) {
+    gap: 11px;
+  }
+  .auth-card--compact :deep(.auth-field) {
+    gap: 6px;
+  }
+  .auth-card--compact :deep(.auth-input .b-input) {
+    height: 44px;
+  }
+  .auth-card--compact :deep(.auth-primary) {
+    height: 44px !important;
+    margin-top: 14px;
+  }
+  .auth-card--compact :deep(.auth-divider) {
+    margin: 14px 0;
+  }
+  .auth-card--compact :deep(.auth-switch) {
+    margin-top: 13px;
+  }
+  .auth-card--compact .auth-assurance {
     margin-top: 14px;
   }
 
