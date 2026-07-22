@@ -1,7 +1,7 @@
 <template>
   <div class="note-header">
     <div style="display: flex; align-items: center" :style="{ gap: bookmark.isMobile ? '0' : '20px' }">
-      <div class="back-icon" @click="back">
+      <div class="back-icon" @click="$emit('back')">
         <SvgIcon :src="icon.noteDetail.back" />
       </div>
       <div
@@ -104,7 +104,6 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
-  import router from '@/router';
   import { defineAsyncComponent, ref } from 'vue';
   import { generatePDF } from '@/utils/htmlToPdf.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
@@ -123,7 +122,6 @@
 
   const props = defineProps<{
     updateTime: string;
-    nodeType: 'edit' | 'add' | 'share';
     readonly: boolean;
     isStartEdit: boolean;
     note: any;
@@ -132,7 +130,7 @@
   }>();
 
   const { t } = useI18n();
-  const emit = defineEmits(['focusout', 'del', 'save', 'switchMode', 'undoSwitch', 'history', 'saveAsTemplate']);
+  const emit = defineEmits(['back', 'focusout', 'del', 'save', 'switchMode', 'undoSwitch', 'history', 'saveAsTemplate']);
 
   const bookmark = bookmarkStore();
 
@@ -162,24 +160,6 @@
       .replace(/'/g, '&#39;');
   };
 
-  function back() {
-    // 处于保存中的状态时，延迟300ms跳转，避免同时进行保存和跳转导致的异常情况
-    setTimeout(
-      () => {
-        if (props.nodeType === 'add') {
-          router.push('/noteLibrary');
-        }
-
-        // else if (props.nodeType === 'share') {
-        //   router.push('/home');
-        // }
-        else {
-          router.back();
-        }
-      },
-      props.isStartEdit ? 300 : 0,
-    );
-  }
   const tagConfDlgVisible = ref(false);
   function updateTag() {
     tagConfDlgVisible.value = true;

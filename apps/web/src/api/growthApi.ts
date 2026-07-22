@@ -57,6 +57,9 @@ export const claimAchievement = (key: string) => apiBasePost('/api/growth/achiev
 // 那年今日 · 智能回顾
 export const getRecap = () => apiBaseGet('/api/growth/recap');
 
+// 知识活动热力图(贡献格子);year 可选,默认当前年
+export const getHeatmap = (year?: number) => apiBaseGet(year ? `/api/growth/heatmap?year=${year}` : '/api/growth/heatmap');
+
 // 每周挑战:进度 + 领取
 export const getWeekly = () => apiBaseGet('/api/growth/weekly');
 export const claimWeekly = (key: string) => apiBasePost('/api/growth/weekly/claim', { key });
@@ -91,6 +94,7 @@ export default {
   drawLottery,
   claimAchievement,
   getRecap,
+  getHeatmap,
   getWeekly,
   claimWeekly,
   getPointsLog,

@@ -54,6 +54,14 @@ export const STREAK_MILESTONES = [
 ];
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
+const HEATMAP_ACTIVITY_TYPES = ['bookmark', 'note', 'file', 'checkin'];
+
+// 游客在 user 表中有固定的共享账号 ID，并不一定等于字面量 "visitor"。
+// 所有成长数据都必须以角色为准隔离，避免游客继承共享账号的历史成长/奖励记录。
+function isVisitorGrowthActor(userId, userRole = null) {
+  return !userId || userId === 'visitor' || userRole === 'visitor';
+}
+
 // 连续加成:第 N 天 +min(N,5),第 5 天起固定 +5 → 单日签到 ≤ 10
 function checkinBonus(streak) {
   return Math.min(Math.max(Number(streak) || 0, 0), 5);
@@ -166,7 +174,7 @@ async function writeLevelUpNotification(conn, userId, level, { source = null } =
  */
 export async function grantExp(userId, source, opts = {}, conn = null) {
   const { refId = null, day = null, amount = 0, meta = null, userRole = null } = opts;
-  if (!userId || userId === 'visitor') return { granted: 0, skipped: 'visitor' };
+  if (isVisitorGrowthActor(userId, userRole)) return { granted: 0, skipped: 'visitor' };
   if (userRole === 'root') return { granted: 0, skipped: 'root' }; // 站长跳过发放(权益=满级另算)
   if (!(amount > 0)) return { granted: 0, skipped: 'noop' };
 
@@ -280,7 +288,7 @@ export function hashRef(str) {
  * @param {string} refId 判重键:书签传 url 的 hashRef,笔记/文件传各自主键
  */
 export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
-  if (!userId || userId === 'visitor' || userRole === 'root') return { granted: 0, skipped: true };
+  if (isVisitorGrowthActor(userId, userRole) || userRole === 'root') return { granted: 0, skipped: true };
   if (!refId) return { granted: 0, skipped: 'no-ref' };
   // 首次创建该类资源 +30(一次性成就,uk_resource(user,'first_own_resource',kind) 幂等)
   // await 让首次与衰减顺序到账(awardCreate 整体已在 handler 里 fire-and-forget,不阻塞创建响应)
@@ -301,6 +309,7 @@ export async function awardCreate(userId, kind, refId, { userRole = null } = {})
  * level 以 levelForExp(exp) 为权威;root 直接按满级展示(权益=满级,不依赖账本)。
  */
 export async function getGrowth(userId, { userRole = null } = {}) {
+  const isGuest = isVisitorGrowthActor(userId, userRole);
   let exp = 0;
   let streak = 0;
   let lastCheckin = null;
@@ -312,7 +321,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let equippedTitle = null;
   let equippedFrame = null;
   let storageBonus = 0;
-  if (userId && userId !== 'visitor') {
+  if (!isGuest) {
     const [rows] = await pool.query(
       'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, equipped_frame, storage_bonus_mb FROM user_growth WHERE user_id = ?',
       [userId],
@@ -355,7 +364,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   const hasUnreadLevelUp = userRole !== 'root' && level > lastNotifiedLevel; // 升级通知未读(通知中心随 level_up)
   // 今日已获经验(仅计入受日顶约束的来源,口径与 grantExp 日顶一致),供前端展示"每日上限"进度
   let dailyExp = 0;
-  if (userId && userId !== 'visitor' && userRole !== 'root') {
+  if (!isGuest && userRole !== 'root') {
     const [[dRow]] = await pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
        WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()
@@ -449,11 +458,138 @@ function longestConsecutiveRun(days) {
 }
 
 /**
+ * 知识活动热力图(贡献格子)。数据全部现成、零新表。口径(见 docs/plan/activity-heatmap-plan-codex-v1):
+ * - 资源新增直接从三张资源表 create_time 读取(归属列不同:bookmark=user_id,note/files=create_by);
+ *   软删仍计入其创建当天(不加 del_flag) —— 今天建明天删不该让昨天的格子熄灭。
+ * - 签到只从 growth_events 读 source='checkin' 这类"一手且互斥"的活动事件;
+ *   绝不直接 COUNT(growth_events) —— 否则 first_own_resource/milestone 等派生奖励会把一次行为放大成多格,
+ *   且资源类事件会与上面的资源表重复。amount 可为 0 仍计(触顶/root/补签)。
+ * - 自然年边界 [YYYY-01-01, (YYYY+1)-01-01),按服务器本地时区分日(当前为中文用户群,风险可接受);
+ *   day/输出统一 YYYY-MM-DD 字符串,前端不再做 Date 解析(避免 toISOString 类偏移)。
+ * - 每格同时返回各来源的次数，用于前端解释“这几次活动来自哪里”；总数和明细来自同一条聚合，避免二次查询口径漂移。
+ * 性能:个人级数据量小,首期不加缓存;如实测慢再按 EXPLAIN 补复合索引 + 短 TTL 缓存。
+ */
+export async function getActivityHeatmap(userId, { userRole = null, year = null } = {}) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  let y = Number(year);
+  if (!Number.isInteger(y) || y < 2000 || y > currentYear) y = currentYear;
+
+  const base = {
+    year: y,
+    timezone: 'server-local',
+    rangeStart: `${y}-01-01`,
+    rangeEndExclusive: `${y + 1}-01-01`,
+    availableYears: [currentYear],
+    days: [],
+    summary: { activeDays: 0, longestStreak: 0, weekCount: 0 },
+    includedTypes: [...HEATMAP_ACTIVITY_TYPES],
+  };
+  // 游客共用 user 表中的一个真实账号 ID，不能只比较字面量 "visitor"，否则会读到该共享账号的历史活动。
+  if (isVisitorGrowthActor(userId, userRole)) return base;
+
+  const start = `${y}-01-01 00:00:00`;
+  const end = `${y + 1}-01-01 00:00:00`;
+  const dayStart = `${y}0101`;
+  const dayEnd = `${y}1231`;
+
+  // 一次 UNION ALL 归一为 {day, activity_type},按日和来源聚合；不 JOIN 三张资源表(避免多态重复),也不逐日 365 次查询。
+  const [rows] = await pool.query(
+    `SELECT day, activity_type, COUNT(*) AS cnt FROM (
+       SELECT DATE_FORMAT(create_time, '%Y%m%d') AS day, 'bookmark' AS activity_type FROM bookmark
+         WHERE user_id = ? AND create_time >= ? AND create_time < ?
+       UNION ALL
+       SELECT DATE_FORMAT(create_time, '%Y%m%d') AS day, 'note' AS activity_type FROM note
+         WHERE create_by = ? AND create_time >= ? AND create_time < ?
+       UNION ALL
+       SELECT DATE_FORMAT(create_time, '%Y%m%d') AS day, 'file' AS activity_type FROM files
+         WHERE create_by = ? AND create_time >= ? AND create_time < ?
+       UNION ALL
+       SELECT day, 'checkin' AS activity_type FROM growth_events
+         WHERE user_id = ? AND source = 'checkin'
+           AND status = 'granted' AND day IS NOT NULL AND day >= ? AND day <= ?
+     ) t
+     GROUP BY day, activity_type
+     ORDER BY day ASC, activity_type ASC`,
+    [userId, start, end, userId, start, end, userId, start, end, userId, dayStart, dayEnd],
+  );
+
+  const activityByDay = new Map();
+  for (const row of rows) {
+    const key = String(row.day);
+    const type = String(row.activity_type || '');
+    const count = Number(row.cnt || 0);
+    if (!/^\d{8}$/.test(key) || !HEATMAP_ACTIVITY_TYPES.includes(type) || count <= 0) continue;
+
+    let activity = activityByDay.get(key);
+    if (!activity) {
+      activity = {
+        count: 0,
+        breakdown: Object.fromEntries(HEATMAP_ACTIVITY_TYPES.map((activityType) => [activityType, 0])),
+      };
+      activityByDay.set(key, activity);
+    }
+    activity.count += count;
+    activity.breakdown[type] += count;
+  }
+  const days = Array.from(activityByDay.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, activity]) => ({
+      day: `${key.slice(0, 4)}-${key.slice(4, 6)}-${key.slice(6, 8)}`,
+      count: activity.count,
+      breakdown: activity.breakdown,
+    }));
+
+  const dayKeys = days.map((item) => item.day.replaceAll('-', '')); // 已按 day ASC
+  const activeDays = dayKeys.length;
+  const longestStreak = longestConsecutiveRun(dayKeys); // 仅当前年份范围内的最长连续
+  // 近 7 天只对当前年有语义；浏览历史年时返回 0，前端不展示这个当前态指标。
+  const weekKeys = new Set();
+  for (let i = 0; i < 7; i++) weekKeys.add(dayKey(addCalendarDays(now, -i)));
+  const weekCount =
+    y === currentYear
+      ? days.reduce((sum, activity) => (weekKeys.has(activity.day.replaceAll('-', '')) ? sum + activity.count : sum), 0)
+      : 0;
+
+  // 只提供真实有活动的历史年份，避免把用户带到一串没有意义的空年份；当前年始终可看。
+  const [yearRows] = await pool.query(
+    `SELECT DISTINCT y FROM (
+       SELECT YEAR(create_time) AS y FROM bookmark WHERE user_id = ?
+       UNION ALL SELECT YEAR(create_time) FROM note WHERE create_by = ?
+       UNION ALL SELECT YEAR(create_time) FROM files WHERE create_by = ?
+       UNION ALL SELECT CAST(LEFT(day, 4) AS UNSIGNED) FROM growth_events
+         WHERE user_id = ? AND source = 'checkin' AND status = 'granted' AND day IS NOT NULL
+     ) activity_years
+     WHERE y BETWEEN ? AND ?
+     ORDER BY y DESC`,
+    [userId, userId, userId, userId, 2000, currentYear],
+  );
+  const availableYears = Array.from(
+    new Set(
+      [currentYear, ...yearRows.map((row) => Number(row.y))].filter(
+        (item) => Number.isInteger(item) && item >= 2000 && item <= currentYear,
+      ),
+    ),
+  ).sort((a, b) => b - a);
+
+  return {
+    year: y,
+    timezone: 'server-local',
+    rangeStart: `${y}-01-01`,
+    rangeEndExclusive: `${y + 1}-01-01`,
+    availableYears,
+    days,
+    summary: { activeDays, longestStreak, weekCount },
+    includedTypes: [...HEATMAP_ACTIVITY_TYPES],
+  };
+}
+
+/**
  * 成长看板聚合:统计 + 成就(解锁/进度) + 今日任务 + 近期时间线。
  * 游客返回全零/全未解锁(仍可展示"待收集"引导)。root 统计真实、等级满级。
  */
 export async function getGrowthDashboard(userId, { userRole = null } = {}) {
-  const isGuest = !userId || userId === 'visitor';
+  const isGuest = isVisitorGrowthActor(userId, userRole);
   const growth = await getGrowth(userId, { userRole });
 
   const stats = {
@@ -660,7 +796,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
  * 后端二次核算任务完成状态,防前端伪造;满级/root/游客不发。
  */
 export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
-  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const g = await getGrowth(userId, { userRole });
   if (g.isMax) return { ok: false, reason: 'max' };
 
@@ -698,7 +834,7 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
  */
 // 领取单个成就奖励:已解锁且未领 → 发积分(幂等,ref=成就 key,与 dashboard.claimed 同源)。
 export async function claimAchievement(userId, key, { userRole = null, dashboard = null } = {}) {
-  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const ach = ACHIEVEMENTS.find((a) => a.key === key);
   if (!ach) return { ok: false, reason: 'not_found', msg: '成就不存在' };
   // 复用看板派生的解锁判定(单一事实源),避免重复实现各 metric 的统计口径;
@@ -715,7 +851,7 @@ export async function getUserSpaceMb(userId, userRole = null) {
   // root 视为满级;积分兑换的永久扩容对所有人(含 root)叠加
   let bonus = 0;
   let exp = 0;
-  if (userId && userId !== 'visitor') {
+  if (!isVisitorGrowthActor(userId, userRole)) {
     const [rows] = await pool.query('SELECT exp, storage_bonus_mb FROM user_growth WHERE user_id = ?', [userId]);
     if (rows[0]) {
       exp = Number(rows[0].exp || 0);
@@ -778,7 +914,7 @@ export async function markNoticesRead(userId) {
  * root 也可签到(更新 streak 展示),但不发经验、权益仍满级。
  */
 export async function checkin(userId, { userRole = null } = {}) {
-  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const today = dayKey();
   const conn = await pool.getConnection();
   try {
@@ -862,7 +998,7 @@ export async function checkin(userId, { userRole = null } = {}) {
 
 // 使用补签卡:可补今天之前最近 3 个自然日的任一漏签，补签到记录和连签，不发经验/积分/里程碑奖励。
 export async function useProtectCard(userId, { userRole = null, date = null } = {}) {
-  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   // 未传日期时兼容旧客户端，默认仍尝试补昨天；新版前端会明确传入用户选择的日期。
   const makeupDate = date || getMakeupCandidateDays()[0];
   if (!isMakeupCandidateDay(makeupDate)) return { ok: false, reason: 'outside_window' };

@@ -22,6 +22,13 @@
           <span class="user-item-label">{{ t('myInfo.email') }}</span>
           <b-input v-model:value="userData.email" :placeholder="t('myInfo.enterEmail')" />
         </div>
+
+        <div class="user-item">
+          <span class="user-item-label">{{ t('myInfo.password') }}</span>
+          <b-button class="password-action" @click="handleConfigPassword">
+            {{ user.password ? t('myInfo.changePassword') : t('myInfo.setPassword') }}
+          </b-button>
+        </div>
       </div>
     </div>
     <b-button
@@ -31,6 +38,7 @@
       @click="saveUserInfo"
       >{{ t('myInfo.save') }}</b-button
     >
+    <PassConfigDlg v-model:visible="configPassVisible" />
   </CommonContainer>
 </template>
 
@@ -47,9 +55,11 @@
   import { useI18n } from 'vue-i18n';
   import { backRouterPage } from '@/utils/common';
   import { recordOperation } from '@/api/commonApi.ts';
+  import PassConfigDlg from './PassConfigDlg.vue';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const saving = ref(false);
+  const configPassVisible = ref(false);
   const visible = <Ref<boolean>>defineModel('visible');
 
   const bookmark = bookmarkStore();
@@ -80,6 +90,10 @@
       }
     });
     input.click(); // 触发文件选择对话框
+  }
+
+  function handleConfigPassword() {
+    configPassVisible.value = true;
   }
 
   async function saveUserInfo() {
@@ -165,6 +179,9 @@
       overflow: hidden;
       white-space: nowrap;
     }
+  }
+  .password-action {
+    width: 100%;
   }
   .user_icon {
     height: 100px;

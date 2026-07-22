@@ -3,9 +3,9 @@
     <div v-if="isReady">
       <NoteHeader
         :updateTime="updateTime"
-        :nodeType="nodeType"
         :readonly="readonly"
-        :isStartEdit="isStartEdit"
+        :isStartEdit="isStartEdit || isLeaving"
+        @back="back"
         @focusout="titleBlur"
         :note="note"
         :note-type="note.type"
@@ -84,6 +84,7 @@
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import router from '@/router';
   import { cloneDeep } from 'lodash-es';
   import { apiBasePost } from '@/http/request.ts';
@@ -199,7 +200,6 @@
   provide('triggerSave', () => saveFunc());
   provide('applyTitleFromAi', (newTitle: string) => {
     note.title = newTitle;
-    note.lastTitle = cloneDeep(newTitle);
     syncHeaderTitle();
   });
   provide('focusEditorToEnd', () => {
@@ -225,44 +225,51 @@
     }
   });
   function inputBlur() {
-    nextTick(() => {
-      if (note.title && note.title !== note.lastTitle) {
-        syncHeaderTitle();
-        note.lastTitle = cloneDeep(note.title);
-        saveFunc();
-      }
-    });
+    if (note.title?.trim() && note.title !== note.lastTitle) {
+      void syncHeaderTitle();
+      void saveImmediately();
+    }
   }
 
   function focusout() {
-    if (!note.title) {
+    if (!note.title?.trim()) {
       note.title = note.lastTitle;
-      syncHeaderTitle();
+      void syncHeaderTitle();
       return;
     }
   }
 
+  function syncDesktopTitleToNote() {
+    const title = document.getElementById('note-header-title');
+    if (!title) return false;
+    const text = title.innerText;
+    if (!text?.trim()) {
+      note.title = note.lastTitle;
+      title.innerText = note.lastTitle;
+      return false;
+    }
+    if (text === note.title) return false;
+    note.title = text;
+    return true;
+  }
+
   function titleBlur() {
-    nextTick(() => {
-      const title = document.getElementById('note-header-title');
-      if (!title) return;
-      const text = title.innerText;
-      if (!text || text === '\n') {
-        note.title = note.lastTitle;
-        title.innerText = note.lastTitle;
-        return;
-      }
-      if (text !== note.lastTitle) {
-        note.title = text;
-        note.lastTitle = cloneDeep(note.title);
-        saveFunc();
-      }
-    });
+    const titleChanged = syncDesktopTitleToNote();
+    if (titleChanged || (note.title?.trim() && note.title !== note.lastTitle)) {
+      void saveImmediately();
+    }
   }
 
   const isStartEdit = ref(false);
-  const isCurrentSave = ref(false);
+  const isLeaving = ref(false);
   const updateTime = ref('');
+  const timer = ref<ReturnType<typeof setTimeout> | null>(null);
+  const SAVE_DEBOUNCE_DELAY = 500;
+  let requestedSaveVersion = 0;
+  let persistedSaveVersion = 0;
+  let latestRequestedTitle = note.title;
+  let skipSaveOnLeave = false;
+  let saveQueue: Promise<boolean> = Promise.resolve(true);
   const nStore = noteStore();
   // 把当前笔记标题同步给 note store,供全局 AI 抽屉「@当前页面」显示真实笔记名
   // (抽屉是全局组件、拿不到详情页的响应式 note;离开笔记页后该值不再被读到,无需清理)。
@@ -429,6 +436,19 @@
     }
   }
 
+  function clearScheduledSave() {
+    if (timer.value) {
+      clearTimeout(timer.value);
+      timer.value = null;
+    }
+  }
+
+  function requestSaveVersion() {
+    requestedSaveVersion += 1;
+    latestRequestedTitle = note.title;
+    return requestedSaveVersion;
+  }
+
   async function saveNote(isMsg?: boolean) {
     if (!note.title || !note.title.trim()) {
       message.warning(t('noteDetail.titleRequired'));
@@ -438,53 +458,85 @@
       return false;
     }
     isStartEdit.value = true;
-    isCurrentSave.value = true;
-    const startTime = Date.now();
+    const titleAtSave = note.title;
     let ok = false;
 
-    if (note.id) {
-      const params: any = cloneDeep(note);
-      delete params.lastTitle;
-      delete params.createBy;
-      delete params.updateTime;
-      const res = await apiBasePost('/api/note/updateNote', params);
-      ok = res.status === 200;
-      if (ok && isMsg) {
-        recordOperation({ module: '笔记', operation: `保存笔记成功【${note.title}】` });
-      }
-    } else {
-      // 新建统一走守卫式创建（与粘贴图片共用同一个在途 Promise，绝不并发建多条）
-      try {
+    try {
+      if (note.id) {
+        const params: any = cloneDeep(note);
+        delete params.lastTitle;
+        delete params.createBy;
+        delete params.updateTime;
+        const res = await apiBasePost('/api/note/updateNote', params);
+        ok = res.status === 200;
+        if (ok && isMsg) {
+          recordOperation({ module: '笔记', operation: `保存笔记成功【${titleAtSave}】` });
+        }
+      } else {
+        // 新建统一走守卫式创建（与粘贴图片共用同一个在途 Promise，绝不并发建多条）
         await createNote();
         ok = !!note.id;
-      } catch {
-        ok = false;
       }
-    }
-
-    if (ok) {
-      const elapsedTime = Date.now() - startTime;
-      const delay = Math.max(500 - elapsedTime, 0);
-      setTimeout(() => {
-        isStartEdit.value = false;
-        timer.value = null;
+      if (ok) {
+        // 只在服务端确认成功后才推进已保存标题，避免失败时把草稿误认为已落库。
+        note.lastTitle = cloneDeep(titleAtSave);
         if (isMsg) {
           message.success(t('common.saveSuccess'));
         }
         setUpdateTime();
-        clearTimeout(timer.value);
-      }, delay);
+      }
+    } catch (error) {
+      console.error('保存笔记失败:', error);
+      ok = false;
+    } finally {
+      isStartEdit.value = false;
     }
     return ok;
   }
 
+  function queueSave(version: number, isMsg?: boolean) {
+    const task = saveQueue
+      .catch(() => false)
+      .then(async () => {
+        if (version <= persistedSaveVersion) return true;
+        const snapshotVersion = requestedSaveVersion;
+        // 空白新建笔记没有需要落库的数据，允许直接离开，不因一次被取消的编辑而拦截用户。
+        if (!isMsg && !note.id && !hasNewNoteDraft()) {
+          persistedSaveVersion = Math.max(persistedSaveVersion, snapshotVersion);
+          return true;
+        }
+        const saved = await saveNote(isMsg);
+        if (saved) {
+          persistedSaveVersion = Math.max(persistedSaveVersion, snapshotVersion);
+        }
+        return saved;
+      });
+    saveQueue = task;
+    return task;
+  }
+
+  function saveImmediately(isMsg?: boolean) {
+    if (!guardWrite(undefined, 'save-note')) {
+      return Promise.resolve(false);
+    }
+    clearScheduledSave();
+    return queueSave(requestSaveVersion(), isMsg);
+  }
+
+  async function flushPendingSave() {
+    clearScheduledSave();
+    let targetVersion = requestedSaveVersion;
+    while (targetVersion > persistedSaveVersion) {
+      const saved = await queueSave(targetVersion);
+      if (!saved) return false;
+      targetVersion = requestedSaveVersion;
+    }
+    return true;
+  }
+
   async function saveAndCompleteInbox() {
     if (!guardWrite(undefined, 'save-note') || !note.id) return;
-    if (timer.value) {
-      clearTimeout(timer.value);
-      timer.value = null;
-    }
-    const saved = await saveNote(false);
+    const saved = await saveImmediately(false);
     if (!saved) return;
     const completed = await completeInboxResource('note', note.id);
     if (!completed) {
@@ -497,20 +549,19 @@
   }
 
   function clickSaveNote(flag?: boolean) {
-    saveFunc(flag);
+    void saveImmediately(flag);
   }
 
-  const timer: any = ref(null);
   function saveFunc(isMsg?: boolean) {
     if (!guardWrite(undefined, 'save-note')) {
       return;
     }
-    if (timer.value) {
-      clearTimeout(timer.value);
-    }
+    clearScheduledSave();
+    const version = requestSaveVersion();
     timer.value = setTimeout(() => {
-      saveNote(isMsg);
-    }, 500);
+      timer.value = null;
+      void queueSave(version, isMsg);
+    }, SAVE_DEBOUNCE_DELAY);
   }
 
   function delNote() {
@@ -529,6 +580,9 @@
           if (res.status) {
             message.success(t('common.deleteSuccess'));
             recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}】` });
+            // 删除已在服务端成功完成，离开时不能再把排队中的旧草稿写回已删除笔记。
+            skipSaveOnLeave = true;
+            clearScheduledSave();
             router.push('/noteLibrary');
           }
         });
@@ -540,19 +594,63 @@
     // 检查是否按下了ctrl+s
     if (event.ctrlKey && event.key === 's') {
       event.preventDefault(); // 阻止默认的保存行为
-      saveFunc(true);
+      void saveImmediately(true);
     }
   };
 
-  function back() {
+  function captureTitleBeforeLeave() {
+    if (!bookmark.isMobile) {
+      syncDesktopTitleToNote();
+    }
+    if (!note.title?.trim()) {
+      note.title = note.lastTitle;
+      void syncHeaderTitle();
+    }
+  }
+
+  async function persistBeforeLeave() {
+    captureTitleBeforeLeave();
+    // 返回发生在失焦事件之前时，主动把当前标题纳入保存队列；不能依赖事件时序。
+    if (note.title?.trim() && note.title !== note.lastTitle && note.title !== latestRequestedTitle) {
+      const titleSaved = await saveImmediately();
+      if (!titleSaved) {
+        message.error(t('noteDetail.saveFailed'));
+        return false;
+      }
+    }
+    const saved = await flushPendingSave();
+    if (!saved) {
+      message.error(t('noteDetail.saveFailed'));
+    }
+    return saved;
+  }
+
+  async function back() {
+    if (isLeaving.value) return;
+    isLeaving.value = true;
+    const saved = await persistBeforeLeave();
+    if (!saved) {
+      isLeaving.value = false;
+      return;
+    }
     if (nodeType.value === 'add') {
       router.push('/noteLibrary');
-    } else if (nodeType.value === 'share') {
-      router.push('/home');
     } else {
       router.back();
     }
   }
+
+  onBeforeRouteLeave(async () => {
+    if (skipSaveOnLeave) return true;
+    return await persistBeforeLeave();
+  });
+
+  onBeforeRouteUpdate(async (to) => {
+    if (skipSaveOnLeave) return true;
+    // 新建笔记首次保存时会把 /add 替换为真实 id；此时同一草稿正在完成保存，不能反向等待自己。
+    if (String(to.params.id || '') === note.id) return true;
+    return await persistBeforeLeave();
+  });
   const isReady = ref(false);
   const a = ref();
   onMounted(() => {
@@ -617,6 +715,7 @@
   });
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyDown);
+    clearScheduledSave();
     nStore.headings = [];
     // 离开笔记时清除「草稿已提升」登记,避免影响下一篇/新建笔记的 key 判断
     markNoteDraftPromoted(null);

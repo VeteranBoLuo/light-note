@@ -12,22 +12,11 @@
       </header>
 
       <section class="growth-panel">
-        <GrowthCard />
+        <GrowthCard @activity-changed="refreshHeatmap" />
       </section>
 
-      <!-- 签到日历:紧跟成长卡(第一个卡片),放在时光回顾之前;满级用户签到已并入顶部卡,故 !isMax 才单独展示 -->
-      <section v-if="!growth?.isMax" class="growth-panel">
-        <SigninCalendar
-          :checkin-days="stats.checkinDays"
-          :checked-in-today="growth?.checkedInToday"
-          :streak="growth?.streak"
-          :makeup-days="growth?.makeupDays || []"
-          @makeup="handleCalendarMakeup"
-        />
-      </section>
-
-      <section v-if="hasRecap" class="growth-panel">
-        <RecapCard />
+      <section id="growth-heatmap" class="growth-panel">
+        <ActivityHeatmap ref="heatmapRef" />
       </section>
 
       <div class="growth-row">
@@ -73,6 +62,11 @@
       <section class="growth-panel">
         <GrowthTimeline :items="timeline" />
       </section>
+
+      <!-- 情感回顾不抢占日常成长首屏，放在记录流之后按需浏览。 -->
+      <section v-if="hasRecap" class="growth-panel">
+        <RecapCard />
+      </section>
     </div>
 
     <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
@@ -84,11 +78,11 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
+  import ActivityHeatmap from '@/components/growth/ActivityHeatmap.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthStats from '@/components/growth/GrowthStats.vue';
   import AchievementWall from '@/components/growth/AchievementWall.vue';
   import GrowthTimeline from '@/components/growth/GrowthTimeline.vue';
-  import SigninCalendar from '@/components/growth/SigninCalendar.vue';
   import MilestoneLadder from '@/components/growth/MilestoneLadder.vue';
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
@@ -106,8 +100,13 @@
 
   const { t } = useI18n();
   const router = useRouter();
-  const { growth, dashboard, recap, loadDashboard, loadRecap, claimDailyBonus, useProtectCard: apiUseProtectCard, claimAchievement } = useGrowth();
+  const { growth, dashboard, recap, loadDashboard, loadRecap, claimDailyBonus, claimAchievement } = useGrowth();
   const hasRecap = computed(() => !!recap.value && (recap.value.onThisDay.length > 0 || recap.value.buried.length > 0));
+  const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
+
+  function refreshHeatmap() {
+    void heatmapRef.value?.reload();
+  }
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
   const EMPTY_STATS = {
@@ -187,7 +186,7 @@
   onMounted(() => {
     recordOperation({ module: '成长', operation: '查看我的成长' });
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
-    loadRecap(); // 那年今日/尘封回顾(有内容才在页首展示)
+    loadRecap(); // 那年今日/尘封回顾(有内容才在页尾展示)
   });
 
   const claimingAch = ref<string | null>(null);
@@ -211,25 +210,6 @@
     }
   }
 
-  const makingUp = ref(false);
-  async function handleCalendarMakeup(date: string) {
-    if (makingUp.value) return;
-    makingUp.value = true;
-    try {
-      const res = await apiUseProtectCard(date);
-      if (res?.status === 200 && res.data?.ok) {
-        message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: `使用补签卡补签 ${date}（连签续至 ${res.data.streak} 天）` });
-        loadDashboard();
-      } else {
-        message.info(t('growth.protectCardFail'));
-      }
-    } catch (err) {
-      console.error('补签失败:', err);
-    } finally {
-      makingUp.value = false;
-    }
-  }
   function goBack() {
     if (window.history.length > 1) router.back();
     else router.push('/home');

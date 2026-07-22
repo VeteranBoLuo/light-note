@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.get('/me', growthHandle.getMyGrowth);
 router.get('/dashboard', growthHandle.getDashboard);
+router.get('/heatmap', growthHandle.getHeatmap);
 router.get('/ranks', growthHandle.getRanks);
 router.post('/checkin', growthHandle.doCheckin);
 router.post('/useProtectCard', growthHandle.doUseProtectCard);

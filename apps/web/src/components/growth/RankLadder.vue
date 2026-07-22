@@ -52,12 +52,27 @@
     return n >= 1000 ? `${n / 1000}k` : String(n);
   }
 
+  // 当前段位仅在段位小列表内滚动到可见。scrollIntoView 会继续滚动外层 growth-page，
+  // 导致刷新「我的成长」后页面被意外带离顶部。
+  function scrollCurrentRankIntoList() {
+    const list = listEl.value;
+    const current = list?.querySelector<HTMLElement>('.rl-row.cur');
+    if (!list || !current) return;
+    const listRect = list.getBoundingClientRect();
+    const currentRect = current.getBoundingClientRect();
+    if (currentRect.top < listRect.top) {
+      list.scrollTop += currentRect.top - listRect.top;
+    } else if (currentRect.bottom > listRect.bottom) {
+      list.scrollTop += currentRect.bottom - listRect.bottom;
+    }
+  }
+
   // 当前段位滚动到可见(高段位用户列表靠下)
   watch(
     [ranks, curLevel],
     async () => {
       await nextTick();
-      listEl.value?.querySelector('.rl-row.cur')?.scrollIntoView({ block: 'nearest' });
+      scrollCurrentRankIntoList();
     },
     { flush: 'post' },
   );

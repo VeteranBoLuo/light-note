@@ -30,6 +30,8 @@ import {
   MAX_LEVEL,
   MAKEUP_WINDOW_DAYS,
   useProtectCard,
+  getGrowthDashboard,
+  getActivityHeatmap,
 } from './growth.js';
 
 afterEach(() => vi.useRealTimers());
@@ -82,6 +84,74 @@ describe('rankOf 越界钳制', () => {
     expect(rankOf(15).name).toBe('文圣');
     expect(rankOf(0).name).toBe('蒙童');
     expect(rankOf(99).name).toBe('文圣');
+  });
+});
+
+describe('游客成长数据隔离', () => {
+  it('共享游客 ID 不会继承历史成就或变成可领取状态', async () => {
+    // 线上游客是 user 表中的共享账号，ID 并非固定字面量 "visitor"。
+    // 即使该共享账号残留过历史流水，角色仍应让成长页保持纯演示态。
+    pool.query.mockReset();
+    pool.getConnection.mockReset();
+
+    const dashboard = await getGrowthDashboard('visitor-shared-id', { userRole: 'visitor' });
+
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(dashboard.unlockedCount).toBe(0);
+    expect(dashboard.claimableCount).toBe(0);
+    expect(
+      dashboard.achievements.every(
+        (achievement) => !achievement.unlocked && !achievement.claimable && !achievement.claimed,
+      ),
+    ).toBe(true);
+    expect(dashboard.achievements.filter((achievement) => achievement.group === 'level')).toEqual([
+      expect.objectContaining({ key: 'level_5', cur: 1, target: 5, unlocked: false, claimable: false }),
+      expect.objectContaining({ key: 'level_10', cur: 1, target: 10, unlocked: false, claimable: false }),
+      expect.objectContaining({ key: 'level_15', cur: 1, target: 15, unlocked: false, claimable: false }),
+    ]);
+  });
+
+  it('共享游客 ID 不会读取知识足迹', async () => {
+    pool.query.mockReset();
+
+    const heatmap = await getActivityHeatmap('visitor-shared-id', { userRole: 'visitor', year: 2026 });
+
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(heatmap.days).toEqual([]);
+    expect(heatmap.summary).toEqual({ activeDays: 0, longestStreak: 0, weekCount: 0 });
+  });
+});
+
+describe('知识活动热力图', () => {
+  it('只聚合一手资源与签到，并返回真实有活动的年份', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 22, 12, 0, 0));
+    pool.query.mockReset();
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          { day: '20260720', activity_type: 'bookmark', cnt: 1 },
+          { day: '20260721', activity_type: 'note', cnt: 3 },
+          { day: '20260721', activity_type: 'checkin', cnt: 1 },
+          { day: '20260722', activity_type: 'bookmark', cnt: 1 },
+          { day: '20260722', activity_type: 'file', cnt: 1 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ y: 2026 }, { y: 2024 }, { y: 2026 }, { y: 1999 }]]);
+
+    const heatmap = await getActivityHeatmap('user-1', { userRole: 'user', year: 2026 });
+
+    expect(pool.query).toHaveBeenCalledTimes(2);
+    expect(pool.query.mock.calls[0][0]).toContain("source = 'checkin'");
+    expect(pool.query.mock.calls[0][0]).toContain("'bookmark' AS activity_type");
+    expect(heatmap.days).toEqual([
+      { day: '2026-07-20', count: 1, breakdown: { bookmark: 1, note: 0, file: 0, checkin: 0 } },
+      { day: '2026-07-21', count: 4, breakdown: { bookmark: 0, note: 3, file: 0, checkin: 1 } },
+      { day: '2026-07-22', count: 2, breakdown: { bookmark: 1, note: 0, file: 1, checkin: 0 } },
+    ]);
+    expect(heatmap.summary).toEqual({ activeDays: 3, longestStreak: 3, weekCount: 7 });
+    expect(heatmap.availableYears).toEqual([2026, 2024]);
+    expect(heatmap.includedTypes).toEqual(['bookmark', 'note', 'file', 'checkin']);
   });
 });
 

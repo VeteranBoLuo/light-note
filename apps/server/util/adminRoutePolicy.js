@@ -238,6 +238,7 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/claimable'],
   ['GET', '/growth/weekly'],
   ['GET', '/growth/points/log'],
+  ['GET', '/growth/heatmap'],
 ]);
 declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
   ['POST', '/growth/checkin'],

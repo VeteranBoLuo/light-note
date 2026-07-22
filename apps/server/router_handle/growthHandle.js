@@ -1,4 +1,4 @@
-import { getGrowth, getGrowthDashboard, claimDailyQuestBonus, claimAchievement, checkin, useProtectCard, adminAdjustGrowth, RANKS, markNoticesRead } from '../util/growth.js';
+import { getGrowth, getGrowthDashboard, getActivityHeatmap, claimDailyQuestBonus, claimAchievement, checkin, useProtectCard, adminAdjustGrowth, RANKS, markNoticesRead } from '../util/growth.js';
 import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -95,6 +95,20 @@ export const getDashboard = async (req, res) => {
   } catch (error) {
     console.error('获取成长看板失败:', error);
     res.send(resultData(null, 500, '获取成长看板失败: ' + error.message));
+  }
+};
+
+// GET /growth/heatmap —— 知识活动热力图(贡献格子);只读,游客返回空;支持 ?year=YYYY
+export const getHeatmap = async (req, res) => {
+  try {
+    const userId = req.user?.id || 'visitor';
+    const userRole = req.user?.role || 'visitor';
+    const year = req.query?.year ? Number(req.query.year) : null;
+    const data = await getActivityHeatmap(userId, { userRole, year });
+    res.send(resultData(data));
+  } catch (error) {
+    console.error('获取活动热力图失败:', error);
+    res.send(resultData(null, 500, '获取活动热力图失败'));
   }
 };
 
