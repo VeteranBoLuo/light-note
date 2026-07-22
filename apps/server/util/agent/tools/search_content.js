@@ -2,11 +2,13 @@ import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 
 function coverageWarning(coverage) {
   if (!coverage || typeof coverage !== 'object') return '';
-  if (coverage.truncated || coverage.complete === false || Number(coverage.coverageRatio) < 1) {
-    const ratio = Number(coverage.coverageRatio);
-    return Number.isFinite(ratio) ? `覆盖约 ${Math.round(ratio * 100)}%，内容不完整` : '来源覆盖不完整';
-  }
-  return '';
+  // 只有有限且落在 [0,1] 的数值才算有效覆盖率;null/undefined/NaN/越界一律视为「缺失」。
+  // 关键:Number(null)===0 且 isFinite(0)===true,旧写法会把「覆盖率缺失」误报成「覆盖约 0%」。
+  const raw = coverage.coverageRatio;
+  const ratio = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : null;
+  const incomplete = coverage.truncated || coverage.complete === false || (ratio !== null && ratio < 1);
+  if (!incomplete) return '';
+  return ratio !== null ? `覆盖约 ${Math.round(ratio * 100)}%，内容不完整` : '来源覆盖不完整';
 }
 
 export default {

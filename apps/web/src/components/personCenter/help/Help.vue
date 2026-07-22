@@ -13,9 +13,21 @@
             <svg-icon color="#cccccc" :src="icon.navigation.search" size="16" />
           </template>
         </b-input>
+        <BButton
+          v-if="isCompactHelpLayout && !isSearching"
+          class="help-compact-catalog-trigger"
+          :aria-expanded="isCompactCatalogOpen"
+          aria-controls="help-article-list"
+          @click="isCompactCatalogOpen = !isCompactCatalogOpen"
+        >
+          <SvgIcon :src="icon.catalogue" size="16" />
+          <span>{{ t('help.catalog') }}</span>
+          <span class="help-compact-trigger-state" aria-hidden="true">{{ isCompactCatalogOpen ? '−' : '+' }}</span>
+        </BButton>
         <div v-if="isSearching" class="help-search-hint">搜索中，请在右侧结果中选择</div>
         <BList
-          v-else
+          v-else-if="!isCompactHelpLayout || isCompactCatalogOpen"
+          id="help-article-list"
           class="help-menu-list"
           style="font-size: 12px"
           :listOptions="viewOptions"
@@ -60,7 +72,7 @@
         id="view-body"
         class="help-editor"
         :class="{
-          'help-editor--with-outline': !bookmark.isMobile && helpOutline.length && !selectedFromSearch,
+          'help-editor--with-outline': !isCompactHelpLayout && helpOutline.length && !selectedFromSearch,
           'help-editor--search-active': selectedFromSearch,
         }"
         @scroll="!selectedFromSearch ? syncActiveOutline : undefined"
@@ -74,9 +86,21 @@
         </div>
         <div v-else class="help-article-content" v-html="renderedContent"></div>
       </div>
+      <BButton
+        v-if="!isSearching && isCompactHelpLayout && helpOutline.length"
+        class="help-compact-outline-trigger"
+        :class="{ active: isCompactOutlineOpen }"
+        :aria-expanded="isCompactOutlineOpen"
+        aria-controls="help-article-outline"
+        @click="isCompactOutlineOpen = !isCompactOutlineOpen"
+      >
+        <SvgIcon :src="icon.catalogue" size="16" />
+        <span>{{ t('help.outline') }}</span>
+      </BButton>
       <div
-        v-if="!isSearching && helpOutline.length"
-        :class="[bookmark.isMobile ? 'phone-help-outline' : 'help-outline']"
+        v-if="!isSearching && helpOutline.length && (!isCompactHelpLayout || isCompactOutlineOpen)"
+        id="help-article-outline"
+        :class="[isCompactHelpLayout ? 'help-compact-outline' : 'help-outline']"
       >
         <div class="help-outline-title">{{ t('help.outline') }}</div>
         <BButton
@@ -226,8 +250,11 @@
   const serverOptions = ref<HelpItem[]>([]);
 
   const bookmark = bookmarkStore();
+  const isCompactHelpLayout = computed(() => bookmark.isMobileDevice);
   const checkId = ref('');
   const activeOutlineId = ref('');
+  const isCompactCatalogOpen = ref(false);
+  const isCompactOutlineOpen = ref(false);
   const renderedHelp = computed(() => {
     const source = node.value?.content || '';
     if (!source) {
@@ -257,6 +284,8 @@
   const renderedContent = computed(() => renderedHelp.value.html);
   const helpOutline = computed(() => renderedHelp.value.outline);
   function applyArticle(item: HelpItem) {
+    isCompactCatalogOpen.value = false;
+    isCompactOutlineOpen.value = false;
     checkId.value = item.id;
     activeOutlineId.value = '';
     nextTick(() => {
@@ -287,6 +316,8 @@
   }
 
   function resetToIntro() {
+    isCompactCatalogOpen.value = false;
+    isCompactOutlineOpen.value = false;
     checkId.value = '';
     activeOutlineId.value = '';
     node.value = helpInfo;
@@ -304,6 +335,7 @@
   }
   function scrollToHelpHeading(id: string) {
     activeOutlineId.value = id;
+    isCompactOutlineOpen.value = false;
     nextTick(() => {
       const container = document.getElementById('view-body');
       const heading = container?.querySelector<HTMLElement>(`#${id}`);
@@ -418,6 +450,10 @@
 
   /** 搜索词变化时重置选中状态 */
   watch(searchValue, (value, previousValue) => {
+    if (value.trim()) {
+      isCompactCatalogOpen.value = false;
+      isCompactOutlineOpen.value = false;
+    }
     if (!value.trim()) {
       selectedFromSearch.value = false;
     } else if (selectedFromSearch.value) {
@@ -426,6 +462,13 @@
     }
     if (value.trim() && value !== previousValue && routeArticleId() && !selectedFromSearch.value) {
       navigateToArticle('', true);
+    }
+  });
+
+  watch(isCompactHelpLayout, (isCompact) => {
+    if (!isCompact) {
+      isCompactCatalogOpen.value = false;
+      isCompactOutlineOpen.value = false;
     }
   });
 
@@ -668,7 +711,7 @@
     font-weight: 700;
   }
   .help-outline .help-outline-item.b_btn,
-  .phone-help-outline .help-outline-item.b_btn {
+  .help-compact-outline .help-outline-item.b_btn {
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -692,11 +735,11 @@
     overflow: hidden;
   }
   .help-outline .help-outline-item.b_btn:hover,
-  .phone-help-outline .help-outline-item.b_btn:hover {
+  .help-compact-outline .help-outline-item.b_btn:hover {
     background: var(--bl-input-noBorder-bg-color);
   }
   .help-outline .help-outline-item.b_btn.active,
-  .phone-help-outline .help-outline-item.b_btn.active {
+  .help-compact-outline .help-outline-item.b_btn.active {
     color: var(--resource-bookmark-color);
     font-weight: 700;
   }
@@ -716,13 +759,44 @@
   .help-outline-item.active .help-outline-marker {
     background: var(--resource-bookmark-color);
   }
-  .phone-help-outline {
+  .help-compact-catalog-trigger.b_btn {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    justify-content: flex-start;
+    gap: 8px;
+    color: var(--text-color);
+    border: 1px solid var(--card-border-color);
+  }
+  .help-compact-trigger-state {
+    margin-left: auto;
+    color: var(--desc-color);
+    font-size: 18px;
+    line-height: 1;
+  }
+  .help-compact-outline-trigger.b_btn {
     position: fixed;
-    right: 16px;
-    bottom: 18px;
-    z-index: 300;
-    width: min(240px, calc(100vw - 32px));
-    max-height: 42vh;
+    // 给右侧 AI 助手边缘入口预留 44px，两个页面级浮层不互相盖住。
+    right: 56px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 100;
+    min-width: 116px;
+    height: 36px;
+    gap: 7px;
+    color: var(--resource-bookmark-color);
+    border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 28%, var(--card-border-color));
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--resource-bookmark-color) 16%, transparent);
+  }
+  .help-compact-outline-trigger.b_btn.active {
+    background: color-mix(in srgb, var(--resource-bookmark-color) 12%, var(--primary-btn-bg-color));
+  }
+  .help-compact-outline {
+    position: fixed;
+    right: 56px;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    z-index: 100;
+    width: min(300px, calc(100vw - 72px));
+    max-height: min(46vh, 420px);
     padding: 10px 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -734,10 +808,10 @@
       0 3px 6px -4px rgba(0, 0, 0, 0.12),
       0 9px 28px 8px rgba(0, 0, 0, 0.05);
   }
-  .phone-help-outline .help-outline-item {
+  .help-compact-outline .help-outline-item {
     padding-right: 12px;
   }
-  @media (max-width: 768px) {
+  @media (max-width: 1199px) {
     .help-container {
       padding: 12px;
     }
@@ -759,6 +833,10 @@
       border-right: 0;
       background: transparent;
     }
+    .help-menu-list {
+      flex: 0 1 auto;
+      height: min(38vh, 280px);
+    }
     .help-editor {
       width: 100%;
       height: auto;
@@ -768,6 +846,9 @@
       border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-border-color));
       border-radius: 10px;
       background: var(--menu-body-bg-color);
+    }
+    .help-editor--with-outline {
+      flex-basis: auto;
     }
     .help-editor--search-active {
       padding: 0;

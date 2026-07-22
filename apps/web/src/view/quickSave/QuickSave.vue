@@ -216,6 +216,8 @@
         relatedTags: form.relatedTags,
         userId: userId.value,
         saveSnapshot: form.saveSnapshot,
+        // 快速保存本就是"先收下回头整理"的场景,入收集箱与其统一入口定位一致(此前不入,割裂)
+        addToInbox: true,
       });
       if (res?.status === 200) {
         saved.value = true;

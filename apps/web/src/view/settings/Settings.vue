@@ -492,6 +492,17 @@
                 @change="set('aiEnabled', $event)"
               />
             </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.ai.defaultFullscreen') }}</span>
+                <span class="field-desc">{{ t('settings.ai.defaultFullscreenDescription') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.aiDefaultFullscreen === true"
+                :aria-label="t('settings.ai.defaultFullscreen')"
+                @change="set('aiDefaultFullscreen', $event)"
+              />
+            </div>
             <div v-if="!isGuestUser()" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.ai.cloudHistory') }}</span>

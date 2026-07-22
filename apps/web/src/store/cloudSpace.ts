@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { apiBasePost, apiQueryPost } from '@/http/request.ts';
 import { CLOUD_FILE_CATEGORY_ORDER, type CloudFileCategory } from '@/constants/cloudFileCategory.ts';
+import i18n from '@/i18n';
 
 export default defineStore('dom', {
   state: () =>
@@ -38,7 +39,8 @@ export default defineStore('dom', {
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],
       folder: {
-        name: '全部文件',
+        // store 在组件外,按项目约定用 i18n.global.t(复用 cloudSpace.allFile 现成键),不再硬编码中文
+        name: i18n.global.t('cloudSpace.allFile'),
         id: 'all',
       },
       searchFileName: '',
@@ -58,7 +60,12 @@ export default defineStore('dom', {
         },
       })
         .then((res) => {
-          this.fileList = res.data;
+          // 校验业务码:失败时保留旧列表并兜底为数组,避免 fileList 被置成 undefined 导致模板 .length 抛错
+          if (res?.status === 200) {
+            this.fileList = res.data ?? [];
+          } else {
+            this.fileList = this.fileList ?? [];
+          }
         })
         .finally(() => {
           this.loading = false;

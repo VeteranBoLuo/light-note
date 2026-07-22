@@ -8,7 +8,7 @@
         </BButton>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
-        <BButton class="growth-report-btn" @click="openWeeklyReport">📊 {{ t('growth.weeklyReportEntry') }}</BButton>
+        <BButton class="growth-report-btn" :loading="wrLoading" @click="openWeeklyReport">📊 {{ t('growth.weeklyReportEntry') }}</BButton>
       </header>
 
       <section class="growth-panel">
@@ -163,16 +163,24 @@
 
   const wrVisible = ref(false);
   const wrData = ref<any>(null);
+  const wrLoading = ref(false);
   async function openWeeklyReport() {
+    if (wrLoading.value) return;
+    wrLoading.value = true;
     try {
       const res = await growthApi.getWeeklyReport();
       if (res?.status === 200) {
         wrData.value = res.data;
         wrVisible.value = true;
         recordOperation({ module: '成长', operation: '查看本周周报' });
+      } else {
+        message.error(t('growth.weeklyReportFailed'));
       }
     } catch (err) {
       console.error('获取周报失败:', err);
+      message.error(t('growth.weeklyReportFailed'));
+    } finally {
+      wrLoading.value = false;
     }
   }
 

@@ -62,7 +62,7 @@
       <!-- 拖拽提示层 -->
       <div v-if="dragActive" class="drag-overlay">
         <div class="drag-content">
-          <svg-icon :src="icon.file_upload" size="64" color="#667eea" />
+          <svg-icon :src="icon.file_upload" size="64" color="var(--primary-color)" />
           <p>{{ $t('cloudSpace.dropFiles') }}</p>
         </div>
       </div>
@@ -752,8 +752,9 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(255, 255, 255, 0.8);
-    border: 2px dashed #667eea;
+    // 主题变量而非写死白色:暗色主题下拖拽不再闪出刺眼白幕
+    background: color-mix(in srgb, var(--background-color) 80%, transparent);
+    border: 2px dashed var(--primary-color);
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -765,7 +766,7 @@
 
   .drag-content {
     text-align: center;
-    color: #667eea;
+    color: var(--primary-color);
     font-size: 20px;
     font-weight: 500;
   }

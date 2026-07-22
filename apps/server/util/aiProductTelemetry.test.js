@@ -4,7 +4,24 @@ import {
   cleanupExpiredAiProductEvents,
   normalizeAiProductEvent,
   recordAiProductEvent,
+  requiresTelemetrySecret,
 } from './aiProductTelemetry.js';
+
+describe('requiresTelemetrySecret 失败关闭策略', () => {
+  it('production 一律要求独立密钥', () => {
+    expect(requiresTelemetrySecret('production', 'linux')).toBe(true);
+    expect(requiresTelemetrySecret('production', 'darwin')).toBe(true);
+  });
+  it('Linux 非明确本地/测试(含漏配 NODE_ENV 的空值)必须失败关闭', () => {
+    expect(requiresTelemetrySecret('', 'linux')).toBe(true); // 漏配 NODE_ENV
+    expect(requiresTelemetrySecret('staging', 'linux')).toBe(true); // 未知非本地环境
+  });
+  it('明确的本地开发/测试环境允许回退固定盐', () => {
+    expect(requiresTelemetrySecret('development', 'linux')).toBe(false);
+    expect(requiresTelemetrySecret('test', 'linux')).toBe(false);
+    expect(requiresTelemetrySecret('', 'darwin')).toBe(false);
+  });
+});
 
 describe('AI product telemetry privacy contract', () => {
   afterEach(() => vi.unstubAllEnvs());

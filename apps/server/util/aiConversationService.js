@@ -1047,13 +1047,34 @@ export async function clearAiIdentityData(identity, database = pool) {
     }
     await connection.commit();
     // 数据库代际已经随上面的事务原子推进；提交后只驱逐当前进程内快照，不再另起数据库事务。
-    if (clearsSubjectWide) await invalidatePersonalKnowledgeCache(identity.subjectUserId, { persist: false });
+    let documents = { deleted: 0, failed: 0, retryScheduled: 0, retryUnavailable: 0 };
+    const excluded = [];
+    if (clearsSubjectWide) {
+      await invalidatePersonalKnowledgeCache(identity.subjectUserId, { persist: false });
+      // AI 文档派生数据(来源/分块/解析任务)与临时上传原文件属该 subject 的可控 AI 数据,一并清除;
+      // 云空间永久文件本体不在此列(只删 AI 派生索引)。OBS 删除无法与 MySQL 事务原子,故放主事务提交后单独执行,
+      // 失败按是否成功加入删除重试队列分别回执，绝不把“未能排队”说成会自动重试。
+      // deleteAllDocumentSources 永不抛错,不会让已提交的主清除因文档清理异常而反回失败。
+      // 惰性动态 import:aiDocument/service 连着 obsClient,静态引入会把 OBS 拉进本模块的导入图、
+      // 连累所有 import aiConversationService 的测试在无 OBS 环境加载即崩;此处仅在真正清除时才加载。
+      const { deleteAllDocumentSources } = await import('./aiDocument/service.js');
+      documents = await deleteAllDocumentSources({ userId: identity.subjectUserId });
+    } else {
+      // owner_domain(管理员代管):文档表仅以 user_id(上传者)归属,无四维 owner 维度,无法精确按 owner 域清理,
+      // 为避免跨授权上下文误删,明确排除并在回执披露。
+      excluded.push('documents');
+    }
     const byType = Object.fromEntries(entries);
+    byType.documents = documents.deleted;
     return {
       deleted: Object.values(byType).reduce((sum, value) => sum + Number(value || 0), 0),
       byType,
       scope: clearScope.scope,
       retained: ['agentLogs', 'quotaUsage', 'tokenReservations'],
+      documentsFailed: documents.failed,
+      documentsRetryScheduled: documents.retryScheduled,
+      documentsRetryUnavailable: documents.retryUnavailable,
+      excluded,
     };
   } catch (error) {
     await connection.rollback();

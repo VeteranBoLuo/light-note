@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db/index.js', () => ({ default: {} }));
+// 生命周期测试覆盖“将来重新开放”时的记忆规则；全局关闭行为由 aiMemoryFeature.test 单独验证。
+vi.mock('./aiMemoryFeature.js', () => ({
+  AI_MEMORY_ENABLED: true,
+  assertAiMemoryWritesEnabled: vi.fn(),
+}));
 
 import {
   __testing,

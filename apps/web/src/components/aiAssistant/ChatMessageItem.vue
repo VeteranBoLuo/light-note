@@ -26,6 +26,9 @@
             @click="handleLinkClick"
             @mouseover="showCitationTip"
             @mouseout="hideCitationTip"
+            @focusin="showCitationTip"
+            @focusout="hideCitationTip"
+            @keydown="onCitationKeydown"
           ></div>
           <div
             v-else
@@ -34,6 +37,9 @@
             @click="handleLinkClick"
             @mouseover="showCitationTip"
             @mouseout="hideCitationTip"
+            @focusin="showCitationTip"
+            @focusout="hideCitationTip"
+            @keydown="onCitationKeydown"
           ></div>
           <div v-if="message.role === 'user' && message.contexts?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedResources') }} · {{ message.contexts.length }}</div>
@@ -151,7 +157,6 @@
     type AiEvidenceReference,
     type AiSource,
   } from '@/components/aiAssistant/aiSourceNavigation';
-  import { extractAiMemoryInfluence } from '@/utils/aiMemoryInfluence';
   import { getRootZoom } from '@/utils/zoom';
 
   const { t } = useI18n();
@@ -194,36 +199,7 @@
     (e: 'edit', content: string, contexts: NonNullable<ChatMessage['contexts']>): void;
     (e: 'regenerate'): void;
     (e: 'source-navigate'): void;
-    (e: 'open-memory-ledger'): void;
   }>();
-
-  const memoryInfluence = computed(() => extractAiMemoryInfluence(props.message.activity));
-  const memoryInfluenceSummary = computed(() => {
-    const influence = memoryInfluence.value;
-    if (!influence) return '';
-    return influence.status === 'used'
-      ? t('ai.memory.influence.used', { count: influence.count })
-      : t('ai.memory.influence.notUsed');
-  });
-  const memoryInfluenceDetails = computed(() => {
-    const influence = memoryInfluence.value;
-    if (!influence) return '';
-    if (influence.status === 'not_used') return t(`ai.memory.influence.reasons.${influence.reason}`);
-    const types = influence.types.length
-      ? influence.types.map((type) => t(`ai.memory.types.${type}`)).join(t('ai.memory.influence.separator'))
-      : t('ai.memory.influence.typeUnavailable');
-    const scopes = influence.scopes.length
-      ? influence.scopes.map((scope) => t(`ai.memory.scopes.${scope}`)).join(t('ai.memory.influence.separator'))
-      : t('ai.memory.influence.scopeUnavailable');
-    return t('ai.memory.influence.details', { types, scopes });
-  });
-  const memoryInfluenceAccessibleLabel = computed(() =>
-    t('ai.memory.influence.accessibleLabel', {
-      summary: memoryInfluenceSummary.value,
-      details: memoryInfluenceDetails.value,
-      action: t('ai.memory.influence.openLedger'),
-    }),
-  );
 
   // 复制这条消息内容到剪贴板
   const handleCopy = () => {
@@ -263,20 +239,30 @@
     return map;
   });
 
-  // 角标改成不可点后,hover 用轻笺自己的 tooltip 浮层显示来源名(角标是 v-html 注入的、套不了 BTooltip,故事件委托 + 命令式浮层)
+  // 角标不可点,hover/focus 用轻笺自己的 tooltip 浮层显示来源名。
+  // 角标是 v-html 注入的、套不了 BTooltip,故事件委托 + 命令式浮层;鼠标(mouseover)、键盘/读屏(focusin)、
+  // 触屏(tap 会先触发 mouseover)三种方式都能触发,Escape 关闭,并在触发时把真实来源名写进 aria-label 供读屏播报。
   const citationTip = ref({ visible: false, text: '', x: 0, y: 0 });
-  const showCitationTip = (event: MouseEvent) => {
+  const showCitationTip = (event: Event) => {
     const el = (event.target as HTMLElement)?.closest?.('.ai-inline-citation') as HTMLElement | null;
     if (!el) return;
     const title = citationTitleMap.value[String(el.dataset.citationKey || '').trim()];
     if (!title) return;
+    el.setAttribute('aria-label', t('ai.citationSourceLabel', { title }));
     const rect = el.getBoundingClientRect();
     // 界面缩放(<html> CSS zoom)下 getBoundingClientRect 是视觉坐标,写 fixed 定位要 ÷ 缩放比,否则 tooltip 错位(见 utils/zoom)
     const zoom = getRootZoom();
     citationTip.value = { visible: true, text: title, x: (rect.left + rect.width / 2) / zoom, y: rect.top / zoom };
   };
-  const hideCitationTip = (event: MouseEvent) => {
-    if ((event.target as HTMLElement)?.closest?.('.ai-inline-citation')) citationTip.value.visible = false;
+  const hideCitationTip = (event?: Event) => {
+    // 离开/失焦即隐藏;无 event(Escape 调用)也隐藏
+    if (!event || (event.target as HTMLElement)?.closest?.('.ai-inline-citation')) citationTip.value.visible = false;
+  };
+  const onCitationKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && citationTip.value.visible) {
+      hideCitationTip();
+      (event.target as HTMLElement)?.blur?.();
+    }
   };
 
   const formatTime = (date: Date): string => {
@@ -396,64 +382,6 @@
     color: color-mix(in srgb, var(--warning-color, #c47f17) 72%, var(--text-color));
     font-size: 0.75rem;
     line-height: 1.4;
-  }
-
-  .memory-influence {
-    display: flex;
-    width: 100%;
-    min-height: 38px;
-    /* 覆盖 BButton .b_btn 的 height:32px / line-height:32px —— 否则双行文案(标题+说明)被 32px 行高
-       各自撑高,卡片变得很高、两行离得老远,而 6px 内边距相对巨大的行高又显得文字贴着上下边框。 */
-    height: auto;
-    line-height: 1.35;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 7px;
-    margin-top: 7px;
-    padding: 6px 9px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--primary-color) 5%, var(--card-background));
-    color: var(--primary-color);
-    text-align: left;
-  }
-
-  .memory-influence.is-not_used {
-    border-color: var(--surface-border-color);
-    background: var(--workspace-panel-bg-color, var(--card-background));
-    color: var(--desc-color);
-  }
-
-  .memory-influence__copy {
-    display: grid;
-    min-width: 0;
-    flex: 1;
-    gap: 1px;
-  }
-
-  .memory-influence__copy strong,
-  .memory-influence__copy small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .memory-influence__copy strong {
-    color: var(--text-color);
-    font-size: 12px;
-    font-weight: 650;
-  }
-
-  .memory-influence__copy small,
-  .memory-influence__action {
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .memory-influence__action {
-    flex: 0 0 auto;
-    color: var(--primary-color);
-    font-weight: 600;
   }
 
   .user-contexts {
@@ -643,10 +571,11 @@
     text-decoration: none;
   }
 
-  /* 角标 hover tooltip(Teleport 到 body,scoped 下靠 data-v 属性生效;浮在角标上方居中,不挡鼠标) */
+  /* 角标 hover/focus tooltip(Teleport 到 body,scoped 下靠 data-v 属性生效;浮在角标上方居中,不挡鼠标) */
+  /* z-index 对齐项目 BTooltip 层级(1100),不再用超高自定义层级破坏统一的 z-index 分层 */
   .ai-citation-tip {
     position: fixed;
-    z-index: 100060;
+    z-index: 1100;
     transform: translate(-50%, calc(-100% - 8px));
     max-width: 260px;
     padding: 5px 10px;
@@ -724,15 +653,6 @@
     align-items: flex-start;
   }
 
-  @media (max-width: 520px) {
-    .memory-influence {
-      min-height: 44px;
-    }
-
-    .memory-influence__action {
-      display: none;
-    }
-  }
 
   /* 用户消息：气泡外下方的操作条（图标在前、时间在后），整体右对齐 */
   .msg-footer {

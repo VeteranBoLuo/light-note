@@ -24,11 +24,13 @@ describe('AI 消息安全渲染', () => {
     expect(html).toContain('<span');
   });
 
-  it('只将证据协议中存在的引用编号转为可访问链接', () => {
+  it('只将证据协议中存在的引用编号转为可聚焦的角标(不可点、无 href)', () => {
     const html = renderAssistantMarkdown('已核验 [1]，未知 [2]。', ['1']);
     expect(html).toContain('class="ai-inline-citation"');
     expect(html).toContain('data-citation-key="1"');
-    expect(html).toContain('href="#ai-evidence-1"');
+    // 角标已是不可点的 span:必须可键盘聚焦(tabindex),且不再是带 href 的跳转链接
+    expect(html).toContain('tabindex="0"');
+    expect(html).not.toContain('href="#ai-evidence-1"');
     expect(html).toContain('未知 [2]');
   });
 

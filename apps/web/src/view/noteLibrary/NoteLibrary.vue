@@ -34,7 +34,8 @@
       <template v-else>
         <TagFilterSelector :all-tags="visibleNoteTags" />
         <ViewModeToggle v-if="!bookmark.isMobile" />
-        <div v-if="!bookmark.isMobile" class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
+        <!-- 移动端也保留搜索框:搜索是刚需,此前移动端整个搜索入口缺失 -->
+        <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
           <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
             <template #prefix>
               <SvgIcon :src="icon.navigation.search" size="16" />
@@ -138,11 +139,20 @@
       </div>
       <div v-if="!loading && !visibleDragNoteList.length" class="note-empty-state">
         <span class="note-empty-icon"><SvgIcon :src="icon.resource.note" size="28" /></span>
-        <strong>{{ $t('note.empty') }}</strong>
-        <p>{{ $t('note.emptyHint') }}</p>
-        <BButton type="primary" class="note-create-button" @click="showNewNotePicker">
-          {{ $t('note.newNote') }}
-        </BButton>
+        <!-- 区分「搜索/标签筛选无命中」与「新用户没笔记」 -->
+        <template v-if="hasActiveFilter">
+          <strong>{{ $t('note.noFilterMatch') }}</strong>
+          <BButton type="primary" class="note-create-button" @click="clearFilters">
+            {{ $t('note.clearFilter') }}
+          </BButton>
+        </template>
+        <template v-else>
+          <strong>{{ $t('note.empty') }}</strong>
+          <p>{{ $t('note.emptyHint') }}</p>
+          <BButton type="primary" class="note-create-button" @click="showNewNotePicker">
+            {{ $t('note.newNote') }}
+          </BButton>
+        </template>
       </div>
     </div>
 
@@ -430,11 +440,20 @@
   init();
   async function init() {
     loading.value = true;
-    const res = await apiBasePost('/api/note/queryNoteList');
-    if (res.status === 200) {
-      noteList.value = buildSearchIndex(res.data ?? []);
-      user.noteTotal = noteList.value.length;
-      await getAllTags();
+    // finally 复位 loading:此前失败分支(非 200 / 网络异常)不会复位,最高频页面会永远卡在骨架屏
+    try {
+      const res = await apiBasePost('/api/note/queryNoteList');
+      if (res.status === 200) {
+        noteList.value = buildSearchIndex(res.data ?? []);
+        user.noteTotal = noteList.value.length;
+        await getAllTags();
+      } else {
+        message.error(t('note.loadFailed'));
+      }
+    } catch (error) {
+      console.error('加载笔记列表失败:', error);
+      message.error(t('note.loadFailed'));
+    } finally {
       loading.value = false;
     }
   }
@@ -451,6 +470,15 @@
   }
   const searchValue = ref('');
   const debouncedSearch = ref('');
+  // 空态区分用:搜索词或标签筛选(?tag=,含 'null'=无标签筛选)任一激活
+  const hasActiveFilter = computed(
+    () => Boolean(debouncedSearch.value.trim()) || router.currentRoute.value.query.tag != null,
+  );
+  function clearFilters() {
+    searchValue.value = '';
+    debouncedSearch.value = '';
+    if (router.currentRoute.value.query.tag != null) router.replace({ query: {} });
+  }
   const searchTimer = ref<number | null>(null);
   const canDragNote = computed(
     () =>

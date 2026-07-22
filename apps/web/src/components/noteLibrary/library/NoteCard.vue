@@ -379,6 +379,12 @@
   }
 
   @media (max-width: 1023px) {
+    /* 触控目标:30px「更多」按钮在手机上偏小,放大到 36px */
+    .note-more-button {
+      width: 36px;
+      min-width: 36px;
+      height: 36px;
+    }
     .note-card {
       border-color: var(--surface-border-color) !important;
       box-shadow: none;

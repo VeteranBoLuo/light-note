@@ -217,7 +217,7 @@ export function getLogFingerprint() {
 
 const LOG_DEVICE_ID_KEY = 'ln_log_device_id';
 
-// 日志排除使用的稳定设备标识。它只用于站长主动配置的日志白名单，不参与登录或权限判断。
+// 浏览器本地稳定设备标识：用于日志白名单和登录设备列表归并；不参与登录、权限或设备信任判断。
 export function getLogDeviceId() {
   try {
     const stored = localStorage.getItem(LOG_DEVICE_ID_KEY);
@@ -319,17 +319,15 @@ export function autoRename(baseName: string, existingNames: Set<string>): string
 }
 
 export function normalizeNoteContentResourceUrls(htmlContent: string = ''): string {
-  if (!htmlContent || typeof document === 'undefined') return htmlContent;
+  if (!htmlContent || !htmlContent.includes('<img')) return htmlContent;
 
-  const tempElement = document.createElement('div');
-  tempElement.innerHTML = htmlContent;
-  tempElement.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
-    const src = img.getAttribute('src');
-    if (!src) return;
-    img.setAttribute('src', normalizeLocalUploadUrl(src));
-  });
-
-  return tempElement.innerHTML;
+  // 用正则只重写 <img src>,绝不做 innerHTML 往返:
+  // DOM 序列化会把文本节点里的 > < & 转成实体——markdown 源文本一旦流经就被永久污染
+  // (「日报模板引用块 > 变 &gt;」反复复发的真根因)。正则方式对任何内容都只碰 img 标签,零转义副作用。
+  return htmlContent.replace(
+    /(<img\b[^>]*?\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
+    (_match, prefix: string, quote: string, src: string) => `${prefix}${quote}${normalizeLocalUploadUrl(src)}${quote}`,
+  );
 }
 
 // marked / DOMPurify 动态加载单例(与 Editor/FilePreview 一致,按需加载,首次后复用)

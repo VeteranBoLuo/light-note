@@ -107,6 +107,22 @@ export async function getPoints(userId) {
 // 需在调用方已确保 user_growth 行存在;可传入事务连接 conn。
 export async function earnPoints(userId, amount, reason, ref = null, conn = pool) {
   if (!userId || !(amount > 0)) return false;
+  // 无外部事务时自开事务:流水 INSERT 与余额 UPDATE 必须同生共死——
+  // 否则中途失败会"记了账没到账",且幂等键会阻止补发,积分永久丢失
+  if (conn === pool) {
+    const tx = await pool.getConnection();
+    try {
+      await tx.beginTransaction();
+      const ok = await earnPoints(userId, amount, reason, ref, tx);
+      await tx.commit();
+      return ok;
+    } catch (e) {
+      await tx.rollback();
+      throw e;
+    } finally {
+      tx.release();
+    }
+  }
   if (ref) {
     // 原子幂等:INSERT ... WHERE NOT EXISTS —— 靠 idx_user_reason_ref 的间隙锁串行化并发同 (user,reason,ref) 请求,
     // affectedRows=0 表示已发过(不再走"先 SELECT 再 INSERT"的非原子判断,修复无行锁 claim 入口的并发双领)。
@@ -129,6 +145,21 @@ export async function earnPoints(userId, amount, reason, ref = null, conn = pool
 // 用 points_log 记一条 delta=0 的审计流水(reason 前缀 storage: 区分,不影响积分余额)。需调用方已确保行存在;可传事务连接。
 export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
   if (!userId || !(mb > 0)) return false;
+  // 同 earnPoints:无外部事务时自开事务,防"流水在、扩容没加"的部分成功
+  if (conn === pool) {
+    const tx = await pool.getConnection();
+    try {
+      await tx.beginTransaction();
+      const ok = await earnStorage(userId, mb, reason, ref, tx);
+      await tx.commit();
+      return ok;
+    } catch (e) {
+      await tx.rollback();
+      throw e;
+    } finally {
+      tx.release();
+    }
+  }
   const logReason = ('storage:' + reason).slice(0, 32);
   if (ref) {
     // 原子幂等,同 earnPoints:防里程碑存储奖励并发重复发放

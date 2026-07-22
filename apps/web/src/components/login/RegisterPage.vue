@@ -115,6 +115,7 @@
   }
 
   async function handleRegister() {
+    formData.email = formData.email.trim();
     const condition = [
       { endCondition: !formData.email, message: t('auth.emailRequired') },
       { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },

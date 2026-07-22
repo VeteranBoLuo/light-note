@@ -110,15 +110,24 @@ const DEFAULT_RETENTION_BATCH_SIZE = 10_000;
 const DEFAULT_RETENTION_MAX_BATCHES = 25;
 let retentionTimer = null;
 
+// 是否必须强制独立密钥(失败关闭)。纯函数便于注入 env/platform 测试。
+// 生产,或 Linux 非明确本地开发/测试(即便漏配 NODE_ENV)——都视为生产级,禁止回退固定盐,避免可预测 HMAC 被字典枚举。
+export function requiresTelemetrySecret(env = process.env.NODE_ENV, platform = process.platform) {
+  const normalized = String(env || '').toLowerCase();
+  if (normalized === 'production') return true;
+  const isExplicitLocal = normalized === 'development' || normalized === 'test';
+  return platform === 'linux' && !isExplicitLocal;
+}
+
 function telemetryHmacSecret() {
   const configured = String(process.env.AI_TELEMETRY_HMAC_SECRET || '').trim();
   if (configured.length >= 32) return configured;
-  if (process.env.NODE_ENV === 'production') {
+  if (requiresTelemetrySecret()) {
     const error = new Error('AI_TELEMETRY_HMAC_SECRET_REQUIRED');
     error.code = 'AI_TELEMETRY_HMAC_SECRET_REQUIRED';
     throw error;
   }
-  // 本地/测试数据不外发；生产环境上方会强制要求独立密钥，避免固定盐可被字典枚举。
+  // 仅非 Linux 的本地/测试环境才回退固定盐(数据不外发);生产/Linux 上方已失败关闭。
   return 'light-note-local-ai-telemetry-hmac-only';
 }
 

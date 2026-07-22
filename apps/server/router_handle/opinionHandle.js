@@ -2,6 +2,7 @@ import pool from '../db/index.js';
 import { snakeCaseKeys, resultData, insertData, INTERNAL_ROLES } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 const OPINION_STATUS = {
   PENDING: 'pending',
@@ -10,26 +11,24 @@ const OPINION_STATUS = {
 };
 
 export const recordOpinion = async (req, res) => {
-  const connection = await pool.getConnection();
   const userId = req.user?.id;
   const insertSql = 'INSERT INTO opinion SET ?';
-  const params = req.body;
-  params.userId = userId;
-  params.status = OPINION_STATUS.PENDING;
-  params.replyViewed = 0;
+  // 字段白名单:此前 params = req.body 整体入库(mass-assignment),请求体可直写任意列(如 reply_content/status)
+  const params = {
+    type: req.body?.type,
+    content: req.body?.content,
+    imgArray: req.body?.imgArray,
+    phone: req.body?.phone,
+    userId,
+    status: OPINION_STATUS.PENDING,
+    replyViewed: 0,
+  };
   try {
-    pool
-      .query(insertSql, [insertData(params)])
-      .then(() => {
-        res.send(resultData('反馈成功'));
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
-      });
+    await pool.query(insertSql, [insertData(params)]);
+    res.send(resultData('反馈成功'));
   } catch (err) {
-    res.send(resultData(null, 400, '客户端请求异常: ' + err.message));
-  } finally {
-    connection.release();
+    console.error('[opinion] 记录反馈失败 code=%s', stableAgentErrorCode(err));
+    res.send(resultData(null, 500, '提交失败，请稍后重试'));
   }
 };
 

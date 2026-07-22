@@ -441,8 +441,20 @@
               const result = await clearAllAiData();
               items.value = [];
               nextCursor.value = null;
-              emit('cleared', result.byType.conversations || 0);
-              message.success(t('ai.conversations.cleared', { count: result.deleted }));
+              emit('cleared', result.byType?.conversations || 0);
+              // 文档来源删除与对象存储并非原子操作；只有确认排入重试的项目才能承诺自动重试。
+              const failed = Number(result.documentsFailed || 0);
+              const retryScheduled = Number(result.documentsRetryScheduled || 0);
+              const retryUnavailable = Number(result.documentsRetryUnavailable || 0);
+              if (failed > 0 && retryUnavailable === 0 && retryScheduled >= failed) {
+                message.warning(t('ai.conversations.clearedPartialRetry', { count: result.deleted, failed }));
+              } else if (failed > 0) {
+                message.warning(t('ai.conversations.clearedPartialManual', { count: result.deleted, failed }));
+              } else if (retryUnavailable > 0) {
+                message.warning(t('ai.conversations.clearedPartialUnknown', { count: result.deleted }));
+              } else {
+                message.success(t('ai.conversations.cleared', { count: result.deleted }));
+              }
             } catch {
               message.warning(t('ai.conversations.clearFailed'));
             } finally {

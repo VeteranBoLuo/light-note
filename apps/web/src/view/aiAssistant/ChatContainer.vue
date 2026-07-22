@@ -28,7 +28,6 @@
             @edit="handleEditMessage"
             @regenerate="() => handleRegenerate(index)"
             @source-navigate="handleMessageSourceNavigate"
-            @open-memory-ledger="emit('open-memory-ledger')"
           />
           <AiAnswerVersionSwitcher
             v-if="message.role === 'assistant' && message.cloudId && message.versionGroupId && conversationId"
@@ -241,7 +240,6 @@
 
   const emit = defineEmits<{
     (event: 'source-navigate', source?: AiSource): void;
-    (event: 'open-memory-ledger'): void;
   }>();
 
   defineExpose({
@@ -891,6 +889,8 @@
 
   // 清空对话
   async function clearHistory() {
+    // 新建对话时先明确中止旧流，避免旧回答在新会话清空后继续写入，也避免 UI 保持“处理中”。
+    if (isLoading.value) stopResponse('cancelled');
     activeAnswerTypewriter = null;
     aiAssistant.clearCurrentConversation(t('ai.greeting'));
     resetScrollState();
@@ -1448,7 +1448,9 @@
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
           scope: { mode: scopeMode.value, externalWeb: false },
-          memoryMode: temporarySession.value ? 'temporary' : 'active',
+          // 长期记忆已关闭:不再请求 active(否则后端会读取/注入/推断并写入候选,而前端已无任何查看/停用/删除入口——
+          // 属隐私控制面与运行面脱节)。临时会话本就不涉记忆,保持 temporary。
+          memoryMode: temporarySession.value ? 'temporary' : 'off',
           ...(savedCloudUserMessage?.conversationId && savedCloudUserMessage.id
             ? {
                 conversationId: savedCloudUserMessage.conversationId,

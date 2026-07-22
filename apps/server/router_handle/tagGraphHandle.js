@@ -403,18 +403,31 @@ export const getGlobalGraph = async (req, res) => {
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
     const minCo = Math.max(1, Math.min(Number(req.body?.minCoOccurrence) || 1, 10));
 
-    const overviewStats = await queryKnowledgeMapStats(userId);
-
-    // 标签作为地图节点,size/weight 由挂载资源数决定。返回最多 300 个供搜索,前端首屏只渲染核心子集。
-    const [tagRows] = await pool.query(
-      `SELECT t.id, t.name, t.icon_url,
-         (SELECT COUNT(*) FROM resource_tag_relations r WHERE r.tag_id = t.id AND r.user_id = ?) AS resource_count
-       FROM tag t
-       WHERE t.user_id = ? AND t.del_flag = 0
-       ORDER BY resource_count DESC, t.sort, t.create_time DESC
-       LIMIT ?`,
-      [userId, userId, MAX_GLOBAL_TAGS],
-    );
+    // 三段查询互不依赖(统计 / 标签节点 / 共现边),并行执行缩短时延
+    const [overviewStats, [tagRows], [coRows]] = await Promise.all([
+      queryKnowledgeMapStats(userId),
+      pool.query(
+        `SELECT t.id, t.name, t.icon_url,
+           (SELECT COUNT(*) FROM resource_tag_relations r WHERE r.tag_id = t.id AND r.user_id = ?) AS resource_count
+         FROM tag t
+         WHERE t.user_id = ? AND t.del_flag = 0
+         ORDER BY resource_count DESC, t.sort, t.create_time DESC
+         LIMIT ?`,
+        [userId, userId, MAX_GLOBAL_TAGS],
+      ),
+      pool.query(
+        `SELECT a.tag_id AS t1, b.tag_id AS t2, COUNT(*) AS co
+         FROM resource_tag_relations a
+         INNER JOIN resource_tag_relations b
+           ON a.resource_type = b.resource_type AND a.resource_id = b.resource_id AND a.tag_id < b.tag_id
+         WHERE a.user_id = ? AND b.user_id = ?
+         GROUP BY a.tag_id, b.tag_id
+         HAVING co >= ?
+         ORDER BY co DESC
+         LIMIT ?`,
+        [userId, userId, minCo, MAX_GLOBAL_EDGES],
+      ),
+    ]);
 
     const nodes = new Map();
     tagRows.forEach((t) => {
@@ -431,20 +444,7 @@ export const getGlobalGraph = async (req, res) => {
       });
     });
 
-    // 标签共现边:两个标签被打在同一批资源上,共现越多关系越强。
-    const [coRows] = await pool.query(
-      `SELECT a.tag_id AS t1, b.tag_id AS t2, COUNT(*) AS co
-       FROM resource_tag_relations a
-       INNER JOIN resource_tag_relations b
-         ON a.resource_type = b.resource_type AND a.resource_id = b.resource_id AND a.tag_id < b.tag_id
-       WHERE a.user_id = ? AND b.user_id = ?
-       GROUP BY a.tag_id, b.tag_id
-       HAVING co >= ?
-       ORDER BY co DESC
-       LIMIT ?`,
-      [userId, userId, minCo, MAX_GLOBAL_EDGES],
-    );
-
+    // 标签共现边:两个标签被打在同一批资源上,共现越多关系越强(查询已并入上方 Promise.all)。
     const edges = new Map();
     coRows.forEach((r) => {
       const source = toNodeId('tag', r.t1);

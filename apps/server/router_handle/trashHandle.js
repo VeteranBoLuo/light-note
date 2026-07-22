@@ -5,6 +5,7 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { restoreTrashResources } from '../util/services/trashService.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { cleanupOrphanNoteImages } from '../util/noteImages.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 // 彻底删除笔记时:删 note_images 行,返回其图片 URL(供事务提交后删磁盘文件)。
 // note_images 原本只增不删,笔记永久删除后图片文件会残留成孤儿。
@@ -200,13 +201,12 @@ export const getTrashList = async (req, res) => {
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
 
     // 先清理当前用户过期数据
-    purgeExpiredItems(userId).catch(() => {});
+    purgeExpiredItems(userId).catch((e) => console.warn('[trash] 过期清理失败 code=%s', stableAgentErrorCode(e)));
 
     const { resourceType, keyword, pageSize = 20, currentPage = 1 } = req.body || {};
 
     const types = resourceType ? [resourceType] : RESOURCE_TYPES;
     const queries = [];
-    const countQueries = [];
 
     for (const type of types) {
       const cfg = TABLE_CONFIG[type];
@@ -224,16 +224,9 @@ export const getTrashList = async (req, res) => {
           [type, userId],
         ),
       );
-
-      countQueries.push(
-        pool.query(
-          `SELECT COUNT(*) AS cnt FROM \`${cfg.table}\` WHERE ${cfg.userIdField} = ? AND del_flag = 1${kwCond}`,
-          [userId],
-        ),
-      );
     }
 
-    const [queryResults, countResults] = await Promise.all([Promise.all(queries), Promise.all(countQueries)]);
+    const queryResults = await Promise.all(queries);
 
     let allItems = [];
     for (const [rows] of queryResults) {
@@ -244,12 +237,8 @@ export const getTrashList = async (req, res) => {
     const offset = Number(pageSize) * (Number(currentPage) - 1);
     const items = allItems.slice(offset, offset + Number(pageSize));
 
-    let total = 0;
-    for (const [rows] of countResults) {
-      total += Number(rows[0]?.cnt || 0);
-    }
-
-    res.send(resultData({ items, total }));
+    // total 直接取全量结果长度:原先另发 3 条 COUNT 与主查询同条件,纯冗余(全量本就已拉回内存)
+    res.send(resultData({ items, total: allItems.length }));
   } catch (e) {
     res.send(resultData(null, 500, '获取回收站列表失败: ' + e.message));
   }

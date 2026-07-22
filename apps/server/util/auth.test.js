@@ -20,7 +20,7 @@ vi.mock('./conversion.js', () => ({ recordConversionEvent: vi.fn() }));
 // auth.js 依赖 common.js(resultData),存在 common.js↔router↔handler 循环依赖:
 // 先 import common.js 让 handler 作为叶子完成初始化,规避循环(同 commonHandle.test.js)。
 await import('./common.js');
-const { accountBanMiddleware, authMiddleware, ensureNotVisitor } = await import('./auth.js');
+const { accountBanMiddleware, authMiddleware, ensureNotVisitor, issueLoginSession } = await import('./auth.js');
 
 function mockRes() {
   const res = {};
@@ -39,6 +39,33 @@ beforeEach(() => {
   getAdminContextMetadata.mockResolvedValue(null);
 });
 
+describe('issueLoginSession 设备归并', () => {
+  it('优先把 X-Device-Id 传给会话层，且不把它作为权限输入', async () => {
+    const { createSession } = await import('./sessionStore.js');
+    createSession.mockResolvedValue({ sid: 'new-session' });
+    const res = mockRes();
+
+    await issueLoginSession(
+      {
+        ip: '127.0.0.1',
+        headers: {
+          'user-agent': 'Mozilla/5.0',
+          'x-device-id': 'new-device-id-1234',
+          'x-log-device-id': 'legacy-device-id-1234',
+        },
+      },
+      res,
+      { id: 'user-1', role: 'user' },
+      true,
+    );
+
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', deviceId: 'new-device-id-1234' }),
+    );
+    expect(res.cookie).toHaveBeenCalledWith('sid', 'new-session', expect.objectContaining({ httpOnly: true }));
+  });
+});
+
 describe('authMiddleware 管理员上下文', () => {
   it('携带上下文令牌但 actor 会话缺失时 fail closed，不降级为游客', async () => {
     const req = {
@@ -53,9 +80,7 @@ describe('authMiddleware 管理员上下文', () => {
     await authMiddleware(req, res, next);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_EXPIRED' } }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_CONTEXT_EXPIRED' } }));
     expect(query).not.toHaveBeenCalled();
   });
 
@@ -214,9 +239,7 @@ describe('游客内容维护权限', () => {
     const res = mockRes();
     expect(ensureNotVisitor(req, res)).toBe(false);
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
   });
 
   it('普通登录用户不受游客维护逻辑影响', () => {

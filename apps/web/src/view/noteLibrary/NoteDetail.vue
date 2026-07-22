@@ -112,7 +112,7 @@
   const user = useUserStore();
   const { guardWrite } = useGuestGuard();
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
-  const DEFAULT_NOTE_TITLE = '未命名文档';
+  const DEFAULT_NOTE_TITLE = t('note.untitledDoc');
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
@@ -142,7 +142,13 @@
   type NoteType = 'html' | 'markdown';
   const normalizeNoteType = (type?: string): NoteType => (type === 'markdown' || type === 'md' ? 'markdown' : 'html');
   const normalizeLoadedContent = (content: string, rawType?: string) => {
-    const normalized = normalizeNoteContentResourceUrls(content || '');
+    const raw = content || '';
+    // Markdown 源文本(type='markdown')绝不能过 normalizeNoteContentResourceUrls:
+    // 它用 innerHTML 往返做图片 URL 归一化,DOM 序列化会把文本节点里的 `>` 转成 `&gt;`
+    // ——这是「日报模板引用块被转义」反复复发的真正根因(加载即污染显示,一保存就污染入库)。
+    // md 的图片是 ![](url) 语法,DOM 方式本也处理不到,跳过无损失。老 'md' 类型正文实际存 HTML,仍需归一化。
+    if (rawType !== 'md' && normalizeNoteType(rawType) === 'markdown') return raw;
+    const normalized = normalizeNoteContentResourceUrls(raw);
     // 早期 Markdown 笔记使用 type=md，正文实际存的是 HTML；加载时转回 Markdown 源文本。
     if (rawType !== 'md' || !/^\s*<(?:h[1-6]|p|ul|ol|blockquote|pre|div)\b/i.test(normalized)) return normalized;
     return new TurndownService({
@@ -378,7 +384,7 @@
     const params: any = cloneDeep(note);
     delete params.lastTitle;
     if (!params.title || !params.title.trim()) {
-      params.title = '未命名文档';
+      params.title = DEFAULT_NOTE_TITLE;
     }
     createPromise = apiBasePost('/api/note/addNote', params)
       .then((res) => {
@@ -389,9 +395,11 @@
             note.title = params.title;
           }
           nodeType.value = 'edit';
-          // 先登记「草稿已提升」再改地址:让 router-view key 保持不变,新建首存不重挂载编辑器子树(不闪)
+          // 先登记「草稿已提升」再改地址:让 router-view key 保持不变,新建首存不重挂载编辑器子树(不闪)。
+          // replace 保留原 query(type/builtin):万一组件仍被重挂(旧版本页面/共键失效),
+          // resolveInitialNoteType 也能拿到 markdown,不再落回 html 打开 TinyMCE 竞态转义窗口(日报模板 &gt; 案根因)
           markNoteDraftPromoted(note.id as string);
-          router.replace(`/noteLibrary/${note.id}`).then();
+          router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
           recordOperation({
             module: '笔记',
             operation: `新建笔记成功【${note.title}】${appliedTemplateName ? `（模板：${appliedTemplateName}）` : ''}`,
@@ -417,7 +425,7 @@
       note.createBy = user.id;
       nodeType.value = 'edit';
       markNoteDraftPromoted(note.id);
-      router.replace(`/noteLibrary/${note.id}`).then();
+      router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
     }
   }
 
@@ -509,9 +517,11 @@
     if (!guardWrite(undefined, 'delete-note')) {
       return;
     }
+    // 与笔记库卡片删除保持一致:统一"移入回收站、可恢复"口径(此前笔记详情用的是老的"确认删除/确定",没提回收站)
     Alert.alert({
-      title: t('common.defaultTitle'),
-      content: t('noteDetail.deleteConfirm'),
+      title: t('note.deleteOneTitle'),
+      content: t('note.deleteOneConfirm', { title: note.title || t('note.untitled') }),
+      okText: t('note.moveToTrash'),
       onOk() {
         apiBasePost('/api/note/delNote', {
           ids: [note.id],

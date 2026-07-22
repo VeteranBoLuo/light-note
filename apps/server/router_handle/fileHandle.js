@@ -13,6 +13,7 @@ import {
 import { ensureNotVisitor } from '../util/auth.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 export const getFileInfo = async (req, res) => {
   try {
@@ -45,8 +46,8 @@ export const getFileInfo = async (req, res) => {
 
     res.send(resultData(file, 200));
   } catch (e) {
-    console.error('获取文件信息时出错:', e);
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[file] 获取文件信息失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
   }
 };
 
@@ -97,12 +98,15 @@ export const updateFile = async (req, res) => {
     const sourceKey = file.obs_key || buildObjectKey(file.create_by, file.file_name);
     const targetKey = buildObjectKey(file.create_by, finalFileName);
 
-    try {
-      await copyObjectInObs(sourceKey, targetKey);
-      await deleteObjectFromObs(sourceKey);
-    } catch (obsError) {
-      console.error('OBS 重命名失败:', obsError);
-      return res.send(resultData(null, 500, 'OBS 文件重命名失败: ' + obsError.message));
+    // 顺序改为 copy → DB 更新 → 删旧:原先「copy 后立即删旧」在 DB 更新失败时会让 DB 仍指向已删对象,文件永久损坏。
+    // 另防同名保存(sourceKey === targetKey):copy 自身后再删除 = 删掉唯一对象。
+    if (sourceKey !== targetKey) {
+      try {
+        await copyObjectInObs(sourceKey, targetKey);
+      } catch (obsError) {
+        console.error('[file] OBS 重命名失败 code=%s', stableAgentErrorCode(obsError));
+        return res.send(resultData(null, 500, '文件重命名暂时失败，请稍后重试'));
+      }
     }
 
     const updateSql = 'UPDATE files SET file_name = ?, obs_key = ?, directory = ? WHERE id = ? AND create_by = ?';
@@ -113,13 +117,26 @@ export const updateFile = async (req, res) => {
       id,
       req.user.id,
     ]);
-    await purgeDocumentSourcesForCloudFiles(pool, req.user.id, [id]);
-    await invalidatePersonalKnowledgeCache(req.user.id);
-
     res.send(resultData({ id, fileName: finalFileName }));
+
+    // 文件名和对象映射已提交，先结束用户请求；旧对象清理与 AI 索引失效都不是本次重命名成功的前置条件。
+    // 这样不会把 AI 文档清理的耗时暴露给用户，同时仍保证失败仅留下可安全清理的冗余数据。
+    if (sourceKey !== targetKey) {
+      deleteObjectFromObs(sourceKey).catch((e) =>
+        console.warn('[file] 旧 OBS 对象清理失败(冗余无害) code=%s', stableAgentErrorCode(e)),
+      );
+    }
+    void Promise.allSettled([
+      purgeDocumentSourcesForCloudFiles(pool, req.user.id, [id]),
+      invalidatePersonalKnowledgeCache(req.user.id),
+    ]).then((results) => {
+      if (results.some((result) => result.status === 'rejected')) {
+        console.warn('[file] 重命名后 AI 缓存清理失败');
+      }
+    });
   } catch (e) {
-    console.error('修改文件名时出错:', e);
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[file] 修改文件名失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
   }
 };
 

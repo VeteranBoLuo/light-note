@@ -87,6 +87,7 @@
       message.warn(t('myInfo.pleaseLogin'));
       return;
     }
+    userData.value.email = String(userData.value.email || '').trim();
     if (userData.value.email && !validateEmail(userData.value.email)) {
       message.warning(t('myInfo.invalidEmail'));
       return;

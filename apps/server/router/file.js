@@ -239,7 +239,11 @@ router.post('/confirmUpload', async (req, res) => {
     if (!req.suppressUserRewards) {
       results
         .filter((r) => r.status === '已上传')
-        .forEach((r) => awardCreate(req.user.id, 'file', r.fileId, { userRole: req.user.role }).catch(() => {}));
+        .forEach((r) =>
+          awardCreate(req.user.id, 'file', r.fileId, { userRole: req.user.role }).catch((e) =>
+            console.warn('[growth] 上传文件奖励发放失败 code=%s', stableAgentErrorCode(e)),
+          ),
+        );
     }
   } catch (error) {
     await connection.rollback();

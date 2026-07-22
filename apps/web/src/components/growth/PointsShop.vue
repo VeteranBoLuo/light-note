@@ -203,7 +203,7 @@
           recordOperation({ module: '成长', operation: '卸下头像框' });
         }
       } else {
-        message.error(res?.data?.msg || '操作失败');
+        message.error(res?.data?.msg || t('growth.operationFailed'));
       }
     } catch (err) {
       console.error('佩戴头像框失败:', err);

@@ -40,8 +40,10 @@ vi.mock('../obsClient.js', () => ({
 
 const {
   attachCloudDocumentSource,
+  cleanupExpiredDocumentSources,
   confirmTemporaryDocumentSource,
   createTemporaryDocumentSource,
+  deleteAllDocumentSources,
   deleteTemporaryDocumentSources,
   getDocumentSourceStatuses,
   purgeDocumentSourcesForCloudFiles,
@@ -605,14 +607,54 @@ describe('AI 文档服务', () => {
     pool.query
       .mockResolvedValueOnce([[{ id: 'source-1' }, { id: 'source-2' }]])
       .mockResolvedValueOnce([[{ id: 'source-1', source_type: 'temporary', object_key: 'tmp/source-1' }]])
-      .mockResolvedValueOnce([[{ id: 'source-2', source_type: 'temporary', object_key: 'tmp/source-2' }]]);
+      .mockResolvedValueOnce([[{ id: 'source-2', source_type: 'temporary', object_key: 'tmp/source-2' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
     pool.getConnection.mockResolvedValue(connection);
     deleteObjectFromObs.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('OBS unavailable'));
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(deleteTemporaryDocumentSources({ userId: 'user-1' })).resolves.toEqual({ deleted: 1, failed: 1 });
+    await expect(deleteTemporaryDocumentSources({ userId: 'user-1' })).resolves.toEqual({
+      deleted: 1,
+      failed: 1,
+      retryScheduled: 1,
+    });
     expect(consoleSpy).toHaveBeenCalledOnce();
     consoleSpy.mockRestore();
+  });
+
+  it('清除全部 AI 数据时，删除失败的文档会标记为自动重试', async () => {
+    pool.query
+      .mockResolvedValueOnce([[{ id: 'source-retry' }]])
+      .mockResolvedValueOnce([[{ id: 'source-retry', source_type: 'temporary', object_key: 'tmp/source-retry' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    deleteObjectFromObs.mockRejectedValueOnce(new Error('OBS unavailable'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(deleteAllDocumentSources({ userId: 'user-1' })).resolves.toEqual({
+      deleted: 0,
+      failed: 1,
+      retryScheduled: 1,
+      retryUnavailable: 0,
+    });
+    expect(pool.query.mock.calls.at(-2)).toEqual([
+      expect.stringContaining("status IN ('queued', 'processing')"),
+      ['删除操作等待自动重试', 'source-retry'],
+    ]);
+    expect(pool.query.mock.calls.at(-1)).toEqual([
+      expect.stringContaining('error_code = ?'),
+      ['DELETE_RETRY_PENDING', '删除操作等待自动重试', 'source-retry', 'user-1'],
+    ]);
+    expect(consoleSpy).toHaveBeenCalledOnce();
+    consoleSpy.mockRestore();
+  });
+
+  it('后台清理会选择已标记删除重试的来源', async () => {
+    pool.query.mockResolvedValueOnce([[]]);
+
+    await expect(cleanupExpiredDocumentSources()).resolves.toBe(0);
+    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('error_code = ?'), ['DELETE_RETRY_PENDING']);
   });
 
   it('OCR 没有识别到文字时任务正常完成，而不是把附件标记为失败', async () => {

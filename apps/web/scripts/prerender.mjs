@@ -10,7 +10,8 @@
  *
  * 预渲染页面清单见 PAGES：
  *   - /landing     门面页（critical：失败则整个构建失败，绝不上线空壳门面）
- *   - /updateLogs  更新日志（数据来自后端 API，构建期通过 /api 代理到生产后端取真实数据；
+ *   - /updateLogs  更新日志（数据来自后端 API，默认通过 /api 代理到生产后端取真实数据；
+ *                  本地验收可由 PRERENDER_API_ORIGIN 指向本机后端；
  *                  非 critical：失败只警告，页面退回 SPA 空壳，不阻塞部署）
  *
  * 每页顺带重写 head（SPA 所有路由共享 index.html，canonical 全指向 /landing，
@@ -36,6 +37,8 @@ import puppeteer from 'puppeteer-core';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, '../dist');
 const SITE_ORIGIN = 'https://boluo66.top';
+const API_ORIGIN = String(process.env.PRERENDER_API_ORIGIN || SITE_ORIGIN).replace(/\/$/, '');
+const shouldStripApiPrefix = process.env.PRERENDER_API_STRIP_PREFIX === '1';
 const TIMEOUT = 60_000;
 
 /**
@@ -109,7 +112,7 @@ function resolveChrome() {
   );
 }
 
-// ---- 静态服务 dist（带 SPA fallback + /api 代理到生产后端），零依赖 ----
+// ---- 静态服务 dist（带 SPA fallback + /api 代理到指定后端），零依赖 ----
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
@@ -132,7 +135,8 @@ function startStaticServer() {
     try {
       const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
 
-      // /api 代理到生产后端:预渲染需要真实数据(更新日志内容、访客身份),本地 dist 没有后端。
+      // /api 代理到指定后端:预渲染需要真实数据(更新日志内容、访客身份),本地 dist 没有后端。
+      // 本地验收时后端没有 /api 前缀，调用方用 PRERENDER_API_STRIP_PREFIX=1 与 Vite 代理保持一致。
       // 埋点与角标接口直接黑洞返回成功，不转发（构建机不是真实访客）。
       if (urlPath.startsWith('/api/')) {
         const blackhole = PRERENDER_API_BLACKHOLES.find(({ path: apiPath }) => urlPath.startsWith(apiPath));
@@ -143,7 +147,8 @@ function startStaticServer() {
         }
         const chunks = [];
         for await (const c of req) chunks.push(c);
-        const upstream = await fetch(`${SITE_ORIGIN}${req.url}`, {
+        const upstreamPath = shouldStripApiPrefix ? req.url.replace(/^\/api(?=\/|$)/, '') : req.url;
+        const upstream = await fetch(`${API_ORIGIN}${upstreamPath}`, {
           method: req.method,
           headers: { 'Content-Type': req.headers['content-type'] || 'application/json' },
           body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks),
@@ -282,7 +287,7 @@ async function main() {
     }
   } finally {
     await browser.close();
-    // 代理到线上接口的 keep-alive 连接可能在非关键页超时后继续占住事件循环。
+    // 代理接口的 keep-alive 连接可能在非关键页超时后继续占住事件循环。
     // 先主动断开存量连接，再等待监听器完全关闭，避免构建已经完成却一直无法退出。
     await new Promise((resolve) => {
       server.close(resolve);

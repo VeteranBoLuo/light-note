@@ -246,6 +246,12 @@
   }
 
   @media (max-width: 1023px) {
+    /* 触控目标:18px 圆点在手机上过小且误触代价高(进详情页),放大到 32px */
+    .tag-detail-corner {
+      width: 32px;
+      min-width: 32px;
+      height: 32px;
+    }
     .card-body {
       height: 154px;
       &:hover {

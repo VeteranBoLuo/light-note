@@ -38,7 +38,8 @@
             >{{ $t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
           >
           <span
-            >{{ $t('personCenter.storageUsed') }}<span style="margin-left: 10px">{{ formatStorageSize(user.storageUsed) }}</span></span
+            >{{ $t('personCenter.storageUsed')
+            }}<span style="margin-left: 10px">{{ formatStorageSize(user.storageUsed) }}</span></span
           >
         </div>
       </div>
@@ -51,11 +52,7 @@
           <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
         </span>
       </div>
-      <div
-        class="person-menu-item"
-        @click="goGrowth"
-        v-click-log="{ module: '个人中心', operation: '打开我的成长' }"
-      >
+      <div class="person-menu-item" @click="goGrowth" v-click-log="{ module: '个人中心', operation: '打开我的成长' }">
         <span class="person-menu-item-title">{{ $t('growth.entry') }}</span>
         <span class="person-menu-item-des"
           >Lv.{{ growthInfo?.level || 1 }} · 🪙 {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
@@ -64,22 +61,27 @@
       </div>
     </div>
     <div class="person-menu">
-      <b-dropdown :trigger="['click']" :menu-options="themeMenuOptions">
-        <div class="person-menu-item">
-          <span class="person-menu-item-title">{{ $t('personCenter.themeMode') }}</span>
-          <span class="person-menu-item-des"
-            >{{ ThemeName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
-          /></span>
-        </div>
-      </b-dropdown>
-      <b-dropdown :trigger="['click']" :menu-options="langMenuOptions">
-        <div class="person-menu-item">
-          <span class="person-menu-item-title">{{ $t('personCenter.language') }}</span>
-          <span class="person-menu-item-des"
-            >{{ LanguageName }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
-          /></span>
-        </div>
-      </b-dropdown>
+      <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
+      <div
+        class="person-menu-item"
+        @click="$router.push('/settings')"
+        v-click-log="{ module: '个人中心', operation: '打开设置' }"
+      >
+        <span class="person-menu-item-title">{{ $t('settings.title') }}</span>
+        <span class="person-menu-item-des">
+          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+        </span>
+      </div>
+      <div
+        class="person-menu-item"
+        @click="$router.push('/help')"
+        v-click-log="{ module: '个人中心', operation: '打开帮助' }"
+      >
+        <span class="person-menu-item-title">{{ $t('personCenter.help') }}</span>
+        <span class="person-menu-item-des">
+          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+        </span>
+      </div>
       <div
         v-if="user.role === 'root'"
         class="person-menu-item"
@@ -129,15 +131,7 @@
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/ptrash')"
-        v-click-log="{ module: '个人中心', operation: '回收站' }"
-      >
-        <span class="person-menu-item-title">{{ $t('trash.title') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
+
       <div
         class="person-menu-item"
         @click="$router.push('/manage/tagMg')"
@@ -153,6 +147,15 @@
         v-click-log="{ module: '个人中心', operation: `书签管理` }"
       >
         <span class="person-menu-item-title">{{ $t('bookmarkMg.title') }}</span>
+        <span class="person-menu-item-des"
+          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+      ></div>
+      <div
+        class="person-menu-item"
+        @click="$router.push('/ptrash')"
+        v-click-log="{ module: '个人中心', operation: '回收站' }"
+      >
+        <span class="person-menu-item-title">{{ $t('trash.title') }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
@@ -202,12 +205,10 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
-import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
-  import { updatePreference } from '@/utils/savePreference';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { useI18n } from 'vue-i18n';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
@@ -245,30 +246,6 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
     inbox.openQuickCapture();
   }
 
-  const themeMenuOptions = computed(() => [
-    { label: t('navigation.followSystem'), icon: icon.navigation.system, function: () => changeTheme('system') },
-    { label: t('navigation.light'), icon: icon.navigation.sun, function: () => changeTheme('day') },
-    { label: t('navigation.dark'), icon: icon.navigation.moon, function: () => changeTheme('night') },
-  ]);
-  const langMenuOptions = computed(() => [
-    { label: '中文', function: () => changeLanguage('zh-CN') },
-    { label: 'English', function: () => changeLanguage('en-US') },
-  ]);
-
-  function changeTheme(theme: string) {
-    // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
-    updatePreference({ theme }).catch((err) => {
-      console.error('后台错误：' + err);
-    });
-  }
-
-  function changeLanguage(lang: 'zh-CN' | 'en-US') {
-    // 统一走 updatePreference:语言即时切换(不刷新页面),与桌面端/设置中心一致
-    updatePreference({ lang }).catch((err) => {
-      console.error('后台错误：' + err);
-    });
-  }
-
   function handleExitLogin() {
     menuVisible.value = false;
     if (user.role === 'visitor') {
@@ -276,26 +253,16 @@ import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
     } else {
       Alert.alert({
         title: '提示',
-	        content: '此操作将退出登录, 是否继续?',
-	        async onOk() {
-	          sessionStorage.setItem('manualLogout', '1');
-	          await userApi.logout();
-	          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
+        content: '此操作将退出登录, 是否继续?',
+        async onOk() {
+          sessionStorage.setItem('manualLogout', '1');
+          await userApi.logout();
+          window.dispatchEvent(new CustomEvent('light-note:auth-expired'));
         },
       });
     }
   }
 
-  const ThemeName = computed(() => {
-    if (user.preferences.theme === 'night') {
-      return t('navigation.dark');
-    }
-    if (user.currentTheme === 'day') {
-      return t('navigation.light');
-    }
-    return t('navigation.followSystem');
-  });
-  const LanguageName = computed(() => (user.preferences.lang === 'en-US' ? 'English' : '中文'));
   ref<Viewer>();
   function zoomImage() {
     bookmark.refreshViewer(user.headPicture || icon.navigation.user);

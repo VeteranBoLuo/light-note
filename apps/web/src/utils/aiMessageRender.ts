@@ -132,6 +132,8 @@ export function decorateAiCitations(html: string, citationKeys: string[] = [], a
       const anchor = document.createElement('span');
       anchor.className = 'ai-inline-citation';
       anchor.dataset.citationKey = knownKey;
+      // 可聚焦(键盘/读屏可达):hover 与 focus 都会触发 ChatMessageItem 的来源名 tooltip,并在聚焦时把真实来源名写进 aria-label
+      anchor.setAttribute('tabindex', '0');
       anchor.setAttribute('aria-label', i18n.global.t('ai.citationAriaLabel', { key: knownKey }));
       anchor.textContent = `[${knownKey}]`;
       fragment.append(anchor);

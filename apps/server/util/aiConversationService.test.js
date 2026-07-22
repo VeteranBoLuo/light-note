@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db/index.js', () => ({ default: {} }));
+// clearAiIdentityData 现在会清 AI 文档派生数据;mock 掉文档服务,避免它经 obsClient 在无 OBS 配置的测试环境导入即崩,
+// 同时可断言「subject 清除调用、owner_domain 排除」。用 vi.hoisted 让 mock fn 在被提升的 vi.mock 工厂里可用。
+const { deleteAllDocumentSources } = vi.hoisted(() => ({
+  deleteAllDocumentSources: vi
+    .fn()
+    .mockResolvedValue({ deleted: 0, failed: 0, retryScheduled: 0, retryUnavailable: 0 }),
+}));
+vi.mock('./aiDocument/service.js', () => ({ deleteAllDocumentSources }));
 
 import {
   __testing,
@@ -105,6 +113,8 @@ describe('AI conversation isolation', () => {
       release: vi.fn(),
       query: vi.fn().mockResolvedValue([{ affectedRows: 2 }]),
     };
+    // 文档清理(临时+cloud 的 AI 派生 + OBS 原文件)在主事务提交后执行:本例模拟删 3 个、1 个原文件清理失败
+    deleteAllDocumentSources.mockResolvedValueOnce({ deleted: 3, failed: 1, retryScheduled: 1, retryUnavailable: 0 });
     const result = await clearAiIdentityData(normalIdentity, {
       getConnection: vi.fn().mockResolvedValue(connection),
     });
@@ -113,10 +123,17 @@ describe('AI conversation isolation', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledTimes(1);
-    expect(result.deleted).toBe(12);
+    // 10 条主删除(memories/changeSets/responseEvents/productEvents/conversations 各 2)+ contentChunks 2 + documents 3
+    expect(result.deleted).toBe(15);
     expect(result.scope).toBe('subject_user');
     expect(result.retained).toEqual(['agentLogs', 'quotaUsage', 'tokenReservations']);
-    expect(result.byType).toMatchObject({ conversations: 2, memories: 2, contentChunks: 2 });
+    expect(result.byType).toMatchObject({ conversations: 2, memories: 2, contentChunks: 2, documents: 3 });
+    // subject 清除会清文档,且如实上报失败数;无排除项
+    expect(deleteAllDocumentSources).toHaveBeenCalledWith({ userId: 'user-1' });
+    expect(result.documentsFailed).toBe(1);
+    expect(result.documentsRetryScheduled).toBe(1);
+    expect(result.documentsRetryUnavailable).toBe(0);
+    expect(result.excluded).toEqual([]);
     const subjectDeletes = connection.query.mock.calls.filter(
       ([sql]) => String(sql).includes('subject_user_id = ?') && !String(sql).includes('ai_content_chunks'),
     );
@@ -152,6 +169,10 @@ describe('AI conversation isolation', () => {
 
     expect(result.scope).toBe('owner_domain');
     expect(result.deleted).toBe(5);
+    // owner_domain(管理员代管):文档表仅 user_id 归属,无法按 owner 域精确清理 → 明确排除,绝不调用文档清理
+    expect(deleteAllDocumentSources).not.toHaveBeenCalled();
+    expect(result.excluded).toEqual(['documents']);
+    expect(result.byType.documents).toBe(0);
     expect(connection.query).toHaveBeenCalledTimes(5);
     expect(
       connection.query.mock.calls.every(

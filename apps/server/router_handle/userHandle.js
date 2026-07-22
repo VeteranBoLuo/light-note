@@ -18,7 +18,7 @@ import nodeMail from '../util/nodemailer.js';
 import crypto from 'crypto';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
-import { removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
+import { groupUserSessions, removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../util/resourceTags.js';
@@ -30,9 +30,11 @@ import {
 } from '../util/adminContextStore.js';
 import { recordAdminContextAudit } from '../util/adminContextAudit.js';
 import { isSelfTraffic } from '../util/logExclude.js';
+import { sanitizeLogUrl, sanitizeSensitivePayload } from '../util/log.js';
 import { recordServerOperation } from '../util/operationLog.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { exportAiUserData } from '../util/aiUserDataExport.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -42,6 +44,9 @@ const isActiveIpBan = (ipReputation) => {
   const bannedUntil = ipReputation?.banned_until ? new Date(ipReputation.banned_until).getTime() : 0;
   return Number(ipReputation?.is_banned || 0) === 1 && bannedUntil > Date.now();
 };
+
+// 邮箱作为账号标识时统一去除首尾空白；服务端兜底，避免绕过前端直接写入“看起来相同”的新账号。
+const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const queryUserInfoById = async (id) => {
   const [result] = await pool.query(
@@ -113,7 +118,8 @@ const sanitizeUser = (user) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password, rememberMe } = req.body;
+    const { password, rememberMe } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
     const ipReputation = await getIpReputation(getClientIp(req));
     const isIpBanned = isActiveIpBan(ipReputation);
     const [result] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
@@ -170,7 +176,7 @@ export const login = async (req, res) => {
       const upgradedHash = hashPassword(result[0].password);
       pool
         .query("UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?", [upgradedHash, result[0].id])
-        .catch(() => {}); // 非关键操作，静默忽略
+        .catch((e) => console.warn('[auth] 明文密码透明升级失败 code=%s', stableAgentErrorCode(e))); // 非关键,留痕不阻断
     }
     const sid = await issueLoginSession(req, res, result[0], Boolean(rememberMe));
     const userInfo = await queryUserInfoById(result[0].id);
@@ -268,10 +274,15 @@ function buildWelcomeNotification(lang) {
 
 export const registerUser = async (req, res) => {
   try {
+    const email = normalizeEmail(req.body?.email);
     // 注册来源(前端透传,仅作转化 context):走白名单归一,非法/脏值降级 unknown
     const signupSource = normalizeConversionSource(req.body?.signupSource);
+    if (!email) {
+      recordConversionEvent(req, 'signup_failed', 'invalid_email');
+      return res.send(resultData(null, 400, L(req, '邮箱不能为空', 'Email is required.')));
+    }
     // 检查邮箱是否已存在
-    const [existingUser] = await pool.query('SELECT * FROM user WHERE email = ?', [req.body.email]);
+    const [existingUser] = await pool.query('SELECT * FROM user WHERE email = ?', [email]);
     if (existingUser?.length > 0) {
       // 「账号已存在」是可预期的用户输入错误,不是服务端异常:返回 409(原 500 会污染错误率)。
       // context 只存标准原因码,不拼 source —— 失败原因与来源归因是两个维度,不混在一个字段
@@ -290,7 +301,7 @@ export const registerUser = async (req, res) => {
     // 昵称(alias)可选:前端非空则 trim + 限长采用,留空统一用「默认昵称」(仍走字段白名单,不接受 role/del_flag 等越权字段)
     const rawAlias = typeof req.body?.alias === 'string' ? req.body.alias.trim() : '';
     const params = {
-      email: req.body.email,
+      email,
       password: req.body.password,
       role: 'user', // 角色服务端强制写死,不信任客户端
       alias: rawAlias ? rawAlias.slice(0, 20) : L(req, '默认昵称', 'Default Nickname'),
@@ -307,13 +318,24 @@ export const registerUser = async (req, res) => {
       params.password_method = 'scrypt';
     }
 
-    // 插入新用户
+    // 插入新用户。并发双注册竞态兜底:SELECT 预检后两个请求仍可能同时 INSERT,
+    // 靠 email 唯一索引报重复(索引见 migrations/20260722_user_email_unique.sql,需线上确认执行)
     const userData = insertData(params);
-    await pool.query('INSERT INTO user SET ?', [userData]);
+    try {
+      await pool.query('INSERT INTO user SET ?', [userData]);
+    } catch (e) {
+      if (e?.code === 'ER_DUP_ENTRY') {
+        recordConversionEvent(req, 'signup_failed', 'email_exists');
+        return res.send(resultData(null, 409, L(req, '账号已存在', 'Account already exists.')));
+      }
+      throw e;
+    }
     const userId = userData.id;
 
     // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
-    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});
+    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req))).catch((e) =>
+      console.warn('[register] 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
+    );
 
     // 记录日志（非关键，失败不影响注册）。注册路由手动写 api_logs，
     // 不经过全局请求日志中间件，因此必须在这里单独应用自有流量白名单。
@@ -324,11 +346,12 @@ export const registerUser = async (req, res) => {
           os: req.headers['os'] ?? '未知',
           fingerprint: req.headers['fingerprint'] ?? '未知',
         });
-        const requestPayload = JSON.stringify(req.method === 'GET' ? req.query : req.body);
+        // 注册 body 含明文密码,落 api_logs 前必须脱敏(与全局日志中间件同一套规则)
+        const requestPayload = JSON.stringify(sanitizeSensitivePayload(req.method === 'GET' ? req.query : req.body));
         const log = {
           userId: userId,
           method: req.method,
-          url: req.originalUrl,
+          url: sanitizeLogUrl(req.originalUrl),
           req: requestPayload === '{}' ? '' : requestPayload,
           ip: getClientIp(req) || '未知',
           system: system,
@@ -336,7 +359,7 @@ export const registerUser = async (req, res) => {
         };
         await pool.query('INSERT INTO api_logs SET ?', [insertData(log)]);
       } catch (err) {
-        console.error('注册日志更新错误:', err.message);
+        console.error('[register] 注册日志写入失败 code=%s', stableAgentErrorCode(err));
       }
     }
 
@@ -346,13 +369,9 @@ export const registerUser = async (req, res) => {
     recordConversionEvent(req, 'register', signupSource, { userId, visitorType: 'user' });
     res.send(resultData({ ...sanitizeUser(userInfo), sid }));
   } catch (err) {
-    console.error('注册过程中发生错误:', err);
+    console.error('[register] 注册失败 code=%s', stableAgentErrorCode(err));
     recordConversionEvent(req, 'signup_failed', 'server_error'); // 不可预期异常也记失败,便于观察真实注册失败(返回文案不暴露异常对象)
-    if (err.message.includes('邮箱') || err.message.includes('账号')) {
-      res.send(resultData(null, 500, err.message));
-    } else {
-      res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message));
-    }
+    res.send(resultData(null, 500, L(req, '注册失败，请稍后重试', 'Registration failed. Please try again later.')));
   }
 };
 export const getUserInfo = async (req, res) => {
@@ -650,6 +669,9 @@ export const saveUserInfo = (req, res) => {
         finalBody[field] = filteredBody[field];
       }
     });
+    if (typeof finalBody.email === 'string') {
+      finalBody.email = normalizeEmail(finalBody.email);
+    }
     pool
       .query('update user set ? where id=?', [finalBody, id])
       .then(([result]) => {
@@ -657,7 +679,9 @@ export const saveUserInfo = (req, res) => {
         // 完善个人资料激励:本次更新涉及昵称或头像时一次性 +20(profile_done 幂等,只发一次)。
         // 响应之后 fire-and-forget,不阻塞、不影响保存结果。
         if (!isRoot && (finalBody.alias || finalBody.head_picture)) {
-          grantExp(id, 'profile_done', { refId: 'profile', amount: 20, userRole: req.user?.role }).catch(() => {});
+          grantExp(id, 'profile_done', { refId: 'profile', amount: 20, userRole: req.user?.role }).catch((e) =>
+            console.warn('[growth] 完善资料奖励发放失败 code=%s', stableAgentErrorCode(e)),
+          );
         }
       })
       .catch((err) => {
@@ -701,7 +725,7 @@ export const github = async (req, res) => {
       getGitHubUser(tokenData.access_token),
       getGitHubEmail(tokenData.access_token), // 单独获取邮箱
     ]);
-    const safeEmail = email || `${baseUser.login}@users.noreply.github.com`;
+    const safeEmail = normalizeEmail(email) || `${baseUser.login}@users.noreply.github.com`;
     // 合并用户对象
     const githubUser = { ...baseUser, email: safeEmail };
 
@@ -736,10 +760,10 @@ export const logout = async (req, res) => {
   }
 };
 
-// 会话句柄:对外只暴露 sid 的 sha256 前 16 位,绝不把真 sid 交给页面(防 XSS 泄露会话)
-const sessionHandle = (sid) => crypto.createHash('sha256').update(String(sid)).digest('hex').slice(0, 16);
+// 设备句柄：对外只暴露设备组键的 SHA-256 前 16 位，不把 session ID 或设备摘要交给页面。
+const deviceHandle = (groupKey) => crypto.createHash('sha256').update(String(groupKey)).digest('hex').slice(0, 16);
 
-// 登录设备/会话列表:展示 IP/设备/最近活跃 + 标记本机
+// 登录设备列表：会话是实现细节，页面只按稳定设备标识聚合；历史无标识会话独立展示，避免错误合并。
 export const getMySessions = async (req, res) => {
   const userId = req.user?.id;
   if (!userId || req.user?.role === 'visitor') {
@@ -748,13 +772,15 @@ export const getMySessions = async (req, res) => {
   try {
     const currentSid = getRequestSid(req);
     const rows = await listUserSessions(userId);
-    const items = rows.map((r) => ({
-      id: sessionHandle(r.sid),
-      ip: r.ip || '',
-      userAgent: r.user_agent || '',
-      createTime: r.create_time,
-      lastActiveTime: r.last_active_time,
-      current: r.sid === currentSid,
+    const items = groupUserSessions(rows, currentSid).map((group) => ({
+      // groupKey 比“最近活跃的 sid”稳定，设备内任一会话活跃都不会让前端刚拿到的句柄失效。
+      id: deviceHandle(group.groupKey),
+      ip: group.ip || '',
+      userAgent: group.user_agent || '',
+      createTime: group.create_time,
+      lastActiveTime: group.last_active_time,
+      current: group.current,
+      sessionCount: group.sessionCount,
     }));
     res.send(resultData(items));
   } catch (e) {
@@ -762,7 +788,8 @@ export const getMySessions = async (req, res) => {
   }
 };
 
-// 吊销会话:body.id=按句柄下线单台;body.others=true 下线除本机外所有。只在本人会话集合内匹配,天然限权。
+// 吊销登录设备：body.id=按设备句柄下线一组 session；body.others=true 下线除本机设备组外所有。
+// 只在本人会话集合内匹配，天然限权。
 export const revokeSession = async (req, res) => {
   const userId = req.user?.id;
   if (!userId || req.user?.role === 'visitor') {
@@ -772,26 +799,31 @@ export const revokeSession = async (req, res) => {
     const { id, others } = req.body || {};
     const currentSid = getRequestSid(req);
     const rows = await listUserSessions(userId);
+    const deviceGroups = groupUserSessions(rows, currentSid);
     let targets = [];
+    let targetDeviceCount = 0;
     if (others) {
-      targets = rows.filter((r) => r.sid !== currentSid).map((r) => r.sid);
+      const targetGroups = deviceGroups.filter((group) => !group.current);
+      targets = targetGroups.flatMap((group) => group.sids);
+      targetDeviceCount = targetGroups.length;
     } else {
-      const match = rows.find((r) => sessionHandle(r.sid) === id);
-      if (!match) return res.send(resultData(null, 400, L(req, '会话不存在', 'Session not found.')));
-      if (match.sid === currentSid)
+      const match = deviceGroups.find((group) => deviceHandle(group.groupKey) === id);
+      if (!match) return res.send(resultData(null, 400, L(req, '设备不存在', 'Device not found.')));
+      if (match.current)
         return res.send(
           resultData(null, 400, L(req, '不能在此下线当前设备,请用退出登录', 'Use sign out for the current device.')),
         );
-      targets = [match.sid];
+      targets = match.sids;
+      targetDeviceCount = 1;
     }
-    for (const sid of targets) await removeSession(sid);
+    for (const sid of [...new Set(targets)]) await removeSession(sid);
     if (targets.length > 0) {
       await recordServerOperation(req, {
         module: '账号安全',
-        operation: others ? `下线其他设备成功【${targets.length}台】` : '下线单个设备成功',
+        operation: others ? `下线其他设备成功【${targetDeviceCount}台】` : '下线单个设备成功',
       }).catch((error) => console.warn('记录会话下线操作失败:', error.message));
     }
-    res.send(resultData({ revoked: targets.length }));
+    res.send(resultData({ revoked: targetDeviceCount, revokedSessions: [...new Set(targets)].length }));
   } catch (e) {
     res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + e.message));
   }
@@ -884,7 +916,7 @@ const getGitHubEmail = async (accessToken, retries = 2) => {
 
 const handleUserDatabaseOperation = async (githubUser, req) => {
   // 邮箱降级策略：使用GitHub提供的备用邮箱格式
-  const safeEmail = githubUser.email || `${githubUser.login}@users.noreply.github.com`;
+  const safeEmail = normalizeEmail(githubUser.email) || `${githubUser.login}@users.noreply.github.com`;
   // 1. 优先使用github_id查询
   const [existingByGithub] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
   if (existingByGithub.length > 0) return existingByGithub[0];
@@ -935,7 +967,9 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   recordConversionEvent(req, 'register', ghSignupSource, { userId: githubUserId, visitorType: 'user' });
 
   // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
-  createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req))).catch(() => {});
+  createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req))).catch((e) =>
+    console.warn('[register] GitHub 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
+  );
 
   // 返回新插入的完整用户数据
   return result[0];
@@ -987,7 +1021,10 @@ export const configPassword = async (req, res) => {
 // 发送验证码接口
 export const sendEmail = async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    if (!email) {
+      return res.send(resultData(null, 400, L(req, '邮箱不能为空', 'Email is required.')));
+    }
     const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6位数字验证码
 
     // 1. 存储验证码到Redis（5分钟过期）
@@ -1021,7 +1058,11 @@ export const sendEmail = async (req, res) => {
 // 验证验证码接口
 export const verifyCode = async (req, res) => {
   try {
-    const { email, code, password } = req.body;
+    const { code, password } = req.body || {};
+    const email = normalizeEmail(req.body?.email);
+    if (!email) {
+      return res.send(resultData(null, 400, L(req, '邮箱不能为空', 'Email is required.')));
+    }
     const pwdCheck = validatePassword(password, reqLang(req));
     if (!pwdCheck.ok) {
       return res.send(resultData(null, 400, pwdCheck.msg));

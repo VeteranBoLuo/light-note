@@ -1,5 +1,5 @@
 <template>
-  <div id="app" style="height: 100vh; width: 100vw">
+  <div id="app" style="width: 100vw">
     <a-config-provider
       :theme="{
         token: {
@@ -708,6 +708,11 @@
     *::-webkit-scrollbar {
       display: none;
     }
+  }
+  /* 100dvh 跟随移动浏览器动态地址栏伸缩,避免底部内容被遮;旧浏览器回退 100vh(双声明,后者不识别时用前者) */
+  #app {
+    height: 100vh;
+    height: 100dvh;
   }
   .app-loading {
     height: 100vh;

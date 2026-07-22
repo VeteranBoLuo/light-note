@@ -118,7 +118,11 @@ export function useTrash() {
         const response = await apiBasePost('/api/trash/restore', { resourceType, ids });
         if (response.status === 200) success += response.data?.restored || 0;
       }
-      if (!success) return;
+      if (!success) {
+        // 此前静默 return:用户点了恢复却毫无反馈,无法区分失败与未生效
+        message.warning(t('trash.restoreFailed'));
+        return;
+      }
       message.success(t('trash.restoreSuccess'));
       recordOperation({ ...OPERATION_LOG_MAP.trash.restore, operation: `恢复回收站资源成功【${success}项】` });
       await fetchList();
@@ -144,7 +148,10 @@ export function useTrash() {
         const response = await apiBasePost('/api/trash/permanentDelete', { resourceType, ids });
         if (response.status === 200) success += response.data?.deleted || 0;
       }
-      if (!success) return;
+      if (!success) {
+        message.warning(t('common.deleteFailed'));
+        return;
+      }
       message.success(t('trash.permanentDeleteSuccess'));
       recordOperation({
         ...OPERATION_LOG_MAP.trash.permanentDelete,

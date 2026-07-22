@@ -313,6 +313,32 @@
     margin: 0 auto;
   }
 
+  // 手机页面本身已有 20px 安全边距，时间轴不再额外占用两侧空间；
+  // 同时显式撑开 Ant Timeline 的内容列，避免卡片按内容宽度收窄。
+  @media (max-width: 767px) {
+    .logs-container {
+      padding-right: 0;
+      padding-left: 0;
+    }
+
+    .timeline-wrapper,
+    :deep(.ant-timeline),
+    :deep(.ant-timeline-item) {
+      width: 100%;
+      max-width: none;
+    }
+
+    :deep(.ant-timeline-item-content) {
+      width: calc(100% - 32px);
+      box-sizing: border-box;
+    }
+
+    .log-card {
+      width: 100%;
+      box-sizing: border-box;
+    }
+  }
+
   // Timeline customization
   :deep(.ant-timeline-item) {
     padding-bottom: 30px;

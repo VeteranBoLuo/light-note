@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import pool from '../db/index.js';
 import { resolveAiConversationIdentity } from './aiConversationService.js';
+import { assertAiMemoryWritesEnabled } from './aiMemoryFeature.js';
 
 const MEMORY_STATUSES = new Set(['candidate', 'active', 'paused', 'expired']);
 const LIVE_MEMORY_STATUSES = new Set(['candidate', 'active', 'paused']);
@@ -122,11 +123,16 @@ function assertMemoryIdentity(identity) {
   getAdminContextDeadline(identity);
 }
 
-function assertMemoryWritable(identity) {
+function assertMemoryMutationAllowed(identity) {
   assertMemoryIdentity(identity);
   if ((identity?.adminContextMode || 'normal') === 'readonly') {
     throw memoryError('ADMIN_PREVIEW_READONLY', '管理员当前处于只读预览模式，不能修改 AI 记忆', 403);
   }
+}
+
+function assertMemoryWritable(identity) {
+  assertMemoryMutationAllowed(identity);
+  assertAiMemoryWritesEnabled();
 }
 
 function ownerWhere(identity, alias = '') {
@@ -900,7 +906,8 @@ export async function updateAiMemory(identity, memoryId, input = {}, database = 
 }
 
 export async function deleteAiMemory(identity, memoryId, database = pool) {
-  assertMemoryWritable(identity);
+  // 关闭长期记忆后仍允许用户擦除既有记录，避免全局开关反而阻断数据控制权。
+  assertMemoryMutationAllowed(identity);
   const normalizedMemoryId = identifier(memoryId, 36, 'memoryId', { required: true });
   const owner = ownerWhere(identity);
   const [result] = await database.query(`DELETE FROM ai_memories WHERE id = ? AND ${owner.sql} LIMIT 1`, [
@@ -914,7 +921,8 @@ export async function deleteAiMemory(identity, memoryId, database = pool) {
 }
 
 export async function clearAiMemories(identity, database = pool) {
-  assertMemoryWritable(identity);
+  // 同上：仅阻断新增/确认/修改，不阻断删除历史记忆。
+  assertMemoryMutationAllowed(identity);
   const owner = ownerWhere(identity);
   const [result] = await database.query(`DELETE FROM ai_memories WHERE ${owner.sql}`, owner.params);
   return { cleared: Number(result?.affectedRows || 0) };

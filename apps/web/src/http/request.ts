@@ -170,6 +170,8 @@ request.interceptors.request.use(
       config.headers['fingerprint'] = getLogFingerprint();
       const logDeviceId = getLogDeviceId();
       if (logDeviceId) config.headers['X-Log-Device-Id'] = logDeviceId;
+      // 会话层只用该稳定标识归并同一浏览器的重复登录记录，不作为认证或权限依据。
+      if (logDeviceId) config.headers['X-Device-Id'] = logDeviceId;
       const rememberedSid = localStorage.getItem('rememberedSid');
       // 过期流程中不再重放旧 sid,避免带着失效凭证继续触发过期
       if (rememberedSid && !authExpiredFlow) {

@@ -17,6 +17,20 @@ const registerLimiter = rateLimit({
   message: { data: null, status: 429, msg: '注册过于频繁，请稍后再试' },
 });
 
+// 发送邮件验证码限流:每 IP 每 10 分钟 5 次,防 SMTP 被滥用轰炸他人邮箱
+const sendEmailLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: { data: null, status: 429, msg: '验证码发送过于频繁，请稍后再试' },
+});
+
+// 校验验证码限流:每 IP 每 10 分钟 10 次,防 6 位重置码被暴力枚举(码本身 5 分钟过期)
+const verifyCodeLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: { data: null, status: 429, msg: '尝试次数过多，请稍后再试' },
+});
+
 router.post('/login', loginLimiter, userHandle.login);
 
 router.get('/getUserInfo', userHandle.getUserInfo);
@@ -47,9 +61,9 @@ router.post('/getMySessions', userHandle.getMySessions);
 
 router.post('/revokeSession', userHandle.revokeSession);
 
-router.post('/sendEmail', userHandle.sendEmail);
+router.post('/sendEmail', sendEmailLimiter, userHandle.sendEmail);
 
-router.post('/verifyCode', userHandle.verifyCode);
+router.post('/verifyCode', verifyCodeLimiter, userHandle.verifyCode);
 
 router.post('/appeal', userHandle.submitAppeal);
 

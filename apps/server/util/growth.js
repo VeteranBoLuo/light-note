@@ -14,6 +14,7 @@ import crypto from 'crypto';
 import { earnPoints, earnStorage, titleName } from './points.js';
 import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
+import { stableAgentErrorCode } from './agent/logSafety.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(方案A,前期平缓、后期陡增,凸显高等级价值):Lv1 0.5G → Lv10 5G → Lv15 20G,
@@ -199,7 +200,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     if (!capExempt) {
       const [[sumRow]] = await c.query(
         `SELECT COALESCE(SUM(amount), 0) AS used FROM growth_events
-         WHERE user_id = ? AND status = 'granted' AND DATE(create_time) = CURDATE()`,
+         WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()`,
         [userId],
       );
       used = Number(sumRow.used || 0);
@@ -283,10 +284,12 @@ export async function awardCreate(userId, kind, refId, { userRole = null } = {})
   if (!refId) return { granted: 0, skipped: 'no-ref' };
   // 首次创建该类资源 +30(一次性成就,uk_resource(user,'first_own_resource',kind) 幂等)
   // await 让首次与衰减顺序到账(awardCreate 整体已在 handler 里 fire-and-forget,不阻塞创建响应)
-  await grantExp(userId, 'first_own_resource', { refId: kind, amount: 30, userRole }).catch(() => {});
+  await grantExp(userId, 'first_own_resource', { refId: kind, amount: 30, userRole }).catch((e) =>
+    console.warn('[growth] 首次资源奖励发放失败 code=%s', stableAgentErrorCode(e)),
+  );
   // 当日第 N 条衰减
   const [[row]] = await pool.query(
-    `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND DATE(create_time)=CURDATE()`,
+    `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND create_time >= CURDATE()`,
     [userId, kind],
   );
   const nth = Number(row?.c || 0) + 1;
@@ -355,7 +358,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   if (userId && userId !== 'visitor' && userRole !== 'root') {
     const [[dRow]] = await pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
-       WHERE user_id = ? AND status = 'granted' AND DATE(create_time) = CURDATE()
+       WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()
          AND source NOT IN ('first_own_resource', 'milestone', 'manual', 'profile_done')`,
       [userId],
     );
@@ -596,9 +599,9 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   if (!isGuest) {
     const [[c]] = await pool.query(
       `SELECT
-        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
-        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
-        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) AS c`,
+        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= CURDATE()) +
+        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) +
+        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) AS c`,
       [userId, userId, userId],
     );
     createdToday = Number(c.c || 0);
@@ -664,9 +667,9 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   const today = dayKey();
   const [[c]] = await pool.query(
     `SELECT
-      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
-      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) +
-      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND DATE(create_time) = CURDATE()) AS c`,
+      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= CURDATE()) +
+      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) +
+      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) AS c`,
     [userId, userId, userId],
   );
   const createdToday = Number(c.c || 0);
@@ -694,12 +697,13 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
  * 供文件上传配额校验按等级下发,替代原先"非 root 一律 500MB"。
  */
 // 领取单个成就奖励:已解锁且未领 → 发积分(幂等,ref=成就 key,与 dashboard.claimed 同源)。
-export async function claimAchievement(userId, key, { userRole = null } = {}) {
+export async function claimAchievement(userId, key, { userRole = null, dashboard = null } = {}) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
   const ach = ACHIEVEMENTS.find((a) => a.key === key);
   if (!ach) return { ok: false, reason: 'not_found', msg: '成就不存在' };
-  // 复用看板派生的解锁判定(单一事实源),避免重复实现各 metric 的统计口径
-  const dash = await getGrowthDashboard(userId, { userRole });
+  // 复用看板派生的解锁判定(单一事实源),避免重复实现各 metric 的统计口径;
+  // claimAll 场景可传入已算好的 dashboard,免得每领一个成就重跑一遍完整聚合(N+1)
+  const dash = dashboard || (await getGrowthDashboard(userId, { userRole }));
   const a = dash.achievements.find((x) => x.key === key);
   if (!a || !a.unlocked) return { ok: false, reason: 'locked', msg: '成就尚未解锁' };
   const got = await earnPoints(userId, ach.reward, 'achievement', key);
@@ -745,7 +749,7 @@ export async function generateGrowthNudges() {
         /* 偏好解析失败按默认(发送)处理 */
       }
       const [ex] = await pool.query(
-        "SELECT 1 FROM notification WHERE user_id = ? AND type = 'streak_risk' AND DATE(create_time) = CURDATE() LIMIT 1",
+        "SELECT 1 FROM notification WHERE user_id = ? AND type = 'streak_risk' AND create_time >= CURDATE() LIMIT 1",
         [u.user_id],
       );
       if (ex.length) continue;
@@ -754,7 +758,7 @@ export async function generateGrowthNudges() {
         title: `连签 ${u.streak} 天,别断啦!`,
         content: '今天还没签到,来保住你的连续签到吧~',
         link: '/growth',
-      }).catch(() => {});
+      }).catch((e) => console.warn('[growth] 连签提醒发送失败 code=%s', stableAgentErrorCode(e)));
       sent++;
     }
     console.log(`[成长提醒] 连签将断候选 ${risk.length} 人,新发提醒 ${sent} 条`);

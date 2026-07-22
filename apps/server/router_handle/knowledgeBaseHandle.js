@@ -3,6 +3,7 @@ import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { upsertKnowledgeBase, updateKnowledgeBaseById } from '../util/services/knowledgeBaseService.js';
 import { invalidateKnowledgeCache } from '../util/knowledgeService.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 const KNOWLEDGE_CLIENT_ERRORS = new Set([
   'CONTENT_TOO_LONG',
@@ -268,6 +269,8 @@ export const getHelpCenterArticles = async (req, res) => {
     );
     res.send(resultData(result, 200));
   } catch (e) {
-    res.send(resultData(e.message, 200));
+    // 公开接口:不把 SQL 错误细节返给游客,降级空数组 + 500
+    console.error('[knowledge] 获取帮助中心文章失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData([], 500, '获取帮助中心内容失败'));
   }
 };

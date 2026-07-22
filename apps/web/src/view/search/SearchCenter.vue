@@ -4,6 +4,8 @@
     :subtitle="t('resourceCenter.subtitle')"
     accent="neutral"
     layout="workspace"
+    :show-back="bookmark.isMobile"
+    @back="$router.back()"
   >
     <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
       <div class="search-page-topbar">
@@ -1645,6 +1647,7 @@
     }
 
     .filter-item.active {
+      padding: 0;
       color: var(--primary-color);
       background: color-mix(in srgb, var(--primary-color) 9%, var(--search-muted-bg));
     }
@@ -1899,6 +1902,10 @@
 
     .result-scroll-area {
       overflow: visible;
+    }
+
+    .filter-item {
+      padding: 6px;
     }
   }
 

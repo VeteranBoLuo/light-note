@@ -253,7 +253,8 @@ export const doClaimAll = async (req, res) => {
     let points = 0;
     const dash = await getGrowthDashboard(userId, { userRole });
     for (const a of dash.achievements.filter((x) => x.claimable)) {
-      const r = await claimAchievement(userId, a.key, { userRole });
+      // 传入已算好的 dashboard,避免每领一个都重跑完整看板聚合;幂等仍由 earnPoints(reason,ref) 保证
+      const r = await claimAchievement(userId, a.key, { userRole, dashboard: dash });
       if (r.ok) {
         claimed++;
         points += r.reward || 0;

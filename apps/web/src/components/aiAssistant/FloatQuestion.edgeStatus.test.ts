@@ -5,20 +5,31 @@ import { createPinia, setActivePinia } from 'pinia';
 import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import useAiAssistantStore, { type AiAssistantEdgeStatus } from '@/store/aiAssistant';
+import useUserStore from '@/store/useUser';
 
 vi.mock('@/store', async () => {
   const { default: useAiAssistantStore } = await import('@/store/aiAssistant');
+  const { default: useUserStore } = await import('@/store/useUser');
   return {
     useAiAssistantStore,
+    useUserStore,
     bookmarkStore: () => ({ isMobile: false, isTablet: false, isDesktop: true }),
   };
 });
 
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: vi.fn() }));
 vi.mock('@/api/aiTelemetry.ts', () => ({ recordAiProductEvent: vi.fn(async () => undefined) }));
-vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
-  default: { name: 'BDrawer', setup: () => () => null },
-}));
+vi.mock('@/components/base/BasicComponents/BDrawer.vue', async () => {
+  const { h } = await import('vue');
+  return {
+    default: {
+      name: 'BDrawer',
+      props: { fullScreen: Boolean },
+      setup: (props: { fullScreen?: boolean }, { slots }: { slots: Record<string, () => unknown> }) => () =>
+        h('div', { class: 'mock-drawer', 'data-full-screen': String(props.fullScreen) }, slots['header-actions']?.()),
+    },
+  };
+});
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: { name: 'BModal', setup: () => () => null },
 }));
@@ -39,10 +50,12 @@ beforeEach(() => {
   if (!window.requestAnimationFrame) window.requestAnimationFrame = (callback) => window.setTimeout(callback, 0);
 });
 
-function mountEdge(locale: 'zh-CN' | 'en-US' = 'zh-CN') {
+function mountEdge(locale: 'zh-CN' | 'en-US' = 'zh-CN', aiDefaultFullscreen = false) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useAiAssistantStore();
+  const user = useUserStore();
+  user.$patch({ preferences: { ...user.preferences, aiDefaultFullscreen } });
   store.switchConversation(
     {
       actorUserId: 'root-user',
@@ -70,7 +83,7 @@ function mountEdge(locale: 'zh-CN' | 'en-US' = 'zh-CN') {
     app.unmount();
     host.remove();
   };
-  return { host, store };
+  return { host, store, user };
 }
 
 function edgeButton(host: HTMLElement) {
@@ -109,7 +122,7 @@ describe('FloatQuestion edge status contract', () => {
     await nextTick();
     await nextTick();
     expect(store.edgeStatus).toBe('idle');
-    expect(edgeButton(host)?.querySelector('[role="status"]')).toBeNull();
+    expect(edgeButton(host)?.querySelector('[role="status"]') ?? null).toBeNull();
   });
 
   it('英文状态同样进入 aria-label，不依赖颜色表达结果', async () => {
@@ -118,5 +131,47 @@ describe('FloatQuestion edge status contract', () => {
     await nextTick();
 
     expect(edgeButton(host)?.getAttribute('aria-label')).toContain('Your confirmation or choice is needed');
+  });
+
+  it('AI 快捷键在已打开时收起助手', async () => {
+    const { host } = mountEdge();
+    const openEvent = new KeyboardEvent('keydown', { key: '/', ctrlKey: true, cancelable: true });
+    document.dispatchEvent(openEvent);
+    await nextTick();
+
+    expect(openEvent.defaultPrevented).toBe(true);
+    expect(edgeButton(host)).toBeNull();
+
+    const closeEvent = new KeyboardEvent('keydown', { key: '/', ctrlKey: true, cancelable: true });
+    document.dispatchEvent(closeEvent);
+    await nextTick();
+
+    expect(closeEvent.defaultPrevented).toBe(true);
+    expect(edgeButton(host)).not.toBeNull();
+  });
+
+  it('开启默认全屏偏好后，快捷键打开 AI 会使用全屏', async () => {
+    const { host } = mountEdge('zh-CN', true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, cancelable: true }));
+    await nextTick();
+
+    expect(host.querySelector('.mock-drawer')?.getAttribute('data-full-screen')).toBe('true');
+  });
+
+  it('手动全屏或还原时同步默认全屏偏好', async () => {
+    const { host, user } = mountEdge();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, cancelable: true }));
+    await nextTick();
+
+    const toggle = host.querySelector<HTMLButtonElement>('.ai-window-toggle[aria-label="最大化"]');
+    toggle?.click();
+    await nextTick();
+    expect(host.querySelector('.mock-drawer')?.getAttribute('data-full-screen')).toBe('true');
+    expect(user.preferences.aiDefaultFullscreen).toBe(true);
+
+    host.querySelector<HTMLButtonElement>('.ai-window-toggle[aria-label="还原窗口"]')?.click();
+    await nextTick();
+    expect(host.querySelector('.mock-drawer')?.getAttribute('data-full-screen')).toBe('false');
+    expect(user.preferences.aiDefaultFullscreen).toBe(false);
   });
 });

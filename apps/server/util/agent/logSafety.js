@@ -2,8 +2,18 @@ const SECRET_PATTERNS = [
   [/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [REDACTED]'],
   [/\b(?:sk|ds|dashscope|deepseek)[-_][A-Za-z0-9_-]{12,}\b/gi, '[REDACTED_API_KEY]'],
   [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[REDACTED_JWT]'],
-  [/(\b(?:password|passwd|pwd|secret|token|api[_-]?key)\b\s*[:=]\s*)[^\s,;&]+/gi, '$1[REDACTED]'],
-  [/([?&](?:token|access_token|key|api_key|password)=)[^&#\s]+/gi, '$1[REDACTED]'],
+  [
+    /(["']?\b(?:password|passwd|pwd|secret|token|access[_-]?token|refresh[_-]?token|authorization|cookie|api[_-]?key|verify[_-]?code|otp)\b["']?\s*[:=]\s*["']?)[^\s,;&"']+/gi,
+    '$1[REDACTED]',
+  ],
+  [
+    /([?&](?:token|access[_-]?token|refresh[_-]?token|key|api[_-]?key|password|secret|authorization|cookie|email|verify[_-]?code|otp)=)[^&#\s]+/gi,
+    '$1[REDACTED]',
+  ],
+  [
+    /((?:https?|redis(?:s)?|mysql|mariadb|postgres(?:ql)?|mongodb(?:\+srv)?):\/\/)[^\s/@:]+:[^\s/@]+@/giu,
+    '$1[REDACTED]@',
+  ],
   [/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[REDACTED_EMAIL]'],
 ];
 

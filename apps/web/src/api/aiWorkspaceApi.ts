@@ -336,6 +336,10 @@ export const clearAllAiData = () =>
     byType: Record<string, number>;
     scope: 'subject_user' | 'owner_domain';
     retained: string[];
+    documentsFailed: number;
+    documentsRetryScheduled: number;
+    documentsRetryUnavailable: number;
+    excluded: string[];
   }>('/api/chat/conversations/clear-all-data');
 
 export const recoverAiAgentResponse = (

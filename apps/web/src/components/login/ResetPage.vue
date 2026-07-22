@@ -110,6 +110,7 @@
 
   async function sendEmail() {
     if (codeTime.value > 0 || sendingCode.value) return;
+    formData.email = formData.email.trim();
     if (!formData.email) {
       message.warning(t('auth.fillEmail'));
       return;
@@ -138,6 +139,7 @@
   }
 
   async function verifyCode() {
+    formData.email = formData.email.trim();
     const condition = [
       { endCondition: !formData.email, message: t('auth.emailRequired') },
       { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },

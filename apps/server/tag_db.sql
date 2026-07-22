@@ -492,8 +492,10 @@ CREATE TABLE `user_sessions` (
   `last_active_time` datetime DEFAULT CURRENT_TIMESTAMP,
   `ip` varchar(100) DEFAULT NULL,
   `user_agent` varchar(500) DEFAULT NULL,
+  `device_key` char(64) DEFAULT NULL,
   PRIMARY KEY (`sid`),
   KEY `idx_user_sessions_user_id` (`user_id`),
+  KEY `idx_user_sessions_user_device_key` (`user_id`,`device_key`),
   KEY `idx_user_sessions_expires_at` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

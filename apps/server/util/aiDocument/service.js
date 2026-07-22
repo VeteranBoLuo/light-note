@@ -17,6 +17,7 @@ const MAX_ATTACHMENT_IDS = 5;
 const PARSE_TIMEOUT_MS = 180_000;
 const TEMPORARY_SOURCE_PREVIEW_EXPIRES_SECONDS = 2 * 60 * 60;
 const NO_TEXT_ERROR_CODE = 'NO_TEXT_CONTENT';
+const DELETE_RETRY_ERROR_CODE = 'DELETE_RETRY_PENDING';
 const DOCUMENT_CONTEXT_CHAR_BUDGET = 12_000;
 const MAX_RETRIEVAL_CHUNKS = 10;
 const MAP_SUMMARY_MAX_CHARS = 420;
@@ -36,6 +37,33 @@ function serviceError(code, message, status = 400) {
   error.code = code;
   error.status = status;
   return error;
+}
+
+function isDocumentDeleteRetryPending(source) {
+  return source?.error_code === DELETE_RETRY_ERROR_CODE;
+}
+
+async function scheduleDocumentDeleteRetry({ userId, sourceId }) {
+  try {
+    // 先取消仍可能被 worker 领取的解析任务。claimNextJob 会在同一事务内锁住 job 并更新 source，
+    // 因此这里先写 job 能与正在执行的解析串行，随后再写 source，避免清除请求被 worker 反向覆盖成 ready/parsing。
+    await pool.query(
+      `UPDATE ai_document_jobs
+       SET status = 'failed', locked_at = NULL, locked_by = NULL, error_message = ?
+       WHERE source_id = ? AND status IN ('queued', 'processing')`,
+      ['删除操作等待自动重试', sourceId],
+    );
+    const [result] = await pool.query(
+      `UPDATE ai_document_sources
+       SET status = 'failed', error_code = ?, error_message = ?
+       WHERE id = ? AND user_id = ?`,
+      [DELETE_RETRY_ERROR_CODE, '删除操作等待自动重试', sourceId, userId],
+    );
+    return Number(result?.affectedRows || 0) > 0;
+  } catch (error) {
+    console.error('[AI 文档] 标记删除重试失败 source=%s code=%s', sourceId, stableAgentErrorCode(error));
+    return false;
+  }
 }
 
 function clampRatio(value) {
@@ -263,6 +291,7 @@ async function ensureTemporarySourceCapacity(userId) {
     try {
       if (await deleteDocumentSource({ userId, sourceId: String(row.id) })) activeCount -= 1;
     } catch (error) {
+      await scheduleDocumentDeleteRetry({ userId, sourceId: String(row.id) });
       console.error('[AI 文档] 自动回收临时文件失败 source=%s code=%s', row.id, stableAgentErrorCode(error));
     }
     if (activeCount < MAX_ACTIVE_TEMPORARY_SOURCES) return;
@@ -312,6 +341,9 @@ export async function createTemporaryDocumentSource({ userId, sessionId = '', fi
 export async function confirmTemporaryDocumentSource({ userId, sourceId }) {
   const source = await selectOwnedSource(pool, userId, sourceId);
   if (!source) throw serviceError('ATTACHMENT_NOT_FOUND', '附件不存在', 404);
+  if (isDocumentDeleteRetryPending(source)) {
+    throw serviceError('ATTACHMENT_DELETE_PENDING', '附件正在删除，请重新上传后再使用', 409);
+  }
   if (source.source_type !== 'temporary') throw serviceError('ATTACHMENT_TYPE_INVALID', '该附件无需确认上传');
   if (source.expires_at && new Date(source.expires_at).getTime() <= Date.now()) {
     throw serviceError('ATTACHMENT_EXPIRED', '附件已过期，请重新上传', 410);
@@ -336,6 +368,9 @@ export async function confirmTemporaryDocumentSource({ userId, sourceId }) {
     await connection.beginTransaction();
     const current = await selectOwnedSource(connection, userId, sourceId, true);
     if (!current) throw serviceError('ATTACHMENT_NOT_FOUND', '附件不存在', 404);
+    if (isDocumentDeleteRetryPending(current)) {
+      throw serviceError('ATTACHMENT_DELETE_PENDING', '附件正在删除，请重新上传后再使用', 409);
+    }
     if (current.status === 'awaiting_upload' || current.status === 'failed') {
       await connection.query(
         `UPDATE ai_document_sources
@@ -527,15 +562,52 @@ export async function deleteTemporaryDocumentSources({ userId }) {
   );
   let deleted = 0;
   let failed = 0;
+  let retryScheduled = 0;
   for (const row of rows) {
     try {
       if (await deleteDocumentSource({ userId, sourceId: String(row.id) })) deleted += 1;
     } catch (error) {
       failed += 1;
+      if (await scheduleDocumentDeleteRetry({ userId, sourceId: String(row.id) })) retryScheduled += 1;
       console.error('[AI 文档] 清理临时文件失败 source=%s code=%s', row.id, stableAgentErrorCode(error));
     }
   }
-  return { deleted, failed };
+  return { deleted, failed, retryScheduled };
+}
+
+/**
+ * 「清除全部 AI 数据」用:删除某用户的**全部** AI 文档派生数据(临时 + cloud 两类来源,含其分块/解析任务)。
+ * 临时来源会连带删除 OBS 原文件(deleteDocumentSource 内先删 OBS 再删库);cloud 来源只删 AI 派生索引,
+ * 云空间永久文件本体不动。删除失败会把来源标为 DELETE_RETRY_PENDING，由文档清理任务自动重试，
+ * 并把已排队与未能排队的数量分别回传，避免界面错误承诺一定会自动完成。
+ * 本函数**永不抛错**(表未迁移或读取异常均安全降级),避免在总清除主事务提交后再抛异常。
+ */
+export async function deleteAllDocumentSources({ userId }) {
+  let rows;
+  try {
+    [rows] = await pool.query(`SELECT id FROM ai_document_sources WHERE user_id = ? ORDER BY create_time ASC`, [
+      userId,
+    ]);
+  } catch (error) {
+    if (error?.code === 'ER_NO_SUCH_TABLE') return { deleted: 0, failed: 0, retryScheduled: 0, retryUnavailable: 0 };
+    console.error('[AI 文档] 清除全部读取文档列表失败 code=%s', stableAgentErrorCode(error));
+    return { deleted: 0, failed: 0, retryScheduled: 0, retryUnavailable: 1 };
+  }
+  let deleted = 0;
+  let failed = 0;
+  let retryScheduled = 0;
+  let retryUnavailable = 0;
+  for (const row of rows) {
+    try {
+      if (await deleteDocumentSource({ userId, sourceId: String(row.id) })) deleted += 1;
+    } catch (error) {
+      failed += 1;
+      if (await scheduleDocumentDeleteRetry({ userId, sourceId: String(row.id) })) retryScheduled += 1;
+      else retryUnavailable += 1;
+      console.error('[AI 文档] 清除全部删除文档失败 source=%s code=%s', row.id, stableAgentErrorCode(error));
+    }
+  }
+  return { deleted, failed, retryScheduled, retryUnavailable };
 }
 
 export async function purgeDocumentSourcesForCloudFiles(connection, userId, fileIds) {
@@ -1006,6 +1078,9 @@ export async function resolveDocumentAttachments({ userId, sourceIds, question }
   for (const id of ids) {
     const source = await selectOwnedSource(pool, userId, id);
     if (!source) throw serviceError('ATTACHMENT_NOT_FOUND', '附件不存在或不属于当前账号', 404);
+    if (isDocumentDeleteRetryPending(source)) {
+      throw serviceError('ATTACHMENT_DELETE_PENDING', '附件正在删除，请重新上传后再使用', 409);
+    }
     if (source.expires_at && new Date(source.expires_at).getTime() <= Date.now()) {
       throw serviceError('ATTACHMENT_EXPIRED', '附件已过期，请重新上传', 410);
     }
@@ -1263,14 +1338,17 @@ export async function cleanupExpiredDocumentSources() {
   for (let batch = 0; batch < 10; batch += 1) {
     const [rows] = await pool.query(
       `SELECT id, user_id FROM ai_document_sources
-       WHERE source_type = 'temporary' AND expires_at IS NOT NULL AND expires_at <= NOW()
-       ORDER BY expires_at ASC LIMIT 100`,
+       WHERE error_code = ?
+          OR (source_type = 'temporary' AND expires_at IS NOT NULL AND expires_at <= NOW())
+       ORDER BY create_time ASC LIMIT 100`,
+      [DELETE_RETRY_ERROR_CODE],
     );
     if (!rows.length) break;
     for (const row of rows) {
       try {
         if (await deleteDocumentSource({ userId: row.user_id, sourceId: row.id })) cleaned += 1;
       } catch (error) {
+        await scheduleDocumentDeleteRetry({ userId: row.user_id, sourceId: String(row.id) });
         console.error('[AI 文档] 清理过期附件 %s 失败 code=%s', row.id, stableAgentErrorCode(error));
       }
     }

@@ -2,6 +2,83 @@ import pool from '../db/index.js';
 import { resultData, formatDateTime, insertData } from './common.js';
 import { isSelfTraffic } from './logExclude.js';
 import { shouldSkipApiLog } from './logPolicy.js';
+import { redactSensitiveText, stableAgentErrorCode } from './agent/logSafety.js';
+
+// api_logs 落库前的敏感字段脱敏。对象键可能来自历史客户端或第三方 SDK，统一忽略分隔符比较，
+// 防止 access_token / access-token / accessToken 这类变体绕过；字符串中的邮箱、URL 凭据也一并清洗。
+const SENSITIVE_PAYLOAD_KEYS = new Set([
+  'password',
+  'oldpassword',
+  'newpassword',
+  'confirmpassword',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'code',
+  'verifycode',
+  'secret',
+  'apikey',
+  'authorization',
+  'cookie',
+  'setcookie',
+  'email',
+  'sessionid',
+  'deviceid',
+  'logdeviceid',
+  'fingerprint',
+]);
+
+const MAX_LOG_PAYLOAD_DEPTH = 4;
+const MAX_LOG_TEXT_LENGTH = 10_000;
+
+function normalizeSensitiveKey(key) {
+  return String(key || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function isSensitivePayloadKey(key) {
+  return SENSITIVE_PAYLOAD_KEYS.has(normalizeSensitiveKey(key));
+}
+
+export function sanitizeSensitivePayload(value, depth = 0, seen = new WeakSet()) {
+  if (typeof value === 'string') return redactSensitiveText(value, MAX_LOG_TEXT_LENGTH);
+  if (value == null || typeof value !== 'object') return value;
+  // 深层对象和循环引用宁可丢弃，也不能把未处理的原值带入日志。
+  if (depth >= MAX_LOG_PAYLOAD_DEPTH) return '[REDACTED_DEPTH_LIMIT]';
+  if (seen.has(value)) return '[REDACTED_CIRCULAR]';
+  seen.add(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeSensitivePayload(item, depth + 1, seen));
+  const out = {};
+  for (const [key, val] of Object.entries(value)) {
+    out[key] = isSensitivePayloadKey(key)
+      ? val == null || val === ''
+        ? val
+        : '[REDACTED]'
+      : sanitizeSensitivePayload(val, depth + 1, seen);
+  }
+  return out;
+}
+
+export function sanitizeLogUrl(value) {
+  const raw = String(value || '').slice(0, MAX_LOG_TEXT_LENGTH);
+  if (!raw) return '';
+  try {
+    const isAbsolute = /^[a-z][a-z\d+.-]*:\/\//i.test(raw);
+    const url = new URL(raw, 'https://log.invalid');
+    if (url.username || url.password) {
+      url.username = '[REDACTED]';
+      url.password = '';
+    }
+    for (const [key] of url.searchParams) {
+      if (isSensitivePayloadKey(key)) url.searchParams.set(key, '[REDACTED]');
+    }
+    const sanitized = isAbsolute ? url.toString() : `${url.pathname}${url.search}${url.hash}`;
+    return redactSensitiveText(sanitized, MAX_LOG_TEXT_LENGTH);
+  } catch {
+    return redactSensitiveText(raw, MAX_LOG_TEXT_LENGTH);
+  }
+}
 
 export async function logFunction(req, res, next) {
   try {
@@ -30,7 +107,7 @@ export async function logFunction(req, res, next) {
       next();
       return;
     }
-    const rawRequestPayload = req.method === 'GET' ? req.query : req.body;
+    const rawRequestPayload = sanitizeSensitivePayload(req.method === 'GET' ? req.query : req.body);
     const requestPayload = JSON.stringify(
       isVisitorWorkspaceWrite
         ? {
@@ -61,7 +138,7 @@ export async function logFunction(req, res, next) {
           const log = {
             userId: userId,
             method: req.method,
-            url: req.originalUrl,
+            url: sanitizeLogUrl(req.originalUrl),
             req: requestPayload === '{}' ? '' : requestPayload,
             status_code: res.statusCode,
             ip: req.ip || '',
@@ -71,15 +148,16 @@ export async function logFunction(req, res, next) {
           // 将日志保存到数据库
           const query = 'INSERT INTO api_logs SET ?';
           pool.query(query, [insertData(log)]).catch((err) => {
-            console.error(formatDateTime(new Date()) + '日志更新sql错误: ' + err.message);
+            console.error(formatDateTime(new Date()) + '日志更新 SQL 失败 code=' + stableAgentErrorCode(err));
           });
         } catch (err1) {
-          console.error(formatDateTime(new Date()) + '日志更新错误：', err1);
+          console.error(formatDateTime(new Date()) + '日志更新失败 code=' + stableAgentErrorCode(err1));
         }
       }
     });
     next();
   } catch (e) {
-    res.send(resultData(null, 500, e.message)); // 设置状态码为500
+    console.error(formatDateTime(new Date()) + '日志中间件失败 code=' + stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
   }
 }

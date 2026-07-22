@@ -58,6 +58,7 @@ interface UserInfo {
     aiEnabled?: boolean; // 是否显示 AI 助手入口
     aiStyle?: 'strict' | 'balanced' | 'creative'; // AI 回答风格
     aiCloudHistory?: boolean; // 是否把新 AI 对话同步到云端
+    aiDefaultFullscreen?: boolean; // 桌面端 AI 助手默认是否全屏打开
   };
 }
 
@@ -99,6 +100,7 @@ const createDefaultUserState = (): UserState => ({
     aiEnabled: true,
     aiStyle: 'balanced',
     aiCloudHistory: true,
+    aiDefaultFullscreen: false,
   },
 });
 

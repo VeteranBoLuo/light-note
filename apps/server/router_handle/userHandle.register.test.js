@@ -34,4 +34,17 @@ describe('registerUser 邮箱已存在(v1.1:改 409 而非 500)', () => {
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
     expect(query.mock.calls.every((c) => !/INSERT INTO user/.test(c[0]))).toBe(true);
   });
+
+  it('注册时会去掉邮箱首尾空白，再按标准邮箱拦截重复账号', async () => {
+    query.mockResolvedValue([[{ id: 'exists', email: 'new@b.com' }]]);
+    const res = mockRes();
+    await registerUser(
+      { headers: {}, body: { email: '  new@b.com  ', password: 'secret123', signupSource: 'nav' } },
+      res,
+    );
+
+    expect(query).toHaveBeenCalledWith('SELECT * FROM user WHERE email = ?', ['new@b.com']);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
+    expect(query.mock.calls.every(([sql]) => !/INSERT INTO user/.test(sql))).toBe(true);
+  });
 });

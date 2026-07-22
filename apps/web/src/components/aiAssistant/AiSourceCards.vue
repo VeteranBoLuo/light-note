@@ -106,14 +106,11 @@
   import icon from '@/config/icon.ts';
   import { recordAiProductEvent } from '@/api/aiTelemetry';
   import AiCoverageDisclosure from './AiCoverageDisclosure.vue';
-  import AiEvidenceLedger from './AiEvidenceLedger.vue';
   import AiSourceList from './AiSourceList.vue';
   import {
     resolveAiSourceNavigation,
-    groupAiEvidence,
     type AiCoverageReport,
     type AiEvidenceReference,
-    type AiResolvedEvidence,
     type AiSource,
     type AiSourceNavigation,
   } from './aiSourceNavigation';
@@ -220,9 +217,6 @@
     navigateInsideApp(source, navigation.target);
   }
 
-  function openEvidenceSource(source: AiSource, _evidence: AiResolvedEvidence) {
-    openSource(source, false);
-  }
 </script>
 
 <style scoped lang="less">

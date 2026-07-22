@@ -4,7 +4,6 @@
       <ChatContainer
         ref="chatRef"
         @source-navigate="emit('source-navigate')"
-        @open-memory-ledger="emit('open-memory-ledger')"
       />
     </div>
   </section>
@@ -22,7 +21,6 @@
   const emit = defineEmits<{
     'source-navigate': [];
     'mode-change': [mode: AiWorkspaceMode];
-    'open-memory-ledger': [];
   }>();
   const activeMode = ref<AiWorkspaceMode>('ask');
   const changeSetId = ref('');

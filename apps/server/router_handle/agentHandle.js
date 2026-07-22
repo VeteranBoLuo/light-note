@@ -72,6 +72,7 @@ import {
   getActiveAiMemoriesForPrompt,
   resolveAiMemoryIdentity,
 } from '../util/aiMemoryService.js';
+import { AI_MEMORY_ENABLED } from '../util/aiMemoryFeature.js';
 import {
   buildAiMemoryNotUsedInfluence,
   buildAiMemoryRuntimeContext,
@@ -956,7 +957,11 @@ export async function agentChat(req, res) {
 
     // 记忆为请求级显式能力：只有 memoryMode=active 才读取；临时会话显式发送 temporary。
     // 游客、翻译和管理员代管不会隐式启用。影响说明只包含数量和枚举，不含正文或记忆 ID。
-    const resolvedMemoryMode = normalizeAiMemoryMode(memoryMode);
+    // 长期记忆已全局关闭(server-side 硬开关):即便收到伪造/历史客户端的 memoryMode=active,也强制降为 off,
+    // 确保服务端绝不读取记忆、不注入 Prompt、不推断或写入候选。临时会话语义保留(本就不涉记忆)。
+    // 前端已改为普通会话发送 'off';记忆若日后重新设计为完整可控功能,把此开关置 true 即可恢复。
+    const requestedMemoryMode = normalizeAiMemoryMode(memoryMode);
+    const resolvedMemoryMode = AI_MEMORY_ENABLED || requestedMemoryMode === 'temporary' ? requestedMemoryMode : 'off';
     let memoryIdentity = null;
     let memoryPrompt = '';
     memoryInfluence = buildAiMemoryNotUsedInfluence(

@@ -71,7 +71,7 @@
             <span v-if="bookmark.isMobile" class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
         </RightMenu>
-        <b-input v-else class="edit-input" v-model:value="newName">
+        <b-input v-else class="edit-input" v-model:value="newName" @keydown.esc="cancelRename(<TagInterface>item)">
           <template #suffix>
             <svg-icon
               :src="icon.filterPanel.check"
@@ -79,12 +79,23 @@
               @click="handleRename(<TagInterface>item)"
               class="dom-hover"
             />
+            <svg-icon
+              :src="icon.common.close"
+              size="16"
+              style="margin-left: 6px"
+              @click="cancelRename(<TagInterface>item)"
+              class="dom-hover"
+            />
           </template>
         </b-input>
       </template>
       <template #empty>
         <div class="empty-tag-prompt">
-          <div class="empty-card">
+          <!-- 搜索无命中 ≠ 没有标签:搜索时不引导"创建第一个标签" -->
+          <div v-if="tagName.trim()" class="empty-card">
+            <h3>{{ $t('home.noTagMatch') }}</h3>
+          </div>
+          <div v-else class="empty-card">
             <h3>{{ $t('home.noTags') }}</h3>
             <div>{{ $t('home.createFirstTag') }}</div>
             <br />
@@ -186,18 +197,25 @@
   };
 
   function handleRename(tag: TagInterface) {
-    if (newName.value) {
-      apiBasePost('/api/bookmark/updateTag', {
-        name: newName.value,
-        id: tag.id,
-      }).then((res) => {
-        if (res.status == 200) {
-          tag.isRename = !tag.isRename;
-          message.success(t('home.renameSuccess'));
-          bookmark.refreshTag();
-        }
-      });
+    // 空名此前静默 return,输入框永远停在编辑态;现在给出提示
+    if (!newName.value || !newName.value.trim()) {
+      message.warning(t('home.tagNameRequired'));
+      return;
     }
+    apiBasePost('/api/bookmark/updateTag', {
+      name: newName.value.trim(),
+      id: tag.id,
+    }).then((res) => {
+      if (res.status == 200) {
+        tag.isRename = !tag.isRename;
+        message.success(t('home.renameSuccess'));
+        bookmark.refreshTag();
+      }
+    });
+  }
+
+  function cancelRename(tag: TagInterface) {
+    tag.isRename = false;
   }
 
   function handleClickTag(tag: TagInterface) {

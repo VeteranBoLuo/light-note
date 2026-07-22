@@ -185,7 +185,7 @@ describe('AiResultActions result reuse workflow', () => {
 
     alert.mock.calls[0][0].onOk();
     await flush();
-    expect(saveAiMessageAsNote).toHaveBeenCalledWith('conversation-1', 'message-1', undefined);
+    expect(saveAiMessageAsNote).toHaveBeenCalledWith('conversation-1', 'message-1', 'AI 研究笔记');
     expect(document.body.textContent).toContain('新笔记已创建');
     expect(document.body.textContent).toContain('回收站');
   });

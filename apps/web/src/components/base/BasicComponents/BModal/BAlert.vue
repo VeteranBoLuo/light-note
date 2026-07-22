@@ -1,67 +1,31 @@
 <template>
   <Teleport to="body" v-if="bookmark.isMobile">
     <div class="bAlert-bg">
-      <div class="bAlert" :class="{ out: isExit }">
-        <div
-          style="
-            padding: 22px;
-            height: 100%;
-            width: 100%;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-          "
-        >
+      <!-- 移动端弹框:正常 flex 流(不再用 .row-center 绝对定位——它把标题限成 50% 宽度导致无谓换行、正文脱流);
+           高度自适应内容,底部按钮永远横排(flex:1) -->
+      <div class="bAlert bAlert--mobile" :class="{ out: isExit }">
+        <div class="bAlert-m-body">
           <slot name="title">
-            <div style="font-size: 16px; margin-bottom: 15px; font-weight: 550" class="row-center">{{ title }}</div>
+            <div class="bAlert-m-title">{{ title }}</div>
           </slot>
-          <div
-            style="
-              color: var(--desc-color);
-              font-size: 14px;
-              margin-top: 40px;
-              width: 100%;
-              text-align: center;
-              padding: 0 20px;
-              box-sizing: border-box;
-              overflow: auto;
-              height: calc(100% - 70px);
-            "
-            class="row-center"
-          >
-            {{ content }}
-          </div>
+          <div class="bAlert-m-content">{{ content }}</div>
         </div>
-        <div
-          style="
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            box-sizing: border-box;
-          "
-        >
+        <div class="bAlert-m-footer">
           <slot name="footer" v-if="footer?.length > 0">
-            <div>
-              <div
-                v-for="btn in footer"
-                class="btn"
-                :type="btn.type"
-                @click="btn.function ? btnFunc(btn.function) : obClose()"
-                >{{ btn.label }}</div
-              >
-            </div>
+            <div
+              v-for="btn in footer"
+              class="btn dom-hover"
+              :type="btn.type"
+              @click="btn.function ? btnFunc(btn.function) : obClose()"
+              >{{ btn.label }}</div
+            >
           </slot>
-          <div v-else style="width: 100%" class="flex-align-center">
+          <template v-else>
             <div class="btn dom-hover" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</div>
-            <div class="btn dom-hover" style="color: var(--primary-color)" type="primary" @click="onOk">{{
+            <div class="btn dom-hover" style="color: var(--primary-color)" @click="onOk">{{
               okText || $t('common.confirm')
             }}</div>
-          </div>
+          </template>
         </div>
       </div>
     </div>
@@ -209,23 +173,54 @@
     }
   }
 
-  @media (max-width: 767px) {
-    .bAlert {
-      width: 70%;
-      top: 45%;
-      height: 160px;
-      padding: 0;
-      background-color: var(--phone-menu-item-bg-color);
-    }
-    .btn {
-      border-top: 1px solid var(--phone-menu-item-border-color);
-      flex: 1;
-      text-align: center;
-      height: 44px;
-      line-height: 44px;
-      &:not(:last-child) {
-        border-right: 1px solid var(--phone-menu-item-border-color);
-      }
+  /* 移动端样式绑到 .bAlert--mobile(与 HTML 分支同源 bookmark.isMobile),不再用 @media (max-width:767px):
+     此前 HTML 用 JS innerWidth<768 门控、CSS 用媒体查询门控,界面缩放(html zoom)/断点边界会分叉 →「移动标记+桌面样式」按钮错位。
+     高度自适应(不再固定 160px),标题正文正常流(不再 .row-center 绝对定位),底部按钮永远横排。 */
+  .bAlert.bAlert--mobile {
+    width: min(78%, 320px);
+    top: 45%;
+    height: auto;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--phone-menu-item-bg-color);
+  }
+  .bAlert--mobile .bAlert-m-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 22px 20px 16px;
+  }
+  .bAlert--mobile .bAlert-m-title {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .bAlert--mobile .bAlert-m-content {
+    width: 100%;
+    color: var(--desc-color);
+    font-size: 14px;
+    text-align: center;
+    line-height: 1.55;
+    max-height: 40vh;
+    overflow: auto;
+    word-break: break-word;
+  }
+  .bAlert--mobile .bAlert-m-footer {
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid var(--phone-menu-item-border-color);
+  }
+  .bAlert--mobile .btn {
+    flex: 1;
+    text-align: center;
+    height: 44px;
+    line-height: 44px;
+    &:not(:last-child) {
+      border-right: 1px solid var(--phone-menu-item-border-color);
     }
   }
 </style>

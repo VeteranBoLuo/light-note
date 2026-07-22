@@ -18,11 +18,20 @@
       <span class="bookmark-empty-icon">
         <SvgIcon :src="icon.resource.bookmark" size="28" />
       </span>
-      <strong>{{ $t('home.noBookmarks') }}</strong>
-      <p>{{ $t('home.noBookmarksHint') }}</p>
-      <BButton type="primary" class="empty-add-button" @click="goAddBookmark">
-        {{ $t('home.addBookmark') }}
-      </BButton>
+      <!-- 区分「搜索无命中」与「新用户没数据」:搜索场景显示"新用户空态+添加书签"会造成数据丢失错觉 -->
+      <template v-if="searchKeyword">
+        <strong>{{ $t('home.noSearchMatch', { kw: searchKeyword }) }}</strong>
+        <BButton type="primary" class="empty-add-button" @click="router.push('/home')">
+          {{ $t('home.clearSearch') }}
+        </BButton>
+      </template>
+      <template v-else>
+        <strong>{{ $t('home.noBookmarks') }}</strong>
+        <p>{{ $t('home.noBookmarksHint') }}</p>
+        <BButton type="primary" class="empty-add-button" @click="goAddBookmark">
+          {{ $t('home.addBookmark') }}
+        </BButton>
+      </template>
     </div>
     <VueDraggable
       v-else
@@ -86,6 +95,8 @@
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
   });
+  // 书签搜索路由 /home/search/:value —— 用于空态区分"搜索无命中"与"真没有书签"
+  const searchKeyword = computed(() => String(route.params.value || '').trim());
 
   // 「已加载过」标记:首次进入时 loading 还是 false、列表为空,若直接显示空状态会闪一下"暂无书签";
   // 未加载过时统一显示骨架,只有真加载完(loading 由 true→false)且仍为空才显示空状态。

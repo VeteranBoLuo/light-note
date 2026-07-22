@@ -33,6 +33,7 @@ import {
   resolveBookmarkUrlForClient,
 } from '../util/bookmarkUrl.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 // 书签地址由共享解析器确定性规范化；分享文案和异常拼接只返回候选，不在落库层静默猜测。
 export { normalizeBookmarkUrl };
@@ -110,7 +111,6 @@ export const queryTagList = (req, res) => {
     ) AS relatedTagList
 FROM
     tag t
-    LEFT JOIN tag_relations ta ON t.id = ta.tag_id
       WHERE
       t.user_id = ? AND t.del_flag = 0
       GROUP BY
@@ -850,7 +850,9 @@ export const getCommonBookmarks = async (req, res) => {
       }),
     );
   } catch (e) {
-    res.send(resultData(e.message, 200));
+    // 此前把错误文本当 200 业务数据返回:前端会把 SQL 错误串当书签列表渲染
+    console.error('[bookmark] 获取常用书签失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '获取常用书签失败'));
   }
 };
 
@@ -947,7 +949,8 @@ export const importBookmarksHtml = async (req, res) => {
     return res.send(resultData(null, 400, '未解析到书签数据'));
   }
 
-  console.log(`解析到 ${parsedBookmarks.length} 条书签`, parsedBookmarks);
+  // 只记条数:完整书签数组含用户收藏内容(URL/标题),不进服务器日志
+  console.log(`解析到 ${parsedBookmarks.length} 条书签`);
 
   const connection = await pool.getConnection();
   try {
@@ -1041,7 +1044,7 @@ export const importBookmarksHtml = async (req, res) => {
         refId: `import_${userId}_${Date.now()}`,
         amount: 15,
         userRole: req.user.role,
-      }).catch(() => {});
+      }).catch((e) => console.warn('[growth] 导入书签奖励发放失败 code=%s', stableAgentErrorCode(e)));
     }
   } catch (e) {
     await connection.rollback();
@@ -1129,7 +1132,9 @@ export const doOrganizeQuote = async (req, res) => {
       }),
     );
   } catch (e) {
-    res.send(resultData(null, 500, 'AI 整理预估失败: ' + e.message));
+    // 不把原始异常(可能含 SQL/模型/OBS 内部信息)返回客户端;只记服务端日志 + 稳定文案
+    console.error('[bookmark] AI 整理预估失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 500, 'AI 整理预估失败，请稍后重试'));
   }
 };
 
@@ -1224,7 +1229,8 @@ export const doOrganizeRun = async (req, res) => {
     }
     res.send(resultData({ ok: true, processed: suggestions.length, suggestions }));
   } catch (e) {
-    res.send(resultData(null, 500, 'AI 整理失败: ' + e.message));
+    console.error('[bookmark] AI 整理失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 500, 'AI 整理失败，请稍后重试'));
   }
 };
 
@@ -1314,7 +1320,8 @@ export const doOrganizeApply = async (req, res) => {
     } catch {
       /* ignore */
     }
-    res.send(resultData(null, 500, '应用整理结果失败: ' + e.message));
+    console.error('[bookmark] 应用整理结果失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '应用整理结果失败，请稍后重试'));
   } finally {
     conn.release();
   }

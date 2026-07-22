@@ -92,6 +92,7 @@
 
   async function handleLogin() {
     if (submitting.value) return;
+    formData.value.email = formData.value.email.trim();
     if (!formData.value.email) {
       message.warning(t('auth.emailRequired'));
       return;

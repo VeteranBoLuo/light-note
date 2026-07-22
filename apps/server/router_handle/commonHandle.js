@@ -13,6 +13,7 @@ import { recordConversionEvent, normalizeConversionSource } from '../util/conver
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { collectUsedImageNames } from '../util/noteImages.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -941,7 +942,8 @@ export const runSql = async (req, res) => {
     const [result] = await pool.query(req.body.sql);
     res.send(resultData(result, 200));
   } catch (e) {
-    res.send(resultData(e.message, 200));
+    console.error('[admin-sql] 执行失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, 'SQL 执行失败，请检查语句后重试'));
   }
 };
 
@@ -952,7 +954,9 @@ export const getHelpConfig = async (req, res) => {
     );
     res.send(resultData(result, 200));
   } catch (e) {
-    res.send(resultData(e.message, 200));
+    // 公开接口:不把 SQL 错误细节返给游客,降级空数组 + 500
+    console.error('[help] 获取帮助中心配置失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData([], 500, '获取帮助中心内容失败'));
   }
 };
 

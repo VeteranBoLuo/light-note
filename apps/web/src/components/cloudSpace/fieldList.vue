@@ -66,7 +66,7 @@
               class="file-card-text-preview-body"
               :class="{ 'file-card-text-preview-body--loading': getTextPreviewState(item.id).loading }"
             >
-              {{ getTextPreviewState(item.id).text || '正在加载内容预览...' }}
+              {{ getTextPreviewState(item.id).text || t('cloudSpace.textPreviewLoading') }}
             </div>
           </div>
           <div v-else class="file-card-placeholder" :class="`file-card-placeholder--${getFileCategory(item)}`">
@@ -240,12 +240,44 @@
             <span style="width: 100%" class="text-hidden">{{ item.fileName }}</span>
             <InboxPendingBadge v-if="item.isPending" />
           </div>
-          <b-input v-else class="edit-file-input" v-model:value="item.fileName" @click.stop @enter="submitReName(item)">
+          <b-input
+            v-else
+            class="edit-file-input"
+            :class="{ 'edit-file-input--saving': isFileRenaming(item) }"
+            v-model:value="item.fileName"
+            :disabled="isFileRenaming(item)"
+            @click.stop
+            @enter="submitReName(item)"
+          >
             <template #suffix>
               <div class="flex-align-center-gap">
-                <svg-icon :src="icon.filterPanel.check" size="18" class="dom-hover" @click="submitReName(item)" />
-                <svg-icon :src="icon.common.close" size="18" class="dom-hover" @click="cloud.queryFieldList()"
-              /></div>
+                <BButton
+                  v-if="isFileRenaming(item)"
+                  class="rename-saving-indicator"
+                  type="primary"
+                  size="small"
+                  :loading="true"
+                  :aria-label="$t('cloudSpace.renameSaving')"
+                  :title="$t('cloudSpace.renameSaving')"
+                />
+                <span v-if="isFileRenaming(item)" class="rename-saving-text" role="status">
+                  {{ $t('cloudSpace.renameSaving') }}
+                </span>
+                <svg-icon
+                  v-else
+                  :src="icon.filterPanel.check"
+                  size="18"
+                  class="dom-hover"
+                  @click="submitReName(item)"
+                />
+                <svg-icon
+                  v-if="!isFileRenaming(item)"
+                  :src="icon.common.close"
+                  size="18"
+                  class="dom-hover"
+                  @click="cancelRename(item)"
+                />
+              </div>
             </template>
           </b-input>
           <div class="flex-align-center handle-btn" v-if="!item.isRename">
@@ -279,6 +311,15 @@
               :trigger="'click'"
               align="right"
               :menu-options="[
+                ...(bookmark.isMobile
+                  ? [
+                      {
+                        label: $t('common.reName'),
+                        icon: icon.cloudSpace.rename,
+                        function: () => openRenameModal(item),
+                      },
+                    ]
+                  : []),
                 {
                   label: $t('cloudSpace.share'),
                   icon: icon.cloudSpace.share,
@@ -381,12 +422,20 @@
       @close="renameModalFile = null"
     >
       <div class="rename-modal-field">
-        <b-input v-model:value="renameModalValue" class="rename-modal-input" @enter="confirmRename" @click.stop />
+        <b-input
+          v-model:value="renameModalValue"
+          class="rename-modal-input"
+          :disabled="renameModalSubmitting"
+          @enter="confirmRename"
+          @click.stop
+        />
         <span v-if="renameModalFile" class="rename-modal-ext">.{{ originalExt }}</span>
       </div>
       <div class="rename-modal-actions">
-        <b-button type="primary" @click="confirmRename">{{ $t('common.confirm') }}</b-button>
-        <b-button @click="renameModalVisible = false">{{ $t('common.cancel') }}</b-button>
+        <b-button type="primary" :loading="renameModalSubmitting" @click="confirmRename">
+          {{ renameModalSubmitting ? $t('cloudSpace.renameSaving') : $t('common.confirm') }}
+        </b-button>
+        <b-button :disabled="renameModalSubmitting" @click="renameModalVisible = false">{{ $t('common.cancel') }}</b-button>
       </div>
     </b-modal>
   </div>
@@ -512,6 +561,8 @@
   const renameModalVisible = ref(false);
   const renameModalFile = ref<any>(null);
   const renameModalValue = ref('');
+  const renamingFileIds = ref<Set<string>>(new Set());
+  const renameModalSubmitting = computed(() => isFileRenaming(renameModalFile.value));
   const downloadProgress = ref({
     visible: false,
     percent: 0,
@@ -554,7 +605,7 @@
     const compact = String(raw || '')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!compact) return '（文本内容为空）';
+    if (!compact) return t('cloudSpace.textPreviewEmpty');
     if (compact.length <= TEXT_PREVIEW_CHAR_LIMIT) return compact;
     return compact.slice(0, TEXT_PREVIEW_CHAR_LIMIT) + '...';
   }
@@ -678,26 +729,49 @@
     return name.slice(0, lastDot);
   };
 
-  function submitReName(file) {
-    const baseName = String(file.fileName || '').trim();
-    const nextName = originalExt.value ? `${baseName}.${originalExt.value}` : baseName;
-    updateFileName(file, nextName);
+  function getFileRenameKey(file: any) {
+    return String(file?.id || '');
   }
 
-  function updateFileName(file, nextName: string) {
-    if (blockGuestWrite('rename-file')) return Promise.resolve(false);
-    if (nextName === originalName.value) {
+  function isFileRenaming(file: any) {
+    const key = getFileRenameKey(file);
+    return Boolean(key) && renamingFileIds.value.has(key);
+  }
+
+  function setFileRenaming(file: any, saving: boolean) {
+    const key = getFileRenameKey(file);
+    if (!key) return;
+    const next = new Set(renamingFileIds.value);
+    if (saving) next.add(key);
+    else next.delete(key);
+    renamingFileIds.value = next;
+  }
+
+  function submitReName(file) {
+    if (isFileRenaming(file)) return;
+    const previousName = originalName.value;
+    const baseName = String(file.fileName || '').trim();
+    const nextName = originalExt.value ? `${baseName}.${originalExt.value}` : baseName;
+    void updateFileName(file, nextName, previousName);
+  }
+
+  async function updateFileName(file: any, nextName: string, previousName = originalName.value) {
+    if (blockGuestWrite('rename-file') || isFileRenaming(file)) return false;
+    if (nextName === previousName) {
+      file.fileName = previousName;
       file.isRename = false;
-      return Promise.resolve(false);
+      return false;
     }
-    return apiBasePost('/api/file/updateFile', {
-      id: file.id,
-      fileName: nextName,
-    }).then((res) => {
+    setFileRenaming(file, true);
+    try {
+      const res = await apiBasePost('/api/file/updateFile', {
+        id: file.id,
+        fileName: nextName,
+      });
       if (res.status === 200) {
         file.isRename = false;
         file.fileName = nextName;
-        if (cloud.searchFileName === originalName.value) {
+        if (cloud.searchFileName === previousName) {
           cloud.searchFileName = nextName;
         }
         recordOperation({ module: '云空间', operation: `重命名文件成功【${nextName}】` });
@@ -708,7 +782,12 @@
         // 后端返回错误（如已存在同名文件），不做任何 UI 改变，用户直接在输入框继续改
         return false;
       }
-    });
+    } catch {
+      message.error(t('cloudSpace.renameFailed'));
+      return false;
+    } finally {
+      setFileRenaming(file, false);
+    }
   }
   function handleDelFile(file) {
     if (blockGuestWrite('delete-file')) return;
@@ -1044,6 +1123,7 @@
   }
 
   function openRenameModal(file) {
+    if (isFileRenaming(file)) return;
     renameModalFile.value = file;
     originalName.value = file.fileName || '';
     originalExt.value = getFileExt(originalName.value);
@@ -1056,22 +1136,24 @@
   }
   async function confirmRename() {
     const f = renameModalFile.value;
-    if (!f) return;
+    if (!f || isFileRenaming(f)) return;
+    const previousName = originalName.value;
     const baseName = renameModalValue.value.trim();
     if (!baseName) return;
     const nextName = originalExt.value ? `${baseName}.${originalExt.value}` : baseName;
-    if (nextName === originalName.value) {
+    if (nextName === previousName) {
       renameModalVisible.value = false;
       renameModalFile.value = null;
       return;
     }
-    const success = await updateFileName(f, nextName);
+    const success = await updateFileName(f, nextName, previousName);
     if (success) {
       renameModalVisible.value = false;
       renameModalFile.value = null;
     }
   }
   function handleReName(file) {
+    if (isFileRenaming(file)) return;
     originalName.value = cloneDeep(file.fileName);
     originalExt.value = getFileExt(originalName.value);
     file.fileName = getFileBaseName(originalName.value);
@@ -1080,6 +1162,12 @@
     nextTick(() => {
       (document.querySelector('.edit-file-input .b-input') as HTMLInputElement).focus();
     });
+  }
+
+  function cancelRename(file: any) {
+    if (isFileRenaming(file)) return;
+    file.fileName = originalName.value;
+    file.isRename = false;
   }
 </script>
 
@@ -1243,6 +1331,26 @@
   }
   .edit-file-input {
     width: min(400px, calc(100% - 120px));
+
+    &.edit-file-input--saving {
+      :deep(.b-input) {
+        padding-right: 110px !important;
+      }
+    }
+  }
+  .rename-saving-indicator {
+    min-width: 24px;
+    height: 24px;
+    padding: 0;
+
+    :deep(.btn-spinner) {
+      margin-right: 0;
+    }
+  }
+  .rename-saving-text {
+    color: var(--desc-color);
+    font-size: 12px;
+    white-space: nowrap;
   }
   .file-label {
     width: calc(100% - 100px);

@@ -1,7 +1,7 @@
 <template>
   <aside class="ai-conv-sidebar" :aria-label="t('ai.conversations.title')">
     <div class="ai-conv-sidebar__head">
-      <BButton class="ai-conv-sidebar__new" type="primary" size="small" @click="emit('new')">
+      <BButton class="ai-conv-sidebar__new" type="primary" @click="emit('new')">
         <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
         {{ t('ai.newConversation') }}
       </BButton>
@@ -18,22 +18,23 @@
     <div class="ai-conv-sidebar__list" role="list">
       <BLoading v-if="loading && !items.length" inline loading :title="t('common.loading')" />
       <p v-else-if="!items.length" class="ai-conv-sidebar__empty">{{ t('ai.conversations.empty') }}</p>
-      <button
-        v-for="conv in items"
-        :key="conv.id"
-        type="button"
-        role="listitem"
-        class="ai-conv-sidebar__item"
-        :class="{ 'is-active': conv.id === currentId }"
-        :aria-current="conv.id === currentId ? 'true' : undefined"
-        :title="conv.title || t('ai.conversations.untitled')"
-        @click="emit('open', conv.id)"
-      >
-        <span class="ai-conv-sidebar__item-title">{{ conv.title || t('ai.conversations.untitled') }}</span>
-        <time class="ai-conv-sidebar__item-time" :datetime="conv.lastMessageAt">{{
-          relativeTime(conv.lastMessageAt)
-        }}</time>
-      </button>
+      <!-- role=listitem 放在外层 div,button 保留原生 button 语义(读屏正确识别为可操作按钮)。
+           这里刻意用原生 button 而非 BButton:BButton 的 .b_btn(定高/居中/max-content)会把多行标题挤没,见下方样式注释 -->
+      <div v-for="conv in items" :key="conv.id" role="listitem" class="ai-conv-sidebar__item-wrap">
+        <button
+          type="button"
+          class="ai-conv-sidebar__item"
+          :class="{ 'is-active': conv.id === currentId }"
+          :aria-current="conv.id === currentId ? 'true' : undefined"
+          :title="conv.title || t('ai.conversations.untitled')"
+          @click="emit('open', conv.id)"
+        >
+          <span class="ai-conv-sidebar__item-title">{{ conv.title || t('ai.conversations.untitled') }}</span>
+          <time class="ai-conv-sidebar__item-time" :datetime="conv.lastMessageAt">{{
+            relativeTime(conv.lastMessageAt)
+          }}</time>
+        </button>
+      </div>
     </div>
   </aside>
 </template>

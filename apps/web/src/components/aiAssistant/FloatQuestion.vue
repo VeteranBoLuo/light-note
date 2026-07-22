@@ -28,7 +28,9 @@
             <SvgIcon :src="icon.ai.conversations" size="17" aria-hidden="true" />
           </BButton>
         </BTooltip>
-        <BButton size="small" @click="clearConversation">{{ t('ai.newConversation') }}</BButton>
+        <BButton size="small" :loading="newConversationSubmitting" @click="clearConversation">
+          {{ t('ai.newConversation') }}
+        </BButton>
         <BTooltip
           v-if="bookmark.isDesktop && activeMode === 'ask'"
           :title="isMaximized ? t('ai.restoreWindow') : t('ai.maximize')"
@@ -96,42 +98,42 @@
       </div>
     </BDrawer>
 
-    <BButton
-      v-show="!isOpen"
-      class="ai-edge-trigger"
-      :class="`ai-edge-trigger--${edgeStatus}`"
-      role="button"
-      tabindex="0"
-      :aria-label="aiTriggerAccessibleLabel"
-      :aria-busy="edgeStatus === 'generating'"
-      :title="aiTriggerAccessibleLabel"
-      :data-status="edgeStatus"
-      @click="openAssistant('edge')"
-      @keydown.enter.prevent="openAssistant('edge')"
-      @keydown.space.prevent="openAssistant('edge')"
-      v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
-    >
-      <span class="ai-edge-surface" aria-hidden="true">
-        <span class="ai-edge-track"></span>
-        <span class="ai-edge-label">AI</span>
-      </span>
-      <span
-        v-if="edgeStatus !== 'idle'"
-        class="ai-edge-status"
-        :class="`ai-edge-status--${edgeStatus}`"
-        aria-hidden="true"
-      />
-      <span v-if="aiEdgeStatusText" class="ai-edge-status-text" role="status" aria-live="polite" aria-atomic="true">
-        {{ aiEdgeStatusText }}
-      </span>
-    </BButton>
+    <BTooltip v-if="!isOpen" :title="aiTriggerAccessibleLabel">
+      <BButton
+        class="ai-edge-trigger"
+        :class="`ai-edge-trigger--${edgeStatus}`"
+        role="button"
+        tabindex="0"
+        :aria-label="aiTriggerAccessibleLabel"
+        :aria-busy="edgeStatus === 'generating'"
+        :data-status="edgeStatus"
+        @click="openAssistant('edge')"
+        @keydown.enter.prevent="openAssistant('edge')"
+        @keydown.space.prevent="openAssistant('edge')"
+        v-click-log="{ module: 'AI助手', operation: '打开ai弹框' }"
+      >
+        <span class="ai-edge-surface" aria-hidden="true">
+          <span class="ai-edge-track"></span>
+          <span class="ai-edge-label">AI</span>
+        </span>
+        <span
+          v-if="edgeStatus !== 'idle'"
+          class="ai-edge-status"
+          :class="`ai-edge-status--${edgeStatus}`"
+          aria-hidden="true"
+        />
+        <span v-if="aiEdgeStatusText" class="ai-edge-status-text" role="status" aria-live="polite" aria-atomic="true">
+          {{ aiEdgeStatusText }}
+        </span>
+      </BButton>
+    </BTooltip>
   </div>
 </template>
 
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { bookmarkStore, useAiAssistantStore } from '@/store';
+  import { bookmarkStore, useAiAssistantStore, useUserStore } from '@/store';
   import { storeToRefs } from 'pinia';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -142,6 +144,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { recordAiProductEvent } from '@/api/aiTelemetry.ts';
   import { getGlobalShortcutLabel, matchesGlobalShortcut } from '@/config/keyboardShortcuts.ts';
+  import { updatePreference } from '@/utils/savePreference';
   import { shouldIgnoreBackgroundEscape } from '@/utils/topLayerEscape';
   import {
     AI_ASSISTANT_OPEN_EVENT,
@@ -157,6 +160,7 @@
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const aiAssistant = useAiAssistantStore();
   const { isLoading, conversationId, temporarySession, edgeStatus } = storeToRefs(aiAssistant);
   // 全屏左侧会话列表的刷新信号:每轮问答结束时 bump(首句自动改名后列表要更新标题);
@@ -167,18 +171,17 @@
   });
   const isOpen = ref(false);
   const isMaximized = ref(false);
+  const newConversationSubmitting = ref(false);
   // 记住“对话”态用户选择的全屏偏好:整理固定全屏,切回对话时恢复此偏好,
   // 避免“全屏 → 切整理 → 切回对话”被强制掉回抽屉。
   const askMaximized = ref(false);
   const activeMode = ref<'ask' | 'organize'>('ask');
-  type AiCenterPanel = 'conversations' | 'memory';
+  type AiCenterPanel = 'conversations';
   const activePanel = ref<AiCenterPanel | null>(null);
   const panelTitle = computed(() => {
     switch (activePanel.value) {
       case 'conversations':
         return t('ai.conversations.title');
-      case 'memory':
-        return t('ai.memory.title');
       default:
         return '';
     }
@@ -239,6 +242,9 @@
   ) {
     const wasClosed = !isOpen.value;
     if (wasClosed) {
+      const defaultAskMaximized = bookmark.isDesktop && user.preferences.aiDefaultFullscreen === true;
+      askMaximized.value = defaultAskMaximized;
+      isMaximized.value = activeMode.value === 'organize' ? bookmark.isDesktop : defaultAskMaximized;
       isOpen.value = true;
       window.dispatchEvent(new CustomEvent('light-note:close-search'));
     }
@@ -307,8 +313,13 @@
 
   function toggleMaximized() {
     if (!bookmark.isDesktop || activeMode.value !== 'ask') return;
-    isMaximized.value = !isMaximized.value;
-    askMaximized.value = isMaximized.value;
+    const nextMaximized = !isMaximized.value;
+    isMaximized.value = nextMaximized;
+    askMaximized.value = nextMaximized;
+    // 用户主动全屏/还原时，同步更新“默认全屏打开”，下次重新打开 AI 延续这次选择。
+    if (user.preferences.aiDefaultFullscreen !== nextMaximized) {
+      void updatePreference({ aiDefaultFullscreen: nextMaximized }).catch(() => message.warning(t('settings.saveFailed')));
+    }
   }
 
   function handleModeChange(mode: 'ask' | 'organize') {
@@ -350,10 +361,24 @@
   );
 
   async function clearConversation() {
+    if (newConversationSubmitting.value) return false;
+    const wasMaximized = isMaximized.value;
+    newConversationSubmitting.value = true;
     closePanel();
-    const cleaned = (await aiAssistantRef.value?.clearHistory?.()) ?? true;
-    if (cleaned) message.success(t('ai.newChart'));
-    else message.warning(t('ai.newConversationCleanupFailed'));
+    try {
+      // clearHistory 会把工作区切回问答态；新建对话不应顺带改变用户当前的抽屉/全屏尺寸。
+      const cleanupTask = aiAssistantRef.value?.clearHistory?.();
+      if (bookmark.isDesktop) {
+        isMaximized.value = wasMaximized;
+        askMaximized.value = wasMaximized;
+      }
+      const cleaned = (await cleanupTask) ?? true;
+      if (cleaned) message.success(t('ai.newChart'));
+      else message.warning(t('ai.newConversationCleanupFailed'));
+      return cleaned;
+    } finally {
+      newConversationSubmitting.value = false;
+    }
   }
 
   async function startNewConversation() {
@@ -382,9 +407,14 @@
   function handleKeydown(event: KeyboardEvent) {
     if (bookmark.isDesktop && matchesGlobalShortcut(event, 'aiAssistant')) {
       event.preventDefault();
+      if (isOpen.value) {
+        recordOperation({ module: 'AI助手', operation: '使用快捷键关闭AI助手' });
+        minimize();
+        return;
+      }
       recordOperation({
         module: 'AI助手',
-        operation: isOpen.value ? '使用快捷键聚焦AI助手' : '使用快捷键唤起AI助手',
+        operation: '使用快捷键唤起AI助手',
       });
       openAssistant('shortcut');
       return;

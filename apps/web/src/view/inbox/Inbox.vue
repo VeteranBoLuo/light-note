@@ -2,6 +2,10 @@
   <main class="inbox-page">
     <ResourceCenterSectionNav class="section-switcher" />
     <header class="inbox-hero">
+      <!-- 移动端/PWA standalone 无系统返回,此前该页是死胡同 -->
+      <BButton v-if="bookmark.isMobile" class="inbox-back-btn" @click="router.back()">
+        <SvgIcon :src="icon.arrow_left" size="16" />
+      </BButton>
       <div>
         <h1>{{ t('inbox.title') }}</h1>
         <p>{{ t('inbox.subtitle') }}</p>
@@ -130,7 +134,7 @@
   import InboxItem from '@/components/inbox/InboxItem.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
-  import { inboxStore, todoStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import type { InboxItem as InboxItemType } from '@/api/inboxApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
@@ -138,8 +142,11 @@
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import type { TodoChecklistItem, TodoItem as TodoItemType, TodoSort } from '@/api/todoApi';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const { t } = useI18n();
+  const bookmark = bookmarkStore();
   const router = useRouter();
   const route = useRoute();
   const inbox = inboxStore();
@@ -524,6 +531,14 @@
     gap: 20px;
     margin: 0 0 18px;
     flex-shrink: 0;
+  }
+  .inbox-back-btn {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 10px;
+    flex: 0 0 auto;
   }
   h1 {
     margin: 0 0 6px;

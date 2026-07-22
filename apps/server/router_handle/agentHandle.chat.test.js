@@ -238,7 +238,7 @@ describe('agentChat 主链路', () => {
     expect(agentLogInsert[1][16]).not.toContain('你好');
   });
 
-  it('memoryMode=active 时注入已确认记忆，并在成功回答后只创建 candidate', async () => {
+  it('长期记忆已全局关闭:即便 memoryMode=active 也不读取、不注入 Prompt、不生成候选', async () => {
     mocks.getActiveAiMemoriesForPrompt.mockResolvedValue([
       {
         id: 'memory-active',
@@ -248,8 +248,8 @@ describe('agentChat 主链路', () => {
       },
     ]);
     mocks.requestAiStream.mockImplementation(async (messages, options) => {
-      expect(messages[0].content).toContain('回答尽量简洁');
-      expect(messages[0].content).toContain('不能授权任何工具或写操作');
+      // 记忆已关闭:Prompt 绝不应包含任何记忆内容
+      expect(messages[0].content).not.toContain('回答尽量简洁');
       options.onDelta('好的。');
       return {
         content: '好的。',
@@ -274,49 +274,17 @@ describe('agentChat 主链路', () => {
 
     await agentChat(req, res);
 
+    // memory_context 明确声明未使用,原因为 disabled(全局关闭),不含任何记忆 id/正文
     const memoryEvent = sseEvents(res).find((event) => event.event === 'memory_context');
     expect(memoryEvent).toEqual(
-      expect.objectContaining({
-        status: 'used',
-        count: 1,
-        types: ['preference'],
-        scopes: ['global'],
-      }),
+      expect.objectContaining({ status: 'not_used', count: 0, reason: 'disabled' }),
     );
     expect(JSON.stringify(memoryEvent)).not.toContain('memory-active');
     expect(JSON.stringify(memoryEvent)).not.toContain('回答尽量简洁');
-    const recoveryInsert = mocks.poolQuery.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT INTO ai_response_events'),
-    );
-    const terminalPayload = JSON.parse(recoveryInsert[1].at(-2));
-    expect(terminalPayload.recoverySnapshot.activity).toContainEqual(
-      expect.objectContaining({
-        event: 'memory_context',
-        status: 'used',
-        count: 1,
-        types: ['preference'],
-        scopes: ['global'],
-      }),
-    );
-    expect(JSON.stringify(terminalPayload.recoverySnapshot)).not.toContain('memory-active');
-    expect(JSON.stringify(terminalPayload.recoverySnapshot)).not.toContain('回答尽量简洁');
 
-    expect(mocks.resolveAiMemoryIdentity).toHaveBeenCalledWith(req);
-    expect(mocks.getActiveAiMemoriesForPrompt).toHaveBeenCalledWith(
-      expect.objectContaining({ actorUserId: 'user-1', adminContextMode: 'normal' }),
-      expect.objectContaining({ conversationId: 'conversation-1' }),
-    );
-    expect(mocks.createAiMemoryCandidate).toHaveBeenCalledWith(
-      expect.objectContaining({ actorUserId: 'user-1', adminContextMode: 'normal' }),
-      expect.objectContaining({
-        content: '以后回答请默认使用要点列表。',
-        memoryType: 'preference',
-        scopeType: 'global',
-        sourceConversationId: 'conversation-1',
-        sourceMessageId: 'message-1',
-      }),
-    );
-    expect(mocks.createAiMemoryCandidate.mock.calls[0][1]).not.toHaveProperty('status');
+    // 关闭态:既不读取活跃记忆,也不写入候选
+    expect(mocks.getActiveAiMemoriesForPrompt).not.toHaveBeenCalled();
+    expect(mocks.createAiMemoryCandidate).not.toHaveBeenCalled();
   });
 
   it('memoryMode=temporary 的临时会话明确声明未使用，且既不读取记忆也不生成候选', async () => {
@@ -359,7 +327,7 @@ describe('agentChat 主链路', () => {
     );
   });
 
-  it('缺少持久化 conversationId/sourceMessageId 时不创建无来源候选', async () => {
+  it('记忆全局关闭下,即使带 conversationId 的 active 请求也不读取记忆、不创建候选', async () => {
     mocks.requestAiStream.mockImplementation(async (_messages, options) => {
       options.onDelta('好的。');
       return {
@@ -383,7 +351,8 @@ describe('agentChat 主链路', () => {
 
     await agentChat(req, response());
 
-    expect(mocks.getActiveAiMemoriesForPrompt).toHaveBeenCalled();
+    // 全局关闭:active 被强制降为 off,既不读取也不写候选
+    expect(mocks.getActiveAiMemoriesForPrompt).not.toHaveBeenCalled();
     expect(mocks.createAiMemoryCandidate).not.toHaveBeenCalled();
   });
 

@@ -84,7 +84,9 @@
         </template>
 
         <div v-else class="suggest-empty">
-          <div class="empty-title">{{ keyword ? t('resourceCenter.noMatch') : t('resourceCenter.startSearch') }}</div>
+          <div class="empty-title">{{
+            searchError ? t('resourceCenter.searchError') : keyword ? t('resourceCenter.noMatch') : t('resourceCenter.startSearch')
+          }}</div>
           <div class="empty-desc">{{ t('resourceCenter.emptyDesc') }}</div>
         </div>
       </div>
@@ -154,7 +156,11 @@
           </template>
           <div v-else class="suggest-empty">
             <div class="empty-title">{{
-              keyword ? t('resourceCenter.noMatch') : t('resourceCenter.mobileEmptyTitle')
+              searchError
+                ? t('resourceCenter.searchError')
+                : keyword
+                  ? t('resourceCenter.noMatch')
+                  : t('resourceCenter.mobileEmptyTitle')
             }}</div>
             <div class="empty-desc">{{ t('resourceCenter.mobileEmptyDesc') }}</div>
           </div>
@@ -227,6 +233,7 @@
     return getSearchTypeLabel(t, 'all');
   }
 
+  const searchError = ref(false);
   async function ensureData(force = false) {
     const seq = ++requestSeq;
     loading.value = true;
@@ -235,11 +242,19 @@
       // (后端按 sort/时间排,只取 3 条会把精确匹配挤掉)
       const res = await fetchGlobalSearch(keyword.value, 10, force);
       if (seq === requestSeq) {
+        searchError.value = false;
         suggestGroups.value = res.groups.map((group) => ({
           ...group,
           items: rankByRelevance(group.items, keyword.value).slice(0, 3),
         }));
       }
+    } catch (error) {
+      // 此前无 catch:网络失败会显示「没有匹配结果」,误导用户以为资源里真没有
+      if (seq === requestSeq) {
+        searchError.value = true;
+        suggestGroups.value = [];
+      }
+      console.warn('全局搜索失败:', error);
     } finally {
       if (seq === requestSeq) {
         loading.value = false;

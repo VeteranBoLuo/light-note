@@ -41,7 +41,8 @@ export const getRequestSid = (req) => {
 
 const getCookieOptions = (maxAge) => ({
   httpOnly: true,
-  secure: process.platform === 'linux',
+  // SECURE_COOKIE=1/0 显式覆盖;未设置时沿用「linux 即生产」的历史约定(脆弱假设,新环境请显式配置)
+  secure: process.env.SECURE_COOKIE != null ? process.env.SECURE_COOKIE === '1' : process.platform === 'linux',
   sameSite: 'lax',
   path: '/',
   maxAge,
@@ -99,6 +100,9 @@ export const issueLoginSession = async (req, res, user, rememberMe = false) => {
     maxAgeMs,
     ip: req.ip || '',
     userAgent: req.headers['user-agent'] || '',
+    // 新客户端显式传 X-Device-Id；旧客户端复用已有的稳定日志设备标识，平滑升级。
+    // 该值只供会话归并，不能参与身份、权限或设备信任判断。
+    deviceId: req.headers['x-device-id'] || req.headers['x-log-device-id'] || '',
   });
   setAuthCookie(res, sid, maxAgeMs);
   res.removeHeader(AUTH_EXPIRED_HEADER);

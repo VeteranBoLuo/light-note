@@ -93,6 +93,7 @@
       message.warn(t('myInfo.pleaseLogin'));
       return;
     }
+    userData.value.email = String(userData.value.email || '').trim();
     if (!userData.value.alias || !userData.value.alias.trim()) {
       message.warning(t('myInfo.enterNickname'));
       return;

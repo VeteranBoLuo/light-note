@@ -18,6 +18,7 @@
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
     "dev:server": "pnpm --filter server start",
+    "preview": "node scripts/localPreview.mjs",
     "test": "pnpm -r test",
     "typecheck": "pnpm --filter web typecheck",
     "deploy:all": "bash scripts/deploy.sh",
