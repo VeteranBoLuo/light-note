@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTodo, deleteTodo, updateTodo } from './todoService.js';
+import {
+  applyTodoStatusChange,
+  createTodo,
+  deleteTodo,
+  listTodoPage,
+  listTodos,
+  prepareTodoStatusChange,
+  updateTodo,
+} from './todoService.js';
 
 describe('todoService', () => {
   let connection;
@@ -149,5 +157,232 @@ describe('todoService', () => {
     await expect(deleteTodo(connection, 'user-3', 'todo-2')).resolves.toBe(1);
     expect(connection.query.mock.calls[0][1]).toEqual(['todo-2', 'user-3']);
     expect(connection.query.mock.calls[1][1]).toEqual(['todo-2', 'user-3']);
+  });
+
+  it('筛选全部时不追加完成状态条件', async () => {
+    connection.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+
+    await expect(listTodos(connection, 'user-4', { status: 'all' })).resolves.toEqual([]);
+
+    expect(connection.query.mock.calls[0]).toEqual([expect.not.stringContaining('status = ?'), ['user-4']]);
+  });
+
+  it('Agent 摘要分页不读取说明或提醒邮箱，并返回清单进度和下一页游标', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-1',
+            title: '整理发票',
+            checklist: JSON.stringify([
+              { id: 'a', text: '归档', done: true },
+              { id: 'b', text: '核对', done: false },
+            ]),
+            priority: 2,
+            status: 'pending',
+            dueAt: '2026-07-24 10:00:00',
+            completedAt: null,
+          },
+          {
+            id: 'todo-2',
+            title: '下一条',
+            checklist: '[]',
+            priority: 1,
+            status: 'pending',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 2 }]])
+      .mockResolvedValueOnce([
+        [
+          { todoId: 'todo-1', channel: 'in_app' },
+          { todoId: 'todo-1', channel: 'email' },
+        ],
+      ]);
+
+    const result = await listTodoPage(connection, 'user-5', { status: 'pending', limit: 1, view: 'summary' });
+
+    expect(connection.query.mock.calls[0][0]).toContain('LIMIT ? OFFSET ?');
+    expect(connection.query.mock.calls[0][0]).not.toContain('description');
+    expect(connection.query.mock.calls[0][1]).toEqual(['user-5', 'pending', 2, 0]);
+    expect(connection.query.mock.calls[2][0]).not.toContain('target_email');
+    expect(result).toEqual({
+      items: [
+        {
+          id: 'todo-1',
+          title: '整理发票',
+          priority: 2,
+          status: 'pending',
+          dueAt: '2026-07-24 10:00:00',
+          completedAt: null,
+          checklistProgress: { completed: 1, total: 2 },
+          reminderChannels: ['in_app', 'email'],
+        },
+      ],
+      total: 2,
+      nextCursor: expect.any(String),
+    });
+  });
+
+  it('为 Agent 状态修改按关键词冻结单个待办和权威版本，不向模型暴露待办说明', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-1',
+            title: '整理发票',
+            description: '仅服务端快照使用',
+            checklist: '[]',
+            priority: 2,
+            status: 'pending',
+            dueAt: '2026-07-24 10:00:00',
+            completedAt: null,
+            updatedAt: '2026-07-23 10:00:00',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ activeReminderCount: 2 }]]);
+
+    const result = await prepareTodoStatusChange(connection, 'user-6', {
+      keyword: '发票',
+      status: 'completed',
+    });
+
+    expect(connection.query.mock.calls[0]).toEqual([expect.stringContaining('title LIKE ?'), ['user-6', '%发票%']]);
+    expect(connection.query.mock.calls[0][0]).not.toContain('SELECT *');
+    expect(result).toMatchObject({
+      todoId: 'todo-1',
+      status: 'completed',
+      targetTitle: '整理发票',
+      currentStatus: 'pending',
+      activeReminderCount: 2,
+    });
+    expect(result.expectedVersion).toEqual(expect.any(String));
+    expect(result).not.toHaveProperty('description');
+    expect(result).not.toHaveProperty('checklist');
+  });
+
+  it('多个同名待办不会默认选择，而是返回服务端白名单候选', async () => {
+    connection.query.mockResolvedValueOnce([
+      [
+        { id: 'todo-1', title: '周报', checklist: '[]', priority: 1, status: 'pending', updatedAt: '2026-07-23' },
+        { id: 'todo-2', title: '周报', checklist: '[]', priority: 2, status: 'pending', updatedAt: '2026-07-22' },
+      ],
+    ]);
+
+    await expect(
+      prepareTodoStatusChange(connection, 'user-7', { keyword: '周报', status: 'completed' }),
+    ).rejects.toMatchObject({
+      code: 'TODO_SELECTION_REQUIRED',
+      status: 409,
+      data: {
+        candidates: [
+          { todoId: 'todo-1', title: '周报', status: 'pending' },
+          { todoId: 'todo-2', title: '周报', status: 'pending' },
+        ],
+      },
+    });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('按标题关键词冻结目标时把 LIKE 通配符按字面文本处理', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+    await expect(
+      prepareTodoStatusChange(connection, 'user-7', { keyword: '100%', status: 'completed' }),
+    ).rejects.toMatchObject({ code: 'TODO_NOT_FOUND' });
+    expect(connection.query.mock.calls[0][1]).toEqual(['user-7', '%100\\%%']);
+  });
+
+  it('准备阶段会拒绝不存在和已处于目标状态的待办', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+    await expect(
+      prepareTodoStatusChange(connection, 'user-8', { todoId: 'missing', status: 'completed' }),
+    ).rejects.toMatchObject({ code: 'TODO_NOT_FOUND', status: 404 });
+
+    connection.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'todo-3',
+          title: '已完成事项',
+          checklist: '[]',
+          priority: 1,
+          status: 'completed',
+          updatedAt: '2026-07-23',
+        },
+      ],
+    ]);
+    await expect(
+      prepareTodoStatusChange(connection, 'user-8', { todoId: 'todo-3', status: 'completed' }),
+    ).rejects.toMatchObject({ code: 'TODO_STATUS_NOOP', status: 409 });
+  });
+
+  it('确认执行在事务内锁定待办、复核版本、取消未触发提醒并失效个人检索缓存', async () => {
+    const row = {
+      id: 'todo-4',
+      title: '完成合同',
+      description: null,
+      checklist: '[]',
+      priority: 1,
+      status: 'pending',
+      dueAt: '2026-07-24 18:00:00',
+      completedAt: null,
+      updatedAt: '2026-07-23 11:00:00',
+    };
+    connection.query.mockResolvedValueOnce([[row]]).mockResolvedValueOnce([[{ activeReminderCount: 1 }]]);
+    const prepared = await prepareTodoStatusChange(connection, 'user-9', { todoId: 'todo-4', status: 'completed' });
+    connection.query.mockReset();
+    connection.query
+      .mockResolvedValueOnce([[row]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 2 }]);
+
+    const result = await applyTodoStatusChange(connection, 'user-9', prepared);
+
+    expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(connection.query.mock.calls[0][1]).toEqual(['todo-4', 'user-9']);
+    expect(connection.query.mock.calls[1][0]).toContain('UPDATE todo_items');
+    expect(connection.query.mock.calls[2][0]).toContain("status = 'cancelled'");
+    expect(result).toMatchObject({
+      state: 'changed',
+      todoId: 'todo-4',
+      title: '完成合同',
+      previousStatus: 'pending',
+      status: 'completed',
+      cancelledReminderCount: 2,
+    });
+  });
+
+  it('确认前目标被修改时拒绝写入；若已被改为目标状态则安全返回 noop', async () => {
+    const row = {
+      id: 'todo-5',
+      title: '更新状态',
+      description: null,
+      checklist: '[]',
+      priority: 1,
+      status: 'pending',
+      dueAt: null,
+      completedAt: null,
+      updatedAt: '2026-07-23 11:00:00',
+    };
+    connection.query.mockResolvedValueOnce([[row]]);
+    await expect(
+      applyTodoStatusChange(connection, 'user-10', {
+        todoId: 'todo-5',
+        status: 'completed',
+        expectedVersion: 'outdated-version',
+      }),
+    ).rejects.toMatchObject({ code: 'TODO_STATUS_CONFLICT', status: 409 });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+
+    connection.query.mockReset();
+    connection.query.mockResolvedValueOnce([[{ ...row, status: 'completed', completedAt: '2026-07-23 12:00:00' }]]);
+    await expect(
+      applyTodoStatusChange(connection, 'user-10', {
+        todoId: 'todo-5',
+        status: 'completed',
+        expectedVersion: 'any-snapshot',
+      }),
+    ).resolves.toMatchObject({ state: 'noop', status: 'completed' });
+    expect(connection.query).toHaveBeenCalledTimes(1);
   });
 });

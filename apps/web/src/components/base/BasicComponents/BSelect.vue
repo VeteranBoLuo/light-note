@@ -282,6 +282,10 @@
   }
 
   function handleTriggerKeydown(event: KeyboardEvent) {
+    // 中文等输入法在候选词组成阶段会用 Enter / 方向键确认或切换候选。
+    // 此时不能把按键当作下拉导航，否则会误选当前高亮项。
+    if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
+
     const typingInSearch = event.target instanceof HTMLInputElement;
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();

@@ -15,16 +15,27 @@ export interface AiToolConfirmation {
   id: string;
   sessionId: string;
   toolName: string;
+  capabilityId?: string;
   args: Record<string, unknown>;
   expiresIn: number;
   riskLevel?: 'low' | 'medium' | 'high';
   preview?: AiToolConfirmationPreview;
 }
 
+export interface AiToolActionReceipt {
+  actionId: string;
+  toolName: string;
+  capabilityId?: string;
+  status: 'succeeded';
+  summary: string;
+  completedAt: string;
+}
+
 export interface AiToolConfirmationResolution {
   toolName: string;
   summary: string;
   sources: unknown[];
+  receipt: AiToolActionReceipt;
 }
 
 export type AiToolConfirmationSettlementStatus = 'confirmed' | 'cancelled' | 'editing' | 'failed' | 'expired';
@@ -85,12 +96,7 @@ export type AiAgentInteractionResolution =
   | { state: 'resolved'; summary?: string };
 
 export type AiAgentInteractionSettlementStatus =
-  | 'advanced'
-  | 'resolved'
-  | 'cancelled'
-  | 'editing'
-  | 'failed'
-  | 'expired';
+  'advanced' | 'resolved' | 'cancelled' | 'editing' | 'failed' | 'expired';
 
 export interface AiAgentInteractionSettlement {
   interactionId: string;

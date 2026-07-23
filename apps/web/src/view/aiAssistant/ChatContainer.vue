@@ -21,6 +21,7 @@
       >
         <template v-for="(message, index) in messages" :key="message.id">
           <ChatMessageItem
+            v-if="shouldRenderMessageItem(message)"
             :message="message"
             :data-ai-message-id="message.cloudId || message.id"
             tabindex="-1"
@@ -274,6 +275,15 @@
   }
 
   type ChatMessage = AiAssistantMessage;
+
+  // 确认卡/选择卡本身就是这轮助手消息的可见主体。若只剩等待确认或等待选择，
+  // 不渲染一个没有内容的助手气泡，避免留下无意义的纵向空白。
+  function shouldRenderMessageItem(message: ChatMessage) {
+    if (message.role !== 'assistant' || message.content || !message.toolEvents?.length) return true;
+    return message.toolEvents.some(
+      (item) => item.status !== 'confirmation_required' && item.status !== 'interaction_required',
+    );
+  }
 
   const aiAssistant = useAiAssistantStore();
   const {
@@ -628,15 +638,15 @@
   function isInitialLocalGreeting(chatMessage: ChatMessage, index: number) {
     return Boolean(
       index === 0 &&
-        chatMessage.role === 'assistant' &&
-        !chatMessage.cloudId &&
-        !chatMessage.parentMessageId &&
-        !chatMessage.versionGroupId &&
-        !chatMessage.contextRefs?.length &&
-        !chatMessage.contexts?.length &&
-        !chatMessage.attachmentRefs?.length &&
-        !chatMessage.sources?.length &&
-        !chatMessage.evidence?.length,
+      chatMessage.role === 'assistant' &&
+      !chatMessage.cloudId &&
+      !chatMessage.parentMessageId &&
+      !chatMessage.versionGroupId &&
+      !chatMessage.contextRefs?.length &&
+      !chatMessage.contexts?.length &&
+      !chatMessage.attachmentRefs?.length &&
+      !chatMessage.sources?.length &&
+      !chatMessage.evidence?.length,
     );
   }
 
@@ -744,10 +754,7 @@
     });
   }
 
-  function applyRecoveredCloudConversation(cloudConversation: {
-    id: string;
-    messages: AiCloudMessage[];
-  }) {
+  function applyRecoveredCloudConversation(cloudConversation: { id: string; messages: AiCloudMessage[] }) {
     const cloudMessages = normalizeVisibleVersionGroups(
       cloudConversation.messages.map(cloudMessageToLocal).filter((item): item is ChatMessage => Boolean(item)),
     );
@@ -1407,7 +1414,9 @@
 
     // 会话上下文快照:本轮问题「之前」的完整对话(显示多少发多少,保证 AI 记得的=你看得到的)。
     // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
-    const historyForRequest = (cloudPreparation === 'replaced' ? messages.value : options.historySnapshot || messages.value)
+    const historyForRequest = (
+      cloudPreparation === 'replaced' ? messages.value : options.historySnapshot || messages.value
+    )
       .filter(
         (m) => m.content && !m.transient && !hasPendingAgentActions(m) && (m.role === 'user' || m.role === 'assistant'),
       )

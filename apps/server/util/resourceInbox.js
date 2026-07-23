@@ -1,7 +1,41 @@
 import crypto from 'node:crypto';
+import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from './pageCursor.js';
 
 export const RESOURCE_TYPES = Object.freeze(['bookmark', 'note', 'file']);
 export const INBOX_SOURCES = Object.freeze(['quick_capture', 'manual', 'duplicate_requeue', 'admin_demo']);
+
+const INBOX_PAGE_CURSOR_SCOPE = 'inbox';
+const INBOX_SORT_SQL = Object.freeze({
+  newest: 'i.create_time DESC, i.id DESC',
+  oldest: 'i.create_time ASC, i.id ASC',
+});
+const RESOURCE_UNION_SQL = `
+  SELECT CONVERT('bookmark' USING utf8) COLLATE utf8_general_ci AS resource_type,
+         CONVERT(CAST(b.id AS CHAR) USING utf8) COLLATE utf8_general_ci AS resource_id,
+         CONVERT(b.user_id USING utf8) COLLATE utf8_general_ci AS user_id,
+         CONVERT(b.name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS title,
+         CONVERT(LEFT(COALESCE(b.description, ''), 1000) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS summary,
+         CONVERT(b.url USING utf8mb4) COLLATE utf8mb4_unicode_ci AS detail,
+         b.create_time AS resource_create_time
+    FROM bookmark b WHERE b.del_flag = 0
+  UNION ALL
+  SELECT CONVERT('note' USING utf8) COLLATE utf8_general_ci,
+         CONVERT(CAST(n.id AS CHAR) USING utf8) COLLATE utf8_general_ci,
+         CONVERT(n.create_by USING utf8) COLLATE utf8_general_ci,
+         CONVERT(n.title USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+         CONVERT(LEFT(COALESCE(n.content, ''), 1000) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+         CONVERT(n.type USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+         n.create_time
+    FROM note n WHERE n.del_flag = 0
+  UNION ALL
+  SELECT CONVERT('file' USING utf8) COLLATE utf8_general_ci,
+         CONVERT(CAST(f.id AS CHAR) USING utf8) COLLATE utf8_general_ci,
+         CONVERT(f.create_by USING utf8) COLLATE utf8_general_ci,
+         CONVERT(f.file_name USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+         CONVERT(COALESCE(f.file_type, '') USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+         CONVERT(CAST(COALESCE(f.folder_id, '') AS CHAR) USING utf8mb4) COLLATE utf8mb4_unicode_ci,
+         f.create_time
+    FROM files f WHERE f.del_flag = 0`;
 
 const RESOURCE_OWNERSHIP = Object.freeze({
   bookmark: { table: 'bookmark', owner: 'user_id' },
@@ -33,6 +67,94 @@ export function normalizeInboxItems(items, limit = 50) {
     normalized.push({ resourceType, resourceId });
   }
   return normalized.length > 0 ? normalized : null;
+}
+
+function inboxListError() {
+  const error = new Error('无效的筛选或排序参数');
+  error.code = 'INBOX_LIST_PARAMS_INVALID';
+  return error;
+}
+
+function normalizeInboxListOptions(input = {}) {
+  const rawType = String(input.type ?? input.resourceType ?? 'all').toLowerCase();
+  const type = rawType === 'all' ? 'all' : normalizeResourceType(rawType);
+  const sort = String(input.sort || 'newest').toLowerCase();
+  if (!type || !INBOX_SORT_SQL[sort]) throw inboxListError();
+
+  const keyword = String(input.keyword || '')
+    .trim()
+    .slice(0, 100);
+  const paginated = input.limit !== undefined || input.cursor !== undefined;
+  const limit = paginated ? normalizePageLimit(input.limit, { defaultLimit: 20, maxLimit: 50 }) : null;
+  const offset = paginated ? decodeOffsetCursor(input.cursor, INBOX_PAGE_CURSOR_SCOPE) : 0;
+  const view = input.view === 'summary' ? 'summary' : 'full';
+  const includeTotal = input.includeTotal !== false;
+  return { type, sort, keyword, paginated, limit, offset, view, includeTotal };
+}
+
+/**
+ * 待整理列表的唯一查询入口。资源本体通过 UNION 后再与关系表 INNER JOIN，
+ * 因此已删除、不可用或不属于当前主体的资源不会出现在页面或 Agent 结果中。
+ * full 视图供页面渲染；summary 视图刻意不选择 note 正文、书签 URL 等敏感字段。
+ */
+export async function listInboxResources(db, { userId, ...input } = {}) {
+  const ownerId = String(userId || '').trim();
+  if (!ownerId) {
+    return {
+      items: [],
+      total: 0,
+      nextCursor: null,
+      pendingTotal: 0,
+      typeTotals: { bookmark: 0, note: 0, file: 0 },
+    };
+  }
+  const { type, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeInboxListOptions(input);
+  const where = [`i.user_id = ?`, `i.status = 'pending'`];
+  const params = [ownerId];
+  if (type !== 'all') {
+    where.push('i.resource_type = ?');
+    params.push(type);
+  }
+  if (keyword) {
+    where.push('(r.title LIKE ? OR r.summary LIKE ?)');
+    const like = `%${keyword}%`;
+    params.push(like, like);
+  }
+  const fromSql = `FROM resource_inbox i
+    INNER JOIN (${RESOURCE_UNION_SQL}) r
+      ON r.resource_type = i.resource_type
+     AND r.resource_id = i.resource_id
+     AND r.user_id = i.user_id
+    WHERE ${where.join(' AND ')}`;
+  const selectedFields =
+    view === 'summary'
+      ? `i.resource_type AS resourceType, i.resource_id AS resourceId,
+          i.source, i.create_time AS collectedAt, r.title, r.resource_create_time AS resourceCreatedAt`
+      : `i.resource_type AS resourceType, i.resource_id AS resourceId,
+          i.source, i.create_time AS collectedAt,
+          r.title, r.summary, r.detail, r.resource_create_time AS resourceCreatedAt`;
+  const pageSql = `SELECT ${selectedFields}
+       ${fromSql}
+      ORDER BY ${INBOX_SORT_SQL[sort]}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
+  const pageParams = paginated ? [...params, limit + 1, offset] : params;
+  const [[rows], countResult, counts] = await Promise.all([
+    db.query(pageSql, pageParams),
+    includeTotal ? db.query(`SELECT COUNT(*) AS total ${fromSql}`, params) : null,
+    queryPendingCount(db, ownerId),
+  ]);
+  const hasMore = paginated && rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  return {
+    items: page.map((item) => ({
+      ...item,
+      resourceType: normalizeResourceType(item.resourceType) || item.resourceType,
+      resourceId: String(item.resourceId),
+      title: item.title || '未命名资源',
+    })),
+    total: includeTotal ? Number(countResult?.[0]?.[0]?.total || 0) : page.length,
+    nextCursor: hasMore ? encodeOffsetCursor(INBOX_PAGE_CURSOR_SCOPE, offset + page.length) : null,
+    ...counts,
+  };
 }
 
 export async function assertResourcesOwned(connection, { userId, items }) {

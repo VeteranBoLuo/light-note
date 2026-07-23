@@ -76,7 +76,9 @@
             </div>
           </div>
         </div>
-        <ReplyLoading v-else-if="!message.toolEvents?.length" />
+        <ReplyLoading
+          v-else-if="!message.toolEvents?.length && !message.confirmations?.length && !message.interactions?.length"
+        />
         <p
           v-if="message.role === 'assistant' && message.citationAudit?.invalidKeys?.length"
           class="citation-audit-notice"
@@ -87,6 +89,7 @@
           v-if="message.role === 'assistant' && message.toolEvents?.length"
           :items="message.toolEvents"
           :has-content="Boolean(message.content)"
+          :has-pending-action="Boolean(message.confirmations?.length || message.interactions?.length)"
         />
         <!-- 用户消息：操作条移到气泡外下方（纯图标 + 时间），整体右对齐，
              气泡因此只需包住文字即可自适应收窄，不再被这一行撑宽 -->
@@ -180,6 +183,8 @@
       evidenceCount: number;
     };
     activity?: Array<Record<string, unknown> | string>;
+    confirmations?: unknown[];
+    interactions?: unknown[];
   }
 
   const props = defineProps<{
@@ -652,7 +657,6 @@
   .message.assistant .bubble-col {
     align-items: flex-start;
   }
-
 
   /* 用户消息：气泡外下方的操作条（图标在前、时间在后），整体右对齐 */
   .msg-footer {

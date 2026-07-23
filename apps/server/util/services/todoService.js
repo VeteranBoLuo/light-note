@@ -1,20 +1,110 @@
 import { insertData } from '../agent/data.js';
 import crypto from 'crypto';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
+import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from '../pageCursor.js';
 
 const STATUS = new Set(['pending', 'completed']);
+const FILTER_STATUS = new Set(['all', ...STATUS]);
+const TODO_PAGE_CURSOR_SCOPE = 'todos';
+const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已完成' });
+const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
+  due_at AS dueAt, completed_at AS completedAt, update_time AS updatedAt`;
 const SORT_SQL = Object.freeze({
   smart: `CASE
       WHEN due_at IS NOT NULL AND due_at < NOW() THEN 0
       WHEN due_at IS NOT NULL AND DATE(due_at) = CURDATE() THEN 1
       WHEN priority = 2 THEN 2 ELSE 3 END,
-    CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, update_time DESC`,
-  due: 'CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, update_time DESC',
-  newest: 'create_time DESC',
-  oldest: 'create_time ASC',
+    CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, update_time DESC, id DESC`,
+  due: 'CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, update_time DESC, id DESC',
+  newest: 'create_time DESC, id DESC',
+  oldest: 'create_time ASC, id ASC',
 });
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
+
+function todoStatusError(code, message, status = 400, data) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  if (data !== undefined) error.data = data;
+  return error;
+}
+
+function normalizeTodoStatusChange(input = {}) {
+  const todoId = String(input?.todoId || '')
+    .trim()
+    .slice(0, 64);
+  const keyword = String(input?.keyword || '')
+    .trim()
+    .slice(0, 100);
+  const status = String(input?.status || '')
+    .trim()
+    .toLowerCase();
+  if (!STATUS.has(status)) {
+    throw todoStatusError('TODO_STATUS_INVALID', '待办状态只能设为“待处理”或“已完成”。');
+  }
+  if (!todoId && !keyword) {
+    throw todoStatusError('TODO_TARGET_REQUIRED', '请指定要修改的待办。');
+  }
+  return { todoId, keyword, status };
+}
+
+function todoTitleLikePattern(keyword) {
+  // LIKE 的通配符必须按字面标题处理；否则用户写“100%”时可能冻结到另一条待办。
+  return `%${String(keyword).replace(/[\\%_]/g, '\\$&')}%`;
+}
+
+function snapshotValue(value) {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : 'invalid-date';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function todoStatusVersion(row) {
+  return crypto
+    .createHash('sha256')
+    .update(
+      JSON.stringify({
+        id: String(row?.id || ''),
+        title: String(row?.title || ''),
+        description: snapshotValue(row?.description),
+        checklist: snapshotValue(row?.checklist),
+        priority: Number(row?.priority ?? 0),
+        status: String(row?.status || ''),
+        dueAt: snapshotValue(row?.dueAt),
+        completedAt: snapshotValue(row?.completedAt),
+        updatedAt: snapshotValue(row?.updatedAt),
+      }),
+    )
+    .digest('hex');
+}
+
+function todoStatusTarget(row) {
+  return {
+    todoId: String(row?.id || ''),
+    title: String(row?.title || '未命名待办').slice(0, 200),
+    status: String(row?.status || 'pending'),
+    dueAt: row?.dueAt || null,
+    priority: Number(row?.priority || 0),
+    expectedVersion: todoStatusVersion(row),
+  };
+}
+
+function todoStatusCandidate(row) {
+  const target = todoStatusTarget(row);
+  return {
+    todoId: target.todoId,
+    title: target.title,
+    status: target.status,
+    dueAt: target.dueAt,
+    priority: target.priority,
+  };
+}
 
 function parseChecklist(value) {
   if (Array.isArray(value)) return value;
@@ -261,6 +351,137 @@ export async function setTodoStatus(connection, userId, id, status) {
   return Number(result.affectedRows || 0);
 }
 
+/**
+ * 为 Agent 状态修改冻结单个待办目标。这个阶段只读，不产生任何业务副作用；
+ * 关键字段会被计算为 expectedVersion 指纹，确认执行时必须在同一事务内再次校验。
+ */
+export async function prepareTodoStatusChange(db, userId, input = {}) {
+  const { todoId, keyword, status } = normalizeTodoStatusChange(input);
+  let rows;
+  if (todoId) {
+    [rows] = await db.query(
+      `SELECT ${TODO_STATUS_TARGET_FIELDS}
+       FROM todo_items
+       WHERE id = ? AND user_id = ? AND del_flag = 0
+       LIMIT 1`,
+      [todoId, userId],
+    );
+  } else {
+    [rows] = await db.query(
+      `SELECT ${TODO_STATUS_TARGET_FIELDS}
+       FROM todo_items
+       WHERE user_id = ? AND del_flag = 0 AND title LIKE ?
+       ORDER BY update_time DESC, id DESC
+       LIMIT 6`,
+      [userId, todoTitleLikePattern(keyword)],
+    );
+  }
+
+  if (!rows?.length) {
+    throw todoStatusError('TODO_NOT_FOUND', '没有找到可修改的待办，请核对名称后重试。', 404);
+  }
+  if (rows.length > 5) {
+    throw todoStatusError('TODO_KEYWORD_AMBIGUOUS', '匹配到多条待办，请补充更具体的标题后重试。', 409);
+  }
+  if (rows.length > 1) {
+    throw todoStatusError('TODO_SELECTION_REQUIRED', '匹配到多条待办，请先选择要修改的一条。', 409, {
+      candidates: rows.map(todoStatusCandidate),
+    });
+  }
+
+  const target = todoStatusTarget(rows[0]);
+  if (target.status === status) {
+    throw todoStatusError(
+      'TODO_STATUS_NOOP',
+      `待办“${target.title}”已是${TODO_STATUS_LABELS[status]}，无需修改。`,
+      409,
+    );
+  }
+  const [reminderRows] = await db.query(
+    `SELECT COUNT(*) AS activeReminderCount
+     FROM todo_reminders
+     WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
+    [target.todoId, userId],
+  );
+  return {
+    todoId: target.todoId,
+    status,
+    expectedVersion: target.expectedVersion,
+    targetTitle: target.title,
+    currentStatus: target.status,
+    dueAt: target.dueAt,
+    priority: target.priority,
+    activeReminderCount: Number(reminderRows?.[0]?.activeReminderCount || 0),
+  };
+}
+
+/**
+ * Agent 确认后的状态变更。调用方必须已经开启事务；函数通过 FOR UPDATE 重新读取
+ * 目标并校验 prepare 阶段的快照，避免确认卡展示的是 A、实际写入的是后来变化的 B。
+ */
+export async function applyTodoStatusChange(connection, userId, input = {}) {
+  const { todoId, status } = normalizeTodoStatusChange(input);
+  const expectedVersion = String(input?.expectedVersion || '').trim();
+  if (!expectedVersion) {
+    throw todoStatusError('TODO_STATUS_PREVIEW_REQUIRED', '待办状态修改需要重新生成确认预览。', 409);
+  }
+  const [rows] = await connection.query(
+    `SELECT ${TODO_STATUS_TARGET_FIELDS}
+     FROM todo_items
+     WHERE id = ? AND user_id = ? AND del_flag = 0
+     LIMIT 1 FOR UPDATE`,
+    [todoId, userId],
+  );
+  const row = rows?.[0];
+  if (!row) {
+    throw todoStatusError('TODO_NOT_FOUND', '该待办已不存在或不再可修改，请重新发起操作。', 404);
+  }
+  const target = todoStatusTarget(row);
+  if (target.status === status) {
+    return {
+      state: 'noop',
+      todoId: target.todoId,
+      title: target.title,
+      status,
+      previousStatus: target.status,
+      cancelledReminderCount: 0,
+    };
+  }
+  if (target.expectedVersion !== expectedVersion) {
+    throw todoStatusError('TODO_STATUS_CONFLICT', '待办在确认前已发生变化，请重新查看后再确认。', 409);
+  }
+
+  const [updateResult] = await connection.query(
+    `UPDATE todo_items
+     SET status = ?, completed_at = ${status === 'completed' ? 'NOW()' : 'NULL'}, update_time = NOW()
+     WHERE id = ? AND user_id = ? AND del_flag = 0`,
+    [status, target.todoId, userId],
+  );
+  if (Number(updateResult?.affectedRows || 0) !== 1) {
+    throw todoStatusError('TODO_STATUS_CONFLICT', '待办状态未能更新，请重新查看后再确认。', 409);
+  }
+
+  let cancelledReminderCount = 0;
+  if (status === 'completed') {
+    const [reminderResult] = await connection.query(
+      `UPDATE todo_reminders SET status = 'cancelled'
+       WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
+      [target.todoId, userId],
+    );
+    cancelledReminderCount = Number(reminderResult?.affectedRows || 0);
+  }
+  await invalidatePersonalKnowledgeCache(userId, { database: connection });
+  return {
+    state: 'changed',
+    todoId: target.todoId,
+    title: target.title,
+    previousStatus: target.status,
+    status,
+    dueAt: target.dueAt,
+    cancelledReminderCount,
+  };
+}
+
 export async function deleteTodo(connection, userId, id, { invalidateSearch = true } = {}) {
   const [result] = await connection.query(
     `UPDATE todo_items SET del_flag = 1, deleted_at = NOW(), update_time = NOW()
@@ -278,26 +499,38 @@ export async function deleteTodo(connection, userId, id, { invalidateSearch = tr
   return Number(result.affectedRows || 0);
 }
 
-export async function listTodos(db, userId, { status = 'pending', keyword = '', sort = 'smart' } = {}) {
-  if (!STATUS.has(status) || !SORT_SQL[sort]) throw new Error('无效的待办筛选参数');
-  const where = ['user_id = ?', 'status = ?', 'del_flag = 0'];
-  const params = [userId, status];
-  if (keyword) {
-    where.push('(title LIKE ? OR description LIKE ?)');
-    const like = `%${String(keyword).trim().slice(0, 100)}%`;
-    params.push(like, like);
-  }
-  const [items] = await db.query(
-    `SELECT id, title, description, checklist, priority, status, due_at AS dueAt,
-            completed_at AS completedAt, create_time AS createdAt, update_time AS updatedAt
-     FROM todo_items WHERE ${where.join(' AND ')} ORDER BY ${status === 'completed' ? 'completed_at DESC' : SORT_SQL[sort]}`,
-    params,
-  );
-  if (!items.length) return [];
+function normalizeTodoListOptions(input = {}) {
+  const status = String(input.status || 'all').toLowerCase();
+  const sort = String(input.sort || 'smart').toLowerCase();
+  if (!FILTER_STATUS.has(status) || !SORT_SQL[sort]) throw new Error('无效的待办筛选参数');
+
+  const keyword = String(input.keyword || '')
+    .trim()
+    .slice(0, 100);
+  const paginated = input.limit !== undefined || input.cursor !== undefined;
+  const limit = paginated ? normalizePageLimit(input.limit, { defaultLimit: 20, maxLimit: 50 }) : null;
+  const offset = paginated ? decodeOffsetCursor(input.cursor, TODO_PAGE_CURSOR_SCOPE) : 0;
+  const view = input.view === 'summary' ? 'summary' : 'full';
+  const includeTotal = input.includeTotal !== false;
+  return { status, sort, keyword, paginated, limit, offset, view, includeTotal };
+}
+
+function todoOrderSql(status, sort) {
+  if (status === 'completed') return 'completed_at DESC, update_time DESC, id DESC';
+  if (status === 'all') return `CASE WHEN status = 'pending' THEN 0 ELSE 1 END, ${SORT_SQL[sort]}`;
+  return SORT_SQL[sort];
+}
+
+async function loadTodoReminderMap(db, items, userId, view) {
+  if (!items.length) return new Map();
   const placeholders = items.map(() => '?').join(',');
+  const fields =
+    view === 'summary'
+      ? 'todo_id AS todoId, channel'
+      : `todo_id AS todoId, channel, scheduled_at AS scheduledAt, schedule_start_at AS startAt,
+            repeat_interval_minutes AS intervalMinutes, repeat_end_at AS endAt, target_email AS email`;
   const [reminderRows] = await db.query(
-    `SELECT todo_id AS todoId, channel, scheduled_at AS scheduledAt, schedule_start_at AS startAt,
-            repeat_interval_minutes AS intervalMinutes, repeat_end_at AS endAt, target_email AS email
+    `SELECT ${fields}
      FROM todo_reminders
      WHERE todo_id IN (${placeholders}) AND user_id = ? AND status IN ('pending','processing')
      ORDER BY create_time ASC`,
@@ -305,6 +538,12 @@ export async function listTodos(db, userId, { status = 'pending', keyword = '', 
   );
   const reminders = new Map();
   for (const row of reminderRows) {
+    if (view === 'summary') {
+      const channels = reminders.get(row.todoId) || [];
+      if (['in_app', 'email'].includes(row.channel) && !channels.includes(row.channel)) channels.push(row.channel);
+      reminders.set(row.todoId, channels);
+      continue;
+    }
     const current = reminders.get(row.todoId) || {
       mode: row.intervalMinutes ? 'repeat' : 'once',
       channels: [],
@@ -317,7 +556,59 @@ export async function listTodos(db, userId, { status = 'pending', keyword = '', 
     if (row.channel === 'email') current.email = row.email || null;
     reminders.set(row.todoId, current);
   }
-  return items.map((item) => {
+  return reminders;
+}
+
+/**
+ * 待办列表的唯一查询入口。页面调用 full 视图；Agent 只能调用 summary 视图，
+ * 因此待办说明和提醒邮箱不会进入模型上下文。
+ */
+export async function listTodoPage(db, userId, input = {}) {
+  const { status, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeTodoListOptions(input);
+  const where = ['user_id = ?', 'del_flag = 0'];
+  const params = [userId];
+  if (status !== 'all') {
+    where.push('status = ?');
+    params.push(status);
+  }
+  if (keyword) {
+    where.push('(title LIKE ? OR description LIKE ?)');
+    const like = `%${keyword}%`;
+    params.push(like, like);
+  }
+  const fields =
+    view === 'summary'
+      ? 'id, title, checklist, priority, status, due_at AS dueAt, completed_at AS completedAt'
+      : `id, title, description, checklist, priority, status, due_at AS dueAt,
+            completed_at AS completedAt, create_time AS createdAt, update_time AS updatedAt`;
+  const pageSql = `SELECT ${fields}
+     FROM todo_items WHERE ${where.join(' AND ')}
+     ORDER BY ${todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
+  const pageParams = paginated ? [...params, limit + 1, offset] : params;
+  const [[rows], countResult] = await Promise.all([
+    db.query(pageSql, pageParams),
+    includeTotal ? db.query(`SELECT COUNT(*) AS total FROM todo_items WHERE ${where.join(' AND ')}`, params) : null,
+  ]);
+  const hasMore = paginated && rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  const reminders = await loadTodoReminderMap(db, items, userId, view);
+  const mappedItems = items.map((item) => {
+    if (view === 'summary') {
+      const checklist = parseChecklist(item.checklist);
+      return {
+        id: String(item.id),
+        title: item.title || '未命名待办',
+        priority: Number(item.priority || 0),
+        status: item.status,
+        dueAt: item.dueAt || null,
+        completedAt: item.completedAt || null,
+        checklistProgress: {
+          completed: checklist.filter((entry) => Boolean(entry?.done)).length,
+          total: checklist.length,
+        },
+        reminderChannels: reminders.get(item.id) || [],
+      };
+    }
     const reminder = reminders.get(item.id) || null;
     return {
       ...item,
@@ -326,6 +617,17 @@ export async function listTodos(db, userId, { status = 'pending', keyword = '', 
       reminderAt: reminder?.startAt || null,
     };
   });
+  return {
+    items: mappedItems,
+    total: includeTotal ? Number(countResult?.[0]?.[0]?.total || 0) : mappedItems.length,
+    nextCursor: hasMore ? encodeOffsetCursor(TODO_PAGE_CURSOR_SCOPE, offset + items.length) : null,
+  };
+}
+
+/** 页面兼容入口：维持既有数组返回形态，同时复用统一筛选、排序与分页规则。 */
+export async function listTodos(db, userId, options = {}) {
+  const result = await listTodoPage(db, userId, { ...options, view: 'full', includeTotal: false });
+  return result.items;
 }
 
 export async function queryTodoPendingCount(db, userId) {

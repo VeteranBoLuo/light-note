@@ -19,6 +19,7 @@
   const props = defineProps<{
     items: AiToolStatusItem[];
     hasContent?: boolean;
+    hasPendingAction?: boolean;
   }>();
 
   const { t, te } = useI18n();
@@ -31,13 +32,20 @@
     return [...latestByName.values()];
   });
 
+  // 确认与选择状态有独立、可直接操作的卡片；不能再额外渲染“等待确认”的过程提示。
+  // 否则用户会看到状态条、活动摘要与确认卡三次表达同一件事。
   const displayItems = computed(() =>
-    props.hasContent ? latestItems.value.filter((item) => !AI_WRITE_TOOL_NAMES.has(item.name)) : latestItems.value,
+    latestItems.value.filter((item) => {
+      if (item.status === 'confirmation_required' || item.status === 'interaction_required') return false;
+      return !props.hasContent || !AI_WRITE_TOOL_NAMES.has(item.name);
+    }),
   );
 
   const runningItem = computed(() => [...displayItems.value].reverse().find((item) => item.status === 'running'));
   const hasRunning = computed(() => Boolean(runningItem.value));
-  const showProgress = computed(() => !props.hasContent || hasRunning.value);
+  const showProgress = computed(
+    () => !props.hasPendingAction && Boolean(displayItems.value.length) && (!props.hasContent || hasRunning.value),
+  );
   const errorCount = computed(() => displayItems.value.filter((item) => item.status === 'error').length);
 
   function toolLabel(name: string) {
@@ -51,12 +59,6 @@
         ? 'ai.toolProgress.preparingAction'
         : 'ai.toolProgress.reading';
       return t(key, { target: toolLabel(runningItem.value.name) });
-    }
-    if (displayItems.value.some((item) => item.status === 'confirmation_required')) {
-      return t('ai.toolProgress.awaitingConfirmation');
-    }
-    if (displayItems.value.some((item) => item.status === 'interaction_required')) {
-      return t('ai.toolProgress.awaitingChoice');
     }
     if (errorCount.value) {
       return t(

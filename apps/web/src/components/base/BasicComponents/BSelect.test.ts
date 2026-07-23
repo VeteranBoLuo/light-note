@@ -11,8 +11,12 @@ const options = [
 
 let cleanup: (() => void) | undefined;
 
-function mountSelect(showSearch = false, accessibility: { ariaLabel?: string; ariaLabelledby?: string } = {}) {
-  const value = ref('');
+function mountSelect(
+  showSearch = false,
+  accessibility: { ariaLabel?: string; ariaLabelledby?: string } = {},
+  mode: 'single' | 'multiple' = 'single',
+) {
+  const value = ref<string | string[]>(mode === 'multiple' ? [] : '');
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -21,9 +25,10 @@ function mountSelect(showSearch = false, accessibility: { ariaLabel?: string; ar
         h(BSelect, {
           options,
           showSearch,
+          mode,
           ...accessibility,
           value: value.value,
-          'onUpdate:value': (nextValue: string) => {
+          'onUpdate:value': (nextValue: string | string[]) => {
             value.value = nextValue;
           },
         });
@@ -52,8 +57,8 @@ function mountSelect(showSearch = false, accessibility: { ariaLabel?: string; ar
   return { host, value };
 }
 
-function pressKey(target: HTMLElement, key: string) {
-  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+function pressKey(target: HTMLElement, key: string, init: KeyboardEventInit = {}) {
+  target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
 }
 
 afterEach(() => {
@@ -97,6 +102,22 @@ describe('BSelect keyboard interaction', () => {
     pressKey(input!, 'Enter');
     await nextTick();
     expect(value.value).toBe('first');
+  });
+
+  it('does not select an active option when Enter confirms an IME candidate', async () => {
+    const { host, value } = mountSelect(true, {}, 'multiple');
+    host.querySelector<HTMLElement>('.select-trigger')?.click();
+    await nextTick();
+    const input = document.body.querySelector<HTMLInputElement>('.select-search-input');
+    expect(input).not.toBeNull();
+
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(input!.getAttribute('aria-activedescendant')).toMatch(/-option-1$/);
+
+    pressKey(input!, 'Enter', { isComposing: true });
+    await nextTick();
+    expect(value.value).toEqual([]);
   });
 
   it('forwards an aria-labelledby relationship to a non-searchable combobox', () => {

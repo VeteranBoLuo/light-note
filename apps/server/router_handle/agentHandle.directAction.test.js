@@ -17,6 +17,10 @@ const mocks = vi.hoisted(() => ({
   inspectAgentInteractionResponse: vi.fn(),
   claimAgentInteractionResponse: vi.fn(),
   settleAgentInteractionResponse: vi.fn(),
+  recordPendingActionBatch: vi.fn(),
+  recordPendingActionBatchById: vi.fn(),
+  resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
+  settleSessionAction: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({
@@ -33,7 +37,10 @@ vi.mock('../util/agent/deepseekClient.js', () => ({
 
 vi.mock('../util/agent/timeRange.js', () => ({ parseTimeRange: vi.fn() }));
 vi.mock('../util/agent/prompt.js', () => ({ buildPlannerPrompt: vi.fn() }));
-vi.mock('../util/agent/toolRouter.js', () => ({ selectAgentTools: vi.fn(() => []) }));
+vi.mock('../util/agent/toolRouter.js', () => ({
+  matchAgentWriteActionToolNames: vi.fn(() => []),
+  selectAgentTools: vi.fn(() => []),
+}));
 vi.mock('../util/agent/secondRound.js', () => ({
   FOLLOW_UP_ROUND_INSTRUCTION: '',
   constrainSecondRoundToolCalls: vi.fn(() => []),
@@ -53,7 +60,11 @@ vi.mock('../util/noteAiService.js', () => ({
 
 vi.mock('../util/agent/sessionStore.js', () => ({
   getOrCreateSession: mocks.getOrCreateSession,
+  recordPendingActionBatch: mocks.recordPendingActionBatch,
+  recordPendingActionBatchById: mocks.recordPendingActionBatchById,
   recordTurn: vi.fn(),
+  resolveSessionActionRetry: mocks.resolveSessionActionRetry,
+  settleSessionAction: mocks.settleSessionAction,
   getSessionId: (session) => session.id,
 }));
 
@@ -556,7 +567,25 @@ describe('confirmAgentTool', () => {
       confirmation.args,
       expect.objectContaining({ idempotencyKey: 'agent-write-v1:confirm-image' }),
     );
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    expect(mocks.settleSessionAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-image',
+        confirmationId: 'confirm-image-1',
+        state: 'succeeded',
+      }),
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({
+          actionReceipt: expect.objectContaining({
+            actionId: 'confirm-image-1',
+            toolName: 'create_image_note',
+            status: 'succeeded',
+          }),
+        }),
+      }),
+    );
   });
 
   it('身份校验失败时不获取或释放动作锁，也不执行工具', async () => {

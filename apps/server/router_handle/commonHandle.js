@@ -1397,3 +1397,113 @@ export const getAgentLogs = async (req, res) => {
     res.send(resultData(null, 500, '查询失败: ' + e.message));
   }
 };
+
+// AI 回答反馈（root 专属）：只查询仍处于现有保留期内的会话。
+// 不复制问题/回答正文，也不绕过会话删除策略；用户清空会话后外键级联删除反馈，本接口自然不可见。
+export const getAiFeedback = async (req, res) => {
+  try {
+    if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
+
+    const {
+      keyword = '',
+      rating = '',
+      resolved = '',
+      pageSize = 20,
+      currentPage = 1,
+      hideInternal = true,
+    } = req.body || {};
+    const take = Math.min(Math.max(Number(pageSize) || 20, 1), 100);
+    const page = Math.max(Number(currentPage) || 1, 1);
+    const offset = take * (page - 1);
+    const where = [
+      "c.status IN ('active', 'archived')",
+      "(c.retention_mode <> 'temporary' OR (c.expire_at IS NOT NULL AND c.expire_at > CURRENT_TIMESTAMP))",
+    ];
+    const params = [];
+
+    if (rating === 'helpful' || rating === 'unhelpful') {
+      where.push('f.rating = ?');
+      params.push(rating);
+    }
+    if (resolved === 'resolved') where.push('f.resolved = 1');
+    if (resolved === 'pending') where.push('(f.resolved IS NULL OR f.resolved = 0)');
+    if (String(keyword).trim()) {
+      const like = `%${String(keyword).trim().slice(0, 200)}%`;
+      where.push(
+        '(u.alias LIKE ? OR c.title LIKE ? OR q.content LIKE ? OR m.content LIKE ? OR f.reason LIKE ? OR f.comment LIKE ?)',
+      );
+      params.push(like, like, like, like, like, like);
+    }
+    if (hideInternal) {
+      where.push(`(u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`);
+      params.push(...INTERNAL_ROLES);
+    }
+    const whereSql = where.join(' AND ');
+    const fromSql = `FROM ai_feedback f
+      INNER JOIN ai_conversations c ON c.id = f.conversation_id
+      INNER JOIN ai_messages m ON m.id = f.message_id AND m.conversation_id = c.id AND m.role = 'assistant'
+      LEFT JOIN ai_messages q ON q.id = m.parent_message_id AND q.conversation_id = c.id AND q.role = 'user'
+      LEFT JOIN user u ON u.id = f.actor_user_id`;
+
+    const [[rows], [countRows], [summaryRows], [reasonRows]] = await Promise.all([
+      pool.query(
+        `SELECT f.id, f.conversation_id, f.message_id, f.request_id, f.rating, f.reason, f.resolved, f.comment,
+                f.create_time, f.update_time, c.title AS conversation_title, u.alias AS user_alias,
+                q.content AS question, m.content AS answer, m.model_meta_json
+         ${fromSql} WHERE ${whereSql}
+         ORDER BY f.update_time DESC, f.id DESC LIMIT ? OFFSET ?`,
+        [...params, take, offset],
+      ),
+      pool.query(`SELECT COUNT(*) AS total ${fromSql} WHERE ${whereSql}`, params),
+      pool.query(
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(f.rating = 'helpful'), 0) AS helpful,
+                COALESCE(SUM(f.rating = 'unhelpful'), 0) AS unhelpful,
+                COALESCE(SUM(f.rating = 'unhelpful' AND (f.resolved IS NULL OR f.resolved = 0)), 0) AS pending
+         ${fromSql} WHERE ${whereSql}`,
+        params,
+      ),
+      pool.query(
+        `SELECT f.reason, COUNT(*) AS count ${fromSql}
+         WHERE ${whereSql} AND f.rating = 'unhelpful' AND f.reason IS NOT NULL
+         GROUP BY f.reason ORDER BY count DESC, f.reason ASC LIMIT 10`,
+        params,
+      ),
+    ]);
+    const summary = summaryRows[0] || {};
+    return res.send(
+      resultData({
+        items: rows.map((row) => ({
+          id: String(row.id),
+          conversationId: String(row.conversation_id),
+          messageId: String(row.message_id),
+          requestId: row.request_id || null,
+          rating: row.rating,
+          reason: row.reason || null,
+          resolved: row.resolved == null ? null : Boolean(row.resolved),
+          comment: row.comment || '',
+          userAlias: row.user_alias || '',
+          conversationTitle: row.conversation_title || '',
+          question: row.question || '',
+          answer: row.answer || '',
+          modelMeta: row.model_meta_json || null,
+          createdAt: row.create_time,
+          updatedAt: row.update_time,
+        })),
+        total: Number(countRows[0]?.total || 0),
+        currentPage: page,
+        pageSize: take,
+        summary: {
+          total: Number(summary.total || 0),
+          helpful: Number(summary.helpful || 0),
+          unhelpful: Number(summary.unhelpful || 0),
+          pending: Number(summary.pending || 0),
+        },
+        reasons: reasonRows.map((row) => ({ reason: row.reason, count: Number(row.count || 0) })),
+      }),
+    );
+  } catch (error) {
+    console.error('[admin-ai-feedback] query failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '查询 AI 回答反馈失败'));
+  }
+};

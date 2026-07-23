@@ -4,6 +4,7 @@ import {
   attachPendingStatus,
   completeResources,
   enqueueResources,
+  listInboxResources,
   normalizeInboxItems,
   normalizeInboxSource,
   normalizeResourceType,
@@ -26,6 +27,73 @@ describe('resourceInbox', () => {
         { resourceType: 'note', resourceId: 'n1' },
       ]),
     ).toEqual([{ resourceType: 'note', resourceId: 'n1' }]);
+  });
+
+  it('摘要分页只返回待整理资源的导航信息，不把资源正文或 URL 暴露给 Agent', async () => {
+    const connection = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              resourceType: 'note',
+              resourceId: 'n1',
+              source: 'manual',
+              collectedAt: '2026-07-23 09:00:00',
+              title: '会议纪要',
+              resourceCreatedAt: '2026-07-22 09:00:00',
+            },
+            {
+              resourceType: 'bookmark',
+              resourceId: 'b1',
+              source: 'quick_capture',
+              collectedAt: '2026-07-22 09:00:00',
+              title: '下一条资源',
+            },
+          ],
+        ])
+        .mockResolvedValueOnce([[{ total: 2 }]])
+        .mockResolvedValueOnce([[{ resourceType: 'note', total: 2 }]]),
+    };
+
+    const result = await listInboxResources(connection, {
+      userId: 'u1',
+      type: 'note',
+      keyword: '会议',
+      limit: 1,
+      view: 'summary',
+    });
+
+    const pageSql = connection.query.mock.calls[0][0];
+    expect(pageSql).toContain('INNER JOIN');
+    expect(pageSql).toContain('r.user_id = i.user_id');
+    expect(pageSql).toContain('LIMIT ? OFFSET ?');
+    expect(pageSql).not.toContain('r.title, r.summary, r.detail');
+    expect(connection.query.mock.calls[0][1]).toEqual(['u1', 'note', '%会议%', '%会议%', 2, 0]);
+    expect(result).toEqual({
+      items: [
+        {
+          resourceType: 'note',
+          resourceId: 'n1',
+          source: 'manual',
+          collectedAt: '2026-07-23 09:00:00',
+          title: '会议纪要',
+          resourceCreatedAt: '2026-07-22 09:00:00',
+        },
+      ],
+      total: 2,
+      nextCursor: expect.any(String),
+      pendingTotal: 2,
+      typeTotals: { bookmark: 0, note: 2, file: 0 },
+    });
+  });
+
+  it('待整理列表拒绝无效资源类型，且不会查询数据库', async () => {
+    const connection = { query: vi.fn() };
+    await expect(listInboxResources(connection, { userId: 'u1', type: 'unsafe' })).rejects.toMatchObject({
+      code: 'INBOX_LIST_PARAMS_INVALID',
+    });
+    expect(connection.query).not.toHaveBeenCalled();
   });
 
   it('归属检查按固定表映射查询并拒绝缺失资源', async () => {

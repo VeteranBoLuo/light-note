@@ -1,22 +1,35 @@
 <template>
   <section v-if="visible" class="ai-activity" :aria-label="t('ai.activity.title')">
-    <BButton class="ai-activity__toggle" :aria-expanded="expanded" :aria-label="summary" @click="expanded = !expanded">
-      <SvgIcon :src="summaryIcon" size="14" aria-hidden="true" />
-      <span>{{ summary }}</span>
-      <small>{{ t('ai.activity.details') }}</small>
-    </BButton>
-    <div v-if="expanded" class="ai-activity__details" role="list">
-      <div v-for="item in items" :key="item.key" class="ai-activity__item" role="listitem">
-        <SvgIcon :src="statusIcon(item.status)" size="14" aria-hidden="true" />
-        <span>{{ item.label }}</span>
-        <small v-if="item.meta">{{ item.meta }}</small>
+    <div class="ai-activity__card" role="status">
+      <BButton
+        v-if="hasExpandableDetails"
+        class="ai-activity__toggle"
+        :aria-expanded="expanded"
+        :aria-label="summary"
+        @click="expanded = !expanded"
+      >
+        <SvgIcon :src="summaryIcon" size="14" aria-hidden="true" />
+        <span>{{ summary }}</span>
+        <small>{{ t(expanded ? 'ai.activity.hideDetails' : 'ai.activity.showDetails') }}</small>
+      </BButton>
+      <div v-else class="ai-activity__summary">
+        <SvgIcon :src="summaryIcon" size="14" aria-hidden="true" />
+        <span>{{ diagnosticItems[0]?.label }}</span>
+        <small>{{ t('ai.activity.notCompleted') }}</small>
+      </div>
+      <div v-if="hasExpandableDetails && expanded" class="ai-activity__details" role="list">
+        <div v-for="item in diagnosticItems" :key="item.key" class="ai-activity__item" role="listitem">
+          <SvgIcon :src="statusIcon(item.status)" size="14" aria-hidden="true" />
+          <span>{{ item.label }}</span>
+          <small>{{ t('ai.activity.notCompleted') }}</small>
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -104,19 +117,15 @@
     }
     return result;
   });
-  const hasError = computed(() => items.value.some((item) => item.status === 'error' || item.status === 'warning'));
-  // 只在有失败/需注意(error/warning)时展示——此时活动摘要用于诚实披露过程与失败(方案 §7.4:关键失败不得隐藏)。
-  // 干净进行中的进度已由下方 ReplyLoading 阶段文案(如"正在组织回答…")承担,故不再在流式期间弹这张"相关内容/查看
-  // 详情"卡:成功场景它与阶段文案+参考来源卡重复,回答完就消失、纯属噪音。
-  const visible = computed(() => items.value.length > 0 && hasError.value);
-  const summary = computed(() => {
-    if (hasError.value) return t('ai.activity.needsAttention', { count: items.value.length });
-    if (props.streaming) return items.value.at(-1)?.label || t('ai.activity.inProgress');
-    return t('ai.activity.completed', { count: items.value.length });
-  });
-  const summaryIcon = computed(() =>
-    hasError.value ? icon.message.warning : props.streaming ? icon.ai.thinking : icon.message.success,
-  );
+  // “等待确认 / 等待选择”由下面真正可操作的确认卡、选择卡承接。
+  // 不能再把它们包装成另一张“查看详情”卡，否则会把用户的注意力从最终动作上移开。
+  // 这里只保留真实失败，并等本轮回答完成后再作为执行回执展示：
+  // 流式期间由 ReplyLoading 解释当前阶段，不能让终态卡先于回答正文出现。
+  const diagnosticItems = computed(() => items.value.filter((item) => item.status === 'error'));
+  const visible = computed(() => !props.streaming && diagnosticItems.value.length > 0);
+  const hasExpandableDetails = computed(() => diagnosticItems.value.length > 1);
+  const summary = computed(() => t('ai.activity.failedSummary', { count: diagnosticItems.value.length }));
+  const summaryIcon = computed(() => icon.message.error);
 
   function statusIcon(status: ActivityItem['status']) {
     if (status === 'error') return icon.message.error;
@@ -124,36 +133,47 @@
     if (status === 'running') return icon.ai.thinking;
     return icon.message.success;
   }
-
-  watch(
-    hasError,
-    (value) => {
-      if (value) expanded.value = true;
-    },
-    { immediate: true },
-  );
 </script>
 
 <style scoped lang="less">
   .ai-activity {
-    display: grid;
     width: min(680px, calc(100% - 44px));
-    gap: 6px;
-    margin: -8px 0 12px 44px;
+    margin: 0 0 12px 44px;
   }
 
+  .ai-activity__card {
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--primary-color) 3%, var(--card-background));
+  }
+
+  .ai-activity__summary,
   .ai-activity__toggle {
     width: 100%;
     min-height: 34px;
-    justify-content: flex-start;
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
     gap: 7px;
     padding: 0 10px;
-    border: 1px solid var(--surface-border-color);
-    background: color-mix(in srgb, var(--primary-color) 3%, var(--card-background));
     color: var(--desc-color);
     text-align: left;
   }
 
+  .ai-activity__toggle {
+    height: auto;
+    justify-content: flex-start;
+    border: 0 !important;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .ai-activity__toggle:hover {
+    background: var(--hover-background);
+  }
+
+  .ai-activity__summary span,
   .ai-activity__toggle span {
     min-width: 0;
     overflow: hidden;
@@ -161,6 +181,7 @@
     text-overflow: ellipsis;
   }
 
+  .ai-activity__summary small,
   .ai-activity__toggle small,
   .ai-activity__item small {
     color: var(--desc-color);
@@ -171,9 +192,8 @@
     display: grid;
     gap: 4px;
     padding: 8px 10px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 9px;
-    background: var(--workspace-panel-bg-color, var(--card-background));
+    border-top: 1px solid var(--surface-border-color);
+    background: color-mix(in srgb, var(--workspace-panel-bg-color, var(--card-background)) 80%, transparent);
   }
 
   .ai-activity__item {
@@ -193,10 +213,14 @@
   @container ai-chat (max-width: 520px) {
     .ai-activity {
       width: 100%;
-      margin: 2px 0 12px;
+      margin: 4px 0 12px;
     }
 
     .ai-activity__toggle {
+      min-height: 44px;
+    }
+
+    .ai-activity__summary {
       min-height: 44px;
     }
   }

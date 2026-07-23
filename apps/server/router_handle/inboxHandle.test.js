@@ -10,6 +10,7 @@ const getConnection = vi.fn(() => connection);
 const poolQuery = vi.fn();
 const enqueueResources = vi.fn();
 const completeResources = vi.fn();
+const listInboxResources = vi.fn();
 const queryPendingCount = vi.fn();
 const queryTodoPendingCount = vi.fn();
 const ensureNotVisitor = vi.fn(() => true);
@@ -22,9 +23,9 @@ vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
 vi.mock('../util/resourceInbox.js', () => ({
   enqueueResources,
   completeResources,
+  listInboxResources,
   normalizeInboxItems: vi.fn((items) => items),
   normalizeInboxSource: vi.fn((source, fallback) => source || fallback),
-  normalizeResourceType: vi.fn((type) => (['bookmark', 'note', 'file'].includes(type) ? type : null)),
   queryPendingCount,
 }));
 vi.mock('../util/services/todoService.js', () => ({ queryTodoPendingCount }));
@@ -45,6 +46,13 @@ describe('inboxHandle 写事务', () => {
       typeTotals: { bookmark: 0, note: 1, file: 0 },
     });
     queryTodoPendingCount.mockResolvedValue(2);
+    listInboxResources.mockResolvedValue({
+      items: [{ resourceType: 'file', resourceId: '8', title: 'demo.txt' }],
+      total: 1,
+      nextCursor: null,
+      pendingTotal: 1,
+      typeTotals: { bookmark: 0, note: 0, file: 1 },
+    });
     ensureNotVisitor.mockReturnValue(true);
     getConnection.mockResolvedValue(connection);
   });
@@ -70,10 +78,7 @@ describe('inboxHandle 写事务', () => {
   it('加入失败时回滚且不返回数据库原始错误', async () => {
     enqueueResources.mockRejectedValueOnce(new Error('sensitive database detail'));
     const res = mockRes();
-    await enqueueInbox(
-      { user: { id: 'u1' }, body: { items: [{ resourceType: 'note', resourceId: 'n1' }] } },
-      res,
-    );
+    await enqueueInbox({ user: { id: 'u1' }, body: { items: [{ resourceType: 'note', resourceId: 'n1' }] } }, res);
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith({
@@ -95,10 +100,7 @@ describe('inboxHandle 写事务', () => {
     getConnection.mockRejectedValueOnce(new Error('connection secret'));
     const res = mockRes();
     await expect(
-      enqueueInbox(
-        { user: { id: 'u1' }, body: { items: [{ resourceType: 'note', resourceId: 'n1' }] } },
-        res,
-      ),
+      enqueueInbox({ user: { id: 'u1' }, body: { items: [{ resourceType: 'note', resourceId: 'n1' }] } }, res),
     ).resolves.toBeUndefined();
     expect(res.send).toHaveBeenCalledWith({
       data: null,
@@ -152,36 +154,37 @@ describe('inboxHandle 写事务', () => {
     });
   });
 
-  it('列表使用固定三类 UNION、当前用户过滤并一次返回全部结果', async () => {
-    poolQuery.mockResolvedValueOnce([[
-      { resourceType: 'file', resourceId: '8', title: 'demo.txt' },
-    ]]);
+  it('列表复用共享查询 Service，并把筛选条件与当前用户传入', async () => {
     const res = mockRes();
-    await listInbox({
-      user: { id: 'u1' },
-      body: { type: 'file', keyword: 'demo', sort: 'oldest' },
-    }, res);
-    expect(poolQuery).toHaveBeenCalledTimes(1);
-    const listSql = poolQuery.mock.calls[0][0];
-    expect(listSql).toContain("SELECT CONVERT('bookmark' USING utf8)");
-    expect(listSql).toContain("CONVERT('note' USING utf8)");
-    expect(listSql).toContain("CONVERT('file' USING utf8)");
-    expect(listSql).toContain('CAST(f.id AS CHAR)');
-    expect(listSql).toContain('COLLATE utf8mb4_unicode_ci');
-    expect(listSql).toContain('COLLATE utf8_general_ci');
-    expect(listSql).toContain('i.user_id = ?');
-    expect(listSql).toContain('i.create_time ASC');
-    expect(listSql).not.toContain('LIMIT');
-    expect(poolQuery.mock.calls[0][1]).toEqual(['u1', 'file', '%demo%', '%demo%']);
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
-      status: 200,
-      data: expect.objectContaining({ total: 1 }),
-    }));
+    await listInbox(
+      {
+        user: { id: 'u1' },
+        body: { type: 'file', keyword: 'demo', sort: 'oldest' },
+      },
+      res,
+    );
+    expect(listInboxResources).toHaveBeenCalledWith(expect.anything(), {
+      userId: 'u1',
+      type: 'file',
+      keyword: 'demo',
+      sort: 'oldest',
+      includeTotal: false,
+    });
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({ total: 1 }),
+      }),
+    );
   });
 
-  it('非法筛选或排序直接拒绝且不查询数据库', async () => {
+  it('非法筛选或排序由共享 Service 拒绝', async () => {
+    const error = new Error('无效的筛选或排序参数');
+    error.code = 'INBOX_LIST_PARAMS_INVALID';
+    listInboxResources.mockRejectedValueOnce(error);
     const res = mockRes();
     await listInbox({ user: { id: 'u1' }, body: { sort: 'DROP TABLE' } }, res);
+    expect(listInboxResources).toHaveBeenCalledTimes(1);
     expect(poolQuery).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith({ data: null, status: 400, msg: '无效的筛选或排序参数' });
   });
@@ -190,13 +193,15 @@ describe('inboxHandle 写事务', () => {
     const res = mockRes();
     await countInbox({ user: { id: 'u1' } }, res);
     expect(queryPendingCount).toHaveBeenCalledWith(expect.anything(), 'u1');
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
-      data: {
-        pendingTotal: 1,
-        typeTotals: { bookmark: 0, note: 1, file: 0 },
-        todoPendingTotal: 2,
-        actionTotal: 3,
-      },
-    }));
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          pendingTotal: 1,
+          typeTotals: { bookmark: 0, note: 1, file: 0 },
+          todoPendingTotal: 2,
+          actionTotal: 3,
+        },
+      }),
+    );
   });
 });

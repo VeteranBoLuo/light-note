@@ -15,8 +15,10 @@ vi.mock('./interactionStore.js', () => {
 const {
   canResolveFolderInteraction,
   canResolveBookmarkUrlInteraction,
+  canResolveTodoStatusInteraction,
   createBookmarkUrlResolutionInteraction,
   createFolderResolutionInteraction,
+  createTodoStatusResolutionInteraction,
   resolveAgentInteractionAction,
 } = await import('./interactionResolvers.js');
 
@@ -71,9 +73,7 @@ describe('agent interactionResolvers', () => {
         candidates: [{ id: 'candidate_1', url: 'https://example.com' }],
       },
     };
-    expect(
-      resolveAgentInteractionAction(interaction, { cancelled: false, selectedIds: ['candidate_1'] }),
-    ).toEqual({
+    expect(resolveAgentInteractionAction(interaction, { cancelled: false, selectedIds: ['candidate_1'] })).toEqual({
       state: 'confirmation_required',
       toolName: 'create_bookmark',
       args: { url: 'https://example.com', name: '资料' },
@@ -84,6 +84,65 @@ describe('agent interactionResolvers', () => {
         selectedIds: ['https://attacker.example'],
       }),
     ).toThrow('请选择一个可用的网址');
+  });
+
+  it('多个待办匹配会先转换为单选卡，选择本身不直接写入', async () => {
+    const error = {
+      code: 'TODO_SELECTION_REQUIRED',
+      normalizedToolArgs: { keyword: '周报', status: 'completed' },
+      data: {
+        candidates: [
+          { todoId: 'todo-1', title: '周报', status: 'pending', dueAt: '2026-07-24 10:00:00' },
+          { todoId: 'todo-2', title: '周报', status: 'completed', dueAt: null },
+        ],
+      },
+    };
+    expect(canResolveTodoStatusInteraction(error, 'set_todo_status')).toBe(true);
+    expect(canResolveTodoStatusInteraction(error, 'create_note')).toBe(false);
+
+    const result = await createTodoStatusResolutionInteraction({
+      error,
+      toolName: 'set_todo_status',
+      ownerKey: 'user:user-1',
+      sessionId: 'session-1',
+      context: { resourceUserId: 'user-1', resourceUserRole: 'user' },
+    });
+    expect(result.spec).toMatchObject({
+      code: 'todo_status_target_selection',
+      type: 'single_choice',
+      purpose: 'choice_confirmation',
+      minSelections: 1,
+      maxSelections: 1,
+    });
+    expect(result.spec.options.map((option) => option.id)).toEqual(['todo_1', 'todo_2']);
+    expect(result.action).toEqual({
+      resolver: 'set_todo_status_target_selection',
+      toolName: 'set_todo_status',
+      args: { status: 'completed' },
+      candidates: [
+        { id: 'todo_1', todoId: 'todo-1' },
+        { id: 'todo_2', todoId: 'todo-2' },
+      ],
+    });
+  });
+
+  it('待办选择只信任服务端缓存的 todoId，随后仍需标准确认', () => {
+    const interaction = {
+      action: {
+        resolver: 'set_todo_status_target_selection',
+        toolName: 'set_todo_status',
+        args: { status: 'pending' },
+        candidates: [{ id: 'todo_1', todoId: 'todo-1' }],
+      },
+    };
+    expect(resolveAgentInteractionAction(interaction, { cancelled: false, selectedIds: ['todo_1'] })).toEqual({
+      state: 'confirmation_required',
+      toolName: 'set_todo_status',
+      args: { todoId: 'todo-1', status: 'pending' },
+    });
+    expect(() =>
+      resolveAgentInteractionAction(interaction, { cancelled: false, selectedIds: ['todo-attacker'] }),
+    ).toThrow('请选择一个可用的待办');
   });
 
   it('只处理保存附件工具的文件夹缺失/重名错误', () => {

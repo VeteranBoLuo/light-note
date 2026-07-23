@@ -106,7 +106,7 @@ describe('Agent Tool Policy', () => {
 
   it('写工具必须确认，inspect 代管不可准备写入，maintain 可生成确认', async () => {
     const tool = makeTool({
-      name: 'create_demo',
+      name: 'restore_trash',
       isWrite: true,
       riskLevel: 'medium',
       confirmationPolicy: 'always',
@@ -144,7 +144,7 @@ describe('Agent Tool Policy', () => {
 
   it('服务端确认参数可以保留 prepareArgs 生成的内部字段', async () => {
     const tool = makeTool({
-      name: 'create_demo',
+      name: 'set_todo_status',
       isWrite: true,
       riskLevel: 'low',
       confirmationPolicy: 'always',
@@ -160,6 +160,7 @@ describe('Agent Tool Policy', () => {
       phase: 'plan',
     });
     expect(prepared.args.internalVersion).toBe(3);
+    expect(prepared.retryArgs).toEqual({ title: 'demo' });
     await expect(
       enforceToolPolicy({
         registry,

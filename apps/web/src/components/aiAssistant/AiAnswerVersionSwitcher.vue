@@ -88,7 +88,7 @@
     align-items: center;
     gap: 4px;
     width: max-content;
-    margin: -4px 0 7px 48px;
+    margin: -8px 0 8px 48px;
     color: var(--sub-text-color);
     font-size: 11px;
   }
@@ -105,7 +105,7 @@
   }
 
   .ai-answer-version.is-mobile {
-    margin-left: 10px;
+    margin: -2px 0 8px 10px;
   }
 
   .ai-answer-version.is-mobile .ai-answer-version__button {

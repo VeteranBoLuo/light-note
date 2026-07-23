@@ -285,6 +285,8 @@ declare(ADMIN_POLICIES.READ, 'agent', [
 
 declare(ADMIN_POLICIES.AI_STATE_WRITE, 'agent', [
   ['POST', '/chat/conversations/create'],
+  // 将失效本地会话迁移为新云端会话，会创建会话及消息记录，按 AI 状态写入约束。
+  ['POST', '/chat/conversations/recover-local'],
   ['POST', '/chat/conversations/update'],
   ['POST', '/chat/conversations/delete'],
   ['POST', '/chat/conversations/restore'],
@@ -342,6 +344,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/runSql'],
   ['POST', '/common/getAgentLogs'],
   ['POST', '/common/getAgentLogsSummary'],
+  ['POST', '/common/getAiFeedback'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverview'],
   ['POST', '/notification/send'],

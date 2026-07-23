@@ -13,6 +13,14 @@ const mocks = vi.hoisted(() => ({
   resolveAiMemoryIdentity: vi.fn(),
   getActiveAiMemoriesForPrompt: vi.fn(),
   createAiMemoryCandidate: vi.fn(),
+  selectAgentTools: vi.fn(),
+  matchAgentWriteActionToolNames: vi.fn(() => []),
+  createToolConfirmation: vi.fn(),
+  publicToolConfirmation: vi.fn(),
+  recordPendingActionBatch: vi.fn(),
+  recordPendingActionBatchById: vi.fn(),
+  resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
+  settleSessionAction: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({ default: { query: mocks.poolQuery } }));
@@ -27,7 +35,8 @@ vi.mock('../util/agent/deepseekClient.js', () => ({
 }));
 vi.mock('../util/agent/prompt.js', () => ({ buildPlannerPrompt: vi.fn(() => 'system') }));
 vi.mock('../util/agent/toolRouter.js', () => ({
-  selectAgentTools: vi.fn((registry) => [registry.get('query_demo')].filter(Boolean)),
+  matchAgentWriteActionToolNames: mocks.matchAgentWriteActionToolNames,
+  selectAgentTools: mocks.selectAgentTools,
 }));
 vi.mock('../util/agent/secondRound.js', () => ({
   FOLLOW_UP_ROUND_INSTRUCTION: '',
@@ -37,7 +46,11 @@ vi.mock('../util/agent/secondRound.js', () => ({
 }));
 vi.mock('../util/agent/sessionStore.js', () => ({
   getOrCreateSession: mocks.getOrCreateSession,
+  recordPendingActionBatch: mocks.recordPendingActionBatch,
+  recordPendingActionBatchById: mocks.recordPendingActionBatchById,
   recordTurn: mocks.recordTurn,
+  resolveSessionActionRetry: mocks.resolveSessionActionRetry,
+  settleSessionAction: mocks.settleSessionAction,
   getSessionId: (session) => session.id,
 }));
 vi.mock('../util/aiQuota.js', () => ({
@@ -74,6 +87,27 @@ vi.mock('../util/agent/tools/index.js', () => ({
       transform: (raw) => `结果:${raw.value}`,
       summarize: (raw) => `结果:${raw.value}`,
     },
+    {
+      name: 'set_todo_status',
+      description: '修改一条待办状态',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string' },
+          status: { type: 'string', enum: ['pending', 'completed'] },
+        },
+        required: ['keyword', 'status'],
+      },
+      isWrite: true,
+      directAction: true,
+      riskLevel: 'low',
+      confirmationPolicy: 'always',
+      prepareArgs: vi.fn(async (args) => ({ ...args, expectedVersion: 'todo-version-1', targetTitle: args.keyword })),
+      execute: vi.fn(),
+      transform: () => '待办状态已更新。',
+      summarize: () => '待办状态已更新。',
+      preview: (args) => ({ title: '完成待办', target: args.targetTitle, impact: '确认后才会写入。' }),
+    },
   ],
 }));
 vi.mock('../util/agent/confirmationStore.js', () => {
@@ -81,10 +115,10 @@ vi.mock('../util/agent/confirmationStore.js', () => {
   return {
     acquireToolConfirmationAction: vi.fn(),
     claimToolConfirmationExecution: vi.fn(),
-    createToolConfirmation: vi.fn(),
+    createToolConfirmation: mocks.createToolConfirmation,
     finalizeToolConfirmationAction: vi.fn(),
     inspectToolConfirmationExecution: vi.fn(),
-    publicToolConfirmation: vi.fn(),
+    publicToolConfirmation: mocks.publicToolConfirmation,
     rejectToolConfirmation: vi.fn(),
     settleToolConfirmationExecution: vi.fn(),
     ToolConfirmationError,
@@ -192,6 +226,19 @@ describe('agentChat 主链路', () => {
     });
     mocks.getActiveAiMemoriesForPrompt.mockResolvedValue([]);
     mocks.createAiMemoryCandidate.mockResolvedValue({ id: 'memory-1', status: 'candidate' });
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_demo')].filter(Boolean));
+    mocks.matchAgentWriteActionToolNames.mockReturnValue([]);
+    mocks.resolveSessionActionRetry.mockReturnValue({ state: 'none' });
+    mocks.createToolConfirmation.mockImplementation(async (input) => ({
+      token: 'confirmation-token-1',
+      confirmation: { ...input, id: 'confirmation-1' },
+      expiresIn: 300,
+    }));
+    mocks.publicToolConfirmation.mockImplementation((token, confirmation, expiresIn) => ({
+      ...confirmation,
+      token,
+      expiresIn,
+    }));
   });
 
   it('高置信普通问答跳过 Planner，并完整发送新旧 SSE 生命周期事件', async () => {
@@ -234,8 +281,8 @@ describe('agentChat 主链路', () => {
     );
     expect(mocks.recordTurn).toHaveBeenCalledWith(expect.anything(), '你好', '你好，我在。', []);
     const agentLogInsert = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'));
-    expect(agentLogInsert[1][16]).toContain('正文不写入日志');
-    expect(agentLogInsert[1][16]).not.toContain('你好');
+    expect(agentLogInsert[1][16]).toBe('你好');
+    expect(agentLogInsert[1][16]).not.toContain('你好，我在。');
   });
 
   it('长期记忆已全局关闭:即便 memoryMode=active 也不读取、不注入 Prompt、不生成候选', async () => {
@@ -477,6 +524,284 @@ describe('agentChat 主链路', () => {
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ response: '参数被安全策略拒绝。' }) }),
     );
+  });
+
+  it('明确待办完成请求在 Planner 漏调时仍生成确认，且不会再产生虚假的最终回复', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('set_todo_status')].filter(Boolean));
+    // 模拟 Provider 忽略工具 schema、直接给出 DIRECT_REPLY 的真实故障模式。
+    mocks.requestAi.mockResolvedValueOnce({
+      content: 'DIRECT_REPLY',
+      toolCalls: [],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'stop',
+    });
+    const req = request({ message: '把待办「测试代办」标记为完成', stream: false, contexts: [], attachmentIds: [] });
+    const res = response();
+
+    await agentChat(req, res);
+
+    // 只有 Planner 一次调用；待确认时严禁再请求 Final Reply 让模型自行声称“已完成”。
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'set_todo_status',
+        args: expect.objectContaining({ keyword: '测试代办', status: 'completed' }),
+      }),
+    );
+    expect(mocks.recordTurn).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: '',
+          confirmations: [expect.objectContaining({ id: 'confirmation-1', toolName: 'set_todo_status' })],
+        }),
+      }),
+    );
+  });
+
+  it('流式待确认操作先发送确认卡事件，再以空正文终态收口', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('set_todo_status')].filter(Boolean));
+    mocks.requestAi.mockResolvedValueOnce({
+      content: 'DIRECT_REPLY',
+      toolCalls: [],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'stop',
+    });
+    const req = request({ message: '把待办「测试代办」标记为完成', stream: true, contexts: [], attachmentIds: [] });
+    const res = response();
+
+    await agentChat(req, res);
+
+    const output = sseEvents(res);
+    const confirmationIndex = output.findIndex((event) => event.event === 'tool_confirmation');
+    const terminalIndex = output.findIndex((event) => event.event === 'response.completed');
+    expect(confirmationIndex).toBeGreaterThanOrEqual(0);
+    expect(terminalIndex).toBeGreaterThan(confirmationIndex);
+    expect(output.some((event) => event.event === 'delta')).toBe(false);
+    expect(output[terminalIndex]).toEqual(expect.objectContaining({ answer: '' }));
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+  });
+
+  it('取消后的“重新执行”不进入模型，重新预检并生成全新的确认', async () => {
+    mocks.resolveSessionActionRetry.mockReturnValue({
+      state: 'retryable',
+      action: {
+        confirmationId: 'confirmation-old',
+        toolName: 'set_todo_status',
+        retryArgs: { keyword: '测试代办', status: 'completed' },
+      },
+    });
+    const req = request({ message: '重新执行', stream: false, sessionId: 'session-1', locale: 'zh-CN' });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        toolName: 'set_todo_status',
+        args: expect.objectContaining({
+          keyword: '测试代办',
+          status: 'completed',
+          expectedVersion: 'todo-version-1',
+        }),
+      }),
+    );
+    expect(mocks.recordPendingActionBatch).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'session-1' }),
+      expect.objectContaining({
+        actions: [
+          expect.objectContaining({
+            confirmationId: 'confirmation-1',
+            toolName: 'set_todo_status',
+            retryArgs: { keyword: '测试代办', status: 'completed' },
+          }),
+        ],
+      }),
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: '',
+          confirmations: [expect.objectContaining({ id: 'confirmation-1' })],
+        }),
+      }),
+    );
+  });
+
+  it('明确写动作未产生确认时由服务端失败关闭，不允许模型编造成功', async () => {
+    mocks.selectAgentTools.mockReturnValue([]);
+    mocks.matchAgentWriteActionToolNames.mockReturnValue(['set_todo_status']);
+    const req = request({ message: '请完成待办整理发票', stream: false, contexts: [], attachmentIds: [] });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload?.data?.response).toContain('尚未执行');
+    expect(payload?.data?.response).not.toMatch(/已完成|成功/);
+  });
+
+  it('未支持的删除请求在额度和模型调用前由服务端确定性拦截', async () => {
+    const req = request({
+      message: '帮我删除我的笔记：引用测试',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.resolveAttachments).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(mocks.recordTurn).toHaveBeenCalledWith(
+      expect.anything(),
+      '帮我删除我的笔记：引用测试',
+      expect.stringMatching(/暂不支持.*没有执行/s),
+      [],
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: expect.stringMatching(/删除笔记.*没有执行/s),
+          confirmations: [],
+          actionPolicy: {
+            resolution: 'planned',
+            capabilityIds: ['note.delete'],
+            executed: false,
+          },
+        }),
+      }),
+    );
+  });
+
+  it('禁止操作以结构化流式终态返回“未修改”，不会泄漏到 Final Reply', async () => {
+    const req = request({
+      message: '彻底删除全部笔记',
+      stream: true,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    const output = sseEvents(res);
+    expect(output.find((event) => event.event === 'stage.changed')).toMatchObject({
+      stage: 'action_policy',
+      resolution: 'forbidden',
+      executed: false,
+    });
+    expect(output.find((event) => event.event === 'delta')?.output?.text).toMatch(/不允许.*没有修改/s);
+    expect(output.find((event) => event.event === 'response.completed')).toMatchObject({
+      output: {
+        action_policy: {
+          resolution: 'forbidden',
+          capability_ids: ['data.permanent_delete'],
+          executed: false,
+        },
+      },
+    });
+  });
+
+  it('未知的数据修改请求失败关闭，不能被普通回答兜底', async () => {
+    const req = request({
+      message: '请立即同步这些',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringMatching(/没有找到已注册.*没有执行/s),
+      actionPolicy: { resolution: 'unknown_mutation', capabilityIds: [], executed: false },
+    });
+  });
+
+  it('“怎么删除笔记”属于用法查询，仍进入只读 Agent 而不是动作拦截', async () => {
+    mocks.requestAiStream.mockImplementation(async (_messages, options) => {
+      options.onDelta('你可以在笔记库中删除，删除后会进入回收站。');
+      return {
+        content: '你可以在笔记库中删除，删除后会进入回收站。',
+        leakedToolCall: false,
+        usage: usage(5),
+        usageStatus: 'reported',
+        provider: 'test',
+        model: 'test-model',
+        finishReason: 'stop',
+      };
+    });
+    const req = request({
+      message: '怎么删除笔记？',
+      stream: true,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.reserve).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAiStream).toHaveBeenCalledOnce();
+    expect(sseEvents(res).find((event) => event.event === 'delta')?.output?.text).toContain('笔记库');
+  });
+
+  it('“已完成的待办有哪些”属于数据查询，不进入写操作无回执安全门', async () => {
+    mocks.requestAiStream.mockImplementation(async (_messages, options) => {
+      options.onDelta('你目前有 2 条已完成待办。');
+      return {
+        content: '你目前有 2 条已完成待办。',
+        leakedToolCall: false,
+        usage: usage(5),
+        usageStatus: 'reported',
+        provider: 'test',
+        model: 'test-model',
+        finishReason: 'stop',
+      };
+    });
+    const req = request({
+      message: '我目前已完成的待办有哪些？',
+      stream: true,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.reserve).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAiStream).toHaveBeenCalledOnce();
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(sseEvents(res).find((event) => event.event === 'delta')?.output?.text).toContain('已完成待办');
+    expect(JSON.stringify(sseEvents(res))).not.toContain('action_policy');
   });
 
   it('同步回答透传长文档逐文件及整体覆盖边界', async () => {

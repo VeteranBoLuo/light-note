@@ -51,6 +51,10 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/agentLog/AgentLog.vue'),
       },
       {
+        path: 'aiFeedback',
+        component: () => import('@/view/admin/components/aiFeedback/AiFeedback.vue'),
+      },
+      {
         path: 'conversion',
         component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
       },
@@ -102,6 +106,11 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'agentLog',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/agentLog/PAgentLog.vue'),
+  },
+  {
+    path: 'aiFeedback',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/aiFeedback/AiFeedback.vue'),
   },
   {
     path: 'conversion',

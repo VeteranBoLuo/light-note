@@ -33,7 +33,7 @@ describe('todo store', () => {
     store.keyword = '旧搜索';
     store.resetForOwner('user-b');
     expect(store.items).toEqual([]);
-    expect(store.status).toBe('pending');
+    expect(store.status).toBe('all');
     expect(store.keyword).toBe('');
   });
 
@@ -49,6 +49,16 @@ describe('todo store', () => {
     resolveFirst({ status: 200, data: { items: [{ id: 'stale' }], total: 1, pendingTotal: 1 } });
     await first;
     expect(store.items.map((item) => item.id)).toEqual(['latest']);
+  });
+
+  it('资源中心总览查询未完成项时保留当前全部筛选', async () => {
+    const store = useTodoStore();
+    listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
+
+    await store.refreshList({ status: 'pending', preserveStatus: true });
+
+    expect(store.status).toBe('all');
+    expect(listTodos).toHaveBeenCalledWith({ status: 'pending', keyword: '', sort: 'smart' });
   });
 
   it('删除成功后重新获取当前列表', async () => {

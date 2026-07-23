@@ -2,6 +2,7 @@ import { apiBasePost } from '@/http/request';
 
 export type TodoPriority = 0 | 1 | 2;
 export type TodoStatus = 'pending' | 'completed';
+export type TodoFilterStatus = 'all' | TodoStatus;
 export type TodoSort = 'smart' | 'due' | 'newest' | 'oldest';
 export type TodoReminderMode = 'once' | 'repeat';
 export type TodoReminderChannel = 'in_app' | 'email';
@@ -48,7 +49,7 @@ export interface TodoPayload {
   reminderAt?: string | null;
 }
 
-export const listTodos = (params: { status: TodoStatus; keyword: string; sort: TodoSort }) =>
+export const listTodos = (params: { status: TodoFilterStatus; keyword: string; sort: TodoSort }) =>
   apiBasePost('/api/todo/list', params, { silent: true });
 export const countTodos = () => apiBasePost('/api/todo/count', {}, { silent: true });
 export const createTodo = (payload: TodoPayload) => apiBasePost('/api/todo/create', payload);

@@ -48,6 +48,7 @@ router.get('/noticeSummary', commonHandle.getNoticeSummary);
 // router.post('/deleteFolder', commonHandle.deleteFolder);
 router.post('/getAgentLogs', commonHandle.getAgentLogs);
 router.post('/getAgentLogsSummary', commonHandle.getAgentLogsSummary);
+router.post('/getAiFeedback', commonHandle.getAiFeedback);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
 router.post('/getAdminOverview', commonHandle.getAdminOverview);
 

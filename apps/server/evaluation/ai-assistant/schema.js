@@ -56,16 +56,7 @@ export const GOLDEN_ENUMS = Object.freeze({
     'privacy',
     'reuse_result',
   ],
-  routes: [
-    'direct',
-    'planner',
-    'organize',
-    'memory',
-    'quota',
-    'recovery',
-    'privacy',
-    'result_reuse',
-  ],
+  routes: ['direct', 'planner', 'organize', 'memory', 'quota', 'recovery', 'privacy', 'result_reuse'],
   outcomes: [
     'answer',
     'report',
@@ -249,11 +240,14 @@ export const GOLDEN_ENUMS = Object.freeze({
     'create_bookmark',
     'query_link_health',
     'query_notes',
+    'query_todos',
+    'set_todo_status',
     'read_note',
     'analyze_resource_images',
     'create_note',
     'create_image_note',
     'query_files',
+    'query_inbox',
     'query_cloud_folders',
     'get_storage_usage',
     'save_attachment_to_cloud',
@@ -505,8 +499,7 @@ function validateTaskShape(task, index, errors, sourcesById) {
   }
   assertString(errors, task.id, `${path}.id`, {
     max: 96,
-    pattern:
-      /^(ask|organize|memory|evidence|owner|quota|recovery|privacy|reuse|gateway)-[a-z0-9-]+-\d{3}$/,
+    pattern: /^(ask|organize|memory|evidence|owner|quota|recovery|privacy|reuse|gateway)-[a-z0-9-]+-\d{3}$/,
   });
   assertString(errors, task.title, `${path}.title`, { max: 160 });
   assertEnum(errors, task.mode, `${path}.mode`, GOLDEN_ENUMS.modes);

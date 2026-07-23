@@ -12,7 +12,9 @@ import {
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
-  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔/.test(message);
+  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标/.test(
+    message,
+  );
   if (!clientError) console.error('[todo] 请求失败:', message);
   return res.send(resultData(null, clientError ? 400 : 500, clientError ? message : '待办服务暂时不可用，请稍后重试'));
 }
@@ -38,7 +40,7 @@ export async function listTodo(req, res) {
     return res.send(resultData({ items: [], total: 0, pendingTotal: 0 }));
   }
   try {
-    const status = String(req.body?.status || 'pending');
+    const status = String(req.body?.status || 'all');
     const sort = String(req.body?.sort || 'smart');
     const keyword = String(req.body?.keyword || '')
       .trim()

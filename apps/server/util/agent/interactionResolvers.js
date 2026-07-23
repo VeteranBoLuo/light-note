@@ -139,10 +139,78 @@ export async function createBookmarkUrlResolutionInteraction({
   });
 }
 
+function formatTodoCandidateDescription(candidate) {
+  const currentStatus = candidate?.status === 'completed' ? '当前：已完成' : '当前：待处理';
+  if (!candidate?.dueAt) return currentStatus;
+  const date = new Date(candidate.dueAt);
+  const dueAt = Number.isFinite(date.getTime())
+    ? date.toLocaleString('zh-CN', { hour12: false })
+    : String(candidate.dueAt);
+  return `${currentStatus} · 截止：${dueAt}`;
+}
+
+export function canResolveTodoStatusInteraction(error, toolName, fallbackArgs = {}) {
+  if (toolName !== 'set_todo_status' || String(error?.code || '') !== 'TODO_SELECTION_REQUIRED') return false;
+  const args = normalizedArgsFromError(error, fallbackArgs);
+  const candidates = error?.data?.candidates;
+  return (
+    ['pending', 'completed'].includes(String(args.status || '').toLowerCase()) &&
+    Array.isArray(candidates) &&
+    candidates.length >= 2 &&
+    candidates.length <= 5 &&
+    candidates.every((candidate) => String(candidate?.todoId || '').trim() && String(candidate?.title || '').trim())
+  );
+}
+
+export async function createTodoStatusResolutionInteraction({
+  error,
+  toolName,
+  fallbackArgs,
+  ownerKey,
+  sessionId,
+  context,
+}) {
+  if (!canResolveTodoStatusInteraction(error, toolName, fallbackArgs)) return null;
+  const args = normalizedArgsFromError(error, fallbackArgs);
+  const candidates = error.data.candidates.slice(0, 5);
+  const targetStatus = String(args.status || '').toLowerCase();
+  const actionLabel = targetStatus === 'completed' ? '完成' : '重新打开';
+  return createAgentInteraction({
+    ownerKey,
+    sessionId,
+    context,
+    spec: {
+      code: 'todo_status_target_selection',
+      type: 'single_choice',
+      purpose: 'choice_confirmation',
+      title: `选择要${actionLabel}的待办`,
+      description: '找到多条匹配的待办。请选择一条；选择本身不会立即修改数据。',
+      options: candidates.map((candidate, index) => ({
+        id: `todo_${index + 1}`,
+        label: String(candidate.title).slice(0, 120),
+        description: formatTodoCandidateDescription(candidate),
+        recommended: candidates.length === 1,
+      })),
+      minSelections: 1,
+      maxSelections: 1,
+    },
+    action: {
+      resolver: 'set_todo_status_target_selection',
+      toolName,
+      args: { status: targetStatus },
+      candidates: candidates.map((candidate, index) => ({
+        id: `todo_${index + 1}`,
+        todoId: String(candidate.todoId),
+      })),
+    },
+  });
+}
+
 export async function createToolResolutionInteraction(input) {
   return (
     (await createFolderResolutionInteraction(input)) ||
-    (await createBookmarkUrlResolutionInteraction(input))
+    (await createBookmarkUrlResolutionInteraction(input)) ||
+    (await createTodoStatusResolutionInteraction(input))
   );
 }
 
@@ -161,6 +229,21 @@ export function resolveAgentInteractionAction(interaction, response) {
       state: 'confirmation_required',
       toolName: action.toolName,
       args: { ...(action.args || {}), url: selected.url },
+    };
+  }
+  if (action.resolver === 'set_todo_status_target_selection' && action.toolName === 'set_todo_status') {
+    const choice = response.selectedIds[0];
+    const selected = Array.isArray(action.candidates)
+      ? action.candidates.find((candidate) => candidate.id === choice)
+      : null;
+    const status = String(action.args?.status || '').toLowerCase();
+    if (!selected?.todoId || !['pending', 'completed'].includes(status)) {
+      throw new AgentInteractionError('AGENT_INTERACTION_RESPONSE_INVALID', '请选择一个可用的待办。');
+    }
+    return {
+      state: 'confirmation_required',
+      toolName: action.toolName,
+      args: { todoId: selected.todoId, status },
     };
   }
   if (action.resolver !== 'save_attachment_folder_resolution' || action.toolName !== 'save_attachment_to_cloud') {

@@ -61,6 +61,12 @@
         url: '/agentLog',
       },
       {
+        id: 'aiFeedback',
+        title: 'AI 回答反馈',
+        icon: icon.ai.feedbackDown,
+        url: '/aiFeedback',
+      },
+      {
         id: 'conversion',
         title: '转化漏斗',
         icon: icon.userCenter.log,

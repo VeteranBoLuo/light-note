@@ -65,6 +65,11 @@
       icon: icon.userCenter.log,
     },
     {
+      id: 'aiFeedback',
+      title: 'AI 回答反馈',
+      icon: icon.ai.feedbackDown,
+    },
+    {
       id: 'conversion',
       title: '转化漏斗',
       icon: icon.userCenter.log,

@@ -7,8 +7,8 @@ import {
   reopenTodo,
   updateTodo,
   type TodoItem,
+  type TodoFilterStatus,
   type TodoSort,
-  type TodoStatus,
 } from '@/api/todoApi';
 
 export default defineStore('todo', {
@@ -18,7 +18,7 @@ export default defineStore('todo', {
     total: 0,
     loading: false,
     loadFailed: false,
-    status: 'pending' as TodoStatus,
+    status: 'all' as TodoFilterStatus,
     sort: 'smart' as TodoSort,
     keyword: '',
     ownerId: '',
@@ -31,7 +31,7 @@ export default defineStore('todo', {
       this.items = [];
       this.pendingTotal = 0;
       this.total = 0;
-      this.status = 'pending';
+      this.status = 'all';
       this.sort = 'smart';
       this.keyword = '';
       this.loadFailed = false;
@@ -47,15 +47,18 @@ export default defineStore('todo', {
         return false;
       }
     },
-    async refreshList(options: { status?: TodoStatus; keyword?: string; sort?: TodoSort } = {}) {
-      if (options.status) this.status = options.status;
+    async refreshList(
+      options: { status?: TodoFilterStatus; keyword?: string; sort?: TodoSort; preserveStatus?: boolean } = {},
+    ) {
+      const requestStatus = options.status || this.status;
+      if (options.status && !options.preserveStatus) this.status = options.status;
       if (options.keyword !== undefined) this.keyword = options.keyword;
       if (options.sort) this.sort = options.sort;
       const requestId = ++this.requestId;
       this.loading = true;
       this.loadFailed = false;
       try {
-        const res = await listTodos({ status: this.status, keyword: this.keyword, sort: this.sort });
+        const res = await listTodos({ status: requestStatus, keyword: this.keyword, sort: this.sort });
         if (requestId !== this.requestId) return false;
         if (res.status !== 200) {
           this.loadFailed = true;

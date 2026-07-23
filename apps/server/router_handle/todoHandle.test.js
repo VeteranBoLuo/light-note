@@ -71,4 +71,9 @@ describe('todoHandle', () => {
     expect(listTodos).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith({ data: { items: [], total: 0, pendingTotal: 0 }, status: 200, msg: '' });
   });
+
+  it('待处理列表默认查询全部完成状态', async () => {
+    await listTodo({ user: { id: 'u1', role: 'user' }, body: {} }, mockRes());
+    expect(listTodos).toHaveBeenCalledWith(expect.anything(), 'u1', { status: 'all', sort: 'smart', keyword: '' });
+  });
 });

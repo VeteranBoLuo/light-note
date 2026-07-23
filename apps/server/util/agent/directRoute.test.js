@@ -15,6 +15,7 @@ describe('Agent 高置信 direct route', () => {
     '总结最近收藏的书签',
     '帮我保存 https://example.com',
     '为什么我的云空间没有这个文件？',
+    '把待办「测试代办」标记为完成',
   ])('%s 保留工具规划', (message) => {
     expect(decideDirectAgentRoute({ message }).direct).toBe(false);
   });

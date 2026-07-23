@@ -13,12 +13,7 @@
     </header>
 
     <section class="inbox-toolbar">
-      <BTabs
-        v-model:active-tab="inbox.filterType"
-        :options="filterOptions"
-        variant="pill"
-        @change="changeFilter"
-      />
+      <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" variant="pill" @change="changeFilter" />
       <div class="inbox-toolbar__right" :class="{ 'has-status': inbox.filterType === 'todo' }">
         <BInput v-model:value="inbox.keyword" :placeholder="t('inbox.searchPlaceholder')" clearable @enter="search" />
         <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
@@ -238,6 +233,7 @@
         ],
   );
   const todoStatusOptions = computed(() => [
+    { label: t('inbox.all'), value: 'all' },
     { label: t('inbox.todoPending'), value: 'pending' },
     { label: t('inbox.todoCompleted'), value: 'completed' },
   ]);
@@ -320,7 +316,7 @@
     } else if (inbox.filterType === 'all') {
       const [inboxRefreshed, todoRefreshed] = await Promise.all([
         inbox.refreshList(),
-        todo.refreshList({ status: 'pending', keyword: inbox.keyword }),
+        todo.refreshList({ status: 'pending', keyword: inbox.keyword, preserveStatus: true }),
       ]);
       refreshed = inboxRefreshed && todoRefreshed;
       inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());

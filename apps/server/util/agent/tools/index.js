@@ -1,10 +1,13 @@
 import searchKnowledgeBase from './search_knowledge_base.js';
 import queryBookmarks from './query_bookmarks.js';
 import queryNotes from './query_notes.js';
+import queryTodos from './query_todos.js';
+import setTodoStatus from './set_todo_status.js';
 import readNote from './read_note.js';
 import analyzeResourceImages from './analyze_resource_images.js';
 import queryFiles from './query_files.js';
 import queryCloudFolders from './query_cloud_folders.js';
+import queryInbox from './query_inbox.js';
 import searchContent from './search_content.js';
 import getStorageUsage from './get_storage_usage.js';
 import getAiQuota from './get_ai_quota.js';
@@ -45,10 +48,13 @@ export default [
   searchKnowledgeBase,
   queryBookmarks,
   queryNotes,
+  queryTodos,
+  setTodoStatus,
   readNote,
   analyzeResourceImages,
   queryFiles,
   queryCloudFolders,
+  queryInbox,
   searchContent,
   getStorageUsage,
   getAiQuota,

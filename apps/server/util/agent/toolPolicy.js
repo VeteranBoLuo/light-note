@@ -1,4 +1,5 @@
 import { normalizeToolArguments, prepareToolArguments } from './toolArguments.js';
+import { getAgentCapabilityByToolName } from './capabilityRegistry.js';
 
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['none', 'default', 'always']);
@@ -38,8 +39,18 @@ export function normalizeRegisteredTool(tool) {
     throw new Error(`Agent 工具注册失败：${tool?.name || '未命名工具'} 缺少名称、参数 schema、execute 或 transform`);
   }
   const isWrite = tool.isWrite === true;
-  const riskLevel = tool.riskLevel || 'low';
-  const confirmationPolicy = tool.confirmationPolicy || (isWrite ? 'always' : 'none');
+  const capability = isWrite ? getAgentCapabilityByToolName(tool.name) : null;
+  if (isWrite && !capability) {
+    throw new Error(`Agent 写工具 ${tool.name} 未在能力注册表声明为 enabled`);
+  }
+  if (capability && tool.riskLevel && tool.riskLevel !== capability.riskLevel) {
+    throw new Error(`Agent 写工具 ${tool.name} 的 riskLevel 与能力注册表不一致`);
+  }
+  if (capability && tool.confirmationPolicy && tool.confirmationPolicy !== capability.confirmationPolicy) {
+    throw new Error(`Agent 写工具 ${tool.name} 的 confirmationPolicy 与能力注册表不一致`);
+  }
+  const riskLevel = capability?.riskLevel || tool.riskLevel || 'low';
+  const confirmationPolicy = capability?.confirmationPolicy || tool.confirmationPolicy || 'none';
   if (!VALID_RISKS.has(riskLevel)) throw new Error(`Agent 工具 ${tool.name} 缺少有效 riskLevel`);
   if (!VALID_CONFIRMATION_POLICIES.has(confirmationPolicy)) {
     throw new Error(`Agent 工具 ${tool.name} 缺少有效 confirmationPolicy`);
@@ -52,6 +63,7 @@ export function normalizeRegisteredTool(tool) {
     .filter((role, index, roles) => role && roles.indexOf(role) === index);
   return {
     ...tool,
+    capabilityId: capability?.id || null,
     category: tool.category || tool.name.split('_').slice(-1)[0] || 'general',
     riskLevel,
     confirmationPolicy,
@@ -150,6 +162,14 @@ function assertRawProperties(tool, args) {
   if (unknown) fail('TOOL_ARGUMENTS_ADDITIONAL_PROPERTY', `args.${unknown} 不是允许的参数。`);
 }
 
+function cloneToolArgs(args) {
+  try {
+    return JSON.parse(JSON.stringify(args || {}));
+  } catch {
+    fail('TOOL_ARGUMENTS_INVALID', '工具参数无法安全保存。');
+  }
+}
+
 function assertActorSubjectBoundary(context, isWrite) {
   const request = context.request || {};
   const adminContext = request.adminContext || null;
@@ -246,6 +266,9 @@ export async function enforceToolPolicy({
   return {
     tool,
     args: preparedArgs,
+    // 仅包含公开 schema 字段，并且是在服务端完成别名归一化和校验后的不可变快照。
+    // 重试时使用它重新执行 prepare，而不是复用可能已经过期的内部版本字段。
+    retryArgs: cloneToolArgs(schemaValue),
     actorRole: boundary.actorRole,
     subjectId: boundary.subjectId,
     requiresConfirmation: tool.isWrite === true,
