@@ -45,6 +45,8 @@ vi.mock('../util/agent/toolRouter.js', () => ({
 vi.mock('../util/agent/secondRound.js', () => ({
   DEPENDENCY_ROUND_INSTRUCTION: '[INTERNAL_AGENT_DEPENDENCY_ROUND]',
   FOLLOW_UP_ROUND_INSTRUCTION: '[INTERNAL_AGENT_RECOVERY_ROUND]',
+  PLAN_COMPLETION_ROUND_INSTRUCTION: '[INTERNAL_AGENT_PLAN_COMPLETION_ROUND]',
+  SEMANTIC_REPAIR_ROUND_INSTRUCTION: '[INTERNAL_AGENT_SEMANTIC_REPAIR_ROUND]',
   isInternalPlanningInstruction: vi.fn((content) => String(content || '').includes('[INTERNAL_AGENT_')),
   shouldContinueToolPlanning: mocks.shouldContinueToolPlanning,
 }));
@@ -871,19 +873,28 @@ describe('agentChat 主链路', () => {
 
   it('明确写动作未产生确认时由服务端失败关闭，不允许模型编造成功', async () => {
     mocks.selectAgentTools.mockReturnValue([]);
-    mocks.requestAi.mockResolvedValueOnce({
-      content: 'DIRECT_REPLY',
-      toolCalls: [],
-      usage: usage(1),
-      usageStatus: 'reported',
-      finishReason: 'stop',
-    });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: 'DIRECT_REPLY',
+        toolCalls: [],
+        usage: usage(1),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      })
+      .mockResolvedValueOnce({
+        content: 'DIRECT_REPLY',
+        toolCalls: [],
+        usage: usage(1),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
     const req = request({ message: '请完成待办整理发票', stream: false, contexts: [], attachmentIds: [] });
     const res = response();
 
     await agentChat(req, res);
 
-    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
     expect(mocks.requestAiStream).not.toHaveBeenCalled();
     const payload = res.send.mock.calls.at(-1)?.[0];
     expect(payload?.data?.response).toContain('未执行');
@@ -948,28 +959,50 @@ describe('agentChat 主链路', () => {
     );
   });
 
-  it('模型对子计划分类自相矛盾时只用旧传感器收敛失败边界，绝不据此执行工具', async () => {
-    mocks.requestAi.mockResolvedValueOnce({
-      content: '',
-      toolCalls: [
-        semanticPlanCall({
-          requestClass: 'data_action',
-          intents: [
-            {
-              kind: 'read',
-              capabilityId: 'read.query_demo',
-              goal: '查询目标笔记',
-              targetDescription: '引用测试',
-              dependsOn: [],
-            },
-          ],
-          toolCalls: [],
-        }),
-      ],
-      usage: usage(4),
-      usageStatus: 'reported',
-      finishReason: 'tool_calls',
-    });
+  it('模型对子计划分类自相矛盾时先由 AI 重判，仍不允许执行未支持的写操作', async () => {
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询目标笔记',
+                targetDescription: '引用测试',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.delete',
+                goal: '删除目标笔记',
+                targetDescription: '引用测试',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
     const res = response();
 
     await agentChat(
@@ -985,7 +1018,8 @@ describe('agentChat 主链路', () => {
 
     expect(mocks.toolExecute).not.toHaveBeenCalled();
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
-    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
       response: expect.stringMatching(/删除笔记.*没有执行/s),
       actionPolicy: { resolution: 'planned', capabilityIds: ['note.delete'], executed: false },
@@ -1291,6 +1325,335 @@ describe('agentChat 主链路', () => {
       toolChoice: 'none',
       temperature: 0.3,
     });
+  });
+
+  it('多读取计划正确识别能力但漏交工具调用时，会收窄能力补全后再执行查询', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_demo'), registry.get('query_detail')].filter(Boolean),
+    );
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询最近新增的书签',
+                targetDescription: '最近 7 天新增书签',
+                dependsOn: [],
+              },
+              {
+                kind: 'read',
+                capabilityId: 'read.query_detail',
+                goal: '查询最近新增的笔记',
+                targetDescription: '最近 7 天新增笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询最近新增的书签',
+                targetDescription: '最近 7 天新增书签',
+                dependsOn: [],
+              },
+              {
+                kind: 'read',
+                capabilityId: 'read.query_detail',
+                goal: '查询最近新增的笔记',
+                targetDescription: '最近 7 天新增笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              { toolName: 'query_demo', arguments: { keyword: '最近7天' } },
+              { toolName: 'query_detail', arguments: { id: 'detail-1' } },
+            ],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '最近 7 天新增内容已经按书签和笔记汇总。',
+        toolCalls: [],
+        usage: usage(5),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const req = request({
+      message: '总结我最近 7 天新增的书签和笔记',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_completion_1');
+    expect(mocks.requestAi.mock.calls[1][0].at(-1).content).toContain('[INTERNAL_AGENT_PLAN_COMPLETION_ROUND]');
+    expect(mocks.toolExecute).toHaveBeenCalledTimes(2);
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: '最近 7 天新增内容已经按书签和笔记汇总。',
+        }),
+      }),
+    );
+  });
+
+  it('第一次读取补全仍漏交调用时会有界重试，第二次补齐后再执行', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_demo'), registry.get('query_detail')].filter(Boolean),
+    );
+    const omittedMultiReadPlan = () =>
+      semanticPlanCall({
+        requestClass: 'data_query',
+        intents: [
+          {
+            kind: 'read',
+            capabilityId: 'read.query_demo',
+            goal: '查询最近新增的书签',
+            targetDescription: '最近 7 天新增书签',
+            dependsOn: [],
+          },
+          {
+            kind: 'read',
+            capabilityId: 'read.query_detail',
+            goal: '查询最近新增的笔记',
+            targetDescription: '最近 7 天新增笔记',
+            dependsOn: [],
+          },
+        ],
+        toolCalls: [],
+      });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [omittedMultiReadPlan()],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [omittedMultiReadPlan()],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询最近新增的书签',
+                targetDescription: '最近 7 天新增书签',
+                dependsOn: [],
+              },
+              {
+                kind: 'read',
+                capabilityId: 'read.query_detail',
+                goal: '查询最近新增的笔记',
+                targetDescription: '最近 7 天新增笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              { toolName: 'query_demo', arguments: { keyword: '最近7天' } },
+              { toolName: 'query_detail', arguments: { id: 'detail-1' } },
+            ],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '第二次补全后成功汇总。',
+        toolCalls: [],
+        usage: usage(5),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const req = request({
+      message: '总结我最近 7 天新增的书签和笔记',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(4);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_completion_1');
+    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('planner_completion_2');
+    expect(mocks.toolExecute).toHaveBeenCalledTimes(2);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: '第二次补全后成功汇总。',
+        }),
+      }),
+    );
+  });
+
+  it('读取补全阶段供应商异常时保留原安全裁决，不退化为通用 500', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_demo')].filter(Boolean));
+    const providerError = Object.assign(new Error('private provider detail'), { code: 'AI_PROVIDER_ERROR' });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询最近新增内容',
+                targetDescription: '最近 7 天新增内容',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockRejectedValueOnce(providerError);
+    const req = request({
+      message: '总结我最近 7 天新增的内容',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.toolExecute).not.toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: expect.stringMatching(/没有成功发起必要的数据查询/),
+          actionPolicy: {
+            resolution: 'unverified_query',
+            capabilityIds: ['read.query_demo'],
+            executed: false,
+          },
+        }),
+      }),
+    );
+    expect(JSON.stringify(res.send.mock.calls.at(-1)?.[0])).not.toContain('private provider detail');
+  });
+
+  it('首轮语义计划自相矛盾时先由 AI 重判，重判通过前绝不执行工具', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_demo')].filter(Boolean));
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'conversation',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询最近新增内容',
+                targetDescription: '最近 7 天新增内容',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '最近7天' } }],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询最近新增内容',
+                targetDescription: '最近 7 天新增内容',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '最近7天' } }],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '已经根据真实查询结果完成汇总。',
+        toolCalls: [],
+        usage: usage(5),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const req = request({
+      message: '总结我最近 7 天新增的内容',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      locale: 'zh-CN',
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
+    expect(mocks.requestAi.mock.calls[1][0].at(-1).content).toContain('[INTERNAL_AGENT_SEMANTIC_REPAIR_ROUND]');
+    expect(mocks.toolExecute).toHaveBeenCalledOnce();
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          response: '已经根据真实查询结果完成汇总。',
+        }),
+      }),
+    );
   });
 
   it('查询后写入按依赖分两轮推进，并只为真实查询目标生成确认卡', async () => {

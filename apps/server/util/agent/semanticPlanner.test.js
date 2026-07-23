@@ -135,6 +135,91 @@ describe('semanticPlanner', () => {
     expect(adjudicateSemanticPlan({ plan: parsed.plan, toolCalls: [], catalog })).toMatchObject({
       state: 'blocked',
       resolution: 'unverified_query',
+      partialToolCalls: [],
+      missingCapabilityIds: ['read.query_todos'],
+    });
+  });
+
+  it('多读取计划遗漏部分调用时保留已核验调用，并明确列出待补全能力', () => {
+    const multiReadCatalog = [
+      catalog[0],
+      {
+        id: 'read.query_notes',
+        effect: 'read',
+        status: 'enabled',
+        toolNames: ['query_notes'],
+        description: '查询笔记',
+      },
+    ];
+    const multiReadPlan = plan({
+      intents: [
+        {
+          kind: 'read',
+          capabilityId: 'read.query_todos',
+          goal: '查询待办',
+          targetDescription: '当前用户的待办',
+          dependsOn: [],
+        },
+        {
+          kind: 'read',
+          capabilityId: 'read.query_notes',
+          goal: '查询笔记',
+          targetDescription: '当前用户的笔记',
+          dependsOn: [],
+        },
+      ],
+    });
+    const existingCall = call('query_todos', { status: 'completed' }, 'query-todos-1');
+
+    expect(
+      adjudicateSemanticPlan({
+        plan: multiReadPlan,
+        toolCalls: [existingCall],
+        catalog: multiReadCatalog,
+      }),
+    ).toMatchObject({
+      state: 'blocked',
+      resolution: 'unverified_query',
+      partialToolCalls: [existingCall],
+      missingCapabilityIds: ['read.query_notes'],
+    });
+  });
+
+  it('未获语义授权的额外只读调用会被丢弃，不拖垮已验证的读取计划', () => {
+    const multiReadCatalog = [
+      catalog[0],
+      {
+        id: 'read.query_notes',
+        effect: 'read',
+        status: 'enabled',
+        toolNames: ['query_notes'],
+        description: '查询笔记',
+      },
+    ];
+    const queryPlan = plan({
+      intents: [
+        {
+          kind: 'read',
+          capabilityId: 'read.query_todos',
+          goal: '查询待办',
+          targetDescription: '当前用户的待办',
+          dependsOn: [],
+        },
+      ],
+    });
+    const intendedCall = call('query_todos', { status: 'completed' }, 'query-todos-1');
+    const unrelatedReadCall = call('query_notes', { timeRange: '最近7天' }, 'query-notes-1');
+
+    expect(
+      adjudicateSemanticPlan({
+        plan: queryPlan,
+        toolCalls: [unrelatedReadCall, intendedCall],
+        catalog: multiReadCatalog,
+      }),
+    ).toMatchObject({
+      state: 'ready',
+      toolCalls: [intendedCall],
+      ignoredReadToolNames: ['query_notes'],
     });
   });
 

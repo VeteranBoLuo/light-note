@@ -455,11 +455,23 @@ export function adjudicateSemanticPlan({ plan, toolCalls = [], catalog = [] } = 
   const selectedToolNames = new Set(selected.flatMap((capability) => capability.toolNames || []));
   const allowedCalls = [];
   const immediateCallCounts = new Map();
+  const ignoredReadToolNames = [];
   let conflict = false;
   for (const call of toolCalls) {
     const toolName = String(call?.function?.name || '');
     const capability = byTool.get(toolName);
-    if (!capability || capability.status !== 'enabled' || (plan && !selectedToolNames.has(toolName))) {
+    if (!capability || capability.status !== 'enabled') {
+      conflict = true;
+      continue;
+    }
+    if (plan && !selectedToolNames.has(toolName)) {
+      // 模型偶发会在正确读取计划旁附带一个目录中存在、但原计划没有声明的只读调用。
+      // 该调用没有语义授权，必须丢弃；但它也不具备写入副作用，无需因此否定整份读取计划。
+      // 未知工具、不可用能力和任何额外写调用仍按冲突失败关闭。
+      if (capability.effect === 'read') {
+        ignoredReadToolNames.push(toolName);
+        continue;
+      }
       conflict = true;
       continue;
     }
@@ -509,18 +521,22 @@ export function adjudicateSemanticPlan({ plan, toolCalls = [], catalog = [] } = 
       writeToolNames: writeCapabilities.flatMap((capability) => capability.toolNames),
     };
   }
-  const missingReadCall =
-    immediateReadCapabilities.length > 0 &&
-    !immediateReadCapabilities.every((capability) =>
-      capability.toolNames.some((toolName) => actualToolNames.has(toolName)),
-    );
-  if (missingReadCall) {
+  const missingReadCapabilities = immediateReadCapabilities.filter(
+    (capability) => !capability.toolNames.some((toolName) => actualToolNames.has(toolName)),
+  );
+  if (missingReadCapabilities.length > 0) {
     return {
       state: 'blocked',
       resolution: 'unverified_query',
       plan,
       capabilities: readCapabilities,
       toolCalls: [],
+      // 读取调用缺失时不能直接回答，但已经通过能力、语义和调用渠道校验的读取调用
+      // 可以交给编排层保留。编排层只允许针对下面缺失的读取能力做有界补全，
+      // 补全后还必须把合并调用重新放回原始计划整体裁决，不能绕过任何校验。
+      partialToolCalls: allowedCalls,
+      missingCapabilityIds: missingReadCapabilities.map((capability) => capability.id),
+      ignoredReadToolNames,
       writeToolNames: [],
     };
   }
@@ -533,6 +549,7 @@ export function adjudicateSemanticPlan({ plan, toolCalls = [], catalog = [] } = 
     toolCalls: allowedCalls,
     writeToolNames: writeCapabilities.flatMap((capability) => capability.toolNames),
     deferredCapabilityIds,
+    ignoredReadToolNames,
   };
 }
 

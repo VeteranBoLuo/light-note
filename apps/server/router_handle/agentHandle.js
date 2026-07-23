@@ -41,6 +41,8 @@ import {
   DEPENDENCY_ROUND_INSTRUCTION,
   FOLLOW_UP_ROUND_INSTRUCTION,
   isInternalPlanningInstruction,
+  PLAN_COMPLETION_ROUND_INSTRUCTION,
+  SEMANTIC_REPAIR_ROUND_INSTRUCTION,
   shouldContinueToolPlanning,
 } from '../util/agent/secondRound.js';
 import {
@@ -151,6 +153,9 @@ const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
   de: '德文',
   es: '西班牙文',
 });
+
+const MAX_SEMANTIC_PLAN_COMPLETION_ATTEMPTS = 2;
+const MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS = 1;
 
 function normalizeTranslationConfig(config = {}) {
   const source = Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.source) ? config.source : 'auto';
@@ -1712,24 +1717,252 @@ export async function agentChat(req, res) {
     let plannerUsageReported = plannerResponse.usageStatus === 'reported';
     trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
 
-    // DeepSeek 偶发把工具调用标记吐进 content。优先本地解析，解析失败直接给友好提示；
-    // 不额外重试 Planner，异常恢复只发生在最终回答阶段。
+    // DeepSeek 偶发把工具调用标记吐进 content。先做本地协议归一；
+    // 语义计划本身的无效/冲突和已确认读取计划的漏调用，分别在下方走受限恢复。
     plannerResponse = normalizePlannerToolCallResponse(plannerResponse, 'planner_round_1');
 
     if (semanticPlanningEnabled) {
-      const parsedSemantic = parseSemanticPlannerResponse(plannerResponse, semanticCatalog, {
+      let parsedSemantic = parseSemanticPlannerResponse(plannerResponse, semanticCatalog, {
         toolCallIdPrefix: 'semantic-plan-round-1',
       });
       semanticPlan = parsedSemantic.plan;
-      const adjudicated = adjudicateSemanticPlan({
+      let adjudicated = adjudicateSemanticPlan({
         plan: semanticPlan,
         toolCalls: parsedSemantic.toolCalls,
         catalog: semanticCatalog,
       });
+      trace.semanticPlanInitialSource = parsedSemantic.source;
+      trace.semanticPlanInitialResolution = semanticPlan ? adjudicated.resolution : 'semantic_plan_missing';
+
+      // 完整语义计划缺失或计划内部自相矛盾时，不能凭关键词替模型选择能力，也不能直接
+      // 执行任何工具。仅进行一次同权限、同完整能力目录的 AI 语义重判；重判结果仍需经过
+      // 完整协议解析和服务端裁决。恢复供应商失败不会把整次请求升级成 500，而是保留原始
+      // 安全裁决；超时/客户端中止仍向外传播。
+      if (!semanticPlan || adjudicated.resolution === 'semantic_conflict') {
+        for (let attempt = 1; attempt <= MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS; attempt += 1) {
+          const repairMessages = [
+            { role: 'system', content: systemContent },
+            ...messages.slice(1),
+            { role: 'user', content: SEMANTIC_REPAIR_ROUND_INSTRUCTION },
+          ];
+          const repairStartedAt = Date.now();
+          try {
+            let repairResponse = await requestAi(repairMessages, {
+              tools: [buildSemanticPlanToolDefinition(semanticCatalog, selectedTools)],
+              toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } },
+              signal: agentAbortController.signal,
+              maxTokens: getPlannerMaxTokens({
+                message,
+                attachmentCount: attachmentIds.length,
+                selectedToolNames,
+              }),
+              trace: { traceId: requestId, stage: `planner_semantic_repair_${attempt}` },
+            });
+            repairResponse = normalizePlannerToolCallResponse(repairResponse, `planner_semantic_repair_${attempt}`);
+            trace.plannerMs += Date.now() - repairStartedAt;
+            trace.finishReason = repairResponse.finishReason || trace.finishReason;
+            plannerUsageReported = plannerUsageReported && repairResponse.usageStatus === 'reported';
+            trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
+            apiCalls += 1;
+            apiCallsForLog = apiCalls;
+            totalUsage.promptTokens += repairResponse.usage.promptTokens;
+            totalUsage.completionTokens += repairResponse.usage.completionTokens;
+            totalUsage.totalTokens += repairResponse.usage.totalTokens;
+
+            const repairedSemantic = parseSemanticPlannerResponse(repairResponse, semanticCatalog, {
+              toolCallIdPrefix: `semantic-plan-repair-${attempt}`,
+            });
+            const repairedDecision = adjudicateSemanticPlan({
+              plan: repairedSemantic.plan,
+              toolCalls: repairedSemantic.toolCalls,
+              catalog: semanticCatalog,
+            });
+            trace.semanticPlanRepairRounds = [
+              ...(trace.semanticPlanRepairRounds || []),
+              {
+                attempt,
+                source: repairedSemantic.source,
+                invalid: repairedSemantic.invalidPlan,
+                resolution: repairedSemantic.plan ? repairedDecision.resolution : 'semantic_plan_missing',
+              },
+            ];
+            if (repairedSemantic.plan) {
+              parsedSemantic = repairedSemantic;
+              semanticPlan = repairedSemantic.plan;
+              adjudicated = repairedDecision;
+              plannerResponse = {
+                ...repairResponse,
+                toolCalls: repairedDecision.toolCalls,
+              };
+              break;
+            }
+          } catch (error) {
+            if (
+              agentAbortController.signal.aborted ||
+              error?.name === 'AbortError' ||
+              error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED'
+            ) {
+              throw error;
+            }
+            trace.semanticPlanRepairRounds = [
+              ...(trace.semanticPlanRepairRounds || []),
+              {
+                attempt,
+                source: 'error',
+                invalid: true,
+                resolution: 'provider_error',
+                errorCode: stableAgentErrorCode(error),
+              },
+            ];
+            break;
+          }
+        }
+      }
+
+      // Provider 偶尔会正确声明多个读取 intent，却漏掉其中一个或全部内嵌 toolCalls。
+      // 这时不能编造答案，也不应把一个可安全恢复的协议漏项直接暴露成“语义冲突”。
+      // 仅对原始计划已经确认的“立即读取能力”做最多两轮补全；每轮目录都会收窄到
+      // 尚缺的 capability，补回的调用还要与原始完整计划重新求交。写能力、未知能力、
+      // 语义冲突和低置信请求绝不进入这条恢复路径。
+      if (
+        semanticPlan &&
+        adjudicated.resolution === 'unverified_query' &&
+        Array.isArray(adjudicated.missingCapabilityIds) &&
+        adjudicated.missingCapabilityIds.length > 0
+      ) {
+        let accumulatedToolCalls = [...(adjudicated.partialToolCalls || [])];
+        let missingCapabilityIds = [...new Set(adjudicated.missingCapabilityIds)];
+
+        for (
+          let attempt = 1;
+          attempt <= MAX_SEMANTIC_PLAN_COMPLETION_ATTEMPTS && missingCapabilityIds.length > 0;
+          attempt += 1
+        ) {
+          const missingCapabilitySet = new Set(missingCapabilityIds);
+          const completionCatalog = semanticCatalog.filter(
+            (entry) => entry.effect === 'read' && entry.status === 'enabled' && missingCapabilitySet.has(entry.id),
+          );
+          const completionToolNameSet = new Set(completionCatalog.flatMap((entry) => entry.toolNames || []));
+          const completionTools = selectedTools.filter((tool) => completionToolNameSet.has(tool.name));
+          if (!completionCatalog.length || !completionTools.length) break;
+
+          const completionPromptBase = buildPlannerPrompt(completionTools, userRole, {
+            semanticCatalog: completionCatalog,
+            semanticCatalogText: formatSemanticCapabilityCatalog(completionCatalog),
+          });
+          const completionPrompt = memoryPrompt
+            ? `${completionPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
+            : `${completionPromptBase}\n\n${scopePrompt}`;
+          const completionSystemContent = session.lastTool
+            ? `${completionPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
+            : completionPrompt;
+          const completionInstruction = [
+            PLAN_COMPLETION_ROUND_INSTRUCTION,
+            `本轮只补齐这些读取能力：${missingCapabilityIds.join(', ')}。`,
+          ].join('\n');
+          const completionMessages = [
+            { role: 'system', content: completionSystemContent },
+            ...messages.slice(1),
+            { role: 'user', content: completionInstruction },
+          ];
+          const completionStartedAt = Date.now();
+          try {
+            let completionResponse = await requestAi(completionMessages, {
+              tools: [buildSemanticPlanToolDefinition(completionCatalog, completionTools)],
+              toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } },
+              signal: agentAbortController.signal,
+              maxTokens: getPlannerMaxTokens({
+                message,
+                attachmentCount: attachmentIds.length,
+                selectedToolNames: completionToolNameSet,
+              }),
+              trace: { traceId: requestId, stage: `planner_completion_${attempt}` },
+            });
+            completionResponse = normalizePlannerToolCallResponse(completionResponse, `planner_completion_${attempt}`);
+            trace.plannerMs += Date.now() - completionStartedAt;
+            trace.finishReason = completionResponse.finishReason || trace.finishReason;
+            plannerUsageReported = plannerUsageReported && completionResponse.usageStatus === 'reported';
+            trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
+            apiCalls += 1;
+            apiCallsForLog = apiCalls;
+            totalUsage.promptTokens += completionResponse.usage.promptTokens;
+            totalUsage.completionTokens += completionResponse.usage.completionTokens;
+            totalUsage.totalTokens += completionResponse.usage.totalTokens;
+
+            const parsedCompletion = parseSemanticPlannerResponse(completionResponse, completionCatalog, {
+              toolCallIdPrefix: `semantic-plan-completion-${attempt}`,
+            });
+            const completionDecision = adjudicateSemanticPlan({
+              plan: parsedCompletion.plan,
+              toolCalls: parsedCompletion.toolCalls,
+              catalog: completionCatalog,
+            });
+            const safeCompletionCalls =
+              completionDecision.state === 'ready'
+                ? completionDecision.toolCalls
+                : completionDecision.resolution === 'unverified_query'
+                  ? completionDecision.partialToolCalls || []
+                  : [];
+            accumulatedToolCalls = [...accumulatedToolCalls, ...safeCompletionCalls];
+            adjudicated = adjudicateSemanticPlan({
+              plan: semanticPlan,
+              toolCalls: accumulatedToolCalls,
+              catalog: semanticCatalog,
+            });
+            missingCapabilityIds =
+              adjudicated.resolution === 'unverified_query' ? [...new Set(adjudicated.missingCapabilityIds || [])] : [];
+            trace.semanticPlanCompletionRounds = [
+              ...(trace.semanticPlanCompletionRounds || []),
+              {
+                attempt,
+                source: parsedCompletion.source,
+                invalid: parsedCompletion.invalidPlan,
+                requestedCapabilityIds: completionCatalog.map((entry) => entry.id),
+                acceptedToolNames: safeCompletionCalls.map((call) => call?.function?.name).filter(Boolean),
+                remainingCapabilityIds: missingCapabilityIds,
+                resolution: completionDecision.resolution,
+              },
+            ];
+            if (adjudicated.state === 'ready') {
+              plannerResponse = {
+                ...plannerResponse,
+                toolCalls: adjudicated.toolCalls,
+                finishReason: completionResponse.finishReason || plannerResponse.finishReason,
+              };
+              break;
+            }
+            if (completionDecision.resolution !== 'unverified_query') break;
+          } catch (error) {
+            if (
+              agentAbortController.signal.aborted ||
+              error?.name === 'AbortError' ||
+              error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED'
+            ) {
+              throw error;
+            }
+            trace.semanticPlanCompletionRounds = [
+              ...(trace.semanticPlanCompletionRounds || []),
+              {
+                attempt,
+                source: 'error',
+                invalid: true,
+                requestedCapabilityIds: completionCatalog.map((entry) => entry.id),
+                acceptedToolNames: [],
+                remainingCapabilityIds: missingCapabilityIds,
+                resolution: 'provider_error',
+                errorCode: stableAgentErrorCode(error),
+              },
+            ];
+            break;
+          }
+        }
+      }
+
       plannerResponse = { ...plannerResponse, toolCalls: adjudicated.toolCalls };
       writeIntentToolNames = new Set(adjudicated.writeToolNames);
       trace.semanticPlanSource = parsedSemantic.source;
       trace.semanticPlanInvalid = parsedSemantic.invalidPlan;
+      trace.semanticIgnoredReadToolNames = adjudicated.ignoredReadToolNames || [];
       trace.semanticRequestClass = semanticPlan?.requestClass || null;
       trace.semanticConfidence = semanticPlan?.confidence || null;
       trace.semanticCapabilityIds = (semanticPlan?.intents || []).map((intent) => intent.capabilityId);
