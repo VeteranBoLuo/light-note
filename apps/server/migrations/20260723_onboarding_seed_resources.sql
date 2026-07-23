@@ -41,7 +41,7 @@ WHERE pl.reason = 'ach_unlock'
   AND NOT EXISTS (
     SELECT 1
     FROM bookmark b
-    WHERE b.user_id = pl.user_id
+    WHERE BINARY b.user_id = BINARY pl.user_id
       AND NOT EXISTS (
         SELECT 1
         FROM onboarding_seed_resources osr
@@ -53,7 +53,7 @@ WHERE pl.reason = 'ach_unlock'
   AND NOT EXISTS (
     SELECT 1
     FROM growth_events ge
-    WHERE ge.user_id = pl.user_id
+    WHERE BINARY ge.user_id = BINARY pl.user_id
       AND ge.source = 'bookmark'
       AND ge.status = 'granted'
   );
@@ -72,7 +72,7 @@ WHERE pl.reason = 'ach_unlock'
   AND NOT EXISTS (
     SELECT 1
     FROM note n
-    WHERE n.create_by = pl.user_id
+    WHERE BINARY n.create_by = BINARY pl.user_id
       AND NOT EXISTS (
         SELECT 1
         FROM onboarding_seed_resources osr
@@ -84,7 +84,7 @@ WHERE pl.reason = 'ach_unlock'
   AND NOT EXISTS (
     SELECT 1
     FROM growth_events ge
-    WHERE ge.user_id = pl.user_id
+    WHERE BINARY ge.user_id = BINARY pl.user_id
       AND ge.source = 'note'
       AND ge.status = 'granted'
   );
@@ -103,7 +103,7 @@ WHERE pl.reason = 'ach_unlock'
   AND NOT EXISTS (
     SELECT 1
     FROM files f
-    WHERE f.create_by = pl.user_id
+    WHERE BINARY f.create_by = BINARY pl.user_id
       AND NOT EXISTS (
         SELECT 1
         FROM onboarding_seed_resources osr
@@ -115,7 +115,7 @@ WHERE pl.reason = 'ach_unlock'
   AND NOT EXISTS (
     SELECT 1
     FROM growth_events ge
-    WHERE ge.user_id = pl.user_id
+    WHERE BINARY ge.user_id = BINARY pl.user_id
       AND ge.source = 'file'
       AND ge.status = 'granted'
   );
