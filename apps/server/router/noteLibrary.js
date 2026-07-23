@@ -30,6 +30,8 @@ router.post('/updateNote', noteLibraryHandle.updateNote);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
 router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
+router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
+router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);
 router.post('/delNote', noteLibraryHandle.delNote);
 router.post('/updateNoteSort', noteLibraryHandle.updateNoteSort);
 router.post('/toggleNoteTop', noteLibraryHandle.toggleNoteTop);

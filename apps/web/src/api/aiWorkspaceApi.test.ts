@@ -10,6 +10,7 @@ const {
   prepareAiMessageVersionGroup,
   prepareAiResultNoteReuse,
   recoverAiAgentResponse,
+  recoverAiLocalConversation,
   revalidateAiChangeSetRetry,
   retryAiChangeSet,
 } = await import('./aiWorkspaceApi');
@@ -45,6 +46,40 @@ describe('AI workspace recovery API', () => {
       code: 'AI_RESPONSE_RECOVERY_NOT_FOUND',
       status: 404,
     });
+  });
+
+  it('本机历史恢复只上传用户明确选择的终态消息，不携带旧云端会话 ID', async () => {
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { conversation: { id: 'conversation-new', messages: [] }, restoredMessageCount: 1 },
+    });
+
+    await recoverAiLocalConversation({
+      messages: [
+        {
+          clientId: 'local-1',
+          role: 'user',
+          status: 'completed',
+          content: '仅在明确恢复时上传的本机历史',
+        },
+      ],
+    });
+
+    expect(apiBasePost).toHaveBeenLastCalledWith(
+      '/api/chat/conversations/recover-local',
+      {
+        messages: [
+          {
+            clientId: 'local-1',
+            role: 'user',
+            status: 'completed',
+            content: '仅在明确恢复时上传的本机历史',
+          },
+        ],
+      },
+      { silent: true },
+    );
+    expect(JSON.stringify(apiBasePost.mock.calls.at(-1))).not.toContain('conversation-old');
   });
 
   it('选段接口只提交归属标识与服务端块 ID，不上传回答正文', async () => {

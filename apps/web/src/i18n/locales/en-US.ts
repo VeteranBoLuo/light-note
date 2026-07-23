@@ -704,6 +704,28 @@ export default {
     untitled: 'Untitled note',
     untitledDoc: 'Untitled Document',
     noFilterMatch: 'No matching notes',
+    resourceRefUnavailable: 'Unavailable reference · {title}',
+    resourceMention: {
+      title: 'Mention a resource',
+      quickTitle: 'Mention a resource',
+      openFull: 'Search all resources…',
+      searchPlaceholder: 'Search your bookmarks, notes, or files',
+      searching: 'Searching resources…',
+      empty: 'No matching resources',
+      emptyHint: 'Enter a keyword to choose a resource to insert',
+      hint: 'Your selection is inserted as a saved, in-app reference link.',
+      insertFailed: 'The insertion position is no longer available. Open the resource picker again and retry.',
+      openResource: 'Open: {title}',
+      checkingResource: 'Checking resource…',
+      resourceUnavailable: 'This resource was deleted or is no longer available to you.',
+    },
+    resourceBacklinks: {
+      title: 'Referenced by notes',
+      loading: 'Loading referencing notes…',
+      showMore: 'Show more',
+      updatedAt: 'Updated {time}',
+      untitled: 'Untitled note',
+    },
     tagConfig: {
       title: 'Note Tag Configuration',
       tagLibrary: 'Tag Library',
@@ -1693,6 +1715,19 @@ export default {
       clearedPartialUnknown:
         'Cleared {count} AI data records; the cleanup status of AI document data could not be confirmed. Please try clearing again later.',
       clearFailed: 'Could not clear AI data. Please try again.',
+      remoteDeletedTitle: 'This conversation was deleted on another device',
+      remoteDeletedContentNoHistory:
+        'This conversation is no longer in the cloud. There is no local history to restore; sending will create a new cloud conversation.',
+      remoteDeletedContentWithHistory:
+        'This conversation is no longer in the cloud, but this device still has {count} messages. Start a clean conversation, or explicitly restore this local history into a new cloud conversation.',
+      remoteDeletedContentLimited:
+        'This conversation is no longer in the cloud, but this device still has {count} messages. To keep recovery reliable, only the latest {restoredCount} safely storable messages can be restored now.',
+      continueAsNew: 'Continue as new',
+      restoreLocalHistory: 'Restore local history',
+      remoteDeletedStartNewFailed: 'Could not create a new cloud conversation. Please try again.',
+      remoteDeletedRestoreFailed: 'Could not restore local history. The original history remains on this device; please try again.',
+      remoteDeletedStartedNew: 'Created a new cloud conversation.',
+      remoteDeletedRestored: 'Restored {count} local messages into a new cloud conversation.',
       retentionSettings: 'Conversation retention',
       retentionMode: 'Retention mode',
       temporaryDuration: 'Temporary duration',

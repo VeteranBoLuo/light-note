@@ -29,6 +29,12 @@
         </span>
         <span v-if="hiddenTagCount" class="inline-note-tag inline-note-tag--more">+{{ hiddenTagCount }}</span>
       </div>
+      <ResourceBacklinks
+        v-if="bookmark.isDesktop && note?.id"
+        placement="header"
+        target-type="note"
+        :target-id="note.id"
+      />
     </div>
     <div class="flex-align-center" style="gap: 20px">
       <span class="mode-pill-group" v-if="!readonly">
@@ -54,7 +60,11 @@
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && bookmark.isDesktop && note?.id">
-        <div class="note-header-title-icon note-header-title-icon--history" @click="$emit('history')" v-click-log="OPERATION_LOG_MAP.note.history">
+        <div
+          class="note-header-title-icon note-header-title-icon--history"
+          @click="$emit('history')"
+          v-click-log="OPERATION_LOG_MAP.note.history"
+        >
           <SvgIcon :src="icon.noteDetail.history" />
         </div>
       </BTooltip>
@@ -68,7 +78,11 @@
         </div>
       </BTooltip>
       <BTooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
-        <div class="note-header-title-icon note-header-title-icon--export" @click="openExportModal" v-click-log="OPERATION_LOG_MAP.note.exportNote">
+        <div
+          class="note-header-title-icon note-header-title-icon--export"
+          @click="openExportModal"
+          v-click-log="OPERATION_LOG_MAP.note.exportNote"
+        >
           <SvgIcon :src="icon.noteDetail.exportLine" />
         </div>
       </BTooltip>
@@ -109,6 +123,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
   import TurndownService from 'turndown';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';
@@ -130,7 +145,16 @@
   }>();
 
   const { t } = useI18n();
-  const emit = defineEmits(['back', 'focusout', 'del', 'save', 'switchMode', 'undoSwitch', 'history', 'saveAsTemplate']);
+  const emit = defineEmits([
+    'back',
+    'focusout',
+    'del',
+    'save',
+    'switchMode',
+    'undoSwitch',
+    'history',
+    'saveAsTemplate',
+  ]);
 
   const bookmark = bookmarkStore();
 
@@ -340,6 +364,8 @@
     border-bottom: 1px solid var(--notePage-topBody-border-color);
     position: fixed;
     top: 0;
+    // 顶部栏中的引用下拉需要越过下方固定的编辑工作区。
+    z-index: 30;
   }
   .note-header-title {
     padding: 0 10px;

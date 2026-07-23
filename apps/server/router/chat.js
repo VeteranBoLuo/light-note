@@ -115,6 +115,7 @@ const changeSetProposeLimiter = rateLimit({
 router.post('/agent', agentChat);
 router.post('/agent/recover', aiResponseHandle.recoverAgentResponse);
 router.post('/conversations/create', aiConversationHandle.createConversation);
+router.post('/conversations/recover-local', agentWriteActionLimiter, aiConversationHandle.recoverLocalConversation);
 router.post('/conversations/list', aiConversationHandle.listConversations);
 router.post('/conversations/get', aiConversationHandle.getConversation);
 router.post('/conversations/lineage', aiConversationHandle.getConversationLineage);

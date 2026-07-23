@@ -4,6 +4,7 @@ import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
 import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
+import { extractOwnedResourceRefs, syncNoteResourceRefs } from './noteReferenceService.js';
 
 const NOTE_TYPES = new Set(['html', 'markdown']);
 const NOTE_VERSION_KEEP = 20;
@@ -108,6 +109,12 @@ export async function createNote({
         items: [{ resourceType: 'note', resourceId: data.id }],
         source: inboxSource,
       });
+    }
+    // 笔记内联提及(N0):在同一事务内把正文的站内引用同步到 note_resource_refs。
+    // 新建笔记旧集合为空,等价于为正文中的有效站内链接建立引用;解析/校验/同步失败则整个创建回滚(§4.4)。
+    const createdRefs = extractOwnedResourceRefs({ content, type });
+    if (createdRefs.length) {
+      await syncNoteResourceRefs(connection, { userId, noteId: data.id, refs: createdRefs });
     }
     commitAttempted = true;
     await connection.commit();
@@ -251,6 +258,11 @@ export async function applyOwnedNoteContentChange(
       }
     }
   }
+
+  // 笔记内联提及(N0):UPDATE 落库后、调用方 commit 前,把正文站内引用差异同步到 note_resource_refs。
+  // apply 是更新语义,正文可能从"有链接"变为"无链接",故无条件 sync(差异同步会正确删除旧引用)。
+  const nextRefs = extractOwnedResourceRefs({ content: nextContent, type: nextType });
+  await syncNoteResourceRefs(connection, { userId: String(userId), noteId: String(noteId), refs: nextRefs });
 
   return { title: current.title, content: nextContent, type: nextType };
 }

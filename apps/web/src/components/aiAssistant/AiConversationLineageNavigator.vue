@@ -93,7 +93,10 @@
   import icon from '@/config/icon.ts';
 
   const props = defineProps<{ conversationId: string }>();
-  const emit = defineEmits<{ open: [conversationId: string] }>();
+  const emit = defineEmits<{
+    open: [conversationId: string];
+    unavailable: [conversationId: string];
+  }>();
   const { t, locale } = useI18n();
   const nodes = ref<AiConversationLineageNode[]>([]);
   const truncated = ref(false);
@@ -117,8 +120,11 @@
       if (epoch !== requestEpoch || props.conversationId !== conversationId) return;
       nodes.value = result.nodes;
       truncated.value = result.truncated;
-    } catch {
-      if (epoch !== requestEpoch) return;
+    } catch (error) {
+      if (epoch !== requestEpoch || props.conversationId !== conversationId) return;
+      if (String((error as { code?: unknown } | null)?.code || '') === 'CONVERSATION_NOT_FOUND') {
+        emit('unavailable', conversationId);
+      }
       nodes.value = [];
       truncated.value = false;
     }

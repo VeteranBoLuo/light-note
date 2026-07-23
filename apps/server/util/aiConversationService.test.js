@@ -26,6 +26,7 @@ import {
   listAiMessageVersions,
   prepareAiMessageVersionGroup,
   purgeDeletedAiConversation,
+  recoverAiConversationFromLocal,
   resolveAiConversationIdentity,
   restoreDeletedAiConversation,
   saveAiMessage,
@@ -101,8 +102,128 @@ describe('AI conversation isolation', () => {
     await expect(
       saveAiMessage(identity, 'conversation-1', { role: 'user', content: 'readonly must not persist' }, database),
     ).rejects.toMatchObject({ code: 'ADMIN_PREVIEW_READONLY', status: 403 });
+    await expect(
+      recoverAiConversationFromLocal(
+        identity,
+        { messages: [{ clientId: 'local-1', role: 'user', status: 'completed', content: 'readonly must not restore' }] },
+        database,
+      ),
+    ).rejects.toMatchObject({ code: 'ADMIN_PREVIEW_READONLY', status: 403 });
     expect(database.query).not.toHaveBeenCalled();
     expect(database.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('在一个事务中新建会话并恢复本机消息的父级和版本组关系', async () => {
+    const recoveredMessages = [];
+    const conversation = {
+      id: '',
+      actor_user_id: 'user-1',
+      subject_user_id: 'user-1',
+      admin_context_mode: 'normal',
+      admin_context_id: null,
+      title: '新会话',
+      summary: '',
+      scope_type: 'global',
+      scope_json: '{}',
+      status: 'active',
+      retention_mode: 'standard',
+      expire_at: null,
+      root_conversation_id: '',
+      parent_conversation_id: null,
+      branch_from_message_id: null,
+      last_message_at: '2026-07-23T00:00:00.000Z',
+      create_time: '2026-07-23T00:00:00.000Z',
+      update_time: '2026-07-23T00:00:00.000Z',
+    };
+    const query = vi.fn(async (sql, params = []) => {
+      const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
+      if (normalizedSql.includes('INSERT INTO ai_conversations')) {
+        conversation.id = params[0];
+        conversation.root_conversation_id = params[10];
+        return [{ affectedRows: 1 }];
+      }
+      if (normalizedSql.startsWith('SELECT * FROM ai_conversations')) return [[conversation]];
+      if (normalizedSql.includes('SELECT id FROM ai_messages WHERE id = ? AND conversation_id = ?')) {
+        const found = recoveredMessages.find((message) => message.id === params[0] && message.conversation_id === params[1]);
+        return [found ? [{ id: found.id }] : []];
+      }
+      if (normalizedSql.includes('SELECT id FROM ai_messages WHERE conversation_id = ? AND request_id = ?')) return [[]];
+      if (normalizedSql.includes('INSERT INTO ai_messages')) {
+        const [id, conversationId, parentMessageId, requestId, traceId, role, content, status, contextRefs, attachmentRefs, activity, coverage, versionGroupId, modelMeta] = params;
+        recoveredMessages.push({
+          id,
+          conversation_id: conversationId,
+          parent_message_id: parentMessageId,
+          request_id: requestId,
+          trace_id: traceId,
+          role,
+          content,
+          status,
+          context_refs_json: contextRefs,
+          attachment_refs_json: attachmentRefs,
+          activity_json: activity,
+          coverage_json: coverage,
+          version_group_id: versionGroupId,
+          model_meta_json: modelMeta,
+          create_time: '2026-07-23T00:00:00.000Z',
+          update_time: '2026-07-23T00:00:00.000Z',
+        });
+        return [{ affectedRows: 1 }];
+      }
+      if (normalizedSql.startsWith('DELETE FROM ai_message_')) return [{ affectedRows: 0 }];
+      if (normalizedSql.includes('UPDATE ai_conversations')) {
+        conversation.title = params[0];
+        return [{ affectedRows: 1 }];
+      }
+      if (normalizedSql.startsWith('SELECT * FROM ai_messages WHERE id = ?')) {
+        const found = recoveredMessages.find((message) => message.id === params[0] && message.conversation_id === params[1]);
+        return [found ? [found] : []];
+      }
+      if (normalizedSql.startsWith('UPDATE ai_messages SET version_group_id')) {
+        const found = recoveredMessages.find((message) => message.id === params[1] && message.conversation_id === params[2]);
+        if (found) found.version_group_id = params[0];
+        return [{ affectedRows: found ? 1 : 0 }];
+      }
+      if (normalizedSql.startsWith('SELECT * FROM ai_messages WHERE conversation_id = ?')) return [recoveredMessages];
+      if (normalizedSql.startsWith('SELECT * FROM ai_message_sources')) return [[]];
+      if (normalizedSql.startsWith('SELECT * FROM ai_message_evidence')) return [[]];
+      if (normalizedSql.startsWith('SELECT message_id, rating, reason, resolved')) return [[]];
+      throw new Error(`unexpected query: ${normalizedSql}`);
+    });
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query,
+    };
+
+    const result = await recoverAiConversationFromLocal(
+      normalIdentity,
+      {
+        messages: [
+          { clientId: 'local-user', role: 'user', status: 'completed', content: '保留本机提问' },
+          {
+            clientId: 'local-answer',
+            parentClientId: 'local-user',
+            versionGroupClientId: 'local-answer',
+            role: 'assistant',
+            status: 'completed',
+            content: '保留本机回答',
+          },
+        ],
+      },
+      { getConnection: vi.fn().mockResolvedValue(connection) },
+    );
+
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(result.restoredMessageCount).toBe(2);
+    expect(result.conversation.messages).toHaveLength(2);
+    expect(recoveredMessages[1].parent_message_id).toBe(recoveredMessages[0].id);
+    expect(recoveredMessages[1].version_group_id).toBe(recoveredMessages[1].id);
   });
 
   it('在单个事务中按 subject 清除普通账号的全部可控 AI 数据并保留安全账本', async () => {

@@ -55,6 +55,29 @@ export interface AiCloudMessage {
   updatedAt: string;
 }
 
+export interface AiLocalConversationRecoveryMessage {
+  /** 仅用于一次恢复请求内关联父消息和版本组，不会作为服务端消息 ID 保存。 */
+  clientId: string;
+  parentClientId?: string | null;
+  versionGroupClientId?: string | null;
+  role: 'user' | 'assistant';
+  status: 'completed' | 'failed' | 'stopped';
+  content: string;
+  contextRefs?: unknown[];
+  attachmentRefs?: unknown[];
+  activity?: unknown[];
+  coverage?: Record<string, unknown> | null;
+  modelMeta?: Record<string, unknown> | null;
+  sources?: Array<Record<string, unknown>>;
+  evidence?: AiEvidence[];
+  traceId?: string | null;
+}
+
+export interface AiLocalConversationRecoveryResult {
+  conversation: AiConversation;
+  restoredMessageCount: number;
+}
+
 export interface AiAgentRecoveryTerminal {
   status: 'completed' | 'failed';
   eventId: number;
@@ -303,6 +326,9 @@ export const createAiConversation = (input: {
   scope?: Record<string, unknown>;
   retentionMode?: AiRetentionMode;
 }) => post<AiConversation>('/api/chat/conversations/create', input);
+
+export const recoverAiLocalConversation = (input: { messages: AiLocalConversationRecoveryMessage[] }) =>
+  post<AiLocalConversationRecoveryResult>('/api/chat/conversations/recover-local', input);
 
 export const listAiConversations = (
   input: {

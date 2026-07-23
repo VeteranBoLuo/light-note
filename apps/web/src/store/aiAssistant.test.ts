@@ -129,6 +129,34 @@ describe('aiAssistant store', () => {
     expect(store.messages.some((item) => item.id === 'assistant-memory-a')).toBe(false);
   });
 
+  it('发现云端会话已失效时保留恢复标记，刷新后仍等待用户选择', () => {
+    const self = identity('user-1', 'user-1', 'self', '');
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+    store.setCloudConversationId('conversation-deleted-on-other-device');
+    store.messages.push({
+      id: 'local-user-message',
+      role: 'user',
+      content: '仍留在本机的提问',
+      timestamp: new Date(),
+    });
+
+    expect(store.markCloudConversationMissing('conversation-deleted-on-other-device')).toBe(true);
+    expect(store.conversationId).toBe('');
+    expect(store.staleCloudConversationId).toBe('conversation-deleted-on-other-device');
+    store.flushPersistence();
+
+    setActivePinia(createPinia());
+    const restored = useAiAssistantStore();
+    restored.switchConversation(self, '你好');
+    expect(restored.conversationId).toBe('');
+    expect(restored.staleCloudConversationId).toBe('conversation-deleted-on-other-device');
+    expect(restored.messages.some((item) => item.content === '仍留在本机的提问')).toBe(true);
+
+    restored.clearCurrentConversation('你好');
+    expect(restored.staleCloudConversationId).toBe('');
+  });
+
   it('管理员上下文切换会中止旧请求，旧 lease 无权写入新主体', () => {
     const store = useAiAssistantStore();
     const subjectA = identity('root-user', 'user-a');

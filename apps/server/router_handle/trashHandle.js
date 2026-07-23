@@ -6,6 +6,7 @@ import { restoreTrashResources } from '../util/services/trashService.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { cleanupOrphanNoteImages } from '../util/noteImages.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { deleteNoteResourceRefsForNotes } from '../util/services/noteReferenceService.js';
 
 // 彻底删除笔记时:删 note_images 行,返回其图片 URL(供事务提交后删磁盘文件)。
 // note_images 原本只增不删,笔记永久删除后图片文件会残留成孤儿。
@@ -120,6 +121,8 @@ async function cleanupExpiredNotes(connection, userId = null) {
   await purgeInboxRelations(connection, 'note', ids);
   const urls = await purgeNoteImages(connection, ids);
   await purgeNoteVersions(connection, ids);
+  // 笔记内联提及(N0):永久清理笔记时,同事务删除其全部出边引用关系(§4 生命周期:永久清理须显式删关系)。
+  await deleteNoteResourceRefsForNotes(connection, ids);
   const [result] = await connection.query(`DELETE FROM note WHERE id IN (${ph})`, ids);
   // 物理文件清理交由调用方在事务提交后执行(此处事务未提交,引用检查会读到旧数据)
   return { count: result.affectedRows, imageUrls: urls };
@@ -337,6 +340,8 @@ export const permanentDelete = async (req, res) => {
       const validNoteIds = validNotes.map((n) => n.id);
       noteImageUrls = await purgeNoteImages(connection, validNoteIds);
       await purgeNoteVersions(connection, validNoteIds);
+      // 笔记内联提及(N0):永久删除笔记时,同事务删除其全部出边引用关系。
+      await deleteNoteResourceRefsForNotes(connection, validNoteIds);
     }
 
     const [result] = await connection.query(
@@ -415,6 +420,8 @@ export const emptyTrash = async (req, res) => {
     const delNoteIds = delNotes.map((n) => n.id);
     const noteImageUrls = await purgeNoteImages(connection, delNoteIds);
     await purgeNoteVersions(connection, delNoteIds);
+    // 笔记内联提及(N0):清空回收站时,同事务删除这些笔记的全部出边引用关系。
+    await deleteNoteResourceRefsForNotes(connection, delNoteIds);
 
     let total = 0;
     for (const type of RESOURCE_TYPES) {

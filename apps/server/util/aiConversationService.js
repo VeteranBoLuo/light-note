@@ -27,6 +27,8 @@ const MAX_RETENTION_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DELETE_UNDO_MS = 15 * 1000;
 const MIN_DELETE_UNDO_MS = 5 * 1000;
 const MAX_DELETE_UNDO_MS = 2 * 60 * 1000;
+const MAX_LOCAL_RECOVERY_MESSAGES = 200;
+const MAX_LOCAL_RECOVERY_CONTENT_CHARS = 2_000_000;
 const LIVE_RETENTION_SQL =
   "(retention_mode <> 'temporary' OR (expire_at IS NOT NULL AND expire_at > CURRENT_TIMESTAMP))";
 
@@ -1402,6 +1404,136 @@ function clonedParentMessageId(message, clonedMessageIds) {
   return clonedMessageIds.get(message.parentMessageId) || null;
 }
 
+function normalizeLocalRecoveryReference(value, field, index) {
+  if (value == null || value === '') return null;
+  const normalized = String(value).trim();
+  if (!normalized || normalized.length > 96) {
+    throw serviceError('RECOVERY_MESSAGE_REFERENCE_INVALID', `第 ${index + 1} 条消息的 ${field} 无效`);
+  }
+  return normalized;
+}
+
+function normalizeLocalRecoveryMessages(rawMessages) {
+  const messages = boundedArray(rawMessages, MAX_LOCAL_RECOVERY_MESSAGES, 'messages');
+  if (!messages.length) throw serviceError('RECOVERY_MESSAGES_REQUIRED', '至少需要恢复一条本机历史消息');
+  const clientIds = new Set();
+  let totalContentLength = 0;
+  const normalized = messages.map((rawMessage, index) => {
+    if (!rawMessage || typeof rawMessage !== 'object' || Array.isArray(rawMessage)) {
+      throw serviceError('RECOVERY_MESSAGE_INVALID', `第 ${index + 1} 条消息格式无效`);
+    }
+    const clientId = normalizeLocalRecoveryReference(rawMessage.clientId, 'clientId', index);
+    if (!clientId || clientIds.has(clientId)) {
+      throw serviceError('RECOVERY_MESSAGE_CLIENT_ID_INVALID', `第 ${index + 1} 条消息 clientId 缺失或重复`);
+    }
+    clientIds.add(clientId);
+    if (rawMessage.role !== 'user' && rawMessage.role !== 'assistant') {
+      throw serviceError('RECOVERY_MESSAGE_ROLE_INVALID', `第 ${index + 1} 条消息角色无效`);
+    }
+    if (!['completed', 'failed', 'stopped'].includes(rawMessage.status)) {
+      throw serviceError('RECOVERY_MESSAGE_STATUS_INVALID', `第 ${index + 1} 条消息状态无效`);
+    }
+    if (typeof rawMessage.content !== 'string' || !rawMessage.content.trim()) {
+      throw serviceError('RECOVERY_MESSAGE_CONTENT_INVALID', `第 ${index + 1} 条消息正文不能为空`);
+    }
+    if (rawMessage.content.length > 1_000_000) {
+      throw serviceError('MESSAGE_TOO_LONG', `第 ${index + 1} 条消息正文不能超过 100 万字符`);
+    }
+    totalContentLength += rawMessage.content.length;
+    if (totalContentLength > MAX_LOCAL_RECOVERY_CONTENT_CHARS) {
+      throw serviceError('RECOVERY_MESSAGE_TOTAL_TOO_LARGE', '待恢复的本机历史正文总量不能超过 200 万字符');
+    }
+    return {
+      clientId,
+      parentClientId: normalizeLocalRecoveryReference(rawMessage.parentClientId, 'parentClientId', index),
+      versionGroupClientId: normalizeLocalRecoveryReference(rawMessage.versionGroupClientId, 'versionGroupClientId', index),
+      role: rawMessage.role,
+      status: rawMessage.status,
+      content: rawMessage.content,
+      contextRefs: rawMessage.contextRefs,
+      attachmentRefs: rawMessage.attachmentRefs,
+      activity: rawMessage.activity,
+      coverage: rawMessage.coverage,
+      modelMeta: rawMessage.modelMeta,
+      sources: rawMessage.sources,
+      evidence: rawMessage.evidence,
+      traceId: asString(rawMessage.traceId, 64) || null,
+    };
+  });
+  // 本机缓存可能被旧版本或浏览器扩展改写。不存在的关联不应让一次用户明确发起的恢复整体失败，
+  // 但绝不把它映射到任意其他消息。
+  return normalized.map((message) => ({
+    ...message,
+    parentClientId: message.parentClientId && clientIds.has(message.parentClientId) ? message.parentClientId : null,
+    versionGroupClientId:
+      message.versionGroupClientId && clientIds.has(message.versionGroupClientId)
+        ? message.versionGroupClientId
+        : null,
+  }));
+}
+
+/**
+ * 用户明确选择「恢复本机历史」时，以单一事务创建新云端会话并写入本机终态消息。
+ * 不接受旧云端 ID，避免把已在其他设备删除的会话悄悄复活。
+ */
+export async function recoverAiConversationFromLocal(identity, input = {}, database = pool) {
+  assertAiConversationWritable(identity);
+  const messages = normalizeLocalRecoveryMessages(input.messages);
+  const ownsTransaction = typeof database?.getConnection === 'function';
+  const connection = ownsTransaction ? await database.getConnection() : database;
+  if (!connection || typeof connection.query !== 'function') {
+    throw serviceError('AI_DATABASE_UNAVAILABLE', 'AI 会话存储暂时不可用', 503);
+  }
+  try {
+    if (ownsTransaction) await connection.beginTransaction();
+    const conversation = await createAiConversation(identity, { retentionMode: 'standard' }, connection);
+    const restoredMessageIds = new Map();
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index];
+      const restored = await saveAiMessage(
+        identity,
+        conversation.id,
+        {
+          parentMessageId: message.parentClientId ? restoredMessageIds.get(message.parentClientId) || null : null,
+          requestId: `recovery:${conversation.id}:${index}`,
+          role: message.role,
+          content: message.content,
+          status: message.status,
+          contextRefs: message.contextRefs,
+          attachmentRefs: message.attachmentRefs,
+          activity: message.activity,
+          coverage: message.coverage,
+          modelMeta: message.modelMeta,
+          sources: message.sources,
+          evidence: message.evidence,
+          traceId: message.traceId,
+        },
+        connection,
+      );
+      restoredMessageIds.set(message.clientId, restored.id);
+    }
+    for (const message of messages) {
+      if (message.role !== 'assistant' || !message.versionGroupClientId) continue;
+      const messageId = restoredMessageIds.get(message.clientId);
+      const versionGroupId = restoredMessageIds.get(message.versionGroupClientId);
+      if (!messageId || !versionGroupId) continue;
+      await connection.query(
+        `UPDATE ai_messages SET version_group_id = ?, update_time = CURRENT_TIMESTAMP
+         WHERE id = ? AND conversation_id = ? AND role = 'assistant'`,
+        [versionGroupId, messageId, conversation.id],
+      );
+    }
+    const result = await getAiConversation(identity, conversation.id, { messageLimit: MAX_LOCAL_RECOVERY_MESSAGES }, connection);
+    if (ownsTransaction) await connection.commit();
+    return { conversation: result, restoredMessageCount: messages.length };
+  } catch (error) {
+    if (ownsTransaction) await connection.rollback();
+    throw error;
+  } finally {
+    if (ownsTransaction) connection.release();
+  }
+}
+
 export async function branchAiConversation(identity, conversationId, input = {}, database = pool) {
   assertAiConversationWritable(identity);
   const ownsTransaction = typeof database?.getConnection === 'function';
@@ -1556,12 +1688,15 @@ export async function getOwnedAiMessage(identity, conversationId, messageId, dat
 export const __testing = {
   DEFAULT_TEMPORARY_RETENTION_MS,
   MAX_TEMPORARY_RETENTION_MS,
+  MAX_LOCAL_RECOVERY_CONTENT_CHARS,
+  MAX_LOCAL_RECOVERY_MESSAGES,
   decodeCursor,
   encodeCursor,
   normalizeTemporaryExpireAt,
   clonedParentMessageId,
   normalizedOwner,
   normalizeEvidence,
+  normalizeLocalRecoveryMessages,
   normalizeSources,
   serviceError,
 };

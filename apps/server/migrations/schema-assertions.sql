@@ -74,3 +74,84 @@ SELECT '[8] missing_lineage_index' AS check_name, CONCAT(x.tn,'.',x.ix) AS detai
 LEFT JOIN information_schema.statistics s
   ON s.table_schema=DATABASE() AND s.table_name=x.tn AND s.index_name=x.ix
 WHERE s.index_name IS NULL;
+
+-- 9) 笔记内联提及派生表 note_resource_refs 应存在（N0;期望 0 行）
+SELECT '[9] missing_note_resource_refs' AS check_name, expected.t AS detail FROM (
+  SELECT 'note_resource_refs' t
+) expected
+LEFT JOIN information_schema.tables a ON a.table_schema=DATABASE() AND a.table_name=expected.t
+WHERE a.table_name IS NULL;
+
+-- 10) note_resource_refs 表引擎/默认排序规则(期望 0 行;CREATE IF NOT EXISTS 不会修复历史同名表)
+SELECT '[10] note_ref_table_shape' AS check_name,
+  CONCAT('实际=', IFNULL(CONCAT(t.engine, '/', t.table_collation), '缺失')) AS detail
+FROM (
+  SELECT 'InnoDB' expected_engine, 'utf8mb4_unicode_ci' expected_collation
+) expected
+LEFT JOIN information_schema.tables t
+  ON t.table_schema=DATABASE() AND t.table_name='note_resource_refs'
+WHERE t.table_name IS NULL
+   OR LOWER(t.engine) <> LOWER(expected.expected_engine)
+   OR t.table_collation <> expected.expected_collation;
+
+-- 11) note_resource_refs 全部列的顺序、类型/宽度、可空、默认、字符集/排序规则与自动更新时间(期望 0 行)
+SELECT '[11] note_ref_column_shape' AS check_name,
+  CONCAT(
+    expected.col,
+    ' 实际=',
+    IFNULL(
+      CONCAT(
+        c.ordinal_position, '/', c.column_type, '/', c.is_nullable, '/', IFNULL(c.column_default, 'NULL'), '/',
+        IFNULL(c.character_set_name, 'NULL'), '/', IFNULL(c.collation_name, 'NULL'), '/', IFNULL(c.extra, '')
+      ),
+      '缺失'
+    )
+  ) AS detail
+FROM (
+  SELECT 1 pos, 'source_note_id' col, 'varchar(255)' ct, 'NO' nn, CAST(NULL AS CHAR) dflt,
+    'utf8mb4' charset_name, 'utf8mb4_unicode_ci' collation_name, '' extra UNION ALL
+  SELECT 2, 'source_user_id', 'varchar(255)', 'NO', CAST(NULL AS CHAR), 'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 3, 'target_type', 'varchar(16)', 'NO', CAST(NULL AS CHAR), 'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 4, 'target_id', 'varchar(255)', 'NO', CAST(NULL AS CHAR), 'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 5, 'target_name_snapshot', 'varchar(255)', 'NO', '', 'utf8mb4', 'utf8mb4_unicode_ci', '' UNION ALL
+  SELECT 6, 'create_time', 'datetime', 'NO', 'CURRENT_TIMESTAMP', CAST(NULL AS CHAR), CAST(NULL AS CHAR), '' UNION ALL
+  SELECT 7, 'update_time', 'datetime', 'NO', 'CURRENT_TIMESTAMP', CAST(NULL AS CHAR), CAST(NULL AS CHAR), 'on update CURRENT_TIMESTAMP'
+) expected
+LEFT JOIN information_schema.columns c
+  ON c.table_schema=DATABASE() AND c.table_name='note_resource_refs' AND c.column_name=expected.col
+WHERE c.column_name IS NULL
+   OR c.ordinal_position <> expected.pos
+   OR LOWER(c.column_type) <> expected.ct
+   OR c.is_nullable <> expected.nn
+   OR NOT (c.column_default <=> expected.dflt)
+   OR NOT (c.character_set_name <=> expected.charset_name)
+   OR NOT (c.collation_name <=> expected.collation_name)
+   OR LOWER(COALESCE(c.extra, '')) <> LOWER(expected.extra);
+
+-- 12) note_resource_refs 主键与二级索引的完整列序、唯一性与前缀长度(期望 0 行)
+SELECT '[12] note_ref_index_shape' AS check_name,
+  CONCAT(
+    expected.idx,
+    ' 实际=',
+    IFNULL(CONCAT(actual.non_unique, '/', actual.cols), '缺失')
+  ) AS detail
+FROM (
+  SELECT 'PRIMARY' idx, 0 non_unique, 'source_note_id,target_type,target_id' cols UNION ALL
+  SELECT 'idx_note_resource_refs_target', 1, 'source_user_id,target_type,target_id' UNION ALL
+  SELECT 'idx_note_resource_refs_source_user', 1, 'source_user_id,source_note_id'
+) expected
+LEFT JOIN (
+  SELECT
+    s.index_name,
+    MAX(s.non_unique) AS non_unique,
+    GROUP_CONCAT(
+      CONCAT(s.column_name, IF(s.sub_part IS NULL, '', CONCAT('(', s.sub_part, ')')))
+      ORDER BY s.seq_in_index SEPARATOR ','
+    ) AS cols
+  FROM information_schema.statistics s
+  WHERE s.table_schema=DATABASE() AND s.table_name='note_resource_refs'
+  GROUP BY s.index_name
+) actual ON actual.index_name=expected.idx
+WHERE actual.index_name IS NULL
+   OR actual.non_unique <> expected.non_unique
+   OR actual.cols <> expected.cols;

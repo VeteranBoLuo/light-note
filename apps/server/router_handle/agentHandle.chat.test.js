@@ -276,9 +276,7 @@ describe('agentChat 主链路', () => {
 
     // memory_context 明确声明未使用,原因为 disabled(全局关闭),不含任何记忆 id/正文
     const memoryEvent = sseEvents(res).find((event) => event.event === 'memory_context');
-    expect(memoryEvent).toEqual(
-      expect.objectContaining({ status: 'not_used', count: 0, reason: 'disabled' }),
-    );
+    expect(memoryEvent).toEqual(expect.objectContaining({ status: 'not_used', count: 0, reason: 'disabled' }));
     expect(JSON.stringify(memoryEvent)).not.toContain('memory-active');
     expect(JSON.stringify(memoryEvent)).not.toContain('回答尽量简洁');
 
@@ -473,6 +471,9 @@ describe('agentChat 主链路', () => {
     await agentChat(req, res);
 
     expect(mocks.toolExecute).not.toHaveBeenCalled();
+    const finalMessages = mocks.requestAi.mock.calls[1][0];
+    expect(finalMessages.some((item) => item.role === 'tool' || Array.isArray(item.tool_calls))).toBe(false);
+    expect(finalMessages.some((item) => String(item.content || '').includes('系统已完成查询'))).toBe(true);
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ response: '参数被安全策略拒绝。' }) }),
     );

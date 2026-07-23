@@ -3,9 +3,10 @@
     <!-- 主聊天容器 -->
     <div class="chat-wrapper">
       <AiConversationLineageNavigator
-        v-if="conversationId"
-        :conversation-id="conversationId"
+        v-if="lineageConversationId"
+        :conversation-id="lineageConversationId"
         @open="openConversation"
+        @unavailable="clearMissingCloudConversation"
       />
       <!-- 消息区域 -->
       <main
@@ -202,6 +203,7 @@
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { consumeAiSseChunk, flushAiSseBuffer, type AiSseEvent } from '@/utils/aiSse';
   import { fetchAiFollowUps } from '@/api/aiFollowUpApi';
   import {
@@ -210,8 +212,10 @@
     listAiConversations as listAiCloudConversations,
     prepareAiMessageVersionGroup,
     recoverAiAgentResponse,
+    recoverAiLocalConversation,
     saveAiCloudMessage,
     type AiCloudMessage,
+    type AiLocalConversationRecoveryMessage,
     type AiPersistedSource,
   } from '@/api/aiWorkspaceApi';
   import {
@@ -284,6 +288,7 @@
     scrollTop,
     sessionId,
     conversationId,
+    staleCloudConversationId,
     longChatHinted,
     scopeMode,
     temporarySession,
@@ -299,6 +304,28 @@
   const enableTranslation = ref(false);
   const translationConfig = ref({ source: 'auto', target: 'zh' });
   const regenerationPreparing = ref(false);
+  const cloudRecoveryPending = ref(false);
+  // 本地持久化可能保留了已删除、过期或换号后不再归属的云端会话 ID。
+  // 只有 get 会话成功后才允许请求谱系，避免打开 AI 时用未经校验的旧 ID 直接触发 404。
+  const lineageConversationId = ref('');
+
+  function isConversationNotFoundError(error: unknown) {
+    return String((error as { code?: unknown } | null)?.code || '') === 'CONVERSATION_NOT_FOUND';
+  }
+
+  function clearMissingCloudConversation(cloudId: string, runtimeKey = aiAssistant.runtimeIdentityKey) {
+    const normalizedId = String(cloudId || '').trim();
+    if (!normalizedId || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
+    if (conversationId.value === normalizedId) aiAssistant.markCloudConversationMissing(normalizedId);
+    if (lineageConversationId.value === normalizedId) lineageConversationId.value = '';
+  }
+
+  // 任意地方切换/清空云端会话时，先撤下上一个会话的谱系导航；等新会话读取成功后再恢复。
+  watch(conversationId, (currentId) => {
+    if (lineageConversationId.value && lineageConversationId.value !== String(currentId || '').trim()) {
+      lineageConversationId.value = '';
+    }
+  });
 
   function focusInput() {
     chatInputRef.value?.focus();
@@ -563,6 +590,7 @@
       stopResponse('cancelled');
     }
     const switched = aiAssistant.switchConversation(conversationIdentity.value, t('ai.greeting'));
+    lineageConversationId.value = '';
     if (!cloudHistoryEnabled()) aiAssistant.setCloudConversationId('');
     if (!switched) {
       void hydrateCloudConversation(nextRuntimeIdentityKey);
@@ -575,14 +603,241 @@
   }
 
   let cloudConversationCreation: { runtimeKey: string; promise: Promise<string | null> } | null = null;
+  const MAX_LOCAL_RECOVERY_MESSAGES = 200;
+  const MAX_LOCAL_RECOVERY_CONTENT_CHARS = 2_000_000;
+  const MAX_LOCAL_RECOVERY_MESSAGE_CHARS = 1_000_000;
+
+  type StaleCloudConversationChoice = 'new' | 'restore' | 'cancel';
+  type CloudConversationPreparation = 'ready' | 'replaced' | 'cancelled';
 
   function cloudHistoryEnabled() {
     return shouldUseAiCloudHistory(user.id, user.role, user.preferences.aiCloudHistory);
   }
 
+  function createGreetingMessage(): ChatMessage {
+    return {
+      id: createAiAssistantMessageId('greeting'),
+      role: 'assistant',
+      content: t('ai.greeting'),
+      timestamp: new Date(),
+      recommendationReady: true,
+      recommendations: [],
+    };
+  }
+
+  function isInitialLocalGreeting(chatMessage: ChatMessage, index: number) {
+    return Boolean(
+      index === 0 &&
+        chatMessage.role === 'assistant' &&
+        !chatMessage.cloudId &&
+        !chatMessage.parentMessageId &&
+        !chatMessage.versionGroupId &&
+        !chatMessage.contextRefs?.length &&
+        !chatMessage.contexts?.length &&
+        !chatMessage.attachmentRefs?.length &&
+        !chatMessage.sources?.length &&
+        !chatMessage.evidence?.length,
+    );
+  }
+
+  function buildLocalConversationRecovery() {
+    const candidates = messages.value.filter(
+      (chatMessage, index) =>
+        chatMessage.content &&
+        !chatMessage.transient &&
+        !hasPendingAgentActions(chatMessage) &&
+        (chatMessage.role === 'user' || chatMessage.role === 'assistant') &&
+        !isInitialLocalGreeting(chatMessage, index),
+    );
+    const selected: ChatMessage[] = [];
+    let contentLength = 0;
+    // 以最新上下文优先：恢复接口与会话读取都封顶 200 条，且服务端总正文有 200 万字符保护。
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const chatMessage = candidates[index];
+      const nextLength = chatMessage.content.length;
+      if (
+        selected.length >= MAX_LOCAL_RECOVERY_MESSAGES ||
+        nextLength > MAX_LOCAL_RECOVERY_MESSAGE_CHARS ||
+        contentLength + nextLength > MAX_LOCAL_RECOVERY_CONTENT_CHARS
+      ) {
+        continue;
+      }
+      selected.push(chatMessage);
+      contentLength += nextLength;
+    }
+    selected.reverse();
+    // 截断刚好落在一条回答上时，不把缺少提问的孤立回答作为新会话的第一段上下文。
+    while (selected[0]?.role === 'assistant') selected.shift();
+    const clientIdByMessage = new Map<ChatMessage, string>();
+    const clientIdByReference = new Map<string, string>();
+    selected.forEach((chatMessage, index) => {
+      const clientId = `local-recovery-${index}`;
+      clientIdByMessage.set(chatMessage, clientId);
+      clientIdByReference.set(chatMessage.id, clientId);
+      if (chatMessage.cloudId) clientIdByReference.set(chatMessage.cloudId, clientId);
+    });
+    const recoveryMessages: AiLocalConversationRecoveryMessage[] = selected.map((chatMessage) => {
+      const sources = (chatMessage.sources || []).map(localSourceToCloud);
+      const knownSourceIds = new Set(sources.map((source) => source.sourceId));
+      return {
+        clientId: clientIdByMessage.get(chatMessage) || createAiAssistantMessageId('local-recovery'),
+        parentClientId: chatMessage.parentMessageId
+          ? clientIdByReference.get(chatMessage.parentMessageId) || null
+          : null,
+        versionGroupClientId: chatMessage.versionGroupId
+          ? clientIdByReference.get(chatMessage.versionGroupId) || null
+          : null,
+        role: chatMessage.role,
+        status: chatMessage.terminal?.status === 'failed' ? 'failed' : 'completed',
+        content: chatMessage.content,
+        contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
+        attachmentRefs: chatMessage.attachmentRefs || [],
+        activity: chatMessage.activity || [],
+        coverage: chatMessage.coverage || null,
+        modelMeta: chatMessage.recovered
+          ? { recovered: true, stage: chatMessage.stage || null, terminal: chatMessage.terminal || null }
+          : null,
+        sources,
+        evidence: (chatMessage.evidence || []).filter((item) => knownSourceIds.has(item.sourceId)),
+        traceId: chatMessage.traceId || null,
+      };
+    });
+    return {
+      messages: recoveryMessages,
+      localMessageCount: candidates.length,
+      truncated: recoveryMessages.length !== candidates.length,
+    };
+  }
+
+  function askStaleCloudConversationChoice(recovery: ReturnType<typeof buildLocalConversationRecovery>) {
+    return new Promise<StaleCloudConversationChoice>((resolve) => {
+      const canRestore = recovery.messages.length > 0;
+      const content = !canRestore
+        ? t('ai.conversations.remoteDeletedContentNoHistory')
+        : recovery.truncated
+          ? t('ai.conversations.remoteDeletedContentLimited', {
+              count: recovery.localMessageCount,
+              restoredCount: recovery.messages.length,
+            })
+          : t('ai.conversations.remoteDeletedContentWithHistory', { count: recovery.localMessageCount });
+      Alert.alert({
+        title: t('ai.conversations.remoteDeletedTitle'),
+        content,
+        footer: [
+          { label: t('common.cancel'), type: 'dashed', function: () => resolve('cancel') },
+          ...(canRestore
+            ? [
+                {
+                  label: t('ai.conversations.restoreLocalHistory'),
+                  type: 'dashed' as const,
+                  function: () => resolve('restore'),
+                },
+              ]
+            : []),
+          {
+            label: t('ai.conversations.continueAsNew'),
+            type: 'primary' as const,
+            function: () => resolve('new'),
+          },
+        ],
+      });
+    });
+  }
+
+  function applyRecoveredCloudConversation(cloudConversation: {
+    id: string;
+    messages: AiCloudMessage[];
+  }) {
+    const cloudMessages = normalizeVisibleVersionGroups(
+      cloudConversation.messages.map(cloudMessageToLocal).filter((item): item is ChatMessage => Boolean(item)),
+    );
+    messages.value = cloudMessages.length ? cloudMessages : [createGreetingMessage()];
+    sessionId.value = '';
+    longChatHinted.value = false;
+    temporarySession.value = false;
+    aiAssistant.setCloudConversationId(cloudConversation.id);
+    aiAssistant.clearCloudConversationRecovery();
+    lineageConversationId.value = cloudConversation.id;
+    persistHistory();
+    resetScrollState();
+  }
+
+  async function startFreshCloudConversationAfterDeletion(runtimeKey: string) {
+    const created = await createAiCloudConversation({ retentionMode: 'standard' });
+    if (aiAssistant.runtimeIdentityKey !== runtimeKey) return false;
+    applyRecoveredCloudConversation({ id: created.id, messages: [] });
+    message.success(t('ai.conversations.remoteDeletedStartedNew'));
+    return true;
+  }
+
+  async function restoreLocalCloudConversationAfterDeletion(
+    runtimeKey: string,
+    recovery: ReturnType<typeof buildLocalConversationRecovery>,
+  ) {
+    const result = await recoverAiLocalConversation({ messages: recovery.messages });
+    if (aiAssistant.runtimeIdentityKey !== runtimeKey) return false;
+    applyRecoveredCloudConversation(result.conversation);
+    message.success(t('ai.conversations.remoteDeletedRestored', { count: result.restoredMessageCount }));
+    return true;
+  }
+
+  async function prepareCloudConversationForSend(runtimeKey: string): Promise<CloudConversationPreparation> {
+    if (!cloudHistoryEnabled() || aiAssistant.runtimeIdentityKey !== runtimeKey) return 'ready';
+    const existingId = String(conversationId.value || '').trim();
+    if (existingId && !staleCloudConversationId.value) {
+      try {
+        // 发送前做一次只读取会话元数据的轻量确认，避免另一台设备刚删除后继续把消息发向失效 ID。
+        await getAiCloudConversation(existingId, 0);
+        if (aiAssistant.runtimeIdentityKey !== runtimeKey) return 'cancelled';
+        lineageConversationId.value = existingId;
+        return 'ready';
+      } catch (error) {
+        if (isConversationNotFoundError(error)) clearMissingCloudConversation(existingId, runtimeKey);
+        else return 'ready'; // 网络暂时不可用时不阻断本地问答；后续保存仍会再次确认。
+      }
+    }
+    if (!staleCloudConversationId.value) return 'ready';
+    cloudRecoveryPending.value = true;
+    const recovery = buildLocalConversationRecovery();
+    try {
+      const choice = await askStaleCloudConversationChoice(recovery);
+      if (choice === 'cancel' || aiAssistant.runtimeIdentityKey !== runtimeKey) return 'cancelled';
+      if (choice === 'new') {
+        try {
+          return (await startFreshCloudConversationAfterDeletion(runtimeKey)) ? 'replaced' : 'cancelled';
+        } catch {
+          message.warning(t('ai.conversations.remoteDeletedStartNewFailed'));
+          return 'cancelled';
+        }
+      }
+      try {
+        return (await restoreLocalCloudConversationAfterDeletion(runtimeKey, recovery)) ? 'replaced' : 'cancelled';
+      } catch {
+        message.warning(t('ai.conversations.remoteDeletedRestoreFailed'));
+        return 'cancelled';
+      }
+    } finally {
+      cloudRecoveryPending.value = false;
+    }
+  }
+
   async function ensureCloudConversation(runtimeKey: string) {
     if (!cloudHistoryEnabled() || aiAssistant.runtimeIdentityKey !== runtimeKey) return null;
-    if (conversationId.value) return conversationId.value;
+    // 已发现跨设备删除时必须先由用户在发送前选择恢复策略，禁止这里静默创建并复活旧上下文。
+    if (staleCloudConversationId.value) return null;
+    if (conversationId.value) {
+      const existingId = conversationId.value;
+      if (lineageConversationId.value === existingId) return existingId;
+      try {
+        // 刷新后恢复的 ID 还没有经过本轮身份/保留策略校验，先轻量读取；不覆盖当前本机历史。
+        await getAiCloudConversation(existingId, 0);
+        if (aiAssistant.runtimeIdentityKey === runtimeKey) lineageConversationId.value = existingId;
+        return existingId;
+      } catch (error) {
+        if (isConversationNotFoundError(error)) clearMissingCloudConversation(existingId, runtimeKey);
+        return null;
+      }
+    }
     if (cloudConversationCreation?.runtimeKey === runtimeKey) return cloudConversationCreation.promise;
     // 不传本地化的"未命名"标题:让后端用固定哨兵默认标题(新会话),这样首条用户消息保存时
     // 后端的"标题==默认→改成首句提问"自动改名才会触发(修复会话全叫"新对话"、无法区分的问题)。
@@ -590,6 +845,7 @@
       .then((created) => {
         if (aiAssistant.runtimeIdentityKey !== runtimeKey) return null;
         aiAssistant.setCloudConversationId(created.id);
+        lineageConversationId.value = created.id;
         return created.id;
       })
       .catch(() => null)
@@ -708,6 +964,8 @@
 
   async function hydrateCloudConversation(runtimeKey: string) {
     if (!cloudHistoryEnabled() || aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return;
+    // 云端已明确找不到旧会话时，保留本机历史直到用户在发送前作出选择，不能再被“最近会话”覆盖。
+    if (staleCloudConversationId.value) return;
     const localHasUnsyncedMessages = messages.value.slice(1).some((item) => item.content && !item.cloudId);
     if (localHasUnsyncedMessages) return;
     try {
@@ -724,24 +982,21 @@
   }
 
   async function loadCloudConversation(cloudId: string, runtimeKey = aiAssistant.runtimeIdentityKey) {
-    const cloudConversation = await getAiCloudConversation(cloudId, 200);
+    let cloudConversation;
+    try {
+      cloudConversation = await getAiCloudConversation(cloudId, 200);
+    } catch (error) {
+      if (isConversationNotFoundError(error)) clearMissingCloudConversation(cloudId, runtimeKey);
+      throw error;
+    }
     if (aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return false;
     const cloudMessages = normalizeVisibleVersionGroups(
       cloudConversation.messages.map(cloudMessageToLocal).filter((item): item is ChatMessage => Boolean(item)),
     );
     aiAssistant.setCloudConversationId(cloudConversation.id);
-    messages.value = cloudMessages.length
-      ? cloudMessages
-      : [
-          {
-            id: createAiAssistantMessageId('greeting'),
-            role: 'assistant',
-            content: t('ai.greeting'),
-            timestamp: new Date(),
-            recommendationReady: true,
-            recommendations: [],
-          },
-        ];
+    aiAssistant.clearCloudConversationRecovery();
+    lineageConversationId.value = cloudConversation.id;
+    messages.value = cloudMessages.length ? cloudMessages : [createGreetingMessage()];
     persistHistory();
     restoreConversationViewport();
     return true;
@@ -816,7 +1071,8 @@
       });
       if (aiAssistant.runtimeIdentityKey === runtimeKey) chatMessage.cloudId = saved.id;
       return saved;
-    } catch {
+    } catch (error) {
+      if (isConversationNotFoundError(error)) clearMissingCloudConversation(cloudConversationId, runtimeKey);
       return null;
     }
   }
@@ -853,7 +1109,8 @@
         chatMessage.versionGroupId = saved.versionGroupId || chatMessage.versionGroupId;
       }
       return saved;
-    } catch {
+    } catch (error) {
+      if (isConversationNotFoundError(error)) clearMissingCloudConversation(cloudConversationId, runtimeKey);
       // 云端保存失败只影响跨端历史；本地持久化仍保留当前结果。
       return null;
     }
@@ -875,6 +1132,7 @@
     (enabled) => {
       if (enabled !== false) return;
       cloudConversationCreation = null;
+      lineageConversationId.value = '';
       aiAssistant.setCloudConversationId('');
     },
   );
@@ -1129,7 +1387,7 @@
       historySnapshot?: ChatMessage[];
     } = {},
   ) => {
-    if (isLoading.value) return;
+    if (isLoading.value || cloudRecoveryPending.value) return;
     // 每次开始新的提问时，重置自动滚动状态，确保本轮对话自动跟随到底部
     shouldFollowMessages.value = true;
     showScrollToBottom.value = false;
@@ -1142,12 +1400,14 @@
     const contextSnapshot = materialSnapshot.contextRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
+    const cloudPreparation = await prepareCloudConversationForSend(aiAssistant.runtimeIdentityKey);
+    if (cloudPreparation === 'cancelled') return;
     activeAnswerTypewriter?.cancel();
     activeAnswerTypewriter = null;
 
     // 会话上下文快照:本轮问题「之前」的完整对话(显示多少发多少,保证 AI 记得的=你看得到的)。
     // 后端会按预算截最近部分兜底。此处在推入本轮问题前取,故不含当前这句。
-    const historyForRequest = (options.historySnapshot || messages.value)
+    const historyForRequest = (cloudPreparation === 'replaced' ? messages.value : options.historySnapshot || messages.value)
       .filter(
         (m) => m.content && !m.transient && !hasPendingAgentActions(m) && (m.role === 'user' || m.role === 'assistant'),
       )
@@ -1168,7 +1428,7 @@
       contexts: contextSnapshot.map((item) => ({ ...item })),
       contextRefs: contextSnapshot,
       attachmentRefs: attachmentSnapshot,
-      parentMessageId: options.parentMessageId,
+      parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
     };
     messages.value.push(userMessage);
 
@@ -1182,7 +1442,7 @@
       recommendationReady: false,
       recommendationPending: true,
       parentMessageId: userMessage.id,
-      versionGroupId: options.versionGroupId,
+      versionGroupId: cloudPreparation === 'replaced' ? undefined : options.versionGroupId,
     };
     messages.value.push(aiMessage);
     const requestLease = aiAssistant.beginRequest(aiMessage.id);

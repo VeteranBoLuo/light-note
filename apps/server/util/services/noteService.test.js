@@ -10,10 +10,15 @@ const connection = {
 const pool = { getConnection: vi.fn(() => connection), query: vi.fn() };
 const enqueueResources = vi.fn();
 const triggerResourceCreateEffects = vi.fn();
+// 笔记内联提及(N0):隔离引用同步钩子,让本文件既有用例不触发真实关系查询;
+// sync 自身逻辑由 noteReferenceService.test.js 覆盖。默认 extract 返回空集合(既有用例正文无站内链接)。
+const extractOwnedResourceRefs = vi.fn(() => []);
+const syncNoteResourceRefs = vi.fn(async () => ({ inserted: 0, deleted: 0 }));
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects }));
+vi.mock('./noteReferenceService.js', () => ({ extractOwnedResourceRefs, syncNoteResourceRefs }));
 
 const { applyOwnedNoteContentChange, createNote } = await import('./noteService.js');
 const { actionIdempotencyUuid } = await import('../agent/actionIdempotency.js');
@@ -260,5 +265,92 @@ describe('noteService.applyOwnedNoteContentChange', () => {
 
     expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO note_versions SET ?')).toBe(false);
     expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE note SET content'))).toBe(false);
+  });
+});
+
+describe('noteService 笔记提及引用同步接入(N0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    connection.beginTransaction.mockResolvedValue();
+    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    connection.commit.mockResolvedValue();
+    connection.rollback.mockResolvedValue();
+    extractOwnedResourceRefs.mockReturnValue([]);
+    syncNoteResourceRefs.mockResolvedValue({ inserted: 0, updated: 0, deleted: 0 });
+  });
+
+  it('createNote 正文含站内链接 → 事务内、commit 前调用 sync', async () => {
+    extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
+    const content = '<a href="/noteLibrary/n1">x</a>';
+    const result = await createNote({ userId: 'u1', note: { title: 'T', content, type: 'html' } });
+    expect(extractOwnedResourceRefs).toHaveBeenCalledWith({ content, type: 'html' });
+    expect(syncNoteResourceRefs).toHaveBeenCalledWith(connection, {
+      userId: 'u1',
+      noteId: result.id,
+      refs: [{ type: 'note', id: 'n1' }],
+    });
+    const syncOrder = syncNoteResourceRefs.mock.invocationCallOrder[0];
+    const commitOrder = connection.commit.mock.invocationCallOrder[0];
+    expect(syncOrder).toBeLessThan(commitOrder);
+  });
+
+  it('createNote 正文无站内链接 → 跳过 sync(新建无旧集合)', async () => {
+    extractOwnedResourceRefs.mockReturnValue([]);
+    await createNote({ userId: 'u1', note: { title: 'T', content: '纯文本无链接', type: 'html' } });
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
+  });
+
+  it('createNote 的引用同步失败 → 整个创建事务回滚且不提交', async () => {
+    const syncError = new Error('reference sync failed');
+    extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
+    syncNoteResourceRefs.mockRejectedValueOnce(syncError);
+
+    await expect(
+      createNote({ userId: 'u1', note: { title: '同步失败', content: '<a href="/noteLibrary/n1">x</a>', type: 'html' } }),
+    ).rejects.toBe(syncError);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('applyOwnedNoteContentChange UPDATE 后无条件 sync(正文清空链接→删旧引用)', async () => {
+    extractOwnedResourceRefs.mockReturnValue([]);
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.startsWith('SELECT title, content, type FROM note')) {
+        return [[{ title: 'T', content: '<a href="/noteLibrary/n1">x</a>', type: 'html' }]];
+      }
+      if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
+      return [{ affectedRows: 1 }];
+    });
+    await applyOwnedNoteContentChange(connection, {
+      userId: 'u1',
+      noteId: 'note-1',
+      before: { title: 'T', content: '<a href="/noteLibrary/n1">x</a>', type: 'html' },
+      after: { title: 'T', content: '清空了链接', type: 'html' },
+    });
+    expect(extractOwnedResourceRefs).toHaveBeenCalledWith({ content: '清空了链接', type: 'html' });
+    expect(syncNoteResourceRefs).toHaveBeenCalledWith(connection, { userId: 'u1', noteId: 'note-1', refs: [] });
+  });
+
+  it('applyOwnedNoteContentChange 的同步失败向所属事务抛出，不伪造成功', async () => {
+    const syncError = new Error('reference sync failed');
+    extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
+    syncNoteResourceRefs.mockRejectedValueOnce(syncError);
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.startsWith('SELECT title, content, type FROM note')) {
+        return [[{ title: 'T', content: '旧正文', type: 'html' }]];
+      }
+      if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
+      return [{ affectedRows: 1 }];
+    });
+
+    await expect(
+      applyOwnedNoteContentChange(connection, {
+        userId: 'u1',
+        noteId: 'note-1',
+        before: { title: 'T', content: '旧正文', type: 'html' },
+        after: { title: 'T', content: '<a href="/noteLibrary/n1">新正文</a>', type: 'html' },
+      }),
+    ).rejects.toBe(syncError);
   });
 });

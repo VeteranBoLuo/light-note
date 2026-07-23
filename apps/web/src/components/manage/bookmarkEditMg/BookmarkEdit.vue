@@ -28,6 +28,11 @@
             @add-tag="goAddTag"
             @view-snapshot="snapVisible = true"
           />
+          <ResourceBacklinks
+            v-if="isEdit && bookmarkId"
+            target-type="bookmark"
+            :target-id="bookmarkId"
+          />
         </BLoading>
       </div>
       <footer class="bookmark-edit-page__footer">
@@ -54,6 +59,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BookmarkEditorForm from '@/components/manage/bookmarkEditMg/BookmarkEditorForm.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
+  import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
   import { useBookmarkEditor } from '@/composables/useBookmarkEditor';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';

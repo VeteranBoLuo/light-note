@@ -62,4 +62,24 @@ describe('AiConversationLineageNavigator', () => {
     expect(open).toHaveBeenCalledWith('child-1');
     expect(getAiConversationLineage).toHaveBeenCalledWith('root-1');
   });
+
+  it('会话已不存在时通知父级清理过期会话 ID', async () => {
+    const unavailable = vi.fn();
+    getAiConversationLineage.mockRejectedValue(Object.assign(new Error('missing'), { code: 'CONVERSATION_NOT_FOUND' }));
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () => h(AiConversationLineageNavigator, { conversationId: 'stale-1', onUnavailable: unavailable }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { render: () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await flush();
+
+    expect(unavailable).toHaveBeenCalledWith('stale-1');
+  });
 });

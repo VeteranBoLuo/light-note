@@ -32,22 +32,69 @@
               type="textarea"
               @input="onMdInput"
               @scroll="syncMdScroll('edit')"
+              @keydown="onMarkdownMentionKeydown"
+              @focusout="closeInlineMention"
               :readonly="readonly"
               :placeholder="$t('note.mdPlaceholder')"
             />
           </div>
           <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
             <div v-if="mdView === 'split'" class="md-editor-label">{{ $t('note.mdPreview') }}</div>
-            <div ref="mdPreviewRef" class="md-preview" @scroll="syncMdScroll('preview')" v-html="renderedMd"></div>
+            <div
+              ref="mdPreviewRef"
+              class="md-preview"
+              @scroll="syncMdScroll('preview')"
+              @click="handleRenderedResourceLinkClick"
+              v-html="renderedMd"
+            ></div>
           </div>
         </div>
       </div>
     </template>
+    <BPopover
+      v-if="!isMobile"
+      v-model:open="inlineMentionVisible"
+      class="resource-mention-inline-anchor"
+      :style="inlineMentionAnchorStyle"
+      trigger="manual"
+      placement="bottom-left"
+      overlay-class-name="resource-mention-inline-popover"
+    >
+      <span aria-hidden="true"></span>
+      <template #content>
+        <ResourceMentionSuggestions
+          ref="inlineMentionSuggestionsRef"
+          :query="inlineMentionQuery"
+          @select="insertInlineResourceMention"
+          @open-full="openFullMentionPicker"
+        />
+      </template>
+    </BPopover>
+    <BModal
+      v-model:visible="mentionPickerVisible"
+      :title="t('note.resourceMention.title')"
+      width="460px"
+      :show-footer="false"
+      @close="closeMentionPicker"
+    >
+      <ResourceMentionPicker @select="insertResourceMention" @close="closeMentionPicker" />
+    </BModal>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue';
+  import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    shallowRef,
+    watch,
+    watchEffect,
+    type PropType,
+  } from 'vue';
+  import { useRouter } from 'vue-router';
   import TinyMceEditor from '@tinymce/tinymce-vue';
   import 'tinymce/tinymce';
   import 'tinymce/icons/default';
@@ -75,9 +122,34 @@
   import icon from '@/config/icon';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
+  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
   import TurndownService from 'turndown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
+  import { getRootZoom } from '@/utils/zoom.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
+  import { isResourceMentionTextTrigger } from '@/utils/noteMentionTrigger';
+  import {
+    applyResourceReferenceChipPresentation,
+    buildResourceAnchorAttrs,
+    buildResourceHref,
+    collectResourceRefsFromHtml,
+    decorateInternalResourceLinks,
+    parseResourceHref,
+    presentResourceReferenceChips,
+    resourceRefKey,
+    serializeResourceReferenceSnapshots,
+    type ResourceRef,
+  } from '@/utils/noteResourceRefs';
+  import type { ResolvedResourceReference } from '@/api/noteReferences';
+  import {
+    resolveAiSourceNavigation,
+    type AiSource,
+    type AiSourceTarget,
+  } from '@/components/aiAssistant/aiSourceNavigation';
 
   const CODE_LANGUAGES = [
     { value: 'plaintext', text: 'Plain Text' },
@@ -125,6 +197,11 @@
       type: String as () => 'html' | 'markdown',
       default: 'html',
     },
+    // 父级在打开笔记时一次批量解析；Editor 只消费展示状态，不自行按 chip 发请求。
+    resourceRefs: {
+      type: Array as PropType<ResolvedResourceReference[]>,
+      default: () => [],
+    },
   });
 
   const emits = defineEmits([
@@ -136,6 +213,7 @@
     'update:type',
     'switch-backup-change',
     'markdown-rendered',
+    'resource-refs-change',
   ]);
   const content = defineModel<string>('content');
   const editorRef = shallowRef<any>(null);
@@ -143,8 +221,11 @@
   const editorKey = ref(0);
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const router = useRouter();
   const { t } = useI18n();
   const isMobile = computed(() => bookmark.isMobile);
+  // 普通游客只能阅读已有引用；管理员进入“游客内容维护”工作区时沿用现有维护权限放行。
+  const canEditResourceMentions = computed(() => !props.readonly && (user.role !== 'visitor' || user.visitorWorkspace));
   type MarkdownView = 'edit' | 'split' | 'preview';
   // MD 编辑器视图：edit / split / preview
   const mdView = ref<MarkdownView>(isMobile.value ? 'edit' : 'split');
@@ -180,10 +261,131 @@
     },
   );
 
+  watch(
+    () => props.resourceRefs,
+    () => {
+      if (currentType.value === 'markdown') {
+        void renderMd();
+        return;
+      }
+      window.setTimeout(() => decorateTinyMceResourceRefs(), 0);
+    },
+    { deep: true },
+  );
+
+  watch(
+    () => props.noteId,
+    () => {
+      // 新建草稿拿到真实 id 后必须重新发布同一批链接，让父级用真实上下文批量解析。
+      lastPublishedResourceRefSignature = '';
+      if (currentType.value === 'markdown') {
+        void renderMd();
+        return;
+      }
+      window.setTimeout(() => {
+        const editor = editorRef.value;
+        if (!editor) return;
+        publishResourceRefs(editor.getContent({ format: 'html' }));
+        decorateTinyMceResourceRefs();
+      }, 0);
+    },
+  );
+
   // Markdown 编辑器状态
   const mdContent = ref('');
   let markedLib: any = null;
   let dompurifyLib: any = null;
+  const mentionPickerVisible = ref(false);
+  const inlineMentionVisible = ref(false);
+  const inlineMentionQuery = ref('');
+  const inlineMentionAnchorStyle = ref<Record<string, string>>({});
+  const inlineMentionSuggestionsRef = ref<{ moveActive: (offset: number) => void; chooseActive: () => void } | null>(
+    null,
+  );
+  let lastPublishedResourceRefSignature = '';
+
+  function resourcePresentationOptions(liveEditor = false) {
+    return {
+      liveEditor,
+      unavailableLabel: (snapshotTitle: string) => t('note.resourceRefUnavailable', { title: snapshotTitle }),
+      linkTitle: (title: string, state: 'pending' | 'available' | 'unavailable') => {
+        if (state === 'available') return t('note.resourceMention.openResource', { title });
+        if (state === 'unavailable') return t('note.resourceMention.resourceUnavailable');
+        return t('note.resourceMention.checkingResource');
+      },
+    };
+  }
+
+  function publishResourceRefs(html: string) {
+    const refs = collectResourceRefsFromHtml(html).slice(0, 100);
+    const signature = `${props.noteId}|${refs.map(resourceRefKey).join('|')}`;
+    if (signature === lastPublishedResourceRefSignature) return;
+    lastPublishedResourceRefSignature = signature;
+    emits('resource-refs-change', refs);
+  }
+
+  // 只记录用户显式打开/插入这两个动作，不记录资源名称、URL、正文，也不在自动保存时刷日志。
+  function recordResourceMentionOperation(operation: string) {
+    void recordOperation({ module: '笔记', operation });
+  }
+
+  function decorateTinyMceResourceRefs() {
+    const editor = editorRef.value;
+    const body = editor?.getBody?.();
+    if (!body) return;
+    const apply = () =>
+      applyResourceReferenceChipPresentation(body, props.resourceRefs, resourcePresentationOptions(true));
+    // 展示层替换当前名称不能进入 TinyMCE undo 栈，也不能触发正文保存。
+    if (editor.undoManager?.ignore) editor.undoManager.ignore(apply);
+    else apply();
+    editor.nodeChanged?.();
+  }
+
+  function resolvedResourceRef(ref: ResourceRef) {
+    return props.resourceRefs.find((item) => item.type === ref.type && item.id === ref.id);
+  }
+
+  function navigateResourceRef(ref: ResourceRef) {
+    const state = resolvedResourceRef(ref);
+    if (state && !state.available) {
+      message.warning(t('note.resourceMention.resourceUnavailable'));
+      return;
+    }
+    // 书签网址只能来自已完成归属校验的解析结果。解析尚未返回时不降级跳到编辑页，
+    // 避免一次点击因竞态违背“打开原站”的引用语义。
+    if (ref.type === 'bookmark' && !state?.url) return;
+    const source: AiSource = {
+      // 刚插入时批量解析尚未返回，也应能立即按 canonical href 打开；真正的数据权限仍由目标页面接口校验。
+      type: ref.type,
+      id: ref.id,
+      title: state?.title || ref.id,
+      url: state?.url,
+      target: state?.navigation?.target as AiSourceTarget | undefined,
+      fileId: state?.navigation?.fileId,
+    };
+    const navigation = resolveAiSourceNavigation(source);
+    if (navigation.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (navigation.kind !== 'internal') return;
+    if (typeof navigation.target === 'string') {
+      void router.push(navigation.target);
+    } else {
+      void router.push(navigation.target);
+    }
+  }
+
+  function handleRenderedResourceLinkClick(event: MouseEvent) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest<HTMLAnchorElement>('a[href]');
+    const ref = anchor ? parseResourceHref(anchor.getAttribute('href')) : null;
+    if (!ref) return;
+    event.preventDefault();
+    event.stopPropagation();
+    navigateResourceRef(ref);
+  }
 
   // 滚动同步
   type BInputExpose = {
@@ -206,6 +408,350 @@
   function getMdTextarea() {
     const element = mdTextareaInputRef.value?.inputEl;
     return element instanceof HTMLTextAreaElement ? element : null;
+  }
+
+  type MarkdownMentionRange = { start: number; end: number };
+  type HtmlMentionSelection = {
+    range: Range;
+    bookmark: any | null;
+  };
+  let markdownMentionRange: MarkdownMentionRange | null = null;
+  // 弹窗会把焦点从 TinyMCE iframe 移走。Range 作为兼容兜底，bookmark 才是跨弹窗
+  // 恢复选区的主方案：它不依赖原始文本节点仍然存在。
+  let htmlMentionSelection: HtmlMentionSelection | null = null;
+
+  function escapeMarkdownLinkTitle(title: string) {
+    return String(title || '')
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/([\\\[\]])/g, '\\$1')
+      .trim();
+  }
+
+  function escapeHtmlText(value: string) {
+    return String(value || '').replace(
+      /[&<>"']/g,
+      (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] || char,
+    );
+  }
+
+  function rangeBelongsToTinyMce(editor: any, range: Range | null | undefined) {
+    const body = editor?.getBody?.() as HTMLElement | null;
+    return Boolean(body && range && body.contains(range.startContainer) && body.contains(range.endContainer));
+  }
+
+  function captureTinyMceMentionSelection(
+    editor: any,
+    replacementRange: Range,
+    currentRange: Range,
+  ): HtmlMentionSelection {
+    let bookmark: any | null = null;
+    try {
+      // bookmark 必须记录“@”本身被选中的区间，而不是输入后的折叠光标；否则恢复后会留下 @。
+      editor.selection.setRng(replacementRange);
+      bookmark = editor.selection.getBookmark?.(2, true) ?? null;
+    } catch {
+      // 极少数 TinyMCE 版本不支持 path bookmark 时，下面的 Range 仍可作为同一轮会话的兜底。
+      bookmark = null;
+    } finally {
+      try {
+        editor.selection.setRng(currentRange);
+      } catch {
+        // 编辑器会在后续 focus 时自行恢复；这里不影响已保存的 bookmark。
+      }
+    }
+    return { range: replacementRange, bookmark };
+  }
+
+  function restoreTinyMceMentionSelection(editor: any) {
+    const selection = htmlMentionSelection;
+    if (!selection) return false;
+
+    if (selection.bookmark) {
+      try {
+        editor.selection.moveToBookmark(selection.bookmark);
+        if (rangeBelongsToTinyMce(editor, editor.selection.getRng?.())) return true;
+      } catch {
+        // bookmark 可能因编辑器被外部重置而失效，继续尝试本轮保存的原始 Range。
+      }
+    }
+
+    if (!rangeBelongsToTinyMce(editor, selection.range)) return false;
+    try {
+      editor.selection.setRng(selection.range);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function moveTinyMceCaretAfterResourceMention(editor: any, item: ResourceRef) {
+    const body = editor.getBody?.() as HTMLElement | null;
+    if (!body) return;
+    const anchor = Array.from(body.querySelectorAll<HTMLAnchorElement>('a[data-ln-resource-type][data-ln-resource-id]'))
+      .reverse()
+      .find(
+        (element) =>
+          element.getAttribute('data-ln-resource-type') === item.type &&
+          element.getAttribute('data-ln-resource-id') === item.id,
+      );
+    if (!anchor) return;
+    try {
+      const range = editor.dom.createRng();
+      range.setStartAfter(anchor);
+      range.collapse(true);
+      editor.selection.setRng(range);
+    } catch {
+      // 插入本身已成功；极少数浏览器无法定位光标时，不让这一步影响正文保存。
+    }
+  }
+
+  function setInlineMentionAnchor(rect: Pick<DOMRect, 'top' | 'left' | 'height'>) {
+    const zoom = getRootZoom();
+    inlineMentionAnchorStyle.value = {
+      position: 'fixed',
+      left: `${rect.left / zoom}px`,
+      top: `${rect.top / zoom}px`,
+      width: '1px',
+      height: `${Math.max(rect.height, 18) / zoom}px`,
+      pointerEvents: 'none',
+    };
+  }
+
+  function getMarkdownCaretRect(textarea: HTMLTextAreaElement) {
+    const sourceRect = textarea.getBoundingClientRect();
+    const style = getComputedStyle(textarea);
+    const mirror = document.createElement('div');
+    const marker = document.createElement('span');
+    const copied = [
+      'boxSizing',
+      'width',
+      'fontFamily',
+      'fontSize',
+      'fontWeight',
+      'fontStyle',
+      'letterSpacing',
+      'lineHeight',
+      'textTransform',
+      'wordSpacing',
+      'textIndent',
+      'whiteSpace',
+      'wordBreak',
+      'overflowWrap',
+      'paddingTop',
+      'paddingRight',
+      'paddingBottom',
+      'paddingLeft',
+      'borderTopWidth',
+      'borderRightWidth',
+      'borderBottomWidth',
+      'borderLeftWidth',
+    ] as const;
+    mirror.style.position = 'fixed';
+    mirror.style.visibility = 'hidden';
+    mirror.style.pointerEvents = 'none';
+    mirror.style.overflow = 'hidden';
+    mirror.style.left = `${sourceRect.left}px`;
+    mirror.style.top = `${sourceRect.top}px`;
+    mirror.style.width = `${textarea.offsetWidth}px`;
+    for (const key of copied) mirror.style[key] = style[key];
+    mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
+    marker.textContent = '\u200b';
+    mirror.append(marker);
+    document.body.append(mirror);
+    const markerRect = marker.getBoundingClientRect();
+    mirror.remove();
+    return {
+      left: markerRect.left - textarea.scrollLeft,
+      top: markerRect.top - textarea.scrollTop,
+      height: markerRect.height || Number.parseFloat(style.lineHeight) || 20,
+    };
+  }
+
+  function openFullMentionPicker() {
+    mentionPickerVisible.value = true;
+    inlineMentionVisible.value = false;
+  }
+
+  function closeInlineMention() {
+    if (!inlineMentionVisible.value) return;
+    inlineMentionVisible.value = false;
+  }
+
+  function closeMentionPicker() {
+    mentionPickerVisible.value = false;
+  }
+
+  function tryOpenMarkdownMention() {
+    if (!canEditResourceMentions.value || mentionPickerVisible.value || inlineMentionVisible.value) return;
+    const textarea = getMdTextarea();
+    if (!textarea) return;
+    const caret = textarea.selectionStart;
+    const value = textarea.value;
+    if (!isResourceMentionTextTrigger(value, caret - 1)) return;
+    markdownMentionRange = { start: caret - 1, end: caret };
+    if (isMobile.value) mentionPickerVisible.value = true;
+    else {
+      inlineMentionQuery.value = '';
+      setInlineMentionAnchor(getMarkdownCaretRect(textarea));
+      inlineMentionVisible.value = true;
+    }
+    recordResourceMentionOperation('打开资源提及选择器');
+  }
+
+  function tryOpenTinyMceMention(editor: any) {
+    if (!canEditResourceMentions.value || mentionPickerVisible.value || inlineMentionVisible.value) return;
+    const range = editor.selection?.getRng?.() as Range | null;
+    if (!range?.collapsed || range.startContainer.nodeType !== Node.TEXT_NODE || range.startOffset < 1) return;
+    if (editor.dom?.getParent?.(range.startContainer, 'pre,code,a')) return;
+    const allBefore = editor.dom.createRng();
+    allBefore.selectNodeContents(editor.getBody());
+    allBefore.setEnd(range.startContainer, range.startOffset);
+    const textBefore = allBefore.toString();
+    if (!isResourceMentionTextTrigger(textBefore, textBefore.length - 1)) return;
+    const replacementRange = range.cloneRange();
+    replacementRange.setStart(range.startContainer, range.startOffset - 1);
+    if (isMobile.value) {
+      htmlMentionSelection = captureTinyMceMentionSelection(editor, replacementRange, range.cloneRange());
+      mentionPickerVisible.value = true;
+    } else {
+      htmlMentionSelection = { range: replacementRange, bookmark: null };
+      syncTinyMceInlineMention(editor);
+      inlineMentionVisible.value = true;
+    }
+    recordResourceMentionOperation('打开资源提及选择器');
+  }
+
+  function syncMarkdownInlineMention() {
+    if (!inlineMentionVisible.value || currentType.value !== 'markdown') return;
+    const textarea = getMdTextarea();
+    const range = markdownMentionRange;
+    if (!textarea || !range || textarea.selectionStart < range.start + 1) return closeInlineMention();
+    const query = textarea.value.slice(range.start + 1, textarea.selectionStart);
+    if (/[\s@]/u.test(query)) return closeInlineMention();
+    markdownMentionRange = { start: range.start, end: textarea.selectionStart };
+    inlineMentionQuery.value = query;
+    setInlineMentionAnchor(getMarkdownCaretRect(textarea));
+  }
+
+  function syncTinyMceInlineMention(editor: any) {
+    if (!htmlMentionSelection) return;
+    const currentRange = editor.selection?.getRng?.() as Range | null;
+    if (!currentRange?.collapsed || !rangeBelongsToTinyMce(editor, currentRange)) return closeInlineMention();
+    try {
+      const mentionRange = htmlMentionSelection.range.cloneRange();
+      mentionRange.setEnd(currentRange.startContainer, currentRange.startOffset);
+      const text = mentionRange.toString();
+      if (!text.startsWith('@') || /[\s@]/u.test(text.slice(1))) return closeInlineMention();
+      htmlMentionSelection = { range: mentionRange, bookmark: null };
+      inlineMentionQuery.value = text.slice(1);
+      const caretRange = currentRange.cloneRange();
+      caretRange.collapse(false);
+      const caretRect = caretRange.getBoundingClientRect();
+      // TinyMCE 的 Range rect 已是页面视口坐标；再次叠加 iframe 的 rect 会让浮层向下偏移一个编辑区高度。
+      setInlineMentionAnchor({
+        left: caretRect.left,
+        top: caretRect.top,
+        height: caretRect.height || 20,
+      });
+    } catch {
+      closeInlineMention();
+    }
+  }
+
+  function onMarkdownMentionKeydown(event: KeyboardEvent) {
+    if (!inlineMentionVisible.value || event.isComposing) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      inlineMentionSuggestionsRef.value?.moveActive(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      inlineMentionSuggestionsRef.value?.moveActive(-1);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      inlineMentionSuggestionsRef.value?.chooseActive();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeInlineMention();
+    }
+  }
+
+  function replaceMarkdownMention(text: string) {
+    const textarea = getMdTextarea();
+    const range =
+      markdownMentionRange || (textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : null);
+    if (!range) return false;
+    // 不使用 document.execCommand：它在 textarea 上的返回值无法保证受控状态已同步，
+    // 弹窗关闭后的 Vue 渲染就可能把“看似已插入”的文本覆盖回去。
+    const source = String(textarea?.value ?? mdContent.value ?? content.value ?? '');
+    const start = Math.max(0, Math.min(range.start, source.length));
+    const end = Math.max(start, Math.min(range.end, source.length));
+    const next = `${source.slice(0, start)}${text}${source.slice(end)}`;
+    onMdInput(next);
+    const caret = start + text.length;
+    void nextTick().then(() => {
+      const currentTextarea = getMdTextarea();
+      if (!currentTextarea) return;
+      currentTextarea.focus({ preventScroll: true });
+      currentTextarea.setSelectionRange(caret, caret);
+    });
+    return true;
+  }
+
+  function insertResourceMention(item: ResourceRef & { title: string }) {
+    if (!canEditResourceMentions.value) return;
+    const href = buildResourceHref(item);
+    if (!href) return;
+    if (currentType.value === 'markdown') {
+      const title = escapeMarkdownLinkTitle(item.title) || item.id;
+      const inserted = replaceMarkdownMention(`[${title}](${href})`);
+      markdownMentionRange = null;
+      if (inserted) recordResourceMentionOperation('插入资源提及成功');
+      return;
+    }
+    const editor = editorRef.value;
+    if (!editor) return;
+    const attrs = buildResourceAnchorAttrs(item);
+    const html = `<a href="${href}" contenteditable="false" data-ln-resource-type="${attrs['data-ln-resource-type']}" data-ln-resource-id="${attrs['data-ln-resource-id']}">${escapeHtmlText(item.title || item.id)}</a>`;
+    let inserted = false;
+    try {
+      editor.focus();
+      if (!restoreTinyMceMentionSelection(editor)) throw new Error('mention selection expired');
+      const insert = () => {
+        if (typeof editor.insertContent === 'function') {
+          editor.insertContent(html);
+        } else {
+          editor.selection.setContent(html);
+        }
+        // 资源引用是原子 chip；显式把光标放到链接之后，之后输入自然成为普通文字。
+        moveTinyMceCaretAfterResourceMention(editor, item);
+      };
+      if (editor.undoManager?.transact) editor.undoManager.transact(insert);
+      else insert();
+
+      // TinyMCE 的插入事件在不同版本中不一定会同步 v-model；显式更新正文事实源，
+      // 保证“选中资源 → 看见链接 → 自动保存”是同一条闭环。
+      const nextHtml = editor.getContent({ format: 'html' });
+      if (!collectResourceRefsFromHtml(nextHtml).some((ref) => resourceRefKey(ref) === resourceRefKey(item))) {
+        throw new Error('mention insertion missing from editor content');
+      }
+      content.value = nextHtml;
+      inserted = true;
+    } catch {
+      message.warning(t('note.resourceMention.insertFailed'));
+    } finally {
+      htmlMentionSelection = null;
+    }
+    if (!inserted) return;
+    recordResourceMentionOperation('插入资源提及成功');
+    window.setTimeout(() => {
+      publishResourceRefs(editor.getContent({ format: 'html' }));
+      decorateTinyMceResourceRefs();
+    }, 0);
+  }
+
+  function insertInlineResourceMention(item: ResourceRef & { title: string }) {
+    insertResourceMention(item);
+    inlineMentionVisible.value = false;
   }
 
   function syncMdScroll(source: 'edit' | 'preview') {
@@ -265,6 +811,15 @@
     dompurifyLib = mods[1].default;
   }
 
+  // MD → HTML 统一收口：marked 渲染 + DOMPurify 消毒 + 站内链接增强属性(N0)。
+  // 集中一处避免多条渲染路径口径漂移；decorate 只给站内链接补 data-ln-*,无站内链接则原样返回(零改写)。
+  // 调用方须先 await ensureMdLib()（本函数同步使用已加载的 markedLib/dompurifyLib）。
+  function mdToSafeHtml(mdText: string): string {
+    const raw = markedLib.parse(mdText || '');
+    const safe = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
+    return decorateInternalResourceLinks(safe);
+  }
+
   const renderedMd = ref('');
   let mdRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -273,7 +828,18 @@
     mdContent.value = val;
     content.value = val;
     debounceRenderMd();
+    void nextTick().then(() => {
+      if (inlineMentionVisible.value) syncMarkdownInlineMention();
+      else tryOpenMarkdownMention();
+    });
   }
+
+  watch([mentionPickerVisible, inlineMentionVisible], ([modalOpen, inlineOpen]) => {
+    if (modalOpen || inlineOpen) return;
+    markdownMentionRange = null;
+    htmlMentionSelection = null;
+    inlineMentionQuery.value = '';
+  });
 
   function debounceRenderMd() {
     if (mdRenderTimer) clearTimeout(mdRenderTimer);
@@ -285,10 +851,12 @@
   async function renderMd() {
     if (!markedLib) await ensureMdLib();
     try {
-      const raw = markedLib.parse(mdContent.value || '');
-      renderedMd.value = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
+      const safeHtml = mdToSafeHtml(mdContent.value || '');
+      publishResourceRefs(safeHtml);
+      renderedMd.value = presentResourceReferenceChips(safeHtml, props.resourceRefs, resourcePresentationOptions());
     } catch {
       renderedMd.value = '<p>' + t('note.renderError') + '</p>';
+      publishResourceRefs('');
     }
     await nextTick();
     emits('markdown-rendered');
@@ -406,8 +974,7 @@
       const mdText = backup.content || '';
       if (mdText.trim()) {
         try {
-          const html = markedLib.parse(mdText);
-          content.value = dompurifyLib ? dompurifyLib.sanitize(html) : html;
+          content.value = mdToSafeHtml(mdText);
         } catch {
           content.value = mdText;
         }
@@ -440,8 +1007,7 @@
       const mdText = backup.content || '';
       if (mdText.trim()) {
         try {
-          const html = markedLib.parse(mdText);
-          content.value = dompurifyLib ? dompurifyLib.sanitize(html) : html;
+          content.value = mdToSafeHtml(mdText);
         } catch {
           content.value = mdText;
         }
@@ -578,8 +1144,7 @@
     let html = value || '';
     if (inputType === 'markdown') {
       await ensureMdLib();
-      html = markedLib.parse(html);
-      html = dompurifyLib ? dompurifyLib.sanitize(html) : html;
+      html = mdToSafeHtml(html);
     }
     editor.undoManager?.transact(() => {
       editor.setContent(html);
@@ -615,7 +1180,8 @@
     quickbars_selection_toolbar: 'aiEdit | myHeadingMenu |  bold italic forecolor backcolor | removeformat |quicklink',
     quickbars_insert_toolbar: false,
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
-    extended_valid_elements: 'input[type|class|checked]',
+    extended_valid_elements:
+      'input[type|class|checked],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled]',
     toolbar: props.readonly
       ? false
       : 'undo redo | blocks  | bold italic underline removeformat | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | link image emoticons |  codeBlock',
@@ -664,6 +1230,51 @@
         }),
     setup: (editor: any) => {
       editorRef.value = editor;
+
+      const refreshResourceReferences = () => {
+        window.setTimeout(() => {
+          if (editorRef.value !== editor) return;
+          publishResourceRefs(editor.getContent({ format: 'html' }));
+          decorateTinyMceResourceRefs();
+        }, 0);
+      };
+
+      // chip 的实时名称/失效状态只属于展示层。TinyMCE 向 v-model 取正文时先还原快照，
+      // 这样资源重命名不会无声改写用户笔记，手动改过的链接文字仍按用户输入保存。
+      editor.on('GetContent', (event: { content?: string }) => {
+        if (typeof event.content === 'string') {
+          event.content = serializeResourceReferenceSnapshots(event.content);
+        }
+      });
+      editor.on('BeforeSetContent', (event: { content?: string }) => {
+        if (typeof event.content === 'string') {
+          event.content = serializeResourceReferenceSnapshots(event.content);
+        }
+      });
+      editor.on('SetContent change undo redo', refreshResourceReferences);
+      editor.on('input', () => {
+        refreshResourceReferences();
+        window.setTimeout(() => {
+          if (inlineMentionVisible.value) syncTinyMceInlineMention(editor);
+          else tryOpenTinyMceMention(editor);
+        }, 0);
+      });
+      editor.on('keydown', (event: KeyboardEvent) => {
+        if (!inlineMentionVisible.value || event.isComposing) return;
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          inlineMentionSuggestionsRef.value?.moveActive(1);
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          inlineMentionSuggestionsRef.value?.moveActive(-1);
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          inlineMentionSuggestionsRef.value?.chooseActive();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          closeInlineMention();
+        }
+      });
 
       const todoCheckboxHtml = '<input type="checkbox" class="note-todo-checkbox" />';
       const getCurrentBlock = () => {
@@ -964,6 +1575,15 @@
       };
 
       editor.on('click', (event: MouseEvent) => {
+        const target = event.target;
+        const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
+        const ref = anchor ? parseResourceHref(anchor.getAttribute('href')) : null;
+        if (ref) {
+          event.preventDefault();
+          event.stopPropagation();
+          navigateResourceRef(ref);
+          return;
+        }
         syncCheckboxAttribute(event.target);
       });
       editor.on('change', (event: Event) => {
@@ -989,12 +1609,15 @@
         await ensureToolbarRendered();
         window.setTimeout(() => {
           resetUndoHistory(editor);
+          refreshResourceReferences();
           emits('ready');
         }, 0);
       });
     },
     content_style: [
-      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
+      '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
         ? '.note-editor-body, .mce-content-body { max-width: 100%; overflow-wrap: anywhere; box-sizing: border-box; } .note-editor-body h1, .mce-content-body h1 { font-size: clamp(26px, 8vw, 38px); line-height: 1.2; overflow-wrap: anywhere; }'
         : '',
@@ -1288,6 +1911,30 @@
     ul,
     ol {
       padding-left: 20px;
+    }
+    a.ln-resource-link {
+      // inline 的 border 不参与行高计算，标签不会再把同一行文本顶开。
+      display: inline;
+      margin: 0 2px;
+      padding: 0 6px;
+      border: 1px solid color-mix(in srgb, var(--primary-color) 26%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+      color: var(--primary-color);
+      line-height: inherit;
+      text-decoration: none;
+      vertical-align: baseline;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+
+      &[data-ln-resource-state='unavailable'] {
+        border-style: dashed;
+        background: color-mix(in srgb, var(--desc-color) 8%, transparent);
+        color: var(--desc-color);
+        cursor: not-allowed;
+      }
     }
   }
 

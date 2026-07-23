@@ -22,6 +22,7 @@ import { groupUserSessions, removeUserSessions, createSession, listUserSessions,
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../util/resourceTags.js';
+import { extractOwnedResourceRefs, syncNoteResourceRefs } from '../util/services/noteReferenceService.js';
 import {
   adminContextPublicView,
   AdminContextError,
@@ -1297,6 +1298,12 @@ export const importData = async (req, res) => {
         ...(n?.createTime ? { createTime: n.createTime } : {}),
       });
       await connection.query('INSERT INTO note SET ?', [payload]);
+      // 笔记内联提及(N0):导入的笔记也在同一导入事务内同步引用;旧/越权/不存在的目标由归属校验自然过滤,
+      // 不阻断正文导入;解析或同步抛错则整个导入事务回滚(与其它写路径一致)。
+      const importedRefs = extractOwnedResourceRefs({ content, type: payload.type });
+      if (importedRefs.length) {
+        await syncNoteResourceRefs(connection, { userId, noteId: payload.id, refs: importedRefs });
+      }
       existNotes.add(k);
       stat.notes.added++;
       const tagIds = [];

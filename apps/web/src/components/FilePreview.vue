@@ -15,6 +15,13 @@
         </div>
       </div>
       <div class="preview-content" @click.stop>
+        <ResourceBacklinks
+          v-if="fileInfo?.id"
+          class="file-preview-backlinks"
+          target-type="file"
+          :target-id="String(fileInfo.id)"
+          placement="inline"
+        />
         <!-- 加载状态 -->
         <div v-if="loading" class="preview-loading">
           <div class="b-spin">
@@ -252,6 +259,7 @@
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { acquireTopLayerEscapeLock } from '@/utils/topLayerEscape';
+  import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,
@@ -936,6 +944,16 @@
       background:
         radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--primary-color) 5%, transparent), transparent 30%),
         var(--background-color);
+
+      .file-preview-backlinks {
+        position: absolute;
+        top: 12px;
+        left: 14px;
+        z-index: 20;
+        // 反链是辅助信息，不应在文件预览中抢占画面；长标题仍可在卡片内省略显示。
+        width: min(320px, calc(100% - 48px));
+        box-shadow: 0 8px 24px color-mix(in srgb, #000 12%, transparent);
+      }
 
       .preview-loading {
         position: absolute;

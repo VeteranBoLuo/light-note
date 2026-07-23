@@ -86,7 +86,9 @@ export async function generateFinalReply({
     finishReason = retryResponse.finishReason || finishReason;
     usageStatus = usageStatus === 'reported' && retryResponse.usageStatus === 'reported' ? 'reported' : 'missing';
     const retryContent = safeContent(retryResponse.content, '抱歉，本次回答格式异常，请重新生成。');
-    content += retryContent;
+    // 已推送的前缀只是泄漏协议前的临时流内容，不能与恢复回答拼接。
+    // SSE 完成事件会以这里的权威正文整体替换客户端的临时聚合结果。
+    content = retryContent;
     onDelta(retryContent);
   }
 

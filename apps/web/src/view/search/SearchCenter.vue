@@ -1647,7 +1647,6 @@
     }
 
     .filter-item.active {
-      padding: 0;
       color: var(--primary-color);
       background: color-mix(in srgb, var(--primary-color) 9%, var(--search-muted-bg));
     }

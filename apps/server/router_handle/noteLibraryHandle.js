@@ -4,6 +4,17 @@ import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '..
 import { ensureNotVisitor } from '../util/auth.js';
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createNote } from '../util/services/noteService.js';
+import {
+  DEFAULT_RESOURCE_BACKLINK_LIMIT,
+  MAX_RESOURCE_BACKLINK_LIMIT,
+  extractOwnedResourceRefs,
+  getResourceRefNavigation,
+  listOwnedResourceBacklinks,
+  normalizeResourceRef,
+  normalizeResourceRefList,
+  resolveOwnedResourceRefSummaries,
+  syncNoteResourceRefs,
+} from '../util/services/noteReferenceService.js';
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
 import { promises as fsP } from 'node:fs';
@@ -176,6 +187,27 @@ export const updateNote = async (req, res) => {
           userId,
         });
       }
+      // 笔记内联提及(N0):只有正文或正文类型发生提交时才同步。仅改标题/标签/排序时跳过,
+      // 避免用空正文误删已有引用；但「只切换 type」也会改变同一正文的解析语义，不能漏掉。
+      const hasSubmittedContent = Object.prototype.hasOwnProperty.call(req.body, 'content');
+      const hasSubmittedType = Object.prototype.hasOwnProperty.call(req.body, 'type');
+      if (hasSubmittedContent || hasSubmittedType) {
+        // 以最终已落库的 content/type 为准：只带其中一个字段时，从同一事务内回读另一个字段。
+        // 这既覆盖 content-only 的旧类型，也覆盖 type-only 的旧正文，不能凭空按 html 解析。
+        let finalContent = hasSubmittedContent && req.body.content != null ? String(req.body.content) : null;
+        let finalType = hasSubmittedType && req.body.type != null ? req.body.type : null;
+        if (finalContent === null || finalType === null) {
+          const [noteRows] = await connection.query('SELECT content, type FROM note WHERE id = ? AND create_by = ?', [
+            req.body.id,
+            userId,
+          ]);
+          const persistedNote = noteRows[0];
+          if (finalContent === null) finalContent = String(persistedNote?.content ?? '');
+          if (finalType === null) finalType = persistedNote?.type;
+        }
+        const refs = extractOwnedResourceRefs({ content: finalContent, type: finalType });
+        await syncNoteResourceRefs(connection, { userId, noteId: req.body.id, refs });
+      }
       await connection.commit();
       await invalidatePersonalKnowledgeCache(userId);
       res.send(resultData('更新笔记成功'));
@@ -255,6 +287,65 @@ export const getNoteDetail = (req, res) => {
   } catch (e) {
     console.warn('[note-library] get detail rejected code=%s', stableAgentErrorCode(e));
     return res.send(resultData(null, 400, '客户端请求参数无效'));
+  }
+};
+
+// N1 阅读态批量解析：正文里的 canonical 链接只有在当前主体仍拥有、且未删除时才返回可用名称和跳转语义。
+// 不接收 userId，永远使用 auth/admin context 已解析好的 req.user（管理员预览时即目标 subject）。
+export const resolveResourceRefs = async (req, res) => {
+  try {
+    const normalized = normalizeResourceRefList(req.body?.refs);
+    if (normalized.tooMany) {
+      return res.send(resultData(null, 400, '一次最多解析 100 个引用'));
+    }
+    if (normalized.invalid) {
+      return res.send(resultData(null, 400, '引用参数无效'));
+    }
+    const summaries = await resolveOwnedResourceRefSummaries(pool, {
+      userId: req.user.id,
+      refs: normalized.refs,
+    });
+    return res.send(
+      resultData({
+        refs: summaries.map((item) => ({
+          type: item.type,
+          id: item.id,
+          title: item.title,
+          available: item.available,
+          ...(item.type === 'bookmark' && item.available && item.url ? { url: item.url } : {}),
+          navigation: item.available ? getResourceRefNavigation(item) : null,
+        })),
+      }),
+    );
+  } catch (error) {
+    return sendNoteServerError(res, 'resolve-resource-refs', error);
+  }
+};
+
+// N2 反链：目标与每一条源笔记都在 service 内重新按当前主体校验；目标不可用统一返回空，避免资源探测。
+export const resourceBacklinks = async (req, res) => {
+  try {
+    const target = normalizeResourceRef({
+      type: req.body?.targetType,
+      id: req.body?.targetId,
+    });
+    if (!target) {
+      return res.send(resultData(null, 400, '引用目标参数无效'));
+    }
+    const rawLimit = req.body?.limit ?? DEFAULT_RESOURCE_BACKLINK_LIMIT;
+    const limit = Number(rawLimit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RESOURCE_BACKLINK_LIMIT) {
+      return res.send(resultData(null, 400, `limit 必须在 1 到 ${MAX_RESOURCE_BACKLINK_LIMIT} 之间`));
+    }
+    const result = await listOwnedResourceBacklinks(pool, {
+      userId: req.user.id,
+      targetType: target.type,
+      targetId: target.id,
+      limit,
+    });
+    return res.send(resultData(result));
+  } catch (error) {
+    return sendNoteServerError(res, 'resource-backlinks', error);
   }
 };
 
@@ -652,6 +743,9 @@ export const restoreNoteVersion = async (req, res) => {
         userId,
       ]);
       await pruneNoteVersions(connection, noteId);
+      // 笔记内联提及(N0):恢复版本会用目标版本正文覆盖当前正文,必须同步引用(§4.6 恢复不能漏)。
+      const restoredRefs = extractOwnedResourceRefs({ content: String(verContent), type: verType });
+      await syncNoteResourceRefs(connection, { userId, noteId, refs: restoredRefs });
       await connection.commit();
       await invalidatePersonalKnowledgeCache(userId);
       res.send(resultData({ id: noteId, title: verTitle, content: verContent, type: verType }));

@@ -61,9 +61,11 @@
             :readonly="readonly"
             :note-id="note.id"
             :ensure-note-id="ensureNoteId"
+            :resource-refs="resolvedResourceRefs"
             @set-note-id="onEditorSetNoteId"
             @ready="refreshCatalog"
             @markdown-rendered="refreshCatalog"
+            @resource-refs-change="onEditorResourceRefsChange"
           />
         </div>
         <AiReply class="ai-panel" v-if="!bookmark.isMobile" />
@@ -106,6 +108,8 @@
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
+  import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
+  import { resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import TurndownService from 'turndown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
@@ -139,6 +143,41 @@
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
+  const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
+  let resourceResolveVersion = 0;
+  let lastResourceRefSignature = '';
+
+  async function onEditorResourceRefsChange(refs: ResourceRef[]) {
+    const normalized = refs.slice(0, 100);
+    const signature = `${note.id}|${normalized.map(resourceRefKey).join('|')}`;
+    if (signature === lastResourceRefSignature) return;
+    lastResourceRefSignature = signature;
+    const request = ++resourceResolveVersion;
+    if (!normalized.length) {
+      resolvedResourceRefs.value = [];
+      return;
+    }
+    // 内容改动时先清掉旧映射，避免新链接短暂套用旧资源的可用状态或标题。
+    resolvedResourceRefs.value = [];
+    try {
+      const resolved = await resolveNoteResourceRefs(normalized);
+      if (request === resourceResolveVersion) {
+        resolvedResourceRefs.value = resolved;
+      }
+    } catch {
+      if (request === resourceResolveVersion) {
+        resolvedResourceRefs.value = [];
+      }
+    }
+  }
+
+  watch(
+    () => note.id,
+    () => {
+      lastResourceRefSignature = '';
+      resolvedResourceRefs.value = [];
+    },
+  );
 
   type NoteType = 'html' | 'markdown';
   const normalizeNoteType = (type?: string): NoteType => (type === 'markdown' || type === 'md' ? 'markdown' : 'html');

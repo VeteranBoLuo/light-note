@@ -110,6 +110,8 @@ interface AiAssistantPersistedState {
   showScrollToBottom: boolean;
   sessionId: string;
   conversationId: string;
+  /** 云端会话已在其他设备删除；保留本机历史，等待用户明确决定是否恢复。 */
+  staleCloudConversationId?: string;
   longChatHinted: boolean;
   scopeMode?: AiAssistantScopeMode;
   temporarySession?: boolean;
@@ -134,6 +136,7 @@ interface AiAssistantState {
   scrollTop: number;
   sessionId: string;
   conversationId: string;
+  staleCloudConversationId: string;
   longChatHinted: boolean;
   scopeMode: AiAssistantScopeMode;
   temporarySession: boolean;
@@ -498,6 +501,7 @@ function readLegacySelfConversation(identity: AiAssistantIdentity): AiAssistantP
       showScrollToBottom: false,
       sessionId: typeof data.sessionId === 'string' ? data.sessionId : '',
       conversationId: '',
+      staleCloudConversationId: '',
       longChatHinted: false,
       scopeMode: 'workspace',
       temporarySession: false,
@@ -528,6 +532,7 @@ function createInitialState(): AiAssistantState {
     scrollTop: 0,
     sessionId: '',
     conversationId: '',
+    staleCloudConversationId: '',
     longChatHinted: false,
     scopeMode: 'workspace',
     temporarySession: false,
@@ -584,6 +589,7 @@ export default defineStore('aiAssistant', {
         showScrollToBottom: Boolean(this.showScrollToBottom),
         sessionId: this.sessionId,
         conversationId: this.conversationId,
+        staleCloudConversationId: this.staleCloudConversationId,
         longChatHinted: Boolean(this.longChatHinted),
         scopeMode: this.scopeMode,
         temporarySession: Boolean(this.temporarySession),
@@ -645,6 +651,8 @@ export default defineStore('aiAssistant', {
       this.scrollTop = Math.max(0, Number(persisted?.scrollTop || 0));
       this.sessionId = typeof persisted?.sessionId === 'string' ? persisted.sessionId : '';
       this.conversationId = typeof persisted?.conversationId === 'string' ? persisted.conversationId : '';
+      this.staleCloudConversationId =
+        typeof persisted?.staleCloudConversationId === 'string' ? persisted.staleCloudConversationId.trim() : '';
       this.longChatHinted = Boolean(persisted?.longChatHinted);
       // 检索范围已收敛为「始终整个知识空间」(已选材料仍会被优先带入),不再从持久化恢复旧的 selected。
       this.scopeMode = 'workspace';
@@ -764,6 +772,7 @@ export default defineStore('aiAssistant', {
       this.scrollTop = 0;
       this.sessionId = '';
       this.conversationId = '';
+      this.staleCloudConversationId = '';
       this.longChatHinted = false;
       this.scopeMode = 'workspace';
       this.temporarySession = false;
@@ -773,6 +782,20 @@ export default defineStore('aiAssistant', {
     setCloudConversationId(conversationId: string) {
       this.conversationId = String(conversationId || '').trim();
       this.schedulePersistence();
+    },
+    markCloudConversationMissing(conversationId: string) {
+      const normalizedId = String(conversationId || '').trim();
+      if (!normalizedId) return false;
+      if (this.conversationId === normalizedId) this.conversationId = '';
+      this.staleCloudConversationId = normalizedId;
+      this.schedulePersistence();
+      return true;
+    },
+    clearCloudConversationRecovery() {
+      if (!this.staleCloudConversationId) return false;
+      this.staleCloudConversationId = '';
+      this.schedulePersistence();
+      return true;
     },
   },
 });

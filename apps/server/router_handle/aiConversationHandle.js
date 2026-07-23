@@ -15,6 +15,7 @@ import {
   listAiConversations,
   listAiMessageVersions,
   prepareAiMessageVersionGroup,
+  recoverAiConversationFromLocal,
   resolveAiConversationIdentity,
   restoreDeletedAiConversation,
   saveAiFeedback,
@@ -64,6 +65,13 @@ export async function createConversation(req, res) {
   return run(req, res, async (identity) => {
     await assertAiCloudHistoryEnabled(identity);
     return createAiConversation(identity, req.body || {});
+  });
+}
+
+export async function recoverLocalConversation(req, res) {
+  return run(req, res, async (identity) => {
+    await assertAiCloudHistoryEnabled(identity);
+    return recoverAiConversationFromLocal(identity, req.body || {});
   });
 }
 

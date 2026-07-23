@@ -1201,9 +1201,13 @@
     height: auto;
     line-height: 1.2;
   }
-  .btn-ghost:hover {
-    border-color: rgba(99, 92, 237, 0.4);
+  /* BButton 默认 hover 是浅色背景；落在深色官网首屏会让白字失去对比度。 */
+  .btn-ghost.b_btn:hover,
+  .btn-ghost.b_btn:focus-visible {
+    background-color: rgba(99, 92, 237, 0.42);
+    border-color: rgba(165, 160, 255, 0.9);
     color: #fff;
+    box-shadow: 0 8px 24px rgba(99, 92, 237, 0.24);
     transform: translateY(-2px);
   }
 

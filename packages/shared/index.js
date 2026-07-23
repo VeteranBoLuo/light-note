@@ -169,3 +169,157 @@ export function resolveBookmarkUrlInput(
   }
   return invalidBookmarkUrl(BOOKMARK_URL_CODE.INVALID_FORMAT, input);
 }
+
+// ————————————————————————————————————————————————————————————————
+// 笔记内联提及(N0)· 站内资源引用 canonical 协议(D3)。前后端唯一事实源:
+//   note     -> /noteLibrary/{id}
+//   bookmark -> /manage/editBookmark/{id}
+//   file     -> /cloudSpace?fileId={id}
+// 纯字符串处理,无 DOM / DB / marked / cheerio 依赖。exact + safe:
+//   - 只接受站内相对路径,拒绝外链 / 协议 / 协议相对(//)。
+//   - note / bookmark 不接受任何 query 或 hash;file 只接受恰好一个 fileId 参数,且无 hash。
+//   - id 必须 URI 解码成功、非空、长度 <= 255、不含正/反斜杠或控制字符(防路由分段逃逸)。
+// ————————————————————————————————————————————————————————————————
+
+export const RESOURCE_REF_TYPES = Object.freeze(['note', 'bookmark', 'file']);
+
+const MAX_RESOURCE_ID_LENGTH = 255; // 与 note.id / bookmark.id / files.id 的 VARCHAR(255) 对齐
+// 会改变路由分段或不可能出现在真实资源 id 中的危险字符:控制字符、DEL、正/反斜杠。
+const UNSAFE_RESOURCE_ID_CHARS = /[\u0000-\u001f\u007f/\\]/;
+
+/** 把历史类型值 `md` 归一为 `markdown`;其余原样字符串化。笔记类型归一的单一事实源。 */
+export function normalizeNoteType(type) {
+  if (type === 'md') return 'markdown';
+  return type == null ? '' : String(type);
+}
+
+/** 校验并解码单个资源 id;非法(编码失败/空/超长/含危险字符)返回 null。 */
+function normalizeResourceId(rawSegment) {
+  if (typeof rawSegment !== 'string' || rawSegment === '') return null;
+  let decoded;
+  try {
+    decoded = decodeURIComponent(rawSegment);
+  } catch {
+    return null; // 非法百分号编码,如 %ZZ
+  }
+  if (!decoded || decoded.length > MAX_RESOURCE_ID_LENGTH) return null;
+  if (UNSAFE_RESOURCE_ID_CHARS.test(decoded)) return null;
+  return decoded;
+}
+
+/**
+ * 解析 canonical href 为 { type, id };不符合 exact 协议或 id 不安全时返回 null。
+ * @param {unknown} href
+ * @returns {{type:'note'|'bookmark'|'file', id:string}|null}
+ */
+export function parseResourceHref(href) {
+  if (typeof href !== 'string') return null;
+  const raw = href.trim();
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null; // 仅站内相对路径
+  if (raw.includes('#')) return null; // 首期不支持锚点
+
+  const qIndex = raw.indexOf('?');
+  const path = qIndex === -1 ? raw : raw.slice(0, qIndex);
+  const query = qIndex === -1 ? '' : raw.slice(qIndex + 1);
+
+  let m = path.match(/^\/noteLibrary\/([^/]+)$/);
+  if (m) {
+    if (query) return null; // note 不接受 query
+    const id = normalizeResourceId(m[1]);
+    return id ? { type: 'note', id } : null;
+  }
+  m = path.match(/^\/manage\/editBookmark\/([^/]+)$/);
+  if (m) {
+    if (query) return null; // bookmark 不接受 query
+    const id = normalizeResourceId(m[1]);
+    return id ? { type: 'bookmark', id } : null;
+  }
+  if (path === '/cloudSpace') {
+    if (!query) return null;
+    // 只接受恰好一个 fileId 参数,拒绝额外 / 重复参数
+    const pairs = query.split('&');
+    if (pairs.length !== 1) return null;
+    const eq = pairs[0].indexOf('=');
+    if (eq === -1) return null;
+    if (pairs[0].slice(0, eq) !== 'fileId') return null;
+    const id = normalizeResourceId(pairs[0].slice(eq + 1));
+    return id ? { type: 'file', id } : null;
+  }
+  return null;
+}
+
+/** 由 { type, id } 构造 canonical href;id 缺失/超长/含危险字符时返回 ''(与 parse 对称)。 */
+export function buildResourceHref(ref) {
+  if (!ref || typeof ref.id !== 'string' || !ref.id) return '';
+  if (ref.id.length > MAX_RESOURCE_ID_LENGTH || UNSAFE_RESOURCE_ID_CHARS.test(ref.id)) return '';
+  const id = encodeURIComponent(ref.id);
+  switch (ref.type) {
+    case 'note':
+      return `/noteLibrary/${id}`;
+    case 'bookmark':
+      return `/manage/editBookmark/${id}`;
+    case 'file':
+      return `/cloudSpace?fileId=${id}`;
+    default:
+      return '';
+  }
+}
+
+/** 由安全 ref 生成 HTML anchor 的增强属性(仅增强,非事实源)。 */
+export function buildResourceAnchorAttrs(ref) {
+  return { 'data-ln-resource-type': ref.type, 'data-ln-resource-id': ref.id };
+}
+
+/** 把一组 href 归一为去重、保序的引用集合(前端装饰 / 后端同步共用口径)。 */
+export function dedupeResourceRefs(hrefs) {
+  const seen = new Set();
+  const out = [];
+  for (const href of hrefs || []) {
+    const ref = parseResourceHref(href);
+    if (!ref) continue;
+    const key = `${ref.type}:${ref.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
+}
+
+/**
+ * 前后端共享测试向量:任一端改协议都会让双方 parse 断言同时失败,杜绝漂移。
+ * 覆盖三类合法 + 外链/协议/编码错误/分段逃逸/额外·重复 query/空·超长 id/危险协议。
+ */
+export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
+  // 合法
+  { href: '/noteLibrary/abc-123', ref: { type: 'note', id: 'abc-123' } },
+  { href: '/manage/editBookmark/bk-9', ref: { type: 'bookmark', id: 'bk-9' } },
+  { href: '/cloudSpace?fileId=f-7', ref: { type: 'file', id: 'f-7' } },
+  {
+    href: '/noteLibrary/550e8400-e29b-41d4-a716-446655440000',
+    ref: { type: 'note', id: '550e8400-e29b-41d4-a716-446655440000' },
+  },
+  { href: '/noteLibrary/id%20with%20space', ref: { type: 'note', id: 'id with space' } },
+  // 外链 / 协议 / 协议相对
+  { href: 'https://example.com/noteLibrary/x', ref: null },
+  { href: '//evil.com/noteLibrary/x', ref: null },
+  { href: 'javascript:alert(1)', ref: null },
+  // 缺失 / 多段 / 非详情路径
+  { href: '/noteLibrary', ref: null },
+  { href: '/noteLibrary/a/b', ref: null },
+  { href: '/cloudSpace', ref: null },
+  { href: '/manage/bookmarkMg', ref: null },
+  // note / bookmark 带 query 或 hash(非 exact)
+  { href: '/noteLibrary/n1?unexpected=1', ref: null },
+  { href: '/manage/editBookmark/b1?x=1', ref: null },
+  { href: '/noteLibrary/n1#frag', ref: null },
+  // file 额外 / 重复 / 缺失参数,或带 hash
+  { href: '/cloudSpace?fileId=f1&extra=1', ref: null },
+  { href: '/cloudSpace?fileId=f1&fileId=f2', ref: null },
+  { href: '/cloudSpace?folderId=x&fileId=f8', ref: null },
+  { href: '/cloudSpace?fileId=', ref: null },
+  { href: '/cloudSpace?fileId=f1#frag', ref: null },
+  // 编码错误 / 分段逃逸 / 超长 id
+  { href: '/noteLibrary/%ZZ', ref: null },
+  { href: '/noteLibrary/id-with%2Fslash', ref: null },
+  { href: `/noteLibrary/${'a'.repeat(256)}`, ref: null },
+]);

@@ -53,12 +53,15 @@ describe('generateFinalReply', () => {
   });
 
   it('流中泄漏工具协议时用禁用工具的请求恢复回答并累计用量', async () => {
-    mocks.stream.mockResolvedValue({
-      content: '',
-      leakedToolCall: true,
-      usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
-      usageStatus: 'reported',
-      finishReason: 'stop',
+    mocks.stream.mockImplementation(async (_messages, options) => {
+      options.onDelta('临时前缀');
+      return {
+        content: '临时前缀',
+        leakedToolCall: true,
+        usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
     });
     mocks.request.mockResolvedValue({
       content: '恢复后的回答',
@@ -78,7 +81,7 @@ describe('generateFinalReply', () => {
       expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('禁止输出') })]),
       expect.objectContaining({ toolChoice: 'none' }),
     );
-    expect(chunks).toEqual(['恢复后的回答']);
+    expect(chunks).toEqual(['临时前缀', '恢复后的回答']);
     expect(result).toEqual(
       expect.objectContaining({
         content: '恢复后的回答',
