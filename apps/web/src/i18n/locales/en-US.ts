@@ -922,10 +922,11 @@ export default {
       autoWrap: 'Wrap text',
       copyText: 'Copy text',
       charCount: '{count} characters',
-      onlineNotice: 'Using Microsoft Office Online Viewer',
       unsupportedTitle: 'Preview is not supported for this file type',
       unsupportedDesc: 'This format cannot be previewed online yet. Download the file to view it.',
-      tryOnline: 'Try online preview',
+      legacyOfficeTitle: 'Legacy Office preview is not supported',
+      legacyOfficeDesc:
+        'This is a legacy .doc, .xls, or .ppt file. Download it, or convert it to a modern Office format and upload it again.',
       previous: 'Previous file (←)',
       next: 'Next file (→)',
       download: 'Download file',

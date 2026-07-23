@@ -169,30 +169,17 @@
             </pre>
           </div>
 
-          <!-- 8. 微软Office在线预览（备用方案） -->
-          <div v-else-if="previewType === 'office-online'" class="online-preview-container">
-            <iframe :src="microsoftOfficeViewerUrl" class="online-preview-iframe" @load="onLoad" @error="onError" />
-            <div class="online-preview-notice">
-              <SvgIcon :src="icon.cloudSpace.preview.info" size="15" />
-              {{ t('cloudSpace.previewPanel.onlineNotice') }}
-            </div>
-          </div>
-
-          <!-- 9. 不支持预览的文件类型 -->
+          <!-- 8. 不支持预览的文件类型 -->
           <div v-else-if="unsupportedTypes.includes(previewType)" class="unsupported-preview">
             <div class="unsupported-icon">
               <SvgIcon :src="icon.cloudSpace.preview.unknown" size="72" />
             </div>
-            <h3>{{ t('cloudSpace.previewPanel.unsupportedTitle') }}</h3>
-            <p>{{ t('cloudSpace.previewPanel.unsupportedDesc') }}</p>
+            <h3>{{ unsupportedTitle }}</h3>
+            <p>{{ unsupportedDescription }}</p>
             <div class="flex-center" style="gap: 8px">
               <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
                 <SvgIcon :src="icon.cloudSpace.download" size="16" />
                 {{ t('cloudSpace.previewPanel.download') }}
-              </BButton>
-              <BButton @click="tryOnlinePreview" v-if="canTryOnlinePreview">
-                <SvgIcon :src="icon.cloudSpace.preview.globe" size="16" />
-                {{ t('cloudSpace.previewPanel.tryOnline') }}
               </BButton>
             </div>
           </div>
@@ -264,6 +251,7 @@
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,
     getCloudPreviewType,
+    isLegacyOfficeFile,
   } from '@/constants/cloudFileCategory.ts';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
@@ -318,6 +306,21 @@
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
   const previewType = computed(() => getCloudPreviewType(props.fileInfo));
+  const legacyOfficeFile = computed(() => isLegacyOfficeFile(props.fileInfo));
+  const unsupportedTitle = computed(() =>
+    t(
+      legacyOfficeFile.value
+        ? 'cloudSpace.previewPanel.legacyOfficeTitle'
+        : 'cloudSpace.previewPanel.unsupportedTitle',
+    ),
+  );
+  const unsupportedDescription = computed(() =>
+    t(
+      legacyOfficeFile.value
+        ? 'cloudSpace.previewPanel.legacyOfficeDesc'
+        : 'cloudSpace.previewPanel.unsupportedDesc',
+    ),
+  );
   const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`);
   const unsupportedTypes = ['unsupported'];
   const normalizedMimeType = computed(
@@ -396,17 +399,6 @@
     const sanitized = markdownSanitizer ? markdownSanitizer(html) : html;
     markdownContent.value = enrichMarkdownHeadings(sanitized);
   }
-
-  // 微软Office在线预览URL
-  const microsoftOfficeViewerUrl = computed(() => {
-    if (!props.fileInfo.fileUrl) return '';
-    const encodedUrl = encodeURIComponent(props.fileInfo.fileUrl);
-    return `https://view.officeapps.live.com/op/view.aspx?src=${encodedUrl}`;
-  });
-
-  const canTryOnlinePreview = computed(() => {
-    return ['word', 'excel', 'ppt'].includes(currentCategory.value);
-  });
 
   const effectiveFileUrl = computed(() => {
     if (!props.fileInfo.fileUrl) return '';
@@ -665,12 +657,6 @@
     // 这里可以调用外部的图片预览逻辑
   }
 
-  function tryOnlinePreview() {
-    if (canTryOnlinePreview.value) {
-      // 这里可以修改 fileInfo 为 office-online 类型
-    }
-  }
-
   function downloadFile() {
     if (!props.fileInfo.fileUrl) return;
 
@@ -777,7 +763,6 @@
   }
 
   function getFileTypeName(type: string) {
-    if (type === 'office-online') return t('common.preview');
     const labelKey = CLOUD_FILE_CATEGORY_LABEL_KEY[getCloudFileCategory({ category: type })];
     return t(labelKey);
   }
@@ -1135,30 +1120,6 @@
           .text-no-wrap {
             white-space: pre;
             overflow-x: auto;
-          }
-        }
-
-        .online-preview-container {
-          width: 100%;
-          height: 100%;
-          position: relative;
-
-          .online-preview-iframe {
-            width: 100%;
-            height: calc(100% - 40px);
-            border: none;
-          }
-
-          .online-preview-notice {
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
-            color: var(--primary-color);
-            font-size: 12px;
-            border-top: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
           }
         }
 

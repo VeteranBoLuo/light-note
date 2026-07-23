@@ -79,6 +79,14 @@ const TEXT_EXT_SET = new Set([
   'yaml',
 ]);
 
+const LEGACY_OFFICE_EXT_SET = new Set(['doc', 'xls', 'ppt']);
+const LEGACY_OFFICE_MIME_SET = new Set([
+  'application/msword',
+  'application/vnd.ms-word',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+]);
+
 function normalizeMimeType(fileType?: string): string {
   return String(fileType || '')
     .trim()
@@ -93,6 +101,12 @@ function getFileExtension(fileName?: string, ext?: string): string {
   const idx = name.lastIndexOf('.');
   if (idx <= 0 || idx === name.length - 1) return '';
   return name.slice(idx + 1).toLowerCase();
+}
+
+export function isLegacyOfficeFile(file?: { fileName?: string; fileType?: string; ext?: string }): boolean {
+  const extension = getFileExtension(file?.fileName, file?.ext);
+  if (extension) return LEGACY_OFFICE_EXT_SET.has(extension);
+  return LEGACY_OFFICE_MIME_SET.has(normalizeMimeType(file?.fileType));
 }
 
 function resolveCloudCategoryFallback(file?: { fileName?: string; fileType?: string; ext?: string }): CloudFileCategory {
@@ -117,6 +131,9 @@ export function getCloudFileCategory(file?: { category?: string; fileName?: stri
 }
 
 export function getCloudPreviewType(file?: { category?: string; fileName?: string; fileType?: string; ext?: string }): CloudPreviewType {
+  // @vue-office 的浏览器渲染器只支持 OOXML（docx/xlsx/pptx）。
+  // 旧版 OLE Office 文件不能交给对应渲染器，否则会被误报为文件损坏。
+  if (isLegacyOfficeFile(file)) return 'unsupported';
   const category = getCloudFileCategory(file);
   return CLOUD_FILE_PREVIEW_TYPE_MAP[category];
 }
