@@ -267,9 +267,21 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
 
 // —— 创造类发经验(书签/笔记/文件):按当日第 N 条衰减(方案 3.1 终版) ——
 const CREATE_TIERS = {
-  bookmark: [[3, 10], [8, 5], [15, 2]],
-  note: [[3, 15], [8, 8], [15, 3]],
-  file: [[3, 12], [8, 6], [15, 3]],
+  bookmark: [
+    [3, 10],
+    [8, 5],
+    [15, 2],
+  ],
+  note: [
+    [3, 15],
+    [8, 8],
+    [15, 3],
+  ],
+  file: [
+    [3, 12],
+    [8, 6],
+    [15, 3],
+  ],
 };
 function createAmount(kind, nth) {
   for (const [maxN, amt] of CREATE_TIERS[kind] || []) if (nth <= maxN) return amt;
@@ -278,7 +290,10 @@ function createAmount(kind, nth) {
 
 // 内容判重键:对 url 等取 sha256 hex,落 growth_events.ref_id 做永久判重(删了重建也不再发)
 export function hashRef(str) {
-  return crypto.createHash('sha256').update(String(str || '')).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(String(str || ''))
+    .digest('hex');
 }
 
 /**
@@ -360,7 +375,11 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   const { nextExp, need } = nextLevelInfo(exp, level);
   const isMax = level >= MAX_LEVEL;
   const span = nextExp ? nextExp - rank.cumExp : 0; // 本级跨度
-  const progress = isMax ? 100 : span > 0 ? Math.max(0, Math.min(100, Math.round(((exp - rank.cumExp) / span) * 100))) : 0;
+  const progress = isMax
+    ? 100
+    : span > 0
+      ? Math.max(0, Math.min(100, Math.round(((exp - rank.cumExp) / span) * 100)))
+      : 0;
   const hasUnreadLevelUp = userRole !== 'root' && level > lastNotifiedLevel; // 升级通知未读(通知中心随 level_up)
   // 今日已获经验(仅计入受日顶约束的来源,口径与 grantExp 日顶一致),供前端展示"每日上限"进度
   let dailyExp = 0;
@@ -458,7 +477,7 @@ function longestConsecutiveRun(days) {
 }
 
 /**
- * 知识活动热力图(贡献格子)。数据全部现成、零新表。口径(见 docs/plan/activity-heatmap-plan-codex-v1):
+ * 知识活动热力图(贡献格子)。数据全部现成、零新表。口径：
  * - 资源新增直接从三张资源表 create_time 读取(归属列不同:bookmark=user_id,note/files=create_by);
  *   软删仍计入其创建当天(不加 del_flag) —— 今天建明天删不该让昨天的格子熄灭。
  * - 签到只从 growth_events 读 source='checkin' 这类"一手且互斥"的活动事件;
@@ -664,10 +683,22 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     // 成长足迹:从真实活动派生(书签/笔记/文件 + 升级里程碑),合并按时间倒序取 15。
     // 不再只读 growth_events —— root/免账本用户没有账本记录,否则足迹恒空(用户反馈)。
     const [[bmRows], [ntRows], [flRows], [msRows]] = await Promise.all([
-      pool.query('SELECT name, create_time FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12', [userId]),
-      pool.query('SELECT title, create_time FROM note WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12', [userId]),
-      pool.query('SELECT file_name, create_time FROM files WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12', [userId]),
-      pool.query("SELECT meta, create_time FROM growth_events WHERE user_id = ? AND source = 'milestone' ORDER BY create_time DESC LIMIT 12", [userId]),
+      pool.query(
+        'SELECT name, create_time FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12',
+        [userId],
+      ),
+      pool.query(
+        'SELECT title, create_time FROM note WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12',
+        [userId],
+      ),
+      pool.query(
+        'SELECT file_name, create_time FROM files WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12',
+        [userId],
+      ),
+      pool.query(
+        "SELECT meta, create_time FROM growth_events WHERE user_id = ? AND source = 'milestone' ORDER BY create_time DESC LIMIT 12",
+        [userId],
+      ),
     ]);
     timeline = [
       ...bmRows.map((r) => ({ source: 'bookmark', name: r.name, meta: null, time: r.create_time })),
@@ -941,7 +972,11 @@ export async function checkin(userId, { userRole = null } = {}) {
     }
     const amount = CHECKIN_BASE + checkinBonus(streak); // 5 + min(streak,5),单日 ≤10
 
-    await conn.query('UPDATE user_growth SET streak = ?, last_checkin_date = ? WHERE user_id = ?', [streak, today, userId]);
+    await conn.query('UPDATE user_growth SET streak = ?, last_checkin_date = ? WHERE user_id = ?', [
+      streak,
+      today,
+      userId,
+    ]);
     // 连签满 7 天奖励 1 张补签卡(上限 2),统一走 grantItem
     if (streak > 0 && streak % 7 === 0) {
       await grantItem(conn, userId, 'makeup_card', 1);
@@ -1064,10 +1099,9 @@ export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null,
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.query(
-      'SELECT exp, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
-      [userId],
-    );
+    const [rows] = await conn.query('SELECT exp, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE', [
+      userId,
+    ]);
     let g = rows[0];
     if (!g) {
       await conn.query('INSERT INTO user_growth (user_id) VALUES (?)', [userId]);
