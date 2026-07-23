@@ -31,6 +31,7 @@ import {
   buildSemanticPlanToolDefinition,
   buildSemanticPolicyMessage,
   formatSemanticCapabilityCatalog,
+  normalizeReadCompletionToolCalls,
   parseSemanticPlannerResponse,
   SEMANTIC_PLAN_TOOL_NAME,
 } from '../util/agent/semanticPlanner.js';
@@ -38,6 +39,7 @@ import { guardUnverifiedExecutionClaim } from '../util/agent/executionClaimGuard
 import { enforceToolDependencyBindings, normalizeToolDependencyRefs } from '../util/agent/dependencyGuard.js';
 import { actionControlMessage, parseAgentActionControl } from '../util/agent/actionControl.js';
 import {
+  DEPENDENCY_REPAIR_ROUND_INSTRUCTION,
   DEPENDENCY_ROUND_INSTRUCTION,
   FOLLOW_UP_ROUND_INSTRUCTION,
   isInternalPlanningInstruction,
@@ -45,6 +47,8 @@ import {
   SEMANTIC_REPAIR_ROUND_INSTRUCTION,
   shouldContinueToolPlanning,
 } from '../util/agent/secondRound.js';
+import { buildAgentCapabilityOverview, isAgentCapabilityOverviewRequest } from '../util/agent/capabilityOverview.js';
+import { resolveAgentInputClarification } from '../util/agent/inputClarification.js';
 import {
   acquireToolConfirmationAction,
   claimToolConfirmationExecution,
@@ -1348,14 +1352,25 @@ export async function agentChat(req, res) {
       attachmentCount: Array.isArray(attachmentIds) ? attachmentIds.length : 0,
       translation: enableTranslation,
     });
+    const capabilityOverviewRequested =
+      !enableTranslation && !requestContextTypes.length && isAgentCapabilityOverviewRequest(message);
+    const deterministicInputClarification = enableTranslation
+      ? ''
+      : resolveAgentInputClarification({
+          message,
+          contextTypes: requestContextTypes,
+          locale,
+        });
     trace.route = directRoute.direct ? directRoute.reason : 'planner';
+    if (capabilityOverviewRequested) trace.route = 'capability_overview';
+    if (deterministicInputClarification) trace.route = 'required_input_clarification';
     if (directRoute.direct) trace.taskType = 'agent_direct';
     let writeIntentToolNames = new Set();
     let semanticPolicy = null;
     let semanticPlan = null;
 
     let selectedTools =
-      enableTranslation || directRoute.direct
+      enableTranslation || (directRoute.direct && !capabilityOverviewRequested)
         ? []
         : selectAgentTools(toolRegistry, {
             message,
@@ -1371,7 +1386,7 @@ export async function agentChat(req, res) {
     if (!contentScope.externalWeb) selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
     trace.selectedTools = selectedTools.map((tool) => tool.name);
     const semanticCatalog =
-      enableTranslation || directRoute.direct
+      enableTranslation || (directRoute.direct && !capabilityOverviewRequested)
         ? []
         : buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
             availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
@@ -1454,10 +1469,15 @@ export async function agentChat(req, res) {
 
     // Semantic Planner 与既有工具规划共用一次模型请求。Provider 只调用唯一的元计划工具，
     // 真实工具名与参数内嵌在计划中，再由服务端展开、求交和校验；不依赖并行调用多个工具。
-    const semanticPlanningEnabled = semanticCatalog.length > 0;
-    const toolDefs = semanticPlanningEnabled
-      ? [buildSemanticPlanToolDefinition(semanticCatalog, selectedTools)]
-      : getToolDefinitions(selectedTools);
+    const deterministicResponseRequested = capabilityOverviewRequested || Boolean(deterministicInputClarification);
+    const semanticPlanningEnabled = semanticCatalog.length > 0 && !deterministicResponseRequested;
+    const toolDefs = capabilityOverviewRequested
+      ? []
+      : deterministicInputClarification
+        ? []
+        : semanticPlanningEnabled
+          ? [buildSemanticPlanToolDefinition(semanticCatalog, selectedTools)]
+          : getToolDefinitions(selectedTools);
     const selectedToolNames = new Set(selectedTools.map((tool) => tool.name));
 
     /** @type {Array<{ name: string, status: string, params?: object, error?: string, dataSummary?: string }>} */
@@ -1846,10 +1866,9 @@ export async function agentChat(req, res) {
           const completionTools = selectedTools.filter((tool) => completionToolNameSet.has(tool.name));
           if (!completionCatalog.length || !completionTools.length) break;
 
-          const completionPromptBase = buildPlannerPrompt(completionTools, userRole, {
-            semanticCatalog: completionCatalog,
-            semanticCatalogText: formatSemanticCapabilityCatalog(completionCatalog),
-          });
+          // 原始语义计划已经完成意图裁决。本轮只把仍缺失的只读真实工具暴露给 Provider，
+          // 避免再次套一层 submit_agent_plan 后随机漏填同一个 toolCalls 字段。
+          const completionPromptBase = buildPlannerPrompt(completionTools, userRole);
           const completionPrompt = memoryPrompt
             ? `${completionPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
             : `${completionPromptBase}\n\n${scopePrompt}`;
@@ -1865,11 +1884,16 @@ export async function agentChat(req, res) {
             ...messages.slice(1),
             { role: 'user', content: completionInstruction },
           ];
+          const completionToolDefinitions = getToolDefinitions(completionTools);
+          const completionToolChoice =
+            completionTools.length === 1
+              ? { type: 'function', function: { name: completionTools[0].name } }
+              : 'required';
           const completionStartedAt = Date.now();
           try {
             let completionResponse = await requestAi(completionMessages, {
-              tools: [buildSemanticPlanToolDefinition(completionCatalog, completionTools)],
-              toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } },
+              tools: completionToolDefinitions,
+              toolChoice: completionToolChoice,
               signal: agentAbortController.signal,
               maxTokens: getPlannerMaxTokens({
                 message,
@@ -1889,20 +1913,13 @@ export async function agentChat(req, res) {
             totalUsage.completionTokens += completionResponse.usage.completionTokens;
             totalUsage.totalTokens += completionResponse.usage.totalTokens;
 
-            const parsedCompletion = parseSemanticPlannerResponse(completionResponse, completionCatalog, {
-              toolCallIdPrefix: `semantic-plan-completion-${attempt}`,
-            });
-            const completionDecision = adjudicateSemanticPlan({
-              plan: parsedCompletion.plan,
-              toolCalls: parsedCompletion.toolCalls,
-              catalog: completionCatalog,
-            });
-            const safeCompletionCalls =
-              completionDecision.state === 'ready'
-                ? completionDecision.toolCalls
-                : completionDecision.resolution === 'unverified_query'
-                  ? completionDecision.partialToolCalls || []
-                  : [];
+            const safeCompletionCalls = normalizeReadCompletionToolCalls(
+              completionResponse.toolCalls,
+              completionCatalog,
+              {
+                toolCallIdPrefix: `semantic-read-completion-${attempt}`,
+              },
+            );
             accumulatedToolCalls = [...accumulatedToolCalls, ...safeCompletionCalls];
             adjudicated = adjudicateSemanticPlan({
               plan: semanticPlan,
@@ -1915,12 +1932,12 @@ export async function agentChat(req, res) {
               ...(trace.semanticPlanCompletionRounds || []),
               {
                 attempt,
-                source: parsedCompletion.source,
-                invalid: parsedCompletion.invalidPlan,
+                source: 'direct_tool_calls',
+                invalid: safeCompletionCalls.length === 0,
                 requestedCapabilityIds: completionCatalog.map((entry) => entry.id),
                 acceptedToolNames: safeCompletionCalls.map((call) => call?.function?.name).filter(Boolean),
                 remainingCapabilityIds: missingCapabilityIds,
-                resolution: completionDecision.resolution,
+                resolution: adjudicated.resolution,
               },
             ];
             if (adjudicated.state === 'ready') {
@@ -1931,7 +1948,7 @@ export async function agentChat(req, res) {
               };
               break;
             }
-            if (completionDecision.resolution !== 'unverified_query') break;
+            if (adjudicated.resolution !== 'unverified_query') break;
           } catch (error) {
             if (
               agentAbortController.signal.aborted ||
@@ -2076,7 +2093,9 @@ export async function agentChat(req, res) {
         const followUpCatalog = semanticCatalog.filter((entry) => {
           if (entry.status !== 'enabled') return false;
           if (dependencyRound) return deferredCapabilityIds.includes(entry.id);
-          return entry.effect === 'read';
+          // 恢复轮只补救尚未成功的读取能力。成功（包括权威空结果）已经完成，
+          // 不得让模型再次调用并用后续不稳定结果覆盖。
+          return entry.effect === 'read' && !completedCapabilityIds.has(entry.id);
         });
         const followUpToolNameSet = new Set(followUpCatalog.flatMap((entry) => entry.toolNames || []));
         const followUpTools = selectedTools.filter((tool) => followUpToolNameSet.has(tool.name));
@@ -2131,15 +2150,102 @@ export async function agentChat(req, res) {
         totalUsage.completionTokens += followUpPlannerResponse.usage.completionTokens;
         totalUsage.totalTokens += followUpPlannerResponse.usage.totalTokens;
 
-        const parsedFollowUp = parseSemanticPlannerResponse(followUpPlannerResponse, followUpCatalog, {
+        let parsedFollowUp = parseSemanticPlannerResponse(followUpPlannerResponse, followUpCatalog, {
           dependenciesAlreadySatisfied: dependencyRound,
           toolCallIdPrefix: `semantic-plan-round-${round}`,
         });
-        const followUpDecision = adjudicateSemanticPlan({
+        let followUpDecision = adjudicateSemanticPlan({
           plan: parsedFollowUp.plan,
           toolCalls: parsedFollowUp.toolCalls,
           catalog: followUpCatalog,
         });
+        if (
+          dependencyRound &&
+          (!parsedFollowUp.plan || ['blocked', 'clarification'].includes(followUpDecision.state))
+        ) {
+          const uniqueDependencyTargetForEveryCapability = deferredCapabilityIds.every((capabilityId) => {
+            const intentIndex = semanticPlan.intents.findIndex((intent) => intent.capabilityId === capabilityId);
+            if (intentIndex < 0) return false;
+            const refs = semanticPlan.intents[intentIndex].dependsOn.flatMap(
+              (dependencyIndex) =>
+                dependencyRefsByCapabilityId.get(semanticPlan.intents[dependencyIndex]?.capabilityId) || [],
+            );
+            return normalizeToolDependencyRefs(refs).length === 1;
+          });
+          if (uniqueDependencyTargetForEveryCapability) {
+            const repairStartedAt = Date.now();
+            try {
+              let repairResponse = await requestAi(
+                [...followUpMessages, { role: 'user', content: DEPENDENCY_REPAIR_ROUND_INSTRUCTION }],
+                {
+                  tools: [
+                    buildSemanticPlanToolDefinition(followUpCatalog, followUpTools, {
+                      dependenciesAlreadySatisfied: true,
+                    }),
+                  ],
+                  toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } },
+                  signal: agentAbortController.signal,
+                  maxTokens: getPlannerMaxTokens({
+                    message,
+                    attachmentCount: attachmentIds.length,
+                    selectedToolNames: followUpToolNames,
+                  }),
+                  trace: { traceId: requestId, stage: `planner_dependency_repair_${round}` },
+                },
+              );
+              repairResponse = normalizePlannerToolCallResponse(repairResponse, `planner_dependency_repair_${round}`);
+              trace.plannerMs += Date.now() - repairStartedAt;
+              plannerUsageReported = plannerUsageReported && repairResponse.usageStatus === 'reported';
+              trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
+              apiCalls += 1;
+              apiCallsForLog = apiCalls;
+              totalUsage.promptTokens += repairResponse.usage.promptTokens;
+              totalUsage.completionTokens += repairResponse.usage.completionTokens;
+              totalUsage.totalTokens += repairResponse.usage.totalTokens;
+              const repairedFollowUp = parseSemanticPlannerResponse(repairResponse, followUpCatalog, {
+                dependenciesAlreadySatisfied: true,
+                toolCallIdPrefix: `semantic-plan-dependency-repair-${round}`,
+              });
+              const repairedDecision = adjudicateSemanticPlan({
+                plan: repairedFollowUp.plan,
+                toolCalls: repairedFollowUp.toolCalls,
+                catalog: followUpCatalog,
+              });
+              trace.semanticDependencyRepairRounds = [
+                ...(trace.semanticDependencyRepairRounds || []),
+                {
+                  round,
+                  source: repairedFollowUp.source,
+                  invalid: repairedFollowUp.invalidPlan,
+                  resolution: repairedFollowUp.plan ? repairedDecision.resolution : 'semantic_plan_missing',
+                },
+              ];
+              if (repairedFollowUp.plan && !['blocked', 'clarification'].includes(repairedDecision.state)) {
+                parsedFollowUp = repairedFollowUp;
+                followUpDecision = repairedDecision;
+                followUpPlannerResponse = repairResponse;
+              }
+            } catch (error) {
+              if (
+                agentAbortController.signal.aborted ||
+                error?.name === 'AbortError' ||
+                error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED'
+              ) {
+                throw error;
+              }
+              trace.semanticDependencyRepairRounds = [
+                ...(trace.semanticDependencyRepairRounds || []),
+                {
+                  round,
+                  source: 'error',
+                  invalid: true,
+                  resolution: 'provider_error',
+                  errorCode: stableAgentErrorCode(error),
+                },
+              ];
+            }
+          }
+        }
         writeIntentToolNames = new Set([...writeIntentToolNames, ...(followUpDecision.writeToolNames || [])]);
         trace.semanticRounds = [
           ...(trace.semanticRounds || []),
@@ -2154,13 +2260,18 @@ export async function agentChat(req, res) {
         ];
 
         if (!parsedFollowUp.plan || ['blocked', 'clarification'].includes(followUpDecision.state)) {
-          semanticPolicy = parsedFollowUp.plan
-            ? followUpDecision
-            : {
-                state: 'blocked',
-                resolution: 'semantic_plan_missing',
-                capabilities: followUpCatalog,
-              };
+          // 恢复轮属于可选增强。已有任一真实成功结果时，恢复计划自身失败不能覆盖
+          // 已取得的事实；最终回答会基于成功结果并披露同轮错误。只有所有查询都失败，
+          // 才返回稳定的语义策略失败说明。
+          if (dependencyRound || !usedTools.some((tool) => tool.status === 'success')) {
+            semanticPolicy = parsedFollowUp.plan
+              ? followUpDecision
+              : {
+                  state: 'blocked',
+                  resolution: 'semantic_plan_missing',
+                  capabilities: followUpCatalog,
+                };
+          }
           break;
         }
         if (!followUpDecision.toolCalls?.length) break;
@@ -2305,6 +2416,20 @@ export async function agentChat(req, res) {
       trace.finalMs = 0;
       if (stream && finalContent) {
         sseLifecycle?.stage('responding', { guarded: true });
+        sseLifecycle?.send('delta', {
+          output: { text: finalContent, session_id: getSessionId(session) },
+        });
+      }
+    } else if (deterministicResponseRequested && !pendingUserAction) {
+      finalContent =
+        deterministicInputClarification ||
+        buildAgentCapabilityOverview({
+          tools: selectedTools,
+          locale,
+        });
+      trace.finalMs = 0;
+      if (stream && finalContent) {
+        sseLifecycle?.stage('responding', { deterministic: true });
         sseLifecycle?.send('delta', {
           output: { text: finalContent, session_id: getSessionId(session) },
         });

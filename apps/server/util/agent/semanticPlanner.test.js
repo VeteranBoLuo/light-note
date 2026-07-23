@@ -3,6 +3,7 @@ import {
   adjudicateSemanticPlan,
   buildSemanticPolicyMessage,
   buildSemanticPlanToolDefinition,
+  normalizeReadCompletionToolCalls,
   parseSemanticPlannerResponse,
   SEMANTIC_PLAN_TOOL_NAME,
 } from './semanticPlanner.js';
@@ -128,6 +129,34 @@ describe('semanticPlanner', () => {
       toolCalls: [expect.objectContaining({ id: 'semantic-plan-tool-1' })],
     });
     expect(JSON.parse(parsed.toolCalls[0].function.arguments)).toEqual({ status: 'completed' });
+  });
+
+  it('读取补全只接受目录内的只读真实工具，并重写调用 ID', () => {
+    const normalized = normalizeReadCompletionToolCalls(
+      [
+        call('query_todos', { status: 'completed' }, 'provider-read'),
+        call('set_todo_status', { status: 'completed' }, 'provider-write'),
+        call('unknown_tool', {}, 'provider-unknown'),
+        {
+          id: 'provider-invalid',
+          type: 'function',
+          function: { name: 'query_todos', arguments: '{bad-json' },
+        },
+      ],
+      catalog,
+      { toolCallIdPrefix: 'completion-2' },
+    );
+
+    expect(normalized).toEqual([
+      {
+        id: 'completion-2-1',
+        type: 'function',
+        function: {
+          name: 'query_todos',
+          arguments: JSON.stringify({ status: 'completed' }),
+        },
+      },
+    ]);
   });
 
   it('查询意图没有真实查询调用时失败关闭', () => {

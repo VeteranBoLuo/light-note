@@ -44,6 +44,31 @@ function safeParseToolArguments(call) {
   }
 }
 
+export function normalizeReadCompletionToolCalls(
+  rawToolCalls,
+  catalog,
+  { toolCallIdPrefix = 'semantic-read-completion' } = {},
+) {
+  if (!Array.isArray(rawToolCalls)) return [];
+  const byTool = capabilityByToolMap(catalog);
+  const calls = [];
+  for (const [index, rawCall] of rawToolCalls.slice(0, MAX_TOOL_CALLS).entries()) {
+    const toolName = String(rawCall?.function?.name || '').trim();
+    const capability = byTool.get(toolName);
+    const args = safeParseToolArguments(rawCall);
+    if (!toolName || capability?.effect !== 'read' || capability.status !== 'enabled' || !args) continue;
+    calls.push({
+      id: `${String(toolCallIdPrefix || 'semantic-read-completion').slice(0, 80)}-${index + 1}`,
+      type: 'function',
+      function: {
+        name: toolName,
+        arguments: JSON.stringify(args),
+      },
+    });
+  }
+  return calls;
+}
+
 function normalizeEmbeddedToolCalls(rawToolCalls, catalog, { toolCallIdPrefix = 'semantic-plan-tool' } = {}) {
   if (!Array.isArray(rawToolCalls) || rawToolCalls.length > MAX_TOOL_CALLS) return null;
   const byTool = capabilityByToolMap(catalog);

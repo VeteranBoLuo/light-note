@@ -43,6 +43,7 @@ vi.mock('../util/agent/toolRouter.js', () => ({
   selectAgentTools: mocks.selectAgentTools,
 }));
 vi.mock('../util/agent/secondRound.js', () => ({
+  DEPENDENCY_REPAIR_ROUND_INSTRUCTION: '[INTERNAL_AGENT_DEPENDENCY_REPAIR_ROUND]',
   DEPENDENCY_ROUND_INSTRUCTION: '[INTERNAL_AGENT_DEPENDENCY_ROUND]',
   FOLLOW_UP_ROUND_INSTRUCTION: '[INTERNAL_AGENT_RECOVERY_ROUND]',
   PLAN_COMPLETION_ROUND_INSTRUCTION: '[INTERNAL_AGENT_PLAN_COMPLETION_ROUND]',
@@ -397,6 +398,38 @@ describe('agentChat 主链路', () => {
     const agentLogInsert = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'));
     expect(agentLogInsert[1][16]).toBe('你好');
     expect(agentLogInsert[1][16]).not.toContain('你好，我在。');
+  });
+
+  it('能力总览由服务端按实际工具确定性生成，不再交给模型自由扩写', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('create_note'), registry.get('set_todo_status')].filter(Boolean),
+    );
+    const res = response();
+
+    await agentChat(request({ message: '你支持哪些工具？', stream: false, contexts: [], attachmentIds: [] }), res);
+
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('所有数据变更都会先展示确认');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('暂不能直接编辑或删除已有笔记/书签');
+  });
+
+  it('网页总结缺少链接时由服务端直接澄清，不进入随机语义规划', async () => {
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '帮我总结一个网页（粘贴链接）',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('请粘贴需要读取或总结的网页链接。');
   });
 
   it('翻译模式隔离历史与知识助手提示，只向模型发送待翻译文本', async () => {
@@ -1363,29 +1396,8 @@ describe('agentChat 主链路', () => {
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_query',
-            intents: [
-              {
-                kind: 'read',
-                capabilityId: 'read.query_demo',
-                goal: '查询最近新增的书签',
-                targetDescription: '最近 7 天新增书签',
-                dependsOn: [],
-              },
-              {
-                kind: 'read',
-                capabilityId: 'read.query_detail',
-                goal: '查询最近新增的笔记',
-                targetDescription: '最近 7 天新增笔记',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              { toolName: 'query_demo', arguments: { keyword: '最近7天' } },
-              { toolName: 'query_detail', arguments: { id: 'detail-1' } },
-            ],
-          }),
+          toolCall('query_demo', { keyword: '最近7天' }, 'completion-query-demo'),
+          toolCall('query_detail', { id: 'detail-1' }, 'completion-query-detail'),
         ],
         usage: usage(4),
         usageStatus: 'reported',
@@ -1412,6 +1424,11 @@ describe('agentChat 主链路', () => {
     expect(mocks.requestAi).toHaveBeenCalledTimes(3);
     expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_completion_1');
     expect(mocks.requestAi.mock.calls[1][0].at(-1).content).toContain('[INTERNAL_AGENT_PLAN_COMPLETION_ROUND]');
+    expect(mocks.requestAi.mock.calls[1][1].toolChoice).toBe('required');
+    expect(mocks.requestAi.mock.calls[1][1].tools.map((item) => item.function.name)).toEqual([
+      'query_demo',
+      'query_detail',
+    ]);
     expect(mocks.toolExecute).toHaveBeenCalledTimes(2);
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith(
@@ -1458,7 +1475,7 @@ describe('agentChat 主链路', () => {
       })
       .mockResolvedValueOnce({
         content: '',
-        toolCalls: [omittedMultiReadPlan()],
+        toolCalls: [],
         usage: usage(4),
         usageStatus: 'reported',
         finishReason: 'tool_calls',
@@ -1466,29 +1483,8 @@ describe('agentChat 主链路', () => {
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_query',
-            intents: [
-              {
-                kind: 'read',
-                capabilityId: 'read.query_demo',
-                goal: '查询最近新增的书签',
-                targetDescription: '最近 7 天新增书签',
-                dependsOn: [],
-              },
-              {
-                kind: 'read',
-                capabilityId: 'read.query_detail',
-                goal: '查询最近新增的笔记',
-                targetDescription: '最近 7 天新增笔记',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              { toolName: 'query_demo', arguments: { keyword: '最近7天' } },
-              { toolName: 'query_detail', arguments: { id: 'detail-1' } },
-            ],
-          }),
+          toolCall('query_demo', { keyword: '最近7天' }, 'completion-query-demo'),
+          toolCall('query_detail', { id: 'detail-1' }, 'completion-query-detail'),
         ],
         usage: usage(4),
         usageStatus: 'reported',
@@ -2253,6 +2249,94 @@ describe('agentChat 主链路', () => {
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
   });
 
+  it('唯一依赖目标已核验时，依赖轮偶发漏计划会受限重判并生成确认卡', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_demo'), registry.get('set_todo_status')].filter(Boolean),
+    );
+    mocks.toolExecute.mockResolvedValue({
+      value: '[todo:todo-1] 测试代办',
+      dependencyRefs: [{ type: 'todo', id: 'todo-1' }],
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询目标待办',
+                targetDescription: '测试代办',
+                dependsOn: [],
+              },
+              {
+                kind: 'write',
+                capabilityId: 'todo.status.set',
+                goal: '重新打开目标待办',
+                targetDescription: '查询结果',
+                dependsOn: [0],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '测试代办' } }],
+          }),
+        ],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '漏掉结构化计划',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'todo.status.set',
+                goal: '重新打开目标待办',
+                targetDescription: 'todo-1',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              {
+                toolName: 'set_todo_status',
+                arguments: { todoId: 'todo-1', status: 'pending' },
+              },
+            ],
+          }),
+        ],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({ message: '重新打开待办“测试代办”', stream: false, contexts: [], attachmentIds: [] }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('planner_dependency_repair_2');
+    expect(mocks.requestAi.mock.calls[2][0].at(-1).content).toContain('[INTERNAL_AGENT_DEPENDENCY_REPAIR_ROUND]');
+    expect(mocks.prepareTodoStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ todoId: 'todo-1', status: 'pending' }),
+      expect.anything(),
+    );
+    expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations).toHaveLength(1);
+  });
+
   it('依赖查询没有可靠目标时返回简短澄清，不猜测写参数也不生成确认', async () => {
     mocks.selectAgentTools.mockImplementation((registry) =>
       [registry.get('query_demo'), registry.get('set_todo_status')].filter(Boolean),
@@ -2616,6 +2700,48 @@ describe('agentChat 主链路', () => {
     });
     const finalMessages = mocks.requestAi.mock.calls[2][0];
     expect(finalMessages.some((entry) => String(entry.content || '').includes('[INTERNAL_AGENT_'))).toBe(false);
+  });
+
+  it('成功读取能力即使建议继续规划也不会被恢复轮重复调用', async () => {
+    mocks.shouldContinueToolPlanning.mockReturnValue(true);
+    mocks.toolExecute.mockResolvedValueOnce({ value: '没有匹配结果' });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '查询当前数据',
+                targetDescription: '当前数据',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_demo', arguments: {} }],
+          }),
+        ],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '没有找到相关数据。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const res = response();
+
+    await agentChat(request({ message: '查询当前数据', stream: false, contexts: [], attachmentIds: [] }), res);
+
+    expect(mocks.toolExecute).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls.some(([, options]) => options?.trace?.stage === 'planner_round_2')).toBe(false);
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('没有找到相关数据。');
   });
 
   it('动作相关 Final Reply 无成功回执却声称完成时由服务端替换', async () => {

@@ -10,9 +10,11 @@ import {
 } from './secondRound.js';
 
 describe('Agent 第二轮受限纠错', () => {
-  it('仅在失败、空结果或信息不足且没有待确认写操作时触发', () => {
+  it('仅在真实失败或缺少摘要且没有待确认写操作时触发，成功空结果直接回答', () => {
     expect(shouldRunSecondPlanner([{ result: { status: 'error', summary: '查询失败' } }])).toBe(true);
-    expect(shouldRunSecondPlanner([{ result: { status: 'success', summary: '暂无匹配结果' } }])).toBe(true);
+    expect(shouldRunSecondPlanner([{ result: { status: 'success', summary: '暂无匹配结果' } }])).toBe(false);
+    expect(shouldRunSecondPlanner([{ result: { status: 'success', summary: '共 0 条待办' } }])).toBe(false);
+    expect(shouldRunSecondPlanner([{ result: { status: 'success', summary: '' } }])).toBe(true);
     expect(shouldRunSecondPlanner([{ result: { status: 'success', summary: '找到 2 条笔记' } }])).toBe(false);
     expect(shouldRunSecondPlanner([{ result: { status: 'error', summary: '失败' } }], [{ id: 'confirm' }])).toBe(false);
   });
@@ -38,7 +40,8 @@ describe('Agent 第二轮受限纠错', () => {
     expect(DEPENDENCY_ROUND_INSTRUCTION).toContain('只从紧邻的真实工具结果提取目标');
     expect(DEPENDENCY_ROUND_INSTRUCTION).toContain('待确认卡');
     expect(FOLLOW_UP_ROUND_INSTRUCTION).toContain('只读工具');
-    expect(PLAN_COMPLETION_ROUND_INSTRUCTION).toContain('缺失读取能力');
+    expect(PLAN_COMPLETION_ROUND_INSTRUCTION).toContain('缺失读取工具');
+    expect(PLAN_COMPLETION_ROUND_INSTRUCTION).toContain('不是重新规划意图');
     expect(SEMANTIC_REPAIR_ROUND_INSTRUCTION).toContain('重新提交一份完整且自洽');
     expect(isInternalPlanningInstruction(DEPENDENCY_ROUND_INSTRUCTION)).toBe(true);
     expect(isInternalPlanningInstruction(FOLLOW_UP_ROUND_INSTRUCTION)).toBe(true);

@@ -16,10 +16,22 @@ function fmt(rows) {
 }
 
 export async function getRecap(userId) {
-  if (!userId || userId === 'visitor') return { onThisDay: [], buried: [] };
+  if (!userId || userId === 'visitor') return { weekly: [], onThisDay: [], buried: [] };
 
-  const [onDay] = await pool.query(
-    `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
+  const [[weekly], [onDay], [buried]] = await Promise.all([
+    pool.query(
+      `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
+          WHERE user_id = ? AND del_flag = 0
+            AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY))
+       UNION ALL
+       (SELECT 'note' AS type, id, title, NULL AS url, create_time FROM note
+          WHERE create_by = ? AND del_flag = 0
+            AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY))
+       ORDER BY create_time DESC LIMIT 20`,
+      [userId, userId],
+    ),
+    pool.query(
+      `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
         WHERE user_id = ? AND del_flag = 0
           AND MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
           AND YEAR(create_time) < YEAR(CURDATE()))
@@ -29,18 +41,18 @@ export async function getRecap(userId) {
           AND MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
           AND YEAR(create_time) < YEAR(CURDATE()))
      ORDER BY create_time DESC LIMIT 12`,
-    [userId, userId],
-  );
-
-  const [buried] = await pool.query(
-    `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
+      [userId, userId],
+    ),
+    pool.query(
+      `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
         WHERE user_id = ? AND del_flag = 0 AND create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY))
      UNION ALL
      (SELECT 'note' AS type, id, title, NULL AS url, create_time FROM note
         WHERE create_by = ? AND del_flag = 0 AND create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY))
      ORDER BY RAND() LIMIT 6`,
-    [userId, userId],
-  );
+      [userId, userId],
+    ),
+  ]);
 
-  return { onThisDay: fmt(onDay), buried: fmt(buried) };
+  return { weekly: fmt(weekly), onThisDay: fmt(onDay), buried: fmt(buried) };
 }
