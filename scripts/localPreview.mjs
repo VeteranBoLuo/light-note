@@ -1,5 +1,6 @@
 import net from "node:net";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,7 @@ const backendPort = 9001;
 const previewPort = 4173;
 const children = new Set();
 let shuttingDown = false;
+const execFileAsync = promisify(execFile);
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -36,11 +38,83 @@ function canConnect(port) {
   });
 }
 
+async function getListeningPids(port) {
+  try {
+    const { stdout } = await execFileAsync("lsof", [
+      "-nP",
+      `-iTCP:${port}`,
+      "-sTCP:LISTEN",
+      "-t",
+    ]);
+    return [...new Set(stdout.split(/\s+/u).filter(Boolean))]
+      .map((pid) => Number(pid))
+      .filter(Number.isSafeInteger);
+  } catch (error) {
+    if (error.code === 1) return [];
+    throw new Error(`无法检查端口 ${port} 的占用进程：${error.message}`);
+  }
+}
+
+async function getProcessInfo(pid) {
+  const [{ stdout: command }, { stdout: cwdOutput }] = await Promise.all([
+    execFileAsync("ps", ["-p", String(pid), "-o", "command="]),
+    execFileAsync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"]),
+  ]);
+  const cwd = cwdOutput
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith("n"))
+    ?.slice(1);
+
+  return { command: command.trim(), cwd: cwd || "" };
+}
+
+function isCurrentProjectProcess({ command, cwd }) {
+  const projectPrefix = `${rootDir}${path.sep}`;
+  return cwd.startsWith(projectPrefix) || command.includes(rootDir);
+}
+
+async function waitForPortRelease(port, timeout = 5_000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if ((await getListeningPids(port)).length === 0) return true;
+    await sleep(100);
+  }
+  return (await getListeningPids(port)).length === 0;
+}
+
 async function ensurePortAvailable(port, serviceName) {
-  if (await canConnect(port)) {
+  const pids = await getListeningPids(port);
+  if (!pids.length) return;
+
+  const processes = await Promise.all(
+    pids.map(async (pid) => ({ pid, ...(await getProcessInfo(pid)) })),
+  );
+  const foreignProcesses = processes.filter(
+    (processInfo) => !isCurrentProjectProcess(processInfo),
+  );
+  if (foreignProcesses.length) {
     throw new Error(
-      `${serviceName}端口 ${port} 已被占用。请先关闭旧的本地服务，再重新执行 pnpm preview。`,
+      `${serviceName}端口 ${port} 被其他应用占用（PID：${foreignProcesses.map(({ pid }) => pid).join(", ")}），为避免误关未自动结束。`,
     );
+  }
+
+  console.log(
+    `[本地预览] 正在关闭占用 ${port} 端口的旧本地进程（PID：${pids.join(", ")}）…`,
+  );
+  for (const { pid } of processes) process.kill(pid, "SIGTERM");
+
+  if (await waitForPortRelease(port)) return;
+
+  console.warn(`[本地预览] 旧进程未在规定时间内退出，正在强制结束…`);
+  for (const { pid } of processes) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+  }
+  if (!(await waitForPortRelease(port, 2_000))) {
+    throw new Error(`${serviceName}端口 ${port} 仍无法释放。`);
   }
 }
 
