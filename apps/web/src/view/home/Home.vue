@@ -283,27 +283,19 @@
   );
 
   // 查询标签列表。silent=true:已有缓存时的后台刷新——不显示骨架、不重复刷书签,仅把别处新增/删除的标签同步过来。
-  function queryTagList(silent = false) {
-    if (!silent) bookmark.tagLoading = true;
+  async function queryTagList(silent = false) {
     const user = useUserStore();
+    const requestedUserId = String(user.id || '');
     if (!silent && bookmark.type !== 'normal') {
       bookmark.refreshData();
     }
-    apiQueryPost('/api/bookmark/queryTagList', {
-      filters: { userId: user.id },
-    })
-      .then((res) => {
-        if (res.status === 200) {
-          bookmark.tagList = res.data;
-          user.tagTotal = res.data.length;
-          if (!silent && bookmark.type === 'normal') {
-            bookmark.refreshData();
-          }
-        }
-      })
-      .finally(() => {
-        if (!silent) bookmark.tagLoading = false;
-      });
+    const tags = await bookmark.loadTagList(requestedUserId, { showLoading: !silent });
+    if (!tags || String(user.id || '') !== requestedUserId) return;
+
+    user.tagTotal = tags.length;
+    if (!silent && bookmark.type === 'normal') {
+      bookmark.refreshData();
+    }
   }
 
   const user = useUserStore();

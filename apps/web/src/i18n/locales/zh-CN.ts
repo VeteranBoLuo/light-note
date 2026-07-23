@@ -1743,6 +1743,11 @@ export default {
       remoteDeletedRestoreFailed: '本机历史恢复失败；原历史仍保留在本机，请稍后重试',
       remoteDeletedStartedNew: '已创建新的云端会话',
       remoteDeletedRestored: '已将 {count} 条本机历史恢复到新的云端会话',
+      latestAvailableTitle: '发现更新的云端对话',
+      latestAvailableContent:
+        '当前设备停留在“{current}”，云端最近更新的是“{latest}”。这可能来自另一台设备，是否切换到最新对话？',
+      stayCurrent: '留在当前对话',
+      switchToLatest: '切换到最新对话',
       retentionSettings: '会话保留设置',
       retentionMode: '保留方式',
       temporaryDuration: '临时保留时长',

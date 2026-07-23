@@ -5,6 +5,7 @@ import type { SearchType } from '@/api/search';
 import type { AiAgentInteraction, AiToolConfirmation } from '@/types/aiAgent';
 import type { AiEvidence } from '@/api/aiWorkspaceApi';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
+import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 
 interface AiResourceContext {
   type: SearchType;
@@ -112,6 +113,9 @@ interface AiAssistantPersistedState {
   conversationId: string;
   /** 云端会话已在其他设备删除；保留本机历史，等待用户明确决定是否恢复。 */
   staleCloudConversationId?: string;
+  /** 本设备最后确认过的云端最新会话位置，用于避免同一跨设备更新反复询问。 */
+  cloudConversationCheckpointId?: string;
+  cloudConversationCheckpointAt?: string;
   longChatHinted: boolean;
   scopeMode?: AiAssistantScopeMode;
   temporarySession?: boolean;
@@ -137,6 +141,8 @@ interface AiAssistantState {
   sessionId: string;
   conversationId: string;
   staleCloudConversationId: string;
+  cloudConversationCheckpointId: string;
+  cloudConversationCheckpointAt: string;
   longChatHinted: boolean;
   scopeMode: AiAssistantScopeMode;
   temporarySession: boolean;
@@ -502,6 +508,8 @@ function readLegacySelfConversation(identity: AiAssistantIdentity): AiAssistantP
       sessionId: typeof data.sessionId === 'string' ? data.sessionId : '',
       conversationId: '',
       staleCloudConversationId: '',
+      cloudConversationCheckpointId: '',
+      cloudConversationCheckpointAt: '',
       longChatHinted: false,
       scopeMode: 'workspace',
       temporarySession: false,
@@ -533,6 +541,8 @@ function createInitialState(): AiAssistantState {
     sessionId: '',
     conversationId: '',
     staleCloudConversationId: '',
+    cloudConversationCheckpointId: '',
+    cloudConversationCheckpointAt: '',
     longChatHinted: false,
     scopeMode: 'workspace',
     temporarySession: false,
@@ -590,6 +600,8 @@ export default defineStore('aiAssistant', {
         sessionId: this.sessionId,
         conversationId: this.conversationId,
         staleCloudConversationId: this.staleCloudConversationId,
+        cloudConversationCheckpointId: this.cloudConversationCheckpointId,
+        cloudConversationCheckpointAt: this.cloudConversationCheckpointAt,
         longChatHinted: Boolean(this.longChatHinted),
         scopeMode: this.scopeMode,
         temporarySession: Boolean(this.temporarySession),
@@ -653,6 +665,14 @@ export default defineStore('aiAssistant', {
       this.conversationId = typeof persisted?.conversationId === 'string' ? persisted.conversationId : '';
       this.staleCloudConversationId =
         typeof persisted?.staleCloudConversationId === 'string' ? persisted.staleCloudConversationId.trim() : '';
+      this.cloudConversationCheckpointId =
+        typeof persisted?.cloudConversationCheckpointId === 'string'
+          ? persisted.cloudConversationCheckpointId.trim()
+          : '';
+      this.cloudConversationCheckpointAt =
+        typeof persisted?.cloudConversationCheckpointAt === 'string'
+          ? persisted.cloudConversationCheckpointAt.trim()
+          : '';
       this.longChatHinted = Boolean(persisted?.longChatHinted);
       // 检索范围已收敛为「始终整个知识空间」(已选材料仍会被优先带入),不再从持久化恢复旧的 selected。
       this.scopeMode = 'workspace';
@@ -782,6 +802,27 @@ export default defineStore('aiAssistant', {
     setCloudConversationId(conversationId: string) {
       this.conversationId = String(conversationId || '').trim();
       this.schedulePersistence();
+    },
+    markCloudConversationCheckpoint(conversationId: string, lastMessageAt: string) {
+      const candidate: AiConversationRecency = {
+        id: String(conversationId || '').trim(),
+        lastMessageAt: String(lastMessageAt || '').trim(),
+      };
+      if (!candidate.id || !candidate.lastMessageAt || Number.isNaN(new Date(candidate.lastMessageAt).getTime())) {
+        return false;
+      }
+      const current =
+        this.cloudConversationCheckpointId && this.cloudConversationCheckpointAt
+          ? {
+              id: this.cloudConversationCheckpointId,
+              lastMessageAt: this.cloudConversationCheckpointAt,
+            }
+          : null;
+      if (current && compareAiConversationRecency(candidate, current) <= 0) return false;
+      this.cloudConversationCheckpointId = candidate.id;
+      this.cloudConversationCheckpointAt = candidate.lastMessageAt;
+      this.schedulePersistence();
+      return true;
     },
     markCloudConversationMissing(conversationId: string) {
       const normalizedId = String(conversationId || '').trim();

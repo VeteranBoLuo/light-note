@@ -18,8 +18,18 @@ async function currentWeekKey() {
 async function weekProgress(userId) {
   const [[r]] = await pool.query(
     `SELECT
-      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND YEARWEEK(create_time, 1) = YEARWEEK(CURDATE(), 1)) AS bookmark,
-      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND YEARWEEK(create_time, 1) = YEARWEEK(CURDATE(), 1)) AS note,
+      (SELECT COUNT(*) FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0 AND YEARWEEK(b.create_time, 1) = YEARWEEK(CURDATE(), 1)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+          )) AS bookmark,
+      (SELECT COUNT(*) FROM note n
+        WHERE n.create_by = ? AND n.del_flag = 0 AND YEARWEEK(n.create_time, 1) = YEARWEEK(CURDATE(), 1)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+          )) AS note,
       (SELECT COUNT(DISTINCT day) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND status = 'granted' AND YEARWEEK(create_time, 1) = YEARWEEK(CURDATE(), 1)) AS checkin`,
     [userId, userId, userId],
   );
@@ -28,17 +38,32 @@ async function weekProgress(userId) {
 
 export async function getWeeklyChallenges(userId) {
   if (!userId || userId === 'visitor') {
-    return { weekKey: null, challenges: WEEKLY_CHALLENGES.map((c) => ({ ...c, cur: 0, done: false, claimed: false, claimable: false })) };
+    return {
+      weekKey: null,
+      challenges: WEEKLY_CHALLENGES.map((c) => ({ ...c, cur: 0, done: false, claimed: false, claimable: false })),
+    };
   }
   const wk = await currentWeekKey();
   const prog = await weekProgress(userId);
-  const [claimRows] = await pool.query("SELECT ref FROM points_log WHERE user_id = ? AND reason = 'weekly' AND ref LIKE ?", [userId, wk + ':%']);
+  const [claimRows] = await pool.query(
+    "SELECT ref FROM points_log WHERE user_id = ? AND reason = 'weekly' AND ref LIKE ?",
+    [userId, wk + ':%'],
+  );
   const claimed = new Set(claimRows.map((r) => r.ref));
   const challenges = WEEKLY_CHALLENGES.map((c) => {
     const cur = Number(prog[c.metric] || 0);
     const done = cur >= c.target;
     const isClaimed = claimed.has(wk + ':' + c.key);
-    return { key: c.key, metric: c.metric, target: c.target, reward: c.reward, cur: Math.min(cur, c.target), done, claimed: isClaimed, claimable: done && !isClaimed };
+    return {
+      key: c.key,
+      metric: c.metric,
+      target: c.target,
+      reward: c.reward,
+      cur: Math.min(cur, c.target),
+      done,
+      claimed: isClaimed,
+      claimable: done && !isClaimed,
+    };
   });
   const claimableCount = challenges.filter((c) => c.claimable).length;
   return { weekKey: wk, challenges, claimableCount };

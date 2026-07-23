@@ -144,6 +144,8 @@ describe('知识活动热力图', () => {
     expect(pool.query).toHaveBeenCalledTimes(2);
     expect(pool.query.mock.calls[0][0]).toContain("source = 'checkin'");
     expect(pool.query.mock.calls[0][0]).toContain("'bookmark' AS activity_type");
+    expect(pool.query.mock.calls[0][0]).toContain('onboarding_seed_resources');
+    expect(pool.query.mock.calls[1][0]).toContain('onboarding_seed_resources');
     expect(heatmap.days).toEqual([
       { day: '2026-07-20', count: 1, breakdown: { bookmark: 1, note: 0, file: 0, checkin: 0 } },
       { day: '2026-07-21', count: 4, breakdown: { bookmark: 0, note: 3, file: 0, checkin: 1 } },

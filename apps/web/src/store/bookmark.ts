@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { TagInterface } from '@/config/bookmarkCfg.ts';
 import Viewer from 'viewerjs';
 import { trackConversion } from '@/utils/conversion';
+import { apiQueryPost } from '@/http/request.ts';
 
 const VIEWPORT_BREAKPOINTS = {
   mobile: 768,
@@ -17,6 +18,8 @@ interface BookmarkState {
   imgList: any[];
   refreshKey: boolean;
   refreshTagKey: boolean;
+  tagRequestVersion: number;
+  tagLoading: boolean;
   type: 'all' | 'normal' | 'search';
   bookmarkSearch: string;
   screenWidth: number;
@@ -48,6 +51,7 @@ export default defineStore('bookmark', {
     imgList: [],
     refreshKey: false,
     refreshTagKey: false,
+    tagRequestVersion: 0,
     type: 'all',
     bookmarkSearch: '',
     screenWidth: typeof window !== 'undefined' ? window.innerWidth : 1920, // SSR 安全
@@ -142,6 +146,33 @@ export default defineStore('bookmark', {
       this.refreshTagKey = !this.refreshTagKey;
     },
     /**
+     * 统一加载标签，并用请求版本号阻止登录前的游客响应覆盖登录后的账号标签。
+     */
+    async loadTagList(userId: string, options: { showLoading?: boolean } = {}): Promise<TagInterface[] | null> {
+      const normalizedUserId = String(userId || '').trim();
+      const showLoading = options.showLoading !== false;
+      const requestVersion = ++this.tagRequestVersion;
+      if (showLoading) this.tagLoading = true;
+
+      try {
+        const response = await apiQueryPost('/api/bookmark/queryTagList', {
+          filters: { userId: normalizedUserId },
+        });
+        if (requestVersion !== this.tagRequestVersion) return null;
+        if (response.status !== 200) return null;
+
+        const tags = Array.isArray(response.data) ? response.data : [];
+        this.tagList = tags;
+        return tags;
+      } catch {
+        return null;
+      } finally {
+        if (showLoading && requestVersion === this.tagRequestVersion) {
+          this.tagLoading = false;
+        }
+      }
+    },
+    /**
      * 刷新查看器
      */
     refreshViewer(src: string, options?: Viewer.Options): void {
@@ -160,6 +191,8 @@ export default defineStore('bookmark', {
       this.bookmarkList = [];
       this.refreshKey = false;
       this.refreshTagKey = false;
+      this.tagRequestVersion += 1;
+      this.tagLoading = false;
       this.type = 'all';
       this.bookmarkSearch = '';
       this.bookmarkAllLoaded = false;

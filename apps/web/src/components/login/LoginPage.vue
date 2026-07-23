@@ -120,12 +120,17 @@
         localStorage.removeItem('rememberedSid');
       }
       user.setUserInfo(res.data);
+      const authenticatedUserId = String(user.id || '');
+      const tags = await bookmark.loadTagList(authenticatedUserId, { showLoading: false });
+      if (tags && String(user.id || '') === authenticatedUserId) {
+        user.tagTotal = tags.length;
+      }
       user.preferences.theme = res.data?.preferences?.theme || 'day';
       user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+      await router.push(getAppHomePath(user.preferences, bookmark.isMobile));
       message.success(t('auth.loginSuccess'));
       setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;

@@ -4,6 +4,7 @@ export const RESOURCE_TYPE = {
   BOOKMARK: 'bookmark',
   NOTE: 'note',
   FILE: 'file',
+  TAG: 'tag',
 };
 
 export const normalizeTagIds = (tagIds = []) => {

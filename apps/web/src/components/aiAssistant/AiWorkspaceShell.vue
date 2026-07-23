@@ -1,10 +1,7 @@
 <template>
   <section class="ai-workspace-shell" :class="`is-${activeMode}`">
     <div class="ai-workspace-shell__surface">
-      <ChatContainer
-        ref="chatRef"
-        @source-navigate="emit('source-navigate')"
-      />
+      <ChatContainer ref="chatRef" @source-navigate="emit('source-navigate')" />
     </div>
   </section>
 </template>
@@ -30,6 +27,7 @@
     focusInput?: () => void;
     applyLaunchContext?: (payload: AiAssistantLaunchPayload) => void;
     openConversation?: (conversationId: string) => Promise<void>;
+    refreshCloudConversation?: () => Promise<void>;
   } | null>(null);
 
   function switchMode(mode: AiWorkspaceMode) {
@@ -66,12 +64,24 @@
     await chatRef.value?.openConversation?.(cloudConversationId);
   }
 
+  async function refreshCloudConversation() {
+    await chatRef.value?.refreshCloudConversation?.();
+  }
+
   function openWorkItem(kind: 'change-set', id: string) {
     changeSetId.value = id;
     switchMode('organize');
   }
 
-  defineExpose({ applyLaunchContext, clearHistory, focusInput, openConversation, openWorkItem, switchMode });
+  defineExpose({
+    applyLaunchContext,
+    clearHistory,
+    focusInput,
+    openConversation,
+    openWorkItem,
+    refreshCloudConversation,
+    switchMode,
+  });
 </script>
 
 <style scoped lang="less">

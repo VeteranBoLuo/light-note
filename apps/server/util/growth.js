@@ -515,14 +515,27 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null 
   // 一次 UNION ALL 归一为 {day, activity_type},按日和来源聚合；不 JOIN 三张资源表(避免多态重复),也不逐日 365 次查询。
   const [rows] = await pool.query(
     `SELECT day, activity_type, COUNT(*) AS cnt FROM (
-       SELECT DATE_FORMAT(create_time, '%Y%m%d') AS day, 'bookmark' AS activity_type FROM bookmark
-         WHERE user_id = ? AND create_time >= ? AND create_time < ?
+       SELECT DATE_FORMAT(b.create_time, '%Y%m%d') AS day, 'bookmark' AS activity_type FROM bookmark b
+         WHERE b.user_id = ? AND b.create_time >= ? AND b.create_time < ?
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+           )
        UNION ALL
-       SELECT DATE_FORMAT(create_time, '%Y%m%d') AS day, 'note' AS activity_type FROM note
-         WHERE create_by = ? AND create_time >= ? AND create_time < ?
+       SELECT DATE_FORMAT(n.create_time, '%Y%m%d') AS day, 'note' AS activity_type FROM note n
+         WHERE n.create_by = ? AND n.create_time >= ? AND n.create_time < ?
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+           )
        UNION ALL
-       SELECT DATE_FORMAT(create_time, '%Y%m%d') AS day, 'file' AS activity_type FROM files
-         WHERE create_by = ? AND create_time >= ? AND create_time < ?
+       SELECT DATE_FORMAT(f.create_time, '%Y%m%d') AS day, 'file' AS activity_type FROM files f
+         WHERE f.create_by = ? AND f.create_time >= ? AND f.create_time < ?
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+               AND osr.resource_id = CAST(f.id AS CHAR)
+           )
        UNION ALL
        SELECT day, 'checkin' AS activity_type FROM growth_events
          WHERE user_id = ? AND source = 'checkin'
@@ -573,9 +586,25 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null 
   // 只提供真实有活动的历史年份，避免把用户带到一串没有意义的空年份；当前年始终可看。
   const [yearRows] = await pool.query(
     `SELECT DISTINCT y FROM (
-       SELECT YEAR(create_time) AS y FROM bookmark WHERE user_id = ?
-       UNION ALL SELECT YEAR(create_time) FROM note WHERE create_by = ?
-       UNION ALL SELECT YEAR(create_time) FROM files WHERE create_by = ?
+       SELECT YEAR(b.create_time) AS y FROM bookmark b
+         WHERE b.user_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+           )
+       UNION ALL SELECT YEAR(n.create_time) FROM note n
+         WHERE n.create_by = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+           )
+       UNION ALL SELECT YEAR(f.create_time) FROM files f
+         WHERE f.create_by = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+               AND osr.resource_id = CAST(f.id AS CHAR)
+           )
        UNION ALL SELECT CAST(LEFT(day, 4) AS UNSIGNED) FROM growth_events
          WHERE user_id = ? AND source = 'checkin' AND status = 'granted' AND day IS NOT NULL
      ) activity_years
@@ -631,13 +660,44 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     // 避免"陪伴 0 天"。
     const [[row]] = await pool.query(
       `SELECT
-        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0) AS bookmarkCount,
-        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0) AS noteCount,
-        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0) AS fileCount,
-        (SELECT COUNT(*) FROM tag WHERE user_id = ? AND del_flag = 0) AS tagCount,
+        (SELECT COUNT(*) FROM bookmark b
+          WHERE b.user_id = ? AND b.del_flag = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+            )) AS bookmarkCount,
+        (SELECT COUNT(*) FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+            )) AS noteCount,
+        (SELECT COUNT(*) FROM files f
+          WHERE f.create_by = ? AND f.del_flag = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+                AND osr.resource_id = CAST(f.id AS CHAR)
+            )) AS fileCount,
+        (SELECT COUNT(*) FROM tag t
+          WHERE t.user_id = ? AND t.del_flag = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = t.user_id AND osr.resource_type = 'tag' AND osr.resource_id = t.id
+            )) AS tagCount,
         (SELECT create_time FROM user WHERE id = ?) AS createTime,
-        (SELECT MIN(create_time) FROM bookmark WHERE user_id = ? AND del_flag = 0) AS firstBookmark,
-        (SELECT MIN(create_time) FROM note WHERE create_by = ? AND del_flag = 0) AS firstNote`,
+        (SELECT MIN(b.create_time) FROM bookmark b
+          WHERE b.user_id = ? AND b.del_flag = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+            )) AS firstBookmark,
+        (SELECT MIN(n.create_time) FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+            )) AS firstNote`,
       [userId, userId, userId, userId, userId, userId, userId],
     );
     stats.bookmarkCount = Number(row.bookmarkCount || 0);
@@ -684,15 +744,34 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     // 不再只读 growth_events —— root/免账本用户没有账本记录,否则足迹恒空(用户反馈)。
     const [[bmRows], [ntRows], [flRows], [msRows]] = await Promise.all([
       pool.query(
-        'SELECT name, create_time FROM bookmark WHERE user_id = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12',
+        `SELECT b.name, b.create_time FROM bookmark b
+         WHERE b.user_id = ? AND b.del_flag = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+           )
+         ORDER BY b.create_time DESC LIMIT 12`,
         [userId],
       ),
       pool.query(
-        'SELECT title, create_time FROM note WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12',
+        `SELECT n.title, n.create_time FROM note n
+         WHERE n.create_by = ? AND n.del_flag = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+           )
+         ORDER BY n.create_time DESC LIMIT 12`,
         [userId],
       ),
       pool.query(
-        'SELECT file_name, create_time FROM files WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC LIMIT 12',
+        `SELECT f.file_name, f.create_time FROM files f
+         WHERE f.create_by = ? AND f.del_flag = 0
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+               AND osr.resource_id = CAST(f.id AS CHAR)
+           )
+         ORDER BY f.create_time DESC LIMIT 12`,
         [userId],
       ),
       pool.query(
@@ -766,9 +845,25 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   if (!isGuest) {
     const [[c]] = await pool.query(
       `SELECT
-        (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= CURDATE()) +
-        (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) +
-        (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) AS c`,
+        (SELECT COUNT(*) FROM bookmark b
+          WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+            )) +
+        (SELECT COUNT(*) FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+            )) +
+        (SELECT COUNT(*) FROM files f
+          WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+                AND osr.resource_id = CAST(f.id AS CHAR)
+            )) AS c`,
       [userId, userId, userId],
     );
     createdToday = Number(c.c || 0);
@@ -834,9 +929,25 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   const today = dayKey();
   const [[c]] = await pool.query(
     `SELECT
-      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= CURDATE()) +
-      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) +
-      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= CURDATE()) AS c`,
+      (SELECT COUNT(*) FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+          )) +
+      (SELECT COUNT(*) FROM note n
+        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+          )) +
+      (SELECT COUNT(*) FROM files f
+        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+              AND osr.resource_id = CAST(f.id AS CHAR)
+          )) AS c`,
     [userId, userId, userId],
   );
   const createdToday = Number(c.c || 0);

@@ -16,14 +16,52 @@ import crypto from 'crypto';
 export async function buildWeeklyReport(userId, userRole = null) {
   const [[row]] = await pool.query(
     `SELECT
-      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS bookmarks,
-      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS notes,
-      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS files,
+      (SELECT COUNT(*) FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+          )) AS bookmarks,
+      (SELECT COUNT(*) FROM note n
+        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+          )) AS notes,
+      (SELECT COUNT(*) FROM files f
+        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+              AND osr.resource_id = CAST(f.id AS CHAR)
+          )) AS files,
       (SELECT COALESCE(SUM(amount), 0) FROM growth_events WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS exp,
       (SELECT COUNT(*) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS checkinDays,
-      (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevBookmarks,
-      (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevNotes,
-      (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevFiles,
+      (SELECT COUNT(*) FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0
+          AND b.create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+          AND b.create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+          )) AS prevBookmarks,
+      (SELECT COUNT(*) FROM note n
+        WHERE n.create_by = ? AND n.del_flag = 0
+          AND n.create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+          AND n.create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+          )) AS prevNotes,
+      (SELECT COUNT(*) FROM files f
+        WHERE f.create_by = ? AND f.del_flag = 0
+          AND f.create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+          AND f.create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+              AND osr.resource_id = CAST(f.id AS CHAR)
+          )) AS prevFiles,
       (SELECT COALESCE(SUM(amount), 0) FROM growth_events WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevExp`,
     [userId, userId, userId, userId, userId, userId, userId, userId, userId],
   );

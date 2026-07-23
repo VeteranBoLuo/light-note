@@ -48,6 +48,7 @@ const {
   getAiFeedback,
   clearImages,
   resolveHelpSources,
+  getAdminOverview,
 } = await import('./commonHandle.js');
 
 function mockRes() {
@@ -204,6 +205,55 @@ describe('resolveHelpSources 旧来源安全补全', () => {
     await resolveHelpSources({ user: { role: 'user' }, body: { titles: '帮助' } }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
     expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAdminOverview 资源统计口径', () => {
+  beforeEach(() => query.mockReset());
+
+  it('累计、今日、存储与近 7 天趋势都排除注册时的系统示例资源', async () => {
+    query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('FROM `user` WHERE del_flag')) return [[{ total: 1, today: 1 }]];
+      if (statement.includes('AS bookmarkTotal')) {
+        return [
+          [
+            {
+              bookmarkTotal: 0,
+              noteTotal: 0,
+              fileTotal: 0,
+              bookmarkToday: 0,
+              noteToday: 0,
+              fileToday: 0,
+              storageMb: 0,
+              trashMb: 0,
+              trashCount: 0,
+            },
+          ],
+        ];
+      }
+      if (statement.includes('FROM conversion_events')) return [[{ visitors: 0, registers: 0 }]];
+      if (statement.includes('FROM opinion')) return [[{ pending: 0 }]];
+      if (statement.includes('FROM security_events')) return [[{ unhandled: 0 }]];
+      if (statement.includes('FROM user_sessions')) return [[{ activeToday: 0, active7d: 0 }]];
+      if (statement.includes('FROM api_logs')) {
+        return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
+      }
+      if (statement.includes('GROUP BY d') && statement.includes('FROM `user`')) return [[]];
+      if (statement.includes('SELECT d, SUM(c)')) return [[]];
+      if (statement.includes('FROM agent_logs')) return [[{ count: 0, tokens: 0, cost: 0 }]];
+      return [[]];
+    });
+    const res = mockRes();
+
+    await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
+
+    const resourceSql = query.mock.calls.find(([sql]) => String(sql).includes('AS bookmarkTotal'))?.[0];
+    const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, SUM(c)'))?.[0];
+    expect(resourceSql).toContain('onboarding_seed_resources');
+    expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
+    expect(trendSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 });
 

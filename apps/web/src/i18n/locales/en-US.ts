@@ -1782,6 +1782,11 @@ export default {
         'Could not restore local history. The original history remains on this device; please try again.',
       remoteDeletedStartedNew: 'Created a new cloud conversation.',
       remoteDeletedRestored: 'Restored {count} local messages into a new cloud conversation.',
+      latestAvailableTitle: 'A newer cloud conversation is available',
+      latestAvailableContent:
+        'This device is on “{current}”, while “{latest}” was updated most recently in the cloud. It may have changed on another device. Switch to the latest conversation?',
+      stayCurrent: 'Stay here',
+      switchToLatest: 'Switch to latest',
       retentionSettings: 'Conversation retention',
       retentionMode: 'Retention mode',
       temporaryDuration: 'Temporary duration',

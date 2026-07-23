@@ -246,6 +246,20 @@ CREATE TABLE `resource_tag_relations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
 
 -- ----------------------------
+-- Table structure for onboarding_seed_resources
+-- ----------------------------
+DROP TABLE IF EXISTS `onboarding_seed_resources`;
+CREATE TABLE `onboarding_seed_resources` (
+  `user_id` varbinary(255) NOT NULL,
+  `resource_type` varchar(32) NOT NULL,
+  `resource_id` varbinary(255) NOT NULL,
+  `seed_version` varchar(32) NOT NULL DEFAULT 'v1',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`,`resource_type`,`resource_id`),
+  KEY `idx_onboarding_resource` (`resource_type`,`resource_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='注册时系统自动生成的示例资源，不计入成长和运营统计';
+
+-- ----------------------------
 -- Table structure for security_account_bans
 -- ----------------------------
 DROP TABLE IF EXISTS `security_account_bans`;

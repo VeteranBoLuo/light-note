@@ -2,9 +2,10 @@ import crypto from 'crypto';
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
 import { bucketBaseUrl, putObjectBodyToObs } from '../obsClient.js';
+import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardingSeed.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../resourceTags.js';
 
-export const NEW_USER_SEED_VERSION = 'v1';
+export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
 
 const DEFAULT_SITE_URL = 'https://boluo66.top';
 const PROJECT_REPOSITORY_URL = 'https://github.com/VeteranBoLuo/light-note';
@@ -320,9 +321,10 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
     }
 
     for (const tag of content.tags) {
+      const tagId = ids.tags[tag.key];
       await connection.query('INSERT INTO tag SET ?', [
         insertData({
-          id: ids.tags[tag.key],
+          id: tagId,
           name: tag.name,
           userId,
           sort: tag.sort,
@@ -330,6 +332,11 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
           delFlag: 0,
         }),
       ]);
+      await markOnboardingSeedResource(connection, {
+        userId,
+        resourceType: RESOURCE_TYPE.TAG,
+        resourceId: tagId,
+      });
     }
 
     for (const bookmark of content.bookmarks) {
@@ -345,6 +352,11 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
           delFlag: 0,
         }),
       ]);
+      await markOnboardingSeedResource(connection, {
+        userId,
+        resourceType: RESOURCE_TYPE.BOOKMARK,
+        resourceId: bookmarkId,
+      });
       await insertResourceTagRelations(connection, {
         tagIds: bookmark.tagKeys.map((key) => ids.tags[key]),
         resourceType: RESOURCE_TYPE.BOOKMARK,
@@ -367,6 +379,11 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
           delFlag: 0,
         }),
       ]);
+      await markOnboardingSeedResource(connection, {
+        userId,
+        resourceType: RESOURCE_TYPE.NOTE,
+        resourceId: noteId,
+      });
       await insertResourceTagRelations(connection, {
         tagIds: note.tagKeys.map((key) => ids.tags[key]),
         resourceType: RESOURCE_TYPE.NOTE,
@@ -518,6 +535,11 @@ export async function seedNewUserCloudFile({ userId, lang = 'zh-CN', siteUrl, fo
         },
       ]);
       const fileId = Number(insertResult.insertId);
+      await markOnboardingSeedResource(connection, {
+        userId,
+        resourceType: RESOURCE_TYPE.FILE,
+        resourceId: fileId,
+      });
 
       const tagIds = [];
       for (const tagKey of file.tagKeys) {

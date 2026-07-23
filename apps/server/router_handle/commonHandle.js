@@ -1169,6 +1169,24 @@ export const getAdminOverview = async (req, res) => {
     const notIntCreateBy = hideInternal
       ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
       : '';
+    const notOnboardingBookmark = ` AND NOT EXISTS (
+      SELECT 1 FROM onboarding_seed_resources osr
+      WHERE osr.user_id = bookmark.user_id
+        AND osr.resource_type = 'bookmark'
+        AND osr.resource_id = bookmark.id
+    )`;
+    const notOnboardingNote = ` AND NOT EXISTS (
+      SELECT 1 FROM onboarding_seed_resources osr
+      WHERE osr.user_id = note.create_by
+        AND osr.resource_type = 'note'
+        AND osr.resource_id = note.id
+    )`;
+    const notOnboardingFile = ` AND NOT EXISTS (
+      SELECT 1 FROM onboarding_seed_resources osr
+      WHERE osr.user_id = files.create_by
+        AND osr.resource_type = 'file'
+        AND osr.resource_id = CAST(files.id AS CHAR)
+    )`;
 
     // 用 Node 本地时间算今日与近7天序列(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
     const now = new Date();
@@ -1206,15 +1224,15 @@ export const getAdminOverview = async (req, res) => {
         ),
         pool.query(
           `SELECT
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${notIntUser}) AS bookmarkTotal,
-           (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}) AS noteTotal,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}) AS fileTotal,
-           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0${notIntCreateBy}), 0) AS storageMb,
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser}) AS bookmarkToday,
-           (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}) AS noteToday,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}) AS fileToday,
-           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}), 0) AS trashMb,
-           (SELECT COUNT(*) FROM files WHERE del_flag = 1${notIntCreateBy}) AS trashCount`,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${notIntUser}${notOnboardingBookmark}) AS bookmarkTotal,
+           (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}${notOnboardingNote}) AS noteTotal,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}) AS fileTotal,
+           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}), 0) AS storageMb,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser}${notOnboardingBookmark}) AS bookmarkToday,
+           (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote}) AS noteToday,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile}) AS fileToday,
+           COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}), 0) AS trashMb,
+           (SELECT COUNT(*) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}) AS trashCount`,
           [today, today, today],
         ),
         pool.query(
@@ -1266,9 +1284,9 @@ export const getAdminOverview = async (req, res) => {
         pool
           .query(
             `SELECT d, SUM(c) AS c FROM (
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser} GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy} GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy} GROUP BY d
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser}${notOnboardingBookmark} GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote} GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile} GROUP BY d
            ) t GROUP BY d`,
             [weekAgo, weekAgo, weekAgo],
           )

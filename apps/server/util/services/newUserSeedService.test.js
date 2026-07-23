@@ -109,11 +109,26 @@ describe('newUserSeedService', () => {
     const relationInserts = connection.query.mock.calls.filter(([sql]) =>
       compactSql(sql).startsWith('INSERT IGNORE INTO resource_tag_relations'),
     );
+    const seedMarkerInserts = connection.query.mock.calls.filter(([sql]) =>
+      compactSql(sql).startsWith('INSERT IGNORE INTO onboarding_seed_resources'),
+    );
 
     expect(tagInserts).toHaveLength(4);
     expect(bookmarkInserts).toHaveLength(3);
     expect(noteInserts).toHaveLength(2);
     expect(relationInserts).toHaveLength(5);
+    expect(seedMarkerInserts).toHaveLength(9);
+    expect(seedMarkerInserts.map(([, values]) => values[1]).sort()).toEqual([
+      'bookmark',
+      'bookmark',
+      'bookmark',
+      'note',
+      'note',
+      'tag',
+      'tag',
+      'tag',
+      'tag',
+    ]);
     expect(new Set(tagInserts.map(([, [row]]) => row.id)).size).toBe(4);
     expect(tagInserts.every(([, [row]]) => row.icon_url.startsWith('data:image/svg+xml;base64,'))).toBe(true);
     expect(bookmarkInserts[0][1][0]).toMatchObject({
@@ -224,6 +239,11 @@ describe('newUserSeedService', () => {
     expect(
       connection.query.mock.calls.filter(([sql]) =>
         compactSql(sql).startsWith('INSERT IGNORE INTO resource_tag_relations'),
+      ),
+    ).toHaveLength(2);
+    expect(
+      connection.query.mock.calls.filter(([sql]) =>
+        compactSql(sql).startsWith('INSERT IGNORE INTO onboarding_seed_resources'),
       ),
     ).toHaveLength(2);
     expect(putObjectBodyToObs.mock.invocationCallOrder[0]).toBeLessThan(getConnection.mock.invocationCallOrder[0]);

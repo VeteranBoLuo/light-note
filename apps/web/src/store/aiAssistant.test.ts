@@ -157,6 +157,22 @@ describe('aiAssistant store', () => {
     expect(restored.staleCloudConversationId).toBe('');
   });
 
+  it('持久化本设备已确认的云端最新位置，且不会被较旧检查点回退', () => {
+    const self = identity('user-1', 'user-1', 'self', '');
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+
+    expect(store.markCloudConversationCheckpoint('conversation-new', '2026-07-23T10:00:00.000Z')).toBe(true);
+    expect(store.markCloudConversationCheckpoint('conversation-old', '2026-07-23T09:00:00.000Z')).toBe(false);
+    store.flushPersistence();
+
+    setActivePinia(createPinia());
+    const restored = useAiAssistantStore();
+    restored.switchConversation(self, '你好');
+    expect(restored.cloudConversationCheckpointId).toBe('conversation-new');
+    expect(restored.cloudConversationCheckpointAt).toBe('2026-07-23T10:00:00.000Z');
+  });
+
   it('管理员上下文切换会中止旧请求，旧 lease 无权写入新主体', () => {
     const store = useAiAssistantStore();
     const subjectA = identity('root-user', 'user-a');

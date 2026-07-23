@@ -204,6 +204,7 @@
     focusInput?: () => void;
     applyLaunchContext?: (payload: AiAssistantLaunchPayload) => void;
     openConversation?: (conversationId: string) => Promise<void>;
+    refreshCloudConversation?: () => Promise<void>;
     openWorkItem?: (kind: 'change-set', id: string) => void;
   } | null>(null);
   const aiShortcutLabel = getGlobalShortcutLabel('aiAssistant');
@@ -253,6 +254,9 @@
         device: telemetryDevice(),
         mode: activeMode.value,
       });
+      // 抽屉内容默认不会随关闭销毁；每次重新打开都主动核对云端，
+      // 才能发现同账号在另一台设备新增的会话或同一会话里的新消息。
+      void nextTick(() => aiAssistantRef.value?.refreshCloudConversation?.());
     }
     // 抽屉已经进入前台后再确认终态；生成态不会被确认掉，仍持续提示后台任务。
     nextTick(() => aiAssistant.acknowledgeEdgeStatus());

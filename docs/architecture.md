@@ -181,6 +181,7 @@ src/
 | `folder`                                     | 云空间文件夹                  | 自增          |
 | `tag`                                        | 标签                          | UUID          |
 | `resource_tag_relations`                     | 资源-标签关联                 | 无独立 id     |
+| `onboarding_seed_resources`                  | 注册示例资源来源标记          | 复合主键      |
 | `resource_inbox`                             | 书签/笔记/文件待整理关系      | UUID          |
 | `todo_items`                                 | 待处理中的待办事项            | UUID          |
 | `todo_reminders`                             | 待办提醒调度记录              | UUID          |
@@ -298,6 +299,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 - 账号 Settings 的“全量数据” JSON 导出同样按 `subject_user_id` 覆盖该账号的会话/消息/来源/证据/反馈、记忆、Change Set、产品事件、`agent_logs` 和配额用量，并返回 schema 版本、分域计数、不可用分域和排除清单。可重建内容/文档索引、10 分钟 SSE 恢复事件与请求级配额占位不具可移植性，因此显式列为排除项。普通 self 总清除和导出虽然都是 subject 级，包含/排除与保留政策仍不同；管理员 maintain 清除则是更窄的 owner 域。接口和产品文案必须以返回的 scope 与 retained/exclusions 解释，不能混用。
 - 会话中心已用 `BSelect` 提供逐会话 `standard` / `temporary` / `indefinite` 保留策略；temporary 可选 1、7、30 天，显示权威到期时间及自动级联会话、消息、来源/证据、记忆、Change Set 的范围。服务端严格校验 patch，回显时只映射最近合法档位；temporary 由启动/周期调度器物理删除，同一调度器也收口超过撤销窗口的软删除会话。standard/indefinite 的长期产品政策仍需验收。
 - 登录账号的 Settings AI 区提供 `aiCloudHistory` 云端会话历史开关，使用账号 preferences 同步。关闭后 `ChatContainer` 不再自动 hydrate/create/save 云会话并清除当前 `cloudConversationId`；服务端 create/save 自动持久化 handler 也会按 subject 权威读取偏好，关闭或主体不可验证时失败关闭并返回 `AI_CLOUD_HISTORY_DISABLED`（409）。缺少该偏好字段默认开启，以兼容既有账号。本地 v3 Store 历史继续保留，既有云端历史不会因切换而删除；Change Set 等显式后台成果的直接 Service 写入、分支创建和历史管理不被自动持久化门禁误伤。仍需真实账号和多设备偏好传播验证。草稿和尚未发送的材料始终是本地窗口状态，不能被当作长期记忆。
+- 云历史开启时，新设备没有本地会话 ID 会自动加载云端最近活跃会话；已有设备继续恢复本机最后选择的会话。AI 抽屉关闭时不销毁，因此每次重新打开都主动拉取当前会话：同一 ID 直接同步新消息；若另一个会话在本设备上次云端检查后成为最新，则使用 `Alert.alert()` 询问是否切换。用户选择留在当前或明确从会话中心打开任一会话后，Store v3 记录已确认的最新 `(lastMessageAt, id)` 检查点，避免同一更新重复打扰；检查点只表示本设备已经见过该云端位置，不作为消息顺序或并发写入的权威版本。
 
 ### 证据与检索
 
@@ -384,7 +386,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 - 邮箱注册和 GitHub 首次建号会按注册语言初始化 4 个带 Base64 SVG 图标的标签、3 个书签、2 篇笔记、1 个示例文件夹和 2 份云文件；已有账号登录、GitHub 绑定已有邮箱账号和历史用户都不会补发或重复生成。
 - 标签、书签、笔记和文件夹在独立短事务内同步创建；欢迎笔记使用账号级确定性 ID 作为幂等标记，整批失败会回滚，但不会反向让注册失败。
 - 示例云文件是真实 Markdown 文件：使用说明放在示例文件夹，待整理清单保留在云空间根目录，因此“全部文件”和示例文件夹会显示不同内容。文件先异步上传 OBS，成功后才写 `files` 和标签关系，避免产生无法预览或下载的假记录；OBS 失败只记录稳定错误码，不阻断注册。
-- 示例资源归用户本人所有，可正常编辑和删除，删除后不会自动恢复。Seed 直插不调用资源创建副作用，因此不会记录 `first_own_resource`、网页快照或创建奖励。
+- 示例资源归用户本人所有，可正常编辑和删除，删除后不会自动恢复。Seed 直插不调用资源创建副作用，并通过 `onboarding_seed_resources` 保留系统来源，因此不计入首次创建成就、每日/每周任务、成长足迹、周报及后台运营资源总览。
 
 ### 游客转化漏斗
 

@@ -21,10 +21,11 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { markLoggedIn } from '@/utils/authStorage';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
 
   const router = useRouter();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const status = ref(200);
   const time = ref(3);
   function toHome() {
@@ -67,6 +68,12 @@
         // 否则 push('/') 会读到登录前(游客)的偏好而落到官网首页。GitHub 接口不含 preferences,单独拉 /me。
         try {
           const me = await apiBaseGet('/api/user/me');
+          user.setUserInfo(me?.data || {});
+          const authenticatedUserId = String(user.id || '');
+          const tags = await bookmark.loadTagList(authenticatedUserId, { showLoading: false });
+          if (tags && String(user.id || '') === authenticatedUserId) {
+            user.tagTotal = tags.length;
+          }
           let prefs = me?.data?.preferences ?? {};
           if (typeof prefs === 'string') {
             try {
@@ -77,7 +84,8 @@
           }
           const finalPrefs = { ...prefs, homePage: getHomePagePreference(prefs) };
           localStorage.setItem('preferences', JSON.stringify(finalPrefs));
-          router.push(getAppHomePath(finalPrefs, bookmark.isMobile));
+          await router.push(getAppHomePath(finalPrefs, bookmark.isMobile));
+          bookmark.refreshTag();
         } catch {
           toHome();
         }

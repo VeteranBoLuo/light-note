@@ -216,6 +216,8 @@
     recoverAiAgentResponse,
     recoverAiLocalConversation,
     saveAiCloudMessage,
+    type AiConversation,
+    type AiConversationSummary,
     type AiCloudMessage,
     type AiLocalConversationRecoveryMessage,
     type AiPersistedSource,
@@ -241,6 +243,7 @@
   import { applyAiRecoverySnapshot, shouldAttemptAiStreamRecovery } from '@/utils/aiStreamRecovery';
   import { toAiMemoryInfluenceActivity } from '@/utils/aiMemoryInfluence';
   import { scrollIntoContainer } from '@/utils/zoom';
+  import { decideAiConversationContinuity, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 
   const { t, locale } = useI18n();
 
@@ -253,6 +256,7 @@
     clearHistory,
     focusInput,
     openConversation,
+    refreshCloudConversation,
   });
   const bookmark = bookmarkStore();
 
@@ -300,6 +304,8 @@
     sessionId,
     conversationId,
     staleCloudConversationId,
+    cloudConversationCheckpointId,
+    cloudConversationCheckpointAt,
     longChatHinted,
     scopeMode,
     temporarySession,
@@ -404,9 +410,7 @@
     if (userInput.value.trim()) return false;
     // 生成回答期间追问内容本来就不可用，不保留一个空的 40px dock；否则发送后消息区会先被挤矮，
     // 看起来像滚动越过底部再回弹。回答完成并真正开始生成追问后，再进入 pending/ready 状态。
-    return Boolean(
-      conversationRound.value === 0 || latest.recommendationPending || latest.recommendationReady,
-    );
+    return Boolean(conversationRound.value === 0 || latest.recommendationPending || latest.recommendationReady);
   });
   const showRecommendation = computed(() => {
     if (isLoading.value || !messages.value.length) return false;
@@ -602,17 +606,20 @@
     if (aiAssistant.initialized && aiAssistant.runtimeIdentityKey !== nextRuntimeIdentityKey && isLoading.value) {
       stopResponse('cancelled');
     }
+    if (aiAssistant.initialized && aiAssistant.runtimeIdentityKey !== nextRuntimeIdentityKey) {
+      cancelLatestConversationChoice();
+    }
     const switched = aiAssistant.switchConversation(conversationIdentity.value, t('ai.greeting'));
     lineageConversationId.value = '';
     if (!cloudHistoryEnabled()) aiAssistant.setCloudConversationId('');
     if (!switched) {
-      void hydrateCloudConversation(nextRuntimeIdentityKey);
+      void requestCloudConversationHydration(nextRuntimeIdentityKey);
       return;
     }
     activeAnswerTypewriter = null;
     void repairLegacyKnowledgeSources();
     restoreConversationViewport();
-    void hydrateCloudConversation(nextRuntimeIdentityKey);
+    void requestCloudConversationHydration(nextRuntimeIdentityKey);
   }
 
   let cloudConversationCreation: { runtimeKey: string; promise: Promise<string | null> } | null = null;
@@ -972,33 +979,133 @@
     return items;
   }
 
+  type LatestConversationChoice = 'stay' | 'switch';
+  let latestConversationChoicePending = false;
+  let resolveLatestConversationChoice: ((choice: LatestConversationChoice) => void) | null = null;
+  let cloudHydrationTask: { runtimeKey: string; promise: Promise<void> } | null = null;
+
+  function conversationRecency(conversation: AiConversationSummary): AiConversationRecency {
+    return {
+      id: String(conversation.id || ''),
+      lastMessageAt: String(conversation.lastMessageAt || ''),
+    };
+  }
+
+  function cloudConversationCheckpoint(): AiConversationRecency | null {
+    if (!cloudConversationCheckpointId.value || !cloudConversationCheckpointAt.value) return null;
+    return {
+      id: cloudConversationCheckpointId.value,
+      lastMessageAt: cloudConversationCheckpointAt.value,
+    };
+  }
+
+  function markCloudConversationSeen(conversation: AiConversationSummary) {
+    aiAssistant.markCloudConversationCheckpoint(conversation.id, conversation.lastMessageAt);
+  }
+
+  function askLatestConversationChoice(
+    current: AiConversationSummary,
+    latest: AiConversationSummary,
+  ): Promise<LatestConversationChoice> {
+    if (latestConversationChoicePending) return Promise.resolve('stay');
+    latestConversationChoicePending = true;
+    return new Promise<LatestConversationChoice>((resolve) => {
+      const settle = (choice: LatestConversationChoice) => {
+        latestConversationChoicePending = false;
+        resolveLatestConversationChoice = null;
+        resolve(choice);
+      };
+      resolveLatestConversationChoice = settle;
+      Alert.alert({
+        title: t('ai.conversations.latestAvailableTitle'),
+        content: t('ai.conversations.latestAvailableContent', {
+          current: current.title || t('ai.conversations.untitled'),
+          latest: latest.title || t('ai.conversations.untitled'),
+        }),
+        footer: [
+          {
+            label: t('ai.conversations.stayCurrent'),
+            type: 'dashed',
+            function: () => settle('stay'),
+          },
+          {
+            label: t('ai.conversations.switchToLatest'),
+            type: 'primary',
+            function: () => settle('switch'),
+          },
+        ],
+      });
+    });
+  }
+
+  function cancelLatestConversationChoice() {
+    if (!resolveLatestConversationChoice) return;
+    const settle = resolveLatestConversationChoice;
+    Alert.destroy();
+    settle('stay');
+  }
+
   async function hydrateCloudConversation(runtimeKey: string) {
     if (!cloudHistoryEnabled() || aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return;
     // 云端已明确找不到旧会话时，保留本机历史直到用户在发送前作出选择，不能再被“最近会话”覆盖。
     if (staleCloudConversationId.value) return;
-    const localHasUnsyncedMessages = messages.value.slice(1).some((item) => item.content && !item.cloudId);
+    const localHasUnsyncedMessages = messages.value
+      .slice(1)
+      .some((item) => !item.cloudId && (Boolean(item.content) || hasPendingAgentActions(item)));
     if (localHasUnsyncedMessages) return;
     try {
-      let cloudId = conversationId.value;
-      if (!cloudId) {
+      const currentCloudId = String(conversationId.value || '').trim();
+      if (!currentCloudId) {
         const listed = await listAiCloudConversations({ status: 'active', limit: 1 });
-        cloudId = listed.items[0]?.id || '';
+        const latest = listed.items[0] || null;
+        if (!latest || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
+        const loaded = await loadCloudConversation(latest.id, runtimeKey);
+        if (loaded) markCloudConversationSeen(latest);
+        return;
       }
-      if (!cloudId || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
-      await loadCloudConversation(cloudId, runtimeKey);
+
+      const current = await loadCloudConversation(currentCloudId, runtimeKey);
+      if (!current || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
+      const listed = await listAiCloudConversations({ status: 'active', limit: 1 });
+      const latest = listed.items[0] || null;
+      if (!latest || aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return;
+      const decision = decideAiConversationContinuity({
+        current: conversationRecency(current),
+        latest: conversationRecency(latest),
+        checkpoint: cloudConversationCheckpoint(),
+      });
+      if (decision !== 'offer_latest') {
+        markCloudConversationSeen(latest);
+        return;
+      }
+
+      const choice = await askLatestConversationChoice(current, latest);
+      if (aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return;
+      if (choice === 'stay') {
+        markCloudConversationSeen(latest);
+        return;
+      }
+      try {
+        const switched = await loadCloudConversation(latest.id, runtimeKey);
+        if (switched) markCloudConversationSeen(latest);
+      } catch {
+        message.warning(t('ai.conversations.loadFailed'));
+      }
     } catch {
       // 云端历史不可用时保留本地会话，聊天主流程继续可用。
     }
   }
 
-  async function loadCloudConversation(cloudId: string, runtimeKey = aiAssistant.runtimeIdentityKey) {
-    let cloudConversation;
-    try {
-      cloudConversation = await getAiCloudConversation(cloudId, 200);
-    } catch (error) {
-      if (isConversationNotFoundError(error)) clearMissingCloudConversation(cloudId, runtimeKey);
-      throw error;
-    }
+  function requestCloudConversationHydration(runtimeKey = aiAssistant.runtimeIdentityKey) {
+    if (cloudHydrationTask?.runtimeKey === runtimeKey) return cloudHydrationTask.promise;
+    const promise = hydrateCloudConversation(runtimeKey).finally(() => {
+      if (cloudHydrationTask?.promise === promise) cloudHydrationTask = null;
+    });
+    cloudHydrationTask = { runtimeKey, promise };
+    return promise;
+  }
+
+  function applyCloudConversation(cloudConversation: AiConversation, runtimeKey: string) {
     if (aiAssistant.runtimeIdentityKey !== runtimeKey || isLoading.value) return false;
     const cloudMessages = normalizeVisibleVersionGroups(
       cloudConversation.messages.map(cloudMessageToLocal).filter((item): item is ChatMessage => Boolean(item)),
@@ -1012,16 +1119,48 @@
     return true;
   }
 
+  async function loadCloudConversation(
+    cloudId: string,
+    runtimeKey = aiAssistant.runtimeIdentityKey,
+  ): Promise<AiConversation | null> {
+    let cloudConversation: AiConversation;
+    try {
+      cloudConversation = await getAiCloudConversation(cloudId, 200);
+    } catch (error) {
+      if (isConversationNotFoundError(error)) clearMissingCloudConversation(cloudId, runtimeKey);
+      throw error;
+    }
+    return applyCloudConversation(cloudConversation, runtimeKey) ? cloudConversation : null;
+  }
+
+  async function markLatestCloudConversationSeen(runtimeKey = aiAssistant.runtimeIdentityKey) {
+    try {
+      const listed = await listAiCloudConversations({ status: 'active', limit: 1 });
+      const latest = listed.items[0] || null;
+      if (latest && aiAssistant.runtimeIdentityKey === runtimeKey) markCloudConversationSeen(latest);
+    } catch {
+      // 用户已明确选择会话，检查点刷新失败只会让下次打开时再次核对，不影响本次切换。
+    }
+  }
+
   async function openConversation(cloudId: string) {
     const normalizedId = String(cloudId || '').trim();
     if (!normalizedId) return false;
     if (isLoading.value) stopResponse('cancelled');
     try {
-      return await loadCloudConversation(normalizedId);
+      const runtimeKey = aiAssistant.runtimeIdentityKey;
+      const loaded = await loadCloudConversation(normalizedId, runtimeKey);
+      if (!loaded) return false;
+      await markLatestCloudConversationSeen(runtimeKey);
+      return true;
     } catch {
       message.warning(t('ai.conversations.loadFailed'));
       return false;
     }
+  }
+
+  async function refreshCloudConversation() {
+    await requestCloudConversationHydration(aiAssistant.runtimeIdentityKey);
   }
 
   function answerVersionRefreshToken(versionGroupId: string) {
@@ -1406,7 +1545,7 @@
       historySnapshot?: ChatMessage[];
     } = {},
   ) => {
-    if (isLoading.value || cloudRecoveryPending.value) return;
+    if (isLoading.value || cloudRecoveryPending.value || latestConversationChoicePending) return;
     // 每次开始新的提问时，重置自动滚动状态，确保本轮对话自动跟随到底部
     shouldFollowMessages.value = true;
     showScrollToBottom.value = false;
@@ -2120,6 +2259,7 @@
   });
 
   onBeforeUnmount(() => {
+    cancelLatestConversationChoice();
     const activeMessage = activeAssistantMessageId.value
       ? messages.value.find((item) => item.id === activeAssistantMessageId.value) || null
       : null;
