@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_CHAT_TOUCH_INTENT_THRESHOLD,
   getAiChatBottomDistance,
+  getAiChatMaxScrollTop,
   isAiChatUpwardScroll,
   isAiChatUpwardTouch,
   isAiChatUpwardWheel,
@@ -14,6 +15,8 @@ import {
 
 describe('aiAutoScroll', () => {
   it('使用同一套布局坐标计算距底部距离', () => {
+    expect(getAiChatMaxScrollTop({ scrollHeight: 1000, clientHeight: 300 })).toBe(700);
+    expect(getAiChatMaxScrollTop({ scrollHeight: 250, clientHeight: 300 })).toBe(0);
     expect(getAiChatBottomDistance({ scrollHeight: 1000, scrollTop: 650, clientHeight: 300 })).toBe(50);
     expect(getAiChatBottomDistance({ scrollHeight: 500, scrollTop: 250, clientHeight: 300 })).toBe(0);
   });

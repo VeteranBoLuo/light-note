@@ -1,13 +1,11 @@
 export interface QuickQuestionDispatchOptions {
   isBusy: () => boolean;
-  setInput: (value: string) => void;
-  afterInputChange: () => Promise<unknown>;
-  send: () => Promise<unknown> | unknown;
+  send: (question: string) => Promise<unknown> | unknown;
 }
 
 /**
- * 推荐问题是“一键提问”，与附件区可继续编辑的提示词建议语义不同。
- * 内部 pending 锁覆盖 setInput 到 send 真正开始前的微任务间隙，避免快速双击重复发送。
+ * 推荐问题是“一键提问”，直接把文本交给发送流程，不经过输入框中转。
+ * 内部 pending 锁覆盖发送函数真正进入 busy 状态前的异步间隙，避免快速双击重复发送。
  */
 export function createQuickQuestionDispatcher(options: QuickQuestionDispatchOptions) {
   let pending = false;
@@ -18,10 +16,7 @@ export function createQuickQuestionDispatcher(options: QuickQuestionDispatchOpti
 
     pending = true;
     try {
-      options.setInput(question);
-      await options.afterInputChange();
-      if (options.isBusy()) return false;
-      await options.send();
+      await options.send(question);
       return true;
     } finally {
       pending = false;

@@ -132,6 +132,40 @@ function getToolDefinitions(tools) {
   return defs;
 }
 
+const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
+  auto: '自动识别',
+  zh: '中文',
+  en: '英文',
+  ja: '日文',
+  ko: '韩文',
+  fr: '法文',
+  de: '德文',
+  es: '西班牙文',
+});
+
+function normalizeTranslationConfig(config = {}) {
+  const source = Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.source) ? config.source : 'auto';
+  const target = config?.target !== 'auto' && Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.target)
+    ? config.target
+    : 'zh';
+  return { source, target };
+}
+
+function buildTranslationFinalMessages(message, config) {
+  const { source, target } = normalizeTranslationConfig(config);
+  const sourceInstruction =
+    source === 'auto' ? '自动识别源语言' : `源语言为${TRANSLATION_LANGUAGE_NAMES[source]}`;
+  return [
+    {
+      role: 'system',
+      content:
+        `你是专业翻译器。${sourceInstruction}，将用户最后一条文本翻译成${TRANSLATION_LANGUAGE_NAMES[target]}。` +
+        '只输出译文，不要回答问题、查询任何用户数据、引用会话历史、添加解释、标题、引号或额外说明。保留原有段落、列表、Markdown、代码和专有名词的结构。',
+    },
+    { role: 'user', content: String(message || '') },
+  ];
+}
+
 /**
  * 写入确认是服务端安全边界，不能因为 Planner 偶发选择直接回答就被绕开。
  * 仅对“带引号的单条待办 + 明确状态”的窄语句补齐 set_todo_status 调用；
@@ -1379,11 +1413,11 @@ export async function agentChat(req, res) {
 
     // 处理翻译模式
     let userMessage = message;
+    const normalizedTranslationConfig = normalizeTranslationConfig(translationConfig);
     if (enableTranslation) {
-      const { source = 'auto', target = 'zh' } = translationConfig || {};
-      const langNames = { auto: '自动识别', zh: '中文', en: '英文', ja: '日文', ko: '韩文' };
-      const targetName = langNames[target] || target;
-      const sourceHint = source === 'auto' ? '' : `（源语言: ${langNames[source] || source}）`;
+      const { source, target } = normalizedTranslationConfig;
+      const targetName = TRANSLATION_LANGUAGE_NAMES[target];
+      const sourceHint = source === 'auto' ? '' : `（源语言: ${TRANSLATION_LANGUAGE_NAMES[source]}）`;
       userMessage = `请将以下内容翻译成${targetName}${sourceHint}：\n\n${message}`;
     }
     userMessage += resolvedContexts.text + resolvedAttachments.text;
@@ -1878,16 +1912,18 @@ export async function agentChat(req, res) {
         }
         return [];
       });
-      const finalMessages = [
-        { role: 'system', content: finalSystemContent },
-        ...finalConversationMessages,
-        {
-          role: 'user',
-          content: usedTools.length
-            ? `请基于上述工具结果回答此前用户提出的原始问题，保持简洁，并严格使用原始问题要求的语言。${citationGuide}`
-            : `请直接回答此前用户提出的原始问题，严格使用原始问题要求的语言，不要提及内部规划过程。${citationGuide}`,
-        },
-      ];
+      const finalMessages = enableTranslation
+        ? buildTranslationFinalMessages(message, normalizedTranslationConfig)
+        : [
+            { role: 'system', content: finalSystemContent },
+            ...finalConversationMessages,
+            {
+              role: 'user',
+              content: usedTools.length
+                ? `请基于上述工具结果回答此前用户提出的原始问题，保持简洁，并严格使用原始问题要求的语言。${citationGuide}`
+                : `请直接回答此前用户提出的原始问题，严格使用原始问题要求的语言，不要提及内部规划过程。${citationGuide}`,
+            },
+          ];
       const finalStartedAt = Date.now();
       sseLifecycle?.stage('responding');
       const finalReply = await generateFinalReply({
@@ -1913,6 +1949,7 @@ export async function agentChat(req, res) {
       citationAudit = auditAgentCitations(finalReply.content, evidence);
       finalContent = removeInvalidAgentCitations(finalReply.content, citationAudit.invalidKeys);
       followUpAvailable =
+        !enableTranslation &&
         shouldOfferFollowUps({
           answer: finalContent,
           confirmations,

@@ -99,6 +99,14 @@ export const putObjectToObs = async (objectKey, filePath, contentType = 'applica
     ContentType: contentType,
   });
 
+export const putObjectBodyToObs = async (objectKey, body, contentType = 'application/octet-stream') =>
+  wrapObsCall(obsClient.putObject.bind(obsClient), {
+    Bucket: bucketName,
+    Key: objectKey,
+    Body: Buffer.isBuffer(body) ? body : Buffer.from(String(body ?? ''), 'utf8'),
+    ContentType: contentType,
+  });
+
 export const getObjectMetadataFromObs = async (objectKey) => {
   const result = await wrapObsCall(obsClient.getObjectMetadata.bind(obsClient), {
     Bucket: bucketName,

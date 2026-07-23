@@ -8,17 +8,22 @@ const sdk = vi.hoisted(() => {
   process.env.OBS_BUCKET_NAME = 'test-bucket';
 
   const getObject = vi.fn();
+  const putObject = vi.fn();
   class MockObsClient {
     getObject(...args) {
       return getObject(...args);
     }
+
+    putObject(...args) {
+      return putObject(...args);
+    }
   }
-  return { getObject, MockObsClient };
+  return { getObject, putObject, MockObsClient };
 });
 
 vi.mock('esdk-obs-nodejs', () => ({ default: sdk.MockObsClient }));
 
-import { getObjectBufferFromObs } from './obsClient.js';
+import { getObjectBufferFromObs, putObjectBodyToObs } from './obsClient.js';
 
 function mockObjectResult(content, contentLength) {
   sdk.getObject.mockImplementationOnce((params, callback) => {
@@ -32,6 +37,7 @@ function mockObjectResult(content, contentLength) {
 describe('OBS 二进制下载', () => {
   beforeEach(() => {
     sdk.getObject.mockReset();
+    sdk.putObject.mockReset();
   });
 
   it('使用流模式并原样保留 PDF 等文件的高位字节', async () => {
@@ -65,5 +71,23 @@ describe('OBS 二进制下载', () => {
     await expect(getObjectBufferFromObs('sample.pdf')).rejects.toMatchObject({
       code: 'OBS_DOWNLOAD_SIZE_MISMATCH',
     });
+  });
+
+  it('可以直接上传内存中的 UTF-8 示例文档', async () => {
+    sdk.putObject.mockImplementationOnce((params, callback) => {
+      callback(null, { CommonMsg: { Status: 200 } });
+    });
+
+    await putObjectBodyToObs('files/user/system/onboarding-v1.md', '# 轻笺', 'text/markdown');
+
+    expect(sdk.putObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Bucket: 'test-bucket',
+        Key: 'files/user/system/onboarding-v1.md',
+        Body: Buffer.from('# 轻笺', 'utf8'),
+        ContentType: 'text/markdown',
+      }),
+      expect.any(Function),
+    );
   });
 });

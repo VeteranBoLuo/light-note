@@ -4,8 +4,12 @@ export const AI_CHAT_TOUCH_INTENT_THRESHOLD = 24;
 
 export type ScrollMetrics = Pick<HTMLElement, 'scrollHeight' | 'scrollTop' | 'clientHeight'>;
 
+export function getAiChatMaxScrollTop(container: Pick<ScrollMetrics, 'scrollHeight' | 'clientHeight'>): number {
+  return Math.max(0, container.scrollHeight - container.clientHeight);
+}
+
 export function getAiChatBottomDistance(container: ScrollMetrics): number {
-  return Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight);
+  return Math.max(0, getAiChatMaxScrollTop(container) - container.scrollTop);
 }
 
 export function shouldPauseAiChatFollow(distance: number): boolean {
@@ -34,7 +38,7 @@ export function resolveAiChatStableViewport(
   metrics: Pick<ScrollMetrics, 'scrollHeight' | 'clientHeight'>,
   preservedScrollTop: number,
 ): AiChatStableViewportState {
-  const maxScrollTop = Math.max(0, metrics.scrollHeight - metrics.clientHeight);
+  const maxScrollTop = getAiChatMaxScrollTop(metrics);
   const scrollTop = Math.min(Math.max(0, preservedScrollTop), maxScrollTop);
   const distance = getAiChatBottomDistance({ ...metrics, scrollTop });
   const shouldFollow = shouldResumeAiChatFollow(distance);
@@ -56,7 +60,7 @@ export function resolveAiChatPostAnswerViewport(
 ): AiChatStableViewportState {
   if (!wasFollowing) return resolveAiChatStableViewport(metrics, preservedScrollTop);
   return {
-    scrollTop: Math.max(0, metrics.scrollHeight - metrics.clientHeight),
+    scrollTop: getAiChatMaxScrollTop(metrics),
     shouldFollow: true,
     showScrollToBottom: false,
   };

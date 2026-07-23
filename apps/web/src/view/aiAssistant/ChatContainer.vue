@@ -178,6 +178,7 @@
   import { shouldUseAiCloudHistory } from '@/components/aiAssistant/aiUiContracts';
   import {
     getAiChatBottomDistance,
+    getAiChatMaxScrollTop,
     isAiChatUpwardScroll,
     isAiChatUpwardTouch,
     isAiChatUpwardWheel,
@@ -401,8 +402,10 @@
     if (!latest || hasPendingAgentActions(latest)) return false;
     // 用户开始输入时收起追问 dock,把纵向空间让给回答区(方案 §8.6:进入对话后不长期占用输入区高度)。
     if (userInput.value.trim()) return false;
+    // 生成回答期间追问内容本来就不可用，不保留一个空的 40px dock；否则发送后消息区会先被挤矮，
+    // 看起来像滚动越过底部再回弹。回答完成并真正开始生成追问后，再进入 pending/ready 状态。
     return Boolean(
-      conversationRound.value === 0 || isLoading.value || latest.recommendationPending || latest.recommendationReady,
+      conversationRound.value === 0 || latest.recommendationPending || latest.recommendationReady,
     );
   });
   const showRecommendation = computed(() => {
@@ -1215,12 +1218,21 @@
 
   // 一帧最多滚动一次，连续 token 不再叠加多个 smooth 动画。
   const scheduleScrollToBottom = (force = false) => {
-    if (!messagesContainer.value || (!force && !shouldFollowMessages.value) || scrollFrame !== null) return;
+    if (!messagesContainer.value || (!force && !shouldFollowMessages.value)) return;
+    // 明确发送新问题时，前一帧可能还排着“点击追问后输入框布局变化”的旧滚动。
+    // 此时必须以实际插入消息后的滚动替换它，不能因为已有 rAF 而错过新消息。
+    if (scrollFrame !== null) {
+      if (!force) return;
+      window.cancelAnimationFrame(scrollFrame);
+      scrollFrame = null;
+    }
     scrollFrame = window.requestAnimationFrame(() => {
       scrollFrame = null;
       const container = messagesContainer.value;
       if (!container || (!force && !shouldFollowMessages.value)) return;
-      container.scrollTop = container.scrollHeight;
+      // scrollTop 的合法最大值是 scrollHeight - clientHeight。直接赋 scrollHeight 会依赖浏览器
+      // 自动钳制，在容器高度同帧变化时可能产生一次越界回弹。
+      container.scrollTop = getAiChatMaxScrollTop(container);
       scrollTop.value = container.scrollTop;
       showScrollToBottom.value = false;
       suppressScrollPause();
@@ -1449,7 +1461,9 @@
       timestamp: new Date(),
       recommendations: [],
       recommendationReady: false,
-      recommendationPending: true,
+      // 回答完成且服务端明确提供 follow-up requestId 后才进入 pending。
+      // 提前置 true 会让空追问栏在“正在理解”阶段重新占回 40px，造成滚动回弹。
+      recommendationPending: false,
       parentMessageId: userMessage.id,
       versionGroupId: cloudPreparation === 'replaced' ? undefined : options.versionGroupId,
     };
@@ -1479,7 +1493,8 @@
     if (options.clearComposer !== false) userInput.value = '';
     await nextTick();
     if (!aiAssistant.isRequestCurrent(requestLease)) return;
-    scheduleScrollToBottom();
+    // 用户主动发送后，消息已经真正插入 DOM；无论此前是否因上滚暂停跟随，都应让本轮问题进入视口。
+    scheduleScrollToBottom(true);
 
     // 网络分片只负责入队，屏幕按固定绘制帧稳定吐字。这样即使 XHR 一次回调积攒了整段文本，
     // 用户看到的仍是连续打字效果，而不是忽快忽慢的整段跳出。
@@ -1959,11 +1974,7 @@
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
   const handleRecommendationClick = createQuickQuestionDispatcher({
     isBusy: () => isLoading.value,
-    setInput: (value) => {
-      userInput.value = value;
-    },
-    afterInputChange: () => nextTick(),
-    send: sendMessage,
+    send: (question) => sendMessage({ inputText: question }),
   });
 
   // 编辑用户消息：把该条内容回填到输入框并聚焦，不自动发送（让用户改完再发）

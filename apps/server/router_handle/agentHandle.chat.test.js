@@ -285,6 +285,50 @@ describe('agentChat 主链路', () => {
     expect(agentLogInsert[1][16]).not.toContain('你好，我在。');
   });
 
+  it('翻译模式隔离历史与知识助手提示，只向模型发送待翻译文本', async () => {
+    mocks.requestAiStream.mockImplementation(async (messages, options) => {
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toEqual(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('只输出译文'),
+        }),
+      );
+      expect(messages[0].content).not.toContain('轻笺');
+      expect(messages[1]).toEqual({ role: 'user', content: 'Maintainer' });
+      options.onDelta('维护者');
+      return {
+        content: '维护者',
+        leakedToolCall: false,
+        usage: usage(6),
+        usageStatus: 'reported',
+        provider: 'test',
+        model: 'test-model',
+        finishReason: 'stop',
+      };
+    });
+    const req = request({
+      message: 'Maintainer',
+      stream: true,
+      enableTranslation: true,
+      translationConfig: { source: 'auto', target: 'zh' },
+      history: [
+        { role: 'user', content: '帮我查最近 7 天新增的笔记' },
+        { role: 'assistant', content: '正在查询。' },
+      ],
+      contexts: [],
+      attachmentIds: [],
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.selectAgentTools).not.toHaveBeenCalled();
+    expect(mocks.resolveAttachments).not.toHaveBeenCalled();
+    expect(sseEvents(res).find((event) => event.event === 'delta')?.output?.text).toBe('维护者');
+  });
+
   it('长期记忆已全局关闭:即便 memoryMode=active 也不读取、不注入 Prompt、不生成候选', async () => {
     mocks.getActiveAiMemoriesForPrompt.mockResolvedValue([
       {

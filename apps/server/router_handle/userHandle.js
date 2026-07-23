@@ -18,7 +18,13 @@ import nodeMail from '../util/nodemailer.js';
 import crypto from 'crypto';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
-import { groupUserSessions, removeUserSessions, createSession, listUserSessions, removeSession } from '../util/sessionStore.js';
+import {
+  groupUserSessions,
+  removeUserSessions,
+  createSession,
+  listUserSessions,
+  removeSession,
+} from '../util/sessionStore.js';
 import { getClientIp } from '../util/security/requestContext.js';
 import { getIpReputation } from '../util/security/services/ipReputation.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../util/resourceTags.js';
@@ -36,6 +42,7 @@ import { recordServerOperation } from '../util/operationLog.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { exportAiUserData } from '../util/aiUserDataExport.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { seedNewUserCloudFile, seedNewUserWorkspaceData } from '../util/services/newUserSeedService.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -246,31 +253,46 @@ export const submitAppeal = async (req, res) => {
   }
 };
 
-// 注册默认语言:按浏览器 Accept-Language 首选项判断(zh 开头→中文,其余→英文),让老外注册即英文、不必手动切
+// 注册默认语言优先使用前端 X-Lang，缺失时回退浏览器 Accept-Language。
 function detectLangFromReq(req) {
-  const first = String(req.headers['accept-language'] || '')
-    .split(',')[0]
-    .trim()
-    .toLowerCase();
-  return first.startsWith('zh') ? 'zh-CN' : 'en-US';
+  return reqLang(req);
 }
 
 // 注册欢迎通知:全员群发通知只发给存量用户,后期注册的用户收不到历史通知,靠这条兜底给新用户一条起始通知
-function buildWelcomeNotification(lang) {
+function buildWelcomeNotification(lang, samplesReady = true) {
   if (lang === 'en-US') {
     return {
       type: 'welcome',
       title: 'Welcome to Light Note 🎉',
-      content:
-        'Great to have you here! Save bookmarks, jot down notes, upload files, and tie them together with tags — with an AI assistant always on hand. Open the menu on the left and start with your very first item ~',
+      content: samplesReady
+        ? 'Great to have you here! A few editable examples are ready to show how bookmarks, notes, files, and tags work together. Open the menu on the left, make them your own, or delete anything you do not need.'
+        : 'Great to have you here! Save bookmarks, jot down notes, upload files, and connect them with tags. Open the menu on the left and create your first item whenever you are ready.',
     };
   }
   return {
     type: 'welcome',
     title: '欢迎加入轻笺 🎉',
-    content:
-      '很高兴见到你!在这里可以收藏书签、记录笔记、上传文件,并用标签把它们串起来,还有 AI 助手随时帮忙。点开左侧菜单,从第一条资源开始整理吧~',
+    content: samplesReady
+      ? '很高兴见到你！账号里已经准备了少量可编辑、可删除的示例内容，帮助你了解书签、笔记、文件和标签如何配合使用。点开左侧菜单，把它们改成自己的内容吧。'
+      : '很高兴见到你！在这里可以收藏书签、记录笔记、上传文件，并用标签把它们串起来。点开左侧菜单，从第一条内容开始整理吧。',
   };
+}
+
+async function initializeNewUserSamples(userId, req) {
+  const lang = detectLangFromReq(req);
+  let seedResult;
+  try {
+    seedResult = await seedNewUserWorkspaceData({ userId, lang });
+  } catch (error) {
+    console.warn('[register] 示例数据初始化失败 code=%s', stableAgentErrorCode(error));
+    return false;
+  }
+
+  // 云文件包含真实 OBS 对象，异步完成以免网络波动拖慢或阻断注册；对象成功后才写 files 记录。
+  void seedNewUserCloudFile({ userId, lang, folderId: seedResult.folderId }).catch((error) =>
+    console.warn('[register] 示例云文件初始化失败 code=%s', stableAgentErrorCode(error)),
+  );
+  return true;
 }
 
 export const registerUser = async (req, res) => {
@@ -333,8 +355,11 @@ export const registerUser = async (req, res) => {
     }
     const userId = userData.id;
 
+    // 数据库示例在短事务内同步完成，注册响应前即可看到；失败降级为空账号，不反向删除已创建用户。
+    const samplesReady = await initializeNewUserSamples(userId, req);
+
     // 欢迎通知(fire-and-forget:失败绝不影响注册主流程)
-    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req))).catch((e) =>
+    createNotification(userId, buildWelcomeNotification(detectLangFromReq(req), samplesReady)).catch((e) =>
       console.warn('[register] 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
     );
 
@@ -364,7 +389,7 @@ export const registerUser = async (req, res) => {
       }
     }
 
-    // 注册即登录:签发会话,前端直接进应用(新用户从空状态开始,由前端空态引导上手)
+    // 注册即登录:签发会话,前端直接进入已经准备好少量示例内容的工作区
     const userInfo = await queryUserInfoById(userId);
     const sid = await issueLoginSession(req, res, userInfo, Boolean(req.body.rememberMe));
     recordConversionEvent(req, 'register', signupSource, { userId, visitorType: 'user' });
@@ -915,7 +940,7 @@ const getGitHubEmail = async (accessToken, retries = 2) => {
   }
 };
 
-const handleUserDatabaseOperation = async (githubUser, req) => {
+export const handleUserDatabaseOperation = async (githubUser, req) => {
   // 邮箱降级策略：使用GitHub提供的备用邮箱格式
   const safeEmail = normalizeEmail(githubUser.email) || `${githubUser.login}@users.noreply.github.com`;
   // 1. 优先使用github_id查询
@@ -963,12 +988,15 @@ const handleUserDatabaseOperation = async (githubUser, req) => {
   );
   const [result] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
 
+  // 仅 GitHub 首次建号执行；已有 GitHub 账号登录、按邮箱绑定旧账号都不会重复初始化。
+  const samplesReady = await initializeNewUserSamples(githubUserId, req);
+
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
   const ghSignupSource = normalizeConversionSource(req.body?.signupSource); // 前端 GithubCallBack 透传的来源(走白名单归一)
   recordConversionEvent(req, 'register', ghSignupSource, { userId: githubUserId, visitorType: 'user' });
 
   // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
-  createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req))).catch((e) =>
+  createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req), samplesReady)).catch((e) =>
     console.warn('[register] GitHub 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
   );
 
