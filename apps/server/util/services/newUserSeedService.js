@@ -9,6 +9,45 @@ export const NEW_USER_SEED_VERSION = 'v1';
 const DEFAULT_SITE_URL = 'https://boluo66.top';
 const PROJECT_REPOSITORY_URL = 'https://github.com/VeteranBoLuo/light-note';
 
+function svgDataUrl(body) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">${body}</svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+}
+
+const TAG_ICON_URLS = Object.freeze({
+  'getting-started': svgDataUrl(
+    '<defs><linearGradient id="startGradient" x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">' +
+      '<stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#3B82F6"/></linearGradient></defs>' +
+      '<circle cx="12" cy="12" r="10" fill="url(#startGradient)"/>' +
+      '<circle cx="12" cy="12" r="7.2" fill="#FFFFFF" fill-opacity=".16"/>' +
+      '<path d="m16.4 7.6-2.7 6.1-6.1 2.7 2.7-6.1 6.1-2.7Z" fill="#FFFFFF"/>' +
+      '<circle cx="12" cy="12" r="1.35" fill="#C4B5FD"/>',
+  ),
+  'read-later': svgDataUrl(
+    '<defs><linearGradient id="readGradient" x1="5" y1="3" x2="19" y2="21" gradientUnits="userSpaceOnUse">' +
+      '<stop stop-color="#FB7185"/><stop offset="1" stop-color="#F97316"/></linearGradient></defs>' +
+      '<path d="M6.5 4.5A2.5 2.5 0 0 1 9 2h6a2.5 2.5 0 0 1 2.5 2.5V21l-5.5-3.3L6.5 21V4.5Z" fill="url(#readGradient)"/>' +
+      '<path d="m12 5.3.85 1.72 1.9.28-1.37 1.34.32 1.89-1.7-.9-1.7.9.32-1.89L9.25 7.3l1.9-.28L12 5.3Z" fill="#FFFFFF"/>' +
+      '<path d="M9.2 13h5.6" stroke="#FFE4E6" stroke-width="1.5" stroke-linecap="round"/>',
+  ),
+  work: svgDataUrl(
+    '<defs><linearGradient id="workGradient" x1="3" y1="7" x2="21" y2="20" gradientUnits="userSpaceOnUse">' +
+      '<stop stop-color="#38BDF8"/><stop offset="1" stop-color="#0D9488"/></linearGradient></defs>' +
+      '<path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7h-2V5.7a.7.7 0 0 0-.7-.7h-2.6a.7.7 0 0 0-.7.7V7H8Z" fill="#BAE6FD"/>' +
+      '<rect x="2.5" y="6.5" width="19" height="14.5" rx="3" fill="url(#workGradient)"/>' +
+      '<path d="M2.5 11.5h19v2.1a3 3 0 0 1-3 3h-13a3 3 0 0 1-3-3v-2.1Z" fill="#FFFFFF" fill-opacity=".16"/>' +
+      '<rect x="10" y="11" width="4" height="3.5" rx="1" fill="#FFFFFF"/>',
+  ),
+  ideas: svgDataUrl(
+    '<defs><linearGradient id="ideaGradient" x1="7" y1="5" x2="17" y2="18" gradientUnits="userSpaceOnUse">' +
+      '<stop stop-color="#FDE047"/><stop offset="1" stop-color="#FB7185"/></linearGradient></defs>' +
+      '<path d="M12 3.1a7.1 7.1 0 0 0-4.4 12.67c.75.6 1.18 1.35 1.28 2.23h6.24c.1-.88.53-1.63 1.28-2.23A7.1 7.1 0 0 0 12 3.1Z" fill="url(#ideaGradient)"/>' +
+      '<path d="m12 7.1.85 2.05 2.05.85-2.05.85L12 12.9l-.85-2.05L9.1 10l2.05-.85L12 7.1Z" fill="#FFFFFF"/>' +
+      '<path d="M9.2 19h5.6M10.2 21.2h3.6" stroke="#8B5CF6" stroke-width="1.7" stroke-linecap="round"/>' +
+      '<path d="M4.2 5.3 3 4.1M19.8 5.3 21 4.1M12 1V.2" stroke="#F472B6" stroke-width="1.5" stroke-linecap="round"/>',
+  ),
+});
+
 function seedError(code, message) {
   const error = new Error(`${code}: ${message}`);
   error.code = code;
@@ -46,10 +85,10 @@ function buildChineseSeed(siteUrl) {
   return {
     lang: 'zh-CN',
     tags: [
-      { key: 'getting-started', name: '轻笺入门', sort: 0 },
-      { key: 'read-later', name: '稍后阅读', sort: 1 },
-      { key: 'work', name: '工作', sort: 2 },
-      { key: 'ideas', name: '灵感', sort: 3 },
+      { key: 'getting-started', name: '轻笺入门', sort: 0, iconUrl: TAG_ICON_URLS['getting-started'] },
+      { key: 'read-later', name: '稍后阅读', sort: 1, iconUrl: TAG_ICON_URLS['read-later'] },
+      { key: 'work', name: '工作', sort: 2, iconUrl: TAG_ICON_URLS.work },
+      { key: 'ideas', name: '灵感', sort: 3, iconUrl: TAG_ICON_URLS.ideas },
     ],
     bookmarks: [
       {
@@ -104,14 +143,31 @@ function buildChineseSeed(siteUrl) {
     ],
     cloud: {
       folderName: '轻笺示例',
-      fileName: '轻笺使用说明.md',
-      fileType: 'text/markdown',
-      tagKeys: ['getting-started'],
-      content:
-        '# 轻笺使用说明\n\n这是一份可以正常预览、下载、重命名和删除的示例文件。\n\n' +
-        '## 四类内容\n\n- **书签**：收藏网页和资料入口\n- **笔记**：记录想法和整理知识\n' +
-        '- **云空间**：保存文件并跨设备访问\n- **标签**：把不同类型的内容关联起来\n\n' +
-        '## 试一试\n\n1. 给这个文件换一个名字。\n2. 为它增加或更换标签。\n3. 不再需要时直接删除。\n',
+      files: [
+        {
+          key: 'guide',
+          fileName: '轻笺使用说明.md',
+          fileType: 'text/markdown',
+          folder: 'sample',
+          tagKeys: ['getting-started'],
+          content:
+            '# 轻笺使用说明\n\n这是一份可以正常预览、下载、重命名和删除的示例文件。\n\n' +
+            '## 四类内容\n\n- **书签**：收藏网页和资料入口\n- **笔记**：记录想法和整理知识\n' +
+            '- **云空间**：保存文件并跨设备访问\n- **标签**：把不同类型的内容关联起来\n\n' +
+            '## 试一试\n\n1. 给这个文件换一个名字。\n2. 为它增加或更换标签。\n3. 不再需要时直接删除。\n',
+        },
+        {
+          key: 'quick-capture',
+          fileName: '待整理清单.md',
+          fileType: 'text/markdown',
+          folder: null,
+          tagKeys: ['read-later'],
+          content:
+            '# 待整理清单\n\n这份文件放在云空间根目录，不属于“轻笺示例”文件夹。\n\n' +
+            '你可以把暂时不知道如何分类的文件先放在这里，之后再移动到合适的文件夹。\n\n' +
+            '- [ ] 整理一份最近下载的资料\n- [ ] 给文件加上标签\n- [ ] 建立自己的第一个文件夹\n',
+        },
+      ],
     },
   };
 }
@@ -120,10 +176,10 @@ function buildEnglishSeed(siteUrl) {
   return {
     lang: 'en-US',
     tags: [
-      { key: 'getting-started', name: 'Getting Started', sort: 0 },
-      { key: 'read-later', name: 'Read Later', sort: 1 },
-      { key: 'work', name: 'Work', sort: 2 },
-      { key: 'ideas', name: 'Ideas', sort: 3 },
+      { key: 'getting-started', name: 'Getting Started', sort: 0, iconUrl: TAG_ICON_URLS['getting-started'] },
+      { key: 'read-later', name: 'Read Later', sort: 1, iconUrl: TAG_ICON_URLS['read-later'] },
+      { key: 'work', name: 'Work', sort: 2, iconUrl: TAG_ICON_URLS.work },
+      { key: 'ideas', name: 'Ideas', sort: 3, iconUrl: TAG_ICON_URLS.ideas },
     ],
     bookmarks: [
       {
@@ -178,14 +234,31 @@ function buildEnglishSeed(siteUrl) {
     ],
     cloud: {
       folderName: 'Light Note Examples',
-      fileName: 'Getting Started.md',
-      fileType: 'text/markdown',
-      tagKeys: ['getting-started'],
-      content:
-        '# Getting Started with Light Note\n\nThis is a real example file that you can preview, download, rename, and delete.\n\n' +
-        '## Four kinds of content\n\n- **Bookmarks** save useful pages\n- **Notes** capture and develop ideas\n' +
-        '- **Cloud storage** keeps files available across devices\n- **Tags** connect all of them\n\n' +
-        '## Try it\n\n1. Rename this file.\n2. Add or change its tags.\n3. Delete it whenever you no longer need it.\n',
+      files: [
+        {
+          key: 'guide',
+          fileName: 'Getting Started.md',
+          fileType: 'text/markdown',
+          folder: 'sample',
+          tagKeys: ['getting-started'],
+          content:
+            '# Getting Started with Light Note\n\nThis is a real example file that you can preview, download, rename, and delete.\n\n' +
+            '## Four kinds of content\n\n- **Bookmarks** save useful pages\n- **Notes** capture and develop ideas\n' +
+            '- **Cloud storage** keeps files available across devices\n- **Tags** connect all of them\n\n' +
+            '## Try it\n\n1. Rename this file.\n2. Add or change its tags.\n3. Delete it whenever you no longer need it.\n',
+        },
+        {
+          key: 'quick-capture',
+          fileName: 'To Organize.md',
+          fileType: 'text/markdown',
+          folder: null,
+          tagKeys: ['read-later'],
+          content:
+            '# To Organize\n\nThis file lives at the root of cloud storage rather than inside the “Light Note Examples” folder.\n\n' +
+            'Keep files here when you have not decided how to organize them, then move them into a folder later.\n\n' +
+            '- [ ] Organize a recent download\n- [ ] Add a tag to a file\n- [ ] Create your first folder\n',
+        },
+      ],
     },
   };
 }
@@ -253,6 +326,7 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
           name: tag.name,
           userId,
           sort: tag.sort,
+          iconUrl: tag.iconUrl,
           delFlag: 0,
         }),
       ]);
@@ -339,8 +413,10 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
   }
 }
 
-function cloudSeedObjectKey(userId) {
-  return `files/${userId}/system/onboarding-${NEW_USER_SEED_VERSION}.md`;
+function cloudSeedObjectKey(userId, fileKey) {
+  // 首份文件沿用已发布的确定性 key，避免升级后给已初始化账号重复创建说明文件。
+  const suffix = fileKey === 'guide' ? '' : `-${fileKey}`;
+  return `files/${userId}/system/onboarding-${NEW_USER_SEED_VERSION}${suffix}.md`;
 }
 
 async function findExistingCloudSeed(db, userId, objectKey) {
@@ -374,15 +450,29 @@ export async function seedNewUserCloudFile({ userId, lang = 'zh-CN', siteUrl, fo
 
   const content = buildNewUserSeedContent({ lang, siteUrl });
   const ids = buildSeedIds(userId, content);
-  const objectKey = cloudSeedObjectKey(userId);
-  const existingBeforeUpload = await findExistingCloudSeed(pool, userId, objectKey);
-  if (existingBeforeUpload) {
-    return { created: false, id: Number(existingBeforeUpload.id), folderId: existingBeforeUpload.folder_id };
+  const cloudFiles = [];
+
+  for (const file of content.cloud.files) {
+    const objectKey = cloudSeedObjectKey(userId, file.key);
+    const existing = await findExistingCloudSeed(pool, userId, objectKey);
+    const fileBody = Buffer.from(file.content, 'utf8');
+    cloudFiles.push({ ...file, objectKey, fileBody, existing });
+
+    if (!existing) {
+      // OBS 成功后才写文件元数据，绝不让云空间出现无法预览或下载的“假文件”。
+      await putObjectBodyToObs(objectKey, fileBody, file.fileType);
+    }
   }
 
-  const fileBody = Buffer.from(content.cloud.content, 'utf8');
-  // OBS 成功后才写文件元数据，绝不让云空间出现无法预览或下载的“假文件”。
-  await putObjectBodyToObs(objectKey, fileBody, content.cloud.fileType);
+  if (cloudFiles.every((file) => file.existing)) {
+    const files = cloudFiles.map((file) => ({
+      key: file.key,
+      created: false,
+      id: Number(file.existing.id),
+      folderId: file.existing.folder_id,
+    }));
+    return { created: false, id: files[0].id, folderId: files[0].folderId, files };
+  }
 
   const connection = await pool.getConnection();
   let transactionStarted = false;
@@ -392,54 +482,77 @@ export async function seedNewUserCloudFile({ userId, lang = 'zh-CN', siteUrl, fo
     const [userRows] = await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
     if (!userRows.length) throw seedError('NEW_USER_CLOUD_SEED_USER_NOT_FOUND', '新用户不存在');
 
-    // 上传前后各查一次：并发重复调用最多覆盖同一份确定性对象，不会插入两条文件记录。
-    const existingAfterUpload = await findExistingCloudSeed(connection, userId, objectKey);
-    if (existingAfterUpload) {
-      await connection.commit();
-      return {
-        created: false,
-        id: Number(existingAfterUpload.id),
-        folderId: existingAfterUpload.folder_id,
-      };
-    }
+    const results = [];
+    for (const file of cloudFiles) {
+      // 上传前后各查一次：并发重复调用最多覆盖同一份确定性对象，不会插入两条文件记录。
+      const existingAfterUpload = await findExistingCloudSeed(connection, userId, file.objectKey);
+      if (existingAfterUpload) {
+        results.push({
+          key: file.key,
+          created: false,
+          id: Number(existingAfterUpload.id),
+          folderId: existingAfterUpload.folder_id,
+        });
+        continue;
+      }
 
-    const resolvedFolderId = await resolveSeedFolder(connection, {
-      userId,
-      folderId,
-      folderName: content.cloud.folderName,
-    });
-    const [insertResult] = await connection.query('INSERT INTO files SET ?', [
-      {
-        create_by: userId,
-        file_name: content.cloud.fileName,
-        file_type: content.cloud.fileType,
-        file_size: fileBody.length,
-        directory: `${bucketBaseUrl}/files/${userId}/`,
-        folder_id: resolvedFolderId,
-        del_flag: 0,
-        obs_key: objectKey,
-        share_token: crypto.randomBytes(16).toString('hex'),
-      },
-    ]);
-    const fileId = Number(insertResult.insertId);
+      const resolvedFolderId =
+        file.folder === 'sample'
+          ? await resolveSeedFolder(connection, {
+              userId,
+              folderId,
+              folderName: content.cloud.folderName,
+            })
+          : null;
+      const [insertResult] = await connection.query('INSERT INTO files SET ?', [
+        {
+          create_by: userId,
+          file_name: file.fileName,
+          file_type: file.fileType,
+          file_size: file.fileBody.length,
+          directory: `${bucketBaseUrl}/files/${userId}/`,
+          folder_id: resolvedFolderId,
+          del_flag: 0,
+          obs_key: file.objectKey,
+          share_token: crypto.randomBytes(16).toString('hex'),
+        },
+      ]);
+      const fileId = Number(insertResult.insertId);
 
-    const gettingStartedTagId = ids.tags['getting-started'];
-    const [tagRows] = await connection.query(
-      'SELECT id FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0 LIMIT 1',
-      [gettingStartedTagId, userId],
-    );
-    if (tagRows.length) {
-      await insertResourceTagRelations(connection, {
-        tagIds: [gettingStartedTagId],
-        resourceType: RESOURCE_TYPE.FILE,
-        resourceId: String(fileId),
-        userId,
-        source: 'onboarding',
+      const tagIds = [];
+      for (const tagKey of file.tagKeys) {
+        const tagId = ids.tags[tagKey];
+        const [tagRows] = await connection.query(
+          'SELECT id FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0 LIMIT 1',
+          [tagId, userId],
+        );
+        if (tagRows.length) tagIds.push(tagId);
+      }
+      if (tagIds.length) {
+        await insertResourceTagRelations(connection, {
+          tagIds,
+          resourceType: RESOURCE_TYPE.FILE,
+          resourceId: String(fileId),
+          userId,
+          source: 'onboarding',
+        });
+      }
+
+      results.push({
+        key: file.key,
+        created: true,
+        id: fileId,
+        folderId: resolvedFolderId,
       });
     }
 
     await connection.commit();
-    return { created: true, id: fileId, folderId: resolvedFolderId };
+    return {
+      created: results.some((file) => file.created),
+      id: results[0].id,
+      folderId: results[0].folderId,
+      files: results,
+    };
   } catch (error) {
     if (transactionStarted) {
       try {
