@@ -4,10 +4,11 @@ import { resolveAgentActionIntent } from './actionIntentPolicy.js';
 
 const DEFAULT_MAX_TOOLS = 10;
 const HARD_MAX_TOOLS = 12;
+const SEMANTIC_PLANNER_MAX_TOOLS = 96;
 const ACTION_SCORE = 800;
 
-// 路由规则只描述“什么时候值得把工具暴露给模型”，不承载权限或执行策略。
-// 新工具必须补入对应 group / action，避免注册成功却因为未知路由规则永远拿不到 schema。
+// GROUPS 仅供旧路由兼容与独立调用方使用。Agent 主链使用 semanticPlanner=true，
+// 在权限过滤后向模型提供完整能力目录，不再用关键词决定模型能看到哪些业务能力。
 const GROUPS = {
   generic: ['search_content', 'search_knowledge_base'],
   fallback: ['query_bookmarks', 'query_notes'],
@@ -19,15 +20,9 @@ const GROUPS = {
   tag: ['query_tags'],
   trash: ['query_trash'],
   url: ['read_url'],
-  growth: [
-    'get_growth',
-    'query_points_log',
-    'get_recap',
-    'query_weekly_challenge',
-    'get_lottery_status',
-    'get_shop_status',
-    'get_insights',
-  ],
+  growth: ['get_growth', 'query_points_log', 'query_weekly_challenge', 'get_lottery_status', 'get_shop_status'],
+  recap: ['get_recap'],
+  insights: ['get_insights'],
   account: ['query_notifications', 'query_my_devices', 'query_feedback', 'get_user_info', 'get_ai_quota'],
   admin: [
     'query_users',
@@ -65,7 +60,9 @@ const DOMAIN_INTENT_RULES = [
   { pattern: /标签|分类|tag/i, groups: ['tag'] },
   { pattern: /回收站|恢复|删除的|trash|restore/i, groups: ['trash'] },
   { pattern: /https?:\/\/|www\./i, groups: ['url'] },
-  { pattern: /等级|经验|积分|成长|抽奖|商店|周挑战|回顾|洞察|level|points/i, groups: ['growth'] },
+  { pattern: /等级|经验|积分|成长|抽奖|商店|周挑战|level|points/i, groups: ['growth'] },
+  { pattern: /回顾|复盘|很久没|久未|那年今日|recap|revisit/i, groups: ['recap'] },
+  { pattern: /分析|洞察|概览|insight|analy[sz]e/i, groups: ['insights'] },
   { pattern: /通知|设备|反馈|账号|个人资料|额度|配额|notification|device|feedback|quota/i, groups: ['account'] },
   { pattern: /用户|活跃/i, groups: ['adminUsers'] },
   { pattern: /日志|审计/i, groups: ['adminLogs'] },
@@ -143,9 +140,27 @@ function addDependencies(scores) {
  */
 export function selectAgentTools(
   registry,
-  { message, contextTypes = [], userRole, allowWrite = true, allowVisitorWrite = false, maxTools = DEFAULT_MAX_TOOLS },
+  {
+    message,
+    contextTypes = [],
+    userRole,
+    allowWrite = true,
+    allowVisitorWrite = false,
+    maxTools = DEFAULT_MAX_TOOLS,
+    semanticPlanner = false,
+  },
 ) {
   const eligibleTools = getEligibleTools(registry, { userRole, allowWrite, allowVisitorWrite });
+  if (semanticPlanner) {
+    if (eligibleTools.length > SEMANTIC_PLANNER_MAX_TOOLS) {
+      throw new Error(
+        `Agent 可用工具数量 ${eligibleTools.length} 超过 Semantic Planner 安全上限 ${SEMANTIC_PLANNER_MAX_TOOLS}`,
+      );
+    }
+    // 语义规划模式不再根据用户文本关键词预先裁剪工具。AI 能看到当前身份真正可用的完整能力，
+    // 然后由结构化 Intent Envelope 选择能力；稳定排序只用于让 Prompt 和测试可复现。
+    return eligibleTools.sort((left, right) => left.name.localeCompare(right.name));
+  }
   const scores = new Map();
   const text = String(message || '');
   const actionIntent = resolveAgentActionIntent({ message: text, contextTypes });

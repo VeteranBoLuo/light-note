@@ -6,6 +6,8 @@ const tools = [
   { name: 'search_knowledge_base' },
   { name: 'get_user_info' },
   { name: 'get_ai_quota' },
+  { name: 'get_recap' },
+  { name: 'get_insights' },
   { name: 'query_bookmarks' },
   { name: 'create_bookmark', isWrite: true },
   { name: 'query_link_health' },
@@ -44,12 +46,58 @@ describe('selectAgentTools', () => {
     expect(names.length).toBeLessThanOrEqual(8);
   });
 
+  it.each([
+    ['帮我回顾很久没看的收藏', 'get_recap'],
+    ['帮我分析下我的收藏', 'get_insights'],
+  ])('%s 路由到只读洞察工具且不暴露创建书签', (message, expectedTool) => {
+    const selected = selectAgentTools(registry, {
+      message,
+      userRole: 'user',
+      maxTools: 12,
+    });
+    expect(selected.map((tool) => tool.name)).toContain(expectedTool);
+    expect(selected.map((tool) => tool.name)).toContain('query_bookmarks');
+    expect(selected.map((tool) => tool.name)).not.toContain('create_bookmark');
+    expect(matchAgentWriteActionToolNames(message)).toEqual([]);
+  });
+
   it('非 root 永远拿不到 root 工具 schema', () => {
     const selected = selectAgentTools(registry, {
       message: '查询用户和安全事件',
       userRole: 'user',
     });
     expect(selected.some((tool) => tool.requireRoot)).toBe(false);
+  });
+
+  it('Semantic Planner 模式不按关键词预裁剪，稳定提供当前身份全部可用工具', () => {
+    const first = selectAgentTools(registry, {
+      message: '帮我回顾很久没看的收藏',
+      userRole: 'user',
+      semanticPlanner: true,
+    });
+    const second = selectAgentTools(registry, {
+      message: '把待办标记为完成',
+      userRole: 'user',
+      semanticPlanner: true,
+    });
+
+    expect(first.map((tool) => tool.name)).toEqual(second.map((tool) => tool.name));
+    expect(first.map((tool) => tool.name)).toEqual(
+      [...first.map((tool) => tool.name)].sort((left, right) => left.localeCompare(right)),
+    );
+    expect(first.some((tool) => tool.requireRoot)).toBe(false);
+  });
+
+  it('Semantic Planner 模式仍在模型前过滤 visitor 写工具', () => {
+    const selected = selectAgentTools(registry, {
+      message: '创建笔记',
+      userRole: 'visitor',
+      allowWrite: true,
+      allowVisitorWrite: false,
+      semanticPlanner: true,
+    });
+
+    expect(selected.some((tool) => tool.isWrite)).toBe(false);
   });
 
   it('root 的后台意图可获得相应只读工具，但仍受上限约束', () => {

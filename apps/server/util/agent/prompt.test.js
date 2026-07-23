@@ -23,4 +23,37 @@ describe('buildPlannerPrompt', () => {
     expect(prompt).not.toContain('- **query_notes**');
     expect(prompt).not.toContain('- **query_users**');
   });
+
+  it('语义规划模式要求 Intent Envelope，并明确查询与修改边界', () => {
+    const semanticCatalog = [
+      {
+        id: 'read.query_notes',
+        effect: 'read',
+        status: 'enabled',
+        toolNames: ['query_notes'],
+        description: '查询笔记',
+      },
+      {
+        id: 'note.delete',
+        effect: 'write',
+        status: 'planned',
+        toolNames: [],
+        description: '删除笔记',
+      },
+    ];
+    const prompt = buildPlannerPrompt(tools, 'user', {
+      semanticCatalog,
+      semanticCatalogText: '- read.query_notes｜read｜enabled｜查询笔记；工具=query_notes',
+    });
+
+    expect(prompt).toContain('结构化语义计划（强制）');
+    expect(prompt).toContain('submit_agent_plan');
+    expect(prompt).toContain('不能只看到');
+    expect(prompt).toContain('询问已有状态、历史记录、统计、回顾');
+    expect(prompt).toContain('planned、forbidden、unavailable 或 unknown');
+    expect(prompt).toContain('dependsOn 只能引用');
+    expect(prompt).toContain('“第一条”在用户未指定排序时使用 sort=smart、limit=1');
+    expect(prompt).toContain('“最后一条”等无法由当前排序与分页可靠确定的说法必须先澄清');
+    expect(prompt).not.toContain('不需要工具时只输出 DIRECT_REPLY');
+  });
 });

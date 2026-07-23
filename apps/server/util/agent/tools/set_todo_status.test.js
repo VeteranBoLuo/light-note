@@ -32,6 +32,8 @@ describe('set_todo_status 工具', () => {
       keyword: '发票',
       status: 'completed',
     });
+    expect(normalizeSetTodoStatusArgs({ todoId: '[todo:todo-2]', status: 'completed' }).todoId).toBe('todo-2');
+    expect(normalizeSetTodoStatusArgs({ todo_id: 'todo:todo-3', status: 'completed' }).todoId).toBe('todo-3');
     expect(
       normalizeSetTodoStatusArgs({
         todoId: 'todo-1',

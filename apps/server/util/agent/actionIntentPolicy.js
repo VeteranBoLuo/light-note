@@ -8,9 +8,9 @@ const MANAGED_RESOURCE =
   /(?:笔记|文档|书签|收藏|网址|链接|附件|文件|文件夹|云空间|标签|回收站|待办|任务|提醒|通知|待整理|收集箱|知识库|帮助中心|账号|账户|密码|邮箱|登录设备|权限|角色|用户|管理员|积分|经验|等级|签到|抽奖|奖励|额度|note|document|bookmark|favorite|url|link|attachment|file|folder|cloud|tag|trash|todo|task|reminder|notification|inbox|knowledge\s+base|help\s+center|account|password|email|device|permission|role|user|admin|points|experience|level|check-in|lottery|reward|quota)/i;
 const DEICTIC_TARGET = /(?:这个|那个|它|这些|那些|当前项|刚才的|选中的|this|that|it|these|those|selected)/i;
 const CHINESE_READ_QUERY_VERB =
-  /(?:查询|查找|查一下|查查|查看|看看|看一下|列出|列一下|罗列|展示|显示|统计|汇总|盘点|检索|搜索|找出|找一下|读取|浏览|告诉我|列给我)/i;
+  /(?:查询|查找|查一下|查查|查看|看看|看一下|列出|列一下|罗列|展示|显示|统计|汇总|总结|盘点|检索|搜索|找出|找一下|读取|浏览|回顾|复盘|分析|洞察|概览|对比|比较|推荐|告诉我|列给我)/i;
 const ENGLISH_READ_QUERY_VERB =
-  /\b(?:show(?:\s+me)?|list|find|search|view|display|read|browse|count|summari[sz]e|tell\s+me)\b/i;
+  /\b(?:show(?:\s+me)?|list|find|search|view|display|read|browse|review|revisit|recap|count|summari[sz]e|analy[sz]e|compare|recommend|tell\s+me)\b/i;
 const CHINESE_READ_RESULT_MARKER =
   /(?:有哪些|有什么|有多少|多少(?:个|条|项|篇|份)?|哪(?:些|个|条|项|篇|份)|分别是|是什么|列表|清单|记录|历史|详情|情况|进度)/i;
 const ENGLISH_READ_RESULT_MARKER = /\b(?:which|what|how\s+many)\b/i;
@@ -24,6 +24,23 @@ const DIRECT_MUTATION_PREFIX =
   /^(?:请|麻烦|帮我|替我|给我|为我|现在|立即|直接|执行|去)?\s*(?:把|将)?\s*(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|整理|设置|更改|删除(?!的)|删掉|移除(?!的)|清除|清空|销毁|注销|恢复|还原|完成(?!的)|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)/i;
 const ENGLISH_DIRECT_MUTATION_PREFIX =
   /^(?:please\s+|now\s+|immediately\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
+const CHINESE_OBJECT_MUTATION =
+  /(?:把|将)[^，。！？,.!?]{0,64}(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|整理|设置|更改|删除|删掉|移除|清除|清空|销毁|注销|恢复|还原|完成|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)/i;
+const CHINESE_RESOURCE_THEN_MUTATION =
+  /(?:笔记|文档|书签|收藏|网址|链接|附件|文件|文件夹|云空间|标签|回收站|待办|任务|提醒|通知|待整理|收集箱|知识库|帮助中心|账号|账户|密码|邮箱|登录设备|权限|角色|用户|管理员|积分|经验|等级|签到|抽奖|奖励|额度)[^，。！？,.!?]{0,32}(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|整理|设置|更改|删除|删掉|移除|清除|清空|销毁|注销|恢复|还原|完成|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)/i;
+const CHINESE_DESIRE_MUTATION =
+  /^(?:我)?(?:要|想|希望|需要|打算)\s*(?:请|让|叫|帮我|替我|为我)?\s*(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|整理|设置|更改|删除|删掉|移除|清除|清空|销毁|注销|恢复|还原|完成|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)/i;
+const CHINESE_POLITE_MUTATION =
+  /^(?:能否|能不能|可不可以|是否可以|可以)(?:请)?(?:帮我|替我|为我)\s*(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|整理|设置|更改|删除|删掉|移除|清除|清空|销毁|注销|恢复|还原|完成|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)/i;
+const ENGLISH_POLITE_MUTATION =
+  /^(?:can|could|would)\s+you\s+(?:please\s+)?(?:help\s+me\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
+const ENGLISH_DESIRE_MUTATION =
+  /^i\s+(?:want|need|would\s+like)\s+(?:you\s+to\s+|to\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
+const LEADING_MUTATION_CONNECTOR = /^(?:(?:并且|然后|接着|随后|之后|后再|同时|再|并)|(?:and\s+then|then|and))\s*/i;
+const GENERAL_CHINESE_HOW_TO_PREFIX =
+  /^(?:怎么|如何|怎样|从哪里|在哪里|在哪|为什么|什么是|是否支持|支不支持|能否|能不能|可不可以|是否可以|可以在轻笺里)/i;
+const GENERAL_ENGLISH_HOW_TO_PREFIX =
+  /^(?:how\s+(?:do|can)\s+i|where\s+(?:can|do)\s+i|does\s+.+\s+support|what\s+is)\b/i;
 
 const ACTION_HOW_TO_QUESTION = [
   /^(?:怎么|如何|怎样|从哪里|在哪里|在哪|为什么|什么是|是否支持|支不支持|能否|能不能|可不可以|是否可以|可以在轻笺里).{0,80}(?:删除|修改|创建|恢复|移动|设置|完成|上传|保存)/i,
@@ -52,18 +69,60 @@ function normalizeContextTypes(contextTypes) {
   ];
 }
 
+function extractTrailingMutationClause(text) {
+  const match = QUERY_THEN_MUTATION.exec(text);
+  if (!match || !Number.isInteger(match.index)) return '';
+  return text.slice(match.index).replace(LEADING_MUTATION_CONNECTOR, '').trim();
+}
+
+function isExplicitMutationSpeechAct(text, contextTypes = []) {
+  if (!text || !ACTION_OPERATION.test(text)) return false;
+  if (
+    DIRECT_MUTATION_PREFIX.test(text) ||
+    ENGLISH_DIRECT_MUTATION_PREFIX.test(text) ||
+    CHINESE_OBJECT_MUTATION.test(text) ||
+    CHINESE_DESIRE_MUTATION.test(text) ||
+    CHINESE_POLITE_MUTATION.test(text) ||
+    ENGLISH_POLITE_MUTATION.test(text) ||
+    ENGLISH_DESIRE_MUTATION.test(text)
+  ) {
+    return true;
+  }
+  if (COMMAND_MARKER.test(text) && DEICTIC_TARGET.test(text)) return true;
+  // “给这个书签添加标签”“笔记标题修改为周报”等中文常把目标放在动作前；
+  // 只读筛选与查询信号已在调用此函数前优先处理，这里才把剩余的“资源 → 动作”结构视为修改。
+  if (CHINESE_RESOURCE_THEN_MUTATION.test(text)) return true;
+  return normalizeContextTypes(contextTypes).length > 0 && COMMAND_MARKER.test(text);
+}
+
+function isHowToQuestion(text) {
+  if (ACTION_HOW_TO_QUESTION.some((pattern) => pattern.test(text))) return true;
+  if (GENERAL_CHINESE_HOW_TO_PREFIX.test(text)) {
+    return ACTION_OPERATION.test(text) || MANAGED_RESOURCE.test(text);
+  }
+  if (GENERAL_ENGLISH_HOW_TO_PREFIX.test(text)) {
+    return ACTION_OPERATION.test(text) || MANAGED_RESOURCE.test(text);
+  }
+  return false;
+}
+
 function isReadOnlyActionSpeechAct(text) {
   if (!text) return false;
-  if (ACTION_HOW_TO_QUESTION.some((pattern) => pattern.test(text))) return true;
+  const trailingMutationClause = extractTrailingMutationClause(text);
+  if (trailingMutationClause) return false;
+  const politeDelegatedMutation = CHINESE_POLITE_MUTATION.test(text) || ENGLISH_POLITE_MUTATION.test(text);
+  if (politeDelegatedMutation) return false;
+  if (isHowToQuestion(text)) return true;
   if (STATUS_QUESTION.test(text)) return true;
-  if (QUERY_THEN_MUTATION.test(text)) return false;
+  const delegatedMutation =
+    CHINESE_OBJECT_MUTATION.test(text) || CHINESE_DESIRE_MUTATION.test(text) || ENGLISH_DESIRE_MUTATION.test(text);
+  if (delegatedMutation) return false;
   const hasManagedResource = MANAGED_RESOURCE.test(text);
   const hasReadQuerySignal =
     CHINESE_READ_QUERY_VERB.test(text) ||
     ENGLISH_READ_QUERY_VERB.test(text) ||
     CHINESE_READ_RESULT_MARKER.test(text) ||
     ENGLISH_READ_RESULT_MARKER.test(text);
-  if (hasManagedResource && hasReadQuerySignal) return true;
   if (
     hasManagedResource &&
     (STATE_FILTER_RESOURCE.test(text) || ENGLISH_STATE_FILTER_RESOURCE.test(text)) &&
@@ -73,8 +132,18 @@ function isReadOnlyActionSpeechAct(text) {
   ) {
     return true;
   }
+  if (DIRECT_MUTATION_PREFIX.test(text) || ENGLISH_DIRECT_MUTATION_PREFIX.test(text)) return false;
+  if (hasManagedResource && hasReadQuerySignal) return true;
   if (COMMAND_MARKER.test(text)) return false;
   return PAST_ACTION_STATEMENT.test(text);
+}
+
+function capabilityMatchesMutationClause(capability, clause) {
+  if (!clause) return true;
+  return (
+    capability.actionPatterns.some((pattern) => pattern.test(clause)) ||
+    capability.operationPatterns.some((pattern) => pattern.test(clause))
+  );
 }
 
 function capabilityPriority(status) {
@@ -85,9 +154,10 @@ function capabilityPriority(status) {
 }
 
 /**
- * 在 Planner 之前把自然语言划分为普通查询或数据动作。
- * 任意已知能力、通用“动作 + 资源”组合，或“命令标记 + 动作 + 指代目标”都会进入动作通道；
- * 未注册的动作失败关闭，绝不落入自由 Final Reply。
+ * 旧式高召回动作传感器。
+ *
+ * Semantic Planner 已负责理解用户真正的查询/修改意图和能力选择；这里不再决定工具，
+ * 只在模型未提交有效 Intent Envelope 或最终文本疑似越过执行协议时提供失败关闭信号。
  */
 export function resolveAgentActionIntent({ message, contextTypes = [] } = {}) {
   const text = String(message || '').trim();
@@ -99,9 +169,14 @@ export function resolveAgentActionIntent({ message, contextTypes = [] } = {}) {
     return { kind: 'query', resolution: 'none', capabilities: [], toolNames: [], reason: 'read_only_speech_act' };
   }
 
-  const matches = AGENT_ACTION_CAPABILITIES.filter((capability) =>
-    matchesAgentCapability(capability, text, normalizedContextTypes),
-  );
+  const trailingMutationClause = extractTrailingMutationClause(text);
+  const explicitMutation = isExplicitMutationSpeechAct(text, normalizedContextTypes) || Boolean(trailingMutationClause);
+  const matches = AGENT_ACTION_CAPABILITIES.filter((capability) => {
+    if (!matchesAgentCapability(capability, text, normalizedContextTypes)) return false;
+    const narrowActionMatch = capability.actionPatterns.some((pattern) => pattern.test(text));
+    if (!narrowActionMatch && !explicitMutation) return false;
+    return capabilityMatchesMutationClause(capability, trailingMutationClause);
+  });
   if (matches.length) {
     const highestPriority = Math.max(...matches.map((item) => capabilityPriority(item.status)));
     const selected = matches.filter((item) => capabilityPriority(item.status) === highestPriority);
@@ -125,7 +200,7 @@ export function resolveAgentActionIntent({ message, contextTypes = [] } = {}) {
   const hasOperation = ACTION_OPERATION.test(text);
   const hasResource = MANAGED_RESOURCE.test(text) || normalizedContextTypes.length > 0;
   const hasPointingCommand = COMMAND_MARKER.test(text) && DEICTIC_TARGET.test(text);
-  if (hasOperation && (hasResource || hasPointingCommand)) {
+  if (hasOperation && explicitMutation && (hasResource || hasPointingCommand)) {
     return {
       kind: 'action',
       resolution: 'unknown_mutation',

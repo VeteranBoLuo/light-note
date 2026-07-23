@@ -24,14 +24,23 @@ import {
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import { selectAgentTools } from '../util/agent/toolRouter.js';
-import { getAgentCapabilityByToolName } from '../util/agent/capabilityRegistry.js';
-import { buildAgentActionPolicyMessage, resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
-import { parseExplicitTodoStatusAction } from '../util/agent/todoIntent.js';
+import { buildAgentSemanticCapabilityCatalog, getAgentCapabilityByToolName } from '../util/agent/capabilityRegistry.js';
+import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
+import {
+  adjudicateSemanticPlan,
+  buildSemanticPlanToolDefinition,
+  buildSemanticPolicyMessage,
+  formatSemanticCapabilityCatalog,
+  parseSemanticPlannerResponse,
+  SEMANTIC_PLAN_TOOL_NAME,
+} from '../util/agent/semanticPlanner.js';
+import { guardUnverifiedExecutionClaim } from '../util/agent/executionClaimGuard.js';
+import { enforceToolDependencyBindings, normalizeToolDependencyRefs } from '../util/agent/dependencyGuard.js';
 import { actionControlMessage, parseAgentActionControl } from '../util/agent/actionControl.js';
 import {
+  DEPENDENCY_ROUND_INSTRUCTION,
   FOLLOW_UP_ROUND_INSTRUCTION,
-  constrainSecondRoundToolCalls,
-  selectSecondRoundTools,
+  isInternalPlanningInstruction,
   shouldContinueToolPlanning,
 } from '../util/agent/secondRound.js';
 import {
@@ -145,16 +154,14 @@ const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
 
 function normalizeTranslationConfig(config = {}) {
   const source = Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.source) ? config.source : 'auto';
-  const target = config?.target !== 'auto' && Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.target)
-    ? config.target
-    : 'zh';
+  const target =
+    config?.target !== 'auto' && Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.target) ? config.target : 'zh';
   return { source, target };
 }
 
 function buildTranslationFinalMessages(message, config) {
   const { source, target } = normalizeTranslationConfig(config);
-  const sourceInstruction =
-    source === 'auto' ? '自动识别源语言' : `源语言为${TRANSLATION_LANGUAGE_NAMES[source]}`;
+  const sourceInstruction = source === 'auto' ? '自动识别源语言' : `源语言为${TRANSLATION_LANGUAGE_NAMES[source]}`;
   return [
     {
       role: 'system',
@@ -164,32 +171,6 @@ function buildTranslationFinalMessages(message, config) {
     },
     { role: 'user', content: String(message || '') },
   ];
-}
-
-/**
- * 写入确认是服务端安全边界，不能因为 Planner 偶发选择直接回答就被绕开。
- * 仅对“带引号的单条待办 + 明确状态”的窄语句补齐 set_todo_status 调用；
- * 解析结果仍会走工具策略、归属/唯一性校验和一次性确认令牌，绝不直接执行写入。
- */
-function prependExplicitTodoStatusFallback(plannerResponse, { message, selectedTools, requestId }) {
-  const args = parseExplicitTodoStatusAction(message);
-  if (!args || !selectedTools.some((tool) => tool.name === 'set_todo_status' && tool.isWrite)) {
-    return plannerResponse;
-  }
-  const calls = Array.isArray(plannerResponse?.toolCalls) ? plannerResponse.toolCalls : [];
-  if (calls.some((call) => call?.function?.name === 'set_todo_status')) return plannerResponse;
-  return {
-    ...plannerResponse,
-    // 放在第一位，保证即使模型已产生过多无关调用，也不会在单轮安全上限处丢失写入确认。
-    toolCalls: [
-      {
-        id: `todo-status-fallback-${requestId}`,
-        type: 'function',
-        function: { name: 'set_todo_status', arguments: JSON.stringify(args) },
-      },
-      ...calls,
-    ],
-  };
 }
 
 const PUBLIC_TOOL_ERROR_CODES = new Set([
@@ -238,6 +219,9 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TODO_TARGET_REQUIRED',
   'TOOL_ARGUMENTS_INVALID',
   'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY',
+  'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
+  'TOOL_DEPENDENCY_TARGET_REQUIRED',
+  'TOOL_DEPENDENCY_TARGET_MISMATCH',
   'TOOL_CONFIRMATION_REQUIRED',
   'TOOL_CONFIRMATION_FORBIDDEN',
   'TOOL_DIRECT_ACTION_NOT_ALLOWED',
@@ -259,6 +243,15 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'CANDIDATE_CONFIRMATION_REQUIRED',
   'USER_REQUIRED',
 ]);
+const TERMINAL_DEPENDENCY_ERROR_CODES = new Set([
+  'TOOL_ARGUMENTS_INVALID',
+  'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY',
+  'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
+  'TOOL_DEPENDENCY_TARGET_REQUIRED',
+  'TOOL_DEPENDENCY_TARGET_MISMATCH',
+  'TOOL_NOT_ALLOWED',
+  'TOOL_FORBIDDEN',
+]);
 
 const AGENT_INTERACTIONS_CAPABILITY = 'agent_interaction_v1';
 
@@ -271,6 +264,11 @@ function supportsAgentInteractions(rawCapabilities) {
 
 function publicToolError(error, fallback = '操作失败，请稍后重试。') {
   if (error?.code && PUBLIC_TOOL_ERROR_CODES.has(error.code)) {
+    // 参数路径与模型臆造字段属于内部诊断信息（例如 args.completed），对用户没有修复价值，
+    // 也会让产品看起来像直接暴露了函数协议。保留稳定错误码供日志定位，界面只显示场景化提示。
+    if (['TOOL_ARGUMENTS_INVALID', 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY'].includes(error.code)) {
+      return { code: error.code, message: String(fallback).slice(0, 300) };
+    }
     const rawMessage = String(error.message || fallback);
     const technicalPrefix = `${error.code}:`;
     const message = rawMessage.startsWith(technicalPrefix)
@@ -374,6 +372,16 @@ async function executeTool(name, args, ctx) {
     }
     // dataSummary 比 transform 更精简，给 lastTool 用
     const dataSummary = typeof tool.summarize === 'function' ? tool.summarize(raw, args) : summary.slice(0, 200);
+    let dependencyRefs = [];
+    if (typeof tool.getDependencyRefs === 'function') {
+      try {
+        dependencyRefs = normalizeToolDependencyRefs(tool.getDependencyRefs(raw, args));
+      } catch (dependencyError) {
+        // 依赖元数据只用于约束后续写操作，不能反过来让一次已成功的纯读取失效。
+        // 元数据异常时保留查询结果、清空引用；若后续存在写入，它会因没有权威目标而失败关闭。
+        console.error('[Agent] dependency refs failed name=%s code=%s', name, stableAgentErrorCode(dependencyError));
+      }
+    }
     return {
       status: 'success',
       summary,
@@ -381,6 +389,7 @@ async function executeTool(name, args, ctx) {
       params: args,
       sources: resolveToolSources(tool, raw, args, ctx),
       nextActions: Array.isArray(raw?.nextActions) ? raw.nextActions.slice(0, 4) : [],
+      dependencyRefs,
     };
   } catch (err) {
     if (err?.name === 'AbortError' || err?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw err;
@@ -562,7 +571,49 @@ function unverifiedWriteMessage({ locale, usedTools, writeToolNames }) {
     .map((item) => String(item.summary || '').trim())
     .filter(Boolean);
   if (failures.length) return failures.join(english ? '\n' : '\n');
-  return buildAgentActionPolicyMessage({ resolution: 'unverified' }, english ? 'en-US' : 'zh-CN');
+  return buildSemanticPolicyMessage({ resolution: 'unverified' }, english ? 'en-US' : 'zh-CN');
+}
+
+function publicSemanticPolicy(outcome) {
+  if (!outcome) return null;
+  return {
+    resolution: String(outcome.resolution || 'unverified'),
+    capabilityIds: [
+      ...new Set((outcome.capabilities || []).map((capability) => String(capability?.id || '').trim()).filter(Boolean)),
+    ],
+    executed: false,
+  };
+}
+
+function legacyFailurePolicy(intent, catalog) {
+  if (intent?.kind !== 'action') return null;
+  const capabilities = (intent.capabilities || [])
+    .map((capability) => catalog.find((entry) => entry.id === capability.id))
+    .filter(Boolean);
+  const resolution =
+    intent.resolution === 'enabled'
+      ? 'unverified'
+      : ['planned', 'forbidden', 'unknown_mutation'].includes(intent.resolution)
+        ? intent.resolution
+        : 'semantic_conflict';
+  return {
+    state: 'blocked',
+    resolution,
+    capabilities,
+    toolCalls: [],
+    writeToolNames: [],
+  };
+}
+
+function normalizePlannerToolCallResponse(response, stage = 'planner') {
+  if (response?.toolCalls?.length || !looksLikeLeakedToolCall(response?.content)) return response;
+  const leaked = parseLeakedToolCalls(response.content);
+  if (leaked.length) {
+    console.warn('[Agent] %s 工具调用泄漏进 content，已恢复为标准调用', stage);
+    return { ...response, toolCalls: leaked, content: '' };
+  }
+  console.warn('[Agent] %s 检测到无法解析的工具调用泄漏，已失败关闭', stage);
+  return { ...response, toolCalls: [], content: '' };
 }
 
 async function prepareRetriedAction({ session, identity, req, requestId }) {
@@ -1170,91 +1221,15 @@ export async function agentChat(req, res) {
       return;
     }
 
-    const actionIntent = enableTranslation
+    const requestContextTypes = [
+      ...(Array.isArray(contexts) ? contexts : []).map((item) => String(item?.type || '')).filter(Boolean),
+      ...(Array.isArray(attachmentIds) && attachmentIds.length ? ['file'] : []),
+    ];
+    // 旧规则不再决定查询、动作或具体能力，只在 Semantic Planner 缺失结构化计划时
+    // 作为高召回风险传感器使用；命中后也只能失败关闭，不能据此选择并执行工具。
+    const legacyIntentSuspicion = enableTranslation
       ? { kind: 'none', resolution: 'none', capabilities: [], toolNames: [], reason: 'translation' }
-      : resolveAgentActionIntent({
-          message,
-          contextTypes: [
-            ...(Array.isArray(contexts) ? contexts : []).map((item) => String(item?.type || '')).filter(Boolean),
-            ...(Array.isArray(attachmentIds) && attachmentIds.length ? ['file'] : []),
-          ],
-        });
-    const blockedActionIntent = ['planned', 'forbidden', 'unknown_mutation'].includes(actionIntent.resolution);
-    if (blockedActionIntent) {
-      const response = buildAgentActionPolicyMessage(actionIntent, locale);
-      const capabilityIds = actionIntent.capabilities.map((item) => item.id);
-      trace.route = 'action_policy';
-      trace.taskType = 'agent_action_policy';
-      trace.usageStatus = 'reported';
-      trace.plannerMs = 0;
-      trace.finalMs = 0;
-      trace.selectedTools = [];
-      trace.actionResolution = actionIntent.resolution;
-      trace.capabilityIds = capabilityIds;
-
-      if (stream) {
-        sseLifecycle = buildSseLifecycle(getSessionId(session));
-        sseLifecycle.start();
-        sendMemoryInfluence();
-        sseLifecycle.stage('action_policy', {
-          resolution: actionIntent.resolution,
-          capabilityIds,
-          executed: false,
-        });
-        sseLifecycle.send('delta', {
-          output: { text: response, session_id: getSessionId(session) },
-        });
-        responseGenerationFinished = true;
-        await sseLifecycle.complete({
-          snapshotAnswer: response,
-          answer: response,
-          output: {
-            session_id: getSessionId(session),
-            action_policy: {
-              resolution: actionIntent.resolution,
-              capability_ids: capabilityIds,
-              executed: false,
-            },
-          },
-          usage: totalUsage,
-          usageStatus: 'reported',
-          followUpAvailable: false,
-        });
-      } else {
-        res.send(
-          resultData({
-            response,
-            sessionId: getSessionId(session),
-            confirmations: [],
-            interactions: [],
-            sources: [],
-            evidence: [],
-            usage: totalUsage,
-            requestId,
-            followUpAvailable: false,
-            actionPolicy: {
-              resolution: actionIntent.resolution,
-              capabilityIds,
-              executed: false,
-            },
-          }),
-        );
-      }
-      recordTurn(session, message, response, []);
-      logAgentRequest({
-        userId: logUserId,
-        userAlias: logUserAlias,
-        question: message,
-        toolsUsed: [],
-        iterations: 0,
-        totalUsage,
-        durationMs: Date.now() - requestStartedAt,
-        status: `action_${actionIntent.resolution}`,
-        trace,
-      });
-      res.removeListener('close', onClientClose);
-      return;
-    }
+      : resolveAgentActionIntent({ message, contextTypes: requestContextTypes });
 
     // 附件和资源归属先于 AI 额度占位校验：无权、过期或仍在解析的附件应尽早失败，
     // 不能因为尚未发生模型调用就消耗用户额度。
@@ -1370,34 +1345,38 @@ export async function agentChat(req, res) {
     });
     trace.route = directRoute.direct ? directRoute.reason : 'planner';
     if (directRoute.direct) trace.taskType = 'agent_direct';
-    const writeIntentToolNames = new Set(
-      actionIntent.resolution === 'enabled'
-        ? actionIntent.toolNames.filter((name) => toolRegistry.get(name)?.isWrite === true)
-        : [],
-    );
+    let writeIntentToolNames = new Set();
+    let semanticPolicy = null;
+    let semanticPlan = null;
 
     let selectedTools =
       enableTranslation || directRoute.direct
         ? []
         : selectAgentTools(toolRegistry, {
             message,
-            contextTypes: [
-              ...(Array.isArray(contexts) ? contexts : []).map((item) => String(item?.type || '')).filter(Boolean),
-              ...(Array.isArray(attachmentIds) && attachmentIds.length ? ['file'] : []),
-            ],
+            contextTypes: requestContextTypes,
             userRole,
             allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
             allowVisitorWrite: req.adminContext?.mode === 'maintain',
-            maxTools: Array.isArray(attachmentIds) && attachmentIds.length ? 12 : 10,
+            semanticPlanner: true,
           });
     if (contentScope.mode === 'selected') {
       selectedTools = selectedTools.filter((tool) => !BROAD_PERSONAL_CONTENT_TOOLS.has(tool.name));
     }
     if (!contentScope.externalWeb) selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
     trace.selectedTools = selectedTools.map((tool) => tool.name);
+    const semanticCatalog =
+      enableTranslation || directRoute.direct
+        ? []
+        : buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
+            availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
+          });
 
     // 构建 system prompt（动态：根据角色决定工具提示详略）
-    const promptBase = buildPlannerPrompt(selectedTools, userRole);
+    const promptBase = buildPlannerPrompt(selectedTools, userRole, {
+      semanticCatalog,
+      semanticCatalogText: formatSemanticCapabilityCatalog(semanticCatalog),
+    });
     const scopePrompt =
       contentScope.mode === 'selected'
         ? `本轮个人知识检索被服务端严格限制在用户显式选择的 ${contentScope.resourceIds.length} 个资源内；不得尝试读取范围外的笔记、书签或文件。`
@@ -1468,8 +1447,12 @@ export async function agentChat(req, res) {
       sseLifecycle.stage('planning', { route: trace.route });
     }
 
-    // 工具定义
-    const toolDefs = getToolDefinitions(selectedTools);
+    // Semantic Planner 与既有工具规划共用一次模型请求。Provider 只调用唯一的元计划工具，
+    // 真实工具名与参数内嵌在计划中，再由服务端展开、求交和校验；不依赖并行调用多个工具。
+    const semanticPlanningEnabled = semanticCatalog.length > 0;
+    const toolDefs = semanticPlanningEnabled
+      ? [buildSemanticPlanToolDefinition(semanticCatalog, selectedTools)]
+      : getToolDefinitions(selectedTools);
     const selectedToolNames = new Set(selectedTools.map((tool) => tool.name));
 
     /** @type {Array<{ name: string, status: string, params?: object, error?: string, dataSummary?: string }>} */
@@ -1480,7 +1463,220 @@ export async function agentChat(req, res) {
     const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
     let finalContent = '';
     let apiCalls = 0;
+    let remainingToolResultBudget = 24000;
     // 累计所有 DeepSeek 调用的 token 用量(totalUsage 已在 try 外声明,供 finally 回写额度)
+
+    const executePlannedToolCalls = async ({
+      toolCalls: rawToolCalls,
+      allowedToolNames,
+      round,
+      finishReason,
+      dependencyRefsByCallId = new Map(),
+    }) => {
+      const toolCalls = (Array.isArray(rawToolCalls) ? rawToolCalls : []).slice(0, 8);
+      if (!toolCalls.length) return [];
+
+      // assistant 声明和实际执行必须使用完全相同的一批调用，确保每个 tool_call
+      // 都有对应结果，并让后续语义轮只基于服务端真实执行结果继续。
+      messages.push({ role: 'assistant', content: null, tool_calls: toolCalls });
+      const toolStartedAt = Date.now();
+      sseLifecycle?.stage('tool_execution', { round });
+      const roundConfirmations = [];
+      const roundInteractions = [];
+      const results = await mapWithConcurrency(
+        toolCalls,
+        runtimeLimits.toolConcurrency,
+        async (tc) => {
+          const parsedArgs = parseToolCallArguments(tc);
+          let args = applyAgentContentScope(tc.function.name, parsedArgs.args, contentScope);
+          let tool = toolRegistry.get(tc.function.name);
+          let result;
+          let pendingInteraction = null;
+          let pendingAction = null;
+          let retryArgs = null;
+          let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
+
+          if (!argumentError && dependencyRefsByCallId.has(tc.id)) {
+            try {
+              args = enforceToolDependencyBindings(tool, args, dependencyRefsByCallId.get(tc.id));
+            } catch (error) {
+              const publicError = publicToolError(
+                error,
+                tool?.isWrite ? '无法核验操作目标，因此没有生成操作确认。' : '无法核验依赖查询目标，因此没有继续读取。',
+              );
+              argumentError = { code: publicError.code, message: publicError.message };
+            }
+          }
+
+          if (!argumentError) {
+            try {
+              const policy = await enforceToolPolicy({
+                registry: toolRegistry,
+                toolName: tc.function.name,
+                args,
+                context: toolRuntimeContext(req, identity, { agentContentScope: contentScope }),
+                allowedToolNames,
+                phase: 'plan',
+              });
+              tool = policy.tool;
+              args = policy.args;
+              retryArgs = policy.retryArgs;
+            } catch (error) {
+              try {
+                if (!canUseInteractions || error instanceof AgentToolPolicyError) throw error;
+                const created = await createToolResolutionInteraction({
+                  error,
+                  toolName: tc.function.name,
+                  fallbackArgs: args,
+                  ownerKey: identity.ownerKey,
+                  sessionId: getSessionId(session),
+                  context: confirmationContext(req, identity),
+                });
+                if (created?.interaction) {
+                  pendingInteraction = created.interaction;
+                  interactions.push(created.interaction);
+                  roundInteractions.push(created.interaction);
+                  args = error.normalizedToolArgs || args;
+                } else {
+                  const publicError = publicToolError(error, 'AI 生成的操作参数无效，请重新发起操作。');
+                  argumentError = { code: publicError.code, message: publicError.message };
+                }
+              } catch (interactionError) {
+                const publicError = publicToolError(
+                  interactionError,
+                  interactionError instanceof AgentToolPolicyError
+                    ? 'AI 生成的操作参数无效，请重新发起操作。'
+                    : '暂时无法准备选择项，请稍后重试。',
+                );
+                argumentError = { code: publicError.code, message: publicError.message };
+              }
+            }
+          }
+
+          if (pendingInteraction) {
+            result = {
+              status: 'interaction_required',
+              summary: pendingInteraction.description || '需要由用户选择下一步处理方式；选择本身不会立即写入数据。',
+              dataSummary: '等待用户选择',
+              params: args,
+            };
+          } else if (argumentError) {
+            console.warn('[Agent] 工具参数无效，已阻止执行', {
+              requestId,
+              tool: tc.function.name,
+              finishReason,
+              argumentLength: String(tc.function.arguments || '').length,
+              code: argumentError.code,
+            });
+            result = {
+              status: 'error',
+              summary: argumentError.message,
+              error: argumentError.code,
+              params: args,
+            };
+          } else if (!tool || !allowedToolNames.has(tc.function.name)) {
+            result = {
+              status: 'error',
+              summary: '该工具不在本轮允许范围内，已拒绝执行。',
+              error: 'TOOL_NOT_ALLOWED',
+              params: args,
+            };
+          } else if (tool.isWrite) {
+            try {
+              const confirmation = await createPendingWriteConfirmation({
+                tool,
+                toolName: tc.function.name,
+                args,
+                identity,
+                req,
+                session,
+              });
+              confirmations.push(confirmation);
+              roundConfirmations.push(confirmation);
+              pendingAction = pendingActionRecord(confirmation, retryArgs || {});
+              result = {
+                status: 'confirmation_required',
+                summary: `该操作会修改数据，尚未执行。请用户确认后再执行工具 ${tc.function.name}。`,
+                dataSummary: '等待用户确认',
+                params: args,
+              };
+            } catch (error) {
+              const publicError = publicToolError(error, '参数无效或预览生成失败，请检查后重试。');
+              result = {
+                status: 'error',
+                summary: `无法生成安全的操作预览：${publicError.message}`,
+                error: publicError.code === 'TOOL_EXECUTION_FAILED' ? 'TOOL_PREVIEW_FAILED' : publicError.code,
+                params: args,
+              };
+            }
+          } else {
+            if (stream) sseLifecycle?.send('tool_start', { tool: tc.function.name, round });
+            result = await executeTool(
+              tc.function.name,
+              args,
+              toolRuntimeContext(req, identity, {
+                signal: agentAbortController.signal,
+                allowedToolNames,
+                suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+                question: message,
+                agentContentScope: contentScope,
+              }),
+            );
+          }
+
+          if (Array.isArray(result.sources)) sources.push(...result.sources);
+          usedTools.push({
+            name: tc.function.name,
+            status: result.status,
+            params: args,
+            error: result.error,
+            dataSummary: result.dataSummary,
+            summary: result.summary,
+            round,
+          });
+          if (stream) {
+            sseLifecycle?.send('tool_result', {
+              tool: tc.function.name,
+              status: result.status,
+              round,
+            });
+          }
+          return { toolCallId: tc.id, toolName: tc.function.name, result, pendingAction };
+        },
+        agentAbortController.signal,
+      );
+      trace.toolMs += Date.now() - toolStartedAt;
+
+      const pendingActions = results.map((item) => item.pendingAction).filter(Boolean);
+      if (pendingActions.length) {
+        await recordPendingActionBatch(session, { batchId: requestId, actions: pendingActions });
+      }
+      if (stream) {
+        for (const confirmation of roundConfirmations) {
+          sseLifecycle?.send('tool_confirmation', {
+            confirmation,
+            output: { session_id: getSessionId(session) },
+          });
+        }
+        for (const interaction of roundInteractions) {
+          sseLifecycle?.send('interaction_required', {
+            interaction,
+            output: { session_id: getSessionId(session) },
+          });
+        }
+      }
+
+      for (const item of results) {
+        const summary = String(item.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
+        remainingToolResultBudget -= summary.length;
+        messages.push({
+          role: 'tool',
+          tool_call_id: item.toolCallId,
+          content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
+        });
+      }
+      return results;
+    };
 
     // ---- 第1步：Planner（带工具定义，让 LLM 决定是否调工具） ----
     const plannerStartedAt = Date.now();
@@ -1494,6 +1690,9 @@ export async function agentChat(req, res) {
     if (toolDefs.length) {
       plannerResponse = await requestAi(messages, {
         tools: toolDefs,
+        ...(semanticPlanningEnabled
+          ? { toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } } }
+          : {}),
         signal: agentAbortController.signal,
         maxTokens: getPlannerMaxTokens({
           message,
@@ -1515,239 +1714,180 @@ export async function agentChat(req, res) {
 
     // DeepSeek 偶发把工具调用标记吐进 content。优先本地解析，解析失败直接给友好提示；
     // 不额外重试 Planner，异常恢复只发生在最终回答阶段。
-    if (!plannerResponse.toolCalls?.length && looksLikeLeakedToolCall(plannerResponse.content)) {
-      const leaked = parseLeakedToolCalls(plannerResponse.content);
-      if (leaked.length) {
-        console.warn('[Agent] 工具调用泄漏进 content，已解析为标准调用直接执行');
-        plannerResponse = { ...plannerResponse, toolCalls: leaked, content: '' };
-      } else {
-        console.warn('[Agent] 检测到无法解析的工具调用泄漏，已阻止原文输出');
+    plannerResponse = normalizePlannerToolCallResponse(plannerResponse, 'planner_round_1');
+
+    if (semanticPlanningEnabled) {
+      const parsedSemantic = parseSemanticPlannerResponse(plannerResponse, semanticCatalog, {
+        toolCallIdPrefix: 'semantic-plan-round-1',
+      });
+      semanticPlan = parsedSemantic.plan;
+      const adjudicated = adjudicateSemanticPlan({
+        plan: semanticPlan,
+        toolCalls: parsedSemantic.toolCalls,
+        catalog: semanticCatalog,
+      });
+      plannerResponse = { ...plannerResponse, toolCalls: adjudicated.toolCalls };
+      writeIntentToolNames = new Set(adjudicated.writeToolNames);
+      trace.semanticPlanSource = parsedSemantic.source;
+      trace.semanticPlanInvalid = parsedSemantic.invalidPlan;
+      trace.semanticRequestClass = semanticPlan?.requestClass || null;
+      trace.semanticConfidence = semanticPlan?.confidence || null;
+      trace.semanticCapabilityIds = (semanticPlan?.intents || []).map((intent) => intent.capabilityId);
+
+      if (!semanticPlan) {
+        const fallbackCapabilities = (legacyIntentSuspicion.capabilities || [])
+          .map((capability) => semanticCatalog.find((entry) => entry.id === capability.id))
+          .filter(Boolean);
+        semanticPolicy = {
+          state: 'blocked',
+          resolution:
+            legacyIntentSuspicion.kind === 'action' && !['none', 'enabled'].includes(legacyIntentSuspicion.resolution)
+              ? legacyIntentSuspicion.resolution
+              : 'semantic_plan_missing',
+          capabilities: fallbackCapabilities,
+        };
+        plannerResponse = { ...plannerResponse, toolCalls: [] };
+      } else if (adjudicated.state === 'clarification') {
+        semanticPolicy = adjudicated;
+        plannerResponse = { ...plannerResponse, toolCalls: [] };
+      } else if (adjudicated.state === 'blocked') {
+        // AI 仍是正常意图判断的主来源；只有它提交的计划自身矛盾或缺少动作能力时，
+        // 才允许旧传感器把结果进一步收敛为 planned / forbidden / unverified。
+        // 这条降级路径永远不选择工具、不执行写入，只让失败说明更准确。
+        semanticPolicy = ['semantic_conflict', 'unknown_mutation'].includes(adjudicated.resolution)
+          ? legacyFailurePolicy(legacyIntentSuspicion, semanticCatalog) || adjudicated
+          : adjudicated;
+        plannerResponse = { ...plannerResponse, toolCalls: [] };
       }
     }
-
-    // 模型遗漏工具调用时，明确的单条待办状态请求仍必须进入确认链；否则会出现
-    // “未写入却回答已完成”的错误。这里只补齐待确认调用，不改变工具的最终执行权限。
-    plannerResponse = prependExplicitTodoStatusFallback(plannerResponse, {
-      message,
-      selectedTools,
-      requestId,
-    });
 
     // Planner 只决定是否调用工具。普通问答也必须进入 Final Reply，
     // 否则同步 Planner 的完整 content 只能在 SSE 末尾一次性发出，前端看不到真实流式增量。
     if (plannerResponse.toolCalls?.length) {
-      // 兜底限制单轮调用总数，并由 mapWithConcurrency 把实际并发压到最多 4，
-      // 防止重复查询打满 DB 连接池。assistant 消息与实际执行必须用同一批——
-      // OpenAI 协议要求每个 tool_call 都有对应的 tool 结果,否则下一轮请求会报错。
-      const MAX_TOOL_CALLS_PER_ROUND = 8;
-      const toolCalls = plannerResponse.toolCalls.slice(0, MAX_TOOL_CALLS_PER_ROUND);
-
-      // 追加 assistant 消息（含 tool_calls）
-      messages.push({
-        role: 'assistant',
-        content: null,
-        tool_calls: toolCalls,
+      const results = await executePlannedToolCalls({
+        toolCalls: plannerResponse.toolCalls,
+        allowedToolNames: selectedToolNames,
+        round: 1,
+        finishReason: plannerResponse.finishReason,
       });
 
-      // 并行执行所有工具
-      const toolStartedAt = Date.now();
-      sseLifecycle?.stage('tool_execution', { round: 1 });
-      const results = await mapWithConcurrency(
-        toolCalls,
-        runtimeLimits.toolConcurrency,
-        async (tc) => {
-          const parsedArgs = parseToolCallArguments(tc);
-          let args = applyAgentContentScope(tc.function.name, parsedArgs.args, contentScope);
-          let tool = toolRegistry.get(tc.function.name);
-          let result;
-          let pendingInteraction = null;
-          let pendingAction = null;
-          let retryArgs = null;
-          let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
-          if (!argumentError) {
-            try {
-              const policy = await enforceToolPolicy({
-                registry: toolRegistry,
-                toolName: tc.function.name,
-                args,
-                context: toolRuntimeContext(req, identity, { agentContentScope: contentScope }),
-                allowedToolNames: selectedToolNames,
-                phase: 'plan',
-              });
-              tool = policy.tool;
-              args = policy.args;
-              retryArgs = policy.retryArgs;
-            } catch (error) {
-              try {
-                if (!canUseInteractions || error instanceof AgentToolPolicyError) throw error;
-                const created = await createToolResolutionInteraction({
-                  error,
-                  toolName: tc.function.name,
-                  fallbackArgs: args,
-                  ownerKey: identity.ownerKey,
-                  sessionId: getSessionId(session),
-                  context: confirmationContext(req, identity),
-                });
-                if (created?.interaction) {
-                  pendingInteraction = created.interaction;
-                  interactions.push(created.interaction);
-                  args = error.normalizedToolArgs || args;
-                } else {
-                  const publicError = publicToolError(error, 'AI 生成的操作参数无效，请重新发起操作。');
-                  argumentError = { code: publicError.code, message: publicError.message };
-                }
-              } catch (interactionError) {
-                const publicError = publicToolError(interactionError, '暂时无法准备选择项，请稍后重试。');
-                argumentError = { code: publicError.code, message: publicError.message };
-              }
-            }
-          }
-          if (pendingInteraction) {
-            result = {
-              status: 'interaction_required',
-              summary: pendingInteraction.description || '需要由用户选择下一步处理方式；选择本身不会立即写入数据。',
-              dataSummary: '等待用户选择',
-              params: args,
-            };
-          } else if (argumentError) {
-            console.warn('[Agent] 工具参数无效，已阻止执行', {
-              requestId,
-              tool: tc.function.name,
-              finishReason: plannerResponse.finishReason,
-              argumentLength: String(tc.function.arguments || '').length,
-              code: argumentError.code,
-            });
-            result = {
-              status: 'error',
-              summary: argumentError.message,
-              error: argumentError.code,
-              params: args,
-            };
-          } else if (!tool || !selectedToolNames.has(tc.function.name)) {
-            result = {
-              status: 'error',
-              summary: '该工具不在本轮允许范围内，已拒绝执行。',
-              error: 'TOOL_NOT_ALLOWED',
-              params: args,
-            };
-          } else if (tool.isWrite) {
-            try {
-              const confirmation = await createPendingWriteConfirmation({
-                tool,
-                toolName: tc.function.name,
-                args,
-                identity,
-                req,
-                session,
-              });
-              confirmations.push(confirmation);
-              pendingAction = pendingActionRecord(confirmation, retryArgs || {});
-              result = {
-                status: 'confirmation_required',
-                summary: `该操作会修改数据，尚未执行。请用户确认后再执行工具 ${tc.function.name}。`,
-                dataSummary: '等待用户确认',
-                params: args,
-              };
-            } catch (error) {
-              const publicError = publicToolError(error, '参数无效或预览生成失败，请检查后重试。');
-              result = {
-                status: 'error',
-                summary: `无法生成安全的操作预览：${publicError.message}`,
-                error: publicError.code === 'TOOL_EXECUTION_FAILED' ? 'TOOL_PREVIEW_FAILED' : publicError.code,
-                params: args,
-              };
-            }
-          } else {
-            if (stream) sseLifecycle?.send('tool_start', { tool: tc.function.name });
-            result = await executeTool(
-              tc.function.name,
-              args,
-              toolRuntimeContext(req, identity, {
-                signal: agentAbortController.signal,
-                allowedToolNames: selectedToolNames,
-                suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
-                question: message,
-                agentContentScope: contentScope,
-              }),
-            );
-          }
-          if (Array.isArray(result.sources)) sources.push(...result.sources);
-          usedTools.push({
-            name: tc.function.name,
-            status: result.status,
-            params: args,
-            error: result.error,
-            dataSummary: result.dataSummary,
-            summary: result.summary,
-          });
-          if (stream) sseLifecycle?.send('tool_result', { tool: tc.function.name, status: result.status });
-          return { toolCallId: tc.id, result, pendingAction };
-        },
-        agentAbortController.signal,
-      );
-      trace.toolMs = Date.now() - toolStartedAt;
-      const pendingActions = results.map((item) => item.pendingAction).filter(Boolean);
-      if (pendingActions.length) {
-        await recordPendingActionBatch(session, { batchId: requestId, actions: pendingActions });
-      }
-
-      if (stream && confirmations.length) {
-        for (const confirmation of confirmations) {
-          sseLifecycle?.send('tool_confirmation', {
-            confirmation,
-            output: { session_id: getSessionId(session) },
-          });
-        }
-      }
-      if (stream && interactions.length) {
-        for (const interaction of interactions) {
-          sseLifecycle?.send('interaction_required', {
-            interaction,
-            output: { session_id: getSessionId(session) },
-          });
-        }
-      }
-
-      // 追加 tool 结果消息
-      // 允许“结构化正文 → 图片分析”两类结果同时进入上下文；仍设置总上限，避免多轮工具挤爆模型窗口。
-      let remainingToolResultBudget = 24000;
-      for (const r of results) {
-        const summary = String(r.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
-        remainingToolResultBudget -= summary.length;
-        messages.push({
-          role: 'tool',
-          tool_call_id: r.toolCallId,
-          content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
-        });
-      }
-
-      // 工具链采用有界多轮：上一轮失败/空结果，或明确声明还有可选后续能力时，
-      // 让模型基于真实结果决定是否继续。后续轮只允许本轮已授权的只读工具，最多 3 轮，
-      // 防止无限循环、越权扩展和无意义 OCR。
-      const followUpTools = selectSecondRoundTools(selectedTools);
-      const followUpToolNames = new Set(followUpTools.map((tool) => tool.name));
-      const followUpEnabled = process.env.AI_SECOND_ROUND_ENABLED !== 'false';
+      // 工具链采用有界语义多轮。依赖任务只开放原始 Intent DAG 中已满足前置条件的
+      // 下一层能力；普通查询恢复仍只开放已授权的只读工具。所有轮次都使用同一个
+      // submit_agent_plan 协议，写工具永远只生成确认，不在 Agent 请求内直接执行。
+      // 依赖轮属于用户原始请求的核心执行路径，不能被“查询失败恢复”开关关闭。
+      // AI_SECOND_ROUND_ENABLED 仅控制可选的只读恢复轮。
+      const recoveryRoundsEnabled = process.env.AI_SECOND_ROUND_ENABLED !== 'false';
       const configuredMaxRounds = Number(process.env.AI_MAX_TOOL_ROUNDS || 3);
-      const maxToolRounds = Math.max(1, Math.min(3, Number.isFinite(configuredMaxRounds) ? configuredMaxRounds : 3));
+      const configuredRoundLimit = Math.max(
+        1,
+        Math.min(3, Number.isFinite(configuredMaxRounds) ? configuredMaxRounds : 3),
+      );
+      const dependencyDepths = [];
+      for (const intent of semanticPlan?.intents || []) {
+        dependencyDepths.push(1 + Math.max(0, ...intent.dependsOn.map((index) => dependencyDepths[index] || 0)));
+      }
+      const requiredDependencyRounds = Math.max(1, ...dependencyDepths);
+      const maxToolRounds = Math.min(3, Math.max(configuredRoundLimit, requiredDependencyRounds));
       let previousRoundResults = results;
-      for (
-        let round = 2;
-        followUpEnabled &&
-        !deadline.softExpired &&
-        round <= maxToolRounds &&
-        followUpTools.length > 0 &&
-        shouldContinueToolPlanning(previousRoundResults, [...confirmations, ...interactions]);
-        round += 1
-      ) {
+      let attemptedDeferredWrite = false;
+      const completedCapabilityIds = new Set();
+      const dependencyRefsByCapabilityId = new Map();
+      const unresolvedIntentIndexes = new Set(
+        (semanticPlan?.intents || [])
+          .map((intent, index) => ({ intent, index }))
+          .filter(({ intent }) => intent.dependsOn.length > 0)
+          .map(({ index }) => index),
+      );
+      const recordSuccessfulCapabilityResults = (roundResults, roundCatalog) => {
+        for (const item of roundResults) {
+          if (item.result?.status !== 'success') continue;
+          const capabilityId = roundCatalog.find((entry) => entry.toolNames?.includes(item.toolName))?.id;
+          if (!capabilityId) continue;
+          completedCapabilityIds.add(capabilityId);
+          const existingRefs = dependencyRefsByCapabilityId.get(capabilityId) || [];
+          dependencyRefsByCapabilityId.set(
+            capabilityId,
+            normalizeToolDependencyRefs([...existingRefs, ...(item.result?.dependencyRefs || [])]),
+          );
+          for (const index of [...unresolvedIntentIndexes]) {
+            if (semanticPlan.intents[index]?.capabilityId === capabilityId) unresolvedIntentIndexes.delete(index);
+          }
+        }
+      };
+      recordSuccessfulCapabilityResults(results, semanticCatalog);
+      const readyDeferredCapabilityIds = () => [
+        ...new Set(
+          [...unresolvedIntentIndexes]
+            .filter((index) =>
+              semanticPlan.intents[index].dependsOn.every((dependencyIndex) =>
+                completedCapabilityIds.has(semanticPlan.intents[dependencyIndex]?.capabilityId),
+              ),
+            )
+            .map((index) => semanticPlan.intents[index].capabilityId),
+        ),
+      ];
+
+      for (let round = 2; !deadline.softExpired && round <= maxToolRounds; round += 1) {
+        // 已生成的确认卡没有执行任何写入，不应阻断同一原始计划中其余依赖链继续解析；
+        // 否则“创建笔记并完成第一条待办”只会静默留下前半个动作。需要用户选择的
+        // interaction 才会暂停，因为选择结果可能改变后续目标。
+        if (interactions.length) break;
+        const deferredCapabilityIds = readyDeferredCapabilityIds();
+        const dependencyRound = deferredCapabilityIds.length > 0;
+        const recoveryRound =
+          !dependencyRound &&
+          recoveryRoundsEnabled &&
+          shouldContinueToolPlanning(previousRoundResults, [...confirmations, ...interactions]);
+        if (!dependencyRound && !recoveryRound) break;
+
+        const followUpCatalog = semanticCatalog.filter((entry) => {
+          if (entry.status !== 'enabled') return false;
+          if (dependencyRound) return deferredCapabilityIds.includes(entry.id);
+          return entry.effect === 'read';
+        });
+        const followUpToolNameSet = new Set(followUpCatalog.flatMap((entry) => entry.toolNames || []));
+        const followUpTools = selectedTools.filter((tool) => followUpToolNameSet.has(tool.name));
+        const followUpToolNames = new Set(followUpTools.map((tool) => tool.name));
+        if (!followUpTools.length || !followUpCatalog.length) break;
+
         sseLifecycle?.stage('planning', { round });
-        messages.push({ role: 'user', content: `${FOLLOW_UP_ROUND_INSTRUCTION}\n当前是第 ${round} 轮工具规划。` });
+        const roundInstruction = [
+          dependencyRound ? DEPENDENCY_ROUND_INSTRUCTION : FOLLOW_UP_ROUND_INSTRUCTION,
+          `当前是第 ${round} 轮工具规划。`,
+          dependencyRound
+            ? `本轮只能处理这些已就绪能力：${deferredCapabilityIds.join(
+                ', ',
+              )}。语义计划只描述本轮能力，不要重复已完成的前置 intent；requestClass 也按本轮能力填写。`
+            : '本轮只允许用已授权的读取能力修复上一轮失败、空结果或信息不足。',
+        ].join('\n');
+        messages.push({ role: 'user', content: roundInstruction });
+        const followUpPromptBase = buildPlannerPrompt(followUpTools, userRole, {
+          semanticCatalog: followUpCatalog,
+          semanticCatalogText: formatSemanticCapabilityCatalog(followUpCatalog),
+        });
+        const followUpPrompt = memoryPrompt
+          ? `${followUpPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
+          : `${followUpPromptBase}\n\n${scopePrompt}`;
+        const followUpMessages = [{ role: 'system', content: followUpPrompt }, ...messages.slice(1)];
         const followUpPlannerStartedAt = Date.now();
-        let followUpPlannerResponse = await requestAi(messages, {
-          tools: getToolDefinitions(followUpTools),
+        let followUpPlannerResponse = await requestAi(followUpMessages, {
+          tools: [
+            buildSemanticPlanToolDefinition(followUpCatalog, followUpTools, {
+              dependenciesAlreadySatisfied: dependencyRound,
+            }),
+          ],
+          toolChoice: { type: 'function', function: { name: SEMANTIC_PLAN_TOOL_NAME } },
           signal: agentAbortController.signal,
-          maxTokens: 900,
+          maxTokens: dependencyRound
+            ? getPlannerMaxTokens({
+                message,
+                attachmentCount: attachmentIds.length,
+                selectedToolNames: followUpToolNames,
+              })
+            : 900,
           trace: { traceId: requestId, stage: `planner_round_${round}` },
         });
+        followUpPlannerResponse = normalizePlannerToolCallResponse(followUpPlannerResponse, `planner_round_${round}`);
         trace.plannerMs += Date.now() - followUpPlannerStartedAt;
         trace.finishReason = followUpPlannerResponse.finishReason || trace.finishReason;
         plannerUsageReported = plannerUsageReported && followUpPlannerResponse.usageStatus === 'reported';
@@ -1758,92 +1898,105 @@ export async function agentChat(req, res) {
         totalUsage.completionTokens += followUpPlannerResponse.usage.completionTokens;
         totalUsage.totalTokens += followUpPlannerResponse.usage.totalTokens;
 
-        if (!followUpPlannerResponse.toolCalls?.length && looksLikeLeakedToolCall(followUpPlannerResponse.content)) {
-          followUpPlannerResponse = {
-            ...followUpPlannerResponse,
-            toolCalls: parseLeakedToolCalls(followUpPlannerResponse.content),
-            content: '',
-          };
-        }
-        const followUpToolCalls = constrainSecondRoundToolCalls(followUpPlannerResponse.toolCalls, followUpTools);
-        if (!followUpToolCalls.length) break;
-
-        messages.push({ role: 'assistant', content: null, tool_calls: followUpToolCalls });
-        const followUpToolStartedAt = Date.now();
-        sseLifecycle?.stage('tool_execution', { round });
-        previousRoundResults = await mapWithConcurrency(
-          followUpToolCalls,
-          runtimeLimits.toolConcurrency,
-          async (tc) => {
-            const parsedArgs = parseToolCallArguments(tc);
-            let args = applyAgentContentScope(tc.function.name, parsedArgs.args, contentScope);
-            let tool = toolRegistry.get(tc.function.name);
-            let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
-            if (!argumentError) {
-              try {
-                const policy = await enforceToolPolicy({
-                  registry: toolRegistry,
-                  toolName: tc.function.name,
-                  args,
-                  context: toolRuntimeContext(req, identity, { agentContentScope: contentScope }),
-                  allowedToolNames: followUpToolNames,
-                  phase: 'plan',
-                });
-                tool = policy.tool;
-                args = policy.args;
-              } catch (error) {
-                const publicError = publicToolError(error, 'AI 生成的查询参数无效，请重新提问。');
-                argumentError = { code: publicError.code, message: publicError.message };
-              }
-            }
-            if (stream) sseLifecycle?.send('tool_start', { tool: tc.function.name, round });
-            const result = argumentError
-              ? {
-                  status: 'error',
-                  summary: argumentError.message,
-                  error: argumentError.code,
-                  params: args,
-                }
-              : await executeTool(
-                  tc.function.name,
-                  args,
-                  toolRuntimeContext(req, identity, {
-                    signal: agentAbortController.signal,
-                    allowedToolNames: followUpToolNames,
-                    suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
-                    question: message,
-                    agentContentScope: contentScope,
-                  }),
-                );
-            if (Array.isArray(result.sources)) sources.push(...result.sources);
-            usedTools.push({
-              name: tc.function.name,
-              status: result.status,
-              params: args,
-              error: result.error,
-              dataSummary: result.dataSummary,
-            });
-            if (stream) {
-              sseLifecycle?.send('tool_result', {
-                tool: tc.function.name,
-                status: result.status,
-                round,
-              });
-            }
-            return { toolCallId: tc.id, result };
+        const parsedFollowUp = parseSemanticPlannerResponse(followUpPlannerResponse, followUpCatalog, {
+          dependenciesAlreadySatisfied: dependencyRound,
+          toolCallIdPrefix: `semantic-plan-round-${round}`,
+        });
+        const followUpDecision = adjudicateSemanticPlan({
+          plan: parsedFollowUp.plan,
+          toolCalls: parsedFollowUp.toolCalls,
+          catalog: followUpCatalog,
+        });
+        writeIntentToolNames = new Set([...writeIntentToolNames, ...(followUpDecision.writeToolNames || [])]);
+        trace.semanticRounds = [
+          ...(trace.semanticRounds || []),
+          {
+            round,
+            source: parsedFollowUp.source,
+            invalid: parsedFollowUp.invalidPlan,
+            requestClass: parsedFollowUp.plan?.requestClass || null,
+            resolution: followUpDecision.resolution,
+            capabilityIds: (parsedFollowUp.plan?.intents || []).map((intent) => intent.capabilityId),
           },
-          agentAbortController.signal,
-        );
-        trace.toolMs += Date.now() - followUpToolStartedAt;
-        for (const r of previousRoundResults) {
-          const summary = String(r.result.summary || '').slice(0, Math.max(0, remainingToolResultBudget));
-          remainingToolResultBudget -= summary.length;
-          messages.push({
-            role: 'tool',
-            tool_call_id: r.toolCallId,
-            content: summary || '工具结果已超过本轮上下文预算，未继续展开。',
-          });
+        ];
+
+        if (!parsedFollowUp.plan || ['blocked', 'clarification'].includes(followUpDecision.state)) {
+          semanticPolicy = parsedFollowUp.plan
+            ? followUpDecision
+            : {
+                state: 'blocked',
+                resolution: 'semantic_plan_missing',
+                capabilities: followUpCatalog,
+              };
+          break;
         }
+        if (!followUpDecision.toolCalls?.length) break;
+        attemptedDeferredWrite =
+          attemptedDeferredWrite ||
+          followUpDecision.toolCalls.some((call) => toolRegistry.get(call?.function?.name)?.isWrite === true);
+
+        const dependencyRefsByCallId = new Map();
+        if (dependencyRound) {
+          for (const call of followUpDecision.toolCalls) {
+            const capabilityId = followUpCatalog.find((entry) => entry.toolNames?.includes(call?.function?.name))?.id;
+            const intentIndex = semanticPlan.intents.findIndex((intent) => intent.capabilityId === capabilityId);
+            if (intentIndex < 0) continue;
+            // 写目标只绑定到它的直接前置读取结果。若更早的宽查询返回 20 个候选、
+            // 紧邻筛选只留下 1 个，绝不能再从任意祖先集合里选回其余 19 个。
+            const refs = semanticPlan.intents[intentIndex].dependsOn.flatMap(
+              (dependencyIndex) =>
+                dependencyRefsByCapabilityId.get(semanticPlan.intents[dependencyIndex]?.capabilityId) || [],
+            );
+            dependencyRefsByCallId.set(call.id, normalizeToolDependencyRefs(refs));
+          }
+        }
+
+        previousRoundResults = await executePlannedToolCalls({
+          toolCalls: followUpDecision.toolCalls,
+          allowedToolNames: followUpToolNames,
+          round,
+          finishReason: followUpPlannerResponse.finishReason,
+          dependencyRefsByCallId,
+        });
+        recordSuccessfulCapabilityResults(previousRoundResults, followUpCatalog);
+        const terminalDependencyFailure = dependencyRound
+          ? previousRoundResults.find(
+              (item) =>
+                item.result?.status === 'error' &&
+                TERMINAL_DEPENDENCY_ERROR_CODES.has(String(item.result?.error || '')),
+            )
+          : null;
+        if (terminalDependencyFailure) {
+          // 目标越界、缺失或 schema 错误不是瞬时故障。禁止让模型在同一请求里换一个
+          // ID 继续试探；保留本次确定性失败说明并结束依赖链。
+          semanticPolicy = {
+            state: 'blocked',
+            resolution: 'dependency_failed',
+            capabilities: followUpCatalog,
+            message: String(terminalDependencyFailure.result.summary || '').trim(),
+          };
+          break;
+        }
+        // 写工具在 Agent 主请求中只负责生成一次确认/选择或返回一次可靠预检错误。
+        // 无论哪种结果都不能让模型自动换参数重试，否则可能把“目标不存在”变成另一个猜测目标。
+        if (attemptedDeferredWrite) break;
+      }
+
+      if (
+        !semanticPolicy &&
+        !confirmations.length &&
+        !interactions.length &&
+        unresolvedIntentIndexes.size > 0 &&
+        !attemptedDeferredWrite
+      ) {
+        const hasReadyDeferredIntent = readyDeferredCapabilityIds().length > 0;
+        semanticPolicy = {
+          state: 'blocked',
+          resolution: hasReadyDeferredIntent ? 'dependency_incomplete' : 'dependency_failed',
+          capabilities: [...unresolvedIntentIndexes]
+            .map((index) => semanticCatalog.find((entry) => entry.id === semanticPlan.intents[index]?.capabilityId))
+            .filter(Boolean),
+        };
       }
     }
 
@@ -1857,9 +2010,49 @@ export async function agentChat(req, res) {
     const evidence = evidenceBundle.evidence;
     let citationAudit = auditAgentCitations('', evidence);
     let followUpAvailable = false;
+    let actionPolicy = null;
     const unverifiedWriteIntent = !pendingUserAction && writeIntentToolNames.size > 0;
+    const verifyExecutionClaims =
+      legacyIntentSuspicion.kind === 'action' || ['data_action', 'mixed'].includes(semanticPlan?.requestClass);
 
-    if (unverifiedWriteIntent) {
+    if (semanticPolicy) {
+      finalContent = semanticPolicy.message || buildSemanticPolicyMessage(semanticPolicy, locale);
+      actionPolicy = publicSemanticPolicy(semanticPolicy);
+      const claimGuard = guardUnverifiedExecutionClaim(finalContent, {
+        actionRelated: verifyExecutionClaims,
+        locale,
+      });
+      finalContent = claimGuard.answer;
+      if (claimGuard.guarded) {
+        actionPolicy = {
+          resolution: 'unverified_claim',
+          capabilityIds: actionPolicy?.capabilityIds || [],
+          executed: false,
+        };
+        trace.executionClaimGuarded = true;
+      }
+      trace.route = 'semantic_policy';
+      trace.taskType = 'agent_semantic_policy';
+      trace.semanticResolution = actionPolicy.resolution;
+      trace.finalMs = 0;
+      if (stream && finalContent) {
+        sseLifecycle?.stage(
+          claimGuard.guarded
+            ? 'action_policy'
+            : semanticPolicy.state === 'clarification'
+              ? 'clarification_required'
+              : 'action_policy',
+          {
+            resolution: actionPolicy.resolution,
+            capability_ids: actionPolicy.capabilityIds,
+            executed: false,
+          },
+        );
+        sseLifecycle?.send('delta', {
+          output: { text: finalContent, session_id: getSessionId(session) },
+        });
+      }
+    } else if (unverifiedWriteIntent) {
       // /agent 本身从不提交写入，只负责生成确认。只要当前文本是明确写动作、却没有
       // 生成确认/选择卡，就不能再让模型自由组织“已完成”之类结果。这里以确定性正文失败关闭。
       finalContent = unverifiedWriteMessage({
@@ -1867,6 +2060,15 @@ export async function agentChat(req, res) {
         usedTools,
         writeToolNames: writeIntentToolNames,
       });
+      actionPolicy = {
+        resolution: 'unverified',
+        capabilityIds: [
+          ...new Set(
+            [...writeIntentToolNames].map((toolName) => getAgentCapabilityByToolName(toolName)?.id).filter(Boolean),
+          ),
+        ],
+        executed: false,
+      };
       trace.finalMs = 0;
       if (stream && finalContent) {
         sseLifecycle?.stage('responding', { guarded: true });
@@ -1896,13 +2098,7 @@ export async function agentChat(req, res) {
           ];
         }
         // 多轮工具规划的内部提示不属于用户对话，不能让最终回答模型把它当成待执行指令。
-        if (
-          entry.role === 'user' &&
-          FOLLOW_UP_ROUND_INSTRUCTION &&
-          String(entry.content || '').includes(FOLLOW_UP_ROUND_INSTRUCTION)
-        ) {
-          return [];
-        }
+        if (entry.role === 'user' && isInternalPlanningInstruction(entry.content)) return [];
         if (
           (entry.role === 'user' || entry.role === 'assistant') &&
           typeof entry.content === 'string' &&
@@ -1925,11 +2121,19 @@ export async function agentChat(req, res) {
             },
           ];
       const finalStartedAt = Date.now();
+      // 查询结果、引用证据和动作回执属于事实回答。即使用户选择“创意”风格，也不能让高温
+      // 破坏工具事实或诱发重复退化；无工具的创作/闲聊仍保留用户选择的风格温度。
+      const groundedFinalReply = usedTools.length > 0 || evidence.length > 0 || verifyExecutionClaims;
+      const finalReplyTemperature = groundedFinalReply
+        ? Math.min(Number.isFinite(styleTemperature) ? styleTemperature : 0.3, 0.6)
+        : styleTemperature;
       sseLifecycle?.stage('responding');
       const finalReply = await generateFinalReply({
         messages: finalMessages,
-        stream,
-        temperature: styleTemperature,
+        // 任何基于工具/证据的事实回答都先完整通过质量与真实性门禁，再一次性输出。
+        // 否则供应商的重复、截断或错误完成声明已经流到界面后，终态快照也无法可靠撤回。
+        stream: stream && !groundedFinalReply,
+        temperature: finalReplyTemperature,
         signal: agentAbortController.signal,
         trace: { traceId: requestId },
         onDelta: (chunk) => {
@@ -1941,13 +2145,37 @@ export async function agentChat(req, res) {
       trace.finalMs = Date.now() - finalStartedAt;
       trace.finishReason = finalReply.finishReason || trace.finishReason;
       trace.usageStatus = plannerUsageReported && finalReply.usageStatus === 'reported' ? 'reported' : 'missing';
+      trace.finalQualityRetried = finalReply.qualityRetried === true;
+      trace.finalQualityIssues = finalReply.qualityIssues || [];
       apiCalls += finalReply.apiCalls;
       apiCallsForLog = apiCalls;
       totalUsage.promptTokens += finalReply.usage.promptTokens;
       totalUsage.completionTokens += finalReply.usage.completionTokens;
       totalUsage.totalTokens += finalReply.usage.totalTokens;
       citationAudit = auditAgentCitations(finalReply.content, evidence);
-      finalContent = removeInvalidAgentCitations(finalReply.content, citationAudit.invalidKeys);
+      const claimGuard = guardUnverifiedExecutionClaim(
+        removeInvalidAgentCitations(finalReply.content, citationAudit.invalidKeys),
+        {
+          actionRelated: verifyExecutionClaims,
+          locale,
+        },
+      );
+      finalContent = claimGuard.answer;
+      if (claimGuard.guarded) {
+        actionPolicy = {
+          resolution: 'unverified_claim',
+          capabilityIds: (semanticPlan?.intents || [])
+            .filter((intent) => intent.kind === 'write' && intent.capabilityId !== 'unknown')
+            .map((intent) => intent.capabilityId),
+          executed: false,
+        };
+        trace.executionClaimGuarded = true;
+      }
+      if (stream && groundedFinalReply && finalContent) {
+        sseLifecycle?.send('delta', {
+          output: { text: finalContent, session_id: getSessionId(session) },
+        });
+      }
       followUpAvailable =
         !enableTranslation &&
         shouldOfferFollowUps({
@@ -1987,7 +2215,18 @@ export async function agentChat(req, res) {
       await sseLifecycle?.complete({
         snapshotAnswer: finalContent,
         answer: finalContent,
-        output: { session_id: getSessionId(session) },
+        output: {
+          session_id: getSessionId(session),
+          ...(actionPolicy
+            ? {
+                action_policy: {
+                  resolution: actionPolicy.resolution,
+                  capability_ids: actionPolicy.capabilityIds,
+                  executed: false,
+                },
+              }
+            : {}),
+        },
         usage: totalUsage,
         usageStatus: trace.usageStatus,
         followUpAvailable,
@@ -2010,6 +2249,7 @@ export async function agentChat(req, res) {
           requestId,
           followUpAvailable,
           memoryContext: memoryInfluence,
+          ...(actionPolicy ? { actionPolicy } : {}),
         }),
       );
       res.removeListener('close', onClientClose);
@@ -2022,7 +2262,7 @@ export async function agentChat(req, res) {
       const candidate = inferAiMemoryCandidate({ message, answer: finalContent });
       const normalizedConversationId = String(conversationId || '').trim();
       const normalizedSourceMessageId = String(sourceMessageId || '').trim();
-      if (memoryIdentity && candidate && normalizedConversationId && normalizedSourceMessageId) {
+      if (!actionPolicy && memoryIdentity && candidate && normalizedConversationId && normalizedSourceMessageId) {
         const adminScoped = memoryIdentity.adminContextMode !== 'normal';
         try {
           await createAiMemoryCandidate(memoryIdentity, {
@@ -2051,7 +2291,13 @@ export async function agentChat(req, res) {
       iterations: apiCalls,
       totalUsage,
       durationMs: Date.now() - requestStartedAt,
-      status: confirmations.length ? 'confirmation_pending' : interactions.length ? 'interaction_pending' : 'success',
+      status: confirmations.length
+        ? 'confirmation_pending'
+        : interactions.length
+          ? 'interaction_pending'
+          : actionPolicy
+            ? `semantic_${actionPolicy.resolution}`.slice(0, 32)
+            : 'success',
       trace,
     });
   } catch (error) {

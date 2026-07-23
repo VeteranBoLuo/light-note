@@ -43,9 +43,15 @@ export default {
       sort: {
         type: 'string',
         enum: ['smart', 'due', 'newest', 'oldest'],
-        description: '排序方式：smart 智能、due 截止时间、newest 最新、oldest 最早',
+        description:
+          '排序方式：smart 为待办列表默认智能顺序、due 为最先到期、newest 为最新、oldest 为最早；用户只说“第一条”时必须用 smart',
       },
-      limit: { type: 'integer', minimum: 1, maximum: 50, description: '返回条数，默认 20，最大 50' },
+      limit: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 50,
+        description: '返回条数，默认 20，最大 50；定位第一条、最新、最早或最先到期时使用 1',
+      },
       cursor: { type: 'string', maxLength: 256, description: '上一页结果返回的下一页游标' },
     },
   },
@@ -56,6 +62,9 @@ export default {
     const args = normalizeArgs(input);
     if (cannotReadTodos(ctx)) return { items: [], total: 0, nextCursor: null };
     return listTodoPage(pool, ctx.userId, { ...args, view: 'summary' });
+  },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'todo', id: item.id }));
   },
   transform(raw, args = {}) {
     const items = raw?.items || [];

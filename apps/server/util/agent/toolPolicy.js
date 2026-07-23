@@ -4,6 +4,7 @@ import { getAgentCapabilityByToolName } from './capabilityRegistry.js';
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['none', 'default', 'always']);
 const KNOWN_ADMIN_MODES = new Set(['readonly', 'maintain']);
+const DEPENDENCY_REF_TYPE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 
 export class AgentToolPolicyError extends Error {
   constructor(code, message, status = 400) {
@@ -58,6 +59,35 @@ export function normalizeRegisteredTool(tool) {
   if (isWrite && confirmationPolicy === 'none') {
     throw new Error(`Agent 写工具 ${tool.name} 禁止关闭确认`);
   }
+  if (tool.getDependencyRefs != null && typeof tool.getDependencyRefs !== 'function') {
+    throw new Error(`Agent 工具 ${tool.name} 的 getDependencyRefs 必须是函数`);
+  }
+  const rawDependencyBindings = tool.dependencyBindings == null ? [] : tool.dependencyBindings;
+  if (!Array.isArray(rawDependencyBindings) || rawDependencyBindings.length > 8) {
+    throw new Error(`Agent 工具 ${tool.name} 的 dependencyBindings 无效`);
+  }
+  const dependencyArguments = new Set();
+  const dependencyBindings = rawDependencyBindings.map((binding) => {
+    const argument = String(binding?.argument || '').trim();
+    const refType = String(binding?.refType || '')
+      .trim()
+      .toLowerCase();
+    if (
+      !argument ||
+      !Object.hasOwn(tool.parameters?.properties || {}, argument) ||
+      !DEPENDENCY_REF_TYPE_PATTERN.test(refType) ||
+      (binding?.requireUnique != null && typeof binding.requireUnique !== 'boolean') ||
+      dependencyArguments.has(argument)
+    ) {
+      throw new Error(`Agent 工具 ${tool.name} 的依赖绑定 ${argument || 'unknown'} 无效`);
+    }
+    dependencyArguments.add(argument);
+    return Object.freeze({
+      argument,
+      refType,
+      ...(binding?.requireUnique === true ? { requireUnique: true } : {}),
+    });
+  });
   const allowedRoles = (tool.allowedRoles || (tool.requireRoot ? ['root'] : ['visitor', 'user', 'test', 'root']))
     .map(canonicalAgentRole)
     .filter((role, index, roles) => role && roles.indexOf(role) === index);
@@ -71,6 +101,7 @@ export function normalizeRegisteredTool(tool) {
     allowedRoles,
     resultBudget: Number(tool.resultBudget || 6000),
     parameters: closeToolSchema(tool.parameters),
+    dependencyBindings: Object.freeze(dependencyBindings),
   };
 }
 

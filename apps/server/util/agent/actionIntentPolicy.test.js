@@ -65,11 +65,22 @@ describe('Agent 动作意图安全策略', () => {
     '帮我读取已删除的笔记',
     '查看已创建的标签',
     '已恢复的回收站内容有哪些？',
+    '帮我回顾很久没看的收藏',
+    '帮我分析下我的收藏',
+    '帮我总结最近收藏的书签',
+    '帮我复盘本月新增的笔记',
+    '帮我对比最近两个文件',
+    '帮我推荐一些很久没看的书签',
     '帮助中心最近更新了哪些内容？',
     '如何修改书签标题？',
+    '如何收藏一个链接？',
+    '怎么把笔记删除？',
     '请告诉我怎么删除笔记？',
     '帮我了解一下如何恢复删除的文件',
     'How can I delete a note?',
+    'How can I bookmark a link?',
+    'Please summarize my saved bookmarks',
+    'Could you review bookmarks I saved a long time ago?',
     'Show me my completed tasks',
     'Which tasks are already completed?',
     'Which notes have I created?',
@@ -90,6 +101,7 @@ describe('Agent 动作意图安全策略', () => {
   it.each([
     ['列出待办，然后把第一条标记为完成', 'todo.status.set'],
     ['查看笔记后再删除“周报”', 'note.delete'],
+    ['帮我回顾收藏并删除失效书签', 'bookmark.delete'],
     ['restore deleted notes', 'trash.restore'],
     ['List my tasks and complete the first one', 'todo.status.set'],
   ])('%s 含后续写动作时不能被只读前半句掩盖', (message, capabilityId) => {
@@ -101,6 +113,18 @@ describe('Agent 动作意图安全策略', () => {
 
   it.each(['你好', '解释一下量子纠缠', '帮我写一首关于夏天的诗'])('%s 不误判为产品写操作', (message) => {
     expect(resolveAgentActionIntent({ message })).toMatchObject({ kind: 'none', resolution: 'none' });
+  });
+
+  it.each([
+    ['我想删除笔记“周报”', 'note.delete'],
+    ['能不能帮我删除这篇笔记', 'note.delete'],
+    ['Could you delete this bookmark?', 'bookmark.delete'],
+    ['I want to delete my note', 'note.delete'],
+  ])('%s 的委托/意愿句仍识别为真实修改', (message, capabilityId) => {
+    expect(resolveAgentActionIntent({ message })).toMatchObject({
+      kind: 'action',
+      capabilities: expect.arrayContaining([expect.objectContaining({ id: capabilityId })]),
+    });
   });
 
   it.each(['帮我发布这个', '请立即同步这些', '把选中的内容合并掉'])('%s 未注册修改能力失败关闭', (message) => {

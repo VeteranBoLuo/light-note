@@ -53,21 +53,27 @@
         :key="conversation.id"
         as="article"
         variant="panel"
+        interactive
         padding="10px"
         radius="11px"
         :class="['ai-conversation-center__item', { 'is-current': conversation.id === currentId }]"
+        role="button"
+        tabindex="0"
+        @click="openConversation(conversation)"
+        @keydown.enter.self="openConversation(conversation)"
+        @keydown.space.prevent.self="openConversation(conversation)"
       >
         <template v-if="editingId === conversation.id">
           <BInput v-model:value="editingTitle" :maxlength="120" @enter="saveRename(conversation)" />
           <div class="ai-conversation-center__edit-actions">
-            <BButton @click="cancelRename">{{ t('common.cancel') }}</BButton>
-            <BButton type="primary" :loading="mutatingId === conversation.id" @click="saveRename(conversation)">
+            <BButton @click.stop="cancelRename">{{ t('common.cancel') }}</BButton>
+            <BButton type="primary" :loading="mutatingId === conversation.id" @click.stop="saveRename(conversation)">
               {{ t('common.save') }}
             </BButton>
           </div>
         </template>
         <template v-else>
-          <BButton class="ai-conversation-center__open" @click="emit('open', conversation.id)">
+          <div class="ai-conversation-center__summary">
             <span>
               <strong>{{ conversation.title || t('ai.conversations.untitled') }}</strong>
               <small v-if="conversation.summary">{{ conversation.summary }}</small>
@@ -76,10 +82,10 @@
               </small>
             </span>
             <time :datetime="conversation.lastMessageAt">{{ relativeTime(conversation.lastMessageAt) }}</time>
-          </BButton>
+          </div>
           <div class="ai-conversation-center__actions">
             <BTooltip :title="t('ai.conversations.rename')" always>
-              <BButton :aria-label="t('ai.conversations.rename')" @click="startRename(conversation)">
+              <BButton :aria-label="t('ai.conversations.rename')" @click.stop="startRename(conversation)">
                 <SvgIcon :src="icon.ai.messageEdit" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
@@ -87,7 +93,7 @@
               <BButton
                 :aria-label="t('ai.conversations.retentionSettings')"
                 :aria-expanded="retentionEditingId === conversation.id"
-                @click="toggleRetentionEditor(conversation)"
+                @click.stop="toggleRetentionEditor(conversation)"
               >
                 <SvgIcon :src="icon.noteDetail.history" size="14" aria-hidden="true" />
               </BButton>
@@ -103,13 +109,13 @@
                   conversation.status === 'archived' ? t('ai.conversations.restore') : t('ai.conversations.archive')
                 "
                 :loading="mutatingId === conversation.id"
-                @click="toggleArchive(conversation)"
+                @click.stop="toggleArchive(conversation)"
               >
                 <SvgIcon :src="icon.common.folder" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
             <BTooltip :title="t('common.delete')" always>
-              <BButton :aria-label="t('common.delete')" class="is-danger" @click="confirmDelete(conversation)">
+              <BButton :aria-label="t('common.delete')" class="is-danger" @click.stop="confirmDelete(conversation)">
                 <SvgIcon :src="icon.noteDetail.delete" size="14" aria-hidden="true" />
               </BButton>
             </BTooltip>
@@ -119,6 +125,7 @@
             class="ai-conversation-center__retention-editor"
             role="group"
             :aria-label="t('ai.conversations.retentionSettings')"
+            @click.stop
           >
             <label :id="`retention-mode-${conversation.id}`">{{ t('ai.conversations.retentionMode') }}</label>
             <BSelect
@@ -246,6 +253,12 @@
   function loadMore() {
     if (!nextCursor.value || loadingMore.value) return;
     void load(false);
+  }
+
+  function openConversation(conversation: AiConversationSummary) {
+    // 编辑表单中的点击与键盘输入只服务于表单本身，不能意外切换会话。
+    if (editingId.value === conversation.id || retentionEditingId.value === conversation.id) return;
+    emit('open', conversation.id);
   }
 
   function startRename(conversation: AiConversationSummary) {
@@ -432,7 +445,7 @@
       footer: [
         { label: t('common.cancel'), type: 'dashed', function: () => Alert.destroy() },
         {
-          label: t('ai.conversations.clearAll'),
+          label: t('ai.conversations.clearConfirmAction'),
           type: 'danger',
           function: async () => {
             Alert.destroy();
@@ -565,6 +578,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 7px;
+    cursor: pointer;
   }
 
   .ai-conversation-center__item.is-current {
@@ -572,27 +586,31 @@
     --b-card-background: color-mix(in srgb, var(--primary-color) 6%, var(--workspace-panel-bg-color));
   }
 
-  .ai-conversation-center__open {
+  .ai-conversation-center__item:not(.is-current):hover {
+    --b-card-background: color-mix(in srgb, var(--primary-color) 4%, var(--workspace-panel-bg-color));
+  }
+
+  .ai-conversation-center__item:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+  }
+
+  .ai-conversation-center__summary {
     min-width: 0;
-    height: auto;
-    justify-content: space-between;
+    display: flex;
+    align-items: center;
     gap: 8px;
-    /* 内边距别太小:hover 背景块会紧贴标题/时间等文字,显得拥挤;留出呼吸再配圆角 */
-    padding: 7px 9px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
     text-align: left;
   }
 
-  .ai-conversation-center__open > span {
+  .ai-conversation-center__summary > span {
     display: grid;
     min-width: 0;
     gap: 3px;
   }
 
-  .ai-conversation-center__open strong,
-  .ai-conversation-center__open small {
+  .ai-conversation-center__summary strong,
+  .ai-conversation-center__summary small {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -602,18 +620,18 @@
     color: color-mix(in srgb, var(--primary-color) 72%, var(--desc-color));
   }
 
-  .ai-conversation-center__open strong {
+  .ai-conversation-center__summary strong {
     color: var(--text-color);
     font-size: 12px;
   }
 
-  .ai-conversation-center__open small,
-  .ai-conversation-center__open time {
+  .ai-conversation-center__summary small,
+  .ai-conversation-center__summary time {
     color: var(--desc-color);
     font-size: 10px;
   }
 
-  .ai-conversation-center__open time {
+  .ai-conversation-center__summary time {
     flex: 0 0 auto;
   }
 
@@ -663,6 +681,7 @@
     border: 0;
     background: transparent;
     color: var(--desc-color);
+    cursor: pointer;
   }
 
   .ai-conversation-center__actions .is-danger:hover {

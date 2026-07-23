@@ -1756,9 +1756,10 @@ export default {
       exported: 'Exported {conversations} conversations and {messages} messages.',
       exportFailed: 'Could not export conversation data. Please try again.',
       clearAll: 'Clear all AI data',
-      clearTitle: 'Permanently clear controllable AI data',
+      clearTitle: 'Clear all AI data?',
       clearConfirm:
         'For a regular account, this permanently deletes conversations, messages, sources, evidence, feedback, memories, change sets, parsed-document indexes and temporary uploaded originals, plus the rebuildable search mirror for that account subject. In an administrator-managed session, it only deletes data in the current authorization context (documents are owned by their uploader and are not cleared in the managed domain). This cannot be undone. Permanent cloud files themselves, security audit logs and quota ledgers remain under their separate retention policies. Export “All data” from account Settings first if needed.',
+      clearConfirmAction: 'Clear',
       cleared: 'Cleared {count} AI data records.',
       clearedPartialRetry:
         'Cleared {count} AI data records; {failed} AI document records could not be cleaned up yet and were queued for automatic retry.',

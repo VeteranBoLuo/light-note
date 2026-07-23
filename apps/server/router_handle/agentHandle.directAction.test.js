@@ -42,9 +42,9 @@ vi.mock('../util/agent/toolRouter.js', () => ({
   selectAgentTools: vi.fn(() => []),
 }));
 vi.mock('../util/agent/secondRound.js', () => ({
-  FOLLOW_UP_ROUND_INSTRUCTION: '',
-  constrainSecondRoundToolCalls: vi.fn(() => []),
-  selectSecondRoundTools: vi.fn(() => []),
+  DEPENDENCY_ROUND_INSTRUCTION: '[INTERNAL_AGENT_DEPENDENCY_ROUND]',
+  FOLLOW_UP_ROUND_INSTRUCTION: '[INTERNAL_AGENT_RECOVERY_ROUND]',
+  isInternalPlanningInstruction: vi.fn(() => false),
   shouldContinueToolPlanning: vi.fn(() => false),
 }));
 vi.mock('../util/aiQuota.js', () => ({

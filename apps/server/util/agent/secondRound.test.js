@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEPENDENCY_ROUND_INSTRUCTION,
+  FOLLOW_UP_ROUND_INSTRUCTION,
+  isInternalPlanningInstruction,
   shouldContinueToolPlanning,
-  constrainSecondRoundToolCalls,
-  selectSecondRoundTools,
   shouldRunSecondPlanner,
 } from './secondRound.js';
 
@@ -31,22 +32,12 @@ describe('Agent 第二轮受限纠错', () => {
     ).toBe(false);
   });
 
-  it('第二轮工具定义和调用都剔除写工具与越权工具', () => {
-    const tools = [
-      { name: 'query_notes', isWrite: false },
-      { name: 'create_note', isWrite: true },
-      { name: 'search_content', isWrite: false },
-    ];
-    const readonly = selectSecondRoundTools(tools);
-    expect(readonly.map((tool) => tool.name)).toEqual(['query_notes', 'search_content']);
-    const calls = constrainSecondRoundToolCalls(
-      [
-        { id: '1', function: { name: 'create_note' } },
-        { id: '2', function: { name: 'query_notes' } },
-        { id: '3', function: { name: 'unknown_tool' } },
-      ],
-      readonly,
-    );
-    expect(calls.map((call) => call.function.name)).toEqual(['query_notes']);
+  it('依赖轮与只读恢复轮使用不同的内部提示且都能被最终回答过滤', () => {
+    expect(DEPENDENCY_ROUND_INSTRUCTION).toContain('只从紧邻的真实工具结果提取目标');
+    expect(DEPENDENCY_ROUND_INSTRUCTION).toContain('待确认卡');
+    expect(FOLLOW_UP_ROUND_INSTRUCTION).toContain('只读工具');
+    expect(isInternalPlanningInstruction(DEPENDENCY_ROUND_INSTRUCTION)).toBe(true);
+    expect(isInternalPlanningInstruction(FOLLOW_UP_ROUND_INSTRUCTION)).toBe(true);
+    expect(isInternalPlanningInstruction('用户普通消息')).toBe(false);
   });
 });

@@ -44,6 +44,7 @@ export default {
   requireRoot: false,
   timeoutMs: 60_000,
   resultBudget: 12_000,
+  dependencyBindings: [{ argument: 'noteId', refType: 'note' }],
   async execute(input, ctx) {
     const args = normalizeArgs(input);
     const note = await findOwnedNoteForAi({ userId: ctx.userId, noteId: args.noteId, title: args.title });
@@ -71,6 +72,9 @@ export default {
       create_time: note.create_time,
       update_time: note.update_time,
     };
+  },
+  getDependencyRefs(raw) {
+    return raw?.id ? [{ type: 'note', id: raw.id }] : [];
   },
   transform(raw) {
     if (!raw?.id) return '没有找到这篇笔记，可能标题不准确、笔记已删除或不属于当前账号。';

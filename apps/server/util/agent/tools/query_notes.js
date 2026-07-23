@@ -45,6 +45,9 @@ export default {
 
     return { total: countRes[0].total, items: rows };
   },
+  getDependencyRefs(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'note', id: item.id }));
+  },
   transform(raw, args) {
     const items = raw?.items || [];
     if (!items.length) {

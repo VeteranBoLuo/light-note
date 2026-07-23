@@ -89,6 +89,32 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
     });
   });
 
+  it('DeepSeek 同步 Planner 显式关闭思考模式，允许强制指定计划工具', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '', tool_calls: [] }, finish_reason: 'tool_calls' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await requestDeepSeek([{ role: 'user', content: '查询待办' }], {
+      tools: [{ type: 'function', function: { name: 'plan_intent', parameters: { type: 'object' } } }],
+      toolChoice: { type: 'function', function: { name: 'plan_intent' } },
+    });
+
+    const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      model: 'deepseek-v4-flash',
+      thinking: { type: 'disabled' },
+      tool_choice: { type: 'function', function: { name: 'plan_intent' } },
+    });
+  });
+
   it('流式请求解析增量与末尾 usage，不把缺失 usage 记为 0 成功', async () => {
     delete process.env.AGENT_LLM_PROVIDER;
     process.env.DEEPSEEK_API_KEY = 'test-key';
@@ -111,6 +137,35 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
       usageStatus: 'reported',
       usage: { promptTokens: 9, completionTokens: 2, totalTokens: 11 },
     });
+    const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      model: 'deepseek-v4-flash',
+      thinking: { type: 'disabled' },
+      stream: true,
+    });
+  });
+
+  it('千问备用供应商继续使用自身的非思考参数，不混入 DeepSeek thinking 字段', async () => {
+    process.env.AGENT_LLM_PROVIDER = 'qwen';
+    process.env.DASHSCOPE_API_KEY = 'test-key';
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    await requestDeepSeek([{ role: 'user', content: 'hi' }]);
+
+    const requestBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(requestBody).toMatchObject({
+      model: 'qwen3.5-flash',
+      enable_thinking: false,
+    });
+    expect(requestBody).not.toHaveProperty('thinking');
   });
 
   it('首字长期未到时返回可识别的超时码，并清理流式计时器', async () => {

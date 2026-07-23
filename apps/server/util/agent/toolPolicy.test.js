@@ -35,6 +35,40 @@ describe('Agent Tool Policy', () => {
     expect(tool.parameters.additionalProperties).toBe(false);
   });
 
+  it('注册时校验并冻结写工具的结构化依赖绑定', () => {
+    const tool = makeTool({
+      name: 'set_todo_status',
+      isWrite: true,
+      riskLevel: 'low',
+      confirmationPolicy: 'always',
+      parameters: {
+        type: 'object',
+        properties: { todoId: { type: 'string' }, status: { type: 'string' } },
+      },
+      dependencyBindings: [{ argument: 'todoId', refType: 'TODO', requireUnique: true }],
+    });
+    expect(tool.dependencyBindings).toEqual([{ argument: 'todoId', refType: 'todo', requireUnique: true }]);
+    expect(Object.isFrozen(tool.dependencyBindings)).toBe(true);
+    expect(makeTool({ dependencyBindings: [{ argument: 'limit', refType: 'page' }] }).dependencyBindings).toEqual([
+      { argument: 'limit', refType: 'page' },
+    ]);
+    expect(() => makeTool({ dependencyBindings: [{ argument: 'missing', refType: 'todo' }] })).toThrow(/依赖绑定/);
+    expect(() =>
+      makeTool({
+        name: 'set_todo_status',
+        isWrite: true,
+        riskLevel: 'low',
+        confirmationPolicy: 'always',
+        dependencyBindings: [{ argument: 'missing', refType: 'bad type' }],
+      }),
+    ).toThrow(/依赖绑定/);
+    expect(() =>
+      makeTool({
+        dependencyBindings: [{ argument: 'limit', refType: 'page', requireUnique: 'yes' }],
+      }),
+    ).toThrow(/依赖绑定/);
+  });
+
   it('拒绝 schema 之外的模型参数', async () => {
     const tool = makeTool();
     await expect(

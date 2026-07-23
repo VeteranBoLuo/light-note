@@ -48,6 +48,11 @@ const PROVIDERS = {
     price: { input: 1, output: 2 },
     // 笔记改写、翻译等场景的结果通常接近原文长度，默认给足 8K 输出空间；可用环境变量下调。
     noteAssistMaxTokens: 8192,
+    // DeepSeek V4 默认开启思考模式，但 thinking 模式不接受 tool_choice。
+    // 当前 Agent 的 Planner 必须用 tool_choice=required 提交结构化意图，
+    // Final Reply 也暂不启用思考，以保证工具协议稳定、首字延迟和成本可控。
+    // 后续若增加复杂任务自适应思考，应通过独立的阶段参数开启，不能修改这个安全默认值。
+    extraBody: { thinking: { type: 'disabled' } },
   },
   qwen: {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
@@ -166,7 +171,7 @@ function combineSignals(signals) {
  * @param {DeepSeekMessage[]} messages
  * @param {Object} options
  * @param {unknown[]} [options.tools] - OpenAI function-calling 格式的工具定义
- * @param {'auto'|'none'} [options.toolChoice='auto']
+ * @param {'auto'|'none'|'required'|{type:'function',function:{name:string}}} [options.toolChoice='auto']
  * @param {AbortSignal} [options.signal]
  * @returns {Promise<DeepSeekResult>}
  */

@@ -12,9 +12,17 @@ function firstValue(args, keys) {
   return '';
 }
 
+function normalizeTodoId(value) {
+  const text = String(value || '').trim();
+  const marker = /^\[?todo:([^\]\s]+)\]?$/i.exec(text);
+  return String(marker?.[1] || text).slice(0, 64);
+}
+
 export function normalizeSetTodoStatusArgs(args = {}) {
   return {
-    todoId: firstValue(args, ['todoId', 'todo_id', 'taskId', 'task_id', 'id']).slice(0, 64),
+    // query_todos 对外使用 [todo:ID] 稳定标记。模型偶尔会把整段标记或 todo:ID
+    // 原样放进参数；这是服务端自己定义的协议表示，应在权限查询前归一成真实 ID。
+    todoId: normalizeTodoId(firstValue(args, ['todoId', 'todo_id', 'taskId', 'task_id', 'id'])),
     keyword: firstValue(args, ['keyword', 'query', 'title', 'todoTitle', 'todo_title']).slice(0, 100),
     status: String(args?.status || '')
       .trim()
@@ -131,6 +139,7 @@ export default {
   directAction: true,
   riskLevel: 'low',
   confirmationPolicy: 'always',
+  dependencyBindings: [{ argument: 'todoId', refType: 'todo', requireUnique: true }],
   normalizeArgs: normalizeSetTodoStatusArgs,
   async prepareArgs(input, ctx) {
     ensureTodoMutationAllowed(ctx);

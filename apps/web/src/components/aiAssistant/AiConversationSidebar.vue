@@ -5,15 +5,6 @@
         <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
         {{ t('ai.newConversation') }}
       </BButton>
-      <BButton
-        class="ai-conv-sidebar__manage"
-        size="small"
-        :title="t('ai.conversations.title')"
-        :aria-label="t('ai.conversations.title')"
-        @click="emit('manage')"
-      >
-        <SvgIcon :src="icon.ai.conversations" size="15" aria-hidden="true" />
-      </BButton>
     </div>
     <div class="ai-conv-sidebar__list" role="list">
       <BLoading v-if="loading && !items.length" inline loading :title="t('common.loading')" />
@@ -49,7 +40,7 @@
   import { listAiConversations, type AiConversationSummary } from '@/api/aiWorkspaceApi';
 
   const props = defineProps<{ currentId: string; refreshToken?: number }>();
-  const emit = defineEmits<{ open: [id: string]; new: []; manage: [] }>();
+  const emit = defineEmits<{ open: [id: string]; new: [] }>();
   const { t, locale } = useI18n();
   const items = ref<AiConversationSummary[]>([]);
   const loading = ref(false);
@@ -82,7 +73,10 @@
   }
 
   // 会话有变动(新建/切换/发消息改名/删除/清空)时父级 bump refreshToken,列表随之刷新。
-  watch(() => props.refreshToken, () => void load());
+  watch(
+    () => props.refreshToken,
+    () => void load(),
+  );
   onMounted(() => void load());
 </script>
 
@@ -101,7 +95,6 @@
   .ai-conv-sidebar__head {
     display: flex;
     align-items: center;
-    gap: 8px;
     padding: 12px;
     flex-shrink: 0;
   }
@@ -110,15 +103,6 @@
     flex: 1;
     justify-content: center;
     gap: 6px;
-  }
-
-  .ai-conv-sidebar__manage {
-    flex: 0 0 auto;
-    width: 32px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .ai-conv-sidebar__list {

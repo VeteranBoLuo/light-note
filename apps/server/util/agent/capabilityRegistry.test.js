@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import tools from './tools/index.js';
 import {
   AGENT_ACTION_CAPABILITIES,
+  buildAgentSemanticCapabilityCatalog,
   ENABLED_AGENT_ACTION_CAPABILITIES,
   getAgentCapabilityByToolName,
   validateAgentCapabilityToolContract,
@@ -33,5 +34,33 @@ describe('Agent 动作能力注册表', () => {
         confirmationPolicy: tool.confirmationPolicy,
       });
     }
+  });
+
+  it('语义能力目录同时覆盖读取工具、可用写能力和未开放动作', () => {
+    const catalog = buildAgentSemanticCapabilityCatalog(tools, {
+      availableToolNames: new Set(['query_notes', 'set_todo_status']),
+    });
+
+    expect(catalog.find((entry) => entry.id === 'read.query_notes')).toMatchObject({
+      effect: 'read',
+      status: 'enabled',
+      toolNames: ['query_notes'],
+    });
+    expect(catalog.find((entry) => entry.id === 'todo.status.set')).toMatchObject({
+      effect: 'write',
+      status: 'enabled',
+      toolNames: ['set_todo_status'],
+    });
+    expect(catalog.find((entry) => entry.id === 'note.delete')).toMatchObject({
+      effect: 'write',
+      status: 'planned',
+      toolNames: [],
+    });
+    expect(catalog.find((entry) => entry.id === 'read.query_bookmarks')).toMatchObject({
+      effect: 'read',
+      status: 'unavailable',
+      toolNames: [],
+    });
+    expect(new Set(catalog.map((entry) => entry.id)).size).toBe(catalog.length);
   });
 });

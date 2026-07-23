@@ -60,7 +60,6 @@
           :refresh-token="conversationListToken"
           @open="openCloudConversation"
           @new="startNewConversation"
-          @manage="activePanel = 'conversations'"
         />
         <AiWorkspaceShell
           ref="aiAssistantRef"
@@ -318,7 +317,9 @@
     askMaximized.value = nextMaximized;
     // 用户主动全屏/还原时，同步更新“默认全屏打开”，下次重新打开 AI 延续这次选择。
     if (user.preferences.aiDefaultFullscreen !== nextMaximized) {
-      void updatePreference({ aiDefaultFullscreen: nextMaximized }).catch(() => message.warning(t('settings.saveFailed')));
+      void updatePreference({ aiDefaultFullscreen: nextMaximized }).catch(() =>
+        message.warning(t('settings.saveFailed')),
+      );
     }
   }
 

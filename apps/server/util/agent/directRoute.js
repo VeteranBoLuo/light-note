@@ -5,9 +5,6 @@ const HIGH_CONFIDENCE_DIRECT_PATTERNS = [
   /^(?:你好|您好|嗨|哈喽|hello|hi|hey)(?:[!！,.，。\s].*)?$/i,
   /^(?:谢谢|感谢|辛苦了|再见|拜拜)(?:[!！,.，。\s].*)?$/i,
   /^(?:你是谁|你能做什么|怎么称呼你|介绍一下你自己)[?？!！。\s]*$/i,
-  /^(?:请)?(?:解释|介绍|说明|比较|分析)(?:一下)?\s*.+/i,
-  /^(?:什么是|为什么|如何理解|怎么理解|给我讲讲)\s*.+/i,
-  /^(?:(?:请|帮我|能否|可以)?\s*)?(?:写|改写|润色|翻译|总结|起草|拟定)\s*.+/i,
 ];
 
 /**
@@ -25,6 +22,5 @@ export function decideDirectAgentRoute({ message, contextCount = 0, attachmentCo
   if (HIGH_CONFIDENCE_DIRECT_PATTERNS.some((pattern) => pattern.test(text))) {
     return { direct: true, reason: 'high_confidence_general' };
   }
-  if (text.length <= 500 && /[?？]$/.test(text)) return { direct: true, reason: 'short_general_question' };
   return { direct: false, reason: 'uncertain' };
 }

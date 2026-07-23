@@ -12,7 +12,7 @@ vi.mock('./deepseekClient.js', () => ({
   looksLikeLeakedToolCall: mocks.looksLikeLeakedToolCall,
 }));
 
-const { generateFinalReply } = await import('./finalReply.js');
+const { generateFinalReply, inspectFinalReplyQuality } = await import('./finalReply.js');
 
 describe('generateFinalReply', () => {
   beforeEach(() => {
@@ -92,17 +92,62 @@ describe('generateFinalReply', () => {
   });
 
   it('非流式请求也经过独立最终回答并过滤协议泄漏', async () => {
-    mocks.request.mockResolvedValue({
-      content: '<tool_calls>bad</tool_calls>',
-      usage: { promptTokens: 5, completionTokens: 1, totalTokens: 6 },
-      usageStatus: 'reported',
-      finishReason: 'stop',
-    });
+    mocks.request
+      .mockResolvedValueOnce({
+        content: '<tool_calls>bad</tool_calls>',
+        usage: { promptTokens: 5, completionTokens: 1, totalTokens: 6 },
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      })
+      .mockResolvedValueOnce({
+        content: '恢复后的回答',
+        usage: { promptTokens: 4, completionTokens: 2, totalTokens: 6 },
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
     mocks.looksLikeLeakedToolCall.mockReturnValue(true);
 
     const result = await generateFinalReply({ messages: [], stream: false });
 
-    expect(result.content).toBe('抱歉，无法处理该请求。');
-    expect(result.apiCalls).toBe(1);
+    expect(result.content).toBe('抱歉，本次回答生成异常，请重新生成。');
+    expect(result.apiCalls).toBe(2);
+    expect(result.qualityRetried).toBe(true);
+  });
+
+  it('输出被模型上限截断时自动以低温短回答重试', async () => {
+    mocks.request
+      .mockResolvedValueOnce({
+        content: '重复说明'.repeat(500),
+        usage: { promptTokens: 5, completionTokens: 900, totalTokens: 905 },
+        usageStatus: 'reported',
+        finishReason: 'length',
+      })
+      .mockResolvedValueOnce({
+        content: '没有找到符合条件的待办。',
+        usage: { promptTokens: 8, completionTokens: 8, totalTokens: 16 },
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+
+    const result = await generateFinalReply({ messages: [{ role: 'user', content: '第一条待办' }], stream: false });
+
+    expect(result).toMatchObject({
+      content: '没有找到符合条件的待办。',
+      apiCalls: 2,
+      qualityRetried: true,
+      qualityIssues: expect.arrayContaining(['truncated']),
+    });
+    expect(mocks.request.mock.calls[1][1]).toMatchObject({
+      toolChoice: 'none',
+      maxTokens: 900,
+      temperature: 0.2,
+    });
+  });
+
+  it('识别内部结束标记和长段重复退化', () => {
+    expect(inspectFinalReplyQuality(`回答${'反复解释'.repeat(250)}\\end(END)`, 'stop')).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining(['internal_end_marker', 'unbroken_runaway']),
+    });
   });
 });

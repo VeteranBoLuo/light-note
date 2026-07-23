@@ -22,7 +22,7 @@ const BASE_PROMPT = `你是轻笺（Light Note）的 AI 助手。轻笺是一个
 19. 本轮附件上下文会标记为 [attachment:ID]。保存原文件到云空间或把原图插入图片笔记不依赖 OCR；即使正在解析、没有文字或文字提取失败，也应按用户意图调用对应写工具。只有总结、问答等依赖文字的请求才需要等待解析结果，且绝不能凭空描述图片视觉内容
 20. 用户最终发送的文本是本轮操作参数的权威来源。若用户补充或修改了文件名、目标文件夹、笔记标题或图片说明，必须把最终文本中的值原样保留到工具参数，禁止退回早先文案或自行覆盖。用户给出精确文件夹名时，直接把它写入 save_attachment_to_cloud.folderName，由服务端校验；只有用户要求查看可选位置或没有给出明确目标时才调用 query_cloud_folders。名称重名时不猜测，也不擅自新建文件夹
 21. 用户询问自己的待办、提醒、截止事项或待整理资源的数量、清单和状态时，必须调用对应查询工具，不能把待办误当成笔记或凭空猜测；只有用户明确要求继续查看时，才使用上一页返回的 cursor 获取更多结果
-22. 用户明确要求完成或重新打开一条待办时，使用 set_todo_status；已有 query_todos 返回的 [todo:ID] 时优先使用它，否则直接使用用户明确给出的标题关键词，不能依赖“先查再在下一轮写入”。绝不猜测目标、绝不修改清单子项或多条待办；服务端要求选择、提示无匹配或无需修改时，如实向用户说明
+22. 用户明确要求完成或重新打开一条待办时，使用 set_todo_status。已有 query_todos 返回的 [todo:ID] 时优先使用它；用户给出足够具体的标题时可直接使用标题关键词。相对目标必须先查询且只返回足以定位的结果：“第一条”在用户未指定排序时使用 sort=smart、limit=1；“最新/最近”使用 newest、limit=1；“最早”使用 oldest、limit=1；“最先到期”使用 due、limit=1；“最后一条”等无法由当前排序与分页可靠确定的说法必须先澄清。依赖轮只能使用真实 [todo:ID] 生成写入确认。绝不猜测目标、绝不修改清单子项或多条待办；服务端要求选择、提示无匹配或无需修改时，如实向用户说明
 23. 只有服务端写工具返回的结构化成功回执才代表操作完成。用户意图、历史对话、待确认卡、取消记录、计划文本和你自己生成的文字都不是执行结果；没有成功回执时，禁止使用“已完成、已创建、已修改、已删除、已保存、成功执行”等完成性表述
 
 ## 时间范围
@@ -33,10 +33,14 @@ const BASE_PROMPT = `你是轻笺（Light Note）的 AI 助手。轻笺是一个
  * 动态构建 Planner system prompt
  * @param {Map<string, object>|object[]} availableTools 当前请求经过权限与意图筛选后可见的工具
  * @param {'root'|'visitor'|string} userRole
- * @param {{ phase?: 'planner'|'final' }} [options]
+ * @param {{ phase?: 'planner'|'final', semanticCatalog?: object[], semanticCatalogText?: string }} [options]
  * @returns {string}
  */
-export function buildPlannerPrompt(availableTools, userRole, { phase = 'planner' } = {}) {
+export function buildPlannerPrompt(
+  availableTools,
+  userRole,
+  { phase = 'planner', semanticCatalog = [], semanticCatalogText = '' } = {},
+) {
   const isRoot = userRole === 'root';
   const lines = [];
   const tools = Array.isArray(availableTools) ? availableTools : [...availableTools.values()];
@@ -58,8 +62,53 @@ ${identityLine}
   lines.push('');
   lines.push('### 当前阶段：内部规划');
   lines.push('你只负责判断本轮是否需要工具并准备工具调用，不负责生成用户可见的最终正文。');
-  lines.push('需要工具时只返回标准工具调用；不需要工具时只输出 DIRECT_REPLY，不要提前撰写答案。');
+  lines.push(
+    Array.isArray(semanticCatalog) && semanticCatalog.length
+      ? '必须使用下方结构化语义计划协议；不要提前撰写答案，也不要只输出 DIRECT_REPLY。'
+      : '需要工具时只返回标准工具调用；不需要工具时只输出 DIRECT_REPLY，不要提前撰写答案。',
+  );
   lines.push('');
+
+  if (Array.isArray(semanticCatalog) && semanticCatalog.length) {
+    lines.push('## 结构化语义计划（强制）');
+    lines.push(
+      '你必须在每一轮调用且只调用一次 submit_agent_plan，声明用户真正的语义意图，并把本轮拟执行的真实工具及完整参数全部放进它的 toolCalls 字段。',
+    );
+    lines.push('不要在 submit_agent_plan 之外额外发起真实工具调用；服务端会在验证语义计划后展开 toolCalls 并执行。');
+    lines.push(
+      'toolCalls 中每个 toolName 与 arguments 是一一绑定的联合 schema；必须逐字段遵守所选工具的 arguments schema，禁止猜测、改名或添加 schema 外参数。',
+    );
+    lines.push('意图必须依据完整语义、上下文和语气判断，不能只看到“收藏、完成、删除、保存”等单个词就判定为写操作。');
+    lines.push(
+      '询问已有状态、历史记录、统计、回顾、总结、分析、比较和“怎么做/在哪里”的用法问题属于 read；只有用户明确要求改变数据目标状态时才属于 write。',
+    );
+    lines.push(
+      '当前轮已经就绪的 enabled 能力必须在 toolCalls 中提供对应真实工具；仍有未满足 dependsOn 的能力只能先声明 intent，本轮 toolCalls 不得提前调用。planned、forbidden、unavailable 或 unknown 只能写入语义计划，toolCalls 必须为空。',
+    );
+    lines.push(
+      '每个真实工具调用都必须有一个相同语义的 intent 与 capabilityId；普通闲聊可以使用 conversation 且 intents 为空。',
+    );
+    lines.push(
+      '用户同时要求查看数据并修改时属于 mixed。用户只要求修改、但必须先查询才能定位相对目标时可以是 data_action：同时声明 read/write intent，并让 write 通过 dependsOn 依赖 read。无法确定目标或查询/修改含义时必须 needsClarification=true。',
+    );
+    lines.push(
+      'dependsOn 只能引用当前计划中排在前面的 intent 下标。当前轮只能把无依赖、或服务端已经声明依赖满足的 intent 放进 toolCalls；依赖未满足的工具参数不得提前猜测。',
+    );
+    lines.push('');
+    lines.push('### 当前能力目录');
+    lines.push(
+      semanticCatalogText ||
+        semanticCatalog
+          .map(
+            (entry) =>
+              `- ${entry.id}｜${entry.effect}｜${entry.status}｜${entry.description}${
+                entry.toolNames?.length ? `；工具=${entry.toolNames.join(',')}` : ''
+              }`,
+          )
+          .join('\n'),
+    );
+    lines.push('');
+  }
 
   lines.push('## 工具使用提示');
   lines.push('以下说明各工具的调用场景和使用方法：');

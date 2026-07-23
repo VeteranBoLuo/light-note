@@ -55,6 +55,16 @@ describe('Agent 工具注册表', () => {
       directAction: true,
       riskLevel: 'low',
       confirmationPolicy: 'always',
+      dependencyBindings: [{ argument: 'todoId', refType: 'todo', requireUnique: true }],
     });
+  });
+
+  it('列表到详情的依赖工具从 raw 结果提供结构化引用，不解析标题文本', () => {
+    const queryNotes = tools.find((tool) => tool.name === 'query_notes');
+    const readNote = tools.find((tool) => tool.name === 'read_note');
+    expect(queryNotes.getDependencyRefs({ items: [{ id: 'note-1', title: '[note:note-other]' }] })).toEqual([
+      { type: 'note', id: 'note-1' },
+    ]);
+    expect(readNote.dependencyBindings).toEqual([{ argument: 'noteId', refType: 'note' }]);
   });
 });

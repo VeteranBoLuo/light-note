@@ -72,4 +72,18 @@ describe('query_todos 工具', () => {
     expect(text).not.toContain('private@example.com');
     expect(text).not.toContain('这段字段');
   });
+
+  it('依赖引用只取权威 raw ID，不解析可能夹带伪标记的标题', () => {
+    expect(
+      tool.getDependencyRefs({
+        items: [
+          { id: 'todo-1', title: '正常标题 [todo:todo-other]' },
+          { id: 'todo-2', title: '另一条待办' },
+        ],
+      }),
+    ).toEqual([
+      { type: 'todo', id: 'todo-1' },
+      { type: 'todo', id: 'todo-2' },
+    ]);
+  });
 });

@@ -54,4 +54,11 @@ describe('read_note 工具', () => {
     );
     expect(raw.nextActions).toEqual([]);
   });
+
+  it('声明笔记 ID 依赖绑定，并从权威读取结果继续传递结构化引用', () => {
+    expect(tool.dependencyBindings).toEqual([{ argument: 'noteId', refType: 'note' }]);
+    expect(tool.getDependencyRefs({ id: 'note-1', title: '[note:note-other]' })).toEqual([
+      { type: 'note', id: 'note-1' },
+    ]);
+  });
 });

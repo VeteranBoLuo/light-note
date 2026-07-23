@@ -1,6 +1,7 @@
 const VALID_CAPABILITY_STATUSES = new Set(['enabled', 'planned', 'forbidden']);
 const VALID_RISKS = new Set(['low', 'medium', 'high']);
 const VALID_CONFIRMATION_POLICIES = new Set(['default', 'always']);
+const SEMANTIC_READ_CAPABILITY_PREFIX = 'read.';
 
 function defineCapability(input) {
   const capability = {
@@ -387,6 +388,84 @@ export function getAgentCapabilityById(id) {
 
 export function getAgentCapabilityByToolName(toolName) {
   return CAPABILITY_BY_TOOL.get(String(toolName || '')) || null;
+}
+
+export function getSemanticCapabilityIdForTool(tool) {
+  if (!tool?.name) return '';
+  if (tool.isWrite === true) return getAgentCapabilityByToolName(tool.name)?.id || '';
+  return `${SEMANTIC_READ_CAPABILITY_PREFIX}${tool.name}`;
+}
+
+/**
+ * 构建供 Semantic Planner 理解产品边界的能力目录。
+ *
+ * 目录只描述“用户想做什么”以及服务端当前能否提供该能力；它不授予权限，
+ * 也不直接执行工具。真正的角色、owner、readonly/maintain 与确认策略仍由
+ * toolPolicy / confirmationStore 在服务端强制校验。
+ */
+export function buildAgentSemanticCapabilityCatalog(tools, { availableToolNames } = {}) {
+  const list = Array.isArray(tools) ? tools : [...(tools?.values?.() || [])];
+  const available = availableToolNames instanceof Set ? availableToolNames : new Set(list.map((tool) => tool?.name));
+  const entries = [];
+  const includedActionCapabilities = new Set();
+
+  for (const tool of list) {
+    if (!tool?.name) continue;
+    const actionCapability = tool.isWrite === true ? getAgentCapabilityByToolName(tool.name) : null;
+    const capabilityId = actionCapability?.id || getSemanticCapabilityIdForTool(tool);
+    if (!capabilityId) continue;
+    if (actionCapability) includedActionCapabilities.add(actionCapability.id);
+    entries.push(
+      Object.freeze({
+        id: capabilityId,
+        effect: tool.isWrite === true ? 'write' : 'read',
+        status: available.has(tool.name) ? 'enabled' : 'unavailable',
+        toolNames: Object.freeze(available.has(tool.name) ? [tool.name] : []),
+        description: String(tool.description || actionCapability?.labels?.zh || tool.name).trim(),
+        label: String(actionCapability?.labels?.zh || tool.description || tool.name).trim(),
+        guidance: String(actionCapability?.guidance?.zh || '').trim(),
+        labels: Object.freeze({
+          zh: String(actionCapability?.labels?.zh || tool.description || tool.name).trim(),
+          en: String(actionCapability?.labels?.en || tool.description || tool.name).trim(),
+        }),
+        guidanceByLocale: Object.freeze({
+          zh: String(actionCapability?.guidance?.zh || '').trim(),
+          en: String(actionCapability?.guidance?.en || '').trim(),
+        }),
+      }),
+    );
+  }
+
+  for (const capability of AGENT_ACTION_CAPABILITIES) {
+    if (includedActionCapabilities.has(capability.id)) continue;
+    entries.push(
+      Object.freeze({
+        id: capability.id,
+        effect: 'write',
+        status: capability.status,
+        toolNames: Object.freeze([]),
+        description: String(capability.labels?.zh || capability.id).trim(),
+        label: String(capability.labels?.zh || capability.id).trim(),
+        guidance: String(capability.guidance?.zh || '').trim(),
+        labels: Object.freeze({
+          zh: String(capability.labels?.zh || capability.id).trim(),
+          en: String(capability.labels?.en || capability.id).trim(),
+        }),
+        guidanceByLocale: Object.freeze({
+          zh: String(capability.guidance?.zh || '').trim(),
+          en: String(capability.guidance?.en || '').trim(),
+        }),
+      }),
+    );
+  }
+
+  const seen = new Set();
+  const unique = entries.filter((entry) => {
+    if (seen.has(entry.id)) throw new Error(`Agent 语义能力目录存在重复 id：${entry.id}`);
+    seen.add(entry.id);
+    return true;
+  });
+  return Object.freeze(unique);
 }
 
 export function matchesAgentCapability(capability, message, contextTypes = []) {

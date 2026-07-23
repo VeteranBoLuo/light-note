@@ -1722,9 +1722,10 @@ export default {
       exported: '已导出 {conversations} 个会话、{messages} 条消息',
       exportFailed: '会话数据导出失败，请稍后重试',
       clearAll: '清除全部 AI 数据',
-      clearTitle: '永久清除可控范围内的 AI 数据',
+      clearTitle: '确认清除全部 AI 数据？',
       clearConfirm:
         '普通账号将永久删除该账号主体下的会话、消息、来源、证据、反馈、记忆、变更集、文档解析索引与临时上传的原文件，及可重建检索镜像；管理员代管时只删除当前授权上下文的数据（文档按上传者归属，不在代管域清理范围）。操作不可恢复。云空间永久文件本体、安全审计日志和配额账本会按独立保留策略继续保留。建议先到账号设置导出“全部数据”。',
+      clearConfirmAction: '确认清除',
       cleared: '已清除 {count} 条 AI 数据记录',
       clearedPartialRetry: '已清除 {count} 条 AI 数据；{failed} 项 AI 文档数据暂未清理成功，已加入自动重试。',
       clearedPartialManual: '已清除 {count} 条 AI 数据；{failed} 项 AI 文档数据暂未清理成功，请稍后再次执行清除。',
