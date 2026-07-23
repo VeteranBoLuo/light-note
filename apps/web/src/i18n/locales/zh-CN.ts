@@ -1717,14 +1717,14 @@ export default {
       deleteRestored: '会话已恢复',
       deleteUndoFailed: '撤销时限已结束，会话无法恢复',
       dataControlHint:
-        '可导出会话备份，或永久清除当前账号的 AI 数据；管理员代管时仅清当前授权上下文。账号设置中的“全部数据”导出范围更完整。',
+        '可导出 AI 会话备份，或永久清除当前账号的 AI 数据。账号设置中的“全部数据”导出范围更完整。',
       export: '导出数据',
       exported: '已导出 {conversations} 个会话、{messages} 条消息',
       exportFailed: '会话数据导出失败，请稍后重试',
       clearAll: '清除全部 AI 数据',
       clearTitle: '确认清除全部 AI 数据？',
       clearConfirm:
-        '普通账号将永久删除该账号主体下的会话、消息、来源、证据、反馈、记忆、变更集、文档解析索引与临时上传的原文件，及可重建检索镜像；管理员代管时只删除当前授权上下文的数据（文档按上传者归属，不在代管域清理范围）。操作不可恢复。云空间永久文件本体、安全审计日志和配额账本会按独立保留策略继续保留。建议先到账号设置导出“全部数据”。',
+        '将永久删除全部 AI 会话及相关数据，且无法恢复。云空间中的永久文件不会被删除，建议先导出数据备份。',
       clearConfirmAction: '确认清除',
       cleared: '已清除 {count} 条 AI 数据记录',
       clearedPartialRetry: '已清除 {count} 条 AI 数据；{failed} 项 AI 文档数据暂未清理成功，已加入自动重试。',

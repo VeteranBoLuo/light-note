@@ -1751,14 +1751,14 @@ export default {
       deleteRestored: 'Conversation restored.',
       deleteUndoFailed: 'The undo window has ended and the conversation cannot be restored.',
       dataControlHint:
-        'Export a conversation backup or permanently clear AI data for the current account. In an administrator-managed session, only the current authorization context is cleared. The account-level “All data” export in Settings is more complete.',
+        'Export an AI conversation backup or permanently clear AI data for the current account. The account-level “All data” export in Settings is more complete.',
       export: 'Export data',
       exported: 'Exported {conversations} conversations and {messages} messages.',
       exportFailed: 'Could not export conversation data. Please try again.',
       clearAll: 'Clear all AI data',
       clearTitle: 'Clear all AI data?',
       clearConfirm:
-        'For a regular account, this permanently deletes conversations, messages, sources, evidence, feedback, memories, change sets, parsed-document indexes and temporary uploaded originals, plus the rebuildable search mirror for that account subject. In an administrator-managed session, it only deletes data in the current authorization context (documents are owned by their uploader and are not cleared in the managed domain). This cannot be undone. Permanent cloud files themselves, security audit logs and quota ledgers remain under their separate retention policies. Export “All data” from account Settings first if needed.',
+        'This permanently deletes all AI conversations and related data and cannot be undone. Permanent files in cloud storage are not deleted. Export a backup first if needed.',
       clearConfirmAction: 'Clear',
       cleared: 'Cleared {count} AI data records.',
       clearedPartialRetry:
