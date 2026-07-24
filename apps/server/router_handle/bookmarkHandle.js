@@ -26,6 +26,8 @@ import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '..
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
 import { importBookmarksWithTags } from '../util/services/bookmarkImportService.js';
+import { createIconBatch } from '../util/bookmarkIconBatchService.js';
+import { getIconBatchStatus, retryIconBatchFailures } from '../util/bookmarkIconBatchService.js';
 import { createTag as createTagService } from '../util/services/tagService.js';
 import {
   BookmarkUrlError,
@@ -35,10 +37,25 @@ import {
 } from '../util/bookmarkUrl.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+// ── 全局 ──────────────────────────────────────────────────
+const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 500;
 
-const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
+/**
+ * 查询指定 ID 的书签中哪些尚无图标，返回 {id, url} 列表
+ */
+async function getBookmarksForIcon(ids, userId) {
+  if (!ids?.length) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT id, url FROM bookmark
+     WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})
+       AND (icon_url IS NULL OR icon_url = '')`,
+    [userId, ...ids],
+  );
+  return rows;
+}
 
-// 书签地址由共享解析器确定性规范化；分享文案和异常拼接只返回候选，不在落库层静默猜测。
+// ──
 export { normalizeBookmarkUrl };
 
 function sendBookmarkUrlError(res, error, fallbackStatus = 500) {
@@ -980,19 +997,40 @@ export const importBookmarksHtml = async (req, res) => {
   console.log(`解析到 ${parsedBookmarks.length} 条书签`);
 
   const connection = await pool.getConnection();
+  let stats;
   try {
     await connection.beginTransaction();
-    const stats = await importBookmarksWithTags(connection, { userId, items: parsedBookmarks });
+    stats = await importBookmarksWithTags(connection, { userId, items: parsedBookmarks });
     await connection.commit();
-    res.send(resultData(stats));
-    finishBookmarkImport(req, userId, stats);
   } catch (e) {
     await connection.rollback();
     console.error('[bookmark] HTML 导入失败 code=%s', stableAgentErrorCode(e));
     res.send(resultData(null, 500, '书签导入失败，请稍后重试'));
+    return;
   } finally {
     connection.release();
   }
+  finishBookmarkImport(req, userId, stats);
+  // 图标批次创建：独立于事务，失败不影响导入结果
+  let iconBatch;
+  try {
+    const ids = stats?.createdBookmarkIds || [];
+    if (ids.length > 0) {
+      const bookmarksForIcon = await getBookmarksForIcon(ids, userId);
+      if (bookmarksForIcon.length > 0) {
+        iconBatch = await Promise.race([
+          createIconBatch(userId, bookmarksForIcon),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+      }
+    }
+  } catch (iconErr) {
+    console.error('[icon-batch] 创建图标批次失败（不影响导入）: %s', stableAgentErrorCode(iconErr));
+  }
+  res.send(resultData({
+    ...stats,
+    iconBatch: iconBatch?.total > 0 ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status } : undefined,
+  }));
 };
 
 // Excel 已在浏览器端解析，服务端只接收结构化行数据；与 HTML 导入共用同一去重和标签关联事务。
@@ -1014,15 +1052,34 @@ export const importBookmarksExcel = async (req, res) => {
     await connection.beginTransaction();
     const stats = await importBookmarksWithTags(connection, { userId, items });
     await connection.commit();
-    res.send(resultData(stats));
-    finishBookmarkImport(req, userId, stats);
   } catch (error) {
     await connection.rollback();
     console.error('[bookmark] Excel 导入失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, 'Excel 书签导入失败，请稍后重试'));
+    return;
   } finally {
     connection.release();
   }
+  finishBookmarkImport(req, userId, stats);
+  let iconBatch;
+  try {
+    const ids = stats?.createdBookmarkIds || [];
+    if (ids.length > 0) {
+      const bookmarksForIcon = await getBookmarksForIcon(ids, userId);
+      if (bookmarksForIcon.length > 0) {
+        iconBatch = await Promise.race([
+          createIconBatch(userId, bookmarksForIcon),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+        ]);
+      }
+    }
+  } catch (iconErr) {
+    console.error('[icon-batch] 创建图标批次失败（不影响导入）: %s', stableAgentErrorCode(iconErr));
+  }
+  res.send(resultData({
+    ...stats,
+    iconBatch: iconBatch?.total > 0 ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status } : undefined,
+  }));
 };
 
 // ============================================================================
@@ -1295,5 +1352,36 @@ export const doOrganizeApply = async (req, res) => {
     res.send(resultData(null, 500, '应用整理结果失败，请稍后重试'));
   } finally {
     conn.release();
+  }
+};
+
+// ============================================================================
+// 书签图标批处理进度与重试接口
+// ============================================================================
+
+export const getIconBatchStatusHandler = async (req, res) => {
+  if (!req.user?.id) return res.send(resultData(null, 401, '请先登录'));
+  const batchId = String(req.body?.batchId || '').trim();
+  if (!batchId) return res.send(resultData(null, 400, '缺少 batchId'));
+  try {
+    const status = await getIconBatchStatus(batchId, req.user.id);
+    res.send(resultData(status));
+  } catch (err) {
+    console.error('[icon-batch] 查询状态失败:', err.message);
+    res.send(resultData(null, 500, '查询失败'));
+  }
+};
+
+export const retryIconBatchFailuresHandler = async (req, res) => {
+  if (!req.user?.id) return res.send(resultData(null, 401, '请先登录'));
+  const batchId = String(req.body?.batchId || '').trim();
+  const includeNotFound = req.body?.includeNotFound === true;
+  if (!batchId) return res.send(resultData(null, 400, '缺少 batchId'));
+  try {
+    const result = await retryIconBatchFailures(batchId, req.user.id, includeNotFound);
+    res.send(resultData(result));
+  } catch (err) {
+    console.error('[icon-batch] 重试失败:', err.message);
+    res.send(resultData(null, 500, '重试失败'));
   }
 };

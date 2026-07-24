@@ -78,12 +78,14 @@ describe('importBookmarksWithTags', () => {
       userId: 'user-1',
       source: 'import',
     });
-    expect(stats).toEqual({
+    expect(stats).toMatchObject({
       parsedTotal: 3,
       createdTags: 1,
       createdBookmarks: 1,
       boundRelations: 4,
       skippedInvalidUrls: 1,
     });
+    expect(Array.isArray(stats.createdBookmarkIds)).toBe(true);
+    expect(Array.isArray(stats.affectedBookmarkIds)).toBe(true);
   });
 });

@@ -60,6 +60,9 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
     createdBookmarks: 0,
     boundRelations: 0,
     skippedInvalidUrls: 0,
+    // 阶段 3：图标补全用
+    createdBookmarkIds: [],
+    affectedBookmarkIds: [],
   };
 
   for (const rawItem of sourceItems) {
@@ -86,6 +89,7 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
 
     const bookmarkName = item.name || canonicalUrl;
     let bookmarkId = bookmarkUrlMap.get(canonicalUrl) || bookmarkMap.get(bookmarkName);
+    const isNew = !bookmarkId;
     if (!bookmarkId) {
       const bookmarkPayload = insertData({
         name: bookmarkName,
@@ -99,6 +103,11 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
       bookmarkUrlMap.set(canonicalUrl, bookmarkId);
       stats.createdBookmarks += 1;
     }
+
+    if (isNew) {
+      stats.createdBookmarkIds.push(bookmarkId);
+    }
+    stats.affectedBookmarkIds.push(bookmarkId);
 
     const inserted = await insertResourceTagRelations(connection, {
       tagIds,

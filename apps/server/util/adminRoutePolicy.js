@@ -32,6 +32,7 @@ declare(ADMIN_POLICIES.READ, 'bookmark', [
   ['POST', '/bookmark/resolveUrl'],
   ['POST', '/bookmark/snapshot'],
   ['GET', '/bookmark/health'],
+  ['POST', '/bookmark/getIconBatchStatus'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
@@ -51,6 +52,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
   // AI 整理"应用"是对 subject 的真实内容写(建标签/加关系/补书签名称),必须 maintain-only、readonly 阻断,
   // 不能归 AI_USE(否则只读预览代管也能落库,违反"readonly 阻断写")。
   ['POST', '/bookmark/ai/organize/apply'],
+  ['POST', '/bookmark/retryIconBatchFailures'],
 ]);
 
 declare(ADMIN_POLICIES.AI_USE, 'bookmark', [

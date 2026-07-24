@@ -1,12 +1,11 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import { isSelfTraffic, listLogExclude, addLogExclude, removeLogExclude } from '../util/logExclude.js';
-import https from 'https';
 import http from 'http';
 import fs from 'fs';
 import fsP from 'fs/promises';
 import path from 'path';
-import { createHash, randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
@@ -15,6 +14,7 @@ import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnap
 import { collectUsedImageNames } from '../util/noteImages.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { processBookmarkIcons, isBookmarkIconCheckRecent } from '../util/bookmarkIconService.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -589,79 +589,25 @@ const imageMimeTypes = {
 
 const BOOKMARK_ICON_UPLOAD_DIR = '/www/wwwroot/images';
 const BOOKMARK_ICON_AFTER_SAVE_COOLDOWN_MS = 60 * 60 * 1000;
-const bookmarkIconRefreshInFlight = new Map();
 
-export function isBookmarkIconCheckRecent(
-  checkedAt,
-  now = Date.now(),
-  cooldownMs = BOOKMARK_ICON_AFTER_SAVE_COOLDOWN_MS,
-) {
-  if (!checkedAt) return false;
-  const timestamp = checkedAt instanceof Date ? checkedAt.getTime() : Date.parse(String(checkedAt).replace(' ', 'T'));
-  return Number.isFinite(timestamp) && now - timestamp < cooldownMs;
-}
-
-export function bookmarkIconBuffersEqual(existingBuffer, fetchedBuffer) {
-  return Buffer.isBuffer(existingBuffer) && Buffer.isBuffer(fetchedBuffer) && existingBuffer.equals(fetchedBuffer);
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function getLocalBookmarkIconPath(iconUrl, bookmarkId) {
-  if (!iconUrl || !bookmarkId) return '';
-  try {
-    const pathname = new URL(iconUrl, 'https://light-note.local').pathname;
-    if (!pathname.startsWith('/uploads/')) return '';
-    const fileName = path.basename(decodeURIComponent(pathname));
-    const validName = new RegExp(
-      `^bookmark-${escapeRegExp(bookmarkId)}(?:-[a-f0-9]{12})?\\.(?:png|svg|jpe?g|gif|webp|ico)$`,
-      'i',
-    );
-    return validName.test(fileName) ? path.join(BOOKMARK_ICON_UPLOAD_DIR, fileName) : '';
-  } catch {
-    return '';
-  }
-}
-
-async function readCurrentBookmarkIcon(connection, bookmarkId, userId, fallbackCheckedAt) {
-  const [rows] = await connection.query(
-    'SELECT icon_url, icon_checked_at FROM bookmark WHERE id=? AND user_id=? AND del_flag=0 LIMIT 1',
-    [bookmarkId, userId],
-  );
-  return {
-    id: bookmarkId,
-    iconUrl: rows[0]?.icon_url || '',
-    iconCheckedAt: rows[0]?.icon_checked_at || fallbackCheckedAt,
-    changed: false,
-    stale: true,
+/**
+ * 性能统计：记录 analyzeImgUrl 每批处理的无正文统计指标
+ * 只记 batchId/数量/延迟/结果分类，不记录 URL/标题/图标内容
+ */
+function logBatchStats(batchId, metrics) {
+  const { bookmarkCount, uniqueOriginCount, successCount, noIconCount, totalDurationMs, p50, p95 } = metrics;
+  const safeMetrics = {
+    batchId,
+    bookmarkCount,
+    uniqueOriginCount,
+    successCount,
+    noIconCount,
+    totalDurationMs,
+    p50,
+    p95,
+    ts: Date.now(),
   };
-}
-
-// 图标获取:统一走同机工具箱 favimg(hub :3480)。favimg 抓网页解析 <link icon> + 站点自身 favicon.ico,
-// 直连失败(强反爬/超时)再兜底公网聚合源(favicone/yandex);内置 SSRF 防护/缓存。返回 {buffer, contentType} 或 null。
-function fetchIconFromFavimg(url) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    const request = http.get(`http://127.0.0.1:3480/favimg/?url=${encodeURIComponent(url)}`, (response) => {
-      const contentType = response.headers['content-type'] || '';
-      if (response.statusCode !== 200 || !contentType.startsWith('image/')) {
-        response.resume();
-        return resolve(null);
-      }
-      response.on('data', (c) => chunks.push(c));
-      response.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-        resolve(buffer.length ? { buffer, contentType } : null);
-      });
-    });
-    request.on('error', () => resolve(null));
-    request.setTimeout(12000, () => {
-      request.destroy();
-      resolve(null);
-    });
-  });
+  console.log(JSON.stringify({ type: 'icon-batch-stats', ...safeMetrics }));
 }
 
 export const analyzeImgUrl = async (req, res) => {
@@ -691,7 +637,6 @@ export const analyzeImgUrl = async (req, res) => {
           ? 'periodic'
           : '';
     if (!id || !refreshMode) return;
-    // 同一请求里定期刷新优先：它本身已由 30 天/24 小时周期筛选，不再受保存后一小时限频影响。
     if (!requestModeById.has(id) || refreshMode === 'periodic') requestModeById.set(id, refreshMode);
   });
   const requestedIds = [...requestModeById.keys()];
@@ -699,136 +644,76 @@ export const analyzeImgUrl = async (req, res) => {
     return res.send(resultData([]));
   }
 
-  const connection = await pool.getConnection();
-  try {
-    // URL 与归属均以数据库为准，不信任客户端传来的 id/url；防止越权改图标或借图标抓取请求任意地址。
-    const placeholders = requestedIds.map(() => '?').join(',');
-    const [ownedBookmarks] = await connection.query(
-      `SELECT id, url, icon_url, icon_checked_at
-       FROM bookmark
-       WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
-      [req.user.id, ...requestedIds],
-    );
-    const results = await Promise.all(
-      ownedBookmarks.map(async (bookmark) => {
-        const refreshMode = requestModeById.get(String(bookmark.id));
-        const checkedAt = new Date().toISOString();
-        if (refreshMode === 'after_save' && isBookmarkIconCheckRecent(bookmark.icon_checked_at)) {
-          return {
-            id: bookmark.id,
-            iconUrl: bookmark.icon_url || '',
-            iconCheckedAt: bookmark.icon_checked_at || checkedAt,
-            changed: false,
-            throttled: true,
-          };
-        }
+  // ── 阶段 A：短查询 ──────────────────────────────────────
+  // 使用 pool.query（短连接），查询完成立即释放
+  const placeholders = requestedIds.map(() => '?').join(',');
+  const [ownedBookmarks] = await pool.query(
+    `SELECT id, url, icon_url, icon_checked_at
+     FROM bookmark
+     WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
+    [req.user.id, ...requestedIds],
+  );
+  // 此时连接已自动释放回池
 
-        const refreshKey = `${req.user.id}:${bookmark.id}:${bookmark.url}`;
-        const existingRefresh = bookmarkIconRefreshInFlight.get(refreshKey);
-        if (existingRefresh) return existingRefresh;
+  // ── 分批：节流 vs 需抓取 ────────────────────────────────
+  const throttledResults = [];
+  const bookmarksToFetch = [];
+  const checkedAt = new Date().toISOString();
 
-        const refreshPromise = (async () => {
-          const markChecked = async () => {
-            const [updateResult] = await connection.query(
-              'UPDATE bookmark SET icon_checked_at=NOW() WHERE id=? AND user_id=? AND url=?',
-              [bookmark.id, req.user.id, bookmark.url],
-            );
-            if (!updateResult?.affectedRows) {
-              return readCurrentBookmarkIcon(connection, bookmark.id, req.user.id, checkedAt);
-            }
-            return {
-              id: bookmark.id,
-              iconUrl: bookmark.icon_url || '',
-              iconCheckedAt: checkedAt,
-              changed: false,
-            };
-          };
-          // 统一走自研 favimg(覆盖面广:网页 link + 站点 favicon.ico + 聚合兜底,无第三方占位假图问题)
-          const fetched = await fetchIconFromFavimg(bookmark.url);
-          if (!fetched) return markChecked();
-          let tempPath = '';
-          let finalPath = '';
-          try {
-            let fileExtension = 'png';
-            const mimeType = Object.entries(imageMimeTypes).find(([key]) => fetched.contentType?.includes(key))?.[1];
-            if (mimeType) fileExtension = mimeType;
-
-            const oldFilePath = getLocalBookmarkIconPath(bookmark.icon_url, bookmark.id);
-            if (oldFilePath) {
-              const existingBuffer = await fsP.readFile(oldFilePath).catch(() => null);
-              if (bookmarkIconBuffersEqual(existingBuffer, fetched.buffer)) {
-                const [updateResult] = await connection.query(
-                  'UPDATE bookmark SET icon_checked_at=NOW() WHERE id=? AND user_id=? AND url=?',
-                  [bookmark.id, req.user.id, bookmark.url],
-                );
-                if (!updateResult?.affectedRows) {
-                  return readCurrentBookmarkIcon(connection, bookmark.id, req.user.id, checkedAt);
-                }
-                return {
-                  id: bookmark.id,
-                  iconUrl: bookmark.icon_url || '',
-                  iconCheckedAt: checkedAt,
-                  changed: false,
-                };
-              }
-            }
-
-            // 内容变化才生成内容寻址文件；URL 不变意味着浏览器缓存也不需要被无意义击穿。
-            const contentHash = createHash('sha256').update(fetched.buffer).digest('hex').slice(0, 12);
-            const fileName = `bookmark-${bookmark.id}-${contentHash}.${fileExtension}`;
-            finalPath = path.join(BOOKMARK_ICON_UPLOAD_DIR, fileName);
-            tempPath = path.join(BOOKMARK_ICON_UPLOAD_DIR, `.bookmark-${bookmark.id}-${randomUUID()}.tmp`);
-            await fsP.mkdir(BOOKMARK_ICON_UPLOAD_DIR, { recursive: true });
-            // 先写临时文件，再原子替换目标文件。写入失败时旧图标仍在，不能为了刷新把可用图标删掉。
-            const existingFinalBuffer = await fsP.readFile(finalPath).catch(() => null);
-            if (!bookmarkIconBuffersEqual(existingFinalBuffer, fetched.buffer)) {
-              await fsP.writeFile(tempPath, fetched.buffer);
-              await fsP.rename(tempPath, finalPath);
-            }
-            const requestHost = typeof req.get === 'function' ? req.get('host') : req.headers?.host;
-            const imageUrl = `https://${requestHost}/uploads/${fileName}`;
-            const [updateResult] = await connection.query(
-              'UPDATE bookmark SET icon_url=?, icon_checked_at=NOW() WHERE id=? AND user_id=? AND url=?',
-              [imageUrl, bookmark.id, req.user.id, bookmark.url],
-            );
-            // 抓取期间书签可能刚好改成另一站点；条件更新失败时不覆盖新站点状态。
-            // 内容寻址文件即使暂时无引用也留给现有图库清理任务处理，避免误删并发请求刚复用的同内容文件。
-            if (!updateResult?.affectedRows) {
-              return readCurrentBookmarkIcon(connection, bookmark.id, req.user.id, checkedAt);
-            }
-            // 数据库已经指向新文件后，再清理上一版文件及固定文件名时代的历史文件。
-            const cleanupPaths = new Set(
-              [
-                oldFilePath,
-                ...['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp'].map((extension) =>
-                  path.join(BOOKMARK_ICON_UPLOAD_DIR, `bookmark-${bookmark.id}.${extension}`),
-                ),
-              ].filter((filePath) => filePath && filePath !== finalPath),
-            );
-            await Promise.all([...cleanupPaths].map((filePath) => fsP.unlink(filePath).catch(() => {})));
-            return { id: bookmark.id, iconUrl: imageUrl, iconCheckedAt: checkedAt, changed: true };
-          } catch (err) {
-            if (tempPath) await fsP.unlink(tempPath).catch(() => {});
-            console.error('图标落盘失败:', err.message);
-            return markChecked();
-          }
-        })();
-        bookmarkIconRefreshInFlight.set(refreshKey, refreshPromise);
-        try {
-          return await refreshPromise;
-        } finally {
-          if (bookmarkIconRefreshInFlight.get(refreshKey) === refreshPromise) {
-            bookmarkIconRefreshInFlight.delete(refreshKey);
-          }
-        }
-      }),
-    );
-    res.send(resultData(results.filter(Boolean), 200, '图标检查完成'));
-  } catch (err) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
-  } finally {
-    connection.release();
+  for (const bm of ownedBookmarks) {
+    const refreshMode = requestModeById.get(String(bm.id));
+    if (refreshMode === 'after_save' && isBookmarkIconCheckRecent(bm.icon_checked_at)) {
+      throttledResults.push({
+        id: bm.id,
+        iconUrl: bm.icon_url || '',
+        iconCheckedAt: bm.icon_checked_at || checkedAt,
+        changed: false,
+        throttled: true,
+      });
+    } else {
+      bookmarksToFetch.push(bm);
+    }
   }
+
+  // ── 性能统计：批次追踪 ──────────────────────────────────
+  const _batchId = generateUUID();
+  const _batchStart = performance.now();
+  const _uniqueOrigins = new Set();
+  for (const bm of bookmarksToFetch) {
+    try {
+      const originUrl = new URL(bm.url.startsWith('http') ? bm.url : `https://${bm.url}`);
+      _uniqueOrigins.add(originUrl.origin);
+    } catch { /* ignore */ }
+  }
+
+  // ── 阶段 B：网络抓取（不占数据库连接） ──────────────────
+  const fetchResults = bookmarksToFetch.length > 0
+    ? await processBookmarkIcons(bookmarksToFetch, req.user.id)
+    : [];
+
+  // ── 性能统计 ────────────────────────────────────────────
+  const _totalDuration = Math.round(performance.now() - _batchStart);
+  const _durations = fetchResults.map((r) => r.changed ? 1 : 0);
+  const _sorted = _durations.slice().sort((a, b) => a - b);
+  const _p50 = _sorted.length ? _sorted[Math.ceil(_sorted.length * 0.5) - 1] : 0;
+  const _p95 = _sorted.length ? _sorted[Math.ceil(_sorted.length * 0.95) - 1] : 0;
+  const _successCount = fetchResults.filter((r) => r.changed).length;
+  const _noIconCount = fetchResults.length - _successCount;
+  logBatchStats(_batchId, {
+    bookmarkCount: ownedBookmarks.length,
+    uniqueOriginCount: _uniqueOrigins.size,
+    successCount: _successCount,
+    noIconCount: _noIconCount,
+    totalDurationMs: _totalDuration,
+    p50: _p50,
+    p95: _p95,
+  });
+
+  // ── 阶段 C：组装响应 ────────────────────────────────────
+  // fetchResults 已经包含各条书签的最终状态
+  // 需要确保返回字段与前端期望一致
+  const allResults = [...throttledResults, ...fetchResults];
+  res.send(resultData(allResults.filter(Boolean), 200, '图标检查完成'));
 };
 
 export const getImages = async (req, res) => {

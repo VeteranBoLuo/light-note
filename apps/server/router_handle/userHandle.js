@@ -589,6 +589,7 @@ export const getUserList = (req, res) => {
     let sql = `
       SELECT 
         u.id,
+        u.head_picture,
         u.alias,
         u.email,
         u.phone_number,

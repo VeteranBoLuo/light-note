@@ -66,9 +66,9 @@
   const logList = ref([]);
 
   const logColumns = [
-    { title: '昵称', key: 'alias', width: '1fr' },
+    { title: '昵称', key: 'alias', width: '150px' },
     { title: '邮箱', key: 'email', width: '1fr' },
-    { title: '模块', key: 'module', width: '1fr' },
+    { title: '模块', key: 'module', width: '150px' },
     { title: '操作', key: 'operation', width: '1fr' },
     { title: '时间', key: 'createTime', width: '1fr' },
   ];

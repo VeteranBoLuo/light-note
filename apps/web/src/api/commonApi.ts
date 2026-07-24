@@ -51,7 +51,7 @@ export const getNoticeSummary = async function () {
 export async function loadBookmarkIconsProgressively(
   items: BookmarkIconItem[],
   applyIcon: (id: string, iconUrl: string) => void,
-  { batchSize = 20, concurrency = 2 }: { batchSize?: number; concurrency?: number } = {},
+  { batchSize = 10, concurrency = 1 }: { batchSize?: number; concurrency?: number } = {},
 ): Promise<void> {
   // 普通用户的管理员预览是只读模式。图标补全会抓取文件并更新 bookmark.icon_url，
   // 因此不能把它当作列表查询的附带动作发出；游客维护工作区仍按后端白名单正常执行。

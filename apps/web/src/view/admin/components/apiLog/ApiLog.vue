@@ -52,7 +52,16 @@
       <div>
         请求参数：
         <pre
-          style="margin: 4px 0 0; max-height: 120px; overflow: auto; padding: 8px; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-all"
+          style="
+            margin: 4px 0 0;
+            max-height: 120px;
+            overflow: auto;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+          "
           >{{ selectedRecord.req }}</pre>
       </div>
       <div>ip地址：{{ selectedRecord?.ip }}</div>
@@ -89,7 +98,7 @@
       {
         title: '昵称',
         key: 'alias',
-        width: '1fr',
+        width: '150px',
       },
       {
         title: '邮箱',
@@ -109,7 +118,7 @@
       {
         title: 'ip',
         key: 'ip',
-        width: '1fr',
+        width: '200px',
       },
       {
         title: '系统',

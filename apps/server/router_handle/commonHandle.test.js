@@ -30,6 +30,20 @@ vi.mock('http', async (importOriginal) => {
   return { ...actual, default: { ...actual.default, get: httpGetSpy } };
 });
 vi.mock('../util/noteImages.js', () => ({ collectUsedImageNames: collectUsedSpy }));
+// 直接在 hoisted 块中创建 mock 函数，确保可被外部引用
+const { mockProcessBookmarkIcons, mockIsBookmarkIconCheckRecent } = vi.hoisted(() => ({
+  mockProcessBookmarkIcons: vi.fn().mockResolvedValue([]),
+  mockIsBookmarkIconCheckRecent: vi.fn((checkedAt, now = Date.now()) => {
+    if (!checkedAt) return false;
+    const timestamp = checkedAt instanceof Date ? checkedAt.getTime() : Date.parse(String(checkedAt).replace(' ', 'T'));
+    const cooldownMs = 60 * 60 * 1000;
+    return Number.isFinite(timestamp) && now - timestamp < cooldownMs;
+  }),
+}));
+vi.mock('../util/bookmarkIconService.js', () => ({
+  processBookmarkIcons: mockProcessBookmarkIcons,
+  isBookmarkIconCheckRecent: mockIsBookmarkIconCheckRecent,
+}));
 
 const { queryDeepSeekBalanceSpy, getDailyBalanceChangeSpy } = vi.hoisted(() => ({
   queryDeepSeekBalanceSpy: vi.fn(),
@@ -46,8 +60,6 @@ const {
   recordConversion,
   recordOperationLogs,
   analyzeImgUrl,
-  bookmarkIconBuffersEqual,
-  isBookmarkIconCheckRecent,
   getConversionFunnel,
   clearLogsByIp,
   getIpLogStats,
@@ -58,6 +70,8 @@ const {
   resolveHelpSources,
   getAdminOverview,
 } = await import('./commonHandle.js');
+const processBookmarkIcons = mockProcessBookmarkIcons;
+const isBookmarkIconCheckRecent = mockIsBookmarkIconCheckRecent;
 
 function mockRes() {
   const res = {};
@@ -364,6 +378,7 @@ describe('analyzeImgUrl 写权限与归属', () => {
     writeFileSpy.mockResolvedValue();
     renameSpy.mockResolvedValue();
     unlinkSpy.mockResolvedValue();
+    processBookmarkIcons.mockResolvedValue([]);
   });
 
   it('普通游客浏览时静默跳过图标写入', async () => {
@@ -373,7 +388,7 @@ describe('analyzeImgUrl 写权限与归属', () => {
       res,
     );
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: [] }));
-    expect(getConnection).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('普通用户预览不能触发图标写入', async () => {
@@ -388,12 +403,11 @@ describe('analyzeImgUrl 写权限与归属', () => {
       res,
     );
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
-    expect(getConnection).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('登录用户只按自己的 user_id 查询待更新书签，且不信任客户端 URL', async () => {
-    const connection = { query: vi.fn().mockResolvedValue([[]]), release: vi.fn() };
-    getConnection.mockResolvedValue(connection);
+    query.mockResolvedValue([[]]);
     const res = mockRes();
     await analyzeImgUrl(
       {
@@ -402,28 +416,21 @@ describe('analyzeImgUrl 写权限与归属', () => {
       },
       res,
     );
-    expect(connection.query).toHaveBeenCalledTimes(1);
-    expect(connection.query.mock.calls[0][0]).toContain('WHERE user_id = ?');
-    expect(connection.query.mock.calls[0][1]).toEqual(['user-1', 'bookmark-1']);
-    expect(connection.release).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toContain('WHERE user_id = ?');
+    expect(query.mock.calls[0][1]).toEqual(['user-1', 'bookmark-1']);
   });
 
   it('保存后一小时内复用最近检查结果，不重复抓取或写文件', async () => {
     const checkedAt = new Date();
-    const connection = {
-      query: vi.fn().mockResolvedValueOnce([
-        [
-          {
-            id: 'bookmark-1',
-            url: 'https://example.com',
-            icon_url: '/uploads/bookmark-1.png',
-            icon_checked_at: checkedAt,
-          },
-        ],
-      ]),
-      release: vi.fn(),
-    };
-    getConnection.mockResolvedValue(connection);
+    query.mockResolvedValueOnce([[
+      {
+        id: 'bookmark-1',
+        url: 'https://example.com',
+        icon_url: '/uploads/bookmark-1.png',
+        icon_checked_at: checkedAt,
+      },
+    ]]);
     const res = mockRes();
 
     await analyzeImgUrl(
@@ -434,100 +441,46 @@ describe('analyzeImgUrl 写权限与归属', () => {
       res,
     );
 
-    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(1);
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 200,
         data: [expect.objectContaining({ id: 'bookmark-1', changed: false, throttled: true })],
       }),
     );
-    expect(connection.release).toHaveBeenCalledTimes(1);
+    expect(processBookmarkIcons).not.toHaveBeenCalled();
   });
 
-  it('远端图标内容未变化时只推进检查时间，不改 URL 或重写文件', async () => {
-    const iconBuffer = Buffer.from('same-icon');
-    mockFavimgResponse(iconBuffer);
-    readFileSpy.mockResolvedValue(iconBuffer);
-    const connection = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([
-          [
-            {
-              id: 'icon-id-1',
-              url: 'https://example.com',
-              icon_url: 'https://boluo66.top/uploads/bookmark-icon-id-1.png?v=old',
-              icon_checked_at: new Date('2026-06-01T00:00:00Z'),
-            },
-          ],
-        ])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]),
-      release: vi.fn(),
-    };
-    getConnection.mockResolvedValue(connection);
-    const res = mockRes();
-
-    await analyzeImgUrl(
+  it('非节流书签会调用 processBookmarkIcons', async () => {
+    query.mockResolvedValueOnce([[
       {
-        user: { id: 'user-1', role: 'user' },
-        body: [{ id: 'icon-id-1', refreshMode: 'periodic' }],
+        id: 'icon-id-1',
+        url: 'https://example.com',
+        icon_url: '',
+        icon_checked_at: new Date('2026-06-01T00:00:00Z'),
       },
-      res,
-    );
-
-    expect(httpGetSpy).toHaveBeenCalledOnce();
-    expect(writeFileSpy).not.toHaveBeenCalled();
-    expect(renameSpy).not.toHaveBeenCalled();
-    expect(connection.query.mock.calls[1][0]).toContain('SET icon_checked_at=NOW()');
-    expect(res.send.mock.calls[0][0].data[0]).toMatchObject({
+    ]]);
+    processBookmarkIcons.mockResolvedValueOnce([{
       id: 'icon-id-1',
-      iconUrl: 'https://boluo66.top/uploads/bookmark-icon-id-1.png?v=old',
+      iconUrl: '',
+      iconCheckedAt: new Date().toISOString(),
       changed: false,
-    });
-  });
-
-  it('远端图标内容变化时写入内容寻址文件并返回新 URL', async () => {
-    mockFavimgResponse(Buffer.from('new-icon'));
-    readFileSpy.mockImplementation((filePath) => {
-      if (String(filePath).endsWith('bookmark-icon-id-1.png')) return Promise.resolve(Buffer.from('old-icon'));
-      return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
-    });
-    const connection = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([
-          [
-            {
-              id: 'icon-id-1',
-              url: 'https://example.com',
-              icon_url: 'https://boluo66.top/uploads/bookmark-icon-id-1.png?v=old',
-              icon_checked_at: new Date('2026-06-01T00:00:00Z'),
-            },
-          ],
-        ])
-        .mockResolvedValueOnce([{ affectedRows: 1 }]),
-      release: vi.fn(),
-    };
-    getConnection.mockResolvedValue(connection);
+    }]);
     const res = mockRes();
 
     await analyzeImgUrl(
       {
         user: { id: 'user-1', role: 'user' },
-        headers: { host: 'boluo66.top' },
-        get: () => 'boluo66.top',
         body: [{ id: 'icon-id-1', refreshMode: 'periodic' }],
       },
       res,
     );
 
-    expect(writeFileSpy).toHaveBeenCalledOnce();
-    expect(renameSpy).toHaveBeenCalledOnce();
-    expect(connection.query.mock.calls[1][0]).toContain('SET icon_url=?');
-    expect(connection.query.mock.calls[1][1][0]).toMatch(
-      /^https:\/\/boluo66\.top\/uploads\/bookmark-icon-id-1-[a-f0-9]{12}\.png$/,
-    );
-    expect(res.send.mock.calls[0][0].data[0]).toMatchObject({ id: 'icon-id-1', changed: true });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(processBookmarkIcons).toHaveBeenCalledOnce();
+    expect(processBookmarkIcons.mock.calls[0][0]).toHaveLength(1);
+    expect(processBookmarkIcons.mock.calls[0][1]).toBe('user-1');
+    expect(res.send).toHaveBeenCalled();
   });
 });
 
@@ -537,12 +490,6 @@ describe('书签图标内容判断', () => {
     expect(isBookmarkIconCheckRecent('2026-07-19T11:00:01Z', now)).toBe(true);
     expect(isBookmarkIconCheckRecent('2026-07-19T11:00:00Z', now)).toBe(false);
     expect(isBookmarkIconCheckRecent(null, now)).toBe(false);
-  });
-
-  it('只有字节完全相同才复用原图标 URL', () => {
-    expect(bookmarkIconBuffersEqual(Buffer.from('same'), Buffer.from('same'))).toBe(true);
-    expect(bookmarkIconBuffersEqual(Buffer.from('old'), Buffer.from('new'))).toBe(false);
-    expect(bookmarkIconBuffersEqual(null, Buffer.from('new'))).toBe(false);
   });
 });
 

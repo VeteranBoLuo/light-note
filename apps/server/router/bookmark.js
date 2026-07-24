@@ -6,7 +6,7 @@ const router = express.Router();
 import * as bookmarkHandle from '../router_handle/bookmarkHandle.js';
 import * as tagGraphHandle from '../router_handle/tagGraphHandle.js';
 
-const upload = multer({ dest: '/' }); // 临时目录用于上传文件
+const upload = multer({ dest: '/tmp' }); // 临时目录用于上传文件
 
 router.post('/queryTagList', bookmarkHandle.queryTagList);
 
@@ -68,5 +68,9 @@ router.post('/health/ignore', bookmarkHandle.doIgnoreHealth);
 router.post('/ai/organize/quote', bookmarkHandle.doOrganizeQuote);
 router.post('/ai/organize/run', bookmarkHandle.doOrganizeRun);
 router.post('/ai/organize/apply', bookmarkHandle.doOrganizeApply);
+
+// 书签图标批次进度与重试
+router.post('/getIconBatchStatus', bookmarkHandle.getIconBatchStatusHandler);
+router.post('/retryIconBatchFailures', bookmarkHandle.retryIconBatchFailuresHandler);
 
 export default router;

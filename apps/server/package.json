@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node app.js",
     "worker:documents": "node documentWorker.js",
+    "worker:bookmark-icons": "node bookmarkIconWorker.js",
     "check:ocr": "node scripts/checkOcrRuntime.js",
     "eval:ai-assistant": "node evaluation/ai-assistant/runner.js",
     "test": "vitest run",

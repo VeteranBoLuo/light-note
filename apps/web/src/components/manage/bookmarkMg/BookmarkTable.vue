@@ -52,6 +52,24 @@
       </template>
 
       <div class="bookmark-manage-page" :class="{ 'bookmark-manage-page--night': user.currentTheme === 'night' }">
+        <!-- 图标补全进度卡 -->
+        <BCard v-if="iconBatchState" class="icon-batch-progress-card">
+          <div class="icon-batch-progress-content">
+            <div class="icon-batch-progress-title">图标补全 {{ iconBatchState.completed }}/{{ iconBatchState.total }}</div>
+            <div class="icon-batch-progress-detail">
+              <span v-if="iconBatchState.success > 0">成功 {{ iconBatchState.success }}</span>
+              <span v-if="iconBatchState.notFound > 0">暂未找到 {{ iconBatchState.notFound }}</span>
+              <span v-if="iconBatchState.failed > 0">失败 {{ iconBatchState.failed }}</span>
+              <span v-if="iconBatchState.retryWaiting > 0">等待重试 {{ iconBatchState.retryWaiting }}</span>
+              <span v-if="iconBatchState.status === 'processing'">正在补全…</span>
+            </div>
+            <div class="icon-batch-progress-actions">
+              <BButton size="sm" @click="dismissIconBatch()">隐藏</BButton>
+              <BButton size="sm" v-if="iconBatchState.failed > 0 || iconBatchState.notFound > 0"
+                @click="retryIconBatch(iconBatchState.batchId)">重试失败项</BButton>
+            </div>
+          </div>
+        </BCard>
         <section class="hero-stats-section">
           <div class="hero-stats">
             <BCard
@@ -342,7 +360,7 @@
 
 <script lang="ts" setup>
   import { bookmarkStore, useUserStore } from '@/store';
-  import { computed, defineAsyncComponent, ref } from 'vue';
+  import { computed, defineAsyncComponent, ref, onMounted, onUnmounted } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search.ts';
@@ -777,7 +795,7 @@
         return;
       }
 
-      const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls } = res.data || {};
+      const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls, iconBatch } = res.data || {};
       const summary = t('bookmarkMg.excelImportSummary', {
         parsed: parsedTotal || 0,
         tags: createdTags || 0,
@@ -789,6 +807,9 @@
           ? `${summary}${t('bookmarkMg.excelImportInvalidUrls', { count: skippedInvalidUrls })}`
           : summary,
       );
+      if (iconBatch?.batchId && iconBatch.total > 0) {
+        startIconBatchTracking(iconBatch.batchId);
+      }
       if (Number(createdBookmarks || 0) > 0 || Number(boundRelations || 0) > 0) {
         recordOperation({
           module: '书签管理',
@@ -818,15 +839,21 @@
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (res.status === 200) {
-        const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls } = res.data || {};
-        message.success(
-          `导入完成：解析 ${parsedTotal || 0}，新标签 ${createdTags || 0}，新书签 ${createdBookmarks || 0}，建立关联 ${boundRelations || 0}${skippedInvalidUrls ? `，跳过无效地址 ${skippedInvalidUrls}` : ''}`,
-        );
+        const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls, iconBatch } = res.data || {};
+        const summary = `导入完成：解析 ${parsedTotal || 0}，新标签 ${createdTags || 0}，新书签 ${createdBookmarks || 0}，建立关联 ${boundRelations || 0}${skippedInvalidUrls ? `，跳过无效地址 ${skippedInvalidUrls}` : ''}`;
+        message.success(summary);
         recordOperation({
           module: '书签管理',
           operation: `导入 HTML 书签成功【新增书签${createdBookmarks || 0}个/标签${createdTags || 0}个】`,
         });
-        await init();
+        // 如果有后台图标补全批次，启动进度追踪，跳过同步刷新
+        if (iconBatch?.batchId && iconBatch.total > 0) {
+          startIconBatchTracking(iconBatch.batchId);
+          // 有 Worker 后台处理，不用前端同步刷新图标
+          await init();
+        } else {
+          await init();
+        }
       } else {
         message.error(res.msg || '导入失败');
       }
@@ -837,6 +864,76 @@
     }
   };
 
+  // ── 后台图标补全进度追踪 ──────────────────────────────
+  const iconBatchState = ref<{
+    batchId: string;
+    total: number;
+    completed: number;
+    success: number;
+    notFound: number;
+    failed: number;
+    status: string;
+  } | null>(null);
+  let iconBatchTimer: ReturnType<typeof setInterval> | null = null;
+  const ICON_BATCH_LOCALSTORAGE_KEY = 'icon-batch-pending';
+
+  function startIconBatchTracking(batchId: string) {
+    try { localStorage.setItem(ICON_BATCH_LOCALSTORAGE_KEY, batchId); } catch { /* ignore */ }
+    iconBatchState.value = { batchId, total: 0, completed: 0, success: 0, notFound: 0, failed: 0, status: 'queued' };
+    pollIconBatchStatus(batchId);
+  }
+
+  async function pollIconBatchStatus(batchId: string) {
+    if (iconBatchTimer) { clearInterval(iconBatchTimer); iconBatchTimer = null; }
+    const poll = async () => {
+      try {
+        const res = await apiBasePost('/api/bookmark/getIconBatchStatus', { batchId }, { silent: true });
+        if (res?.status === 200 && res.data) {
+          iconBatchState.value = res.data;
+          if (res.data.status === 'completed' || res.data.total === 0) {
+            if (iconBatchTimer) { clearInterval(iconBatchTimer); iconBatchTimer = null; }
+            try { localStorage.removeItem(ICON_BATCH_LOCALSTORAGE_KEY); } catch { /* ignore */ }
+          }
+        }
+      } catch { /* ignore */ }
+    };
+    await poll();
+    if (iconBatchState.value?.status !== 'completed') {
+      iconBatchTimer = setInterval(async () => {
+        if (document.hidden) return;
+        await poll();
+      }, 2000);
+    }
+  }
+
+  function dismissIconBatch() {
+    if (iconBatchTimer) { clearInterval(iconBatchTimer); iconBatchTimer = null; }
+    iconBatchState.value = null;
+    try { localStorage.removeItem(ICON_BATCH_LOCALSTORAGE_KEY); } catch { /* ignore */ }
+  }
+
+  async function retryIconBatch(batchId: string) {
+    try {
+      const res = await apiBasePost('/api/bookmark/retryIconBatchFailures', { batchId, includeNotFound: false }, { silent: true });
+      if (res?.status === 200) {
+        message.success('已重新加入补全队列');
+        // 重新开始轮询
+        startIconBatchTracking(batchId);
+      }
+    } catch { /* ignore */ }
+  }
+
+  onMounted(() => {
+    try {
+      const pending = localStorage.getItem(ICON_BATCH_LOCALSTORAGE_KEY);
+      if (pending) pollIconBatchStatus(pending);
+    } catch { /* ignore */ }
+  });
+
+  onUnmounted(() => {
+    if (iconBatchTimer) { clearInterval(iconBatchTimer); }
+  });
+  // ── checkInitialRoute: can-be-manage-bookmark-settings-etc
   init();
 </script>
 

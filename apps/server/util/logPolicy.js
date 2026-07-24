@@ -3,6 +3,7 @@ const API_LOG_SKIP_SUBSTRINGS = Object.freeze([
   'getUserInfo',
   'getUserList',
   'analyzeImgUrl',
+  'getIconBatchStatus',
   'getRelatedTag',
   'getOpinionNotice',
   'noticeSummary',
