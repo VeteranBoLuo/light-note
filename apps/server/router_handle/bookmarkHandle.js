@@ -25,6 +25,7 @@ import {
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
+import { importBookmarksWithTags } from '../util/services/bookmarkImportService.js';
 import { createTag as createTagService } from '../util/services/tagService.js';
 import {
   BookmarkUrlError,
@@ -34,6 +35,8 @@ import {
 } from '../util/bookmarkUrl.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+
+const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
 
 // 书签地址由共享解析器确定性规范化；分享文案和异常拼接只返回候选，不在落库层静默猜测。
 export { normalizeBookmarkUrl };
@@ -879,6 +882,15 @@ export const updateBookmarkSort = async (req, res) => {
 };
 
 // 解析 Netscape 书签 HTML，提取文件夹（标签）与书签
+function decodeBookmarkHtmlText(value = '') {
+  return String(value)
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&');
+}
+
 const parseBookmarksFromHtml = (html = '') => {
   const bookmarks = [];
   const folderStack = [];
@@ -890,7 +902,7 @@ const parseBookmarksFromHtml = (html = '') => {
 
     const folderMatch = line.match(/<DT><H3[^>]*>(.*?)<\/H3>/i);
     if (folderMatch) {
-      folderStack.push(folderMatch[1].trim());
+      folderStack.push(decodeBookmarkHtmlText(folderMatch[1]).trim());
       continue;
     }
 
@@ -903,8 +915,8 @@ const parseBookmarksFromHtml = (html = '') => {
     if (linkMatch) {
       const currentFolder = folderStack[folderStack.length - 1] || '';
       bookmarks.push({
-        name: linkMatch[2].trim(),
-        url: linkMatch[1].trim(),
+        name: decodeBookmarkHtmlText(linkMatch[2]).trim(),
+        url: decodeBookmarkHtmlText(linkMatch[1]).trim(),
         folder: currentFolder,
       });
     }
@@ -912,6 +924,21 @@ const parseBookmarksFromHtml = (html = '') => {
 
   return bookmarks;
 };
+
+function finishBookmarkImport(req, userId, stats) {
+  if (stats.createdBookmarks > 0 || stats.boundRelations > 0) {
+    // 业务事务已提交，索引失效作为旁路执行，避免占用导入事务连接。
+    void invalidatePersonalKnowledgeCache(userId);
+  }
+  // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)
+  if (stats.createdBookmarks > 0 && !req.suppressUserRewards) {
+    grantExp(userId, 'bookmark_import', {
+      refId: `import_${userId}_${Date.now()}`,
+      amount: 15,
+      userRole: req.user.role,
+    }).catch((e) => console.warn('[growth] 导入书签奖励发放失败 code=%s', stableAgentErrorCode(e)));
+  }
+}
 
 // HTML 书签导入：新增缺失的标签/书签，并建立关联
 export const importBookmarksHtml = async (req, res) => {
@@ -955,100 +982,44 @@ export const importBookmarksHtml = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-
-    // 预加载现有标签和书签
-    const [tagRows] = await connection.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
-    const [bookmarkRows] = await connection.query(
-      'SELECT id, name, url FROM bookmark WHERE user_id = ? AND del_flag = 0',
-      [userId],
-    );
-    const tagMap = new Map(tagRows.map((row) => [row.name, row.id]));
-    const bookmarkMap = new Map(bookmarkRows.map((row) => [row.name, row.id]));
-    const bookmarkUrlMap = new Map(
-      bookmarkRows
-        .map((row) => [inspectBookmarkUrl(row.url, { allowTextExtraction: false }).canonicalUrl, row.id])
-        .filter(([url]) => Boolean(url)),
-    );
-
-    let createdTags = 0;
-    let createdBookmarks = 0;
-    let boundRelations = 0;
-    let skippedInvalidUrls = 0;
-
-    for (const item of parsedBookmarks) {
-      const resolution = inspectBookmarkUrl(item.url, { allowTextExtraction: false });
-      if (!resolution.canonicalUrl) {
-        skippedInvalidUrls += 1;
-        continue;
-      }
-      const canonicalUrl = resolution.canonicalUrl;
-      const tagName = (item.folder || '').trim();
-      let tagId = null;
-
-      if (tagName) {
-        if (!tagMap.has(tagName)) {
-          const tagPayload = insertData({
-            name: tagName,
-            userId,
-          });
-          await connection.query('INSERT INTO tag SET ?', [tagPayload]);
-          tagId = tagPayload.id;
-          tagMap.set(tagName, tagId);
-          createdTags++;
-        } else {
-          console.log('标签已存在:', tagName);
-          tagId = tagMap.get(tagName);
-        }
-      }
-      let bookmarkId = bookmarkUrlMap.get(canonicalUrl) || bookmarkMap.get(item.name);
-      if (!bookmarkId) {
-        const bookmarkPayload = insertData({
-          name: item.name,
-          userId,
-          url: canonicalUrl,
-          description: '',
-        });
-        await connection.query('INSERT INTO bookmark SET ?', [bookmarkPayload]);
-        bookmarkId = bookmarkPayload.id;
-        bookmarkMap.set(item.name, bookmarkId);
-        bookmarkUrlMap.set(canonicalUrl, bookmarkId);
-        createdBookmarks++;
-      }
-      if (tagId && bookmarkId) {
-        const inserted = await insertResourceTagRelations(connection, {
-          tagIds: [tagId],
-          resourceType: RESOURCE_TYPE.BOOKMARK,
-          resourceId: bookmarkId,
-          userId,
-          source: 'import',
-        });
-        if (inserted > 0) {
-          boundRelations++;
-        }
-      }
-    }
-
+    const stats = await importBookmarksWithTags(connection, { userId, items: parsedBookmarks });
     await connection.commit();
-    res.send(
-      resultData({
-        parsedTotal: parsedBookmarks.length,
-        createdTags,
-        createdBookmarks,
-        boundRelations,
-        skippedInvalidUrls,
-      }),
-    );
-    // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)
-    if (createdBookmarks > 0 && !req.suppressUserRewards) {
-      grantExp(userId, 'bookmark_import', {
-        refId: `import_${userId}_${Date.now()}`,
-        amount: 15,
-        userRole: req.user.role,
-      }).catch((e) => console.warn('[growth] 导入书签奖励发放失败 code=%s', stableAgentErrorCode(e)));
-    }
+    res.send(resultData(stats));
+    finishBookmarkImport(req, userId, stats);
   } catch (e) {
     await connection.rollback();
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[bookmark] HTML 导入失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '书签导入失败，请稍后重试'));
+  } finally {
+    connection.release();
+  }
+};
+
+// Excel 已在浏览器端解析，服务端只接收结构化行数据；与 HTML 导入共用同一去重和标签关联事务。
+export const importBookmarksExcel = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const userId = req.user?.id;
+  if (!userId) return res.send(resultData(null, 401, '缺少用户身份'));
+
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.send(resultData(null, 400, '未解析到书签数据'));
+  }
+  if (items.length > MAX_EXCEL_BOOKMARK_IMPORT_ITEMS) {
+    return res.send(resultData(null, 400, `单次最多导入 ${MAX_EXCEL_BOOKMARK_IMPORT_ITEMS} 条书签`));
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const stats = await importBookmarksWithTags(connection, { userId, items });
+    await connection.commit();
+    res.send(resultData(stats));
+    finishBookmarkImport(req, userId, stats);
+  } catch (error) {
+    await connection.rollback();
+    console.error('[bookmark] Excel 导入失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, 'Excel 书签导入失败，请稍后重试'));
   } finally {
     connection.release();
   }

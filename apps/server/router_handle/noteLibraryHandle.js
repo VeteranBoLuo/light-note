@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
 import { snakeCaseKeys, resultData, mergeExistingProperties, insertData } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -36,6 +37,19 @@ const sendTemplateServerError = (res, scene, error) => {
 const sendNoteServerError = (res, scene, error) => {
   console.error('[note-library] %s failed code=%s', scene, stableAgentErrorCode(error));
   return res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+};
+
+// Markdown 正文的规范读模型：只对当前正式类型 `markdown` 生效。
+// 早期 `md` 记录的正文实际可能是 HTML，不能把它当作 Markdown 源码改写。
+const normalizeCanonicalMarkdownContent = (content, type) =>
+  type === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
+
+const normalizeCanonicalMarkdownRecord = (record) => {
+  if (!record || record.type !== 'markdown') return record;
+  return {
+    ...record,
+    content: normalizeMarkdownBlockquoteEntities(record.content),
+  };
 };
 
 // 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
@@ -137,7 +151,7 @@ async function snapshotNoteVersion(connection, { noteId, userId, newContent }) {
     userId,
   ]);
   if (rows.length === 0) return; // 笔记不存在或非本人,交由后续 update 的 where 兜底
-  const oldContent = rows[0].content ?? '';
+  const oldContent = normalizeCanonicalMarkdownContent(rows[0].content ?? '', rows[0].type);
   if (oldContent === newContent) return; // 正文无变化,去重
   // 时间合并:距该笔记上一条版本不足窗口则并入,不新增
   const [lastRows] = await connection.query(
@@ -162,20 +176,40 @@ export const updateNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
-    const params = {
-      ...req.body,
-      updateBy: userId,
-    };
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      const hasSubmittedContent = Object.prototype.hasOwnProperty.call(req.body || {}, 'content');
+      let requestBody = req.body || {};
+      // 正常前端会随正文提交 type；兼容旧客户端的 content-only 更新时，从权威当前笔记补齐类型。
+      // 这样任何 Markdown 写入入口都会在服务端统一拦住 `&gt;` 形式的引用标记污染。
+      if (hasSubmittedContent) {
+        let submittedType = normalizeNoteType(requestBody.type);
+        if (!submittedType) {
+          const [typeRows] = await connection.query('SELECT type FROM note WHERE id = ? AND create_by = ?', [
+            requestBody.id,
+            userId,
+          ]);
+          submittedType = normalizeNoteType(typeRows[0]?.type);
+        }
+        if (submittedType === 'markdown') {
+          requestBody = {
+            ...requestBody,
+            content: normalizeMarkdownBlockquoteEntities(requestBody.content),
+          };
+        }
+      }
+      const params = {
+        ...requestBody,
+        updateBy: userId,
+      };
       // 覆盖前先存历史版本快照(改动前旧内容;含去重/时间合并/保留上限)
-      await snapshotNoteVersion(connection, { noteId: req.body.id, userId, newContent: req.body.content });
+      await snapshotNoteVersion(connection, { noteId: requestBody.id, userId, newContent: requestBody.content });
       // 更新 note 表，排除 tags
       const updateParams = mergeExistingProperties(params, [], ['id', 'tags']);
       await connection.query('update note set ? where id=? and create_by=?', [
         snakeCaseKeys(updateParams),
-        req.body.id,
+        requestBody.id,
         userId,
       ]);
       if (params.tags && Array.isArray(params.tags)) {
@@ -183,22 +217,21 @@ export const updateNote = async (req, res) => {
         await replaceResourceTagRelations(connection, {
           tagIds,
           resourceType: RESOURCE_TYPE.NOTE,
-          resourceId: req.body.id,
+          resourceId: requestBody.id,
           userId,
         });
       }
       // 笔记内联提及(N0):只有正文或正文类型发生提交时才同步。仅改标题/标签/排序时跳过,
       // 避免用空正文误删已有引用；但「只切换 type」也会改变同一正文的解析语义，不能漏掉。
-      const hasSubmittedContent = Object.prototype.hasOwnProperty.call(req.body, 'content');
-      const hasSubmittedType = Object.prototype.hasOwnProperty.call(req.body, 'type');
+      const hasSubmittedType = Object.prototype.hasOwnProperty.call(requestBody, 'type');
       if (hasSubmittedContent || hasSubmittedType) {
         // 以最终已落库的 content/type 为准：只带其中一个字段时，从同一事务内回读另一个字段。
         // 这既覆盖 content-only 的旧类型，也覆盖 type-only 的旧正文，不能凭空按 html 解析。
-        let finalContent = hasSubmittedContent && req.body.content != null ? String(req.body.content) : null;
-        let finalType = hasSubmittedType && req.body.type != null ? req.body.type : null;
+        let finalContent = hasSubmittedContent && requestBody.content != null ? String(requestBody.content) : null;
+        let finalType = hasSubmittedType && requestBody.type != null ? requestBody.type : null;
         if (finalContent === null || finalType === null) {
           const [noteRows] = await connection.query('SELECT content, type FROM note WHERE id = ? AND create_by = ?', [
-            req.body.id,
+            requestBody.id,
             userId,
           ]);
           const persistedNote = noteRows[0];
@@ -206,7 +239,7 @@ export const updateNote = async (req, res) => {
           if (finalType === null) finalType = persistedNote?.type;
         }
         const refs = extractOwnedResourceRefs({ content: finalContent, type: finalType });
-        await syncNoteResourceRefs(connection, { userId, noteId: req.body.id, refs });
+        await syncNoteResourceRefs(connection, { userId, noteId: requestBody.id, refs });
       }
       await connection.commit();
       await invalidatePersonalKnowledgeCache(userId);
@@ -279,7 +312,7 @@ export const getNoteDetail = (req, res) => {
         if (result.length === 0) {
           return res.send(resultData(null, 404, '笔记不存在'));
         }
-        res.send(resultData(result[0]));
+        res.send(resultData(normalizeCanonicalMarkdownRecord(result[0])));
       })
       .catch((err) => {
         return sendNoteServerError(res, 'get-note-detail', err);
@@ -660,8 +693,9 @@ export const getNoteVersions = async (req, res) => {
        ORDER BY create_time DESC, id DESC`,
       [noteId],
     );
-    // 回传 content + type,字数与预览渲染都交给前端(按渲染后展示文本计,html/md 口径一致)
-    res.send(resultData(rows));
+    // 回传 content + type,字数与预览渲染都交给前端(按渲染后展示文本计,html/md 口径一致)。
+    // 历史的错误实体在读取时也立即还原，用户无需先手动编辑一次才能看到正确 Markdown。
+    res.send(resultData(rows.map(normalizeCanonicalMarkdownRecord)));
   } catch (e) {
     return sendNoteServerError(res, 'list-note-versions', e);
   }
@@ -675,9 +709,10 @@ export const getNoteVersionDetail = async (req, res) => {
     if (!versionId) {
       return res.send(resultData(null, 400, '参数错误'));
     }
-    const [rows] = await pool.query('SELECT id, note_id, title, content, create_time FROM note_versions WHERE id=?', [
-      versionId,
-    ]);
+    const [rows] = await pool.query(
+      'SELECT id, note_id, title, content, type, create_time FROM note_versions WHERE id=?',
+      [versionId],
+    );
     if (rows.length === 0) {
       return res.send(resultData(null, 404, '版本不存在'));
     }
@@ -686,7 +721,7 @@ export const getNoteVersionDetail = async (req, res) => {
     if (own.length === 0) {
       return res.send(resultData(null, 404, '版本不存在'));
     }
-    res.send(resultData(rows[0]));
+    res.send(resultData(normalizeCanonicalMarkdownRecord(rows[0])));
   } catch (e) {
     return sendNoteServerError(res, 'get-note-version', e);
   }
@@ -713,8 +748,9 @@ export const restoreNoteVersion = async (req, res) => {
       }
       const noteId = verRows[0].note_id;
       const verTitle = verRows[0].title;
-      const verContent = verRows[0].content ?? '';
+      const rawVerContent = verRows[0].content ?? '';
       const verType = verRows[0].type || 'html';
+      const verContent = normalizeCanonicalMarkdownContent(rawVerContent, verType);
       // 归属校验 + 取当前值(未删除的、属于自己的笔记)
       const [curRows] = await connection.query(
         'SELECT title, content, type FROM note WHERE id=? AND create_by=? AND del_flag=?',
@@ -728,7 +764,7 @@ export const restoreNoteVersion = async (req, res) => {
       const curSnap = insertData({
         noteId,
         title: curRows[0].title,
-        content: curRows[0].content ?? '',
+        content: normalizeCanonicalMarkdownContent(curRows[0].content ?? '', curRows[0].type),
         type: curRows[0].type,
         createBy: userId,
       });
@@ -798,7 +834,7 @@ export const getNoteTemplateDetail = async (req, res) => {
     if (rows.length === 0) {
       return res.send(resultData(null, 404, '模板不存在'));
     }
-    res.send(resultData(rows[0]));
+    res.send(resultData(normalizeCanonicalMarkdownRecord(rows[0])));
   } catch (e) {
     sendTemplateServerError(res, '查询模板详情', e);
   }
@@ -813,7 +849,9 @@ export const addNoteTemplate = async (req, res) => {
     const titleTemplate = String(req.body.titleTemplate || '').trim();
     const description = String(req.body.description || '').trim();
     const type = req.body.type === 'md' ? 'markdown' : String(req.body.type || 'html');
-    const content = String(req.body.content || '');
+    const rawContent = String(req.body.content || '');
+    const content =
+      normalizeNoteType(type) === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawContent) : rawContent;
     if (!name) {
       return res.send(resultData(null, 400, '模板名称不能为空'));
     }

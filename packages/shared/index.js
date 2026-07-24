@@ -193,6 +193,51 @@ export function normalizeNoteType(type) {
   return type == null ? '' : String(type);
 }
 
+// Markdown 源文本可能被旧版客户端或错误的 DOM innerHTML 往返处理，
+// 从而把行首引用标记 `>` 序列化成 `&gt;`。这不是内容安全处理，
+// 只恢复 Markdown 语法中可确定识别的引用标记：行首（或列表标记后）的 `&gt;`，
+// 并跳过围栏代码块和四空格缩进代码，避免误改正文中的普通 HTML 实体。
+const MARKDOWN_FENCE_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})/u;
+const MARKDOWN_BLOCKQUOTE_ENTITY_PATTERN = /^([ \t]*)(?:(?:[-+*]|\d+[.)])([ \t]+))?((?:&gt;[ \t]*)+)/iu;
+
+/**
+ * 恢复被 HTML 序列化污染的 Markdown 行首引用标记。
+ *
+ * 此函数刻意不解码所有 HTML 实体；例如正文、链接、代码中的 `&gt;` 会保持原样。
+ * 前后端都在 Markdown 的读取/写入边界调用，保证旧页面提交也不会再污染持久化正文。
+ */
+export function normalizeMarkdownBlockquoteEntities(value) {
+  const source = value == null ? '' : String(value);
+  if (!/&gt;/iu.test(source)) return source;
+
+  let fence = null;
+  const chunks = source.split(/(\r\n|\n|\r)/u);
+  for (let index = 0; index < chunks.length; index += 2) {
+    const line = chunks[index];
+    const fenceMatch = line.match(MARKDOWN_FENCE_PATTERN);
+    if (fence) {
+      if (fenceMatch && fenceMatch[1][0] === fence.character && fenceMatch[1].length >= fence.length) {
+        fence = null;
+      }
+      continue;
+    }
+    if (fenceMatch) {
+      fence = { character: fenceMatch[1][0], length: fenceMatch[1].length };
+      continue;
+    }
+
+    const match = line.match(MARKDOWN_BLOCKQUOTE_ENTITY_PATTERN);
+    if (!match) continue;
+    const [, leadingWhitespace, listSpacing, encodedMarkers] = match;
+    // 四空格缩进且不在列表中是 Markdown 代码块，不把其中的实体当作引用语法修复。
+    if (!listSpacing && leadingWhitespace.replace(/\t/gu, '    ').length >= 4) continue;
+    const markerStart = match[0].length - encodedMarkers.length;
+    chunks[index] =
+      `${line.slice(0, markerStart)}${encodedMarkers.replace(/&gt;/giu, '>')}${line.slice(match[0].length)}`;
+  }
+  return chunks.join('');
+}
+
 /** 校验并解码单个资源 id;非法(编码失败/空/超长/含危险字符)返回 null。 */
 function normalizeResourceId(rawSegment) {
   if (typeof rawSegment !== 'string' || rawSegment === '') return null;

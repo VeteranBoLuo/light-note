@@ -53,6 +53,16 @@ describe('noteService.createNote', () => {
     expect(triggerResourceCreateEffects).toHaveBeenCalledWith(expect.objectContaining({ resourceId: result.id }));
   });
 
+  it('Markdown 创建在服务端写入边界恢复旧页面序列化的引用标记', async () => {
+    await createNote({
+      userId: 'user-1',
+      userRole: 'user',
+      note: { title: '日报', content: '&gt; 2026-07-24 星期五\n\n正文', type: 'markdown' },
+    });
+    const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note SET ?')?.[1]?.[0];
+    expect(inserted.content).toBe('> 2026-07-24 星期五\n\n正文');
+  });
+
   it('非法历史类型在写库前失败', async () => {
     await expect(createNote({ userId: 'user-1', note: { title: '坏类型', type: 'richtext' } })).rejects.toThrow(
       'INVALID_NOTE_TYPE',
@@ -266,6 +276,36 @@ describe('noteService.applyOwnedNoteContentChange', () => {
     expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO note_versions SET ?')).toBe(false);
     expect(connection.query.mock.calls.some(([sql]) => sql.startsWith('UPDATE note SET content'))).toBe(false);
   });
+
+  it('AI 变更会把历史污染与新正文一起按 Markdown 源码规范化', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.startsWith('SELECT title, content, type FROM note')) {
+        return [[{ title: '日报', content: '&gt; 原始引用', type: 'markdown' }]];
+      }
+      if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
+      if (sql.startsWith('UPDATE note SET content')) return [{ affectedRows: 1 }];
+      return [{ affectedRows: 1 }];
+    });
+
+    await expect(
+      applyOwnedNoteContentChange(connection, {
+        userId: 'subject-1',
+        noteId: 'note-1',
+        before: { title: '日报', content: '> 原始引用', type: 'markdown' },
+        after: { title: '日报', content: '&gt; 新引用', type: 'markdown' },
+      }),
+    ).resolves.toEqual({ title: '日报', content: '> 新引用', type: 'markdown' });
+
+    const snapshot = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?')?.[1]?.[0];
+    expect(snapshot).toMatchObject({ content: '> 原始引用' });
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE note SET content = ?'), [
+      '> 新引用',
+      'markdown',
+      'subject-1',
+      'note-1',
+      'subject-1',
+    ]);
+  });
 });
 
 describe('noteService 笔记提及引用同步接入(N0)', () => {
@@ -306,7 +346,10 @@ describe('noteService 笔记提及引用同步接入(N0)', () => {
     syncNoteResourceRefs.mockRejectedValueOnce(syncError);
 
     await expect(
-      createNote({ userId: 'u1', note: { title: '同步失败', content: '<a href="/noteLibrary/n1">x</a>', type: 'html' } }),
+      createNote({
+        userId: 'u1',
+        note: { title: '同步失败', content: '<a href="/noteLibrary/n1">x</a>', type: 'html' },
+      }),
     ).rejects.toBe(syncError);
 
     expect(connection.rollback).toHaveBeenCalledTimes(1);

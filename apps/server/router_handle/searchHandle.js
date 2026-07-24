@@ -4,10 +4,13 @@ import { resolveFileCategory } from '../util/fileCategory.js';
 import { normalizeTagIds, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { removeInboxRelations } from '../util/resourceInbox.js';
+import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 
 const SEARCH_TYPES = ['bookmark', 'note', 'file', 'tag'];
 const BATCH_EDITABLE_TYPES = ['bookmark', 'note', 'file'];
 const BATCH_DELETE_TYPES = ['bookmark', 'note', 'file', 'tag'];
+// 单次批量操作保持为一笔短事务，既覆盖管理页常见的大批量操作，也避免超长 IN 查询拖慢数据库。
+const MAX_BATCH_DELETE_ITEMS = 1000;
 const RESOURCE_OWNER_SQL = {
   bookmark: `SELECT id FROM bookmark WHERE user_id = ? AND del_flag = 0 AND id IN ({ids})`,
   note: `SELECT id FROM note WHERE create_by = ? AND del_flag = 0 AND id IN ({ids})`,
@@ -664,18 +667,26 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
 
 export const batchDeleteResources = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.send(resultData(null, 401, '请先登录'));
+  }
+
+  const rawItems = req.body?.items;
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    return res.send(resultData(null, 400, '未选择可删除资源'));
+  }
+  if (rawItems.length > MAX_BATCH_DELETE_ITEMS) {
+    return res.send(resultData(null, 400, `单次最多删除 ${MAX_BATCH_DELETE_ITEMS} 项资源`));
+  }
+
+  const items = normalizeBatchDeleteItems(rawItems);
+  if (!items.length) {
+    return res.send(resultData(null, 400, '未选择可删除资源'));
+  }
+
   const connection = await pool.getConnection();
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.send(resultData(null, 401, '请先登录'));
-    }
-
-    const items = normalizeBatchDeleteItems(req.body?.items || []);
-    if (!items.length) {
-      return res.send(resultData(null, 400, '未选择可删除资源'));
-    }
-
     const grouped = {
       bookmark: [],
       note: [],
@@ -757,6 +768,10 @@ export const batchDeleteResources = async (req, res) => {
     }
 
     await connection.commit();
+    if (affectedItemCount > 0) {
+      // 资源已经提交删除后再推进个人检索代际；持久化清理不占用本次批量删除的连接。
+      void invalidatePersonalKnowledgeCache(userId);
+    }
     res.send(
       resultData({
         requestedItemCount: items.length,

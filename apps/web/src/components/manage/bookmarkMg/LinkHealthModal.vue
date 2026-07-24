@@ -6,26 +6,48 @@
       <div class="lh-bar">
         <div class="lh-stats">
           <span>{{ $t('bookmarkMg.healthProgress', { checked: summary.checked, total: summary.total }) }}</span>
-          <span v-if="summary.suspect.length" class="lh-dead-n">· {{ $t('bookmarkMg.healthSuspectCount', { n: summary.suspect.length }) }}</span>
+          <span v-if="summary.suspect.length" class="lh-dead-n"
+            >· {{ $t('bookmarkMg.healthSuspectCount', { n: summary.suspect.length }) }}</span
+          >
         </div>
         <b-space>
-          <b-button size="small" :disabled="running || starting || resetting || summary.checked === 0" @click="resetCheck">
+          <b-button
+            size="small"
+            :disabled="running || starting || resetting || summary.checked === 0"
+            @click="resetCheck"
+          >
             {{ $t('bookmarkMg.healthReset') }}
           </b-button>
-          <b-button size="small" type="primary" :loading="running || starting" :disabled="running || starting" @click="startCheck">
-            {{ running ? $t('bookmarkMg.healthChecking') : allChecked ? $t('bookmarkMg.healthRecheck') : $t('bookmarkMg.healthStartAll') }}
+          <b-button
+            size="small"
+            type="primary"
+            :loading="running || starting"
+            :disabled="running || starting"
+            @click="startCheck"
+          >
+            {{
+              running
+                ? $t('bookmarkMg.healthChecking')
+                : allChecked
+                  ? $t('bookmarkMg.healthRecheck')
+                  : $t('bookmarkMg.healthStartAll')
+            }}
           </b-button>
         </b-space>
       </div>
 
-      <div v-if="!summary.suspect.length && summary.checked > 0" class="lh-empty">✅ {{ $t('bookmarkMg.healthNoDead') }}</div>
+      <div v-if="!summary.suspect.length && summary.checked > 0" class="lh-empty"
+        >✅ {{ $t('bookmarkMg.healthNoDead') }}</div
+      >
 
       <template v-if="summary.suspect.length">
         <p class="lh-hint">{{ $t('bookmarkMg.healthSuspectHint') }}</p>
         <div class="lh-list">
           <div v-for="d in summary.suspect" :key="d.id" class="lh-item">
             <div class="lh-item-main">
-              <a class="lh-item-name" :href="normalizeUrl(d.url) || undefined" target="_blank" rel="noopener">🔗 {{ d.name }}</a>
+              <a class="lh-item-name" :href="normalizeUrl(d.url) || undefined" target="_blank" rel="noopener"
+                >🔗 {{ d.name }}</a
+              >
               <div class="lh-item-url">{{ d.url }}</div>
             </div>
             <div class="lh-item-actions">
@@ -62,8 +84,19 @@
 
   const visible = defineModel<boolean>('visible');
 
-  interface SuspectItem { id: string; name: string; url: string; note: string; hasSnapshot: boolean }
-  const summary = ref<{ total: number; checked: number; running: boolean; suspect: SuspectItem[] }>({ total: 0, checked: 0, running: false, suspect: [] });
+  interface SuspectItem {
+    id: string;
+    name: string;
+    url: string;
+    note: string;
+    hasSnapshot: boolean;
+  }
+  const summary = ref<{ total: number; checked: number; running: boolean; suspect: SuspectItem[] }>({
+    total: 0,
+    checked: 0,
+    running: false,
+    suspect: [],
+  });
   const starting = ref(false);
   const resetting = ref(false);
   const ignoring = ref('');
@@ -165,7 +198,6 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 480px;
     max-width: 88vw;
     box-sizing: border-box;
   }
@@ -255,6 +287,8 @@
   }
   .lh-item-actions {
     flex: 0 0 auto;
+    display: flex;
+    gap: 10px;
   }
   .lh-act {
     padding: 4px 12px;

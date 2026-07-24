@@ -65,6 +65,14 @@ describe('importData 引用同步接入(N0 · P0-1)', () => {
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
+  it('导入 Markdown 时恢复行首被旧页面转义的引用标记', async () => {
+    const res = mockRes();
+    await importData(req({ notes: [{ title: '日报', content: '&gt; 2026-07-24 星期五', type: 'markdown' }] }), res);
+
+    const noteInsert = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note SET ?');
+    expect(noteInsert?.[1]?.[0]).toMatchObject({ content: '> 2026-07-24 星期五', type: 'markdown' });
+  });
+
   it('同步抛错 → 整个导入事务回滚,不 commit', async () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     syncNoteResourceRefs.mockRejectedValueOnce(new Error('sync failed'));

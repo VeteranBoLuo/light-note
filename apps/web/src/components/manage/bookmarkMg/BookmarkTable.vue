@@ -345,6 +345,7 @@
   import { computed, defineAsyncComponent, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
+  import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
@@ -370,6 +371,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
   import { openAiAssistant } from '@/utils/aiEntry';
+  import { buildNetscapeBookmarkHtml } from '@/utils/bookmarkHtml';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -569,59 +571,50 @@
   const handleBatchDelete = () => {
     if (blockGuestWrite('delete-bookmark')) return;
     if (selectedRows.value.length === 0) {
-      message.warning('请选择要删除的书签');
+      message.warning(t('bookmarkMg.batchDeleteNoSelection'));
       return;
     }
-    const selectedBookmarks = filteredBookmarks.value.filter((item) => selectedRows.value.includes(item.id));
-    const names = selectedBookmarks.map((b) => b.name).join('、');
+    const selectedIds = [...selectedRows.value];
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要批量删除选中的 ${selectedRows.value.length} 个书签？<br/>书签列表：${names}`,
-      onOk() {
+      title: t('bookmarkMg.batchDeleteConfirmTitle'),
+      content: t('bookmarkMg.batchDeleteConfirmContent', { count: selectedIds.length }),
+      async onOk() {
         loading.value = true;
-        const requests = selectedRows.value.map((id) => apiBasePost('/api/bookmark/delBookmark', { id }));
-        Promise.allSettled(requests).then((results: any) => {
-          let successCount = 0;
-          let failedCount = 0;
-          const failedItems: any[] = [];
-          results.forEach((result: any, index: number) => {
-            if (result.status === 'fulfilled' && result.value.status === 200) {
-              successCount++;
-            } else {
-              failedCount++;
-              const bm = selectedBookmarks[index];
-              failedItems.push({ name: bm.name, url: bm.url, error: result.value?.msg || '删除失败' });
-            }
+        try {
+          // 统一走集合型删除接口，避免选中上百条书签时瞬间创建上百个单删请求和事务。
+          const res = await batchDeleteSearchResources(selectedIds.map((id) => ({ id, type: 'bookmark' })));
+          if (Number(res?.status) !== 200) {
+            message.error(res?.msg || t('bookmarkMg.batchDeleteFailed'));
+            return;
+          }
+
+          const successCount = Number(res?.data?.affectedItemCount || 0);
+          const skippedCount = Number(res?.data?.invalidItemCount || 0);
+          if (successCount === 0) {
+            message.warning(t('bookmarkMg.batchDeleteNoChanges'));
+            return;
+          }
+
+          recordOperation({
+            module: '书签管理',
+            operation:
+              skippedCount > 0
+                ? `批量删除书签部分成功【${successCount}成功/${skippedCount}跳过】`
+                : `批量删除书签成功【${successCount}个】`,
           });
-          init();
-          if (failedCount > 0) {
-            const errorText = failedItems
-              .map((item) => `${item.name} (${item.url}): <span style="color: #ff5722">${item.error}</span>`)
-              .join('<br/>');
-            Alert.alert({
-              title: `删除完成 (${successCount}成功/${failedCount}失败)`,
-              content: errorText,
-              okText: '复制错误信息',
-              onOk() {
-                navigator.clipboard.writeText(failedItems.map((f) => `${f.name} (${f.url}): ${f.error}`).join('\n'));
-                message.success('错误信息已复制到剪贴板');
-              },
-            });
-          } else {
-            message.success(`批量删除成功！共删除 ${successCount} 个书签`);
-          }
-          if (successCount > 0) {
-            recordOperation({
-              module: '书签管理',
-              operation:
-                failedCount > 0
-                  ? `批量删除书签部分成功【${successCount}成功/${failedCount}失败】`
-                  : `批量删除书签成功【${successCount}个】`,
-            });
-          }
+          message[skippedCount > 0 ? 'warning' : 'success'](
+            skippedCount > 0
+              ? t('bookmarkMg.batchDeletePartial', { count: successCount, skipped: skippedCount })
+              : t('bookmarkMg.batchDeleteSuccess', { count: successCount }),
+          );
           selectedRows.value = [];
+          clearGlobalSearchCache();
+          await init();
+        } catch {
+          message.error(t('bookmarkMg.batchDeleteFailed'));
+        } finally {
           loading.value = false;
-        });
+        }
       },
     });
   };
@@ -642,11 +635,16 @@
       书签名: item.name,
       网址: item.url,
       描述: item?.description,
+      标签: (item.tagList || [])
+        .map((tag) => String(tag?.name || '').trim())
+        .filter(Boolean)
+        .join(' | '),
     }));
     const maxLen = [
       Math.max(...exportData.map((item) => item.书签名.length)),
       Math.max(...exportData.map((item) => item.网址.length)),
       Math.max(...exportData.map((item) => item.描述?.length || 0)),
+      Math.max(...exportData.map((item) => item.标签.length)),
     ];
     try {
       await exportExcelFile(
@@ -655,6 +653,7 @@
           { header: '书签名', key: '书签名', width: Math.max(maxLen[0], 12) },
           { header: '网址', key: '网址', width: Math.max(maxLen[1], 20) },
           { header: '描述', key: '描述', width: 50 },
+          { header: '标签', key: '标签', width: Math.min(Math.max(maxLen[3], 12), 40) },
         ],
         '书签集合.xlsx',
       );
@@ -694,19 +693,9 @@
         groupedBookmarks['未分类'].push(bookmarkItem);
       }
     });
-    let html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
-<TITLE>Bookmarks</TITLE>
-<H1>Bookmarks</H1>
-<DL><p>`;
-    Object.keys(groupedBookmarks).forEach((folder) => {
-      html += `<DT><H3>${folder}</H3>\n<DL><p>\n`;
-      groupedBookmarks[folder].forEach((bm) => {
-        html += `<DT><A HREF="${bm.url}">${bm.name}</A>\n`;
-      });
-      html += `</DL><p>\n`;
-    });
-    html += `</DL><p>`;
+    const html = buildNetscapeBookmarkHtml(
+      Object.entries(groupedBookmarks).map(([name, bookmarks]) => ({ name, bookmarks })),
+    );
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -732,15 +721,6 @@
     if (withProtocol(url)) return;
     event.preventDefault();
     message.warning(t('bookmarkUrl.invalid'));
-  }
-
-  function escapeHtml(value: unknown) {
-    return String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   }
 
   type BUploadExpose = { open: () => void };
@@ -771,69 +751,53 @@
       const requiredColumns = ['书签名', '网址', '描述'];
       const hasRequired = requiredColumns.every((col) => jsonData.length > 0 && Object.keys(jsonData[0]).includes(col));
       if (!hasRequired) {
-        message.error('导入文件格式不正确，请确保包含书签名、网址、描述列');
+        message.error(t('bookmarkMg.excelImportFormatInvalid'));
         return;
       }
       const bookmarksToImport = jsonData.map((item: any) => ({
-        name: item['书签名'].trim(),
-        url: item['网址'].trim(),
-        description: item['描述']?.trim() || '',
+        name: String(item['书签名'] ?? '').trim(),
+        url: String(item['网址'] ?? '').trim(),
+        description: String(item['描述'] ?? '').trim(),
+        tagNames: Array.from(
+          new Set(
+            String(item['标签'] || '')
+              .split('|')
+              .map((tagName) => tagName.trim())
+              .filter(Boolean),
+          ),
+        ),
       }));
-      let successCount = 0;
-      let failedCount = 0;
-      const failedItems: any[] = [];
-      const results: PromiseSettledResult<any>[] = [];
-      for (let index = 0; index < bookmarksToImport.length; index += 8) {
-        const batch = bookmarksToImport.slice(index, index + 8);
-        results.push(
-          ...(await Promise.allSettled(
-            batch.map((bm: any) => apiBasePost('/api/bookmark/addBookmark', bm, { silent: true })),
-          )),
-        );
+      const res = await apiBasePost(
+        '/api/bookmark/importBookmarksExcel',
+        { items: bookmarksToImport },
+        { silent: true },
+      );
+      if (Number(res?.status) !== 200) {
+        message.error(res?.msg || t('bookmarkMg.excelImportFailed'));
+        return;
       }
-      results.forEach((result: any, index: number) => {
-        if (result.status === 'fulfilled' && result.value.status === 200) {
-          successCount++;
-        } else {
-          failedCount++;
-          failedItems.push({
-            name: bookmarksToImport[index].name,
-            url: bookmarksToImport[index].url,
-            error: result.value?.msg || result.reason?.message || '请求失败',
-          });
-        }
+
+      const { parsedTotal, createdTags, createdBookmarks, boundRelations, skippedInvalidUrls } = res.data || {};
+      const summary = t('bookmarkMg.excelImportSummary', {
+        parsed: parsedTotal || 0,
+        tags: createdTags || 0,
+        bookmarks: createdBookmarks || 0,
+        relations: boundRelations || 0,
       });
-      await init();
-      if (failedCount > 0) {
-        const errorText = failedItems
-          .map(
-            (item) =>
-              `${escapeHtml(item.name)} (${escapeHtml(item.url)}): <span style="color: #ff5722">${escapeHtml(item.error)}</span>`,
-          )
-          .join('<br/>');
-        Alert.alert({
-          title: `导入完成 (${successCount}成功/${failedCount}失败)`,
-          content: errorText,
-          okText: '复制错误信息',
-          onOk() {
-            navigator.clipboard.writeText(failedItems.map((f) => `${f.name} (${f.url}): ${f.error}`).join('\n'));
-            message.success('错误信息已复制到剪贴板');
-          },
-        });
-      } else {
-        message.success(`导入成功！共导入 ${successCount} 个书签`);
-      }
-      if (successCount > 0) {
+      message.success(
+        skippedInvalidUrls
+          ? `${summary}${t('bookmarkMg.excelImportInvalidUrls', { count: skippedInvalidUrls })}`
+          : summary,
+      );
+      if (Number(createdBookmarks || 0) > 0 || Number(boundRelations || 0) > 0) {
         recordOperation({
           module: '书签管理',
-          operation:
-            failedCount > 0
-              ? `导入 Excel 书签部分成功【${successCount}成功/${failedCount}失败】`
-              : `导入 Excel 书签成功【${successCount}个】`,
+          operation: `导入 Excel 书签完成【解析${parsedTotal || 0}条/新增书签${createdBookmarks || 0}个/新增标签${createdTags || 0}个/关联${boundRelations || 0}条】`,
         });
       }
+      await init();
     } catch (err: any) {
-      message.error('文件处理失败: ' + err.message);
+      message.error(err?.message || t('bookmarkMg.excelImportFailed'));
     } finally {
       loading.value = false;
     }

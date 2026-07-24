@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import pool from '../../db/index.js';
+import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
 import { insertData } from '../agent/data.js';
 import { bucketBaseUrl, putObjectBodyToObs } from '../obsClient.js';
 import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardingSeed.js';
@@ -368,11 +369,12 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
 
     for (const note of content.notes) {
       const noteId = ids.notes[note.key];
+      const noteContent = note.type === 'markdown' ? normalizeMarkdownBlockquoteEntities(note.content) : note.content;
       await connection.query('INSERT INTO note SET ?', [
         insertData({
           id: noteId,
           title: note.title,
-          content: note.content,
+          content: noteContent,
           type: note.type,
           createBy: userId,
           sort: 0,

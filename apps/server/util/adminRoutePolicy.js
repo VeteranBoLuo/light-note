@@ -45,6 +45,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'bookmark', [
   ['POST', '/bookmark/updateBookmarkSort'],
   ['POST', '/bookmark/toggleBookmarkTop'],
   ['POST', '/bookmark/importBookmarksHtml'],
+  ['POST', '/bookmark/importBookmarksExcel'],
   ['POST', '/bookmark/archive'],
   ['POST', '/bookmark/health/ignore'],
   // AI 整理"应用"是对 subject 的真实内容写(建标签/加关系/补书签名称),必须 maintain-only、readonly 阻断,

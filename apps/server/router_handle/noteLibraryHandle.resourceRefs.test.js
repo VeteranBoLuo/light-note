@@ -128,6 +128,26 @@ describe('updateNote 引用同步接入(N0)', () => {
     expect(syncNoteResourceRefs).toHaveBeenCalledWith(connection, { userId: 'u1', noteId: 'note-1', refs: [] });
   });
 
+  it('旧页面提交 Markdown 的 &gt; → 写库前恢复为真实引用标记', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT title, content, type FROM note/.test(sql))
+        return [[{ title: '日报', content: '> 原始引用', type: 'markdown' }]];
+      if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
+      if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
+      return [{ affectedRows: 1 }];
+    });
+
+    await updateNote(
+      { user: { id: 'u1' }, body: { id: 'note-1', content: '&gt; 2026-07-24 星期五', type: 'markdown' } },
+      mockRes(),
+    );
+
+    const updateCall = connection.query.mock.calls.find(
+      ([sql]) => sql === 'update note set ? where id=? and create_by=?',
+    );
+    expect(updateCall?.[1]?.[0]).toMatchObject({ content: '> 2026-07-24 星期五', type: 'markdown' });
+  });
+
   it('只带 content 不带 type → 用最终笔记的 type 解析(P1-4,不凭空按 html)', async () => {
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {

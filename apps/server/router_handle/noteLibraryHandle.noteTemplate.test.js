@@ -99,7 +99,7 @@ describe('笔记模板 handler', () => {
     await addNoteTemplate(
       {
         user: { id: 'u1' },
-        body: { name: '周报', titleTemplate: '周报 {{date}}', type: 'md', content: '## 本周' },
+        body: { name: '周报', titleTemplate: '周报 {{date}}', type: 'md', content: '&gt; 本周摘要' },
       },
       res,
     );
@@ -108,6 +108,7 @@ describe('笔记模板 handler', () => {
     expect(sent.data.id).toBe('tpl-new-id');
     const insertPayload = poolQuery.mock.calls[1][1][0];
     expect(insertPayload.type).toBe('markdown');
+    expect(insertPayload.content).toBe('> 本周摘要');
     expect(insertPayload.createBy).toBe('u1');
     expect(insertPayload.titleTemplate).toBe('周报 {{date}}');
   });

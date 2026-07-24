@@ -110,6 +110,7 @@
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
+  import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import TurndownService from 'turndown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
@@ -187,7 +188,11 @@
     // 它用 innerHTML 往返做图片 URL 归一化,DOM 序列化会把文本节点里的 `>` 转成 `&gt;`
     // ——这是「日报模板引用块被转义」反复复发的真正根因(加载即污染显示,一保存就污染入库)。
     // md 的图片是 ![](url) 语法,DOM 方式本也处理不到,跳过无损失。老 'md' 类型正文实际存 HTML,仍需归一化。
-    if (rawType !== 'md' && normalizeNoteType(rawType) === 'markdown') return raw;
+    if (rawType !== 'md' && normalizeNoteType(rawType) === 'markdown') {
+      // 已污染的历史正文也要在编辑区立即恢复为真正的 Markdown 源码；
+      // 规范函数只处理语义明确的行首引用标记，不会把普通 HTML 实体整体解码。
+      return normalizeMarkdownBlockquoteEntities(raw);
+    }
     const normalized = normalizeNoteContentResourceUrls(raw);
     // 早期 Markdown 笔记使用 type=md，正文实际存的是 HTML；加载时转回 Markdown 源文本。
     if (rawType !== 'md' || !/^\s*<(?:h[1-6]|p|ul|ol|blockquote|pre|div)\b/i.test(normalized)) return normalized;
@@ -245,9 +250,10 @@
     editorRef.value?.focusToEnd?.();
   });
   provide('applyContentFromAi', async (content: string, type: 'html' | 'markdown') => {
-    const applied = await editorRef.value?.replaceContentWithUndo?.(content, type);
+    const normalizedContent = type === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
+    const applied = await editorRef.value?.replaceContentWithUndo?.(normalizedContent, type);
     if (!applied) {
-      note.content = content;
+      note.content = normalizedContent;
     }
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
@@ -406,7 +412,8 @@
       }
       const opts = { locale: String(locale.value) };
       note.type = tplType;
-      note.content = renderNoteTemplate(rawContent, opts);
+      const renderedContent = renderNoteTemplate(rawContent, opts);
+      note.content = tplType === 'markdown' ? normalizeMarkdownBlockquoteEntities(renderedContent) : renderedContent;
       const renderedTitle = renderNoteTemplate(rawTitle, opts).trim();
       if (renderedTitle) {
         note.title = renderedTitle;

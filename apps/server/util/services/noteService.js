@@ -1,5 +1,6 @@
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
+import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
 import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
@@ -52,11 +53,14 @@ export async function createNote({
   idempotencyKey = null,
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
-  const type = note.type === 'md' ? 'markdown' : String(note.type || 'html');
+  const type = normalizeNoteType(note.type || 'html');
   if (!NOTE_TYPES.has(type)) throw new Error('INVALID_NOTE_TYPE: 笔记类型仅支持 html 或 markdown');
   const title = String(note.title || '').trim() || '未命名文档';
   if (title.length > 255) throw new Error('TITLE_TOO_LONG: 笔记标题不能超过 255 个字符');
-  const content = String(note.content || '');
+  const rawContent = String(note.content || '');
+  // 无论请求来自当前页面、旧版缓存页面还是内部调用，Markdown 源码均在持久化边界收口，
+  // 防止旧客户端把引用语法 `>` 经 DOM 序列化成 `&gt;` 后永久写入数据库。
+  const content = type === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawContent) : rawContent;
   if (content.length > maxContentLength) {
     throw new Error(`CONTENT_TOO_LONG: 笔记正文不能超过 ${maxContentLength} 个字符`);
   }
@@ -190,8 +194,9 @@ export async function applyOwnedNoteContentChange(
   if (!connection?.query) throw noteServiceError('CONNECTION_REQUIRED', '缺少事务连接', 500);
   if (!userId || !noteId) throw noteServiceError('NOTE_OWNER_REQUIRED', '缺少笔记归属信息');
 
-  const nextType = after?.type === 'md' ? 'markdown' : String(after?.type || '');
-  const nextContent = String(after?.content ?? '');
+  const nextType = normalizeNoteType(after?.type || '');
+  const rawNextContent = String(after?.content ?? '');
+  const nextContent = nextType === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawNextContent) : rawNextContent;
   if (!NOTE_TYPES.has(nextType)) throw noteServiceError('INVALID_NOTE_TYPE', '笔记类型仅支持 html 或 markdown');
   if (nextContent.length > maxContentLength) {
     throw noteServiceError('CONTENT_TOO_LONG', `笔记正文不能超过 ${maxContentLength} 个字符`);
@@ -203,15 +208,21 @@ export async function applyOwnedNoteContentChange(
   );
   if (!rows.length) throw noteServiceError('RESOURCE_NOT_FOUND', '笔记不存在或无权操作', 404);
 
+  const currentType = normalizeNoteType(rows[0].type || 'html');
   const current = {
     title: rows[0].title || '',
-    content: rows[0].content || '',
-    type: rows[0].type === 'md' ? 'markdown' : rows[0].type || 'html',
+    content:
+      currentType === 'markdown' ? normalizeMarkdownBlockquoteEntities(rows[0].content || '') : rows[0].content || '',
+    type: currentType,
   };
+  const expectedType = normalizeNoteType(before?.type || 'html');
   const expected = {
     title: String(before?.title || ''),
-    content: String(before?.content ?? ''),
-    type: before?.type === 'md' ? 'markdown' : String(before?.type || 'html'),
+    content:
+      expectedType === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(before?.content ?? '')
+        : String(before?.content ?? ''),
+    type: expectedType,
   };
   if (current.title !== expected.title || current.content !== expected.content || current.type !== expected.type) {
     throw noteServiceError('NOTE_VERSION_CONFLICT', '笔记在预览后已发生变化，请重新生成差异', 409);

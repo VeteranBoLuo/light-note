@@ -1,4 +1,5 @@
 import pool from '../db/index.js';
+import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
 import {
   resultData,
   snakeCaseKeys,
@@ -1311,7 +1312,9 @@ export const importData = async (req, res) => {
     // 3) 笔记(按标题+内容去重)
     for (const n of Array.isArray(data.notes) ? data.notes : []) {
       const title = String(n?.title || '').trim();
-      const content = n?.content || '';
+      const rawContent = n?.content || '';
+      const type = n?.type || 'html';
+      const content = type === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawContent) : rawContent;
       if (!title && !content) continue;
       const k = noteKey(title, content);
       if (existNotes.has(k)) {
@@ -1321,7 +1324,7 @@ export const importData = async (req, res) => {
       const payload = insertData({
         title: title || 'Untitled',
         content,
-        type: n?.type || 'html',
+        type,
         createBy: userId,
         ...(n?.createTime ? { createTime: n.createTime } : {}),
       });

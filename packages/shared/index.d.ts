@@ -72,6 +72,12 @@ export declare const RESOURCE_REF_TYPES: readonly ResourceRefType[];
 /** 把历史类型值 `md` 归一为 `markdown`;其余原样字符串化。 */
 export declare function normalizeNoteType(type: unknown): string;
 
+/**
+ * 仅恢复被 HTML 序列化污染的 Markdown 行首引用标记（`&gt;` → `>`）。
+ * 普通正文、链接和代码块内的 HTML 实体保持不变。
+ */
+export declare function normalizeMarkdownBlockquoteEntities(value: unknown): string;
+
 /** 解析 canonical href 为 { type, id };非 exact 或 id 不安全返回 null。 */
 export declare function parseResourceHref(href: unknown): ResourceRef | null;
 
