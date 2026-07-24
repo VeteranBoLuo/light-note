@@ -849,8 +849,7 @@
         // 如果有后台图标补全批次，启动进度追踪，跳过同步刷新
         if (iconBatch?.batchId && iconBatch.total > 0) {
           startIconBatchTracking(iconBatch.batchId);
-          // 有 Worker 后台处理，不用前端同步刷新图标
-          await init();
+          await init({ refreshIcons: false });
         } else {
           await init();
         }
@@ -875,10 +874,17 @@
     status: string;
   } | null>(null);
   let iconBatchTimer: ReturnType<typeof setInterval> | null = null;
+  // localStorage key 按用户隔离
+  const iconBatchStorageKey = computed(() => {
+    const userId = String(user?.id || 'anonymous');
+    return `icon-batch-pending:${userId}`;
+  });
+
   const ICON_BATCH_LOCALSTORAGE_KEY = 'icon-batch-pending';
 
   function startIconBatchTracking(batchId: string) {
-    try { localStorage.setItem(ICON_BATCH_LOCALSTORAGE_KEY, batchId); } catch { /* ignore */ }
+    const key = iconBatchStorageKey.value;
+    try { localStorage.setItem(key, batchId); } catch { /* ignore */ }
     iconBatchState.value = { batchId, total: 0, completed: 0, success: 0, notFound: 0, failed: 0, status: 'queued' };
     pollIconBatchStatus(batchId);
   }
@@ -892,7 +898,7 @@
           iconBatchState.value = res.data;
           if (res.data.status === 'completed' || res.data.total === 0) {
             if (iconBatchTimer) { clearInterval(iconBatchTimer); iconBatchTimer = null; }
-            try { localStorage.removeItem(ICON_BATCH_LOCALSTORAGE_KEY); } catch { /* ignore */ }
+            try { localStorage.removeItem(iconBatchStorageKey.value); } catch { /* ignore */ }
           }
         }
       } catch { /* ignore */ }
@@ -909,7 +915,7 @@
   function dismissIconBatch() {
     if (iconBatchTimer) { clearInterval(iconBatchTimer); iconBatchTimer = null; }
     iconBatchState.value = null;
-    try { localStorage.removeItem(ICON_BATCH_LOCALSTORAGE_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(iconBatchStorageKey.value); } catch { /* ignore */ }
   }
 
   async function retryIconBatch(batchId: string) {
@@ -923,18 +929,21 @@
     } catch { /* ignore */ }
   }
 
-  onMounted(() => {
+  onMounted(async () => {
     try {
-      const pending = localStorage.getItem(ICON_BATCH_LOCALSTORAGE_KEY);
-      if (pending) pollIconBatchStatus(pending);
+      const pending = localStorage.getItem(iconBatchStorageKey.value);
+      if (pending) {
+        await init({ refreshIcons: false });
+        pollIconBatchStatus(pending);
+        return;
+      }
     } catch { /* ignore */ }
+    await init();
   });
 
   onUnmounted(() => {
     if (iconBatchTimer) { clearInterval(iconBatchTimer); }
   });
-  // ── checkInitialRoute: can-be-manage-bookmark-settings-etc
-  init();
 </script>
 
 <style lang="less" scoped>

@@ -149,11 +149,15 @@ export async function processBookmarkIcons(bookmarks, userId) {
 }
 
 // ── 保存图标到磁盘 ──────────────────────────────────────
-async function saveIconToDisk(bookmark, fetchResult, userId) {
-  const checkedAt = new Date().toISOString();
-
+/**
+ * 将图标内容写入磁盘。返回 {iconUrl, changed, oldFilePath, newFilePath}。
+ * 失败时抛出稳定错误，不得返回 changed:false 假装成功。
+ */
+export async function saveIconToDisk(bookmark, fetchResult) {
   if (!fetchResult?.buffer?.length) {
-    return { iconUrl: bookmark.icon_url || '', iconCheckedAt: checkedAt, changed: false };
+    const error = new Error('BOOKMARK_ICON_EMPTY_BUFFER');
+    error.code = 'BOOKMARK_ICON_EMPTY_BUFFER';
+    throw error;
   }
 
   let tempPath = '';
@@ -168,7 +172,7 @@ async function saveIconToDisk(bookmark, fetchResult, userId) {
     if (oldFilePath) {
       const existingBuffer = await fsP.readFile(oldFilePath).catch(() => null);
       if (existingBuffer && existingBuffer.equals(fetchResult.buffer)) {
-        return { iconUrl: bookmark.icon_url || '', iconCheckedAt: checkedAt, changed: false };
+        return { iconUrl: bookmark.icon_url || '', changed: false, oldFilePath, newFilePath: oldFilePath };
       }
     }
 
@@ -188,23 +192,22 @@ async function saveIconToDisk(bookmark, fetchResult, userId) {
 
     const imageUrl = `/uploads/${fileName}`;
 
-    // 清理旧图标文件
-    const cleanupPaths = new Set(
-      [
-        oldFilePath,
-        ...['png', 'svg', 'jpeg', 'jpg', 'gif', 'ico', 'webp'].map((ext) =>
-          path.join(BOOKMARK_ICON_UPLOAD_DIR, `bookmark-${bookmark.id}.${ext}`),
-        ),
-      ].filter((fp) => fp && fp !== finalPath),
-    );
-    await Promise.all([...cleanupPaths].map((fp) => fsP.unlink(fp).catch(() => {})));
-
-    return { iconUrl: imageUrl, iconCheckedAt: checkedAt, changed: true };
-  } catch (err) {
+    return { iconUrl: imageUrl, changed: true, oldFilePath, newFilePath: finalPath };
+  } catch (cause) {
     if (tempPath) await fsP.unlink(tempPath).catch(() => {});
-    console.error('图标落盘失败:', err.message);
-    return { iconUrl: bookmark.icon_url || '', iconCheckedAt: checkedAt, changed: false };
+    const error = new Error('BOOKMARK_ICON_PERSIST_FAILED');
+    error.code = 'BOOKMARK_ICON_PERSIST_FAILED';
+    error.cause = cause;
+    throw error;
   }
+}
+
+/**
+ * 数据库提交成功后清理旧图标文件。
+ */
+export async function cleanupPreviousBookmarkIcon(oldFilePath, newFilePath) {
+  if (!oldFilePath || oldFilePath === newFilePath) return;
+  await fsP.unlink(oldFilePath).catch(() => {});
 }
 
 // ── 批量写回数据库 ──────────────────────────────────────

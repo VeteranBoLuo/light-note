@@ -6,6 +6,7 @@ KEY="$HOME/.ssh/hermes_server"
 REMOTE="/www/wwwroot/light-note-back"
 PM2="app"                     # pm2 进程名(实测,非 light-note-back)
 DOCUMENT_WORKER_PM2="light-note-document-worker"
+BOOKMARK_ICON_WORKER_PM2="light-note-bookmark-icon-worker"
 OUT="/tmp/ln-server-deploy"
 TS="$(date +%Y%m%d%H%M%S)"
 cd "$(dirname "$0")/.."
@@ -28,7 +29,18 @@ rsync -az --no-owner --no-group --delete \
   -e "ssh -i $KEY" "$OUT"/ "$HOST:$REMOTE/"
 
 echo "♻️  pm2 restart ${PM2}…"
-ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then pm2 restart '$DOCUMENT_WORKER_PM2' --update-env; else cd '$REMOTE' && pm2 start documentWorker.js --name '$DOCUMENT_WORKER_PM2'; fi && pm2 save"
+ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \
+  if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \
+    pm2 restart '$DOCUMENT_WORKER_PM2' --update-env; \
+  else \
+    cd '$REMOTE' && pm2 start documentWorker.js --name '$DOCUMENT_WORKER_PM2'; \
+  fi && \
+  if pm2 describe '$BOOKMARK_ICON_WORKER_PM2' >/dev/null 2>&1; then \
+    pm2 restart '$BOOKMARK_ICON_WORKER_PM2' --update-env; \
+  else \
+    cd '$REMOTE' && pm2 start bookmarkIconWorker.js --name '$BOOKMARK_ICON_WORKER_PM2'; \
+  fi && \
+  pm2 save"
 
 echo "⏳  等待后端重启就绪并健康检查(重启窗口会短暂 502,属正常)…"
 code=000

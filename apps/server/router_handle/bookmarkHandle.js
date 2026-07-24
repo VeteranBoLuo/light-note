@@ -38,7 +38,7 @@ import {
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 // ── 全局 ──────────────────────────────────────────────────
-const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 500;
+const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
 
 /**
  * 查询指定 ID 的书签中哪些尚无图标，返回 {id, url} 列表
@@ -1364,7 +1364,8 @@ export const getIconBatchStatusHandler = async (req, res) => {
   const batchId = String(req.body?.batchId || '').trim();
   if (!batchId) return res.send(resultData(null, 400, '缺少 batchId'));
   try {
-    const status = await getIconBatchStatus(batchId, req.user.id);
+    const cursor = req.body?.cursor || {};
+    const status = await getIconBatchStatus(batchId, req.user.id, cursor);
     res.send(resultData(status));
   } catch (err) {
     console.error('[icon-batch] 查询状态失败:', err.message);

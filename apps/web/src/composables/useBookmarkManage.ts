@@ -15,7 +15,8 @@ export function useBookmarkManage() {
   const loading = ref(false);
   const bookmarks = ref<BookmarkInterface[]>([]);
 
-  async function reloadBookmarks() {
+  async function reloadBookmarks(options: { refreshIcons?: boolean } = {}) {
+    const { refreshIcons = true } = options;
     loading.value = true;
     try {
       const response = await apiQueryPost('/api/bookmark/getBookmarkList', {
@@ -24,6 +25,8 @@ export function useBookmarkManage() {
       if (response.status !== 200) return;
 
       bookmarks.value = cloneDeep(response.data?.items || []);
+
+      if (!refreshIcons) return;
 
       loadBookmarkIconsProgressively(response.data?.items || [], (id, favicon) => {
         const bookmark = bookmarks.value.find((item) => item.id === id);

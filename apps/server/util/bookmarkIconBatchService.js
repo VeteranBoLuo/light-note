@@ -43,8 +43,9 @@ export async function createIconBatch(userId, bookmarks) {
     return { batchId, total: 0, status: 'no_tasks' };
   }
 
-  // 分批插入，避免单条 SQL 过长
+  // 分批插入，避免单条 SQL 过长，返回实际插入数
   const BATCH_SIZE = 50;
+  let insertedTotal = 0;
   for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
     const chunk = tasks.slice(i, i + BATCH_SIZE);
     const values = chunk.map(() => '(?,?,?,?,?,?)').join(',');
@@ -53,21 +54,24 @@ export async function createIconBatch(userId, bookmarks) {
       t.url_snapshot, t.origin_key, t.url_hash,
     ]);
 
-    await pool.query(
+    const [result] = await pool.query(
       `INSERT IGNORE INTO bookmark_icon_jobs
        (batch_id, user_id, bookmark_id, url_snapshot, origin_key, url_hash)
        VALUES ${values}`,
       params,
     );
+    insertedTotal += Number(result?.affectedRows || 0);
   }
 
-  return { batchId, total: tasks.length, status: 'queued' };
+  return { batchId, total: insertedTotal, status: insertedTotal > 0 ? 'queued' : 'no_tasks' };
 }
 
 /**
- * 查询批次进度
+ * 查询批次进度（支持增量 cursor）
+ * cursor: { finishedAt?: string, jobId?: number }
  */
-export async function getIconBatchStatus(batchId, userId) {
+export async function getIconBatchStatus(batchId, userId, cursor = {}) {
+  // 查询汇总状态
   const [rows] = await pool.query(
     `SELECT status, COUNT(*) as cnt
      FROM bookmark_icon_jobs
@@ -96,6 +100,39 @@ export async function getIconBatchStatus(batchId, userId) {
     overallStatus = 'no_tasks';
   }
 
+  // 增量更新查询（cursor 后 finishe d_at 的已完成项目）
+  const updates = [];
+  let nextCursor = null;
+  const cursorFinishedAt = cursor?.finishedAt || '1970-01-01';
+  const cursorJobId = cursor?.jobId || 0;
+
+  const [updateRows] = await pool.query(
+    `SELECT j.id AS jobId, j.bookmark_id AS bookmarkId, j.status, j.finished_at AS finishedAt,
+            b.icon_url AS iconUrl
+     FROM bookmark_icon_jobs j
+     LEFT JOIN bookmark b ON b.id = j.bookmark_id AND b.user_id = j.user_id AND b.del_flag = 0
+     WHERE j.batch_id = ? AND j.user_id = ? AND j.finished_at IS NOT NULL
+       AND (j.finished_at > ? OR (j.finished_at = ? AND j.id > ?))
+     ORDER BY j.finished_at ASC, j.id ASC
+     LIMIT 100`,
+    [batchId, userId, cursorFinishedAt, cursorFinishedAt, cursorJobId],
+  );
+
+  for (const r of updateRows || []) {
+    updates.push({
+      jobId: r.jobId,
+      bookmarkId: r.bookmarkId,
+      status: r.status,
+      iconUrl: r.iconUrl || '',
+      finishedAt: r.finishedAt,
+    });
+  }
+
+  if (updates.length > 0) {
+    const last = updates[updates.length - 1];
+    nextCursor = { finishedAt: last.finishedAt, jobId: last.jobId };
+  }
+
   return {
     batchId,
     total,
@@ -108,6 +145,8 @@ export async function getIconBatchStatus(batchId, userId) {
     processing: statusMap.processing || 0,
     retryWaiting: statusMap.retry_wait || 0,
     status: overallStatus,
+    updates,
+    nextCursor,
   };
 }
 
