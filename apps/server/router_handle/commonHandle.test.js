@@ -31,6 +31,13 @@ vi.mock('http', async (importOriginal) => {
 });
 vi.mock('../util/noteImages.js', () => ({ collectUsedImageNames: collectUsedSpy }));
 
+const { queryDeepSeekBalanceSpy, getDailyBalanceChangeSpy } = vi.hoisted(() => ({
+  queryDeepSeekBalanceSpy: vi.fn(),
+  getDailyBalanceChangeSpy: vi.fn(),
+}));
+vi.mock('../util/agent/providerBalance.js', () => ({ getDeepSeekBalance: queryDeepSeekBalanceSpy }));
+vi.mock('../util/agent/providerBalanceSnapshot.js', () => ({ getDeepSeekDailyBalanceChange: getDailyBalanceChangeSpy }));
+
 // common.js ↔ router/common.js ↔ commonHandle.js 存在循环依赖:
 // 直接首个 import commonHandle.js 会拿到未初始化的导出而报错。
 // 先按应用真实顺序 import common.js,让 commonHandle.js 作为叶子完成初始化,规避循环。
@@ -44,6 +51,7 @@ const {
   getConversionFunnel,
   clearLogsByIp,
   getIpLogStats,
+  getDeepSeekBalance,
   getAgentLogsSummary,
   getAiFeedback,
   clearImages,
@@ -75,6 +83,47 @@ function mockFavimgResponse(buffer, contentType = 'image/png') {
     return request;
   });
 }
+
+describe('getDeepSeekBalance 余额主指标', () => {
+  beforeEach(() => {
+    query.mockReset();
+    queryDeepSeekBalanceSpy.mockReset();
+    getDailyBalanceChangeSpy.mockReset();
+  });
+
+  it('同时返回当前余额与当天余额变化', async () => {
+    query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
+    const balance = {
+      provider: 'deepseek',
+      isAvailable: true,
+      currency: 'CNY',
+      totalBalance: '8.25',
+      balanceInfos: [{ currency: 'CNY', totalBalance: '8.25' }],
+    };
+    queryDeepSeekBalanceSpy.mockResolvedValue(balance);
+    getDailyBalanceChangeSpy.mockResolvedValue({
+      isAvailable: true,
+      currency: 'CNY',
+      change: '-1.75',
+      direction: 'decrease',
+    });
+    const res = mockRes();
+
+    await getDeepSeekBalance({ user: { id: 'root-id', role: 'root' }, body: { forceRefresh: true } }, res);
+
+    expect(queryDeepSeekBalanceSpy).toHaveBeenCalledWith({ forceRefresh: true });
+    expect(getDailyBalanceChangeSpy).toHaveBeenCalledWith(balance);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({
+          totalBalance: '8.25',
+          dailyBalanceChange: expect.objectContaining({ change: '-1.75', direction: 'decrease' }),
+        }),
+      }),
+    );
+  });
+});
 
 describe('recordConversion 白名单', () => {
   beforeEach(() => query.mockReset());
@@ -253,6 +302,8 @@ describe('getAdminOverview 资源统计口径', () => {
     expect(resourceSql).toContain('onboarding_seed_resources');
     expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
     expect(trendSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.data.ai).toEqual({ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 });
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 });
@@ -745,6 +796,8 @@ describe('getAgentLogsSummary AI 质量指标', () => {
     await getAgentLogsSummary({ user: { role: 'root' }, body: { hideInternal: false } }, res);
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
+    expect(payload.data.today).toEqual({ count: 3, tokens: 120 });
+    expect(payload.data.total).toEqual({ count: 10, tokens: 500 });
     expect(payload.data.quality).toMatchObject({
       sampleCount: 4,
       errorRate: 25,

@@ -154,6 +154,7 @@ export default {
   },
   todo: 'Todo',
   aiMonitor: {
+    subtitle: 'LLM request logs, token usage, and operational quality',
     balance: {
       title: 'Current DeepSeek balance',
       loading: 'Loading…',
@@ -161,7 +162,17 @@ export default {
       failed: 'Unavailable; call logs are unaffected',
       disabled: 'Account unavailable',
       cached: 'Showing the latest cached balance',
+      currentHint: 'Current available balance reported by the provider',
+      changeTitle: "Today's account balance change",
+      changeFromMidnight: "Change since today's 00:00 balance",
+      changeFromBootstrap: "Since today's first successful balance read",
+      changeUnavailable: "Waiting for today's balance baseline",
+      changeCached: 'Current balance is cached; the change may lag',
       refresh: 'Refresh',
+    },
+    metrics: {
+      todayTokens: "Today's tokens",
+      todayTokensHint: '{calls} calls today · {total} records in the current filter',
     },
   },
   aiFeedback: {

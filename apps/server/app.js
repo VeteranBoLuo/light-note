@@ -21,6 +21,7 @@ import { startAiConversationRetentionScheduler } from './util/aiConversationServ
 import { startAiProductEventRetentionScheduler } from './util/aiProductTelemetry.js';
 import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecoveryService.js';
 import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from './util/aiArtifactRetention.js';
+import { startAiBalanceSnapshotScheduler } from './util/agent/providerBalanceSnapshot.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
 
 import dotenv from 'dotenv';
@@ -103,6 +104,7 @@ if (aiArtifactRetentionConfig.enabledDomains.length) {
     console.error('AI 产物保留清理调度启动失败 code=%s', stableAgentErrorCode(err)),
   );
 }
+startAiBalanceSnapshotScheduler();
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

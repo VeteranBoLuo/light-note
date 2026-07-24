@@ -11,6 +11,7 @@ import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
+import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnapshot.js';
 import { collectUsedImageNames } from '../util/noteImages.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
@@ -170,9 +171,16 @@ export const getDeepSeekBalance = async (req, res) => {
   if (!rootUserId) return;
   try {
     const balance = await queryDeepSeekBalance({ forceRefresh: req.body?.forceRefresh === true });
-    return res.send(resultData(balance));
+    // 余额快照表尚未迁移或瞬时不可用时，不能影响管理员读取当前供应商余额。
+    let dailyBalanceChange = { isAvailable: false, reason: 'baseline_unavailable' };
+    try {
+      dailyBalanceChange = await getDeepSeekDailyBalanceChange(balance);
+    } catch (snapshotError) {
+      console.warn('[agent-balance] 今日余额变化读取失败 code=%s', stableAgentErrorCode(snapshotError));
+    }
+    return res.send(resultData({ ...balance, dailyBalanceChange }));
   } catch (error) {
-    console.error('[agent-balance] DeepSeek 余额查询失败:', error?.message || error);
+    console.error('[agent-balance] DeepSeek 余额查询失败 code=%s', stableAgentErrorCode(error));
     return res.send(resultData(null, 500, 'DeepSeek 余额查询暂时不可用'));
   }
 };
@@ -1060,11 +1068,11 @@ export const getAgentLogsSummary = async (req, res) => {
 
     const [[todayRow], [totalRow]] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(a.total_tokens),0) as tokens, COALESCE(SUM(a.cost),0) as cost FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE a.created_at >= ? AND a.created_at < DATE_ADD(?, INTERVAL 1 DAY)${roleClause}`,
+        `SELECT COUNT(*) as count, COALESCE(SUM(a.total_tokens),0) as tokens FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE a.created_at >= ? AND a.created_at < DATE_ADD(?, INTERVAL 1 DAY)${roleClause}`,
         [todayStr, todayStr, ...roleParams],
       ),
       pool.query(
-        `SELECT COUNT(*) as count, COALESCE(SUM(a.total_tokens),0) as tokens, COALESCE(SUM(a.cost),0) as cost FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE 1=1${roleClause}`,
+        `SELECT COUNT(*) as count, COALESCE(SUM(a.total_tokens),0) as tokens FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE 1=1${roleClause}`,
         [...roleParams],
       ),
     ]);
@@ -1113,12 +1121,10 @@ export const getAgentLogsSummary = async (req, res) => {
         today: {
           count: todayRow[0].count,
           tokens: todayRow[0].tokens,
-          cost: Number(todayRow[0].cost).toFixed(4),
         },
         total: {
           count: totalRow[0].count,
           tokens: totalRow[0].tokens,
-          cost: Number(totalRow[0].cost).toFixed(4),
         },
         quality: {
           sampleCount: metricRows.length,
@@ -1293,30 +1299,29 @@ export const getAdminOverview = async (req, res) => {
           .catch(() => [[]]),
       ]);
 
-    // AI 消耗单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)
-    let ai = { todayCount: 0, todayTokens: 0, todayCost: '0.0000', totalCount: 0, totalTokens: 0, totalCost: '0.0000' };
+    // AI 用量单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)。
+    // agent_logs 的 cost 是静态价表估算，不作为后台金额指标返回。
+    let ai = { todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 };
     try {
       const [[aiToday], [aiTotal]] = await Promise.all([
         pool.query(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)' +
+          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens FROM agent_logs WHERE created_at >= ? AND created_at < DATE_ADD(?, INTERVAL 1 DAY)' +
             notIntUser,
           [today, today],
         ),
         pool.query(
-          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens, COALESCE(SUM(cost),0) AS cost FROM agent_logs WHERE 1=1' +
+          'SELECT COUNT(*) AS count, COALESCE(SUM(total_tokens),0) AS tokens FROM agent_logs WHERE 1=1' +
             notIntUser,
         ),
       ]);
       ai = {
         todayCount: Number(aiToday[0].count),
         todayTokens: Number(aiToday[0].tokens),
-        todayCost: Number(aiToday[0].cost).toFixed(4),
         totalCount: Number(aiTotal[0].count),
         totalTokens: Number(aiTotal[0].tokens),
-        totalCost: Number(aiTotal[0].cost).toFixed(4),
       };
     } catch (aiErr) {
-      console.error('[AdminOverview] AI 统计失败(忽略):', aiErr.message);
+      console.error('[AdminOverview] AI 统计失败(忽略) code=%s', stableAgentErrorCode(aiErr));
     }
 
     // 趋势按天补零成 7 天序列(展示 MM-DD)

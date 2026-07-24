@@ -2,7 +2,7 @@
   <AdminDataPage
     eyebrow="Admin / AI"
     title="AI 调用监控"
-    subtitle="大模型请求记录、Token 消耗与费用统计"
+    :subtitle="t('aiMonitor.subtitle')"
     toolbar-hint="支持模糊匹配 · 回车或停止输入 0.5s 自动查询"
     :summary-count="total"
   >
@@ -11,21 +11,21 @@
         <span class="admin-stat-label">{{ t('aiMonitor.balance.title') }}</span>
         <strong class="admin-stat-value">{{ balanceDisplay }}</strong>
         <span class="admin-stat-hint agent-balance-hint">
-          <span>{{ balanceHint || `累计费用 ¥${totalCost}` }}</span>
+          <span>{{ balanceHint || t('aiMonitor.balance.currentHint') }}</span>
           <BButton size="small" :loading="balanceLoading" @click="fetchBalance(true)">
             {{ t('aiMonitor.balance.refresh') }}
           </BButton>
         </span>
       </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">今日调用</span>
-        <strong class="admin-stat-value">{{ todayCount }}</strong>
-        <span class="admin-stat-hint">累计 {{ total }} 次请求</span>
+      <li class="admin-stat-card agent-balance-change-card">
+        <span class="admin-stat-label">{{ t('aiMonitor.balance.changeTitle') }}</span>
+        <strong class="admin-stat-value">{{ dailyBalanceChangeDisplay }}</strong>
+        <span class="admin-stat-hint">{{ dailyBalanceChangeHint }}</span>
       </li>
       <li class="admin-stat-card">
-        <span class="admin-stat-label">今日消耗</span>
-        <strong class="admin-stat-value">¥{{ todayCost }}</strong>
-        <span class="admin-stat-hint">{{ formatNumber(todayTokens) }} Token · 总计 ¥{{ totalCost }}</span>
+        <span class="admin-stat-label">{{ t('aiMonitor.metrics.todayTokens') }}</span>
+        <strong class="admin-stat-value">{{ formatNumber(todayTokens) }}</strong>
+        <span class="admin-stat-hint">{{ todayTokenHint }}</span>
       </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">30 天质量</span>
@@ -98,9 +98,6 @@
           ><label>API 调用次数</label><p>{{ selectedRecord.iterations || 1 }} 次</p></div
         >
         <div
-          ><label>费用</label><p>¥{{ Number(selectedRecord.cost || 0).toFixed(6) }}</p></div
-        >
-        <div
           ><label>Usage</label><p>{{ selectedRecord.usageStatus || '-' }}</p></div
         >
         <div
@@ -162,8 +159,6 @@
   const total = ref(0);
   const todayCount = ref(0);
   const todayTokens = ref(0);
-  const todayCost = ref('0');
-  const totalCost = ref('0');
   const balance = ref<any>(null);
   const balanceLoading = ref(false);
   const balanceError = ref(false);
@@ -186,8 +181,7 @@
   const balanceDisplay = computed(() => {
     if (balanceLoading.value && !balance.value) return t('aiMonitor.balance.loading');
     if (!balance.value) return t('aiMonitor.balance.unavailable');
-    const symbol = balance.value.currency === 'CNY' ? '¥' : `${balance.value.currency || ''} `;
-    return `${symbol}${Number(balance.value.totalBalance || 0).toFixed(2)}`;
+    return formatBalanceAmount(balance.value.totalBalance, balance.value.currency);
   });
   const balanceHint = computed(() => {
     if (balanceError.value && !balance.value) return t('aiMonitor.balance.failed');
@@ -195,13 +189,33 @@
     if (!balance.value.isAvailable) return t('aiMonitor.balance.disabled');
     return balance.value.stale ? t('aiMonitor.balance.cached') : '';
   });
+  const dailyBalanceChange = computed(() => balance.value?.dailyBalanceChange || null);
+  const dailyBalanceChangeDisplay = computed(() => {
+    const change = dailyBalanceChange.value;
+    if (!change?.isAvailable) return t('aiMonitor.balance.unavailable');
+    const amount = Number(change.change);
+    if (!Number.isFinite(amount)) return t('aiMonitor.balance.unavailable');
+    const sign = amount > 0 ? '+' : amount < 0 ? '-' : '';
+    return `${sign}${formatBalanceAmount(amount, change.currency || balance.value?.currency)}`;
+  });
+  const dailyBalanceChangeHint = computed(() => {
+    const change = dailyBalanceChange.value;
+    if (!change?.isAvailable) return t('aiMonitor.balance.changeUnavailable');
+    if (change.stale || balance.value?.stale) return t('aiMonitor.balance.changeCached');
+    return change.partialDay ? t('aiMonitor.balance.changeFromBootstrap') : t('aiMonitor.balance.changeFromMidnight');
+  });
+  const todayTokenHint = computed(() =>
+    t('aiMonitor.metrics.todayTokensHint', {
+      calls: formatNumber(todayCount.value),
+      total: formatNumber(total.value),
+    }),
+  );
 
   const columns = [
     { title: '用户', key: 'userAlias', width: '1fr' },
     { title: '提问', key: 'question', width: '2fr', ellipsis: true },
     { title: '工具', key: 'toolsUsedDisplay', width: '1fr' },
     { title: '供应商', key: 'provider', width: '90px' },
-    { title: '费用(¥)', key: 'cost', width: '100px' },
     { title: '调用', key: 'iterations', width: '60px' },
     { title: '时间', key: 'createdAt', width: '1fr' },
   ];
@@ -259,8 +273,6 @@
           const d = res.data;
           todayCount.value = d.today?.count ?? 0;
           todayTokens.value = d.today?.tokens ?? 0;
-          todayCost.value = d.today?.cost ?? '0';
-          totalCost.value = d.total?.cost ?? '0';
           quality.value = { ...quality.value, ...(d.quality || {}) };
         }
       })
@@ -292,6 +304,14 @@
   function formatNumber(n: number) {
     if (n == null) return '0';
     return n.toLocaleString();
+  }
+
+  function formatBalanceAmount(value: unknown, currency: unknown) {
+    const amount = Number(value);
+    const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
+    const code = String(currency || '').trim().toUpperCase();
+    const symbol = code === 'CNY' ? '¥' : `${code || ''} `;
+    return `${symbol}${safeAmount.toFixed(2)}`;
   }
 
   function formatDuration(value: unknown) {
@@ -336,6 +356,14 @@
     background: linear-gradient(
       135deg,
       color-mix(in srgb, var(--primary-color) 9%, var(--card-background)),
+      var(--card-background)
+    );
+  }
+  .agent-balance-change-card {
+    border-color: color-mix(in srgb, var(--success-color, #2e8b57) 24%, var(--card-border-color));
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--success-color, #2e8b57) 8%, var(--card-background)),
       var(--card-background)
     );
   }

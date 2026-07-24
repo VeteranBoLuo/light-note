@@ -79,8 +79,8 @@
         </li>
       </ul>
 
-      <!-- AI 消耗:累计为主 + 今日增量 -->
-      <p class="ov-section-title">AI 消耗 <span class="ov-section-tip">累计总量 · 今日增量</span></p>
+      <!-- AI 用量:累计为主 + 今日增量；金额以 AI 监控的供应商余额变化为准。 -->
+      <p class="ov-section-title">AI 用量 <span class="ov-section-tip">累计总量 · 今日增量</span></p>
       <ul class="admin-stats">
         <li class="admin-stat-card">
           <span class="admin-stat-label">调用次数</span>
@@ -91,11 +91,6 @@
           <span class="admin-stat-label">Token 消耗</span>
           <strong class="admin-stat-value">{{ n(data?.ai.totalTokens) }}</strong>
           <span class="admin-stat-hint">{{ delta(data?.ai.todayTokens) }}</span>
-        </li>
-        <li class="admin-stat-card">
-          <span class="admin-stat-label">费用</span>
-          <strong class="admin-stat-value">¥{{ data?.ai.totalCost ?? '0.0000' }}</strong>
-          <span class="admin-stat-hint">今日 ¥{{ data?.ai.todayCost ?? '0.0000' }}</span>
         </li>
       </ul>
 

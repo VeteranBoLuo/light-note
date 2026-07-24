@@ -150,6 +150,7 @@ export default {
   },
   todo: '待办',
   aiMonitor: {
+    subtitle: '大模型请求记录、Token 用量与运行质量',
     balance: {
       title: 'DeepSeek 当前余额',
       loading: '查询中…',
@@ -157,7 +158,17 @@ export default {
       failed: '查询失败，不影响调用日志',
       disabled: '账户当前不可用',
       cached: '上游异常，展示最近缓存',
+      currentHint: '来自供应商的当前可用余额',
+      changeTitle: '今日账户余额变化',
+      changeFromMidnight: '相对今日 00:00 的余额增减',
+      changeFromBootstrap: '自今日首次成功读取起',
+      changeUnavailable: '等待今日余额基线',
+      changeCached: '当前余额为缓存值，变化可能滞后',
       refresh: '刷新',
+    },
+    metrics: {
+      todayTokens: '今日 Token',
+      todayTokensHint: '今日 {calls} 次调用 · 当前筛选共 {total} 条',
     },
   },
   aiFeedback: {

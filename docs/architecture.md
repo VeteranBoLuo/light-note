@@ -193,6 +193,7 @@ src/
 | `admin_context_audit`                        | 管理员预览与内容维护审计      | UUID          |
 | `agent_logs`                                 | AI 请求、用量和阶段追踪       | UUID          |
 | `ai_token_usage` / `ai_token_reservations`   | AI 日额度账本与请求级原子占位 | 复合键 / 自增 |
+| `ai_provider_balance_snapshots`              | AI 供应商每日账户余额快照     | 自增          |
 | `ai_document_sources`                        | AI 文档来源与解析状态         | UUID          |
 | `ai_document_chunks`                         | AI 文档正文片段与定位         | 自增          |
 | `ai_document_jobs`                           | AI 文档异步解析任务           | 自增          |
@@ -235,8 +236,8 @@ src/
 - 通过 `AGENT_LLM_PROVIDER` 环境变量切换
 - 配置集中在 `util/agent/deepseekClient.js` 的 `PROVIDERS` 表
 - DeepSeek V4 默认会进入思考模式；当前 Planner 为保证强制指定 `submit_agent_plan` 的结构化规划协议，必须显式使用非思考模式，Final Reply 也暂时保持非思考以控制首字延迟与成本。未来如引入复杂任务自适应思考，只能在完成工具执行后的回答阶段按请求开启，不得改变 Planner 的非思考安全默认值
-- 价格按供应商独立计算
-- root 可在 AI 监控页通过 DeepSeek 官方余额接口查看账户可用状态和剩余余额；查询结果短时缓存，上游异常时回退最近一次成功值
+- 调用日志中的 `cost` 仅按供应商静态价表估算，用于内部诊断，不作为财务计量或后台金额主指标
+- root 可在 AI 监控页通过 DeepSeek 官方余额接口查看账户可用状态和剩余余额；查询结果短时缓存，上游异常时回退最近一次成功值。服务端按 `Asia/Shanghai` 业务日在 `ai_provider_balance_snapshots` 保留当天 0 点余额，后台展示“当前余额 + 今日账户余额变化”；首次部署、重启或上游异常导致错过 0 点时建立 `bootstrap` 基线并明确标识为部分日。余额变化不是逐请求精确费用，充值、赠金、退款及同账号其他系统调用也会反映在其中
 - 会话按用户或管理员 actor/subject 组合隔离；前端历史也按账号键隔离
 - 每轮先按角色、代管模式和写入权限过滤工具，再由 `capabilityRegistry.js` 生成当前身份的完整语义能力目录。Agent 主链不再按用户文本关键词预裁剪工具；模型能看到当前身份全部可用能力以及 `planned / forbidden / unavailable` 边界，非 root、游客和只读上下文仍由服务端在模型前移除不可执行工具
 - 写能力采用封闭世界注册表：`util/agent/capabilityRegistry.js` 是能力 ID、启用状态、风险等级、确认策略和动作路由的唯一产品声明，状态分为 `enabled / planned / forbidden`。注册写工具必须与一个 `enabled` 能力一一对应；计划中或禁止能力不能绑定工具，契约不一致时启动或测试直接失败
@@ -293,10 +294,10 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 
 - `ai_conversations` 保存标题、范围、归档状态、保留策略和分支谱系；`ai_messages` 保存消息、请求/追踪 ID、材料快照、活动、覆盖度和答案版本组。
 - 来源和证据分别进入 `ai_message_sources` 与 `ai_message_evidence`；客户端提交的消息 ID 不被信任，服务端生成 UUID，并仅以 `(conversation_id, request_id, role)` 做 owner 内幂等。
-- 会话中心支持列表、搜索、重命名、归档、单条删除/撤销、导出和“清除全部 AI 数据”。单条删除先在服务端改为隐藏状态，默认提供 15 秒（可配置 5 秒～2 分钟）的权威撤销窗口；窗口结束后定时器会事务清理关联记忆、Change Set 与会话子表，应用重启或定时器丢失时由会话保留调度器兜底。UI 用 `BCard` 展示撤销条，但是否可恢复最终由服务端状态与时间判断。总清除是无撤销事务：普通 self/normal 账号按 `subject_user_id` 清除该主体全部可控 AI 对象，包含曾由管理员授权上下文为该主体产生的对象，响应 `scope=subject_user`；管理员 `maintain` 调用只清当前 actor + subject + mode + context 四维域，响应 `scope=owner_domain`，`readonly` 不能调用。两种范围都覆盖会话、记忆、Change Set、产品事件与 SSE 恢复事件；普通 self 还会在同一事务推进 `ai_content_generations` 并删除 `ai_content_chunks`，提交后只驱逐本进程缓存，代际/schema 失败会让整个清除回滚；owner-domain 清除不触碰 subject 级索引代际。`agent_logs`、配额用量和请求占位账本按独立安全/运营保留策略保留。任何必需 AI 表或字段缺失时，总清除返回 `AI_DATA_CLEAR_SCHEMA_UNAVAILABLE`（503）、回滚整个事务，不会把“未检查”误报为“已清空”。
+- 会话中心支持列表、搜索、重命名、归档、单条删除/撤销、导出和“清除全部 AI 数据”。单条删除先在服务端改为隐藏状态，默认提供 15 秒（可配置 5 秒～2 分钟）的权威撤销窗口；窗口结束后定时器会事务清理关联记忆、Change Set 与会话子表，应用重启或定时器丢失时由会话保留调度器兜底。UI 用 `BCard` 展示撤销条，但是否可恢复最终由服务端状态与时间判断。总清除是无撤销事务：普通 self/normal 账号按 `subject_user_id` 清除该主体全部可控 AI 对象，包含曾由管理员授权上下文为该主体产生的对象，响应 `scope=subject_user`；管理员 `maintain` 调用只清当前 actor + subject + mode + context 四维域，响应 `scope=owner_domain`，`readonly` 不能调用。两种范围都覆盖会话、记忆、Change Set、产品事件与 SSE 恢复事件；普通 self 还会在同一事务推进 `ai_content_generations` 并删除 `ai_content_chunks`，提交后只驱逐本进程缓存，代际/schema 失败会让整个清除回滚；owner-domain 清除不触碰 subject 级索引代际。`agent_logs`、配额用量和请求占位账本按独立安全/运营保留策略保留；`ai_provider_balance_snapshots` 是供应商级运营账本，不归属任何用户，也不随用户清除删除。任何必需 AI 表或字段缺失时，总清除返回 `AI_DATA_CLEAR_SCHEMA_UNAVAILABLE`（503）、回滚整个事务，不会把“未检查”误报为“已清空”。
 - 会话谱系以 `root_conversation_id / parent_conversation_id / branch_from_message_id` 保存，并由 owner 四维 + live retention 查询；从指定消息创建分支会在同一事务克隆截至该点的消息与 parent 映射，继承 retention/expire 后立即打开，超过 200 条安全上限则返回 `CONVERSATION_BRANCH_TOO_LARGE`（409）且不部分写。fresh schema 的 root 为 NOT NULL；既有库增量迁移保持 nullable，使滚动/回滚旧后端可继续插入 NULL 独立根，新版查询同时按 root ID 或自身 ID 兼容。UI 用 B 组件展示最多 200 节点的分支树和前后导航；遗留会话只回填 `root=id`，不从标题/正文推断历史关系。
 - 重新生成保留全部旧答案，并用 `versionGroupId` 形成同会话版本组；版本 API 只读取 owner 内同 conversation 的 completed assistant 消息，最多 50 个。回答下方切换器只滚动/聚焦已保存版本，不隐藏、覆盖或删除旧答案；目标不在当前最多 200 条已加载消息时明确提示不可定位。`aiCloudHistory=false` 仍阻断自动 hydrate/create/save，但不误伤用户显式打开历史、谱系、分支和版本管理。
-- 账号 Settings 的“全量数据” JSON 导出同样按 `subject_user_id` 覆盖该账号的会话/消息/来源/证据/反馈、记忆、Change Set、产品事件、`agent_logs` 和配额用量，并返回 schema 版本、分域计数、不可用分域和排除清单。可重建内容/文档索引、10 分钟 SSE 恢复事件与请求级配额占位不具可移植性，因此显式列为排除项。普通 self 总清除和导出虽然都是 subject 级，包含/排除与保留政策仍不同；管理员 maintain 清除则是更窄的 owner 域。接口和产品文案必须以返回的 scope 与 retained/exclusions 解释，不能混用。
+- 账号 Settings 的“全量数据” JSON 导出同样按 `subject_user_id` 覆盖该账号的会话/消息/来源/证据/反馈、记忆、Change Set、产品事件、`agent_logs` 和配额用量，并返回 schema 版本、分域计数、不可用分域和排除清单。可重建内容/文档索引、10 分钟 SSE 恢复事件、请求级配额占位和供应商级 `ai_provider_balance_snapshots` 不具单用户可移植性，因此显式列为排除项。普通 self 总清除和导出虽然都是 subject 级，包含/排除与保留政策仍不同；管理员 maintain 清除则是更窄的 owner 域。接口和产品文案必须以返回的 scope 与 retained/exclusions 解释，不能混用。
 - 会话中心已用 `BSelect` 提供逐会话 `standard` / `temporary` / `indefinite` 保留策略；temporary 可选 1、7、30 天，显示权威到期时间及自动级联会话、消息、来源/证据、记忆、Change Set 的范围。服务端严格校验 patch，回显时只映射最近合法档位；temporary 由启动/周期调度器物理删除，同一调度器也收口超过撤销窗口的软删除会话。standard/indefinite 的长期产品政策仍需验收。
 - 登录账号的 Settings AI 区提供 `aiCloudHistory` 云端会话历史开关，使用账号 preferences 同步。关闭后 `ChatContainer` 不再自动 hydrate/create/save 云会话并清除当前 `cloudConversationId`；服务端 create/save 自动持久化 handler 也会按 subject 权威读取偏好，关闭或主体不可验证时失败关闭并返回 `AI_CLOUD_HISTORY_DISABLED`（409）。缺少该偏好字段默认开启，以兼容既有账号。本地 v3 Store 历史继续保留，既有云端历史不会因切换而删除；Change Set 等显式后台成果的直接 Service 写入、分支创建和历史管理不被自动持久化门禁误伤。仍需真实账号和多设备偏好传播验证。草稿和尚未发送的材料始终是本地窗口状态，不能被当作长期记忆。
 - 云历史开启时，新设备没有本地会话 ID 会自动加载云端最近活跃会话；已有设备继续恢复本机最后选择的会话。AI 抽屉关闭时不销毁，因此每次重新打开都主动拉取当前会话：同一 ID 直接同步新消息；若另一个会话在本设备上次云端检查后成为最新，则使用 `Alert.alert()` 询问是否切换。用户选择留在当前或明确从会话中心打开任一会话后，Store v3 记录已确认的最新 `(lastMessageAt, id)` 检查点，避免同一更新重复打扰；检查点只表示本设备已经见过该云端位置，不作为消息顺序或并发写入的权威版本。
