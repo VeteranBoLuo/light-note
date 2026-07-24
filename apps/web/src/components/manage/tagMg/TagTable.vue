@@ -64,7 +64,12 @@
                 <span>{{ totalStat.label }}</span>
               </div>
               <span class="overview-strip__divider" aria-hidden="true"></span>
-              <div v-for="stat in coveredStats" :key="stat.key" class="overview-item" :class="`overview-item--${stat.key}`">
+              <div
+                v-for="stat in coveredStats"
+                :key="stat.key"
+                class="overview-item"
+                :class="`overview-item--${stat.key}`"
+              >
                 <span class="overview-dot"></span>
                 <strong>{{ stat.value }}</strong>
                 <span>{{ stat.label }}</span>
@@ -251,7 +256,6 @@
                       {{ t('tagManage.unlinkedHint') }}
                     </div>
                   </div>
-
                 </BCard>
               </div>
 

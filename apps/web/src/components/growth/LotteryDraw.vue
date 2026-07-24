@@ -54,7 +54,13 @@
 
     <!-- 抽奖按钮 -->
     <div class="lt-actions">
-      <BButton v-if="(lottery?.freeDaily || 0) > 0" type="success" :disabled="!canFree" :loading="rolling" @click="onDraw(1, true)">
+      <BButton
+        v-if="(lottery?.freeDaily || 0) > 0"
+        type="success"
+        :disabled="!canFree"
+        :loading="rolling"
+        @click="onDraw(1, true)"
+      >
         {{ t('growth.lotteryFreeDraw') }} · {{ t('growth.lotteryFreeLeft', { n: lottery?.freeRemaining || 0 }) }}
       </BButton>
       <BButton type="primary" :disabled="!canDraw(1)" :loading="rolling" @click="onDraw(1)">
@@ -64,7 +70,9 @@
         {{ t('growth.lotteryDrawTen') }} · 🪙 {{ lottery?.tenCost || 800 }}
       </BButton>
     </div>
-    <div v-if="lottery?.points !== undefined && !hasEnoughAny && !isVisitor" class="lt-tip">{{ t('growth.shopInsufficient') }}</div>
+    <div v-if="lottery?.points !== undefined && !hasEnoughAny && !isVisitor" class="lt-tip">{{
+      t('growth.shopInsufficient')
+    }}</div>
     <div v-if="isVisitor" class="lt-tip">{{ t('growth.lotteryVisitorTip') }}</div>
 
     <!-- 概率公示 -->
@@ -132,7 +140,10 @@
         revealed.value = res.data.results || [];
         // 大奖(512MB 存储)高亮庆祝
         hitBest.value = revealed.value.some((p) => p.kind === 'storage' && p.amount >= 512);
-        recordOperation({ module: '成长', operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）` });
+        recordOperation({
+          module: '成长',
+          operation: `积分抽奖 ${free ? '免费抽' : times === 10 ? '十连' : '单抽'}（-${res.data.cost} 积分）`,
+        });
       } else {
         message.error(res?.data?.msg || t('growth.shopInsufficient'));
       }
@@ -222,8 +233,13 @@
     animation: lt-shake 0.5s infinite ease-in-out;
   }
   @keyframes lt-shake {
-    0%, 100% { transform: rotate(-12deg) scale(1); }
-    50% { transform: rotate(12deg) scale(1.15); }
+    0%,
+    100% {
+      transform: rotate(-12deg) scale(1);
+    }
+    50% {
+      transform: rotate(12deg) scale(1.15);
+    }
   }
   .lt-rolling-text {
     font-size: 13px;
@@ -265,8 +281,14 @@
     animation: lt-pop 0.4s both cubic-bezier(0.2, 0.9, 0.3, 1.4);
   }
   @keyframes lt-pop {
-    0% { transform: scale(0.4) translateY(10px); opacity: 0; }
-    100% { transform: scale(1) translateY(0); opacity: 1; }
+    0% {
+      transform: scale(0.4) translateY(10px);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
   }
   .lt-prize-icon {
     font-size: 24px;
@@ -351,5 +373,14 @@
   }
   .lt-odds-rate {
     font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 760px) {
+    .lt-actions {
+      gap: 4px;
+    }
+    .lt-actions :deep(.b_btn) {
+      min-width: unset;
+    }
   }
 </style>

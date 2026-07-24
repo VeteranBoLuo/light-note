@@ -1,23 +1,20 @@
 <template>
-  <BTooltip :title="tooltip" @click.stop>
-    <span
-      class="b-action-button"
-      :class="[`b-action-button--${action}`, { 'b-action-button--with-label': label }]"
-      role="button"
-      tabindex="0"
-      :aria-label="tooltip"
-      @click="emit('click')"
-      @keydown.enter.prevent.stop="emit('click')"
-      @keydown.space.prevent.stop="emit('click')"
-    >
-      <SvgIcon :src="action === 'edit' ? icon.table_edit : icon.table_delete" size="17" />
-      <span v-if="label" class="b-action-button__label">{{ label }}</span>
-    </span>
-  </BTooltip>
+  <span
+    class="b-action-button"
+    :class="[`b-action-button--${action}`, { 'b-action-button--with-label': label }]"
+    role="button"
+    tabindex="0"
+    :aria-label="tooltip"
+    @click="emit('click')"
+    @keydown.enter.prevent.stop="emit('click')"
+    @keydown.space.prevent.stop="emit('click')"
+  >
+    <SvgIcon :src="action === 'edit' ? icon.table_edit : icon.table_delete" size="17" />
+    <span v-if="label" class="b-action-button__label">{{ label }}</span>
+  </span>
 </template>
 
 <script setup lang="ts">
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
