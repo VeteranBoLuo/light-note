@@ -1,7 +1,9 @@
 <template>
-  <PBookmarkTable v-if="bookmark.isMobile" />
-  <BookmarkTable v-else />
-  <BookmarkSnapshotModal v-model:visible="snapshotVisible" :bookmark-id="snapshotBookmarkId" />
+  <div class="bookmark-mg-route">
+    <PBookmarkTable v-if="bookmark.isMobile" />
+    <BookmarkTable v-else />
+    <BookmarkSnapshotModal v-model:visible="snapshotVisible" :bookmark-id="snapshotBookmarkId" />
+  </div>
 </template>
 
 <script lang="ts" setup>
@@ -48,4 +50,13 @@
   });
 </script>
 
-<style lang="less"></style>
+<style scoped lang="less">
+  // 该路由必须保留单一根节点：外层 view/index.vue 会把固定定位和可用高度通过 attrs 传入 router-view。
+  // 多根节点时这些样式无法继承，书签页便会从顶部开始渲染并被固定导航栏覆盖，缩放后尤为明显。
+  .bookmark-mg-route {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+</style>

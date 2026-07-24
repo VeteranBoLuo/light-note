@@ -400,7 +400,7 @@ export function useGrowth() {
     return inventory.value;
   }
 
-  // 使用一件背包消耗品(如 AI 加油包 → 今日额度 +30万);成功则刷新背包 + 成长快照(数量/额度变化)
+  // 使用一件背包消耗品(如 AI 加油包 → 今日额度 +60万);成功则刷新背包 + 成长快照(数量/额度变化)
   async function useItem(itemId: string) {
     const res = await growthApi.useItemApi(itemId);
     if (res?.status === 200 && res.data?.ok) {

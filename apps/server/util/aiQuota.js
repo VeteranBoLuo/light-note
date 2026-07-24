@@ -19,7 +19,7 @@ import { getClientIp } from './security/requestContext.js';
 const RESERVE_TOKENS = 5000;
 const DAILY_QUOTA = {
   user: 100_000,
-  visitor: 30_000,
+  visitor: 200_000,
 };
 
 const DISABLED_VALUES = new Set(['0', 'false', 'off', 'no']);

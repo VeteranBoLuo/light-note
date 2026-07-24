@@ -1271,8 +1271,8 @@ export async function agentChat(req, res) {
       // 额度用完的提示按身份区分:登录用户引导「升级涨额度」,游客引导「注册得更多」
       const tip =
         quotaHandle.type === 'user'
-          ? '今日 AI 额度已用完啦～ 明天 0 点自动重置。想要更多?提升等级即可解锁更高额度,段位越高额度越多(满级 200 万 token/日)。'
-          : '访客今日 AI 额度已用完啦～ 明天 0 点重置。登录注册后额度立涨,还能随等级成长持续提升,一路解锁到满级 200 万 token/日 😉';
+          ? '今日 AI 额度已用完啦～ 明天 0 点自动重置。想要更多?提升等级即可解锁更高额度,段位越高额度越多(满级 400 万 token/日)。'
+          : '访客今日 AI 额度已用完啦～ 明天 0 点重置。登录注册后额度立涨,还能随等级成长持续提升,一路解锁到满级 400 万 token/日 😉';
       if (stream) {
         sseLifecycle = buildSseLifecycle();
         sseLifecycle.start({ preview: userRole === 'visitor', quotaExceeded: true });

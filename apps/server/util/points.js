@@ -82,7 +82,7 @@ export async function ensurePointsSchema() {
 export const SHOP_ITEMS = [
   // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
   // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
-  { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '+30 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)', cost: 150, effect: 'ai_pack', bonusTokens: 300_000 },
+  { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '+60 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)', cost: 150, effect: 'ai_pack', bonusTokens: 600_000 },
   { id: 'storage_512', type: 'consumable', name: '扩容包 512MB', desc: '云空间永久 +512MB,叠加在等级配额之上', cost: 800, effect: 'storage', storageMb: 512 },
   { id: 'storage_2g', type: 'consumable', name: '扩容包 2GB', desc: '云空间永久 +2GB,大文件党首选', cost: 2500, effect: 'storage', storageMb: 2048 },
   // 专属称号已下架:称号仅本人可见、无公开展示价值,故移除兑换入口(buyItem/equipTitle 仍兼容 type==='title' 历史数据,目录不再上架)。

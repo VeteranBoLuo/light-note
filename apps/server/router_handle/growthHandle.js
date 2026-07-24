@@ -216,7 +216,7 @@ export const getInventoryHandle = async (req, res) => {
   }
 };
 
-// POST /growth/item/use —— 使用一件背包消耗品(如 AI 加油包 → 今日额度 +30万);补签卡走 /useProtectCard
+// POST /growth/item/use —— 使用一件背包消耗品(如 AI 加油包 → 今日额度 +60万);补签卡走 /useProtectCard
 export const useItemHandle = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {

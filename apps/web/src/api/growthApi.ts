@@ -38,7 +38,7 @@ export const buyShopItem = (itemId: string) => apiBasePost('/api/growth/shop/buy
 // 背包(消耗品持有)+ 资产(积分/永久扩容/今日AI加油)总览
 export const getInventory = () => apiBaseGet('/api/growth/inventory');
 
-// 使用一件背包消耗品(如 AI 加油包 → 今日额度 +30万);补签卡走 useProtectCard
+// 使用一件背包消耗品(如 AI 加油包 → 今日额度 +60万);补签卡走 useProtectCard
 export const useItemApi = (itemId: string) => apiBasePost('/api/growth/item/use', { itemId });
 
 // 佩戴 / 卸下称号(titleId 为空=卸下)

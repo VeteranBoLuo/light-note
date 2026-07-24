@@ -51,8 +51,23 @@ describe('growth 段位表', () => {
     expect(RANKS[0].spaceMb).toBe(512);
     expect(RANKS[9].spaceMb).toBe(5120);
     expect(RANKS[14].spaceMb).toBe(20480);
-    expect(RANKS[0].aiTokenDaily).toBe(250_000);
-    expect(RANKS[14].aiTokenDaily).toBe(2_000_000);
+    expect(RANKS.map((rank) => rank.aiTokenDaily)).toEqual([
+      500_000,
+      600_000,
+      760_000,
+      900_000,
+      1_100_000,
+      1_300_000,
+      1_500_000,
+      1_760_000,
+      2_000_000,
+      2_300_000,
+      2_600_000,
+      3_000_000,
+      3_300_000,
+      3_600_000,
+      4_000_000,
+    ]);
     for (let i = 1; i < RANKS.length; i++) {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
       expect(RANKS[i].aiTokenDaily).toBeGreaterThanOrEqual(RANKS[i - 1].aiTokenDaily);

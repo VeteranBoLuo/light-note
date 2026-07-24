@@ -15,7 +15,7 @@ export default {
   transform(raw) {
     if (raw?.unavailable) return 'AI 额度服务暂时不可用，为避免无保护调用，当前不会继续消耗模型额度。请稍后重试。';
     if (raw?.guest) {
-      return '游客模式下 AI 额度按设备与可信网络临时分配(单设备每日约 3 万 token)。注册登录后,额度随成长等级提升,还能用「AI 加油包」当天扩充。';
+      return '游客模式下 AI 额度按设备与可信网络临时分配(单设备每日约 20 万 token)。注册登录后,额度随成长等级提升,还能用「AI 加油包」当天扩充。';
     }
     const fmt = (n) => Number(n || 0).toLocaleString('en-US');
     const pct = raw.quota ? Math.round((raw.used / raw.quota) * 100) : 0;

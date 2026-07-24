@@ -18,24 +18,25 @@ import { stableAgentErrorCode } from './agent/logSafety.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(方案A,前期平缓、后期陡增,凸显高等级价值):Lv1 0.5G → Lv10 5G → Lv15 20G,
-// 11 级起明显加速(5→7→9→12→16→20G)。数值 = 展示 GB×1024 取整;后端按 level 下发真实配额。
+// 11 级起明显加速(5→7→9→12→16→20G)。AI 额度同步按等级递增:Lv.1 50 万 → Lv.15 400 万 token/日。
+// 数值 = 展示 GB×1024 取整;后端按 level 下发真实配额。
 export const RANKS = [
-  { level: 1, name: '蒙童', cumExp: 0, spaceMb: 512, aiTokenDaily: 250_000, trashDays: 30 },
-  { level: 2, name: '书生', cumExp: 500, spaceMb: 768, aiTokenDaily: 300_000, trashDays: 30 },
-  { level: 3, name: '秀才', cumExp: 1000, spaceMb: 1024, aiTokenDaily: 380_000, trashDays: 30 },
-  { level: 4, name: '举人', cumExp: 1700, spaceMb: 1536, aiTokenDaily: 450_000, trashDays: 30 },
-  { level: 5, name: '贡士', cumExp: 2700, spaceMb: 2048, aiTokenDaily: 550_000, trashDays: 60 },
-  { level: 6, name: '进士', cumExp: 4000, spaceMb: 2560, aiTokenDaily: 650_000, trashDays: 60 },
-  { level: 7, name: '探花', cumExp: 5800, spaceMb: 3072, aiTokenDaily: 750_000, trashDays: 60 },
-  { level: 8, name: '榜眼', cumExp: 8000, spaceMb: 3584, aiTokenDaily: 880_000, trashDays: 60 },
-  { level: 9, name: '状元', cumExp: 10800, spaceMb: 4352, aiTokenDaily: 1_000_000, trashDays: 60 },
-  { level: 10, name: '翰林', cumExp: 14500, spaceMb: 5120, aiTokenDaily: 1_150_000, trashDays: 180 },
-  { level: 11, name: '学士', cumExp: 19000, spaceMb: 7168, aiTokenDaily: 1_300_000, trashDays: 180 },
-  { level: 12, name: '大学士', cumExp: 25000, spaceMb: 9216, aiTokenDaily: 1_500_000, trashDays: 180 },
-  { level: 13, name: '文豪', cumExp: 32000, spaceMb: 12288, aiTokenDaily: 1_650_000, trashDays: 180 },
-  { level: 14, name: '文宗', cumExp: 40000, spaceMb: 16384, aiTokenDaily: 1_800_000, trashDays: 180 },
+  { level: 1, name: '蒙童', cumExp: 0, spaceMb: 512, aiTokenDaily: 500_000, trashDays: 30 },
+  { level: 2, name: '书生', cumExp: 500, spaceMb: 768, aiTokenDaily: 600_000, trashDays: 30 },
+  { level: 3, name: '秀才', cumExp: 1000, spaceMb: 1024, aiTokenDaily: 760_000, trashDays: 30 },
+  { level: 4, name: '举人', cumExp: 1700, spaceMb: 1536, aiTokenDaily: 900_000, trashDays: 30 },
+  { level: 5, name: '贡士', cumExp: 2700, spaceMb: 2048, aiTokenDaily: 1_100_000, trashDays: 60 },
+  { level: 6, name: '进士', cumExp: 4000, spaceMb: 2560, aiTokenDaily: 1_300_000, trashDays: 60 },
+  { level: 7, name: '探花', cumExp: 5800, spaceMb: 3072, aiTokenDaily: 1_500_000, trashDays: 60 },
+  { level: 8, name: '榜眼', cumExp: 8000, spaceMb: 3584, aiTokenDaily: 1_760_000, trashDays: 60 },
+  { level: 9, name: '状元', cumExp: 10800, spaceMb: 4352, aiTokenDaily: 2_000_000, trashDays: 60 },
+  { level: 10, name: '翰林', cumExp: 14500, spaceMb: 5120, aiTokenDaily: 2_300_000, trashDays: 180 },
+  { level: 11, name: '学士', cumExp: 19000, spaceMb: 7168, aiTokenDaily: 2_600_000, trashDays: 180 },
+  { level: 12, name: '大学士', cumExp: 25000, spaceMb: 9216, aiTokenDaily: 3_000_000, trashDays: 180 },
+  { level: 13, name: '文豪', cumExp: 32000, spaceMb: 12288, aiTokenDaily: 3_300_000, trashDays: 180 },
+  { level: 14, name: '文宗', cumExp: 40000, spaceMb: 16384, aiTokenDaily: 3_600_000, trashDays: 180 },
   // 满级 36500 天(100 年)≈ 永久:清理 SQL 用它算出的过期点在 100 年前,永不命中;前端 ≥3650 显示「永久」
-  { level: 15, name: '文圣', cumExp: 50000, spaceMb: 20480, aiTokenDaily: 2_000_000, trashDays: 36500 },
+  { level: 15, name: '文圣', cumExp: 50000, spaceMb: 20480, aiTokenDaily: 4_000_000, trashDays: 36500 },
 ];
 
 export const MAX_LEVEL = 15;

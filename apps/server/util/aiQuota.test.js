@@ -215,7 +215,7 @@ describe('AI quota abuse hardening', () => {
   it('默认强制执行，只有明确 false 才关闭', async () => {
     expect(aiQuota.isEnforcing()).toBe(true);
     const req = visitorRequest();
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 40; index += 1) {
       await expect(aiQuota.reserve(req, visitorContext(`default-${index}`))).resolves.toMatchObject({ blocked: false });
     }
     await expect(aiQuota.reserve(req, visitorContext('default-blocked'))).resolves.toMatchObject({
@@ -258,7 +258,7 @@ describe('AI quota abuse hardening', () => {
 
   it('轮换客户端 fingerprint 最终仍被同一可信网络桶拦截', async () => {
     const ip = '203.0.113.45';
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 20; index += 1) {
       const handle = await aiQuota.reserve(
         visitorRequest(`rotated-device-${index}`, ip),
         visitorContext(`rotate-${index}`),
@@ -268,7 +268,7 @@ describe('AI quota abuse hardening', () => {
     }
     const blocked = await aiQuota.reserve(visitorRequest('rotated-device-4', ip), visitorContext('rotate-blocked'));
     expect(blocked).toMatchObject({ blocked: true, type: 'fingerprint', reason: 'quota_exceeded' });
-    expect(usageByType('visitor_network')).toEqual([{ tokens: 90_000, calls: 3 }]);
+    expect(usageByType('visitor_network')).toEqual([{ tokens: 600_000, calls: 20 }]);
   });
 
   it('登录用户继续使用成长等级单桶，不受游客网络桶影响', async () => {
@@ -288,7 +288,7 @@ describe('AI quota abuse hardening', () => {
 
   it('并发 gate 在同一设备账本只允许一个请求占用最后额度', async () => {
     const req = visitorRequest('concurrent-device');
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 39; index += 1) {
       await aiQuota.reserve(req, visitorContext(`warmup-${index}`));
     }
     const results = await Promise.all([
@@ -297,7 +297,7 @@ describe('AI quota abuse hardening', () => {
     ]);
     expect(results.filter((item) => item.blocked)).toHaveLength(1);
     expect(results.filter((item) => !item.blocked)).toHaveLength(1);
-    expect(usageByType('visitor_device')).toEqual([{ tokens: 30_000, calls: 6 }]);
+    expect(usageByType('visitor_device')).toEqual([{ tokens: 200_000, calls: 40 }]);
   });
 
   it('重复 requestId 不会二次调用额度，占位结算也只执行一次', async () => {

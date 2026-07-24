@@ -30,8 +30,8 @@ export const CONSUMABLES = {
     icon: '⚡',
     backing: 'user_item',
     effect: 'ai_tokens',
-    tokens: 300_000,
-    desc: '使用后当日 AI 额度 +30 万 tokens。存进背包随时开,不再当天不用就作废。',
+    tokens: 600_000,
+    desc: '使用后当日 AI 额度 +60 万 tokens。存进背包随时开,不再当天不用就作废。',
     action: 'use', // 前端:直接「使用」
   },
   makeup_card: {

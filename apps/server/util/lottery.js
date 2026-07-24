@@ -4,7 +4,7 @@ import { grantItem } from './items.js';
 
 // 积分抽奖·盲盒。纯积分消耗池(健康的积分出口):单抽 88 / 十连 800(省 80)。
 // 每 10 抽保底一次稀有(补签卡/AI包/存储);奖池期望值 < 单抽成本,长期是净消耗,但用稀有大奖制造惊喜。
-// 复用 points 的落库口径:积分走 points_log,存储走 storage_bonus_mb,补签卡走上限 2,AI 包走 ai_daily_bonus。
+// 复用 points 的落库口径:积分走 points_log,存储走 storage_bonus_mb,补签卡走上限 2,AI 包进背包后在使用时写 ai_daily_bonus。
 // 每日免费抽奖次数随等级递增(把「升级」直接变成「解锁更多免费抽」),是等级权益与抽奖的粘合点。
 
 export const DRAW_COST = 88;
@@ -40,7 +40,7 @@ export const LOTTERY_POOL = [
   { id: 'p30', kind: 'points', amount: 30, name: '+30 积分', weight: 300 },
   { id: 'p70', kind: 'points', amount: 70, name: '+70 积分', weight: 130 },
   { id: 'card', kind: 'card', amount: 1, name: '补签卡 ×1', weight: 60, tier: 'rare' },
-  { id: 'ai', kind: 'ai_pack', amount: 300_000, name: 'AI 加油包', weight: 80, tier: 'rare' },
+  { id: 'ai', kind: 'ai_pack', amount: 600_000, name: 'AI 加油包', weight: 80, tier: 'rare' },
   { id: 's128', kind: 'storage', amount: 128, name: '扩容 +128MB', weight: 45, tier: 'rare' },
   { id: 's512', kind: 'storage', amount: 512, name: '扩容 +512MB(大奖)', weight: 5, tier: 'rare' },
 ];
