@@ -591,6 +591,7 @@ export const getUserList = (req, res) => {
         u.id,
         u.alias,
         u.email,
+        u.head_picture,
         u.phone_number,
         u.role,
         u.ip,

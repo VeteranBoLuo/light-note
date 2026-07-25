@@ -182,7 +182,7 @@
 
                     <div class="tag-card__tools">
                       <span class="tag-card__open" aria-hidden="true">→</span>
-                      <div class="tag-actions">
+                      <div class="tag-actions" @click.stop>
                         <BActionButton
                           action="edit"
                           :label="t('common.edit')"
@@ -310,7 +310,7 @@
                       >+{{ tag.relatedTagList.length - 2 }}</span
                     >
                   </div>
-                  <div class="tag-row-actions">
+                  <div class="tag-row-actions" @click.stop>
                     <BActionButton
                       action="edit"
                       :label="t('common.edit')"

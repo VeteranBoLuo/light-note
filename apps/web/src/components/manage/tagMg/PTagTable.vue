@@ -129,7 +129,7 @@
               <span v-if="tag.relatedTagList.length > 2" class="more-count">+{{ tag.relatedTagList.length - 2 }}</span>
             </div>
 
-            <div class="mobile-card-actions">
+            <div class="mobile-card-actions" @click.stop>
               <BActionButton
                 action="edit"
                 :label="t('common.edit')"

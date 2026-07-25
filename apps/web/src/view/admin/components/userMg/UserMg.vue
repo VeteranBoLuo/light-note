@@ -28,7 +28,10 @@
       @row-click="onRowClick"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'operation'">
+        <template v-if="column.key === 'headPicture'">
+          <svg-icon style="border-radius: 50%" :src="record.headPicture || icon.navigation.user" :size="30" />
+        </template>
+        <template v-else-if="column.key === 'operation'">
           <BSpace>
             <BTooltip :title="t('guest.userPreviewEntry')">
               <svg-icon :src="icon.navigation.user" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
@@ -136,9 +139,14 @@
   const userList = ref([]);
   const userColumns = computed(() => {
     return [
-      { title: '昵称', key: 'alias', width: '1fr' },
+      {
+        title: '头像',
+        key: 'headPicture',
+        width: '60px',
+      },
+      { title: '昵称', key: 'alias', width: '150px' },
       { title: '邮箱', key: 'email', width: '1fr' },
-      { title: 'IP', key: 'ip', width: '1fr' },
+      { title: 'IP', key: 'ip', width: '150px' },
       { title: '最近活跃', key: 'lastActiveTime', width: '1fr', sortable: true },
       { title: '注册时间', key: 'createTime', width: '1fr' },
       { title: '操作', key: 'operation', width: '190px' },
