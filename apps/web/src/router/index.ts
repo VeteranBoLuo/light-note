@@ -126,6 +126,11 @@ export function reloadOnceTo(target: string) {
   return true;
 }
 
+// 页面成功加载后清除防死循环锁，下次部署还能自动刷新
+window.addEventListener('load', () => {
+  try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch {}
+});
+
 // 兜底:部分懒加载 chunk 请求失败不会经过 vite:preloadError(见 main.ts),
 // 而是直接以路由导航错误的形式出现,这里按错误信息匹配后自动刷新自愈。
 const CHUNK_ERROR_PATTERN =
