@@ -89,9 +89,13 @@ export async function mainLoop({
   console.log('[bookmark-icon-worker] stopped');
 }
 
-const isDirectRun = process.argv[1]
-  ? import.meta.url === pathToFileURL(process.argv[1]).href
-  : false;
+// PM2 会通过自己的容器入口加载脚本，此时 process.argv[1] 不一定是业务脚本路径。
+// NODE_APP_INSTANCE 是 PM2 为托管进程注入的稳定标识；保留 argv 判断以兼容直接 node 启动。
+const isDirectRun =
+  process.env.NODE_APP_INSTANCE !== undefined ||
+  (process.argv[1]
+    ? import.meta.url === pathToFileURL(process.argv[1]).href
+    : false);
 
 if (isDirectRun) {
   void mainLoop().catch((error) => {
