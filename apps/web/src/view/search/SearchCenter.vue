@@ -908,11 +908,16 @@
     });
   }
 
+  let isInitialRouteLoad = true;
   watch(
     () => route.query,
     () => {
       applyRouteState();
-      loadData();
+      // 模块级搜索缓存用于同页筛选/视图切换，不能跨页面进入继续充当资源事实源。
+      // 每次 SearchCenter 重新挂载时强制请求一次，确保新增、编辑或删除后的资源立即可见。
+      const force = isInitialRouteLoad;
+      isInitialRouteLoad = false;
+      void loadData(force);
     },
     { immediate: true },
   );
