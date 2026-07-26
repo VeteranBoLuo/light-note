@@ -1348,7 +1348,8 @@ export default {
     uiScaleMedium: 'Standard',
     uiScaleLarge: 'Large',
     defaultHome: 'Default home',
-    defaultHomeDesc: 'The page shown each time you open the site',
+    defaultHomeDesc:
+      'Desktop opens the selected page. Mobile supports Bookmarks, Notes, and Cloud Space; other choices fall back to Bookmarks.',
     noteView: 'Note view',
     noteViewDesc: 'How the note library list is displayed',
     resourceView: 'Resource center view',

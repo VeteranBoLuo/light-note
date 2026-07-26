@@ -4,7 +4,7 @@
     :subtitle="$t('note.subtitle')"
     accent="note"
     layout="workspace"
-    :show-back="bookmark.isMobile"
+    :show-back="showMobileBack"
     :title-actionable="!bookmark.isMobile"
     @back="backRouterPage"
     @title-click="resetNoteLibrary"
@@ -205,6 +205,7 @@
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
+  import { getMobileHomePath } from '@/utils/preferences.ts';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -218,6 +219,8 @@
 
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
+  const showMobileBack = computed(() => bookmark.isMobile && getMobileHomePath(user.preferences) !== '/noteLibrary');
   const { addResourcesToInbox } = useInboxEnqueue();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
@@ -435,7 +438,6 @@
   function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'addInbox' | 'delete', note: any) {
     handleNoteMenuSelect(action, note);
   }
-  const user = useUserStore();
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
   init();
   async function init() {

@@ -3,11 +3,7 @@ import { TagInterface } from '@/config/bookmarkCfg.ts';
 import Viewer from 'viewerjs';
 import { trackConversion } from '@/utils/conversion';
 import { apiQueryPost } from '@/http/request.ts';
-
-const VIEWPORT_BREAKPOINTS = {
-  mobile: 768,
-  desktop: 1200,
-} as const;
+import { VIEWPORT_BREAKPOINTS } from '@/config/responsive.ts';
 
 // 接口定义
 interface BookmarkState {

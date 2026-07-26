@@ -1327,7 +1327,7 @@ export default {
     uiScaleMedium: '标准',
     uiScaleLarge: '大',
     defaultHome: '默认首页',
-    defaultHomeDesc: '每次打开网站默认进入的页面',
+    defaultHomeDesc: '桌面端按所选页面进入；移动端仅支持书签、笔记和云空间，其他选项回退到书签',
     noteView: '笔记视图',
     noteViewDesc: '笔记库列表的展示方式',
     resourceView: '资源中心视图',

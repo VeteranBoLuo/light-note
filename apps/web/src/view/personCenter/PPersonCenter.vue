@@ -2,7 +2,7 @@
   <CommonContainer
     :title="$t('personCenter.title')"
     :style="{ backgroundColor: user.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
-    @backClick="router.push('/home')"
+    @backClick="goHome"
   >
     <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
       <div style="display: flex; gap: 20px; align-items: center">
@@ -112,25 +112,18 @@
           >{{ $t('personCenter.resourceCenterDesc')
           }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
       ></div>
-      <div
-        class="person-menu-item"
-        @click="router.push('/noteLibrary')"
-        v-click-log="{ module: '个人中心', operation: `笔记库` }"
+      <BButton
+        v-for="entry in mobileResourceEntries"
+        :key="entry.path"
+        class="person-menu-item person-module-entry"
+        @click="router.push(entry.path)"
+        v-click-log="{ module: '个人中心', operation: entry.operation }"
       >
-        <span class="person-menu-item-title">{{ $t('note.title') }}</span>
+        <span class="person-menu-item-title">{{ entry.label }}</span>
         <span class="person-menu-item-des"
           ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14"
         /></span>
-      </div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/cloudSpace')"
-        v-click-log="{ module: '个人中心', operation: `云空间` }"
-      >
-        <span class="person-menu-item-title">{{ $t('cloudSpace.title') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
+      </BButton>
 
       <div
         class="person-menu-item"
@@ -215,6 +208,8 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { getMobileHomePath, type MobileHomePath } from '@/utils/preferences.ts';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -231,6 +226,15 @@
     return frameVariant(id) ? id : null;
   });
   const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
+  const mobileHomePath = computed(() => getMobileHomePath(user.preferences));
+  const mobileResourceEntries = computed(() => {
+    const entries: Array<{ path: MobileHomePath; label: string; operation: string }> = [
+      { path: '/home', label: t('navigation.bookmark'), operation: '打开书签' },
+      { path: '/noteLibrary', label: t('note.title'), operation: '打开笔记库' },
+      { path: '/cloudSpace', label: t('cloudSpace.title'), operation: '打开云空间' },
+    ];
+    return entries.filter((entry) => entry.path !== mobileHomePath.value);
+  });
 
   onMounted(() => {
     loadGrowth();
@@ -238,6 +242,10 @@
 
   function goGrowth() {
     router.push('/growth');
+  }
+
+  function goHome() {
+    router.push(mobileHomePath.value);
   }
 
   function openQuickCapture() {
@@ -309,6 +317,24 @@
       gap: 5px;
       line-height: 100%;
     }
+  }
+
+  :deep(.person-module-entry.b_btn.default_btn) {
+    width: 100%;
+    height: 50px;
+    padding: 0 20px;
+    border-radius: 0;
+    justify-content: space-between;
+    line-height: 1;
+    background-color: var(--phone-menu-item-bg-color);
+
+    &:hover {
+      background-color: var(--phone-menu-item-bg-color);
+    }
+  }
+
+  :deep(.person-module-entry.b_btn.default_btn:not(:last-child)) {
+    border-bottom: 1px solid var(--phone-menu-item-border-color) !important;
   }
 
   .navigation-icon {

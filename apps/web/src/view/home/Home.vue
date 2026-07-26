@@ -5,7 +5,9 @@
       :subtitle="pageSubtitle"
       accent="bookmark"
       layout="workspace"
+      :show-back="showMobileBack"
       :title-actionable="!bookmark.isMobile"
+      @back="backRouterPage"
       @title-click="resetBookmarkView"
     >
       <template #actions>
@@ -75,14 +77,18 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { getMobileHomePath } from '@/utils/preferences.ts';
+  import { backRouterPage } from '@/utils/common.ts';
 
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const router = useRouter();
   const route = useRoute();
   const { t } = useI18n();
   const MIN_SKELETON_MS = 100;
   const BOOKMARK_SEARCH_DEBOUNCE_MS = 280;
   const isHomeDrawerLayout = computed(() => bookmark.isMobile);
+  const showMobileBack = computed(() => bookmark.isMobile && getMobileHomePath(user.preferences) !== '/home');
   const bookmarkSearchInput = ref('');
   let bookmarkSearchTimer = 0;
   let bookmarkRequestSequence = 0;
@@ -298,7 +304,6 @@
     }
   }
 
-  const user = useUserStore();
   onMounted(() => {
     bookmark.bookmarkList = [];
     if (!user.id) {

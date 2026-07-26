@@ -258,6 +258,10 @@
       gap: 10px;
     }
 
+    .resource-page-shell:not(.resource-page-shell--with-back) {
+      padding-top: 6px;
+    }
+
     .resource-page-header {
       min-height: 40px;
       align-items: center;

@@ -22,7 +22,7 @@
         </div>
       </b-dropdown>
     </BTooltip>
-    <BButton v-if="bookmark.isMobile && route.path.includes('/home')" class="mobile-github-btn" @click="githubClick">
+    <BButton v-if="showMobileHomeExtra" class="mobile-github-btn" @click="githubClick">
       <svg-icon size="24" hover :src="icon.github" />
     </BButton>
     <BButton v-if="showGuestRegister" type="primary" class="guest-register-link" @click="registerClick">
@@ -60,6 +60,7 @@
   import { computed, onMounted } from 'vue';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
+  import { isMobileHomeRoute } from '@/utils/preferences.ts';
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { t } = useI18n();
@@ -72,6 +73,7 @@
     return frameVariant(id) ? id : null;
   });
   const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
+  const showMobileHomeExtra = computed(() => bookmark.isMobile && isMobileHomeRoute(route.name, user.preferences));
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
   const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
   const moreMenuOptions = computed(() => [

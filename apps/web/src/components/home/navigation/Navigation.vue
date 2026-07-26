@@ -112,6 +112,7 @@
   import RightArea from '@/components/home/navigation/RightArea.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import { recordOperation } from '@/api/commonApi';
+  import { getAppHomePath } from '@/utils/preferences.ts';
 
   const route = useRoute();
   const user = useUserStore();
@@ -161,11 +162,16 @@
 
   const bookmark = bookmarkStore();
   async function handleToIndex() {
-    bookmark.type = 'all';
-    bookmark.refreshData();
     if (bookmark.isMobile) {
-      await router.push('/home');
+      const targetPath = getAppHomePath(user.preferences, true);
+      if (targetPath === '/home') {
+        bookmark.type = 'all';
+        bookmark.refreshData();
+      }
+      await router.push(targetPath);
     } else {
+      bookmark.type = 'all';
+      bookmark.refreshData();
       await router.push('/');
     }
     bookmark.isFold = true;

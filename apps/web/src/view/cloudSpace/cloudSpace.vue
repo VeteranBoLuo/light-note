@@ -4,7 +4,7 @@
     :subtitle="$t('cloudSpace.subtitle')"
     accent="file"
     layout="workspace"
-    :show-back="bookmark.isMobile"
+    :show-back="showMobileBack"
     :title-actionable="!bookmark.isMobile"
     @back="backRouterPage"
     @title-click="resetCloudSpace"
@@ -147,6 +147,7 @@
   import { backRouterPage } from '@/utils/common.ts';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { apiBasePost } from '@/http/request';
+  import { getMobileHomePath } from '@/utils/preferences.ts';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -155,6 +156,7 @@
   const user = useUserStore();
   const route = useRoute();
   const router = useRouter();
+  const showMobileBack = computed(() => bookmark.isMobile && getMobileHomePath(user.preferences) !== '/cloudSpace');
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const organizingFileId = computed(() => {
     const value = route.query.fileId;

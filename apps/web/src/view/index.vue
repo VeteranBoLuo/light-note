@@ -8,14 +8,16 @@
 
 <script lang="ts" setup>
   import Navigation from '@/components/home/navigation/Navigation.vue';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { useRoute } from 'vue-router';
   import { computed } from 'vue';
   import { NAVIGATION_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { getMainRouteViewKey } from '@/utils/routeViewKey.ts';
+  import { isMobileHomeRoute } from '@/utils/preferences.ts';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
+  const user = useUserStore();
 
   const routeName = computed(() => String(route.name || ''));
   const routeViewKey = computed(() => getMainRouteViewKey(route));
@@ -23,7 +25,7 @@
   // 导航栏显示逻辑
   const showNavigation = computed(() => {
     if (bookmark.isMobile) {
-      return route.path === '/home';
+      return isMobileHomeRoute(route.name, user.preferences);
     }
     return !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value);
   });

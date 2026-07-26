@@ -21,7 +21,16 @@ import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
-import { getDesktopHomePath } from '@/utils/preferences.ts';
+import { getDesktopHomePath, getMobileHomePath } from '@/utils/preferences.ts';
+import { isMobileViewport } from '@/config/responsive.ts';
+
+function getStoredPreferences() {
+  try {
+    return JSON.parse(localStorage.getItem('preferences') || '{}');
+  } catch {
+    return {};
+  }
+}
 
 const routes: RouteRecordRaw[] = [
   {
@@ -31,8 +40,11 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: '/',
     redirect: () => {
+      const preferences = getStoredPreferences();
+      if (isMobileViewport(window.innerWidth)) return getMobileHomePath(preferences);
+      // 保留既有平板首屏行为；手机布局使用上方统一断点，避免把移动端改造扩大到平板。
       if (window.innerWidth < 1024) return '/home';
-      return getDesktopHomePath(JSON.parse(localStorage.getItem('preferences') || '{}'));
+      return getDesktopHomePath(preferences);
     },
     component: () => import('@/view/index.vue'),
     // 放入此处的有顶部导航栏

@@ -156,8 +156,6 @@
     '/admin/operationLog': '/operationLog',
     '/admin/imageMg': '/imageMg',
     '/admin/logExclude': '/logExclude',
-    '/workbenches': '/home',
-    '/': '/home',
     '/securityCenter/overview': '/securityOverview',
     '/securityCenter/events': '/securityEvents',
     '/securityCenter/ips': '/securityIps',
@@ -325,6 +323,10 @@
   function handleRouteChange(isMobileLayout: boolean, path: string) {
     // 桌面布局切换至手机布局
     if (isMobileLayout) {
+      if (path === '/' || path === '/workbenches') {
+        router.push(getAppHomePath(user.preferences, true));
+        return;
+      }
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
       }
@@ -576,9 +578,9 @@
 
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
-    // 手机端访问官网 → 跳 /home（根路由 redirect 已处理 /）
+    // 手机端不展示官网，按移动端默认首页进入；不支持的默认项由解析器回退到书签。
     if (bookmark.isMobile && to.path === '/landing') {
-      next('/home');
+      next(getAppHomePath(user.preferences, true));
       return;
     }
 
