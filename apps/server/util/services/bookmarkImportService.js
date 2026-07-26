@@ -121,3 +121,31 @@ export async function importBookmarksWithTags(connection, { userId, items = [] }
 
   return stats;
 }
+
+/**
+ * 统一执行 HTML / Excel 书签导入事务，并在提交后返回后续图标批次所需 stats。
+ * 调用方只负责把稳定错误映射成对应接口文案。
+ */
+export async function runBookmarkImportTransaction(
+  dbPool,
+  {
+    userId,
+    items = [],
+    importFn = importBookmarksWithTags,
+  } = {},
+) {
+  if (!dbPool?.getConnection) throw new Error('缺少数据库连接池');
+
+  const connection = await dbPool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const stats = await importFn(connection, { userId, items });
+    await connection.commit();
+    return stats;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}

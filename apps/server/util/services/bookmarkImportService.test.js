@@ -13,7 +13,7 @@ vi.mock('../resourceTags.js', () => ({
 }));
 vi.mock('../bookmarkUrl.js', () => ({ inspectBookmarkUrl: mocks.inspectBookmarkUrl }));
 
-const { importBookmarksWithTags } = await import('./bookmarkImportService.js');
+const { importBookmarksWithTags, runBookmarkImportTransaction } = await import('./bookmarkImportService.js');
 
 function createConnection() {
   return { query: vi.fn() };
@@ -87,5 +87,44 @@ describe('importBookmarksWithTags', () => {
     });
     expect(Array.isArray(stats.createdBookmarkIds)).toBe(true);
     expect(Array.isArray(stats.affectedBookmarkIds)).toBe(true);
+  });
+
+  it('事务提交后把 stats 返回给 Excel/HTML 导入后续批次创建逻辑', async () => {
+    const stats = {
+      parsedTotal: 1,
+      createdTags: 0,
+      createdBookmarks: 1,
+      boundRelations: 0,
+      skippedInvalidUrls: 0,
+      createdBookmarkIds: ['bookmark-new'],
+      affectedBookmarkIds: ['bookmark-new'],
+    };
+    const connection = {
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    };
+    const dbPool = {
+      getConnection: vi.fn().mockResolvedValue(connection),
+    };
+    const importFn = vi.fn().mockResolvedValue(stats);
+
+    await expect(
+      runBookmarkImportTransaction(dbPool, {
+        userId: 'user-1',
+        items: [{ name: '站点', url: 'https://example.com' }],
+        importFn,
+      }),
+    ).resolves.toBe(stats);
+
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(importFn).toHaveBeenCalledWith(connection, {
+      userId: 'user-1',
+      items: [{ name: '站点', url: 'https://example.com' }],
+    });
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
   });
 });

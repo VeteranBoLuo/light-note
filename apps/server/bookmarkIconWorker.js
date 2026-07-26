@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { claimTasks, processTaskBatch } from './util/bookmarkIconWorkerService.js';
+import { bookmarkIconBackgroundJobsEnabled } from './util/bookmarkIconBatchService.js';
+import { assertBookmarkIconWorkerRuntime } from './util/bookmarkIconRuntimeCheck.js';
 
 const WORKER_ID =
   process.env.BOOKMARK_ICON_WORKER_ID ||
@@ -39,7 +42,16 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function mainLoop() {
+export async function mainLoop({
+  runtimeCheck = assertBookmarkIconWorkerRuntime,
+} = {}) {
+  if (!bookmarkIconBackgroundJobsEnabled()) {
+    console.log('[bookmark-icon-worker] disabled by feature flag');
+    while (running) await sleep(1000);
+    return;
+  }
+
+  await runtimeCheck();
   console.log(
     '[bookmark-icon-worker] started id=%s batch=%s poll=%sms',
     WORKER_ID,
@@ -77,4 +89,16 @@ async function mainLoop() {
   console.log('[bookmark-icon-worker] stopped');
 }
 
-void mainLoop();
+const isDirectRun = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+
+if (isDirectRun) {
+  void mainLoop().catch((error) => {
+    console.error(
+      '[bookmark-icon-worker] startup failed code=%s',
+      String(error?.code || error?.name || 'UNKNOWN'),
+    );
+    process.exitCode = 1;
+  });
+}

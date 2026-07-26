@@ -23,6 +23,7 @@ import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecove
 import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from './util/aiArtifactRetention.js';
 import { startAiBalanceSnapshotScheduler } from './util/agent/providerBalanceSnapshot.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
+import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -64,14 +65,15 @@ const allRouter = [
     path: '/files',
     router: express.static('/www/wwwroot/files'), // 设置静态文件目录,
   },
-  {
-    path: '/uploads',
-    router: express.static('/www/wwwroot/images'), // 设置静态文件目录
-  },
 ];
 allRouter.forEach((item) => {
   app.use(item.path, item.router);
 });
+// 本地预览时 Worker 可把 favicon 写入临时目录；线上仍回退到既有上传目录。
+// 多次挂载利用 express.static 的 fallthrough，找不到时继续尝试下一个目录。
+for (const directory of getUploadStaticDirectories(process.env)) {
+  app.use('/uploads', express.static(directory));
+}
 
 startSessionMaintenance();
 ensureSecurityTables().catch((err) => console.error('安全模块初始化失败 code=%s', stableAgentErrorCode(err)));

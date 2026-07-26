@@ -5,6 +5,7 @@ import { normalizeTagIds, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { removeInboxRelations } from '../util/resourceInbox.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
+import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 
 const SEARCH_TYPES = ['bookmark', 'note', 'file', 'tag'];
 const BATCH_EDITABLE_TYPES = ['bookmark', 'note', 'file'];
@@ -700,6 +701,7 @@ export const batchDeleteResources = async (req, res) => {
     const typeStats = [];
     let affectedItemCount = 0;
     let validItemCount = 0;
+    const bookmarkIconsToCleanup = [];
 
     for (const type of BATCH_DELETE_TYPES) {
       const requestedIds = grouped[type];
@@ -720,6 +722,13 @@ export const batchDeleteResources = async (req, res) => {
       const placeholders = validIds.map(() => '?').join(',');
       let result = { affectedRows: 0 };
       if (type === 'bookmark') {
+        const [bookmarkRows] = await connection.query(
+          `SELECT id, icon_url AS iconUrl
+           FROM bookmark
+           WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
+          [...validIds, userId],
+        );
+        bookmarkIconsToCleanup.push(...(bookmarkRows || []));
         [result] = await connection.query(
           `UPDATE bookmark SET del_flag = 1, deleted_at = NOW(), icon_url = NULL
            WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
@@ -768,6 +777,7 @@ export const batchDeleteResources = async (req, res) => {
     }
 
     await connection.commit();
+    await cleanupBookmarkIconFiles(bookmarkIconsToCleanup, { db: connection }).catch(() => {});
     if (affectedItemCount > 0) {
       // 资源已经提交删除后再推进个人检索代际；持久化清理不占用本次批量删除的连接。
       void invalidatePersonalKnowledgeCache(userId);

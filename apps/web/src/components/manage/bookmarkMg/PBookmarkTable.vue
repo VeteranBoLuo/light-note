@@ -1,10 +1,12 @@
 <template>
   <PhoneListMg
-    :loading="loading"
+    :loading="initialLoading"
+    :error="loadError"
     :list-data="tableData"
     :title="$t('bookmarkMg.title')"
     :subtitle="$t('bookmarkMg.subtitle')"
     @add="router.push('/manage/editBookmark/add')"
+    @retry="retryLoad"
   >
     <template #item="{ data }">
       <div class="bookmark-item-main">
@@ -38,7 +40,7 @@
           @click="edit(data.id)"
           v-click-log="{ module: '书签管理', operation: `点击编辑图标` }"
         />
-        <BActionButton action="delete" :tooltip="$t('common.delete')" @click="confirmDeleteBookmark(data)" />
+        <BActionButton action="delete" :tooltip="$t('common.delete')" @click="deleteBookmark(data)" />
       </div>
     </template>
   </PhoneListMg>
@@ -55,8 +57,15 @@
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { useBookmarkManage } from '@/composables/useBookmarkManage.ts';
+  import type { BookmarkInterface } from '@/config/bookmarkCfg.ts';
 
-  const { loading, bookmarks: tableData, reloadBookmarks, confirmDeleteBookmark } = useBookmarkManage();
+  const {
+    initialLoading,
+    loadError,
+    bookmarks: tableData,
+    reloadBookmarks,
+    confirmDeleteBookmark,
+  } = useBookmarkManage();
   // 列表角标点击 → 弹出网页正文存档 / AI 摘要(与编辑页快照同一弹框)
   const snapVisible = ref(false);
   const snapBookmarkId = ref('');
@@ -67,8 +76,18 @@
   const edit = (id: string) => {
     router.push({ path: `/manage/editBookmark/${id}` });
   };
+  const deleteBookmark = (bookmarkItem: Record<string, any>) => {
+    confirmDeleteBookmark(bookmarkItem as BookmarkInterface);
+  };
+  const retryLoad = async () => {
+    try {
+      await reloadBookmarks();
+    } catch {
+      // 请求层负责统一提示，页面保留可重试错误状态。
+    }
+  };
 
-  reloadBookmarks();
+  void retryLoad();
 </script>
 
 <style lang="less" scoped>

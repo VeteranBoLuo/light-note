@@ -11,7 +11,6 @@ import {
 } from '../util/resourceTags.js';
 
 import { promises as fs } from 'fs';
-import path from 'path';
 import { ensureNotVisitor } from '../util/auth.js';
 import { grantExp } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
@@ -25,7 +24,7 @@ import {
 import { suggestBookmarkMeta, suggestTagsFromText, ORGANIZE_MAX_BATCH } from '../util/aiOrganize.js';
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
 import { createBookmark, normalizeBookmarkUrl, shouldResetBookmarkIcon } from '../util/services/bookmarkService.js';
-import { importBookmarksWithTags } from '../util/services/bookmarkImportService.js';
+import { runBookmarkImportTransaction } from '../util/services/bookmarkImportService.js';
 import { createIconBatch } from '../util/bookmarkIconBatchService.js';
 import { getIconBatchStatus, retryIconBatchFailures } from '../util/bookmarkIconBatchService.js';
 import { createTag as createTagService } from '../util/services/tagService.js';
@@ -37,6 +36,7 @@ import {
 } from '../util/bookmarkUrl.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 // ── 全局 ──────────────────────────────────────────────────
 const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
 
@@ -53,6 +53,14 @@ async function getBookmarksForIcon(ids, userId) {
     [userId, ...ids],
   );
   return rows;
+}
+
+async function createImportIconBatch(stats, userId) {
+  const ids = stats?.createdBookmarkIds || [];
+  if (ids.length === 0) return undefined;
+  const bookmarksForIcon = await getBookmarksForIcon(ids, userId);
+  if (bookmarksForIcon.length === 0) return undefined;
+  return createIconBatch(userId, bookmarksForIcon);
 }
 
 // ──
@@ -818,18 +826,6 @@ export const delBookmark = async (req, res) => {
 
     const iconUrl = result[0].icon_url;
 
-    // 删除图标文件
-    if (iconUrl) {
-      try {
-        const url = new URL(iconUrl);
-        const fileName = url.pathname.split('/').pop();
-        const filePath = path.join('/www/wwwroot/images/', fileName);
-        await fs.unlink(filePath);
-      } catch (e) {
-        console.error('删除文件失败:', e);
-      }
-    }
-
     const params = {
       del_flag: 1,
       icon_url: null,
@@ -846,6 +842,7 @@ export const delBookmark = async (req, res) => {
       items: [{ resourceType: 'bookmark', resourceId: String(id) }],
     });
     await connection.commit();
+    await cleanupBookmarkIconFiles([{ id, iconUrl }], { db: connection }).catch(() => {});
     await invalidatePersonalKnowledgeCache(userId);
 
     res.send(resultData(updateResult));
@@ -996,41 +993,34 @@ export const importBookmarksHtml = async (req, res) => {
   // 只记条数:完整书签数组含用户收藏内容(URL/标题),不进服务器日志
   console.log(`解析到 ${parsedBookmarks.length} 条书签`);
 
-  const connection = await pool.getConnection();
   let stats;
   try {
-    await connection.beginTransaction();
-    stats = await importBookmarksWithTags(connection, { userId, items: parsedBookmarks });
-    await connection.commit();
+    stats = await runBookmarkImportTransaction(pool, {
+      userId,
+      items: parsedBookmarks,
+    });
   } catch (e) {
-    await connection.rollback();
     console.error('[bookmark] HTML 导入失败 code=%s', stableAgentErrorCode(e));
     res.send(resultData(null, 500, '书签导入失败，请稍后重试'));
     return;
-  } finally {
-    connection.release();
   }
   finishBookmarkImport(req, userId, stats);
   // 图标批次创建：独立于事务，失败不影响导入结果
   let iconBatch;
   try {
-    const ids = stats?.createdBookmarkIds || [];
-    if (ids.length > 0) {
-      const bookmarksForIcon = await getBookmarksForIcon(ids, userId);
-      if (bookmarksForIcon.length > 0) {
-        iconBatch = await Promise.race([
-          createIconBatch(userId, bookmarksForIcon),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-        ]);
-      }
-    }
+    iconBatch = await createImportIconBatch(stats, userId);
   } catch (iconErr) {
     console.error('[icon-batch] 创建图标批次失败（不影响导入）: %s', stableAgentErrorCode(iconErr));
   }
-  res.send(resultData({
-    ...stats,
-    iconBatch: iconBatch?.total > 0 ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status } : undefined,
-  }));
+  res.send(
+    resultData({
+      ...stats,
+      iconBatch:
+        iconBatch?.total > 0
+          ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status }
+          : undefined,
+    }),
+  );
 };
 
 // Excel 已在浏览器端解析，服务端只接收结构化行数据；与 HTML 导入共用同一去重和标签关联事务。
@@ -1047,39 +1037,33 @@ export const importBookmarksExcel = async (req, res) => {
     return res.send(resultData(null, 400, `单次最多导入 ${MAX_EXCEL_BOOKMARK_IMPORT_ITEMS} 条书签`));
   }
 
-  const connection = await pool.getConnection();
+  let stats;
   try {
-    await connection.beginTransaction();
-    const stats = await importBookmarksWithTags(connection, { userId, items });
-    await connection.commit();
+    stats = await runBookmarkImportTransaction(pool, {
+      userId,
+      items,
+    });
   } catch (error) {
-    await connection.rollback();
     console.error('[bookmark] Excel 导入失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, 'Excel 书签导入失败，请稍后重试'));
     return;
-  } finally {
-    connection.release();
   }
   finishBookmarkImport(req, userId, stats);
   let iconBatch;
   try {
-    const ids = stats?.createdBookmarkIds || [];
-    if (ids.length > 0) {
-      const bookmarksForIcon = await getBookmarksForIcon(ids, userId);
-      if (bookmarksForIcon.length > 0) {
-        iconBatch = await Promise.race([
-          createIconBatch(userId, bookmarksForIcon),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-        ]);
-      }
-    }
+    iconBatch = await createImportIconBatch(stats, userId);
   } catch (iconErr) {
     console.error('[icon-batch] 创建图标批次失败（不影响导入）: %s', stableAgentErrorCode(iconErr));
   }
-  res.send(resultData({
-    ...stats,
-    iconBatch: iconBatch?.total > 0 ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status } : undefined,
-  }));
+  res.send(
+    resultData({
+      ...stats,
+      iconBatch:
+        iconBatch?.total > 0
+          ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status }
+          : undefined,
+    }),
+  );
 };
 
 // ============================================================================
@@ -1363,12 +1347,13 @@ export const getIconBatchStatusHandler = async (req, res) => {
   if (!req.user?.id) return res.send(resultData(null, 401, '请先登录'));
   const batchId = String(req.body?.batchId || '').trim();
   if (!batchId) return res.send(resultData(null, 400, '缺少 batchId'));
+  if (batchId.length > 64) return res.send(resultData(null, 400, 'batchId 无效'));
   try {
     const cursor = req.body?.cursor || {};
     const status = await getIconBatchStatus(batchId, req.user.id, cursor);
     res.send(resultData(status));
   } catch (err) {
-    console.error('[icon-batch] 查询状态失败:', err.message);
+    console.error('[icon-batch] 查询状态失败 code=%s', stableAgentErrorCode(err));
     res.send(resultData(null, 500, '查询失败'));
   }
 };
@@ -1378,11 +1363,12 @@ export const retryIconBatchFailuresHandler = async (req, res) => {
   const batchId = String(req.body?.batchId || '').trim();
   const includeNotFound = req.body?.includeNotFound === true;
   if (!batchId) return res.send(resultData(null, 400, '缺少 batchId'));
+  if (batchId.length > 64) return res.send(resultData(null, 400, 'batchId 无效'));
   try {
     const result = await retryIconBatchFailures(batchId, req.user.id, includeNotFound);
     res.send(resultData(result));
   } catch (err) {
-    console.error('[icon-batch] 重试失败:', err.message);
+    console.error('[icon-batch] 重试失败 code=%s', stableAgentErrorCode(err));
     res.send(resultData(null, 500, '重试失败'));
   }
 };

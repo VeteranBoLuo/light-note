@@ -219,6 +219,8 @@ src/
 
 书签图标采用 stale-while-revalidate：`bookmark.icon_checked_at` 记录最近一次 favicon 抓取检查时间；已有图标满 30 天后在列表后台静默刷新，抓取失败保留旧图标，无图标记录按 24 小时冷却重试。书签站点主机变化时清空旧图标及检查时间，同站点路径变化以及普通标题、描述、标签编辑不清图标；编辑页支持主动刷新。
 
+批量导入的无图标书签使用 `bookmark_icon_jobs` 持久任务和独立 `bookmarkIconWorker.js` 补全：导入事务提交后按 Origin 建批次，Worker 有界并发调用 `FAVICON_API_BASE_URL`、逐条写回并记录 `finished_at`；前端用 `(finishedAt, jobId)` 游标短轮询增量更新，完成后最终刷新列表。图标文件使用完整 SHA-256 内容哈希作为共享文件名，不同书签和重复导入复用同一份内容；删除或替换书签图标时只在没有活动书签继续引用后清理文件，并兼容旧版按书签 ID 命名的文件。Worker 启动前必须验证任务表、`finished_at`、`idx_icon_job_updates` 和 favicon-api 健康状态；后台链路连续失败或长时间无进度时，前端恢复受限渐进补图，仅剩延时重试时改为低频静态后台状态且不跨页面恢复成“正在补全”。`BOOKMARK_ICON_BACKGROUND_JOBS_ENABLED=false` 可停止创建和领取新任务，但不删除既有任务或图标。
+
 书签地址以 `@lightnote/shared` 的 `resolveBookmarkUrlInput` 为前后端共享判定规则，服务端 `util/bookmarkUrl.js` 是最终权限边界。纯网址和裸域名可确定性规范化；分享文案、协议后空格、重复协议或多网址输入只生成候选，必须由用户显式选择；无有效候选、非 HTTP(S)、带账号密码或超长地址直接拒绝。保存前 `/bookmark/resolveUrl` 进行 SSRF 防护下的短时探活：域名不存在及 404/410 仅标“疑似失效”，前端推荐返回修改但允许明确“仍然保存”；超时、反爬、鉴权和内网站点不武断判死。智能识别只在地址确定后运行，AI 只补名称、描述和标签，抓取失败时响应标记 `metadataSource=inferred`，不得伪装成已读取网页；已有名称或描述时先展示新旧逐字段对比，由用户选择要应用的字段。识别期间可由用户主动停止，客户端断开信号会传递到网页抓取与 LLM 请求，并由前后端超时共同兜底，停止或超时后的结果不得回填。
 
 ### INSERT 规范

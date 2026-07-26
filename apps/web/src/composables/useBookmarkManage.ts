@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 import { useI18n } from 'vue-i18n';
 import { useUserStore } from '@/store';
@@ -13,27 +13,46 @@ export function useBookmarkManage() {
   const { t } = useI18n();
   const user = useUserStore();
   const loading = ref(false);
+  const hasLoaded = ref(false);
+  const loadError = ref(false);
   const bookmarks = ref<BookmarkInterface[]>([]);
+  const initialLoading = computed(() => !hasLoaded.value);
+  const refreshing = computed(() => loading.value && hasLoaded.value);
+  let requestSequence = 0;
+  let activeRequests = 0;
 
   async function reloadBookmarks(options: { refreshIcons?: boolean } = {}) {
     const { refreshIcons = true } = options;
+    const requestId = ++requestSequence;
+    activeRequests += 1;
     loading.value = true;
+    loadError.value = false;
     try {
       const response = await apiQueryPost('/api/bookmark/getBookmarkList', {
         filters: { userId: user.id, type: 'all' },
       });
-      if (response.status !== 200) return;
+      if (response.status !== 200) {
+        if (requestId === requestSequence) loadError.value = true;
+        return false;
+      }
 
+      if (requestId !== requestSequence) return false;
       bookmarks.value = cloneDeep(response.data?.items || []);
 
-      if (!refreshIcons) return;
+      if (!refreshIcons) return true;
 
       loadBookmarkIconsProgressively(response.data?.items || [], (id, favicon) => {
         const bookmark = bookmarks.value.find((item) => item.id === id);
         if (bookmark) bookmark.iconUrl = favicon;
       });
+      return true;
+    } catch (error) {
+      if (requestId === requestSequence) loadError.value = true;
+      throw error;
     } finally {
-      loading.value = false;
+      activeRequests = Math.max(0, activeRequests - 1);
+      if (requestId === requestSequence) hasLoaded.value = true;
+      loading.value = activeRequests > 0;
     }
   }
 
@@ -54,6 +73,10 @@ export function useBookmarkManage() {
 
   return {
     loading,
+    hasLoaded,
+    initialLoading,
+    refreshing,
+    loadError,
     bookmarks,
     reloadBookmarks,
     confirmDeleteBookmark,

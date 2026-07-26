@@ -1,11 +1,9 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import { isSelfTraffic, listLogExclude, addLogExclude, removeLogExclude } from '../util/logExclude.js';
-import http from 'http';
 import fs from 'fs';
 import fsP from 'fs/promises';
 import path from 'path';
-import { createHash } from 'crypto';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
@@ -576,26 +574,12 @@ export const clearLogsByIp = async (req, res) => {
   }
 };
 
-// 定义支持的图片类型及其对应的扩展名
-const imageMimeTypes = {
-  'image/png': 'png',
-  'image/svg+xml': 'svg',
-  'image/jpeg': 'jpeg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/x-icon': 'ico',
-  'image/vnd.microsoft.icon': 'ico',
-};
-
-const BOOKMARK_ICON_UPLOAD_DIR = '/www/wwwroot/images';
-const BOOKMARK_ICON_AFTER_SAVE_COOLDOWN_MS = 60 * 60 * 1000;
-
 /**
  * 性能统计：记录 analyzeImgUrl 每批处理的无正文统计指标
  * 只记 batchId/数量/延迟/结果分类，不记录 URL/标题/图标内容
  */
 function logBatchStats(batchId, metrics) {
-  const { bookmarkCount, uniqueOriginCount, successCount, noIconCount, totalDurationMs, p50, p95 } = metrics;
+  const { bookmarkCount, uniqueOriginCount, successCount, noIconCount, totalDurationMs } = metrics;
   const safeMetrics = {
     batchId,
     bookmarkCount,
@@ -603,8 +587,6 @@ function logBatchStats(batchId, metrics) {
     successCount,
     noIconCount,
     totalDurationMs,
-    p50,
-    p95,
     ts: Date.now(),
   };
   console.log(JSON.stringify({ type: 'icon-batch-stats', ...safeMetrics }));
@@ -693,11 +675,7 @@ export const analyzeImgUrl = async (req, res) => {
 
   // ── 性能统计 ────────────────────────────────────────────
   const _totalDuration = Math.round(performance.now() - _batchStart);
-  const _durations = fetchResults.map((r) => r.changed ? 1 : 0);
-  const _sorted = _durations.slice().sort((a, b) => a - b);
-  const _p50 = _sorted.length ? _sorted[Math.ceil(_sorted.length * 0.5) - 1] : 0;
-  const _p95 = _sorted.length ? _sorted[Math.ceil(_sorted.length * 0.95) - 1] : 0;
-  const _successCount = fetchResults.filter((r) => r.changed).length;
+  const _successCount = fetchResults.filter((r) => !r.errorCode).length;
   const _noIconCount = fetchResults.length - _successCount;
   logBatchStats(_batchId, {
     bookmarkCount: ownedBookmarks.length,
@@ -705,8 +683,6 @@ export const analyzeImgUrl = async (req, res) => {
     successCount: _successCount,
     noIconCount: _noIconCount,
     totalDurationMs: _totalDuration,
-    p50: _p50,
-    p95: _p95,
   });
 
   // ── 阶段 C：组装响应 ────────────────────────────────────

@@ -46,6 +46,30 @@ pnpm preview
 pnpm --filter server worker:documents
 ```
 
+涉及批量导入书签或后台图标补全时，还应额外启动：
+
+```bash
+pnpm --filter server worker:bookmark-icons
+```
+
+并在预览前执行 `pnpm --filter server check:bookmark-icons`，确认本次环境已经应用 `bookmark_icon_jobs`、`finished_at` 和增量索引迁移，且 favicon-api 与图标目录可用。
+
+如果本地不使用线上默认图标目录，应让预检、Worker 和预览后端继承同一个 `BOOKMARK_ICON_UPLOAD_DIR`。例如分别在两个终端运行：
+
+```bash
+FAVICON_API_BASE_URL=http://127.0.0.1:3456/ \
+BOOKMARK_ICON_UPLOAD_DIR=/tmp/light-note-bookmark-icons \
+pnpm --filter server worker:bookmark-icons
+```
+
+```bash
+FAVICON_API_BASE_URL=http://127.0.0.1:3456/ \
+BOOKMARK_ICON_UPLOAD_DIR=/tmp/light-note-bookmark-icons \
+pnpm preview
+```
+
+本地预览会把浏览器的 `/uploads` 请求代理到本机后端；本机后端优先从该自定义目录读取图标，再回退到既有上传目录。
+
 ## 上线确认门禁
 
 完成本地验收后，开发者须向用户提供预览地址、截图或验收结果，并等待用户明确说“预览确认通过”或“可以上线”。在收到该确认前，禁止执行推送、部署或任何线上数据库操作；本地提交仍须遵守当前任务的授权边界。

@@ -8,9 +8,9 @@
 import { createHash } from 'crypto';
 import pool from '../db/index.js';
 import { fetchFaviconFromApi, normalizeOrigin, isRetryableError } from './bookmarkIconClient.js';
-import { saveIconToDisk, cleanupPreviousBookmarkIcon } from './bookmarkIconService.js';
+import { cleanupBookmarkIconFiles, cleanupPreviousBookmarkIcon, saveIconToDisk } from './bookmarkIconService.js';
 
-const MAX_ATTEMPTS = parseInt(process.env.BOOKMARK_ICON_MAX_ATTEMPTS || "4", 10);
+const MAX_ATTEMPTS = parseInt(process.env.BOOKMARK_ICON_MAX_ATTEMPTS || '4', 10);
 const WORKER_CONCURRENCY = Math.max(1, Number.parseInt(process.env.BOOKMARK_ICON_WORKER_CONCURRENCY || '10', 10));
 const SUB_GROUP_CONCURRENCY = 4;
 
@@ -110,11 +110,11 @@ export async function processTaskBatch(tasks, workerId) {
   let processed = 0;
 
   // 并发处理所有 Origin（受 WORKER_CONCURRENCY 限制）
-  await runPool(entries, WORKER_CONCURRENCY, async ([originKey, groupTasks]) => {
+  await runPool(entries, WORKER_CONCURRENCY, async ([, groupTasks]) => {
     let fetchResult;
     try {
       fetchResult = await fetchFaviconFromApi(groupTasks[0].url_snapshot);
-    } catch (error) {
+    } catch {
       fetchResult = { ok: false, errorCode: 'INTERNAL_ERROR', retryable: true };
     }
 
@@ -130,11 +130,12 @@ export async function processTaskBatch(tasks, workerId) {
 
 // ── 任务结果更新 ──────────────────────────────────────────
 
-async function updateTaskResult(task, fetchResult, workerId) {
+export async function updateTaskResult(task, fetchResult, workerId) {
   const { id, bookmark_id, user_id, url_snapshot, url_hash, attempts } = task;
 
   if (fetchResult.ok) {
-    // 先在校验事务中确认书签未变化
+    // 网络抓取期间不持有数据库连接；落盘前重新读取当前书签快照。
+    let currentBookmark;
     const verifyConn = await pool.getConnection();
     try {
       const [rows] = await verifyConn.query(
@@ -143,20 +144,31 @@ async function updateTaskResult(task, fetchResult, workerId) {
       );
       if (!rows?.length) {
         await verifyConn.query(
-          'UPDATE bookmark_icon_jobs SET status = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL WHERE id = ?',
-          ['cancelled', id],
+          `UPDATE bookmark_icon_jobs
+           SET status = 'cancelled',
+               error_code = 'BOOKMARK_UNAVAILABLE',
+               finished_at = NOW(3),
+               locked_at = NULL,
+               locked_by = NULL
+           WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+          [id, user_id, workerId],
         );
         return;
       }
-      const currentHash = createHash('sha256').update(rows[0].url || '').digest('hex');
-      if (currentHash !== url_hash) {
+      currentBookmark = rows[0];
+      if (String(currentBookmark.url || '') !== String(url_snapshot || '')) {
         await verifyConn.query(
-          'UPDATE bookmark_icon_jobs SET status = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL WHERE id = ?',
-          ['cancelled', id],
+          `UPDATE bookmark_icon_jobs
+           SET status = 'cancelled',
+               error_code = 'BOOKMARK_URL_CHANGED',
+               finished_at = NOW(3),
+               locked_at = NULL,
+               locked_by = NULL
+           WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+          [id, user_id, workerId],
         );
         return;
       }
-      const oldIconUrl = rows[0].icon_url || '';
     } finally {
       verifyConn.release();
     }
@@ -165,46 +177,102 @@ async function updateTaskResult(task, fetchResult, workerId) {
     let saved;
     try {
       saved = await saveIconToDisk(
-        { id: bookmark_id, url: url_snapshot, icon_url: '' },
+        {
+          id: bookmark_id,
+          url: url_snapshot,
+          icon_url: currentBookmark.icon_url || '',
+        },
         fetchResult,
       );
-    } catch (saveError) {
+    } catch {
       // 落盘失败，标为 failed
-      const writeConn = await pool.getConnection();
-      try {
-        await writeConn.query(
-          'UPDATE bookmark_icon_jobs SET status = ?, error_code = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL WHERE id = ?',
-          ['failed', 'BOOKMARK_ICON_PERSIST_FAILED', id],
-        );
-      } finally {
-        writeConn.release();
-      }
+      await pool.query(
+        `UPDATE bookmark_icon_jobs
+         SET status = 'failed',
+             error_code = 'BOOKMARK_ICON_PERSIST_FAILED',
+             finished_at = NOW(3),
+             locked_at = NULL,
+             locked_by = NULL
+         WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+        [id, user_id, workerId],
+      );
       return;
     }
 
-    // 事务更新 bookmark + job（同事务提交）
+    // 锁定 job 后，以 URL 条件更新 bookmark；书签与 job 终态在同一事务提交。
     const updateConn = await pool.getConnection();
+    let committedSuccess = false;
+    let shouldCleanupNewIcon = false;
+    let transactionError = null;
     try {
       await updateConn.beginTransaction();
-      await updateConn.query(
-        'UPDATE bookmark SET icon_url = ?, icon_checked_at = NOW() WHERE id = ? AND user_id = ? AND del_flag = 0',
-        [saved.iconUrl, bookmark_id, user_id],
+      const [jobRows] = await updateConn.query(
+        `SELECT status, locked_by
+         FROM bookmark_icon_jobs
+         WHERE id = ? AND user_id = ?
+         FOR UPDATE`,
+        [id, user_id],
       );
-      await updateConn.query(
-        'UPDATE bookmark_icon_jobs SET status = ?, error_code = NULL, finished_at = NOW(3), locked_at = NULL, locked_by = NULL WHERE id = ?',
-        ['success', id],
-      );
-      await updateConn.commit();
+      if (!jobRows?.length || jobRows[0].status !== 'processing' || jobRows[0].locked_by !== workerId) {
+        await updateConn.commit();
+        shouldCleanupNewIcon = true;
+      } else {
+        const [bookmarkResult] = await updateConn.query(
+          `UPDATE bookmark
+           SET icon_url = ?, icon_checked_at = NOW()
+           WHERE id = ? AND user_id = ? AND del_flag = 0 AND url = ?`,
+          [saved.iconUrl, bookmark_id, user_id, url_snapshot],
+        );
+        if (Number(bookmarkResult?.affectedRows || 0) !== 1) {
+          await updateConn.query(
+            `UPDATE bookmark_icon_jobs
+             SET status = 'cancelled',
+                 error_code = 'BOOKMARK_URL_CHANGED',
+                 finished_at = NOW(3),
+                 locked_at = NULL,
+                 locked_by = NULL
+             WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+            [id, user_id, workerId],
+          );
+          await updateConn.commit();
+          shouldCleanupNewIcon = true;
+        } else {
+          const [jobResult] = await updateConn.query(
+            `UPDATE bookmark_icon_jobs
+             SET status = 'success',
+                 error_code = NULL,
+                 finished_at = NOW(3),
+                 locked_at = NULL,
+                 locked_by = NULL
+             WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+            [id, user_id, workerId],
+          );
+          if (Number(jobResult?.affectedRows || 0) !== 1) {
+            const error = new Error('BOOKMARK_ICON_JOB_LOCK_LOST');
+            error.code = 'BOOKMARK_ICON_JOB_LOCK_LOST';
+            throw error;
+          }
+          await updateConn.commit();
+          committedSuccess = true;
+        }
+      }
     } catch (txErr) {
       await updateConn.rollback();
-      throw txErr;
+      shouldCleanupNewIcon = true;
+      transactionError = txErr;
     } finally {
       updateConn.release();
     }
 
+    if (shouldCleanupNewIcon) {
+      await cleanupBookmarkIconFiles([{ id: bookmark_id, iconUrl: saved.iconUrl }]).catch(() => {});
+      if (transactionError) throw transactionError;
+      return;
+    }
+
     // commit 后才清理旧图标
-    if (saved.oldFilePath && saved.oldFilePath !== saved.newFilePath) {
-      await cleanupPreviousBookmarkIcon(saved.oldFilePath, saved.newFilePath).catch(() => {});
+    if (committedSuccess && saved.oldIconUrl && saved.oldFilePath !== saved.newFilePath) {
+      await cleanupPreviousBookmarkIcon(saved.oldIconUrl, bookmark_id, saved.iconUrl).catch(() => {});
     }
     return;
   }
@@ -215,13 +283,13 @@ async function updateTaskResult(task, fetchResult, workerId) {
 
   if (!isRetryableError(errorCode)) {
     // 不可重试——标记终态
-    await terminalJob(id, bookmark_id, user_id, url_hash, 'not_found', errorCode, nextAttempt);
+    await terminalJob(id, bookmark_id, user_id, url_hash, 'not_found', errorCode, nextAttempt, workerId);
     return;
   }
 
   // retryable
   if (nextAttempt >= MAX_ATTEMPTS) {
-    await terminalJob(id, bookmark_id, user_id, url_hash, 'failed', errorCode, nextAttempt);
+    await terminalJob(id, bookmark_id, user_id, url_hash, 'failed', errorCode, nextAttempt, workerId);
     return;
   }
 
@@ -236,37 +304,54 @@ async function updateTaskResult(task, fetchResult, workerId) {
          finished_at = NULL,
          locked_at = NULL,
          locked_by = NULL
-     WHERE id = ?`,
-    [nextAttempt, retryAt, errorCode, id],
+     WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+    [nextAttempt, retryAt, errorCode, id, user_id, workerId],
   );
 }
 
 /**
  * 终态处理：not_found 或 failed。同事务更新 bookmark 检查时间。
  */
-async function terminalJob(jobId, bookmarkId, userId, urlHash, status, errorCode, attempt) {
+async function terminalJob(jobId, bookmarkId, userId, urlHash, status, errorCode, attempt, workerId) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [rows] = await conn.query(
-      'SELECT url FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0 LIMIT 1',
-      [bookmarkId, userId],
+    const [jobRows] = await conn.query(
+      `SELECT id
+       FROM bookmark_icon_jobs
+       WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?
+       FOR UPDATE`,
+      [jobId, userId, workerId],
     );
-    const currentHash = createHash('sha256').update(rows[0]?.url || '').digest('hex');
+    if (!jobRows?.length) {
+      await conn.commit();
+      return;
+    }
+    const [rows] = await conn.query('SELECT url FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0 LIMIT 1', [
+      bookmarkId,
+      userId,
+    ]);
+    const currentHash = createHash('sha256')
+      .update(rows[0]?.url || '')
+      .digest('hex');
 
     if (currentHash === urlHash && rows?.length) {
+      await conn.query('UPDATE bookmark SET icon_checked_at = NOW() WHERE id = ? AND user_id = ? AND del_flag = 0', [
+        bookmarkId,
+        userId,
+      ]);
       await conn.query(
-        'UPDATE bookmark SET icon_checked_at = NOW() WHERE id = ? AND user_id = ? AND del_flag = 0',
-        [bookmarkId, userId],
-      );
-      await conn.query(
-        'UPDATE bookmark_icon_jobs SET status = ?, error_code = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL WHERE id = ?',
-        [status, errorCode, jobId],
+        `UPDATE bookmark_icon_jobs
+         SET status = ?, attempts = ?, error_code = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL
+         WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+        [status, attempt, errorCode, jobId, userId, workerId],
       );
     } else {
       await conn.query(
-        'UPDATE bookmark_icon_jobs SET status = ?, error_code = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL WHERE id = ?',
-        ['cancelled', errorCode, jobId],
+        `UPDATE bookmark_icon_jobs
+         SET status = 'cancelled', attempts = ?, error_code = ?, finished_at = NOW(3), locked_at = NULL, locked_by = NULL
+         WHERE id = ? AND user_id = ? AND status = 'processing' AND locked_by = ?`,
+        [attempt, errorCode, jobId, userId, workerId],
       );
     }
     await conn.commit();

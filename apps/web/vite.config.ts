@@ -58,6 +58,19 @@ export default defineConfig(({ mode }) => {
                 changeOrigin: true,
                 secure: false,
               },
+        // favicon 的 icon_url 使用同源 /uploads 路径。本地预览必须转发给
+        // 本机后端，否则 Vite SPA fallback 会返回 index.html，图片随即回退为默认图标。
+        '/uploads':
+          env.VITE_ENV === 'local'
+            ? {
+                target: 'http://127.0.0.1:9001',
+                changeOrigin: true,
+              }
+            : {
+                target: 'https://boluo66.top',
+                changeOrigin: true,
+                secure: false,
+              },
         // WebSocket 代理
         '/ws': {
           target: 'http://127.0.0.1:3000',

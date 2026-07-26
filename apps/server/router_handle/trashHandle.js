@@ -7,6 +7,7 @@ import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js
 import { cleanupOrphanNoteImages } from '../util/noteImages.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { deleteNoteResourceRefsForNotes } from '../util/services/noteReferenceService.js';
+import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 
 // 彻底删除笔记时:删 note_images 行,返回其图片 URL(供事务提交后删磁盘文件)。
 // note_images 原本只增不删,笔记永久删除后图片文件会残留成孤儿。
@@ -132,7 +133,7 @@ async function cleanupExpiredBookmarks(connection, userId = null) {
   const userCond = userId ? ` AND b.user_id = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('b.user_id')}`;
 
   const [bookmarks] = await connection.query(
-    `SELECT b.id FROM bookmark b LEFT JOIN user_growth g ON g.user_id = b.user_id
+    `SELECT b.id, b.icon_url AS iconUrl FROM bookmark b LEFT JOIN user_growth g ON g.user_id = b.user_id
      WHERE ${expiryWhere('b')}${userCond}`,
   );
   await purgeInboxRelations(
@@ -152,7 +153,7 @@ async function cleanupExpiredBookmarks(connection, userId = null) {
   const [result] = await connection.query(
     `DELETE b FROM bookmark b LEFT JOIN user_growth g ON g.user_id = b.user_id WHERE ${expiryWhere('b')}${userCond}`,
   );
-  return result.affectedRows;
+  return { count: result.affectedRows, icons: bookmarks };
 }
 
 /** 全局清理（定时任务调用，无 userId 限制） */
@@ -160,10 +161,11 @@ export async function cleanupAllExpiredTrash() {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const bookmarkCount = await cleanupExpiredBookmarks(connection);
+    const { count: bookmarkCount, icons: bookmarkIcons } = await cleanupExpiredBookmarks(connection);
     const { count: noteCount, imageUrls } = await cleanupExpiredNotes(connection);
     const fileCount = await cleanupExpiredFiles(connection);
     await connection.commit();
+    await cleanupBookmarkIconFiles(bookmarkIcons, { db: connection }).catch(() => {});
     cleanupOrphanNoteImages(imageUrls);
     console.log(`[回收站定时清理] 书签${bookmarkCount} 笔记${noteCount} 文件${fileCount}`);
   } catch (e) {
@@ -183,10 +185,11 @@ async function purgeExpiredItems(userId) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    await cleanupExpiredBookmarks(connection, userId);
+    const { icons: bookmarkIcons } = await cleanupExpiredBookmarks(connection, userId);
     const { imageUrls } = await cleanupExpiredNotes(connection, userId);
     await cleanupExpiredFiles(connection, userId);
     await connection.commit();
+    await cleanupBookmarkIconFiles(bookmarkIcons, { db: connection }).catch(() => {});
     cleanupOrphanNoteImages(imageUrls);
   } catch (e) {
     await connection.rollback();
@@ -320,6 +323,7 @@ export const permanentDelete = async (req, res) => {
 
     let objsToDelete = [];
     let noteImageUrls = [];
+    let bookmarkIcons = [];
     if (resourceType === 'file') {
       const [files] = await connection.query(
         `SELECT id, obs_key, create_by, file_name FROM \`${cfg.table}\`
@@ -342,6 +346,14 @@ export const permanentDelete = async (req, res) => {
       await purgeNoteVersions(connection, validNoteIds);
       // 笔记内联提及(N0):永久删除笔记时,同事务删除其全部出边引用关系。
       await deleteNoteResourceRefsForNotes(connection, validNoteIds);
+    } else if (resourceType === 'bookmark') {
+      const [bookmarks] = await connection.query(
+        `SELECT id, icon_url AS iconUrl
+         FROM bookmark
+         WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
+        [...ids, userId],
+      );
+      bookmarkIcons = bookmarks || [];
     }
 
     const [result] = await connection.query(
@@ -350,6 +362,7 @@ export const permanentDelete = async (req, res) => {
     );
 
     await connection.commit();
+    await cleanupBookmarkIconFiles(bookmarkIcons, { db: connection }).catch(() => {});
 
     for (const f of objsToDelete) {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
@@ -422,6 +435,12 @@ export const emptyTrash = async (req, res) => {
     await purgeNoteVersions(connection, delNoteIds);
     // 笔记内联提及(N0):清空回收站时,同事务删除这些笔记的全部出边引用关系。
     await deleteNoteResourceRefsForNotes(connection, delNoteIds);
+    const [bookmarkIcons] = await connection.query(
+      `SELECT id, icon_url AS iconUrl
+       FROM bookmark
+       WHERE user_id = ? AND del_flag = 1`,
+      [userId],
+    );
 
     let total = 0;
     for (const type of RESOURCE_TYPES) {
@@ -444,6 +463,7 @@ export const emptyTrash = async (req, res) => {
     }
 
     await connection.commit();
+    await cleanupBookmarkIconFiles(bookmarkIcons, { db: connection }).catch(() => {});
 
     // 事务提交后删 OBS
     for (const f of files) {

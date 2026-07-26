@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   ensureNotVisitor: vi.fn(() => true),
   removeInboxRelations: vi.fn(),
   invalidatePersonalKnowledgeCache: vi.fn(() => Promise.resolve()),
+  cleanupBookmarkIconFiles: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../db/index.js', () => ({ default: mocks.pool }));
@@ -21,6 +22,9 @@ vi.mock('../util/auth.js', () => ({ ensureNotVisitor: mocks.ensureNotVisitor }))
 vi.mock('../util/resourceInbox.js', () => ({ removeInboxRelations: mocks.removeInboxRelations }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({
   invalidatePersonalKnowledgeCache: mocks.invalidatePersonalKnowledgeCache,
+}));
+vi.mock('../util/bookmarkIconService.js', () => ({
+  cleanupBookmarkIconFiles: mocks.cleanupBookmarkIconFiles,
 }));
 
 const { batchDeleteResources } = await import('./searchHandle.js');
@@ -45,6 +49,7 @@ describe('batchDeleteResources', () => {
     mocks.ensureNotVisitor.mockReturnValue(true);
     mocks.removeInboxRelations.mockResolvedValue(0);
     mocks.invalidatePersonalKnowledgeCache.mockResolvedValue({ skipped: true });
+    mocks.cleanupBookmarkIconFiles.mockResolvedValue({ deleted: 0 });
   });
 
   it('上百个书签合并为一笔集合更新和一次待整理清理', async () => {
@@ -52,6 +57,7 @@ describe('batchDeleteResources', () => {
     const connection = createConnection();
     connection.query
       .mockResolvedValueOnce([ids.map((id) => ({ id }))])
+      .mockResolvedValueOnce([ids.map((id) => ({ id, iconUrl: `/uploads/${id}.png` }))])
       .mockResolvedValueOnce([{ affectedRows: ids.length }]);
     mocks.pool.getConnection.mockResolvedValue(connection);
     const res = createResponse();
@@ -62,14 +68,19 @@ describe('batchDeleteResources', () => {
     );
 
     expect(connection.beginTransaction).toHaveBeenCalledOnce();
-    expect(connection.query).toHaveBeenCalledTimes(2);
+    expect(connection.query).toHaveBeenCalledTimes(3);
     expect(connection.query.mock.calls[0][0]).toContain('SELECT id FROM bookmark');
-    expect(connection.query.mock.calls[1][0]).toContain('UPDATE bookmark SET del_flag = 1');
+    expect(connection.query.mock.calls[1][0]).toContain('SELECT id, icon_url AS iconUrl');
+    expect(connection.query.mock.calls[2][0]).toContain('UPDATE bookmark SET del_flag = 1');
     expect(mocks.removeInboxRelations).toHaveBeenCalledWith(connection, {
       userId: 'user-1',
       items: ids.map((id) => ({ resourceType: 'bookmark', resourceId: id })),
     });
     expect(connection.commit).toHaveBeenCalledOnce();
+    expect(mocks.cleanupBookmarkIconFiles).toHaveBeenCalledWith(
+      ids.map((id) => ({ id, iconUrl: `/uploads/${id}.png` })),
+      { db: connection },
+    );
     expect(mocks.invalidatePersonalKnowledgeCache).toHaveBeenCalledOnce();
     expect(res.send).toHaveBeenCalledWith({
       data: {
