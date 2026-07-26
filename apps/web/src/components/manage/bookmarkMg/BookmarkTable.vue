@@ -8,11 +8,11 @@
     @back="handleToBack"
   >
     <template #actions>
-      <BButton v-if="viewMode === 'table' && selectedRows.length > 0" @click="openSelectedBookmarksInAi">
+      <BButton v-if="selectedRows.length > 0" @click="openSelectedBookmarksInAi">
         <SvgIcon :src="icon.ai.ask" color="currentColor" size="16" aria-hidden="true" />
         {{ $t('bookmarkMg.aiUseSelected') }}
       </BButton>
-      <BButton v-if="viewMode === 'table' && selectedRows.length > 0" type="danger" @click="handleBatchDelete">
+      <BButton v-if="selectedRows.length > 0" type="danger" @click="handleBatchDelete">
         {{ $t('bookmarkMg.batchDelete') }}
       </BButton>
       <BButton
@@ -50,7 +50,6 @@
         {{ $t('common.add') }}
       </BButton>
     </template>
-
     <div class="bookmark-manage-page" :class="{ 'bookmark-manage-page--night': user.currentTheme === 'night' }">
       <!-- 图标补全进度卡 -->
       <BCard v-if="iconBatchState" class="icon-batch-progress-card">
@@ -171,6 +170,24 @@
                   <span>{{ $t('bookmarkMg.tableView') }}</span>
                 </BButton>
               </div>
+              <BButton
+                v-if="viewMode === 'card'"
+                size="small"
+                class="card-selection-toggle"
+                :class="{ active: cardSelectionMode }"
+                :aria-pressed="cardSelectionMode"
+                @click="toggleCardSelectionMode"
+              >
+                {{ $t(cardSelectionMode ? 'bookmarkMg.batchCancel' : 'bookmarkMg.batchSelect') }}
+              </BButton>
+              <BButton
+                v-if="viewMode === 'card' && cardSelectionMode && selectableBookmarkIds.length"
+                size="small"
+                class="card-selection-toggle"
+                @click="toggleSelectAllVisibleBookmarks"
+              >
+                {{ $t(allVisibleBookmarksSelected ? 'bookmarkMg.batchDeselectAll' : 'bookmarkMg.batchSelectAll') }}
+              </BButton>
               <b-input
                 v-model:value="tableSearchValue"
                 class="result-search"
@@ -184,6 +201,9 @@
             <div class="result-toolbar-right">
               <div class="result-title">{{ $t('bookmarkMg.resultTitle') }}</div>
               <div class="result-subtitle">{{ resultSubtitle }}</div>
+              <div v-if="cardSelectionMode" class="result-selection-count">
+                {{ $t('bookmarkMg.batchSelected', { count: selectedRows.length }) }}
+              </div>
             </div>
           </div>
 
@@ -269,9 +289,18 @@
               variant="card"
               padding="18px"
               class="bookmark-card"
+              :class="{ 'is-selected': selectedRows.includes(bookmarkItem.id) }"
             >
               <div class="bookmark-card__head">
                 <div class="bookmark-identity">
+                  <BCheckbox
+                    v-if="cardSelectionMode || selectedRows.length > 0"
+                    class="bookmark-selection-checkbox"
+                    :checked="selectedRows.includes(bookmarkItem.id)"
+                    @click.stop
+                    @keydown.stop
+                    @change="toggleBookmarkSelection(bookmarkItem.id)"
+                  />
                   <BookmarkFavicon
                     :bookmark-id="bookmarkItem.id"
                     :src="bookmarkItem.iconUrl"
@@ -523,6 +552,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useI18n } from 'vue-i18n';
   import { BookmarkInterface } from '@/config/bookmarkCfg.ts';
@@ -592,6 +622,7 @@
     snapVisible.value = true;
   };
   const viewMode = ref<'card' | 'table'>('card');
+  const cardSelectionMode = ref(false);
   const tableSearchValue = ref('');
   type ImportStage = 'idle' | 'reading' | 'importing' | 'refreshing';
   const importStage = ref<ImportStage>('idle');
@@ -620,6 +651,18 @@
   const handleSelectionChange = (selected: string[]) => {
     selectedRows.value = selected;
   };
+
+  function toggleCardSelectionMode() {
+    if (cardSelectionMode.value) selectedRows.value = [];
+    cardSelectionMode.value = !cardSelectionMode.value;
+  }
+
+  function toggleBookmarkSelection(id: string) {
+    const selected = new Set(selectedRows.value);
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    selectedRows.value = Array.from(selected);
+  }
 
   function openBookmarksInAi(items: BookmarkInterface[]) {
     const available = items.filter((item) => String(item?.id || '').trim());
@@ -689,6 +732,14 @@
       // 请求层负责统一提示，页面保留可重试错误状态。
     }
   }
+  const selectableBookmarkIds = computed(() =>
+    filteredBookmarks.value.map((item) => String(item.id || '')).filter((id) => Boolean(id)),
+  );
+  const allVisibleBookmarksSelected = computed(
+    () =>
+      selectableBookmarkIds.value.length > 0 &&
+      selectableBookmarkIds.value.every((id) => selectedRows.value.includes(id)),
+  );
 
   const filters = computed(() => {
     const base = filteredByKeyword.value;
@@ -750,6 +801,16 @@
     }
     return t('bookmarkMg.resultSubtitle', { count: filteredBookmarks.value.length });
   });
+
+  function toggleSelectAllVisibleBookmarks() {
+    const selected = new Set(selectedRows.value);
+    if (allVisibleBookmarksSelected.value) {
+      selectableBookmarkIds.value.forEach((id) => selected.delete(id));
+    } else {
+      selectableBookmarkIds.value.forEach((id) => selected.add(id));
+    }
+    selectedRows.value = Array.from(selected);
+  }
 
   // ── 导入导出配置 ──
   const importExportSections = computed(() => [
@@ -863,6 +924,7 @@
               : t('bookmarkMg.batchDeleteSuccess', { count: successCount }),
           );
           selectedRows.value = [];
+          cardSelectionMode.value = false;
           clearGlobalSearchCache();
           await init();
         } catch {
@@ -1320,6 +1382,13 @@
     flex-shrink: 0;
   }
 
+  .result-selection-count {
+    margin-top: 4px;
+    color: var(--resource-bookmark-color);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .result-search {
     width: 200px;
   }
@@ -1356,6 +1425,12 @@
     &:hover:not(.active) {
       color: var(--text-color);
     }
+  }
+
+  .card-selection-toggle.active {
+    color: var(--resource-bookmark-color);
+    border-color: color-mix(in srgb, var(--resource-bookmark-color) 38%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--resource-bookmark-color) 10%, var(--bm-muted-bg));
   }
 
   // ── Stats ──
@@ -1560,6 +1635,11 @@
       box-shadow: var(--surface-hover-shadow);
       border-color: color-mix(in srgb, var(--resource-bookmark-color) 28%, var(--surface-border-color));
     }
+
+    &.is-selected {
+      border-color: var(--resource-bookmark-color);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--resource-bookmark-color) 18%, transparent);
+    }
   }
 
   .bookmark-card__head {
@@ -1575,6 +1655,11 @@
     gap: 12px;
     min-width: 0;
     flex: 1;
+  }
+
+  .bookmark-selection-checkbox {
+    flex: 0 0 auto;
+    margin: -4px 0 0 -4px;
   }
 
   .bookmark-meta {

@@ -947,6 +947,11 @@
   }
 
   @media (max-width: 767px) {
+    .note-body {
+      // 移动端没有目录和 AI 助手侧栏，保留桌面列间距会在左侧形成无效留白。
+      gap: 0;
+    }
+
     .editor-panel {
       border-right: 0;
       border-left: 0;

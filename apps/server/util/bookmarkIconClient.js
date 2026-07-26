@@ -8,7 +8,7 @@
 import http from 'http';
 import https from 'https';
 
-const FAVICON_API_TIMEOUT_MS = parseInt(process.env.BOOKMARK_ICON_API_TIMEOUT_MS || "12000", 10);
+const FAVICON_API_TIMEOUT_MS = parseInt(process.env.BOOKMARK_ICON_API_TIMEOUT_MS || '12000', 10);
 const FAVICON_API_BASE_URL = process.env.FAVICON_API_BASE_URL || 'http://127.0.0.1:3480/favimg/';
 const MAX_FAVICON_API_RESPONSE_BYTES = 6 * 1024 * 1024;
 const httpAgent = new http.Agent({
@@ -23,9 +23,7 @@ const httpsAgent = new https.Agent({
 });
 
 export function buildFaviconApiUrl(pathname = '', baseUrl = FAVICON_API_BASE_URL, params = {}) {
-  const normalizedBase = String(baseUrl || '').endsWith('/')
-    ? String(baseUrl)
-    : `${String(baseUrl)}/`;
+  const normalizedBase = String(baseUrl || '').endsWith('/') ? String(baseUrl) : `${String(baseUrl)}/`;
   const normalizedPath = String(pathname || '').replace(/^\/+/, '');
   const url = new URL(normalizedPath, normalizedBase);
   for (const [key, value] of Object.entries(params || {})) {
@@ -175,10 +173,7 @@ export async function fetchFaviconFromApi(domainOrUrl) {
 }
 
 export async function checkFaviconApiHealth() {
-  const response = await requestFaviconApi(
-    buildFaviconApiUrl('health'),
-    { maxBytes: 64 * 1024 },
-  );
+  const response = await requestFaviconApi(buildFaviconApiUrl('health'), { maxBytes: 64 * 1024 });
   if (!response.ok || response.statusCode !== 200) {
     return {
       ok: false,
@@ -188,9 +183,7 @@ export async function checkFaviconApiHealth() {
 
   try {
     const body = JSON.parse(response.buffer.toString('utf8'));
-    return body?.status === 'ok'
-      ? { ok: true }
-      : { ok: false, errorCode: 'UPSTREAM_ERROR' };
+    return body?.status === 'ok' ? { ok: true } : { ok: false, errorCode: 'UPSTREAM_ERROR' };
   } catch {
     return { ok: false, errorCode: 'UPSTREAM_ERROR' };
   }

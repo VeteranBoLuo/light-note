@@ -112,10 +112,7 @@ describe('bookmarkIconService 内容寻址与清理', () => {
 
   it('远端内容与现有共享图标一致时仍推进检查时间', async () => {
     const buffer = Buffer.from('unchanged favicon bytes'.repeat(4));
-    const saved = await saveIconToDisk(
-      { id: 'bookmark-1', icon_url: '' },
-      { buffer, contentType: 'image/png' },
-    );
+    const saved = await saveIconToDisk({ id: 'bookmark-1', icon_url: '' }, { buffer, contentType: 'image/png' });
     mocks.normalizeOrigin.mockReturnValue('https://example.com');
     mocks.fetchFaviconFromApi.mockResolvedValue({
       ok: true,
@@ -124,14 +121,17 @@ describe('bookmarkIconService 内容寻址与清理', () => {
     });
     mocks.pool.query.mockResolvedValue([{ affectedRows: 1 }]);
 
-    const results = await processBookmarkIcons([
-      {
-        id: 'bookmark-1',
-        url: 'https://example.com/path',
-        icon_url: saved.iconUrl,
-        icon_checked_at: null,
-      },
-    ], 'user-1');
+    const results = await processBookmarkIcons(
+      [
+        {
+          id: 'bookmark-1',
+          url: 'https://example.com/path',
+          icon_url: saved.iconUrl,
+          icon_checked_at: null,
+        },
+      ],
+      'user-1',
+    );
 
     expect(results[0]).toMatchObject({
       id: 'bookmark-1',
@@ -139,19 +139,20 @@ describe('bookmarkIconService 内容寻址与清理', () => {
       changed: false,
       checked: true,
     });
-    expect(mocks.pool.query).toHaveBeenCalledWith(
-      expect.stringContaining('SET icon_checked_at=NOW()'),
-      ['bookmark-1', 'user-1'],
-    );
+    expect(mocks.pool.query).toHaveBeenCalledWith(expect.stringContaining('SET icon_checked_at=NOW()'), [
+      'bookmark-1',
+      'user-1',
+    ]);
   });
 
   it('无效 URL 会写入永久失败检查时间，避免每次刷新重复请求', async () => {
     mocks.normalizeOrigin.mockReturnValue(null);
     mocks.pool.query.mockResolvedValue([{ affectedRows: 1 }]);
 
-    const results = await processBookmarkIcons([
-      { id: 'bookmark-invalid', url: 'invalid url', icon_url: '', icon_checked_at: null },
-    ], 'user-1');
+    const results = await processBookmarkIcons(
+      [{ id: 'bookmark-invalid', url: 'invalid url', icon_url: '', icon_checked_at: null }],
+      'user-1',
+    );
 
     expect(results[0]).toMatchObject({
       id: 'bookmark-invalid',
@@ -159,10 +160,10 @@ describe('bookmarkIconService 内容寻址与清理', () => {
       errorCode: 'INVALID_URL',
     });
     expect(mocks.fetchFaviconFromApi).not.toHaveBeenCalled();
-    expect(mocks.pool.query).toHaveBeenCalledWith(
-      expect.stringContaining('SET icon_checked_at=NOW()'),
-      ['bookmark-invalid', 'user-1'],
-    );
+    expect(mocks.pool.query).toHaveBeenCalledWith(expect.stringContaining('SET icon_checked_at=NOW()'), [
+      'bookmark-invalid',
+      'user-1',
+    ]);
   });
 
   it('短重试失败后使用第二次结果分类，避免保留已经过时的可重试状态', async () => {
@@ -178,9 +179,10 @@ describe('bookmarkIconService 内容寻址与清理', () => {
     });
 
     try {
-      const results = await processBookmarkIcons([
-        { id: 'bookmark-retry', url: 'https://example.com/path', icon_url: '', icon_checked_at: null },
-      ], 'user-1');
+      const results = await processBookmarkIcons(
+        [{ id: 'bookmark-retry', url: 'https://example.com/path', icon_url: '', icon_checked_at: null }],
+        'user-1',
+      );
 
       expect(mocks.fetchFaviconFromApi).toHaveBeenCalledTimes(2);
       expect(results[0]).toMatchObject({
@@ -188,10 +190,10 @@ describe('bookmarkIconService 内容寻址与清理', () => {
         changed: false,
         errorCode: 'ICON_NOT_FOUND',
       });
-      expect(mocks.pool.query).toHaveBeenCalledWith(
-        expect.stringContaining('SET icon_checked_at=NOW()'),
-        ['bookmark-retry', 'user-1'],
-      );
+      expect(mocks.pool.query).toHaveBeenCalledWith(expect.stringContaining('SET icon_checked_at=NOW()'), [
+        'bookmark-retry',
+        'user-1',
+      ]);
     } finally {
       timeoutSpy.mockRestore();
     }

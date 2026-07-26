@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventEmitter } from 'node:events';
 
 // mock db 连接池(可断言 query 调用),redis/nodemailer 由 vitest.setup.js 全局 mock
 const query = vi.fn();
@@ -7,30 +6,16 @@ const getConnection = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 
 // clearImages 用:文件删除与引用集合均可控
-const { unlinkSpy, readFileSpy, mkdirSpy, writeFileSpy, renameSpy, httpGetSpy, collectUsedSpy } = vi.hoisted(() => ({
+const { unlinkSpy, collectUsedSpy } = vi.hoisted(() => ({
   unlinkSpy: vi.fn(),
-  readFileSpy: vi.fn(),
-  mkdirSpy: vi.fn(),
-  writeFileSpy: vi.fn(),
-  renameSpy: vi.fn(),
-  httpGetSpy: vi.fn(),
   collectUsedSpy: vi.fn(),
 }));
 vi.mock('fs/promises', () => ({
   default: {
     unlink: unlinkSpy,
-    readFile: readFileSpy,
-    mkdir: mkdirSpy,
-    writeFile: writeFileSpy,
-    rename: renameSpy,
   },
 }));
-vi.mock('http', async (importOriginal) => {
-  const actual = await importOriginal();
-  return { ...actual, default: { ...actual.default, get: httpGetSpy } };
-});
 vi.mock('../util/noteImages.js', () => ({ collectUsedImageNames: collectUsedSpy }));
-// 直接在 hoisted 块中创建 mock 函数，确保可被外部引用
 const { mockProcessBookmarkIcons, mockIsBookmarkIconCheckRecent } = vi.hoisted(() => ({
   mockProcessBookmarkIcons: vi.fn().mockResolvedValue([]),
   mockIsBookmarkIconCheckRecent: vi.fn((checkedAt, now = Date.now()) => {
@@ -50,7 +35,9 @@ const { queryDeepSeekBalanceSpy, getDailyBalanceChangeSpy } = vi.hoisted(() => (
   getDailyBalanceChangeSpy: vi.fn(),
 }));
 vi.mock('../util/agent/providerBalance.js', () => ({ getDeepSeekBalance: queryDeepSeekBalanceSpy }));
-vi.mock('../util/agent/providerBalanceSnapshot.js', () => ({ getDeepSeekDailyBalanceChange: getDailyBalanceChangeSpy }));
+vi.mock('../util/agent/providerBalanceSnapshot.js', () => ({
+  getDeepSeekDailyBalanceChange: getDailyBalanceChangeSpy,
+}));
 
 // common.js ↔ router/common.js ↔ commonHandle.js 存在循环依赖:
 // 直接首个 import commonHandle.js 会拿到未初始化的导出而报错。
@@ -78,24 +65,6 @@ function mockRes() {
   res.send = vi.fn().mockReturnValue(res);
   res.status = vi.fn().mockReturnValue(res);
   return res;
-}
-
-function mockFavimgResponse(buffer, contentType = 'image/png') {
-  httpGetSpy.mockImplementation((_url, callback) => {
-    const response = new EventEmitter();
-    response.headers = { 'content-type': contentType };
-    response.statusCode = 200;
-    response.resume = vi.fn();
-    const request = new EventEmitter();
-    request.setTimeout = vi.fn();
-    request.destroy = vi.fn();
-    queueMicrotask(() => {
-      callback(response);
-      response.emit('data', buffer);
-      response.emit('end');
-    });
-    return request;
-  });
 }
 
 describe('getDeepSeekBalance 余额主指标', () => {
@@ -274,7 +243,7 @@ describe('resolveHelpSources 旧来源安全补全', () => {
 describe('getAdminOverview 资源统计口径', () => {
   beforeEach(() => query.mockReset());
 
-  it('累计、今日、存储与近 7 天趋势都排除注册时的系统示例资源', async () => {
+  it('累计、今日、存储与近 7 天趋势都排除注册时的系统示例资源和已删除用户的书签', async () => {
     query.mockImplementation(async (sql) => {
       const statement = String(sql);
       if (statement.includes('FROM `user` WHERE del_flag')) return [[{ total: 1, today: 1 }]];
@@ -315,7 +284,9 @@ describe('getAdminOverview 资源统计口径', () => {
     const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, SUM(c)'))?.[0];
     expect(resourceSql).toContain('onboarding_seed_resources');
     expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
+    expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
     expect(trendSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
+    expect(trendSql).toContain('bookmark_owner.del_flag = 0');
     const payload = res.send.mock.calls[0][0];
     expect(payload.data.ai).toEqual({ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 });
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
@@ -368,15 +339,7 @@ describe('analyzeImgUrl 写权限与归属', () => {
   beforeEach(() => {
     query.mockReset();
     getConnection.mockReset();
-    httpGetSpy.mockReset();
-    readFileSpy.mockReset();
-    mkdirSpy.mockReset();
-    writeFileSpy.mockReset();
-    renameSpy.mockReset();
     unlinkSpy.mockReset();
-    mkdirSpy.mockResolvedValue();
-    writeFileSpy.mockResolvedValue();
-    renameSpy.mockResolvedValue();
     unlinkSpy.mockResolvedValue();
     processBookmarkIcons.mockResolvedValue([]);
   });
@@ -423,14 +386,16 @@ describe('analyzeImgUrl 写权限与归属', () => {
 
   it('保存后一小时内复用最近检查结果，不重复抓取或写文件', async () => {
     const checkedAt = new Date();
-    query.mockResolvedValueOnce([[
-      {
-        id: 'bookmark-1',
-        url: 'https://example.com',
-        icon_url: '/uploads/bookmark-1.png',
-        icon_checked_at: checkedAt,
-      },
-    ]]);
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'bookmark-1',
+          url: 'https://example.com',
+          icon_url: '/uploads/bookmark-1.png',
+          icon_checked_at: checkedAt,
+        },
+      ],
+    ]);
     const res = mockRes();
 
     await analyzeImgUrl(
@@ -452,20 +417,24 @@ describe('analyzeImgUrl 写权限与归属', () => {
   });
 
   it('非节流书签会调用 processBookmarkIcons', async () => {
-    query.mockResolvedValueOnce([[
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'icon-id-1',
+          url: 'https://example.com',
+          icon_url: '',
+          icon_checked_at: new Date('2026-06-01T00:00:00Z'),
+        },
+      ],
+    ]);
+    processBookmarkIcons.mockResolvedValueOnce([
       {
         id: 'icon-id-1',
-        url: 'https://example.com',
-        icon_url: '',
-        icon_checked_at: new Date('2026-06-01T00:00:00Z'),
+        iconUrl: '',
+        iconCheckedAt: new Date().toISOString(),
+        changed: false,
       },
-    ]]);
-    processBookmarkIcons.mockResolvedValueOnce([{
-      id: 'icon-id-1',
-      iconUrl: '',
-      iconCheckedAt: new Date().toISOString(),
-      changed: false,
-    }]);
+    ]);
     const res = mockRes();
 
     await analyzeImgUrl(

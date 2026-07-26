@@ -45,6 +45,7 @@
               class="md-preview"
               @scroll="syncMdScroll('preview')"
               @click="handleRenderedResourceLinkClick"
+              @touchend="handleRenderedResourceLinkClick"
               v-html="renderedMd"
             ></div>
           </div>
@@ -80,7 +81,6 @@
       <ResourceMentionPicker @select="handleMentionPickerSelect" @close="closeMentionPicker" />
     </BModal>
     <BModal
-      v-if="isMobile"
       v-model:visible="mobileResourcePreviewVisible"
       :title="t('note.resourceMention.resourceActionsTitle')"
       width="360px"
@@ -101,9 +101,6 @@
         <div class="resource-mention-mobile-preview__actions">
           <BButton type="primary" :disabled="!mobileResourcePreviewCanOpen" @click="openMobileResourcePreviewTarget">
             {{ mobileResourcePreviewOpenLabel }}
-          </BButton>
-          <BButton v-if="canReplaceMobileResource" @click="startMobileResourceReplacement">
-            {{ t('note.resourceMention.replaceResource') }}
           </BButton>
         </div>
       </div>
@@ -330,9 +327,6 @@
   const inlineMentionQuery = ref('');
   const mobileResourcePreviewVisible = ref(false);
   const mobileResourcePreview = ref<{ ref: ResourceRef; title: string } | null>(null);
-  // 资源预览只在移动端保存本轮被点中的 chip 节点；“替换引用”复用该节点而不猜测同名/同 ID 的其他引用。
-  let mobileResourcePreviewAnchor: HTMLAnchorElement | null = null;
-  let mobileResourceReplacementAnchor: HTMLAnchorElement | null = null;
   const inlineMentionAnchorStyle = ref<Record<string, string>>({});
   const inlineMentionSuggestionsRef = ref<{ moveActive: (offset: number) => void; chooseActive: () => void } | null>(
     null,
@@ -413,13 +407,6 @@
     if (type === 'file') return t('note.resourceMention.openFile');
     return t('note.resourceMention.openNote');
   });
-  const canReplaceMobileResource = computed(
-    () =>
-      canEditResourceMentions.value &&
-      currentType.value === 'html' &&
-      Boolean(mobileResourcePreview.value && mobileResourcePreviewAnchor),
-  );
-
   function navigateResourceRef(ref: ResourceRef) {
     const state = resolvedResourceRef(ref);
     if (state && !state.available) {
@@ -452,7 +439,6 @@
   }
 
   function showMobileResourcePreview(ref: ResourceRef, anchor: HTMLAnchorElement | null) {
-    mobileResourcePreviewAnchor = anchor;
     mobileResourcePreview.value = {
       ref,
       title: String(anchor?.textContent || '').trim() || ref.id,
@@ -463,7 +449,6 @@
   function closeMobileResourcePreview() {
     mobileResourcePreviewVisible.value = false;
     mobileResourcePreview.value = null;
-    mobileResourcePreviewAnchor = null;
   }
 
   function openMobileResourcePreviewTarget() {
@@ -477,36 +462,44 @@
     navigateResourceRef(preview.ref);
   }
 
-  function startMobileResourceReplacement() {
-    const editor = editorRef.value;
-    const anchor = mobileResourcePreviewAnchor;
-    const body = editor?.getBody?.() as HTMLElement | null;
-    if (!canReplaceMobileResource.value || !anchor || !body?.contains(anchor)) {
-      message.warning(t('note.resourceMention.insertFailed'));
-      closeMobileResourcePreview();
-      return;
-    }
-    mobileResourceReplacementAnchor = anchor;
-    closeMobileResourcePreview();
-    mentionPickerVisible.value = true;
-  }
-
   function handleResourceRefClick(ref: ResourceRef, anchor: HTMLAnchorElement | null) {
-    if (isMobile.value) {
-      showMobileResourcePreview(ref, anchor);
-      return;
-    }
-    navigateResourceRef(ref);
+    // 引用点击先展示资源详情；真正跳转由详情中的显式按钮触发，避免 PC 端误点后直接离开当前笔记。
+    showMobileResourcePreview(ref, anchor);
   }
 
-  function handleRenderedResourceLinkClick(event: MouseEvent) {
+  let lastMobileResourceActivation: { anchor: HTMLAnchorElement; at: number } | null = null;
+
+  function isDuplicateMobileResourceActivation(anchor: HTMLAnchorElement) {
+    if (!isMobile.value) return false;
+    const now = Date.now();
+    if (lastMobileResourceActivation?.anchor === anchor && now - lastMobileResourceActivation.at < 500) return true;
+    lastMobileResourceActivation = { anchor, at: now };
+    return false;
+  }
+
+  function handleTinyMceResourceReferenceActivation(event: Event) {
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
+    const ref = anchor ? parseResourceHref(anchor.getAttribute('href')) : null;
+    if (!ref || !anchor) return false;
+
+    event.preventDefault();
+    event.stopPropagation();
+    // 移动端一次触摸通常会紧跟一个合成 click；两者只处理一次，避免重复打开资源详情弹窗。
+    if (isDuplicateMobileResourceActivation(anchor)) return true;
+    handleResourceRefClick(ref, anchor);
+    return true;
+  }
+
+  function handleRenderedResourceLinkClick(event: Event) {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest<HTMLAnchorElement>('a[href]');
     const ref = anchor ? parseResourceHref(anchor.getAttribute('href')) : null;
-    if (!ref) return;
+    if (!ref || !anchor) return;
     event.preventDefault();
     event.stopPropagation();
+    if (isDuplicateMobileResourceActivation(anchor)) return;
     handleResourceRefClick(ref, anchor);
   }
 
@@ -544,13 +537,14 @@
     range: Range;
     bookmark: any | null;
     markerId: string | null;
+    text: string;
   };
   let markdownMentionRange: MarkdownMentionRange | null = null;
   // Markdown 的资源插入是受控值写入，浏览器不会把它加入 textarea 原生 undo 栈。
   // 这里只保留最近一次“提及替换”，且正文随后有任何改动便立刻失效，避免抢占普通文字撤回。
   let markdownMentionUndo: MarkdownMentionUndo | null = null;
-  // 弹窗会把焦点从 TinyMCE iframe 移走。移动端额外放一个临时锚点在 @ 前面，
-  // 让恢复逻辑能重新精确选中 @，而不是仅凭已经可能漂移的 Range/bookmark 猜位置。
+  // 弹窗会把焦点从 TinyMCE iframe 移走。临时锚点放在完整 @查询 前面，
+  // 让恢复逻辑能重新精确选中待替换文本，而不是仅凭已经可能漂移的 Range/bookmark 猜位置。
   let htmlMentionSelection: HtmlMentionSelection | null = null;
   let htmlMentionMarkerSequence = 0;
 
@@ -592,24 +586,36 @@
     );
   }
 
-  function getTinyMceMentionRangeFromMarker(editor: any, markerId: string | null) {
+  function isValidTinyMceMentionText(text: string) {
+    return text.startsWith('@') && !/[\s@]/u.test(text.slice(1));
+  }
+
+  function getTinyMceMentionRangeFromMarker(editor: any, markerId: string | null, expectedText = '@') {
     const marker = findTinyMceMentionMarker(editor, markerId);
     const triggerNode = marker?.nextSibling;
-    if (!marker || triggerNode?.nodeType !== Node.TEXT_NODE || !String(triggerNode.textContent || '').startsWith('@')) {
+    if (
+      !marker ||
+      triggerNode?.nodeType !== Node.TEXT_NODE ||
+      !String(triggerNode.textContent || '').startsWith(expectedText)
+    ) {
       return null;
     }
     try {
       const range = editor.dom.createRng();
       range.setStartAfter(marker);
-      range.setEnd(triggerNode, 1);
+      range.setEnd(triggerNode, expectedText.length);
       return range;
     } catch {
       return null;
     }
   }
 
-  function selectionIsExactTinyMceMention(editor: any, range: Range | null | undefined) {
-    return Boolean(rangeBelongsToTinyMce(editor, range) && range?.toString() === '@');
+  function selectionIsExactTinyMceMention(editor: any, range: Range | null | undefined, expectedText = '@') {
+    return Boolean(
+      isValidTinyMceMentionText(expectedText) &&
+        rangeBelongsToTinyMce(editor, range) &&
+        range?.toString() === expectedText,
+    );
   }
 
   function clearTinyMceMentionSelection(editor = editorRef.value) {
@@ -622,6 +628,7 @@
     let bookmark: any | null = null;
     let markerId: string | null = null;
     let selectionRange = replacementRange;
+    const text = replacementRange.toString();
     try {
       const markerRange = replacementRange.cloneRange();
       markerRange.collapse(true);
@@ -634,24 +641,24 @@
         marker.setAttribute('aria-hidden', 'true');
         marker.style.display = 'none';
         markerRange.insertNode(marker);
-        selectionRange = getTinyMceMentionRangeFromMarker(editor, markerId) || replacementRange;
+        selectionRange = getTinyMceMentionRangeFromMarker(editor, markerId, text) || replacementRange;
       }
-      // bookmark 必须记录“@”本身被选中的区间，而不是输入后的折叠光标；否则恢复后会留下 @。
+      // bookmark 必须记录完整“@查询”被选中的区间，而不是输入后的折叠光标；否则恢复后会留下触发文本。
       editor.selection.setRng(selectionRange);
       bookmark = editor.selection.getBookmark?.(2, true) ?? null;
     } catch {
       // 极少数 TinyMCE 版本不支持 path bookmark 时，下面的 Range 仍可作为同一轮会话的兜底。
       bookmark = null;
     }
-    return { range: selectionRange, bookmark, markerId };
+    return { range: selectionRange, bookmark, markerId, text };
   }
 
   function restoreTinyMceMentionSelection(editor: any) {
     const selection = htmlMentionSelection;
     if (!selection) return false;
 
-    const markerRange = getTinyMceMentionRangeFromMarker(editor, selection.markerId);
-    if (selectionIsExactTinyMceMention(editor, markerRange)) {
+    const markerRange = getTinyMceMentionRangeFromMarker(editor, selection.markerId, selection.text);
+    if (selectionIsExactTinyMceMention(editor, markerRange, selection.text)) {
       try {
         editor.selection.setRng(markerRange);
         return true;
@@ -663,13 +670,13 @@
     if (selection.bookmark) {
       try {
         editor.selection.moveToBookmark(selection.bookmark);
-        if (selectionIsExactTinyMceMention(editor, editor.selection.getRng?.())) return true;
+        if (selectionIsExactTinyMceMention(editor, editor.selection.getRng?.(), selection.text)) return true;
       } catch {
         // bookmark 可能因编辑器被外部重置而失效，继续尝试本轮保存的原始 Range。
       }
     }
 
-    if (!selectionIsExactTinyMceMention(editor, selection.range)) return false;
+    if (!selectionIsExactTinyMceMention(editor, selection.range, selection.text)) return false;
     try {
       editor.selection.setRng(selection.range);
       return true;
@@ -762,6 +769,19 @@
   }
 
   function openFullMentionPicker() {
+    const editor = editorRef.value;
+    const selection = htmlMentionSelection;
+    // 全量搜索会使焦点离开 iframe。先将正在输入的 @查询 固化成带标记的选区，
+    // 避免后续从弹窗选中资源时只剩已经失效的原始 DOM Range。
+    if (
+      currentType.value === 'html' &&
+      editor &&
+      selection &&
+      !selection.markerId &&
+      selectionIsExactTinyMceMention(editor, selection.range, selection.text)
+    ) {
+      htmlMentionSelection = captureTinyMceMentionSelection(editor, selection.range);
+    }
     mentionPickerVisible.value = true;
     inlineMentionVisible.value = false;
   }
@@ -775,7 +795,6 @@
     mentionPickerVisible.value = false;
     markdownMentionRange = null;
     clearTinyMceMentionSelection();
-    mobileResourceReplacementAnchor = null;
   }
 
   function tryOpenMarkdownMention() {
@@ -811,7 +830,7 @@
       htmlMentionSelection = captureTinyMceMentionSelection(editor, replacementRange);
       mentionPickerVisible.value = true;
     } else {
-      htmlMentionSelection = { range: replacementRange, bookmark: null, markerId: null };
+      htmlMentionSelection = { range: replacementRange, bookmark: null, markerId: null, text: '@' };
       syncTinyMceInlineMention(editor);
       inlineMentionVisible.value = true;
     }
@@ -838,8 +857,8 @@
       const mentionRange = htmlMentionSelection.range.cloneRange();
       mentionRange.setEnd(currentRange.startContainer, currentRange.startOffset);
       const text = mentionRange.toString();
-      if (!text.startsWith('@') || /[\s@]/u.test(text.slice(1))) return closeInlineMention();
-      htmlMentionSelection = { range: mentionRange, bookmark: null, markerId: null };
+      if (!isValidTinyMceMentionText(text)) return closeInlineMention();
+      htmlMentionSelection = { range: mentionRange, bookmark: null, markerId: null, text };
       inlineMentionQuery.value = text.slice(1);
       const caretRange = currentRange.cloneRange();
       caretRange.collapse(false);
@@ -969,58 +988,8 @@
     return true;
   }
 
-  function replaceMobileResourceMention(item: ResourceRef & { title: string }) {
-    const editor = editorRef.value;
-    const anchor = mobileResourceReplacementAnchor;
-    mobileResourceReplacementAnchor = null;
-    const body = editor?.getBody?.() as HTMLElement | null;
-    const href = buildResourceHref(item);
-    if (!editor || !anchor || !body?.contains(anchor) || !href) {
-      message.warning(t('note.resourceMention.insertFailed'));
-      return false;
-    }
-    const attrs = buildResourceAnchorAttrs(item);
-    const html = `<a href="${href}" contenteditable="false" data-ln-resource-type="${attrs['data-ln-resource-type']}" data-ln-resource-id="${attrs['data-ln-resource-id']}">${escapeHtmlText(item.title || item.id)}</a>`;
-    let replaced = false;
-    try {
-      editor.focus();
-      const range = editor.dom.createRng();
-      range.selectNode(anchor);
-      editor.selection.setRng(range);
-      const replace = () => {
-        if (typeof editor.insertContent === 'function') {
-          editor.insertContent(html);
-        } else {
-          editor.selection.setContent(html);
-        }
-        moveTinyMceCaretAfterResourceMention(editor, item);
-      };
-      if (editor.undoManager?.transact) editor.undoManager.transact(replace);
-      else replace();
-      const nextHtml = editor.getContent({ format: 'html' });
-      if (!collectResourceRefsFromHtml(nextHtml).some((ref) => resourceRefKey(ref) === resourceRefKey(item))) {
-        throw new Error('resource mention replacement missing from editor content');
-      }
-      content.value = nextHtml;
-      replaced = true;
-    } catch {
-      message.warning(t('note.resourceMention.insertFailed'));
-    }
-    if (!replaced) return false;
-    recordResourceMentionOperation('替换资源提及成功');
-    window.setTimeout(() => {
-      publishResourceRefs(editor.getContent({ format: 'html' }));
-      decorateTinyMceResourceRefs();
-    }, 0);
-    return true;
-  }
-
   function handleMentionPickerSelect(item: ResourceRef & { title: string }) {
-    if (mobileResourceReplacementAnchor) {
-      replaceMobileResourceMention(item);
-    } else {
-      insertResourceMention(item);
-    }
+    insertResourceMention(item);
     // 一次选择只消费一次当前编辑器位置。即使位置已在弹窗期间失效，也关闭选择器并要求重新触发，
     // 避免用户继续点列表时复用过期的 Range/bookmark。
     closeMentionPicker();
@@ -1856,16 +1825,12 @@
       };
 
       editor.on('click', (event: MouseEvent) => {
-        const target = event.target;
-        const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
-        const ref = anchor ? parseResourceHref(anchor.getAttribute('href')) : null;
-        if (ref) {
-          event.preventDefault();
-          event.stopPropagation();
-          handleResourceRefClick(ref, anchor);
-          return;
-        }
+        if (handleTinyMceResourceReferenceActivation(event)) return;
         syncCheckboxAttribute(event.target);
+      });
+      editor.on('touchend', (event: TouchEvent) => {
+        if (!isMobile.value) return;
+        handleTinyMceResourceReferenceActivation(event);
       });
       editor.on('change', (event: Event) => {
         syncCheckboxAttribute(event.target);

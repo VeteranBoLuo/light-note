@@ -2,23 +2,23 @@
   <div class="settings-page" ref="pageRef">
     <div class="settings-container">
       <header class="settings-hero">
-        <button class="settings-back" @click="goBack">
+        <BButton class="settings-back" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
-        </button>
+        </BButton>
         <h1 class="settings-title">{{ t('settings.title') }}</h1>
         <p class="settings-subtitle">{{ t('settings.subtitle') }}</p>
       </header>
 
       <nav class="settings-anchors">
-        <button
+        <BButton
           v-for="a in anchors"
           :key="a.id"
-          type="button"
           class="anchor-chip"
           :class="{ active: activeAnchor === a.id }"
+          :aria-pressed="activeAnchor === a.id"
           @click="scrollToSection(a.id)"
-          >{{ a.label }}</button
+          >{{ a.label }}</BButton
         >
       </nav>
 
@@ -45,15 +45,17 @@
                 <span class="field-desc">{{ t('settings.themeDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in themeOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.theme || 'system') === o.v }"
+                  :type="(user.preferences.theme || 'system') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.theme || 'system') === o.v"
                   @click="set('theme', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -63,15 +65,17 @@
                 <span class="field-desc">{{ t('settings.languageDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in langOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.lang || 'zh-CN') === o.v }"
+                  :type="(user.preferences.lang || 'zh-CN') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.lang || 'zh-CN') === o.v"
                   @click="set('lang', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -81,15 +85,17 @@
                 <span class="field-desc">{{ t('settings.uiScaleDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in uiScaleOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.uiScale || 'medium') === o.v }"
+                  :type="(user.preferences.uiScale || 'medium') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.uiScale || 'medium') === o.v"
                   @click="set('uiScale', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
           </div>
@@ -127,15 +133,17 @@
                 <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in homeOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.homePage || 'landing') === o.v }"
+                  :type="(user.preferences.homePage || 'landing') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.homePage || 'landing') === o.v"
                   @click="set('homePage', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -145,15 +153,17 @@
                 <span class="field-desc">{{ t('settings.bookmarkOpenDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in bookmarkOpenOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.openBookmarkIn || 'newTab') === o.v }"
+                  :type="(user.preferences.openBookmarkIn || 'newTab') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.openBookmarkIn || 'newTab') === o.v"
                   @click="set('openBookmarkIn', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -163,15 +173,17 @@
                 <span class="field-desc">{{ t('settings.noteViewDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in viewOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.noteViewMode || 'list') === o.v }"
+                  :type="(user.preferences.noteViewMode || 'list') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.noteViewMode || 'list') === o.v"
                   @click="set('noteViewMode', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -181,15 +193,17 @@
                 <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in resourceViewOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.resourceView || 'card') === o.v }"
+                  :type="(user.preferences.resourceView || 'card') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.resourceView || 'card') === o.v"
                   @click="set('resourceView', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -199,15 +213,17 @@
                 <span class="field-desc">{{ t('settings.resourceSortDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in resourceSortOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.resourceSort || 'relevance') === o.v }"
+                  :type="(user.preferences.resourceSort || 'relevance') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.resourceSort || 'relevance') === o.v"
                   @click="set('resourceSort', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -217,15 +233,17 @@
                 <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in tagViewOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.tagView || 'card') === o.v }"
+                  :type="(user.preferences.tagView || 'card') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.tagView || 'card') === o.v"
                   @click="set('tagView', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -235,15 +253,17 @@
                 <span class="field-desc">{{ t('settings.cloudViewDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in cloudViewOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.cloudView || 'card') === o.v }"
+                  :type="(user.preferences.cloudView || 'card') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.cloudView || 'card') === o.v"
                   @click="set('cloudView', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -253,15 +273,17 @@
                 <span class="field-desc">{{ t('settings.tagManageViewDesc') }}</span>
               </div>
               <div class="seg">
-                <button
+                <BButton
                   v-for="o in tagManageViewOpts"
                   :key="o.v"
                   class="seg-btn"
                   :class="{ active: (user.preferences.tagManageView || 'card') === o.v }"
+                  :type="(user.preferences.tagManageView || 'card') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.tagManageView || 'card') === o.v"
                   @click="set('tagManageView', o.v)"
                 >
                   {{ o.label }}
-                </button>
+                </BButton>
               </div>
             </div>
 
@@ -270,17 +292,11 @@
                 <span class="field-label">{{ t('settings.hideEmptyTags') }}</span>
                 <span class="field-desc">{{ t('settings.hideEmptyTagsDesc') }}</span>
               </div>
-              <div class="seg">
-                <button
-                  v-for="o in onOffOpts"
-                  :key="String(o.v)"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.hideEmptyTags ?? false) === o.v }"
-                  @click="set('hideEmptyTags', o.v)"
-                >
-                  {{ o.label }}
-                </button>
-              </div>
+              <BSwitch
+                :checked="user.preferences.hideEmptyTags ?? false"
+                :aria-label="t('settings.hideEmptyTags')"
+                @change="set('hideEmptyTags', $event)"
+              />
             </div>
           </div>
         </section>
@@ -343,17 +359,11 @@
                 <span class="field-label">{{ t('settings.weeklyReport') }}</span>
                 <span class="field-desc">{{ t('settings.weeklyReportDesc') }}</span>
               </div>
-              <div class="seg">
-                <button
-                  v-for="o in onOffOpts"
-                  :key="String(o.v)"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.weeklyReport !== false) === o.v }"
-                  @click="set('weeklyReport', o.v)"
-                >
-                  {{ o.label }}
-                </button>
-              </div>
+              <BSwitch
+                :checked="user.preferences.weeklyReport !== false"
+                :aria-label="t('settings.weeklyReport')"
+                @change="set('weeklyReport', $event)"
+              />
             </div>
 
             <div class="field">
@@ -361,17 +371,11 @@
                 <span class="field-label">{{ t('settings.notifyLevelUp') }}</span>
                 <span class="field-desc">{{ t('settings.notifyLevelUpDesc') }}</span>
               </div>
-              <div class="seg">
-                <button
-                  v-for="o in onOffOpts"
-                  :key="String(o.v)"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.notifyLevelUp !== false) === o.v }"
-                  @click="set('notifyLevelUp', o.v)"
-                >
-                  {{ o.label }}
-                </button>
-              </div>
+              <BSwitch
+                :checked="user.preferences.notifyLevelUp !== false"
+                :aria-label="t('settings.notifyLevelUp')"
+                @change="set('notifyLevelUp', $event)"
+              />
             </div>
 
             <div class="field">
@@ -379,17 +383,11 @@
                 <span class="field-label">{{ t('settings.notifyOpinionReply') }}</span>
                 <span class="field-desc">{{ t('settings.notifyOpinionReplyDesc') }}</span>
               </div>
-              <div class="seg">
-                <button
-                  v-for="o in onOffOpts"
-                  :key="String(o.v)"
-                  class="seg-btn"
-                  :class="{ active: (user.preferences.notifyOpinionReply !== false) === o.v }"
-                  @click="set('notifyOpinionReply', o.v)"
-                >
-                  {{ o.label }}
-                </button>
-              </div>
+              <BSwitch
+                :checked="user.preferences.notifyOpinionReply !== false"
+                :aria-label="t('settings.notifyOpinionReply')"
+                @change="set('notifyOpinionReply', $event)"
+              />
             </div>
 
             <div class="field">
@@ -399,6 +397,7 @@
               </div>
               <BSwitch
                 :checked="user.preferences.notifyFeatureRequest !== false"
+                :aria-label="t('settings.notifyFeatureRequest')"
                 @change="set('notifyFeatureRequest', $event)"
               />
             </div>
@@ -408,17 +407,11 @@
                 <span class="field-label">{{ t('settings.notifyStreakRisk') }}</span>
                 <span class="field-desc">{{ t('settings.notifyStreakRiskDesc') }}</span>
               </div>
-              <div class="seg">
-                <button
-                  v-for="o in onOffOpts"
-                  :key="String(o.v)"
-                  class="seg-btn"
-                  :class="{ active: ((user.preferences as any).notifyStreakRisk !== false) === o.v }"
-                  @click="set('notifyStreakRisk', o.v)"
-                >
-                  {{ o.label }}
-                </button>
-              </div>
+              <BSwitch
+                :checked="(user.preferences as any).notifyStreakRisk !== false"
+                :aria-label="t('settings.notifyStreakRisk')"
+                @change="set('notifyStreakRisk', $event)"
+              />
             </div>
           </div>
         </section>
@@ -572,25 +565,26 @@
                 <span class="field-label">{{ t('settings.exportAll') }}</span>
                 <span class="field-desc">{{ t('settings.exportAllDesc') }}</span>
               </div>
-              <button class="export-btn" :disabled="exporting" @click="exportAll">
+              <BButton class="export-btn" type="primary" :loading="exporting" @click="exportAll">
                 {{ exporting ? t('settings.exporting') : t('settings.exportBtn') }}
-              </button>
+              </BButton>
             </div>
             <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.importAll') }}</span>
                 <span class="field-desc">{{ t('settings.importAllDesc') }}</span>
               </div>
-              <button class="export-btn" :disabled="importing" @click="triggerImport">
-                {{ importing ? t('settings.importing') : t('settings.importBtn') }}
-              </button>
-              <input
-                ref="importInputRef"
-                type="file"
+              <BUpload
                 accept="application/json,.json"
-                style="display: none"
-                @change="onImportFile"
-              />
+                :multiple="false"
+                raw-file
+                :disabled="importing"
+                @change="onImportFiles"
+              >
+                <BButton class="export-btn" type="primary" :loading="importing">
+                  {{ importing ? t('settings.importing') : t('settings.importBtn') }}
+                </BButton>
+              </BUpload>
             </div>
           </div>
         </section>
@@ -617,6 +611,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
 
   const { t } = useI18n();
@@ -748,15 +743,8 @@
 
   // 数据导入:选择「数据导出」生成的备份 JSON,恢复书签/笔记/标签(后端智能去重)。文件二进制不在备份内,跳过。
   const importing = ref(false);
-  const importInputRef = ref<HTMLInputElement | null>(null);
-  function triggerImport() {
-    if (importing.value) return;
-    importInputRef.value?.click();
-  }
-  async function onImportFile(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = ''; // 清空,允许重复选同一文件再次导入
+  async function onImportFiles(files: File[]) {
+    const file = files?.[0];
     if (!file) return;
     importing.value = true;
     try {
@@ -838,10 +826,6 @@
   const tagManageViewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'list', label: t('settings.listView') },
-  ]);
-  const onOffOpts = computed(() => [
-    { v: true, label: t('settings.switchOn') },
-    { v: false, label: t('settings.switchOff') },
   ]);
   const resourceSortOpts = computed(() => [
     { v: 'relevance', label: t('resourceCenter.sort.relevance') },

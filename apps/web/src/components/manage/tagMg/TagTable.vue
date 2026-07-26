@@ -113,6 +113,15 @@
                   {{ t('resourceCenter.view.list') }}
                 </BButton>
               </div>
+              <BButton
+                size="small"
+                class="selection-mode-button"
+                :class="{ active: tagSelectionMode }"
+                :aria-pressed="tagSelectionMode"
+                @click="toggleTagSelectionMode"
+              >
+                {{ t(tagSelectionMode ? 'tagManage.batchCancel' : 'tagManage.batchSelect') }}
+              </BButton>
             </div>
           </div>
 
@@ -138,9 +147,29 @@
               <div class="result-title">{{ t('tagManage.resultTitle') }}</div>
               <div class="result-subtitle">{{ resultSubtitle }}</div>
             </div>
-            <span v-if="activeFilter !== 'all' || keyword" class="active-query-hint">
-              {{ t('tagManage.filteredResult') }}
-            </span>
+            <div class="result-toolbar-actions">
+              <BButton
+                v-if="tagSelectionMode && selectableTagIds.length"
+                size="small"
+                @click="toggleSelectAllVisibleTags"
+              >
+                {{ t(allVisibleTagsSelected ? 'tagManage.batchDeselectAll' : 'tagManage.batchSelectAll') }}
+              </BButton>
+              <span v-if="tagSelectionMode" class="batch-selection-count">
+                {{ t('tagManage.batchSelected', { count: selectedTagIds.length }) }}
+              </span>
+              <BButton
+                v-if="selectedTagIds.length"
+                size="small"
+                type="danger"
+                @click="handleBatchDeleteTags"
+              >
+                {{ t('tagManage.batchDelete') }}
+              </BButton>
+              <span v-if="activeFilter !== 'all' || keyword" class="active-query-hint">
+                {{ t('tagManage.filteredResult') }}
+              </span>
+            </div>
           </div>
 
           <div
@@ -160,6 +189,7 @@
                   interactive
                   padding="0"
                   class="tag-card"
+                  :class="{ 'is-selected': selectedTagIds.includes(String(tag.id)) }"
                   role="button"
                   tabindex="0"
                   @click="openTagDetail(tag.id)"
@@ -168,6 +198,14 @@
                 >
                   <div class="tag-card__head">
                     <div class="tag-identity">
+                      <BCheckbox
+                        v-if="tagSelectionMode"
+                        class="tag-selection-checkbox"
+                        :checked="selectedTagIds.includes(String(tag.id))"
+                        @click.stop
+                        @keydown.stop
+                        @change="toggleTagSelection(String(tag.id))"
+                      />
                       <div class="tag-icon-wrap">
                         <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="24" />
                         <span v-else>#</span>
@@ -182,7 +220,7 @@
 
                     <div class="tag-card__tools">
                       <span class="tag-card__open" aria-hidden="true">→</span>
-                      <div class="tag-actions">
+                      <div class="tag-actions" @click.stop>
                         <BActionButton
                           action="edit"
                           :label="t('common.edit')"
@@ -274,6 +312,7 @@
                   interactive
                   padding="10px 12px"
                   class="tag-row"
+                  :class="{ 'is-selected': selectedTagIds.includes(String(tag.id)) }"
                   role="button"
                   tabindex="0"
                   @click="openTagDetail(tag.id)"
@@ -281,6 +320,14 @@
                   v-click-log="{ module: '标签管理', operation: `查看标签详情【${tag.name}】` }"
                 >
                   <div class="tag-row__identity">
+                    <BCheckbox
+                      v-if="tagSelectionMode"
+                      class="tag-selection-checkbox"
+                      :checked="selectedTagIds.includes(String(tag.id))"
+                      @click.stop
+                      @keydown.stop
+                      @change="toggleTagSelection(String(tag.id))"
+                    />
                     <div class="tag-row-icon">
                       <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="18" />
                       <span v-else>#</span>
@@ -310,7 +357,7 @@
                       >+{{ tag.relatedTagList.length - 2 }}</span
                     >
                   </div>
-                  <div class="tag-row-actions">
+                  <div class="tag-row-actions" @click.stop>
                     <BActionButton
                       action="edit"
                       :label="t('common.edit')"
@@ -359,6 +406,7 @@
   import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -369,6 +417,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { updatePreference } from '@/utils/savePreference';
   import { openPage } from '@/utils/common.ts';
@@ -397,6 +446,8 @@
   const isCompactHeader = ref(false);
   const hasScrollAbove = ref(false);
   const hasScrollBelow = ref(false);
+  const tagSelectionMode = ref(false);
+  const selectedTagIds = ref<string[]>([]);
   let resultResizeObserver: ResizeObserver | undefined;
   const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
 
@@ -451,11 +502,41 @@
       ? t('tagManage.resultSubtitleKeyword', { keyword: searchKeyword, count: visibleTags.value.length })
       : t('tagManage.resultSubtitle', { count: visibleTags.value.length });
   });
+  const selectableTagIds = computed(() =>
+    visibleTags.value.map((tag) => String(tag.id || '')).filter((id) => Boolean(id)),
+  );
+  const allVisibleTagsSelected = computed(
+    () =>
+      selectableTagIds.value.length > 0 &&
+      selectableTagIds.value.every((id) => selectedTagIds.value.includes(id)),
+  );
 
   function setTagView(mode: 'card' | 'list') {
     if (viewMode.value === mode) return;
     viewMode.value = mode;
     updatePreference({ tagManageView: mode }).catch(() => {});
+  }
+
+  function toggleTagSelectionMode() {
+    if (tagSelectionMode.value) selectedTagIds.value = [];
+    tagSelectionMode.value = !tagSelectionMode.value;
+  }
+
+  function toggleTagSelection(id: string) {
+    const selected = new Set(selectedTagIds.value);
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    selectedTagIds.value = Array.from(selected);
+  }
+
+  function toggleSelectAllVisibleTags() {
+    const selected = new Set(selectedTagIds.value);
+    if (allVisibleTagsSelected.value) {
+      selectableTagIds.value.forEach((id) => selected.delete(id));
+    } else {
+      selectableTagIds.value.forEach((id) => selected.add(id));
+    }
+    selectedTagIds.value = Array.from(selected);
   }
 
   function updateScrollState() {
@@ -543,8 +624,60 @@
           if (res.status !== 200) return;
           recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
           message.success(t('tagManage.deleteSuccess'));
+          selectedTagIds.value = selectedTagIds.value.filter((id) => id !== String(tag.id));
           loadTags();
         });
+      },
+    });
+  }
+
+  function handleBatchDeleteTags() {
+    if (blockGuestWrite('delete-tag')) return;
+    const selectedIds = [...selectedTagIds.value];
+    if (!selectedIds.length) {
+      message.warning(t('tagManage.batchDeleteNoSelection'));
+      return;
+    }
+    Alert.alert({
+      title: t('tagManage.batchDeleteConfirmTitle'),
+      content: t('tagManage.batchDeleteConfirmContent', { count: selectedIds.length }),
+      async onOk() {
+        loading.value = true;
+        try {
+          const res = await batchDeleteSearchResources(selectedIds.map((id) => ({ id, type: 'tag' })));
+          if (Number(res?.status) !== 200) {
+            message.error(res?.msg || t('tagManage.batchDeleteFailed'));
+            return;
+          }
+
+          const successCount = Number(res?.data?.affectedItemCount || 0);
+          const skippedCount = Number(res?.data?.invalidItemCount || 0);
+          if (successCount === 0) {
+            message.warning(t('tagManage.batchDeleteNoChanges'));
+            return;
+          }
+
+          recordOperation({
+            module: '标签管理',
+            operation:
+              skippedCount > 0
+                ? `批量删除标签部分成功【${successCount}成功/${skippedCount}跳过】`
+                : `批量删除标签成功【${successCount}个】`,
+          });
+          message[skippedCount > 0 ? 'warning' : 'success'](
+            skippedCount > 0
+              ? t('tagManage.batchDeletePartial', { count: successCount, skipped: skippedCount })
+              : t('tagManage.batchDeleteSuccess', { count: successCount }),
+          );
+          selectedTagIds.value = [];
+          tagSelectionMode.value = false;
+          clearGlobalSearchCache();
+          await loadTags();
+        } catch {
+          message.error(t('tagManage.batchDeleteFailed'));
+        } finally {
+          loading.value = false;
+        }
       },
     });
   }
@@ -634,7 +767,8 @@
   .view-switch,
   .filter-toolbar,
   .tag-actions,
-  .tag-row-actions {
+  .tag-row-actions,
+  .result-toolbar-actions {
     display: flex;
     align-items: center;
   }
@@ -931,6 +1065,12 @@
     color: #fff !important;
   }
 
+  .selection-mode-button.active {
+    color: var(--resource-tag-color);
+    border-color: color-mix(in srgb, var(--resource-tag-color) 42%, var(--tag-border-color));
+    background: color-mix(in srgb, var(--resource-tag-color) 10%, var(--tag-muted-bg));
+  }
+
   .filter-toolbar {
     gap: 8px;
     margin-top: 9px;
@@ -989,6 +1129,18 @@
     border-radius: 999px;
     color: var(--resource-tag-color);
     background: color-mix(in srgb, var(--resource-tag-color) 8%, transparent);
+  }
+
+  .result-toolbar-actions {
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .batch-selection-count {
+    color: var(--resource-tag-color);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .results-viewport {
@@ -1088,6 +1240,11 @@
       outline: none;
       border-color: color-mix(in srgb, var(--resource-tag-color) 32%, var(--tag-border-color));
     }
+
+    &.is-selected {
+      border-color: var(--resource-tag-color);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--resource-tag-color) 18%, transparent);
+    }
   }
 
   .tag-card__head {
@@ -1107,6 +1264,11 @@
 
   .tag-identity {
     gap: 11px;
+  }
+
+  .tag-selection-checkbox {
+    flex: 0 0 auto;
+    margin: -4px 0 0 -4px;
   }
 
   .tag-icon-wrap,
@@ -1418,6 +1580,12 @@
       outline: none;
       border-color: color-mix(in srgb, var(--resource-tag-color) 28%, var(--tag-border-color));
       background: color-mix(in srgb, var(--resource-tag-color) 3%, var(--tag-card-bg));
+    }
+
+    &.is-selected {
+      border-color: var(--resource-tag-color);
+      background: color-mix(in srgb, var(--resource-tag-color) 7%, var(--tag-card-bg));
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--resource-tag-color) 16%, transparent);
     }
   }
 
