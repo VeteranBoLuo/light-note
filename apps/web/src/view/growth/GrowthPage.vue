@@ -28,7 +28,8 @@
         </section>
       </div>
 
-      <section v-if="questsEnabled" class="growth-panel">
+      <!-- 周挑战与每日任务的等级上限规则不同：管理员/满级账号仍可查看周挑战。 -->
+      <section class="growth-panel">
         <WeeklyChallenge />
       </section>
 

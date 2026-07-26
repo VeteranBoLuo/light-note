@@ -1175,6 +1175,11 @@ export const getAdminOverview = async (req, res) => {
     const notIntCreateBy = hideInternal
       ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))`
       : '';
+    // 用户逻辑删除后，历史书签仍会保留，以支持后续的数据清理；后台总览不应继续把它们算入有效内容。
+    const activeBookmarkOwner = ` AND EXISTS (
+      SELECT 1 FROM \`user\` bookmark_owner
+      WHERE bookmark_owner.id = bookmark.user_id AND bookmark_owner.del_flag = 0
+    )`;
     const notOnboardingBookmark = ` AND NOT EXISTS (
       SELECT 1 FROM onboarding_seed_resources osr
       WHERE osr.user_id = bookmark.user_id
@@ -1230,11 +1235,11 @@ export const getAdminOverview = async (req, res) => {
         ),
         pool.query(
           `SELECT
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${notIntUser}${notOnboardingBookmark}) AS bookmarkTotal,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}) AS bookmarkTotal,
            (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}${notOnboardingNote}) AS noteTotal,
            (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}) AS fileTotal,
            COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}), 0) AS storageMb,
-           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser}${notOnboardingBookmark}) AS bookmarkToday,
+           (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}) AS bookmarkToday,
            (SELECT COUNT(*) FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote}) AS noteToday,
            (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile}) AS fileToday,
            COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}), 0) AS trashMb,
@@ -1290,7 +1295,7 @@ export const getAdminOverview = async (req, res) => {
         pool
           .query(
             `SELECT d, SUM(c) AS c FROM (
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${notIntUser}${notOnboardingBookmark} GROUP BY d
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark} GROUP BY d
              UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote} GROUP BY d
              UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile} GROUP BY d
            ) t GROUP BY d`,

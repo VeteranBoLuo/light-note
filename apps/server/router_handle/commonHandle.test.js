@@ -260,7 +260,7 @@ describe('resolveHelpSources 旧来源安全补全', () => {
 describe('getAdminOverview 资源统计口径', () => {
   beforeEach(() => query.mockReset());
 
-  it('累计、今日、存储与近 7 天趋势都排除注册时的系统示例资源', async () => {
+  it('累计、今日、存储与近 7 天趋势都排除注册时的系统示例资源和已删除用户的书签', async () => {
     query.mockImplementation(async (sql) => {
       const statement = String(sql);
       if (statement.includes('FROM `user` WHERE del_flag')) return [[{ total: 1, today: 1 }]];
@@ -301,7 +301,9 @@ describe('getAdminOverview 资源统计口径', () => {
     const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, SUM(c)'))?.[0];
     expect(resourceSql).toContain('onboarding_seed_resources');
     expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
+    expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
     expect(trendSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
+    expect(trendSql).toContain('bookmark_owner.del_flag = 0');
     const payload = res.send.mock.calls[0][0];
     expect(payload.data.ai).toEqual({ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 });
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));

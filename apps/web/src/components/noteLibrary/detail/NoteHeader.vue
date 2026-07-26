@@ -1,6 +1,6 @@
 <template>
   <div class="note-header">
-    <div style="display: flex; align-items: center" :style="{ gap: bookmark.isMobile ? '0' : '20px' }">
+    <div class="note-header-leading" :class="{ 'is-mobile': bookmark.isMobile }">
       <div class="back-icon" @click="$emit('back')">
         <SvgIcon :src="icon.noteDetail.back" />
       </div>
@@ -12,14 +12,10 @@
         @focusout="$emit('focusout')"
       >
       </div>
-      <div
-        style="color: #c0c0c0; font-size: 12px"
-        v-if="!isStartEdit"
-        :style="{ marginLeft: bookmark.isMobile ? '20px' : '0' }"
-      >
+      <div class="note-header-save-state" v-if="!isStartEdit">
         <span v-show="note.id"> {{ $t('noteDetail.savedAt') }} {{ updateTime }} </span>
       </div>
-      <div v-else style="color: #c0c0c0; font-size: 12px" :style="{ marginLeft: bookmark.isMobile ? '20px' : '0' }">
+      <div v-else class="note-header-save-state">
         <span>{{ $t('noteDetail.saving') }}</span>
       </div>
       <!--标签-->
@@ -36,7 +32,7 @@
         :target-id="note.id"
       />
     </div>
-    <div class="flex-align-center" style="gap: 20px">
+    <div class="note-header-actions flex-align-center">
       <span class="mode-pill-group" v-if="!readonly">
         <BTooltip :title="$t('note.switchModeTooltip')">
           <span class="mode-pill" :class="`is-${noteType}`" @click.stop="$emit('switchMode')">
@@ -366,6 +362,31 @@
     top: 0;
     // 顶部栏中的引用下拉需要越过下方固定的编辑工作区。
     z-index: 30;
+  }
+  .note-header-leading,
+  .note-header-actions {
+    display: flex;
+    align-items: center;
+  }
+  .note-header-leading {
+    min-width: 0;
+    gap: 20px;
+  }
+  .note-header-actions {
+    flex: 0 0 auto;
+    gap: 20px;
+  }
+  .note-header-save-state {
+    color: #c0c0c0;
+    font-size: 12px;
+  }
+  // 保持原有移动端头部间距：仅撤销了此前把整个顶部左右内边距清零的改动。
+  .note-header-leading.is-mobile {
+    gap: 0;
+
+    .note-header-save-state {
+      margin-left: 20px;
+    }
   }
   .note-header-title {
     padding: 0 10px;
