@@ -61,6 +61,11 @@ describe('Agent 动作能力注册表', () => {
       status: 'unavailable',
       toolNames: [],
     });
+    expect(catalog.find((entry) => entry.id === 'read.get_resource_creation_ranking')).toMatchObject({
+      effect: 'read',
+      status: 'unavailable',
+      toolNames: [],
+    });
     expect(new Set(catalog.map((entry) => entry.id)).size).toBe(catalog.length);
   });
 });

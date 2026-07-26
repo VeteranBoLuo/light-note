@@ -19,8 +19,7 @@ import todoRouter from '../router/todo.js';
 import tagIconRouter from '../router/tagIcon.js';
 import featureRequestRouter from '../router/featureRequest.js';
 
-// 内部账号角色:站长(root) + 测试号(test)。日志/统计中作为「非真实用户」过滤。
-export const INTERNAL_ROLES = ['root', 'test'];
+export { INTERNAL_ROLES } from './internalRoles.js';
 
 export const resultData = function (data = null, status = 200, msg = '') {
   if (status !== 200 && status !== 'visitor' && status !== 'preview') {

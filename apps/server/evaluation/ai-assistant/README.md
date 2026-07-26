@@ -4,13 +4,13 @@
 
 ## 目录内容
 
-- `golden-tasks.json`：267 条匿名化合成任务和 49 个合成来源夹具。
+- `golden-tasks.json`：268 条匿名化合成任务和 49 个合成来源夹具。
 - `generate-golden-tasks.js`：从 70 条核心任务和显式产品场景定义确定性重建 v2 矩阵；生成时拒绝重复 ID、重复问题和错误总数。
 - `schema.js`：严格字段 schema、枚举、跨字段约束、结果 schema 与六维评分器。
 - `runner.js`：黄金集 lint、JSON/JSONL 结果读取和发布门槛检查。
 - `schema.test.js` / `runner.test.js`：隐私声明、覆盖分布、严格校验和安全失败回归。
 
-黄金集保留原 70 条 Ask / Organize 核心任务，并新增 197 条互不重复的产品生命周期场景。十个能力域分别为：Ask、Organize / Change Set、记忆、证据与引用、owner 四维隔离、配额、SSE 恢复、隐私与保留、结果复用、Gateway 与工具策略。每个能力域至少 20 条。
+黄金集保留原 70 条 Ask / Organize 核心任务，并新增 198 条互不重复的产品生命周期场景。十个能力域分别为：Ask、Organize / Change Set、记忆、证据与引用、owner 四维隔离、配额、SSE 恢复、隐私与保留、结果复用、Gateway 与工具策略。每个能力域至少 20 条。
 
 新增场景不是正文相近的参数复制，而是分别定义可观察前置条件、预期路由/工具、禁止动作、确认与结果类型，以及状态信号。例如隐私域区分账号导出、派生数据排除、owner 域清除、schema 失败关闭、软删除撤销和有界保留清理。
 

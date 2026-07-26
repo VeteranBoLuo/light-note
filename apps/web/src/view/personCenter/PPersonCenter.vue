@@ -309,6 +309,10 @@
       border-bottom: 1px solid var(--phone-menu-item-border-color);
     }
 
+    .person-menu-item-title {
+      font-size: 16px;
+    }
+
     .person-menu-item-des {
       color: #999fa8;
       font-size: 14px;

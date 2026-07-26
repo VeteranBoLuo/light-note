@@ -1979,6 +1979,17 @@ const gatewayScenarios = [
       forbiddenActions: ['write_without_confirmation'],
     },
   ),
+  scenario(
+    'root-resource-creation-ranking',
+    'Root 查询昨天谁新增的资源最多时使用业务表聚合工具',
+    ['gateway_tool_policy_applied', 'owner_actor_matched'],
+    {
+      message: '昨天谁新增的资源最多？',
+      identity: selfIdentity('synthetic-root', 'root'),
+      requiredTools: ['get_resource_creation_ranking'],
+      forbiddenTools: ['query_operation_logs'],
+    },
+  ),
 ];
 
 const suites = [
@@ -2144,13 +2155,13 @@ assertUnique(
   tasks.map((task) => task.input.message),
   '任务 message',
 );
-if (tasks.length !== 267) throw new Error(`预期生成 295 条任务，实际 ${tasks.length} 条`);
+if (tasks.length !== 268) throw new Error(`预期生成 268 条任务，实际 ${tasks.length} 条`);
 
 const dataset = {
   schemaVersion: 2,
   datasetId: 'light-note-ai-golden-product-matrix-v2',
   description:
-    '267 条完全合成、可确定性评分的 AI 助手产品能力矩阵，覆盖问答、变更集、记忆、证据、四维 owner、配额、恢复、隐私保留、结果复用与 Gateway 策略。',
+    '268 条完全合成、可确定性评分的 AI 助手产品能力矩阵，覆盖问答、变更集、记忆、证据、四维 owner、配额、恢复、隐私保留、结果复用与 Gateway 策略。',
   privacy: {
     syntheticOnly: true,
     containsRealUserContent: false,

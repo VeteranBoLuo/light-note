@@ -22,6 +22,7 @@ const tools = [
   { name: 'save_attachment_to_cloud', isWrite: true },
   { name: 'query_tags' },
   { name: 'query_users', requireRoot: true },
+  { name: 'get_resource_creation_ranking', requireRoot: true },
   { name: 'get_security_events', requireRoot: true },
   { name: 'query_api_logs', requireRoot: true },
   { name: 'query_todos' },
@@ -109,6 +110,22 @@ describe('selectAgentTools', () => {
     expect(selected.some((tool) => tool.name === 'get_security_events')).toBe(true);
     expect(selected.some((tool) => tool.name === 'query_api_logs')).toBe(true);
     expect(selected.length).toBeLessThanOrEqual(4);
+  });
+
+  it('资源新增排行只向 root 提供专用聚合工具', () => {
+    const root = selectAgentTools(registry, {
+      message: '昨天谁新增的资源最多？',
+      userRole: 'root',
+      maxTools: 4,
+    });
+    const user = selectAgentTools(registry, {
+      message: '昨天谁新增的资源最多？',
+      userRole: 'user',
+      maxTools: 4,
+    });
+
+    expect(root.map((tool) => tool.name)).toContain('get_resource_creation_ranking');
+    expect(user.map((tool) => tool.name)).not.toContain('get_resource_creation_ranking');
   });
 
   it('游客和只读上下文不下发写工具 schema', () => {
