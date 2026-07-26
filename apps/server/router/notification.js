@@ -15,5 +15,8 @@ router.post('/admin/list', notificationHandle.adminList);
 router.post('/admin/recall', notificationHandle.adminRecall);
 router.post('/admin/delete', notificationHandle.adminDelete);
 router.post('/admin/recipients', notificationHandle.adminBatchRecipients);
+router.post('/admin/email/stats', notificationHandle.adminEmailStats);
+router.post('/admin/email/list', notificationHandle.adminEmailList);
+router.post('/admin/email/detail', notificationHandle.adminEmailDetail);
 
 export default router;

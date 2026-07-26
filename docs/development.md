@@ -135,6 +135,12 @@ try {
 - Root 操作用 `ensureRootRole(req, res)`
 - 不要用 `requireRole()` 中间件
 
+**系统邮件：**
+
+- 系统邮件必须通过 `util/emailDelivery.js` 的 `sendTrackedEmail()` 发送，禁止业务入口直接新增 `nodeMail.sendMail()`。
+- 投递记录只保存排障元数据，不保存验证码、完整正文或 SMTP 凭据；SMTP 成功只能称为“已受理”，不能宣称“已送达”。
+- SMTP 已受理后的日志回写失败不得反向让业务重试，以免重复发信；长时间停留在 `sending` 的记录按 `unknown` 展示，只允许人工核查。
+
 ### AI 助手开发硬约束
 
 **Owner 四维隔离：**

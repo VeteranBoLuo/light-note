@@ -2,7 +2,9 @@
   <div class="aw">
     <div class="aw-head">
       <span class="aw-title">{{ t('growth.dashWall') }}</span>
-      <span v-if="(claimableCount || 0) > 0" class="aw-claimable">🎁 {{ t('growth.achClaimableN', { n: claimableCount }) }}</span>
+      <span v-if="(claimableCount || 0) > 0" class="aw-claimable"
+        >🎁 {{ t('growth.achClaimableN', { n: claimableCount }) }}</span
+      >
       <span class="aw-count">{{ t('growth.achUnlocked', { n: unlockedCount, total: totalAchievements }) }}</span>
     </div>
     <div class="aw-bar">
@@ -23,14 +25,20 @@
           <div class="aw-medal">
             <span class="aw-emoji">{{ icons[a.key] || '🏆' }}</span>
             <span v-if="!a.unlocked" class="aw-lock">
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z" /></svg>
+              <SvgIcon :src="icon.growth.lock" size="11" />
             </span>
           </div>
           <div class="aw-name">{{ t(`growth.achName.${a.key}`) }}</div>
           <template v-if="a.unlocked">
-            <button v-if="a.claimable" class="aw-claim" :disabled="claimingKey === a.key" @click.stop="onClaim(a)">
+            <BButton
+              v-if="a.claimable"
+              class="aw-claim"
+              :disabled="readOnly || claimingKey === a.key"
+              :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+              @click.stop="onClaim(a)"
+            >
               🪙 {{ t('growth.achClaim', { n: a.reward }) }}
-            </button>
+            </BButton>
             <div v-else class="aw-got">✓ {{ t('growth.achClaimed') }}</div>
           </template>
           <div v-else class="aw-mini">
@@ -51,9 +59,15 @@
         <div class="awd-name">{{ t(`growth.achName.${detail.key}`) }}</div>
         <div class="awd-desc">{{ t(`growth.achDesc.${detail.key}`) }}</div>
         <div v-if="detail.reward" class="awd-reward">{{ t('growth.achRewardLabel') }} 🪙 {{ detail.reward }}</div>
-        <button v-if="detail.claimable" class="awd-claim" :disabled="claimingKey === detail.key" @click="onClaim(detail)">
+        <BButton
+          v-if="detail.claimable"
+          class="awd-claim"
+          :disabled="readOnly || claimingKey === detail.key"
+          :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+          @click="onClaim(detail)"
+        >
           {{ t('growth.achClaim', { n: detail.reward }) }}
-        </button>
+        </BButton>
         <div v-else-if="detail.unlocked" class="awd-status unlocked">✓ {{ t('growth.achClaimed') }}</div>
         <div v-else class="awd-status">
           <div class="awd-bar"><div class="awd-fill" :style="{ width: prog(detail) + '%' }"></div></div>
@@ -70,14 +84,21 @@
   import type { Achievement } from '@/composables/useGrowth.ts';
   import { ACHIEVEMENT_ICONS, ACHIEVEMENT_GROUPS } from '@/config/achievements.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
-  const props = defineProps<{
-    achievements: Achievement[];
-    unlockedCount: number;
-    totalAchievements: number;
-    claimableCount?: number;
-    claimingKey?: string | null;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      achievements: Achievement[];
+      unlockedCount: number;
+      totalAchievements: number;
+      claimableCount?: number;
+      claimingKey?: string | null;
+      readOnly?: boolean;
+    }>(),
+    { readOnly: false },
+  );
   const emit = defineEmits<{ (e: 'claim', key: string): void }>();
   const { t } = useI18n();
 
@@ -89,11 +110,14 @@
     detailVisible.value = true;
   }
   function onClaim(a: Achievement) {
+    if (props.readOnly) return;
     emit('claim', a.key);
   }
   // 只展示实际存在数据的分组(向后兼容后端新增/删减)
   const groups = computed(() => ACHIEVEMENT_GROUPS.filter((g) => props.achievements.some((a) => a.group === g)));
-  const pct = computed(() => (props.totalAchievements ? Math.round((props.unlockedCount / props.totalAchievements) * 100) : 0));
+  const pct = computed(() =>
+    props.totalAchievements ? Math.round((props.unlockedCount / props.totalAchievements) * 100) : 0,
+  );
 
   function byGroup(g: string) {
     return props.achievements.filter((a) => a.group === g);
@@ -178,7 +202,11 @@
   }
   .aw-badge.unlocked {
     border-color: color-mix(in srgb, #fbbf24 45%, transparent);
-    background: linear-gradient(180deg, color-mix(in srgb, #fbbf24 12%, var(--background-color)), var(--background-color));
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, #fbbf24 12%, var(--background-color)),
+      var(--background-color)
+    );
   }
   .aw-badge.unlocked:hover {
     transform: translateY(-2px);
@@ -264,8 +292,13 @@
     animation: none;
   }
   @keyframes aw-claim-pulse {
-    0%, 100% { box-shadow: 0 4px 10px -5px rgba(245, 158, 11, 0.8); }
-    50% { box-shadow: 0 4px 16px -3px rgba(245, 158, 11, 0.95); }
+    0%,
+    100% {
+      box-shadow: 0 4px 10px -5px rgba(245, 158, 11, 0.8);
+    }
+    50% {
+      box-shadow: 0 4px 16px -3px rgba(245, 158, 11, 0.95);
+    }
   }
   .aw-reward-hint {
     font-size: 9.5px;

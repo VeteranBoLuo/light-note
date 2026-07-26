@@ -1,7 +1,7 @@
 import { getGrowth, getGrowthDashboard, getActivityHeatmap, claimDailyQuestBonus, claimAchievement, checkin, useProtectCard, adminAdjustGrowth, RANKS, markNoticesRead } from '../util/growth.js';
 import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { resultData } from '../util/common.js';
-import { ensureNotVisitor } from '../util/auth.js';
+import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, equipFrame, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getInventory, useItem } from '../util/items.js';
@@ -47,7 +47,7 @@ export const doUseProtectCard = async (req, res) => {
 
 // GET /growth/weeklyReport —— 实时生成当前用户本周周报(供前端随时「查看大图」,不发通知)
 export const getWeeklyReport = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  if (!ensureUserOrAdminPolicy(req, res, ['read'])) return;
   try {
     const report = await buildWeeklyReport(req.user.id, req.user.role);
     res.send(resultData(report));
@@ -326,7 +326,7 @@ export const doClaimWeekly = async (req, res) => {
 
 // GET /growth/points/log —— 当前用户积分流水(分页)
 export const getMyPointsLog = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  if (!ensureUserOrAdminPolicy(req, res, ['read'])) return;
   try {
     const limit = Number(req.query?.limit) || 30;
     const offset = Number(req.query?.offset) || 0;

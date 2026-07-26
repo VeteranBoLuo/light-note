@@ -39,21 +39,29 @@
         <div class="item-main">
           <div class="item-name-row">
             <span class="item-name">{{ it.name }}</span>
-            <span class="item-qty" :class="{ zero: it.qty < 1 }">{{ it.qty > 0 ? '×' + it.qty : t('growth.itemEmptyQty') }}</span>
+            <span class="item-qty" :class="{ zero: it.qty < 1 }">{{
+              it.qty > 0 ? '×' + it.qty : t('growth.itemEmptyQty')
+            }}</span>
           </div>
           <p class="item-desc">{{ it.desc }}</p>
         </div>
         <div class="item-action">
           <!-- AI 加油包:直接使用(加今日额度) -->
-          <BButton v-if="it.action === 'use'" class="inv-btn" :disabled="it.qty < 1 || usingId === it.id" @click="onUse(it)">
+          <BButton
+            v-if="it.action === 'use'"
+            class="inv-btn"
+            :disabled="readOnly || it.qty < 1 || usingId === it.id"
+            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+            @click="onUse(it)"
+          >
             {{ usingId === it.id ? t('growth.itemUsing') : t('growth.itemUse') }}
           </BButton>
           <!-- 补签卡:补回最近 3 个自然日内的漏签（默认补最近一天） -->
           <BButton
             v-else-if="it.action === 'makeup'"
             class="inv-btn"
-            :disabled="it.qty < 1 || !canMakeup || makingUp"
-            :title="!canMakeup ? t('growth.itemMakeupHint') : ''"
+            :disabled="readOnly || it.qty < 1 || !canMakeup || makingUp"
+            :title="readOnly ? t('growth.adminContextActionUnavailable') : !canMakeup ? t('growth.itemMakeupHint') : ''"
             @click="onMakeup"
           >
             {{ t('growth.itemGoMakeup') }}
@@ -75,6 +83,8 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const { t, locale } = useI18n();
+  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const readOnly = computed(() => props.readOnly);
   const { inventory, growth, loadInventory, loadDashboard, useItem, useProtectCard } = useGrowth();
   const inv = inventory;
   const makeupDate = computed(() => growth.value?.makeupDays?.[0] || null);
@@ -93,7 +103,7 @@
   }
 
   async function onUse(it: InventoryItem) {
-    if (usingId.value) return;
+    if (readOnly.value || usingId.value) return;
     usingId.value = it.id;
     try {
       const res = await useItem(it.id);
@@ -113,7 +123,7 @@
 
   function onMakeup() {
     const date = makeupDate.value;
-    if (makingUp.value || !date) return;
+    if (readOnly.value || makingUp.value || !date) return;
     Alert.alert({
       title: t('growth.protectCardConfirmTitle'),
       content: t('growth.protectCardConfirmContent', { date: formatDate(date) }),
@@ -122,6 +132,7 @@
   }
 
   async function performMakeup(date: string) {
+    if (readOnly.value) return;
     makingUp.value = true;
     try {
       const res = await useProtectCard(date);

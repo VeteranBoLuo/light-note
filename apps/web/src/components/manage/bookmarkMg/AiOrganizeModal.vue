@@ -3,20 +3,28 @@
     <div class="aio">
       <!-- 确认额度 -->
       <template v-if="step === 'confirm'">
-        <p class="aio-hint">{{ resourceType === 'note' ? $t('bookmarkMg.aiOrganizeIntroNote') : $t('bookmarkMg.aiOrganizeIntro') }}</p>
+        <p class="aio-hint">{{
+          resourceType === 'note' ? $t('bookmarkMg.aiOrganizeIntroNote') : $t('bookmarkMg.aiOrganizeIntro')
+        }}</p>
         <div v-if="quoteLoading" class="aio-center aio-muted">…</div>
         <template v-else-if="quote">
-          <div v-if="quote.candidateTotal === 0" class="aio-center aio-muted">{{ $t('bookmarkMg.aiOrganizeNone') }}</div>
+          <div v-if="quote.candidateTotal === 0" class="aio-center aio-muted">{{
+            $t('bookmarkMg.aiOrganizeNone')
+          }}</div>
           <template v-else>
             <ul class="aio-stat">
               <li>{{ $t('bookmarkMg.aiOrganizeCand', { n: quote.candidateTotal }) }}</li>
               <li>
                 {{ $t('bookmarkMg.aiOrganizeThisRunFree', { n: quote.batchCap }) }}
-                <span v-if="quote.candidateTotal > quote.batchCap" class="aio-muted"> · {{ $t('bookmarkMg.aiOrganizeBatchHint') }}</span>
+                <span v-if="quote.candidateTotal > quote.batchCap" class="aio-muted">
+                  · {{ $t('bookmarkMg.aiOrganizeBatchHint') }}</span
+                >
               </li>
             </ul>
             <div class="aio-actions">
-              <BButton type="primary" :disabled="!quote.canRun" @click="run">{{ $t('bookmarkMg.aiOrganizeStart') }}</BButton>
+              <BButton type="primary" :disabled="!quote.canRun" @click="run">{{
+                $t('bookmarkMg.aiOrganizeStart')
+              }}</BButton>
             </div>
           </template>
         </template>
@@ -30,6 +38,9 @@
 
       <!-- 复审 -->
       <template v-else-if="step === 'review'">
+        <div v-if="isReadonlyAdminContext" class="aio-admin-notice">
+          {{ $t('bookmarkMg.aiOrganizeReadonlyNotice') }}
+        </div>
         <div class="aio-review-head">
           <span>{{ $t('bookmarkMg.aiOrganizeReview', { n: chosenCount }) }}</span>
           <BCheckbox v-if="resourceType === 'bookmark'" v-model:checked="fillMeta" class="aio-fill">
@@ -62,12 +73,19 @@
               >
                 {{ nt }}
               </BButton>
-              <span v-if="!s.matchedTags.length && !s.newTags.length" class="aio-muted">{{ $t('bookmarkMg.aiOrganizeNoTag') }}</span>
+              <span v-if="!s.matchedTags.length && !s.newTags.length" class="aio-muted">{{
+                $t('bookmarkMg.aiOrganizeNoTag')
+              }}</span>
             </div>
           </div>
         </div>
         <div class="aio-actions">
-          <BButton type="primary" :loading="applying" :disabled="applying || !chosenCount" @click="apply">
+          <BButton
+            type="primary"
+            :loading="applying"
+            :disabled="isReadonlyAdminContext || applying || !chosenCount"
+            @click="apply"
+          >
             {{ $t('bookmarkMg.aiOrganizeApply', { n: chosenCount }) }}
           </BButton>
         </div>
@@ -94,10 +112,13 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { useUserStore } from '@/store';
 
   const visible = defineModel<boolean>('visible');
   const props = defineProps<{ initType?: 'bookmark' | 'note' }>();
   const emit = defineEmits<{ (e: 'applied'): void }>();
+  const user = useUserStore();
+  const isReadonlyAdminContext = computed(() => user.adminContext?.mode === 'readonly');
 
   const resourceType = ref<'bookmark' | 'note'>('bookmark');
 
@@ -134,7 +155,10 @@
   async function loadQuote() {
     quoteLoading.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/quote', { scope: 'untagged', resourceType: resourceType.value });
+      const res = await apiBasePost('/api/bookmark/ai/organize/quote', {
+        scope: 'untagged',
+        resourceType: resourceType.value,
+      });
       if (res?.status === 200) quote.value = res.data;
     } finally {
       quoteLoading.value = false;
@@ -145,7 +169,10 @@
     if (!quote.value?.batchIds?.length) return;
     step.value = 'running';
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/run', { ids: quote.value.batchIds, resourceType: resourceType.value });
+      const res = await apiBasePost('/api/bookmark/ai/organize/run', {
+        ids: quote.value.batchIds,
+        resourceType: resourceType.value,
+      });
       if (res?.status === 200 && res.data?.ok) {
         const processed = Number(res.data?.processed || 0);
         recordOperation({
@@ -175,7 +202,7 @@
   }
 
   async function apply() {
-    if (applying.value) return;
+    if (isReadonlyAdminContext.value || applying.value) return;
     const items = suggestions.value
       .filter((s) => s.include)
       .map((s) => ({
@@ -239,6 +266,16 @@
     width: 560px;
     max-width: 88vw;
     box-sizing: border-box;
+  }
+  .aio-admin-notice {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--workbench-subcard-bg));
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.55;
   }
   .aio-hint {
     margin: 0 0 12px;

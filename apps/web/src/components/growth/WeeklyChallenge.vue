@@ -15,9 +15,15 @@
           <div class="wc-bar"><div class="wc-fill" :style="{ width: pct(c) + '%' }"></div></div>
         </div>
         <div class="wc-action">
-          <button v-if="c.claimable" class="wc-claim" :disabled="claimingKey === c.key" @click="onClaim(c)">
+          <BButton
+            v-if="c.claimable"
+            class="wc-claim"
+            :disabled="readOnly || claimingKey === c.key"
+            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+            @click="onClaim(c)"
+          >
             🪙 {{ t('growth.weeklyClaim', { n: c.reward }) }}
-          </button>
+          </BButton>
           <span v-else-if="c.claimed" class="wc-claimed">✓ {{ t('growth.weeklyClaimed') }}</span>
           <span v-else class="wc-reward">🪙 {{ c.reward }}</span>
         </div>
@@ -32,8 +38,10 @@
   import { useGrowth, type WeeklyChallenge } from '@/composables/useGrowth.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const { t, te } = useI18n();
+  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const { weekly, loadWeekly, claimWeekly } = useGrowth();
 
   const ICONS: Record<string, string> = { wk_bookmark: '📚', wk_note: '📝', wk_checkin: '📅' };
@@ -49,7 +57,7 @@
 
   const claimingKey = ref<string | null>(null);
   async function onClaim(c: WeeklyChallenge) {
-    if (claimingKey.value) return;
+    if (props.readOnly || claimingKey.value) return;
     claimingKey.value = c.key;
     try {
       const res = await claimWeekly(c.key);

@@ -49,7 +49,13 @@
           <span class="gc-points">· 🪙 {{ (g.points || 0).toLocaleString('en-US') }} {{ t('growth.points') }}</span>
         </div>
       </div>
-      <BButton class="gc-checkin" :class="{ done: g.checkedInToday }" :disabled="g.checkedInToday || checking" @click="onCheckin">
+      <BButton
+        class="gc-checkin"
+        :class="{ done: g.checkedInToday }"
+        :disabled="readOnly || g.checkedInToday || checking"
+        :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+        @click="onCheckin"
+      >
         {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
       </BButton>
     </div>
@@ -105,6 +111,7 @@
       :checked-in-today="g.checkedInToday"
       :streak="g.streak"
       :makeup-days="g.makeupDays || []"
+      :read-only="readOnly"
       @makeup="onUseCard"
     />
     </div>
@@ -131,6 +138,8 @@
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
 
   const { t } = useI18n();
+  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const readOnly = computed(() => props.readOnly);
   const { growth: g, dashboard, load, loadDashboard, doCheckin, useProtectCard, markRead } = useGrowth();
   const emit = defineEmits<{ (event: 'activity-changed'): void }>();
   const checking = ref(false);
@@ -144,7 +153,7 @@
   }
 
   async function onCheckin() {
-    if (checking.value || g.value?.checkedInToday) return;
+    if (readOnly.value || checking.value || g.value?.checkedInToday) return;
     checking.value = true;
     try {
       const res = await doCheckin();
@@ -158,11 +167,17 @@
           } else {
             message.success(t('growth.checkinSuccess', { n: res.data.expGained }));
           }
-          recordOperation({ module: '成长', operation: `每日签到（连续 ${res.data.streak} 天，经验+${res.data.expGained}、积分+${pts}）` });
+          recordOperation({
+            module: '成长',
+            operation: `每日签到（连续 ${res.data.streak} 天，经验+${res.data.expGained}、积分+${pts}）`,
+          });
           if (res.data.leveledUp && res.data.growth) {
             lvUp.value = { level: res.data.growth.level, name: res.data.growth.name }; // 触发升级庆祝动画
             markRead(); // 签到升级当场已看动画 → 立即标记已读,避免刷新页面重复弹
-            recordOperation({ module: '成长', operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}` });
+            recordOperation({
+              module: '成长',
+              operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}`,
+            });
           }
           // 连签里程碑大奖:额外弹一条庆祝并记录(奖励含积分/永久存储/补签卡)
           if (res.data.milestone) {
@@ -221,7 +236,7 @@
 
   const usingCard = ref(false);
   async function onUseCard(date: string) {
-    if (usingCard.value) return;
+    if (readOnly.value || usingCard.value) return;
     usingCard.value = true;
     try {
       const res = await useProtectCard(date);

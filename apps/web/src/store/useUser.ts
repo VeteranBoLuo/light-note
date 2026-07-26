@@ -25,6 +25,7 @@ interface UserInfo {
     mode: 'readonly' | 'maintain';
     issuedAt: string;
     expiresAt: string;
+    capabilities: string[];
   } | null;
   headPicture: string;
   email: string;

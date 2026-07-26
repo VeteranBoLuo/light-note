@@ -1,6 +1,6 @@
 import pool from '../db/index.js';
-import nodeMail, { smtpUser } from './nodemailer.js';
 import { createNotification } from './notification.js';
+import { sendTrackedEmail } from './emailDelivery.js';
 
 const POLL_INTERVAL_MS = 60 * 1000;
 const BATCH_SIZE = 50;
@@ -75,10 +75,14 @@ async function deliverReminder(reminder) {
     const dueText = reminder.todo.dueAt ? `\n截止时间：${String(reminder.todo.dueAt)}` : '';
     const description = reminder.todo.description ? `\n说明：${String(reminder.todo.description).slice(0, 1000)}` : '';
     const siteUrl = String(process.env.SITE_URL || 'https://boluo66.top').replace(/\/$/, '');
-    await nodeMail.sendMail({
-      from: `"轻笺"<${smtpUser}>`,
-      to: reminder.targetEmail,
+    await sendTrackedEmail({
+      emailType: 'todo_reminder',
+      userId: reminder.userId,
+      recipient: reminder.targetEmail,
       subject: `轻笺待办提醒：${String(reminder.todo.title || '').slice(0, 120)}`,
+      businessType: 'todo',
+      businessId: reminder.todoId,
+      attemptNo: Number(reminder.retryCount || 0) + 1,
       text: `你设置的待办提醒已到时间。\n\n待办：${String(reminder.todo.title || '')}${description}${dueText}\n\n打开轻笺“待处理”查看：${siteUrl}${link}`,
     });
     return;

@@ -112,9 +112,16 @@ export async function getBookmarkSnapshot(userId, bookmarkId) {
 // AI 一键摘要:基于已存快照正文经统一 AI Gateway 生成摘要,缓存到 summary 列。
 // 无快照先归档;已有摘要且非 force 直接返回缓存(省 token)。正文截断到 ~6000 字喂模型。
 const SUMMARY_INPUT_LIMIT = 6000;
-export async function summarizeBookmark(userId, bookmarkId, { force = false, trace, governance } = {}) {
+export async function summarizeBookmark(
+  userId,
+  bookmarkId,
+  { force = false, trace, governance, persist = true, archiveIfMissing = persist } = {},
+) {
   let snap = await getBookmarkSnapshot(userId, bookmarkId);
   if (!snap || !snap.content) {
+    if (!archiveIfMissing) {
+      return { ok: false, reason: 'no_snapshot', msg: '无可用正文' };
+    }
     const arc = await archiveBookmark(userId, bookmarkId); // 无快照先抓一次
     if (!arc.ok) return { ok: false, reason: arc.reason || 'no_snapshot', msg: arc.msg || '无可用正文' };
     snap = await getBookmarkSnapshot(userId, bookmarkId);
@@ -155,9 +162,11 @@ export async function summarizeBookmark(userId, bookmarkId, { force = false, tra
     return { ok: false, reason: 'ai_error', msg: 'AI 服务暂时不可用,请稍后再试' };
   }
   if (!summary) return { ok: false, reason: 'empty', msg: '摘要生成失败' };
-  await pool.query(
-    'UPDATE bookmark_snapshot SET summary = ?, summary_at = CURRENT_TIMESTAMP WHERE bookmark_id = ? AND user_id = ?',
-    [summary, bookmarkId, userId],
-  );
+  if (persist) {
+    await pool.query(
+      'UPDATE bookmark_snapshot SET summary = ?, summary_at = CURRENT_TIMESTAMP WHERE bookmark_id = ? AND user_id = ?',
+      [summary, bookmarkId, userId],
+    );
+  }
   return { ok: true, summary, cached: false };
 }

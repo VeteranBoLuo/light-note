@@ -2,191 +2,244 @@
   <div class="nc-page">
     <header class="nc-hero">
       <div>
-        <h1 class="nc-title">通知中心</h1>
-        <p class="nc-sub">统一下发系统通知，查看送达与已读，支持撤回</p>
+        <h1 class="nc-title">{{ t('notificationAdmin.inApp.title') }}</h1>
+        <p class="nc-sub">{{ pageSubtitle }}</p>
       </div>
-      <button class="nc-refresh" @click="refreshAll" :disabled="loading">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M23 4v6h-6M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-        </svg>
-        刷新
-      </button>
+      <BButton class="nc-refresh" :loading="activeTab === 'in_app' && loading" @click="refreshActive">
+        {{ t('notificationAdmin.refresh') }}
+      </BButton>
     </header>
 
-    <!-- 概览 -->
-    <div class="nc-stats">
-      <div class="nc-stat">
-        <span class="nc-stat-icon">📨</span>
-        <b class="nc-stat-val">{{ stats.totalSent }}</b>
-        <span class="nc-stat-label">累计下发</span>
-      </div>
-      <div class="nc-stat">
-        <span class="nc-stat-icon">👀</span>
-        <b class="nc-stat-val">{{ stats.totalRead }}</b>
-        <span class="nc-stat-label">已读条数</span>
-      </div>
-      <div class="nc-stat">
-        <span class="nc-stat-icon">🗂️</span>
-        <b class="nc-stat-val">{{ stats.batches }}</b>
-        <span class="nc-stat-label">发送批次</span>
-      </div>
-      <div class="nc-stat">
-        <span class="nc-stat-icon">↩️</span>
-        <b class="nc-stat-val">{{ stats.totalRecalled }}</b>
-        <span class="nc-stat-label">已撤回</span>
-      </div>
-    </div>
+    <BTabs v-model:active-tab="activeTab" :options="tabOptions" variant="segment" class="nc-tabs" />
 
-    <div class="nc-body">
-      <!-- 发送 -->
-      <section class="nc-card nc-compose">
-        <h2 class="nc-card-title">发送通知</h2>
-
-        <div class="nc-field">
-          <label class="nc-label">接收人</label>
-          <div class="nc-seg">
-            <button v-for="m in targetModes" :key="m.v" class="nc-seg-btn" :class="{ active: targetMode === m.v }" @click="targetMode = m.v">
-              {{ m.label }}
-            </button>
-          </div>
+    <template v-if="activeTab === 'in_app'">
+      <!-- 概览 -->
+      <div class="nc-stats">
+        <div class="nc-stat">
+          <span class="nc-stat-icon">📨</span>
+          <b class="nc-stat-val">{{ stats.totalSent }}</b>
+          <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.sent') }}</span>
         </div>
+        <div class="nc-stat">
+          <span class="nc-stat-icon">👀</span>
+          <b class="nc-stat-val">{{ stats.totalRead }}</b>
+          <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.read') }}</span>
+        </div>
+        <div class="nc-stat">
+          <span class="nc-stat-icon">🗂️</span>
+          <b class="nc-stat-val">{{ stats.batches }}</b>
+          <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.batches') }}</span>
+        </div>
+        <div class="nc-stat">
+          <span class="nc-stat-icon">↩️</span>
+          <b class="nc-stat-val">{{ stats.totalRecalled }}</b>
+          <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.recalled') }}</span>
+        </div>
+      </div>
 
-        <!-- 指定用户:搜索 + 多选 -->
-        <div v-if="targetMode === 'users'" class="nc-field">
-          <label class="nc-label">选择用户</label>
-          <div class="nc-picker">
-            <div v-if="selected.length" class="nc-chips">
-              <span v-for="u in selected" :key="u.id" class="nc-chip">
-                {{ u.alias || u.email }}
-                <i class="nc-chip-x" @click="removeUser(u.id)">×</i>
-              </span>
-            </div>
-            <b-input v-model:value="searchKey" placeholder="搜索昵称 / 邮箱" @input="onSearch" />
-            <div v-if="searchKey && results.length" class="nc-results">
-              <div
-                v-for="u in results"
-                :key="u.id"
-                class="nc-result"
-                :class="{ picked: isPicked(u.id) }"
-                @click="toggleUser(u)"
+      <div class="nc-body">
+        <!-- 发送 -->
+        <section class="nc-card nc-compose">
+          <h2 class="nc-card-title">{{ t('notificationAdmin.inApp.compose.title') }}</h2>
+
+          <div class="nc-field">
+            <label class="nc-label">{{ t('notificationAdmin.inApp.compose.recipient') }}</label>
+            <div class="nc-seg">
+              <BButton
+                v-for="m in targetModes"
+                :key="m.v"
+                class="nc-seg-btn"
+                :class="{ active: targetMode === m.v }"
+                @click="targetMode = m.v"
               >
-                <span class="nc-result-name">{{ u.alias || '未命名' }}</span>
-                <span class="nc-result-mail">{{ u.email }}</span>
-                <span v-if="isPicked(u.id)" class="nc-result-tick">✓</span>
+                {{ m.label }}
+              </BButton>
+            </div>
+          </div>
+
+          <!-- 指定用户:搜索 + 多选 -->
+          <div v-if="targetMode === 'users'" class="nc-field">
+            <label class="nc-label">{{ t('notificationAdmin.inApp.compose.chooseUsers') }}</label>
+            <div class="nc-picker">
+              <div v-if="selected.length" class="nc-chips">
+                <span v-for="u in selected" :key="u.id" class="nc-chip">
+                  {{ u.alias || u.email }}
+                  <i class="nc-chip-x" @click="removeUser(u.id)">×</i>
+                </span>
+              </div>
+              <b-input
+                v-model:value="searchKey"
+                :placeholder="t('notificationAdmin.inApp.compose.searchUsers')"
+                @input="onSearch"
+              />
+              <div v-if="searchKey && results.length" class="nc-results">
+                <div
+                  v-for="u in results"
+                  :key="u.id"
+                  class="nc-result"
+                  :class="{ picked: isPicked(u.id) }"
+                  @click="toggleUser(u)"
+                >
+                  <span class="nc-result-name">{{ u.alias || t('notificationAdmin.inApp.compose.unnamed') }}</span>
+                  <span class="nc-result-mail">{{ u.email }}</span>
+                  <span v-if="isPicked(u.id)" class="nc-result-tick">✓</span>
+                </div>
+              </div>
+              <div v-else-if="searchKey && !searching && !results.length" class="nc-results-empty">
+                {{ t('notificationAdmin.inApp.compose.noUsers') }}
               </div>
             </div>
-            <div v-else-if="searchKey && !searching && !results.length" class="nc-results-empty">无匹配用户</div>
           </div>
-        </div>
 
-        <div class="nc-field">
-          <label class="nc-label">类型</label>
-          <b-select v-model:value="form.type" :options="typeOptions" mode="single" style="width: 160px" />
-        </div>
+          <div class="nc-field">
+            <label class="nc-label">{{ t('notificationAdmin.inApp.compose.type') }}</label>
+            <b-select v-model:value="form.type" :options="typeOptions" mode="single" style="width: 160px" />
+          </div>
 
-        <div class="nc-field">
-          <label class="nc-label">标题</label>
-          <b-input v-model:value="form.title" placeholder="通知标题(必填)" :maxlength="60" />
-        </div>
+          <div class="nc-field">
+            <label class="nc-label">{{ t('notificationAdmin.inApp.compose.subject') }}</label>
+            <b-input
+              v-model:value="form.title"
+              :placeholder="t('notificationAdmin.inApp.compose.subjectPlaceholder')"
+              :maxlength="60"
+            />
+          </div>
 
-        <div class="nc-field">
-          <label class="nc-label">内容</label>
-          <textarea v-model="form.content" class="nc-textarea" rows="4" placeholder="通知内容(可选)" maxlength="500"></textarea>
-        </div>
+          <div class="nc-field">
+            <label class="nc-label">{{ t('notificationAdmin.inApp.compose.content') }}</label>
+            <BInput
+              v-model:value="form.content"
+              type="textarea"
+              :rows="4"
+              :placeholder="t('notificationAdmin.inApp.compose.contentPlaceholder')"
+              :maxlength="500"
+            />
+          </div>
 
-        <div class="nc-field">
-          <label class="nc-label">跳转链接</label>
-          <b-input v-model:value="form.link" placeholder="点击通知后跳转的站内路径,如 /growth(可选)" />
-        </div>
+          <div class="nc-field">
+            <label class="nc-label">{{ t('notificationAdmin.inApp.compose.link') }}</label>
+            <b-input v-model:value="form.link" :placeholder="t('notificationAdmin.inApp.compose.linkPlaceholder')" />
+          </div>
 
-        <div class="nc-compose-foot">
-          <span class="nc-target-hint">{{ targetHint }}</span>
-          <button class="nc-send" :disabled="sending" @click="onSend">{{ sending ? '发送中…' : '发送' }}</button>
-        </div>
-      </section>
+          <div class="nc-compose-foot">
+            <span class="nc-target-hint">{{ targetHint }}</span>
+            <BButton class="nc-send" type="primary" :loading="sending" @click="onSend">
+              {{ sending ? t('notificationAdmin.inApp.compose.sending') : t('notificationAdmin.inApp.compose.send') }}
+            </BButton>
+          </div>
+        </section>
 
-      <!-- 记录 -->
-      <section class="nc-card nc-history">
-        <h2 class="nc-card-title">发送记录</h2>
-        <BTable
-          :data="history"
-          :columns="columns"
-          :pagination="true"
-          :total="total"
-          :current-page="currentPage"
-          :page-size="pageSize"
-          :row-clickable="true"
-          @row-click="onRowClick"
-          @page-change="onPageChange"
-          @size-change="onSizeChange"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'title'">
-              <div class="nc-h-title" :class="{ recalled: Number(asBatch(record).recalled) === 1 }">
-                {{ asBatch(record).title }}
-              </div>
-              <div v-if="asBatch(record).content" class="nc-h-content">{{ asBatch(record).content }}</div>
-            </template>
-            <template v-else-if="column.key === 'type'">
-              <span class="nc-type" :class="`t-${asBatch(record).type}`">{{
-                asBatch(record).type === 'system' ? '系统' : '其他'
-              }}</span>
-            </template>
-            <template v-else-if="column.key === 'readRate'">
-              <div class="nc-rate">
-                <div class="nc-rate-bar">
-                  <div class="nc-rate-fill" :style="{ width: readPct(asBatch(record)) + '%' }"></div>
+        <!-- 记录 -->
+        <section class="nc-card nc-history">
+          <h2 class="nc-card-title">{{ t('notificationAdmin.inApp.history.title') }}</h2>
+          <BTable
+            :data="history"
+            :columns="columns"
+            :pagination="true"
+            :total="total"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            :row-clickable="true"
+            @row-click="onRowClick"
+            @page-change="onPageChange"
+            @size-change="onSizeChange"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'title'">
+                <div class="nc-h-title" :class="{ recalled: Number(asBatch(record).recalled) === 1 }">
+                  {{ asBatch(record).title }}
                 </div>
-                <span class="nc-rate-num">{{ asBatch(record).readCount }}/{{ asBatch(record).recipients }}</span>
-              </div>
+                <div v-if="asBatch(record).content" class="nc-h-content">{{ asBatch(record).content }}</div>
+              </template>
+              <template v-else-if="column.key === 'type'">
+                <span class="nc-type" :class="`t-${asBatch(record).type}`">{{
+                  asBatch(record).type === 'system'
+                    ? t('notificationAdmin.inApp.compose.system')
+                    : t('notificationAdmin.inApp.compose.other')
+                }}</span>
+              </template>
+              <template v-else-if="column.key === 'readRate'">
+                <div class="nc-rate">
+                  <div class="nc-rate-bar">
+                    <div class="nc-rate-fill" :style="{ width: readPct(asBatch(record)) + '%' }"></div>
+                  </div>
+                  <span class="nc-rate-num">{{ asBatch(record).readCount }}/{{ asBatch(record).recipients }}</span>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'createTime'">
+                <span class="nc-time">{{ fmtTime(asBatch(record).createTime) }}</span>
+              </template>
+              <template v-else-if="column.key === 'operation'">
+                <BSpace class="nc-actions" :size="6" @click.stop>
+                  <span v-if="Number(asBatch(record).recalled) === 1" class="nc-recalled-tag">
+                    {{ t('notificationAdmin.inApp.history.recalled') }}
+                  </span>
+                  <BButton v-else class="nc-recall-btn" size="small" @click="onRecall(asBatch(record))">
+                    {{ t('notificationAdmin.inApp.history.recall') }}
+                  </BButton>
+                  <BButton
+                    class="nc-delete-btn"
+                    type="danger"
+                    size="small"
+                    :loading="deletingBatchId === asBatch(record).batchId"
+                    :disabled="Boolean(deletingBatchId)"
+                    @click="onDelete(asBatch(record))"
+                  >
+                    {{ t('notificationAdmin.delete') }}
+                  </BButton>
+                </BSpace>
+              </template>
             </template>
-            <template v-else-if="column.key === 'createTime'">
-              <span class="nc-time">{{ fmtTime(asBatch(record).createTime) }}</span>
-            </template>
-            <template v-else-if="column.key === 'operation'">
-              <BSpace class="nc-actions" :size="6" @click.stop>
-                <span v-if="Number(asBatch(record).recalled) === 1" class="nc-recalled-tag">已撤回</span>
-                <BButton v-else class="nc-recall-btn" size="small" @click="onRecall(asBatch(record))">撤回</BButton>
-                <BButton
-                  class="nc-delete-btn"
-                  type="danger"
-                  size="small"
-                  :loading="deletingBatchId === asBatch(record).batchId"
-                  :disabled="Boolean(deletingBatchId)"
-                  @click="onDelete(asBatch(record))"
-                >
-                  {{ t('notificationAdmin.delete') }}
-                </BButton>
-              </BSpace>
-            </template>
-          </template>
-        </BTable>
-      </section>
-    </div>
+          </BTable>
+        </section>
+      </div>
 
-    <BModal v-model:visible="recipientsVisible" :title="recipientsTitle" width="min(560px, 94vw)" :show-footer="false">
-      <div class="nc-recipients">
-        <div class="nc-recipients-head">
-          <span class="nc-recipients-count">已读 <b>{{ recipientsRead }}</b> / 共 <b>{{ recipientsList.length }}</b> 人</span>
-        </div>
-        <div v-if="recipientsLoading" class="nc-recipients-empty">加载中…</div>
-        <div v-else-if="!recipientsList.length" class="nc-recipients-empty">暂无接收记录</div>
-        <div v-else class="nc-recipients-list">
-          <div v-for="r in recipientsList" :key="r.userId" class="nc-recipient">
-            <span class="nc-recipient-main">
-              <span class="nc-recipient-name">{{ r.alias || '未命名' }}</span>
-              <span class="nc-recipient-mail">{{ r.email || r.userId }}</span>
-            </span>
-            <span class="nc-recipient-meta">
-              <span class="nc-recipient-status" :class="Number(r.isRead) === 1 ? 'is-read' : 'is-unread'">
-                {{ Number(r.isRead) === 1 ? '已读' : '未读' }}
+      <BModal
+        v-model:visible="recipientsVisible"
+        :title="recipientsTitle"
+        width="min(560px, 94vw)"
+        :show-footer="false"
+      >
+        <div class="nc-recipients">
+          <div class="nc-recipients-head">
+            <span class="nc-recipients-count">{{
+              t('notificationAdmin.inApp.recipients.readCount', {
+                read: recipientsRead,
+                total: recipientsList.length,
+              })
+            }}</span>
+          </div>
+          <div v-if="recipientsLoading" class="nc-recipients-empty">
+            {{ t('notificationAdmin.inApp.recipients.loading') }}
+          </div>
+          <div v-else-if="!recipientsList.length" class="nc-recipients-empty">
+            {{ t('notificationAdmin.inApp.recipients.empty') }}
+          </div>
+          <div v-else class="nc-recipients-list">
+            <div v-for="r in recipientsList" :key="r.userId" class="nc-recipient">
+              <span class="nc-recipient-main">
+                <span class="nc-recipient-name">{{ r.alias || t('notificationAdmin.inApp.compose.unnamed') }}</span>
+                <span class="nc-recipient-mail">{{ r.email || r.userId }}</span>
               </span>
-              <span v-if="Number(r.isRead) === 1 && r.readTime" class="nc-recipient-time">{{ fmtTime(r.readTime) }}</span>
-            </span>
+              <span class="nc-recipient-meta">
+                <span class="nc-recipient-status" :class="Number(r.isRead) === 1 ? 'is-read' : 'is-unread'">
+                  {{
+                    Number(r.isRead) === 1
+                      ? t('notificationAdmin.inApp.recipients.read')
+                      : t('notificationAdmin.inApp.recipients.unread')
+                  }}
+                </span>
+                <span v-if="Number(r.isRead) === 1 && r.readTime" class="nc-recipient-time">{{
+                  fmtTime(r.readTime)
+                }}</span>
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    </BModal>
+      </BModal>
+    </template>
+
+    <EmailDeliveryPanel v-else ref="emailPanelRef" />
   </div>
 </template>
 
@@ -201,11 +254,21 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import EmailDeliveryPanel from './EmailDeliveryPanel.vue';
 
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const activeTab = ref<'in_app' | 'email'>('in_app');
+  const emailPanelRef = ref<InstanceType<typeof EmailDeliveryPanel> | null>(null);
+  const tabOptions = computed(() => [
+    { key: 'in_app', label: t('notificationAdmin.tabs.inApp') },
+    { key: 'email', label: t('notificationAdmin.tabs.email') },
+  ]);
+  const pageSubtitle = computed(() =>
+    activeTab.value === 'email' ? t('notificationAdmin.email.subtitle') : t('notificationAdmin.inApp.subtitle'),
+  );
 
   interface UserLite {
     id: string;
@@ -236,15 +299,15 @@
   const stats = ref({ totalSent: 0, totalRead: 0, batches: 0, totalRecalled: 0 });
 
   // —— 发送表单 ——
-  const targetModes: { v: 'all' | 'users'; label: string }[] = [
-    { v: 'all', label: '全体用户' },
-    { v: 'users', label: '指定用户' },
-  ];
+  const targetModes = computed<{ v: 'all' | 'users'; label: string }[]>(() => [
+    { v: 'all', label: t('notificationAdmin.inApp.compose.allUsers') },
+    { v: 'users', label: t('notificationAdmin.inApp.compose.selectedUsers') },
+  ]);
   const targetMode = ref<'all' | 'users'>('all');
-  const typeOptions = [
-    { value: 'system', label: '系统通知' },
-    { value: 'other', label: '其他' },
-  ];
+  const typeOptions = computed(() => [
+    { value: 'system', label: t('notificationAdmin.inApp.compose.system') },
+    { value: 'other', label: t('notificationAdmin.inApp.compose.other') },
+  ]);
   const form = ref<{ type: string; title: string; content: string; link: string }>({
     type: 'system',
     title: '',
@@ -294,8 +357,10 @@
   }
 
   const targetHint = computed(() => {
-    if (targetMode.value === 'all') return '将发送给全体注册用户';
-    return selected.value.length ? `已选 ${selected.value.length} 位用户` : '请先选择接收用户';
+    if (targetMode.value === 'all') return t('notificationAdmin.inApp.compose.allHint');
+    return selected.value.length
+      ? t('notificationAdmin.inApp.compose.selectedHint', { count: selected.value.length })
+      : t('notificationAdmin.inApp.compose.selectHint');
   });
 
   const sending = ref(false);
@@ -314,8 +379,7 @@
       .sendNotification(payload)
       .then((res) => {
         if (res.status === 200) {
-          message.success(`已发送给 ${res.data?.sent ?? 0} 人`);
-          recordOperation({ module: '通知中心', operation: `发送通知【${payload.title}】给 ${res.data?.sent ?? 0} 人` });
+          message.success(t('notificationAdmin.inApp.compose.sent', { count: res.data?.sent ?? 0 }));
           // 重置内容,保留类型/模式
           form.value.title = '';
           form.value.content = '';
@@ -333,17 +397,17 @@
   function onSend() {
     if (sending.value) return;
     if (!form.value.title.trim()) {
-      message.warning('请填写通知标题');
+      message.warning(t('notificationAdmin.inApp.compose.subjectRequired'));
       return;
     }
     if (targetMode.value === 'users' && !selected.value.length) {
-      message.warning('请先选择接收用户');
+      message.warning(t('notificationAdmin.inApp.compose.selectHint'));
       return;
     }
     if (targetMode.value === 'all') {
       Alert.alert({
-        title: '确认群发',
-        content: '将向全体注册用户发送该通知，确认发送？',
+        title: t('notificationAdmin.inApp.compose.confirmTitle'),
+        content: t('notificationAdmin.inApp.compose.confirmContent'),
         onOk() {
           doSend();
         },
@@ -358,13 +422,13 @@
   const total = ref(0);
   const currentPage = ref(1);
   const pageSize = ref(10);
-  const columns = [
-    { title: '通知', key: 'title', width: '1fr' },
-    { title: '类型', key: 'type', width: '72px' },
-    { title: '已读率', key: 'readRate', width: '150px' },
-    { title: '发送时间', key: 'createTime', width: '160px' },
-    { title: '操作', key: 'operation', width: '138px' },
-  ];
+  const columns = computed(() => [
+    { title: t('notificationAdmin.inApp.history.notification'), key: 'title', width: '1fr' },
+    { title: t('notificationAdmin.inApp.history.type'), key: 'type', width: '72px' },
+    { title: t('notificationAdmin.inApp.history.readRate'), key: 'readRate', width: '150px' },
+    { title: t('notificationAdmin.inApp.history.sentAt'), key: 'createTime', width: '160px' },
+    { title: t('notificationAdmin.inApp.history.operation'), key: 'operation', width: '138px' },
+  ]);
 
   function asBatch(record: unknown): Batch {
     return record as Batch;
@@ -377,7 +441,7 @@
     if (!ts) return '';
     const d = new Date(String(ts).replace(' ', 'T'));
     if (isNaN(d.getTime())) return String(ts);
-    return d.toLocaleString('zh-CN', { hour12: false });
+    return d.toLocaleString(locale.value === 'en-US' ? 'en-US' : 'zh-CN', { hour12: false });
   }
 
   async function loadHistory() {
@@ -400,6 +464,10 @@
     loadStats();
     loadHistory();
   }
+  function refreshActive() {
+    if (activeTab.value === 'email') emailPanelRef.value?.refresh();
+    else refreshAll();
+  }
   function onPageChange(p: number) {
     currentPage.value = p;
     loadHistory();
@@ -411,13 +479,12 @@
   }
   function onRecall(record: Batch) {
     Alert.alert({
-      title: '撤回通知',
-      content: `确认撤回「${record.title}」？撤回后所有接收者将不再看到该通知。`,
+      title: t('notificationAdmin.inApp.history.recallTitle'),
+      content: t('notificationAdmin.inApp.history.recallConfirm', { title: record.title }),
       onOk() {
         notificationApi.recallNotification(record.batchId).then((res) => {
           if (res.status === 200) {
-            message.success(`已撤回(${res.data?.recalled ?? 0} 条)`);
-            recordOperation({ module: '通知中心', operation: `撤回通知【${record.title}】` });
+            message.success(t('notificationAdmin.inApp.history.recallSuccess', { count: res.data?.recalled ?? 0 }));
             refreshAll();
           }
         });
@@ -438,7 +505,6 @@
           .then((res) => {
             if (res.status === 200) {
               message.success(t('notificationAdmin.deleted', { count: res.data?.deleted ?? 0 }));
-              recordOperation({ module: '通知中心', operation: `删除通知【${record.title}】` });
               if (history.value.length === 1 && currentPage.value > 1) currentPage.value -= 1;
               refreshAll();
             }
@@ -457,7 +523,9 @@
   const recipientsBatch = ref<Batch | null>(null);
   const recipientsRead = ref(0);
   const recipientsTitle = computed(() =>
-    recipientsBatch.value ? `接收明细 · ${recipientsBatch.value.title}` : '接收明细',
+    recipientsBatch.value
+      ? t('notificationAdmin.inApp.recipients.detailTitle', { title: recipientsBatch.value.title })
+      : t('notificationAdmin.inApp.recipients.title'),
   );
   async function openRecipients(batch: Batch) {
     recipientsBatch.value = batch;
@@ -471,7 +539,7 @@
         recipientsRead.value = Number(res.data.readCount || 0);
       }
     } catch {
-      message.warning('获取接收明细失败');
+      message.warning(t('notificationAdmin.inApp.recipients.loadFailed'));
     } finally {
       recipientsLoading.value = false;
     }
@@ -482,7 +550,6 @@
   }
 
   onMounted(() => {
-    recordOperation({ module: '通知中心', operation: '查看通知中心' });
     refreshAll();
   });
 </script>
@@ -512,6 +579,10 @@
     margin: 4px 0 0;
     font-size: 13px;
     color: var(--desc-color);
+  }
+  .nc-tabs {
+    width: max-content;
+    margin-bottom: 18px;
   }
   .nc-refresh {
     flex: 0 0 auto;
@@ -632,23 +703,6 @@
     background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 76%, #4b46cc));
     color: #fff;
   }
-  .nc-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    border-radius: 9px;
-    padding: 9px 11px;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    color: var(--text-color);
-    font-family: inherit;
-    font-size: 13px;
-    resize: vertical;
-  }
-  .nc-textarea:focus {
-    outline: none;
-    border-color: var(--primary-color);
-  }
-
   /* 用户选择 */
   .nc-picker {
     display: flex;

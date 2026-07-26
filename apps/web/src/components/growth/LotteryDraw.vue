@@ -57,16 +57,29 @@
       <BButton
         v-if="(lottery?.freeDaily || 0) > 0"
         type="success"
-        :disabled="!canFree"
+        :disabled="readOnly || !canFree"
         :loading="rolling"
+        :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
         @click="onDraw(1, true)"
       >
         {{ t('growth.lotteryFreeDraw') }} · {{ t('growth.lotteryFreeLeft', { n: lottery?.freeRemaining || 0 }) }}
       </BButton>
-      <BButton type="primary" :disabled="!canDraw(1)" :loading="rolling" @click="onDraw(1)">
+      <BButton
+        type="primary"
+        :disabled="readOnly || !canDraw(1)"
+        :loading="rolling"
+        :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+        @click="onDraw(1)"
+      >
         {{ t('growth.lotteryDrawOne') }} · 🪙 {{ lottery?.singleCost || 88 }}
       </BButton>
-      <BButton type="primary" :disabled="!canDraw(10)" :loading="rolling" @click="onDraw(10)">
+      <BButton
+        type="primary"
+        :disabled="readOnly || !canDraw(10)"
+        :loading="rolling"
+        :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+        @click="onDraw(10)"
+      >
         {{ t('growth.lotteryDrawTen') }} · 🪙 {{ lottery?.tenCost || 800 }}
       </BButton>
     </div>
@@ -76,9 +89,9 @@
     <div v-if="isVisitor" class="lt-tip">{{ t('growth.lotteryVisitorTip') }}</div>
 
     <!-- 概率公示 -->
-    <button class="lt-odds-toggle" @click="showOdds = !showOdds">
+    <BButton class="lt-odds-toggle" @click="showOdds = !showOdds">
       {{ showOdds ? t('growth.lotteryOddsHide') : t('growth.lotteryOdds') }}
-    </button>
+    </BButton>
     <div v-if="showOdds && lottery" class="lt-odds">
       <div v-for="p in lottery.pool" :key="p.id" class="lt-odds-row" :class="{ rare: p.rare }">
         <span>{{ prizeIcon(p) }} {{ prizeLabel(p) }}</span>
@@ -98,6 +111,8 @@
   import { recordOperation } from '@/api/commonApi.ts';
 
   const { t } = useI18n();
+  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const readOnly = computed(() => props.readOnly);
   const { lottery, loadLottery, draw } = useGrowth();
 
   const rolling = ref(false);
@@ -105,7 +120,8 @@
   const hitBest = ref(false);
   const showOdds = ref(false);
 
-  const isVisitor = computed(() => !useUserStore().id || useUserStore().id === 'visitor');
+  const user = useUserStore();
+  const isVisitor = computed(() => !user.id || user.id === 'visitor');
   const hasEnoughAny = computed(() => (lottery.value?.points || 0) >= (lottery.value?.singleCost || 88));
   const canFree = computed(() => !rolling.value && !isVisitor.value && (lottery.value?.freeRemaining || 0) > 0);
 
@@ -128,7 +144,7 @@
   }
 
   async function onDraw(times: number, free = false) {
-    if (free ? !canFree.value : !canDraw(times)) return;
+    if (readOnly.value || (free ? !canFree.value : !canDraw(times))) return;
     rolling.value = true;
     revealed.value = [];
     hitBest.value = false;

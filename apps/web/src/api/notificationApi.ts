@@ -39,12 +39,28 @@ export const getAdminList = (params: { currentPage?: number; pageSize?: number }
 export const recallNotification = (batchId: string) => apiBasePost('/api/notification/admin/recall', { batchId });
 
 // 后台通知中心(仅 root):删除一个批次(同时撤回并从发送记录移除)
-export const deleteAdminNotification = (batchId: string) =>
-  apiBasePost('/api/notification/admin/delete', { batchId });
+export const deleteAdminNotification = (batchId: string) => apiBasePost('/api/notification/admin/delete', { batchId });
 
 // 后台通知中心(仅 root):某批次接收者与已读明细(发给谁、谁已读谁未读)
-export const getBatchRecipients = (batchId: string) =>
-  apiBasePost('/api/notification/admin/recipients', { batchId });
+export const getBatchRecipients = (batchId: string) => apiBasePost('/api/notification/admin/recipients', { batchId });
+
+export interface AdminEmailListParams {
+  currentPage?: number;
+  pageSize?: number;
+  emailType?: string;
+  status?: string;
+  keyword?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+// 后台通知中心邮件发送概览与记录（仅 root 普通上下文）
+export const getAdminEmailStats = () => apiBasePost('/api/notification/admin/email/stats');
+
+export const getAdminEmailList = (params: AdminEmailListParams = {}) =>
+  apiBasePost('/api/notification/admin/email/list', params);
+
+export const getAdminEmailDetail = (id: string) => apiBasePost('/api/notification/admin/email/detail', { id });
 
 export default {
   getNotificationList,
@@ -58,4 +74,7 @@ export default {
   recallNotification,
   deleteAdminNotification,
   getBatchRecipients,
+  getAdminEmailStats,
+  getAdminEmailList,
+  getAdminEmailDetail,
 };

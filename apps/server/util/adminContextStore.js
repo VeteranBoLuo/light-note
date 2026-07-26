@@ -129,6 +129,8 @@ export function adminContextPublicView(context) {
     'file.read',
     'tag.read',
     'trash.read',
+    'growth.read',
+    'ai.use',
   ];
   if (context.mode === 'maintain') {
     capabilities.push(
@@ -137,7 +139,7 @@ export function adminContextPublicView(context) {
       'file.write',
       'tag.write',
       'trash.restore',
-      'ai.use',
+      'ai.state.write',
     );
   }
   return {

@@ -105,9 +105,7 @@ describe('adminRoutePolicyMiddleware', () => {
     const denyRes = createRes();
     adminRoutePolicyMiddleware(createReq('/bookmark/ai/organize/apply', 'POST', 'readonly'), denyRes, denyNext);
     expect(denyNext).not.toHaveBeenCalled();
-    expect(denyRes.json).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }),
-    );
+    expect(denyRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
 
     const allowNext = vi.fn();
     const allowReq = createReq('/bookmark/ai/organize/apply', 'POST', 'maintain');
@@ -120,6 +118,30 @@ describe('adminRoutePolicyMiddleware', () => {
       const next = vi.fn();
       adminRoutePolicyMiddleware(createReq(path, 'POST', 'readonly'), createRes(), next);
       expect(next).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('管理员上下文可读取目标账号成长数据，但成长权益写入始终拒绝', () => {
+    for (const path of [
+      '/growth/me',
+      '/growth/dashboard',
+      '/growth/ranks',
+      '/growth/weeklyReport',
+      '/growth/points/log',
+    ]) {
+      const next = vi.fn();
+      adminRoutePolicyMiddleware(createReq(path, 'GET', 'readonly'), createRes(), next);
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+
+    for (const mode of ['readonly', 'maintain']) {
+      for (const path of ['/growth/checkin', '/growth/shop/buy', '/growth/lottery/draw']) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+      }
     }
   });
 

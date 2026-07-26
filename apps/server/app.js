@@ -14,6 +14,7 @@ import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
+import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
 import { globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
@@ -83,7 +84,9 @@ await initLogExclude().catch((err) => console.error('日志白名单初始化失
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败 code=%s', stableAgentErrorCode(err)));
-ensureFeatureRequestTables().catch((err) => console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureFeatureRequestTables().catch((err) =>
+  console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
+);
 ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 startAiConversationRetentionScheduler().catch((err) =>
   console.error('AI 临时会话清理调度启动失败 code=%s', stableAgentErrorCode(err)),
@@ -174,6 +177,7 @@ function scheduleGrowthNudges() {
 }
 scheduleGrowthNudges();
 startTodoReminderScheduler();
+startEmailDeliveryLogCleanupScheduler();
 
 // 启动 Express 服务器
 // 全局兜底:fire-and-forget 漏 catch 或深层依赖异常时留痕,避免 Node 默认行为下无声崩溃(进程守护由 PM2 负责)。

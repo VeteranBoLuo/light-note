@@ -15,7 +15,7 @@ import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
 import { fetchGitHubTokenRacing } from '../util/githubOAuth.js';
 import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
-import nodeMail from '../util/nodemailer.js';
+import { sendTrackedEmail } from '../util/emailDelivery.js';
 import crypto from 'crypto';
 import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
@@ -1062,24 +1062,24 @@ export const sendEmail = async (req, res) => {
     await redisClient.setEx(`email:code:${email}`, 300, code);
 
     // 2. 发送邮件
-    const mailOptions = {
-      from: '"轻笺"<1902013368@qq.com>',
-      to: email,
+    await sendTrackedEmail({
+      emailType: 'verification',
+      userId: req.user?.id && req.user.id !== 'visitor' ? req.user.id : null,
+      recipient: email,
       subject: '【轻笺】验证邮件',
+      businessType: 'account_verification',
       html: `
         <p>您好！</p>
         <p>您的验证码是：<strong style="color:orangered;">${code}</strong></p>
         <p>有效期5分钟，请勿泄露</p>
         <p>如果不是您本人操作，请无视此邮件</p>
       `,
-    };
-
-    await nodeMail.sendMail(mailOptions);
+    });
     res.send(resultData(L(req, '验证码发送成功', 'Verification code sent.')));
   } catch (e) {
     // 原样把 SMTP 内部错误(如 QQ 535 Login fail)抛给用户既不友好也泄露实现;
     // 面向用户给稳定文案,真实错误只进服务端日志便于排查。
-    console.error('邮件发送异常:', e?.message || e);
+    console.error('[email-verification] 发送失败 code=%s', stableAgentErrorCode(e));
     res.send(
       resultData(null, 500, L(req, '验证码发送失败,请稍后重试', 'Failed to send the code. Please try again later.')),
     );

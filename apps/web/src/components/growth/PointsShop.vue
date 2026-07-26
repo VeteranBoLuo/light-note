@@ -8,7 +8,9 @@
       <div class="ps-balance">
         <span class="ps-balance-label">{{ t('growth.myPoints') }}</span>
         <span class="ps-balance-num">🪙 {{ (shop?.points || 0).toLocaleString('en-US') }}</span>
-        <button v-if="!shop?.isVisitor" class="ps-log-link" @click="logVisible = true">{{ t('growth.pointsLogEntry') }} ›</button>
+        <BButton v-if="!shop?.isVisitor" class="ps-log-link" @click="logVisible = true">
+          {{ t('growth.pointsLogEntry') }} ›
+        </BButton>
       </div>
     </div>
 
@@ -31,8 +33,9 @@
           <BButton
             size="small"
             type="primary"
-            :disabled="!canBuyNow(it) || buyingId === it.id"
+            :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
             :loading="buyingId === it.id"
+            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
             @click="askBuy(it)"
           >
             {{ consumableBtn(it) }}
@@ -64,14 +67,37 @@
           <span v-if="!it.owned" class="ps-item-cost">🪙 {{ it.cost }}</span>
           <span v-else class="ps-item-cost ps-item-cost--owned">{{ t('growth.shopOwned') }}</span>
           <template v-if="it.owned">
-            <BButton v-if="it.equipped" size="small" :disabled="equippingId === it.id" :loading="equippingId === it.id" @click="doEquipFrame(null)">
+            <BButton
+              v-if="it.equipped"
+              size="small"
+              :disabled="readOnly || equippingId === it.id"
+              :loading="equippingId === it.id"
+              :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+              @click="doEquipFrame(null)"
+            >
               {{ t('growth.shopUnequip') }}
             </BButton>
-            <BButton v-else size="small" type="primary" :disabled="equippingId === it.id" :loading="equippingId === it.id" @click="doEquipFrame(it.id)">
+            <BButton
+              v-else
+              size="small"
+              type="primary"
+              :disabled="readOnly || equippingId === it.id"
+              :loading="equippingId === it.id"
+              :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+              @click="doEquipFrame(it.id)"
+            >
               {{ t('growth.shopEquip') }}
             </BButton>
           </template>
-          <BButton v-else size="small" type="primary" :disabled="!canBuyNow(it) || buyingId === it.id" :loading="buyingId === it.id" @click="askBuy(it)">
+          <BButton
+            v-else
+            size="small"
+            type="primary"
+            :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
+            :loading="buyingId === it.id"
+            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+            @click="askBuy(it)"
+          >
             {{ titleBtn(it) }}
           </BButton>
         </div>
@@ -82,7 +108,9 @@
 
     <!-- 兑换确认 -->
     <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
-      <div class="ps-confirm">{{ pending ? t('growth.shopBuyConfirm', { n: pending.cost, name: itemName(pending) }) : '' }}</div>
+      <div class="ps-confirm">{{
+        pending ? t('growth.shopBuyConfirm', { n: pending.cost, name: itemName(pending) }) : ''
+      }}</div>
     </BModal>
   </div>
 </template>
@@ -102,6 +130,8 @@
   import { frameVariant } from '@/config/growthFrames';
 
   const { t, te } = useI18n();
+  const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const readOnly = computed(() => props.readOnly);
   const { shop, loadShop, buyItem, equipFrame } = useGrowth();
   const user = useUserStore();
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
@@ -134,6 +164,7 @@
 
   // 可兑换判定:全前端按 live shop.points/level/owned/上限 实时算,积分变动即时生效(不依赖服务端 canBuy 快照,免刷新)
   function canBuyNow(it: ShopItem) {
+    if (readOnly.value) return false;
     const s = shop.value;
     if (!s || s.isVisitor || it.owned) return false;
     if (it.minLevel && (s.level || 0) < it.minLevel) return false;
@@ -163,12 +194,13 @@
   const logVisible = ref(false);
 
   function askBuy(it: ShopItem) {
-    if (!canBuyNow(it)) return;
+    if (readOnly.value || !canBuyNow(it)) return;
     pending.value = it;
     confirmVisible.value = true;
   }
 
   async function confirmBuy() {
+    if (readOnly.value) return;
     const it = pending.value;
     confirmVisible.value = false;
     if (!it) return;
@@ -190,6 +222,7 @@
   }
 
   async function doEquipFrame(frameId: string | null) {
+    if (readOnly.value) return;
     equippingId.value = frameId || 'unequip';
     try {
       const res = await equipFrame(frameId);
@@ -345,13 +378,25 @@
     overflow: hidden;
   }
   .ps-frame-item--gold {
-    background: linear-gradient(135deg, color-mix(in srgb, #f59e0b 11%, var(--background-color)), var(--background-color) 52%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #f59e0b 11%, var(--background-color)),
+      var(--background-color) 52%
+    );
   }
   .ps-frame-item--sakura {
-    background: linear-gradient(135deg, color-mix(in srgb, #ec4899 10%, var(--background-color)), var(--background-color) 54%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #ec4899 10%, var(--background-color)),
+      var(--background-color) 54%
+    );
   }
   .ps-frame-item--neon {
-    background: linear-gradient(135deg, color-mix(in srgb, #6366f1 11%, var(--background-color)), var(--background-color) 54%);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #6366f1 11%, var(--background-color)),
+      var(--background-color) 54%
+    );
   }
   .ps-frame-item--galaxy,
   .ps-frame-item--galaxy.is-equipped {

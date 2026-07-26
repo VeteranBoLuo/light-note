@@ -8,11 +8,18 @@
         </BButton>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
-        <BButton class="growth-report-btn" :loading="wrLoading" @click="openWeeklyReport">📊 {{ t('growth.weeklyReportEntry') }}</BButton>
+        <BButton class="growth-report-btn" :loading="wrLoading" @click="openWeeklyReport"
+          >📊 {{ t('growth.weeklyReportEntry') }}</BButton
+        >
       </header>
 
+      <div v-if="isAdminContext" class="growth-admin-notice" role="status">
+        <strong>{{ t('growth.adminContextTitle') }}</strong>
+        <span>{{ t('growth.adminContextNotice') }}</span>
+      </div>
+
       <section class="growth-panel">
-        <GrowthCard @activity-changed="refreshHeatmap" />
+        <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
       </section>
 
       <section id="growth-heatmap" class="growth-panel">
@@ -21,7 +28,13 @@
 
       <div class="growth-row">
         <section v-if="questsEnabled" class="growth-panel growth-panel--flex">
-          <DailyQuests :quests="quests" :bonus="questBonus" :claiming="claiming" @claim="onClaim" />
+          <DailyQuests
+            :quests="quests"
+            :bonus="questBonus"
+            :claiming="claiming"
+            :read-only="isAdminContext"
+            @claim="onClaim"
+          />
         </section>
         <section class="growth-panel growth-panel--flex">
           <GrowthStats :stats="stats" />
@@ -30,19 +43,19 @@
 
       <!-- 周挑战与每日任务的等级上限规则不同：管理员/满级账号仍可查看周挑战。 -->
       <section class="growth-panel">
-        <WeeklyChallenge />
+        <WeeklyChallenge :read-only="isAdminContext" />
       </section>
 
       <section class="growth-panel">
-        <PointsShop />
+        <PointsShop :read-only="isAdminContext" />
       </section>
 
       <section class="growth-panel">
-        <LotteryDraw />
+        <LotteryDraw :read-only="isAdminContext" />
       </section>
 
       <section class="growth-panel">
-        <MyInventory />
+        <MyInventory :read-only="isAdminContext" />
       </section>
 
       <section v-if="streakMilestones.length" class="growth-panel">
@@ -56,6 +69,7 @@
           :total-achievements="dashboard?.totalAchievements || achievements.length"
           :claimable-count="dashboard?.claimableCount || 0"
           :claiming-key="claimingAch"
+          :read-only="isAdminContext"
           @claim="onClaimAchievement"
         />
       </section>
@@ -98,9 +112,12 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import growthApi from '@/api/growthApi.ts';
+  import { useUserStore } from '@/store';
 
   const { t } = useI18n();
   const router = useRouter();
+  const user = useUserStore();
+  const isAdminContext = computed(() => Boolean(user.adminContext));
   const { growth, dashboard, recap, loadDashboard, loadRecap, claimDailyBonus, claimAchievement } = useGrowth();
   const hasRecap = computed(() => !!recap.value && (recap.value.onThisDay.length > 0 || recap.value.buried.length > 0));
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
@@ -135,7 +152,7 @@
 
   const claiming = ref(false);
   async function onClaim() {
-    if (claiming.value) return;
+    if (isAdminContext.value || claiming.value) return;
     claiming.value = true;
     try {
       const res = await claimDailyBonus();
@@ -192,7 +209,7 @@
 
   const claimingAch = ref<string | null>(null);
   async function onClaimAchievement(key: string) {
-    if (claimingAch.value) return;
+    if (isAdminContext.value || claimingAch.value) return;
     claimingAch.value = key;
     try {
       const res = await claimAchievement(key);
@@ -310,6 +327,21 @@
       margin: 0 auto;
       width: 50%;
     }
+  }
+  .growth-admin-notice {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 13px 15px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--workbench-subcard-bg));
+    color: var(--text-color);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .growth-admin-notice span {
+    color: var(--desc-color);
   }
   /* 今日任务 + 数据统计:大屏并排,窄屏堆叠 */
   .growth-row {

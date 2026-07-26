@@ -3,11 +3,38 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
+import { EMAIL_EFFECTIVE_STATUS_SQL, maskEmail } from '../util/emailDelivery.js';
 
 // 后台「通知中心」聚合口径:只统计 root 主动下发的通知(system/other),
 // 排除升级 / 反馈回复等系统自动通知。单条 legacy(无 batch_id)按自身 id 独立成组。
 const ADMIN_TYPES = ['system', 'other'];
 const GROUP_KEY = 'COALESCE(batch_id, id)';
+const EMAIL_TYPES = ['verification', 'todo_reminder', 'system'];
+const EMAIL_STATUSES = ['sending', 'accepted', 'failed', 'unknown'];
+
+async function ensureRootRole(req, res) {
+  const userId = req.user?.id;
+  if (!userId || req.user?.role !== 'root' || req.adminContext) {
+    res.send(resultData(null, 403, '没有操作权限'));
+    return null;
+  }
+  try {
+    const [rows] = await pool.query('SELECT role, del_flag FROM user WHERE id = ? LIMIT 1', [userId]);
+    if (!rows[0] || rows[0].role !== 'root' || Number(rows[0].del_flag) !== 0) {
+      res.send(resultData(null, 403, '没有操作权限'));
+      return null;
+    }
+    return userId;
+  } catch {
+    res.send(resultData(null, 500, '校验管理权限失败'));
+    return null;
+  }
+}
+
+function normalizeDateFilter(value) {
+  const normalized = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/u.test(normalized) ? normalized : null;
+}
 
 // POST /notification/list —— 分页列表 + 总数 + 未读数(可按 type 筛选;游客返回空)
 export const list = async (req, res) => {
@@ -141,7 +168,16 @@ export const send = async (req, res) => {
   if (req.user?.role !== 'root') {
     return res.send(resultData(null, 403, '没有操作权限'));
   }
-  const { userId, userIds, toAll = false, role = null, type = 'system', title, content = null, link = null } = req.body || {};
+  const {
+    userId,
+    userIds,
+    toAll = false,
+    role = null,
+    type = 'system',
+    title,
+    content = null,
+    link = null,
+  } = req.body || {};
   if (!title || !title.trim()) {
     return res.send(resultData(null, 400, '通知标题不能为空'));
   }
@@ -289,5 +325,132 @@ export const adminBatchRecipients = async (req, res) => {
     res.send(resultData({ items, total: items.length, readCount }));
   } catch (e) {
     res.send(resultData(null, 500, '获取接收明细失败: ' + e.message));
+  }
+};
+
+// POST /notification/admin/email/stats —— 今日邮件 SMTP 投递概览（仅 root 普通上下文）
+export const adminEmailStats = async (req, res) => {
+  if (!(await ensureRootRole(req, res))) return;
+  try {
+    const [[row]] = await pool.query(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM((${EMAIL_EFFECTIVE_STATUS_SQL}) = 'accepted'), 0) AS accepted,
+              COALESCE(SUM((${EMAIL_EFFECTIVE_STATUS_SQL}) = 'failed'), 0) AS failed,
+              COALESCE(SUM((${EMAIL_EFFECTIVE_STATUS_SQL}) = 'unknown'), 0) AS unknownCount
+       FROM email_delivery_logs e
+       WHERE e.create_time >= CURDATE()`,
+    );
+    return res.send(
+      resultData({
+        total: Number(row?.total || 0),
+        accepted: Number(row?.accepted || 0),
+        failed: Number(row?.failed || 0),
+        unknown: Number(row?.unknownCount || 0),
+      }),
+    );
+  } catch {
+    return res.send(resultData(null, 500, '获取邮件发送概览失败'));
+  }
+};
+
+// POST /notification/admin/email/list —— 邮件投递记录分页与筛选（仅 root 普通上下文）
+export const adminEmailList = async (req, res) => {
+  if (!(await ensureRootRole(req, res))) return;
+  try {
+    const pageSize = Math.min(Math.max(Number(req.body?.pageSize) || 20, 1), 50);
+    const currentPage = Math.max(Number(req.body?.currentPage) || 1, 1);
+    const offset = (currentPage - 1) * pageSize;
+    const emailType = String(req.body?.emailType || '').trim();
+    const status = String(req.body?.status || '').trim();
+    const keyword = String(req.body?.keyword || '')
+      .trim()
+      .slice(0, 100);
+    const startDate = normalizeDateFilter(req.body?.startDate);
+    const endDate = normalizeDateFilter(req.body?.endDate);
+    const where = ['1 = 1'];
+    const params = [];
+
+    if (emailType && emailType !== 'all') {
+      if (!EMAIL_TYPES.includes(emailType)) return res.send(resultData(null, 400, '邮件类型不合法'));
+      where.push('e.email_type = ?');
+      params.push(emailType);
+    }
+    if (status && status !== 'all') {
+      if (!EMAIL_STATUSES.includes(status)) return res.send(resultData(null, 400, '邮件状态不合法'));
+      where.push(`(${EMAIL_EFFECTIVE_STATUS_SQL}) = ?`);
+      params.push(status);
+    }
+    if (keyword) {
+      where.push('(e.recipient_email LIKE ? OR e.subject LIKE ? OR u.alias LIKE ?)');
+      const like = `%${keyword}%`;
+      params.push(like, like, like);
+    }
+    if (startDate) {
+      where.push('e.create_time >= ?');
+      params.push(`${startDate} 00:00:00`);
+    }
+    if (endDate) {
+      where.push('e.create_time < DATE_ADD(?, INTERVAL 1 DAY)');
+      params.push(`${endDate} 00:00:00`);
+    }
+    const whereSql = where.join(' AND ');
+    const [items] = await pool.query(
+      `SELECT e.id, e.email_type AS emailType, e.user_id AS userId,
+              e.recipient_email AS recipientEmail, e.subject,
+              e.business_type AS businessType, e.business_id AS businessId,
+              (${EMAIL_EFFECTIVE_STATUS_SQL}) AS status, e.attempt_no AS attemptNo,
+              e.accepted_at AS acceptedAt, e.create_time AS createTime, e.update_time AS updateTime,
+              u.alias
+       FROM email_delivery_logs e
+       LEFT JOIN user u ON u.id = e.user_id
+       WHERE ${whereSql}
+       ORDER BY e.create_time DESC
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, offset],
+    );
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM email_delivery_logs e
+       LEFT JOIN user u ON u.id = e.user_id
+       WHERE ${whereSql}`,
+      params,
+    );
+    const safeItems = items.map((item) => ({
+      ...item,
+      recipientEmail: maskEmail(item.recipientEmail),
+    }));
+    return res.send(resultData({ items: safeItems, total: Number(total || 0), currentPage, pageSize }));
+  } catch {
+    return res.send(resultData(null, 500, '获取邮件发送记录失败'));
+  }
+};
+
+// POST /notification/admin/email/detail —— 单封邮件投递详情（仅 root 普通上下文）
+export const adminEmailDetail = async (req, res) => {
+  if (!(await ensureRootRole(req, res))) return;
+  const id = String(req.body?.id || '').trim();
+  if (!id) return res.send(resultData(null, 400, '缺少邮件记录标识'));
+  try {
+    const [rows] = await pool.query(
+      `SELECT e.id, e.email_type AS emailType, e.user_id AS userId,
+              e.recipient_email AS recipientEmail, e.subject,
+              e.business_type AS businessType, e.business_id AS businessId,
+              e.provider, (${EMAIL_EFFECTIVE_STATUS_SQL}) AS status,
+              e.attempt_no AS attemptNo, e.provider_message_id AS providerMessageId,
+              e.provider_response AS providerResponse, e.error_code AS errorCode,
+              e.error_message AS errorMessage, e.accepted_at AS acceptedAt,
+              e.create_time AS createTime, e.update_time AS updateTime,
+              u.alias, t.title AS todoTitle
+       FROM email_delivery_logs e
+       LEFT JOIN user u ON u.id = e.user_id
+       LEFT JOIN todo_items t ON e.business_type = 'todo' AND t.id = e.business_id
+       WHERE e.id = ?
+       LIMIT 1`,
+      [id],
+    );
+    if (!rows[0]) return res.send(resultData(null, 404, '邮件记录不存在'));
+    return res.send(resultData(rows[0]));
+  } catch {
+    return res.send(resultData(null, 500, '获取邮件详情失败'));
   }
 };

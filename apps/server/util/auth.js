@@ -414,6 +414,21 @@ export const ensureNotVisitor = (req, res) => {
   return true;
 };
 
+// 读取/AI 建议类 handler 的二次身份守卫。
+// 管理员上下文已由 adminRoutePolicyMiddleware 完成路由级授权，这里只接受调用方显式声明的策略，
+// 避免复用 ensureNotVisitor 时把合法的 readonly/maintain 读取误判成内容写入。
+export const ensureUserOrAdminPolicy = (req, res, allowedAdminPolicies = []) => {
+  if (!req.adminContext) return ensureNotVisitor(req, res);
+  const policy = req.adminCapability?.policy;
+  if (allowedAdminPolicies.includes(policy)) return true;
+  res.status(403).json({
+    data: { code: req.adminContext.mode === 'readonly' ? 'ADMIN_PREVIEW_READONLY' : 'ADMIN_MAINTENANCE_FORBIDDEN' },
+    status: 403,
+    msg: '管理员当前上下文不允许执行该操作。',
+  });
+  return false;
+};
+
 export const startSessionMaintenance = () => {
   cleanupExpiredSessions().catch((e) => console.error('清理过期登录态失败:', e.message));
   cleanupLegacyElevatedVisitorSessions()

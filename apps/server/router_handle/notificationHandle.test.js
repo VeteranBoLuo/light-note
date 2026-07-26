@@ -8,8 +8,13 @@ vi.mock('../util/common.js', () => ({
 }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor: vi.fn(() => true) }));
 vi.mock('../util/notification.js', () => ({ createNotification: vi.fn() }));
+vi.mock('../util/emailDelivery.js', () => ({
+  EMAIL_EFFECTIVE_STATUS_SQL:
+    "CASE WHEN e.status = 'sending' AND e.update_time < DATE_SUB(NOW(), INTERVAL 10 MINUTE) THEN 'unknown' ELSE e.status END",
+  maskEmail: (value) => String(value).replace(/^(.{2}).*(@.*)$/u, '$1***$2'),
+}));
 
-const { adminDelete } = await import('./notificationHandle.js');
+const { adminDelete, adminEmailStats, adminEmailList, adminEmailDetail } = await import('./notificationHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
 
@@ -46,5 +51,112 @@ describe('通知中心管理员删除', () => {
     expect(sql).toContain('type IN (?,?)');
     expect(params).toEqual(['batch-1', 'batch-1', 'system', 'other']);
     expect(res.send).toHaveBeenCalledWith({ data: { deleted: 3 }, status: 200, msg: '' });
+  });
+});
+
+describe('通知中心邮件发送记录', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('拒绝普通用户和管理员预览上下文读取邮件记录', async () => {
+    const userRes = mockRes();
+    const previewRes = mockRes();
+
+    await adminEmailStats({ user: { role: 'user' } }, userRes);
+    await adminEmailStats({ user: { role: 'root' }, adminContext: { id: 'ctx-1' } }, previewRes);
+
+    expect(query).not.toHaveBeenCalled();
+    expect(userRes.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+    expect(previewRes.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+  });
+
+  it('会话角色为 root 时仍复核数据库中的实时角色和删除状态', async () => {
+    query.mockResolvedValueOnce([[{ role: 'user', del_flag: 0 }]]);
+    const res = mockRes();
+
+    await adminEmailStats({ user: { id: 'root-1', role: 'root' } }, res);
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0][0]).toContain('SELECT role, del_flag FROM user');
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
+  });
+
+  it('返回今日 SMTP 状态统计', async () => {
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([[{ total: 8, accepted: 6, failed: 1, unknownCount: 1 }]]);
+    const res = mockRes();
+
+    await adminEmailStats({ user: { id: 'root-1', role: 'root' } }, res);
+
+    expect(res.send).toHaveBeenCalledWith({
+      data: { total: 8, accepted: 6, failed: 1, unknown: 1 },
+      status: 200,
+      msg: '',
+    });
+  });
+
+  it('邮件列表使用参数化筛选并对收件邮箱脱敏', async () => {
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'mail-1',
+            emailType: 'todo_reminder',
+            recipientEmail: 'person@example.com',
+            subject: '待办提醒',
+            status: 'accepted',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await adminEmailList(
+      {
+        user: { id: 'root-1', role: 'root' },
+        body: {
+          emailType: 'todo_reminder',
+          status: 'accepted',
+          keyword: 'person',
+          startDate: '2026-07-26',
+          currentPage: 1,
+          pageSize: 20,
+        },
+      },
+      res,
+    );
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[1][0]).toContain('e.email_type = ?');
+    expect(query.mock.calls[1][0]).toContain('e.recipient_email LIKE ?');
+    expect(query.mock.calls[1][1]).toEqual([
+      'todo_reminder',
+      'accepted',
+      '%person%',
+      '%person%',
+      '%person%',
+      '2026-07-26 00:00:00',
+      20,
+      0,
+    ]);
+    expect(res.send.mock.calls[0][0].data.items[0].recipientEmail).toBe('pe***@example.com');
+  });
+
+  it('详情只按记录 ID 参数化查询', async () => {
+    query
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([[{ id: 'mail-1', recipientEmail: 'person@example.com' }]]);
+    const res = mockRes();
+
+    await adminEmailDetail({ user: { id: 'root-1', role: 'root' }, body: { id: 'mail-1' } }, res);
+
+    expect(query.mock.calls[1][0]).toContain('WHERE e.id = ?');
+    expect(query.mock.calls[1][1]).toEqual(['mail-1']);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 200, data: expect.objectContaining({ id: 'mail-1' }) }),
+    );
   });
 });

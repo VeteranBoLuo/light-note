@@ -5,7 +5,9 @@
       <div class="cal-nav">
         <BButton class="cal-arrow" :aria-label="t('common.previous')" @click="prevMonth">‹</BButton>
         <span class="cal-month">{{ monthLabel }}</span>
-        <BButton class="cal-arrow" :aria-label="t('common.next')" :disabled="atCurrentMonth" @click="nextMonth">›</BButton>
+        <BButton class="cal-arrow" :aria-label="t('common.next')" :disabled="atCurrentMonth" @click="nextMonth"
+          >›</BButton
+        >
       </div>
     </div>
 
@@ -21,7 +23,7 @@
           blank: cell === null,
           checked: cell !== null && isChecked(cell),
           today: cell !== null && isToday(cell),
-          'makeup-able': cell !== null && isMakeupDay(cell),
+          'makeup-able': cell !== null && isMakeupDay(cell) && !readOnly,
         }"
         @click="cell !== null && onCellClick(cell)"
       >
@@ -45,7 +47,17 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 
-  const props = defineProps<{ checkinDays: string[]; checkedInToday?: boolean; streak?: number; wide?: boolean; makeupDays?: string[] }>();
+  const props = withDefaults(
+    defineProps<{
+      checkinDays: string[];
+      checkedInToday?: boolean;
+      streak?: number;
+      wide?: boolean;
+      makeupDays?: string[];
+      readOnly?: boolean;
+    }>(),
+    { readOnly: false },
+  );
   const emit = defineEmits<{ makeup: [date: string] }>();
   const { t, locale } = useI18n();
 
@@ -85,7 +97,7 @@
   });
 
   function onCellClick(d: number) {
-    if (!isMakeupDay(d)) return;
+    if (props.readOnly || !isMakeupDay(d)) return;
     const date = dayStr(d);
     Alert.alert({
       title: t('growth.protectCardConfirmTitle'),

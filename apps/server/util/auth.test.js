@@ -20,7 +20,8 @@ vi.mock('./conversion.js', () => ({ recordConversionEvent: vi.fn() }));
 // auth.js 依赖 common.js(resultData),存在 common.js↔router↔handler 循环依赖:
 // 先 import common.js 让 handler 作为叶子完成初始化,规避循环(同 commonHandle.test.js)。
 await import('./common.js');
-const { accountBanMiddleware, authMiddleware, ensureNotVisitor, issueLoginSession } = await import('./auth.js');
+const { accountBanMiddleware, authMiddleware, ensureNotVisitor, ensureUserOrAdminPolicy, issueLoginSession } =
+  await import('./auth.js');
 
 function mockRes() {
   const res = {};
@@ -251,5 +252,21 @@ describe('游客内容维护权限', () => {
       ),
     ).toBe(true);
     expect(res.send).not.toHaveBeenCalled();
+  });
+
+  it('管理员上下文仅在 handler 显式接受当前路由策略时通过二次守卫', () => {
+    const readonlyReq = {
+      user: { id: 'user-1', role: 'user' },
+      adminContext: { id: 'ctx-1', mode: 'readonly', subjectRole: 'user' },
+      adminCapability: { policy: 'ai_use', resourceType: 'bookmark' },
+    };
+    const allowedRes = mockRes();
+    expect(ensureUserOrAdminPolicy(readonlyReq, allowedRes, ['ai_use'])).toBe(true);
+    expect(allowedRes.json).not.toHaveBeenCalled();
+
+    const deniedRes = mockRes();
+    expect(ensureUserOrAdminPolicy(readonlyReq, deniedRes, ['read'])).toBe(false);
+    expect(deniedRes.status).toHaveBeenCalledWith(403);
+    expect(deniedRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
   });
 });

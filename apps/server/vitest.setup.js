@@ -18,4 +18,5 @@ vi.mock('./util/redisClient.js', () => ({
 
 vi.mock('./util/nodemailer.js', () => ({
   default: { sendMail: vi.fn().mockResolvedValue({ messageId: 'test' }) },
+  smtpUser: 'test@example.com',
 }));

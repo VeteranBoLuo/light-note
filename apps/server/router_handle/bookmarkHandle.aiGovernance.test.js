@@ -23,7 +23,10 @@ vi.mock('../util/resourceTags.js', () => ({
   validateUserTags: vi.fn(),
   validateUserResources: vi.fn(),
 }));
-vi.mock('../util/auth.js', () => ({ ensureNotVisitor: () => true }));
+vi.mock('../util/auth.js', () => ({
+  ensureNotVisitor: () => true,
+  ensureUserOrAdminPolicy: () => true,
+}));
 vi.mock('../util/growth.js', () => ({ grantExp: vi.fn() }));
 vi.mock('../util/snapshot.js', () => ({
   archiveBookmark: vi.fn(),
@@ -95,10 +98,34 @@ describe('bookmark AI entry governance', () => {
 
     expect(mocks.summarizeBookmark).toHaveBeenCalledWith('user-1', 'bookmark-1', {
       force: false,
+      persist: true,
+      archiveIfMissing: true,
       governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
     });
     expect(res.statusCode).toBe(429);
     expect(res.payload).toMatchObject({ status: 429, data: { reason: 'quota_exceeded' } });
+  });
+
+  it('管理员只读预览生成书签摘要时不写摘要缓存或补建网页归档', async () => {
+    mocks.summarizeBookmark.mockResolvedValue({ ok: true, summary: '只读摘要', cached: false });
+    const req = {
+      body: { id: 'bookmark-1', force: true },
+      user: { id: 'subject-1', role: 'user' },
+      billingUser: { id: 'root-1', role: 'root' },
+      adminContext: { id: 'ctx-1', mode: 'readonly' },
+      adminCapability: { policy: 'ai_use', resourceType: 'bookmark' },
+    };
+    const res = response();
+
+    await doSummarizeBookmark(req, res);
+
+    expect(mocks.summarizeBookmark).toHaveBeenCalledWith('subject-1', 'bookmark-1', {
+      force: true,
+      persist: false,
+      archiveIfMissing: false,
+      governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
+    });
+    expect(res.payload).toMatchObject({ status: 200, data: { summary: '只读摘要' } });
   });
 
   it('批量整理在额度耗尽时保留已完成建议并返回明确 429', async () => {

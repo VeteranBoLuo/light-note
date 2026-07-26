@@ -631,6 +631,7 @@
   type CloudConversationPreparation = 'ready' | 'replaced' | 'cancelled';
 
   function cloudHistoryEnabled() {
+    if (user.adminContext?.mode === 'readonly') return false;
     return shouldUseAiCloudHistory(user.id, user.role, user.preferences.aiCloudHistory);
   }
 

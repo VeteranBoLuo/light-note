@@ -64,6 +64,19 @@ describe('summarizeBookmark AI Gateway', () => {
     ]);
   });
 
+  it('只读管理员上下文可生成摘要，但不归档网页或写入摘要缓存', async () => {
+    mocks.requestAi.mockResolvedValue({ content: '只读摘要' });
+
+    const result = await summarizeBookmark('user-1', 'bookmark-1', {
+      persist: false,
+      archiveIfMissing: false,
+    });
+
+    expect(result).toEqual({ ok: true, summary: '只读摘要', cached: false });
+    expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchWebMeta).not.toHaveBeenCalled();
+  });
+
   it('供应商异常只返回稳定错误分类，不透传上游细节', async () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mocks.requestAi.mockRejectedValue(new Error('Authorization: Bearer secret-provider-token'));

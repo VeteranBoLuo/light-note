@@ -11,7 +11,7 @@ import {
 } from '../util/resourceTags.js';
 
 import { promises as fs } from 'fs';
-import { ensureNotVisitor } from '../util/auth.js';
+import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { grantExp } from '../util/growth.js';
 import { archiveBookmark, getBookmarkSnapshot, summarizeBookmark } from '../util/snapshot.js';
 import {
@@ -592,12 +592,15 @@ export const toggleBookmarkTop = async (req, res) => {
 
 // POST /bookmark/summarize —— AI 基于网页快照正文生成摘要(缓存;force 重新生成)
 export const doSummarizeBookmark = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
   try {
     const { id, force } = req.body || {};
     if (!id) return res.send(resultData(null, 400, '缺少书签 id'));
+    const persistSummary = req.adminContext?.mode !== 'readonly';
     const result = await summarizeBookmark(req.user.id, id, {
       force: force === true,
+      persist: persistSummary,
+      archiveIfMissing: persistSummary,
       governance: { request: req, quotaPolicy: 'user', taskType: 'bookmark_summary' },
     });
     if (result?.reason === 'quota_exceeded') {
@@ -647,7 +650,7 @@ export const doCheckAllHealth = async (req, res) => {
 
 // GET /bookmark/health —— 当前健康概览(总数/已测/疑似失效列表 + running)
 export const getHealth = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  if (!ensureUserOrAdminPolicy(req, res, ['read'])) return;
   try {
     res.send(resultData(await getHealthSummary(req.user.id)));
   } catch (error) {
@@ -1147,7 +1150,7 @@ function stripHtml(html) {
 
 // POST /bookmark/ai/organize/quote —— 预估本次可整理数(免费;不跑 AI)
 export const doOrganizeQuote = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
   try {
     const userId = req.user.id;
     const { scope = 'untagged', ids = [], resourceType = 'bookmark' } = req.body || {};
@@ -1171,7 +1174,7 @@ export const doOrganizeQuote = async (req, res) => {
 
 // POST /bookmark/ai/organize/run —— 对指定 ids 跑 AI(并发 3,免费),返回建议供复审
 export const doOrganizeRun = async (req, res) => {
-  if (!ensureNotVisitor(req, res)) return;
+  if (!ensureUserOrAdminPolicy(req, res, ['ai_use'])) return;
   try {
     const userId = req.user.id;
     const resourceType = req.body?.resourceType === 'note' ? 'note' : 'bookmark';

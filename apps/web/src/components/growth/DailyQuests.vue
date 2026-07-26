@@ -7,9 +7,7 @@
     <div class="dq-list">
       <div v-for="q in quests" :key="q.key" class="dq-item" :class="{ done: q.done }">
         <span class="dq-check">
-          <svg v-if="q.done" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
+          <SvgIcon v-if="q.done" :src="icon.filterPanel.check" size="13" />
         </span>
         <span class="dq-label">{{ questLabel(q) }}</span>
         <span v-if="q.target && !q.done" class="dq-prog">{{ q.cur ?? 0 }}/{{ q.target }}</span>
@@ -22,12 +20,22 @@
       <div class="dq-bonus-left">
         <span class="dq-bonus-emoji">{{ bonus.claimed ? '🎉' : '🎁' }}</span>
         <span class="dq-bonus-text">
-          {{ bonus.claimed ? t('growth.questBonusClaimed', { n: bonus.exp }) : t('growth.questBonusHint', { n: bonus.exp }) }}
+          {{
+            bonus.claimed
+              ? t('growth.questBonusClaimed', { n: bonus.exp })
+              : t('growth.questBonusHint', { n: bonus.exp })
+          }}
         </span>
       </div>
-      <button v-if="bonus.claimable" class="dq-claim" :disabled="claiming" @click="$emit('claim')">
+      <BButton
+        v-if="bonus.claimable"
+        class="dq-claim"
+        :disabled="readOnly || claiming"
+        :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+        @click="$emit('claim')"
+      >
         {{ claiming ? t('growth.questClaiming') : t('growth.questClaim') }}
-      </button>
+      </BButton>
     </div>
   </div>
 </template>
@@ -36,8 +44,14 @@
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { Quest, QuestBonus } from '@/composables/useGrowth.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
-  const props = defineProps<{ quests: Quest[]; bonus: QuestBonus; claiming?: boolean }>();
+  const props = withDefaults(
+    defineProps<{ quests: Quest[]; bonus: QuestBonus; claiming?: boolean; readOnly?: boolean }>(),
+    { readOnly: false },
+  );
   defineEmits<{ (e: 'claim'): void }>();
   const { t } = useI18n();
 

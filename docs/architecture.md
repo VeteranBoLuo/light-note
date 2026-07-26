@@ -185,6 +185,7 @@ src/
 | `resource_inbox`                             | 书签/笔记/文件待整理关系      | UUID          |
 | `todo_items`                                 | 待处理中的待办事项            | UUID          |
 | `todo_reminders`                             | 待办提醒调度记录              | UUID          |
+| `email_delivery_logs`                        | 系统邮件 SMTP 投递记录        | UUID          |
 | `tag_relations`                              | 标签-标签关联                 | 无独立 id     |
 | `api_logs`                                   | API 请求日志                  | UUID          |
 | `operation_logs`                             | 操作日志                      | UUID          |
@@ -357,6 +358,14 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 - 提醒计划存入 `todo_reminders`，支持单次/周期计划及站内/邮箱渠道；周期计划以 `scheduled_at` 保存下一次执行时间，超过 `repeat_end_at` 自动结束
 - 待办完成或删除不会修改任何书签、笔记或文件；管理员预览首期只允许读取，不允许代用户写入待办
 - 待办提醒由服务端定时扫描 `todo_reminders`，先原子抢占再投递；站内渠道写入统一通知中心，邮件渠道使用服务端 SMTP 配置
+
+### 管理员邮件发送记录
+
+- Root 管理员的“通知中心”包含“站内通知”和“邮件发送”两个页签；邮件页签不进入普通用户通知铃铛，也不读取系统邮箱来信。
+- 验证码和待办提醒统一通过 `util/emailDelivery.js` 发送，并在 `email_delivery_logs` 记录邮件类型、收件人、主题、关联业务、SMTP 状态、尝试次数和脱敏错误；不保存验证码、SMTP 凭据或完整邮件正文。
+- 状态 `accepted` 只表示 SMTP 已受理，不能表述为进入收件箱或已读；`sending` 超过 10 分钟时，管理接口按 `unknown` 展示，禁止据此自动重发。
+- 邮件记录接口位于 `/notification/admin/email/*`，只允许 Root 普通管理上下文访问；管理员预览目标账号时失败关闭。
+- 列表接口默认脱敏收件邮箱，详情接口为 Root 排障返回完整收件地址。历史记录默认保留 180 天，可通过 `EMAIL_DELIVERY_LOG_RETENTION_DAYS` 调整，并由每日小批量任务清理。
 
 ## 日志白名单
 

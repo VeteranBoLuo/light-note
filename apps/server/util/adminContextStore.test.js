@@ -40,13 +40,29 @@ describe('adminContextStore', () => {
     });
     expect(visitor.capabilities).toContain('bookmark.write');
     expect(visitor.capabilities).toContain('file.write');
+    expect(visitor.capabilities).toContain('growth.read');
+    expect(visitor.capabilities).toContain('ai.use');
+    expect(visitor.capabilities).toContain('ai.state.write');
     expect(visitor).not.toHaveProperty('actorSessionId');
   });
 
+  it('只读预览可读取成长数据并使用 AI，但不暴露内容或 AI 状态写能力', () => {
+    const preview = adminContextPublicView({
+      id: 'ctx-readonly',
+      subjectUserId: 'user-1',
+      subjectRole: 'user',
+      subjectAlias: '用户',
+      mode: 'readonly',
+      issuedAt: '2026-07-15T00:00:00.000Z',
+      expiresAt: '2026-07-15T00:20:00.000Z',
+    });
+    expect(preview.capabilities).toEqual(expect.arrayContaining(['growth.read', 'ai.use']));
+    expect(preview.capabilities).not.toContain('bookmark.write');
+    expect(preview.capabilities).not.toContain('ai.state.write');
+  });
+
   it('仅 root 真实会话可签发，且 Redis 只保存令牌哈希键', async () => {
-    query.mockResolvedValue([[
-      { id: 'user-1', alias: '普通用户', email: 'u@example.com', role: 'user', del_flag: 0 },
-    ]]);
+    query.mockResolvedValue([[{ id: 'user-1', alias: '普通用户', email: 'u@example.com', role: 'user', del_flag: 0 }]]);
     const result = await createAdminContext({
       actor: { id: 'root-1', role: 'root' },
       actorSessionId: 'sid-1',
