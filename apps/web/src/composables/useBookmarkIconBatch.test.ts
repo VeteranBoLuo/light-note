@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getBookmarkIconRuntimeState, resetBookmarkIconRuntime } from './bookmarkIconRuntime';
 import { refreshAfterBookmarkImport, useBookmarkIconBatchTracking } from './useBookmarkIconBatch';
 
 function createStorage() {
@@ -33,6 +34,7 @@ function processingState(overrides: Record<string, unknown> = {}) {
 describe('useBookmarkIconBatchTracking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBookmarkIconRuntime();
   });
 
   it('应用增量 updates，并在下一次状态请求发送 nextCursor', async () => {
@@ -256,6 +258,57 @@ describe('useBookmarkIconBatchTracking', () => {
     expect(tracker.readPendingBatch()).toBe('batch-1');
     expect(notifyFallback).not.toHaveBeenCalled();
   });
+
+  it('只为 queued/processing 的具体书签设置加载态，并在等待重试或卸载时清理', async () => {
+    const requestStatus = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: 200,
+        data: processingState({
+          activeBookmarkIds: ['bookmark-1'],
+          queued: 1,
+          processing: 0,
+        }),
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: processingState({
+          activeBookmarkIds: [],
+          queued: 0,
+          processing: 0,
+          retryWaiting: 1,
+        }),
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: processingState({
+          activeBookmarkIds: ['bookmark-1'],
+          queued: 0,
+          processing: 1,
+          retryWaiting: 0,
+        }),
+      });
+    const tracker = useBookmarkIconBatchTracking({
+      bookmarks: ref([{ id: 'bookmark-1', iconUrl: '' }]),
+      reloadBookmarks: vi.fn().mockResolvedValue(undefined),
+      storageKey: computed(() => 'icon-batch-pending:user-1'),
+      requestStatus,
+      storage: createStorage(),
+      schedule: vi.fn(() => 1),
+      cancelSchedule: vi.fn(),
+    });
+
+    await tracker.start('batch-1', 1);
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(true);
+
+    await tracker.pollNow();
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(false);
+
+    await tracker.pollNow();
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(true);
+    tracker.stopForUnmount();
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(false);
+  });
 });
 
 describe('refreshAfterBookmarkImport', () => {
@@ -264,7 +317,7 @@ describe('refreshAfterBookmarkImport', () => {
     const reload = vi.fn().mockResolvedValue(undefined);
 
     await expect(refreshAfterBookmarkImport({ batchId: 'batch-1', total: 3 }, start, reload)).resolves.toBe(true);
-    expect(start).toHaveBeenCalledWith('batch-1', 3);
+    expect(start).toHaveBeenCalledWith('batch-1', 3, []);
     expect(reload).toHaveBeenCalledWith({ refreshIcons: false });
 
     start.mockClear();
@@ -272,5 +325,18 @@ describe('refreshAfterBookmarkImport', () => {
     await expect(refreshAfterBookmarkImport(undefined, start, reload)).resolves.toBe(false);
     expect(start).not.toHaveBeenCalled();
     expect(reload).toHaveBeenCalledWith({ refreshIcons: true });
+  });
+
+  it('立即传入导入书签 ID 建立加载态，不等待首轮轮询再刷新列表', async () => {
+    const start = vi.fn(() => new Promise<void>(() => {}));
+    const reload = vi.fn().mockResolvedValue(undefined);
+
+    await refreshAfterBookmarkImport(
+      { batchId: 'batch-1', total: 2, bookmarkIds: ['bookmark-1', 'bookmark-2'] },
+      start,
+      reload,
+    );
+    expect(start).toHaveBeenCalledWith('batch-1', 2, ['bookmark-1', 'bookmark-2']);
+    expect(reload).toHaveBeenCalledWith({ refreshIcons: false });
   });
 });

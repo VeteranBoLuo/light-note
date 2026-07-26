@@ -16,6 +16,10 @@ type BookmarkIconItem = {
 
 const bookmarkIconAfterSaveRequests = new Map<string, Promise<string>>();
 
+function bookmarkIconAfterSaveRequestKey(item: Pick<BookmarkIconItem, 'id' | 'url'>) {
+  return `${String(item.id || '').trim()}:${String(item.url || '')}`;
+}
+
 export function resetBookmarkIconRefreshRequests() {
   bookmarkIconAfterSaveRequests.clear();
 }
@@ -58,9 +62,32 @@ export async function loadBookmarkIconsProgressively(
   if (isReadOnlyAdminPreview()) return;
   const targets = (items || []).filter((item) => needsBookmarkIconRefresh(item));
   if (!targets.length) return;
-  const targetById = new Map(targets.map((item) => [item.id, item]));
+
+  // 新增/编辑页可能已先发起同一书签的保存后取图。列表加载时复用该请求，
+  // 避免返回页面后再向同一站点重复抓取一次。
+  const pendingAfterSave = targets.flatMap((item) => {
+    const pending = bookmarkIconAfterSaveRequests.get(bookmarkIconAfterSaveRequestKey(item));
+    return pending ? [{ item, pending }] : [];
+  });
+  const pendingIds = new Set(pendingAfterSave.map(({ item }) => item.id));
+  const requestTargets = targets.filter((item) => !pendingIds.has(item.id));
+  const pendingAfterSaveTask = Promise.all(
+    pendingAfterSave.map(async ({ item, pending }) => {
+      const iconUrl = await pending;
+      if (!iconUrl) return;
+      item.iconUrl = iconUrl;
+      applyIcon(item.id, iconUrl);
+    }),
+  );
+
+  if (!requestTargets.length) {
+    await pendingAfterSaveTask;
+    return;
+  }
+
+  const targetById = new Map(requestTargets.map((item) => [item.id, item]));
   const requestTokens = new Map(
-    targets.map((item) => [
+    requestTargets.map((item) => [
       item.id,
       beginBookmarkIconRefresh(item.id, {
         clearExisting: !item.iconUrl,
@@ -70,8 +97,8 @@ export async function loadBookmarkIconsProgressively(
   );
   // 每批 batchSize 个书签合并成 1 个请求;总请求数 ≈ ceil(targets/batchSize),远低于限流阈值
   const batches: Array<typeof targets> = [];
-  for (let i = 0; i < targets.length; i += batchSize) {
-    batches.push(targets.slice(i, i + batchSize));
+  for (let i = 0; i < requestTargets.length; i += batchSize) {
+    batches.push(requestTargets.slice(i, i + batchSize));
   }
   let bi = 0;
   const worker = async () => {
@@ -108,7 +135,10 @@ export async function loadBookmarkIconsProgressively(
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, () => worker()));
+  await Promise.all([
+    pendingAfterSaveTask,
+    ...Array.from({ length: Math.min(concurrency, batches.length) }, () => worker()),
+  ]);
 }
 
 export function refreshBookmarkIconAfterSave(
@@ -117,7 +147,7 @@ export function refreshBookmarkIconAfterSave(
 ): Promise<string> {
   const id = String(item?.id || '').trim();
   if (!id) return Promise.resolve('');
-  const requestKey = `${id}:${String(item.url || '')}`;
+  const requestKey = bookmarkIconAfterSaveRequestKey({ id, url: item.url });
   const pendingRequest = bookmarkIconAfterSaveRequests.get(requestKey);
   if (pendingRequest) return pendingRequest;
 
@@ -129,11 +159,7 @@ export function refreshBookmarkIconAfterSave(
   request = (async () => {
     let iconUrl = '';
     try {
-      const res = await apiBasePost(
-        '/api/common/analyzeImgUrl',
-        [{ id, refreshMode: 'after_save' }],
-        { silent: true },
-      );
+      const res = await apiBasePost('/api/common/analyzeImgUrl', [{ id, refreshMode: 'after_save' }], { silent: true });
       const result = Array.isArray(res?.data) ? res.data.find((entry) => entry?.id === id) : null;
       if (result?.iconCheckedAt) item.iconCheckedAt = result.iconCheckedAt;
       if (result?.iconUrl) {
@@ -158,5 +184,4 @@ export function refreshBookmarkIconAfterSave(
 export const getLogExclude = () => apiBasePost('/api/common/getLogExclude', {});
 export const addLogExclude = (fingerprint: string, deviceId?: string, note?: string) =>
   apiBasePost('/api/common/addLogExclude', { fingerprint, deviceId, note });
-export const removeLogExclude = (fingerprint: string) =>
-  apiBasePost('/api/common/removeLogExclude', { fingerprint });
+export const removeLogExclude = (fingerprint: string) => apiBasePost('/api/common/removeLogExclude', { fingerprint });

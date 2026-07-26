@@ -161,7 +161,17 @@ export function useBookmarkEditor() {
         module: '书签详情',
         operation: `${handleType.value === 'add' ? '新增' : '保存'}书签成功【${bookmarkData.value.name || params.url}】`,
       });
-      if (handleType.value === 'edit') {
+      if (handleType.value === 'add') {
+        const createdBookmarkId = String(res.data?.id || '').trim();
+        if (createdBookmarkId) {
+          bookmarkData.value.id = createdBookmarkId;
+          // 新增成功后立即开始取图但不阻塞返回；列表卡片通过全局运行态直接显示加载占位。
+          void refreshBookmarkIconAfterSave(
+            { ...bookmarkData.value, id: createdBookmarkId, iconUrl: '' },
+            { clearExisting: true },
+          );
+        }
+      } else {
         // 保存成功后立即发起后台校验，不阻塞返回列表；跨站点时旧图标不再继续冒充新站点图标。
         void refreshBookmarkIconAfterSave(
           { ...bookmarkData.value, iconUrl: previousIconUrl },

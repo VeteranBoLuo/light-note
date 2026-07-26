@@ -2,6 +2,7 @@ import { reactive } from 'vue';
 
 export interface BookmarkIconRuntimeState {
   refreshing: boolean;
+  batchLoading: boolean;
   iconUrl: string;
   hasIconOverride: boolean;
   hidePreviousIcon: boolean;
@@ -20,6 +21,7 @@ function ensureBookmarkIconState(id: string) {
   if (!bookmarkIconStates[id]) {
     bookmarkIconStates[id] = {
       refreshing: false,
+      batchLoading: false,
       iconUrl: '',
       hasIconOverride: false,
       hidePreviousIcon: false,
@@ -64,6 +66,17 @@ export function finishBookmarkIconRefresh(id?: string, requestToken = 0, iconUrl
     state.hidePreviousIcon = false;
   }
   state.refreshing = false;
+}
+
+/**
+ * 标记后台导入批次中仍在排队或处理的书签。
+ * 与单条保存后刷新分开存储，任一链路仍在工作时卡片都应保持加载态。
+ */
+export function setBookmarkIconBatchLoading(id?: string, loading = true) {
+  const bookmarkId = normalizeBookmarkId(id);
+  if (!bookmarkId) return;
+  if (!loading && !bookmarkIconStates[bookmarkId]) return;
+  ensureBookmarkIconState(bookmarkId).batchLoading = loading;
 }
 
 export function getBookmarkIconRuntimeState(id?: string) {

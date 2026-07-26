@@ -20,7 +20,12 @@ vi.mock('@/store/useUser.ts', () => ({
   default: () => mocks.user,
 }));
 
-import { loadBookmarkIconsProgressively, needsBookmarkIconRefresh, refreshBookmarkIconAfterSave } from './commonApi.ts';
+import {
+  loadBookmarkIconsProgressively,
+  needsBookmarkIconRefresh,
+  refreshBookmarkIconAfterSave,
+  resetBookmarkIconRefreshRequests,
+} from './commonApi.ts';
 
 describe('needsBookmarkIconRefresh', () => {
   const now = Date.parse('2026-07-15T12:00:00Z');
@@ -52,6 +57,7 @@ describe('loadBookmarkIconsProgressively', () => {
     mocks.isAdminLoginPreview.mockReset();
     mocks.user.visitorWorkspace = false;
     resetBookmarkIconRuntime();
+    resetBookmarkIconRefreshRequests();
   });
 
   it('普通用户的管理员只读预览不触发图标写入请求', async () => {
@@ -110,6 +116,7 @@ describe('refreshBookmarkIconAfterSave', () => {
   beforeEach(() => {
     mocks.apiBasePost.mockReset();
     resetBookmarkIconRuntime();
+    resetBookmarkIconRefreshRequests();
   });
 
   it('同一书签的重复保存后请求会复用在途任务，并把结果回填到运行态', async () => {
@@ -151,5 +158,32 @@ describe('refreshBookmarkIconAfterSave', () => {
       iconUrl: '/uploads/new.png',
       hasIconOverride: true,
     });
+  });
+
+  it('返回列表后的渐进补图复用新增书签的在途请求', async () => {
+    let resolveRequest: (value: unknown) => void = () => {};
+    mocks.apiBasePost.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
+    const editorItem = { id: 'bookmark-1', url: 'https://example.com' };
+    const listItem = { id: 'bookmark-1', url: 'https://example.com' };
+
+    const afterSaveRequest = refreshBookmarkIconAfterSave(editorItem);
+    const applyIcon = vi.fn();
+    const progressiveRequest = loadBookmarkIconsProgressively([listItem], applyIcon);
+
+    expect(mocks.apiBasePost).toHaveBeenCalledOnce();
+    resolveRequest({
+      status: 200,
+      data: [{ id: 'bookmark-1', iconUrl: '/uploads/new.png' }],
+    });
+
+    await afterSaveRequest;
+    await progressiveRequest;
+    expect(applyIcon).toHaveBeenCalledWith('bookmark-1', '/uploads/new.png');
+    expect(listItem.iconUrl).toBe('/uploads/new.png');
   });
 });

@@ -5,6 +5,7 @@ import {
   getBookmarkIconRuntimeState,
   resetBookmarkIconRuntime,
   resolveBookmarkIconSource,
+  setBookmarkIconBatchLoading,
 } from './bookmarkIconRuntime.ts';
 
 describe('bookmarkIconRuntime', () => {
@@ -47,5 +48,23 @@ describe('bookmarkIconRuntime', () => {
 
     finishBookmarkIconRefresh('bookmark-1', secondToken, '/uploads/latest.png');
     expect(resolveBookmarkIconSource('bookmark-1', '')).toBe('/uploads/latest.png');
+  });
+
+  it('批次加载态与单条保存后刷新相互独立', () => {
+    setBookmarkIconBatchLoading('bookmark-1', true);
+    const token = beginBookmarkIconRefresh('bookmark-1');
+
+    expect(getBookmarkIconRuntimeState('bookmark-1')).toMatchObject({
+      refreshing: true,
+      batchLoading: true,
+    });
+    setBookmarkIconBatchLoading('bookmark-1', false);
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.refreshing).toBe(true);
+
+    finishBookmarkIconRefresh('bookmark-1', token);
+    expect(getBookmarkIconRuntimeState('bookmark-1')).toMatchObject({
+      refreshing: false,
+      batchLoading: false,
+    });
   });
 });

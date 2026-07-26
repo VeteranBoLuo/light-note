@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue';
+import { setBookmarkIconBatchLoading } from '@/composables/bookmarkIconRuntime.ts';
 
 export type IconBatchCursor = {
   finishedAt: string;
@@ -25,6 +26,7 @@ export type IconBatchState = {
   processing: number;
   retryWaiting: number;
   status: 'queued' | 'processing' | 'completed' | 'no_tasks';
+  activeBookmarkIds?: string[];
   updates?: IconBatchUpdate[];
   nextCursor?: IconBatchCursor | null;
 };
@@ -94,6 +96,9 @@ function normalizeState(batchId: string, value: Partial<IconBatchState>): IconBa
     processing: toCount(value.processing),
     retryWaiting: toCount(value.retryWaiting),
     status,
+    activeBookmarkIds: Array.isArray(value.activeBookmarkIds)
+      ? Array.from(new Set(value.activeBookmarkIds.map((id) => String(id || '').trim()).filter(Boolean)))
+      : [],
     updates: Array.isArray(value.updates) ? value.updates : [],
     nextCursor: value.nextCursor || null,
   };
@@ -137,6 +142,18 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
   let lastProgressAt = now();
   let wasWaitingForRetry = false;
   let generation = 0;
+  let loadingBookmarkIds = new Set<string>();
+
+  function replaceLoadingBookmarkIds(nextIds: string[] = []) {
+    const next = new Set(nextIds.map((id) => String(id || '').trim()).filter(Boolean));
+    loadingBookmarkIds.forEach((id) => {
+      if (!next.has(id)) setBookmarkIconBatchLoading(id, false);
+    });
+    next.forEach((id) => {
+      if (!loadingBookmarkIds.has(id)) setBookmarkIconBatchLoading(id, true);
+    });
+    loadingBookmarkIds = next;
+  }
 
   function clearTimer() {
     if (timer === null) return;
@@ -176,6 +193,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
     activeBatchId = '';
     cursor.value = null;
     state.value = null;
+    replaceLoadingBookmarkIds();
     clearPending();
     notifyFallback();
     await reloadBookmarks({ refreshIcons: true });
@@ -199,6 +217,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
       consecutiveFailures = 0;
       const nextState = normalizeState(batchId, response.data);
       state.value = nextState;
+      replaceLoadingBookmarkIds(nextState.activeBookmarkIds);
       applyIconBatchUpdates(bookmarks.value, nextState.updates);
       if (nextState.nextCursor) cursor.value = nextState.nextCursor;
 
@@ -250,11 +269,12 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
     }
   }
 
-  async function start(batchId: string, total = 0) {
+  async function start(batchId: string, total = 0, initialBookmarkIds: string[] = []) {
     const normalizedBatchId = String(batchId || '').trim();
     if (!normalizedBatchId) return;
     generation += 1;
     clearTimer();
+    replaceLoadingBookmarkIds(initialBookmarkIds);
     activeBatchId = normalizedBatchId;
     consecutiveFailures = 0;
     lastCompleted = 0;
@@ -264,7 +284,9 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
     state.value = normalizeState(normalizedBatchId, {
       batchId: normalizedBatchId,
       total,
+      queued: total,
       status: 'queued',
+      activeBookmarkIds: initialBookmarkIds,
     });
     savePending(normalizedBatchId);
     await pollNow();
@@ -276,6 +298,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
     activeBatchId = '';
     cursor.value = null;
     state.value = null;
+    replaceLoadingBookmarkIds();
     clearPending();
   }
 
@@ -284,6 +307,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
     clearTimer();
     activeBatchId = '';
     cursor.value = null;
+    replaceLoadingBookmarkIds();
   }
 
   function readPendingBatch() {
@@ -325,14 +349,16 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
 }
 
 export async function refreshAfterBookmarkImport(
-  iconBatch: { batchId?: string; total?: number } | undefined,
-  startTracking: (batchId: string, total: number) => Promise<unknown>,
+  iconBatch: { batchId?: string; total?: number; bookmarkIds?: string[] } | undefined,
+  startTracking: (batchId: string, total: number, initialBookmarkIds?: string[]) => Promise<unknown>,
   reloadBookmarks: ReloadBookmarks,
 ) {
   const batchId = String(iconBatch?.batchId || '').trim();
   const total = toCount(iconBatch?.total);
   if (batchId && total > 0) {
-    void startTracking(batchId, total);
+    // 导入响应直接携带新建书签 ID，start 的同步阶段会先写入全局加载态；
+    // 状态轮询继续异步运行，不额外拖慢导入后的列表展示。
+    void startTracking(batchId, total, Array.isArray(iconBatch?.bookmarkIds) ? iconBatch.bookmarkIds : []);
     await reloadBookmarks({ refreshIcons: false });
     return true;
   }

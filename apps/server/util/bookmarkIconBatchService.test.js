@@ -9,11 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../db/index.js', () => ({ default: mocks.pool }));
 
-const {
-  createIconBatch,
-  getIconBatchStatus,
-  retryIconBatchFailures,
-} = await import('./bookmarkIconBatchService.js');
+const { createIconBatch, getIconBatchStatus, retryIconBatchFailures } = await import('./bookmarkIconBatchService.js');
 
 describe('bookmarkIconBatchService', () => {
   beforeEach(() => {
@@ -24,9 +20,7 @@ describe('bookmarkIconBatchService', () => {
   it('功能开关关闭时不创建后台任务', async () => {
     process.env.BOOKMARK_ICON_BACKGROUND_JOBS_ENABLED = 'false';
 
-    const result = await createIconBatch('user-1', [
-      { id: 'bookmark-1', url: 'https://example.com' },
-    ]);
+    const result = await createIconBatch('user-1', [{ id: 'bookmark-1', url: 'https://example.com' }]);
 
     expect(result).toMatchObject({ total: 0, status: 'no_tasks' });
     expect(mocks.pool.query).not.toHaveBeenCalled();
@@ -37,13 +31,9 @@ describe('bookmarkIconBatchService', () => {
       code: 'ER_LOCK_DEADLOCK',
       errno: 1213,
     });
-    mocks.pool.query
-      .mockRejectedValueOnce(deadlock)
-      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    mocks.pool.query.mockRejectedValueOnce(deadlock).mockResolvedValueOnce([{ affectedRows: 1 }]);
 
-    const result = await createIconBatch('user-1', [
-      { id: 'bookmark-1', url: 'https://example.com/path' },
-    ]);
+    const result = await createIconBatch('user-1', [{ id: 'bookmark-1', url: 'https://example.com/path' }]);
 
     expect(result).toMatchObject({ total: 1, status: 'queued' });
     expect(mocks.pool.query).toHaveBeenCalledTimes(2);
@@ -56,27 +46,27 @@ describe('bookmarkIconBatchService', () => {
     });
     mocks.pool.query.mockRejectedValueOnce(failure);
 
-    await expect(
-      createIconBatch('user-1', [
-        { id: 'bookmark-1', url: 'https://example.com/path' },
-      ]),
-    ).rejects.toBe(failure);
+    await expect(createIconBatch('user-1', [{ id: 'bookmark-1', url: 'https://example.com/path' }])).rejects.toBe(
+      failure,
+    );
     expect(mocks.pool.query).toHaveBeenCalledOnce();
   });
 
   it('增量状态查询严格携带用户归属和可回传的游标', async () => {
     mocks.pool.query
       .mockResolvedValueOnce([[{ status: 'success', cnt: 1 }]])
-      .mockResolvedValueOnce([[{ total: 1 }]])
-      .mockResolvedValueOnce([[
-        {
-          jobId: 7,
-          bookmarkId: 'bookmark-1',
-          status: 'success',
-          finishedAt: new Date('2026-07-25T02:00:00.123Z'),
-          iconUrl: '/uploads/icon.png',
-        },
-      ]]);
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([
+        [
+          {
+            jobId: 7,
+            bookmarkId: 'bookmark-1',
+            status: 'success',
+            finishedAt: new Date('2026-07-25T02:00:00.123Z'),
+            iconUrl: '/uploads/icon.png',
+          },
+        ],
+      ]);
 
     const result = await getIconBatchStatus('batch-1', 'user-1', {
       finishedAt: '2026-07-25T01:00:00.000Z',
@@ -85,6 +75,7 @@ describe('bookmarkIconBatchService', () => {
 
     expect(result.status).toBe('completed');
     expect(result.total).toBe(1);
+    expect(result.activeBookmarkIds).toEqual([]);
     expect(result.updates).toHaveLength(1);
     expect(result.nextCursor).toEqual({
       finishedAt: new Date('2026-07-25T02:00:00.123Z'),
@@ -95,20 +86,46 @@ describe('bookmarkIconBatchService', () => {
     expect(mocks.pool.query.mock.calls[2][1][2]).toBeInstanceOf(Date);
   });
 
+  it('只把 queued 和 processing 任务作为卡片加载态返回', async () => {
+    mocks.pool.query
+      .mockResolvedValueOnce([
+        [
+          { status: 'queued', cnt: 1 },
+          { status: 'processing', cnt: 1 },
+          { status: 'retry_wait', cnt: 1 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ bookmarkId: 'bookmark-queued' }, { bookmarkId: 'bookmark-processing' }]])
+      .mockResolvedValueOnce([[]]);
+
+    const result = await getIconBatchStatus('batch-1', 'user-1');
+
+    expect(result.total).toBe(3);
+    expect(result.activeBookmarkIds).toEqual(['bookmark-queued', 'bookmark-processing']);
+    expect(result.retryWaiting).toBe(1);
+    const activeSql = mocks.pool.query.mock.calls[1][0];
+    const activeParams = mocks.pool.query.mock.calls[1][1];
+    expect(activeSql).toContain("status IN ('queued', 'processing')");
+    expect(activeParams).toEqual(['batch-1', 'user-1']);
+  });
+
   it('重试失败项时重新读取当前 URL 并清空全部终态与锁字段', async () => {
     const connection = {
       beginTransaction: vi.fn().mockResolvedValue(undefined),
       commit: vi.fn().mockResolvedValue(undefined),
       rollback: vi.fn().mockResolvedValue(undefined),
       release: vi.fn(),
-      query: vi.fn()
-        .mockResolvedValueOnce([[
-          {
-            id: 11,
-            bookmarkId: 'bookmark-1',
-            currentUrl: 'https://new.example/path',
-          },
-        ]])
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            {
+              id: 11,
+              bookmarkId: 'bookmark-1',
+              currentUrl: 'https://new.example/path',
+            },
+          ],
+        ])
         .mockResolvedValueOnce([{ affectedRows: 1 }]),
     };
     mocks.pool.getConnection.mockResolvedValue(connection);

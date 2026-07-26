@@ -35,7 +35,9 @@
   const resolvedSrc = computed(() => resolveBookmarkIconSource(props.bookmarkId, props.src));
   // 刷新已有图标时继续展示旧图；只有当前确实没有可用图标时才展示加载态。
   const resolvedLoading = computed(
-    () => !resolvedSrc.value && (props.loading || Boolean(runtimeState.value?.refreshing)),
+    () =>
+      !resolvedSrc.value &&
+      (props.loading || Boolean(runtimeState.value?.refreshing) || Boolean(runtimeState.value?.batchLoading)),
   );
 
   function handleError(event: Event) {

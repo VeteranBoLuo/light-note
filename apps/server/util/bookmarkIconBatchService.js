@@ -81,8 +81,12 @@ export async function createIconBatch(userId, bookmarks) {
     const chunk = tasks.slice(i, i + BATCH_SIZE);
     const values = chunk.map(() => '(?,?,?,?,?,?)').join(',');
     const params = chunk.flatMap((t) => [
-      t.batch_id, t.user_id, t.bookmark_id,
-      t.url_snapshot, t.origin_key, t.url_hash,
+      t.batch_id,
+      t.user_id,
+      t.bookmark_id,
+      t.url_snapshot,
+      t.origin_key,
+      t.url_hash,
     ]);
 
     const [result] = await insertIconJobChunk(
@@ -111,18 +115,22 @@ export async function getIconBatchStatus(batchId, userId, cursor = {}) {
     [batchId, userId],
   );
 
-  const totalResult = await pool.query(
-    'SELECT COUNT(*) as total FROM bookmark_icon_jobs WHERE batch_id = ? AND user_id = ?',
+  const [activeRows] = await pool.query(
+    `SELECT bookmark_id AS bookmarkId
+     FROM bookmark_icon_jobs
+     WHERE batch_id = ? AND user_id = ? AND status IN ('queued', 'processing')
+     ORDER BY id ASC`,
     [batchId, userId],
   );
-  const total = Number(totalResult[0]?.[0]?.total || 0);
 
   const statusMap = {};
   for (const r of rows) {
     statusMap[r.status] = Number(r.cnt);
   }
+  const total = Object.values(statusMap).reduce((sum, count) => sum + Number(count || 0), 0);
 
-  const completed = (statusMap.success || 0) + (statusMap.not_found || 0) + (statusMap.failed || 0) + (statusMap.cancelled || 0);
+  const completed =
+    (statusMap.success || 0) + (statusMap.not_found || 0) + (statusMap.failed || 0) + (statusMap.cancelled || 0);
 
   let overallStatus = 'processing';
   if (completed >= total && total > 0) {
@@ -137,9 +145,7 @@ export async function getIconBatchStatus(batchId, userId, cursor = {}) {
   const parsedCursorDate = cursor?.finishedAt ? new Date(cursor.finishedAt) : new Date(0);
   const cursorFinishedAt = Number.isNaN(parsedCursorDate.getTime()) ? new Date(0) : parsedCursorDate;
   const parsedCursorJobId = Number(cursor?.jobId || 0);
-  const cursorJobId = Number.isSafeInteger(parsedCursorJobId) && parsedCursorJobId >= 0
-    ? parsedCursorJobId
-    : 0;
+  const cursorJobId = Number.isSafeInteger(parsedCursorJobId) && parsedCursorJobId >= 0 ? parsedCursorJobId : 0;
 
   const [updateRows] = await pool.query(
     `SELECT j.id AS jobId, j.bookmark_id AS bookmarkId, j.status, j.finished_at AS finishedAt,
@@ -180,6 +186,7 @@ export async function getIconBatchStatus(batchId, userId, cursor = {}) {
     processing: statusMap.processing || 0,
     retryWaiting: statusMap.retry_wait || 0,
     status: overallStatus,
+    activeBookmarkIds: (activeRows || []).map((row) => String(row.bookmarkId || '')).filter(Boolean),
     updates,
     nextCursor,
   };

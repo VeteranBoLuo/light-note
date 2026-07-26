@@ -60,7 +60,16 @@ async function createImportIconBatch(stats, userId) {
   if (ids.length === 0) return undefined;
   const bookmarksForIcon = await getBookmarksForIcon(ids, userId);
   if (bookmarksForIcon.length === 0) return undefined;
-  return createIconBatch(userId, bookmarksForIcon);
+  const batch = await createIconBatch(userId, bookmarksForIcon);
+  return {
+    ...batch,
+    // 导入产生的书签 ID 都是新的；只有整批任务均成功入队时才用于首屏加载态，
+    // 极少数 INSERT IGNORE 部分命中时交给首次状态轮询返回精确集合。
+    bookmarkIds:
+      batch.total === bookmarksForIcon.length
+        ? bookmarksForIcon.map((bookmark) => String(bookmark.id || '')).filter(Boolean)
+        : [],
+  };
 }
 
 // ──
@@ -1017,7 +1026,12 @@ export const importBookmarksHtml = async (req, res) => {
       ...stats,
       iconBatch:
         iconBatch?.total > 0
-          ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status }
+          ? {
+              batchId: iconBatch.batchId,
+              total: iconBatch.total,
+              status: iconBatch.status,
+              bookmarkIds: iconBatch.bookmarkIds,
+            }
           : undefined,
     }),
   );
@@ -1060,7 +1074,12 @@ export const importBookmarksExcel = async (req, res) => {
       ...stats,
       iconBatch:
         iconBatch?.total > 0
-          ? { batchId: iconBatch.batchId, total: iconBatch.total, status: iconBatch.status }
+          ? {
+              batchId: iconBatch.batchId,
+              total: iconBatch.total,
+              status: iconBatch.status,
+              bookmarkIds: iconBatch.bookmarkIds,
+            }
           : undefined,
     }),
   );
