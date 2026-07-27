@@ -48,7 +48,7 @@
             <span>{{ actionDescription }}</span>
           </div>
           <BButton
-            v-if="!isStandalone"
+            v-if="canPrompt && !isStandalone"
             type="primary"
             class="pwa-guide__install-button"
             :loading="prompting"
@@ -136,7 +136,7 @@
   import icon from '@/config/icon';
   import { usePwaInstall, type PwaGuidePlatform } from '@/composables/usePwaInstall';
 
-  const { t } = useI18n();
+  const { t, te } = useI18n();
   const {
     canPrompt,
     detectedBrowser,
@@ -170,13 +170,15 @@
     () => platformOptions.value.find((platform) => platform.key === guidePlatform.value)?.label || '',
   );
   const detectedBrowserLabel = computed(() => t(`pwa.browsers.${detectedBrowser.value}.label`));
-  const steps = computed(() => [
-    t(`pwa.platforms.${guidePlatform.value}.step1`),
-    guidePlatform.value === detectedPlatform.value
-      ? t(`pwa.browsers.${detectedBrowser.value}.step2`)
-      : t(`pwa.platforms.${guidePlatform.value}.step2`),
-    t(`pwa.platforms.${guidePlatform.value}.step3`),
-  ]);
+  const steps = computed(() => {
+    const browserStepKey = `pwa.browsers.${detectedBrowser.value}.step2.${guidePlatform.value}`;
+    const useDetectedBrowserStep = guidePlatform.value === detectedPlatform.value && te(browserStepKey);
+    return [
+      t(`pwa.platforms.${guidePlatform.value}.step1`),
+      useDetectedBrowserStep ? t(browserStepKey) : t(`pwa.platforms.${guidePlatform.value}.step2`),
+      t(`pwa.platforms.${guidePlatform.value}.step3`),
+    ];
+  });
   const activeNote = computed(() => {
     const platformNote = t(`pwa.platforms.${guidePlatform.value}.note`);
     if (guidePlatform.value !== detectedPlatform.value) return platformNote;
@@ -185,11 +187,11 @@
   });
   const actionTitle = computed(() => {
     if (isStandalone.value) return t('pwa.installed');
-    return canPrompt.value ? t('pwa.directAvailable') : t('pwa.tryDirectInstall');
+    return canPrompt.value ? t('pwa.directAvailable') : t('pwa.manualAvailable');
   });
   const actionDescription = computed(() => {
     if (isStandalone.value) return t('pwa.guideIntroDesc');
-    return canPrompt.value ? t('pwa.directAvailableDesc') : t('pwa.tryDirectInstallDesc');
+    return canPrompt.value ? t('pwa.directAvailableDesc') : t('pwa.manualHint');
   });
 
   function selectPlatform(platform: PwaGuidePlatform) {

@@ -99,6 +99,7 @@ export const OPERATION_LOG_MAP = {
   }),
   pwa: createModule('PWA安装', {
     openGuide: '查看安装教程',
+    requestInstall: '点击一键安装',
     accepted: '接受安装轻笺',
     dismissed: '取消安装轻笺',
     unsupported: '浏览器不支持一键安装',

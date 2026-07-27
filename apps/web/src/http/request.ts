@@ -2,7 +2,7 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
-import { getBrowserType, getLogDeviceId, getLogFingerprint, getUserOsInfo } from '@/utils/common.ts';
+import { getApiLogOsInfo, getBrowserType, getLogDeviceId, getLogFingerprint } from '@/utils/common.ts';
 import {
   clearAdminLoginPreview,
   getAdminContextToken,
@@ -160,7 +160,7 @@ request.interceptors.request.use(
       } catch (e) {
         currentLang = 'zh-CN';
       }
-      config.headers['OS'] = getUserOsInfo();
+      config.headers['OS'] = getApiLogOsInfo();
       config.headers['Browser'] = getBrowserType();
       config.headers['X-Lang'] = currentLang;
       const adminContextToken = getAdminContextToken();

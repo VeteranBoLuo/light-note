@@ -15,6 +15,7 @@ export type PwaBrowserFamily =
   | 'opera'
   | 'uc'
   | 'qq'
+  | 'wechat'
   | 'baidu'
   | 'sogou'
   | 'other';
@@ -40,6 +41,20 @@ const detectedBrowser = ref<PwaBrowserFamily>('other');
 const detectedPlatform = ref<PwaGuidePlatform>('desktop');
 let initialized = false;
 
+const INSTALL_SOURCE_LABELS: Record<PwaInstallSource, string> = {
+  landing: '官网首页',
+  'landing-final': '官网底部',
+  'person-center': '个人中心',
+  settings: '设置',
+};
+
+function withInstallSource(operation: { module: string; operation: string }, source: PwaInstallSource) {
+  return {
+    ...operation,
+    operation: `${operation.operation}【${INSTALL_SOURCE_LABELS[source]}】`,
+  };
+}
+
 export function detectPwaBrowserFamily(userAgent: string): PwaBrowserFamily {
   if (/HuaweiBrowser/i.test(userAgent)) return 'huawei';
   if (/Quark/i.test(userAgent)) return 'quark';
@@ -48,8 +63,9 @@ export function detectPwaBrowserFamily(userAgent: string): PwaBrowserFamily {
   if (/FxiOS|Firefox/i.test(userAgent)) return 'firefox';
   if (/OPiOS|OPR\/|Opera/i.test(userAgent)) return 'opera';
   if (/UCBrowser|UCWEB/i.test(userAgent)) return 'uc';
-  if (/MQQBrowser|QQBrowser/i.test(userAgent)) return 'qq';
-  if (/BIDUBrowser|baidubrowser/i.test(userAgent)) return 'baidu';
+  if (/MicroMessenger/i.test(userAgent)) return 'wechat';
+  if (/MQQBrowser|QQBrowser|TencentTraveler/i.test(userAgent)) return 'qq';
+  if (/BIDUBrowser|baidubrowser|baiduboxapp|BaiduHD/i.test(userAgent)) return 'baidu';
   if (/MetaSr|SogouMobileBrowser/i.test(userAgent)) return 'sogou';
   if (/CriOS|Chrome|Chromium/i.test(userAgent)) return 'chrome';
   if (/Safari/i.test(userAgent)) return 'safari';
@@ -131,10 +147,7 @@ function recordInstallResult(source: PwaInstallSource, result: Exclude<PwaInstal
     unsupported: OPERATION_LOG_MAP.pwa.unsupported,
     failed: OPERATION_LOG_MAP.pwa.failed,
   }[result];
-  void recordOperation({
-    ...operation,
-    operation: `${operation.operation}【${source}】`,
-  });
+  void recordOperation(withInstallSource(operation, source));
 }
 
 export function usePwaInstall() {
@@ -147,13 +160,12 @@ export function usePwaInstall() {
     guideSource.value = source;
     guidePlatform.value = platform || detectedPlatform.value;
     guideVisible.value = true;
-    void recordOperation({
-      ...OPERATION_LOG_MAP.pwa.openGuide,
-      operation: `${OPERATION_LOG_MAP.pwa.openGuide.operation}【${source}】`,
-    });
+    void recordOperation(withInstallSource(OPERATION_LOG_MAP.pwa.openGuide, source));
   }
 
   async function requestInstall(source: PwaInstallSource): Promise<PwaInstallResult> {
+    // 不等待日志请求，避免丢失浏览器要求的一次性用户手势，导致安装弹窗无法调起。
+    void recordOperation(withInstallSource(OPERATION_LOG_MAP.pwa.requestInstall, source));
     if (standalone.value) return 'installed';
     const promptEvent = deferredPrompt.value;
     if (!promptEvent) {

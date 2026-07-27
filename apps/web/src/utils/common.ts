@@ -138,6 +138,23 @@ export function getUserOsInfo() {
   return 'Other';
 }
 
+// PWA 安装后仍沿用浏览器 User-Agent，只能通过独立窗口显示模式识别。
+// 该结果仅用于 API 日志展示，不参与设备身份、登录归并或权限判断。
+export function isPwaStandaloneMode() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const navigatorStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  try {
+    return navigatorStandalone || window.matchMedia('(display-mode: standalone)').matches;
+  } catch {
+    return navigatorStandalone;
+  }
+}
+
+export function getApiLogOsInfo() {
+  const os = getUserOsInfo();
+  return isPwaStandaloneMode() ? `${os}(app)` : os;
+}
+
 // fingerprint.js
 export function fingerprint() {
   // 创建一个简单的哈希函数，用于生成字符串的哈希值

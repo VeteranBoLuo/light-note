@@ -26,4 +26,32 @@ describe('locale key parity', () => {
     i18n.global.locale.value = 'en-US';
     expect(i18n.global.t('note.resourceMention.insertFailed')).toContain('insertion position');
   });
+
+  it('provides install instructions for every detected browser and platform combination', () => {
+    const browsers = [
+      'huawei',
+      'quark',
+      'chrome',
+      'edge',
+      'firefox',
+      'safari',
+      '360',
+      'opera',
+      'uc',
+      'qq',
+      'wechat',
+      'baidu',
+      'sogou',
+      'other',
+    ] as const;
+    const platforms = ['harmony', 'android', 'ios', 'desktop'] as const;
+
+    for (const locale of [zhCN, enUS]) {
+      for (const browser of browsers) {
+        for (const platform of platforms) {
+          expect(locale.pwa.browsers[browser].step2[platform]).toBeTruthy();
+        }
+      }
+    }
+  });
 });

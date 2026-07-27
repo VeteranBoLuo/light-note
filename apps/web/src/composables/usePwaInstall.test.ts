@@ -38,6 +38,9 @@ describe('usePwaInstall', () => {
     expect(detectPwaBrowserFamily('Mozilla/5.0 QHBrowser/14.5 Chrome/122.0')).toBe('360');
     expect(detectPwaBrowserFamily('Mozilla/5.0 EdgA/138.0 Chrome/138.0')).toBe('edge');
     expect(detectPwaBrowserFamily('Mozilla/5.0 Firefox/140.0')).toBe('firefox');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 MQQBrowser/6.2 MicroMessenger/8.0.60')).toBe('wechat');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 baiduboxapp/14.0')).toBe('baidu');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 TencentTraveler MQQBrowser/16.0')).toBe('qq');
 
     initializePwaInstall();
     const pwa = usePwaInstall();
@@ -46,10 +49,22 @@ describe('usePwaInstall', () => {
     expect(pwa.detectedPlatform.value).toBe('android');
     expect(await pwa.requestInstall('settings')).toBe('unsupported');
     expect(pwa.guideVisible.value).toBe(false);
+    expect(recordOperation).toHaveBeenCalledWith({
+      module: 'PWA安装',
+      operation: '点击一键安装【设置】',
+    });
+    expect(recordOperation).toHaveBeenCalledWith({
+      module: 'PWA安装',
+      operation: '浏览器不支持一键安装【设置】',
+    });
 
     pwa.openGuide('settings');
     expect(pwa.guideVisible.value).toBe(true);
     expect(pwa.guidePlatform.value).toBe('android');
+    expect(recordOperation).toHaveBeenCalledWith({
+      module: 'PWA安装',
+      operation: '查看安装教程【设置】',
+    });
 
     const acceptedPrompt = vi.fn().mockResolvedValue({ outcome: 'accepted', platform: 'web' });
     const acceptedEvent = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
