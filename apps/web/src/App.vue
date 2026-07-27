@@ -1,5 +1,5 @@
 <template>
-  <div id="app" style="width: 100vw">
+  <div id="app" style="width: 100vw" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
     <a-config-provider
       :theme="{
         token: {
@@ -7,24 +7,27 @@
         },
       }"
     >
-      <router-view />
+      <MobileAppShell
+        :enabled="mobileShellEnabled"
+        :show-top-switcher="mobileTopSwitcherActive"
+        :show-bottom-nav="mobileBottomNavActive"
+      >
+        <router-view />
+      </MobileAppShell>
       <Login v-if="bookmark.isShowLogin" />
       <BViewer />
-      <FloatQuestion v-if="aiVisible" />
+      <FloatQuestion v-if="aiVisible" :hide-trigger="mobileBottomNavActive" />
       <GuestNudge />
       <DisplayScaleSuggestion />
       <AdminContextBanner />
-      <QuickCaptureModal
-        v-if="inbox.quickCaptureVisible"
-        v-model:visible="inbox.quickCaptureVisible"
-      />
+      <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
     </a-config-provider>
   </div>
 </template>
 <script setup lang="ts">
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useGrowth } from '@/composables/useGrowth';
-  import { h, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent } from 'vue';
+  import { h, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, provide, ref } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { getNoticeSummary, resetBookmarkIconRefreshRequests } from '@/api/commonApi.ts';
@@ -44,6 +47,13 @@
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
   import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
+  import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
+  import {
+    LANDING_AUTH_CONTEXT,
+    resolveLandingAuthStatus,
+    type LandingAuthStatus,
+  } from '@/view/landing/landingAuth.ts';
+  import { applyDocumentTheme } from '@/utils/theme.ts';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -118,9 +128,17 @@
     return (
       !bookmark.isShowLogin &&
       router.currentRoute.value.name !== 'landing' &&
+      router.currentRoute.value.name !== 'mobileAiWorkspace' &&
       (user.preferences as any).aiEnabled !== false
     );
   });
+  const mobileTopSwitcherActive = computed(
+    () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopSwitcher === true,
+  );
+  const mobileBottomNavActive = computed(
+    () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
+  );
+  const mobileShellEnabled = computed(() => mobileTopSwitcherActive.value || mobileBottomNavActive.value);
   function getStoredPreferences() {
     if (isAdminLoginPreview()) {
       return getAdminLoginPreviewPreferences();
@@ -190,6 +208,13 @@
   let noticeRequest: Promise<void> | null = null;
   let userInfoRequest: Promise<any> | null = null;
   let userInfoLoaded = false;
+  // 官网 CTA 单独等待 /me 的确定结果，避免 Pinia 初始游客值在登录态恢复前短暂露出注册入口。
+  // 它不参与登录、会话或路由鉴权，只影响 Landing 的按钮展示与点击资格。
+  const landingAuthStatus = ref<LandingAuthStatus>('pending');
+  provide(LANDING_AUTH_CONTEXT, {
+    status: landingAuthStatus,
+    retry: () => getUserInfo(true),
+  });
   let isHandlingAuthExpired = false;
   let isHandlingUserBanned = false;
   let authExpireTimer: number | null = null;
@@ -267,6 +292,7 @@
       return userInfoRequest;
     }
 
+    landingAuthStatus.value = 'pending';
     userInfoRequest = (async () => {
       // 记录发起本次 /me 时的登录身份,用于识别并丢弃「陈旧的在途响应」
       const reqUserId = user.id || '';
@@ -280,6 +306,12 @@
         }
         userInfoLoaded = true;
         applyUserInfo(res.data);
+        // 只有服务端明确返回 visitor 才开放注册入口；接口异常、格式异常等未知状态保留重试，
+        // 不能把已登录 Cookie 尚未确认的用户错误降级为游客。
+        landingAuthStatus.value = resolveLandingAuthStatus(
+          res.status,
+          Boolean(user.id && user.role !== RoleEnum.VISITOR),
+        );
         if (res.status === 200) {
           bookmark.isShowLogin = false;
           await refreshOpinionNotice();
@@ -294,6 +326,8 @@
         userInfoLoaded = true;
         message.error(t('app.loadUserFailed'), error);
         handleUserLogout();
+        // 网络失败不是“未登录”的可靠结论，Landing 只提供重试，不展示注册入口。
+        landingAuthStatus.value = 'error';
         return null;
       } finally {
         userInfoRequest = null;
@@ -310,8 +344,8 @@
 
     // 强制重绘确保样式生效
     void document.documentElement.offsetWidth;
-    // 执行主题切换
-    document.documentElement.setAttribute('data-theme', user.currentTheme);
+    // 同步 CSS 变量主题与浏览器原生配色；浅色使用 only light，避免鸿蒙等浏览器再次自动暗化页面。
+    applyDocumentTheme(user.currentTheme);
 
     // 下一事件循环恢复动画
     setTimeout(() => {
@@ -350,6 +384,8 @@
     }
     if (resetUser) {
       user.resetUserInfo();
+      // 显式登出或会话失效已经完成本地退出，官网可安全恢复游客 CTA。
+      landingAuthStatus.value = 'anonymous';
     }
     setStoredPreferences(user.preferences);
     // 退出/会话失效后是否弹登录框：仅对曾登录过的老用户弹，纯游客不弹
@@ -444,7 +480,10 @@
             {
               onClick: () => {
                 notification.close(NOTICE_KEY);
-                router.push({ path: bookmark.isMobile ? '/userOpinion' : '/admin/userOpinion', query: { status: 'pending' } });
+                router.push({
+                  path: bookmark.isMobile ? '/userOpinion' : '/admin/userOpinion',
+                  query: { status: 'pending' },
+                });
               },
             },
             `${t('personCenter.opinions.feedbackModule')}：${opinion.pendingTotal}${t('personCenter.opinions.pendingCountSuffix')}`,
@@ -561,7 +600,16 @@
     }, NOTICE_POLLING_INTERVAL);
   }
 
-  const skipRouter = ['help', 'updateLogs', 'githubCallBack', 'not-found', 'not-role', 'landing', 'banned', 'quickSave'];
+  const skipRouter = [
+    'help',
+    'updateLogs',
+    'githubCallBack',
+    'not-found',
+    'not-role',
+    'landing',
+    'banned',
+    'quickSave',
+  ];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {
@@ -687,6 +735,10 @@
   }
 </script>
 <style>
+  #app.has-mobile-bottom-nav {
+    --mobile-shell-bottom-height: calc(56px + env(safe-area-inset-bottom));
+  }
+
   /* 只影响根元素下的主要内容，避免全局影响 */
   .disable-animations #app,
   .disable-animations #app * {

@@ -21,6 +21,7 @@ import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
+import aiRouter from '@/router/modules/ai.ts';
 import { getDesktopHomePath, getMobileHomePath } from '@/utils/preferences.ts';
 import { isMobileViewport } from '@/config/responsive.ts';
 
@@ -63,6 +64,7 @@ const routes: RouteRecordRaw[] = [
       knowledgeBaseRouter,
       graphRouter,
       inboxRouter,
+      aiRouter,
       ...coBuildRouter,
       ...securityCenterRouter,
       notificationCenterRouter,
@@ -71,6 +73,8 @@ const routes: RouteRecordRaw[] = [
   {
     meta: {
       roles: ALL_ROLES,
+      mobileShell: 'profile',
+      mobileBottomNav: true,
     },
     path: '/personCenter',
     name: 'personCenter',

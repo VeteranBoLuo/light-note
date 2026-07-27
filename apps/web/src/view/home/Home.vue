@@ -5,13 +5,12 @@
       :subtitle="pageSubtitle"
       accent="bookmark"
       layout="workspace"
-      :show-back="showMobileBack"
+      compact-mobile-heading
       :title-actionable="!bookmark.isMobile"
-      @back="backRouterPage"
       @title-click="resetBookmarkView"
     >
       <template #actions>
-        <div class="bookmark-search-action">
+        <div v-if="!bookmark.isMobile" class="bookmark-search-action">
           <BInput
             v-model:value="bookmarkSearchInput"
             :placeholder="$t('home.searchBookmark')"
@@ -24,15 +23,15 @@
             </template>
           </BInput>
         </div>
-        <BButton class="bookmark-manage-action" @click="openBookmarkManagement">
-          <SvgIcon :src="icon.manage_categoryBtn_bookmark" size="16" />
-          {{ $t('navigation.bookmarkManagement') }}
-        </BButton>
         <BButton v-if="bookmark.isMobile" class="bookmark-filter-action" @click="bookmark.isFold = false">
           <SvgIcon :src="icon.cloudSpace.filter" size="16" />
           {{ $t('home.filterTags') }}
         </BButton>
-        <BButton type="primary" class="bookmark-add-action" @click="openAddBookmark">
+        <BButton class="bookmark-manage-action" @click="openBookmarkManagement">
+          <SvgIcon :src="icon.manage_categoryBtn_bookmark" size="16" />
+          {{ $t('navigation.bookmarkManagement') }}
+        </BButton>
+        <BButton v-if="!bookmark.isMobile" type="primary" class="bookmark-add-action" @click="openAddBookmark">
           <SvgIcon :src="icon.common.add" size="16" />
           {{ $t('navigation.newBookmark') }}
         </BButton>
@@ -77,8 +76,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { getMobileHomePath } from '@/utils/preferences.ts';
-  import { backRouterPage } from '@/utils/common.ts';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -88,7 +86,6 @@
   const MIN_SKELETON_MS = 100;
   const BOOKMARK_SEARCH_DEBOUNCE_MS = 280;
   const isHomeDrawerLayout = computed(() => bookmark.isMobile);
-  const showMobileBack = computed(() => bookmark.isMobile && getMobileHomePath(user.preferences) !== '/home');
   const bookmarkSearchInput = ref('');
   let bookmarkSearchTimer = 0;
   let bookmarkRequestSequence = 0;
@@ -152,6 +149,18 @@
     bookmark.type = 'search';
     router.replace({ name: 'home:search', params: { value } }).then(() => bookmark.refreshData());
   }
+
+  useMobileTopBar(['home', 'home:id', 'home:search'], {
+    getSearchValue: () => bookmarkSearchInput.value,
+    setSearchValue: (value) => {
+      bookmarkSearchInput.value = value;
+    },
+    onSearchInput: handleBookmarkSearchInput,
+    onSearchEnter: handleBookmarkSearch,
+    searchPlaceholder: () => t('home.searchBookmark'),
+    onAdd: openAddBookmark,
+    addLabel: () => t('navigation.newBookmark'),
+  });
 
   // 处理滚动条滚动到顶部
   const scrollToTop = () => {
@@ -398,13 +407,8 @@
   }
 
   @media (max-width: 767px) {
-    .bookmark-search-action,
-    .bookmark-manage-action {
-      display: none;
-    }
-
     .bookmark-filter-action,
-    .bookmark-add-action {
+    .bookmark-manage-action {
       flex: 1 1 0;
       width: auto;
     }

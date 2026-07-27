@@ -1,11 +1,10 @@
 <template>
   <ResourcePageShell
+    class="search-center-shell"
     :title="t('resourceCenter.title')"
     :subtitle="t('resourceCenter.subtitle')"
     accent="neutral"
     layout="workspace"
-    :show-back="bookmark.isMobile"
-    @back="$router.back()"
   >
     <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
       <div class="search-page-topbar">
@@ -15,6 +14,7 @@
       <BCard as="section" variant="raised" padding="16px 20px" class="search-header">
         <div class="search-header-input">
           <b-input
+            v-if="!bookmark.isMobile"
             id="search-center-input"
             v-model:value="queryState.keyword"
             :placeholder="t('resourceCenter.searchPlaceholder')"
@@ -317,6 +317,7 @@
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
@@ -929,14 +930,27 @@
     },
   );
 
-  // 打开资源中心自动聚焦搜索框(移动端不聚焦,避免弹出软键盘遮挡内容);让「打开即可搜」
-  onMounted(() => {
-    if (bookmark.isMobile) return;
+  function focusSearchInput() {
     nextTick(() => {
       const host = document.getElementById('search-center-input');
       const input = host && (host.tagName === 'INPUT' ? host : host.querySelector('input'));
       (input as HTMLInputElement | null)?.focus();
     });
+  }
+
+  useMobileTopBar(['searchCenter'], {
+    getSearchValue: () => queryState.keyword,
+    setSearchValue: (value) => {
+      queryState.keyword = value;
+    },
+    onSearchInput: syncQueryDebounced,
+    onSearchEnter: submitSearch,
+    searchPlaceholder: () => t('resourceCenter.searchPlaceholder'),
+  });
+
+  // 打开资源中心自动聚焦搜索框(移动端不主动聚焦,避免一进页面就弹出软键盘)。
+  onMounted(() => {
+    if (!bookmark.isMobile) focusSearchInput();
   });
 
   onBeforeUnmount(() => {
@@ -1914,6 +1928,113 @@
   }
 
   @media (max-width: 767px) {
+    .search-center-shell :deep(.resource-page-header) {
+      display: none;
+    }
+
+    .search-page-topbar {
+      margin-bottom: 8px;
+    }
+
+    .section-switcher {
+      margin-bottom: 0;
+    }
+
+    .search-header {
+      padding: 10px 12px;
+    }
+
+    .search-header-input {
+      grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .refresh-btn,
+    .graph-entry,
+    .search-ai-entry {
+      width: 100%;
+      min-width: 0;
+      height: 38px;
+      padding-inline: 10px;
+      border-radius: 11px;
+    }
+
+    .graph-entry {
+      grid-column: auto;
+      justify-content: center;
+    }
+
+    .search-layout {
+      margin-top: 12px;
+      gap: 12px;
+    }
+
+    .result-panel {
+      min-height: 0;
+      padding: 10px;
+      border-radius: 14px;
+    }
+
+    .result-toolbar--summary {
+      min-height: 0;
+      padding-bottom: 8px;
+      align-items: center;
+      flex-direction: row;
+      gap: 8px;
+    }
+
+    .result-heading {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .result-title {
+      white-space: nowrap;
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .result-subtitle {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .toolbar-actions {
+      flex: 0 0 auto;
+      width: auto;
+      gap: 4px;
+    }
+
+    .toolbar-actions :deep(.b_btn) {
+      flex: 0 0 auto;
+      min-width: 0;
+      height: 28px;
+      min-height: 28px;
+      padding: 0 8px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .advanced-filters {
+      margin-top: 8px;
+      padding: 8px;
+      gap: 8px;
+      border-radius: 12px;
+    }
+
+    .filter-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      align-items: center;
+    }
+
     .result-panel,
     .result-scroll-area,
     .advanced-filters,
@@ -1927,13 +2048,90 @@
     }
 
     .select-wrap {
-      flex: 1 1 140px;
       min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 4px;
+      font-size: 11px;
     }
 
     .filter-select {
       width: 100%;
       min-width: 0;
+    }
+
+    :deep(.filter-select .select-trigger) {
+      height: 32px;
+      min-height: 32px;
+      padding: 0 8px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .tagless-btn,
+    .select-visible-btn {
+      width: 100%;
+      height: 32px;
+      min-height: 32px;
+      padding: 0 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tag-filter-wrap {
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tag-filter-label {
+      font-size: 11px;
+      line-height: 26px;
+    }
+
+    .tag-filter-main {
+      min-width: 0;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .tag-filter-list {
+      min-width: 0;
+      flex: 1 1 auto;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+      touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .tag-filter-list::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tag-filter-list--collapsed {
+      max-height: 26px;
+    }
+
+    .tag-chip {
+      flex: 0 0 auto;
+      height: 26px;
+      min-height: 26px;
+      padding: 0 9px;
+      line-height: 1;
+    }
+
+    .tag-toggle-btn {
+      display: none;
+    }
+
+    .result-scroll-area {
+      margin-top: 8px;
     }
 
     .batch-toolbar {

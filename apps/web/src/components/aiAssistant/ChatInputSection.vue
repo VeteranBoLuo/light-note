@@ -353,21 +353,43 @@
 
   @media (max-width: 600px) {
     .input-section {
-      padding: 0.4rem 0.35rem calc(0.45rem + env(safe-area-inset-bottom));
+      padding: 0.25rem 0.35rem calc(0.3rem + env(safe-area-inset-bottom));
     }
 
     .input-container {
-      padding: 0.6rem 0.65rem 0.5rem;
+      padding: 0.45rem 0.55rem 0.4rem;
       border-radius: 0.875rem;
     }
 
+    .context-actions {
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
+    .context-actions :deep(.b_btn),
+    .input-actions :deep(.b_btn) {
+      min-height: 32px !important;
+      height: 32px !important;
+      padding-inline: 10px;
+    }
+
+    .text-input :deep(.b-textarea) {
+      min-height: 42px;
+    }
+
     .composer-toolbar {
+      min-height: 24px;
+      margin-top: 2px;
       justify-content: flex-end;
     }
 
+    .input-actions {
+      gap: 4px;
+    }
+
     .send-btn {
-      min-width: 64px;
-      height: 44px;
+      min-width: 54px;
+      height: 32px;
     }
   }
 </style>

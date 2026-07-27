@@ -1,5 +1,5 @@
 <template>
-  <div class="view-panel" id="view-panel">
+  <div class="view-panel" id="view-panel" data-mobile-resource-scroll>
     <TagInfo />
     <CardPanel />
   </div>

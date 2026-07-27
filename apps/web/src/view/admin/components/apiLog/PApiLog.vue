@@ -2,7 +2,7 @@
   <CommonContainer title="api日志" @backClick="router.push('/admin')">
     <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden">
       <b-space style="width: 100%; flex-shrink: 0">
-        <b-input v-model:value="searchValue" placeholder="用户名或ip..." @input="handleSearch">
+        <b-input v-model:value="searchValue" placeholder="昵称、邮箱、IP 或接口..." @input="handleSearch">
           <template #prefix>
             <svg-icon :src="icon.navigation.search" size="16" />
           </template>

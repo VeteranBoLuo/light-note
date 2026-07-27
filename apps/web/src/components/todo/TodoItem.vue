@@ -241,7 +241,16 @@
   @media (max-width: 767px) {
     .todo-item {
       grid-template-columns: minmax(0, 1fr);
-      padding: 13px;
+      gap: 10px;
+      padding: 12px 13px;
+      border-radius: 14px;
+    }
+    .todo-item__meta {
+      margin-left: 30px;
+      gap: 6px;
+    }
+    .todo-item__meta > span:first-child {
+      display: none;
     }
     .todo-item__actions {
       margin-left: 30px;

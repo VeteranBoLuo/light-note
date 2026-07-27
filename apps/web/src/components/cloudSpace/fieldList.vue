@@ -29,7 +29,7 @@
         </b-space>
       </div>
     </div>
-    <div v-if="viewMode === 'card'" class="file-card-grid">
+    <div v-if="viewMode === 'card'" class="file-card-grid" data-mobile-resource-scroll>
       <article
         v-for="item in cloud.fileList"
         :key="item.id"
@@ -210,7 +210,7 @@
         {{ $t('cloudSpace.batchDownload') }}
       </b-button>
     </div>
-    <div v-if="viewMode === 'table'" class="file-container">
+    <div v-if="viewMode === 'table'" class="file-container" data-mobile-resource-scroll>
       <div
         class="field-item"
         :class="{
@@ -435,7 +435,9 @@
         <b-button type="primary" :loading="renameModalSubmitting" @click="confirmRename">
           {{ renameModalSubmitting ? $t('cloudSpace.renameSaving') : $t('common.confirm') }}
         </b-button>
-        <b-button :disabled="renameModalSubmitting" @click="renameModalVisible = false">{{ $t('common.cancel') }}</b-button>
+        <b-button :disabled="renameModalSubmitting" @click="renameModalVisible = false">{{
+          $t('common.cancel')
+        }}</b-button>
       </div>
     </b-modal>
   </div>

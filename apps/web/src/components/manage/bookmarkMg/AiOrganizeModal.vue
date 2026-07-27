@@ -1,5 +1,5 @@
 <template>
-  <BModal v-model:visible="visible" :title="$t('bookmarkMg.aiOrganizeTitle')" :show-footer="false" width="auto">
+  <BModal v-model:visible="visible" :title="$t('bookmarkMg.aiOrganizeTitle')" :show-footer="false" width="600px">
     <div class="aio">
       <!-- 确认额度 -->
       <template v-if="step === 'confirm'">
@@ -261,10 +261,11 @@
 </script>
 
 <style lang="less" scoped>
-  /* 定宽约束 BModal 的 min-width:max-content,防长内容撑爆 */
+  /* BModal 外框固定为桌面 600px、窄屏由其 max-width 自动收缩；内容只填充可用内宽，不能反向撑大外框。 */
   .aio {
-    width: 560px;
-    max-width: 88vw;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     box-sizing: border-box;
   }
   .aio-admin-notice {
@@ -298,11 +299,18 @@
     line-height: 1.9;
   }
   .aio-actions {
+    width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 12px;
     margin-top: 12px;
+    box-sizing: border-box;
+  }
+  .aio-actions :deep(.b_btn) {
+    max-width: 100%;
   }
   .aio-spin {
     width: 34px;
@@ -319,9 +327,12 @@
     }
   }
   .aio-review-head {
+    min-width: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 8px;
     font-size: 13px;
     font-weight: 600;
@@ -336,22 +347,31 @@
     cursor: pointer;
   }
   .aio-list {
+    width: 100%;
+    min-width: 0;
     max-height: 46vh;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    box-sizing: border-box;
   }
   .aio-item {
+    width: 100%;
+    min-width: 0;
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     padding: 10px 12px;
+    box-sizing: border-box;
+    overflow: hidden;
     transition: opacity 0.15s;
   }
   .aio-item.off {
     opacity: 0.45;
   }
   .aio-item-head {
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -366,12 +386,16 @@
     white-space: nowrap;
   }
   .aio-tags {
+    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     padding-left: 22px;
+    box-sizing: border-box;
   }
   .aio-tag {
+    max-width: 100%;
+    overflow: hidden;
     border: 1px solid var(--card-border-color);
     background: transparent;
     color: var(--desc-color);
@@ -382,6 +406,7 @@
     transition: all 0.15s;
     height: 26px;
     line-height: 26px;
+    text-overflow: ellipsis;
   }
   .aio-tag--new {
     border-style: dashed;

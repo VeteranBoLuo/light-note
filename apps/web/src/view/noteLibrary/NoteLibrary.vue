@@ -4,9 +4,8 @@
     :subtitle="$t('note.subtitle')"
     accent="note"
     layout="workspace"
-    :show-back="showMobileBack"
+    compact-mobile-heading
     :title-actionable="!bookmark.isMobile"
-    @back="backRouterPage"
     @title-click="resetNoteLibrary"
   >
     <template #meta>
@@ -32,39 +31,54 @@
         <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
       </template>
       <template v-else>
-        <TagFilterSelector :all-tags="visibleNoteTags" />
-        <ViewModeToggle v-if="!bookmark.isMobile" />
-        <!-- 移动端也保留搜索框:搜索是刚需,此前移动端整个搜索入口缺失 -->
-        <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
-          <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
-            <template #prefix>
-              <SvgIcon :src="icon.navigation.search" size="16" />
-            </template>
-          </BInput>
+        <div v-if="bookmark.isMobile" class="note-mobile-actions">
+          <TagFilterSelector :all-tags="visibleNoteTags" />
+          <BButton
+            class="note-action-button note-ai-button"
+            @click="aiOrgVisible = true"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" />
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          </BButton>
         </div>
-        <BButton
-          v-if="!bookmark.isMobile"
-          class="note-action-button note-ai-button"
-          @click="aiOrgVisible = true"
-          v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
-        >
-          <SvgIcon :src="icon.ai.organize" size="17" />
-          {{ $t('bookmarkMg.aiOrganizeBtn') }}
-        </BButton>
-        <BButton
-          type="primary"
-          class="note-action-button note-create-button"
-          @click="showNewNotePicker"
-          v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-        >
-          <SvgIcon :src="icon.common.add" size="16" />
-          {{ $t('note.newNote') }}
-        </BButton>
+        <template v-else>
+          <TagFilterSelector :all-tags="visibleNoteTags" />
+          <ViewModeToggle />
+          <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
+            <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
+              <template #prefix>
+                <SvgIcon :src="icon.navigation.search" size="16" />
+              </template>
+            </BInput>
+          </div>
+          <BButton
+            class="note-action-button note-ai-button"
+            @click="aiOrgVisible = true"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" />
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          </BButton>
+          <BButton
+            type="primary"
+            class="note-action-button note-create-button"
+            @click="showNewNotePicker"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+          >
+            <SvgIcon :src="icon.common.add" size="16" />
+            {{ $t('note.newNote') }}
+          </BButton>
+        </template>
       </template>
     </template>
 
     <div class="note-workspace">
-      <div v-if="loading && currentViewMode === 'card'" class="note-library-body note-card-skeleton-wrap">
+      <div
+        v-if="loading && currentViewMode === 'card'"
+        class="note-library-body note-card-skeleton-wrap"
+        data-mobile-resource-scroll
+      >
         <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
           <div class="skeleton-line long"></div>
           <div class="skeleton-line"></div>
@@ -81,6 +95,7 @@
         :animation="200"
         v-model="visibleDragNoteList"
         class="note-library-body"
+        data-mobile-resource-scroll
         @start="onStart"
         @end="onEnd"
         ghost-class="note-card-drag-ghost"
@@ -106,7 +121,7 @@
         </RightMenu>
       </VueDraggable>
       <div v-if="currentViewMode === 'list' && (loading || visibleDragNoteList.length)" class="note-library-body-list">
-        <div v-if="loading" class="note-list note-list-skeleton-wrap">
+        <div v-if="loading" class="note-list note-list-skeleton-wrap" data-mobile-resource-scroll>
           <div v-for="n in 10" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
             <div class="skeleton-line long"></div>
             <div class="skeleton-line"></div>
@@ -120,6 +135,7 @@
           ref="el"
           v-model="visibleDragNoteList"
           class="note-list"
+          data-mobile-resource-scroll
           @start="onStart"
           @end="onEnd"
           :scroll-sensitivity="50"
@@ -157,7 +173,21 @@
     </div>
 
     <!-- 新建笔记类型选择 -->
+    <NewNotePickerModal
+      v-if="bookmark.isMobile"
+      v-model:visible="showTypePicker"
+      :builtin-templates="BUILTIN_NOTE_TEMPLATES"
+      :my-templates="myTemplates"
+      :my-templates-state="myTemplatesState"
+      :template-icons="TEMPLATE_ICONS"
+      @select-blank="handleMobileBlankSelection"
+      @select-builtin="handleMobileBuiltinSelection"
+      @select-mine="handleMobileTemplateSelection"
+      @remove-mine="confirmDeleteTemplate"
+      @retry="loadMyTemplates"
+    />
     <ActionCardModal
+      v-else
       v-model:visible="showTypePicker"
       :mask-closable="false"
       :title="$t('note.pickEditor')"
@@ -182,7 +212,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
@@ -195,17 +225,18 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
-  import { backRouterPage } from '@/utils/common';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
+  import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
   import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
-  import { getMobileHomePath } from '@/utils/preferences.ts';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -220,7 +251,7 @@
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const showMobileBack = computed(() => bookmark.isMobile && getMobileHomePath(user.preferences) !== '/noteLibrary');
+  const { resetCurrentResourceScroll } = useMobileNavigationState();
   const { addResourcesToInbox } = useInboxEnqueue();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
@@ -352,6 +383,19 @@
     showTypePicker.value = true;
     loadMyTemplates();
   }
+
+  function handleMobileBlankSelection(type: 'html' | 'markdown') {
+    gotoNewNote({ type });
+  }
+
+  function handleMobileBuiltinSelection(template: { key: string; type: 'html' | 'markdown' }) {
+    gotoNewNote({ type: template.type, builtin: template.key });
+  }
+
+  function handleMobileTemplateSelection(template: { id: string; type: string }) {
+    gotoNewNote({ type: template.type, templateId: template.id });
+  }
+
   function addNoteToInbox(note: any) {
     addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
   }
@@ -515,6 +559,34 @@
     },
     { immediate: true },
   );
+
+  watch(
+    [debouncedSearch, () => router.currentRoute.value.query.tag],
+    () => {
+      if (!bookmark.isMobile) return;
+      nextTick(() => {
+        window.requestAnimationFrame(resetCurrentResourceScroll);
+      });
+    },
+  );
+
+  function applyNoteSearchImmediately() {
+    if (searchTimer.value) window.clearTimeout(searchTimer.value);
+    searchTimer.value = null;
+    debouncedSearch.value = searchValue.value.trim().toLowerCase();
+  }
+
+  useMobileTopBar(['noteLibrary'], {
+    getSearchValue: () => searchValue.value,
+    setSearchValue: (value) => {
+      if (hasCheck.value) exitBatch();
+      searchValue.value = value;
+    },
+    onSearchEnter: applyNoteSearchImmediately,
+    searchPlaceholder: () => t('note.searchNote'),
+    onAdd: showNewNotePicker,
+    addLabel: () => t('note.newNote'),
+  });
 
   async function resetNoteLibrary() {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
@@ -1116,6 +1188,19 @@
     background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
   }
 
+  .note-mobile-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .note-mobile-actions :deep(.noteType-select) {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
   .note-create-button {
     background: var(--resource-note-color, #00a884);
   }
@@ -1243,6 +1328,23 @@
 
     .note-action-button {
       height: 34px;
+    }
+
+    .note-mobile-actions .note-ai-button {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      padding: 0 10px;
+      justify-content: center;
+      color: var(--text-color);
+      background: var(--primary-btn-bg-color);
+      font-size: 14px;
+    }
+
+    .note-mobile-actions .note-ai-button:hover,
+    .note-mobile-actions .note-ai-button:active {
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
     }
   }
 </style>

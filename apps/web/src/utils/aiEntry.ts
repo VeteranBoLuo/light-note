@@ -2,6 +2,8 @@ import type { AiAttachment } from '@/api/aiAttachmentApi';
 import type { SearchType } from '@/api/search';
 
 export const AI_ASSISTANT_OPEN_EVENT = 'light-note:open-ai';
+export const AI_ASSISTANT_VISIBILITY_EVENT = 'light-note:ai-visibility';
+let aiAssistantVisible = false;
 
 export type AiAssistantIntent =
   'ask' | 'find' | 'summarize' | 'compare' | 'organize' | 'extract_todos' | 'find_related';
@@ -89,4 +91,17 @@ export function openAiAssistant(payload: AiAssistantLaunchPayload = {}) {
       detail: normalizeAiAssistantLaunchPayload(payload),
     }),
   );
+}
+
+export function setAiAssistantVisibility(open: boolean) {
+  aiAssistantVisible = open;
+  window.dispatchEvent(
+    new CustomEvent(AI_ASSISTANT_VISIBILITY_EVENT, {
+      detail: { open },
+    }),
+  );
+}
+
+export function getAiAssistantVisibility() {
+  return aiAssistantVisible;
 }

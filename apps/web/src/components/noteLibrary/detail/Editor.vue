@@ -154,7 +154,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
   import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
-  import TurndownService from 'turndown';
+  import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -1192,12 +1192,6 @@
     const targetType = currentType.value === 'html' ? 'markdown' : 'html';
     const backup = { content: content.value || '', type: currentType.value };
 
-    // 移动端直接切，不弹框、不备份
-    if (isMobile.value) {
-      await doDirectSwitch(targetType, backup);
-      return;
-    }
-
     Alert.alert({
       title: targetType === 'markdown' ? t('note.switchToMd') : t('note.switchToHtml'),
       content: targetType === 'markdown' ? t('note.switchToMdTip') : t('note.switchToHtmlTip'),
@@ -1207,35 +1201,6 @@
     });
   }
 
-  async function doDirectSwitch(targetType: string, backup: { content: string; type: string }) {
-    currentType.value = targetType;
-    if (targetType === 'markdown') {
-      await ensureMdLib();
-      const turndownService = new TurndownService({
-        headingStyle: 'atx',
-        codeBlockStyle: 'fenced',
-      });
-      mdContent.value = turndownService.turndown(backup.content || '');
-      content.value = mdContent.value;
-      await nextTick();
-      renderMd();
-    } else {
-      await ensureMdLib();
-      const mdText = backup.content || '';
-      if (mdText.trim()) {
-        try {
-          content.value = mdToSafeHtml(mdText);
-        } catch {
-          content.value = mdText;
-        }
-      } else {
-        content.value = '';
-      }
-      forceReinit();
-    }
-    emits('update:type', targetType);
-  }
-
   async function doSwitch(targetType: string, backup: { content: string; type: string }) {
     switchBackup.value = backup;
     currentType.value = targetType;
@@ -1243,11 +1208,7 @@
     if (targetType === 'markdown') {
       // HTML → MD：用 turndown 转换
       await ensureMdLib();
-      const turndownService = new TurndownService({
-        headingStyle: 'atx',
-        codeBlockStyle: 'fenced',
-      });
-      mdContent.value = turndownService.turndown(backup.content || '');
+      mdContent.value = noteHtmlToMarkdown(backup.content || '');
       content.value = mdContent.value;
       await nextTick();
       renderMd();
@@ -1362,10 +1323,7 @@
       const md =
         inputType === 'markdown'
           ? value || ''
-          : new TurndownService({
-              headingStyle: 'atx',
-              codeBlockStyle: 'fenced',
-            }).turndown(value || '');
+          : noteHtmlToMarkdown(value || '');
       // 用 execCommand('insertText') 替换 textarea 全文,让浏览器把这次替换记入原生撤销栈,
       // 使 AI 替换后能像 html(TinyMCE undoManager)一样 Ctrl+Z 撤回;不支持时退回直接赋值(内容正确,仅撤回失效)。
       const textarea = getMdTextarea();

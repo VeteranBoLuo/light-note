@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AI_ASSISTANT_OPEN_EVENT, normalizeAiAssistantLaunchPayload, openAiAssistant } from './aiEntry';
+import {
+  AI_ASSISTANT_OPEN_EVENT,
+  AI_ASSISTANT_VISIBILITY_EVENT,
+  getAiAssistantVisibility,
+  normalizeAiAssistantLaunchPayload,
+  openAiAssistant,
+  setAiAssistantVisibility,
+} from './aiEntry';
 
 describe('aiEntry', () => {
   it('只保留受支持、数量受限的启动上下文', () => {
@@ -35,5 +42,16 @@ describe('aiEntry', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect((listener.mock.calls[0][0] as CustomEvent).detail.suggestedIntent).toBe('summarize');
     window.removeEventListener(AI_ASSISTANT_OPEN_EVENT, listener);
+  });
+
+  it('同步 AI 工作区显隐状态给移动端导航', () => {
+    const listener = vi.fn();
+    window.addEventListener(AI_ASSISTANT_VISIBILITY_EVENT, listener);
+    setAiAssistantVisibility(true);
+    expect(getAiAssistantVisibility()).toBe(true);
+    expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ open: true });
+    setAiAssistantVisibility(false);
+    expect(getAiAssistantVisibility()).toBe(false);
+    window.removeEventListener(AI_ASSISTANT_VISIBILITY_EVENT, listener);
   });
 });

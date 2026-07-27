@@ -9,6 +9,8 @@ const inboxRouter: RouteRecordRaw = {
     keepAlive: true,
     requireAuth: true,
     roles: ALL_ROLES,
+    mobileShell: 'todo',
+    mobileBottomNav: true,
   },
   component: () => import('@/view/inbox/Inbox.vue'),
 };

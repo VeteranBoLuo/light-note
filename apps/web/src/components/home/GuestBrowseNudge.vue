@@ -112,6 +112,12 @@
     border: 1px solid var(--card-border-color);
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   }
+
+  @media (max-width: 767px) {
+    .guest-browse-nudge {
+      bottom: calc(var(--mobile-shell-bottom-height, 0px) + 16px);
+    }
+  }
   .guest-browse-nudge__text {
     font-size: 13px;
     white-space: nowrap;

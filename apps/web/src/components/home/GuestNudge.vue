@@ -23,7 +23,14 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';
-  import { nudgeVisible, nudgeContent, nudgeSource, hideGuestNudge, pauseNudgeTimer, resumeNudgeTimer } from '@/composables/guestNudge';
+  import {
+    nudgeVisible,
+    nudgeContent,
+    nudgeSource,
+    hideGuestNudge,
+    pauseNudgeTimer,
+    resumeNudgeTimer,
+  } from '@/composables/guestNudge';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -114,7 +121,7 @@
   @media (max-width: 560px) {
     .guest-nudge {
       right: 12px;
-      bottom: 12px;
+      bottom: calc(var(--mobile-shell-bottom-height, 0px) + 12px);
       width: 280px;
       max-width: calc(100vw - 24px);
     }
