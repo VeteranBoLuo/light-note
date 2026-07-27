@@ -3639,10 +3639,6 @@ export default {
     choosePlatform: 'Choose your device',
     stepsLabel: '3 quick steps',
     manualHint: 'Follow the guide and add it from your browser menu',
-    nudgeTitle: 'Add LightNote to your home screen',
-    nudgeDesc: 'You can always install it later from Profile or Settings',
-    dismissNudge: 'Dismiss install prompt',
-    later: 'Not now',
     platforms: {
       harmony: {
         label: 'HarmonyOS / Huawei',

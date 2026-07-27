@@ -3,7 +3,7 @@ import { recordOperation } from '@/api/commonApi';
 import { OPERATION_LOG_MAP } from '@/config/logMap';
 
 export type PwaGuidePlatform = 'harmony' | 'ios' | 'android' | 'desktop';
-export type PwaInstallSource = 'landing' | 'landing-final' | 'person-center' | 'settings' | 'mobile-nudge';
+export type PwaInstallSource = 'landing' | 'landing-final' | 'person-center' | 'settings';
 
 type InstallChoice = {
   outcome: 'accepted' | 'dismissed';
@@ -15,41 +15,17 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<InstallChoice>;
 }
 
-const VISIT_COUNT_KEY = 'light-note:pwa-visit-count';
-const SESSION_COUNTED_KEY = 'light-note:pwa-session-counted';
-
 const deferredPrompt = shallowRef<BeforeInstallPromptEvent | null>(null);
 const standalone = ref(false);
 const prompting = ref(false);
 const guideVisible = ref(false);
 const guidePlatform = ref<PwaGuidePlatform>('harmony');
 const guideSource = ref<PwaInstallSource>('settings');
-const visitCount = ref(1);
 let initialized = false;
-
-function storageNumber(storage: Storage, key: string, fallback = 0) {
-  const value = Number(storage.getItem(key));
-  return Number.isFinite(value) && value >= 0 ? value : fallback;
-}
 
 function updateStandaloneState() {
   const navigatorStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
   standalone.value = navigatorStandalone || window.matchMedia('(display-mode: standalone)').matches;
-}
-
-function countCurrentSession() {
-  try {
-    const previous = storageNumber(localStorage, VISIT_COUNT_KEY);
-    if (!sessionStorage.getItem(SESSION_COUNTED_KEY)) {
-      sessionStorage.setItem(SESSION_COUNTED_KEY, '1');
-      visitCount.value = previous + 1;
-      localStorage.setItem(VISIT_COUNT_KEY, String(visitCount.value));
-      return;
-    }
-    visitCount.value = Math.max(previous, 1);
-  } catch {
-    visitCount.value = 1;
-  }
 }
 
 function registerServiceWorker() {
@@ -69,7 +45,6 @@ export function initializePwaInstall() {
   if (initialized || typeof window === 'undefined') return;
   initialized = true;
   updateStandaloneState();
-  countCurrentSession();
   registerServiceWorker();
 
   const displayMode = window.matchMedia('(display-mode: standalone)');
@@ -139,7 +114,6 @@ export function usePwaInstall() {
     installState,
     isStandalone: computed(() => standalone.value),
     prompting: computed(() => prompting.value),
-    visitCount: computed(() => visitCount.value),
     openGuide,
     requestInstall,
   };

@@ -3551,10 +3551,6 @@ export default {
     choosePlatform: '选择你的设备',
     stepsLabel: '3 步完成',
     manualHint: '按照右侧教程，从当前浏览器菜单添加',
-    nudgeTitle: '把轻笺放到主屏幕',
-    nudgeDesc: '关闭后仍可在「我的」或「设置」中随时安装',
-    dismissNudge: '关闭安装提示',
-    later: '暂不',
     platforms: {
       harmony: {
         label: '鸿蒙 / 华为',

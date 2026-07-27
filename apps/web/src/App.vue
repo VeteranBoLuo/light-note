@@ -22,10 +22,6 @@
       <AdminContextBanner />
       <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
       <PwaInstallGuideModal />
-      <MobilePwaInstallNudge
-        v-if="bookmark.isMobile"
-        :eligible="mobileBottomNavActive && !bookmark.isShowLogin && !inbox.quickCaptureVisible"
-      />
     </a-config-provider>
   </div>
 </template>
@@ -54,7 +50,6 @@
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
   import PwaInstallGuideModal from '@/components/pwa/PwaInstallGuideModal.vue';
-  import MobilePwaInstallNudge from '@/components/pwa/MobilePwaInstallNudge.vue';
   import {
     LANDING_AUTH_CONTEXT,
     resolveLandingAuthStatus,
