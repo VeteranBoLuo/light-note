@@ -825,9 +825,12 @@
     }
   }
   @media (max-width: 767px) {
-    .inbox-page--mobile-todo,
-    .inbox-page--mobile-resources {
+    .inbox-page--mobile-todo {
       padding: 8px 10px 0;
+    }
+
+    .inbox-page--mobile-resources {
+      padding: 6px 12px 0;
     }
 
     .inbox-page--mobile-resources .section-switcher {
