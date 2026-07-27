@@ -53,6 +53,7 @@
     resolveLandingAuthStatus,
     type LandingAuthStatus,
   } from '@/view/landing/landingAuth.ts';
+  import { applyDocumentTheme } from '@/utils/theme.ts';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -343,8 +344,8 @@
 
     // 强制重绘确保样式生效
     void document.documentElement.offsetWidth;
-    // 执行主题切换
-    document.documentElement.setAttribute('data-theme', user.currentTheme);
+    // 同步 CSS 变量主题与浏览器原生配色；浅色使用 only light，避免鸿蒙等浏览器再次自动暗化页面。
+    applyDocumentTheme(user.currentTheme);
 
     // 下一事件循环恢复动画
     setTimeout(() => {

@@ -599,7 +599,7 @@
   import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { updatePreference, isGuestUser } from '@/utils/savePreference';
   import { scrollIntoContainer } from '@/utils/zoom';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -616,6 +616,7 @@
 
   const { t } = useI18n();
   const router = useRouter();
+  const bookmark = bookmarkStore();
 
   // 设置页锚点导航:区块多、页面长,顶部 sticky 锚点条一键跳转。游客隐藏「账号与安全」锚点,与该区块 v-if 一致。
   const anchors = computed(() => {
@@ -884,6 +885,12 @@
   });
 
   function goBack() {
+    // 移动端设置页是个人中心的下级页面，返回目标必须稳定留在轻笺内部。
+    // 使用 replace 避免个人中心再次按浏览器返回时又回到设置页形成往返循环。
+    if (bookmark.isMobile) {
+      router.replace('/personCenter');
+      return;
+    }
     if (window.history.length > 1) router.back();
     else router.push('/home');
   }
