@@ -11,10 +11,15 @@ describe('usePwaInstall', () => {
     localStorage.clear();
     sessionStorage.clear();
     recordOperation.mockReset();
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value:
+        'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36',
+    });
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       value: vi.fn((query: string) => ({
-        matches: query === '(max-width: 767px)',
+        matches: false,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -26,28 +31,82 @@ describe('usePwaInstall', () => {
     });
   });
 
-  it('falls back to the guide, captures the browser prompt, and detects an installed app', async () => {
-    const { initializePwaInstall, usePwaInstall } = await import('./usePwaInstall');
+  it('detects the environment and handles standard, legacy, pending, broken, and unavailable install prompts', async () => {
+    const { detectPwaBrowserFamily, initializePwaInstall, usePwaInstall } = await import('./usePwaInstall');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 HuaweiBrowser/16.0 Chrome/114.0')).toBe('huawei');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 Quark/7.7.0 Chrome/124.0')).toBe('quark');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 QHBrowser/14.5 Chrome/122.0')).toBe('360');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 EdgA/138.0 Chrome/138.0')).toBe('edge');
+    expect(detectPwaBrowserFamily('Mozilla/5.0 Firefox/140.0')).toBe('firefox');
+
     initializePwaInstall();
     const pwa = usePwaInstall();
 
-    expect(await pwa.requestInstall('settings')).toBe('manual');
-    expect(pwa.guideVisible.value).toBe(true);
-    expect(pwa.guidePlatform.value).toBe('harmony');
+    expect(pwa.detectedBrowser.value).toBe('chrome');
+    expect(pwa.detectedPlatform.value).toBe('android');
+    expect(await pwa.requestInstall('settings')).toBe('unsupported');
+    expect(pwa.guideVisible.value).toBe(false);
 
-    const prompt = vi.fn().mockResolvedValue(undefined);
-    const event = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
-      prompt: typeof prompt;
-      userChoice: Promise<{ outcome: 'accepted'; platform: string }>;
+    pwa.openGuide('settings');
+    expect(pwa.guideVisible.value).toBe(true);
+    expect(pwa.guidePlatform.value).toBe('android');
+
+    const acceptedPrompt = vi.fn().mockResolvedValue({ outcome: 'accepted', platform: 'web' });
+    const acceptedEvent = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: typeof acceptedPrompt;
     };
-    event.prompt = prompt;
-    event.userChoice = Promise.resolve({ outcome: 'accepted', platform: 'web' });
-    window.dispatchEvent(event);
+    acceptedEvent.prompt = acceptedPrompt;
+    window.dispatchEvent(acceptedEvent);
 
     expect(pwa.canPrompt.value).toBe(true);
     expect(await pwa.requestInstall('settings')).toBe('accepted');
-    expect(prompt).toHaveBeenCalledOnce();
+    expect(acceptedPrompt).toHaveBeenCalledOnce();
     expect(pwa.canPrompt.value).toBe(false);
+
+    const legacyPrompt = vi.fn().mockResolvedValue(undefined);
+    const legacyEvent = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: typeof legacyPrompt;
+      userChoice: Promise<{ outcome: 'dismissed'; platform: string }>;
+    };
+    legacyEvent.prompt = legacyPrompt;
+    legacyEvent.userChoice = Promise.resolve({ outcome: 'dismissed', platform: 'web' });
+    window.dispatchEvent(legacyEvent);
+    expect(await pwa.requestInstall('settings')).toBe('dismissed');
+
+    const brokenPrompt = vi.fn().mockResolvedValue(undefined);
+    const brokenEvent = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: typeof brokenPrompt;
+    };
+    brokenEvent.prompt = brokenPrompt;
+    window.dispatchEvent(brokenEvent);
+    expect(await pwa.requestInstall('settings')).toBe('failed');
+
+    let resolvePendingPrompt!: (choice: { outcome: 'accepted'; platform: string }) => void;
+    const pendingPrompt = vi.fn(
+      () =>
+        new Promise<{ outcome: 'accepted'; platform: string }>((resolve) => {
+          resolvePendingPrompt = resolve;
+        }),
+    );
+    const pendingEvent = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: typeof pendingPrompt;
+    };
+    pendingEvent.prompt = pendingPrompt;
+    window.dispatchEvent(pendingEvent);
+    const pendingResult = pwa.requestInstall('settings');
+    await Promise.resolve();
+    expect(pwa.prompting.value).toBe(true);
+    resolvePendingPrompt({ outcome: 'accepted', platform: 'web' });
+    expect(await pendingResult).toBe('accepted');
+    expect(pwa.prompting.value).toBe(false);
+
+    const throwingPrompt = vi.fn().mockRejectedValue(new Error('not implemented'));
+    const throwingEvent = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: typeof throwingPrompt;
+    };
+    throwingEvent.prompt = throwingPrompt;
+    window.dispatchEvent(throwingEvent);
+    expect(await pwa.requestInstall('settings')).toBe('failed');
 
     window.dispatchEvent(new Event('appinstalled'));
     expect(pwa.isStandalone.value).toBe(true);

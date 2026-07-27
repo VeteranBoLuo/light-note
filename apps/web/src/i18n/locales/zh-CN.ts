@@ -3532,6 +3532,7 @@ export default {
   },
   pwa: {
     install: '安装轻笺',
+    oneClickInstall: '一键安装',
     installed: '已安装到当前设备',
     viewGuide: '查看安装方法',
     browserGuide: '浏览器添加教程',
@@ -3539,6 +3540,10 @@ export default {
     directAvailable: '当前浏览器支持直接安装',
     directAvailableShort: '可直接安装',
     directAvailableDesc: '确认后会以独立窗口打开，不需要通过应用商店。',
+    tryDirectInstall: '优先尝试一键安装',
+    tryDirectInstallDesc: '支持时会调起系统安装窗口；不支持则保留下方的浏览器添加方法。',
+    unsupportedBrowser: '当前浏览器暂未开放网页一键安装，请按下方步骤添加到桌面。',
+    installFailedFallback: '未能调起安装窗口，浏览器可能暂不支持；请按下方步骤手动添加。',
     manualAvailable: '可通过浏览器添加',
     guideTitle: '把轻笺安装到设备',
     guideEyebrow: 'LIGHT NOTE · 设备安装',
@@ -3551,12 +3556,73 @@ export default {
     choosePlatform: '选择你的设备',
     stepsLabel: '3 步完成',
     manualHint: '按照右侧教程，从当前浏览器菜单添加',
+    detectedBrowser: '当前浏览器 · {browser}',
+    directCapabilityReady: '可一键安装',
+    manualCapabilityReady: '菜单方式备用',
+    browserFallbackHint:
+      '如果 {browser} 菜单里没有“安装应用 / 添加到主屏幕 / 添加到桌面”，说明它没有开放当前网页的安装能力，可改用最新版 Chrome、Edge 或系统浏览器重试。',
+    iosBrowserFallbackHint:
+      'iPhone / iPad 上若当前浏览器没有“添加到主屏幕”，请复制网址到 Safari，再通过分享菜单完成添加。',
+    browsers: {
+      huawei: {
+        label: '华为浏览器',
+        step2: '打开网页菜单，选择“添加至桌面”；若出现“安装应用”，也可以直接使用。',
+      },
+      quark: {
+        label: '夸克浏览器',
+        step2: '打开底部菜单或工具箱，查找“添加到桌面 / 添加到主屏幕 / 安装应用”。',
+      },
+      chrome: {
+        label: 'Chrome',
+        step2: '打开右上角 ⋮ 菜单，选择“添加到主屏幕”或“安装应用”。',
+      },
+      edge: {
+        label: 'Edge',
+        step2: '打开浏览器菜单，在“应用”或“添加到手机”中查找安装入口。',
+      },
+      firefox: {
+        label: 'Firefox',
+        step2: '打开浏览器菜单，查找“安装”或“添加到主屏幕”；桌面版可能没有该入口。',
+      },
+      safari: {
+        label: 'Safari',
+        step2: '打开分享菜单，选择“添加到主屏幕”；macOS 可在文件菜单中查找“添加到程序坞”。',
+      },
+      '360': {
+        label: '360 浏览器',
+        step2: '打开浏览器菜单，查找“添加到桌面 / 创建快捷方式 / 安装应用”。',
+      },
+      opera: {
+        label: 'Opera',
+        step2: '打开浏览器菜单，查找“安装应用”或“添加到主屏幕”。',
+      },
+      uc: {
+        label: 'UC 浏览器',
+        step2: '打开底部菜单或工具箱，查找“添加到桌面 / 添加到主屏幕”。',
+      },
+      qq: {
+        label: 'QQ 浏览器',
+        step2: '打开浏览器菜单或工具箱，查找“添加到桌面 / 添加到主屏幕”。',
+      },
+      baidu: {
+        label: '百度浏览器',
+        step2: '打开浏览器菜单或工具箱，查找“添加到桌面 / 添加到主屏幕”。',
+      },
+      sogou: {
+        label: '搜狗浏览器',
+        step2: '打开浏览器菜单，查找“创建快捷方式 / 添加到桌面 / 安装应用”。',
+      },
+      other: {
+        label: '当前浏览器',
+        step2: '打开浏览器菜单，查找“安装应用 / 添加到主屏幕 / 添加到桌面”。',
+      },
+    },
     platforms: {
       harmony: {
         label: '鸿蒙 / 华为',
-        title: '鸿蒙与华为浏览器',
-        description: '不同系统版本的菜单名称可能略有差异，优先寻找“添加至”或“添加到桌面”。',
-        step1: '用系统浏览器打开 buluo66.top，并登录轻笺。',
+        title: '鸿蒙与华为设备',
+        description: '不同系统版本和浏览器的菜单名称可能略有差异，优先寻找“添加至”或“添加到桌面”。',
+        step1: '用当前浏览器打开 buluo66.top，并登录轻笺。',
         step2: '点击浏览器右下角或底部的菜单按钮，选择“添加至”。',
         step3: '选择“桌面”或“添加到主屏幕”，确认名称后完成添加。',
         note: '若菜单里直接出现“安装应用”，也可以使用该入口；无需下载安装包。',
@@ -3577,7 +3643,7 @@ export default {
         step1: '在浏览器中打开 buluo66.top，并登录轻笺。',
         step2: '打开浏览器菜单，选择“安装应用”或“添加到主屏幕”。',
         step3: '在系统确认框中选择“安装”或“添加”。',
-        note: '若当前浏览器支持直接安装，教程上方会出现“安装轻笺”按钮。',
+        note: '请先尝试上方“一键安装”；没有弹出系统确认框时，再使用浏览器菜单。',
       },
       desktop: {
         label: '电脑',

@@ -234,7 +234,7 @@
     return frameVariant(id) ? id : null;
   });
   const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
-  const { canPrompt, isStandalone, openGuide, requestInstall } = usePwaInstall();
+  const { canPrompt, isStandalone, openGuide } = usePwaInstall();
   const pwaEntryDescription = computed(() =>
     isStandalone.value
       ? t('pwa.installed')
@@ -259,11 +259,7 @@
   }
 
   function handlePwaEntry() {
-    if (isStandalone.value) {
-      openGuide('person-center');
-      return;
-    }
-    void requestInstall('person-center');
+    openGuide('person-center');
   }
 
   function openQuickCapture() {

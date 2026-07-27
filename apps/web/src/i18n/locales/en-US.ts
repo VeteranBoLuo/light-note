@@ -3620,6 +3620,7 @@ export default {
   },
   pwa: {
     install: 'Install LightNote',
+    oneClickInstall: 'One-click install',
     installed: 'Installed on this device',
     viewGuide: 'View install guide',
     browserGuide: 'Browser setup guide',
@@ -3627,6 +3628,13 @@ export default {
     directAvailable: 'Direct install is available',
     directAvailableShort: 'Ready to install',
     directAvailableDesc: 'It opens in its own window and does not require an app store.',
+    tryDirectInstall: 'Try one-click install first',
+    tryDirectInstallDesc:
+      'A system install dialog opens when supported; the browser guide remains available as a fallback.',
+    unsupportedBrowser:
+      'This browser does not currently expose one-click web app installation. Use the guide below instead.',
+    installFailedFallback:
+      'The install dialog could not be opened. This browser may not support it; use the manual steps below.',
     manualAvailable: 'Add it from your browser',
     guideTitle: 'Install LightNote on your device',
     guideEyebrow: 'LIGHT NOTE · DEVICE INSTALL',
@@ -3639,12 +3647,74 @@ export default {
     choosePlatform: 'Choose your device',
     stepsLabel: '3 quick steps',
     manualHint: 'Follow the guide and add it from your browser menu',
+    detectedBrowser: 'Current browser · {browser}',
+    directCapabilityReady: 'One-click ready',
+    manualCapabilityReady: 'Menu fallback',
+    browserFallbackHint:
+      'If {browser} has no “Install app”, “Add to Home Screen”, or “Add to desktop” menu item, it has not exposed PWA installation for this page. Try the latest Chrome, Edge, or your system browser instead.',
+    iosBrowserFallbackHint:
+      'On iPhone or iPad, copy the URL to Safari if the current browser has no “Add to Home Screen” action, then use the Share menu.',
+    browsers: {
+      huawei: {
+        label: 'Huawei Browser',
+        step2: 'Open the page menu and choose “Add to desktop”. You can also use “Install app” when shown.',
+      },
+      quark: {
+        label: 'Quark Browser',
+        step2: 'Open the bottom menu or toolbox and look for “Add to desktop”, “Add to Home Screen”, or “Install app”.',
+      },
+      chrome: {
+        label: 'Chrome',
+        step2: 'Open the ⋮ menu and choose “Add to Home Screen” or “Install app”.',
+      },
+      edge: {
+        label: 'Edge',
+        step2: 'Open the browser menu and look under “Apps” or “Add to phone” for the install action.',
+      },
+      firefox: {
+        label: 'Firefox',
+        step2:
+          'Open the browser menu and look for “Install” or “Add to Home Screen”. Firefox desktop may not offer it.',
+      },
+      safari: {
+        label: 'Safari',
+        step2: 'Open Share and choose “Add to Home Screen”. On macOS, look for “Add to Dock” in the File menu.',
+      },
+      '360': {
+        label: '360 Browser',
+        step2: 'Open the browser menu and look for “Add to desktop”, “Create shortcut”, or “Install app”.',
+      },
+      opera: {
+        label: 'Opera',
+        step2: 'Open the browser menu and look for “Install app” or “Add to Home Screen”.',
+      },
+      uc: {
+        label: 'UC Browser',
+        step2: 'Open the bottom menu or toolbox and look for “Add to desktop” or “Add to Home Screen”.',
+      },
+      qq: {
+        label: 'QQ Browser',
+        step2: 'Open the browser menu or toolbox and look for “Add to desktop” or “Add to Home Screen”.',
+      },
+      baidu: {
+        label: 'Baidu Browser',
+        step2: 'Open the browser menu or toolbox and look for “Add to desktop” or “Add to Home Screen”.',
+      },
+      sogou: {
+        label: 'Sogou Browser',
+        step2: 'Open the browser menu and look for “Create shortcut”, “Add to desktop”, or “Install app”.',
+      },
+      other: {
+        label: 'Current browser',
+        step2: 'Open the browser menu and look for “Install app”, “Add to Home Screen”, or “Add to desktop”.',
+      },
+    },
     platforms: {
       harmony: {
         label: 'HarmonyOS / Huawei',
-        title: 'HarmonyOS and Huawei Browser',
-        description: 'Menu labels may vary by system version. Look for “Add to” or “Add to Home screen”.',
-        step1: 'Open buluo66.top in the system browser and sign in.',
+        title: 'HarmonyOS and Huawei devices',
+        description: 'Menu labels may vary by system version and browser. Look for “Add to” or “Add to Home screen”.',
+        step1: 'Open buluo66.top in your current browser and sign in.',
         step2: 'Open the browser menu and choose “Add to”.',
         step3: 'Choose “Desktop” or “Add to Home screen”, then confirm.',
         note: 'If you see “Install app”, you can use that instead. No APK is needed.',
@@ -3665,7 +3735,7 @@ export default {
         step1: 'Open buluo66.top in your browser and sign in.',
         step2: 'Open the browser menu and choose “Install app” or “Add to Home screen”.',
         step3: 'Confirm “Install” or “Add” in the system dialog.',
-        note: 'When direct install is available, an Install LightNote button appears above this guide.',
+        note: 'Try “One-click install” above first. If no system dialog appears, use the browser menu instead.',
       },
       desktop: {
         label: 'Desktop',

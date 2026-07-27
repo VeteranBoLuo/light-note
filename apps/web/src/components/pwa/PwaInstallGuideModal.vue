@@ -48,17 +48,17 @@
             <span>{{ actionDescription }}</span>
           </div>
           <BButton
-            v-if="canPrompt && !isStandalone"
+            v-if="!isStandalone"
             type="primary"
             class="pwa-guide__install-button"
             :loading="prompting"
             @click="installDirectly"
           >
             <SvgIcon :src="icon.pwa.install" size="16" aria-hidden="true" />
-            {{ t('pwa.install') }}
+            {{ t('pwa.oneClickInstall') }}
           </BButton>
           <span v-else class="pwa-guide__action-badge">
-            {{ isStandalone ? t('pwa.installed') : t('pwa.browserGuide') }}
+            {{ t('pwa.installed') }}
           </span>
         </div>
       </section>
@@ -90,6 +90,16 @@
         </aside>
 
         <section :key="guidePlatform" class="pwa-guide__detail">
+          <div class="pwa-guide__browser-context">
+            <span class="pwa-guide__browser-icon">
+              <SvgIcon :src="icon.pwa.device" size="15" aria-hidden="true" />
+            </span>
+            <strong>{{ t('pwa.detectedBrowser', { browser: detectedBrowserLabel }) }}</strong>
+            <span class="pwa-guide__browser-state" :class="{ 'is-ready': canPrompt }">
+              {{ canPrompt ? t('pwa.directCapabilityReady') : t('pwa.manualCapabilityReady') }}
+            </span>
+          </div>
+
           <header class="pwa-guide__detail-head">
             <div>
               <span class="pwa-guide__detail-kicker">{{ activePlatformLabel }}</span>
@@ -108,7 +118,7 @@
 
           <div class="pwa-guide__note">
             <SvgIcon :src="icon.pwa.tip" size="17" aria-hidden="true" />
-            <span>{{ t(`pwa.platforms.${guidePlatform}.note`) }}</span>
+            <span>{{ activeNote }}</span>
           </div>
         </section>
       </div>
@@ -121,13 +131,23 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { usePwaInstall, type PwaGuidePlatform } from '@/composables/usePwaInstall';
 
   const { t } = useI18n();
-  const { canPrompt, guidePlatform, guideSource, guideVisible, isStandalone, prompting, requestInstall } =
-    usePwaInstall();
+  const {
+    canPrompt,
+    detectedBrowser,
+    detectedPlatform,
+    guidePlatform,
+    guideSource,
+    guideVisible,
+    isStandalone,
+    prompting,
+    requestInstall,
+  } = usePwaInstall();
   const platformListRef = ref<HTMLElement | null>(null);
 
   const platformKeys: PwaGuidePlatform[] = ['harmony', 'ios', 'android', 'desktop'];
@@ -149,14 +169,27 @@
   const activePlatformLabel = computed(
     () => platformOptions.value.find((platform) => platform.key === guidePlatform.value)?.label || '',
   );
-  const steps = computed(() => [1, 2, 3].map((index) => t(`pwa.platforms.${guidePlatform.value}.step${index}`)));
+  const detectedBrowserLabel = computed(() => t(`pwa.browsers.${detectedBrowser.value}.label`));
+  const steps = computed(() => [
+    t(`pwa.platforms.${guidePlatform.value}.step1`),
+    guidePlatform.value === detectedPlatform.value
+      ? t(`pwa.browsers.${detectedBrowser.value}.step2`)
+      : t(`pwa.platforms.${guidePlatform.value}.step2`),
+    t(`pwa.platforms.${guidePlatform.value}.step3`),
+  ]);
+  const activeNote = computed(() => {
+    const platformNote = t(`pwa.platforms.${guidePlatform.value}.note`);
+    if (guidePlatform.value !== detectedPlatform.value) return platformNote;
+    const fallbackKey = detectedPlatform.value === 'ios' ? 'pwa.iosBrowserFallbackHint' : 'pwa.browserFallbackHint';
+    return `${platformNote} ${t(fallbackKey, { browser: detectedBrowserLabel.value })}`;
+  });
   const actionTitle = computed(() => {
     if (isStandalone.value) return t('pwa.installed');
-    return canPrompt.value ? t('pwa.directAvailable') : t('pwa.manualAvailable');
+    return canPrompt.value ? t('pwa.directAvailable') : t('pwa.tryDirectInstall');
   });
   const actionDescription = computed(() => {
     if (isStandalone.value) return t('pwa.guideIntroDesc');
-    return canPrompt.value ? t('pwa.directAvailableDesc') : t('pwa.manualHint');
+    return canPrompt.value ? t('pwa.directAvailableDesc') : t('pwa.tryDirectInstallDesc');
   });
 
   function selectPlatform(platform: PwaGuidePlatform) {
@@ -180,15 +213,19 @@
 
   async function installDirectly() {
     const result = await requestInstall(guideSource.value);
-    if (result === 'accepted' || result === 'installed') guideVisible.value = false;
+    if (result === 'accepted' || result === 'installed') {
+      guideVisible.value = false;
+      return;
+    }
+    if (result === 'unsupported' || result === 'failed') {
+      message.warning(t(result === 'unsupported' ? 'pwa.unsupportedBrowser' : 'pwa.installFailedFallback'), 6);
+    }
   }
 </script>
 
 <style scoped lang="less">
   :global(.pwa-install-mask.mask-container) {
-    background:
-      radial-gradient(circle at 72% 18%, rgba(97, 92, 237, 0.16), transparent 30%),
-      rgba(2, 3, 10, 0.82);
+    background: radial-gradient(circle at 72% 18%, rgba(97, 92, 237, 0.16), transparent 30%), rgba(2, 3, 10, 0.82);
     backdrop-filter: blur(14px) saturate(115%);
   }
 
@@ -597,6 +634,57 @@
     min-width: 0;
     padding: 22px 24px 24px;
     animation: pwa-detail-in 0.24s ease;
+  }
+
+  .pwa-guide__browser-context {
+    min-width: 0;
+    margin-bottom: 14px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(151, 147, 255, 0.12);
+    border-radius: 11px;
+    color: #999bae;
+    background: rgba(97, 92, 237, 0.045);
+  }
+
+  .pwa-guide__browser-icon {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: #9691ff;
+    background: rgba(97, 92, 237, 0.1);
+  }
+
+  .pwa-guide__browser-context strong {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    color: #c9cad6;
+    font-size: 10px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pwa-guide__browser-state {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    border-radius: 999px;
+    color: #9294a6;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 8px;
+    line-height: 1.2;
+  }
+
+  .pwa-guide__browser-state.is-ready {
+    color: #aaa7ff;
+    background: rgba(97, 92, 237, 0.13);
   }
 
   .pwa-guide__detail-head {

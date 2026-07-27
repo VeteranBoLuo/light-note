@@ -101,6 +101,8 @@ export const OPERATION_LOG_MAP = {
     openGuide: '查看安装教程',
     accepted: '接受安装轻笺',
     dismissed: '取消安装轻笺',
+    unsupported: '浏览器不支持一键安装',
+    failed: '调起安装轻笺失败',
     installed: '安装轻笺成功',
   }),
   trash: createModule('回收站', {
