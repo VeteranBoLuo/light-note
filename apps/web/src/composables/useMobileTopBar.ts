@@ -1,6 +1,8 @@
 import { onBeforeUnmount, shallowReactive } from 'vue';
 
 export interface MobileTopBarBinding {
+  showSearch?: boolean;
+  showMoreMenu?: boolean;
   getSearchValue?: () => string;
   setSearchValue?: (value: string) => void;
   onSearchInput?: (value: string) => void;

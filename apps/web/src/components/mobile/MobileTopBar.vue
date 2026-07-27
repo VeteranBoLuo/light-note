@@ -11,7 +11,7 @@
       <span>{{ t('navigation.title') }}</span>
     </BButton>
 
-    <div class="mobile-top-bar__search">
+    <div v-if="showSearch" class="mobile-top-bar__search">
       <BInput
         id="mobile-top-search-input"
         v-model:value="searchValue"
@@ -26,7 +26,7 @@
       </BInput>
     </div>
 
-    <div class="mobile-top-bar__actions">
+    <div v-if="showActions" class="mobile-top-bar__actions">
       <BButton
         v-if="
           activeBinding?.onAuxiliaryAction &&
@@ -51,7 +51,13 @@
       >
         <SvgIcon :src="icon.common.plus" size="20" aria-hidden="true" />
       </BButton>
-      <BDropdown trigger="click" align="right" overlay-class-name="mobile-top-bar-menu" :menu-options="moreMenuOptions">
+      <BDropdown
+        v-if="showMoreMenu"
+        trigger="click"
+        align="right"
+        overlay-class-name="mobile-top-bar-menu"
+        :menu-options="moreMenuOptions"
+      >
         <BButton
           class="mobile-top-bar__action"
           :aria-label="t('mobileNavigation.moreActions')"
@@ -86,6 +92,11 @@
   const fallbackSearchValue = ref('');
 
   const activeBinding = computed(() => getMobileTopBarBinding(route.name));
+  const showSearch = computed(() => activeBinding.value?.showSearch !== false);
+  const showMoreMenu = computed(() => activeBinding.value?.showMoreMenu !== false);
+  const showActions = computed(() =>
+    Boolean(activeBinding.value?.onAuxiliaryAction || activeBinding.value?.onAdd || showMoreMenu.value),
+  );
   const searchValue = computed({
     get: () => activeBinding.value?.getSearchValue?.() ?? fallbackSearchValue.value,
     set: (value: string | number | undefined) => {
@@ -189,6 +200,7 @@
   }
 
   .mobile-top-bar__actions {
+    margin-left: auto;
     flex: 0 0 auto;
     display: flex;
     align-items: center;

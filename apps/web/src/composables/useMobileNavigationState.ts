@@ -4,6 +4,7 @@ import { getMobileResourcePath, isMobileResourcePath, type MobileResourcePath } 
 const LAST_RESOURCE_STORAGE_KEY = 'ln-mobile-last-resource';
 const lastMobileResourcePath = ref<MobileResourcePath | null>(readStoredResourcePath());
 const resourceScrollPositions = new Map<MobileResourcePath, number>();
+const nonPersistentScrollPaths = new Set<MobileResourcePath>(['/noteLibrary']);
 
 function readStoredResourcePath(): MobileResourcePath | null {
   try {
@@ -46,18 +47,28 @@ function getLastMobileResourcePath(fallback: string): MobileResourcePath {
 
 function saveResourceScroll(path: MobileResourcePath | null) {
   if (!path) return;
+  if (nonPersistentScrollPaths.has(path)) {
+    resourceScrollPositions.delete(path);
+    return;
+  }
   const element = findResourceScrollElement();
   if (element) resourceScrollPositions.set(path, element.scrollTop);
 }
 
 function restoreResourceScroll(path: MobileResourcePath | null) {
   if (!path) return false;
+  if (nonPersistentScrollPaths.has(path)) {
+    const element = findResourceScrollElement();
+    if (!element) return false;
+    element.scrollTop = 0;
+    return true;
+  }
   const top = resourceScrollPositions.get(path);
   if (top == null) return false;
   const element = findResourceScrollElement();
   if (!element) return false;
   element.scrollTop = top;
-  return true;
+  return Math.abs(element.scrollTop - top) <= 1;
 }
 
 function scrollCurrentResourceToTop() {
@@ -65,6 +76,11 @@ function scrollCurrentResourceToTop() {
   if (!element) return;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   element.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+
+function resetCurrentResourceScroll() {
+  const element = findResourceScrollElement();
+  if (element) element.scrollTop = 0;
 }
 
 export function useMobileNavigationState() {
@@ -76,5 +92,6 @@ export function useMobileNavigationState() {
     saveResourceScroll,
     restoreResourceScroll,
     scrollCurrentResourceToTop,
+    resetCurrentResourceScroll,
   };
 }

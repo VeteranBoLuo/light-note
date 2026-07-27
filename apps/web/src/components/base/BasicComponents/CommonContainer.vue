@@ -5,7 +5,7 @@
       :class="{ 'phone-container--embedded': embeddedMobile }"
       v-if="bookmark.isMobile"
     >
-      <div class="phone-navigation">
+      <div v-if="showNavigation" class="phone-navigation">
         <slot name="navigation">
           <span
             v-if="showBack"
@@ -39,6 +39,10 @@
       default: '',
     },
     showBack: {
+      type: Boolean,
+      default: true,
+    },
+    showNavigation: {
       type: Boolean,
       default: true,
     },

@@ -2,178 +2,190 @@
   <CommonContainer
     :title="$t('personCenter.title')"
     :show-back="false"
+    :show-navigation="!bookmark.isMobile"
     embedded-mobile
     :style="{ backgroundColor: user.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
   >
-    <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
-      <div style="display: flex; gap: 20px; align-items: center">
-        <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" :style="{ color: user.iconColor }">
-          <AvatarFramePreview
-            v-if="equippedFrameId"
-            :frame-id="equippedFrameId"
-            :src="user.headPicture || icon.navigation.user"
-            :size="44"
-            :decorative="false"
-            class="dom-hover"
-            @click="zoomImage"
-          />
-          <svg-icon
-            v-else
-            img-id="viewUserImg"
-            @click="zoomImage"
-            size="50"
-            :src="user.headPicture || icon.navigation.user"
-            class="dom-hover"
-          />
+    <div class="person-center-layout" :class="{ 'person-center-layout--mobile': bookmark.isMobile }">
+      <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
+        <div style="display: flex; gap: 20px; align-items: center">
+          <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" :style="{ color: user.iconColor }">
+            <AvatarFramePreview
+              v-if="equippedFrameId"
+              :frame-id="equippedFrameId"
+              :src="user.headPicture || icon.navigation.user"
+              :size="44"
+              :decorative="false"
+              class="dom-hover"
+              @click="zoomImage"
+            />
+            <svg-icon
+              v-else
+              img-id="viewUserImg"
+              @click="zoomImage"
+              size="50"
+              :src="user.headPicture || icon.navigation.user"
+              class="dom-hover"
+            />
+          </div>
+          <div style="display: flex; flex-direction: column">
+            <b style="font-size: 20px">{{ user.alias ? user.alias : $t('personCenter.defaultNickname') }}</b>
+          </div>
         </div>
-        <div style="display: flex; flex-direction: column">
-          <b style="font-size: 20px">{{ user.alias ? user.alias : $t('personCenter.defaultNickname') }}</b>
+        <div class="user-icon-text" :style="{ color: user.iconColor }">
+          <div style="display: flex; gap: 20px; font-size: 14px">
+            <span
+              >{{ $t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
+            >
+            <span
+              >{{ $t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
+            >
+            <span
+              >{{ $t('personCenter.storageUsed')
+              }}<span style="margin-left: 10px">{{ formatStorageSize(user.storageUsed) }}</span></span
+            >
+          </div>
         </div>
       </div>
-      <div class="user-icon-text" :style="{ color: user.iconColor }">
-        <div style="display: flex; gap: 20px; font-size: 14px">
-          <span
-            >{{ $t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
+      <div
+        class="person-menu-scroll"
+        :class="{ 'person-menu-scroll--mobile': bookmark.isMobile, 'no-scrollbar': bookmark.isMobile }"
+      >
+        <div class="person-menu">
+          <div class="person-menu-item" @click="goToProfileModule('/myInfo')">
+            <span class="person-menu-item-title">{{ $t('personCenter.personalProfile') }}</span>
+            <span class="person-menu-item-des"
+              >{{ $t('personCenter.email_nickname') }}
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </div>
+          <div
+            class="person-menu-item"
+            @click="goGrowth"
+            v-click-log="{ module: '个人中心', operation: '打开我的成长' }"
           >
-          <span
-            >{{ $t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
+            <span class="person-menu-item-title">{{ $t('growth.entry') }}</span>
+            <span class="person-menu-item-des"
+              >Lv.{{ growthInfo?.level || 1 }} · 🪙 {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </div>
+        </div>
+        <div class="person-menu">
+          <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/settings')"
+            v-click-log="{ module: '个人中心', operation: '打开设置' }"
           >
-          <span
-            >{{ $t('personCenter.storageUsed')
-            }}<span style="margin-left: 10px">{{ formatStorageSize(user.storageUsed) }}</span></span
+            <span class="person-menu-item-title">{{ $t('settings.title') }}</span>
+            <span class="person-menu-item-des">
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </div>
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/help')"
+            v-click-log="{ module: '个人中心', operation: '打开帮助' }"
+          >
+            <span class="person-menu-item-title">{{ $t('personCenter.help') }}</span>
+            <span class="person-menu-item-des">
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </div>
+          <div
+            v-if="user.role === 'root'"
+            class="person-menu-item"
+            @click="goToProfileModule('/admin')"
+            v-click-log="{ module: '个人中心', operation: `后台管理` }"
+          >
+            <span class="person-menu-item-title">{{ $t('personCenter.admin') }}</span>
+            <span class="person-menu-item-des"
+              >{{ $t('personCenter.logs_user_mg')
+              }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+        </div>
+        <div class="person-menu">
+          <div v-if="canUseQuickCapture" class="person-menu-item" @click="openQuickCapture">
+            <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
+            <span class="person-menu-item-des">
+              {{ inbox.actionTotal || '' }}
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </div>
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/search')"
+            v-click-log="{ module: '个人中心', operation: `资源中心` }"
+          >
+            <span class="person-menu-item-title">{{ $t('personCenter.resourceCenter') }}</span>
+            <span class="person-menu-item-des"
+              >{{ $t('personCenter.resourceCenterDesc')
+              }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/manage/tagMg')"
+            v-click-log="{ module: '个人中心', operation: `标签管理` }"
+          >
+            <span class="person-menu-item-title">{{ $t('tagManage.title') }}</span>
+            <span class="person-menu-item-des"
+              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/manage/bookmarkMg')"
+            v-click-log="{ module: '个人中心', operation: `书签管理` }"
+          >
+            <span class="person-menu-item-title">{{ $t('bookmarkMg.title') }}</span>
+            <span class="person-menu-item-des"
+              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/ptrash')"
+            v-click-log="{ module: '个人中心', operation: '回收站' }"
+          >
+            <span class="person-menu-item-title">{{ $t('trash.title') }}</span>
+            <span class="person-menu-item-des"
+              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+        </div>
+        <div class="person-menu">
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/opinions')"
+            v-click-log="{ module: '个人中心', operation: `意见反馈` }"
+          >
+            <span class="person-menu-item-title">{{ $t('personCenter.feedback') }}</span>
+            <span class="person-menu-item-des"
+              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/updateLogs')"
+            v-click-log="{ module: '更新日志', operation: `更新日志` }"
+          >
+            <span class="person-menu-item-title">{{ $t('personCenter.changelog') }}</span>
+            <span class="person-menu-item-des"
+              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
+          ></div>
+        </div>
+        <div
+          class="person-menu"
+          @click="handleExitLogin"
+          v-click-log="{
+            module: '个人中心',
+            operation: user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout'),
+          }"
+        >
+          <div class="person-menu-item" style="justify-content: center">
+            <span class="person-menu-item-title">{{
+              user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout')
+            }}</span></div
           >
         </div>
       </div>
-    </div>
-    <div class="person-menu">
-      <div class="person-menu-item" @click="$router.push('/myInfo')">
-        <span class="person-menu-item-title">{{ $t('personCenter.personalProfile') }}</span>
-        <span class="person-menu-item-des"
-          >{{ $t('personCenter.email_nickname') }}
-          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-        </span>
-      </div>
-      <div class="person-menu-item" @click="goGrowth" v-click-log="{ module: '个人中心', operation: '打开我的成长' }">
-        <span class="person-menu-item-title">{{ $t('growth.entry') }}</span>
-        <span class="person-menu-item-des"
-          >Lv.{{ growthInfo?.level || 1 }} · 🪙 {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
-          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-        </span>
-      </div>
-    </div>
-    <div class="person-menu">
-      <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
-      <div
-        class="person-menu-item"
-        @click="$router.push('/settings')"
-        v-click-log="{ module: '个人中心', operation: '打开设置' }"
-      >
-        <span class="person-menu-item-title">{{ $t('settings.title') }}</span>
-        <span class="person-menu-item-des">
-          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-        </span>
-      </div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/help')"
-        v-click-log="{ module: '个人中心', operation: '打开帮助' }"
-      >
-        <span class="person-menu-item-title">{{ $t('personCenter.help') }}</span>
-        <span class="person-menu-item-des">
-          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-        </span>
-      </div>
-      <div
-        v-if="user.role === 'root'"
-        class="person-menu-item"
-        @click="router.push('/admin')"
-        v-click-log="{ module: '个人中心', operation: `后台管理` }"
-      >
-        <span class="person-menu-item-title">{{ $t('personCenter.admin') }}</span>
-        <span class="person-menu-item-des"
-          >{{ $t('personCenter.logs_user_mg')
-          }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-    </div>
-    <div class="person-menu">
-      <div v-if="canUseQuickCapture" class="person-menu-item" @click="openQuickCapture">
-        <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
-        <span class="person-menu-item-des">
-          {{ inbox.actionTotal || '' }}
-          <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-        </span>
-      </div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/search')"
-        v-click-log="{ module: '个人中心', operation: `资源中心` }"
-      >
-        <span class="person-menu-item-title">{{ $t('personCenter.resourceCenter') }}</span>
-        <span class="person-menu-item-des"
-          >{{ $t('personCenter.resourceCenterDesc')
-          }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/manage/tagMg')"
-        v-click-log="{ module: '个人中心', operation: `标签管理` }"
-      >
-        <span class="person-menu-item-title">{{ $t('tagManage.title') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/manage/bookmarkMg')"
-        v-click-log="{ module: '个人中心', operation: `书签管理` }"
-      >
-        <span class="person-menu-item-title">{{ $t('bookmarkMg.title') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/ptrash')"
-        v-click-log="{ module: '个人中心', operation: '回收站' }"
-      >
-        <span class="person-menu-item-title">{{ $t('trash.title') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-    </div>
-    <div class="person-menu">
-      <div
-        class="person-menu-item"
-        @click="$router.push('/opinions')"
-        v-click-log="{ module: '个人中心', operation: `意见反馈` }"
-      >
-        <span class="person-menu-item-title">{{ $t('personCenter.feedback') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-      <div
-        class="person-menu-item"
-        @click="$router.push('/updateLogs')"
-        v-click-log="{ module: '更新日志', operation: `更新日志` }"
-      >
-        <span class="person-menu-item-title">{{ $t('personCenter.changelog') }}</span>
-        <span class="person-menu-item-des"
-          ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-      ></div>
-    </div>
-    <div
-      class="person-menu"
-      @click="handleExitLogin"
-      v-click-log="{
-        module: '个人中心',
-        operation: user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout'),
-      }"
-    >
-      <div class="person-menu-item" style="justify-content: center">
-        <span class="person-menu-item-title">{{
-          user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout')
-        }}</span></div
-      >
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
   </CommonContainer>
@@ -195,6 +207,7 @@
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { frameVariant } from '@/config/growthFrames';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
@@ -212,13 +225,20 @@
     return frameVariant(id) ? id : null;
   });
   const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
-
+  useMobileTopBar(['personCenter'], {
+    showSearch: false,
+    showMoreMenu: false,
+  });
   onMounted(() => {
     loadGrowth();
   });
 
+  function goToProfileModule(path: string) {
+    router.push(path);
+  }
+
   function goGrowth() {
-    router.push('/growth');
+    goToProfileModule('/growth');
   }
 
   function openQuickCapture() {
@@ -252,6 +272,13 @@
 </script>
 
 <style lang="less" scoped>
+  .person-center-layout--mobile {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
   .person-title-card {
     gap: 40px;
     padding: 15px;
@@ -262,6 +289,18 @@
     flex-direction: column;
     justify-content: center;
     color: white;
+  }
+
+  .person-center-layout--mobile .person-title-card {
+    flex: 0 0 auto;
+  }
+
+  .person-menu-scroll--mobile {
+    min-height: 0;
+    padding-bottom: 20px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    flex: 1 1 auto;
   }
 
   .person-menu {
@@ -373,5 +412,10 @@
       width: 80%;
       max-width: 700px;
     }
+  }
+
+  :deep(.phone-container--embedded .phone-body) {
+    padding-top: 12px;
+    overflow: hidden;
   }
 </style>

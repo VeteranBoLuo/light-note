@@ -82,6 +82,8 @@
   }
 
   useMobileTopBar(['mobileAiWorkspace'], {
+    showSearch: false,
+    showMoreMenu: false,
     onAuxiliaryAction: () => {
       historyVisible.value = true;
     },

@@ -1,5 +1,6 @@
-export type MobileShellSection = 'resources' | 'inbox' | 'ai' | 'search' | 'profile';
+export type MobileShellSection = 'resources' | 'todo' | 'ai' | 'search' | 'profile';
 export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace';
+export type MobileResourceInboxTab = 'all' | 'bookmark' | 'note' | 'file';
 
 export interface MobileResourceNavigationItem {
   key: 'bookmark' | 'note' | 'cloud';
@@ -12,7 +13,7 @@ export interface MobileBottomNavigationItem {
   key: MobileShellSection;
   labelKey:
     | 'mobileNavigation.resources'
-    | 'navigation.inbox'
+    | 'mobileNavigation.todo'
     | 'mobileNavigation.ai'
     | 'mobileNavigation.search'
     | 'mobileNavigation.profile';
@@ -42,11 +43,17 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
 
 export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
   { key: 'resources', labelKey: 'mobileNavigation.resources' },
-  { key: 'inbox', labelKey: 'navigation.inbox', path: '/inbox' },
+  { key: 'todo', labelKey: 'mobileNavigation.todo', path: '/inbox' },
   { key: 'ai', labelKey: 'mobileNavigation.ai', path: '/ai' },
   { key: 'search', labelKey: 'mobileNavigation.search', path: '/search' },
   { key: 'profile', labelKey: 'mobileNavigation.profile', path: '/personCenter' },
 ] as const;
+
+export const MOBILE_RESOURCE_INBOX_TABS: readonly MobileResourceInboxTab[] = ['all', 'bookmark', 'note', 'file'];
+
+export function isMobileResourceInboxTab(value: unknown): value is MobileResourceInboxTab {
+  return MOBILE_RESOURCE_INBOX_TABS.includes(String(value || '') as MobileResourceInboxTab);
+}
 
 export function getMobileResourcePath(routeName: unknown): MobileResourcePath | null {
   const normalizedName = String(routeName || '');

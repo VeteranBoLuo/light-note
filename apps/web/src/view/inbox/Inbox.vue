@@ -1,31 +1,48 @@
 <template>
-  <main class="inbox-page">
-    <ResourceCenterSectionNav v-if="!bookmark.isMobile" class="section-switcher" />
-    <header class="inbox-hero">
+  <main
+    class="inbox-page"
+    :class="{
+      'inbox-page--mobile-todo': isMobileTodoPrimary,
+      'inbox-page--mobile-resources': isMobileResourceInbox,
+    }"
+  >
+    <ResourceCenterSectionNav v-if="!bookmark.isMobile || isMobileResourceInbox" class="section-switcher" />
+    <header v-if="!bookmark.isMobile" class="inbox-hero">
       <div>
         <h1>{{ t('inbox.title') }}</h1>
         <p>{{ t('inbox.subtitle') }}</p>
       </div>
     </header>
 
-    <section class="inbox-toolbar">
-      <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" variant="pill" @change="changeFilter" />
-      <div class="inbox-toolbar__right" :class="{ 'has-status': inbox.filterType === 'todo' }">
-        <BInput
-          v-if="!bookmark.isMobile"
-          v-model:value="inbox.keyword"
-          :placeholder="t('inbox.searchPlaceholder')"
-          clearable
-          @enter="search"
+    <section class="inbox-toolbar" :class="{ 'inbox-toolbar--todo-primary': isMobileTodoPrimary }">
+      <template v-if="isMobileTodoPrimary">
+        <BTabs
+          v-model:active-tab="todo.status"
+          :options="mobileTodoStatusOptions"
+          variant="pill"
+          @change="changeTodoStatus"
         />
-        <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
-        <BSelect
-          v-if="inbox.filterType === 'todo'"
-          v-model:value="todo.status"
-          :options="todoStatusOptions"
-          @change="search"
-        />
-      </div>
+        <BSelect class="mobile-todo-sort" v-model:value="todo.sort" :options="sortOptions" @change="search" />
+      </template>
+      <template v-else>
+        <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" variant="pill" @change="changeFilter" />
+        <div class="inbox-toolbar__right" :class="{ 'has-status': inbox.filterType === 'todo' }">
+          <BInput
+            v-if="!bookmark.isMobile"
+            v-model:value="inbox.keyword"
+            :placeholder="t('inbox.searchPlaceholder')"
+            clearable
+            @enter="search"
+          />
+          <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
+          <BSelect
+            v-if="inbox.filterType === 'todo'"
+            v-model:value="todo.status"
+            :options="todoStatusOptions"
+            @change="search"
+          />
+        </div>
+      </template>
     </section>
 
     <section v-if="inbox.filterType !== 'todo' && inbox.items.length" class="inbox-batch">
@@ -136,9 +153,10 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
+  import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
-  import type { TodoChecklistItem, TodoItem as TodoItemType, TodoSort } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoFilterStatus, TodoItem as TodoItemType, TodoSort } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
 
   const { t } = useI18n();
@@ -162,6 +180,9 @@
   let resizeObserver: ResizeObserver | null = null;
   let mobileInboxSearchTimer = 0;
 
+  const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
+  const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
+
   const selectedItems = computed(() =>
     inbox.items.filter((item) => inbox.selectedKeys.includes(inbox.resourceKey(item))),
   );
@@ -179,15 +200,23 @@
       deletingTodoId.value,
     ),
   );
-  const pageLoading = computed(() => inbox.loading || todo.loading);
-  const pageLoadFailed = computed(() =>
-    inbox.filterType === 'todo'
+  const pageLoading = computed(() => {
+    if (isMobileTodoPrimary.value) return todo.loading;
+    if (isMobileResourceInbox.value) return inbox.loading;
+    return inbox.loading || todo.loading;
+  });
+  const pageLoadFailed = computed(() => {
+    if (isMobileTodoPrimary.value) return todo.loadFailed;
+    if (isMobileResourceInbox.value) return inbox.loadFailed;
+    return inbox.filterType === 'todo'
       ? todo.loadFailed
       : inbox.filterType === 'all'
         ? inbox.loadFailed || todo.loadFailed
-        : inbox.loadFailed,
+        : inbox.loadFailed;
+  });
+  const isInboxGloballyEmpty = computed(() =>
+    isMobileResourceInbox.value ? inbox.pendingTotal === 0 : inbox.actionTotal === 0,
   );
-  const isInboxGloballyEmpty = computed(() => inbox.actionTotal === 0);
   const currentTypeLabel = computed(() =>
     inbox.filterType === 'all' ? t('inbox.all') : t(`inbox.${inbox.filterType}`),
   );
@@ -200,12 +229,18 @@
     return t('inbox.typeEmptyTitle', { type: currentTypeLabel.value });
   });
   const emptyStateDesc = computed(() => {
-    if (inbox.filterType === 'todo') return t('inbox.todoEmptyDesc');
+    if (inbox.filterType === 'todo') {
+      return isMobileTodoPrimary.value ? t('inbox.todoPrimaryEmptyDesc') : t('inbox.todoEmptyDesc');
+    }
     if (isInboxGloballyEmpty.value) return t('inbox.emptyDesc');
-    if (inbox.filterType === 'all') return t('inbox.filterEmptyDesc', { count: inbox.actionTotal });
+    if (inbox.filterType === 'all') {
+      return t('inbox.filterEmptyDesc', {
+        count: isMobileResourceInbox.value ? inbox.pendingTotal : inbox.actionTotal,
+      });
+    }
     return t('inbox.typeEmptyDesc', {
       type: currentTypeLabel.value,
-      count: inbox.actionTotal,
+      count: isMobileResourceInbox.value ? inbox.pendingTotal : inbox.actionTotal,
     });
   });
   const emptyStateAction = computed(() => {
@@ -214,13 +249,20 @@
     return t('inbox.collectType', { type: currentTypeLabel.value });
   });
 
-  const filterOptions = computed(() => [
-    { key: 'all', label: t('inbox.all'), badge: inbox.actionTotal },
-    { key: 'bookmark', label: t('inbox.bookmark'), badge: inbox.typeTotals.bookmark },
-    { key: 'note', label: t('inbox.note'), badge: inbox.typeTotals.note },
-    { key: 'file', label: t('inbox.file'), badge: inbox.typeTotals.file },
-    { key: 'todo', label: t('inbox.todo'), badge: todo.pendingTotal },
-  ]);
+  const filterOptions = computed(() => {
+    const resourceOptions = [
+      {
+        key: 'all',
+        label: t('inbox.all'),
+        badge: isMobileResourceInbox.value ? inbox.pendingTotal : inbox.actionTotal,
+      },
+      { key: 'bookmark', label: t('inbox.bookmark'), badge: inbox.typeTotals.bookmark },
+      { key: 'note', label: t('inbox.note'), badge: inbox.typeTotals.note },
+      { key: 'file', label: t('inbox.file'), badge: inbox.typeTotals.file },
+    ];
+    if (isMobileResourceInbox.value) return resourceOptions;
+    return [...resourceOptions, { key: 'todo', label: t('inbox.todo'), badge: todo.pendingTotal }];
+  });
   const sortOptions = computed(() =>
     inbox.filterType === 'todo'
       ? [
@@ -239,6 +281,11 @@
     { label: t('inbox.todoPending'), value: 'pending' },
     { label: t('inbox.todoCompleted'), value: 'completed' },
   ]);
+  const mobileTodoStatusOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
+    { key: 'pending', label: t('inbox.todoPending'), badge: todo.pendingTotal },
+    { key: 'completed', label: t('inbox.todoCompleted') },
+    { key: 'all', label: t('inbox.all') },
+  ]);
   const actionItems = computed(() => {
     if (inbox.filterType === 'todo') {
       return todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
@@ -248,7 +295,7 @@
       key: inbox.resourceKey(item),
       item,
     }));
-    if (inbox.filterType !== 'all') return resources;
+    if (inbox.filterType !== 'all' || isMobileResourceInbox.value) return resources;
     const todos = todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
     return [...resources, ...todos].sort(
       (left, right) => actionRank(left) - actionRank(right) || actionTime(right) - actionTime(left),
@@ -260,6 +307,7 @@
     async (id) => {
       inbox.resetForOwner(id || 'visitor');
       todo.resetForOwner(id || 'visitor');
+      syncRequestedMobileMode();
       await refreshList();
     },
   );
@@ -268,9 +316,14 @@
     inbox.resetForOwner(user.id || 'visitor');
     todo.resetForOwner(user.id || 'visitor');
     const requestedTab = String(route.query.tab || '');
-    if (['all', 'bookmark', 'note', 'file', 'todo'].includes(requestedTab)) inbox.filterType = requestedTab as any;
-    await refreshList();
+    if (bookmark.isMobile) {
+      syncRequestedMobileMode();
+    } else if (['all', 'bookmark', 'note', 'file', 'todo'].includes(requestedTab)) {
+      inbox.filterType = requestedTab as any;
+    }
     const requestedTodoId = String(route.query.todoId || '');
+    if (isMobileTodoPrimary.value) todo.status = requestedTodoId ? 'all' : 'pending';
+    await refreshList();
     const requestedTodo = requestedTodoId ? todo.items.find((item) => item.id === requestedTodoId) : null;
     if (requestedTodo) {
       openTodoEditor(requestedTodo);
@@ -293,6 +346,31 @@
     () => nextTick(updateScrollFade),
   );
 
+  watch(
+    () => route.query.tab,
+    async (tab, previousTab) => {
+      if (!bookmark.isMobile || tab === previousTab) return;
+      const nextFilter = isMobileResourceInboxTab(tab) ? tab : 'todo';
+      if (inbox.filterType === nextFilter) return;
+      inbox.filterType = nextFilter;
+      inbox.keyword = '';
+      todo.keyword = '';
+      if (nextFilter === 'todo') todo.status = 'pending';
+      else inbox.sort = 'newest';
+      await refreshList(true);
+    },
+  );
+
+  function syncRequestedMobileMode() {
+    if (!bookmark.isMobile) return;
+    inbox.filterType = isMobileResourceInboxTab(route.query.tab) ? route.query.tab : 'todo';
+    if (inbox.filterType === 'todo') {
+      if (!route.query.todoId) todo.status = 'pending';
+    } else {
+      inbox.sort = 'newest';
+    }
+  }
+
   function openCapture() {
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
@@ -309,20 +387,29 @@
     getSearchValue: () => inbox.keyword,
     setSearchValue: setMobileInboxKeyword,
     onSearchEnter: search,
-    searchPlaceholder: () => t('inbox.searchPlaceholder'),
+    searchPlaceholder: () =>
+      isMobileTodoPrimary.value ? t('inbox.todoSearchPlaceholder') : t('inbox.resourceSearchPlaceholder'),
     onAdd: () => {
-      if (inbox.filterType === 'todo') openTodoEditor();
+      if (isMobileTodoPrimary.value) openTodoEditor();
       else openCapture();
     },
-    addLabel: () => (inbox.filterType === 'todo' ? t('inbox.createTodo') : t('inbox.quickCapture')),
+    addLabel: () => (isMobileTodoPrimary.value ? t('inbox.createTodo') : t('inbox.quickCapture')),
   });
   function handleEmptyStateAction() {
-    if (inbox.filterType === 'todo') openTodoEditor();
+    if (isMobileTodoPrimary.value || inbox.filterType === 'todo') openTodoEditor();
     else openCapture();
   }
   async function changeFilter() {
     inbox.sort = inbox.filterType === 'todo' ? ('smart' as any) : 'newest';
-    router.replace({ query: { ...route.query, tab: inbox.filterType === 'all' ? undefined : inbox.filterType } });
+    router.replace({
+      query: {
+        ...route.query,
+        tab: isMobileResourceInbox.value ? inbox.filterType : inbox.filterType === 'all' ? undefined : inbox.filterType,
+      },
+    });
+    await refreshList(true);
+  }
+  async function changeTodoStatus() {
     await refreshList(true);
   }
   async function search() {
@@ -330,19 +417,25 @@
   }
   async function refreshList(resetScroll = false) {
     todo.keyword = inbox.keyword;
-    if (inbox.filterType === 'todo') todo.sort = inbox.sort as TodoSort;
+    if (inbox.filterType === 'todo' && !isMobileTodoPrimary.value) todo.sort = inbox.sort as TodoSort;
     let refreshed = false;
     let inboxCountsReady = false;
     if (inbox.filterType === 'todo') {
       refreshed = await todo.refreshList();
       inboxCountsReady = await inbox.refreshCount();
     } else if (inbox.filterType === 'all') {
-      const [inboxRefreshed, todoRefreshed] = await Promise.all([
-        inbox.refreshList(),
-        todo.refreshList({ status: 'pending', keyword: inbox.keyword, preserveStatus: true }),
-      ]);
-      refreshed = inboxRefreshed && todoRefreshed;
-      inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+      if (isMobileResourceInbox.value) {
+        const inboxRefreshed = await inbox.refreshList();
+        refreshed = inboxRefreshed;
+        inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+      } else {
+        const [inboxRefreshed, todoRefreshed] = await Promise.all([
+          inbox.refreshList(),
+          todo.refreshList({ status: 'pending', keyword: inbox.keyword, preserveStatus: true }),
+        ]);
+        refreshed = inboxRefreshed && todoRefreshed;
+        inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
+      }
     } else {
       const inboxRefreshed = await inbox.refreshList();
       refreshed = inboxRefreshed;
@@ -732,6 +825,16 @@
     }
   }
   @media (max-width: 767px) {
+    .inbox-page--mobile-todo,
+    .inbox-page--mobile-resources {
+      padding: 8px 10px 0;
+    }
+
+    .inbox-page--mobile-resources .section-switcher {
+      width: 100%;
+      margin-bottom: 8px;
+    }
+
     .inbox-hero {
       align-items: center;
     }
@@ -742,6 +845,26 @@
       gap: 8px;
       padding: 8px;
       overflow: visible;
+    }
+    .inbox-toolbar--todo-primary {
+      min-height: 48px;
+      margin-bottom: 8px;
+      padding: 6px;
+      align-items: center;
+      flex-direction: row;
+      gap: 6px;
+      border-radius: 12px;
+    }
+    .inbox-toolbar--todo-primary :deep(.tab-container) {
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow-x: auto;
+      padding-bottom: 0;
+    }
+    .mobile-todo-sort {
+      width: 104px;
+      min-width: 104px;
+      flex: 0 0 104px;
     }
     .inbox-toolbar :deep(.tab-container) {
       width: 100%;
@@ -776,6 +899,16 @@
     }
     .inbox-list {
       padding: 8px 8px 18px;
+    }
+    .inbox-page--mobile-todo .inbox-content {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .inbox-page--mobile-todo .inbox-list {
+      gap: 8px;
+      padding: 0 0 18px;
     }
   }
 </style>

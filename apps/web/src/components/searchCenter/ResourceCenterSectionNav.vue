@@ -16,8 +16,8 @@
       :aria-selected="activeSection === 'inbox'"
       @click="goTo('/inbox')"
     >
-      {{ t('resourceCenter.sections.inbox') }}
-      <span v-if="inbox.actionTotal" class="section-nav-count">{{ displayInboxCount }}</span>
+      {{ inboxSectionLabel }}
+      <span v-if="displayCountValue" class="section-nav-count">{{ displayInboxCount }}</span>
     </BButton>
   </div>
 </template>
@@ -28,23 +28,34 @@
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi';
-  import { inboxStore } from '@/store';
+  import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
+  import { bookmarkStore, inboxStore } from '@/store';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
+  const bookmark = bookmarkStore();
   const inbox = inboxStore();
 
-  const activeSection = computed(() => (route.path.startsWith('/inbox') ? 'inbox' : 'resources'));
-  const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
+  const activeSection = computed(() => {
+    if (!route.path.startsWith('/inbox')) return 'resources';
+    if (!bookmark.isMobile) return 'inbox';
+    return isMobileResourceInboxTab(route.query.tab) ? 'inbox' : 'resources';
+  });
+  const displayCountValue = computed(() => (bookmark.isMobile ? inbox.pendingTotal : inbox.actionTotal));
+  const displayInboxCount = computed(() => (displayCountValue.value > 99 ? '99+' : String(displayCountValue.value)));
+  const inboxSectionLabel = computed(() =>
+    bookmark.isMobile ? t('resourceCenter.sections.pendingResources') : t('resourceCenter.sections.inbox'),
+  );
 
   function goTo(path: '/search' | '/inbox') {
-    if (route.path === path) return;
+    const target = path === '/inbox' && bookmark.isMobile ? { path, query: { tab: 'all' } } : path;
+    if (router.resolve(target).fullPath === route.fullPath) return;
     recordOperation({
       module: '资源中心',
-      operation: path === '/inbox' ? '切换待处理视图' : '切换全部资源视图',
+      operation: path === '/inbox' ? (bookmark.isMobile ? '切换待整理视图' : '切换待处理视图') : '切换全部资源视图',
     });
-    router.push(path);
+    router.push(target);
   }
 </script>
 
@@ -90,5 +101,19 @@
     color: #fff;
     font-size: 10px;
     line-height: 1;
+  }
+
+  @media (max-width: 767px) {
+    .resource-center-section-nav {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      box-sizing: border-box;
+    }
+
+    .section-nav-item {
+      width: 100%;
+      min-width: 0;
+    }
   }
 </style>

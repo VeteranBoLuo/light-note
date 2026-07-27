@@ -149,7 +149,7 @@
 <ul>
   <li><strong>智能书签</strong>：一键收藏网页，AI 自动生成名称与描述；支持 Excel / HTML 格式导入导出，批量编辑标签</li>
   <li><strong>统一标签</strong>：书签、笔记、云文件共享同一标签库，点击标签即可跨类型查看所有关联内容</li>
-  <li><strong>快速添加与待处理</strong>：登录后可从导航栏添加网址、文本、文件或待办，再到“待处理”统一整理资源、完成任务</li>
+  <li><strong>快速添加与待办</strong>：登录后可从导航栏添加网址、文本、文件或待办；资源进入“资源中心 → 待整理”，待办进入独立待办列表</li>
   <li><strong>笔记库</strong>：支持 HTML 富文本 / Markdown 双模式编辑器；AI 笔记助手可润色全文、优化标题、生成摘要、纠错语病、改写选段；可导出为 PDF / HTML / Markdown</li>
   <li><strong>云空间</strong>：支持点击上传、Ctrl+V 粘贴上传、拖拽上传三种方式；文件可搜索、按类型筛选、移动、重命名、分享链接、批量操作与打包下载</li>
   <li><strong>资源中心</strong>：一键检索书签、笔记、文件和标签，并在“全部资源”和“待整理”之间切换；按 <code>/</code> 键可快速唤起搜索</li>
@@ -170,7 +170,7 @@
 
 <h3>📂 快速上手</h3>
 <ol>
-  <li>登录后点击导航栏的<b>快速添加</b>，随手保存网址、文本、文件或创建待办；稍后到<b>资源中心 → 待处理</b>统一处理</li>
+  <li>登录后点击导航栏的<b>快速添加</b>，随手保存网址、文本、文件或创建待办；资源稍后到<b>资源中心 → 待整理</b>处理，任务则在<b>待办</b>中推进</li>
   <li>在<b>书签页</b>点击标签筛选收藏的网页</li>
   <li>进入<b>书签管理</b>新增、编辑或批量操作书签</li>
   <li>打开<b>笔记库</b>新建笔记（支持 HTML 或 Markdown），用标签关联相关知识</li>
@@ -196,7 +196,7 @@
 <ul>
   <li><strong>Smart Bookmarks</strong>: Save web pages with one click; AI auto-generates titles and descriptions; import/export in Excel and HTML formats; batch tag editing</li>
   <li><strong>Unified Tags</strong>: Bookmarks, notes, and cloud files share the same tag library — click a tag to view all associated content across types</li>
-  <li><strong>Quick Add & Pending</strong>: Signed-in users can add URLs, text, files, or todos from the navigation bar, then organize resources and finish tasks under Pending</li>
+  <li><strong>Quick Add & Todos</strong>: Signed-in users can add URLs, text, files, or todos from the navigation bar; resources go to Resource Center → To Organize, while tasks go to the dedicated Todos list</li>
   <li><strong>Note Library</strong>: Dual-mode editor supporting HTML rich text and Markdown; AI Note Assistant can polish text, optimize titles, generate summaries, correct errors, and rewrite sections; export to PDF / HTML / Markdown</li>
   <li><strong>Cloud Space</strong>: Upload via click, Ctrl+V paste, or drag & drop; search, filter by type, move, rename, share links, batch operations and zip download</li>
   <li><strong>Resource Center</strong>: Find bookmarks, notes, files, and tags in one place, and switch between All Resources and Inbox; press <code>/</code> to quickly activate search</li>
@@ -217,7 +217,7 @@
 
 <h3>📂 Quick Start</h3>
 <ol>
-  <li>After signing in, use <b>Quick Add</b> to save a URL, text, file, or todo, then process it under <b>Resource Center → Pending</b></li>
+  <li>After signing in, use <b>Quick Add</b> to save a URL, text, file, or todo; organize resources under <b>Resource Center → To Organize</b> and manage tasks in <b>Todos</b></li>
   <li>On the <b>Bookmarks</b> page, click tags to filter your saved web pages</li>
   <li>Go to <b>Bookmark Management</b> to add, edit, or batch-operate bookmarks</li>
   <li>Open the <b>Note Library</b> to create notes and link them with tags</li>

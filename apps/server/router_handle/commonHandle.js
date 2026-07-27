@@ -319,14 +319,14 @@ export const getApiLogs = async (req, res) => {
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
     const roleParams = hideInternal ? INTERNAL_ROLES : [];
 
-    const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%') OR a.url LIKE CONCAT('%', ?, '%')) AND a.del_flag = 0`;
+    const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%') OR a.url LIKE CONCAT('%', ?, '%')) AND a.del_flag = 0`;
     // 隐藏内部账号(root/test);u.role 为 NULL(join 不到 user,如已删用户)按真实用户保留,避免误删日志
     const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
     const whereClause = baseWhere + roleFilter;
 
     const [result] = await pool.query(
       `SELECT a.*, u.alias, u.email FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause} ORDER BY a.request_time DESC LIMIT ? OFFSET ?`,
-      [key, key, key, ...roleParams, pageSize, skip],
+      [key, key, key, key, ...roleParams, pageSize, skip],
     );
 
     result.forEach((row) => {
@@ -341,7 +341,7 @@ export const getApiLogs = async (req, res) => {
 
     const [totalRes] = await pool.query(
       `SELECT COUNT(*) AS total FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause}`,
-      [key, key, key, ...roleParams],
+      [key, key, key, key, ...roleParams],
     );
 
     res.send(
@@ -471,21 +471,29 @@ export const getOperationLogs = (req, res) => {
 FROM operation_logs o
 LEFT JOIN user u ON o.create_by = u.id
 WHERE (u.alias LIKE CONCAT('%', ?, '%') 
+OR u.email LIKE CONCAT('%', ?, '%')
 OR o.operation LIKE CONCAT('%', ?, '%') 
 OR o.module LIKE CONCAT('%', ?, '%')) 
 AND o.del_flag = 0${roleFilter}
 ORDER BY o.create_time DESC
 LIMIT ? OFFSET ?;
 `,
-        [filters.key, filters.key, filters.key, ...roleParams, pageSize, skip],
+        [filters.key, filters.key, filters.key, filters.key, ...roleParams, pageSize, skip],
       )
       .then(async ([result]) => {
         const totalSql = `SELECT COUNT(*) FROM operation_logs o left join user u on o.create_by=u.id WHERE 
 (u.alias LIKE CONCAT('%', ?, '%') 
+OR u.email LIKE CONCAT('%', ?, '%')
 OR o.operation LIKE CONCAT('%', ?, '%') 
 OR o.module LIKE CONCAT('%', ?, '%'))
 AND o.del_flag=0${roleFilter}`;
-        const [totalRes] = await pool.query(totalSql, [filters.key, filters.key, filters.key, ...roleParams]);
+        const [totalRes] = await pool.query(totalSql, [
+          filters.key,
+          filters.key,
+          filters.key,
+          filters.key,
+          ...roleParams,
+        ]);
         res.send(
           resultData({
             items: result,

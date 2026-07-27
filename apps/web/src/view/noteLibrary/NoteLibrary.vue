@@ -31,34 +31,45 @@
         <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
       </template>
       <template v-else>
-        <TagFilterSelector :all-tags="visibleNoteTags" />
-        <ViewModeToggle v-if="!bookmark.isMobile" />
-        <div v-if="!bookmark.isMobile" class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
-          <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
-            <template #prefix>
-              <SvgIcon :src="icon.navigation.search" size="16" />
-            </template>
-          </BInput>
+        <div v-if="bookmark.isMobile" class="note-mobile-actions">
+          <TagFilterSelector :all-tags="visibleNoteTags" />
+          <BButton
+            class="note-action-button note-ai-button"
+            @click="aiOrgVisible = true"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" />
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          </BButton>
         </div>
-        <BButton
-          v-if="!bookmark.isMobile"
-          class="note-action-button note-ai-button"
-          @click="aiOrgVisible = true"
-          v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
-        >
-          <SvgIcon :src="icon.ai.organize" size="17" />
-          {{ $t('bookmarkMg.aiOrganizeBtn') }}
-        </BButton>
-        <BButton
-          v-if="!bookmark.isMobile"
-          type="primary"
-          class="note-action-button note-create-button"
-          @click="showNewNotePicker"
-          v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
-        >
-          <SvgIcon :src="icon.common.add" size="16" />
-          {{ $t('note.newNote') }}
-        </BButton>
+        <template v-else>
+          <TagFilterSelector :all-tags="visibleNoteTags" />
+          <ViewModeToggle />
+          <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
+            <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
+              <template #prefix>
+                <SvgIcon :src="icon.navigation.search" size="16" />
+              </template>
+            </BInput>
+          </div>
+          <BButton
+            class="note-action-button note-ai-button"
+            @click="aiOrgVisible = true"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" />
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          </BButton>
+          <BButton
+            type="primary"
+            class="note-action-button note-create-button"
+            @click="showNewNotePicker"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+          >
+            <SvgIcon :src="icon.common.add" size="16" />
+            {{ $t('note.newNote') }}
+          </BButton>
+        </template>
       </template>
     </template>
 
@@ -201,7 +212,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
@@ -225,6 +236,7 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -239,6 +251,7 @@
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const { resetCurrentResourceScroll } = useMobileNavigationState();
   const { addResourcesToInbox } = useInboxEnqueue();
   const noteList = ref([]);
   const visibleDragNoteList = ref<any[]>([]);
@@ -545,6 +558,16 @@
       }, 200);
     },
     { immediate: true },
+  );
+
+  watch(
+    [debouncedSearch, () => router.currentRoute.value.query.tag],
+    () => {
+      if (!bookmark.isMobile) return;
+      nextTick(() => {
+        window.requestAnimationFrame(resetCurrentResourceScroll);
+      });
+    },
   );
 
   function applyNoteSearchImmediately() {
@@ -1165,6 +1188,19 @@
     background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
   }
 
+  .note-mobile-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .note-mobile-actions :deep(.noteType-select) {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+  }
+
   .note-create-button {
     background: var(--resource-note-color, #00a884);
   }
@@ -1292,6 +1328,23 @@
 
     .note-action-button {
       height: 34px;
+    }
+
+    .note-mobile-actions .note-ai-button {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      padding: 0 10px;
+      justify-content: center;
+      color: var(--text-color);
+      background: var(--primary-btn-bg-color);
+      font-size: 14px;
+    }
+
+    .note-mobile-actions .note-ai-button:hover,
+    .note-mobile-actions .note-ai-button:active {
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
     }
   }
 </style>

@@ -14,8 +14,8 @@
     >
       <span class="mobile-bottom-nav__icon">
         <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'ai' ? '21' : '20'" aria-hidden="true" />
-        <span v-if="item.key === 'inbox' && inbox.actionTotal > 0" class="mobile-bottom-nav__badge">
-          {{ inbox.actionTotal > 99 ? '99+' : inbox.actionTotal }}
+        <span v-if="item.key === 'todo' && inbox.todoPendingTotal > 0" class="mobile-bottom-nav__badge">
+          {{ inbox.todoPendingTotal > 99 ? '99+' : inbox.todoPendingTotal }}
         </span>
       </span>
       <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
@@ -24,12 +24,14 @@
 </template>
 
 <script setup lang="ts">
+  import { watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import {
+    isMobileResourceInboxTab,
     MOBILE_BOTTOM_NAVIGATION,
     type MobileBottomNavigationItem,
     type MobileShellSection,
@@ -47,13 +49,16 @@
 
   const bottomIcons = {
     resources: icon.navigation.portal,
-    inbox: icon.contextMenu.inbox,
+    todo: icon.noteDetail.toolbar.todo,
     ai: icon.ai.ask,
     search: icon.navigation.search,
     profile: icon.navigation.user,
   } as const;
 
   function isItemActive(key: MobileShellSection) {
+    if (route.name === 'inbox') {
+      return key === (isMobileResourceInboxTab(route.query.tab) ? 'search' : 'todo');
+    }
     return route.meta.mobileShell === key;
   }
 
@@ -65,8 +70,12 @@
     saveResourceScroll(route.meta.mobileShell === 'resources' ? getMobileResourcePathFromRoute() : null);
 
     const target =
-      item.key === 'resources' ? getLastMobileResourcePath(getMobileHomePath(user.preferences)) : item.path;
-    if (target && route.path !== target) router.push(target);
+      item.key === 'resources'
+        ? getLastMobileResourcePath(getMobileHomePath(user.preferences))
+        : item.key === 'todo'
+          ? { path: '/inbox', query: { tab: 'todo' } }
+          : item.path;
+    if (target && router.resolve(target).fullPath !== route.fullPath) router.push(target);
   }
 
   function getMobileResourcePathFromRoute() {
@@ -75,6 +84,14 @@
     if (['home', 'home:id', 'home:search'].includes(String(route.name || ''))) return '/home' as const;
     return null;
   }
+
+  watch(
+    () => [user.id, user.role],
+    ([id, role]) => {
+      if (id && role !== 'visitor') void inbox.refreshCount();
+    },
+    { immediate: true },
+  );
 </script>
 
 <style scoped lang="less">

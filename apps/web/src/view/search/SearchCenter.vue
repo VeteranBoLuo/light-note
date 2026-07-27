@@ -1,5 +1,6 @@
 <template>
   <ResourcePageShell
+    class="search-center-shell"
     :title="t('resourceCenter.title')"
     :subtitle="t('resourceCenter.subtitle')"
     accent="neutral"
@@ -7,7 +8,7 @@
   >
     <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
       <div class="search-page-topbar">
-        <ResourceCenterSectionNav v-if="!bookmark.isMobile" class="section-switcher" />
+        <ResourceCenterSectionNav class="section-switcher" />
       </div>
 
       <BCard as="section" variant="raised" padding="16px 20px" class="search-header">
@@ -1927,6 +1928,18 @@
   }
 
   @media (max-width: 767px) {
+    .search-center-shell :deep(.resource-page-header) {
+      display: none;
+    }
+
+    .search-page-topbar {
+      margin-bottom: 8px;
+    }
+
+    .section-switcher {
+      margin-bottom: 0;
+    }
+
     .search-header {
       padding: 10px 12px;
     }

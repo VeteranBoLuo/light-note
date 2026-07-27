@@ -9,7 +9,7 @@
     <template #toolbar>
       <b-input
         v-model:value="searchValue"
-        placeholder="搜索昵称 / IP / 接口 URL"
+        placeholder="搜索昵称 / 邮箱 / IP / 接口 URL"
         class="log-search-input"
         @input="handleSearch"
       >
