@@ -44,6 +44,7 @@ import getPointsOverview from './get_points_overview.js';
 import getUserDetail from './get_user_detail.js';
 import getPendingFeedback from './get_pending_feedback.js';
 import getResourceCreationRanking from './get_resource_creation_ranking.js';
+import getCheckinRanking from './get_checkin_ranking.js';
 
 export default [
   searchKnowledgeBase,
@@ -92,4 +93,5 @@ export default [
   getUserDetail,
   getPendingFeedback,
   getResourceCreationRanking,
+  getCheckinRanking,
 ];

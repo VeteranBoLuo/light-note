@@ -159,6 +159,27 @@
     codeBlockStyle: 'fenced',
   });
 
+  const isTodoCheckbox = (node: Node) => {
+    const input = node as HTMLInputElement;
+    return input.nodeName === 'INPUT' && input.type === 'checkbox' && input.classList.contains('note-todo-checkbox');
+  };
+
+  // Turndown 默认会移除原生 input；轻笺待办改为通用 GFM 任务列表，供 GitHub、Typora、Obsidian 等识别。
+  turndownService.addRule('noteTodoCheckbox', {
+    filter: isTodoCheckbox,
+    replacement: (_content, node) => (isTodoCheckbox(node) && (node.checked || node.hasAttribute('checked')) ? '[x] ' : '[ ] '),
+  });
+  turndownService.addRule('noteTodoParagraph', {
+    filter: (node) => {
+      if (node.nodeName !== 'P' && node.nodeName !== 'DIV') return false;
+      return Array.from((node as HTMLElement).children).some(isTodoCheckbox);
+    },
+    replacement: (content) => {
+      const normalizedContent = content.trim().replace(/^(\[(?:x| )\])\s+/, (_match, checkbox) => `${checkbox} `);
+      return `\n\n- ${normalizedContent}\n\n`;
+    },
+  });
+
   const downloadFile = (fileName: string, content: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);

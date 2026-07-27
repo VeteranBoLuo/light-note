@@ -70,6 +70,7 @@ const ROOT_TOOLS = [
   'get_points_overview',
   'get_pending_feedback',
   'get_resource_creation_ranking',
+  'get_checkin_ranking',
   'write_knowledge_base',
 ];
 
@@ -101,7 +102,7 @@ export function buildAgentCapabilityOverview({ tools = [], locale = 'zh-CN' } = 
     }
     if (hasRootTools) {
       lines.push(
-        '- **Administration:** query users, activity, resource creation rankings, API and operation logs, security events, AI usage, points, and feedback.',
+        '- **Administration:** query users, activity, resource creation and check-in rankings, API and operation logs, security events, AI usage, points, and feedback.',
       );
     }
     lines.push(
@@ -114,7 +115,9 @@ export function buildAgentCapabilityOverview({ tools = [], locale = 'zh-CN' } = 
   if (reads.length) lines.push(`- **查询与阅读**：${reads.join('；')}。`);
   if (writes.length) lines.push(`- **确认后执行**：${writes.join('；')}。所有数据变更都会先展示确认。`);
   if (hasRootTools) {
-    lines.push('- **管理查询**：查看用户与活跃度、资源新增排行、接口和操作日志、安全事件、AI 用量、积分与反馈。');
+    lines.push(
+      '- **管理查询**：查看用户与活跃度、资源新增排行与签到排行、接口和操作日志、安全事件、AI 用量、积分与反馈。',
+    );
   }
   lines.push('- **当前边界**：暂不能直接编辑或删除已有笔记/书签、清空回收站，也不能修改邮箱或密码。');
   return lines.join('\n');

@@ -1981,12 +1981,12 @@ const gatewayScenarios = [
   ),
   scenario(
     'root-resource-creation-ranking',
-    'Root 查询昨天谁新增的资源最多时使用业务表聚合工具',
+    'Root 同时查询资源新增与签到天数排行时使用各自业务表聚合工具',
     ['gateway_tool_policy_applied', 'owner_actor_matched'],
     {
-      message: '昨天谁新增的资源最多？',
+      message: '昨天谁新增的资源最多？另外目前签到天数排名是什么？',
       identity: selfIdentity('synthetic-root', 'root'),
-      requiredTools: ['get_resource_creation_ranking'],
+      requiredTools: ['get_resource_creation_ranking', 'get_checkin_ranking'],
       forbiddenTools: ['query_operation_logs'],
     },
   ),

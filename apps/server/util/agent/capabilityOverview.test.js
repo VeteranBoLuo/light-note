@@ -21,6 +21,7 @@ describe('capabilityOverview', () => {
         { name: 'set_todo_status' },
         { name: 'query_users' },
         { name: 'get_resource_creation_ranking' },
+        { name: 'get_checkin_ranking' },
       ],
       locale: 'zh-CN',
     });
@@ -32,6 +33,7 @@ describe('capabilityOverview', () => {
     expect(response).toContain('暂不能直接编辑或删除已有笔记/书签');
     expect(response).toContain('管理查询');
     expect(response).toContain('资源新增排行');
+    expect(response).toContain('签到排行');
     expect(response).not.toContain('上传、下载');
   });
 });

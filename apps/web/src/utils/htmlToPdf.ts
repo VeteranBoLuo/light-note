@@ -16,6 +16,33 @@ interface PDFOptions {
 }
 
 /**
+ * html2canvas 无法解析 Chromium 为原生勾选框计算出的 CSS Color 4 `color(...)` 值。
+ * PDF 只需要呈现结果，因此在克隆文档中将待办勾选框转为等价的静态字符，
+ * 既保留勾选状态，也避免原生控件的浏览器私有样式参与渲染。
+ */
+function replacePdfCheckboxes(clonedDocument: Document) {
+  const documents = [clonedDocument];
+  clonedDocument.querySelectorAll('iframe').forEach((frame) => {
+    if (frame.contentDocument) documents.push(frame.contentDocument);
+  });
+
+  documents.forEach((document) => {
+    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => {
+      const checkbox = document.createElement('span');
+      const checked = input.checked || input.hasAttribute('checked');
+
+      checkbox.className = 'note-pdf-checkbox';
+      checkbox.textContent = checked ? '☑' : '☐';
+      checkbox.setAttribute('aria-hidden', 'true');
+      checkbox.style.cssText =
+        'display:inline-block;margin-right:6px;color:#615ced;font-family:Arial,sans-serif;font-size:1em;line-height:1;vertical-align:middle;';
+
+      input.replaceWith(checkbox);
+    });
+  });
+}
+
+/**
  * 从 HTML 元素生成 PDF
  * @param title PDF 文件名
  * @param selector CSS 选择器，目标元素
@@ -42,6 +69,7 @@ export async function generatePDF(title: string, selector: string, options: PDFO
       useCORS: true,
       logging: false,
       backgroundColor: '#FFFFFF',
+      onclone: replacePdfCheckboxes,
     });
 
     // 创建 PDF 实例

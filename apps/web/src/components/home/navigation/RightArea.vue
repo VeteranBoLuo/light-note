@@ -22,11 +22,11 @@
         </div>
       </b-dropdown>
     </BTooltip>
-    <BButton v-if="showMobileHomeExtra" class="mobile-github-btn" @click="githubClick">
-      <svg-icon size="24" hover :src="icon.github" />
-    </BButton>
     <BButton v-if="showGuestRegister" type="primary" class="guest-register-link" @click="registerClick">
       {{ $t('home.freeRegister') }}
+    </BButton>
+    <BButton v-if="showMobileHomeExtra" class="mobile-github-btn" @click="githubClick">
+      <svg-icon size="24" hover :src="icon.github" />
     </BButton>
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
@@ -239,11 +239,5 @@
   .guest-register-link:hover {
     opacity: 0.9;
     box-shadow: 0 3px 12px rgba(97, 92, 237, 0.4);
-  }
-
-  @media (max-width: 360px) {
-    .phone-top-menu .mobile-github-btn {
-      display: none;
-    }
   }
 </style>

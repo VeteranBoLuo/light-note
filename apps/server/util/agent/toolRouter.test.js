@@ -19,10 +19,12 @@ const tools = [
   { name: 'query_files' },
   { name: 'query_cloud_folders' },
   { name: 'get_storage_usage' },
+  { name: 'get_growth' },
   { name: 'save_attachment_to_cloud', isWrite: true },
   { name: 'query_tags' },
   { name: 'query_users', requireRoot: true },
   { name: 'get_resource_creation_ranking', requireRoot: true },
+  { name: 'get_checkin_ranking', requireRoot: true },
   { name: 'get_security_events', requireRoot: true },
   { name: 'query_api_logs', requireRoot: true },
   { name: 'query_todos' },
@@ -126,6 +128,23 @@ describe('selectAgentTools', () => {
 
     expect(root.map((tool) => tool.name)).toContain('get_resource_creation_ranking');
     expect(user.map((tool) => tool.name)).not.toContain('get_resource_creation_ranking');
+  });
+
+  it('签到排行只向 root 提供专用聚合工具，同时普通用户仍可读取自己的成长信息', () => {
+    const root = selectAgentTools(registry, {
+      message: '目前签到天数排名和最长连签排名是什么？',
+      userRole: 'root',
+      maxTools: 4,
+    });
+    const user = selectAgentTools(registry, {
+      message: '我当前连签几天？',
+      userRole: 'user',
+      maxTools: 4,
+    });
+
+    expect(root.map((tool) => tool.name)).toContain('get_checkin_ranking');
+    expect(user.map((tool) => tool.name)).toContain('get_growth');
+    expect(user.map((tool) => tool.name)).not.toContain('get_checkin_ranking');
   });
 
   it('游客和只读上下文不下发写工具 schema', () => {

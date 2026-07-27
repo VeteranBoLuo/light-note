@@ -1928,7 +1928,9 @@
   }
   .note-editor-toolbar {
     flex-shrink: 0;
-    overflow: hidden;
+    position: relative;
+    z-index: 1;
+    overflow: visible;
     border-bottom: 1px solid var(--surface-border-color);
     background-color: var(--note-editor-header-bg, var(--w-e-toolbar-bg-color));
   }

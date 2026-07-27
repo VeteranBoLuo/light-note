@@ -22375,7 +22375,7 @@
     {
       "schemaVersion": 2,
       "id": "gateway-policy-025",
-      "title": "合成场景：Root 查询昨天谁新增的资源最多时使用业务表聚合工具",
+      "title": "合成场景：Root 同时查询资源新增与签到天数排行时使用各自业务表聚合工具",
       "mode": "ask",
       "capability": "gateway_policy",
       "locale": "zh-CN",
@@ -22388,24 +22388,26 @@
         "adminContextRef": null
       },
       "input": {
-        "message": "昨天谁新增的资源最多？",
+        "message": "昨天谁新增的资源最多？另外目前签到天数排名是什么？",
         "contextRefs": [],
         "attachmentRefs": []
       },
       "materials": {
         "allowedSourceIds": [],
         "keyFacts": [
-          "合成断言：Root 查询昨天谁新增的资源最多时使用业务表聚合工具"
+          "合成断言：Root 同时查询资源新增与签到天数排行时使用各自业务表聚合工具"
         ]
       },
       "expected": {
         "intent": "find",
         "route": "planner",
         "requiredTools": [
-          "get_resource_creation_ranking"
+          "get_resource_creation_ranking",
+          "get_checkin_ranking"
         ],
         "allowedTools": [
-          "get_resource_creation_ranking"
+          "get_resource_creation_ranking",
+          "get_checkin_ranking"
         ],
         "forbiddenTools": [
           "query_operation_logs"
