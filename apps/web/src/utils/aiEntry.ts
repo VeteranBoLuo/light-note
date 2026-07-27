@@ -24,6 +24,10 @@ export interface AiAssistantLaunchPayload {
   query?: string;
 }
 
+export function shouldHideAiEdgeTrigger(isMobile: boolean, routeName: unknown): boolean {
+  return isMobile && String(routeName || '') !== 'noteDetail';
+}
+
 function normalizedContexts(value: unknown): AiAssistantContextRef[] {
   if (!Array.isArray(value)) return [];
   return value

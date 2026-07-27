@@ -303,8 +303,34 @@
           </div>
         </section>
 
+        <!-- 安装到设备 -->
+        <section class="settings-card" id="set-install">
+          <div class="card-head">
+            <span class="card-icon card-icon--install">
+              <SvgIcon :src="icon.pwa.install" size="20" aria-hidden="true" />
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.installTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.installDesc') }}</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ pwaStateLabel }}</span>
+                <span class="field-desc">{{ t('settings.installStateDesc') }}</span>
+              </div>
+              <div class="pwa-settings-actions">
+                <BButton type="primary" :disabled="isStandalone" @click="openGuide('settings')">
+                  {{ isStandalone ? t('pwa.installed') : t('pwa.install') }}
+                </BButton>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- 全局快捷键 -->
-        <section class="settings-card" id="set-shortcuts">
+        <section v-if="!bookmark.isMobile" class="settings-card" id="set-shortcuts">
           <div class="card-head">
             <span class="card-icon card-icon--shortcuts">
               <SvgIcon :src="icon.settings.shortcuts" size="20" />
@@ -531,7 +557,7 @@
         </section>
 
         <!-- 快速收藏(bookmarklet) -->
-        <section class="settings-card" id="set-quicksave">
+        <section v-if="!bookmark.isMobile" class="settings-card" id="set-quicksave">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">🔖</span>
             <div class="card-head-text">
@@ -553,7 +579,7 @@
         </section>
 
         <!-- 数据导出 / 备份 -->
-        <section class="settings-card" id="set-export">
+        <section v-if="!bookmark.isMobile" class="settings-card" id="set-export">
           <div class="card-head">
             <span class="card-icon card-icon--appearance">📦</span>
             <div class="card-head-text">
@@ -615,6 +641,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
+  import { usePwaInstall } from '@/composables/usePwaInstall';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -625,15 +652,18 @@
     const list = [
       { id: 'set-appearance', label: t('settings.appearance') },
       { id: 'set-general', label: t('settings.general') },
-      { id: 'set-shortcuts', label: t('settings.shortcutsTitle') },
+      { id: 'set-install', label: t('settings.installTitle') },
       { id: 'set-notification', label: t('settings.notification') },
     ];
+    if (!bookmark.isMobile) list.splice(3, 0, { id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
     if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
-    list.push(
-      { id: 'set-ai', label: 'AI 设置' },
-      { id: 'set-quicksave', label: t('settings.quickSaveTitle') },
-      { id: 'set-export', label: t('settings.exportTitle') },
-    );
+    list.push({ id: 'set-ai', label: 'AI 设置' });
+    if (!bookmark.isMobile) {
+      list.push(
+        { id: 'set-quicksave', label: t('settings.quickSaveTitle') },
+        { id: 'set-export', label: t('settings.exportTitle') },
+      );
+    }
     return list;
   });
   function scrollToSection(id: string) {
@@ -678,6 +708,15 @@
     pageRef.value?.removeEventListener('scroll', onPageScroll);
   });
   const user = useUserStore();
+  const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
+  const pwaStateLabel = computed(() =>
+    installState.value === 'installed'
+      ? t('pwa.installed')
+      : installState.value === 'prompt-ready'
+        ? t('pwa.directAvailable')
+        : t('pwa.manualAvailable'),
+  );
+
   const shortcutItems = computed(() => [
     {
       id: 'globalSearch',
@@ -1065,6 +1104,10 @@
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 12%, transparent);
   }
+  .card-icon--install {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  }
   .card-head-text {
     display: flex;
     flex-direction: column;
@@ -1112,6 +1155,13 @@
     font-size: 12px;
     line-height: 1.4;
     color: var(--desc-color);
+  }
+
+  .pwa-settings-actions {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   .shortcut-keys {
@@ -1194,6 +1244,9 @@
     }
     .shortcut-keys {
       align-self: flex-start;
+    }
+    .pwa-settings-actions {
+      justify-content: flex-start;
     }
   }
 

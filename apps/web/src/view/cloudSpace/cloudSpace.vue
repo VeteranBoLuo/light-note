@@ -17,11 +17,13 @@
         <BTooltip :title="$t('note.cardView')">
           <BButton class="cloud-view-button" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
             <SvgIcon :src="icon.navigation.portal" size="15" />
+            <span class="cloud-view-label">{{ $t('note.cardView') }}</span>
           </BButton>
         </BTooltip>
         <BTooltip :title="$t('note.listView')">
           <BButton class="cloud-view-button" :class="{ active: viewMode === 'table' }" @click="setViewMode('table')">
             <SvgIcon :src="icon.filterPanel.list" size="15" />
+            <span class="cloud-view-label">{{ $t('note.listView') }}</span>
           </BButton>
         </BTooltip>
       </div>
@@ -34,7 +36,7 @@
       >
         {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
       </BButton>
-      <FileTypeFilter />
+      <FileTypeFilter class="cloud-type-filter" />
       <div v-if="!bookmark.isMobile" class="cloud-search-action">
         <BInput
           v-model:value="cloud.searchFileName"
@@ -646,6 +648,10 @@
     background: transparent;
   }
 
+  .cloud-view-label {
+    display: none;
+  }
+
   .cloud-view-button.active {
     color: var(--resource-file-color, #ff8a00);
     background: var(--menu-body-bg-color);
@@ -852,7 +858,39 @@
     }
 
     .cloud-view-toggle {
-      flex: 0 0 auto;
+      min-width: 0;
+      height: 40px;
+      box-sizing: border-box;
+      flex: 1 1 0;
+    }
+
+    .cloud-view-button {
+      width: 100%;
+      min-width: 0;
+      height: 34px;
+      gap: 5px;
+      flex: 1 1 0;
+    }
+
+    .cloud-view-toggle :deep(.b-tooltip-wrap) {
+      min-width: 0;
+      flex: 1 1 0;
+    }
+
+    .cloud-view-label {
+      display: inline;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cloud-type-filter {
+      min-width: 0;
+      flex: 1 1 0;
+    }
+
+    .cloud-type-filter :deep(.filter-button) {
+      height: 40px;
     }
 
     .header-handle-group {

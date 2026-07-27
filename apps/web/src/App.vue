@@ -16,11 +16,16 @@
       </MobileAppShell>
       <Login v-if="bookmark.isShowLogin" />
       <BViewer />
-      <FloatQuestion v-if="aiVisible" :hide-trigger="mobileBottomNavActive" />
+      <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
       <GuestNudge />
       <DisplayScaleSuggestion />
       <AdminContextBanner />
       <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
+      <PwaInstallGuideModal />
+      <MobilePwaInstallNudge
+        v-if="bookmark.isMobile"
+        :eligible="mobileBottomNavActive && !bookmark.isShowLogin && !inbox.quickCaptureVisible"
+      />
     </a-config-provider>
   </div>
 </template>
@@ -48,12 +53,15 @@
   import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
+  import PwaInstallGuideModal from '@/components/pwa/PwaInstallGuideModal.vue';
+  import MobilePwaInstallNudge from '@/components/pwa/MobilePwaInstallNudge.vue';
   import {
     LANDING_AUTH_CONTEXT,
     resolveLandingAuthStatus,
     type LandingAuthStatus,
   } from '@/view/landing/landingAuth.ts';
   import { applyDocumentTheme } from '@/utils/theme.ts';
+  import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -134,6 +142,9 @@
       (user.preferences as any).aiEnabled !== false
     );
   });
+  const aiEdgeTriggerHidden = computed(() =>
+    shouldHideAiEdgeTrigger(bookmark.isMobile, router.currentRoute.value.name),
+  );
   const mobileTopSwitcherActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopSwitcher === true,
   );

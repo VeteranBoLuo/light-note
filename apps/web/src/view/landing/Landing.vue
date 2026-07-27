@@ -77,6 +77,25 @@
                   >
                 </template>
               </div>
+              <div class="pwa-install-strip">
+                <span class="pwa-install-strip__icon">
+                  <SvgIcon :src="icon.pwa.device" size="22" aria-hidden="true" />
+                </span>
+                <div class="pwa-install-strip__copy">
+                  <strong>{{ t('landing.pwaTitle') }}</strong>
+                  <span>{{ t('landing.pwaDesc') }}</span>
+                </div>
+                <div class="pwa-install-strip__actions">
+                  <BButton
+                    size="small"
+                    type="primary"
+                    :disabled="isStandalone"
+                    @click="openGuide('landing')"
+                  >
+                    {{ isStandalone ? t('pwa.installed') : t('pwa.install') }}
+                  </BButton>
+                </div>
+              </div>
             </div>
             <div class="cover-mockup">
               <div class="mockup-wrapper">
@@ -360,12 +379,16 @@
   import { trackConversion } from '@/utils/conversion';
   import { getAppHomePath } from '@/utils/preferences';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import { usePwaInstall } from '@/composables/usePwaInstall';
   import { LANDING_AUTH_CONTEXT, resolveLandingCtaMode } from './landingAuth.ts';
 
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const { isStandalone, openGuide } = usePwaInstall();
   const isLoggedIn = computed(() => !!user.id && user.role !== 'visitor');
   const landingAuth = inject(LANDING_AUTH_CONTEXT, null);
   const landingCtaMode = computed(() =>
@@ -884,6 +907,54 @@
   .cover-text .hero-actions {
     justify-content: flex-start;
   }
+  .pwa-install-strip {
+    width: min(100%, 560px);
+    margin-top: 16px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid rgba(145, 140, 255, 0.2);
+    border-radius: 14px;
+    background: rgba(99, 92, 237, 0.08);
+    backdrop-filter: blur(14px);
+  }
+  .pwa-install-strip__icon {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: #aaa6ff;
+    background: rgba(99, 92, 237, 0.16);
+  }
+  .pwa-install-strip__copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .pwa-install-strip__copy strong {
+    color: #f1f0ff;
+    font-size: 13px;
+  }
+  .pwa-install-strip__copy span {
+    color: #908f9b;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .pwa-install-strip__actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 6px;
+  }
+  .pwa-install-strip__actions :deep(.b_btn) {
+    border-radius: 8px;
+  }
   .cover-mockup {
     flex: 0 0 auto;
     width: 58%;
@@ -1080,6 +1151,11 @@
     .cover-text .hero-actions {
       justify-content: center;
     }
+    .pwa-install-strip {
+      margin-right: auto;
+      margin-left: auto;
+      text-align: left;
+    }
     .cover-mockup {
       width: 80%;
       max-width: 480px;
@@ -1091,6 +1167,20 @@
     }
   }
   @media (max-width: 520px) {
+    .pwa-install-strip {
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+    .pwa-install-strip__copy {
+      padding-top: 2px;
+    }
+    .pwa-install-strip__actions {
+      width: 100%;
+      padding-left: 46px;
+    }
+    .pwa-install-strip__actions :deep(.b_btn) {
+      width: 100%;
+    }
     .carousel-dot {
       padding: 5px 7px;
     }

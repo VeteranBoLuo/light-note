@@ -3,7 +3,9 @@ import {
   buildCaptureFileMeta,
   buildMarkdownNotePayload,
   detectInboxCaptureType,
+  getAvailableQuickCaptureTypes,
   hasCaptureBookmarkCandidate,
+  normalizeQuickCaptureType,
   normalizeCaptureUrl,
 } from './inboxCapture';
 
@@ -50,5 +52,12 @@ describe('inboxCapture', () => {
   it('文件元数据只包含确认上传所需字段', () => {
     const files = [new File(['abc'], '中文.txt', { type: 'text/plain' })];
     expect(buildCaptureFileMeta(files)).toEqual([{ fileName: '中文.txt', fileType: 'text/plain', fileSize: 3 }]);
+  });
+
+  it('移动端快速添加不提供待办，并把旧的待办入口安全回退到笔记', () => {
+    expect(getAvailableQuickCaptureTypes(true)).toEqual(['bookmark', 'note', 'file']);
+    expect(normalizeQuickCaptureType('todo', true)).toBe('note');
+    expect(getAvailableQuickCaptureTypes(false)).toContain('todo');
+    expect(normalizeQuickCaptureType('todo', false)).toBe('todo');
   });
 });

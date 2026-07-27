@@ -7,7 +7,8 @@
         v-click-log="{ module: '云空间', operation: '切换文件类型筛选' }"
       >
         <svg-icon :src="icon.cloudSpace.filter" class="filter-icon" />
-        <span class="filter-button-label">{{ $t('cloudSpace.fileType') }}</span>
+        <span class="filter-button-label filter-button-label--desktop">{{ $t('cloudSpace.fileType') }}</span>
+        <span class="filter-button-label filter-button-label--mobile">{{ filterSummary }}</span>
         <span v-if="selectedCount > 0 && selectedCount < fileTypes.length" class="filter-badge">
           {{ selectedCount }}
         </span>
@@ -82,6 +83,11 @@
   const allTypesSelected = ref(true);
   const indeterminate = ref(false);
   const selectedCount = computed(() => cloud.typeCheckValue.length);
+  const filterSummary = computed(() => {
+    if (selectedCount.value === fileTypes.value.length) return t('cloudSpace.allFileTypes');
+    if (selectedCount.value === 0) return t('cloudSpace.noFileTypes');
+    return t('cloudSpace.selectedFileTypes', { count: selectedCount.value });
+  });
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
@@ -136,6 +142,10 @@
 
   .filter-icon {
     opacity: 0.9;
+  }
+
+  .filter-button-label--mobile {
+    display: none;
   }
 
   .filter-badge {
@@ -280,10 +290,23 @@
     }
 
     .filter-button-label {
-      max-width: 5em;
+      min-width: 0;
+      max-width: none;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .filter-button-label--desktop {
+      display: none;
+    }
+
+    .filter-button-label--mobile {
+      display: inline;
+    }
+
+    .filter-badge {
+      display: none;
     }
 
     .filter-menu {

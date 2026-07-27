@@ -81,12 +81,14 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
-  import { inboxStore, todoStore } from '@/store';
+  import { bookmarkStore, inboxStore, todoStore } from '@/store';
   import {
     buildCaptureFileMeta,
     buildMarkdownNotePayload,
     detectInboxCaptureType,
+    getAvailableQuickCaptureTypes,
     hasCaptureBookmarkCandidate,
+    normalizeQuickCaptureType,
   } from '@/utils/inboxCapture';
   import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
   import { recordOperation } from '@/api/commonApi';
@@ -98,6 +100,7 @@
   const emit = defineEmits<{ captured: [] }>();
   const { t } = useI18n();
   const router = useRouter();
+  const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const todo = todoStore();
   const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
@@ -109,12 +112,12 @@
   const todoFormKey = ref(0);
   const capturedResource = ref<{ type: ActionCaptureType; id?: string; title?: string } | null>(null);
 
-  const typeOptions = computed(() => [
-    { key: 'bookmark', label: t('inbox.bookmark') },
-    { key: 'note', label: t('inbox.note') },
-    { key: 'file', label: t('inbox.file') },
-    { key: 'todo', label: t('inbox.todo') },
-  ]);
+  const typeOptions = computed(() =>
+    getAvailableQuickCaptureTypes(bookmark.isMobile).map((key) => ({
+      key,
+      label: t(`inbox.${key}`),
+    })),
+  );
   const captureHint = computed(() =>
     captureType.value === 'todo' ? t('inbox.todoCaptureHint') : t('inbox.captureHint'),
   );
@@ -132,13 +135,22 @@
 
   watch(visible, (value) => {
     if (value) {
-      captureType.value = inbox.quickCaptureType;
+      captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
       manualType.value = false;
       if (captureType.value === 'todo') todoFormKey.value += 1;
     } else {
       reset();
     }
   });
+
+  watch(
+    () => bookmark.isMobile,
+    (isMobile) => {
+      if (visible.value) {
+        captureType.value = normalizeQuickCaptureType(captureType.value, isMobile);
+      }
+    },
+  );
 
   function handleTypeChange() {
     manualType.value = true;
@@ -324,7 +336,7 @@
     successText.value = '';
     capturedResource.value = null;
     manualType.value = false;
-    captureType.value = inbox.quickCaptureType;
+    captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
   }
 
   function close() {

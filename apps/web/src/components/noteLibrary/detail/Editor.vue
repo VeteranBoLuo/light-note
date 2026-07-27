@@ -1385,7 +1385,9 @@
     license_key: 'gpl',
     base_url: '/node_modules/tinymce',
     plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount quickbars',
-    quickbars_selection_toolbar: 'aiEdit | myHeadingMenu |  bold italic forecolor backcolor | removeformat |quicklink',
+    quickbars_selection_toolbar: bookmark.isMobile
+      ? 'copy | aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink'
+      : 'aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink',
     quickbars_insert_toolbar: false,
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:

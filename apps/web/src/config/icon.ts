@@ -79,6 +79,23 @@ export default {
     ai: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18"/></g></svg>',
   },
 
+  pwa: {
+    install:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M12 7v7m0 0l-3-3m3 3l3-3M9 18h6"/></g></svg>',
+    device:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3" y="4" width="18" height="13" rx="2.5"/><path d="M8 21h8M12 17v4M8 9h8M12 6v6"/></g></svg>',
+    harmony:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"><ellipse cx="12" cy="8.1" rx="7.2" ry="3.6"/><path d="M4.8 8.1v3.8c0 2 3.2 3.6 7.2 3.6s7.2-1.6 7.2-3.6V8.1M7.5 14.5v1.4c0 1.4 2 2.5 4.5 2.5s4.5-1.1 4.5-2.5v-1.4"/></g></svg>',
+    ios: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="6.2" y="2.5" width="11.6" height="19" rx="3"/><path d="M10 5h4M11.2 18.8h1.6"/></g></svg>',
+    android:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M6.5 9.2h11v8.3a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2V9.2Z"/><path d="M8 9.2a4 4 0 0 1 8 0M9 5.5L7.7 3.7M15 5.5l1.3-1.8M9.3 12.5h.01M14.7 12.5h.01M9.5 19.5V22M14.5 19.5V22M6.5 11.5H4.8v5M17.5 11.5h1.7v5"/></g></svg>',
+    desktop:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="2.8" y="3.8" width="18.4" height="13.2" rx="2.4"/><path d="M8.5 20.5h7M12 17v3.5"/></g></svg>',
+    check:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path d="m5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>',
+    tip: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 10.8v5M12 7.5h.01"/></g></svg>',
+  },
+
   // 登录页面图标
   login: {
     password:

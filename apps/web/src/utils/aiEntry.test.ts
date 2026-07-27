@@ -6,6 +6,7 @@ import {
   normalizeAiAssistantLaunchPayload,
   openAiAssistant,
   setAiAssistantVisibility,
+  shouldHideAiEdgeTrigger,
 } from './aiEntry';
 
 describe('aiEntry', () => {
@@ -53,5 +54,12 @@ describe('aiEntry', () => {
     setAiAssistantVisibility(false);
     expect(getAiAssistantVisibility()).toBe(false);
     window.removeEventListener(AI_ASSISTANT_VISIBILITY_EVENT, listener);
+  });
+
+  it('移动端只在笔记详情展示 AI 侧边图标，桌面端保持全局入口', () => {
+    expect(shouldHideAiEdgeTrigger(true, 'noteDetail')).toBe(false);
+    expect(shouldHideAiEdgeTrigger(true, 'settings')).toBe(true);
+    expect(shouldHideAiEdgeTrigger(true, 'growth')).toBe(true);
+    expect(shouldHideAiEdgeTrigger(false, 'settings')).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import { Icon } from '@iconify/vue';
 import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n from '@/i18n';
+import { initializePwaInstall } from '@/composables/usePwaInstall';
 // 创建vue实例
 const app = createApp(App);
 const pinia = createPinia();
@@ -16,6 +17,8 @@ app.use(i18n);
 app.component('Icon', Icon);
 app.config.globalProperties.$t = i18n.global.t;
 globalDirect(app);
+// 必须在 mount 前监听 beforeinstallprompt，否则浏览器可能在应用组件挂载前触发事件而丢失安装入口。
+initializePwaInstall();
 // 挂载实例
 app.mount('#app');
 

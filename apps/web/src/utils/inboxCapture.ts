@@ -1,6 +1,18 @@
 import { resolveBookmarkUrlInput } from '@lightnote/shared';
 
 export type InboxCaptureType = 'bookmark' | 'note' | 'file';
+export type QuickCaptureType = InboxCaptureType | 'todo';
+
+const RESOURCE_CAPTURE_TYPES: readonly InboxCaptureType[] = ['bookmark', 'note', 'file'];
+const ALL_CAPTURE_TYPES: readonly QuickCaptureType[] = [...RESOURCE_CAPTURE_TYPES, 'todo'];
+
+export function getAvailableQuickCaptureTypes(isMobile: boolean): readonly QuickCaptureType[] {
+  return isMobile ? RESOURCE_CAPTURE_TYPES : ALL_CAPTURE_TYPES;
+}
+
+export function normalizeQuickCaptureType(type: QuickCaptureType, isMobile: boolean): QuickCaptureType {
+  return isMobile && type === 'todo' ? 'note' : type;
+}
 
 export function normalizeCaptureUrl(input: string): URL | null {
   const resolution = resolveBookmarkUrlInput(input, { allowTextExtraction: false });

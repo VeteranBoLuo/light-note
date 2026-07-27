@@ -1,9 +1,9 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="mask-container" @click.self="handleMaskClick">
+    <div v-if="visible" class="mask-container" :class="props.maskClass" @click.self="handleMaskClick">
       <div
         class="modal-view"
-        :class="{ out: isOut }"
+        :class="[{ out: isOut }, props.modalClass]"
         :style="{
           width: props.width !== 'auto' ? props.width : undefined,
           height: props.height !== 'auto' ? props.height : undefined,
@@ -13,11 +13,9 @@
           <slot name="title">
             <div class="modal-title">{{ title || t('common.defaultTitle') }}</div>
           </slot>
-          <button class="modal-close" @click="handleClose">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
+          <BButton class="modal-close" :aria-label="t('common.close')" @click="handleClose">
+            <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
+          </BButton>
         </div>
         <div class="modal-content">
           <slot name="default"></slot>
@@ -38,6 +36,8 @@
 <script lang="ts" setup>
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { computed, onBeforeUnmount, onMounted, ref, useAttrs, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
 
@@ -51,6 +51,8 @@
       top?: string;
       width?: string;
       height?: string;
+      modalClass?: string;
+      maskClass?: string;
     }>(),
     {
       title: '',
@@ -169,7 +171,7 @@
     margin: 0;
   }
 
-  .modal-close {
+  .modal-close.b_btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;

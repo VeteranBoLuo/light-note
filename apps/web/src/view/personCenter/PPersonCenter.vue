@@ -73,6 +73,13 @@
         </div>
         <div class="person-menu">
           <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
+          <BButton class="person-menu-item person-menu-item--button" @click="handlePwaEntry">
+            <span class="person-menu-item-title">{{ $t('pwa.install') }}</span>
+            <span class="person-menu-item-des">
+              {{ pwaEntryDescription }}
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </BButton>
           <div
             class="person-menu-item"
             @click="goToProfileModule('/settings')"
@@ -209,6 +216,8 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { frameVariant } from '@/config/growthFrames';
+  import { usePwaInstall } from '@/composables/usePwaInstall';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -225,6 +234,14 @@
     return frameVariant(id) ? id : null;
   });
   const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
+  const { canPrompt, isStandalone, openGuide, requestInstall } = usePwaInstall();
+  const pwaEntryDescription = computed(() =>
+    isStandalone.value
+      ? t('pwa.installed')
+      : canPrompt.value
+        ? t('pwa.directAvailableShort')
+        : t('pwa.addToHomeScreen'),
+  );
   useMobileTopBar(['personCenter'], {
     showSearch: false,
     showMoreMenu: false,
@@ -239,6 +256,14 @@
 
   function goGrowth() {
     goToProfileModule('/growth');
+  }
+
+  function handlePwaEntry() {
+    if (isStandalone.value) {
+      openGuide('person-center');
+      return;
+    }
+    void requestInstall('person-center');
   }
 
   function openQuickCapture() {
@@ -333,6 +358,15 @@
       gap: 5px;
       line-height: 100%;
     }
+  }
+
+  .person-menu-item--button {
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+    color: var(--text-color);
+    line-height: 1;
+    text-align: left;
   }
 
   .navigation-icon {

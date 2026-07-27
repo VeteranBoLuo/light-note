@@ -97,6 +97,12 @@ export const OPERATION_LOG_MAP = {
   settings: createModule('设置', {
     exportData: '导出个人数据成功',
   }),
+  pwa: createModule('PWA安装', {
+    openGuide: '查看安装教程',
+    accepted: '接受安装轻笺',
+    dismissed: '取消安装轻笺',
+    installed: '安装轻笺成功',
+  }),
   trash: createModule('回收站', {
     restore: '恢复资源成功',
     permanentDelete: '永久删除资源成功',
