@@ -3559,6 +3559,8 @@ export default {
     manualCapabilityReady: '需从浏览器菜单添加',
     browserFallbackHint:
       '如果 {browser} 菜单里没有“安装应用 / 添加到主屏幕 / 添加到桌面”，说明它没有开放当前网页的安装能力，可改用最新版 Chrome、Edge 或系统浏览器重试。',
+    harmonyBrowserFallbackHint:
+      '鸿蒙浏览器目前没有可供网站可靠调用的一键安装接口，请以 {browser} 菜单里的“添加至桌面 / 添加到主屏幕”为准。',
     iosBrowserFallbackHint:
       'iPhone / iPad 上若当前浏览器没有“添加到主屏幕”，请复制网址到 Safari，再通过分享菜单完成添加。',
     browsers: {

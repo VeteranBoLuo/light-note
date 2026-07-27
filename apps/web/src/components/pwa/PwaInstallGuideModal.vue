@@ -57,8 +57,11 @@
             <SvgIcon :src="icon.pwa.install" size="16" aria-hidden="true" />
             {{ t('pwa.oneClickInstall') }}
           </BButton>
-          <span v-else class="pwa-guide__action-badge">
+          <span v-else-if="isStandalone" class="pwa-guide__action-badge">
             {{ t('pwa.installed') }}
+          </span>
+          <span v-else class="pwa-guide__action-badge is-manual">
+            {{ t('pwa.manualCapabilityReady') }}
           </span>
         </div>
       </section>
@@ -182,7 +185,12 @@
   const activeNote = computed(() => {
     const platformNote = t(`pwa.platforms.${guidePlatform.value}.note`);
     if (guidePlatform.value !== detectedPlatform.value) return platformNote;
-    const fallbackKey = detectedPlatform.value === 'ios' ? 'pwa.iosBrowserFallbackHint' : 'pwa.browserFallbackHint';
+    const fallbackKey =
+      detectedPlatform.value === 'harmony'
+        ? 'pwa.harmonyBrowserFallbackHint'
+        : detectedPlatform.value === 'ios'
+          ? 'pwa.iosBrowserFallbackHint'
+          : 'pwa.browserFallbackHint';
     return `${platformNote} ${t(fallbackKey, { browser: detectedBrowserLabel.value })}`;
   });
   const actionTitle = computed(() => {

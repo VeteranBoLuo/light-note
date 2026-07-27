@@ -32,7 +32,8 @@ describe('usePwaInstall', () => {
   });
 
   it('detects the environment and handles standard, legacy, pending, broken, and unavailable install prompts', async () => {
-    const { detectPwaBrowserFamily, initializePwaInstall, usePwaInstall } = await import('./usePwaInstall');
+    const { detectPwaBrowserFamily, initializePwaInstall, supportsReliablePwaPrompt, usePwaInstall } =
+      await import('./usePwaInstall');
     expect(detectPwaBrowserFamily('Mozilla/5.0 HuaweiBrowser/16.0 Chrome/114.0')).toBe('huawei');
     expect(detectPwaBrowserFamily('Mozilla/5.0 Quark/7.7.0 Chrome/124.0')).toBe('quark');
     expect(detectPwaBrowserFamily('Mozilla/5.0 QHBrowser/14.5 Chrome/122.0')).toBe('360');
@@ -41,6 +42,15 @@ describe('usePwaInstall', () => {
     expect(detectPwaBrowserFamily('Mozilla/5.0 MQQBrowser/6.2 MicroMessenger/8.0.60')).toBe('wechat');
     expect(detectPwaBrowserFamily('Mozilla/5.0 baiduboxapp/14.0')).toBe('baidu');
     expect(detectPwaBrowserFamily('Mozilla/5.0 TencentTraveler MQQBrowser/16.0')).toBe('qq');
+    expect(supportsReliablePwaPrompt('harmony', 'huawei')).toBe(false);
+    expect(supportsReliablePwaPrompt('harmony', 'chrome')).toBe(false);
+    expect(supportsReliablePwaPrompt('android', 'quark')).toBe(false);
+    expect(supportsReliablePwaPrompt('android', 'huawei')).toBe(false);
+    expect(supportsReliablePwaPrompt('android', 'chrome')).toBe(true);
+    expect(supportsReliablePwaPrompt('android', 'edge')).toBe(true);
+    expect(supportsReliablePwaPrompt('desktop', 'opera')).toBe(true);
+    expect(supportsReliablePwaPrompt('desktop', 'firefox')).toBe(false);
+    expect(supportsReliablePwaPrompt('ios', 'safari')).toBe(false);
 
     initializePwaInstall();
     const pwa = usePwaInstall();

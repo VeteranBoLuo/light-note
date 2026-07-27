@@ -48,6 +48,8 @@ const INSTALL_SOURCE_LABELS: Record<PwaInstallSource, string> = {
   settings: '设置',
 };
 
+const RELIABLE_DIRECT_INSTALL_BROWSERS = new Set<PwaBrowserFamily>(['chrome', 'edge', 'opera']);
+
 function withInstallSource(operation: { module: string; operation: string }, source: PwaInstallSource) {
   return {
     ...operation,
@@ -88,6 +90,15 @@ function updateDetectedEnvironment() {
   detectedPlatform.value = detectGuidePlatform(userAgent);
 }
 
+export function supportsReliablePwaPrompt(platform: PwaGuidePlatform, browser: PwaBrowserFamily) {
+  if (platform === 'harmony' || platform === 'ios') return false;
+  return RELIABLE_DIRECT_INSTALL_BROWSERS.has(browser);
+}
+
+function hasReliableDirectInstallCapability() {
+  return supportsReliablePwaPrompt(detectedPlatform.value, detectedBrowser.value);
+}
+
 function updateStandaloneState() {
   const navigatorStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
   standalone.value = navigatorStandalone || window.matchMedia('(display-mode: standalone)').matches;
@@ -116,7 +127,7 @@ export function initializePwaInstall() {
   displayMode.addEventListener?.('change', updateStandaloneState);
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
-    deferredPrompt.value = event as BeforeInstallPromptEvent;
+    deferredPrompt.value = hasReliableDirectInstallCapability() ? (event as BeforeInstallPromptEvent) : null;
   });
   window.addEventListener('appinstalled', () => {
     deferredPrompt.value = null;
@@ -151,7 +162,9 @@ function recordInstallResult(source: PwaInstallSource, result: Exclude<PwaInstal
 }
 
 export function usePwaInstall() {
-  const canPrompt = computed(() => Boolean(deferredPrompt.value) && !standalone.value);
+  const canPrompt = computed(
+    () => Boolean(deferredPrompt.value) && !standalone.value && hasReliableDirectInstallCapability(),
+  );
   const installState = computed<'installed' | 'prompt-ready' | 'manual'>(() =>
     standalone.value ? 'installed' : canPrompt.value ? 'prompt-ready' : 'manual',
   );
@@ -168,7 +181,8 @@ export function usePwaInstall() {
     void recordOperation(withInstallSource(OPERATION_LOG_MAP.pwa.requestInstall, source));
     if (standalone.value) return 'installed';
     const promptEvent = deferredPrompt.value;
-    if (!promptEvent) {
+    if (!promptEvent || !hasReliableDirectInstallCapability()) {
+      deferredPrompt.value = null;
       recordInstallResult(source, 'unsupported');
       return 'unsupported';
     }

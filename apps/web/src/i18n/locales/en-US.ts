@@ -3649,6 +3649,8 @@ export default {
     manualCapabilityReady: 'Browser menu required',
     browserFallbackHint:
       'If {browser} has no “Install app”, “Add to Home Screen”, or “Add to desktop” menu item, it has not exposed PWA installation for this page. Try the latest Chrome, Edge, or your system browser instead.',
+    harmonyBrowserFallbackHint:
+      'HarmonyOS browsers do not currently expose a reliable one-click install API to websites. Use “Add to desktop” or “Add to Home Screen” from the {browser} menu.',
     iosBrowserFallbackHint:
       'On iPhone or iPad, copy the URL to Safari if the current browser has no “Add to Home Screen” action, then use the Share menu.',
     browsers: {
