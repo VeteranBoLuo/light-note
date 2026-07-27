@@ -1,5 +1,5 @@
 <template>
-  <div id="app" style="width: 100vw" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
+  <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
     <a-config-provider
       :theme="{
         token: {
@@ -92,13 +92,15 @@
     if (scaleExcludedRouter.has(name)) {
       document.documentElement.style.zoom = '';
     } else {
-      applyDisplaySettings();
+      // 手机端已有独立响应式布局，不再叠加桌面端界面缩放；这里只改变运行时效果，
+      // 不回写 uiScale，确保用户回到电脑后仍保留原来的小/标准/大偏好。
+      applyDisplaySettings({ forceStandard: bookmark.isMobile });
     }
   }
 
-  // 监听界面缩放变化 → 按当前路由重设 <html> zoom
+  // 监听界面缩放和手机布局变化 → 按当前路由重设 <html> zoom
   watch(
-    () => user.preferences?.uiScale,
+    () => [user.preferences?.uiScale, bookmark.isMobile],
     () => {
       applyScaleForRoute();
     },
@@ -735,13 +737,13 @@
   }
 </script>
 <style>
-  #app.has-mobile-bottom-nav {
+  .app-root.has-mobile-bottom-nav {
     --mobile-shell-bottom-height: calc(56px + env(safe-area-inset-bottom));
   }
 
   /* 只影响根元素下的主要内容，避免全局影响 */
-  .disable-animations #app,
-  .disable-animations #app * {
+  .disable-animations .app-root,
+  .disable-animations .app-root * {
     animation: none !important;
     transition: none !important;
     animation-play-state: paused !important;
@@ -765,8 +767,13 @@
   }
   /* 100dvh 跟随移动浏览器动态地址栏伸缩,避免底部内容被遮;旧浏览器回退 100vh(双声明,后者不识别时用前者) */
   #app {
+    width: 100%;
     height: 100vh;
     height: 100dvh;
+  }
+  .app-root {
+    width: 100%;
+    height: 100%;
   }
   .app-loading {
     height: 100vh;

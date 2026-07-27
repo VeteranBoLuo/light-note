@@ -1354,6 +1354,7 @@ export default {
     subtitle: 'Manage appearance, language and preferences in one place',
     appearance: 'Appearance',
     appearanceDesc: 'Theme, language and UI scale',
+    appearanceDescMobile: 'Theme and language',
     general: 'General',
     generalDesc: 'Default home and content layout',
     shortcutsTitle: 'Global Shortcuts',

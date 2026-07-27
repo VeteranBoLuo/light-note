@@ -34,7 +34,9 @@
             </span>
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.appearance') }}</h2>
-              <p class="card-sub">{{ t('settings.appearanceDesc') }}</p>
+              <p class="card-sub">
+                {{ t(bookmark.isMobile ? 'settings.appearanceDescMobile' : 'settings.appearanceDesc') }}
+              </p>
             </div>
           </div>
 
@@ -79,7 +81,7 @@
               </div>
             </div>
 
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.uiScale') }}</span>
                 <span class="field-desc">{{ t('settings.uiScaleDesc') }}</span>

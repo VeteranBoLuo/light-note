@@ -1333,6 +1333,7 @@ export default {
     subtitle: '外观、语言、偏好都在这里统一管理',
     appearance: '外观',
     appearanceDesc: '主题、语言、界面缩放',
+    appearanceDescMobile: '主题、语言',
     general: '通用',
     generalDesc: '默认首页与内容展示方式',
     shortcutsTitle: '全局快捷键',

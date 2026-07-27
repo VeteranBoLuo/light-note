@@ -27,10 +27,10 @@ export function isGuestUser(): boolean {
 // 浮层(通知中心/个人中心)一律改用自研 BPopover——它按实时 getBoundingClientRect 定位、与 zoom 自洽,
 // 不再出现之前 a-popover 在缩放下错位的问题。
 const UI_SCALE: Record<string, number> = { small: 0.9, medium: 1, large: 1.1 };
-export function applyDisplaySettings(): void {
+export function applyDisplaySettings(options: { forceStandard?: boolean } = {}): void {
   const user = useUserStore();
   const root = document.documentElement;
-  const scale = UI_SCALE[(user.preferences as any).uiScale] ?? 1;
+  const scale = options.forceStandard ? 1 : (UI_SCALE[(user.preferences as any).uiScale] ?? 1);
   (root.style as any).zoom = scale === 1 ? '' : String(scale);
   // 清掉上一版"字号+密度"分离实现的残留
   root.style.fontSize = '';

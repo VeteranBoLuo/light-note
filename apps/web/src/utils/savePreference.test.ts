@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const userState: any = { id: '', role: 'visitor', preferences: { theme: 'day', lang: 'zh-CN' } };
 vi.mock('@/store', () => ({ useUserStore: () => userState }));
 
-const { applyPreferenceLocally, isGuestUser } = await import('@/utils/savePreference');
+const { applyDisplaySettings, applyPreferenceLocally, isGuestUser } = await import('@/utils/savePreference');
 
 describe('applyPreferenceLocally', () => {
   beforeEach(() => {
@@ -54,5 +54,30 @@ describe('isGuestUser', () => {
     userState.id = 'u1';
     userState.role = 'admin';
     expect(isGuestUser()).toBe(false);
+  });
+});
+
+describe('applyDisplaySettings', () => {
+  beforeEach(() => {
+    userState.preferences = { theme: 'day', lang: 'zh-CN', uiScale: 'medium' };
+    document.documentElement.style.zoom = '';
+  });
+
+  it.each([
+    ['small', '0.9'],
+    ['medium', ''],
+    ['large', '1.1'],
+  ] as const)('桌面端按已保存偏好应用 %s 缩放', (uiScale, expectedZoom) => {
+    userState.preferences.uiScale = uiScale;
+    applyDisplaySettings();
+    expect(document.documentElement.style.zoom).toBe(expectedZoom);
+  });
+
+  it('手机布局强制标准显示，但保留电脑端缩放偏好', () => {
+    userState.preferences.uiScale = 'small';
+    applyDisplaySettings({ forceStandard: true });
+
+    expect(document.documentElement.style.zoom).toBe('');
+    expect(userState.preferences.uiScale).toBe('small');
   });
 });
