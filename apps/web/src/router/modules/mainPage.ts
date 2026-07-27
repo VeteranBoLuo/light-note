@@ -8,6 +8,10 @@ const mainPageRouter: RouteRecordRaw = {
     keepAlive: true,
     requireAuth: true,
     roles: ALL_ROLES,
+    mobileShell: 'resources',
+    mobileTopSwitcher: true,
+    mobileBottomNav: true,
+    mobileCompactResourceHeading: true,
   },
   children: [
     {

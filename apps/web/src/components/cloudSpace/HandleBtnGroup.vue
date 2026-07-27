@@ -3,7 +3,14 @@
     <CloudStorageBar v-if="!bookmark.isMobile" />
     <!-- 上传按钮及提示 -->
     <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
-      <b-upload multiple raw-file class="upload-btn" @change="handleChange" :max-total-size="500 * 1024 * 1024">
+      <b-upload
+        ref="uploadPicker"
+        multiple
+        raw-file
+        class="upload-btn"
+        @change="handleChange"
+        :max-total-size="500 * 1024 * 1024"
+      >
         <b-button type="primary" class="upload-action" :loading="uploadProgress.visible">
           <SvgIcon :src="icon.file_upload" size="17" />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
@@ -25,7 +32,13 @@
           </BButton>
         </div>
       </div>
-      <div class="progress-track overall-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="Math.round(uploadProgress.overall)">
+      <div
+        class="progress-track overall-progress"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="Math.round(uploadProgress.overall)"
+      >
         <span :style="{ width: `${uploadProgress.overall}%` }"></span>
       </div>
       <div class="file-progress-list" v-if="uploadProgress.files.length > 0">
@@ -58,6 +71,7 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
+  const uploadPicker = ref<{ open: () => void } | null>(null);
   // 格式化速度
   const formatSpeed = (speed: number) => {
     if (speed < 1024) return `${speed.toFixed(0)} B/s`;
@@ -349,6 +363,11 @@
     });
   }
 
+  function openFileDialog() {
+    if (blockGuestWrite('upload-file')) return;
+    uploadPicker.value?.open();
+  }
+
   // 取消上传确认
   const handleCancelConfirm = () => {
     if (uploadController.value) {
@@ -368,7 +387,7 @@
     });
   };
 
-  defineExpose({ uploadFiles });
+  defineExpose({ uploadFiles, openFileDialog });
 </script>
 <style lang="less" scoped>
   .upload-btn {

@@ -4,9 +4,8 @@
     :subtitle="$t('cloudSpace.subtitle')"
     accent="file"
     layout="workspace"
-    :show-back="showMobileBack"
+    compact-mobile-heading
     :title-actionable="!bookmark.isMobile"
-    @back="backRouterPage"
     @title-click="resetCloudSpace"
   >
     <template #meta>
@@ -36,7 +35,7 @@
         {{ batchMode ? $t('cloudSpace.exitBatch') : $t('cloudSpace.batchAction') }}
       </BButton>
       <FileTypeFilter />
-      <div class="cloud-search-action">
+      <div v-if="!bookmark.isMobile" class="cloud-search-action">
         <BInput
           v-model:value="cloud.searchFileName"
           :placeholder="$t('cloudSpace.searchFile')"
@@ -49,7 +48,7 @@
           </template>
         </BInput>
       </div>
-      <HandleBtnGroup ref="handleBtnGroup" class="header-handle-group" />
+      <HandleBtnGroup v-show="!bookmark.isMobile" ref="handleBtnGroup" class="header-handle-group" />
     </template>
 
     <div
@@ -144,10 +143,9 @@
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
-  import { backRouterPage } from '@/utils/common.ts';
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { apiBasePost } from '@/http/request';
-  import { getMobileHomePath } from '@/utils/preferences.ts';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -156,7 +154,6 @@
   const user = useUserStore();
   const route = useRoute();
   const router = useRouter();
-  const showMobileBack = computed(() => bookmark.isMobile && getMobileHomePath(user.preferences) !== '/cloudSpace');
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const organizingFileId = computed(() => {
     const value = route.query.fileId;
@@ -205,7 +202,12 @@
 
   const CLOUD_SPACE_VIEW_STORAGE_KEY = 'cloud-space-view-mode';
 
-  const handleBtnGroup = ref();
+  interface HandleBtnGroupExposed {
+    uploadFiles: (files: any[], folderId?: string | null) => Promise<void>;
+    openFileDialog: () => void;
+  }
+
+  const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
   const batchMode = ref(false);
   // 视图优先取用户偏好(设置页「云空间视图」/ 跨设备),再回退本浏览器独立缓存,最后卡片——与标签详情/资源中心对齐。
   // user 偏好在 App.vue setup 阶段已从 localStorage 早恢复,本路由组件 setup 时已就绪。
@@ -229,6 +231,18 @@
     window.clearTimeout(cloudSearchTimer);
     cloudSearchTimer = window.setTimeout(() => cloud.queryFieldList(), 220);
   }
+
+  useMobileTopBar(['cloudSpace'], {
+    getSearchValue: () => cloud.searchFileName,
+    setSearchValue: (value) => {
+      cloud.searchFileName = value;
+    },
+    onSearchInput: onCloudSearchInput,
+    onSearchEnter: () => cloud.queryFieldList(),
+    searchPlaceholder: () => t('cloudSpace.searchFile'),
+    onAdd: () => handleBtnGroup.value?.openFileDialog(),
+    addLabel: () => t('cloudSpace.uploadFile'),
+  });
 
   // 拖拽状态
   const dragActive = ref(false);
@@ -343,7 +357,7 @@
   };
 
   const onUploadFiles = ({ files, folderId }) => {
-    handleBtnGroup.value.uploadFiles(files, folderId);
+    handleBtnGroup.value?.uploadFiles(files, folderId);
   };
 
   // 拖拽事件处理
@@ -381,7 +395,7 @@
     dragActive.value = false;
     const files = Array.from(event.dataTransfer.files);
     if (files.length) {
-      handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
+      handleBtnGroup.value?.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
     }
   }
 
@@ -414,7 +428,7 @@
       }
 
       if (files.length) {
-        handleBtnGroup.value.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
+        handleBtnGroup.value?.uploadFiles(files, cloud.folder.id === 'all' ? null : cloud.folder.id);
       }
     }
   }

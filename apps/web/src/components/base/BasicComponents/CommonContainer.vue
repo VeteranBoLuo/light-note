@@ -1,9 +1,14 @@
 <template>
-  <div>
-    <div class="phone-container no-scrollbar" v-if="bookmark.isMobile">
+  <div :class="{ 'common-container--embedded-mobile': embeddedMobile && bookmark.isMobile }">
+    <div
+      class="phone-container no-scrollbar"
+      :class="{ 'phone-container--embedded': embeddedMobile }"
+      v-if="bookmark.isMobile"
+    >
       <div class="phone-navigation">
         <slot name="navigation">
           <span
+            v-if="showBack"
             style="position: absolute; left: 0; top: 30px; transform: translateY(-50%)"
             class="flex-align-center dom-hover"
             @click="backClick"
@@ -28,10 +33,18 @@
   import { getCurrentInstance } from 'vue';
   import { backRouterPage } from '@/utils/common';
   const bookmark = bookmarkStore();
-  const props = defineProps({
+  defineProps({
     title: {
       type: String,
       default: '',
+    },
+    showBack: {
+      type: Boolean,
+      default: true,
+    },
+    embeddedMobile: {
+      type: Boolean,
+      default: false,
     },
   });
   const emit = defineEmits(['backClick']);
@@ -83,5 +96,35 @@
     padding-top: 20px;
     box-sizing: border-box;
     overflow: auto;
+  }
+
+  .common-container--embedded-mobile {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .phone-container--embedded {
+    position: relative !important;
+    top: auto !important;
+    height: 100% !important;
+    min-height: 0;
+    padding: 0 20px 20px;
+  }
+
+  .phone-container--embedded .phone-navigation {
+    position: relative;
+    top: auto;
+    width: 100%;
+    flex: 0 0 60px;
+  }
+
+  .phone-container--embedded .phone-body {
+    position: relative;
+    top: auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
   }
 </style>

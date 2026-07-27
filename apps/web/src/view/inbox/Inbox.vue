@@ -1,11 +1,7 @@
 <template>
   <main class="inbox-page">
-    <ResourceCenterSectionNav class="section-switcher" />
+    <ResourceCenterSectionNav v-if="!bookmark.isMobile" class="section-switcher" />
     <header class="inbox-hero">
-      <!-- 移动端/PWA standalone 无系统返回,此前该页是死胡同 -->
-      <BButton v-if="bookmark.isMobile" class="inbox-back-btn" @click="router.back()">
-        <SvgIcon :src="icon.arrow_left" size="16" />
-      </BButton>
       <div>
         <h1>{{ t('inbox.title') }}</h1>
         <p>{{ t('inbox.subtitle') }}</p>
@@ -15,7 +11,13 @@
     <section class="inbox-toolbar">
       <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" variant="pill" @change="changeFilter" />
       <div class="inbox-toolbar__right" :class="{ 'has-status': inbox.filterType === 'todo' }">
-        <BInput v-model:value="inbox.keyword" :placeholder="t('inbox.searchPlaceholder')" clearable @enter="search" />
+        <BInput
+          v-if="!bookmark.isMobile"
+          v-model:value="inbox.keyword"
+          :placeholder="t('inbox.searchPlaceholder')"
+          clearable
+          @enter="search"
+        />
         <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
         <BSelect
           v-if="inbox.filterType === 'todo'"
@@ -137,8 +139,7 @@
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import type { TodoChecklistItem, TodoItem as TodoItemType, TodoSort } from '@/api/todoApi';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -159,6 +160,7 @@
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
   let resizeObserver: ResizeObserver | null = null;
+  let mobileInboxSearchTimer = 0;
 
   const selectedItems = computed(() =>
     inbox.items.filter((item) => inbox.selectedKeys.includes(inbox.resourceKey(item))),
@@ -281,7 +283,10 @@
       resizeObserver.observe(scrollContainer.value);
     }
   });
-  onBeforeUnmount(() => resizeObserver?.disconnect());
+  onBeforeUnmount(() => {
+    window.clearTimeout(mobileInboxSearchTimer);
+    resizeObserver?.disconnect();
+  });
 
   watch(
     () => [inbox.items.length, todo.items.length, inbox.loading, todo.loading],
@@ -293,6 +298,24 @@
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.openQuickCapture(inbox.filterType === 'all' ? 'note' : inbox.filterType);
   }
+
+  function setMobileInboxKeyword(value: string) {
+    inbox.keyword = value;
+    window.clearTimeout(mobileInboxSearchTimer);
+    mobileInboxSearchTimer = window.setTimeout(search, 220);
+  }
+
+  useMobileTopBar(['inbox'], {
+    getSearchValue: () => inbox.keyword,
+    setSearchValue: setMobileInboxKeyword,
+    onSearchEnter: search,
+    searchPlaceholder: () => t('inbox.searchPlaceholder'),
+    onAdd: () => {
+      if (inbox.filterType === 'todo') openTodoEditor();
+      else openCapture();
+    },
+    addLabel: () => (inbox.filterType === 'todo' ? t('inbox.createTodo') : t('inbox.quickCapture')),
+  });
   function handleEmptyStateAction() {
     if (inbox.filterType === 'todo') openTodoEditor();
     else openCapture();

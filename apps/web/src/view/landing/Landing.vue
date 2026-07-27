@@ -26,30 +26,26 @@
                 <span class="hero-tagline">{{ t('landing.heroTagline') }}</span>
               </h1>
               <div class="hero-actions">
-                <BButton
-                  v-if="isLoggedIn"
-                  type="primary"
-                  class="btn-primary"
-                  @click="enterApp"
-                  v-click-log="{ module: '官网首页', operation: '进入我的轻笺' }"
-                >
-                  <span>{{ t('landing.ctaEnterApp') }}</span>
-                  <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M5 12h14M13 5l7 7-7 7"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </BButton>
+                <template v-if="landingCtaMode === 'enter'">
+                  <BButton type="primary" class="btn-primary" @click="handleEnterApp">
+                    <span>{{ t('landing.ctaEnterApp') }}</span>
+                    <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M5 12h14M13 5l7 7-7 7"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </BButton>
+                </template>
                 <template v-else>
                   <BButton
+                    v-if="landingCtaMode === 'register'"
                     type="primary"
                     class="btn-primary"
-                    @click="goRegister('landing_primary')"
-                    v-click-log="{ module: '官网首页', operation: '免费注册开始使用' }"
+                    @click="handleRegister('landing_primary')"
                   >
                     <span>{{ t('landing.ctaCreateSpace') }}</span>
                     <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -61,6 +57,17 @@
                         stroke-linejoin="round"
                       />
                     </svg>
+                  </BButton>
+                  <BButton
+                    v-else-if="landingCtaMode === 'retry'"
+                    type="primary"
+                    class="btn-primary"
+                    @click="retryLandingAuth"
+                  >
+                    <span>{{ t('landing.ctaRetryAuth') }}</span>
+                  </BButton>
+                  <BButton v-else type="primary" class="btn-primary" loading>
+                    <span>{{ t('landing.ctaCheckingAuth') }}</span>
                   </BButton>
                   <BButton
                     class="btn-ghost"
@@ -226,30 +233,26 @@
             <h2 class="cta-title">{{ t('landing.ctaTitle') }}</h2>
             <p class="cta-desc">{{ t('landing.ctaDesc') }}</p>
             <div class="cta-actions">
-              <BButton
-                v-if="isLoggedIn"
-                type="primary"
-                class="btn-primary btn-large"
-                @click="enterApp"
-                v-click-log="{ module: '官网首页', operation: '进入我的轻笺' }"
-              >
-                {{ t('landing.ctaEnterApp') }}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M5 12h14M13 5l7 7-7 7"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </BButton>
+              <template v-if="landingCtaMode === 'enter'">
+                <BButton type="primary" class="btn-primary btn-large" @click="handleEnterApp">
+                  {{ t('landing.ctaEnterApp') }}
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M5 12h14M13 5l7 7-7 7"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </BButton>
+              </template>
               <template v-else>
                 <BButton
+                  v-if="landingCtaMode === 'register'"
                   type="primary"
                   class="btn-primary btn-large"
-                  @click="goRegister('landing_final')"
-                  v-click-log="{ module: '官网首页', operation: '免费注册开始使用' }"
+                  @click="handleRegister('landing_final')"
                 >
                   {{ t('landing.ctaCreateSpace') }}
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -261,6 +264,17 @@
                       stroke-linejoin="round"
                     />
                   </svg>
+                </BButton>
+                <BButton
+                  v-else-if="landingCtaMode === 'retry'"
+                  type="primary"
+                  class="btn-primary btn-large"
+                  @click="retryLandingAuth"
+                >
+                  {{ t('landing.ctaRetryAuth') }}
+                </BButton>
+                <BButton v-else type="primary" class="btn-primary btn-large" loading>
+                  {{ t('landing.ctaCheckingAuth') }}
                 </BButton>
                 <BButton
                   class="btn-ghost"
@@ -337,20 +351,30 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+  import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useUserStore, bookmarkStore } from '@/store';
   import { apiBasePost } from '@/http/request';
+  import { recordOperation } from '@/api/commonApi.ts';
   import { trackConversion } from '@/utils/conversion';
   import { getAppHomePath } from '@/utils/preferences';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { LANDING_AUTH_CONTEXT, resolveLandingCtaMode } from './landingAuth.ts';
 
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const isLoggedIn = computed(() => !!user.id && user.role !== 'visitor');
+  const landingAuth = inject(LANDING_AUTH_CONTEXT, null);
+  const landingCtaMode = computed(() =>
+    resolveLandingCtaMode(landingAuth?.status.value || 'pending', isLoggedIn.value),
+  );
+  const LANDING_OPERATION_LOG = {
+    enter: { module: '官网首页', operation: '进入我的轻笺' },
+    register: { module: '官网首页', operation: '免费注册开始使用' },
+  } as const;
   const theme = ref(user.preferences?.theme || 'day');
   const slidesRef = ref<HTMLElement>();
   const canvasRef = ref<HTMLCanvasElement>();
@@ -418,6 +442,25 @@
   // 已登录用户:直接进入应用,按其首页偏好跳转(与登录成功一致,不固定 /home)
   function enterApp() {
     router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+  }
+  async function retryLandingAuth() {
+    if (!landingAuth) return;
+    await landingAuth.retry();
+  }
+  // 点击瞬间再次判断，避免 /me 完成与用户点击同一时刻竞争时记录错误的“免费注册”日志。
+  function handleRegister(source: string) {
+    if (landingCtaMode.value === 'enter') {
+      handleEnterApp();
+      return;
+    }
+    if (landingCtaMode.value !== 'register') return;
+    void recordOperation(LANDING_OPERATION_LOG.register);
+    goRegister(source);
+  }
+  function handleEnterApp() {
+    if (!isLoggedIn.value) return;
+    void recordOperation(LANDING_OPERATION_LOG.enter);
+    enterApp();
   }
   function handleContact() {
     showContactModal.value = true;

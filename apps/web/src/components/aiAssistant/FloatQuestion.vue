@@ -97,7 +97,7 @@
       </div>
     </BDrawer>
 
-    <BTooltip v-if="!isOpen" :title="aiTriggerAccessibleLabel">
+    <BTooltip v-if="!isOpen && !props.hideTrigger" :title="aiTriggerAccessibleLabel">
       <BButton
         class="ai-edge-trigger"
         :class="`ai-edge-trigger--${edgeStatus}`"
@@ -148,6 +148,7 @@
   import {
     AI_ASSISTANT_OPEN_EVENT,
     normalizeAiAssistantLaunchPayload,
+    setAiAssistantVisibility,
     type AiAssistantLaunchPayload,
   } from '@/utils/aiEntry';
 
@@ -158,6 +159,14 @@
   );
 
   const { t } = useI18n();
+  const props = withDefaults(
+    defineProps<{
+      hideTrigger?: boolean;
+    }>(),
+    {
+      hideTrigger: false,
+    },
+  );
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const aiAssistant = useAiAssistantStore();
@@ -169,6 +178,9 @@
     if (wasLoading && !loading) conversationListToken.value += 1;
   });
   const isOpen = ref(false);
+  watch(isOpen, (open) => {
+    setAiAssistantVisibility(open);
+  });
   const isMaximized = ref(false);
   const newConversationSubmitting = ref(false);
   // 记住“对话”态用户选择的全屏偏好:整理固定全屏,切回对话时恢复此偏好,

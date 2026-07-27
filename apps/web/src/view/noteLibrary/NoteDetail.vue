@@ -1,5 +1,5 @@
 <template>
-  <div class="note-container">
+  <div class="note-container" :class="{ 'note-container--mobile': bookmark.isMobile }">
     <div v-if="isReady">
       <NoteHeader
         :updateTime="updateTime"
@@ -111,7 +111,7 @@
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
-  import TurndownService from 'turndown';
+  import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
@@ -196,10 +196,7 @@
     const normalized = normalizeNoteContentResourceUrls(raw);
     // 早期 Markdown 笔记使用 type=md，正文实际存的是 HTML；加载时转回 Markdown 源文本。
     if (rawType !== 'md' || !/^\s*<(?:h[1-6]|p|ul|ol|blockquote|pre|div)\b/i.test(normalized)) return normalized;
-    return new TurndownService({
-      headingStyle: 'atx',
-      codeBlockStyle: 'fenced',
-    }).turndown(normalized);
+    return noteHtmlToMarkdown(normalized);
   };
 
   // 历史版本恢复后:回写标题/正文并刷新编辑器与目录
@@ -770,6 +767,8 @@
 
 <style lang="less">
   .note-container {
+    --note-detail-header-height: 60px;
+
     width: 100%;
     height: 100%;
     box-sizing: border-box;
@@ -777,6 +776,9 @@
     top: 0 !important;
     display: flex;
     flex-direction: column;
+  }
+  .note-container--mobile {
+    --note-detail-header-height: 48px;
   }
   .note-body-title {
     height: 56px;
@@ -838,15 +840,15 @@
     flex-direction: row;
     gap: 20px;
     box-sizing: border-box;
-    height: calc(100% - 60px);
+    height: calc(100% - var(--note-detail-header-height));
     position: fixed;
-    top: 60px;
+    top: var(--note-detail-header-height);
     width: 100%;
     min-width: 0;
   }
   .inbox-organize-banner {
     position: fixed;
-    top: 60px;
+    top: var(--note-detail-header-height);
     left: 0;
     z-index: 12;
     width: 100%;
@@ -863,8 +865,8 @@
     font-size: 13px;
   }
   .note-body.note-body--organizing {
-    top: 108px;
-    height: calc(100% - 108px);
+    top: calc(var(--note-detail-header-height) + 48px);
+    height: calc(100% - var(--note-detail-header-height) - 48px);
   }
   .catalog-panel {
     flex: 2;
@@ -967,7 +969,6 @@
     .note-body-title {
       height: 50px;
       width: 100%;
-      padding-right: 52px;
       box-sizing: border-box;
 
       .b-input {

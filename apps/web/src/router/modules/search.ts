@@ -7,6 +7,8 @@ const searchRouter: RouteRecordRaw = {
     keepAlive: true,
     requireAuth: true,
     roles: ALL_ROLES,
+    mobileShell: 'search',
+    mobileBottomNav: true,
   },
   path: '/search',
   name: 'searchCenter',

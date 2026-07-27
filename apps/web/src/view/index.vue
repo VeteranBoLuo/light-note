@@ -8,35 +8,40 @@
 
 <script lang="ts" setup>
   import Navigation from '@/components/home/navigation/Navigation.vue';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore } from '@/store';
   import { useRoute } from 'vue-router';
   import { computed } from 'vue';
   import { NAVIGATION_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { getMainRouteViewKey } from '@/utils/routeViewKey.ts';
-  import { isMobileHomeRoute } from '@/utils/preferences.ts';
 
   const route = useRoute();
   const bookmark = bookmarkStore();
-  const user = useUserStore();
 
   const routeName = computed(() => String(route.name || ''));
   const routeViewKey = computed(() => getMainRouteViewKey(route));
 
   // 导航栏显示逻辑
   const showNavigation = computed(() => {
-    if (bookmark.isMobile) {
-      return isMobileHomeRoute(route.name, user.preferences);
-    }
+    if (bookmark.isMobile) return false;
     return !NAVIGATION_HIDDEN_ROUTE_NAMES.includes(routeName.value);
   });
 
-  const viewStyle = computed(() => ({
-    position: 'fixed',
-    top: showNavigation.value ? '60px' : '0',
-    height: showNavigation.value ? 'calc(100% - 60px)' : '100%',
-    width: '100%',
-    boxSizing: 'border-box',
-  }));
+  const viewStyle = computed(() =>
+    bookmark.isMobile
+      ? {
+          position: 'relative',
+          height: '100%',
+          width: '100%',
+          boxSizing: 'border-box',
+        }
+      : {
+          position: 'fixed',
+          top: showNavigation.value ? '60px' : '0',
+          height: showNavigation.value ? 'calc(100% - 60px)' : '100%',
+          width: '100%',
+          boxSizing: 'border-box',
+        },
+  );
 </script>
 
 <style lang="less" scoped>

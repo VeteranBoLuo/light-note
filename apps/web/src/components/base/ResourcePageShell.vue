@@ -4,7 +4,10 @@
     :class="[
       `resource-page-shell--${accent}`,
       `resource-page-shell--layout-${layout}`,
-      { 'resource-page-shell--with-back': showBack },
+      {
+        'resource-page-shell--with-back': showBack,
+        'resource-page-shell--mobile-compact': compactMobileHeading,
+      },
     ]"
   >
     <header class="resource-page-header">
@@ -65,6 +68,7 @@
       layout?: 'contained' | 'workspace';
       showBack?: boolean;
       titleActionable?: boolean;
+      compactMobileHeading?: boolean;
     }>(),
     {
       subtitle: '',
@@ -72,6 +76,7 @@
       layout: 'contained',
       showBack: false,
       titleActionable: false,
+      compactMobileHeading: false,
     },
   );
 
@@ -306,6 +311,33 @@
       justify-content: flex-start;
       flex-wrap: nowrap;
       overflow: visible;
+    }
+
+    .resource-page-shell--mobile-compact {
+      padding-top: 8px;
+      padding-bottom: 10px;
+      gap: 8px;
+    }
+
+    .resource-page-shell--mobile-compact .resource-page-heading {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .resource-page-shell--mobile-compact .resource-page-header {
+      min-height: 40px;
+      flex-wrap: nowrap;
+    }
+
+    .resource-page-shell--mobile-compact .resource-page-actions {
+      order: initial;
     }
   }
 
