@@ -19,45 +19,19 @@
             :trigger="'click'"
             :menu-options="[
               {
-                label: $t('common.reName'),
-                icon: icon.cloudSpace.rename,
-                function: () => openRenameModal(item),
+                label: t('guest.userPreviewEntry'),
+                icon: icon.navigation.user,
+                function: () => loginAsUser(record),
               },
               {
-                label: $t('cloudSpace.share'),
-                icon: icon.cloudSpace.share,
-                function: () => handleShareFile(item.id, item.fileName, item.fileType, item.shareToken),
-              },
-              {
-                label: $t('cloudSpace.moveFile'),
-                icon: icon.cloudSpace.moveFile,
-                function: () => emit('moveField', [item]),
-              },
-              {
-                label: $t('cloudSpace.relateTags'),
-                icon: icon.manage_categoryBtn_tag,
-                function: () => openTagDialog(item),
-              },
-              {
-                label: $t('cloudSpace.aiUseFile'),
-                icon: icon.ai.ask,
-                function: () => openFilesInAi([item]),
-              },
-              {
-                label: $t('inbox.addExisting'),
-                icon: icon.common.more,
-                function: () => addFileToInbox(item),
-              },
-              {
-                label: $t('common.delete'),
-                icon: icon.noteDetail.delete,
-                danger: true,
-                function: () => handleDelFile(item),
+                label: t('guest.adminContextMaintainEntry'),
+                icon: icon.card_edit,
+                function: () => maintainAsUser(record),
               },
             ]"
           >
-            <BTooltip :title="t('guest.userPreviewEntry')">
-              <svg-icon :src="icon.common.more" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
+            <BTooltip :title="t('common.more')">
+              <svg-icon :src="icon.common.more" size="16" class="dom-hover" />
             </BTooltip>
           </b-dropdown>
         </template>
