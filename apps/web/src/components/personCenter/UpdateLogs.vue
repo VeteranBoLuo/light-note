@@ -56,7 +56,10 @@
 
             <p v-if="item.summary" class="log-summary">{{ item.summary }}</p>
 
-            <ol v-if="!item.contentMarkdown && item.highlights.length" class="log-highlights">
+            <ol
+              v-if="item.highlights.length && (!item.contentMarkdown || !isExpanded(item.id))"
+              class="log-highlights"
+            >
               <li v-for="(highlight, highlightIndex) in visibleHighlights(item)" :key="highlightIndex">
                 {{ highlight }}
               </li>
