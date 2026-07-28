@@ -12,7 +12,7 @@ describe('PWA API 日志设备标记', () => {
       matches: false,
     } as MediaQueryList);
     expect(isPwaStandaloneMode()).toBe(false);
-    expect(getApiLogOsInfo()).not.toContain('(app)');
+    expect(getApiLogOsInfo()).not.toContain('（app）');
   });
 
   it('独立窗口模式在操作系统名称后追加 app', () => {
@@ -20,7 +20,7 @@ describe('PWA API 日志设备标记', () => {
       matches: true,
     } as MediaQueryList);
     expect(isPwaStandaloneMode()).toBe(true);
-    expect(getApiLogOsInfo()).toMatch(/\(app\)$/);
+    expect(getApiLogOsInfo()).toMatch(/（app）$/);
   });
 
   it('兼容 iOS 的 navigator.standalone 标记', () => {
@@ -32,6 +32,6 @@ describe('PWA API 日志设备标记', () => {
       matches: false,
     } as MediaQueryList);
     expect(isPwaStandaloneMode()).toBe(true);
-    expect(getApiLogOsInfo()).toMatch(/\(app\)$/);
+    expect(getApiLogOsInfo()).toMatch(/（app）$/);
   });
 });

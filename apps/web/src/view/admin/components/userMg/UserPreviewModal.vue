@@ -12,26 +12,14 @@
     <template #title>
       <div class="preview-modal-heading">
         <div class="preview-modal-title">{{ previewTitle }}</div>
-        <div
-          v-if="contextInfo"
-          class="preview-context-status"
-          :class="`mode-${contextInfo.mode}`"
-        >
+        <div v-if="contextInfo" class="preview-context-status" :class="`mode-${contextInfo.mode}`">
           <strong>{{ modeTitle }}</strong>
           <span class="preview-context-subject">{{ subjectLabel }}</span>
           <span class="preview-context-countdown">{{ countdownLabel }}</span>
-          <BButton size="small" :disabled="closing" @click.stop="closePreview">
-            {{ t('guest.adminContextExit') }}
-          </BButton>
         </div>
       </div>
     </template>
-    <iframe
-      v-if="previewUrl"
-      class="user-preview-frame"
-      :name="ADMIN_LOGIN_PREVIEW_FRAME_NAME"
-      :src="previewUrl"
-    />
+    <iframe v-if="previewUrl" class="user-preview-frame" :name="ADMIN_LOGIN_PREVIEW_FRAME_NAME" :src="previewUrl" />
   </b-modal>
 </template>
 
@@ -76,9 +64,7 @@
       : t('guest.userPreviewTitle', { name });
   });
   const modeTitle = computed(() =>
-    contextInfo.value?.mode === 'maintain'
-      ? t('guest.adminContextMaintain')
-      : t('guest.adminContextReadonly'),
+    contextInfo.value?.mode === 'maintain' ? t('guest.adminContextMaintain') : t('guest.adminContextReadonly'),
   );
   const subjectLabel = computed(() =>
     t('guest.adminContextSubject', {
@@ -196,7 +182,6 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    max-width: calc(100% - 360px);
     padding: 6px 8px 6px 12px;
     transform: translate(-50%, -50%);
     border: 1px solid rgba(97, 92, 237, 0.35);
@@ -233,6 +218,11 @@
     }
     .preview-modal-title {
       max-width: 34%;
+    }
+  }
+  @media (max-width: 768px) {
+    .preview-context-status {
+      left: 60%;
     }
   }
 </style>

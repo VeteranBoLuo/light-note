@@ -1,16 +1,8 @@
 export type CloudFileCategory =
-  | 'image'
-  | 'video'
-  | 'audio'
-  | 'pdf'
-  | 'word'
-  | 'excel'
-  | 'ppt'
-  | 'text'
-  | 'compress'
-  | 'other';
+  'image' | 'video' | 'audio' | 'pdf' | 'word' | 'excel' | 'ppt' | 'text' | 'compress' | 'other';
 
-export type CloudPreviewType = 'image' | 'video' | 'audio' | 'pdf' | 'word' | 'excel' | 'ppt' | 'text' | 'unsupported';
+export type CloudPreviewType =
+  'image' | 'video' | 'audio' | 'pdf' | 'word' | 'excel' | 'ppt' | 'html' | 'text' | 'unsupported';
 
 export const CLOUD_FILE_CATEGORY_ORDER: CloudFileCategory[] = [
   'image',
@@ -86,6 +78,7 @@ const LEGACY_OFFICE_MIME_SET = new Set([
   'application/vnd.ms-excel',
   'application/vnd.ms-powerpoint',
 ]);
+const HTML_EXT_SET = new Set(['html', 'htm']);
 
 function normalizeMimeType(fileType?: string): string {
   return String(fileType || '')
@@ -95,7 +88,9 @@ function normalizeMimeType(fileType?: string): string {
 }
 
 function getFileExtension(fileName?: string, ext?: string): string {
-  const explicit = String(ext || '').trim().toLowerCase();
+  const explicit = String(ext || '')
+    .trim()
+    .toLowerCase();
   if (explicit) return explicit;
   const name = String(fileName || '').trim();
   const idx = name.lastIndexOf('.');
@@ -109,7 +104,17 @@ export function isLegacyOfficeFile(file?: { fileName?: string; fileType?: string
   return LEGACY_OFFICE_MIME_SET.has(normalizeMimeType(file?.fileType));
 }
 
-function resolveCloudCategoryFallback(file?: { fileName?: string; fileType?: string; ext?: string }): CloudFileCategory {
+export function isHtmlFile(file?: { fileName?: string; fileType?: string; ext?: string }): boolean {
+  const extension = getFileExtension(file?.fileName, file?.ext);
+  if (extension) return HTML_EXT_SET.has(extension);
+  return normalizeMimeType(file?.fileType) === 'text/html';
+}
+
+function resolveCloudCategoryFallback(file?: {
+  fileName?: string;
+  fileType?: string;
+  ext?: string;
+}): CloudFileCategory {
   const mime = normalizeMimeType(file?.fileType);
   if (mime.startsWith('text/') || TEXT_MIME_SET.has(mime)) return 'text';
   const extension = getFileExtension(file?.fileName, file?.ext);
@@ -118,22 +123,36 @@ function resolveCloudCategoryFallback(file?: { fileName?: string; fileType?: str
 }
 
 export function normalizeCloudFileCategory(category?: string): CloudFileCategory {
-  const normalized = String(category || '').trim().toLowerCase();
+  const normalized = String(category || '')
+    .trim()
+    .toLowerCase();
   return CLOUD_FILE_CATEGORY_ORDER.includes(normalized as CloudFileCategory)
     ? (normalized as CloudFileCategory)
     : 'other';
 }
 
-export function getCloudFileCategory(file?: { category?: string; fileName?: string; fileType?: string; ext?: string }): CloudFileCategory {
+export function getCloudFileCategory(file?: {
+  category?: string;
+  fileName?: string;
+  fileType?: string;
+  ext?: string;
+}): CloudFileCategory {
   const normalized = normalizeCloudFileCategory(file?.category);
   if (normalized !== 'other') return normalized;
   return resolveCloudCategoryFallback(file);
 }
 
-export function getCloudPreviewType(file?: { category?: string; fileName?: string; fileType?: string; ext?: string }): CloudPreviewType {
+export function getCloudPreviewType(file?: {
+  category?: string;
+  fileName?: string;
+  fileType?: string;
+  ext?: string;
+}): CloudPreviewType {
   // @vue-office 的浏览器渲染器只支持 OOXML（docx/xlsx/pptx）。
   // 旧版 OLE Office 文件不能交给对应渲染器，否则会被误报为文件损坏。
   if (isLegacyOfficeFile(file)) return 'unsupported';
+  // HTML 必须进入独立沙箱，不能作为普通文本通过 v-html 注入轻笺页面。
+  if (isHtmlFile(file)) return 'html';
   const category = getCloudFileCategory(file);
   return CLOUD_FILE_PREVIEW_TYPE_MAP[category];
 }

@@ -1,5 +1,14 @@
 <template>
-  <article class="result-item" :class="[`result-item--${view}`, { 'result-item--selected': selected }]">
+  <article
+    class="result-item"
+    :class="[
+      `result-item--${view}`,
+      {
+        'result-item--selected': selected,
+        'result-item--compact': compact,
+      },
+    ]"
+  >
     <!-- 列表视图:横向紧凑行(信息密度高,适合快速检索定位) -->
     <template v-if="view === 'list'">
       <label v-if="selectable" class="row-checkbox-wrap">
@@ -93,6 +102,7 @@
     selected?: boolean;
     selectable?: boolean;
     view: ResourceView;
+    compact?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -159,6 +169,72 @@
 
   .result-item--card {
     min-height: 186px;
+  }
+
+  .result-item--compact.result-item--card {
+    min-height: 112px;
+  }
+
+  .result-item--compact .result-checkbox-wrap {
+    top: 11px;
+    right: 11px;
+  }
+
+  .result-item--compact .result-click-area {
+    gap: 5px;
+    padding: 10px 12px;
+  }
+
+  .result-item--compact .result-click-area--selectable {
+    padding-right: 36px;
+  }
+
+  .result-item--compact .item-head {
+    min-height: 21px;
+  }
+
+  .result-item--compact .type-pill {
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+
+  .result-item--compact .item-title {
+    min-height: 20px;
+    font-size: 15px;
+  }
+
+  .result-item--compact .item-desc {
+    min-height: 1.5em;
+    line-height: 1.5;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+
+  .result-item--compact .item-meta {
+    min-height: 18px;
+    margin-top: 1px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .result-item--compact .meta-line {
+    min-width: 0;
+    max-width: 60%;
+    line-height: 18px;
+  }
+
+  .result-item--compact .meta-line:last-child {
+    margin-left: auto;
+    max-width: 40%;
+  }
+
+  .result-item--compact .meta-line strong {
+    display: none;
+  }
+
+  .result-item--compact .meta-line-value {
+    margin-left: 0;
   }
 
   /* 列表视图:横向紧凑行——覆盖卡片的最小高度与位移 hover,一行内横排:类型 / 标题 / 描述 / 标签 / 时间 */

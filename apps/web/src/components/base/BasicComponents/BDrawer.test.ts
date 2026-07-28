@@ -163,6 +163,42 @@ describe('BDrawer compositor cleanup', () => {
     expect(panel?.style.width).toBe('576px');
   });
 
+  it('supports a bottom placement without changing the default side drawer layout', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(BDrawer, {
+            open: true,
+            title: 'Bottom filters',
+            placement: 'bottom',
+            height: '60dvh',
+          });
+      },
+    });
+    app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await nextTick();
+    await nextTick();
+    const panel = document.querySelector<HTMLElement>('.b-drawer-panel');
+    expect(panel?.classList.contains('b-drawer-panel--bottom')).toBe(true);
+    expect(panel?.style.width).toBe('100%');
+    expect(panel?.style.height).toBe('60dvh');
+    expect(panel?.style.minWidth).toBe('0px');
+  });
+
   it('normalizes pointer coordinates under root zoom and clamps to a narrow desktop viewport', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);

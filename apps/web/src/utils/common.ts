@@ -152,7 +152,7 @@ export function isPwaStandaloneMode() {
 
 export function getApiLogOsInfo() {
   const os = getUserOsInfo();
-  return isPwaStandaloneMode() ? `${os}(app)` : os;
+  return isPwaStandaloneMode() ? `${os}（app）` : os;
 }
 
 // fingerprint.js
@@ -399,7 +399,10 @@ export async function noteDisplayText(content: string = '', type?: string): Prom
     }
   }
   if (typeof document === 'undefined') {
-    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(); // 无 DOM 兜底
+    return html
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(); // 无 DOM 兜底
   }
   const div = document.createElement('div');
   div.innerHTML = html;

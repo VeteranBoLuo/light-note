@@ -737,6 +737,8 @@ export default {
     startSearch: 'Enter a keyword to start',
     mobileEmptyTitle: 'Search your LightNote library',
     mobileEmptyDesc: 'Bring scattered content together and return to the resource you need.',
+    mobileFiltersTitle: 'Filter Search Results',
+    resourceState: 'Resource Status',
     clearFilters: 'Clear Filters',
     tagFilter: 'Tag Filter',
     tagExpand: 'Show all {count}',
@@ -1083,6 +1085,8 @@ export default {
     download: 'Download',
     previewPanel: {
       close: 'Close preview',
+      enterFullscreen: 'Preview fullscreen',
+      exitFullscreen: 'Exit fullscreen',
       loading: 'Loading file…',
       loadFailed: 'Failed to load file',
       retry: 'Reload',

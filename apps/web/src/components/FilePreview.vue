@@ -1,22 +1,58 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="fullscreen-preview">
+    <div
+      v-if="visible"
+      ref="previewRootRef"
+      class="fullscreen-preview"
+      :class="{ 'html-fullscreen-mode': isHtmlFullscreen }"
+    >
       <div class="preview-header">
         <div class="preview-title">
           <span class="file-type-badge">{{ getFileTypeName(currentCategory) }}</span>
           <span class="file-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
         </div>
         <div class="preview-actions">
+          <BTooltip
+            v-if="previewType === 'html' && !loading && !error"
+            :title="t('cloudSpace.previewPanel.enterFullscreen')"
+          >
+            <BButton
+              size="small"
+              class="action-btn header-fullscreen-btn"
+              :aria-label="t('cloudSpace.previewPanel.enterFullscreen')"
+              @click="enterHtmlFullscreen"
+            >
+              <SvgIcon :src="icon.ai.maximize" size="17" />
+            </BButton>
+          </BTooltip>
           <BTooltip :title="t('cloudSpace.previewPanel.close')">
-            <BButton size="small" @click="handleClose" class="action-btn header-close-btn">
+            <BButton
+              size="small"
+              class="action-btn header-close-btn"
+              :aria-label="t('cloudSpace.previewPanel.close')"
+              @click="handleClose"
+            >
               <SvgIcon :src="icon.common.close" size="17" />
             </BButton>
           </BTooltip>
         </div>
       </div>
+      <div v-if="isHtmlFullscreen" class="fullscreen-exit-bar">
+        <BTooltip :title="t('cloudSpace.previewPanel.exitFullscreen')">
+          <BButton
+            size="small"
+            class="exit-fullscreen-btn"
+            :aria-label="t('cloudSpace.previewPanel.exitFullscreen')"
+            @click="exitHtmlFullscreen"
+          >
+            <SvgIcon :src="icon.ai.restoreWindow" size="17" />
+            <span>{{ t('cloudSpace.previewPanel.exitFullscreen') }}</span>
+          </BButton>
+        </BTooltip>
+      </div>
       <div class="preview-content" @click.stop>
         <ResourceBacklinks
-          v-if="fileInfo?.id"
+          v-if="fileInfo?.id && !isHtmlFullscreen"
           class="file-preview-backlinks"
           target-type="file"
           :target-id="String(fileInfo.id)"
@@ -48,6 +84,19 @@
             v-if="previewType === 'pdf' && pdfBlobUrl"
             :src="pdfBlobUrl"
             class="preview-iframe"
+            @load="onLoad"
+            @error="onError"
+          />
+
+          <!-- 1.5 HTML 交互预览：必须与轻笺页面隔离，禁止直接 v-html 注入 -->
+          <iframe
+            v-else-if="previewType === 'html' && htmlBlobUrl"
+            :src="htmlBlobUrl"
+            :title="fileInfo.fileName"
+            :sandbox="HTML_PREVIEW_SANDBOX"
+            :referrerpolicy="HTML_PREVIEW_REFERRER_POLICY"
+            class="html-preview-iframe"
+            allow="fullscreen"
             @load="onLoad"
             @error="onError"
           />
@@ -148,10 +197,7 @@
                 }}</span>
               </div>
             </div>
-            <template v-if="isHtmlText">
-              <div v-html="textContent" class="html-container"></div>
-            </template>
-            <template v-else-if="isMarkdownFile">
+            <template v-if="isMarkdownFile">
               <div
                 ref="markdownContainerRef"
                 v-html="markdownContent"
@@ -186,7 +232,10 @@
         </div>
 
         <!-- 预览控制栏：悬浮在内容区内，避免额外占用预览高度 -->
-        <div v-if="!loading && !error && !unsupportedTypes.includes(previewType)" class="preview-controls">
+        <div
+          v-if="!loading && !error && !unsupportedTypes.includes(previewType) && !isHtmlFullscreen"
+          class="preview-controls"
+        >
           <div v-if="showNext" class="preview-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.previous')">
               <BButton size="small" @click="handlePrev" class="action-btn">
@@ -253,6 +302,7 @@
     getCloudPreviewType,
     isLegacyOfficeFile,
   } from '@/constants/cloudFileCategory.ts';
+  import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview.ts';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -292,6 +342,9 @@
   const textContent = ref('');
   const wrapText = ref(true);
   const pdfBlobUrl = ref<string>('');
+  const htmlBlobUrl = ref<string>('');
+  const previewRootRef = ref<HTMLElement | null>(null);
+  const isHtmlFullscreen = ref(false);
   const previewHistoryActive = ref(false);
   const markdownContainerRef = ref<HTMLElement | null>(null);
   const markdownContent = ref('');
@@ -309,29 +362,14 @@
   const legacyOfficeFile = computed(() => isLegacyOfficeFile(props.fileInfo));
   const unsupportedTitle = computed(() =>
     t(
-      legacyOfficeFile.value
-        ? 'cloudSpace.previewPanel.legacyOfficeTitle'
-        : 'cloudSpace.previewPanel.unsupportedTitle',
+      legacyOfficeFile.value ? 'cloudSpace.previewPanel.legacyOfficeTitle' : 'cloudSpace.previewPanel.unsupportedTitle',
     ),
   );
   const unsupportedDescription = computed(() =>
-    t(
-      legacyOfficeFile.value
-        ? 'cloudSpace.previewPanel.legacyOfficeDesc'
-        : 'cloudSpace.previewPanel.unsupportedDesc',
-    ),
+    t(legacyOfficeFile.value ? 'cloudSpace.previewPanel.legacyOfficeDesc' : 'cloudSpace.previewPanel.unsupportedDesc'),
   );
   const zoomPercent = computed(() => `${Math.round(scale.value * 100)}%`);
   const unsupportedTypes = ['unsupported'];
-  const normalizedMimeType = computed(
-    () =>
-      String(props.fileInfo.fileType || '')
-        .trim()
-        .toLowerCase()
-        .split(';')[0],
-  );
-  const isHtmlText = computed(() => normalizedMimeType.value === 'text/html');
-
   const isMarkdownFile = computed(() => {
     const fileName = props.fileInfo?.fileName?.toLowerCase() || '';
     return fileName?.endsWith('.md') || fileName?.endsWith('.markdown');
@@ -425,7 +463,9 @@
         return;
       }
       if (!newVisible) {
+        void exitHtmlFullscreen();
         activePreviewFileId = '';
+        releaseHtmlBlobUrl();
         document.body.style.overflow = previousBodyOverflow;
         previewHistoryActive.value = false;
       }
@@ -468,12 +508,15 @@
     errorMessage.value = '';
     textContent.value = '';
     markdownContent.value = '';
+    releaseHtmlBlobUrl();
     try {
       if (['word', 'excel', 'ppt'].includes(previewType.value)) {
         await ensureOfficeStylesLoaded();
       }
       if (previewType.value === 'pdf') {
         await loadPdfBlob(effectiveFileUrl.value);
+      } else if (previewType.value === 'html') {
+        await loadHtmlBlob(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
       } else if (unsupportedTypes.includes(previewType.value)) {
@@ -482,6 +525,42 @@
     } catch (err) {
       error.value = true;
       errorMessage.value = t('cloudSpace.previewPanel.loadFailed');
+      loading.value = false;
+    }
+  }
+
+  function releaseHtmlBlobUrl() {
+    if (!htmlBlobUrl.value) return;
+    URL.revokeObjectURL(htmlBlobUrl.value);
+    htmlBlobUrl.value = '';
+  }
+
+  async function loadHtmlBlob(url?: string) {
+    if (!url) {
+      error.value = true;
+      errorMessage.value = t('cloudSpace.previewPanel.invalidUrl');
+      loading.value = false;
+      return;
+    }
+
+    const expectedFileId = activePreviewFileId;
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`HTTP错误! 状态码: ${response.status}`);
+      }
+      const sourceBlob = await response.blob();
+      if (expectedFileId !== activePreviewFileId) return;
+
+      // 强制使用 text/html，兼容对象存储把 .html 误标为 application/octet-stream 的情况。
+      const htmlBlob = new Blob([sourceBlob], { type: 'text/html;charset=utf-8' });
+      htmlBlobUrl.value = URL.createObjectURL(htmlBlob);
+      // 保持加载态，直到 iframe 真正完成导航并触发 onLoad。
+    } catch (err) {
+      if (expectedFileId !== activePreviewFileId) return;
+      console.error('加载HTML文件失败:', err);
+      error.value = true;
+      errorMessage.value = t('cloudSpace.previewPanel.textLoadFailed');
       loading.value = false;
     }
   }
@@ -677,12 +756,48 @@
     startPreview(props.fileInfo);
   }
 
+  async function enterHtmlFullscreen() {
+    const previewRoot = previewRootRef.value;
+    if (previewType.value !== 'html' || !previewRoot) return;
+
+    // 先进入轻笺沉浸态，Fullscreen API 不可用或被浏览器拒绝时仍可正常使用。
+    isHtmlFullscreen.value = true;
+    if (typeof previewRoot.requestFullscreen !== 'function') return;
+
+    try {
+      await previewRoot.requestFullscreen();
+    } catch {
+      // 浏览器可能因权限或运行环境拒绝原生全屏，此时保留页面内沉浸态作为兼容降级。
+    }
+  }
+
+  async function exitHtmlFullscreen() {
+    isHtmlFullscreen.value = false;
+    const previewRoot = previewRootRef.value;
+    if (!previewRoot || document.fullscreenElement !== previewRoot || typeof document.exitFullscreen !== 'function') return;
+
+    try {
+      await document.exitFullscreen();
+    } catch (err) {
+      console.warn('退出浏览器全屏失败:', err);
+    }
+  }
+
+  function handleFullscreenChange() {
+    if (document.fullscreenElement === previewRootRef.value) {
+      isHtmlFullscreen.value = true;
+      return;
+    }
+    isHtmlFullscreen.value = false;
+  }
+
   function handleClose() {
     // 清理PDF blob URL
     if (pdfBlobUrl.value) {
       URL.revokeObjectURL(pdfBlobUrl.value);
       pdfBlobUrl.value = '';
     }
+    releaseHtmlBlobUrl();
     rotate.value = 0; // 重置旋转角度
     scale.value = 1; // 重置缩放
     imagePosition.value = { x: 0, y: 0 }; // 重置位置
@@ -774,10 +889,15 @@
     if (e.key === 'Escape') {
       e.preventDefault();
       if (e.repeat) return;
+      if (isHtmlFullscreen.value) {
+        void exitHtmlFullscreen();
+        return;
+      }
       handleClose();
       return;
     }
 
+    if (isHtmlFullscreen.value) return;
     if (!showNext.value) return;
 
     if (e.key === 'ArrowLeft') {
@@ -823,6 +943,7 @@
     document.addEventListener('wheel', handleWheel, { passive: false });
     document.addEventListener('mousedown', handleMiddleDblClick);
     document.addEventListener('selectstart', preventSelect);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
     window.addEventListener('popstate', handlePopState);
   });
 
@@ -832,6 +953,7 @@
     document.removeEventListener('wheel', handleWheel);
     document.removeEventListener('mousedown', handleMiddleDblClick);
     document.removeEventListener('selectstart', preventSelect);
+    document.removeEventListener('fullscreenchange', handleFullscreenChange);
     window.removeEventListener('popstate', handlePopState);
     document.body.style.overflow = previousBodyOverflow;
     // 清理PDF blob URL
@@ -839,6 +961,8 @@
       URL.revokeObjectURL(pdfBlobUrl.value);
       pdfBlobUrl.value = '';
     }
+    releaseHtmlBlobUrl();
+    void exitHtmlFullscreen();
   });
 </script>
 
@@ -853,6 +977,48 @@
     z-index: 900;
     isolation: isolate;
     overflow: hidden;
+
+    &:fullscreen {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    &.html-fullscreen-mode {
+      grid-template-rows: 40px minmax(0, 1fr);
+
+      .preview-header {
+        display: none;
+      }
+
+      .preview-content {
+        grid-row: 2;
+      }
+    }
+
+    .fullscreen-exit-bar {
+      grid-row: 1;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-width: 0;
+      padding: 0 max(10px, env(safe-area-inset-right)) 0 max(10px, env(safe-area-inset-left));
+      border-bottom: 1px solid var(--card-border-color);
+      background: color-mix(in srgb, var(--background-color) 94%, var(--primary-color) 6%);
+      box-sizing: border-box;
+    }
+
+    .exit-fullscreen-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      height: 34px;
+      padding: 0 12px;
+      border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
+      border-radius: 10px;
+      color: var(--text-color);
+      background: var(--primary-btn-bg-color);
+    }
 
     .preview-header {
       position: relative;
@@ -907,13 +1073,18 @@
           justify-content: center;
         }
 
-        .header-close-btn {
+        .header-close-btn,
+        .header-fullscreen-btn {
           width: 30px;
           min-width: 30px;
           height: 30px;
           padding: 0;
           border-radius: 9px;
           color: var(--desc-color);
+        }
+
+        .header-fullscreen-btn {
+          color: var(--text-color);
         }
       }
     }
@@ -1006,6 +1177,13 @@
           width: 100%;
           height: 100%;
           border: none;
+        }
+
+        .html-preview-iframe {
+          width: 100%;
+          height: 100%;
+          border: none;
+          background: var(--background-color);
         }
 
         .preview-pdf-viewer {
@@ -1209,16 +1387,6 @@
     }
   }
 
-  .html-container {
-    color: var(--text-color);
-    padding: 9px 9px 86px;
-    :deep(a) {
-      text-decoration: underline !important;
-      font-family: 'Arial', sans-serif;
-      font-weight: 600;
-    }
-  }
-
   .markdown-container {
     flex: 1;
     margin: 0;
@@ -1287,6 +1455,12 @@
     }
   }
 
+  @media (max-width: 767px) {
+    .header-fullscreen-btn {
+      display: none;
+    }
+  }
+
   @media (max-width: 600px) {
     .fullscreen-preview {
       grid-template-rows: 44px minmax(0, 1fr);
@@ -1316,6 +1490,10 @@
           padding: 6px;
           border-radius: 13px;
         }
+      }
+
+      &.html-fullscreen-mode {
+        grid-template-rows: 40px minmax(0, 1fr);
       }
     }
   }

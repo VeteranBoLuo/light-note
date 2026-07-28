@@ -5,16 +5,22 @@
     :subtitle="t('resourceCenter.subtitle')"
     accent="neutral"
     layout="workspace"
+    :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
   >
-    <div class="search-page" :class="{ 'search-page--night': user.currentTheme === 'night' }">
+    <div
+      class="search-page"
+      :class="{
+        'search-page--night': user.currentTheme === 'night',
+        'search-page--mobile': bookmark.isMobile,
+      }"
+    >
       <div class="search-page-topbar">
         <ResourceCenterSectionNav class="section-switcher" />
       </div>
 
-      <BCard as="section" variant="raised" padding="16px 20px" class="search-header">
+      <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
         <div class="search-header-input">
           <b-input
-            v-if="!bookmark.isMobile"
             id="search-center-input"
             v-model:value="queryState.keyword"
             :placeholder="t('resourceCenter.searchPlaceholder')"
@@ -54,13 +60,14 @@
       </BCard>
 
       <section class="search-layout">
-        <BCard as="aside" variant="card" padding="12px" class="type-filter">
+        <BCard ref="typeFilterRef" as="aside" variant="card" padding="12px" class="type-filter">
           <BButton
             v-for="item in typeFilters"
             :key="item.value"
             class="filter-item"
             :class="{ active: queryState.type === item.value }"
-            @click="setActiveType(item.value)"
+            :data-search-type="item.value"
+            @click="selectActiveType(item.value)"
             v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
           >
             <span class="filter-dot" :class="`filter-dot--${item.value}`"></span>
@@ -73,9 +80,41 @@
           <div class="result-toolbar result-toolbar--summary">
             <div class="result-heading">
               <div class="result-title">{{ t('resourceCenter.results') }}</div>
-              <div class="result-subtitle">{{ resultSubtitle }}</div>
+              <div class="result-subtitle">{{ bookmark.isMobile ? mobileResultSubtitle : resultSubtitle }}</div>
             </div>
-            <div class="toolbar-actions">
+            <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
+              <BButton
+                class="mobile-toolbar-btn mobile-toolbar-btn--icon"
+                :loading="viewState.loading"
+                :aria-label="t('resourceCenter.refresh')"
+                :title="t('resourceCenter.refresh')"
+                @click="refreshData"
+                v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+              >
+                <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" aria-hidden="true" />
+              </BButton>
+              <BButton
+                class="mobile-toolbar-btn mobile-filter-btn"
+                :class="{ active: mobileActiveFilterCount > 0 }"
+                @click="mobileFilterVisible = true"
+                v-click-log="{ module: '资源中心', operation: '打开移动端筛选' }"
+              >
+                <SvgIcon :src="icon.cloudSpace.filter" size="15" aria-hidden="true" />
+                <span>{{ t('common.filter') }}</span>
+                <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{ mobileActiveFilterCount }}</span>
+              </BButton>
+              <BButton
+                class="mobile-toolbar-btn mobile-ai-btn"
+                :disabled="!queryState.keyword.trim() && !selectedIds.length"
+                :aria-label="t('ai.entry.askSearch')"
+                :title="t('ai.entry.askSearch')"
+                @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
+              >
+                <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
+                <span>AI</span>
+              </BButton>
+            </div>
+            <div v-else class="toolbar-actions">
               <BButton
                 size="small"
                 class="clear-btn"
@@ -97,7 +136,7 @@
             </div>
           </div>
 
-          <section class="advanced-filters">
+          <section v-if="!bookmark.isMobile" class="advanced-filters">
             <div class="filter-row">
               <label class="select-wrap">
                 <span>{{ t('resourceCenter.sort.label') }}</span>
@@ -171,6 +210,9 @@
               <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
             </div>
             <div class="batch-actions">
+              <b-button v-if="bookmark.isMobile" @click="toggleSelectAllVisible">
+                {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
+              </b-button>
               <b-button @click="openSearchAi('organize')">
                 <SvgIcon :src="icon.ai.organize" size="15" />
                 {{ t('ai.entry.organizeSelected') }}
@@ -223,6 +265,7 @@
                       :selected="selectedIds.includes(getItemSelectionKey(item))"
                       :selectable="true"
                       :view="effectiveView"
+                      :compact="bookmark.isMobile"
                       @open="openItem(item)"
                       @toggle-select="toggleSelect(item)"
                     />
@@ -271,6 +314,71 @@
       </section>
     </div>
   </ResourcePageShell>
+
+  <BDrawer
+    v-if="bookmark.isMobile"
+    :open="mobileFilterVisible"
+    :title="t('resourceCenter.mobileFiltersTitle')"
+    placement="bottom"
+    height="min(76dvh, 640px)"
+    body-padding="14px 16px max(18px, env(safe-area-inset-bottom))"
+    @close="mobileFilterVisible = false"
+  >
+    <div class="mobile-filter-drawer">
+      <div class="mobile-filter-field">
+        <span class="mobile-filter-label">{{ t('resourceCenter.sort.label') }}</span>
+        <BSelect
+          class="mobile-filter-select"
+          :options="sortOptions"
+          v-model:value="queryState.sort"
+          @change="applyQueryState('切换排序')"
+        />
+      </div>
+
+      <div class="mobile-filter-field">
+        <span class="mobile-filter-label">{{ t('resourceCenter.date.label') }}</span>
+        <BSelect
+          class="mobile-filter-select"
+          :options="dateOptions"
+          v-model:value="queryState.date"
+          @change="applyQueryState('筛选时间范围')"
+        />
+      </div>
+
+      <div class="mobile-filter-section">
+        <span class="mobile-filter-label">{{ t('resourceCenter.resourceState') }}</span>
+        <BButton
+          class="tagless-btn mobile-filter-toggle"
+          :class="{ active: queryState.untagged }"
+          @click="toggleUntagged"
+        >
+          {{ t('resourceCenter.untagged') }}
+        </BButton>
+      </div>
+
+      <div v-if="tagOptions.length" class="mobile-filter-section">
+        <span class="mobile-filter-label">{{ t('resourceCenter.tagFilter') }}</span>
+        <div class="mobile-filter-tags">
+          <BButton
+            v-for="tag in tagOptions"
+            :key="tag"
+            class="tag-chip"
+            :class="{ active: queryState.tags.includes(tag) }"
+            @click="toggleTagFilter(tag)"
+          >
+            {{ tag }}
+          </BButton>
+        </div>
+      </div>
+
+      <div class="mobile-filter-footer">
+        <BButton :disabled="!hasActiveAdvancedFilters" @click="clearAdvancedFilters">
+          {{ t('resourceCenter.clearFilters') }}
+        </BButton>
+        <BButton type="primary" @click="mobileFilterVisible = false">{{ t('common.confirm') }}</BButton>
+      </div>
+    </div>
+  </BDrawer>
 </template>
 
 <script setup lang="ts">
@@ -282,6 +390,7 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import icon from '@/config/icon.ts';
@@ -318,6 +427,7 @@
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { resolveMobileTypeFilterScrollLeft } from '@/components/searchCenter/mobileTypeFilterScroll';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
@@ -334,6 +444,8 @@
   const REFRESH_SKELETON_MS = 360;
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
+  const mobileFilterVisible = ref(false);
+  const typeFilterRef = ref<{ $el?: Element } | null>(null);
   let requestSeq = 0;
   const summaryTotals = ref<Record<SearchType, number>>({
     bookmark: 0,
@@ -439,6 +551,13 @@
       queryState.untagged ||
       queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance'),
   );
+  const mobileActiveFilterCount = computed(
+    () =>
+      queryState.tags.length +
+      Number(queryState.date !== 'all') +
+      Number(queryState.untagged) +
+      Number(queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance')),
+  );
 
   // 标签筛选 chips 折叠:默认收起,标签较多时点「更多」展开(原 hero 统计卡已删,信息与左侧类型筛选栏重复)
   const showAllTags = ref(false);
@@ -461,6 +580,7 @@
     const prefix = q ? t('resourceCenter.keywordSummary', { keyword: q }) : t('resourceCenter.defaultSummary');
     return `${prefix} · ${t('resourceCenter.totalCount', { count: allVisibleItems.value.length })}`;
   });
+  const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: allVisibleItems.value.length }));
   function menuForSearchItem(item: DisplaySearchItem) {
     const deleteItem = {
       key: 'delete',
@@ -669,6 +789,30 @@
     queryState.type = type;
     selectedIds.value = [];
     applyQueryState(`筛选搜索类型【${getSearchTypeLabel(t, type)}】`);
+  }
+
+  function scrollMobileTypeFilter(type: SearchType | 'all') {
+    if (!bookmark.isMobile) return;
+    nextTick(() => {
+      const container = typeFilterRef.value?.$el;
+      if (!(container instanceof HTMLElement)) return;
+      const target = container.querySelector<HTMLElement>(`[data-search-type="${type}"]`);
+      const left = resolveMobileTypeFilterScrollLeft(type, {
+        maxScroll: Math.max(0, container.scrollWidth - container.clientWidth),
+        viewportWidth: container.clientWidth,
+        activeOffsetLeft: target?.offsetLeft || 0,
+        activeWidth: target?.offsetWidth || 0,
+      });
+      container.scrollTo({
+        left,
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+    });
+  }
+
+  function selectActiveType(type: SearchType | 'all') {
+    setActiveType(type);
+    scrollMobileTypeFilter(type);
   }
 
   function setView(view: ResourceView) {
@@ -950,7 +1094,11 @@
 
   // 打开资源中心自动聚焦搜索框(移动端不主动聚焦,避免一进页面就弹出软键盘)。
   onMounted(() => {
-    if (!bookmark.isMobile) focusSearchInput();
+    if (bookmark.isMobile) {
+      scrollMobileTypeFilter(queryState.type);
+    } else {
+      focusSearchInput();
+    }
   });
 
   onBeforeUnmount(() => {
@@ -2158,5 +2306,348 @@
     .result-grid--list {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+
+  /* 移动端使用独立的紧凑工作区：顶部仅保留视图与类型切换，筛选进入底部抽屉，结果占满余下高度。 */
+  .search-center-shell--mobile :deep(.resource-page-header) {
+    display: none;
+  }
+
+  .search-center-shell--mobile :deep(.resource-page-body) {
+    overflow: hidden;
+  }
+
+  .search-page--mobile {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .search-page--mobile .search-page-topbar {
+    flex: 0 0 auto;
+    margin-bottom: 6px;
+  }
+
+  .search-page--mobile .section-switcher {
+    margin-bottom: 0;
+  }
+
+  .search-page--mobile .search-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .search-page--mobile .type-filter {
+    --b-card-background: transparent;
+    --b-card-shadow: none;
+
+    width: 100%;
+    flex: 0 0 auto;
+    position: static;
+    padding: 1px 0 4px !important;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .search-page--mobile .type-filter::-webkit-scrollbar {
+    display: none;
+  }
+
+  .search-page--mobile .filter-item {
+    width: auto;
+    min-width: max-content;
+    height: 34px;
+    flex: 0 0 auto;
+    padding: 0 11px;
+    display: inline-flex;
+    grid-template-columns: none;
+    gap: 6px;
+    border: 1px solid var(--search-border-color);
+    border-radius: 999px;
+    background: var(--search-card-bg);
+    box-shadow: none;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .search-page--mobile .filter-item.active {
+    border-color: color-mix(in srgb, var(--primary-color) 34%, var(--search-border-color));
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--search-card-bg));
+    color: var(--primary-color);
+  }
+
+  .search-page--mobile .filter-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .search-page--mobile .filter-count {
+    font-size: 11px;
+  }
+
+  .search-page--mobile .result-panel {
+    --b-card-background: transparent;
+    --b-card-shadow: none;
+
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .search-page--mobile .result-toolbar--summary {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 4px 0 7px;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .search-page--mobile .result-heading {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: baseline;
+    flex-direction: row;
+    gap: 7px;
+  }
+
+  .search-page--mobile .result-title {
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .search-page--mobile .result-subtitle {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .search-page--mobile .toolbar-actions--mobile {
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .search-page--mobile .mobile-toolbar-btn {
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    padding: 0 9px;
+    gap: 4px;
+    border: 1px solid var(--search-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--search-card-bg);
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .search-page--mobile .mobile-toolbar-btn--icon {
+    width: 34px;
+    padding: 0;
+  }
+
+  .search-page--mobile .mobile-toolbar-btn.active {
+    border-color: color-mix(in srgb, var(--primary-color) 35%, var(--search-border-color));
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--search-card-bg));
+  }
+
+  .search-page--mobile .mobile-toolbar-btn:disabled {
+    opacity: 0.48;
+  }
+
+  .mobile-filter-count {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .search-page--mobile .batch-toolbar {
+    flex: 0 0 auto;
+    min-width: 0;
+    margin-top: 6px;
+    padding: 6px 8px;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--search-card-bg));
+  }
+
+  .search-page--mobile .batch-left {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .search-page--mobile .batch-actions {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 auto;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .search-page--mobile .batch-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .search-page--mobile .batch-actions :deep(.b_btn) {
+    width: auto;
+    min-width: max-content;
+    height: 30px;
+    flex: 0 0 auto;
+    padding: 0 9px;
+    font-size: 11px;
+  }
+
+  .search-page--mobile .result-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 0;
+    padding: 0 2px 12px;
+    overflow: hidden auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .search-page--mobile .result-group {
+    margin-top: 9px;
+  }
+
+  .search-page--mobile .result-group:first-child,
+  .search-page--mobile .result-skeleton {
+    margin-top: 7px;
+  }
+
+  .search-page--mobile .group-header {
+    margin-bottom: 6px;
+    padding: 0 2px;
+    font-size: 12px;
+  }
+
+  .search-page--mobile .result-grid,
+  .search-page--mobile .result-grid--list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .search-page--mobile .result-skeleton {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .search-page--mobile .result-sk-card {
+    min-height: 106px;
+    padding: 10px 12px;
+    gap: 7px;
+    border-radius: 14px;
+  }
+
+  .search-page--mobile .result-sk-line--desc2,
+  .search-page--mobile .result-sk-line--meta2 {
+    display: none;
+  }
+
+  .search-page--mobile .result-sk-meta {
+    min-height: 11px;
+    margin-top: 0;
+  }
+
+  .search-page--mobile .empty-state {
+    min-height: 100%;
+  }
+
+  .mobile-filter-drawer {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .mobile-filter-field,
+  .mobile-filter-section {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .mobile-filter-label {
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .mobile-filter-select {
+    width: 100%;
+  }
+
+  .mobile-filter-toggle {
+    width: max-content;
+    min-height: 34px;
+  }
+
+  .mobile-filter-tags {
+    max-height: 30dvh;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    overflow-y: auto;
+  }
+
+  .mobile-filter-footer {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
+    padding-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    background: var(--background-color);
+  }
+
+  .mobile-filter-footer :deep(.b_btn) {
+    width: 100%;
+    min-height: 40px;
   }
 </style>

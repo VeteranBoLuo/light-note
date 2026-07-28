@@ -18,6 +18,7 @@
         :class="{
           'b-drawer-panel--fullscreen': fullScreen,
           'b-drawer-panel--mobile-fullscreen': mobileFullScreen,
+          'b-drawer-panel--bottom': placement === 'bottom',
         }"
         :style="panelStyle"
         role="dialog"
@@ -73,6 +74,8 @@
       open: boolean;
       title?: string;
       width?: string;
+      height?: string;
+      placement?: 'right' | 'bottom';
       maskClosable?: boolean;
       fullScreen?: boolean;
       mobileFullScreen?: boolean;
@@ -91,6 +94,8 @@
     {
       title: '',
       width: '640px',
+      height: 'min(76dvh, 640px)',
+      placement: 'right',
       maskClosable: true,
       fullScreen: false,
       mobileFullScreen: false,
@@ -227,15 +232,22 @@
   watch(layoutViewportWidth, () => {
     if (currentWidth.value) currentWidth.value = clampWidth(currentWidth.value);
   });
-  const panelStyle = computed(() =>
-    props.fullScreen
-      ? { width: '100%', minWidth: '100%', maxWidth: '100%' }
-      : {
-          width: props.resizable && currentWidth.value ? `${currentWidth.value}px` : panelWidth.value,
-          minWidth: props.resizable ? `${resolvedMinWidth.value}px` : undefined,
-          maxWidth: props.resizable ? `${resolvedMaxWidth.value}px` : undefined,
-        },
-  );
+  const panelStyle = computed(() => {
+    if (props.fullScreen) return { width: '100%', minWidth: '100%', maxWidth: '100%' };
+    if (props.placement === 'bottom') {
+      return {
+        width: '100%',
+        minWidth: '0',
+        maxWidth: '100%',
+        height: props.height,
+      };
+    }
+    return {
+      width: props.resizable && currentWidth.value ? `${currentWidth.value}px` : panelWidth.value,
+      minWidth: props.resizable ? `${resolvedMinWidth.value}px` : undefined,
+      maxWidth: props.resizable ? `${resolvedMaxWidth.value}px` : undefined,
+    };
+  });
 
   function isNumeric(v: string): boolean {
     return /^\d+$/.test(v);
@@ -517,6 +529,24 @@
 
   .b-drawer-panel--fullscreen {
     .fullscreen-drawer();
+  }
+
+  .b-drawer-panel--bottom {
+    top: auto;
+    left: 0;
+    min-height: 240px;
+    max-height: calc(100% - env(safe-area-inset-top));
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.16);
+    transform: translateY(100%);
+
+    .b-drawer-header {
+      padding: 14px 18px 12px;
+    }
+
+    .b-drawer-body {
+      padding-bottom: max(18px, env(safe-area-inset-bottom));
+    }
   }
 
   @media (max-width: 767px) {

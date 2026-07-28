@@ -861,7 +861,7 @@
       min-width: 0;
       height: 40px;
       box-sizing: border-box;
-      flex: 1 1 0;
+      flex: 3 1 0;
     }
 
     .cloud-view-button {
@@ -886,7 +886,7 @@
 
     .cloud-type-filter {
       min-width: 0;
-      flex: 1 1 0;
+      flex: 2 1 0;
     }
 
     .cloud-type-filter :deep(.filter-button) {

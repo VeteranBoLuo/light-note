@@ -725,6 +725,8 @@ export default {
     startSearch: '输入关键词开始搜索',
     mobileEmptyTitle: '搜索你的轻笺知识库',
     mobileEmptyDesc: '把零散内容聚在一起找，快速回到需要的资源。',
+    mobileFiltersTitle: '筛选搜索结果',
+    resourceState: '资源状态',
     clearFilters: '清空筛选',
     tagFilter: '标签筛选',
     tagExpand: '展开全部 {count} 个',
@@ -1066,6 +1068,8 @@ export default {
     download: '下载',
     previewPanel: {
       close: '关闭预览',
+      enterFullscreen: '全屏预览',
+      exitFullscreen: '退出全屏',
       loading: '文件加载中…',
       loadFailed: '文件加载失败',
       retry: '重新加载',

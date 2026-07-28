@@ -176,7 +176,7 @@
         <span :style="{ width: `${downloadProgress.percent}%` }"></span>
       </div>
     </div>
-    <div v-if="viewMode === 'table'" class="field-header">
+    <div v-if="viewMode === 'table' && !bookmark.isMobile" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
         <span class="field-header-label">{{ $t('cloudSpace.fileName') }}</span>
       </div>

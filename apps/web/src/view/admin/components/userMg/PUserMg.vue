@@ -14,21 +14,52 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'operation'">
-          <b-space>
+          <b-dropdown
+            class="card-more-menu"
+            :trigger="'click'"
+            :menu-options="[
+              {
+                label: $t('common.reName'),
+                icon: icon.cloudSpace.rename,
+                function: () => openRenameModal(item),
+              },
+              {
+                label: $t('cloudSpace.share'),
+                icon: icon.cloudSpace.share,
+                function: () => handleShareFile(item.id, item.fileName, item.fileType, item.shareToken),
+              },
+              {
+                label: $t('cloudSpace.moveFile'),
+                icon: icon.cloudSpace.moveFile,
+                function: () => emit('moveField', [item]),
+              },
+              {
+                label: $t('cloudSpace.relateTags'),
+                icon: icon.manage_categoryBtn_tag,
+                function: () => openTagDialog(item),
+              },
+              {
+                label: $t('cloudSpace.aiUseFile'),
+                icon: icon.ai.ask,
+                function: () => openFilesInAi([item]),
+              },
+              {
+                label: $t('inbox.addExisting'),
+                icon: icon.common.more,
+                function: () => addFileToInbox(item),
+              },
+              {
+                label: $t('common.delete'),
+                icon: icon.noteDetail.delete,
+                danger: true,
+                function: () => handleDelFile(item),
+              },
+            ]"
+          >
             <BTooltip :title="t('guest.userPreviewEntry')">
-              <svg-icon
-                :src="icon.navigation.user"
-                size="16"
-                @click.stop="loginAsUser(record)"
-                class="dom-hover"
-              />
+              <svg-icon :src="icon.common.more" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
             </BTooltip>
-            <BTooltip :title="t('guest.adminContextMaintainEntry')">
-              <BButton size="small" @click.stop="maintainAsUser(record)">{{ t('guest.adminContextMaintainShort') }}</BButton>
-            </BTooltip>
-            <BActionButton action="edit" :tooltip="t('common.edit')" @click="editUser(record)" />
-            <BActionButton action="delete" :tooltip="t('common.delete')" @click="delUser(record)" />
-          </b-space>
+          </b-dropdown>
         </template>
       </template>
     </BTable>
@@ -48,16 +79,43 @@
     <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
 
     <BModal v-model:visible="detailVisible" title="用户详情" width="90%" :show-footer="false" :mask-closable="true">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px;" v-if="selectedRecord">
-        <div><div style="font-size:12px;color:var(--desc-color)">昵称</div><div style="color:var(--text-color)">{{ selectedRecord.alias }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">邮箱</div><div style="color:var(--text-color)">{{ selectedRecord.email }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">角色</div><div style="color:var(--text-color)">{{ selectedRecord.role }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">IP</div><div style="color:var(--text-color)">{{ selectedRecord.ip || '-' }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">最近活跃</div><div style="color:var(--text-color)">{{ selectedRecord.lastActiveTime || '-' }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">注册时间</div><div style="color:var(--text-color)">{{ selectedRecord.createTime }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">书签</div><div style="color:var(--text-color)">{{ selectedRecord.bookmarkTotal ?? 0 }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">笔记</div><div style="color:var(--text-color)">{{ selectedRecord.noteTotal ?? 0 }}</div></div>
-        <div><div style="font-size:12px;color:var(--desc-color)">云空间</div><div style="color:var(--text-color)">{{ selectedRecord.storageUsed ?? 0 }} MB</div></div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px" v-if="selectedRecord">
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">昵称</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.alias }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">邮箱</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.email }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">角色</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.role }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">IP</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.ip || '-' }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">最近活跃</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.lastActiveTime || '-' }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">注册时间</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.createTime }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">书签</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.bookmarkTotal ?? 0 }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">笔记</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.noteTotal ?? 0 }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">云空间</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.storageUsed ?? 0 }} MB</div></div
+        >
       </div>
     </BModal>
   </CommonContainer>
@@ -90,7 +148,7 @@
   const userColumns = [
     { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
-    { title: '操作', key: 'operation', width: '160px' },
+    { title: '操作', key: 'operation', width: '65px' },
   ];
 
   const currentPage = ref<number>(1);
@@ -216,5 +274,4 @@
   });
 </script>
 
-<style lang="less" scoped>
-</style>
+<style lang="less" scoped></style>

@@ -280,11 +280,18 @@
   @media (max-width: 768px) {
     .filter-container {
       display: block;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .filter-container :deep(.b-popover-trigger) {
+      width: 100%;
       min-width: 0;
     }
 
     .filter-button {
       width: 100%;
+      min-width: 0;
       justify-content: center;
       padding: 0 10px;
     }

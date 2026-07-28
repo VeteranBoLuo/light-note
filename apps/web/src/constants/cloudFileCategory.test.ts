@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCloudPreviewType, isLegacyOfficeFile } from './cloudFileCategory';
+import { getCloudPreviewType, isHtmlFile, isLegacyOfficeFile } from './cloudFileCategory';
 
 describe('cloudFileCategory preview compatibility', () => {
   it.each([
@@ -26,5 +26,21 @@ describe('cloudFileCategory preview compatibility', () => {
     const file = { fileName: 'report.docx', fileType: 'application/msword', category: 'word' };
     expect(isLegacyOfficeFile(file)).toBe(false);
     expect(getCloudPreviewType(file)).toBe('word');
+  });
+
+  it.each([
+    ['interactive.html', 'application/octet-stream'],
+    ['interactive.htm', 'text/plain'],
+    ['无扩展名', 'text/html'],
+  ])('HTML 文件 %s 进入独立交互预览', (fileName, fileType) => {
+    const file = { fileName, fileType, category: 'text' };
+    expect(isHtmlFile(file)).toBe(true);
+    expect(getCloudPreviewType(file)).toBe('html');
+  });
+
+  it('非 HTML 扩展名优先，避免仅因错误 MIME 执行普通文本', () => {
+    const file = { fileName: 'readme.txt', fileType: 'text/html', category: 'text' };
+    expect(isHtmlFile(file)).toBe(false);
+    expect(getCloudPreviewType(file)).toBe('text');
   });
 });
