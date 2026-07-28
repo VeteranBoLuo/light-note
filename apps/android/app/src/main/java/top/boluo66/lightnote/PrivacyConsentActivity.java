@@ -13,11 +13,14 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public final class PrivacyConsentActivity extends Activity {
+    private static final int BUTTON_PRIMARY = 1;
+    private static final int BUTTON_TONAL = 2;
+    private static final int BUTTON_SECONDARY = 3;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -32,28 +35,28 @@ public final class PrivacyConsentActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(getColor(R.color.brand_primary));
 
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(getColor(R.color.page_background));
-        scrollView.setClipToPadding(false);
-
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(dp(28), dp(28), dp(28), dp(32));
-        scrollView.addView(content, new ScrollView.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
-        root.addView(scrollView, new FrameLayout.LayoutParams(
+        content.setBackgroundColor(getColor(R.color.page_background));
+        content.setPadding(dp(24), dp(18), dp(24), dp(16));
+        root.addView(content, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_launcher_foreground);
+        icon.setImageResource(R.drawable.ic_brand_tile);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        content.addView(icon, new LinearLayout.LayoutParams(dp(76), dp(76)));
+        icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        header.addView(icon, new LinearLayout.LayoutParams(dp(58), dp(58)));
+
+        LinearLayout headerCopy = new LinearLayout(this);
+        headerCopy.setOrientation(LinearLayout.VERTICAL);
 
         TextView title = createText(
             R.string.privacy_consent_title,
@@ -61,46 +64,47 @@ public final class PrivacyConsentActivity extends Activity {
             getColor(R.color.text_primary)
         );
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setGravity(Gravity.CENTER);
-        content.addView(title, topMarginParams(dp(12)));
+        title.setIncludeFontPadding(false);
+        headerCopy.addView(title);
 
         TextView reviewBadge = createText(
             R.string.privacy_consent_review_badge,
-            12,
+            13,
             getColor(R.color.brand_primary)
         );
-        reviewBadge.setGravity(Gravity.CENTER);
-        reviewBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
-        reviewBadge.setBackground(roundedBackground(
-            Color.rgb(239, 238, 255),
-            getColor(R.color.brand_primary),
-            999,
-            1
-        ));
-        content.addView(reviewBadge, topMarginParams(dp(10)));
+        reviewBadge.setIncludeFontPadding(false);
+        headerCopy.addView(reviewBadge, topMarginParams(dp(5)));
+
+        LinearLayout.LayoutParams headerCopyParams = new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        );
+        headerCopyParams.leftMargin = dp(14);
+        header.addView(headerCopy, headerCopyParams);
+        content.addView(header);
 
         TextView summary = createText(
             R.string.privacy_consent_summary,
-            15,
-            getColor(R.color.text_primary)
+            14,
+            getColor(R.color.privacy_text_secondary)
         );
         summary.setGravity(Gravity.START);
-        summary.setLineSpacing(0f, 1.35f);
-        content.addView(summary, matchWidthTopMarginParams(dp(22)));
+        summary.setLineSpacing(dp(2), 1.2f);
+        content.addView(summary, matchWidthTopMarginParams(dp(18)));
 
-        TextView points = createText(
-            R.string.privacy_consent_points,
-            14,
-            Color.rgb(75, 79, 92)
-        );
-        points.setLineSpacing(dp(3), 1.25f);
+        LinearLayout points = new LinearLayout(this);
+        points.setOrientation(LinearLayout.VERTICAL);
         points.setPadding(dp(16), dp(14), dp(16), dp(14));
         points.setBackground(roundedBackground(
-            Color.rgb(247, 247, 252),
-            Color.rgb(226, 227, 235),
-            14,
+            getColor(R.color.privacy_surface),
+            getColor(R.color.privacy_surface_border),
+            18,
             1
         ));
+        addPrivacyPoint(points, R.string.privacy_point_data, false);
+        addPrivacyPoint(points, R.string.privacy_point_permissions, true);
+        addPrivacyPoint(points, R.string.privacy_point_third_party, true);
         content.addView(points, matchWidthTopMarginParams(dp(16)));
 
         LinearLayout documentActions = new LinearLayout(this);
@@ -109,7 +113,7 @@ public final class PrivacyConsentActivity extends Activity {
 
         Button privacyPolicy = createActionButton(
             R.string.privacy_policy,
-            false
+            BUTTON_TONAL
         );
         privacyPolicy.setOnClickListener(view ->
             LegalDocumentActivity.open(
@@ -122,7 +126,7 @@ public final class PrivacyConsentActivity extends Activity {
 
         Button userAgreement = createActionButton(
             R.string.user_agreement,
-            false
+            BUTTON_TONAL
         );
         userAgreement.setOnClickListener(view ->
             LegalDocumentActivity.open(
@@ -134,19 +138,26 @@ public final class PrivacyConsentActivity extends Activity {
         LinearLayout.LayoutParams agreementParams = weightedButtonParams();
         agreementParams.leftMargin = dp(10);
         documentActions.addView(userAgreement, agreementParams);
-        content.addView(documentActions, matchWidthTopMarginParams(dp(18)));
+        content.addView(documentActions, matchWidthTopMarginParams(dp(14)));
+
+        View flexibleSpace = new View(this);
+        content.addView(flexibleSpace, new LinearLayout.LayoutParams(
+            dp(1),
+            0,
+            1f
+        ));
 
         TextView notice = createText(
             R.string.privacy_consent_notice,
             12,
-            Color.rgb(101, 105, 118)
+            getColor(R.color.privacy_text_muted)
         );
-        notice.setLineSpacing(0f, 1.25f);
-        content.addView(notice, matchWidthTopMarginParams(dp(16)));
+        notice.setLineSpacing(dp(1), 1.15f);
+        content.addView(notice, matchWidthTopMarginParams(dp(12)));
 
         Button accept = createActionButton(
             R.string.agree_and_continue,
-            true
+            BUTTON_PRIMARY
         );
         accept.setOnClickListener(view -> {
             PrivacyConsentStore.accept(this);
@@ -156,7 +167,7 @@ public final class PrivacyConsentActivity extends Activity {
 
         Button decline = createActionButton(
             R.string.decline_and_exit,
-            false
+            BUTTON_SECONDARY
         );
         decline.setOnClickListener(view -> {
             Toast.makeText(
@@ -179,7 +190,7 @@ public final class PrivacyConsentActivity extends Activity {
         WindowInsetsSupport.apply(
             this,
             root,
-            scrollView,
+            content,
             statusBarBackground
         );
         return root;
@@ -199,19 +210,83 @@ public final class PrivacyConsentActivity extends Activity {
         return view;
     }
 
-    private Button createActionButton(int textResource, boolean primary) {
+    private void addPrivacyPoint(
+        LinearLayout container,
+        int textResource,
+        boolean addTopMargin
+    ) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.TOP);
+
+        View marker = new View(this);
+        marker.setBackground(roundedBackground(
+            getColor(R.color.brand_primary),
+            getColor(R.color.brand_primary),
+            999,
+            0
+        ));
+        LinearLayout.LayoutParams markerParams =
+            new LinearLayout.LayoutParams(dp(6), dp(6));
+        markerParams.topMargin = dp(7);
+        row.addView(marker, markerParams);
+
+        TextView text = createText(
+            textResource,
+            13,
+            getColor(R.color.privacy_text_secondary)
+        );
+        text.setLineSpacing(dp(1), 1.15f);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
+            0,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            1f
+        );
+        textParams.leftMargin = dp(10);
+        row.addView(text, textParams);
+
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        if (addTopMargin) {
+            rowParams.topMargin = dp(10);
+        }
+        container.addView(row, rowParams);
+    }
+
+    private Button createActionButton(int textResource, int style) {
         Button button = new Button(this);
         button.setText(textResource);
         button.setTextSize(14);
         button.setAllCaps(false);
-        button.setMinHeight(dp(48));
+        button.setMinHeight(dp(46));
+        button.setMinimumHeight(dp(46));
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
         button.setPadding(dp(14), dp(8), dp(14), dp(8));
-        button.setTextColor(primary ? Color.WHITE : getColor(R.color.brand_primary));
+        button.setGravity(Gravity.CENTER);
+        button.setStateListAnimator(null);
+        button.setElevation(0f);
+
+        boolean primary = style == BUTTON_PRIMARY;
+        boolean tonal = style == BUTTON_TONAL;
+        int fillColor = primary
+            ? getColor(R.color.brand_primary)
+            : tonal
+                ? getColor(R.color.privacy_tonal)
+                : getColor(R.color.privacy_secondary_button);
+        int strokeColor = style == BUTTON_SECONDARY
+            ? getColor(R.color.privacy_surface_border)
+            : fillColor;
+        button.setTextColor(
+            primary ? Color.WHITE : getColor(R.color.brand_primary)
+        );
         button.setBackground(roundedBackground(
-            primary ? getColor(R.color.brand_primary) : Color.WHITE,
-            getColor(R.color.brand_primary),
-            12,
-            primary ? 0 : 1
+            fillColor,
+            strokeColor,
+            14,
+            style == BUTTON_SECONDARY ? 1 : 0
         ));
         return button;
     }

@@ -3,8 +3,11 @@
     <style name="Theme.LightNote" parent="Theme.LightNote.Base">
         <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowSplashScreenBackground">@color/brand_primary</item>
-        <!-- 系统开屏不使用带方形背景层的 adaptive icon，避免兼容层未裁切时露出方角。 -->
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <!--
+            使用透明且已收进安全区的品牌前景，避免系统再次把完整图标
+            套进圆形蒙版，也不依赖厂商兼容层裁切方形背景。
+        -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
         <item name="android:windowSplashScreenAnimationDuration">250</item>
     </style>
 </resources>

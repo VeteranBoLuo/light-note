@@ -21,10 +21,12 @@
     <string name="webview_too_old_message">当前网页组件无法安全运行轻笺。请先在系统应用商店更新“Android System WebView”或 Chrome，然后重新打开轻笺。</string>
     <string name="close_app">关闭轻笺</string>
     <string name="privacy_consent_title">欢迎使用轻笺</string>
-    <string name="privacy_consent_review_badge">隐私保护说明</string>
-    <string name="privacy_consent_summary">轻笺通过网络提供书签、笔记、文件、待办与 AI 辅助服务。继续前，请先阅读并理解隐私政策和用户协议。</string>
-    <string name="privacy_consent_points">• 仅在功能需要时处理账号、内容、文件和安全日志\n• 当前 APK 不申请通讯录、定位、麦克风或存储运行时权限\n• 使用 GitHub 登录、AI、文件上传等功能时，会按文档说明使用相应第三方服务\n• 您可随时在“设置 → 隐私与协议”重新查看或撤回同意</string>
-    <string name="privacy_consent_notice">点击“同意并继续”表示您已阅读并同意当前版本的《隐私政策》和《用户协议》。您可随时在“设置 → 隐私与协议”重新查看或撤回同意。</string>
+    <string name="privacy_consent_review_badge">隐私与数据使用说明</string>
+    <string name="privacy_consent_summary">开始使用前，请阅读并理解隐私政策和用户协议。只有在您同意后，轻笺才会加载在线服务。</string>
+    <string name="privacy_point_data">仅在提供功能时处理必要的账号、内容、文件与安全日志</string>
+    <string name="privacy_point_permissions">当前 APK 不申请通讯录、定位、麦克风或存储运行时权限</string>
+    <string name="privacy_point_third_party">GitHub 登录、AI 与文件服务会按政策说明使用相应第三方服务</string>
+    <string name="privacy_consent_notice">点击“同意并继续”即表示您同意当前版本的两份文档；之后可在“设置 → 隐私与协议”中查看或撤回。</string>
     <string name="privacy_policy">隐私政策</string>
     <string name="user_agreement">用户协议</string>
     <string name="agree_and_continue">同意并继续</string>

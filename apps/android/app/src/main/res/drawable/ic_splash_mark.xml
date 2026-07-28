@@ -4,11 +4,15 @@
     android:height="108dp"
     android:viewportWidth="256"
     android:viewportHeight="256">
+    <!--
+        Android 12+ 会把启动图标放进固定的大尺寸容器。这里额外收小图形，
+        让系统开屏与紧随其后的原生品牌封面保持接近的视觉尺寸。
+    -->
     <group
         android:pivotX="128"
         android:pivotY="128"
-        android:scaleX="0.72"
-        android:scaleY="0.72">
+        android:scaleX="0.45"
+        android:scaleY="0.45">
         <path
             android:fillColor="#FF8A84FA"
             android:pathData="M132,24h48c28.72,0 52,23.28 52,52v48h-48l-52,-52z" />

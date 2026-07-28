@@ -3,4 +3,10 @@
     <color name="brand_primary">#615CED</color>
     <color name="page_background">#FFFFFF</color>
     <color name="text_primary">#1F2330</color>
+    <color name="privacy_surface">#F7F7FC</color>
+    <color name="privacy_surface_border">#E2E3EC</color>
+    <color name="privacy_text_secondary">#5F6473</color>
+    <color name="privacy_text_muted">#747887</color>
+    <color name="privacy_tonal">#EFEEFF</color>
+    <color name="privacy_secondary_button">#FFFFFF</color>
 </resources>
