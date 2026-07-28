@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">轻笺</string>
+    <string name="network_error_title">页面暂时无法打开</string>
+    <string name="network_error_message">请检查网络连接后重试</string>
+    <string name="retry">重新加载</string>
+    <string name="browser_back">返回</string>
+    <string name="browser_close">关闭</string>
+    <string name="browser_title">应用内浏览</string>
+    <string name="download_started">已开始下载，请在系统下载列表中查看</string>
+    <string name="download_failed">无法开始下载</string>
+    <string name="cannot_open_link">当前设备无法打开这个链接</string>
+    <string name="ssl_error">安全连接校验失败，已停止加载</string>
+</resources>

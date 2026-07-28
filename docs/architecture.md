@@ -7,6 +7,7 @@
 ```
 light-note/
 ├── apps/
+│   ├── android/      # Android WebView 原生壳
 │   ├── web/          # 前端（Vue 3 + Vite + Pinia）
 │   └── server/       # 后端（Express + MySQL + JWT）
 ├── packages/         # 共享包（预留）
@@ -124,6 +125,15 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 - Root 操作使用 `ensureRootRole(req, res)` 检查
 
 ## 前端架构
+
+### Android 客户端
+
+- Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
+- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 首页固定为 `https://boluo66.top`，Debug 才允许用显式 Gradle 参数覆盖本地地址。
+- 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
+- Release 只允许 HTTPS、关闭 WebView 调试、拒绝 SSL 错误，不使用 JavaScript Interface；文件访问和内容访问默认关闭。
+- Android 源码、Gradle Wrapper 和资源进入 Git；`local.properties`、`.gradle`、`build`、APK/AAB、签名密钥及密码配置必须忽略。
+- PWA 与 Android APK 并行保留。App 备案通过前 APK 仅用于受控测试，不在官网公开下载；正式签名、备案特征和 Android 开发者身份登记必须保持一致。
 
 ### 路由体系
 
