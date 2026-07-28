@@ -39,6 +39,14 @@
     </div>
     <div class="todo-item__actions">
       <BButton size="small" :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
+      <BButton
+        size="small"
+        :disabled="disabled"
+        v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
+        @click="$emit('add-to-calendar')"
+      >
+        {{ t('inbox.addToCalendar') }}
+      </BButton>
       <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
         {{ t('inbox.deleteTodo') }}
       </BButton>
@@ -51,6 +59,7 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
   import type { TodoChecklistItem, TodoItem } from '@/api/todoApi';
 
   const props = defineProps<{ item: TodoItem; disabled?: boolean; deleting?: boolean }>();
@@ -59,6 +68,7 @@
     'update-checklist': [checklist: TodoChecklistItem[]];
     edit: [];
     delete: [];
+    'add-to-calendar': [];
   }>();
   const { t, locale } = useI18n();
   const overdue = computed(

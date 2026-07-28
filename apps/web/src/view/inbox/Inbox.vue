@@ -123,6 +123,7 @@
                 @update-checklist="updateTodoChecklist(action.item, $event)"
                 @edit="openTodoEditor(action.item)"
                 @delete="confirmDeleteTodo(action.item)"
+                @add-to-calendar="openTodoCalendar(action.item)"
               />
             </template>
           </div>
@@ -130,6 +131,12 @@
       </div>
     </section>
     <TodoEditorModal v-model:visible="todoEditorVisible" :item="editingTodo" @saved="afterTodoSaved" />
+    <TodoCalendarModal
+      v-model:visible="todoCalendarVisible"
+      :item="calendarTodo"
+      :exporting="exportingCalendar"
+      @confirm="exportTodoCalendar"
+    />
   </main>
 </template>
 
@@ -148,6 +155,8 @@
   import InboxItem from '@/components/inbox/InboxItem.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
+  import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
+  import { buildIcsFileName, buildTodoIcs, deliverIcsFile } from '@/utils/ics';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import type { InboxItem as InboxItemType } from '@/api/inboxApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -172,6 +181,9 @@
   const batchDeleting = ref(false);
   const todoEditorVisible = ref(false);
   const editingTodo = ref<TodoItemType | null>(null);
+  const calendarTodo = ref<TodoItemType | null>(null);
+  const todoCalendarVisible = ref(false);
+  const exportingCalendar = ref(false);
   const updatingTodoId = ref('');
   const deletingTodoId = ref('');
   const scrollContainer = ref<HTMLElement | null>(null);
@@ -606,6 +618,54 @@
       cancelText: t('common.cancel'),
       onOk: () => removeTodo(item),
     });
+  }
+  function openTodoCalendar(item: TodoItemType) {
+    // 无截止时间无法生成日历事件：提示并引导进入编辑，而不是导出错误文件
+    if (!item.dueAt) {
+      Alert.alert({
+        title: t('inbox.calendarModalTitle'),
+        content: t('inbox.calendarNeedDueAt'),
+        okText: t('inbox.editTodo'),
+        cancelText: t('common.cancel'),
+        onOk: () => openTodoEditor(item),
+      });
+      return;
+    }
+    calendarTodo.value = item;
+    todoCalendarVisible.value = true;
+  }
+  async function exportTodoCalendar(alarmMinutesBefore: number | null) {
+    if (exportingCalendar.value) return;
+    const item = calendarTodo.value;
+    if (!item?.dueAt) return;
+    const content = buildTodoIcs(
+      { id: item.id, title: item.title, description: item.description, dueAt: item.dueAt, updatedAt: item.updatedAt },
+      {
+        alarmMinutesBefore,
+        alarmDescription: t('inbox.calendarAlarmDescription'),
+        origin: window.location.origin,
+      },
+    );
+    if (!content) {
+      message.error(t('inbox.calendarExportFailed'));
+      return;
+    }
+    const fileName = buildIcsFileName(item.title, t('inbox.calendarFileFallback'));
+    exportingCalendar.value = true;
+    try {
+      // 移动端优先系统分享（可直达日历应用），取消分享不打扰也不记成功；桌面端直接下载
+      const result = await deliverIcsFile(content, fileName, bookmark.isMobile);
+      if (result === 'cancelled') return;
+      todoCalendarVisible.value = false;
+      calendarTodo.value = null;
+      message.success(t(result === 'shared' ? 'inbox.calendarShared' : 'inbox.calendarDownloaded'));
+      recordOperation(OPERATION_LOG_MAP.inbox.exportCalendar);
+    } catch (error) {
+      console.error('[TodoCalendar] export failed', error);
+      message.error(t('inbox.calendarExportFailed'));
+    } finally {
+      exportingCalendar.value = false;
+    }
   }
   async function removeTodo(item: TodoItemType) {
     deletingTodoId.value = item.id;
