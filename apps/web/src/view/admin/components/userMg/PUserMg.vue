@@ -17,6 +17,7 @@
           <b-dropdown
             class="card-more-menu"
             :trigger="'click'"
+            @click.stop
             :menu-options="[
               {
                 label: t('guest.userPreviewEntry'),
@@ -24,9 +25,21 @@
                 function: () => loginAsUser(record),
               },
               {
-                label: t('guest.adminContextMaintainEntry'),
-                icon: icon.card_edit,
+                label: t('guest.adminContextMaintainShort'),
+                icon: icon.user_admin,
                 function: () => maintainAsUser(record),
+              },
+              {
+                label: t('common.edit'),
+                icon: icon.table_edit,
+                danger: true,
+                function: () => editUser(record),
+              },
+              {
+                label: t('common.delete'),
+                icon: icon.table_delete,
+                danger: true,
+                function: () => delUser(record),
               },
             ]"
           >

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h } from 'vue';
+import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
 import BUpload from './BUpload.vue';
@@ -40,6 +40,37 @@ describe('BUpload semantics', () => {
     expect(trigger?.getAttribute('aria-label')).toBe('Upload file');
     trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the native file input mounted and omits an unrestricted accept attribute', async () => {
+    const host = mountUpload({ accept: '*' });
+    await nextTick();
+    const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input');
+    expect(input).not.toBeNull();
+    expect(input?.hasAttribute('accept')).toBe(false);
+
+    const trigger = host.querySelector<HTMLElement>('.b-upload-trigger');
+    const click = vi.spyOn(input as HTMLInputElement, 'click').mockImplementation(() => {});
+    trigger?.click();
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits selected raw files and resets the input for selecting the same file again', async () => {
+    const onChange = vi.fn();
+    mountUpload({ rawFile: true, onChange });
+    await nextTick();
+    const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input');
+    expect(input).not.toBeNull();
+    if (!input) throw new Error('native file input was not mounted');
+    const file = new File(['content'], 'note.txt', { type: 'text/plain' });
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [file],
+    });
+
+    input.dispatchEvent(new Event('change'));
+    expect(onChange).toHaveBeenCalledWith([file]);
+    expect(input.value).toBe('');
   });
 
   it('removes disabled triggers from the tab order', () => {

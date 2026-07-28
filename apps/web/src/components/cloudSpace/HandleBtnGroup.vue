@@ -20,36 +20,43 @@
         </b-button>
       </b-upload>
     </div>
-    <!-- 上传进度条 -->
-    <div v-if="uploadProgress.visible" class="upload-progress">
-      <div class="progress-header">
-        <span class="progress-title">{{ $t('cloudSpace.uploading') }}</span>
-        <div class="progress-actions">
-          <span class="progress-percent">{{ Math.round(uploadProgress.overall) }}%</span>
-          <span class="progress-speed">{{ formatSpeed(uploadProgress.speed) }}</span>
-          <BButton size="small" class="cancel-btn" :title="$t('cloudSpace.cancelUpload')" @click="confirmCancelUpload">
-            <SvgIcon :src="icon.common.close" size="15" />
-          </BButton>
+    <!-- 移动端会隐藏桌面操作区，进度浮层必须脱离该容器显示。 -->
+    <Teleport to="body">
+      <div v-if="uploadProgress.visible" class="upload-progress">
+        <div class="progress-header">
+          <span class="progress-title">{{ $t('cloudSpace.uploading') }}</span>
+          <div class="progress-actions">
+            <span class="progress-percent">{{ Math.round(uploadProgress.overall) }}%</span>
+            <span class="progress-speed">{{ formatSpeed(uploadProgress.speed) }}</span>
+            <BButton
+              size="small"
+              class="cancel-btn"
+              :title="$t('cloudSpace.cancelUpload')"
+              @click="confirmCancelUpload"
+            >
+              <SvgIcon :src="icon.common.close" size="15" />
+            </BButton>
+          </div>
         </div>
-      </div>
-      <div
-        class="progress-track overall-progress"
-        role="progressbar"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        :aria-valuenow="Math.round(uploadProgress.overall)"
-      >
-        <span :style="{ width: `${uploadProgress.overall}%` }"></span>
-      </div>
-      <div class="file-progress-list" v-if="uploadProgress.files.length > 0">
-        <div v-for="(file, index) in uploadProgress.files" :key="index" class="file-progress-item">
-          <span class="file-name">{{ file.name }}</span>
-          <div class="progress-track file-progress-track" :class="`file-progress-track--${file.status}`">
-            <span :style="{ width: `${file.progress}%` }"></span>
+        <div
+          class="progress-track overall-progress"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="Math.round(uploadProgress.overall)"
+        >
+          <span :style="{ width: `${uploadProgress.overall}%` }"></span>
+        </div>
+        <div class="file-progress-list" v-if="uploadProgress.files.length > 0">
+          <div v-for="(file, index) in uploadProgress.files" :key="index" class="file-progress-item">
+            <span class="file-name">{{ file.name }}</span>
+            <div class="progress-track file-progress-track" :class="`file-progress-track--${file.status}`">
+              <span :style="{ width: `${file.progress}%` }"></span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </b-space>
 </template>
 
@@ -72,6 +79,7 @@
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
   const uploadPicker = ref<{ open: () => void } | null>(null);
+  const MIN_PROGRESS_VISIBLE_MS = 800;
   // 格式化速度
   const formatSpeed = (speed: number) => {
     if (speed < 1024) return `${speed.toFixed(0)} B/s`;
@@ -184,7 +192,10 @@
               },
               signal: uploadController.value?.signal,
               onUploadProgress: (progressEvent) => {
-                const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100);
+                // 部分 Android 浏览器不会提供 total，使用文件实际大小兜底。
+                const progressTotal = progressEvent.total || fileData.size;
+                const percent =
+                  progressTotal > 0 ? Math.min(100, Math.round((progressEvent.loaded / progressTotal) * 100)) : 0;
                 uploadProgress.files[index].progress = percent;
                 // 计算总体进度
                 const totalProgress = uploadProgress.files.reduce((sum, file) => sum + file.progress, 0);
@@ -202,6 +213,10 @@
                 }
               },
             });
+            // 很小的文件可能没有触发可用的进度事件，完成后确保进度收口到 100%。
+            uploadProgress.files[index].progress = 100;
+            uploadProgress.overall =
+              uploadProgress.files.reduce((sum, file) => sum + file.progress, 0) / uploadProgress.files.length;
             uploadProgress.files[index].status = 'success';
             return { ...info, uploadStatus: 'success' };
           } catch (error) {
@@ -267,6 +282,10 @@
           message.error('上传失败：' + error.message);
         }
       } finally {
+        const visibleDuration = Date.now() - startTime;
+        if (visibleDuration < MIN_PROGRESS_VISIBLE_MS && uploadProgress.visible) {
+          await new Promise((resolve) => window.setTimeout(resolve, MIN_PROGRESS_VISIBLE_MS - visibleDuration));
+        }
         uploadProgress.visible = false;
         uploadController.value = null;
 
@@ -365,6 +384,10 @@
 
   function openFileDialog() {
     if (blockGuestWrite('upload-file')) return;
+    if (uploadProgress.visible) {
+      message.info(t('cloudSpace.uploading'));
+      return;
+    }
     uploadPicker.value?.open();
   }
 

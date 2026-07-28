@@ -158,12 +158,7 @@
               <span v-if="tagSelectionMode" class="batch-selection-count">
                 {{ t('tagManage.batchSelected', { count: selectedTagIds.length }) }}
               </span>
-              <BButton
-                v-if="selectedTagIds.length"
-                size="small"
-                type="danger"
-                @click="handleBatchDeleteTags"
-              >
+              <BButton v-if="selectedTagIds.length" size="small" type="danger" @click="handleBatchDeleteTags">
                 {{ t('tagManage.batchDelete') }}
               </BButton>
               <span v-if="activeFilter !== 'all' || keyword" class="active-query-hint">
@@ -506,9 +501,7 @@
     visibleTags.value.map((tag) => String(tag.id || '')).filter((id) => Boolean(id)),
   );
   const allVisibleTagsSelected = computed(
-    () =>
-      selectableTagIds.value.length > 0 &&
-      selectableTagIds.value.every((id) => selectedTagIds.value.includes(id)),
+    () => selectableTagIds.value.length > 0 && selectableTagIds.value.every((id) => selectedTagIds.value.includes(id)),
   );
 
   function setTagView(mode: 'card' | 'list') {
@@ -1278,7 +1271,6 @@
     justify-content: center;
     flex-shrink: 0;
     color: var(--resource-tag-color);
-    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--tag-muted-bg));
   }
 
   .tag-icon-wrap {

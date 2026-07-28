@@ -1,384 +1,412 @@
 <template>
-  <ResourcePageShell
-    class="search-center-shell"
-    :title="t('resourceCenter.title')"
-    :subtitle="t('resourceCenter.subtitle')"
-    accent="neutral"
-    layout="workspace"
-    :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
-  >
-    <div
-      class="search-page"
-      :class="{
-        'search-page--night': user.currentTheme === 'night',
-        'search-page--mobile': bookmark.isMobile,
-      }"
+  <div class="search-center-route">
+    <ResourcePageShell
+      class="search-center-shell"
+      :title="t('resourceCenter.title')"
+      :subtitle="t('resourceCenter.subtitle')"
+      accent="neutral"
+      layout="workspace"
+      :class="{ 'search-center-shell--mobile': bookmark.isMobile }"
     >
-      <div class="search-page-topbar">
-        <ResourceCenterSectionNav class="section-switcher" />
-      </div>
-
-      <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
-        <div class="search-header-input">
-          <b-input
-            id="search-center-input"
-            v-model:value="queryState.keyword"
-            :placeholder="t('resourceCenter.searchPlaceholder')"
-            height="42px"
-            @input="syncQueryDebounced"
-            @enter="submitSearch"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="18" />
-            </template>
-          </b-input>
-          <BButton
-            class="refresh-btn"
-            :loading="viewState.loading"
-            @click="refreshData"
-            v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
-          >
-            {{ t('resourceCenter.refreshShort') }}
-          </BButton>
-          <BButton
-            class="graph-entry"
-            @click="$router.push('/graph')"
-            v-click-log="{ module: '资源中心', operation: '进入知识地图' }"
-          >
-            <svg-icon :src="icon.ai.internet" size="16" />
-            {{ t('resourceCenter.knowledgeGraph') }}
-          </BButton>
-          <BButton
-            class="search-ai-entry"
-            :disabled="!queryState.keyword.trim() && !selectedIds.length"
-            @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
-          >
-            <svg-icon :src="icon.ai.ask" size="16" />
-            {{ t('ai.entry.askSearch') }}
-          </BButton>
+      <div
+        class="search-page"
+        :class="{
+          'search-page--night': user.currentTheme === 'night',
+          'search-page--mobile': bookmark.isMobile,
+        }"
+      >
+        <div class="search-page-topbar">
+          <ResourceCenterSectionNav class="section-switcher" />
         </div>
-      </BCard>
 
-      <section class="search-layout">
-        <BCard ref="typeFilterRef" as="aside" variant="card" padding="12px" class="type-filter">
-          <BButton
-            v-for="item in typeFilters"
-            :key="item.value"
-            class="filter-item"
-            :class="{ active: queryState.type === item.value }"
-            :data-search-type="item.value"
-            @click="selectActiveType(item.value)"
-            v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
-          >
-            <span class="filter-dot" :class="`filter-dot--${item.value}`"></span>
-            <span>{{ item.label }}</span>
-            <span class="filter-count">{{ item.count }}</span>
-          </BButton>
-        </BCard>
-
-        <BCard as="main" variant="card" padding="16px" class="result-panel">
-          <div class="result-toolbar result-toolbar--summary">
-            <div class="result-heading">
-              <div class="result-title">{{ t('resourceCenter.results') }}</div>
-              <div class="result-subtitle">{{ bookmark.isMobile ? mobileResultSubtitle : resultSubtitle }}</div>
-            </div>
-            <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
+        <BCard v-if="!bookmark.isMobile" as="section" variant="raised" padding="16px 20px" class="search-header">
+          <div class="search-header-input">
+            <b-input
+              id="search-center-input"
+              v-model:value="queryState.keyword"
+              :placeholder="t('resourceCenter.searchPlaceholder')"
+              height="42px"
+              @input="syncQueryDebounced"
+              @enter="submitSearch"
+            >
+              <template #prefix>
+                <svg-icon :src="icon.navigation.search" size="18" />
+              </template>
+            </b-input>
+            <BButton
+              class="search-ai-entry"
+              :disabled="!queryState.keyword.trim() && !selectedIds.length"
+              @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
+            >
+              <svg-icon :src="icon.ai.ask" size="16" />
+              {{ t('ai.entry.askSearch') }}
+            </BButton>
+            <BTooltip :title="t('resourceCenter.refresh')">
               <BButton
-                class="mobile-toolbar-btn mobile-toolbar-btn--icon"
+                class="search-header-icon-btn refresh-btn"
                 :loading="viewState.loading"
                 :aria-label="t('resourceCenter.refresh')"
-                :title="t('resourceCenter.refresh')"
                 @click="refreshData"
                 v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
               >
-                <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" aria-hidden="true" />
+                <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" aria-hidden="true" />
               </BButton>
+            </BTooltip>
+            <BTooltip :title="t('resourceCenter.knowledgeGraph')">
               <BButton
-                class="mobile-toolbar-btn mobile-filter-btn"
-                :class="{ active: mobileActiveFilterCount > 0 }"
-                @click="mobileFilterVisible = true"
-                v-click-log="{ module: '资源中心', operation: '打开移动端筛选' }"
+                class="search-header-icon-btn graph-entry"
+                :aria-label="t('resourceCenter.knowledgeGraph')"
+                @click="$router.push('/graph')"
+                v-click-log="{ module: '资源中心', operation: '进入知识地图' }"
               >
-                <SvgIcon :src="icon.cloudSpace.filter" size="15" aria-hidden="true" />
-                <span>{{ t('common.filter') }}</span>
-                <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{ mobileActiveFilterCount }}</span>
+                <svg-icon :src="icon.ai.internet" size="17" aria-hidden="true" />
               </BButton>
-              <BButton
-                class="mobile-toolbar-btn mobile-ai-btn"
-                :disabled="!queryState.keyword.trim() && !selectedIds.length"
-                :aria-label="t('ai.entry.askSearch')"
-                :title="t('ai.entry.askSearch')"
-                @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
-              >
-                <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
-                <span>AI</span>
-              </BButton>
-            </div>
-            <div v-else class="toolbar-actions">
-              <BButton
-                size="small"
-                class="clear-btn"
-                :disabled="!queryState.keyword"
-                @click="clearKeyword"
-                v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }"
-              >
-                {{ t('resourceCenter.clear') }}
-              </BButton>
-              <BButton
-                size="small"
-                class="clear-btn"
-                :disabled="!hasActiveAdvancedFilters"
-                @click="clearAdvancedFilters"
-                v-click-log="{ module: '资源中心', operation: '清空筛选条件' }"
-              >
-                {{ t('resourceCenter.clearFilters') }}
-              </BButton>
-            </div>
-          </div>
-
-          <section v-if="!bookmark.isMobile" class="advanced-filters">
-            <div class="filter-row">
-              <label class="select-wrap">
-                <span>{{ t('resourceCenter.sort.label') }}</span>
-                <BSelect
-                  class="filter-select"
-                  :options="sortOptions"
-                  v-model:value="queryState.sort"
-                  @change="applyQueryState('切换排序')"
-                />
-              </label>
-
-              <label class="select-wrap">
-                <span>{{ t('resourceCenter.date.label') }}</span>
-                <BSelect
-                  class="filter-select"
-                  :options="dateOptions"
-                  v-model:value="queryState.date"
-                  @change="applyQueryState('筛选时间范围')"
-                />
-              </label>
-
-              <div class="view-switch" v-if="!bookmark.isMobile">
-                <BButton class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
-                  {{ t('resourceCenter.view.card') }}
-                </BButton>
-                <BButton class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
-                  {{ t('resourceCenter.view.list') }}
-                </BButton>
-              </div>
-
-              <BButton class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
-                {{ t('resourceCenter.untagged') }}
-              </BButton>
-
-              <BButton
-                class="select-visible-btn"
-                :disabled="!selectableVisibleItems.length"
-                @click="toggleSelectAllVisible"
-              >
-                {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
-              </BButton>
-            </div>
-
-            <div class="tag-filter-wrap" v-if="tagOptions.length">
-              <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
-              <div class="tag-filter-main">
-                <div class="tag-filter-list" :class="{ 'tag-filter-list--collapsed': !showAllTags }">
-                  <BButton
-                    v-for="tag in tagOptions"
-                    :key="tag"
-                    class="tag-chip"
-                    :class="{ active: queryState.tags.includes(tag) }"
-                    @click="toggleTagFilter(tag)"
-                  >
-                    {{ tag }}
-                  </BButton>
-                </div>
-                <BButton v-if="tagOptions.length > 14" class="tag-toggle-btn" @click="showAllTags = !showAllTags">
-                  {{
-                    showAllTags
-                      ? t('resourceCenter.tagCollapse')
-                      : t('resourceCenter.tagExpand', { count: tagOptions.length })
-                  }}
-                </BButton>
-              </div>
-            </div>
-          </section>
-
-          <section v-if="selectedIds.length" class="batch-toolbar">
-            <div class="batch-left">
-              <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
-            </div>
-            <div class="batch-actions">
-              <b-button v-if="bookmark.isMobile" @click="toggleSelectAllVisible">
-                {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
-              </b-button>
-              <b-button @click="openSearchAi('organize')">
-                <SvgIcon :src="icon.ai.organize" size="15" />
-                {{ t('ai.entry.organizeSelected') }}
-              </b-button>
-              <b-button @click="batchAddToInbox">{{ t('inbox.addExisting') }}</b-button>
-              <b-button type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</b-button>
-              <b-button type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</b-button>
-              <b-button type="danger" @click="batchDelete">{{ t('resourceCenter.batch.delete') }}</b-button>
-            </div>
-          </section>
-
-          <div class="result-scroll-area">
-            <div
-              v-if="viewState.loading"
-              class="result-skeleton"
-              :class="{ 'result-skeleton--list': effectiveView === 'list' }"
-            >
-              <div v-for="n in 24" :key="n" class="result-sk-card">
-                <div class="result-sk-top">
-                  <div class="result-sk-dot"></div>
-                  <div class="result-sk-line result-sk-line--short"></div>
-                </div>
-                <div class="result-sk-line result-sk-line--title"></div>
-                <div class="result-sk-line result-sk-line--desc"></div>
-                <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
-                <div class="result-sk-meta">
-                  <div class="result-sk-line result-sk-line--meta1"></div>
-                  <div class="result-sk-line result-sk-line--meta2"></div>
-                </div>
-              </div>
-            </div>
-
-            <template v-else-if="visibleGroups.length">
-              <section v-for="group in visibleGroups" :key="group.type" class="result-group">
-                <div class="group-header">
-                  <span>{{ getSearchTypeLabel(t, group.type) }}</span>
-                  <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
-                </div>
-                <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
-                  <RightMenu
-                    :menu="menuForSearchItem(item)"
-                    @select="handleItemMenu($event, item)"
-                    v-for="item in group.items"
-                    :key="`${item.type}-${item.id}`"
-                  >
-                    <SearchResultItem
-                      :item="item"
-                      :type-label="getSearchTypeLabel(t, item.type)"
-                      :keyword="queryState.keyword"
-                      :selected="selectedIds.includes(getItemSelectionKey(item))"
-                      :selectable="true"
-                      :view="effectiveView"
-                      :compact="bookmark.isMobile"
-                      @open="openItem(item)"
-                      @toggle-select="toggleSelect(item)"
-                    />
-                  </RightMenu>
-                </div>
-              </section>
-            </template>
-
-            <div v-else class="empty-state">
-              <div class="empty-orbit"></div>
-              <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
-              <p>{{ t('resourceCenter.emptyDesc') }}</p>
-              <div class="empty-actions">
-                <BButton
-                  class="empty-action-btn"
-                  @click="router.push('/manage/editBookmark/add')"
-                  v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
-                >
-                  {{ t('resourceCenter.emptyActionBookmark') }}
-                </BButton>
-                <BButton
-                  class="empty-action-btn"
-                  @click="router.push('/noteLibrary/add')"
-                  v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
-                >
-                  {{ t('resourceCenter.emptyActionNote') }}
-                </BButton>
-                <BButton
-                  class="empty-action-btn"
-                  @click="router.push('/cloudSpace')"
-                  v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
-                >
-                  {{ t('resourceCenter.emptyActionFile') }}
-                </BButton>
-                <BButton
-                  class="empty-action-btn"
-                  @click="router.push('/manage/tagMg')"
-                  v-click-log="{ module: '资源中心', operation: '空状态进入标签管理' }"
-                >
-                  {{ t('resourceCenter.emptyActionTag') }}
-                </BButton>
-              </div>
-            </div>
+            </BTooltip>
           </div>
         </BCard>
-      </section>
-    </div>
-  </ResourcePageShell>
 
-  <BDrawer
-    v-if="bookmark.isMobile"
-    :open="mobileFilterVisible"
-    :title="t('resourceCenter.mobileFiltersTitle')"
-    placement="bottom"
-    height="min(76dvh, 640px)"
-    body-padding="14px 16px max(18px, env(safe-area-inset-bottom))"
-    @close="mobileFilterVisible = false"
-  >
-    <div class="mobile-filter-drawer">
-      <div class="mobile-filter-field">
-        <span class="mobile-filter-label">{{ t('resourceCenter.sort.label') }}</span>
-        <BSelect
-          class="mobile-filter-select"
-          :options="sortOptions"
-          v-model:value="queryState.sort"
-          @change="applyQueryState('切换排序')"
-        />
+        <section class="search-layout">
+          <BCard ref="typeFilterRef" as="aside" variant="card" padding="12px" class="type-filter">
+            <BButton
+              v-for="item in typeFilters"
+              :key="item.value"
+              class="filter-item"
+              :class="{ active: queryState.type === item.value }"
+              :data-search-type="item.value"
+              @click="selectActiveType(item.value)"
+              v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
+            >
+              <span class="filter-dot" :class="`filter-dot--${item.value}`"></span>
+              <span>{{ item.label }}</span>
+              <span class="filter-count">{{ item.count }}</span>
+            </BButton>
+          </BCard>
+
+          <BCard as="main" variant="card" padding="16px" class="result-panel">
+            <div class="result-toolbar result-toolbar--summary">
+              <div class="result-heading">
+                <div class="result-title">{{ t('resourceCenter.results') }}</div>
+                <div class="result-subtitle">
+                  {{
+                    bookmark.isMobile
+                      ? mobileResultSubtitle
+                      : t('resourceCenter.totalCount', { count: allVisibleItems.length })
+                  }}
+                </div>
+              </div>
+              <div v-if="!bookmark.isMobile" class="desktop-result-controls">
+                <label class="select-wrap select-wrap--compact">
+                  <span>{{ t('resourceCenter.sort.label') }}</span>
+                  <BSelect
+                    class="filter-select"
+                    :options="sortOptions"
+                    v-model:value="queryState.sort"
+                    @change="applyQueryState('切换排序')"
+                  />
+                </label>
+
+                <label class="select-wrap select-wrap--compact">
+                  <span>{{ t('resourceCenter.date.label') }}</span>
+                  <BSelect
+                    class="filter-select"
+                    :options="dateOptions"
+                    v-model:value="queryState.date"
+                    @change="applyQueryState('筛选时间范围')"
+                  />
+                </label>
+
+                <div class="view-switch">
+                  <BButton class="view-btn" :class="{ active: queryState.view === 'card' }" @click="setView('card')">
+                    {{ t('resourceCenter.view.card') }}
+                  </BButton>
+                  <BButton class="view-btn" :class="{ active: queryState.view === 'list' }" @click="setView('list')">
+                    {{ t('resourceCenter.view.list') }}
+                  </BButton>
+                </div>
+
+                <BButton class="tagless-btn" :class="{ active: queryState.untagged }" @click="toggleUntagged">
+                  {{ t('resourceCenter.untagged') }}
+                </BButton>
+
+                <BButton
+                  class="select-visible-btn"
+                  :disabled="!selectableVisibleItems.length"
+                  @click="toggleSelectAllVisible"
+                >
+                  {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
+                </BButton>
+              </div>
+              <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
+                <BButton
+                  class="mobile-toolbar-btn mobile-toolbar-btn--icon"
+                  :loading="viewState.loading"
+                  :aria-label="t('resourceCenter.refresh')"
+                  :title="t('resourceCenter.refresh')"
+                  @click="refreshData"
+                  v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
+                >
+                  <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" aria-hidden="true" />
+                </BButton>
+                <BButton
+                  class="mobile-toolbar-btn mobile-filter-btn"
+                  :class="{ active: mobileActiveFilterCount > 0 }"
+                  @click="mobileFilterVisible = true"
+                  v-click-log="{ module: '资源中心', operation: '打开移动端筛选' }"
+                >
+                  <SvgIcon :src="icon.cloudSpace.filter" size="15" aria-hidden="true" />
+                  <span>{{ t('common.filter') }}</span>
+                  <span v-if="mobileActiveFilterCount" class="mobile-filter-count">{{ mobileActiveFilterCount }}</span>
+                </BButton>
+                <BButton
+                  class="mobile-toolbar-btn mobile-ai-btn"
+                  :disabled="!queryState.keyword.trim() && !selectedIds.length"
+                  :aria-label="t('ai.entry.askSearch')"
+                  :title="t('ai.entry.askSearch')"
+                  @click="openSearchAi(selectedIds.length > 1 ? 'compare' : 'find')"
+                >
+                  <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
+                  <span>AI</span>
+                </BButton>
+              </div>
+              <div v-else class="toolbar-actions">
+                <BButton
+                  size="small"
+                  class="clear-btn"
+                  :disabled="!queryState.keyword"
+                  @click="clearKeyword"
+                  v-click-log="{ module: '资源中心', operation: '清空搜索关键词' }"
+                >
+                  {{ t('resourceCenter.clear') }}
+                </BButton>
+                <BButton
+                  size="small"
+                  class="clear-btn"
+                  :disabled="!hasActiveAdvancedFilters"
+                  @click="clearAdvancedFilters"
+                  v-click-log="{ module: '资源中心', operation: '清空筛选条件' }"
+                >
+                  {{ t('resourceCenter.clearFilters') }}
+                </BButton>
+              </div>
+            </div>
+
+            <section v-if="!bookmark.isMobile" class="advanced-filters">
+              <div class="tag-filter-wrap" v-if="tagOptions.length">
+                <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
+                <div class="tag-filter-main">
+                  <div class="tag-filter-list">
+                    <BButton
+                      v-for="tag in tagOptions"
+                      :key="tag"
+                      class="tag-chip"
+                      :class="{ active: queryState.tags.includes(tag) }"
+                      @click="toggleTagFilter(tag)"
+                    >
+                      {{ tag }}
+                    </BButton>
+                  </div>
+                  <BPopover
+                    v-if="tagOptions.length > 14"
+                    v-model:open="showAllTags"
+                    trigger="click"
+                    placement="bottom-right"
+                  >
+                    <BButton class="tag-toggle-btn">
+                      {{ showAllTags ? t('resourceCenter.tagCollapse') : `${t('common.more')} ${tagOptions.length}` }}
+                    </BButton>
+                    <template #content>
+                      <div class="tag-filter-popover">
+                        <BButton
+                          v-for="tag in tagOptions"
+                          :key="tag"
+                          class="tag-chip"
+                          :class="{ active: queryState.tags.includes(tag) }"
+                          @click="toggleTagFilter(tag)"
+                        >
+                          {{ tag }}
+                        </BButton>
+                      </div>
+                    </template>
+                  </BPopover>
+                </div>
+              </div>
+            </section>
+
+            <section v-if="selectedIds.length" class="batch-toolbar">
+              <div class="batch-left">
+                <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
+              </div>
+              <div class="batch-actions">
+                <b-button v-if="bookmark.isMobile" @click="toggleSelectAllVisible">
+                  {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
+                </b-button>
+                <b-button @click="openSearchAi('organize')">
+                  <SvgIcon :src="icon.ai.organize" size="15" />
+                  {{ t('ai.entry.organizeSelected') }}
+                </b-button>
+                <b-button @click="batchAddToInbox">{{ t('inbox.addExisting') }}</b-button>
+                <b-button type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</b-button>
+                <b-button type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</b-button>
+                <b-button type="danger" @click="batchDelete">{{ t('resourceCenter.batch.delete') }}</b-button>
+              </div>
+            </section>
+
+            <div class="result-scroll-area">
+              <div
+                v-if="viewState.loading"
+                class="result-skeleton"
+                :class="{ 'result-skeleton--list': effectiveView === 'list' }"
+              >
+                <div v-for="n in 24" :key="n" class="result-sk-card">
+                  <div class="result-sk-top">
+                    <div class="result-sk-dot"></div>
+                    <div class="result-sk-line result-sk-line--short"></div>
+                  </div>
+                  <div class="result-sk-line result-sk-line--title"></div>
+                  <div class="result-sk-line result-sk-line--desc"></div>
+                  <div class="result-sk-line result-sk-line--desc result-sk-line--desc2"></div>
+                  <div class="result-sk-meta">
+                    <div class="result-sk-line result-sk-line--meta1"></div>
+                    <div class="result-sk-line result-sk-line--meta2"></div>
+                  </div>
+                </div>
+              </div>
+
+              <template v-else-if="visibleGroups.length">
+                <section v-for="group in visibleGroups" :key="group.type" class="result-group">
+                  <div class="group-header">
+                    <span>{{ getSearchTypeLabel(t, group.type) }}</span>
+                    <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
+                  </div>
+                  <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
+                    <RightMenu
+                      :menu="menuForSearchItem(item)"
+                      @select="handleItemMenu($event, item)"
+                      v-for="item in group.items"
+                      :key="`${item.type}-${item.id}`"
+                    >
+                      <SearchResultItem
+                        :item="item"
+                        :type-label="getSearchTypeLabel(t, item.type)"
+                        :keyword="queryState.keyword"
+                        :selected="selectedIds.includes(getItemSelectionKey(item))"
+                        :selectable="true"
+                        :view="effectiveView"
+                        :compact="bookmark.isMobile"
+                        @open="openItem(item)"
+                        @toggle-select="toggleSelect(item)"
+                      />
+                    </RightMenu>
+                  </div>
+                </section>
+              </template>
+
+              <div v-else class="empty-state">
+                <div class="empty-orbit"></div>
+                <h3>{{ t('resourceCenter.emptyTitle') }}</h3>
+                <p>{{ t('resourceCenter.emptyDesc') }}</p>
+                <div class="empty-actions">
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/manage/editBookmark/add')"
+                    v-click-log="{ module: '资源中心', operation: '空状态创建书签' }"
+                  >
+                    {{ t('resourceCenter.emptyActionBookmark') }}
+                  </BButton>
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/noteLibrary/add')"
+                    v-click-log="{ module: '资源中心', operation: '空状态创建笔记' }"
+                  >
+                    {{ t('resourceCenter.emptyActionNote') }}
+                  </BButton>
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/cloudSpace')"
+                    v-click-log="{ module: '资源中心', operation: '空状态上传文件' }"
+                  >
+                    {{ t('resourceCenter.emptyActionFile') }}
+                  </BButton>
+                  <BButton
+                    class="empty-action-btn"
+                    @click="router.push('/manage/tagMg')"
+                    v-click-log="{ module: '资源中心', operation: '空状态进入标签管理' }"
+                  >
+                    {{ t('resourceCenter.emptyActionTag') }}
+                  </BButton>
+                </div>
+              </div>
+            </div>
+          </BCard>
+        </section>
       </div>
+    </ResourcePageShell>
 
-      <div class="mobile-filter-field">
-        <span class="mobile-filter-label">{{ t('resourceCenter.date.label') }}</span>
-        <BSelect
-          class="mobile-filter-select"
-          :options="dateOptions"
-          v-model:value="queryState.date"
-          @change="applyQueryState('筛选时间范围')"
-        />
-      </div>
+    <BDrawer
+      v-if="bookmark.isMobile"
+      :open="mobileFilterVisible"
+      :title="t('resourceCenter.mobileFiltersTitle')"
+      placement="bottom"
+      height="min(76dvh, 640px)"
+      body-padding="14px 16px max(18px, env(safe-area-inset-bottom))"
+      @close="mobileFilterVisible = false"
+    >
+      <div class="mobile-filter-drawer">
+        <div class="mobile-filter-field">
+          <span class="mobile-filter-label">{{ t('resourceCenter.sort.label') }}</span>
+          <BSelect
+            class="mobile-filter-select"
+            :options="sortOptions"
+            v-model:value="queryState.sort"
+            @change="applyQueryState('切换排序')"
+          />
+        </div>
 
-      <div class="mobile-filter-section">
-        <span class="mobile-filter-label">{{ t('resourceCenter.resourceState') }}</span>
-        <BButton
-          class="tagless-btn mobile-filter-toggle"
-          :class="{ active: queryState.untagged }"
-          @click="toggleUntagged"
-        >
-          {{ t('resourceCenter.untagged') }}
-        </BButton>
-      </div>
+        <div class="mobile-filter-field">
+          <span class="mobile-filter-label">{{ t('resourceCenter.date.label') }}</span>
+          <BSelect
+            class="mobile-filter-select"
+            :options="dateOptions"
+            v-model:value="queryState.date"
+            @change="applyQueryState('筛选时间范围')"
+          />
+        </div>
 
-      <div v-if="tagOptions.length" class="mobile-filter-section">
-        <span class="mobile-filter-label">{{ t('resourceCenter.tagFilter') }}</span>
-        <div class="mobile-filter-tags">
+        <div class="mobile-filter-section">
+          <span class="mobile-filter-label">{{ t('resourceCenter.resourceState') }}</span>
           <BButton
-            v-for="tag in tagOptions"
-            :key="tag"
-            class="tag-chip"
-            :class="{ active: queryState.tags.includes(tag) }"
-            @click="toggleTagFilter(tag)"
+            class="tagless-btn mobile-filter-toggle"
+            :class="{ active: queryState.untagged }"
+            @click="toggleUntagged"
           >
-            {{ tag }}
+            {{ t('resourceCenter.untagged') }}
           </BButton>
         </div>
-      </div>
 
-      <div class="mobile-filter-footer">
-        <BButton :disabled="!hasActiveAdvancedFilters" @click="clearAdvancedFilters">
-          {{ t('resourceCenter.clearFilters') }}
-        </BButton>
-        <BButton type="primary" @click="mobileFilterVisible = false">{{ t('common.confirm') }}</BButton>
+        <div v-if="tagOptions.length" class="mobile-filter-section">
+          <span class="mobile-filter-label">{{ t('resourceCenter.tagFilter') }}</span>
+          <div class="mobile-filter-tags">
+            <BButton
+              v-for="tag in tagOptions"
+              :key="tag"
+              class="tag-chip"
+              :class="{ active: queryState.tags.includes(tag) }"
+              @click="toggleTagFilter(tag)"
+            >
+              {{ tag }}
+            </BButton>
+          </div>
+        </div>
+
+        <div class="mobile-filter-footer">
+          <BButton :disabled="!hasActiveAdvancedFilters" @click="clearAdvancedFilters">
+            {{ t('resourceCenter.clearFilters') }}
+          </BButton>
+          <BButton type="primary" @click="mobileFilterVisible = false">{{ t('common.confirm') }}</BButton>
+        </div>
       </div>
-    </div>
-  </BDrawer>
+    </BDrawer>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -391,6 +419,8 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import icon from '@/config/icon.ts';
@@ -559,7 +589,7 @@
       Number(queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance')),
   );
 
-  // 标签筛选 chips 折叠:默认收起,标签较多时点「更多」展开(原 hero 统计卡已删,信息与左侧类型筛选栏重复)
+  // PC 端标签保持单行，完整列表通过「更多」浮层查看。
   const showAllTags = ref(false);
 
   const typeFilters = computed(() => [
@@ -575,11 +605,6 @@
     })),
   ]);
 
-  const resultSubtitle = computed(() => {
-    const q = queryState.keyword.trim();
-    const prefix = q ? t('resourceCenter.keywordSummary', { keyword: q }) : t('resourceCenter.defaultSummary');
-    return `${prefix} · ${t('resourceCenter.totalCount', { count: allVisibleItems.value.length })}`;
-  });
   const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: allVisibleItems.value.length }));
   function menuForSearchItem(item: DisplaySearchItem) {
     const deleteItem = {
@@ -1107,6 +1132,13 @@
 </script>
 
 <style scoped lang="less">
+  .search-center-route {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+  }
+
   .search-page {
     --search-hero-bg: var(--surface-raised-background);
     --search-panel-bg: var(--workspace-panel-bg-color);
@@ -1460,11 +1492,6 @@
     padding-right: 2px;
   }
 
-  .tag-filter-list--collapsed {
-    max-height: 34px;
-    overflow: hidden;
-  }
-
   .tag-toggle-btn {
     align-self: flex-start;
     border: 0;
@@ -1474,6 +1501,17 @@
     font-size: 12px;
     font-weight: 600;
     padding: 2px 0;
+  }
+
+  .tag-filter-popover {
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(320px, calc(100dvh - 32px));
+    padding: 12px;
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    overflow-y: auto;
   }
 
   .tag-chip {
@@ -1517,11 +1555,8 @@
 
   .result-scroll-area {
     margin-top: 12px;
-    padding: 2px 10px 20px;
     box-sizing: border-box;
-    border: 1px solid var(--search-border-color);
     border-radius: 14px;
-    background: var(--search-panel-bg);
   }
 
   .result-group {
@@ -1702,11 +1737,17 @@
   }
 
   /* 桌面端工作区：顶部承担定位与搜索，筛选保持可见，仅让结果列表滚动。 */
-  @media (min-width: 901px) {
+  @media (min-width: 768px) {
+    .search-center-shell :deep(.resource-page-body) {
+      min-height: 0;
+      overflow: hidden;
+    }
+
     .search-page {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
+      height: 100%;
       overflow: hidden;
       padding: 0;
     }
@@ -1724,13 +1765,13 @@
 
     .search-header {
       flex: 0 0 auto;
-      min-height: 76px;
+      min-height: 58px;
       box-sizing: border-box;
-      padding: 13px 16px;
+      padding: 8px 12px;
       flex-direction: row;
       align-items: center;
-      gap: 18px;
-      border-radius: 16px;
+      gap: 10px;
+      border-radius: 14px;
       box-shadow: var(--surface-raised-shadow);
     }
 
@@ -1754,10 +1795,11 @@
     }
 
     .search-header-input {
-      flex: 1 1 560px;
+      width: 100%;
+      flex: 1 1 auto;
       min-width: 360px;
       display: grid;
-      grid-template-columns: minmax(260px, 1fr) auto auto;
+      grid-template-columns: minmax(260px, 1fr) auto 42px 42px;
       gap: 8px;
     }
 
@@ -1765,23 +1807,34 @@
       border-radius: 12px;
     }
 
-    .refresh-btn,
-    .graph-entry {
+    .search-ai-entry,
+    .search-header-icon-btn {
       height: 42px;
-      min-width: 72px;
-      padding: 0 13px;
       border-radius: 11px;
       font-weight: 600;
     }
 
-    .refresh-btn {
+    .search-ai-entry {
+      flex-shrink: 0;
+      min-width: 118px;
+      padding: 0 14px;
+      gap: 6px;
+      color: #fff;
+      background: var(--primary-color);
+    }
+
+    .search-header-icon-btn {
+      width: 42px;
+      min-width: 42px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       color: var(--text-color);
       background: var(--search-muted-bg);
     }
 
     .graph-entry {
-      min-width: 112px;
-      gap: 6px;
       color: var(--primary-color);
       background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
     }
@@ -1790,14 +1843,16 @@
       flex: 1 1 auto;
       min-height: 0;
       margin-top: 0;
-      grid-template-columns: 188px minmax(0, 1fr);
-      gap: 14px;
+      grid-template-columns: 168px minmax(0, 1fr);
+      gap: 12px;
       align-items: stretch;
+      overflow: hidden;
     }
 
     .type-filter {
       position: static;
-      align-self: stretch;
+      align-self: start;
+      max-height: 100%;
       padding: 10px;
       border-radius: 16px;
       overflow: auto;
@@ -1805,9 +1860,9 @@
 
     .filter-item {
       height: auto;
-      min-height: 42px;
+      min-height: 38px;
       line-height: 1.2;
-      padding: 10px;
+      padding: 8px 10px;
       border-radius: 10px;
       justify-content: initial;
       background: transparent;
@@ -1820,7 +1875,7 @@
 
     .result-panel {
       min-height: 0;
-      padding: 14px 14px 0;
+      padding: 14px;
       border-radius: 16px;
       display: flex;
       flex-direction: column;
@@ -1829,8 +1884,9 @@
 
     .result-toolbar--summary {
       flex: 0 0 auto;
-      min-height: 42px;
-      padding: 0 2px 10px;
+      min-height: 38px;
+      padding: 0 2px 7px;
+      gap: 8px;
     }
 
     .result-heading {
@@ -1842,7 +1898,7 @@
 
     .result-title {
       flex: 0 0 auto;
-      font-size: 18px;
+      font-size: 17px;
     }
 
     .result-subtitle {
@@ -1860,13 +1916,36 @@
       background: transparent;
     }
 
+    .desktop-result-controls {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+    }
+
+    .desktop-result-controls::-webkit-scrollbar {
+      display: none;
+    }
+
+    .desktop-result-controls .select-visible-btn {
+      margin-left: 0;
+    }
+
+    .result-toolbar--summary > .toolbar-actions {
+      flex: 0 0 auto;
+      margin-left: auto;
+    }
+
     .advanced-filters {
       flex: 0 0 auto;
-      margin-top: 10px;
-      padding: 9px 10px;
-      gap: 8px;
+      margin-top: 6px;
+      padding: 6px 8px;
       border: 0;
-      border-radius: 12px;
+      border-radius: 10px;
       background: color-mix(in srgb, var(--search-muted-bg) 78%, transparent);
     }
 
@@ -1880,7 +1959,7 @@
     }
 
     .filter-select {
-      min-width: 124px;
+      min-width: 116px;
     }
 
     .view-switch {
@@ -1910,26 +1989,40 @@
     }
 
     .select-visible-btn {
-      margin-left: auto;
       color: var(--primary-color);
       background: color-mix(in srgb, var(--primary-color) 9%, var(--background-color));
     }
 
     .tag-filter-wrap {
-      grid-template-columns: 64px minmax(0, 1fr);
+      display: flex;
+      align-items: center;
       gap: 8px;
+      min-width: 0;
     }
 
     .tag-filter-label {
+      flex: 0 0 auto;
       line-height: 26px;
     }
 
-    .tag-filter-list {
-      gap: 6px;
+    .tag-filter-main {
+      min-width: 0;
+      flex: 1 1 auto;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
     }
 
-    .tag-filter-list--collapsed {
-      max-height: 28px;
+    .tag-filter-list {
+      min-width: 0;
+      flex: 1 1 auto;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .tag-filter-list .tag-chip {
+      flex: 0 0 auto;
     }
 
     .tag-chip {
@@ -1941,9 +2034,11 @@
     }
 
     .tag-toggle-btn {
+      flex: 0 0 auto;
+      align-self: center;
       height: 22px;
       min-height: 22px;
-      padding: 0;
+      padding: 0 4px;
       background: transparent;
     }
 
@@ -1967,20 +2062,19 @@
       flex: 1 1 auto;
       min-height: 0;
       overflow: hidden auto;
-      margin-top: 10px;
-      padding: 0 10px 28px;
+      margin-top: 6px;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
-      mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 18px), transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
     }
 
     .result-group:first-child,
     .result-skeleton {
-      margin-top: 12px;
+      margin-top: 4px;
     }
 
     .result-group:last-child {
-      margin-bottom: 6px;
+      margin-bottom: 0;
     }
 
     .result-grid {
@@ -1996,7 +2090,7 @@
     }
   }
 
-  @media (min-width: 901px) and (max-width: 1180px) {
+  @media (min-width: 768px) and (max-width: 1180px) {
     .search-header-copy {
       flex-basis: 300px;
       min-width: 220px;
@@ -2013,9 +2107,40 @@
     .select-visible-btn {
       margin-left: 0;
     }
+
+    .result-toolbar--summary {
+      flex-wrap: wrap;
+    }
+
+    .desktop-result-controls {
+      width: 100%;
+      order: 3;
+      flex-basis: 100%;
+    }
   }
 
-  @media (max-width: 900px) {
+  @media (min-width: 768px) and (max-width: 900px) {
+    .desktop-result-controls {
+      gap: 5px;
+    }
+
+    .desktop-result-controls .select-wrap > span {
+      display: none;
+    }
+
+    .desktop-result-controls .filter-select {
+      width: 104px;
+      min-width: 104px;
+    }
+
+    .desktop-result-controls .view-btn,
+    .desktop-result-controls .tagless-btn,
+    .desktop-result-controls .select-visible-btn {
+      padding-inline: 8px;
+    }
+  }
+
+  @media (max-width: 767px) {
     .search-page {
       padding: 0;
       display: block;
@@ -2260,10 +2385,6 @@
 
     .tag-filter-list::-webkit-scrollbar {
       display: none;
-    }
-
-    .tag-filter-list--collapsed {
-      max-height: 26px;
     }
 
     .tag-chip {

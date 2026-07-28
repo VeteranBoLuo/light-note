@@ -23,6 +23,23 @@
       </div>
     </slot>
   </div>
+  <!--
+    原生文件输入是 BUpload 与系统文件选择器交互的底层能力。
+    持久挂载到 body，避免部分 Android 厂商浏览器无法向临时、未挂载的 input 回传选择结果。
+  -->
+  <Teleport to="body">
+    <input
+      ref="nativeInput"
+      class="b-upload-native-input"
+      type="file"
+      :accept="normalizedAccept || undefined"
+      :multiple="multiple"
+      tabindex="-1"
+      aria-hidden="true"
+      @change="handleFileChange"
+      @cancel="resetNativeInput"
+    />
+  </Teleport>
 </template>
 
 <script lang="ts" setup>
@@ -31,7 +48,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { useUserStore } from '@/store';
   import { useI18n } from 'vue-i18n';
-  import { computed, useSlots } from 'vue';
+  import { computed, ref, useSlots } from 'vue';
 
   const { t } = useI18n();
   const slots = useSlots();
@@ -52,7 +69,7 @@
       ariaLabel?: string;
     }>(),
     {
-      accept: '*',
+      accept: '',
       multiple: false,
       maxTotalSize: 10 * 1024 * 1024,
       rawFile: false,
@@ -61,6 +78,12 @@
     }, // 默认总大小限制为10MB
   );
   const user = useUserStore();
+  const nativeInput = ref<HTMLInputElement | null>(null);
+  // accept="*" 不是合法的文件类型说明符。兼容存量调用，将它视为“不限制类型”。
+  const normalizedAccept = computed(() => {
+    const accept = props.accept.trim();
+    return accept === '*' ? '' : accept;
+  });
   // 有插槽时,键盘由内层控件自理(内层 button 的 Enter 会原生触发 click 并冒泡到外层 @click),
   // 外层不重复处理,避免 Enter 双触发;仅无插槽的默认按钮态由外层承担键盘。
   function onTriggerKeydown(event: KeyboardEvent) {
@@ -71,54 +94,65 @@
 
   function handleUpload() {
     if (props.disabled) return;
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = props.accept;
-    input.multiple = props.multiple;
-    input.addEventListener('change', function (event: any) {
-      const files = event.target.files;
-      let totalSize = 0;
-      const result = [];
-      for (let i = 0; i < files.length; i++) {
-        totalSize += files[i].size;
-      }
-      // 检查总文件大小是否超过指定限制
-      if (totalSize > props.maxTotalSize) {
-        message.warning(t('common.maxTotalSize', { n: props.maxTotalSize / (1024 * 1024) }));
-        return; // 如果总文件大小过大，终止函数执行
-      }
-      // 直传模式:直接透传原始 File,不走 FileReader/Base64(大图/多图不再卡顿)
-      if (props.rawFile) {
-        emit('change', Array.from(files));
-        return;
-      }
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = function (e) {
-            if (file.type.startsWith('image/')) {
-              result.push({
-                isImg: true,
-                fileName: file.name,
-                file: e.target.result,
-                size: totalSize,
-              }); // 图片文件转换为 Base64 字符串
-            } else {
-              result.push(file); // 非图片文件返回原始文件数据
-            }
-            if (result.length === files.length) {
-              emit('change', result); // 当所有文件处理完成后，返回结果数组
-            }
-          };
-          reader.onerror = function (error) {
-            console.error('Error reading file:', error);
-          };
-          reader.readAsDataURL(file);
+    resetNativeInput();
+    nativeInput.value?.click();
+  }
+
+  function resetNativeInput() {
+    if (nativeInput.value) nativeInput.value.value = '';
+  }
+
+  function handleFileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    // File 对象已复制出来，可以立即清空 input，确保再次选择同一文件仍会触发 change。
+    resetNativeInput();
+    if (files.length === 0) return;
+
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    // 检查总文件大小是否超过指定限制
+    if (totalSize > props.maxTotalSize) {
+      message.warning(t('common.maxTotalSize', { n: props.maxTotalSize / (1024 * 1024) }));
+      return;
+    }
+
+    // 直传模式:直接透传原始 File,不走 FileReader/Base64(大图/多图不再卡顿)
+    if (props.rawFile) {
+      emit('change', files);
+      return;
+    }
+
+    const result: Array<
+      | File
+      | {
+          isImg: true;
+          fileName: string;
+          file: string | ArrayBuffer | null;
+          size: number;
         }
-      }
-    });
-    input.click();
+    > = [];
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        if (file.type.startsWith('image/')) {
+          result.push({
+            isImg: true,
+            fileName: file.name,
+            file: e.target?.result ?? null,
+            size: totalSize,
+          }); // 图片文件转换为 Base64 字符串
+        } else {
+          result.push(file); // 非图片文件返回原始文件数据
+        }
+        if (result.length === files.length) {
+          emit('change', result); // 当所有文件处理完成后，返回结果数组
+        }
+      };
+      reader.onerror = function (error) {
+        console.error('Error reading file:', error);
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   defineExpose({ open: handleUpload });
@@ -138,5 +172,18 @@
       cursor: not-allowed;
       opacity: 0.45;
     }
+  }
+
+  .b-upload-native-input {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
   }
 </style>
