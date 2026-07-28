@@ -501,22 +501,22 @@
         </BCard>
       </section>
 
-      <BUpload
-        ref="importFileInput"
-        class="hidden-upload"
-        accept=".xlsx"
-        :multiple="false"
-        raw-file
-        @change="handleExcelFiles"
-      />
-      <BUpload
-        ref="importHTMLFileInput"
-        class="hidden-upload"
-        accept=".html,.htm"
-        :multiple="false"
-        raw-file
-        @change="handleHtmlFiles"
-      />
+      <div class="hidden-upload">
+        <BUpload
+          ref="importFileInput"
+          accept=".xlsx"
+          :multiple="false"
+          raw-file
+          @change="handleExcelFiles"
+        />
+        <BUpload
+          ref="importHTMLFileInput"
+          accept=".html,.htm"
+          :multiple="false"
+          raw-file
+          @change="handleHtmlFiles"
+        />
+      </div>
 
       <ActionCardModal
         v-if="importExportModalVisible"
@@ -1664,6 +1664,7 @@
 
   .bookmark-meta {
     min-width: 0;
+    flex: 1;
   }
   .bookmark-name {
     font-size: 15px;
@@ -1691,7 +1692,7 @@
   // ── 正文存档 / AI 摘要 角标 ──
   .bm-badges {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     margin-top: 6px;
   }
