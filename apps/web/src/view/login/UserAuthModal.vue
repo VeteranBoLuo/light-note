@@ -60,6 +60,16 @@
           <span class="auth-assurance__dot"></span>
           {{ t('auth.assurance') }}
         </div>
+        <div class="auth-legal">
+          <span>{{ t('auth.legalPrefix') }}</span>
+          <a href="/legal/user-agreement.html" target="_blank" rel="noopener noreferrer">
+            {{ t('auth.userAgreement') }}
+          </a>
+          <span>{{ t('auth.legalAnd') }}</span>
+          <a href="/legal/privacy-policy.html" target="_blank" rel="noopener noreferrer">
+            {{ t('auth.privacyPolicy') }}
+          </a>
+        </div>
       </section>
     </div>
   </teleport>
@@ -444,6 +454,27 @@
     margin-top: 18px;
     color: var(--auth-muted);
     font-size: 11px;
+  }
+  .auth-legal {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .auth-legal a {
+    color: var(--primary-color);
+    text-decoration: none;
+  }
+  .auth-legal a:hover {
+    text-decoration: underline;
   }
 
   .auth-assurance__dot {

@@ -617,6 +617,54 @@
           </div>
         </section>
 
+        <!-- 隐私与协议 -->
+        <section class="settings-card" id="set-privacy">
+          <div class="card-head">
+            <span class="card-icon card-icon--general">
+              <SvgIcon :src="icon.settings.privacy" size="20" aria-hidden="true" />
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.privacyTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.privacyDesc') }}</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.privacyPolicy') }}</span>
+                <span class="field-desc">{{ t('settings.privacyPolicyDesc') }}</span>
+              </div>
+              <div class="legal-settings-actions">
+                <BButton @click="openLegalDocument('privacy-policy.html')">
+                  {{ t('settings.viewDocument') }}
+                </BButton>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.userAgreement') }}</span>
+                <span class="field-desc">{{ t('settings.userAgreementDesc') }}</span>
+              </div>
+              <div class="legal-settings-actions">
+                <BButton @click="openLegalDocument('user-agreement.html')">
+                  {{ t('settings.viewDocument') }}
+                </BButton>
+              </div>
+            </div>
+            <div v-if="isAndroidApp" class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.withdrawConsent') }}</span>
+                <span class="field-desc">{{ t('settings.withdrawConsentDesc') }}</span>
+              </div>
+              <div class="legal-settings-actions">
+                <BButton @click="withdrawAndroidConsent">
+                  {{ t('settings.withdrawConsentAction') }}
+                </BButton>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <p class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
@@ -640,8 +688,10 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
+  import { hasAndroidBridge, postAndroidMessage } from '@/utils/androidBridge.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -664,6 +714,7 @@
         { id: 'set-export', label: t('settings.exportTitle') },
       );
     }
+    list.push({ id: 'set-privacy', label: t('settings.privacyTitle') });
     return list;
   });
   function scrollToSection(id: string) {
@@ -708,6 +759,7 @@
     pageRef.value?.removeEventListener('scroll', onPageScroll);
   });
   const user = useUserStore();
+  const isAndroidApp = ref(hasAndroidBridge());
   const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
   const pwaStateLabel = computed(() =>
     installState.value === 'installed'
@@ -733,6 +785,23 @@
       label: getGlobalShortcutLabel('aiAssistant'),
     },
   ]);
+
+  function openLegalDocument(fileName: 'privacy-policy.html' | 'user-agreement.html') {
+    window.open(`/legal/${fileName}`, '_blank', 'noopener,noreferrer');
+  }
+
+  function withdrawAndroidConsent() {
+    Alert.alert({
+      title: t('settings.withdrawConsentConfirmTitle'),
+      content: t('settings.withdrawConsentConfirmContent'),
+      onOk() {
+        if (!postAndroidMessage({ type: 'privacyConsent.withdraw' })) {
+          isAndroidApp.value = false;
+          message.warning(t('settings.androidBridgeUnavailable'));
+        }
+      },
+    });
+  }
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
   const bmRef = ref<HTMLAnchorElement | null>(null);
@@ -1164,6 +1233,13 @@
     gap: 8px;
   }
 
+  .legal-settings-actions {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
   .shortcut-keys {
     flex: 0 0 auto;
     display: inline-flex;
@@ -1246,6 +1322,9 @@
       align-self: flex-start;
     }
     .pwa-settings-actions {
+      justify-content: flex-start;
+    }
+    .legal-settings-actions {
       justify-content: flex-start;
     }
   }

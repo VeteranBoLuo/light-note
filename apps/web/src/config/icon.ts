@@ -77,6 +77,8 @@ export default {
     shortcuts:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect width="19" height="13.5" x="2.5" y="5.25" rx="2.5"/><path d="M6.5 9h.01M10.15 9h.01M13.8 9h.01M17.45 9h.01M6.5 12.75h.01M10.15 12.75h.01M13.8 12.75h3.65M7.25 16.25h9.5"/></g></svg>',
     ai: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18"/></g></svg>',
+    privacy:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M12 3.25 19 6v5.1c0 4.45-2.85 7.45-7 9.65-4.15-2.2-7-5.2-7-9.65V6z"/><path d="M9 11.5l2 2 4-4"/></g></svg>',
   },
 
   pwa: {

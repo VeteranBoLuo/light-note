@@ -35,11 +35,6 @@ final class WindowInsetsSupport {
             window.setNavigationBarContrastEnforced(false);
         }
 
-        WindowInsetsControllerCompat controller =
-            WindowCompat.getInsetsController(window, root);
-        controller.setAppearanceLightStatusBars(false);
-        controller.setAppearanceLightNavigationBars(true);
-
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
             Insets safeArea = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars()
@@ -58,7 +53,13 @@ final class WindowInsetsSupport {
             updateStatusBarHeight(statusBarBackground, safeArea.top);
             return windowInsets;
         });
-        ViewCompat.requestApplyInsets(root);
+        root.post(() -> {
+            WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(window, root);
+            controller.setAppearanceLightStatusBars(false);
+            controller.setAppearanceLightNavigationBars(true);
+            ViewCompat.requestApplyInsets(root);
+        });
     }
 
     private static void updateMargins(

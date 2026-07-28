@@ -27,8 +27,16 @@
             android:exported="false" />
 
         <activity
+            android:name=".LegalDocumentActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode"
+            android:exported="false" />
+
+        <activity
+            android:name=".PrivacyConsentActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

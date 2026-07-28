@@ -410,24 +410,36 @@ public final class MainActivity extends Activity {
     private void handleTrustedWebMessage(WebView sourceView, WebMessageCompat message) {
         try {
             JSONObject payload = new JSONObject(message.getData());
-            if (!"download".equals(payload.optString("type"))) {
-                return;
+            String messageType = payload.optString("type");
+            if ("download".equals(messageType)) {
+                String url = payload.optString("url");
+                String fileName = payload.optString("fileName");
+                runOnUiThread(() ->
+                    WebViewSupport.download(
+                        MainActivity.this,
+                        url,
+                        sourceView.getSettings().getUserAgentString(),
+                        null,
+                        null,
+                        fileName
+                    )
+                );
+            } else if ("privacyConsent.withdraw".equals(messageType)) {
+                runOnUiThread(this::restartForPrivacyConsent);
             }
-            String url = payload.optString("url");
-            String fileName = payload.optString("fileName");
-            runOnUiThread(() ->
-                WebViewSupport.download(
-                    MainActivity.this,
-                    url,
-                    sourceView.getSettings().getUserAgentString(),
-                    null,
-                    null,
-                    fileName
-                )
-            );
         } catch (JSONException error) {
             // 受信页面发来的未知/损坏消息不执行任何原生操作。
         }
+    }
+
+    private void restartForPrivacyConsent() {
+        PrivacyConsentStore.clear(this);
+        Intent intent = new Intent(this, PrivacyConsentActivity.class);
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
+        );
+        startActivity(intent);
+        finish();
     }
 
     private boolean routeMainUrl(String url) {

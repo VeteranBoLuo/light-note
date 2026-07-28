@@ -2,33 +2,15 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
+import { postAndroidMessage } from '@/utils/androidBridge.ts';
 const cloud = cloudSpaceStore();
 
-declare global {
-  interface Window {
-    LightNoteAndroid?: {
-      postMessage: (message: string) => void;
-    };
-  }
-}
-
 function requestAndroidDownload(downloadUrl: string, fileName?: string): boolean {
-  const bridge = typeof window !== 'undefined' ? window.LightNoteAndroid : undefined;
-  if (typeof bridge?.postMessage !== 'function') return false;
-
-  try {
-    bridge.postMessage(
-      JSON.stringify({
-        type: 'download',
-        url: downloadUrl,
-        fileName: fileName || '',
-      }),
-    );
-    return true;
-  } catch (error) {
-    console.warn('Android 原生下载通道不可用，回退到浏览器下载:', error);
-    return false;
-  }
+  return postAndroidMessage({
+    type: 'download',
+    url: downloadUrl,
+    fileName: fileName || '',
+  });
 }
 
 export async function downloadField(id: number | string, token?: string) {

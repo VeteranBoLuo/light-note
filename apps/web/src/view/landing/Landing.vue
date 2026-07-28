@@ -320,6 +320,10 @@
                  AI 助手/帮助文档路由(router/modules/common.ts),不能撞 -->
             <a href="/helpCenter">{{ t('landing.helpCenter') }}</a>
             <span class="footer-sep">|</span>
+            <a href="/legal/privacy-policy.html">{{ t('landing.privacyPolicy') }}</a>
+            <span class="footer-sep">|</span>
+            <a href="/legal/user-agreement.html">{{ t('landing.userAgreement') }}</a>
+            <span class="footer-sep">|</span>
             <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>

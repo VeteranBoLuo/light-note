@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.tasks.Sync
 
 plugins {
     id("com.android.application")
@@ -103,6 +104,12 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    sourceSets {
+        getByName("main").assets.srcDir(
+            layout.buildDirectory.dir("generated/legal-assets"),
+        )
+    }
 }
 
 dependencies {
@@ -129,4 +136,22 @@ tasks.matching {
     it.name == "packageRelease" || it.name == "bundleRelease"
 }.configureEach {
     dependsOn(validateLongTermReleaseSigning)
+}
+
+val syncLegalDocuments by tasks.registering(Sync::class) {
+    val legalDocumentsSource = rootProject.layout.projectDirectory.dir("../web/public/legal")
+    from(legalDocumentsSource)
+    into(layout.buildDirectory.dir("generated/legal-assets/legal"))
+
+    doFirst {
+        if (!legalDocumentsSource.asFile.isDirectory) {
+            throw GradleException(
+                "Shared legal documents are missing: ${legalDocumentsSource.asFile}",
+            )
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(syncLegalDocuments)
 }
