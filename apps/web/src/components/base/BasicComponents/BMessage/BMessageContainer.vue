@@ -1,24 +1,16 @@
 <template>
   <Teleport to="body">
-    <div
-      class="b-message-container"
-      v-show="messageState.messages.length > 0"
-      aria-live="polite"
-      aria-atomic="false"
-    >
+    <div class="b-message-container" v-show="messageState.messages.length > 0" aria-live="polite" aria-atomic="false">
       <TransitionGroup name="b-message">
         <div
           v-for="msg in messageState.messages"
           :key="msg.key || msg.id"
           :class="['b-message-item', `b-message-${msg.type}`]"
           :role="msg.type === 'error' || msg.type === 'warning' ? 'alert' : 'status'"
+          @click="dismissOnMobile(msg.id)"
         >
           <span class="b-message-icon" aria-hidden="true">
-            <SvgIcon
-              :src="messageIcons[msg.type]"
-              size="17"
-              :class="{ 'b-message-spin': msg.type === 'loading' }"
-            />
+            <SvgIcon :src="messageIcons[msg.type]" size="17" :class="{ 'b-message-spin': msg.type === 'loading' }" />
           </span>
           <span class="b-message-content">{{ msg.content }}</span>
         </div>
@@ -30,9 +22,13 @@
 <script lang="ts" setup>
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { messageState } from './messageState';
+  import { messageState, removeMessage } from './messageState';
 
   const messageIcons = icon.message;
+
+  function dismissOnMobile(id: number) {
+    if (window.matchMedia?.('(max-width: 600px)').matches) removeMessage(id);
+  }
 </script>
 
 <style lang="less">
@@ -153,26 +149,50 @@
   }
 
   @keyframes b-message-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @media (max-width: 600px) {
-    /* 移动端改为底部弹出:顶部常是页面/抽屉的标题与操作区(如 AI 助手全屏),顶部 toast 会把它们遮住;
-       底部弹出更符合移动端习惯,也不挡顶部操作。 */
+    /* 移动端使用紧凑 Snackbar，并始终避开底部导航和系统安全区。 */
     .b-message-container {
       top: auto;
-      bottom: max(14px, env(safe-area-inset-bottom));
-      width: calc(100vw - 20px);
-      max-width: none;
+      bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 10px);
+      width: max-content;
+      max-width: calc(100vw - 24px);
+      gap: 6px;
     }
 
     .b-message-item {
-      width: 100%;
-      min-width: 0;
-      max-width: none;
-      padding-right: 12px;
+      width: max-content;
+      min-width: min(180px, calc(100vw - 24px));
+      max-width: calc(100vw - 24px);
+      min-height: 44px;
+      gap: 8px;
+      padding: 7px 12px 7px 9px;
+      border-radius: 12px;
       font-size: 13px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .b-message-item::before {
+      inset-block: 8px;
+    }
+
+    .b-message-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+    }
+
+    /* 只保留最新两条，避免连续操作时遮挡大块内容。 */
+    .b-message-item:nth-last-child(n + 3) {
+      display: none;
     }
 
     /* 底部弹出:进出动画改为从下方滑入/滑出 */

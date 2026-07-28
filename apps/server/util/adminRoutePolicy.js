@@ -178,6 +178,18 @@ declare(ADMIN_POLICIES.READ, 'common', [
   ['GET', '/helpCenter/:id'],
   ['GET', '/sitemap.xml'],
 ]);
+declare(ADMIN_POLICIES.READ, 'update_log', [
+  ['POST', '/updateLog/list'],
+  ['GET', '/updateLog/image/:logId/:fileName'],
+]);
+declare(ADMIN_POLICIES.ADMIN_ONLY, 'update_log', [
+  ['POST', '/updateLog/manageList'],
+  ['POST', '/updateLog/createDraft'],
+  ['POST', '/updateLog/save'],
+  ['POST', '/updateLog/delete'],
+  ['POST', '/updateLog/cleanupImages'],
+  ['POST', '/updateLog/uploadImage'],
+]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'common', [['POST', '/common/analyzeImgUrl']]);
 declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'telemetry', [
   ['POST', '/common/recordOperationLogs'],
@@ -426,6 +438,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/helpCenter\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /helpCenter/:id`);
+  }
+  if (/^\/updateLog\/image\/[^/]+\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /updateLog/image/:logId/:fileName`);
   }
   return null;
 }

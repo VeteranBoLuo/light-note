@@ -22,3 +22,16 @@ export interface MessageOpenConfig {
 export const messageState = reactive({
   messages: [] as MessageItem[],
 });
+
+export function removeMessage(id: number): void {
+  const index = messageState.messages.findIndex((message) => message.id === id);
+  if (index === -1) return;
+  const [message] = messageState.messages.splice(index, 1);
+  message.onClose?.();
+}
+
+export function clearMessages(): void {
+  const messages = [...messageState.messages];
+  messageState.messages.splice(0);
+  messages.forEach((message) => message.onClose?.());
+}

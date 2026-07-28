@@ -8,14 +8,19 @@ describe('API 日志跳过策略', () => {
     '/api/inbox/count',
     '/inbox/count?source=navigation',
     '/api/notification/unreadCount',
+    '/api/updateLog/list',
+    '/api/updateLog/image/log-1/release.webp',
   ])('跳过无审计价值的被动读取接口：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(true);
   });
 
-  it.each(['/api/json/updateConfig', '/api/inbox/list', '/api/inbox/enqueue', '/api/bookmark/getBookmarkList'])(
-    '保留真实读取与写入接口日志：%s',
-    (url) => {
-      expect(shouldSkipApiLog(url)).toBe(false);
-    },
-  );
+  it.each([
+    '/api/json/updateConfig',
+    '/api/inbox/list',
+    '/api/inbox/enqueue',
+    '/api/bookmark/getBookmarkList',
+    '/api/updateLog/save',
+  ])('保留真实读取与写入接口日志：%s', (url) => {
+    expect(shouldSkipApiLog(url)).toBe(false);
+  });
 });

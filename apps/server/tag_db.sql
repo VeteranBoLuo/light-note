@@ -73,6 +73,29 @@ CREATE TABLE `config_json` (
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COMMENT='通用JSON配置数据表';
 
 -- ----------------------------
+-- Table structure for update_logs
+-- ----------------------------
+DROP TABLE IF EXISTS `update_logs`;
+CREATE TABLE `update_logs` (
+  `id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `publish_date` date NOT NULL,
+  `summary` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `highlights` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON 字符串数组，供列表与工作台摘要使用',
+  `tags` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'JSON 字符串数组',
+  `content_markdown` longtext COLLATE utf8mb4_unicode_ci NOT NULL,
+  `image_keys` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '该日志拥有的 OBS object key JSON 数组',
+  `status` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft',
+  `sort` int(11) NOT NULL DEFAULT '0',
+  `created_by` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_update_logs_public` (`status`, `publish_date`, `sort`),
+  KEY `idx_update_logs_updated` (`updated_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='更新日志';
+
+-- ----------------------------
 -- Table structure for files
 -- ----------------------------
 DROP TABLE IF EXISTS `files`;

@@ -18,6 +18,7 @@ import inboxRouter from '../router/inbox.js';
 import todoRouter from '../router/todo.js';
 import tagIconRouter from '../router/tagIcon.js';
 import featureRequestRouter from '../router/featureRequest.js';
+import updateLogRouter from '../router/updateLog.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -246,6 +247,10 @@ export const baseRouter = [
   {
     path: '/featureRequest',
     router: featureRequestRouter,
+  },
+  {
+    path: '/updateLog',
+    router: updateLogRouter,
   },
   {
     path: '/tagIcon',

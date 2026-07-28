@@ -1,6 +1,6 @@
 import { createVNode, render } from 'vue';
 import BMessageContainer from './BMessageContainer.vue';
-import { messageState } from './messageState';
+import { clearMessages, messageState, removeMessage } from './messageState';
 import type { MessageType, MessageOpenConfig } from './messageState';
 
 let seed = 0;
@@ -16,34 +16,46 @@ function ensureMounted() {
   render(vnode, container);
 }
 
-function remove(id: number) {
-  const idx = messageState.messages.findIndex((m) => m.id === id);
-  if (idx === -1) return;
-  const item = messageState.messages[idx];
-  messageState.messages.splice(idx, 1);
-  item.onClose?.();
+const mobileDuration: Record<MessageType, number> = {
+  success: 1.8,
+  info: 2.5,
+  warning: 4,
+  error: 4,
+  loading: 3,
+};
+
+function isMobileMessageViewport(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(max-width: 600px)').matches === true;
 }
 
-function add(
-  type: MessageType,
-  content: string,
-  duration?: number,
-  onClose?: () => void,
-): () => void {
+function resolveDuration(type: MessageType, duration?: number): number {
+  if (typeof duration === 'number') return duration;
+  return isMobileMessageViewport() ? mobileDuration[type] : 3;
+}
+
+function suppressDuplicateMobileMessage(type: MessageType, content: string): (() => void) | null {
+  if (!isMobileMessageViewport()) return null;
+  const existing = messageState.messages.find((message) => message.type === type && message.content === content);
+  return existing ? () => removeMessage(existing.id) : null;
+}
+
+function add(type: MessageType, content: string, duration?: number, onClose?: () => void): () => void {
   ensureMounted();
+  const duplicateCloser = suppressDuplicateMobileMessage(type, content);
+  if (duplicateCloser) return duplicateCloser;
   const id = ++seed;
   const item = {
     id,
     type,
     content,
-    duration: duration ?? 3,
+    duration: resolveDuration(type, duration),
     onClose,
   };
   messageState.messages.push(item);
   if (item.duration > 0) {
-    setTimeout(() => remove(id), item.duration * 1000);
+    setTimeout(() => removeMessage(id), item.duration * 1000);
   }
-  return () => remove(id);
+  return () => removeMessage(id);
 }
 
 const message = {
@@ -73,7 +85,7 @@ const message = {
 
   open(config: MessageOpenConfig): () => void {
     ensureMounted();
-    const { content, type = 'info', duration = 3, key, onClose } = config;
+    const { content, type = 'info', duration, key, onClose } = config;
 
     // Dedup by key
     if (key) {
@@ -81,26 +93,26 @@ const message = {
       if (existing) return () => {};
     }
 
+    const duplicateCloser = suppressDuplicateMobileMessage(type, content);
+    if (duplicateCloser) return duplicateCloser;
     const id = ++seed;
     const item = {
       id,
       type,
       content,
-      duration,
+      duration: resolveDuration(type, duration),
       key,
       onClose,
     };
     messageState.messages.push(item);
     if (item.duration > 0) {
-      setTimeout(() => remove(id), item.duration * 1000);
+      setTimeout(() => removeMessage(id), item.duration * 1000);
     }
-    return () => remove(id);
+    return () => removeMessage(id);
   },
 
   destroy(): void {
-    const items = [...messageState.messages];
-    messageState.messages.splice(0);
-    items.forEach((item) => item.onClose?.());
+    clearMessages();
   },
 };
 

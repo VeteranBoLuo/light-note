@@ -147,6 +147,14 @@
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
   );
   const mobileShellEnabled = computed(() => mobileTopSwitcherActive.value || mobileBottomNavActive.value);
+  watch(
+    mobileBottomNavActive,
+    (active) => {
+      if (typeof document === 'undefined') return;
+      document.documentElement.classList.toggle('has-mobile-bottom-nav', active);
+    },
+    { immediate: true },
+  );
   function getStoredPreferences() {
     if (isAdminLoginPreview()) {
       return getAdminLoginPreviewPreferences();
@@ -708,6 +716,7 @@
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
     stopOpinionNoticePolling();
+    document.documentElement.classList.remove('has-mobile-bottom-nav');
     window.removeEventListener('resize', handleResize);
     window.removeEventListener('light-note:auth-expired', handleAuthExpired);
     window.removeEventListener('light-note:user-banned', handleUserBanned);
@@ -743,6 +752,7 @@
   }
 </script>
 <style>
+  :root.has-mobile-bottom-nav,
   .app-root.has-mobile-bottom-nav {
     --mobile-shell-bottom-height: calc(56px + env(safe-area-inset-bottom));
   }

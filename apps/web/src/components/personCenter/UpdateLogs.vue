@@ -1,544 +1,562 @@
 <template>
-  <CommonContainer :title="$t('changelog.title')">
-    <b-button type="primary" size="small" v-if="user.role === 'root'" @click="editLogs" class="edit-btn" v-click-log="{ module: '更新日志', operation: '编辑更新日志' }">
-      {{ $t('common.edit') }}
-    </b-button>
+  <CommonContainer :title="t('changelog.title')">
+    <div v-if="user.role === 'root'" class="page-actions">
+      <BButton
+        type="primary"
+        size="small"
+        :loading="creating"
+        v-click-log="{ module: '更新日志', operation: '新建更新日志' }"
+        @click="createLog"
+      >
+        {{ t('changelog.newLog') }}
+      </BButton>
+    </div>
 
     <div class="logs-container">
-      <div class="logs-intro">
-        <h1 class="intro-title">{{ $t('changelog.pageTitle') }}</h1>
-        <p class="intro-desc">{{ $t('changelog.pageDesc') }}</p>
+      <header class="logs-intro">
+        <h1 class="intro-title">{{ t('changelog.pageTitle') }}</h1>
+        <p class="intro-desc">{{ t('changelog.pageDesc') }}</p>
+      </header>
+
+      <div v-if="loading" class="logs-state">
+        <BLoading :loading="true" inline :title="t('common.loading')" />
       </div>
+      <div v-else-if="!logs.length" class="logs-state">{{ t('changelog.empty') }}</div>
 
-      <div class="timeline-wrapper">
-        <a-timeline>
-          <a-timeline-item color="#615ced" v-for="(item, index) in displayLogs" :key="item.time || index">
-            <!-- 自定义时间轴点 -->
-            <template #dot>
-              <div class="timeline-dot">
-                <div class="dot-inner"></div>
-              </div>
-            </template>
+      <div v-else class="timeline" role="list">
+        <article v-for="item in logs" :key="item.id" class="timeline-item" role="listitem">
+          <div class="timeline-marker" aria-hidden="true">
+            <span></span>
+          </div>
 
-            <div class="log-card">
-              <div class="log-header" :class="{ 'no-border': !item.list || item.list.length === 0 }">
-                <div class="version-tag">
-                  <span class="v-num" v-html="item.label"></span>
+          <section class="log-card" :class="{ 'is-latest': item.id === latestPublishedId }">
+            <div class="log-card-head">
+              <div class="log-heading">
+                <div class="log-title-row">
+                  <h2>{{ item.title }}</h2>
+                  <span v-if="item.id === latestPublishedId" class="latest-badge">{{ t('changelog.latest') }}</span>
+                  <span v-if="item.status === 'draft'" class="draft-badge">{{ t('changelog.status.draft') }}</span>
                 </div>
-                <span class="log-date">{{ item.time }}</span>
+                <time :datetime="item.publishDate">{{ item.publishDate }}</time>
               </div>
 
-              <div class="log-content" v-if="item.list && item.list.length > 0">
-                <div v-for="(li, i) in item.list" :key="i" class="log-item">
-                  <span class="item-index" v-if="!item.hideIndex">{{ (i as number) + 1 }}.</span>
-                  <span class="item-text" v-html="li"></span>
-                </div>
-              </div>
+              <BButton
+                v-if="user.role === 'root'"
+                size="small"
+                v-click-log="{ module: '更新日志', operation: '编辑更新日志' }"
+                @click="editLog(item.id)"
+              >
+                {{ t('common.edit') }}
+              </BButton>
             </div>
-          </a-timeline-item>
-        </a-timeline>
+
+            <div v-if="item.tags.length" class="log-tags" :aria-label="t('changelog.fields.tags')">
+              <span v-for="tag in item.tags" :key="tag">{{ tag }}</span>
+            </div>
+
+            <p v-if="item.summary" class="log-summary">{{ item.summary }}</p>
+
+            <ol v-if="!item.contentMarkdown && item.highlights.length" class="log-highlights">
+              <li v-for="(highlight, highlightIndex) in visibleHighlights(item)" :key="highlightIndex">
+                {{ highlight }}
+              </li>
+            </ol>
+
+            <div
+              v-if="isExpanded(item.id) && renderedContent[item.id]"
+              class="log-markdown markdown-body"
+              v-html="renderedContent[item.id]"
+            ></div>
+
+            <div v-if="canToggle(item)" class="log-card-footer">
+              <BButton class="expand-button" size="small" @click="toggleExpanded(item.id)">
+                {{ isExpanded(item.id) ? t('changelog.collapse') : t('changelog.expand') }}
+              </BButton>
+            </div>
+          </section>
+        </article>
       </div>
     </div>
 
-    <!-- JSON编辑器模态框 (保持原有逻辑) -->
-    <b-modal
-      v-model:visible="visible"
-      :title="$t('changelog.editTitle')"
-      top="50%"
-      :maskClosable="false"
-      :showFooter="false"
-      @ok="handleUpdate"
-      @close="visible = false"
-    >
-      <div class="json-editor-wrapper">
-        <div class="editor-header">
-          <span>{{ $t('changelog.charCount', { count: jsonContent.length }) }}</span>
-          <div class="editor-actions">
-            <BButton size="small" @click="formatJson" v-click-log="{ module: '更新日志', operation: '格式化JSON' }">{{ $t('changelog.format') }}</BButton>
-            <BButton size="small" @click="resetJson" style="margin-left: 8px" v-click-log="{ module: '更新日志', operation: '重置JSON' }">{{ $t('changelog.reset') }}</BButton>
-            <BButton size="small" type="primary" class="bo" @click="handleUpdate" :loading="updating">
-              {{ $t('common.save') }}
-            </BButton>
-          </div>
-        </div>
-        <div ref="editorRef" class="code-editor"></div>
-        <div v-if="jsonError" class="error-message">
-          <CloseCircleOutlined style="color: #ff4d4f; margin-right: 4px" />
-          {{ jsonError }}
-        </div>
-        <div class="editor-footer">
-          <span>{{ $t('changelog.shortcuts') }}</span>
-        </div>
-      </div>
-    </b-modal>
+    <UpdateLogEditor
+      v-if="editorVisible"
+      v-model:visible="editorVisible"
+      :log-id="editingId"
+      :discard-on-close="discardNewDraft"
+      @saved="handleEditorSaved"
+      @deleted="handleEditorDeleted"
+    />
   </CommonContainer>
 </template>
 
-<script lang="ts" setup>
-  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
-  import { bookmarkStore, useUserStore } from '@/store';
-  import { getJsonInfo, updateConfig } from '@/config/jsonCfg.ts';
-  import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue';
-  import { API_TEXTS } from '@/config/constants.ts';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { CloseCircleOutlined } from '@ant-design/icons-vue';
-  import { EditorView, basicSetup } from 'codemirror';
-  import { json, jsonParseLinter } from '@codemirror/lang-json';
-  import { linter } from '@codemirror/lint';
-  import { oneDark } from '@codemirror/theme-one-dark';
+<script setup lang="ts">
+  import { computed, ref, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import UpdateLogEditor from '@/components/personCenter/UpdateLogEditor.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import { useUserStore } from '@/store';
+  import { noteContentToHtml } from '@/utils/common';
+  import { createUpdateLogDraft, listManagedUpdateLogs, listUpdateLogs, type UpdateLogItem } from '@/api/updateLogApi';
 
   const { t } = useI18n();
-  const bookmark = bookmarkStore();
   const user = useUserStore();
-  const updateOptions = ref<any[]>([]);
+  const logs = ref<UpdateLogItem[]>([]);
+  const renderedContent = ref<Record<string, string>>({});
+  const expandedIds = ref(new Set<string>());
+  const loading = ref(false);
+  const creating = ref(false);
+  const editorVisible = ref(false);
+  const editingId = ref('');
+  const discardNewDraft = ref(false);
+  const latestPublishedId = computed(() => logs.value.find((item) => item.status === 'published')?.id || '');
+  let loadSequence = 0;
 
-  // 显示列表计算属性，确保反转逻辑
-  const displayLogs = computed(() => {
-    return [...updateOptions.value].reverse();
-  });
-
-  const visible = ref(false);
-  const jsonContent = ref('');
-  const editorRef = ref<HTMLElement>();
-  const editorView = ref<EditorView>();
-  const jsonError = ref('');
-  const isValidJson = ref(true);
-  const updating = ref(false);
-  const originalContent = ref('');
-
-  // 获取更新日志
   async function getLogs() {
+    const sequence = ++loadSequence;
+    loading.value = true;
     try {
-      const res = await getJsonInfo(API_TEXTS.CHANGELOG);
-      // 兼容可能返回的字符串或对象
-      const content =
-        typeof res.data.jsonContent === 'string' ? JSON.parse(res.data.jsonContent) : res.data.jsonContent;
-      updateOptions.value = content || [];
+      let res = user.role === 'root' ? await listManagedUpdateLogs() : await listUpdateLogs();
+      if (user.role === 'root' && res.status !== 200) {
+        res = await listUpdateLogs();
+      }
+      if (res.status !== 200) throw new Error(res.msg || 'CHANGELOG_LIST_FAILED');
+      const items = Array.isArray(res.data?.items) ? (res.data.items as UpdateLogItem[]) : [];
+      const renderedPairs = await Promise.all(
+        items.map(
+          async (item) =>
+            [item.id, item.contentMarkdown ? await noteContentToHtml(item.contentMarkdown, 'markdown') : ''] as const,
+        ),
+      );
+      if (sequence !== loadSequence) return;
+      logs.value = items;
+      renderedContent.value = Object.fromEntries(renderedPairs);
+      const firstId = items[0]?.id;
+      expandedIds.value = firstId ? new Set([firstId]) : new Set();
     } catch (error) {
       console.error(error);
       message.error(t('changelog.errorInfo'));
+    } finally {
+      if (sequence === loadSequence) loading.value = false;
     }
   }
 
-  // 初始化编辑器 (保持逻辑不变)
-  const initEditor = () => {
-    if (!editorRef.value) return;
-    if (editorView.value) editorView.value.destroy();
+  function isExpanded(id: string) {
+    return expandedIds.value.has(id);
+  }
 
-    editorView.value = new EditorView({
-      doc: jsonContent.value,
-      extensions: [
-        basicSetup,
-        json(),
-        linter(jsonParseLinter()),
-        oneDark,
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            jsonContent.value = editorView.value?.state.doc.toString() || '';
-            validateJson();
-          }
-        }),
-        EditorView.lineWrapping,
-      ],
-      parent: editorRef.value,
-    });
+  function toggleExpanded(id: string) {
+    const next = new Set(expandedIds.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    expandedIds.value = next;
+  }
 
-    // 监听键盘事件
-    editorView.value.dom.addEventListener('keydown', handleKeyDown);
-  };
+  function visibleHighlights(item: UpdateLogItem) {
+    return isExpanded(item.id) ? item.highlights : item.highlights.slice(0, 3);
+  }
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      if (isValidJson.value) handleUpdate();
-    }
-    // ... 其他快捷键逻辑保持
-  };
+  function canToggle(item: UpdateLogItem) {
+    return Boolean(item.contentMarkdown || item.highlights.length > 3);
+  }
 
-  const validateJson = () => {
+  async function createLog() {
+    if (creating.value) return;
+    creating.value = true;
     try {
-      if (jsonContent.value.trim()) {
-        JSON.parse(jsonContent.value);
-        jsonError.value = '';
-        isValidJson.value = true;
-      } else {
-        jsonError.value = 'Empty JSON';
-        isValidJson.value = false;
+      const res = await createUpdateLogDraft();
+      const item = res.data?.item as UpdateLogItem | undefined;
+      if (res.status !== 200 || !item?.id) {
+        message.error(res.msg || t('changelog.createFailed'));
+        return;
       }
-    } catch (error: any) {
-      jsonError.value = error.message;
-      isValidJson.value = false;
-    }
-  };
-
-  const formatJson = () => {
-    try {
-      const parsed = JSON.parse(jsonContent.value);
-      const formatted = JSON.stringify(parsed, null, 2);
-      jsonContent.value = formatted;
-      if (editorView.value) {
-        editorView.value.dispatch({
-          changes: { from: 0, to: editorView.value.state.doc.length, insert: formatted },
-        });
-      }
-    } catch (e) {}
-  };
-
-  const resetJson = () => {
-    jsonContent.value = originalContent.value;
-    if (editorView.value) {
-      editorView.value.dispatch({
-        changes: { from: 0, to: editorView.value.state.doc.length, insert: originalContent.value },
-      });
-    }
-    validateJson();
-  };
-
-  const editLogs = () => {
-    visible.value = true;
-    const content = JSON.stringify(updateOptions.value, null, 2);
-    jsonContent.value = content;
-    originalContent.value = content;
-
-    nextTick(() => {
-      initEditor();
-      validateJson();
-    });
-  };
-
-  const handleUpdate = async () => {
-    if (!isValidJson.value) return;
-    try {
-      updating.value = true;
-      const parsed = JSON.parse(jsonContent.value);
-      // 同时更新当前视图
-      updateOptions.value = parsed;
-
-      const response = await updateConfig({
-        jsonContent: JSON.stringify(parsed),
-        name: API_TEXTS.CHANGELOG,
-      });
-
-      if (response.status === 200) {
-        message.success('更新成功');
-        recordOperation({ module: '更新日志', operation: '保存更新日志成功' });
-        visible.value = false;
-      } else {
-        // 如果后端失败，回滚
-        getLogs();
-      }
-    } catch (error) {
-      message.error('保存失败');
+      editingId.value = item.id;
+      discardNewDraft.value = true;
+      editorVisible.value = true;
+    } catch {
+      message.error(t('changelog.createFailed'));
     } finally {
-      updating.value = false;
+      creating.value = false;
     }
-  };
+  }
 
-  watch(visible, (newVal) => {
-    if (!newVal && editorView.value) {
-      editorView.value.destroy();
-      editorView.value = undefined;
-    }
-  });
+  function editLog(id: string) {
+    editingId.value = id;
+    discardNewDraft.value = false;
+    editorVisible.value = true;
+  }
 
-  onMounted(() => {
-    getLogs();
-  });
+  function handleEditorSaved() {
+    discardNewDraft.value = false;
+    void getLogs();
+  }
 
-  onUnmounted(() => {
-    if (editorView.value) editorView.value.destroy();
-  });
+  function handleEditorDeleted() {
+    discardNewDraft.value = false;
+    void getLogs();
+  }
+
+  onMounted(getLogs);
 </script>
 
-<style lang="less" scoped>
-  .logs-container {
-    height: 100%;
-    overflow-y: auto;
-    padding: 24px 16px;
-
-    // 滚动条样式
-    &::-webkit-scrollbar {
-      width: 6px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background-color: rgba(100, 100, 100, 0.2);
-      border-radius: 3px;
-    }
-
-    @media (min-width: 768px) {
-      padding: 32px 10%;
-    }
-    @media (min-width: 1200px) {
-      padding: 32px 15%;
-    }
-  }
-
-  .logs-intro {
-    text-align: center;
-    margin-bottom: 40px;
-    animation: fadeIn 0.6s ease;
-
-    .intro-title {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 8px;
-      background: linear-gradient(135deg, #615ced 0%, #3d37c9 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .intro-desc {
-      font-size: 14px;
-      color: var(--text-secondary-color);
-      opacity: 0.8;
-    }
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .timeline-wrapper {
-    max-width: 900px;
-    margin: 0 auto;
-  }
-
-  // 手机页面本身已有 20px 安全边距，时间轴不再额外占用两侧空间；
-  // 同时显式撑开 Ant Timeline 的内容列，避免卡片按内容宽度收窄。
-  @media (max-width: 767px) {
-    .logs-container {
-      padding-right: 0;
-      padding-left: 0;
-    }
-
-    .timeline-wrapper,
-    :deep(.ant-timeline),
-    :deep(.ant-timeline-item) {
-      width: 100%;
-      max-width: none;
-    }
-
-    :deep(.ant-timeline-item-content) {
-      width: calc(100% - 32px);
-      box-sizing: border-box;
-    }
-
-    .log-card {
-      width: 100%;
-      box-sizing: border-box;
-    }
-  }
-
-  // Timeline customization
-  :deep(.ant-timeline-item) {
-    padding-bottom: 30px;
-
-    &-tail {
-      border-left: 2px solid var(--menu-item-h-bg-color); // Subtler line
-      left: 6px; // Adjust for custom dot
-    }
-
-    &-head {
-      background: transparent;
-      padding: 0;
-    }
-
-    &-content {
-      margin-left: 32px;
-      top: -6px;
-    }
-  }
-
-  .timeline-dot {
-    width: 14px;
-    height: 14px;
-    background: var(--background-color); // Match parent bg to look like ring
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2;
-
-    .dot-inner {
-      width: 10px;
-      height: 10px;
-      background: #615ced;
-      border-radius: 50%;
-      box-shadow: 0 0 0 2px rgba(97, 92, 237, 0.3);
-    }
-  }
-
-  .log-card {
-    background: var(--menu-item-h-bg-color); // Consistent card bg
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition:
-      transform 0.2s,
-      box-shadow 0.2s;
-
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
-    }
-  }
-
-  .log-header {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px dashed rgba(150, 150, 150, 0.2);
-
-    &.no-border {
-      margin-bottom: 0;
-      padding-bottom: 0;
-      border-bottom: none;
-    }
-  }
-
-  .version-tag {
-    display: flex;
-    align-items: center;
-    background: linear-gradient(135deg, #615ced 0%, #3d37c9 100%);
-    color: #fff;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-weight: 700;
-    box-shadow: 0 2px 6px rgba(97, 92, 237, 0.25);
-
-    .v-num {
-      font-size: 15px;
-    }
-  }
-
-  .log-date {
-    color: var(--text-secondary-color);
-    font-size: 13px;
-  }
-
-  .log-content {
-    color: var(--text-color);
-    font-size: 14px;
-    line-height: 1.6;
-  }
-
-  .log-item {
-    display: flex;
-    align-items: flex-start;
-    margin-bottom: 8px;
-
-    &:last-child {
-      margin-bottom: 0;
-    }
-
-    .item-index {
-      color: #615ced;
-      font-weight: 600;
-      margin-right: 8px;
-      flex-shrink: 0;
-      font-feature-settings: 'tnum'; // Monospace numbers
-    }
-
-    .item-text {
-      opacity: 0.9;
-    }
-  }
-
-  [data-theme='day'] {
-    .log-card {
-      background-color: #f7f8fa;
-      border: 1px solid #ebedf0;
-    }
-  }
-
-  // Editor styles (Optimized)
-  .json-editor-wrapper {
-    display: flex;
-    flex-direction: column;
-    height: 600px;
-
-    border: 1px solid #434343;
-    border-radius: 6px;
-    overflow: hidden;
-    @media (min-width: 764px) {
-      width: 1200px;
-    }
-  }
-
-  .editor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background-color: #1a1a1a;
-    border-bottom: 1px solid #434343;
-    font-size: 12px;
-    color: #8c8c8c;
-  }
-
-  .editor-actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .code-editor {
-    flex: 1;
-    overflow: hidden;
-
-    :deep(.cm-editor) {
-      height: 100%;
-
-      .cm-scroller {
-        overflow: auto;
-        font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-        font-size: 13px;
-        line-height: 1.5;
-      }
-
-      .cm-gutters {
-        background-color: #1a1a1a;
-        border-right: 1px solid #434343;
-        color: #8c8c8c;
-      }
-    }
-  }
-
-  .error-message {
-    padding: 8px 12px;
-    background-color: rgba(255, 77, 79, 0.1);
-    border-top: 1px solid #434343;
-    color: #ff4d4f;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-  }
-
-  .editor-footer {
-    padding: 4px 12px;
-    background-color: #1a1a1a;
-    border-top: 1px solid #434343;
-    color: #8c8c8c;
-    font-size: 11px;
-  }
-
-  .edit-btn {
+<style scoped lang="less">
+  .page-actions {
     position: absolute;
     top: 5px;
     right: 20px;
     z-index: 10;
+  }
+
+  .logs-container {
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 28px 16px 48px;
+  }
+
+  .logs-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .logs-container::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--desc-color) 25%, transparent);
+  }
+
+  .logs-intro {
+    margin-bottom: 34px;
+    text-align: center;
+  }
+
+  .intro-title {
+    margin: 0 0 8px;
+    font-size: 30px;
+    font-weight: 750;
+    background: linear-gradient(135deg, var(--primary-color) 0%, #3d37c9 100%);
+    background-clip: text;
+    color: transparent;
+  }
+
+  .intro-desc {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 14px;
+  }
+
+  .logs-state {
+    min-height: 260px;
+    display: grid;
+    place-items: center;
+    color: var(--desc-color);
+  }
+
+  .timeline {
+    position: relative;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  .timeline::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    bottom: 12px;
+    left: 7px;
+    width: 2px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
+  }
+
+  .timeline-item {
+    position: relative;
+    padding: 0 0 26px 38px;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    left: 0;
+    top: 22px;
+    width: 16px;
+    height: 16px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--background-color);
+  }
+
+  .timeline-marker span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
+  }
+
+  .log-card {
+    padding: 22px 24px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 16px;
+    background: var(--card-background, var(--background-color));
+    box-shadow: var(--surface-card-shadow);
+  }
+
+  .log-card.is-latest {
+    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--card-border-color));
+    box-shadow: var(--surface-raised-shadow);
+  }
+
+  .log-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent);
+  }
+
+  .log-heading {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .log-title-row {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .log-title-row h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 18px;
+    line-height: 1.45;
+  }
+
+  .latest-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .draft-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--desc-color) 12%, transparent);
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .log-heading time {
+    color: var(--desc-color);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .log-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 14px;
+  }
+
+  .log-tags span {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--workspace-panel-bg-color);
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .log-summary {
+    margin: 16px 0 0;
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.65;
+  }
+
+  .log-highlights {
+    margin: 16px 0 0;
+    padding-left: 1.5em;
+    color: var(--text-color);
+  }
+
+  .log-highlights li {
+    margin: 8px 0;
+    padding-left: 5px;
+    color: color-mix(in srgb, var(--text-color) 90%, transparent);
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .log-highlights li::marker {
+    color: var(--primary-color);
+    font-weight: 700;
+  }
+
+  .log-markdown {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px dashed color-mix(in srgb, var(--card-border-color) 75%, transparent);
+  }
+
+  .markdown-body {
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+  }
+
+  .markdown-body :deep(h1),
+  .markdown-body :deep(h2),
+  .markdown-body :deep(h3) {
+    margin: 1.25em 0 0.55em;
+    line-height: 1.35;
+  }
+
+  .markdown-body :deep(p),
+  .markdown-body :deep(ul),
+  .markdown-body :deep(ol),
+  .markdown-body :deep(blockquote) {
+    margin: 0.75em 0;
+  }
+
+  .markdown-body :deep(a) {
+    color: var(--primary-color);
+  }
+
+  .markdown-body :deep(img) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 16px auto;
+    border-radius: 12px;
+    box-shadow: var(--surface-card-shadow);
+  }
+
+  .markdown-body :deep(img[data-ln-size='small']) {
+    width: min(100%, 360px);
+  }
+
+  .markdown-body :deep(img[data-ln-size='medium']) {
+    width: min(100%, 640px);
+  }
+
+  .markdown-body :deep(img[data-ln-size='large']) {
+    width: min(100%, 900px);
+  }
+
+  .markdown-body :deep(img[data-ln-size='full']) {
+    width: 100%;
+  }
+
+  .markdown-body :deep(img[data-ln-size='original']) {
+    width: auto;
+  }
+
+  .markdown-body :deep(pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 14px;
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .markdown-body :deep(code) {
+    font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+
+  .log-card-footer {
+    display: flex;
+    justify-content: center;
+    margin-top: 14px;
+  }
+
+  .expand-button {
+    color: var(--primary-color);
+    background: transparent;
+  }
+
+  @media (min-width: 768px) {
+    .logs-container {
+      padding-right: 10%;
+      padding-left: 10%;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .logs-container {
+      padding-right: 15%;
+      padding-left: 15%;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .page-actions {
+      right: 12px;
+    }
+
+    .logs-container {
+      padding: 20px 0 36px;
+    }
+
+    .logs-intro {
+      margin-bottom: 26px;
+      padding: 0 12px;
+    }
+
+    .intro-title {
+      font-size: 27px;
+    }
+
+    .timeline::before {
+      left: 6px;
+    }
+
+    .timeline-item {
+      padding-left: 28px;
+      padding-bottom: 18px;
+    }
+
+    .timeline-marker {
+      width: 14px;
+      height: 14px;
+      top: 18px;
+    }
+
+    .timeline-marker span {
+      width: 9px;
+      height: 9px;
+    }
+
+    .log-card {
+      padding: 17px 16px;
+      border-radius: 14px;
+    }
+
+    .log-card-head {
+      gap: 10px;
+      padding-bottom: 12px;
+    }
+
+    .log-title-row h2 {
+      font-size: 16px;
+    }
+
+    .log-highlights li,
+    .markdown-body {
+      font-size: 13.5px;
+      line-height: 1.72;
+    }
   }
 </style>

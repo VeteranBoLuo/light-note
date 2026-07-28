@@ -222,8 +222,8 @@
           <div v-else-if="latestUpdateLog" class="latest-update-content">
             <div class="latest-update-title">
               <span class="update-dot"></span>
-              <strong v-html="latestUpdateLog.label || t('workbench.logs.latest')"></strong>
-              <time>{{ latestUpdateLog.time || '-' }}</time>
+              <strong>{{ latestUpdateLog.title || latestUpdateLog.label || t('workbench.logs.latest') }}</strong>
+              <time>{{ latestUpdateLog.publishDate || latestUpdateLog.time || '-' }}</time>
             </div>
             <div v-if="latestUpdateItems.length" class="latest-update-items">
               <div
@@ -232,7 +232,7 @@
                 class="latest-update-item"
               >
                 <span>{{ index + 1 }}</span>
-                <p v-html="item"></p>
+                <p>{{ item }}</p>
               </div>
             </div>
           </div>
@@ -253,8 +253,11 @@
   import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request.ts';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
-  import { getJsonInfo } from '@/config/jsonCfg.ts';
-  import { API_TEXTS } from '@/config/constants.ts';
+  import {
+    listUpdateLogs,
+    updateLogMarkdownSummaryItems,
+    type UpdateLogItem,
+  } from '@/api/updateLogApi.ts';
   import { cloudSpaceStore, inboxStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -282,12 +285,6 @@
     meta: string;
     icon: string;
     raw: any;
-  }
-
-  interface UpdateLogItem {
-    label?: string;
-    time?: string;
-    list?: string[];
   }
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
@@ -464,9 +461,12 @@
   );
   const topHotTags = computed(() => hotTagTable.value.slice(0, 5));
   const latestUpdateLog = computed(() => updateLogList.value[0] || null);
-  const latestUpdateItems = computed(() =>
-    Array.isArray(latestUpdateLog.value?.list) ? latestUpdateLog.value.list.slice(0, 4) : [],
-  );
+  const latestUpdateItems = computed(() => {
+    const item = latestUpdateLog.value;
+    if (item?.contentMarkdown) return updateLogMarkdownSummaryItems(item.contentMarkdown, 4);
+    if (Array.isArray(item?.highlights)) return item.highlights.slice(0, 4);
+    return Array.isArray(item?.list) ? item.list.slice(0, 4) : [];
+  });
 
   function displayCount(value: number) {
     return value > 99 ? '99+' : String(Number(value || 0));
@@ -575,10 +575,8 @@
   async function fetchUpdateLogs() {
     loadingUpdateLogs.value = true;
     try {
-      const res = await getJsonInfo(API_TEXTS.CHANGELOG);
-      const content =
-        typeof res.data.jsonContent === 'string' ? JSON.parse(res.data.jsonContent || '[]') : res.data.jsonContent;
-      updateLogList.value = Array.isArray(content) ? [...content].reverse() : [];
+      const res = await listUpdateLogs();
+      updateLogList.value = Array.isArray(res.data?.items) ? res.data.items : [];
     } catch (error) {
       console.warn('fetchUpdateLogs fallback', error);
       updateLogList.value = [];

@@ -13,7 +13,8 @@ const API_LOG_SKIP_SUBSTRINGS = Object.freeze([
 ]);
 
 const PASSIVE_API_PATHS = new Set([
-  '/json/getConfigByName', // 公开配置读取（当前用于更新日志），构建预渲染也会调用。
+  '/json/getConfigByName', // 公开配置读取（更新日志滚动发布兼容期间仍会回退调用）。
+  '/updateLog/list', // 公开更新日志读取，页面与构建预渲染都会调用。
   '/inbox/count', // 待处理角标读取，页面加载及构建预渲染会高频调用。
 ]);
 
@@ -30,5 +31,6 @@ function normalizeApiPath(originalUrl) {
 export function shouldSkipApiLog(originalUrl) {
   const url = String(originalUrl || '');
   if (API_LOG_SKIP_SUBSTRINGS.some((key) => url.includes(key))) return true;
-  return PASSIVE_API_PATHS.has(normalizeApiPath(url));
+  const path = normalizeApiPath(url);
+  return PASSIVE_API_PATHS.has(path) || path.startsWith('/updateLog/image/');
 }

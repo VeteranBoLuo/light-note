@@ -78,6 +78,16 @@ cd apps/server && node app.js
 
 ### 后端规范
 
+#### 更新日志与 OBS 图片
+
+- 更新日志正文保存 Markdown 源文本，展示前必须经过 `marked + DOMPurify`，不得直接把数据库内容交给 `v-html`。
+- 更新日志编辑器以 Markdown 为唯一正文输入；历史 `highlights` 在首次编辑时转换为有序 Markdown，保存时再从 Markdown 自动生成兼容摘要，不再提供独立的“重点更新”输入框。
+- 更新日志图片只能由 Root 上传，支持的 MIME 类型与大小由 `util/updateLog.js` 统一校验；禁止 SVG，避免公开页面引入脚本型图片内容。
+- 更新日志图片显示尺寸使用受控的 `data-ln-size` 档位（原始、小、中、大、通栏），OBS 只保存一份原图；所有档位必须保留 `max-width: 100%` 的窄屏保护。
+- 数据库只保存 OBS object key，不保存会过期的签名 URL。公开页面使用 `/api/updateLog/image/:logId/:fileName` 稳定地址，后端仅允许读取已登记且已发布日志拥有的对象；Root 可预览草稿图片。
+- `image_keys` 与 Markdown 引用同属 `update_logs` 一条记录。保存或删除时先提交数据库事务，再清理不再引用的 OBS 对象；上传失败和登记失败必须清理临时文件及已上传对象。
+- 旧 `config_json` 更新日志只作为迁移与回滚来源，新功能不得继续写入原始 JSON 配置。
+
 **响应格式：**
 
 ```javascript

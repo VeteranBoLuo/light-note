@@ -12,7 +12,12 @@
     </div>
 
     <!-- 抽奖台:滚动/揭晓 -->
-    <div class="lt-stage" :class="{ rolling }">
+    <div
+      class="lt-stage"
+      :class="{ rolling }"
+      :aria-busy="rolling || undefined"
+      :aria-live="rolling ? 'polite' : undefined"
+    >
       <template v-if="rolling">
         <div class="lt-rolling">
           <div class="lt-roller">🎁</div>
@@ -58,7 +63,6 @@
         v-if="(lottery?.freeDaily || 0) > 0"
         type="success"
         :disabled="readOnly || !canFree"
-        :loading="rolling"
         :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
         @click="onDraw(1, true)"
       >
@@ -67,7 +71,6 @@
       <BButton
         type="primary"
         :disabled="readOnly || !canDraw(1)"
-        :loading="rolling"
         :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
         @click="onDraw(1)"
       >
@@ -76,7 +79,6 @@
       <BButton
         type="primary"
         :disabled="readOnly || !canDraw(10)"
-        :loading="rolling"
         :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
         @click="onDraw(10)"
       >
@@ -221,6 +223,8 @@
   }
   /* 抽奖台 */
   .lt-stage {
+    isolation: isolate;
+    overflow: hidden;
     min-height: 130px;
     display: flex;
     flex-direction: column;
@@ -393,10 +397,26 @@
 
   @media (max-width: 760px) {
     .lt-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+      gap: 6px;
+    }
+    .lt-actions :deep(.b_btn) {
+      width: 100%;
+      min-width: 0;
+      padding: 0 6px;
+      font-size: 13px;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .lt-actions {
       gap: 4px;
     }
     .lt-actions :deep(.b_btn) {
-      min-width: unset;
+      padding: 0 4px;
+      font-size: 12px;
     }
   }
 </style>

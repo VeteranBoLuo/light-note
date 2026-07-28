@@ -46,6 +46,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'security.js': '/security',
       'seo.js': '',
       'trash.js': '/trash',
+      'updateLog.js': '/updateLog',
       'user.js': '/user',
       'workbench.js': '/workbench',
     };
