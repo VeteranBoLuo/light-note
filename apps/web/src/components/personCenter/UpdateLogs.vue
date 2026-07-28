@@ -65,6 +65,7 @@
             <div
               v-if="isExpanded(item.id) && renderedContent[item.id]"
               class="log-markdown markdown-body"
+              :class="{ 'has-meta-divider': item.tags.length > 0 || Boolean(item.summary) }"
               v-html="renderedContent[item.id]"
             ></div>
 
@@ -406,6 +407,9 @@
 
   .log-markdown {
     margin-top: 18px;
+  }
+
+  .log-markdown.has-meta-divider {
     padding-top: 18px;
     border-top: 1px dashed color-mix(in srgb, var(--card-border-color) 75%, transparent);
   }
