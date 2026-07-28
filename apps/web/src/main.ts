@@ -7,6 +7,16 @@ import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
+
+// Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
+// 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 是旧调试包的兼容识别。
+const isAndroidWebView =
+  /\bLightNoteAndroid\/[\w.-]+/i.test(navigator.userAgent) ||
+  (/Android/i.test(navigator.userAgent) && /;\s*wv\)/i.test(navigator.userAgent));
+if (isAndroidWebView) {
+  document.documentElement.classList.add('light-note-android-webview');
+}
+
 // 创建vue实例
 const app = createApp(App);
 const pinia = createPinia();

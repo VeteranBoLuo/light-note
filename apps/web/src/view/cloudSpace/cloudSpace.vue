@@ -635,7 +635,7 @@
     gap: 3px;
     padding: 3px;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--card-border-color) 42%, transparent);
+    background: var(--bl-input-noBorder-bg-color);
   }
 
   .cloud-view-button {
@@ -655,7 +655,7 @@
   .cloud-view-button.active {
     color: var(--resource-file-color, #ff8a00);
     background: var(--menu-body-bg-color);
-    box-shadow: 0 2px 7px color-mix(in srgb, var(--text-color) 12%, transparent);
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
   }
 
   .batch-toggle-btn {
@@ -870,6 +870,10 @@
       height: 34px;
       gap: 5px;
       flex: 1 1 0;
+    }
+
+    .cloud-view-button.active {
+      box-shadow: none;
     }
 
     .cloud-view-toggle :deep(.b-tooltip-wrap) {

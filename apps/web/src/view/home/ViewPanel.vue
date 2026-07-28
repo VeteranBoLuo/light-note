@@ -1,5 +1,9 @@
 <template>
-  <div class="view-panel" id="view-panel" data-mobile-resource-scroll>
+  <div
+    class="view-panel"
+    id="view-panel"
+    :data-mobile-resource-scroll="bookmark.isMobile ? null : ''"
+  >
     <TagInfo />
     <CardPanel />
   </div>
@@ -8,6 +12,9 @@
 <script lang="ts" setup>
   import TagInfo from '@/components/home/TagInfo.vue';
   import CardPanel from '@/components/home/CardPanel.vue';
+  import { bookmarkStore } from '@/store';
+
+  const bookmark = bookmarkStore();
 </script>
 
 <style lang="less">

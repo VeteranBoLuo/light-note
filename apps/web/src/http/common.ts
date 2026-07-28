@@ -3,12 +3,43 @@ import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
 const cloud = cloudSpaceStore();
+
+declare global {
+  interface Window {
+    LightNoteAndroid?: {
+      postMessage: (message: string) => void;
+    };
+  }
+}
+
+function requestAndroidDownload(downloadUrl: string, fileName?: string): boolean {
+  const bridge = typeof window !== 'undefined' ? window.LightNoteAndroid : undefined;
+  if (typeof bridge?.postMessage !== 'function') return false;
+
+  try {
+    bridge.postMessage(
+      JSON.stringify({
+        type: 'download',
+        url: downloadUrl,
+        fileName: fileName || '',
+      }),
+    );
+    return true;
+  } catch (error) {
+    console.warn('Android 原生下载通道不可用，回退到浏览器下载:', error);
+    return false;
+  }
+}
+
 export async function downloadField(id: number | string, token?: string) {
   try {
     cloud.loading = true;
     const res = await apiBasePost('/api/file/downloadFileById', { id, token });
     if (res.status === 200 && res.data?.downloadUrl) {
       const { downloadUrl, fileName } = res.data;
+      if (requestAndroidDownload(downloadUrl, fileName)) {
+        return true;
+      }
       const a = document.createElement('a');
       a.href = downloadUrl; // OBS will serve the file directly
       if (fileName) a.download = decodeURIComponent(fileName);

@@ -197,16 +197,16 @@
     max-width: 100%;
     box-sizing: border-box;
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--text-color) 8%, transparent),
+      0 0 0 1px var(--surface-border-color, var(--card-border-color)),
       0 8px 24px rgba(15, 23, 42, 0.06);
     transition: box-shadow 0.2s ease;
   }
 
   .input-container:focus-within {
-    background-color: color-mix(in srgb, var(--menu-container-bg-color) 97%, var(--primary-color));
+    background-color: var(--menu-container-bg-color);
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--text-color) 8%, transparent),
-      0 12px 30px color-mix(in srgb, var(--primary-color) 12%, transparent);
+      0 0 0 1px var(--surface-border-color, var(--card-border-color)),
+      0 12px 30px rgba(97, 92, 237, 0.12);
   }
 
   .context-actions {
@@ -235,12 +235,12 @@
     box-sizing: border-box;
     border-radius: 0.875rem;
     background: var(--card-background);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-color) 10%, transparent);
+    box-shadow: inset 0 0 0 1px var(--surface-border-color, var(--card-border-color));
     transition: box-shadow 0.2s ease;
   }
 
   .text-input :deep(.input-container:focus-within) {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 62%, transparent);
+    box-shadow: inset 0 0 0 1px var(--primary-color);
   }
 
   .text-input :deep(.b-textarea) {
@@ -252,6 +252,8 @@
     background: transparent !important;
     font-size: 1rem;
     line-height: 1.5;
+    appearance: none;
+    -webkit-appearance: none;
   }
 
   .text-input :deep(.b-textarea:hover),

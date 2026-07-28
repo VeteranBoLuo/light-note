@@ -1,6 +1,20 @@
 <template>
   <div class="help-container">
-    <div class="help-body">
+    <div v-if="isCompactHelpLayout" class="help-mobile-header">
+      <BButton
+        class="help-mobile-exit"
+        :aria-label="t('help.exitToProfile')"
+        @click="exitHelpCenter"
+      >
+        <SvgIcon :src="icon.arrow_left" size="18" />
+        <span>{{ t('help.exitToProfile') }}</span>
+      </BButton>
+      <span class="help-mobile-title">{{ t('help.title') }}</span>
+    </div>
+    <div
+      class="help-body"
+      :class="{ 'help-body--catalog-open': isCompactHelpLayout && isCompactCatalogOpen && !isSearching }"
+    >
       <div class="help-sidebar">
         <b-input
           v-model:value="searchValue"
@@ -18,13 +32,15 @@
           class="help-compact-catalog-trigger"
           :aria-expanded="isCompactCatalogOpen"
           aria-controls="help-article-list"
-          @click="isCompactCatalogOpen = !isCompactCatalogOpen"
+          @click="toggleCompactCatalog"
         >
           <SvgIcon :src="icon.catalogue" size="16" />
           <span>{{ t('help.catalog') }}</span>
           <span class="help-compact-trigger-state" aria-hidden="true">{{ isCompactCatalogOpen ? '−' : '+' }}</span>
         </BButton>
-        <div v-if="isSearching" class="help-search-hint">搜索中，请在右侧结果中选择</div>
+        <div v-if="isSearching && !isCompactHelpLayout" class="help-search-hint">
+          搜索中，请在右侧结果中选择
+        </div>
         <BList
           v-else-if="!isCompactHelpLayout || isCompactCatalogOpen"
           id="help-article-list"
@@ -87,7 +103,7 @@
         <div v-else class="help-article-content" v-html="renderedContent"></div>
       </div>
       <BButton
-        v-if="!isSearching && isCompactHelpLayout && helpOutline.length"
+        v-if="!isSearching && isCompactHelpLayout && !isCompactCatalogOpen && helpOutline.length"
         class="help-compact-outline-trigger"
         :class="{ active: isCompactOutlineOpen }"
         :aria-expanded="isCompactOutlineOpen"
@@ -137,6 +153,8 @@
   const { t, locale } = useI18n();
   const route = useRoute();
   const router = useRouter();
+  const helpEntryHistoryPosition =
+    typeof window.history.state?.position === 'number' ? window.history.state.position : null;
   const helpInfo = {
     content:
       locale.value === 'zh-CN'
@@ -315,6 +333,24 @@
     void (replace ? router.replace(navigation) : router.push(navigation));
   }
 
+  function exitHelpCenter() {
+    isCompactCatalogOpen.value = false;
+    isCompactOutlineOpen.value = false;
+    const currentHistoryPosition =
+      typeof window.history.state?.position === 'number' ? window.history.state.position : null;
+    if (
+      helpEntryHistoryPosition !== null &&
+      currentHistoryPosition !== null &&
+      currentHistoryPosition >= helpEntryHistoryPosition &&
+      window.history.length > 1
+    ) {
+      // 一次跨过本次帮助中心内累积的文章记录，回到进入帮助中心前的页面。
+      router.go(-(currentHistoryPosition - helpEntryHistoryPosition + 1));
+      return;
+    }
+    void router.replace({ name: 'personCenter' });
+  }
+
   function resetToIntro() {
     isCompactCatalogOpen.value = false;
     isCompactOutlineOpen.value = false;
@@ -332,6 +368,12 @@
     selectedFromSearch.value = false;
     applyArticle(item);
     navigateToArticle(String(item.id));
+  }
+  function toggleCompactCatalog() {
+    isCompactCatalogOpen.value = !isCompactCatalogOpen.value;
+    if (isCompactCatalogOpen.value) {
+      isCompactOutlineOpen.value = false;
+    }
   }
   function scrollToHelpHeading(id: string) {
     activeOutlineId.value = id;
@@ -546,6 +588,36 @@
     display: flex;
     gap: 10px;
   }
+  .help-mobile-header {
+    position: relative;
+    min-height: 40px;
+    flex: 0 0 40px;
+    display: flex;
+    align-items: center;
+  }
+  .help-mobile-exit.b_btn {
+    position: relative;
+    z-index: 1;
+    height: 36px;
+    padding: 0 8px;
+    gap: 5px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-color);
+  }
+  .help-mobile-title {
+    position: absolute;
+    left: 50%;
+    max-width: 42%;
+    transform: translateX(-50%);
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 17px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .help-title {
     height: 30px;
     line-height: 1rem;
@@ -560,7 +632,8 @@
     position: relative;
     display: flex;
     gap: 0;
-    height: 100%;
+    height: auto;
+    flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--resource-bookmark-color) 14%, var(--card-border-color));
@@ -835,7 +908,35 @@
     }
     .help-menu-list {
       flex: 0 1 auto;
-      height: min(38vh, 280px);
+    }
+    .help-body--catalog-open {
+      overflow: hidden;
+    }
+    .help-body--catalog-open .help-sidebar {
+      height: 100%;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    .help-body--catalog-open .help-editor {
+      display: none;
+    }
+    .help-body--catalog-open #help-article-list.help-menu-list {
+      // BList 根节点自身有更高优先级的 height: 100%，这里必须明确覆盖，
+      // 目录打开时占满搜索区以下空间，正文暂时隐藏，目录自身负责完整滚动。
+      height: auto !important;
+      max-height: none;
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    .help-body--catalog-open #help-article-list.help-menu-list .category-body {
+      // 此处没有使用 BList 内置搜索框，不应再预留 50px；完整高度交给目录自身滚动。
+      height: 100% !important;
+      max-height: 100%;
+      box-sizing: border-box;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
     }
     .help-editor {
       width: 100%;

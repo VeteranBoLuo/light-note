@@ -1,0 +1,87 @@
+/*
+ * Android 系统 WebView 兼容层
+ *
+ * 部分华为系统 WebView 会错误渲染 color-mix()，并把低透明度、多层
+ * box-shadow 显示为实心黑框。这里只覆盖真机已确认有问题的组件，普通
+ * 浏览器和 PC 不会命中 light-note-android-webview。
+ */
+html.light-note-android-webview {
+  // 书签真实卡片：不用混色渐变和混色阴影。
+  .card-body {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    background: var(--menu-body-bg-color) !important;
+    box-shadow: none !important;
+  }
+
+  // 待办顶部状态容器与选中项：避免黑色外框和四角方形阴影。
+  .inbox-toolbar--todo-primary {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    background: var(--workspace-panel-bg-color, var(--background-color)) !important;
+    box-shadow: none !important;
+  }
+
+  .is-pill .tab:hover {
+    background: var(--bl-input-noBorder-hover-bg-color) !important;
+  }
+
+  .is-pill .tab.is-active {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    background: var(--card-background, var(--background-color)) !important;
+    box-shadow: none !important;
+  }
+
+  // 成长页：统一修正所有已有边框的颜色，不新增边框。
+  .growth-page .growth-back,
+  .growth-page .growth-report-btn,
+  .growth-page .growth-admin-notice,
+  .growth-page .growth-panel,
+  .growth-page .growth-panel * {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+  }
+
+  .growth-page .growth-panel,
+  .growth-page .gc-badge,
+  .growth-page .gc-checkin,
+  .growth-page .cal-cell,
+  .growth-page .rl-row,
+  .growth-page .aw-badge,
+  .growth-page .ps-item,
+  .growth-page .lt-prize {
+    box-shadow: none !important;
+  }
+
+  .growth-page .dq-item.done .dq-check {
+    border-color: transparent !important;
+  }
+
+  // 帮助中心：旧 WebView 会把混色边框画成黑框，并放大大纲入口的混色/多层阴影。
+  .help-body,
+  .help-editor,
+  .help-compact-catalog-trigger,
+  .help-compact-outline-trigger,
+  .help-compact-outline,
+  .search-result-card {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+  }
+
+  .help-body,
+  .help-editor,
+  .help-compact-outline-trigger,
+  .help-compact-outline {
+    box-shadow: none !important;
+  }
+
+  .bookmark-page .card-panel,
+  .bookmark-page .card-panel > div,
+  .bookmark-page .right-menu-anchor,
+  .bookmark-page .card-body {
+    touch-action: pan-y;
+  }
+
+  // 旧 WebView 明确声明轻触导航，避免等待双击缩放判定造成约 300ms 的点击迟滞。
+  .mobile-resource-tab,
+  .mobile-bottom-nav__item,
+  .mobile-top-bar button {
+    touch-action: manipulation;
+  }
+}

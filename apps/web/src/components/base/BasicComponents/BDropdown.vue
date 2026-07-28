@@ -77,8 +77,16 @@
   const panelRef = ref<HTMLElement | null>(null);
   const visible = ref(false);
   const teleportTarget = ref<HTMLElement | string>('body');
-  const panelStyle = reactive<Record<string, string>>({ position: 'fixed', top: '0px', left: '0px', minWidth: '0px' });
+  const panelStyle = reactive<Record<string, string>>({
+    position: 'fixed',
+    top: '0px',
+    left: '0px',
+    minWidth: '0px',
+    visibility: 'hidden',
+  });
   let closeTimer: number | null = null;
+  let positionFrame: number | null = null;
+  let resizeObserver: ResizeObserver | null = null;
 
   const triggerModes = computed(() => (Array.isArray(props.trigger) ? props.trigger : [props.trigger]));
   const isHover = computed(() => triggerModes.value.includes('hover'));
@@ -111,6 +119,13 @@
     panelStyle.top = `${rBottom + 6}px`;
     panelStyle.left = `${left}px`;
     panelStyle.minWidth = `${Math.ceil(rWidth)}px`;
+    panelStyle.visibility = 'visible';
+  }
+
+  function cancelPositionFrame() {
+    if (positionFrame === null) return;
+    cancelAnimationFrame(positionFrame);
+    positionFrame = null;
   }
 
   function clearCloseTimer() {
@@ -124,9 +139,23 @@
     clearCloseTimer();
     if (visible.value) return;
     teleportTarget.value = (props.getPopupContainer?.(triggerRef.value as HTMLElement) as HTMLElement | null) || 'body';
+    panelStyle.visibility = 'hidden';
     visible.value = true;
     emit('openChange', true);
-    nextTick(computePosition);
+    nextTick(() => {
+      computePosition();
+      // 旧 WebView 在 Teleport 节点首帧完成布局后，菜单宽度可能才稳定；再校准一次避免右对齐漂移。
+      cancelPositionFrame();
+      positionFrame = requestAnimationFrame(() => {
+        positionFrame = null;
+        computePosition();
+      });
+      resizeObserver?.disconnect();
+      if (panelRef.value && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(computePosition);
+        resizeObserver.observe(panelRef.value);
+      }
+    });
     window.addEventListener('scroll', computePosition, true);
     window.addEventListener('resize', computePosition);
     if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
@@ -137,6 +166,9 @@
     if (!visible.value) return;
     visible.value = false;
     emit('openChange', false);
+    cancelPositionFrame();
+    resizeObserver?.disconnect();
+    resizeObserver = null;
     window.removeEventListener('scroll', computePosition, true);
     window.removeEventListener('resize', computePosition);
     document.removeEventListener('mousedown', onDocMouseDown, true);
@@ -177,6 +209,8 @@
 
   onBeforeUnmount(() => {
     clearCloseTimer();
+    cancelPositionFrame();
+    resizeObserver?.disconnect();
     window.removeEventListener('scroll', computePosition, true);
     window.removeEventListener('resize', computePosition);
     document.removeEventListener('mousedown', onDocMouseDown, true);

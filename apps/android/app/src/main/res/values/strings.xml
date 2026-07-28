@@ -7,8 +7,17 @@
     <string name="browser_back">返回</string>
     <string name="browser_close">关闭</string>
     <string name="browser_title">应用内浏览</string>
-    <string name="download_started">已开始下载，请在系统下载列表中查看</string>
+    <string name="download_started">已开始下载，完成后会提示</string>
+    <string name="download_completed">下载完成：%1$s。可在“文件”或相册中查看</string>
     <string name="download_failed">无法开始下载</string>
+    <string name="download_failed_named">下载失败：%1$s</string>
+    <string name="file_chooser_opening">正在打开系统文件选择器…</string>
+    <string name="file_chooser_processing">正在读取所选文件…</string>
+    <string name="file_chooser_returning">正在返回轻笺…</string>
     <string name="cannot_open_link">当前设备无法打开这个链接</string>
     <string name="ssl_error">安全连接校验失败，已停止加载</string>
+    <string name="unsafe_page_blocked">检测到风险页面，已停止加载</string>
+    <string name="webview_too_old_title">系统 WebView 版本过旧</string>
+    <string name="webview_too_old_message">当前网页组件无法安全运行轻笺。请先在系统应用商店更新“Android System WebView”或 Chrome，然后重新打开轻笺。</string>
+    <string name="close_app">关闭轻笺</string>
 </resources>

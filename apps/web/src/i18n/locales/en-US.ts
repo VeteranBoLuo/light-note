@@ -3334,6 +3334,7 @@ export default {
     backToResults: 'Back to results',
     articleUnavailable: 'This help article is unavailable or no longer published',
     title: 'Help Center',
+    exitToProfile: 'Back to profile',
     catalog: 'Article list',
     outline: 'Outline',
     introTitle: 'Welcome to Help Center',

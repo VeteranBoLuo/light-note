@@ -1,5 +1,6 @@
 <template>
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
+    <BLoading :loading="routeNavigationLoading" bar :title="t('common.loading')" />
     <a-config-provider
       :theme="{
         token: {
@@ -57,6 +58,8 @@
   } from '@/view/landing/landingAuth.ts';
   import { applyDocumentTheme } from '@/utils/theme.ts';
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { routeNavigationLoading } from '@/router';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));

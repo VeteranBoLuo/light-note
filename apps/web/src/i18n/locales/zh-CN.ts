@@ -3249,6 +3249,7 @@ export default {
     backToResults: '返回搜索结果',
     articleUnavailable: '这篇帮助文章不存在或已下线',
     title: '帮助中心',
+    exitToProfile: '返回个人中心',
     catalog: '文章目录',
     outline: '内容大纲',
     introTitle: '欢迎来到帮助中心',

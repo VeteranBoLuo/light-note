@@ -1,5 +1,8 @@
 <template>
-  <div v-if="inline" v-show="loading" class="b-loading-inline" role="status" aria-live="polite">
+  <div v-if="bar" v-show="loading" class="b-loading-bar" role="progressbar" :aria-label="title" :aria-valuetext="title">
+    <span class="b-loading-bar__indicator" aria-hidden="true"></span>
+  </div>
+  <div v-else-if="inline" v-show="loading" class="b-loading-inline" role="status" aria-live="polite">
     <span class="b-loading-inline__indicator" aria-hidden="true">
       <i></i>
       <i></i>
@@ -48,6 +51,10 @@
       type: Boolean,
       default: false,
     },
+    bar: {
+      type: Boolean,
+      default: false,
+    },
   });
 
   const slotContainerRef = ref<HTMLElement>();
@@ -63,6 +70,48 @@
 </script>
 
 <style lang="less" scoped>
+  .b-loading-bar {
+    position: fixed;
+    z-index: 12000;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgba(78, 75, 70, 0.12);
+  }
+
+  .b-loading-bar__indicator {
+    width: 38%;
+    height: 100%;
+    display: block;
+    background: var(--primary-color, #4e4b46);
+    transform: translate3d(-120%, 0, 0);
+    animation: b-loading-bar-move 1.05s ease-in-out infinite;
+  }
+
+  @keyframes b-loading-bar-move {
+    0% {
+      transform: translate3d(-120%, 0, 0);
+    }
+
+    55% {
+      transform: translate3d(90%, 0, 0);
+    }
+
+    100% {
+      transform: translate3d(300%, 0, 0);
+    }
+  }
+
+  :global(.disable-animations) .b-loading-bar__indicator {
+    width: 100%;
+    opacity: 0.65;
+    transform: none;
+    animation: none !important;
+  }
+
   .b-loading-inline {
     display: inline-flex;
     align-items: center;
@@ -108,6 +157,13 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .b-loading-bar__indicator {
+      width: 100%;
+      opacity: 0.65;
+      transform: none;
+      animation: none;
+    }
+
     .b-loading-inline__indicator i {
       animation: none;
       opacity: 0.65;

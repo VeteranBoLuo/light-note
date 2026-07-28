@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
+import { readonly, ref } from 'vue';
 
 import loginRouter from '@/router/modules/login';
 import mainPageRouter from '@/router/modules/mainPage';
@@ -120,12 +121,42 @@ const router = createRouter({
   routes,
 });
 
+const routeNavigationLoadingState = ref(false);
+export const routeNavigationLoading = readonly(routeNavigationLoadingState);
+let routeNavigationSequence = 0;
+
+function finishRouteNavigationFeedback() {
+  const completedSequence = routeNavigationSequence;
+  if (!routeNavigationLoadingState.value) return;
+
+  const hideWhenCurrent = () => {
+    if (completedSequence === routeNavigationSequence) {
+      routeNavigationLoadingState.value = false;
+    }
+  };
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    hideWhenCurrent();
+    return;
+  }
+
+  // afterEach 早于新路由视图完成绘制；保留到下一轮绘制后，避免导航已选中但旧内容仍在时进度条提前消失。
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(hideWhenCurrent);
+  });
+}
+
 // 记录"用户正要去哪":异步组件解析(可能因 chunk 404 而失败)之前先落一份目标路径,
 // 供 main.ts 的 vite:preloadError 兜底使用,让自愈刷新精确落到用户点击的目标页,
 // 而不是退回到点击前的旧页面(那样用户还得再点一次)。
 let pendingNavigationTarget = '';
-router.beforeEach((to) => {
+router.beforeEach((to, from) => {
+  routeNavigationSequence += 1;
   pendingNavigationTarget = to.fullPath;
+  // 首次整页打开已有原生 WebView/浏览器进度；这里只反馈应用内部的异步路由切换。
+  // 已缓存的同步切换会在浏览器绘制前完成，因此不会产生无意义的闪烁。
+  if (from.matched.length > 0 && to.fullPath !== from.fullPath) {
+    routeNavigationLoadingState.value = true;
+  }
 });
 export function getPendingNavigationTarget() {
   return pendingNavigationTarget || window.location.pathname + window.location.search;
@@ -148,11 +179,13 @@ const CHUNK_ERROR_PATTERN =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
 
 router.onError((error, to) => {
+  routeNavigationLoadingState.value = false;
   if (!CHUNK_ERROR_PATTERN.test(error?.message || '')) return;
   reloadOnceTo(to.fullPath);
 });
 
 router.afterEach(() => {
+  finishRouteNavigationFeedback();
   sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
 });
 
