@@ -195,6 +195,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin_context', [['POST', '/user/adminContex
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/login'],
   ['POST', '/user/registerUser'],
+  ['POST', '/user/github/authorize'],
   ['POST', '/user/github'],
   ['POST', '/user/saveUserInfo'],
   ['GET', '/user/deleteUserById'],
@@ -202,6 +203,8 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/user/configPassword'],
   ['POST', '/user/getMySessions'],
   ['POST', '/user/revokeSession'],
+  ['POST', '/user/requestAccountDeletionCode'],
+  ['POST', '/user/deleteMyAccount'],
   ['POST', '/user/exportData'],
   ['POST', '/user/importData'],
   ['POST', '/user/sendEmail'],

@@ -29,8 +29,8 @@ Android 构建前会通过 `syncLegalDocuments` 自动复制到生成目录并�
 `LegalDocuments.PRIVACY_POLICY_VERSION`；隐私政策发生需要重新征得同意的变化时，必须同步更新
 页面版本和该常量。
 
-当前文档明确标记为“备案前审阅稿”，不能作为正式候选包公开发布。定稿门槛和权限、依赖审计见
-`docs/android/p4-compliance-audit.md`。
+当前正式政策版本为 `2026-07-28`。定稿依据、权限、依赖和第三方服务审计见
+`docs/android/p4-compliance-audit.md`；处理目的、范围或第三方服务发生实质变化时，应先更新政策版本并重新构建。
 
 ## 本地构建
 

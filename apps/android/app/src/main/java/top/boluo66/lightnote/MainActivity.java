@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -42,6 +43,8 @@ public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final long FILE_CHOOSER_LAUNCH_DELAY_MS = 64;
     private static final long FILE_CHOOSER_READY_FALLBACK_MS = 3_000;
+    private static final long LAUNCH_TIMEOUT_MS = 10_000;
+    private static final long WEB_APP_READY_FALLBACK_MS = 1_500;
 
     private WebView webView;
     private ProgressBar progressBar;
@@ -59,6 +62,7 @@ public final class MainActivity extends Activity {
     private boolean launchOverlayHidden;
     private boolean unsupportedWebView;
     private final Runnable launchTimeout = this::hideLaunchOverlay;
+    private final Runnable webAppReadyFallback = this::hideLaunchOverlay;
     private final Runnable fileChooserReadyFallback = this::hideFileChooserOverlay;
 
     @Override
@@ -70,7 +74,7 @@ public final class MainActivity extends Activity {
             return;
         }
         configureWebView();
-        launchOverlay.postDelayed(launchTimeout, 10_000);
+        launchOverlay.postDelayed(launchTimeout, LAUNCH_TIMEOUT_MS);
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(WebViewSupport.HOME_URL);
@@ -185,44 +189,43 @@ public final class MainActivity extends Activity {
         FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundColor(getColor(R.color.brand_primary));
         overlay.setClickable(true);
+        overlay.setImportantForAccessibility(
+            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        );
 
-        LinearLayout center = new LinearLayout(this);
-        center.setOrientation(LinearLayout.VERTICAL);
-        center.setGravity(Gravity.CENTER);
+        // 与 Android 系统开屏保持同一背景和品牌标识。静态品牌封面会一直
+        // 延续到 WebView 第一帧，不展示转圈或“加载中”等状态。
+        LinearLayout brand = new LinearLayout(this);
+        brand.setOrientation(LinearLayout.VERTICAL);
+        brand.setGravity(Gravity.CENTER);
+        brand.setTranslationY(dp(-44));
 
         ImageView icon = new ImageView(this);
-        // 启动页只展示透明品牌前景。自适应桌面图标还包含一层方形背景，
-        // 部分鸿蒙 Android 兼容层在普通 ImageView 中不会套用启动器蒙版，会露出方角。
         icon.setImageResource(R.drawable.ic_launcher_foreground);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        center.addView(icon, new LinearLayout.LayoutParams(dp(96), dp(96)));
+        brand.addView(icon, new LinearLayout.LayoutParams(dp(192), dp(192)));
 
         TextView appName = new TextView(this);
         appName.setText(R.string.app_name);
         appName.setTextColor(Color.WHITE);
-        appName.setTextSize(22);
+        appName.setTextSize(30);
+        appName.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         appName.setGravity(Gravity.CENTER);
+        appName.setIncludeFontPadding(false);
+        appName.setLetterSpacing(0.08f);
         LinearLayout.LayoutParams appNameParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        appNameParams.topMargin = dp(14);
-        center.addView(appName, appNameParams);
+        appNameParams.topMargin = dp(10);
+        brand.addView(appName, appNameParams);
 
-        ProgressBar loading = new ProgressBar(this);
-        loading.setIndeterminateTintList(getColorStateList(android.R.color.white));
-        LinearLayout.LayoutParams loadingParams =
-            new LinearLayout.LayoutParams(dp(28), dp(28));
-        loadingParams.gravity = Gravity.CENTER_HORIZONTAL;
-        loadingParams.topMargin = dp(22);
-        center.addView(loading, loadingParams);
-
-        FrameLayout.LayoutParams centerParams = new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        centerParams.gravity = Gravity.CENTER;
-        overlay.addView(center, centerParams);
+        brandParams.gravity = Gravity.CENTER;
+        overlay.addView(brand, brandParams);
         return overlay;
     }
 
@@ -286,13 +289,8 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                hideLaunchOverlay();
+                scheduleLaunchFallback();
                 progressBar.setVisibility(View.GONE);
-            }
-
-            @Override
-            public void onPageCommitVisible(WebView view, String url) {
-                hideLaunchOverlay();
             }
 
             @Override
@@ -426,6 +424,8 @@ public final class MainActivity extends Activity {
                 );
             } else if ("privacyConsent.withdraw".equals(messageType)) {
                 runOnUiThread(this::restartForPrivacyConsent);
+            } else if ("app.ready".equals(messageType)) {
+                runOnUiThread(this::hideLaunchOverlay);
             }
         } catch (JSONException error) {
             // 受信页面发来的未知/损坏消息不执行任何原生操作。
@@ -676,6 +676,7 @@ public final class MainActivity extends Activity {
         }
         launchOverlayHidden = true;
         launchOverlay.removeCallbacks(launchTimeout);
+        launchOverlay.removeCallbacks(webAppReadyFallback);
         launchOverlay.animate()
             .alpha(0f)
             .setDuration(180)
@@ -687,6 +688,23 @@ public final class MainActivity extends Activity {
                 }
             })
             .start();
+    }
+
+    private void scheduleLaunchFallback() {
+        if (
+            launchOverlayHidden
+                || launchOverlay == null
+                || launchOverlay.getVisibility() != View.VISIBLE
+        ) {
+            return;
+        }
+        // 兼容尚未包含 app.ready 通知的旧网页缓存和旧部署版本。
+        // 新网页会在首个路由页面完成绘制后立即通过受信通道撤掉封面。
+        launchOverlay.removeCallbacks(webAppReadyFallback);
+        launchOverlay.postDelayed(
+            webAppReadyFallback,
+            WEB_APP_READY_FALLBACK_MS
+        );
     }
 
     @Override
@@ -714,6 +732,7 @@ public final class MainActivity extends Activity {
         cancelPendingFileChooserLaunch();
         if (launchOverlay != null) {
             launchOverlay.removeCallbacks(launchTimeout);
+            launchOverlay.removeCallbacks(webAppReadyFallback);
         }
         if (fileChooserOverlay != null) {
             fileChooserOverlay.removeCallbacks(fileChooserReadyFallback);

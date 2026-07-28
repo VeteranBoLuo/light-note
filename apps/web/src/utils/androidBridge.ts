@@ -23,3 +23,7 @@ export function postAndroidMessage(payload: Record<string, unknown>): boolean {
     return false;
   }
 }
+
+export function postAndroidAppReady(): boolean {
+  return postAndroidMessage({ type: 'app.ready' });
+}

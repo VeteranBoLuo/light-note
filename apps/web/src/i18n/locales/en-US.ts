@@ -3609,6 +3609,25 @@ export default {
     forgotPassword: 'Forgot password?',
     rememberMe: 'Remember me',
     githubLogin: 'Sign in with GitHub',
+    githubConsentTitle: 'Confirm GitHub sign-in',
+    githubConsentIntro:
+      'GitHub sign-in is optional. Continuing opens GitHub for authorization and involves cross-border processing of personal data.',
+    githubConsentRecipientLabel: 'Recipient',
+    githubConsentRecipient:
+      'GitHub, Inc. / GitHub B.V.; privacy-rights requests can be submitted through the channels in GitHub’s privacy statement',
+    githubConsentPurposeLabel: 'Purpose',
+    githubConsentPurpose: 'Authenticate you, create or link your Light Note account, and protect sign-in security',
+    githubConsentDataLabel: 'Data',
+    githubConsentData:
+      'GitHub account ID, username, email and avatar within the authorized scope, plus network data GitHub processes under its rules',
+    githubConsentLocationLabel: 'Location',
+    githubConsentLocation: 'The United States and other countries where GitHub or its service providers operate',
+    githubConsentChoice:
+      'You can cancel and use email sign-in without losing other Light Note features. Continuing gives separate consent to this processing.',
+    githubPrivacyLink: 'GitHub privacy statement',
+    lightNotePrivacyLink: 'Light Note privacy policy',
+    githubConsentContinue: 'Agree and continue to GitHub',
+    githubStartFailed: 'GitHub sign-in is unavailable. Please use email sign-in.',
     previewMobile: 'Mobile preview',
     noAccount: "Don't have an account? ",
     goRegister: 'Sign up',
@@ -3785,10 +3804,8 @@ export default {
       wechat: {
         label: 'WeChat in-app browser',
         step2: {
-          harmony:
-            'Tap “…” → “Open in browser”, choose Huawei Browser, then use its “Add to desktop” action.',
-          android:
-            'Tap “…” → “Open in browser”, then add it from the Chrome or system browser menu.',
+          harmony: 'Tap “…” → “Open in browser”, choose Huawei Browser, then use its “Add to desktop” action.',
+          android: 'Tap “…” → “Open in browser”, then add it from the Chrome or system browser menu.',
           ios: 'Tap “…” and choose “Open in default browser”, or copy the link, then add it from Safari.',
           desktop: 'Choose “Open in default browser” from the page menu, then use the Chrome or Edge install action.',
         },
@@ -3820,8 +3837,7 @@ export default {
             'Open the browser menu and look for “Add to desktop” or “Add to Home Screen”. Copy the URL to Huawei Browser if missing.',
           android: 'Open the browser menu and look for “Install app”, “Add to Home Screen”, or “Add to desktop”.',
           ios: 'Open Share and look for “Add to Home Screen”. Copy the URL to Safari if the action is missing.',
-          desktop:
-            'Check the address bar or browser menu for “Install app”, “Create shortcut”, or “Add to desktop”.',
+          desktop: 'Check the address bar or browser menu for “Install app”, “Create shortcut”, or “Add to desktop”.',
         },
       },
     },
@@ -3851,8 +3867,7 @@ export default {
         step1: 'Open buluo66.top in your browser and sign in.',
         step2: 'Open the browser menu and choose “Install app” or “Add to Home screen”.',
         step3: 'Confirm “Install” or “Add” in the system dialog.',
-        note:
-          'If the browser only offers “Add to Home screen”, whether it opens standalone or as a normal web page is decided by that browser.',
+        note: 'If the browser only offers “Add to Home screen”, whether it opens standalone or as a normal web page is decided by that browser.',
       },
       desktop: {
         label: 'Desktop',

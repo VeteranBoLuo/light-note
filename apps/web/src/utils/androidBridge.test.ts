@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hasAndroidBridge, postAndroidMessage } from './androidBridge';
+import { hasAndroidBridge, postAndroidAppReady, postAndroidMessage } from './androidBridge';
 
 afterEach(() => {
   delete window.LightNoteAndroid;
@@ -18,6 +18,14 @@ describe('androidBridge', () => {
 
     expect(postAndroidMessage({ type: 'privacyConsent.withdraw' })).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'privacyConsent.withdraw' }));
+  });
+
+  it('首个路由页面完成绘制后可通知原生壳撤掉品牌封面', () => {
+    const postMessage = vi.fn();
+    window.LightNoteAndroid = { postMessage };
+
+    expect(postAndroidAppReady()).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'app.ready' }));
   });
 
   it('原生通道抛错时不阻断网页回退逻辑', () => {

@@ -6,9 +6,8 @@ const unlink = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query: poolQuery } }));
 vi.mock('node:fs', () => ({ promises: { unlink } }));
 
-const { extractNoteImageUrls, filterOwnedImageUrls, cleanupOrphanNoteImages, collectUsedImageNames } = await import(
-  './noteImages.js'
-);
+const { extractNoteImageUrls, filterOwnedImageUrls, cleanupOrphanNoteImages, collectUsedImageNames } =
+  await import('./noteImages.js');
 
 describe('extractNoteImageUrls', () => {
   it('从 html 与 markdown 正文提取本站上传图片并去重', () => {
@@ -122,5 +121,17 @@ describe('cleanupOrphanNoteImages', () => {
       'https://boluo66.top/uploads/y.png',
     ]);
     expect(unlink).toHaveBeenCalledTimes(1); // 仅 y.png 被删
+  });
+
+  it('严格清理模式返回失败计数，供账号注销任务重试', async () => {
+    poolQuery.mockResolvedValueOnce([[{ n: 0 }]]).mockResolvedValueOnce([[{ n: 0 }]]);
+    unlink.mockRejectedValueOnce(Object.assign(new Error('disk busy'), { code: 'EBUSY' }));
+
+    await expect(
+      cleanupOrphanNoteImages(['https://boluo66.top/uploads/note-a.png'], { strict: true }),
+    ).rejects.toMatchObject({
+      code: 'NOTE_IMAGE_CLEANUP_FAILED',
+      result: { deleted: 0, kept: 0, skipped: 0, failed: 1 },
+    });
   });
 });

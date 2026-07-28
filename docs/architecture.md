@@ -92,6 +92,7 @@ apps/server/
     ├── aiProductTelemetry.js # 无正文 AI 产品事件与保留期
     ├── aiArtifactRetention.js # Change Set 可选产物 TTL
     ├── aiUserDataExport.js # 账号级 AI 数据 JSON 导出与排除清单
+    ├── accountDeletion.js # 账号注销验证码、去标识化与可重试物理清理
     ├── personalKnowledgeSearch.js # 个人知识统一词法检索
     ├── adminContextStore.js # Redis 管理员上下文（actor/subject 分离）
     ├── adminRoutePolicy.js  # 管理员上下文显式路由策略
@@ -194,7 +195,7 @@ src/
 | `bookmark`                                   | 书签                          | UUID          |
 | `note`                                       | 笔记                          | UUID          |
 | `files`                                      | 云空间文件                    | 自增          |
-| `folder`                                     | 云空间文件夹                  | 自增          |
+| `folders`                                    | 云空间文件夹                  | 自增          |
 | `tag`                                        | 标签                          | UUID          |
 | `resource_tag_relations`                     | 资源-标签关联                 | 无独立 id     |
 | `onboarding_seed_resources`                  | 注册示例资源来源标记          | 复合主键      |
@@ -202,6 +203,7 @@ src/
 | `todo_items`                                 | 待处理中的待办事项            | UUID          |
 | `todo_reminders`                             | 待办提醒调度记录              | UUID          |
 | `email_delivery_logs`                        | 系统邮件 SMTP 投递记录        | UUID          |
+| `account_deletion_requests`                  | 账号注销物理清理重试队列      | UUID          |
 | `tag_relations`                              | 标签-标签关联                 | 无独立 id     |
 | `api_logs`                                   | API 请求日志                  | UUID          |
 | `operation_logs`                             | 操作日志                      | UUID          |
@@ -411,6 +413,13 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 ```
 
 登录设备页展示的是“设备组”而不是原始 session 行。浏览器请求会携带本地持久的随机设备标识；服务端只保存其 SHA-256 `user_sessions.device_key` 摘要，并在同一账号、同一浏览器再次登录时事务性轮换为一条会话，避免重复登录堆积为多台设备。该标识不参与认证、权限或设备信任判断。升级前没有设备摘要的历史会话不会根据 IP 或 UA 猜测归属，而是逐条独立展示和撤销，避免共享网络或浏览器升级造成远端会话误并入当前设备；“下线设备”会撤销该设备组包含的全部 session。
+
+### 账号自助注销
+
+- 登录用户从“设置 → 账号与安全”发起，注销验证码只能发送到服务端从当前账号读取的已绑定邮箱；Redis 仅保存 5 分钟有效的加盐摘要，客户端不能指定收件地址，也不复用重置密码验证码。
+- 最终提交必须同时通过 6 位验证码和精确确认文字。服务端在单事务内锁定账号、重新核对邮箱摘要、创建 `account_deletion_requests` 清理任务，并将密码、邮箱、电话、头像、位置、IP、GitHub 标识与授权凭据等身份字段清空，同时把账号标成不可登录；随后清除全部会话和当前登录 Cookie。
+- 数据库内容、OBS 文件、笔记图片和书签图标由后台任务物理清理。数据库删除使用事务；对象或本地文件删除失败时进入指数退避重试，只有全部完成后才清空任务中的对象路径并标记 `completed`。已完成任务只保留不含邮箱、昵称的账号 UUID、时间和尝试次数，用于清理幂等与审计，并在 180 天后分批删除。
+- 安全事件和管理员审计等依法或为安全所需的有限记录不随内容表直接删除，但会解除账号 ID 关联，并继续受各自保留期约束。Root、游客和任何管理员预览/代管上下文都不能走自助注销接口。
 
 ### 新账号示例内容
 

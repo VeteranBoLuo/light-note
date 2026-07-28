@@ -67,6 +67,12 @@
       <span>{{ t('auth.hasAccount') }}</span>
       <BButton class="auth-link" @click="title = '登录'">{{ t('auth.goLogin') }}</BButton>
     </div>
+
+    <GithubOAuthConsentModal
+      v-model:visible="githubConsentVisible"
+      :loading="githubStarting"
+      @confirm="confirmGitHubRegistration"
+    />
   </div>
 </template>
 
@@ -87,6 +93,8 @@
   import { markLoggedIn } from '@/utils/authStorage';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { setLocale } from '@/i18n';
+  import { createGithubAuthorizationUrl } from '@/utils/githubOAuth';
+  import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
 
@@ -96,22 +104,30 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const submitting = ref(false);
+  const githubConsentVisible = ref(false);
+  const githubStarting = ref(false);
   const disable = computed(() => submitting.value || !formData.password || !formData.email);
   const emit = defineEmits<{ 'update:success': [formData: { email: string; password: string }] }>();
 
   function registerWithGitHub() {
+    githubConsentVisible.value = true;
+  }
+
+  async function confirmGitHubRegistration() {
+    if (githubStarting.value) return;
+    githubStarting.value = true;
     const source = bookmark.authModalSource || 'unknown';
     trackConversion('signup_submit', source);
     try {
-      sessionStorage.setItem('ln_signup_source', source);
+      const authorizationUrl = await createGithubAuthorizationUrl({
+        flow: 'register',
+        signupSource: source,
+      });
+      window.location.href = authorizationUrl;
     } catch {
-      // 隐私模式下 sessionStorage 可能不可用，不影响 OAuth 跳转。
+      message.error(t('auth.githubStartFailed'));
+      githubStarting.value = false;
     }
-    const clientId = 'Ov23liuOPhDka7KkXrpQ';
-    const redirectUri = 'https://boluo66.top/auth/callback';
-    const scope = 'user:email';
-    const state = Math.random().toString(36).substring(7);
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
   }
 
   async function handleRegister() {

@@ -71,6 +71,26 @@ html.light-note-android-webview {
     box-shadow: none !important;
   }
 
+  // 登录与账号注销新增区域同样避开 color-mix()，防止旧 WebView 把提示框画成黑块或黑边。
+  .github-consent__details,
+  .acc-sec .sess-item.is-current,
+  .acc-sec .deletion-warning,
+  .acc-sec .danger-zone {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    box-shadow: none !important;
+  }
+
+  .github-consent__details,
+  .acc-sec .deletion-warning {
+    background: var(--modal-input-bg, var(--background-color)) !important;
+  }
+
+  .acc-sec .sess-item,
+  .acc-sec .sess-badge {
+    background: var(--bl-input-noBorder-bg-color, var(--background-color)) !important;
+    box-shadow: none !important;
+  }
+
   .bookmark-page .card-panel,
   .bookmark-page .card-panel > div,
   .bookmark-page .right-menu-anchor,

@@ -17,7 +17,13 @@ import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import { sendTrackedEmail } from '../util/emailDelivery.js';
 import crypto from 'crypto';
-import { issueLoginSession, logoutCurrentSession, ensureNotVisitor, getRequestSid } from '../util/auth.js';
+import {
+  clearAuthCookie,
+  issueLoginSession,
+  logoutCurrentSession,
+  ensureNotVisitor,
+  getRequestSid,
+} from '../util/auth.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
 import {
   groupUserSessions,
@@ -44,6 +50,18 @@ import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { exportAiUserData } from '../util/aiUserDataExport.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { seedNewUserCloudFile, seedNewUserWorkspaceData } from '../util/services/newUserSeedService.js';
+import {
+  processAccountDeletionRequest,
+  requestAccountDeletion,
+  sendAccountDeletionCode,
+} from '../util/accountDeletion.js';
+import {
+  consumeGitHubOAuthChallenge,
+  createGitHubOAuthChallenge,
+  githubOAuthCookieOptions,
+  GITHUB_OAUTH_NONCE_COOKIE,
+  readGitHubOAuthNonce,
+} from '../util/githubOAuthState.js';
 let redisClient;
 if (process.platform === 'linux') {
   redisClient = (await import('../util/redisClient.js')).default;
@@ -739,13 +757,59 @@ export const deleteUserById = (req, res) => {
   }
 };
 
+export const startGithubOAuth = async (req, res) => {
+  try {
+    const challenge = await createGitHubOAuthChallenge({
+      consentVersion: req.body?.consentVersion,
+      flow: req.body?.flow,
+      signupSource: req.body?.signupSource,
+    });
+    res.cookie(GITHUB_OAUTH_NONCE_COOKIE, challenge.nonce, githubOAuthCookieOptions());
+    return res.send(
+      resultData({
+        authorizationUrl: challenge.authorizationUrl,
+        expiresIn: challenge.expiresIn,
+      }),
+    );
+  } catch (error) {
+    const status = Number.isInteger(error?.status) ? error.status : 500;
+    if (status >= 500) {
+      console.error('[github-oauth] authorization start failed code=%s', stableAgentErrorCode(error));
+    }
+    return res.send(
+      resultData(
+        { code: String(error?.code || 'GITHUB_OAUTH_START_FAILED') },
+        status,
+        status < 500 ? error.message : L(req, 'GitHub 登录暂不可用，请使用邮箱登录', 'GitHub sign-in is unavailable.'),
+      ),
+    );
+  }
+};
+
 export const github = async (req, res) => {
-  const { code } = req.body;
-  if (!code) return res.status(400).json({ error: 'Missing authorization code' });
+  const { code, state } = req.body || {};
+  // 无论回调是否完整都清除浏览器侧 nonce；有效挑战在 Redis 中仍会按 TTL 自动失效。
+  res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
+  if (!code || !state) {
+    return res.send(
+      resultData(
+        { code: 'GITHUB_OAUTH_CALLBACK_INVALID' },
+        400,
+        L(req, 'GitHub 授权参数不完整，请重新发起登录', 'GitHub authorization data is incomplete.'),
+      ),
+    );
+  }
 
   try {
+    const nonce = readGitHubOAuthNonce(req);
+    const consent = await consumeGitHubOAuthChallenge({ state, nonce });
+    req.body.signupSource = consent.signupSource;
+
     // 1. 用 code 换取 GitHub Token
-    const tokenData = await fetchGitHubToken(code);
+    const tokenData = await fetchGitHubToken(code, {
+      codeVerifier: consent.codeVerifier,
+      redirectUri: consent.redirectUri,
+    });
     if (!tokenData.access_token) throw new Error('Failed to obtain access token');
 
     // 2. 获取基础用户信息和邮箱信息
@@ -760,6 +824,11 @@ export const github = async (req, res) => {
     // 3. 数据库操作（查找/创建用户）
     const user = await handleUserDatabaseOperation(githubUser, req);
     const sid = await issueLoginSession(req, res, user, true);
+    await recordServerOperation(req, {
+      module: '账号与隐私',
+      operation: `GitHub 跨境授权同意【${consent.consentVersion}/${consent.flow}】`,
+      userId: user.id,
+    }).catch((error) => console.warn('[github-oauth] consent audit failed code=%s', stableAgentErrorCode(error)));
 
     res.send(
       resultData({
@@ -774,8 +843,19 @@ export const github = async (req, res) => {
       }),
     );
   } catch (error) {
-    console.error('GitHub Auth Error:', error);
-    res.send(resultData(null, 500, L(req, 'GitHub认证失败：', 'GitHub authentication failed: ') + error));
+    const isStateError = String(error?.code || '').startsWith('GITHUB_OAUTH_STATE_');
+    const status = isStateError ? 400 : 500;
+    const logger = isStateError ? console.warn : console.error;
+    logger('[github-oauth] callback failed code=%s', stableAgentErrorCode(error));
+    res.send(
+      resultData(
+        { code: String(error?.code || 'GITHUB_OAUTH_FAILED') },
+        status,
+        isStateError
+          ? error.message
+          : L(req, 'GitHub 认证失败，请重新授权或使用邮箱登录', 'GitHub authentication failed.'),
+      ),
+    );
   }
 };
 
@@ -785,6 +865,71 @@ export const logout = async (req, res) => {
     res.send(resultData(null, 200, L(req, '退出成功', 'Signed out successfully.')));
   } catch (e) {
     res.send(resultData(null, 500, L(req, '退出登录失败：', 'Logout failed: ') + e.message));
+  }
+};
+
+function rejectAdminContextAccountDeletion(req, res) {
+  if (!req.adminContext) return false;
+  res.status(403).json({
+    data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' },
+    status: 403,
+    msg: '管理员预览或代管状态下不能操作账号注销。',
+  });
+  return true;
+}
+
+function sendAccountDeletionError(req, res, error, fallbackMessage) {
+  const code = String(error?.code || '');
+  const isExpected = code.startsWith('ACCOUNT_');
+  const status = isExpected && Number.isInteger(error?.status) ? error.status : 500;
+  const msg = isExpected ? error.message : L(req, fallbackMessage, 'The request failed. Please try again later.');
+  if (!isExpected) {
+    console.error('[account-deletion] request failed code=%s', stableAgentErrorCode(error));
+  }
+  return res.send(resultData({ code: code || 'ACCOUNT_DELETION_FAILED' }, status, msg));
+}
+
+export const requestAccountDeletionCode = async (req, res) => {
+  if (rejectAdminContextAccountDeletion(req, res)) return;
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const data = await sendAccountDeletionCode({ userId: req.user.id });
+    res.send(resultData(data, 200, L(req, '注销验证码已发送', 'Account deletion code sent.')));
+  } catch (error) {
+    sendAccountDeletionError(req, res, error, '验证码发送失败，请稍后重试');
+  }
+};
+
+export const deleteMyAccount = async (req, res) => {
+  if (rejectAdminContextAccountDeletion(req, res)) return;
+  if (!ensureNotVisitor(req, res)) return;
+  const userId = req.user.id;
+  try {
+    const deletion = await requestAccountDeletion({
+      userId,
+      code: req.body?.code,
+      confirmation: req.body?.confirmation,
+    });
+
+    // 账号已在事务内停用；这里尽力清掉所有会话缓存并无条件删除当前 cookie。
+    // 即便会话存储短暂故障，鉴权每次仍会重读 user 的 deleted/del_flag 状态，不会恢复业务访问。
+    await removeUserSessions(userId).catch((error) =>
+      console.error('[account-deletion] session cleanup failed code=%s', stableAgentErrorCode(error)),
+    );
+    clearAuthCookie(res);
+    res.send(
+      resultData(
+        { requestId: deletion.requestId, cleanupStatus: deletion.status },
+        200,
+        L(req, '账号已注销，云端数据正在安全清理', 'Your account has been deleted. Cloud data cleanup is in progress.'),
+      ),
+    );
+
+    void processAccountDeletionRequest(deletion.requestId).catch((error) =>
+      console.error('[account-deletion] immediate cleanup failed code=%s', stableAgentErrorCode(error)),
+    );
+  } catch (error) {
+    sendAccountDeletionError(req, res, error, '账号注销失败，请稍后重试');
   }
 };
 
@@ -874,11 +1019,18 @@ const retry = async (fn, attempts = 3, label = '') => {
   throw lastErr;
 };
 
-const fetchGitHubToken = async (code) => {
+const fetchGitHubToken = async (code, { codeVerifier, redirectUri } = {}) => {
+  const clientId = String(process.env.GITHUB_CLIENT_ID || '').trim();
+  const clientSecret = String(process.env.GITHUB_CLIENT_SECRET || '').trim();
+  if (!clientId || !clientSecret || !codeVerifier || !redirectUri) {
+    throw new Error('GitHub OAuth configuration is incomplete');
+  }
   const params = new URLSearchParams();
-  params.append('client_id', process.env.GITHUB_CLIENT_ID); // 改用环境变量
-  params.append('client_secret', process.env.GITHUB_CLIENT_SECRET);
+  params.append('client_id', clientId);
+  params.append('client_secret', clientSecret);
   params.append('code', code);
+  params.append('redirect_uri', redirectUri);
+  params.append('code_verifier', codeVerifier);
 
   try {
     // 多 IP 竞速换 token:绕过 GFW 对 github.com 单个 DNS IP 的间歇性 TCP 封锁(详见 util/githubOAuth.js)。
