@@ -10,7 +10,7 @@ const phoneRouter: RouteRecordRaw[] = [
     },
     path: '/ptrash',
     name: 'ptrash',
-    component: () => import('@/view/trash/PTrash.vue'),
+    component: () => import('@/view/trash/TrashMobile.vue'),
   },
   {
     meta: {
@@ -20,7 +20,7 @@ const phoneRouter: RouteRecordRaw[] = [
     },
     path: '/opinions',
     name: 'opinions',
-    component: () => import('@/components/personCenter/opinions/POpinions.vue'),
+    component: () => import('@/components/personCenter/opinions/OpinionsMobile.vue'),
   },
   {
     meta: {
@@ -30,7 +30,7 @@ const phoneRouter: RouteRecordRaw[] = [
     },
     path: '/myInfo',
     name: 'myInfo',
-    component: () => import('@/components/personCenter/myInfo/PMyInfo.vue'),
+    component: () => import('@/components/personCenter/myInfo/MyInfoMobile.vue'),
   },
 ];
 

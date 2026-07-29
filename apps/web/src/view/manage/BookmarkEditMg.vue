@@ -1,5 +1,5 @@
 <template>
-  <PBookmarkEdit v-if="bookmark.isMobile" />
+  <BookmarkEditMobile v-if="bookmark.isMobile" />
   <BookmarkEdit v-else />
 </template>
 
@@ -8,7 +8,9 @@
   import { bookmarkStore } from '@/store';
 
   const BookmarkEdit = defineAsyncComponent(() => import('@/components/manage/bookmarkEditMg/BookmarkEdit.vue'));
-  const PBookmarkEdit = defineAsyncComponent(() => import('@/components/manage/bookmarkEditMg/PBookmarkEdit.vue'));
+  const BookmarkEditMobile = defineAsyncComponent(
+    () => import('@/components/manage/bookmarkEditMg/BookmarkEditMobile.vue'),
+  );
 
   const bookmark = bookmarkStore();
 </script>

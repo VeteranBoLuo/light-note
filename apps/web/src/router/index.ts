@@ -85,7 +85,7 @@ export const routes: RouteRecordRaw[] = [
     },
     path: '/personCenter',
     name: 'personCenter',
-    component: () => import('@/view/personCenter/PPersonCenter.vue'),
+    component: () => import('@/view/personCenter/PersonCenterMobile.vue'),
   },
   loginRouter,
   {

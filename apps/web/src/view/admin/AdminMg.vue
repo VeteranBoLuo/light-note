@@ -1,5 +1,5 @@
 <template>
-  <PAdmin v-if="bookmark.isMobile" />
+  <AdminMobile v-if="bookmark.isMobile" />
   <Admin v-else />
 </template>
 
@@ -7,7 +7,7 @@
   import { defineAsyncComponent } from 'vue';
   import { bookmarkStore } from '@/store';
 
-  const PAdmin = defineAsyncComponent(() => import('@/view/admin/admin/PAdmin.vue'));
+  const AdminMobile = defineAsyncComponent(() => import('@/view/admin/admin/AdminMobile.vue'));
   const Admin = defineAsyncComponent(() => import('@/view/admin/admin/Admin.vue'));
 
   const bookmark = bookmarkStore();

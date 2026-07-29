@@ -76,6 +76,26 @@ cd apps/server && node app.js
 | 目录         | kebab-case     | `basic-components/`        |
 | API 路由路径 | kebab-case     | `/api/common/getDashboard` |
 
+#### PC / 移动端页面命名与目录边界
+
+- `Xxx.vue` 表示路由入口、共享编排组件，或 PC / 移动端真正共用的响应式组件；不得默认把无端标名称理解为 PC 专属。
+- 当同一功能的 PC 与移动端在页面结构或交互上明显不同，需要拆分视图时，使用成对后缀命名：`XxxDesktop.vue`、`XxxMobile.vue`。路由入口继续由 `Xxx.vue` 承担，并负责选择视图、注入共享状态。
+- 只服务于移动端且跨业务复用的壳层组件使用 `Mobile` 前缀，例如 `MobileAppShell.vue`、`MobileTopBar.vue`、`MobileBottomNav.vue`；这类组件统一放在 `apps/web/src/components/mobile/`。
+- 功能专属的 PC / 移动端视图应留在对应功能目录内，避免建立一套与业务目录平行的全局页面副本。例如：
+
+```text
+view/search/
+├── SearchCenter.vue
+├── SearchCenterDesktop.vue
+├── SearchCenterMobile.vue
+└── useSearchCenter.ts
+```
+
+- API 请求、权限判断、状态管理和业务操作必须优先提取到 store、composable 或共享服务中，PC / 移动端视图只负责各自的展示和交互，禁止复制两套业务逻辑。
+- 仅有间距、字号、列数和排列方式差异时，继续使用共享组件与统一响应式断点，不为轻微样式差异拆分文件。
+- 现有 `P*.vue` 等含义不明确的移动端命名按“改到哪、整理到哪”的方式逐步迁移为显式 `Mobile` 命名，不进行无业务收益的全量搬迁。
+- 移动浏览器、移动 PWA 与 Android APK 共用 `apps/web` 中的移动端 Web UI；不得把 Vue 页面或移动布局迁入 `apps/android`。`apps/android` 只维护 WebView 容器和文件选择、下载、系统返回等原生能力。
+
 ### 后端规范
 
 #### 更新日志与 OBS 图片

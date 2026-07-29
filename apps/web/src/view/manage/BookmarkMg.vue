@@ -1,6 +1,6 @@
 <template>
   <div class="bookmark-mg-route">
-    <PBookmarkTable v-if="bookmark.isMobile" />
+    <BookmarkTableMobile v-if="bookmark.isMobile" />
     <BookmarkTable v-else />
     <BookmarkSnapshotModal v-model:visible="snapshotVisible" :bookmark-id="snapshotBookmarkId" />
   </div>
@@ -12,7 +12,9 @@
   import { bookmarkStore } from '@/store';
 
   const BookmarkTable = defineAsyncComponent(() => import('@/components/manage/bookmarkMg/BookmarkTable.vue'));
-  const PBookmarkTable = defineAsyncComponent(() => import('@/components/manage/bookmarkMg/PBookmarkTable.vue'));
+  const BookmarkTableMobile = defineAsyncComponent(
+    () => import('@/components/manage/bookmarkMg/BookmarkTableMobile.vue'),
+  );
   const BookmarkSnapshotModal = defineAsyncComponent(
     () => import('@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue'),
   );

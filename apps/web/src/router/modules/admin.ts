@@ -80,32 +80,32 @@ const adminRouter: RouteRecordRaw[] = [
   {
     path: 'apiLog',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/apiLog/PApiLog.vue'),
+    component: () => import('@/view/admin/components/apiLog/ApiLogMobile.vue'),
   },
   {
     path: 'operationLog',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/operationLog/POperationLog.vue'),
+    component: () => import('@/view/admin/components/operationLog/OperationLogMobile.vue'),
   },
   {
     path: 'userMg',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/userMg/PUserMg.vue'),
+    component: () => import('@/view/admin/components/userMg/UserMgMobile.vue'),
   },
   {
     path: 'userOpinion',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/userOpinion/PUserOpinion.vue'),
+    component: () => import('@/view/admin/components/userOpinion/UserOpinionMobile.vue'),
   },
   {
     path: 'imageMg',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/imageMg/PImageMg.vue'),
+    component: () => import('@/view/admin/components/imageMg/ImageMgMobile.vue'),
   },
   {
     path: 'agentLog',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/agentLog/PAgentLog.vue'),
+    component: () => import('@/view/admin/components/agentLog/AgentLogMobile.vue'),
   },
   {
     path: 'aiFeedback',

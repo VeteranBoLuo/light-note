@@ -1,5 +1,5 @@
 <template>
-  <PSecurityCenter v-if="bookmark.isMobile" />
+  <SecurityCenterMobile v-if="bookmark.isMobile" />
   <SecurityCenter v-else />
 </template>
 
@@ -7,7 +7,7 @@
 import { defineAsyncComponent } from 'vue';
 import { bookmarkStore } from '@/store';
 
-const PSecurityCenter = defineAsyncComponent(() => import('./PSecurityCenter.vue'));
+const SecurityCenterMobile = defineAsyncComponent(() => import('./SecurityCenterMobile.vue'));
 const SecurityCenter = defineAsyncComponent(() => import('./SecurityCenter.vue'));
 
 const bookmark = bookmarkStore();
