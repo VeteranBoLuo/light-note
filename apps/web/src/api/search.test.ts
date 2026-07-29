@@ -85,4 +85,81 @@ describe('fetchGlobalSearch cache policy', () => {
       untagged: false,
     });
   });
+
+  it('有序分页按游标请求 40 条，追加批次不会重复请求统计元数据', async () => {
+    mocks.apiBasePost
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          items: Array.from({ length: 40 }, (_, index) => ({
+            id: `bookmark-${index + 1}`,
+            type: 'bookmark',
+            title: `书签 ${index + 1}`,
+          })),
+          total: 60,
+          typeTotals: { bookmark: 40, note: 20, file: 0, tag: 0 },
+          tagOptions: ['工作'],
+          pageSize: 40,
+          hasMore: true,
+          nextCursor: { type: 'note', offset: 0 },
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          items: Array.from({ length: 20 }, (_, index) => ({
+            id: `note-${index + 1}`,
+            type: 'note',
+            title: `笔记 ${index + 1}`,
+          })),
+          pageSize: 40,
+          hasMore: false,
+          nextCursor: null,
+        },
+      });
+
+    const initial = await fetchGlobalSearch('', 40, true, {
+      type: 'all',
+      paginationMode: 'ordered',
+      cursor: null,
+      includeMetadata: true,
+    });
+    const appended = await fetchGlobalSearch('', 40, false, {
+      type: 'all',
+      paginationMode: 'ordered',
+      cursor: initial.nextCursor,
+      includeMetadata: false,
+    });
+
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(1, '/api/search/global', {
+      keyword: '',
+      pageSize: 40,
+      type: 'all',
+      sort: 'relevance',
+      date: 'all',
+      tags: [],
+      untagged: false,
+      paginationMode: 'ordered',
+      cursor: null,
+      includeMetadata: true,
+    });
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(2, '/api/search/global', {
+      keyword: '',
+      pageSize: 40,
+      type: 'all',
+      sort: 'relevance',
+      date: 'all',
+      tags: [],
+      untagged: false,
+      paginationMode: 'ordered',
+      cursor: { type: 'note', offset: 0 },
+      includeMetadata: false,
+    });
+    expect(initial.nextCursor).toEqual({ type: 'note', offset: 0 });
+    expect(initial.typeTotals).toEqual({ bookmark: 40, note: 20, file: 0, tag: 0 });
+    expect(appended.items).toHaveLength(20);
+    expect(appended.nextCursor).toBeNull();
+    expect(appended.typeTotals).toBeUndefined();
+    expect(appended.tagOptions).toBeUndefined();
+  });
 });

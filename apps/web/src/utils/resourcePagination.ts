@@ -1,5 +1,5 @@
 export const RESOURCE_LIST_PAGE_SIZE = 48;
-export const SEARCH_PAGE_SIZE_PER_TYPE = 12;
+export const SEARCH_PAGE_SIZE = 40;
 export const RESOURCE_LOAD_MORE_THRESHOLD = 360;
 
 export interface ResourceSortMove {

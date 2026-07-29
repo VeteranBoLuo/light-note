@@ -188,4 +188,148 @@ describe('globalSearch pagination', () => {
     expect(payload.data.hasMore).toBe(true);
     expect(payload.data.tagOptions).toEqual(['工作', '稍后读']);
   });
+
+  it('全部结果按固定类型顺序合计返回 40 条，并在类型耗尽时用下一类型补齐', async () => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const normalizedSql = String(sql);
+      if (normalizedSql.includes('SELECT name') && normalizedSql.includes('FROM tag')) {
+        return [[{ name: '工作' }]];
+      }
+      if (normalizedSql.includes('COUNT(*) AS total FROM bookmark')) return [[{ total: 3 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM note')) return [[{ total: 50 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM files')) return [[{ total: 5 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM tag')) return [[{ total: 2 }]];
+      if (normalizedSql.includes('FROM bookmark b')) {
+        return [
+          Array.from({ length: 3 }, (_, index) => ({
+            id: `bookmark-${index + 1}`,
+            name: `书签 ${index + 1}`,
+            description: '',
+            url: `https://example.com/${index + 1}`,
+            tag_list: [],
+          })),
+        ];
+      }
+      if (normalizedSql.includes('FROM note n')) {
+        return [
+          Array.from({ length: 38 }, (_, index) => ({
+            id: `note-${index + 1}`,
+            title: `笔记 ${index + 1}`,
+            content: '',
+            tags: [],
+          })),
+        ];
+      }
+      return [[]];
+    });
+    const res = createResponse();
+
+    await globalSearch(
+      {
+        user: { id: 'user-1' },
+        body: {
+          paginationMode: 'ordered',
+          pageSize: 400,
+          type: 'all',
+          cursor: { type: 'bookmark', offset: 0 },
+        },
+        headers: { 'x-lang': 'zh-CN' },
+      },
+      res,
+    );
+
+    const listCalls = mocks.pool.query.mock.calls.filter(([sql]) => String(sql).includes('LIMIT ? OFFSET ?'));
+    const bookmarkListCall = listCalls.find(([sql]) => String(sql).includes('FROM bookmark b'));
+    const noteListCall = listCalls.find(([sql]) => String(sql).includes('FROM note n'));
+    expect(bookmarkListCall?.[1].slice(-2)).toEqual([41, 0]);
+    expect(noteListCall?.[1].slice(-2)).toEqual([38, 0]);
+
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.pageSize).toBe(40);
+    expect(payload.data.items).toHaveLength(40);
+    expect(payload.data.items.slice(0, 3).every((item) => item.type === 'bookmark')).toBe(true);
+    expect(payload.data.items.slice(3).every((item) => item.type === 'note')).toBe(true);
+    expect(payload.data.groups.map((group) => [group.type, group.items.length])).toEqual([
+      ['bookmark', 3],
+      ['note', 37],
+    ]);
+    expect(payload.data.nextCursor).toEqual({ type: 'note', offset: 37 });
+    expect(payload.data.hasMore).toBe(true);
+    expect(payload.data.typeTotals).toEqual({ bookmark: 3, note: 50, file: 5, tag: 2 });
+    expect(payload.data.hasMoreByType).toEqual({
+      bookmark: false,
+      note: true,
+      file: true,
+      tag: true,
+    });
+  });
+
+  it('有序分页追加批次不重复统计元数据，并能依次跨过剩余类型', async () => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const normalizedSql = String(sql);
+      if (normalizedSql.includes('COUNT(*) AS total') || normalizedSql.includes('SELECT name')) {
+        throw new Error('追加批次不应查询统计元数据');
+      }
+      if (normalizedSql.includes('FROM note n')) {
+        return [
+          Array.from({ length: 13 }, (_, index) => ({
+            id: `note-${index + 38}`,
+            title: `笔记 ${index + 38}`,
+            content: '',
+            tags: [],
+          })),
+        ];
+      }
+      if (normalizedSql.includes('FROM files')) {
+        return [
+          Array.from({ length: 5 }, (_, index) => ({
+            id: String(index + 1),
+            file_name: `文件 ${index + 1}.txt`,
+            file_type: 'text/plain',
+            tags: [],
+          })),
+        ];
+      }
+      if (normalizedSql.includes('FROM tag t')) {
+        return [
+          Array.from({ length: 2 }, (_, index) => ({
+            id: `tag-${index + 1}`,
+            name: `标签 ${index + 1}`,
+            resource_count: 0,
+          })),
+        ];
+      }
+      return [[]];
+    });
+    const res = createResponse();
+
+    await globalSearch(
+      {
+        user: { id: 'user-1' },
+        body: {
+          paginationMode: 'ordered',
+          pageSize: 40,
+          type: 'all',
+          cursor: { type: 'note', offset: 37 },
+          includeMetadata: false,
+        },
+        headers: { 'x-lang': 'zh-CN' },
+      },
+      res,
+    );
+
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.items).toHaveLength(20);
+    expect(payload.data.groups.map((group) => [group.type, group.items.length])).toEqual([
+      ['note', 13],
+      ['file', 5],
+      ['tag', 2],
+    ]);
+    expect(payload.data.nextCursor).toBeNull();
+    expect(payload.data.hasMore).toBe(false);
+    expect(payload.data).not.toHaveProperty('typeTotals');
+    expect(payload.data).not.toHaveProperty('tagOptions');
+  });
 });

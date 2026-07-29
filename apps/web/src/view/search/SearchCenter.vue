@@ -444,6 +444,7 @@
     batchDeleteSearchResources,
     clearGlobalSearchCache,
     fetchGlobalSearch,
+    type SearchCursor,
     type SearchResultItem,
     type SearchType,
   } from '@/api/search.ts';
@@ -471,7 +472,7 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { resolveMobileTypeFilterScrollLeft } from '@/components/searchCenter/mobileTypeFilterScroll';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import { SEARCH_PAGE_SIZE_PER_TYPE, mergeResourcePage } from '@/utils/resourcePagination';
+  import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
@@ -526,14 +527,14 @@
     loading: boolean;
     loadingMore: boolean;
     rawItems: SearchResultItem[];
-    page: number;
+    nextCursor: SearchCursor | null;
     hasMore: boolean;
     tagOptions: string[];
   }>({
     loading: false,
     loadingMore: false,
     rawItems: [],
-    page: 0,
+    nextCursor: null,
     hasMore: false,
     tagOptions: [],
   });
@@ -770,7 +771,6 @@
   async function loadData(force = false, minSkeletonMs = MIN_SKELETON_MS, append = false) {
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
-    const targetPage = append ? viewState.page + 1 : 1;
     const loadingStart = Date.now();
     let loadSucceeded = false;
     if (append) {
@@ -778,26 +778,28 @@
     } else {
       viewState.loading = true;
       viewState.loadingMore = false;
-      viewState.page = 0;
+      viewState.nextCursor = null;
       viewState.hasMore = false;
     }
     try {
-      const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE_PER_TYPE, force, {
-        page: targetPage,
+      const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, force, {
         type: queryState.type,
         sort: queryState.sort,
         date: queryState.date,
         tags: queryState.tags,
         untagged: queryState.untagged,
+        paginationMode: 'ordered',
+        cursor: append ? viewState.nextCursor : null,
+        includeMetadata: !append,
       });
       if (seq !== requestSeq) return false;
       const normalizedItems = normalizeSearchResultItems(res);
       viewState.rawItems = append
         ? mergeResourcePage(viewState.rawItems, normalizedItems, (item) => getItemSelectionKey(item))
         : normalizedItems;
-      viewState.page = Number(res.page || targetPage);
+      viewState.nextCursor = res.nextCursor || null;
       viewState.hasMore = Boolean(res.hasMore);
-      viewState.tagOptions = Array.isArray(res.tagOptions) ? res.tagOptions : [];
+      if (Array.isArray(res.tagOptions)) viewState.tagOptions = res.tagOptions;
       if (res.typeTotals) {
         summaryTotals.value = {
           bookmark: Number(res.typeTotals.bookmark || 0),

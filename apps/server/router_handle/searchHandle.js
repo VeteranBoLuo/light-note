@@ -129,9 +129,30 @@ function normalizePage(value) {
   return Math.min(Math.floor(parsed), 1_000_000);
 }
 
+function normalizeSearchOffset(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(Math.floor(parsed), 10_000_000);
+}
+
 function normalizeSearchType(value) {
   const type = toText(value);
   return SEARCH_TYPES.includes(type) ? type : 'all';
+}
+
+function normalizeOrderedCursor(value, selectedType) {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const rawType = normalizeSearchType(raw.type);
+  if (selectedType !== 'all') {
+    return {
+      type: selectedType,
+      offset: rawType === selectedType || rawType === 'all' ? normalizeSearchOffset(raw.offset) : 0,
+    };
+  }
+  return {
+    type: rawType === 'all' ? SEARCH_TYPES[0] : rawType,
+    offset: normalizeSearchOffset(raw.offset),
+  };
 }
 
 function normalizeSearchSort(value) {
@@ -353,7 +374,7 @@ function appendResourceTagFilters({ where, params, alias, resourceType, tagNames
   }
 }
 
-async function queryBookmarks(userId, options, lang, includeItems) {
+async function queryBookmarks(userId, options, lang, includeItems, includeTotal = true) {
   const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
   const where = ['b.user_id = ?', 'b.del_flag = 0'];
   const params = [userId];
@@ -391,7 +412,9 @@ async function queryBookmarks(userId, options, lang, includeItems) {
   const dateCondition = buildDateCondition('b.create_time', date);
   if (dateCondition) where.push(dateCondition);
   const whereSql = where.join(' AND ');
-  const countPromise = pool.query(`SELECT COUNT(*) AS total FROM bookmark b WHERE ${whereSql}`, params);
+  const countPromise = includeTotal
+    ? pool.query(`SELECT COUNT(*) AS total FROM bookmark b WHERE ${whereSql}`, params)
+    : null;
 
   let rows = [];
   if (includeItems) {
@@ -426,7 +449,7 @@ async function queryBookmarks(userId, options, lang, includeItems) {
     );
     rows = result;
   }
-  const [totalRows] = await countPromise;
+  const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
   return {
     total: Number(totalRows?.[0]?.total || 0),
@@ -445,7 +468,7 @@ async function queryBookmarks(userId, options, lang, includeItems) {
   };
 }
 
-async function queryNotes(userId, options, lang, includeItems) {
+async function queryNotes(userId, options, lang, includeItems, includeTotal = true) {
   const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
   const where = ['n.create_by = ?', 'n.del_flag = 0'];
   const params = [userId];
@@ -482,7 +505,9 @@ async function queryNotes(userId, options, lang, includeItems) {
   const dateCondition = buildDateCondition('COALESCE(n.update_time, n.create_time)', date);
   if (dateCondition) where.push(dateCondition);
   const whereSql = where.join(' AND ');
-  const countPromise = pool.query(`SELECT COUNT(*) AS total FROM note n WHERE ${whereSql}`, params);
+  const countPromise = includeTotal
+    ? pool.query(`SELECT COUNT(*) AS total FROM note n WHERE ${whereSql}`, params)
+    : null;
 
   let rows = [];
   if (includeItems) {
@@ -517,7 +542,7 @@ async function queryNotes(userId, options, lang, includeItems) {
     );
     rows = result;
   }
-  const [totalRows] = await countPromise;
+  const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
   return {
     total: Number(totalRows?.[0]?.total || 0),
@@ -534,7 +559,7 @@ async function queryNotes(userId, options, lang, includeItems) {
   };
 }
 
-async function queryFiles(userId, options, lang, includeItems) {
+async function queryFiles(userId, options, lang, includeItems, includeTotal = true) {
   const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
   const where = ['files.create_by = ?', 'files.del_flag = 0'];
   const params = [userId];
@@ -572,10 +597,12 @@ async function queryFiles(userId, options, lang, includeItems) {
   const dateCondition = buildDateCondition('files.create_time', date);
   if (dateCondition) where.push(dateCondition);
   const whereSql = where.join(' AND ');
-  const countPromise = pool.query(
-    `SELECT COUNT(*) AS total FROM files LEFT JOIN folders ON files.folder_id = folders.id WHERE ${whereSql}`,
-    params,
-  );
+  const countPromise = includeTotal
+    ? pool.query(
+        `SELECT COUNT(*) AS total FROM files LEFT JOIN folders ON files.folder_id = folders.id WHERE ${whereSql}`,
+        params,
+      )
+    : null;
 
   let rows = [];
   if (includeItems) {
@@ -610,7 +637,7 @@ async function queryFiles(userId, options, lang, includeItems) {
     );
     rows = result;
   }
-  const [totalRows] = await countPromise;
+  const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
   return {
     total: Number(totalRows?.[0]?.total || 0),
@@ -631,7 +658,7 @@ async function queryFiles(userId, options, lang, includeItems) {
   };
 }
 
-async function queryTags(userId, options, lang, includeItems) {
+async function queryTags(userId, options, lang, includeItems, includeTotal = true) {
   const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
   const where = ['t.user_id = ?', 't.del_flag = 0'];
   const params = [userId];
@@ -647,7 +674,9 @@ async function queryTags(userId, options, lang, includeItems) {
   const dateCondition = buildDateCondition('t.create_time', date);
   if (dateCondition) where.push(dateCondition);
   const whereSql = where.join(' AND ');
-  const countPromise = pool.query(`SELECT COUNT(*) AS total FROM tag t WHERE ${whereSql}`, params);
+  const countPromise = includeTotal
+    ? pool.query(`SELECT COUNT(*) AS total FROM tag t WHERE ${whereSql}`, params)
+    : null;
 
   let rows = [];
   if (includeItems) {
@@ -673,7 +702,7 @@ async function queryTags(userId, options, lang, includeItems) {
     );
     rows = result;
   }
-  const [totalRows] = await countPromise;
+  const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
   return {
     total: Number(totalRows?.[0]?.total || 0),
@@ -688,6 +717,81 @@ async function queryTags(userId, options, lang, includeItems) {
       raw: item,
     })),
   };
+}
+
+const SEARCH_QUERY_BY_TYPE = {
+  bookmark: queryBookmarks,
+  note: queryNotes,
+  file: queryFiles,
+  tag: queryTags,
+};
+
+async function queryOrderedSearchItems({ userId, options, lang, selectedType, cursor, pageSize }) {
+  const orderedTypes = selectedType === 'all' ? SEARCH_TYPES : [selectedType];
+  let typeIndex = Math.max(0, orderedTypes.indexOf(cursor.type));
+  let typeOffset = cursor.offset;
+  let remaining = pageSize;
+  const items = [];
+  let nextCursor = null;
+
+  while (remaining > 0 && typeIndex < orderedTypes.length) {
+    const type = orderedTypes[typeIndex];
+    const queryType = SEARCH_QUERY_BY_TYPE[type];
+    // 多取一条只用于判断当前类型是否仍有下一页；额外行不会进入响应，
+    // 下一批会从当前已返回数量对应的 offset 继续读取。
+    const result = await queryType(
+      userId,
+      {
+        ...options,
+        pageSize: remaining + 1,
+        offset: typeOffset,
+      },
+      lang,
+      true,
+      false,
+    );
+    const pageItems = result.items.slice(0, remaining);
+    items.push(...pageItems);
+    typeOffset += pageItems.length;
+    remaining -= pageItems.length;
+
+    if (result.items.length > pageItems.length) {
+      nextCursor = { type, offset: typeOffset };
+      break;
+    }
+
+    typeIndex += 1;
+    typeOffset = 0;
+    if (remaining === 0 && typeIndex < orderedTypes.length) {
+      nextCursor = { type: orderedTypes[typeIndex], offset: 0 };
+    }
+  }
+
+  return {
+    items,
+    nextCursor,
+  };
+}
+
+function buildOrderedHasMoreByType(typeTotals, selectedType, nextCursor) {
+  const result = Object.fromEntries(SEARCH_TYPES.map((type) => [type, false]));
+  if (!nextCursor) return result;
+  if (selectedType !== 'all') {
+    result[selectedType] =
+      nextCursor.type === selectedType && nextCursor.offset < Number(typeTotals[selectedType] || 0);
+    return result;
+  }
+
+  const cursorIndex = SEARCH_TYPES.indexOf(nextCursor.type);
+  SEARCH_TYPES.forEach((type, index) => {
+    if (index < cursorIndex) return;
+    if (index === cursorIndex) {
+      result[type] = nextCursor.offset < Number(typeTotals[type] || 0);
+      return;
+    }
+    result[type] = Number(typeTotals[type] || 0) > 0;
+  });
+  return result;
 }
 
 async function querySearchTagOptions(userId) {
@@ -708,8 +812,13 @@ export const globalSearch = async (req, res) => {
     if (!userId) return res.send(resultData(null, 400, '缺少用户信息'));
 
     const keyword = toText(req.body?.keyword || req.body?.filters?.keyword).slice(0, 200);
+    const paginationMode = req.body?.paginationMode === 'ordered' ? 'ordered' : 'perType';
     const page = normalizePage(req.body?.page ?? req.body?.currentPage);
-    const pageSize = normalizeLimit(req.body?.limitPerType ?? req.body?.pageSize, 12);
+    const pageSize = normalizeLimit(
+      req.body?.pageSize ?? req.body?.limitPerType,
+      paginationMode === 'ordered' ? 40 : 12,
+      paginationMode === 'ordered' ? 40 : 50,
+    );
     const selectedType = normalizeSearchType(req.body?.type);
     const lang = normalizeLang(req.headers['x-lang']);
     const options = {
@@ -722,6 +831,54 @@ export const globalSearch = async (req, res) => {
       tagNames: normalizeSearchTagNames(req.body?.tags),
       untagged: req.body?.untagged === true || String(req.body?.untagged || '') === '1',
     };
+
+    if (paginationMode === 'ordered') {
+      const cursor = normalizeOrderedCursor(req.body?.cursor, selectedType);
+      const includeMetadata = req.body?.includeMetadata !== false;
+      const orderedItemsPromise = queryOrderedSearchItems({
+        userId,
+        options,
+        lang,
+        selectedType,
+        cursor,
+        pageSize,
+      });
+      const metadataPromise = includeMetadata
+        ? Promise.all([
+            queryBookmarks(userId, options, lang, false),
+            queryNotes(userId, options, lang, false),
+            queryFiles(userId, options, lang, false),
+            queryTags(userId, options, lang, false),
+            querySearchTagOptions(userId),
+          ])
+        : Promise.resolve(null);
+      const [orderedResult, metadata] = await Promise.all([orderedItemsPromise, metadataPromise]);
+
+      const response = {
+        keyword,
+        items: orderedResult.items,
+        groups: groupItems(orderedResult.items, lang),
+        pageSize,
+        nextCursor: orderedResult.nextCursor,
+        hasMore: Boolean(orderedResult.nextCursor),
+      };
+      if (metadata) {
+        const [bookmarkResult, noteResult, fileResult, tagResult, tagOptions] = metadata;
+        const typeTotals = {
+          bookmark: bookmarkResult.total,
+          note: noteResult.total,
+          file: fileResult.total,
+          tag: tagResult.total,
+        };
+        Object.assign(response, {
+          total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
+          typeTotals,
+          tagOptions,
+          hasMoreByType: buildOrderedHasMoreByType(typeTotals, selectedType, orderedResult.nextCursor),
+        });
+      }
+      return res.send(resultData(response));
+    }
 
     const [bookmarkResult, noteResult, fileResult, tagResult, tagOptions] = await Promise.all([
       queryBookmarks(userId, options, lang, selectedType === 'all' || selectedType === 'bookmark'),

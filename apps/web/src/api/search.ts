@@ -3,6 +3,11 @@ import i18n from '@/i18n';
 
 export type SearchType = 'bookmark' | 'note' | 'file' | 'tag';
 
+export interface SearchCursor {
+  type: SearchType;
+  offset: number;
+}
+
 export interface SearchResultItem {
   id: string;
   type: SearchType;
@@ -34,6 +39,7 @@ export interface GlobalSearchResponse {
   pageSize?: number;
   hasMore?: boolean;
   hasMoreByType?: Partial<Record<SearchType, boolean>>;
+  nextCursor?: SearchCursor | null;
 }
 
 export interface GlobalSearchQuery {
@@ -43,6 +49,9 @@ export interface GlobalSearchQuery {
   date?: 'all' | '7d' | '30d' | '365d';
   tags?: string[];
   untagged?: boolean;
+  paginationMode?: 'perType' | 'ordered';
+  cursor?: SearchCursor | null;
+  includeMetadata?: boolean;
 }
 
 export interface BatchResourceItem {
@@ -71,20 +80,35 @@ const emptySearchResult: GlobalSearchResponse = {
     file: false,
     tag: false,
   },
+  nextCursor: null,
 };
 
 const cache = new Map<string, GlobalSearchResponse>();
+const SEARCH_TYPES: SearchType[] = ['bookmark', 'note', 'file', 'tag'];
+
+function normalizeSearchCursor(value: unknown): SearchCursor | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Partial<SearchCursor>;
+  if (!SEARCH_TYPES.includes(raw.type as SearchType)) return null;
+  const offset = Number(raw.offset);
+  if (!Number.isFinite(offset) || offset < 0) return null;
+  return {
+    type: raw.type as SearchType,
+    offset: Math.floor(offset),
+  };
+}
 
 export async function fetchGlobalSearch(
   keyword = '',
-  limitPerType = 12,
+  pageSize = 12,
   force = false,
   query: GlobalSearchQuery = {},
 ): Promise<GlobalSearchResponse> {
   const normalizedKeyword = keyword.trim();
   const locale = i18n.global.locale.value;
+  const paginationMode = query.paginationMode === 'ordered' ? 'ordered' : 'perType';
+  const normalizedCursor = normalizeSearchCursor(query.cursor);
   const normalizedQuery = {
-    page: Math.max(1, Number(query.page || 1)),
     type: query.type || 'all',
     sort: query.sort || 'relevance',
     date: query.date || 'all',
@@ -93,8 +117,17 @@ export async function fetchGlobalSearch(
       .filter(Boolean)
       .sort(),
     untagged: query.untagged === true,
+    ...(paginationMode === 'ordered'
+      ? {
+          paginationMode: 'ordered' as const,
+          cursor: normalizedCursor,
+          includeMetadata: query.includeMetadata !== false,
+        }
+      : {
+          page: Math.max(1, Number(query.page || 1)),
+        }),
   };
-  const cacheKey = `${locale}::${normalizedKeyword}::${limitPerType}::${JSON.stringify(normalizedQuery)}`;
+  const cacheKey = `${locale}::${normalizedKeyword}::${pageSize}::${JSON.stringify(normalizedQuery)}`;
 
   if (!force && cache.has(cacheKey)) {
     return cache.get(cacheKey) as GlobalSearchResponse;
@@ -102,30 +135,46 @@ export async function fetchGlobalSearch(
 
   const res = await apiBasePost('/api/search/global', {
     keyword: normalizedKeyword,
-    limitPerType,
+    ...(paginationMode === 'ordered' ? { pageSize } : { limitPerType: pageSize }),
     ...normalizedQuery,
   });
 
   if (res.status !== 200) return emptySearchResult;
 
-  const data = {
-    ...emptySearchResult,
-    ...res.data,
+  const typeTotals =
+    res.data?.typeTotals && typeof res.data.typeTotals === 'object'
+      ? {
+          ...emptySearchResult.typeTotals,
+          ...res.data.typeTotals,
+        }
+      : paginationMode === 'perType'
+        ? { ...emptySearchResult.typeTotals }
+        : undefined;
+  const hasMoreByType =
+    res.data?.hasMoreByType && typeof res.data.hasMoreByType === 'object'
+      ? {
+          ...emptySearchResult.hasMoreByType,
+          ...res.data.hasMoreByType,
+        }
+      : paginationMode === 'perType'
+        ? { ...emptySearchResult.hasMoreByType }
+        : undefined;
+  const data: GlobalSearchResponse = {
+    keyword: String(res.data?.keyword || normalizedKeyword),
     groups: Array.isArray(res.data?.groups) ? res.data.groups : [],
     items: Array.isArray(res.data?.items) ? res.data.items : [],
     total: Number(res.data?.total || 0),
-    tagOptions: Array.isArray(res.data?.tagOptions) ? res.data.tagOptions : [],
-    page: Number(res.data?.page || normalizedQuery.page),
-    pageSize: Number(res.data?.pageSize || limitPerType || 12),
+    page: Number(res.data?.page || query.page || 1),
+    pageSize: Number(res.data?.pageSize || pageSize || 12),
     hasMore: Boolean(res.data?.hasMore),
-    typeTotals: {
-      ...emptySearchResult.typeTotals,
-      ...(res.data?.typeTotals || {}),
-    },
-    hasMoreByType: {
-      ...emptySearchResult.hasMoreByType,
-      ...(res.data?.hasMoreByType || {}),
-    },
+    nextCursor: normalizeSearchCursor(res.data?.nextCursor),
+    ...(Array.isArray(res.data?.tagOptions)
+      ? { tagOptions: res.data.tagOptions }
+      : paginationMode === 'perType'
+        ? { tagOptions: [] }
+        : {}),
+    ...(typeTotals ? { typeTotals } : {}),
+    ...(hasMoreByType ? { hasMoreByType } : {}),
   };
 
   cache.set(cacheKey, data);
