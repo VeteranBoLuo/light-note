@@ -45,12 +45,8 @@
   import { getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from '@/utils/appEntry.ts';
   import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
   import { useI18n } from 'vue-i18n';
-  import {
-    getAdminLoginPreviewPreferences,
-    isAdminLoginPreview,
-    hasLoggedInBefore,
-    markLoggedIn,
-  } from '@/utils/authStorage.ts';
+  import { getAdminLoginPreviewPreferences, isAdminLoginPreview, markLoggedIn } from '@/utils/authStorage.ts';
+  import { resolvePassiveAuthUi } from '@/utils/authUiPolicy.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import GuestNudge from '@/components/home/GuestNudge.vue';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
@@ -397,7 +393,9 @@
       try {
         const res = await apiBaseGet('/api/user/me', undefined, {
           silent: isLandingRequest,
-          suppressAuthExpired: isLandingRequest,
+          // /me 是身份初始化的权威请求，由本函数统一处理游客/登录结果。
+          // 禁止响应拦截器先把旧会话痕迹解释成“立即打开登录框”。
+          suppressAuthExpired: true,
         });
         // 陈旧响应保护:请求在途期间登录身份已变(典型:退出时发出的游客 /me,晚于「重新登录」才返回),
         // 该响应已过时。若继续 applyUserInfo 会用游客数据覆盖刚登录的账号,导致登录态被冲掉且无从恢复,
@@ -438,8 +436,8 @@
           bookmark.isShowLogin = false;
           await refreshOpinionNotice();
         } else {
-          // 仅对「曾登录过、会话过期」的老用户弹登录框；始终是游客的新访客不弹
-          bookmark.isShowLogin = isLandingRequest ? false : hasLoggedInBefore();
+          // 初始化确认当前是游客时保持资料页可浏览，不替用户打开登录/注册。
+          bookmark.isShowLogin = false;
           stopOpinionNoticePolling();
           notification.close(NOTICE_KEY);
         }
@@ -520,8 +518,8 @@
       landingAuthStatus.value = 'anonymous';
     }
     setStoredPreferences(withoutHomePagePreference(user.preferences));
-    // 退出/会话失效后是否弹登录框：仅对曾登录过的老用户弹，纯游客不弹
-    bookmark.isShowLogin = router.currentRoute.value.name === 'landing' ? false : hasLoggedInBefore();
+    // 被动降级为游客时不替用户打开认证；主动登录/注册和受保护操作仍走各自入口。
+    bookmark.isShowLogin = false;
     stopOpinionNoticePolling();
     notification.close(NOTICE_KEY);
     localStorage.removeItem('rememberedSid');
@@ -533,10 +531,16 @@
       return;
     }
     isHandlingAuthExpired = true;
+    const appInitialized = userInfoLoaded;
     const isManualLogout = sessionStorage.getItem('manualLogout') === '1';
     sessionStorage.removeItem('manualLogout');
     const isLandingRoute = router.currentRoute.value.name === 'landing';
-    if (!isManualLogout && !isLandingRoute) {
+    const passiveAuthUi = resolvePassiveAuthUi({
+      appInitialized,
+      isLandingRoute,
+      isManualLogout,
+    });
+    if (passiveAuthUi.showSessionExpiredMessage) {
       message.warning(t('app.sessionExpired'));
     }
     userInfoLoaded = true;
@@ -549,10 +553,8 @@
     if (redirect) {
       await redirectToGuestHome();
     }
-    // 手动登出当次不再弹登录框（hasLoggedInBefore 标记仍保留，下次会话自然过期时才弹）
-    if (isManualLogout || isLandingRoute) {
-      bookmark.isShowLogin = false;
-    }
+    // getUserInfo 可能先写入游客结果；最终仍以统一被动认证策略收口。
+    bookmark.isShowLogin = passiveAuthUi.showAuthModal;
     isHandlingAuthExpired = false;
   }
 
