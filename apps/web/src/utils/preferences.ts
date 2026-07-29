@@ -3,9 +3,8 @@ import { isMobileViewport } from '@/config/responsive.ts';
 export type ThemePreference = 'day' | 'night' | 'system';
 export type LanguagePreference = 'zh-CN' | 'en-US';
 export type HomePagePreference = 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace';
-export type ApplicationHomePreference = Exclude<HomePagePreference, 'landing'>;
 export type MobileHomePreference = Extract<HomePagePreference, 'bookmark' | 'noteLibrary' | 'cloudSpace'>;
-export type AppHomePath = '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace';
+export type AppHomePath = '/' | '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace';
 export type MobileHomePath = Extract<AppHomePath, '/home' | '/noteLibrary' | '/cloudSpace'>;
 
 export interface UserPreferences {
@@ -19,12 +18,13 @@ export interface UserPreferences {
   openBookmarkIn?: 'newTab' | 'current';
 }
 
-export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'workbench';
+export const DEFAULT_HOME_PAGE: HomePagePreference = 'landing';
 export const DEFAULT_MOBILE_HOME_PAGE: MobileHomePreference = 'bookmark';
 
-export function getHomePagePreference(preferences?: UserPreferences | null): ApplicationHomePreference {
+export function getHomePagePreference(preferences?: UserPreferences | null): HomePagePreference {
   const homePage = preferences?.homePage;
   if (
+    homePage === 'landing' ||
     homePage === 'workbench' ||
     homePage === 'resourceCenter' ||
     homePage === 'bookmark' ||
@@ -38,6 +38,9 @@ export function getHomePagePreference(preferences?: UserPreferences | null): App
 
 export function getDesktopHomePath(preferences?: UserPreferences | null): AppHomePath {
   const homePage = getHomePagePreference(preferences);
+  if (homePage === 'landing') {
+    return '/';
+  }
   if (homePage === 'resourceCenter') {
     return '/search';
   }
@@ -85,6 +88,9 @@ export function isMobileHomeRoute(routeName: unknown, preferences?: UserPreferen
 }
 
 export function getAppHomePath(preferences?: UserPreferences | null, isMobile = false): AppHomePath {
+  if (getHomePagePreference(preferences) === 'landing') {
+    return '/';
+  }
   if (isMobile) {
     return getMobileHomePath(preferences);
   }
@@ -92,14 +98,16 @@ export function getAppHomePath(preferences?: UserPreferences | null, isMobile = 
 }
 
 /**
- * `/app` 是稳定的应用入口：手机按移动端默认资源进入，平板保留既有书签首屏，
- * 桌面端按用户偏好进入。旧值 `landing` 会由 getHomePagePreference 迁移为工作台，
- * 避免应用入口再次回到公开官网形成循环。
+ * `/app` 是默认首页分发入口：未设置或选择官网时回到 `/`；
+ * 其余偏好按设备映射到对应应用页。根路径自身始终是官网，不参与分流。
  */
 export function getApplicationEntryPath(
   preferences: UserPreferences | null | undefined,
   viewportWidth: number,
 ): AppHomePath {
+  if (getHomePagePreference(preferences) === 'landing') {
+    return '/';
+  }
   if (isMobileViewport(viewportWidth)) {
     return getMobileHomePath(preferences);
   }

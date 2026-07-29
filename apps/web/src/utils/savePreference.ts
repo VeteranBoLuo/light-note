@@ -4,11 +4,16 @@ import { setLocale } from '@/i18n';
 /**
  * 本地应用并持久化用户偏好(主题/语言/视图模式等),不触发后端。
  * 游客换主题/语言/视图时用:偏好本地生效并存 localStorage(本浏览器留存),
- * 但不调 saveUserInfo(游客写接口会被 ensureNotVisitor 拦成 'preview' 而误弹注册墙)。
+ * 但不保存账号专属的默认首页，也不调 saveUserInfo
+ * (游客写接口会被 ensureNotVisitor 拦成 'preview' 而误弹注册墙)。
  */
 export function applyPreferenceLocally(patch: Record<string, any>): void {
   const user = useUserStore();
-  user.preferences = { ...user.preferences, ...patch };
+  const nextPreferences = { ...user.preferences, ...patch };
+  if (!user.id || user.role === 'visitor') {
+    delete nextPreferences.homePage;
+  }
+  user.preferences = nextPreferences;
   try {
     localStorage.setItem('preferences', JSON.stringify(user.preferences));
   } catch {
@@ -39,7 +44,8 @@ export function applyDisplaySettings(options: { forceStandard?: boolean } = {}):
 
 /**
  * 统一偏好写入口 —— 收口原先散落多套的 theme / lang / noteViewMode / homePage 写逻辑。
- * 顺序:本地立即生效 + localStorage → lang 变化同步 i18n → 游客到此为止(只本地)→
+ * 顺序:本地立即生效 + localStorage → lang 变化同步 i18n → 游客到此为止
+ * (homePage 会被过滤，其余偏好只存本地)→
  * 登录用户以「整对象 preferences JSON」同步后端(权威口径),失败回滚本地。
  * 所有偏好入口(设置中心 / 头像下拉 / 各切换组件)都应只调这一个,避免口径漂移。
  */

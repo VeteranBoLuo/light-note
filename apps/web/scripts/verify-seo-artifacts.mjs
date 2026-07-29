@@ -38,14 +38,13 @@ async function main() {
   const legacyLandingFile = path.join(DIST, 'landing/index.html');
   const manifestFile = path.join(DIST, 'site.webmanifest');
   const robotsFile = path.join(DIST, 'robots.txt');
+  const skipPrerender = process.env.SKIP_PRERENDER === '1';
 
   assert(existsSync(spaFile), '缺少通用 SPA 入口 dist/index.html');
-  assert(existsSync(rootFile), '缺少根官网 SEO 产物 dist/__seo/root/index.html');
   assert(!existsSync(legacyLandingFile), '不应继续生成 /landing 独立预渲染页面');
 
-  const [spaHtml, rootHtml, manifestText, robotsText] = await Promise.all([
+  const [spaHtml, manifestText, robotsText] = await Promise.all([
     readFile(spaFile, 'utf8'),
-    readFile(rootFile, 'utf8'),
     readFile(manifestFile, 'utf8'),
     readFile(robotsFile, 'utf8'),
   ]);
@@ -58,6 +57,20 @@ async function main() {
   assert(readAttribute(spaRobots, 'content') === 'noindex, nofollow', '通用 SPA 空壳必须保持 noindex, nofollow');
   assert(!/<link\b[^>]*rel=["']canonical["'][^>]*>/i.test(spaHtml), '通用 SPA 空壳不应声明固定 canonical');
 
+  const manifest = JSON.parse(manifestText);
+  assert(manifest.id === '/', 'PWA id 必须保持 /，避免被识别为新的应用');
+  assert(manifest.start_url === '/app', 'PWA start_url 必须使用 /app');
+
+  assert(!/^Disallow:\s*\/admin\s*$/imu.test(robotsText), 'robots.txt 不应屏蔽 /admin，否则爬虫看不到 noindex');
+  assert(/^Disallow:\s*\/api\/\s*$/imu.test(robotsText), 'robots.txt 必须继续屏蔽 /api/');
+
+  if (skipPrerender) {
+    console.log('⏭  SKIP_PRERENDER=1：已校验 SPA/manifest/robots，跳过仅预渲染产物检查');
+    return;
+  }
+
+  assert(existsSync(rootFile), '缺少根官网 SEO 产物 dist/__seo/root/index.html');
+  const rootHtml = await readFile(rootFile, 'utf8');
   const rootRobots = findTag(
     rootHtml,
     /<meta\b[^>]*name=["']robots["'][^>]*>/i,
@@ -81,13 +94,6 @@ async function main() {
   assert(/<h1\b[^>]*class=["'][^"']*\bhero-title\b[^"']*["'][^>]*>/i.test(rootHtml), '根官网缺少 hero H1');
   assert(plainText(rootHtml).includes('轻笺'), '根官网正文必须包含品牌词“轻笺”');
   assert(plainText(rootHtml).length >= 500, '根官网正文过短，疑似预渲染空壳');
-
-  const manifest = JSON.parse(manifestText);
-  assert(manifest.id === '/', 'PWA id 必须保持 /，避免被识别为新的应用');
-  assert(manifest.start_url === '/app', 'PWA start_url 必须使用 /app');
-
-  assert(!/^Disallow:\s*\/admin\s*$/imu.test(robotsText), 'robots.txt 不应屏蔽 /admin，否则爬虫看不到 noindex');
-  assert(/^Disallow:\s*\/api\/\s*$/imu.test(robotsText), 'robots.txt 必须继续屏蔽 /api/');
 
   console.log('✅ SEO 产物校验通过：根官网可索引，通用 SPA 保持 noindex，PWA 使用 /app');
 }

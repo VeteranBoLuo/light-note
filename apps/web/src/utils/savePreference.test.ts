@@ -30,6 +30,29 @@ describe('applyPreferenceLocally', () => {
     expect(userState.preferences.noteViewMode).toBe('card');
     expect(userState.preferences.theme).toBe('day');
   });
+
+  it('游客不保存默认首页，但保留同次提交的其他本地偏好', () => {
+    userState.preferences = { theme: 'day', lang: 'zh-CN', homePage: 'bookmark' };
+
+    applyPreferenceLocally({ homePage: 'noteLibrary', theme: 'night' });
+
+    expect(userState.preferences.homePage).toBeUndefined();
+    expect(userState.preferences.theme).toBe('night');
+    const stored = JSON.parse(localStorage.getItem('preferences') || '{}');
+    expect(stored.homePage).toBeUndefined();
+    expect(stored.theme).toBe('night');
+  });
+
+  it('登录用户仍可保存账号默认首页', () => {
+    userState.id = 'u1';
+    userState.role = 'user';
+
+    applyPreferenceLocally({ homePage: 'noteLibrary' });
+
+    expect(userState.preferences.homePage).toBe('noteLibrary');
+    const stored = JSON.parse(localStorage.getItem('preferences') || '{}');
+    expect(stored.homePage).toBe('noteLibrary');
+  });
 });
 
 describe('isGuestUser', () => {

@@ -177,6 +177,11 @@
     }
   }
 
+  function withoutHomePagePreference(preferences) {
+    const { homePage: _homePage, ...rest } = preferences || {};
+    return rest;
+  }
+
   // 首屏同步恢复偏好——必须在 setup 阶段执行,早于子路由组件的 setup(它们会在 setup 里读 user.preferences,
   // 如资源中心视图/排序、标签详情视图)。若放到 onMounted 的 initApp(晚于子组件 setup),子组件会先读到默认值、
   // 退回各自陈旧的独立 localStorage 缓存,表现为「设置页改了视图/排序,刷新对应页面不生效」。
@@ -286,21 +291,24 @@
   // const isAppReady = ref(false); // 已移除，不再需要loading界面
   function applyUserInfo(data) {
     user.setUserInfo(data || {});
-    // 游客:/me 返回的是共用「游客」账号的偏好,应让本地(localStorage)选择优先,
-    // 否则刷新后游客自己切的主题/语言会被服务器默认值覆盖(配合 savePreference.ts 的本地持久化)
+    // /me 会把共享游客账号的 preferences 一并返回；普通游客只保留主题、语言、视图等本地偏好，
+    // 不提供默认首页能力，也不能继承共享游客账号或历史 localStorage 中的 homePage。
     if (!user.id || user.role === 'visitor') {
-      const storedPreferences = getStoredPreferences();
-      if (storedPreferences && Object.keys(storedPreferences).length > 0) {
-        user.preferences = { ...user.preferences, ...storedPreferences };
-      }
+      const storedPreferences = withoutHomePagePreference(getStoredPreferences());
+      user.preferences = {
+        ...withoutHomePagePreference(user.preferences),
+        ...storedPreferences,
+      };
     }
     user.preferences.theme = user.preferences?.theme || 'day';
     user.preferences.lang = user.preferences?.lang || 'zh-CN';
     user.preferences.noteViewMode = user.preferences?.noteViewMode || 'list';
-    user.preferences.homePage = getHomePagePreference(user.preferences);
-    // 已登录用户同步偏好到 localStorage（游客无 API 偏好，不需处理）
     if (user.id && user.role !== 'visitor') {
+      user.preferences.homePage = getHomePagePreference(user.preferences);
       setStoredPreferences(user.preferences);
+    } else {
+      // 同步清理旧版本曾写入的游客 homePage，避免后续 /app 误读到已经废弃的游客设置。
+      setStoredPreferences(withoutHomePagePreference(user.preferences));
     }
     setLocale(user.preferences.lang || 'zh-CN');
   }
@@ -408,7 +416,7 @@
       // 显式登出或会话失效已经完成本地退出，官网可安全恢复游客 CTA。
       landingAuthStatus.value = 'anonymous';
     }
-    setStoredPreferences(user.preferences);
+    setStoredPreferences(withoutHomePagePreference(user.preferences));
     // 退出/会话失效后是否弹登录框：仅对曾登录过的老用户弹，纯游客不弹
     bookmark.isShowLogin = hasLoggedInBefore();
     stopOpinionNoticePolling();

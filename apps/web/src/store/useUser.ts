@@ -95,7 +95,6 @@ const createDefaultUserState = (): UserState => ({
     theme: 'day', // 主题
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
     lang: 'zh-CN', // 语言
-    homePage: 'workbench', // 默认应用首页；官网固定使用根路径，不再参与应用内首页偏好
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
     notifyFeatureRequest: true,
     aiEnabled: true,

@@ -133,7 +133,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 ### Android 客户端
 
 - Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
-- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址；公开官网固定使用根路径 `/`。
+- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。公开官网固定使用根路径 `/`，直接访问和站内品牌 Logo 都返回官网，不按用户偏好分流；`/app` 只读取登录账号同步到本机的默认首页偏好。普通游客不展示或保存默认首页，官网“体验示例”固定进入 `/home`，没有账号偏好时 `/app` 返回官网。
 - 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
 - Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
 - 隐私政策和用户协议在浏览器与 App 设置中都长期可访问；App 设置优先通过受信消息通道打开 APK 内置的离线同源文档，通道不可用时回退到网站公开文档。首次启动同意页仍由原生层负责，不能被设置入口替代。

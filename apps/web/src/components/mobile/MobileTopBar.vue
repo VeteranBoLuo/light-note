@@ -2,10 +2,10 @@
   <header class="mobile-top-bar">
     <BButton
       class="mobile-top-bar__brand"
-      :aria-label="t('mobileNavigation.backToResources')"
-      :title="t('mobileNavigation.backToResources')"
-      @click="goToResources"
-      v-click-log="{ module: '移动端导航', operation: '返回资料首页' }"
+      :aria-label="t('home.officialSite')"
+      :title="t('home.officialSite')"
+      @click="goToOfficialSite"
+      v-click-log="{ module: '移动端导航', operation: '返回官方首页' }"
     >
       <img src="/favicon.svg?v=7" width="25" height="25" alt="" />
       <span>{{ t('navigation.title') }}</span>
@@ -79,16 +79,11 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
-  import { useUserStore } from '@/store';
-  import { getMobileHomePath } from '@/utils/preferences';
 
   const route = useRoute();
   const router = useRouter();
-  const user = useUserStore();
   const { t } = useI18n();
-  const { getLastMobileResourcePath } = useMobileNavigationState();
   const fallbackSearchValue = ref('');
 
   const activeBinding = computed(() => getMobileTopBarBinding(route.name));
@@ -142,9 +137,8 @@
     },
   ]);
 
-  function goToResources() {
-    const target = getLastMobileResourcePath(getMobileHomePath(user.preferences));
-    if (route.path !== target) router.push(target);
+  function goToOfficialSite() {
+    if (route.path !== '/') router.push('/');
   }
 
   function submitSearch() {

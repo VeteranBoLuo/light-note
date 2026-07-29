@@ -125,13 +125,13 @@
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.general') }}</h2>
               <p class="card-sub">
-                {{ t(bookmark.isMobile ? 'settings.generalDescMobile' : 'settings.generalDesc') }}
+                {{ t(bookmark.isMobile || isGuestUser() ? 'settings.generalDescMobile' : 'settings.generalDesc') }}
               </p>
             </div>
           </div>
 
           <div class="fields">
-            <div v-if="!bookmark.isMobile" class="field">
+            <div v-if="!bookmark.isMobile && !isGuestUser()" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.defaultHome') }}</span>
                 <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>

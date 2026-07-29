@@ -11,6 +11,7 @@ import {
 
 describe('默认首页解析', () => {
   const desktopCases: Array<[HomePagePreference, string]> = [
+    ['landing', '/'],
     ['workbench', '/workbenches'],
     ['resourceCenter', '/search'],
     ['bookmark', '/home'],
@@ -23,10 +24,12 @@ describe('默认首页解析', () => {
     expect(getAppHomePath({ homePage }, false)).toBe(path);
   });
 
-  it('将旧版官网首页偏好迁移为应用工作台', () => {
-    expect(getHomePagePreference({ homePage: 'landing' })).toBe('workbench');
-    expect(getDesktopHomePath({ homePage: 'landing' })).toBe('/workbenches');
-    expect(getAppHomePath({ homePage: 'landing' }, false)).toBe('/workbenches');
+  it('缺失偏好和官网偏好都保留在规范根路径', () => {
+    expect(getHomePagePreference()).toBe('landing');
+    expect(getHomePagePreference({ homePage: 'landing' })).toBe('landing');
+    expect(getDesktopHomePath({ homePage: 'landing' })).toBe('/');
+    expect(getAppHomePath({ homePage: 'landing' }, false)).toBe('/');
+    expect(getAppHomePath({ homePage: 'landing' }, true)).toBe('/');
   });
 
   it.each([
@@ -58,9 +61,10 @@ describe('默认首页解析', () => {
   });
 
   it('按手机、平板和桌面视口解析统一应用入口', () => {
+    expect(getApplicationEntryPath(undefined, 390)).toBe('/');
+    expect(getApplicationEntryPath({ homePage: 'landing' }, 1440)).toBe('/');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 390)).toBe('/noteLibrary');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 820)).toBe('/home');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 1440)).toBe('/noteLibrary');
-    expect(getApplicationEntryPath({ homePage: 'landing' }, 1440)).toBe('/workbenches');
   });
 });
