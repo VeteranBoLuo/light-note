@@ -23,7 +23,8 @@ import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import aiRouter from '@/router/modules/ai.ts';
-import { getApplicationEntryPath } from '@/utils/preferences.ts';
+import { getRuntimeApplicationEntryPath } from '@/utils/appEntry.ts';
+import { isInstalledApplicationRuntime } from '@/utils/appRuntime.ts';
 import { syncRouteSeoMeta } from '@/utils/seoMeta.ts';
 
 function getStoredPreferences() {
@@ -87,7 +88,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/app',
     name: 'appEntry',
-    redirect: () => getApplicationEntryPath(getStoredPreferences(), window.innerWidth),
+    redirect: () => getRuntimeApplicationEntryPath(getStoredPreferences(), window.innerWidth),
   },
   {
     path: '/landing',
@@ -157,6 +158,12 @@ function finishRouteNavigationFeedback() {
 // 而不是退回到点击前的旧页面(那样用户还得再点一次)。
 let pendingNavigationTarget = '';
 router.beforeEach((to, from) => {
+  // APK/PWA 是应用容器：即使外部链接或旧版本把它们带到根路径，也不渲染营销官网。
+  // 普通浏览器（包括 Googlebot Smartphone）不会命中该分支，根路径继续稳定输出官网。
+  if (to.name === 'landing' && isInstalledApplicationRuntime()) {
+    return { name: 'appEntry', replace: true };
+  }
+
   routeNavigationSequence += 1;
   pendingNavigationTarget = to.fullPath;
   // 首次整页打开已有原生 WebView/浏览器进度；这里只反馈应用内部的异步路由切换。

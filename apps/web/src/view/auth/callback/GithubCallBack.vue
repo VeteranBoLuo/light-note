@@ -20,7 +20,8 @@
   import { apiBasePost, apiBaseGet } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { markLoggedIn } from '@/utils/authStorage';
-  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
@@ -78,7 +79,7 @@
           }
           const finalPrefs = { ...prefs, homePage: getHomePagePreference(prefs) };
           localStorage.setItem('preferences', JSON.stringify(finalPrefs));
-          await router.push(getAppHomePath(finalPrefs, bookmark.isMobile));
+          await router.push(getRuntimeApplicationHomePath(finalPrefs, bookmark.isMobile));
           bookmark.refreshTag();
         } catch {
           toHome();

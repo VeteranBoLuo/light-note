@@ -3,11 +3,7 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
 import { getApiLogOsInfo, getBrowserType, getLogDeviceId, getLogFingerprint } from '@/utils/common.ts';
-import {
-  clearAdminLoginPreview,
-  getAdminContextToken,
-  getAdminLoginPreviewPreferences,
-} from '@/utils/authStorage.ts';
+import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -43,6 +39,11 @@ interface QueryData {
   filters?: any;
 }
 
+type RequestOptions = AxiosRequestConfig & {
+  silent?: boolean;
+  suppressAuthExpired?: boolean;
+};
+
 const request = axios.create({
   timeout: TIMEOUT,
   withCredentials: true,
@@ -71,9 +72,7 @@ function notifyAuthExpired(response?: any) {
   const headerExpired = response?.headers?.['x-auth-expired'] === '1';
   const serverRole = response?.headers?.['x-auth-role'];
   const lostLoginState =
-    user.id &&
-    user.role !== 'visitor' &&
-    (serverRole === 'visitor' || status === 'visitor' || status === 401);
+    user.id && user.role !== 'visitor' && (serverRole === 'visitor' || status === 'visitor' || status === 401);
   if (status === 200 && serverRole && serverRole !== 'visitor') {
     authExpiredFlow = false;
     // 收到有效登录响应 → 重新登录成功,解除一次性抑制,下次真过期还能正常提示
@@ -156,7 +155,9 @@ request.interceptors.request.use(
       let currentLang = 'zh-CN';
       try {
         currentLang =
-          getAdminLoginPreviewPreferences().lang || JSON.parse(localStorage.getItem('preferences') || '{}').lang || 'zh-CN';
+          getAdminLoginPreviewPreferences().lang ||
+          JSON.parse(localStorage.getItem('preferences') || '{}').lang ||
+          'zh-CN';
       } catch (e) {
         currentLang = 'zh-CN';
       }
@@ -194,10 +195,14 @@ request.interceptors.response.use(
     notifyAuthSession(response);
     notifyUserBanned(response);
     notifyIpBanned(response);
-    notifyAuthExpired(response);
+    if (!(response.config as RequestOptions).suppressAuthExpired) {
+      notifyAuthExpired(response);
+    }
     return response;
   },
   (error) => {
+    const requestOptions = error.config as RequestOptions | undefined;
+    const silent = Boolean(requestOptions?.silent);
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
       const adminContextCode = error.response.data?.data?.code;
@@ -225,10 +230,7 @@ request.interceptors.response.use(
         message.info(msg);
         return Promise.reject({ code: adminContextCode, message: msg, status: error.response.status });
       }
-      if (
-        adminContextCode === 'ADMIN_MAINTENANCE_FORBIDDEN' ||
-        adminContextCode === 'ADMIN_MAINTENANCE_DISABLED'
-      ) {
+      if (adminContextCode === 'ADMIN_MAINTENANCE_FORBIDDEN' || adminContextCode === 'ADMIN_MAINTENANCE_DISABLED') {
         const msg = error.response.data?.msg || '当前内容代管模式不允许此操作。';
         message.warning(msg);
         return Promise.reject({ code: adminContextCode, message: msg, status: error.response.status });
@@ -252,16 +254,20 @@ request.interceptors.response.use(
           status: 423,
         });
       }
-      notifyAuthExpired(error.response);
+      if (!requestOptions?.suppressAuthExpired) {
+        notifyAuthExpired(error.response);
+      }
       const status = error.response.status;
       if (status === 429) {
         const msg = error.response.data?.msg || i18n.global.t('http.tooFrequent');
-        message.open({
-          key: 'http-rate-limit',
-          type: 'error',
-          content: msg,
-          duration: 5,
-        });
+        if (!silent) {
+          message.open({
+            key: 'http-rate-limit',
+            type: 'error',
+            content: msg,
+            duration: 5,
+          });
+        }
         return Promise.reject({
           code: 'HTTP_429',
           message: msg,
@@ -271,7 +277,9 @@ request.interceptors.response.use(
       }
       if (status >= 500) {
         const msg = error.response.data?.msg || i18n.global.t('http.serverBusy');
-        message.error(msg);
+        if (!silent) {
+          message.error(msg);
+        }
         return Promise.reject({
           code: 'HTTP_' + status,
           message: msg,
@@ -315,11 +323,7 @@ export const apiQueryPost = async (
   return handleErrorResponse(res.data);
 };
 
-export const apiBasePost = async (
-  url: string,
-  data?: any,
-  options?: AxiosRequestConfig & { silent?: boolean },
-): Promise<ApiResponse> => {
+export const apiBasePost = async (url: string, data?: any, options?: RequestOptions): Promise<ApiResponse> => {
   const res = await request({
     url,
     method: 'post',
@@ -329,14 +333,14 @@ export const apiBasePost = async (
   return handleErrorResponse(res.data, options?.silent);
 };
 
-export const apiBaseGet = async (url: string, params?: any, options?: AxiosRequestConfig): Promise<ApiResponse> => {
+export const apiBaseGet = async (url: string, params?: any, options?: RequestOptions): Promise<ApiResponse> => {
   const res = await request({
     url,
     method: 'get',
     params,
     ...options,
   });
-  return handleErrorResponse(res.data);
+  return handleErrorResponse(res.data, options?.silent);
 };
 
 export function handleErrorResponse(res: AxiosResponse['data'], silent = false): ApiResponse {

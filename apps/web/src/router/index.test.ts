@@ -7,9 +7,11 @@ describe('官网与应用入口路由', () => {
     expect(resolved.name).toBe('landing');
     expect(resolved.matched.map((record) => record.name)).toEqual(['appShell', 'landing']);
     expect(resolved.matched.at(-1)?.beforeEnter).toBeUndefined();
+    expect(resolved.meta.seoIndexable).toBe(true);
+    expect(resolved.meta.canonicalPath).toBe('/');
   });
 
-  it('保留独立 /app 应用入口，并将旧 /landing 规范化到根路径', () => {
+  it('保留独立 /app 稳定应用入口，并将旧 /landing 规范化到根路径', () => {
     expect(router.resolve('/app').name).toBe('appEntry');
     const legacyLanding = router.getRoutes().find((record) => record.name === 'legacyLanding');
     expect(legacyLanding?.redirect).toBe('/');

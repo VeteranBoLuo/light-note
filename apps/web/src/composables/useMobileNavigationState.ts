@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { getMobileResourcePath, isMobileResourcePath, type MobileResourcePath } from '@/config/mobileNavigation';
+import { getMobileHomePath, type UserPreferences } from '@/utils/preferences';
 
 const LAST_RESOURCE_STORAGE_KEY = 'ln-mobile-last-resource';
 const lastMobileResourcePath = ref<MobileResourcePath | null>(readStoredResourcePath());
@@ -40,9 +41,13 @@ function rememberResourceFromRoute(routeName: unknown) {
   return path;
 }
 
-function getLastMobileResourcePath(fallback: string): MobileResourcePath {
+export function getLastMobileResourcePath(fallback: string): MobileResourcePath {
   if (lastMobileResourcePath.value) return lastMobileResourcePath.value;
   return isMobileResourcePath(fallback) ? fallback : '/home';
+}
+
+export function getMobileResourceEntryPath(preferences?: UserPreferences | null): MobileResourcePath {
+  return getLastMobileResourcePath(getMobileHomePath(preferences));
 }
 
 function saveResourceScroll(path: MobileResourcePath | null) {

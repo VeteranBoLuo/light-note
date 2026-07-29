@@ -26,6 +26,7 @@ describe('androidBridge', () => {
     expect(hasLightNoteAndroidUserAgent(appUa)).toBe(true);
     expect(isLightNoteAndroidApp(chromeUa)).toBe(false);
     expect(isLightNoteAndroidApp(appUa)).toBe(true);
+    expect(isLightNoteAndroidApp(webViewUa)).toBe(false);
     expect(isAndroidWebViewRuntime(chromeUa)).toBe(false);
     expect(isAndroidWebViewRuntime(webViewUa)).toBe(true);
   });
@@ -56,9 +57,7 @@ describe('androidBridge', () => {
     window.LightNoteAndroid = { postMessage };
 
     expect(postAndroidOpenLegalDocument('privacy-policy.html')).toBe(true);
-    expect(postMessage).toHaveBeenCalledWith(
-      JSON.stringify({ type: 'legal.open', document: 'privacy-policy.html' }),
-    );
+    expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'legal.open', document: 'privacy-policy.html' }));
   });
 
   it('原生通道抛错时不阻断网页回退逻辑', () => {

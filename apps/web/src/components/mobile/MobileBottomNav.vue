@@ -36,8 +36,7 @@
     type MobileBottomNavigationItem,
     type MobileShellSection,
   } from '@/config/mobileNavigation';
-  import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
-  import { getMobileHomePath } from '@/utils/preferences';
+  import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import { inboxStore, useUserStore } from '@/store';
 
   const route = useRoute();
@@ -45,7 +44,7 @@
   const user = useUserStore();
   const inbox = inboxStore();
   const { t } = useI18n();
-  const { getLastMobileResourcePath, saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
+  const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
 
   const bottomIcons = {
     resources: icon.navigation.portal,
@@ -71,7 +70,7 @@
 
     const target =
       item.key === 'resources'
-        ? getLastMobileResourcePath(getMobileHomePath(user.preferences))
+        ? getMobileResourceEntryPath(user.preferences)
         : item.key === 'todo'
           ? { path: '/inbox', query: { tab: 'todo' } }
           : item.path;

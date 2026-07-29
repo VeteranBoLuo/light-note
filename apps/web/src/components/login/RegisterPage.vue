@@ -91,7 +91,8 @@
   import { checkEndCondition, isValidEmail } from '@/utils/validator.ts';
   import router from '@/router';
   import { markLoggedIn } from '@/utils/authStorage';
-  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
   import { setLocale } from '@/i18n';
   import { createGithubAuthorizationUrl } from '@/utils/githubOAuth';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
@@ -165,7 +166,7 @@
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      await router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+      await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
       message.success(t('auth.registerSuccess'));
       setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;

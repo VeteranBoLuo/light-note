@@ -41,7 +41,9 @@
   import { setLocale } from './i18n';
   import { applyDisplaySettings } from '@/utils/savePreference';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
-  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from '@/utils/appEntry.ts';
+  import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
   import { useI18n } from 'vue-i18n';
   import { getAdminLoginPreviewPreferences, isAdminLoginPreview, hasLoggedInBefore } from '@/utils/authStorage.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
@@ -51,6 +53,7 @@
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
   import {
+    getLandingAuthRetryDelay,
     LANDING_AUTH_CONTEXT,
     resolveLandingAuthStatus,
     type LandingAuthStatus,
@@ -237,9 +240,53 @@
   // 官网 CTA 单独等待 /me 的确定结果，避免 Pinia 初始游客值在登录态恢复前短暂露出注册入口。
   // 它不参与登录、会话或路由鉴权，只影响 Landing 的按钮展示与点击资格。
   const landingAuthStatus = ref<LandingAuthStatus>('pending');
+  let landingAuthRetryTimer: number | null = null;
+  let landingAuthRetryAttempt = 0;
+
+  function clearLandingAuthRetry(resetAttempt = false) {
+    if (landingAuthRetryTimer !== null) {
+      window.clearTimeout(landingAuthRetryTimer);
+      landingAuthRetryTimer = null;
+    }
+    if (resetAttempt) {
+      landingAuthRetryAttempt = 0;
+    }
+  }
+
+  function scheduleLandingAuthRetry() {
+    if (router.currentRoute.value.name !== 'landing' || landingAuthRetryTimer !== null) return;
+
+    const delay = getLandingAuthRetryDelay(landingAuthRetryAttempt);
+    landingAuthRetryAttempt += 1;
+    landingAuthRetryTimer = window.setTimeout(() => {
+      landingAuthRetryTimer = null;
+      if (router.currentRoute.value.name !== 'landing') return;
+      if (document.visibilityState === 'hidden' || navigator.onLine === false) {
+        scheduleLandingAuthRetry();
+        return;
+      }
+      void retryLandingAuthNow();
+    }, delay);
+  }
+
+  async function retryLandingAuthNow() {
+    clearLandingAuthRetry();
+    return getUserInfo(true);
+  }
+
+  function handleLandingAuthRecoverySignal() {
+    if (
+      router.currentRoute.value.name === 'landing' &&
+      landingAuthStatus.value === 'error' &&
+      document.visibilityState !== 'hidden'
+    ) {
+      void retryLandingAuthNow();
+    }
+  }
+
   provide(LANDING_AUTH_CONTEXT, {
     status: landingAuthStatus,
-    retry: () => getUserInfo(true),
+    retry: retryLandingAuthNow,
   });
   let isHandlingAuthExpired = false;
   let isHandlingUserBanned = false;
@@ -313,6 +360,23 @@
     setLocale(user.preferences.lang || 'zh-CN');
   }
 
+  async function redirectLandingToApplicationIfNeeded() {
+    if (router.currentRoute.value.name !== 'landing') return;
+
+    const runtime = resolveLightNoteRuntime();
+    const shouldRedirect = shouldRedirectLandingToApplication({
+      runtime,
+      isMobileLayout: bookmark.isMobile,
+      isAuthenticated: Boolean(user.id && user.role !== RoleEnum.VISITOR),
+    });
+    if (!shouldRedirect) return;
+
+    const target = getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile, { runtime });
+    if (router.currentRoute.value.path !== target) {
+      await router.replace(target);
+    }
+  }
+
   async function getUserInfo(force = false) {
     if (!force && userInfoLoaded) {
       return;
@@ -325,8 +389,12 @@
     userInfoRequest = (async () => {
       // 记录发起本次 /me 时的登录身份,用于识别并丢弃「陈旧的在途响应」
       const reqUserId = user.id || '';
+      const isLandingRequest = router.currentRoute.value.name === 'landing';
       try {
-        const res = await apiBaseGet('/api/user/me');
+        const res = await apiBaseGet('/api/user/me', undefined, {
+          silent: isLandingRequest,
+          suppressAuthExpired: isLandingRequest,
+        });
         // 陈旧响应保护:请求在途期间登录身份已变(典型:退出时发出的游客 /me,晚于「重新登录」才返回),
         // 该响应已过时。若继续 applyUserInfo 会用游客数据覆盖刚登录的账号,导致登录态被冲掉且无从恢复,
         // 故整体丢弃——不写 user、不改登录框、不刷通知。当前身份的数据以登录时写入的为准。
@@ -334,6 +402,18 @@
           return res;
         }
         userInfoLoaded = true;
+        const responseStatus: unknown = res.status;
+        const hasDefinitiveAuthResult =
+          responseStatus === 200 || responseStatus === 'visitor' || responseStatus === 401;
+        if (isLandingRequest && !hasDefinitiveAuthResult) {
+          // 官网认证探测异常不能覆盖现有身份、弹登录框或要求用户处理；
+          // 页面继续正常浏览，并在后台按渐进退避自动恢复。
+          landingAuthStatus.value = 'error';
+          bookmark.isShowLogin = false;
+          scheduleLandingAuthRetry();
+          return res;
+        }
+
         applyUserInfo(res.data);
         // 只有服务端明确返回 visitor 才开放注册入口；接口异常、格式异常等未知状态保留重试，
         // 不能把已登录 Cookie 尚未确认的用户错误降级为游客。
@@ -341,21 +421,33 @@
           res.status,
           Boolean(user.id && user.role !== RoleEnum.VISITOR),
         );
+        clearLandingAuthRetry(true);
+        // 普通移动浏览器必须等 /me 明确确认登录后才能离开官网；APK/PWA 则始终应用优先。
+        // 匿名浏览器不会跳转，移动优先索引仍抓取完整根官网。
+        await redirectLandingToApplicationIfNeeded();
         if (res.status === 200) {
           bookmark.isShowLogin = false;
           await refreshOpinionNotice();
         } else {
           // 仅对「曾登录过、会话过期」的老用户弹登录框；始终是游客的新访客不弹
-          bookmark.isShowLogin = hasLoggedInBefore();
+          bookmark.isShowLogin = isLandingRequest ? false : hasLoggedInBefore();
           stopOpinionNoticePolling();
           notification.close(NOTICE_KEY);
         }
         return res;
       } catch (error) {
         userInfoLoaded = true;
+        if (isLandingRequest) {
+          // 官网是公开内容页：网络波动时静默保留页面与当前身份，由后台自动重试。
+          // 不把“认证确认失败”转嫁为按钮、弹窗或手动刷新任务。
+          landingAuthStatus.value = 'error';
+          bookmark.isShowLogin = false;
+          scheduleLandingAuthRetry();
+          return null;
+        }
         message.error(t('app.loadUserFailed'), error);
         handleUserLogout();
-        // 网络失败不是“未登录”的可靠结论，Landing 只提供重试，不展示注册入口。
+        // 非官网页面沿用既有会话失效处理；官网分支已在上方静默恢复。
         landingAuthStatus.value = 'error';
         return null;
       } finally {
@@ -387,7 +479,7 @@
     // 桌面布局切换至手机布局
     if (isMobileLayout) {
       if (path === '/workbenches') {
-        router.push(getAppHomePath(user.preferences, true));
+        router.push(getRuntimeApplicationHomePath(user.preferences, true));
         return;
       }
       if (phoneReplaceMap[path]) {
@@ -400,7 +492,7 @@
     }
   }
   async function redirectToGuestHome() {
-    const targetPath = getAppHomePath(user.preferences, bookmark.isMobile);
+    const targetPath = getRuntimeGuestEntryPath(user.preferences);
     if (router.currentRoute.value.path !== targetPath) {
       await router.replace(targetPath);
     }
@@ -418,7 +510,7 @@
     }
     setStoredPreferences(withoutHomePagePreference(user.preferences));
     // 退出/会话失效后是否弹登录框：仅对曾登录过的老用户弹，纯游客不弹
-    bookmark.isShowLogin = hasLoggedInBefore();
+    bookmark.isShowLogin = router.currentRoute.value.name === 'landing' ? false : hasLoggedInBefore();
     stopOpinionNoticePolling();
     notification.close(NOTICE_KEY);
     localStorage.removeItem('rememberedSid');
@@ -432,7 +524,8 @@
     isHandlingAuthExpired = true;
     const isManualLogout = sessionStorage.getItem('manualLogout') === '1';
     sessionStorage.removeItem('manualLogout');
-    if (!isManualLogout) {
+    const isLandingRoute = router.currentRoute.value.name === 'landing';
+    if (!isManualLogout && !isLandingRoute) {
       message.warning(t('app.sessionExpired'));
     }
     userInfoLoaded = true;
@@ -446,7 +539,7 @@
       await redirectToGuestHome();
     }
     // 手动登出当次不再弹登录框（hasLoggedInBefore 标记仍保留，下次会话自然过期时才弹）
-    if (isManualLogout) {
+    if (isManualLogout || isLandingRoute) {
       bookmark.isShowLogin = false;
     }
     isHandlingAuthExpired = false;
@@ -681,7 +774,7 @@
     if (requiredRoles.length > 0 && !isPublicRoute && !requiredRoles.includes(user.role)) {
       if (!user.id || user.role === RoleEnum.VISITOR) {
         handleUserLogout();
-        next(getAppHomePath(user.preferences, bookmark.isMobile));
+        next(getRuntimeGuestEntryPath(user.preferences));
         return;
       }
       next('/403');
@@ -694,6 +787,11 @@
   // 每次路由切换后按目标页决定是否缩放：固定排版入口页清零，帮助中心等应用内页面按 uiScale。
   router.afterEach((to) => {
     applyScaleForRoute(<string>to.name);
+    if (to.name === 'landing' && landingAuthStatus.value === 'error') {
+      scheduleLandingAuthRetry();
+    } else if (to.name !== 'landing') {
+      clearLandingAuthRetry(true);
+    }
   });
 
   // 只有第一次进入页面或者刷新页面才触发（简化）
@@ -703,13 +801,14 @@
     window.addEventListener('light-note:user-banned', handleUserBanned);
     window.addEventListener('light-note:auth-session', handleAuthSession);
     window.addEventListener('light-note:preview-blocked', handlePreviewBlocked);
-    router.isReady().then(async () => {
-      await getUserInfo();
-      handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
-      if (skipRouter.includes(<string>router.currentRoute.value.name)) {
-        bookmark.isShowLogin = false;
-      }
-    });
+    window.addEventListener('online', handleLandingAuthRecoverySignal);
+    document.addEventListener('visibilitychange', handleLandingAuthRecoverySignal);
+    await router.isReady();
+    await getUserInfo();
+    handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
+    if (skipRouter.includes(<string>router.currentRoute.value.name)) {
+      bookmark.isShowLogin = false;
+    }
   }
 
   onMounted(async () => {
@@ -728,6 +827,10 @@
     window.removeEventListener('light-note:auth-expired', handleAuthExpired);
     window.removeEventListener('light-note:user-banned', handleUserBanned);
     window.removeEventListener('light-note:auth-session', handleAuthSession);
+    window.removeEventListener('light-note:preview-blocked', handlePreviewBlocked);
+    window.removeEventListener('online', handleLandingAuthRecoverySignal);
+    document.removeEventListener('visibilitychange', handleLandingAuthRecoverySignal);
+    clearLandingAuthRetry(true);
     if (mq && mqListener) {
       mq.removeEventListener('change', mqListener);
     }

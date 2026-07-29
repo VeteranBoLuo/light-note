@@ -133,9 +133,10 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 ### Android 客户端
 
 - Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
-- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。公开官网固定使用根路径 `/`，直接访问和站内品牌 Logo 都返回官网，不按用户偏好分流；`/app` 只读取登录账号同步到本机的默认首页偏好。普通游客不展示或保存默认首页，官网“体验示例”固定进入 `/home`，没有账号偏好时 `/app` 返回官网。
+- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。普通浏览器的根路径 `/` 固定为公开官网：匿名移动浏览器保留官网，已确认登录的手机用户进入最近使用的资料模块，桌面浏览器仍可直接浏览官网；`/app` 始终是应用入口，不能返回官网。Android APK 与 PWA 独立窗口采用应用优先策略，即使误入 `/` 也进入最近使用的书签、笔记库或云空间，没有历史记录时回退 `/home`。移动端品牌 Logo 与底部“资料”入口行为一致。
 - 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
-- Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
+- Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；通用 Android `wv` 标记只用于旧 WebView 渲染兼容，不能作为轻笺 APK 身份或入口分流依据。原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
+- SEO 只以普通匿名浏览器语义为准：根官网保留预渲染、`index, follow` 和自引用 canonical；`/app` 与业务页面继续 `noindex`。不得按 Googlebot UA 提供不同内容，也不得仅因手机视口把匿名根路径重定向到业务页。
 - 隐私政策和用户协议在浏览器与 App 设置中都长期可访问；App 设置优先通过受信消息通道打开 APK 内置的离线同源文档，通道不可用时回退到网站公开文档。首次启动同意页仍由原生层负责，不能被设置入口替代。
 - Release 只允许 HTTPS、关闭 WebView 调试、拒绝 SSL 错误，不使用 JavaScript Interface；文件访问和内容访问默认关闭。
 - Android 源码、Gradle Wrapper 和资源进入 Git；`local.properties`、`.gradle`、`build`、APK/AAB、签名密钥及密码配置必须忽略。

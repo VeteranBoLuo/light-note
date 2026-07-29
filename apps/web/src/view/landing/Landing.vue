@@ -29,15 +29,7 @@
                 <template v-if="landingCtaMode === 'enter'">
                   <BButton type="primary" class="btn-primary" @click="handleEnterApp">
                     <span>{{ t('landing.ctaEnterApp') }}</span>
-                    <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M5 12h14M13 5l7 7-7 7"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
+                    <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="18" aria-hidden="true" />
                   </BButton>
                 </template>
                 <template v-else>
@@ -48,26 +40,23 @@
                     @click="handleRegister('landing_primary')"
                   >
                     <span>{{ t('landing.ctaCreateSpace') }}</span>
-                    <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path
-                        d="M5 12h14M13 5l7 7-7 7"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                    </svg>
+                    <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="18" aria-hidden="true" />
                   </BButton>
                   <BButton
-                    v-else-if="landingCtaMode === 'retry'"
+                    v-else
                     type="primary"
                     class="btn-primary"
-                    @click="retryLandingAuth"
+                    :loading="startingApp"
+                    @click="handleStart('landing_primary')"
                   >
-                    <span>{{ t('landing.ctaRetryAuth') }}</span>
-                  </BButton>
-                  <BButton v-else type="primary" class="btn-primary" loading>
-                    <span>{{ t('landing.ctaCheckingAuth') }}</span>
+                    <span>{{ t('landing.ctaStart') }}</span>
+                    <SvgIcon
+                      v-if="!startingApp"
+                      class="btn-arrow"
+                      :src="icon.arrow_right"
+                      size="18"
+                      aria-hidden="true"
+                    />
                   </BButton>
                   <BButton
                     class="btn-ghost"
@@ -86,12 +75,7 @@
                   <span>{{ t('landing.pwaDesc') }}</span>
                 </div>
                 <div class="pwa-install-strip__actions">
-                  <BButton
-                    size="small"
-                    type="primary"
-                    :disabled="isStandalone"
-                    @click="openGuide('landing')"
-                  >
+                  <BButton size="small" type="primary" :disabled="isStandalone" @click="openGuide('landing')">
                     {{ isStandalone ? t('pwa.installed') : t('pwa.install') }}
                   </BButton>
                 </div>
@@ -107,11 +91,7 @@
                     <span class="dot d-green"></span>
                   </div>
                   <div class="win-url">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M3.5 9h17M3.5 15h17" />
-                      <path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z" />
-                    </svg>
+                    <SvgIcon :src="icon.cloudSpace.preview.globe" size="12" aria-hidden="true" />
                     <span>{{ t('landing.brandShort') }} · {{ previewItems[previewIndex]?.label }}</span>
                   </div>
                 </div>
@@ -133,17 +113,19 @@
                   </div>
                 </div>
                 <div class="mockup-notch"></div>
-                <div class="carousel-dots">
-                  <button
+                <div class="carousel-dots" :aria-label="t('landing.previewNavigation')">
+                  <BButton
                     v-for="(item, i) in previewItems"
                     :key="item.key"
                     :class="['carousel-dot', { active: previewIndex === i }]"
+                    :aria-label="item.label"
+                    :aria-pressed="previewIndex === i"
                     @click="previewIndex = i"
                     v-click-log="{ module: '官网首页', operation: '切换预览图' }"
                   >
                     <span class="dot-indicator"></span>
                     <span class="dot-label">{{ item.label }}</span>
-                  </button>
+                  </BButton>
                 </div>
               </div>
             </div>
@@ -255,15 +237,7 @@
               <template v-if="landingCtaMode === 'enter'">
                 <BButton type="primary" class="btn-primary btn-large" @click="handleEnterApp">
                   {{ t('landing.ctaEnterApp') }}
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M5 12h14M13 5l7 7-7 7"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
+                  <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="20" aria-hidden="true" />
                 </BButton>
               </template>
               <template v-else>
@@ -274,26 +248,17 @@
                   @click="handleRegister('landing_final')"
                 >
                   {{ t('landing.ctaCreateSpace') }}
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M5 12h14M13 5l7 7-7 7"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
+                  <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="20" aria-hidden="true" />
                 </BButton>
                 <BButton
-                  v-else-if="landingCtaMode === 'retry'"
+                  v-else
                   type="primary"
                   class="btn-primary btn-large"
-                  @click="retryLandingAuth"
+                  :loading="startingApp"
+                  @click="handleStart('landing_final')"
                 >
-                  {{ t('landing.ctaRetryAuth') }}
-                </BButton>
-                <BButton v-else type="primary" class="btn-primary btn-large" loading>
-                  {{ t('landing.ctaCheckingAuth') }}
+                  {{ t('landing.ctaStart') }}
+                  <SvgIcon v-if="!startingApp" class="btn-arrow" :src="icon.arrow_right" size="20" aria-hidden="true" />
                 </BButton>
                 <BButton
                   class="btn-ghost"
@@ -334,42 +299,52 @@
 
     <!-- Nav -->
     <div class="nav-dots">
-      <button
+      <BButton
         v-for="(_, i) in 5"
         :key="i"
         :class="['nav-dot', { active: current === i }]"
+        :aria-label="navLabels[i]"
+        :aria-current="current === i ? 'step' : undefined"
         @click="goTo(i)"
         v-click-log="{ module: '官网首页', operation: '切换幻灯片' }"
       >
         <span class="dot-tooltip">{{ navLabels[i] }}</span>
-      </button>
+      </BButton>
     </div>
     <div class="slide-counter" :class="{ pulse: animating }">{{ navLabels[current] }}</div>
 
     <!-- Contact Modal -->
-    <div v-if="showContactModal" class="contact-overlay" @click.self="showContactModal = false">
-      <div class="contact-dialog">
-        <button class="contact-dialog__close" @click="showContactModal = false">×</button>
-        <div class="contact-dialog__header">{{ t('landing.contactUs') }}</div>
+    <BModal
+      v-model:visible="showContactModal"
+      :title="t('landing.contactUs')"
+      :show-footer="false"
+      width="min(420px, calc(100vw - 32px))"
+      modal-class="landing-contact-dialog"
+    >
+      <div class="contact-dialog__body">
         <div class="contact-dialog__email">{{ t('landing.contactEmail') }}</div>
         <div class="contact-dialog__field">
           <label>{{ t('landing.feedbackLabel') }}</label>
-          <textarea
-            v-model="feedbackContent"
+          <BInput
+            v-model:value="feedbackContent"
             class="contact-dialog__input"
+            type="textarea"
             :placeholder="t('landing.feedbackPlaceholder')"
-            rows="4"
-          ></textarea>
+            :rows="4"
+            :maxlength="2000"
+          />
         </div>
-        <button
+        <BButton
+          type="primary"
           class="contact-dialog__submit"
           :disabled="!feedbackContent.trim() || submitting"
+          :loading="submitting"
           @click="submitFeedback"
         >
           {{ submitting ? t('landing.submitting') : t('landing.submitFeedback') }}
-        </button>
+        </BButton>
       </div>
-    </div>
+    </BModal>
   </div>
 </template>
 
@@ -382,6 +357,9 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { trackConversion } from '@/utils/conversion';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { usePwaInstall } from '@/composables/usePwaInstall';
@@ -416,6 +394,7 @@
   const showContactModal = ref(false);
   const feedbackContent = ref('');
   const submitting = ref(false);
+  const startingApp = ref(false);
 
   const previewItems = computed(() => [
     {
@@ -455,9 +434,6 @@
   function goTo(i: number) {
     slidesRef.value?.children[i]?.scrollIntoView({ behavior: 'smooth' });
   }
-  function scrollTo(i: number) {
-    goTo(i);
-  }
   function goHome() {
     // 次 CTA「先体验示例」:进入游客共享示例空间,记 demo_enter
     trackConversion('demo_enter', 'landing_demo');
@@ -471,9 +447,28 @@
   function enterApp() {
     router.push('/app');
   }
-  async function retryLandingAuth() {
-    if (!landingAuth) return;
-    await landingAuth.retry();
+  async function handleStart(source: string) {
+    if (startingApp.value) return;
+    if (!landingAuth) {
+      handleRegister(source);
+      return;
+    }
+
+    startingApp.value = true;
+    try {
+      await landingAuth.retry();
+      if (isLoggedIn.value) {
+        handleEnterApp();
+        return;
+      }
+      if (landingAuth.status.value === 'anonymous') {
+        handleRegister(source);
+        return;
+      }
+      message.warning(t('landing.serviceUnavailable'));
+    } finally {
+      startingApp.value = false;
+    }
   }
   // 点击瞬间再次判断，避免 /me 完成与用户点击同一时刻竞争时记录错误的“免费注册”日志。
   function handleRegister(source: string) {
@@ -494,28 +489,6 @@
     showContactModal.value = true;
     feedbackContent.value = '';
   }
-  function showToast(msg: string) {
-    const toast = document.createElement('div');
-    toast.textContent = msg;
-    Object.assign(toast.style, {
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      background: 'rgba(0,0,0,.78)',
-      color: '#eee',
-      padding: '14px 28px',
-      borderRadius: '8px',
-      fontSize: '14px',
-      zIndex: '9999',
-      transition: 'opacity .3s',
-    });
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      setTimeout(() => toast.remove(), 300);
-    }, 1800);
-  }
   async function submitFeedback() {
     const content = feedbackContent.value.trim();
     if (!content) return;
@@ -529,12 +502,12 @@
       if (res.status === 200) {
         showContactModal.value = false;
         feedbackContent.value = '';
-        showToast(t('landing.feedbackOk'));
+        message.success(t('landing.feedbackOk'));
       } else {
-        showToast(t('landing.feedbackFail'));
+        message.error(t('landing.feedbackFail'));
       }
     } catch {
-      showToast(t('landing.networkErr'));
+      message.error(t('landing.networkErr'));
     } finally {
       submitting.value = false;
     }
@@ -609,6 +582,7 @@
 
   // Canvas particles
   let animId = 0;
+  let resizeCanvas: (() => void) | null = null;
   function onScroll() {
     const s = slidesRef.value;
     if (!s) return;
@@ -632,6 +606,7 @@
       w = canvas.width = window.innerWidth;
       h = canvas.height = window.innerHeight;
     }
+    resizeCanvas = resize;
     resize();
     window.addEventListener('resize', resize);
 
@@ -682,6 +657,10 @@
 
   onBeforeUnmount(() => {
     cancelAnimationFrame(animId);
+    if (resizeCanvas) {
+      window.removeEventListener('resize', resizeCanvas);
+      resizeCanvas = null;
+    }
   });
 </script>
 
@@ -1097,12 +1076,14 @@
     gap: 6px;
     z-index: 10;
   }
-  .carousel-dot {
+  .carousel-dot.b_btn {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
     gap: 5px;
     min-width: 58px;
+    height: auto;
+    line-height: 1;
     padding: 4px 10px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.35);
@@ -1112,11 +1093,11 @@
     backdrop-filter: blur(4px);
     white-space: nowrap;
   }
-  .carousel-dot:hover {
+  .carousel-dot.b_btn:hover {
     background: rgba(0, 0, 0, 0.5);
     border-color: rgba(255, 255, 255, 0.3);
   }
-  .carousel-dot.active {
+  .carousel-dot.b_btn.active {
     background: rgba(99, 92, 237, 0.7);
     border-color: #615ced;
     box-shadow: 0 0 12px rgba(99, 92, 237, 0.4);
@@ -1186,11 +1167,8 @@
     .pwa-install-strip__actions :deep(.b_btn) {
       width: 100%;
     }
-    .carousel-dot {
-      padding: 5px 7px;
-    }
-    .carousel-dot .dot-label {
-      display: none;
+    .carousel-dot.b_btn {
+      padding: 7px 10px;
     }
   }
   .float-elements {
@@ -1692,9 +1670,12 @@
     gap: 14px;
     z-index: 100;
   }
-  .nav-dot {
+  .nav-dot.b_btn {
     width: 8px;
+    min-width: 8px;
     height: 8px;
+    min-height: 8px;
+    line-height: 1;
     border-radius: 50%;
     background: #333;
     border: none;
@@ -1703,10 +1684,10 @@
     padding: 0;
     position: relative;
   }
-  .nav-dot:hover {
+  .nav-dot.b_btn:hover {
     background: #555;
   }
-  .nav-dot.active {
+  .nav-dot.b_btn.active {
     background: #615ced;
     width: 12px;
     height: 12px;
@@ -1743,23 +1724,253 @@
   }
 
   @media (max-width: 768px) {
+    .landing {
+      height: 100dvh;
+    }
+    .slides {
+      height: 100dvh;
+      overscroll-behavior-y: contain;
+      scroll-behavior: smooth;
+    }
     .slide {
-      padding: 30px 20px;
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      padding: 68px 16px;
+      justify-content: flex-start;
+      overflow: visible;
+    }
+    .slide::before {
+      height: 36px;
+    }
+    .s-cover {
+      min-height: 100vh;
+      min-height: 100svh;
+      padding-top: max(48px, calc(env(safe-area-inset-top) + 28px));
+      padding-bottom: 52px;
+    }
+    .s-cta {
+      padding-bottom: max(48px, calc(env(safe-area-inset-bottom) + 32px));
+    }
+    .slide-inner,
+    .s-why .slide-inner {
+      max-width: 640px !important;
+    }
+    .cover-layout {
+      width: 100%;
+      max-width: 100%;
+      gap: 28px;
+    }
+    .cover-text {
+      width: 100%;
+      text-align: center;
+    }
+    .cover-text .hero-actions {
+      justify-content: center;
+    }
+    .logo-badge {
+      margin-bottom: 14px;
+      padding: 5px 17px;
+      font-size: 10px;
+      letter-spacing: 2.5px;
+    }
+    .hero-title {
+      margin-bottom: 24px;
+    }
+    .hero-brand {
+      padding: 4px 0 8px;
+      font-size: clamp(58px, 18vw, 76px);
+      letter-spacing: clamp(8px, 3vw, 12px);
+      line-height: 1.12;
+    }
+    .hero-tagline {
+      margin: 0;
+      font-size: clamp(15px, 4.3vw, 18px);
+      line-height: 1.65;
+      letter-spacing: clamp(3px, 1.5vw, 6px);
+    }
+    .hero-actions,
+    .cta-actions {
+      width: 100%;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .btn-primary,
+    .btn-ghost,
+    .btn-large {
+      width: 100%;
+      min-height: 48px;
+      padding: 13px 20px;
+      font-size: 15px;
+    }
+    .btn-primary:hover,
+    .btn-ghost.b_btn:hover {
+      transform: none;
+    }
+    .pwa-install-strip {
+      width: 100%;
+      margin-top: 16px;
+      padding: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      border-radius: 16px;
+    }
+    .pwa-install-strip__copy {
+      padding-top: 0;
+    }
+    .pwa-install-strip__actions {
+      width: 100%;
+      padding-left: 46px;
+    }
+    .pwa-install-strip__actions :deep(.b_btn) {
+      width: 100%;
+      min-height: 40px;
+    }
+    .cover-mockup {
+      width: 100%;
+      max-width: 560px;
+    }
+    .mockup-wrapper {
+      border-radius: 16px;
+      box-shadow:
+        0 18px 42px rgba(0, 0, 0, 0.36),
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    }
+    .mockup-header {
+      padding: 9px 11px;
+    }
+    .win-url {
+      min-width: 0;
+      padding: 5px 8px;
+    }
+    .mockup-carousel {
+      aspect-ratio: 4 / 3;
+      background: #f5f5f8;
+    }
+    .mockup-screen {
+      background: #f5f5f8;
+    }
+    .mockup-screen img {
+      object-fit: contain;
+    }
+    .mockup-notch {
+      height: 12px;
+    }
+    .mockup-notch::before {
+      width: 48px;
+      height: 3px;
+    }
+    .carousel-dots {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      width: 100%;
+      max-width: none;
+      padding: 8px;
+      transform: none;
+      gap: 4px;
+      overflow-x: hidden;
+      background: #11111c;
+      scrollbar-width: none;
+    }
+    .carousel-dots::-webkit-scrollbar {
+      display: none;
+    }
+    .carousel-dot.b_btn {
+      width: 100%;
+      min-width: 0;
+      min-height: 34px;
+      padding: 7px 4px;
+      gap: 3px;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.055);
+    }
+    .carousel-dot.b_btn.active {
+      background: rgba(99, 92, 237, 0.82);
+    }
+    .dot-label {
+      display: inline;
+      font-size: 10px;
+    }
+    .section-badge {
+      margin-bottom: 12px;
+    }
+    h2 {
+      margin-top: 0;
+      font-size: clamp(26px, 8vw, 34px);
+      line-height: 1.25;
+    }
+    .section-sub {
+      margin: 8px auto 24px;
+      max-width: 34em;
+      font-size: 14px;
+      line-height: 1.65;
     }
     .core-grid {
       grid-template-columns: 1fr;
+      width: 100%;
+      gap: 12px;
     }
     .features-grid {
       grid-template-columns: 1fr;
+      width: 100%;
+      gap: 10px;
     }
-    .nav-dots {
-      right: 10px;
+    .core-card,
+    .feat-card,
+    .reason-card {
+      opacity: 1;
+      transform: none;
+    }
+    .core-card {
+      padding: 26px 20px 22px;
+      border-radius: 20px;
+    }
+    .feat-card {
+      padding: 17px;
+    }
+    .reasons-wrap {
+      margin-top: 20px;
+      gap: 10px;
+    }
+    .reason-card {
+      padding: 17px;
+      gap: 14px;
+    }
+    .cta-glass {
+      width: 100%;
+      max-width: 560px;
+      padding: 28px 18px;
+      border-radius: 24px;
+    }
+    .cta-emoji {
+      font-size: 40px;
+    }
+    .cta-desc {
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    .trust-badges {
+      gap: 8px 12px;
+    }
+    .landing-footer {
+      margin-top: 18px;
+      padding-top: 16px;
+      gap: 7px;
+      line-height: 1.6;
+    }
+    .nav-dots,
+    .slide-counter {
+      display: none;
     }
     .float-el {
       display: none;
     }
     .dot-tooltip {
       display: none;
+    }
+    .orb {
+      filter: blur(90px);
     }
   }
   @media (max-width: 1024px) and (min-width: 769px) {
@@ -1772,44 +1983,26 @@
   }
 
   /* ============ Contact Modal ============ */
-  .contact-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 300;
-  }
-  .contact-dialog {
-    background: #1a1a1a;
+  :global(.landing-contact-dialog.modal-view) {
+    background: #161620;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    padding: 32px;
-    width: min(420px, calc(100vw - 40px));
-    position: relative;
+    color: #e8e8ec;
   }
-  .contact-dialog__close {
-    position: absolute;
-    top: 12px;
-    right: 16px;
-    background: none;
-    border: none;
-    color: #666;
-    font-size: 22px;
-    cursor: pointer;
-    line-height: 1;
-    transition: color 0.2s;
+  :global(.landing-contact-dialog .modal-header) {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
   }
-  .contact-dialog__close:hover {
-    color: #eee;
+  :global(.landing-contact-dialog .modal-title) {
+    color: #f2f2f5;
   }
-  .contact-dialog__header {
-    font-size: 18px;
-    font-weight: 600;
-    color: #eee;
-    margin-bottom: 6px;
+  :global(.landing-contact-dialog .modal-close.b_btn) {
+    color: #8c8b96;
+  }
+  :global(.landing-contact-dialog .modal-close.b_btn:hover) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .contact-dialog__body {
+    width: 100%;
   }
   .contact-dialog__email {
     font-size: 13px;
@@ -1824,7 +2017,7 @@
     color: #aaa;
     margin-bottom: 8px;
   }
-  .contact-dialog__input {
+  .contact-dialog__input :deep(.b-textarea) {
     width: 100%;
     box-sizing: border-box;
     background: rgba(255, 255, 255, 0.04);
@@ -1838,30 +2031,16 @@
     transition: border-color 0.2s;
     font-family: inherit;
   }
-  .contact-dialog__input:focus {
+  .contact-dialog__input :deep(.b-textarea:focus) {
     border-color: #615ced;
   }
-  .contact-dialog__input::placeholder {
+  .contact-dialog__input :deep(.b-textarea::placeholder) {
     color: #555;
   }
-  .contact-dialog__submit {
+  .contact-dialog__submit.b_btn {
     margin-top: 16px;
     width: 100%;
-    padding: 10px 0;
-    background: #615ced;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
-  .contact-dialog__submit:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-  .contact-dialog__submit:not(:disabled):hover {
-    opacity: 0.85;
+    min-height: 42px;
+    border-radius: 9px;
   }
 </style>

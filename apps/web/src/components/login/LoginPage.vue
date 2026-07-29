@@ -76,7 +76,8 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { setLocale } from '@/i18n';
-  import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
+  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
   import { markLoggedIn } from '@/utils/authStorage';
   import { createGithubAuthorizationUrl } from '@/utils/githubOAuth';
   import { isValidEmail } from '@/utils/validator.ts';
@@ -140,7 +141,7 @@
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      await router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+      await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
       message.success(t('auth.loginSuccess'));
       setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;
