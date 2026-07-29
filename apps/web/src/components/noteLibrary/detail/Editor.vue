@@ -21,25 +21,6 @@
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
           <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="line" />
-          <BUpload
-            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-            :multiple="false"
-            raw-file
-            :max-total-size="10 * 1024 * 1024"
-            :disabled="markdownImageUploading"
-            :aria-label="t('note.mdUploadImage')"
-            @change="uploadMarkdownImage"
-          >
-            <BButton
-              class="md-image-upload"
-              size="small"
-              :loading="markdownImageUploading"
-              :aria-label="t('note.mdUploadImage')"
-            >
-              <SvgIcon v-if="!markdownImageUploading" :src="icon.file_upload" size="15" aria-hidden="true" />
-              <span>{{ markdownImageUploading ? t('note.mdUploadingImage') : t('note.mdUploadImage') }}</span>
-            </BButton>
-          </BUpload>
         </div>
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
@@ -52,6 +33,7 @@
               @input="onMdInput"
               @scroll="syncMdScroll('edit')"
               @keydown="onMarkdownMentionKeydown"
+              @paste="onMarkdownPaste"
               @focusout="closeInlineMention"
               :readonly="readonly"
               :placeholder="$t('note.mdPlaceholder')"
@@ -171,7 +153,6 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
-  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
   import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
@@ -546,6 +527,146 @@
   function getMdTextarea() {
     const element = mdTextareaInputRef.value?.inputEl;
     return element instanceof HTMLTextAreaElement ? element : null;
+  }
+
+  /**
+   * TinyMCE searchreplace 在 inline 编辑器中会给当前命中项加上
+   * `.mce-match-marker-selected`。它自带的 `selection.scrollIntoView(span)`
+   * 在我们的 `.note-editor-scroll` 容器里会误用原来的光标位置，导致“找到了但没跳过去”。
+   * 这里统一按当前蓝色命中项滚动，保证查找、上一个、下一个和替换后的下一个命中项都可见。
+   */
+  function scrollTinyMceFindMatchIntoView() {
+    const content = editorRef.value?.getBody?.();
+    if (!(content instanceof HTMLElement)) return;
+
+    const selectedMatch = content.querySelector<HTMLElement>('.mce-match-marker-selected');
+    const scrollContainer = content.closest<HTMLElement>('.note-editor-scroll');
+    if (!selectedMatch || !scrollContainer) return;
+
+    // 让命中项落在编辑区中部偏上的安全位置，避免被工具栏或右上查找面板遮住。
+    const offset = Math.min(240, Math.max(80, Math.round(scrollContainer.clientHeight * 0.35)));
+    scrollIntoContainer(scrollContainer, selectedMatch, offset);
+  }
+
+  function scheduleTinyMceFindMatchScroll() {
+    // TinyMCE 的按钮处理会在当前事件循环内更新 marker；双帧后再读才能拿到新的当前命中项。
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(scrollTinyMceFindMatchIntoView);
+    });
+  }
+
+  function getTinyMceFindDialog() {
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('.tox-tinymce-aux .tox-dialog-inline'));
+    return dialogs.find((candidate) => candidate.querySelector('[data-mce-name="findtext"]')) || null;
+  }
+
+  function setTinyMceFindDialogVisible(visible: boolean) {
+    const dialog = getTinyMceFindDialog();
+    if (!dialog) return;
+    if (visible) {
+      dialog.style.removeProperty('visibility');
+    } else {
+      dialog.style.visibility = 'hidden';
+    }
+  }
+
+  // 固定为工具栏下方右侧锚点，并将查找框收窄，避免遮住左侧正文。
+  function positionTinyMceInlineDialog() {
+    const dialog = getTinyMceFindDialog();
+    const anchor = dialog?.parentElement;
+    const sink = anchor?.parentElement;
+    const toolbar = document.getElementById('editor-toolbar');
+    if (!(dialog instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !(sink instanceof HTMLElement) || !toolbar) {
+      return;
+    }
+
+    // 清掉旧版本曾写入 dialog 本身的定位样式，避免热更新后保留过期坐标。
+    dialog.style.removeProperty('position');
+    dialog.style.removeProperty('inset');
+    dialog.style.removeProperty('transform');
+
+    const zoom = getRootZoom();
+    const viewportWidth = document.documentElement.clientWidth / zoom;
+    const edge = 12;
+    const availableWidth = viewportWidth - edge * 2;
+    if (availableWidth > 0) {
+      // TinyMCE 默认 480px；420px 可避免覆盖正文，同时在窄屏时保留两侧安全边距。
+      const width = Math.min(420, availableWidth);
+      dialog.style.width = `${width}px`;
+      dialog.style.maxWidth = `${width}px`;
+    }
+
+    // TinyMCE 会在每次打开时根据“上一次选区”重算 inline dialog 的锚点，
+    // 查找过较靠下的内容后第二次打开就会跑到顶部。固定在工具栏下方右侧，
+    // 让首次打开、关闭后再次打开的位置完全一致。
+    dialog.removeAttribute('data-drag-left');
+    dialog.removeAttribute('data-drag-top');
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const sinkRect = sink.getBoundingClientRect();
+    const dialogWidth = dialog.offsetWidth;
+    const dialogHeight = dialog.offsetHeight;
+    if (toolbarRect.width && sinkRect.width && dialogWidth && dialogHeight) {
+      const sinkLeft = sinkRect.left / zoom;
+      const sinkTop = sinkRect.top / zoom;
+      const right = Math.min(viewportWidth - edge, toolbarRect.right / zoom - edge);
+      const left = Math.max(edge, right - dialogWidth);
+      const preferredTop = toolbarRect.bottom / zoom + edge;
+      const maxTop = Math.max(edge, document.documentElement.clientHeight / zoom - dialogHeight - edge);
+      const top = Math.max(edge, Math.min(preferredTop, maxTop));
+
+      anchor.style.left = `${left - sinkLeft}px`;
+      anchor.style.top = `${top - sinkTop}px`;
+      anchor.style.right = 'auto';
+      anchor.style.bottom = 'auto';
+    }
+
+    if (dialog.dataset.lightNoteFindDialogBound === 'true') return;
+    dialog.dataset.lightNoteFindDialogBound = 'true';
+
+    // Inline dialog 的整个标题栏默认可拖动。查找框位置是固定工作流的一部分，关闭该拖拽交互。
+    const header = dialog.querySelector<HTMLElement>('.tox-dialog__header');
+    const dragHandle = dialog.querySelector<HTMLElement>('.tox-dialog__draghandle');
+    if (dragHandle) dragHandle.style.cursor = 'default';
+    header?.addEventListener(
+      'mousedown',
+      (event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest('.tox-button')) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      },
+      true,
+    );
+
+    const scrollAfterFindAction = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const action = target.closest<HTMLElement>('[data-mce-name]')?.getAttribute('data-mce-name');
+      if (action === 'Find' || action === 'Next' || action === 'Previous' || action === 'Replace') {
+        scheduleTinyMceFindMatchScroll();
+      }
+    };
+    // capture 阶段先登记，确保 TinyMCE 自己停止冒泡时也不会漏掉定位修复。
+    dialog.addEventListener('click', scrollAfterFindAction, true);
+    dialog.addEventListener('submit', () => scheduleTinyMceFindMatchScroll(), true);
+  }
+
+  function scheduleTinyMceInlineDialogPosition() {
+    // OpenWindow 时浮层已经进入 DOM。先在当前事件循环隐藏它，再等待 TinyMCE
+    // 完成两轮内部停靠；最终坐标写入后直接显示，避免用户看到“区域外 → 区域内”的闪跳。
+    setTinyMceFindDialogVisible(false);
+    window.requestAnimationFrame(() => {
+      setTinyMceFindDialogVisible(false);
+      window.requestAnimationFrame(() => {
+        setTinyMceFindDialogVisible(false);
+        positionTinyMceInlineDialog();
+        // Inline dialog 的内部停靠会在下一轮布局里再次计算一次；随后再写回固定锚点并显示。
+        window.setTimeout(() => {
+          positionTinyMceInlineDialog();
+          setTinyMceFindDialogVisible(true);
+        }, 0);
+      });
+    });
   }
 
   type MarkdownMentionRange = { start: number; end: number };
@@ -1132,19 +1253,43 @@
       .trim();
   }
 
-  async function uploadMarkdownImage(files: File[]) {
-    const file = Array.isArray(files) ? files[0] : null;
-    if (!file || markdownImageUploading.value) return;
+  function getPastedMarkdownImage(event: ClipboardEvent): File | null {
+    const files = Array.from(event.clipboardData?.files || []);
+    const directImage = files.find((file) => file.type.startsWith('image/'));
+    if (directImage) return directImage;
+
+    const imageItem = Array.from(event.clipboardData?.items || []).find((item) => item.type.startsWith('image/'));
+    return imageItem?.getAsFile() || null;
+  }
+
+  function pastedImageFileName(file: File) {
+    if (file.name) return file.name;
+    const extension = file.type.split('/')[1]?.replace(/[^a-z0-9]/giu, '') || 'png';
+    return `pasted-image.${extension}`;
+  }
+
+  function onMarkdownPaste(event: ClipboardEvent) {
+    if (props.readonly) return;
+    const file = getPastedMarkdownImage(event);
+    if (!file) return;
+    // 只拦截图片粘贴；文本与普通 Markdown 内容仍走浏览器默认行为。
+    event.preventDefault();
+    if (markdownImageUploading.value) return;
+    void uploadMarkdownImage(file, pastedImageFileName(file));
+  }
+
+  async function uploadMarkdownImage(file: File, fileName = file.name) {
+    if (markdownImageUploading.value) return;
     const textarea = getMdTextarea();
     const start = textarea?.selectionStart ?? mdContent.value.length;
     const end = textarea?.selectionEnd ?? start;
     markdownImageUploading.value = true;
     try {
-      const imageUrl = await uploadNoteImageFile(file, file.name);
+      const imageUrl = await uploadNoteImageFile(file, fileName);
       const source = mdContent.value || '';
       const linePrefix = start > 0 && source[start - 1] !== '\n' ? '\n' : '';
       const lineSuffix = end < source.length && source[end] !== '\n' ? '\n' : '';
-      const markdown = `${linePrefix}![${escapeMarkdownImageAlt(file.name)}](${imageUrl})${lineSuffix}`;
+      const markdown = `${linePrefix}![${escapeMarkdownImageAlt(fileName)}](${imageUrl})${lineSuffix}`;
       const nextValue = `${source.slice(0, start)}${markdown}${source.slice(end)}`;
       onMdInput(nextValue);
       await nextTick();
@@ -1463,7 +1608,7 @@
     quickbars_insert_toolbar: false,
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
-      'input[type|class|checked],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled]',
+      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled]',
     toolbar: props.readonly
       ? false
       : 'undo redo | blocks  | bold italic underline removeformat | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | link image emoticons |  codeBlock',
@@ -1487,6 +1632,7 @@
         }),
     setup: (editor: any) => {
       editorRef.value = editor;
+      editor.on('OpenWindow', scheduleTinyMceInlineDialogPosition);
 
       const refreshResourceReferences = () => {
         window.setTimeout(() => {
@@ -1533,7 +1679,9 @@
         }
       });
 
-      const todoCheckboxHtml = '<input type="checkbox" class="note-todo-checkbox" />';
+      const isTodoCheckbox = (element: Element | null): element is HTMLInputElement =>
+        element?.tagName === 'INPUT' &&
+        (element.classList.contains('note-todo-checkbox') || element.getAttribute('data-note-task') === 'true');
       const getCurrentBlock = () => {
         const node = editor.selection ? editor.selection.getNode() : null;
         if (!node) return null;
@@ -1561,11 +1709,8 @@
         while (firstNode && firstNode.nodeType === 3 && !firstNode.textContent?.trim()) {
           firstNode = firstNode.nextSibling;
         }
-        if (firstNode && firstNode.nodeType === 1) {
-          const el = firstNode as HTMLElement;
-          if (el.tagName === 'INPUT' && el.classList.contains('note-todo-checkbox')) {
-            return el as HTMLInputElement;
-          }
+        if (firstNode && firstNode.nodeType === 1 && isTodoCheckbox(firstNode as Element)) {
+          return firstNode as HTMLInputElement;
         }
         return null;
       };
@@ -1587,6 +1732,7 @@
         const checkboxEl = editor.dom.create('input', {
           type: 'checkbox',
           class: 'note-todo-checkbox',
+          'data-note-task': 'true',
         }) as HTMLInputElement;
         const spacer = editor.dom.doc.createTextNode(' ');
         editor.undoManager.transact(() => {
@@ -1610,6 +1756,7 @@
         const checkboxEl = editor.dom.create('input', {
           type: 'checkbox',
           class: 'note-todo-checkbox',
+          'data-note-task': 'true',
         });
         const spacer = editor.dom.doc.createTextNode(' ');
         newBlock.appendChild(checkboxEl);
@@ -1821,9 +1968,8 @@
 
       const syncCheckboxAttribute = (target: EventTarget | null) => {
         if (!target) return;
-        const el = target as HTMLElement;
-        if (el.tagName !== 'INPUT' || !el.classList.contains('note-todo-checkbox')) return;
-        const input = el as HTMLInputElement;
+        const input = target as HTMLInputElement;
+        if (!isTodoCheckbox(input)) return;
         if (input.checked) {
           editor.dom.setAttrib(input, 'checked', 'checked');
         } else {
@@ -1868,7 +2014,7 @@
       });
     },
     content_style: [
-      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list, .mce-content-body .note-task-list{ padding-left:0; list-style:none; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
@@ -2091,12 +2237,6 @@
       background: var(--resource-note-color, #00a884);
     }
   }
-  .md-image-upload {
-    flex: 0 0 auto;
-    gap: 5px;
-    margin-left: 8px;
-  }
-
   /* Markdown 编辑器 */
   .md-editor-container {
     flex: 1;
@@ -2215,14 +2355,14 @@
     ol {
       padding-left: 20px;
     }
-    .note-task-list {
+    :deep(.note-task-list) {
       padding-left: 0;
       list-style: none;
     }
-    .note-task-list-item {
+    :deep(.note-task-list-item) {
       list-style: none;
     }
-    .note-todo-checkbox {
+    :deep(.note-todo-checkbox) {
       margin: 0 7px 0 0;
       vertical-align: middle;
     }
@@ -2255,17 +2395,6 @@
   @media (max-width: 420px) {
     .md-editor-toolbar {
       padding: 0 8px;
-    }
-    .md-image-upload {
-      width: 32px;
-      min-width: 32px;
-      padding: 0;
-    }
-    .md-image-upload :deep(.btn-spinner) {
-      margin-right: 0;
-    }
-    .md-image-upload span {
-      display: none;
     }
   }
 

@@ -1,8 +1,47 @@
 import TurndownService from 'turndown';
 
+function isCheckboxElement(node: Element | null): node is HTMLInputElement {
+  return node?.tagName === 'INPUT' && node.getAttribute('type')?.toLowerCase() === 'checkbox';
+}
+
 function isNoteTodoCheckbox(node: Node): node is HTMLInputElement {
   const input = node as HTMLInputElement;
-  return input.nodeName === 'INPUT' && input.type === 'checkbox' && input.classList.contains('note-todo-checkbox');
+  if (input.nodeName !== 'INPUT' || input.type !== 'checkbox') return false;
+  // `class` 可能被编辑器清理；Markdown 渲染出来的任务项仍可通过其直接位于 li 内识别。
+  return (
+    input.classList.contains('note-todo-checkbox') ||
+    input.getAttribute('data-note-task') === 'true' ||
+    input.parentElement?.tagName === 'LI'
+  );
+}
+
+function getLeadingTaskCheckbox(element: Element): HTMLInputElement | null {
+  return Array.from(element.children).find((child) => isCheckboxElement(child)) || null;
+}
+
+function getTaskListItemCheckbox(item: HTMLLIElement): HTMLInputElement | null {
+  const directCheckbox = getLeadingTaskCheckbox(item);
+  if (directCheckbox) return directCheckbox;
+
+  // Turndown 输出的任务项之间带空行时，marked 会生成 `li > p > input` 的松散列表。
+  // 这里兼容该结构，避免第一次切换后任务语义就丢失。
+  const contentBlock = Array.from(item.children).find((child) => ['P', 'DIV'].includes(child.tagName));
+  return contentBlock ? getLeadingTaskCheckbox(contentBlock) : null;
+}
+
+function moveTaskItemContentToParagraph(
+  item: HTMLLIElement,
+  checkbox: HTMLInputElement,
+  paragraph: HTMLParagraphElement,
+) {
+  const checkboxContainer = checkbox.parentElement;
+  const isSingleContentBlock =
+    checkboxContainer !== item &&
+    checkboxContainer !== null &&
+    ['P', 'DIV'].includes(checkboxContainer.tagName) &&
+    item.children.length === 1;
+  const source = isSingleContentBlock ? checkboxContainer : item;
+  while (source.firstChild) paragraph.appendChild(source.firstChild);
 }
 
 export function createNoteTurndownService() {
@@ -47,16 +86,15 @@ export function normalizeMarkdownTaskListHtml(html: string, editable = false) {
   doc.body.querySelectorAll<HTMLUListElement | HTMLOListElement>('ul,ol').forEach((list) => {
     const items = Array.from(list.children).filter((child): child is HTMLLIElement => child.tagName === 'LI');
     if (!items.length) return;
-    const taskItems = items.filter((item) => {
-      const firstElement = item.firstElementChild;
-      return firstElement instanceof HTMLInputElement && firstElement.type === 'checkbox';
-    });
+    const taskItems = items
+      .map((item) => ({ item, checkbox: getTaskListItemCheckbox(item) }))
+      .filter((entry): entry is { item: HTMLLIElement; checkbox: HTMLInputElement } => entry.checkbox !== null);
     if (!taskItems.length) return;
 
     list.classList.add('note-task-list');
-    taskItems.forEach((item) => {
-      const checkbox = item.firstElementChild as HTMLInputElement;
+    taskItems.forEach(({ item, checkbox }) => {
       checkbox.classList.add('note-todo-checkbox');
+      checkbox.setAttribute('data-note-task', 'true');
       item.classList.add('note-task-list-item');
       if (editable) checkbox.removeAttribute('disabled');
     });
@@ -66,9 +104,9 @@ export function normalizeMarkdownTaskListHtml(html: string, editable = false) {
     // 混合列表仍保留列表结构，避免破坏其中的普通项目和嵌套层级。
     if (!editable || taskItems.length !== items.length) return;
     const fragment = doc.createDocumentFragment();
-    for (const item of items) {
+    for (const { item, checkbox } of taskItems) {
       const paragraph = doc.createElement('p');
-      while (item.firstChild) paragraph.appendChild(item.firstChild);
+      moveTaskItemContentToParagraph(item, checkbox, paragraph);
       fragment.appendChild(paragraph);
     }
     list.replaceWith(fragment);

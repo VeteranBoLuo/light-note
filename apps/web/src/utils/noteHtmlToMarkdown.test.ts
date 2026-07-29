@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { marked } from 'marked';
 import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from './noteHtmlToMarkdown';
 
 describe('noteHtmlToMarkdown', () => {
@@ -29,7 +30,22 @@ describe('noteHtmlToMarkdown', () => {
     expect(richHtml).not.toContain('<ul');
     expect(richHtml).not.toContain('disabled');
     expect(richHtml).toContain('class="note-todo-checkbox"');
+    expect(richHtml).toContain('data-note-task="true"');
     expect(noteHtmlToMarkdown(richHtml)).toBe('- [ ] 未完成\n\n- [x] 已完成');
+  });
+
+  it('HTML 与 Markdown 连续往返时持续保留复选框与完成状态', () => {
+    let html =
+      '<p><input type="checkbox" class="note-todo-checkbox" /> 测试</p><p><input type="checkbox" class="note-todo-checkbox" checked="checked" /> 哈哈</p>';
+
+    for (let round = 0; round < 3; round += 1) {
+      const markdown = noteHtmlToMarkdown(html);
+      expect(markdown).toBe('- [ ] 测试\n\n- [x] 哈哈');
+
+      html = normalizeMarkdownTaskListHtml(marked.parse(markdown) as string, true);
+      expect(html).not.toContain('<ul');
+      expect(html).toContain('data-note-task="true"');
+    }
   });
 
   it('Markdown 待办预览保留列表结构但提供无圆点样式标记', () => {

@@ -18,6 +18,7 @@
   import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { createTodo, updateTodo, type TodoItem, type TodoPayload } from '@/api/todoApi';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
 
   const props = defineProps<{ item?: TodoItem | null }>();
   const visible = defineModel<boolean>('visible');
@@ -31,7 +32,8 @@
   });
 
   async function save(payload: TodoPayload) {
-    if (saving.value) return;
+    // 打开表单只是浏览与填写，不应把游客挡在填写前；仅在真正提交写入时提示注册。
+    if (saving.value || blockGuestWrite(props.item ? 'todo-update' : 'todo-create', t('inbox.guestPrompt'))) return;
     saving.value = true;
     try {
       const res = props.item ? await updateTodo(props.item.id, payload) : await createTodo(payload);

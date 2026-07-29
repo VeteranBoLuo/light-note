@@ -566,8 +566,8 @@
     }
   }
 
-  // PDF 直接使用带真实文件名路径的短期签名 URL。此前二次 fetch 后生成 blob:UUID，
-  // 浏览器内置 PDF 工具栏只能把 UUID 当标题，左上角因此显示文件 ID 而不是真实名称。
+  // PDF 统一下载为 blob 后再交给 iframe。部分浏览器会把对象存储的签名地址当成附件下载，
+  // 直接赋给 src 会跳出预览或触发下载；blob URL 能稳定留在应用内预览。
   async function loadPdfBlob(url?: string) {
     if (!url) {
       error.value = true;
@@ -576,19 +576,28 @@
       return;
     }
 
+    const expectedFileId = activePreviewFileId;
     try {
       if (pdfBlobUrl.value) {
         if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
         pdfBlobUrl.value = '';
       }
-      pdfBlobUrl.value = url;
+
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`HTTP错误! 状态码: ${response.status}`);
+      }
+      const blob = await response.blob();
+      if (expectedFileId !== activePreviewFileId) return;
+      pdfBlobUrl.value = URL.createObjectURL(blob);
     } catch (err) {
+      if (expectedFileId !== activePreviewFileId) return;
       console.error('加载PDF文件失败:', err);
       error.value = true;
       errorMessage.value = t('cloudSpace.previewPanel.pdfLoadFailed');
       throw err;
     } finally {
-      loading.value = false;
+      if (expectedFileId === activePreviewFileId) loading.value = false;
     }
   }
 

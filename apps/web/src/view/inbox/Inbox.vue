@@ -581,7 +581,6 @@
     }
   }
   function openTodoEditor(item: TodoItemType | null = null) {
-    if (blockGuestWrite('todo-create', t('inbox.guestPrompt'))) return;
     editingTodo.value = item;
     todoEditorVisible.value = true;
   }

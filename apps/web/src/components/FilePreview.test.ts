@@ -108,6 +108,39 @@ async function mountHtmlPreview() {
   return { fileUrl };
 }
 
+async function mountPdfPreview() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const fileUrl = 'https://files.example/preview.pdf?signature=test';
+  const app = createApp({
+    setup() {
+      return () =>
+        h(FilePreview, {
+          visible: true,
+          showNext: true,
+          fileInfo: {
+            id: 'pdf-1',
+            fileName: 'preview.pdf',
+            fileType: 'application/pdf',
+            fileUrl,
+            category: 'pdf',
+          },
+        });
+    },
+  });
+  app.mount(host);
+  await nextTick();
+  await Promise.resolve();
+  await Promise.resolve();
+  await nextTick();
+
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  return { fileUrl };
+}
+
 describe('FilePreview HTML sandbox', () => {
   it('loads HTML directly in an isolated iframe instead of injecting it into the app DOM', async () => {
     const { fileUrl } = await mountHtmlPreview();
@@ -204,5 +237,20 @@ describe('FilePreview HTML sandbox', () => {
     expect(exitFullscreen).toHaveBeenCalledOnce();
     expect(previewRoot?.classList.contains('html-fullscreen-mode')).toBe(false);
     expect(previewRoot?.isConnected).toBe(true);
+  });
+});
+
+describe('FilePreview PDF preview', () => {
+  it('loads the signed URL as a blob so the browser keeps the PDF in the preview frame', async () => {
+    const { fileUrl } = await mountPdfPreview();
+    const iframe = document.body.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+
+    expect(fetch).toHaveBeenCalledWith(fileUrl, { mode: 'cors' });
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(iframe?.getAttribute('src')).toBe('blob:https://boluo66.top/html-preview');
+
+    cleanup?.();
+    cleanup = undefined;
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:https://boluo66.top/html-preview');
   });
 });
