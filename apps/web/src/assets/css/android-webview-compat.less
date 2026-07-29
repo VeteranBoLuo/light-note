@@ -27,6 +27,15 @@ html.light-note-android-webview {
   --ln-android-color-mix-warning: var(--warning-color, #f59e0b);
   --ln-android-color-mix-danger: var(--danger-color, var(--error-color, #e5484d));
   --ln-android-color-mix-success: var(--success-color, #22a447);
+  // 旧 WebView 不可靠计算低透明度 color-mix()，使用稳定 RGBA 保留徽标和标签的柔和底色。
+  --ln-android-color-mix-primary-soft-background: rgba(97, 92, 237, 0.1);
+  --ln-android-color-mix-bookmark-soft-background: rgba(97, 92, 237, 0.1);
+  --ln-android-color-mix-note-soft-background: rgba(0, 168, 132, 0.1);
+  --ln-android-color-mix-file-soft-background: rgba(255, 138, 0, 0.1);
+  --ln-android-color-mix-tag-soft-background: rgba(236, 72, 153, 0.1);
+  --ln-android-color-mix-warning-soft-background: rgba(245, 158, 11, 0.1);
+  --ln-android-color-mix-danger-soft-background: rgba(229, 72, 77, 0.1);
+  --ln-android-color-mix-success-soft-background: rgba(34, 164, 71, 0.1);
   --ln-android-color-mix-transparent: transparent;
   --ln-android-color-mix-white: #ffffff;
   --ln-android-color-mix-black: #111318;

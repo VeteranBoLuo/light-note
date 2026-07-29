@@ -7,6 +7,17 @@ interface ParsedOperand {
   weight: number | null;
 }
 
+const SOFT_BACKGROUND_CATEGORIES = new Set([
+  'primary',
+  'bookmark',
+  'note',
+  'file',
+  'tag',
+  'warning',
+  'danger',
+  'success',
+]);
+
 function splitTopLevel(value: string) {
   const parts: string[] = [];
   let depth = 0;
@@ -76,6 +87,32 @@ function selectFallbackOperand(first: ParsedOperand, second: ParsedOperand, kind
   return Number(firstWeight) > Number(secondWeight) ? first.color : second.color;
 }
 
+function softBackgroundCategory(first: ParsedOperand, second: ParsedOperand, kind: ColorMixKind) {
+  if (kind !== 'background') return null;
+
+  let firstWeight = first.weight;
+  let secondWeight = second.weight;
+  if (firstWeight === null && secondWeight === null) {
+    firstWeight = 50;
+    secondWeight = 50;
+  } else if (firstWeight === null) {
+    firstWeight = Math.max(0, 100 - Number(secondWeight));
+  } else if (secondWeight === null) {
+    secondWeight = Math.max(0, 100 - firstWeight);
+  }
+
+  const firstTransparent = isTransparent(first.color);
+  const secondTransparent = isTransparent(second.color);
+  if (firstTransparent === secondTransparent) return null;
+
+  const visible = firstTransparent ? second : first;
+  const visibleWeight = firstTransparent ? Number(secondWeight) : Number(firstWeight);
+  if (visibleWeight >= 50) return null;
+
+  const category = variableCategory(visible.color, kind);
+  return SOFT_BACKGROUND_CATEGORIES.has(category) ? `${category}-soft-background` : null;
+}
+
 function literalCategory(color: string, kind: ColorMixKind) {
   const normalized = color.trim().toLowerCase();
   if (normalized === 'transparent') return 'transparent';
@@ -107,6 +144,9 @@ function variableCategory(color: string, kind: ColorMixKind) {
   if (variable.includes('success')) return 'success';
   if (/primary-btn-(?:h-)?bg/.test(variable)) return 'background';
   if (variable.includes('primary')) return 'primary';
+  if (variable.includes('muted') && (variable.endsWith('-bg') || variable.includes('-background'))) {
+    return 'input-background';
+  }
   if (variable.includes('desc') || variable.includes('muted')) return 'muted';
   if (variable.includes('text') || variable.includes('foreground')) return 'text';
   if (variable.includes('common-tag-bg')) return 'tag-background';
@@ -135,6 +175,8 @@ function fallbackCategory(colorMix: string, property: string) {
   }
   const first = parseOperand(parts[1]);
   const second = parseOperand(parts[2]);
+  const softCategory = softBackgroundCategory(first, second, kind);
+  if (softCategory) return softCategory;
   return variableCategory(selectFallbackOperand(first, second, kind), kind);
 }
 

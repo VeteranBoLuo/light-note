@@ -2,10 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { wrapAndroidColorMixFallbacks } from './androidColorMixFallback';
 
 describe('wrapAndroidColorMixFallbacks', () => {
-  it('uses a transparent fallback for low-opacity backgrounds', () => {
+  it('keeps the browser color-mix while giving Android a soft primary background', () => {
     const value = 'color-mix(in srgb, var(--primary-color) 20%, transparent)';
 
     expect(wrapAndroidColorMixFallbacks(value, 'background-color')).toBe(
+      `var(--ln-android-color-mix-primary-soft-background, ${value})`,
+    );
+  });
+
+  it.each([
+    ['bookmark', 'var(--resource-bookmark-color)'],
+    ['note', 'var(--resource-note-color)'],
+    ['file', 'var(--resource-file-color)'],
+    ['tag', 'var(--resource-tag-color)'],
+  ])('uses the %s soft background for resource pills', (category, color) => {
+    const value = `color-mix(in srgb, ${color} 14%, transparent)`;
+
+    expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
+      `var(--ln-android-color-mix-${category}-soft-background, ${value})`,
+    );
+  });
+
+  it('treats muted background aliases as backgrounds instead of muted text colors', () => {
+    const value = 'color-mix(in srgb, var(--resource-tag-color) 9%, var(--mobile-tag-muted-bg))';
+
+    expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
+      `var(--ln-android-color-mix-input-background, ${value})`,
+    );
+  });
+
+  it('keeps non-semantic low-opacity backgrounds transparent in Android', () => {
+    const value = 'color-mix(in srgb, var(--text-color) 4%, transparent)';
+
+    expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
       `var(--ln-android-color-mix-transparent, ${value})`,
     );
   });
