@@ -3,7 +3,6 @@ package top.boluo66.lightnote;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -73,7 +72,6 @@ public final class MainActivity extends Activity {
             + "})();";
 
     private WebView webView;
-    private ProgressBar progressBar;
     private LinearLayout errorView;
     private TextView errorTitleView;
     private TextView errorMessageView;
@@ -82,6 +80,7 @@ public final class MainActivity extends Activity {
     private View statusBarBackground;
     private FrameLayout launchOverlay;
     private FrameLayout fileChooserOverlay;
+    private ProgressBar fileChooserProgressView;
     private TextView fileChooserStatusView;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraOutputUri;
@@ -126,16 +125,6 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
-
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progressBar.setMax(100);
-        progressBar.setProgressTintList(getColorStateList(R.color.brand_primary));
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(3)
-        );
-        progressParams.gravity = Gravity.TOP;
-        content.addView(progressBar, progressParams);
 
         errorView = new LinearLayout(this);
         errorView.setOrientation(LinearLayout.VERTICAL);
@@ -239,7 +228,7 @@ public final class MainActivity extends Activity {
 
     private FrameLayout createFileChooserOverlay() {
         FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(getColor(R.color.brand_primary));
+        overlay.setBackgroundColor(getFileChooserBackgroundColor());
         overlay.setClickable(true);
 
         LinearLayout center = new LinearLayout(this);
@@ -247,16 +236,18 @@ public final class MainActivity extends Activity {
         center.setGravity(Gravity.CENTER);
         center.setPadding(dp(28), dp(28), dp(28), dp(28));
 
-        ProgressBar loading = new ProgressBar(this);
-        loading.setIndeterminateTintList(getColorStateList(android.R.color.white));
+        fileChooserProgressView = new ProgressBar(this);
+        fileChooserProgressView.setIndeterminateTintList(
+            getColorStateList(R.color.brand_primary)
+        );
         LinearLayout.LayoutParams loadingParams =
             new LinearLayout.LayoutParams(dp(36), dp(36));
         loadingParams.gravity = Gravity.CENTER_HORIZONTAL;
-        center.addView(loading, loadingParams);
+        center.addView(fileChooserProgressView, loadingParams);
 
         fileChooserStatusView = new TextView(this);
         fileChooserStatusView.setText(R.string.file_chooser_opening);
-        fileChooserStatusView.setTextColor(Color.WHITE);
+        fileChooserStatusView.setTextColor(getFileChooserTextColor());
         fileChooserStatusView.setTextSize(15);
         fileChooserStatusView.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(
@@ -292,14 +283,12 @@ public final class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 errorView.setVisibility(View.GONE);
-                progressBar.setVisibility(View.VISIBLE);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 syncWebTheme(view, url);
                 scheduleLaunchFallback();
-                progressBar.setVisibility(View.GONE);
             }
 
             @Override
@@ -334,12 +323,6 @@ public final class MainActivity extends Activity {
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onProgressChanged(WebView view, int newProgress) {
-                progressBar.setProgress(newProgress);
-                progressBar.setVisibility(newProgress >= 100 ? View.GONE : View.VISIBLE);
-            }
-
             @Override
             public boolean onShowFileChooser(
                 WebView view,
@@ -491,6 +474,7 @@ public final class MainActivity extends Activity {
             return;
         }
         resolvedNightTheme = "night".equals(theme);
+        applyFileChooserOverlayTheme();
         if (launchOverlayHidden) {
             applyResolvedWebTheme();
         }
@@ -665,6 +649,13 @@ public final class MainActivity extends Activity {
         if (fileChooserOverlay == null) {
             return;
         }
+        applyFileChooserOverlayTheme();
+        WindowInsetsSupport.applySystemBarTheme(
+            this,
+            rootView,
+            statusBarBackground,
+            resolvedNightTheme
+        );
         fileChooserOverlay.removeCallbacks(fileChooserReadyFallback);
         fileChooserOverlay.animate().cancel();
         fileChooserOverlay.setAlpha(1f);
@@ -711,8 +702,39 @@ public final class MainActivity extends Activity {
             .withEndAction(() -> {
                 fileChooserOverlay.setVisibility(View.GONE);
                 fileChooserOverlay.setAlpha(1f);
+                applyResolvedWebTheme();
             })
             .start();
+    }
+
+    private int getFileChooserBackgroundColor() {
+        return getColor(
+            resolvedNightTheme
+                ? R.color.file_chooser_background_night
+                : R.color.file_chooser_background_day
+        );
+    }
+
+    private int getFileChooserTextColor() {
+        return getColor(
+            resolvedNightTheme
+                ? R.color.file_chooser_text_night
+                : R.color.file_chooser_text_day
+        );
+    }
+
+    private void applyFileChooserOverlayTheme() {
+        if (fileChooserOverlay != null) {
+            fileChooserOverlay.setBackgroundColor(getFileChooserBackgroundColor());
+        }
+        if (fileChooserStatusView != null) {
+            fileChooserStatusView.setTextColor(getFileChooserTextColor());
+        }
+        if (fileChooserProgressView != null) {
+            fileChooserProgressView.setIndeterminateTintList(
+                getColorStateList(R.color.brand_primary)
+            );
+        }
     }
 
     private void cancelPendingFileChooserLaunch() {
@@ -728,7 +750,6 @@ public final class MainActivity extends Activity {
         errorMessageView.setText(R.string.network_error_message);
         errorActionButton.setText(R.string.retry);
         hideLaunchOverlay();
-        progressBar.setVisibility(View.GONE);
         errorView.setVisibility(View.VISIBLE);
     }
 
@@ -738,7 +759,6 @@ public final class MainActivity extends Activity {
         errorMessageView.setText(R.string.webview_too_old_message);
         errorActionButton.setText(R.string.close_app);
         hideLaunchOverlay();
-        progressBar.setVisibility(View.GONE);
         errorView.setVisibility(View.VISIBLE);
     }
 

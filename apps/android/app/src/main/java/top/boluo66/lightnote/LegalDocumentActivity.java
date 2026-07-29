@@ -1,6 +1,7 @@
 package top.boluo66.lightnote;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -61,12 +62,12 @@ public final class LegalDocumentActivity extends Activity {
             EXTRA_TITLE,
             R.string.legal_document_title
         );
-        setContentView(createContentView(titleResource));
+        setContentView(createContentView(titleResource, document));
         configureWebView();
         webView.loadUrl(ASSET_ORIGIN + ASSET_PREFIX + document);
     }
 
-    private View createContentView(int titleResource) {
+    private View createContentView(int titleResource, String document) {
         FrameLayout outerRoot = new FrameLayout(this);
         outerRoot.setBackgroundColor(getColor(R.color.page_background));
 
@@ -116,6 +117,20 @@ public final class LegalDocumentActivity extends Activity {
             1
         ));
 
+        if (LegalDocuments.PRIVACY_POLICY_FILE.equals(document)) {
+            TextView withdrawConsent = new TextView(this);
+            withdrawConsent.setText(R.string.withdraw_privacy_consent);
+            withdrawConsent.setTextColor(getColor(R.color.brand_primary));
+            withdrawConsent.setTextSize(14);
+            withdrawConsent.setGravity(Gravity.CENTER);
+            withdrawConsent.setMinHeight(dp(48));
+            withdrawConsent.setOnClickListener(view -> confirmWithdrawConsent());
+            content.addView(withdrawConsent, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            ));
+        }
+
         View statusBarBackground = new View(this);
         statusBarBackground.setBackgroundColor(getColor(R.color.page_background));
         FrameLayout.LayoutParams statusBarParams = new FrameLayout.LayoutParams(
@@ -131,6 +146,23 @@ public final class LegalDocumentActivity extends Activity {
             statusBarBackground
         );
         return outerRoot;
+    }
+
+    private void confirmWithdrawConsent() {
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.withdraw_privacy_consent_confirm_title)
+            .setMessage(R.string.withdraw_privacy_consent_confirm_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.withdraw_privacy_consent_confirm, (dialog, which) -> {
+                PrivacyConsentStore.clear(this);
+                Intent intent = new Intent(this, PrivacyConsentActivity.class);
+                intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                );
+                startActivity(intent);
+                finish();
+            })
+            .show();
     }
 
     private void configureWebView() {

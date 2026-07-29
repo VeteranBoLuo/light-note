@@ -124,12 +124,14 @@
             </span>
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.general') }}</h2>
-              <p class="card-sub">{{ t('settings.generalDesc') }}</p>
+              <p class="card-sub">
+                {{ t(bookmark.isMobile ? 'settings.generalDescMobile' : 'settings.generalDesc') }}
+              </p>
             </div>
           </div>
 
           <div class="fields">
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.defaultHome') }}</span>
                 <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>
@@ -629,38 +631,25 @@
             </div>
           </div>
           <div class="fields">
-            <div class="field">
+            <div class="field legal-document-field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.privacyPolicy') }}</span>
                 <span class="field-desc">{{ t('settings.privacyPolicyDesc') }}</span>
               </div>
-              <div class="legal-settings-actions">
-                <BButton @click="openLegalDocument('privacy-policy.html')">
-                  {{ t('settings.viewDocument') }}
-                </BButton>
-              </div>
+              <BButton class="legal-document-link" @click="openLegalDocument('privacy-policy.html')">
+                <span>{{ t('settings.viewDocument') }}</span>
+                <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+              </BButton>
             </div>
-            <div class="field">
+            <div class="field legal-document-field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.userAgreement') }}</span>
                 <span class="field-desc">{{ t('settings.userAgreementDesc') }}</span>
               </div>
-              <div class="legal-settings-actions">
-                <BButton @click="openLegalDocument('user-agreement.html')">
-                  {{ t('settings.viewDocument') }}
-                </BButton>
-              </div>
-            </div>
-            <div v-if="isAndroidApp" class="field">
-              <div class="field-head">
-                <span class="field-label">{{ t('settings.withdrawConsent') }}</span>
-                <span class="field-desc">{{ t('settings.withdrawConsentDesc') }}</span>
-              </div>
-              <div class="legal-settings-actions">
-                <BButton @click="withdrawAndroidConsent">
-                  {{ t('settings.withdrawConsentAction') }}
-                </BButton>
-              </div>
+              <BButton class="legal-document-link" @click="openLegalDocument('user-agreement.html')">
+                <span>{{ t('settings.viewDocument') }}</span>
+                <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+              </BButton>
             </div>
           </div>
         </section>
@@ -688,12 +677,10 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import {
     isLightNoteAndroidApp,
-    postAndroidMessage,
     postAndroidOpenLegalDocument,
     type AndroidLegalDocument,
   } from '@/utils/androidBridge.ts';
@@ -794,18 +781,6 @@
   function openLegalDocument(fileName: AndroidLegalDocument) {
     if (isAndroidApp && postAndroidOpenLegalDocument(fileName)) return;
     window.open(`/legal/${fileName}`, '_blank', 'noopener,noreferrer');
-  }
-
-  function withdrawAndroidConsent() {
-    Alert.alert({
-      title: t('settings.withdrawConsentConfirmTitle'),
-      content: t('settings.withdrawConsentConfirmContent'),
-      onOk() {
-        if (!postAndroidMessage({ type: 'privacyConsent.withdraw' })) {
-          message.warning(t('settings.androidBridgeUnavailable'));
-        }
-      },
-    });
   }
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
@@ -1238,11 +1213,18 @@
     gap: 8px;
   }
 
-  .legal-settings-actions {
+  .legal-document-link {
     flex: 0 0 auto;
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
+    gap: 3px;
+    height: 40px;
+    padding: 0 0 0 12px;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--primary-color) !important;
+    font-size: 13px;
+  }
+  .legal-document-link:hover {
+    opacity: 0.78;
   }
 
   .shortcut-keys {
@@ -1329,8 +1311,10 @@
     .pwa-settings-actions {
       justify-content: flex-start;
     }
-    .legal-settings-actions {
-      justify-content: flex-start;
+    .field.legal-document-field {
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
     }
   }
 

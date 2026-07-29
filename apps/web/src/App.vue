@@ -1,6 +1,6 @@
 <template>
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
-    <BLoading :loading="routeNavigationLoading" bar :title="t('common.loading')" />
+    <BLoading v-if="!isAndroidApp" :loading="routeNavigationLoading" bar :title="t('common.loading')" />
     <a-config-provider
       :theme="{
         token: {

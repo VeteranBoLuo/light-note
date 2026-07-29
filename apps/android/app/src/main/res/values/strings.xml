@@ -26,7 +26,7 @@
     <string name="privacy_point_data">仅在提供功能时处理必要的账号、内容、文件与安全日志</string>
     <string name="privacy_point_permissions">当前 APK 不申请通讯录、定位、麦克风或存储运行时权限</string>
     <string name="privacy_point_third_party">GitHub 登录、AI 与文件服务会按政策说明使用相应第三方服务</string>
-    <string name="privacy_consent_notice">点击“同意并继续”即表示您同意当前版本的两份文档；之后可在“设置 → 隐私与协议”中查看或撤回。</string>
+    <string name="privacy_consent_notice">点击“同意并继续”即表示您同意当前版本的两份文档；之后可在“设置 → 隐私与协议”中查看，并可从隐私政策全文页撤回同意。</string>
     <string name="privacy_policy">隐私政策</string>
     <string name="user_agreement">用户协议</string>
     <string name="agree_and_continue">同意并继续</string>
@@ -34,4 +34,8 @@
     <string name="privacy_declined">轻笺不会加载在线服务。您可稍后重新打开并再次选择。</string>
     <string name="legal_document_title">轻笺协议文档</string>
     <string name="legal_document_unavailable">协议文档暂时无法打开</string>
+    <string name="withdraw_privacy_consent">撤回隐私同意</string>
+    <string name="withdraw_privacy_consent_confirm_title">撤回隐私同意？</string>
+    <string name="withdraw_privacy_consent_confirm_message">轻笺将停止当前在线页面并返回首次启动说明。账号和云端内容不会被删除。</string>
+    <string name="withdraw_privacy_consent_confirm">确认撤回</string>
 </resources>

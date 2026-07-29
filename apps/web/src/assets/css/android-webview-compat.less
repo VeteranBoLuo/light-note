@@ -6,6 +6,31 @@
  * 浏览器和 PC 不会命中 light-note-android-webview。
  */
 html.light-note-android-webview {
+  /*
+   * 构建阶段会把所有 color-mix() 包进这些回退变量。普通浏览器没有定义
+   * 变量，继续使用原始混色；APK WebView 命中这里后改用稳定主题色。
+   */
+  --ln-android-color-mix-background: var(--background-color);
+  --ln-android-color-mix-card-background: var(--card-background, var(--background-color));
+  --ln-android-color-mix-panel-background: var(--workspace-panel-bg-color, var(--background-color));
+  --ln-android-color-mix-menu-background: var(--menu-body-bg-color, var(--background-color));
+  --ln-android-color-mix-input-background: var(--bl-input-noBorder-bg-color, var(--background-color));
+  --ln-android-color-mix-tag-background: var(--common-tag-bg-color, var(--background-color));
+  --ln-android-color-mix-border: var(--surface-border-color, var(--card-border-color));
+  --ln-android-color-mix-text: var(--text-color);
+  --ln-android-color-mix-muted: var(--desc-color, var(--text-color));
+  --ln-android-color-mix-primary: var(--primary-color);
+  --ln-android-color-mix-bookmark: var(--resource-bookmark-color, var(--primary-color));
+  --ln-android-color-mix-note: var(--resource-note-color, var(--primary-color));
+  --ln-android-color-mix-file: var(--resource-file-color, var(--primary-color));
+  --ln-android-color-mix-tag: var(--resource-tag-color, var(--primary-color));
+  --ln-android-color-mix-warning: var(--warning-color, #f59e0b);
+  --ln-android-color-mix-danger: var(--danger-color, var(--error-color, #e5484d));
+  --ln-android-color-mix-success: var(--success-color, #22a447);
+  --ln-android-color-mix-transparent: transparent;
+  --ln-android-color-mix-white: #ffffff;
+  --ln-android-color-mix-black: #111318;
+
   // 书签真实卡片：不用混色渐变和混色阴影。
   .card-body {
     border-color: var(--surface-border-color, var(--card-border-color)) !important;
@@ -89,6 +114,26 @@ html.light-note-android-webview {
   .acc-sec .sess-badge {
     background: var(--bl-input-noBorder-bg-color, var(--background-color)) !important;
     box-shadow: none !important;
+  }
+
+  // 设置页：外层卡片与返回按钮使用稳定主题边框，避开 color-mix() 被绘制成纯黑。
+  .settings-page .settings-card,
+  .settings-page .settings-back {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+  }
+
+  .settings-page .settings-card {
+    box-shadow: none !important;
+  }
+
+  // 云空间移动端文件夹横排：旧 WebView 会把 color-mix() 边框绘制成纯黑。
+  .mobile-folder-item {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-folder-item.active {
+    border-color: var(--resource-file-color, var(--primary-color)) !important;
   }
 
   .bookmark-page .card-panel,
