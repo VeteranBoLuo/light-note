@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getApplicationEntryPath,
   getAppHomePath,
   getDesktopHomePath,
+  getHomePagePreference,
   getMobileHomePath,
   isMobileHomeRoute,
   type HomePagePreference,
@@ -9,7 +11,6 @@ import {
 
 describe('默认首页解析', () => {
   const desktopCases: Array<[HomePagePreference, string]> = [
-    ['landing', '/landing'],
     ['workbench', '/workbenches'],
     ['resourceCenter', '/search'],
     ['bookmark', '/home'],
@@ -20,6 +21,12 @@ describe('默认首页解析', () => {
   it.each(desktopCases)('桌面端保持 %s → %s', (homePage, path) => {
     expect(getDesktopHomePath({ homePage })).toBe(path);
     expect(getAppHomePath({ homePage }, false)).toBe(path);
+  });
+
+  it('将旧版官网首页偏好迁移为应用工作台', () => {
+    expect(getHomePagePreference({ homePage: 'landing' })).toBe('workbench');
+    expect(getDesktopHomePath({ homePage: 'landing' })).toBe('/workbenches');
+    expect(getAppHomePath({ homePage: 'landing' }, false)).toBe('/workbenches');
   });
 
   it.each([
@@ -48,5 +55,12 @@ describe('默认首页解析', () => {
     expect(isMobileHomeRoute('noteDetail', { homePage: 'noteLibrary' })).toBe(false);
     expect(isMobileHomeRoute('cloudSpace', { homePage: 'cloudSpace' })).toBe(true);
     expect(isMobileHomeRoute('noteLibrary', { homePage: 'cloudSpace' })).toBe(false);
+  });
+
+  it('按手机、平板和桌面视口解析统一应用入口', () => {
+    expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 390)).toBe('/noteLibrary');
+    expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 820)).toBe('/home');
+    expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 1440)).toBe('/noteLibrary');
+    expect(getApplicationEntryPath({ homePage: 'landing' }, 1440)).toBe('/workbenches');
   });
 });

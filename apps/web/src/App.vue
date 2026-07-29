@@ -257,11 +257,11 @@
         sessionStorage.setItem('ln_pv_sent', '1');
         // page_view 的 source 只记规范页面名,不存完整 pathname(/share/:id 等含 ID/PII)
         const pvPage =
-          location.pathname === '/landing'
+          location.pathname === '/' || location.pathname === '/landing'
             ? 'landing'
             : location.pathname.startsWith('/share')
               ? 'share'
-              : location.pathname === '/' || location.pathname === '/home'
+              : location.pathname === '/home'
                 ? 'home'
                 : 'app';
         apiBasePost('/api/common/recordConversion', { event: 'page_view', source: pvPage }).catch(() => {});
@@ -378,7 +378,7 @@
   function handleRouteChange(isMobileLayout: boolean, path: string) {
     // 桌面布局切换至手机布局
     if (isMobileLayout) {
-      if (path === '/' || path === '/workbenches') {
+      if (path === '/workbenches') {
         router.push(getAppHomePath(user.preferences, true));
         return;
       }
@@ -647,12 +647,6 @@
 
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
-    // 手机端不展示官网，按移动端默认首页进入；不支持的默认项由解析器回退到书签。
-    if (bookmark.isMobile && to.path === '/landing') {
-      next(getAppHomePath(user.preferences, true));
-      return;
-    }
-
     if (to.name === 'workbenches') {
       handleRouteChange(bookmark.isMobile, to.path);
     }
@@ -713,7 +707,7 @@
   onMounted(async () => {
     initApp();
     await init();
-    // /landing 是纯官网展示页(游客默认首页),不应该出现任何账号相关的通知/弹窗
+    // 根路径是纯官网展示页，不应该出现任何账号相关的通知/弹窗。
     if (router.currentRoute.value.name === 'landing') return;
     startOpinionNoticePolling();
   });

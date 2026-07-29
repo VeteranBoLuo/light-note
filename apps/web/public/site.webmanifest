@@ -4,7 +4,7 @@
   "description": "书签、笔记、文件与 AI 的轻量级知识管理平台",
   "lang": "zh-CN",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "prefer_related_applications": false,

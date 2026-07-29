@@ -381,7 +381,6 @@
   import { apiBasePost } from '@/http/request';
   import { recordOperation } from '@/api/commonApi.ts';
   import { trackConversion } from '@/utils/conversion';
-  import { getAppHomePath } from '@/utils/preferences';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -468,9 +467,9 @@
   function goRegister(source: string) {
     bookmark.openAuthModal('注册', source);
   }
-  // 已登录用户:直接进入应用,按其首页偏好跳转(与登录成功一致,不固定 /home)
+  // 已登录用户统一进入 /app，再由稳定应用入口按设备与首页偏好分发。
   function enterApp() {
-    router.push(getAppHomePath(user.preferences, bookmark.isMobile));
+    router.push('/app');
   }
   async function retryLandingAuth() {
     if (!landingAuth) return;

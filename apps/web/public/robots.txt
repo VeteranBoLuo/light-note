@@ -1,6 +1,6 @@
 User-agent: *
 Allow: /
-Disallow: /admin
+# 管理后台由 noindex / X-Robots-Tag 排除；保持可抓取，爬虫才能读取排除指令。
 Disallow: /securityCenter
 Disallow: /personCenter
 Disallow: /share/

@@ -23,8 +23,8 @@ import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import aiRouter from '@/router/modules/ai.ts';
-import { getDesktopHomePath, getMobileHomePath } from '@/utils/preferences.ts';
-import { isMobileViewport } from '@/config/responsive.ts';
+import { getApplicationEntryPath } from '@/utils/preferences.ts';
+import { syncRouteSeoMeta } from '@/utils/seoMeta.ts';
 
 function getStoredPreferences() {
   try {
@@ -34,23 +34,25 @@ function getStoredPreferences() {
   }
 }
 
-const routes: RouteRecordRaw[] = [
+export const routes: RouteRecordRaw[] = [
   {
     meta: {
       roles: ALL_ROLES,
     },
     path: '/',
-    name: '/',
-    redirect: () => {
-      const preferences = getStoredPreferences();
-      if (isMobileViewport(window.innerWidth)) return getMobileHomePath(preferences);
-      // 保留既有平板首屏行为；手机布局使用上方统一断点，避免把移动端改造扩大到平板。
-      if (window.innerWidth < 1024) return '/home';
-      return getDesktopHomePath(preferences);
-    },
+    name: 'appShell',
     component: () => import('@/view/index.vue'),
     // 放入此处的有顶部导航栏
     children: [
+      {
+        path: '',
+        name: 'landing',
+        meta: {
+          seoIndexable: true,
+          canonicalPath: '/',
+        },
+        component: () => import('@/view/landing/Landing.vue'),
+      },
       workbenchesRouter,
       mainPageRouter,
       ...commonRouter,
@@ -83,9 +85,14 @@ const routes: RouteRecordRaw[] = [
   },
   loginRouter,
   {
+    path: '/app',
+    name: 'appEntry',
+    redirect: () => getApplicationEntryPath(getStoredPreferences(), window.innerWidth),
+  },
+  {
     path: '/landing',
-    name: 'landing',
-    component: () => import('@/view/landing/Landing.vue'),
+    name: 'legacyLanding',
+    redirect: '/',
   },
   {
     path: '/banned',
@@ -184,9 +191,10 @@ router.onError((error, to) => {
   reloadOnceTo(to.fullPath);
 });
 
-router.afterEach(() => {
+router.afterEach((to) => {
   finishRouteNavigationFeedback();
   sessionStorage.removeItem(CHUNK_RELOAD_FLAG);
+  syncRouteSeoMeta(to);
 });
 
 export default router;

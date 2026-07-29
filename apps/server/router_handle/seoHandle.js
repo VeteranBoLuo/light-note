@@ -5,7 +5,7 @@
  * status='public' 的帮助文章是现成的内容库，这里用模板字符串直出完整 HTML：
  *   GET /helpCenter          帮助中心索引页（按分类列出全部公开文章，爬虫的发现入口）
  *   GET /helpCenter/:id      文章详情页（title/description/canonical/JSON-LD/正文）
- *   GET /sitemap.xml         动态 sitemap（首页/landing/helpCenter + 全部公开文章，lastmod 取 updated_at）
+ *   GET /sitemap.xml         动态 sitemap（官网首页/helpCenter + 全部公开文章，lastmod 取 updated_at）
  *
  * ⚠️ 路径踩坑记录：最初这三个路由挂在 /help，结果和项目里已有的
  * router/modules/common.ts 的 `path: '/help'`（HelpMg.vue，AI 助手/帮助文档入口，
@@ -25,6 +25,7 @@
 import pool from '../db/index.js';
 import { marked } from 'marked';
 import { formatDateTime } from '../util/common.js';
+import { getStaticSitemapUrls, renderSitemapXml } from '../util/seoSitemap.js';
 
 const SITE = 'https://boluo66.top';
 const BRAND = '轻笺';
@@ -37,8 +38,6 @@ const escapeHtml = (s) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-
-const escapeXml = escapeHtml;
 
 /** 提取纯文本（生成 meta description 用） */
 const toPlainText = (html, limit = 150) =>
@@ -100,11 +99,11 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
 <body>
 <div class="wrap">
 <header class="site">
-  <a href="/landing">${BRAND}</a>
-  <nav><a href="${HELP_PATH}">帮助中心</a><a href="/landing">产品介绍</a></nav>
+  <a href="/">${BRAND}</a>
+  <nav><a href="${HELP_PATH}">帮助中心</a><a href="/">产品介绍</a></nav>
 </header>
 ${body}
-<footer class="site">${BRAND} —— 轻量级知识管理工具：书签 · 笔记 · 云空间 · <a href="/landing">了解更多</a></footer>
+<footer class="site">${BRAND} —— 轻量级知识管理工具：书签 · 笔记 · 云空间 · <a href="/">了解更多</a></footer>
 </div>
 </body>
 </html>`;
@@ -239,13 +238,7 @@ export const sitemapXml = async (req, res) => {
     const [rows] = await pool.query(
       `SELECT id, updated_at FROM knowledge_base WHERE status = 'public' ORDER BY updated_at DESC`,
     );
-    // 根路径 / 不收录:它是纯客户端重定向,canonical 已指向 /landing,
-    // sitemap 里同时列出 / 会跟 canonical 信号打架(一边喊来收录,一边喊别收录去别处)
-    const staticUrls = [
-      { loc: `${SITE}/landing`, priority: '1.0', changefreq: 'weekly' },
-      { loc: `${SITE}/updateLogs`, priority: '0.8', changefreq: 'weekly' },
-      { loc: `${SITE}${HELP_PATH}`, priority: '0.8', changefreq: 'weekly' },
-    ];
+    const staticUrls = getStaticSitemapUrls(SITE, HELP_PATH);
     const articleUrls = rows.map((r) => ({
       loc: `${SITE}${HELP_PATH}/${encodeURIComponent(r.id)}`,
       priority: '0.6',
@@ -253,18 +246,7 @@ export const sitemapXml = async (req, res) => {
       lastmod: formatDate(r.updated_at),
     }));
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${[...staticUrls, ...articleUrls]
-  .map(
-    (u) => `  <url>
-    <loc>${escapeXml(u.loc)}</loc>${u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ''}
-    <changefreq>${u.changefreq}</changefreq>
-    <priority>${u.priority}</priority>
-  </url>`,
-  )
-  .join('\n')}
-</urlset>`;
+    const xml = renderSitemapXml([...staticUrls, ...articleUrls]);
 
     res.set('Content-Type', 'application/xml; charset=utf-8').set('Cache-Control', 'public, max-age=3600').send(xml);
   } catch (e) {

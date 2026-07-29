@@ -348,7 +348,8 @@ export const registerUser = async (req, res) => {
       role: 'user', // 角色服务端强制写死,不信任客户端
       alias: rawAlias ? rawAlias.slice(0, 20) : L(req, '默认昵称', 'Default Nickname'),
     };
-    // homePage 默认 'bookmark':新用户注册后(及以后登录)直落书签工作区,而非 DEFAULT_HOME_PAGE 的营销页 /landing
+    // homePage 默认 'bookmark'：新用户注册后（及以后登录）直接进入书签工作区。
+    // 公开官网固定使用根路径 /，不再作为应用内默认首页选项。
     params.preferences = JSON.stringify({
       theme: 'day',
       noteViewMode: 'card',

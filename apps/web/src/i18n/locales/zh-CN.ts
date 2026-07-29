@@ -618,7 +618,7 @@ export default {
       theme: '主题',
       language: '语言',
       homePage: '默认首页',
-      homePageHint: '默认首页会在下次打开应用、重新登录或从品牌入口进入时生效。',
+      homePageHint: '默认首页会在下次打开应用或重新登录时生效。',
       saved: '偏好设置已更新',
       saveFailed: '偏好设置更新失败',
     },
@@ -1502,7 +1502,6 @@ export default {
     listView: '列表',
     tableView: '表格',
     home: {
-      landing: '官网首页',
       workbench: '工作台',
       resourceCenter: '资源中心',
       bookmark: '书签',

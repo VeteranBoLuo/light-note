@@ -97,7 +97,7 @@
   }
 
   function officialSiteClick() {
-    router.push('/landing');
+    router.push('/');
     recordOperation({ module: '导航栏', operation: '访问官方首页' });
   }
 

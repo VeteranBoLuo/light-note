@@ -630,7 +630,7 @@ export default {
       theme: 'Theme',
       language: 'Language',
       homePage: 'Default Home',
-      homePageHint: 'Your default home applies the next time you open the app, sign in again, or use the brand entry.',
+      homePageHint: 'Your default home applies the next time you open the app or sign in again.',
       saved: 'Preferences updated',
       saveFailed: 'Failed to update preferences',
     },
@@ -1525,7 +1525,6 @@ export default {
     listView: 'List',
     tableView: 'Table',
     home: {
-      landing: 'Landing',
       workbench: 'Workbench',
       resourceCenter: 'Resource Center',
       bookmark: 'Bookmarks',

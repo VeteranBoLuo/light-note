@@ -18,6 +18,8 @@ const commonRouter: RouteRecordRaw[] = [
       keepAlive: true,
       requireAuth: true,
       roles: ALL_ROLES,
+      seoIndexable: true,
+      canonicalPath: '/updateLogs',
     },
     path: '/updateLogs',
     name: 'updateLogs',

@@ -141,9 +141,9 @@
                   v-for="o in homeOpts"
                   :key="o.v"
                   class="seg-btn"
-                  :class="{ active: (user.preferences.homePage || 'landing') === o.v }"
-                  :type="(user.preferences.homePage || 'landing') === o.v ? 'primary' : undefined"
-                  :aria-pressed="(user.preferences.homePage || 'landing') === o.v"
+                  :class="{ active: selectedHomePage === o.v }"
+                  :type="selectedHomePage === o.v ? 'primary' : undefined"
+                  :aria-pressed="selectedHomePage === o.v"
                   @click="set('homePage', o.v)"
                 >
                   {{ o.label }}
@@ -684,6 +684,7 @@
     postAndroidOpenLegalDocument,
     type AndroidLegalDocument,
   } from '@/utils/androidBridge.ts';
+  import { getHomePagePreference } from '@/utils/preferences.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -752,6 +753,7 @@
     pageRef.value?.removeEventListener('scroll', onPageScroll);
   });
   const user = useUserStore();
+  const selectedHomePage = computed(() => getHomePagePreference(user.preferences));
   const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
   const pwaStateLabel = computed(() =>
     installState.value === 'installed'
@@ -887,7 +889,6 @@
     { v: 'large', label: t('settings.uiScaleLarge') },
   ]);
   const homeOpts = computed(() => [
-    { v: 'landing', label: t('settings.home.landing') },
     { v: 'workbench', label: t('settings.home.workbench') },
     { v: 'resourceCenter', label: t('settings.home.resourceCenter') },
     { v: 'bookmark', label: t('settings.home.bookmark') },

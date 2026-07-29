@@ -4,18 +4,19 @@
  * 背景：整站是纯 SPA，爬虫（尤其是不渲染 JS 的百度）抓到的 <body> 是空壳。
  * 本脚本在 `vite build` 之后跑：本地起静态服务 serve dist → 用系统 Chrome
  * 无头渲染各公开页 → 把渲染完成的真实 HTML（含 H1、正文文案）落成
- * dist/<route>/index.html。线上 nginx 对这些路由有 `location = /<route>` 精确
+ * dist/<route>/index.html。根官网单独落到 dist/__seo/root/index.html，避免覆盖
+ * 仍需 noindex 的通用 SPA fallback。线上 nginx 对这些路由使用精确
  * 匹配直接回静态文件（见服务器 www.boluo.com.conf），浏览器端 SPA bundle
  * 照常加载并重新挂载 #app，用户体验不变。
  *
  * 预渲染页面清单见 PAGES：
- *   - /landing     门面页（critical：失败则整个构建失败，绝不上线空壳门面）
+ *   - /            官网首页（critical：失败则整个构建失败，绝不上线空壳门面）
  *   - /updateLogs  更新日志（数据来自后端 API，默认通过 /api 代理到生产后端取真实数据；
  *                  本地验收可由 PRERENDER_API_ORIGIN 指向本机后端；
  *                  非 critical：失败只警告，页面退回 SPA 空壳，不阻塞部署）
  *
- * 每页顺带重写 head（SPA 所有路由共享 index.html，canonical 全指向 /landing，
- * 公开页不改写会被 Google 当成 /landing 的重复页拒收）：
+ * 每页顺带重写 head（通用 SPA 空壳不带 canonical，公开页必须在预渲染成功后
+ * 写入自引用 canonical）：
  *   - <link rel="canonical"> / <meta og:url> → 指向页面自身
  *   - <meta name="robots"> → 仅预渲染成功的公开页改为 index, follow
  *   - /updateLogs 另有独立 title/description（避免全站同名同描述被判重复）
@@ -23,7 +24,7 @@
  * 用 puppeteer-core + 系统 Chrome（不引入 170MB 的 Chromium 下载）：
  *   - 优先读 PRERENDER_CHROME 环境变量
  *   - macOS 默认路径 / Linux(CI) 常见命令名依次探测
- * 紧急情况下 SKIP_PRERENDER=1 可跳过本步（部署不被预渲染故障阻塞）。
+ * SKIP_PRERENDER=1 仅供排查；完整 build 后的 SEO 产物校验会拒绝缺失官网首页的产物。
  */
 
 import { createServer } from 'node:http';
@@ -49,7 +50,8 @@ const TIMEOUT = 60_000;
  */
 const PAGES = [
   {
-    route: '/landing',
+    route: '/',
+    outputFile: '__seo/root/index.html',
     waitSelector: '.hero-title',
     critical: true,
     head: {},
@@ -81,7 +83,7 @@ const PRERENDER_API_BLACKHOLES = Object.freeze([
 ]);
 
 if (process.env.SKIP_PRERENDER === '1') {
-  console.log('⏭  SKIP_PRERENDER=1，跳过预渲染');
+  console.log('⏭  SKIP_PRERENDER=1，跳过预渲染（该产物不能通过完整 SEO 构建校验）');
   process.exit(0);
 }
 
@@ -184,7 +186,7 @@ function startStaticServer() {
 
 // ---- 单页渲染 ----
 async function renderPage(browser, port, pageConf) {
-  const { route, waitSelector, head } = pageConf;
+  const { route, waitSelector, head, outputFile } = pageConf;
   const url = `http://127.0.0.1:${port}${route}`;
 
   const page = await browser.newPage();
@@ -206,10 +208,17 @@ async function renderPage(browser, port, pageConf) {
 
     // 基础 SPA 空壳默认 noindex；只有真实正文完成预渲染后才允许收录。
     // 同时修正 canonical 与 og:url 指向页面自身（正则宽容匹配属性顺序与空白）。
+    const canonical = `${SITE_ORIGIN}${route}`;
     html = html
       .replace(/(<meta[^>]*name="robots"[^>]*content=")[^"]*(")/i, '$1index, follow$2')
-      .replace(/(<link[^>]*rel="canonical"[^>]*href=")[^"]*(")/i, `$1${SITE_ORIGIN}${route}$2`)
-      .replace(/(<meta[^>]*property="og:url"[^>]*content=")[^"]*(")/i, `$1${SITE_ORIGIN}${route}$2`);
+      .replace(/(<meta[^>]*property="og:url"[^>]*content=")[^"]*(")/i, `$1${canonical}$2`);
+
+    const canonicalTag = `<link rel="canonical" href="${canonical}" />`;
+    if (/<link\b[^>]*rel=["']canonical["'][^>]*>/i.test(html)) {
+      html = html.replace(/<link\b[^>]*rel=["']canonical["'][^>]*>/i, canonicalTag);
+    } else {
+      html = html.replace(/<\/head>/i, `  ${canonicalTag}\n</head>`);
+    }
 
     // 页面独立 title / meta description(共享 index.html 全站同名同描述,公开页会被判重复内容)
     if (head.title) {
@@ -246,11 +255,12 @@ async function renderPage(browser, port, pageConf) {
       throw new Error('预渲染产物未正确设置 robots=index, follow，拒绝落盘');
     }
 
-    const outDir = path.join(DIST, route.replace(/^\//, ''));
-    await mkdir(outDir, { recursive: true });
-    await writeFile(path.join(outDir, 'index.html'), html, 'utf8');
+    const relativeOutput = outputFile || path.join(route.replace(/^\//, ''), 'index.html');
+    const outFile = path.join(DIST, relativeOutput);
+    await mkdir(path.dirname(outFile), { recursive: true });
+    await writeFile(outFile, html, 'utf8');
     console.log(
-      `✅  ${route} 预渲染完成 → dist${route}/index.html（${(html.length / 1024).toFixed(0)}KB，正文 ${textLen} 字符）`,
+      `✅  ${route} 预渲染完成 → dist/${relativeOutput}（${(html.length / 1024).toFixed(0)}KB，正文 ${textLen} 字符）`,
     );
   } finally {
     await page.close().catch(() => {});
@@ -298,6 +308,6 @@ async function main() {
 
 main().catch((err) => {
   console.error('❌  预渲染失败:', err.message);
-  console.error('    紧急部署可用 SKIP_PRERENDER=1 跳过（landing 将退回 SPA 空壳）');
+  console.error('    官网首页是关键 SEO 产物，失败时禁止发布空壳根页。');
   process.exit(1);
 });

@@ -32,7 +32,7 @@ export const copyTextToClipboard = function (text) {
  * @returns 防抖后的函数
  */
 export function debounce<T extends (...args: any[]) => any>(func: T, delay: number): (...args: Parameters<T>) => void {
-  let timeoutId: number | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
   return (...args: Parameters<T>) => {
     if (timeoutId !== null) {
@@ -46,7 +46,7 @@ export function debounce<T extends (...args: any[]) => any>(func: T, delay: numb
 }
 // 节流函数：限制函数调用频率
 export function throttle(func: Function, delay: number) {
-  let timeoutId: number | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   return (...args: any[]) => {
     if (timeoutId === null) {
       func(...args);

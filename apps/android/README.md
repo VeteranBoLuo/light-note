@@ -1,6 +1,6 @@
 # 轻笺 Android
 
-轻笺 Android 是加载 `https://boluo66.top` 的轻量原生壳，业务界面继续由轻笺 Web 端统一维护。
+轻笺 Android 是加载 `https://boluo66.top/app` 的轻量原生壳，业务界面继续由轻笺 Web 端统一维护。
 
 ## 页面策略
 
@@ -49,7 +49,7 @@ cd apps/android
 ./gradlew assembleDebug -PlightNoteHomeUrl=http://192.168.1.10:5175
 ```
 
-`lightNoteHomeUrl` 只覆盖 Debug 包；Release 始终加载 `https://boluo66.top`。
+`lightNoteHomeUrl` 只覆盖 Debug 包；Release 始终加载 `https://boluo66.top/app`。
 
 Debug APK 位于：
 
@@ -70,7 +70,7 @@ WebView 过旧时，App 会显示更新提示而不是停在空白页。华为�
 - 应用名：`轻笺`
 - 包名：`top.boluo66.lightnote`
 - 首发版本：`1.0.0`（`versionCode 10000`）
-- Release 首页：`https://boluo66.top`
+- Release 首页：`https://boluo66.top/app`
 - Release 签名别名：建议固定为 `light-note-release`
 
 上述名称、包名和 Release 签名用于官网直发、Android 开发者身份登记与 App

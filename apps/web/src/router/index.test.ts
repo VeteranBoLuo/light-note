@@ -1,0 +1,16 @@
+import { describe, expect, it } from 'vitest';
+import router from './index';
+
+describe('官网与应用入口路由', () => {
+  it('根路径稳定匹配官网 Landing，不再执行设备或偏好重定向', () => {
+    const resolved = router.resolve('/');
+    expect(resolved.name).toBe('landing');
+    expect(resolved.matched.map((record) => record.name)).toEqual(['appShell', 'landing']);
+  });
+
+  it('保留独立 /app 应用入口，并将旧 /landing 规范化到根路径', () => {
+    expect(router.resolve('/app').name).toBe('appEntry');
+    const legacyLanding = router.getRoutes().find((record) => record.name === 'legacyLanding');
+    expect(legacyLanding?.redirect).toBe('/');
+  });
+});

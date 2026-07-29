@@ -58,8 +58,8 @@
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
-        // 与邮箱登录一致:登录成功后按用户偏好落 localStorage 再跳默认首页;
-        // 否则 push('/') 会读到登录前(游客)的偏好而落到官网首页。GitHub 接口不含 preferences,单独拉 /me。
+        // 与邮箱登录一致：登录成功后先把 /me 返回的偏好落到 localStorage，
+        // 再进入应用默认页。GitHub 换票接口不含 preferences，因此需要单独拉 /me。
         try {
           const me = await apiBaseGet('/api/user/me');
           user.setUserInfo(me?.data || {});

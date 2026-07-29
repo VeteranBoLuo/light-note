@@ -5,6 +5,7 @@ import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
 import androidColorMixFallback from './src/vite/androidColorMixFallback';
+import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 
 import path from 'path';
 export default defineConfig(({ mode }) => {
@@ -21,6 +22,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: false, // 默认就是false
     },
     plugins: [
+      seoPreviewRoutes(),
       vue(),
       vueJsx(),
       Components({

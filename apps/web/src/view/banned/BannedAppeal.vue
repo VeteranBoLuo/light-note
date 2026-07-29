@@ -82,7 +82,7 @@
     } catch {
       /* 忽略 */
     }
-    window.location.href = '/landing';
+    window.location.href = '/';
   }
 </script>
 

@@ -6,7 +6,7 @@ plugins {
 }
 
 val debugHomeUrl = providers.gradleProperty("lightNoteHomeUrl")
-    .orElse("https://boluo66.top")
+    .orElse("https://boluo66.top/app")
     .get()
 
 val releaseSigningPropertiesFile = rootProject.file("keystore.properties")
@@ -67,7 +67,7 @@ android {
         targetSdk = 35
         versionCode = 10000
         versionName = "1.0.0"
-        buildConfigField("String", "HOME_URL", "\"https://boluo66.top\"")
+        buildConfigField("String", "HOME_URL", "\"https://boluo66.top/app\"")
     }
 
     signingConfigs {
