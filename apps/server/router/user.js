@@ -31,6 +31,30 @@ const verifyCodeLimiter = rateLimit({
   message: { data: null, status: 429, msg: '尝试次数过多，请稍后再试' },
 });
 
+const accountDeletionCodeLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000,
+  max: 3,
+  message: { data: null, status: 429, msg: '注销验证码发送过于频繁，请稍后再试' },
+});
+
+const accountDeletionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { data: null, status: 429, msg: '注销验证尝试次数过多，请稍后再试' },
+});
+
+const githubOAuthStartLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  message: { data: null, status: 429, msg: 'GitHub 授权请求过于频繁，请稍后再试' },
+});
+
+const githubOAuthCallbackLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 12,
+  message: { data: null, status: 429, msg: 'GitHub 登录尝试过于频繁，请稍后再试' },
+});
+
 router.post('/login', loginLimiter, userHandle.login);
 
 router.get('/getUserInfo', userHandle.getUserInfo);
@@ -51,7 +75,9 @@ router.post('/saveUserInfo', userHandle.saveUserInfo);
 
 router.get('/deleteUserById', userHandle.deleteUserById);
 
-router.post('/github', userHandle.github);
+router.post('/github/authorize', githubOAuthStartLimiter, userHandle.startGithubOAuth);
+
+router.post('/github', githubOAuthCallbackLimiter, userHandle.github);
 
 router.post('/logout', userHandle.logout);
 
@@ -60,6 +86,10 @@ router.post('/configPassword', userHandle.configPassword);
 router.post('/getMySessions', userHandle.getMySessions);
 
 router.post('/revokeSession', userHandle.revokeSession);
+
+router.post('/requestAccountDeletionCode', accountDeletionCodeLimiter, userHandle.requestAccountDeletionCode);
+
+router.post('/deleteMyAccount', accountDeletionLimiter, userHandle.deleteMyAccount);
 
 router.post('/sendEmail', sendEmailLimiter, userHandle.sendEmail);
 

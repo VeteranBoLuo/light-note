@@ -10,10 +10,26 @@
  * 修法:写入 fixed/absolute 定位前,把 getBoundingClientRect/clientX 得到的视觉坐标 ÷ getRootZoom(),
  * 换算回 html 局部(布局)坐标。offsetWidth/offsetHeight/clientWidth/clientHeight 本就是布局像素、无需换算。
  */
+/**
+ * 把浏览器返回的 CSS zoom 值统一换成倍率。
+ *
+ * Chromium 通常返回 "1"，部分 Android WebView 会返回 "100%"。直接 parseFloat("100%")
+ * 会得到 100，导致所有依赖 zoom 的浮层坐标被缩小 100 倍并挤到视口左上角。
+ */
+export function parseCssZoom(value?: string | null): number {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === 'normal') return 1;
+
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return normalized.endsWith('%') ? parsed / 100 : parsed;
+}
+
 export function getRootZoom(): number {
-  const el = document.documentElement;
-  const z = parseFloat(el.style.zoom || getComputedStyle(el).zoom || '1');
-  return z && z > 0 ? z : 1;
+  // 只认轻笺设置在 <html style="zoom:…"> 上的显式值。部分鸿蒙 Android 兼容层会把
+  // getComputedStyle(html).zoom 错误返回为设备像素密度（真机为 3.5），它不是 CSS zoom，
+  // 若参与坐标换算会把所有浮层挤到视口左上角。
+  return parseCssZoom(document.documentElement.style.zoom);
 }
 
 export interface RootZoomRect {

@@ -69,7 +69,9 @@
     bindScrollTimer = setTimeout(() => {
       bindScrollTimer = null;
       if (!isGuest.value || seen()) return;
-      scrollEl = document.getElementById('view-panel');
+      scrollEl =
+        document.querySelector<HTMLElement>('.bookmark-page [data-mobile-resource-scroll]') ||
+        document.getElementById('view-panel');
       scrollEl?.addEventListener('scroll', onScroll, { passive: true });
     }, 0);
   }

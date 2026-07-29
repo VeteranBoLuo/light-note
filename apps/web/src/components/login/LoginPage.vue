@@ -56,6 +56,12 @@
       <span>{{ t('auth.noAccount') }}</span>
       <BButton class="auth-link" @click="title = '注册'">{{ t('auth.goRegister') }}</BButton>
     </div>
+
+    <GithubOAuthConsentModal
+      v-model:visible="githubConsentVisible"
+      :loading="githubStarting"
+      @confirm="confirmGitHubLogin"
+    />
   </div>
 </template>
 
@@ -72,7 +78,9 @@
   import { setLocale } from '@/i18n';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { markLoggedIn } from '@/utils/authStorage';
+  import { createGithubAuthorizationUrl } from '@/utils/githubOAuth';
   import { isValidEmail } from '@/utils/validator.ts';
+  import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
   interface LoginFormData {
@@ -85,6 +93,8 @@
   const REMEMBERED_EMAIL_KEY = 'rememberedLoginEmail';
   const isCheck = ref(true);
   const submitting = ref(false);
+  const githubConsentVisible = ref(false);
+  const githubStarting = ref(false);
   const disable = computed(() => submitting.value || !formData.value.email || !formData.value.password);
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -142,11 +152,19 @@
   }
 
   function loginWithGitHub() {
-    const clientId = 'Ov23liuOPhDka7KkXrpQ';
-    const redirectUri = 'https://boluo66.top/auth/callback';
-    const scope = 'user:email';
-    const state = Math.random().toString(36).substring(7);
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
+    githubConsentVisible.value = true;
+  }
+
+  async function confirmGitHubLogin() {
+    if (githubStarting.value) return;
+    githubStarting.value = true;
+    try {
+      const authorizationUrl = await createGithubAuthorizationUrl({ flow: 'login' });
+      window.location.href = authorizationUrl;
+    } catch {
+      message.error(t('auth.githubStartFailed'));
+      githubStarting.value = false;
+    }
   }
 
   onMounted(() => {

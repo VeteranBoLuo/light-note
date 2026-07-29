@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 与默认资源保持一致，避免厂商安装检查阶段切换图标解析方式。 -->
+    <item android:drawable="@drawable/ic_brand_tile" />
+</layer-list>

@@ -1,4 +1,4 @@
-import { createApp } from 'vue';
+import { createApp, nextTick } from 'vue';
 import App from '@/App.vue';
 import router, { getPendingNavigationTarget, reloadOnceTo } from '@/router';
 import '@/assets/css/index.less';
@@ -7,6 +7,20 @@ import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
+import {
+  isAndroidWebViewRuntime,
+  isLightNoteAndroidApp,
+  postAndroidAppReady,
+} from '@/utils/androidBridge';
+
+// Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
+// 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 保留给旧调试包与系统 WebView。
+const isAndroidApp = isLightNoteAndroidApp();
+const isAndroidWebView = isAndroidWebViewRuntime();
+if (isAndroidWebView) {
+  document.documentElement.classList.add('light-note-android-webview');
+}
+
 // 创建vue实例
 const app = createApp(App);
 const pinia = createPinia();
@@ -18,9 +32,28 @@ app.component('Icon', Icon);
 app.config.globalProperties.$t = i18n.global.t;
 globalDirect(app);
 // 必须在 mount 前监听 beforeinstallprompt，否则浏览器可能在应用组件挂载前触发事件而丢失安装入口。
-initializePwaInstall();
+// 轻笺原生 APK 已经安装完成，不再注册 PWA Service Worker 或安装提示监听。
+if (!isAndroidApp) {
+  initializePwaInstall();
+}
 // 挂载实例
 app.mount('#app');
+
+async function notifyAndroidInitialViewReady() {
+  await router.isReady();
+  await nextTick();
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  postAndroidAppReady();
+}
+
+if (isAndroidWebView) {
+  // 原生品牌封面持续显示到首个异步路由组件真正完成绘制，避免 HTML
+  // 到达后 Vue 首帧尚未出现时短暂露出 WebView 白底。
+  void notifyAndroidInitialViewReady().catch((error) => {
+    console.warn('Android 首屏就绪通知失败:', error);
+  });
+}
 
 // 游客访问量埋点(page_view)已移至 App.vue initApp():需等 window.fingerprint 生成后再上报,
 // 否则 fingerprint 为空会导致漏斗按 DISTINCT fingerprint 统计失真。

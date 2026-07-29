@@ -80,6 +80,17 @@ export function markLoggedIn(): void {
   }
 }
 
+/** 注销账号后清除这台设备上与原账号登录相关的持久标记。 */
+export function clearLoginHistory(): void {
+  try {
+    localStorage.removeItem(LOGGED_IN_KEY);
+    localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    localStorage.removeItem('rememberedSid');
+  } catch {
+    // localStorage 不可用时不阻断服务端已完成的账号注销。
+  }
+}
+
 /** 当前设备是否曾登录过（且未超过有效期）。 */
 export function hasLoggedInBefore(): boolean {
   try {

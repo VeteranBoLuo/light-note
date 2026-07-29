@@ -7,6 +7,7 @@
 ```
 light-note/
 ├── apps/
+│   ├── android/      # Android WebView 原生壳
 │   ├── web/          # 前端（Vue 3 + Vite + Pinia）
 │   └── server/       # 后端（Express + MySQL + JWT）
 ├── packages/         # 共享包（预留）
@@ -93,6 +94,7 @@ apps/server/
     ├── aiProductTelemetry.js # 无正文 AI 产品事件与保留期
     ├── aiArtifactRetention.js # Change Set 可选产物 TTL
     ├── aiUserDataExport.js # 账号级 AI 数据 JSON 导出与排除清单
+    ├── accountDeletion.js # 账号注销验证码、去标识化与可重试物理清理
     ├── personalKnowledgeSearch.js # 个人知识统一词法检索
     ├── adminContextStore.js # Redis 管理员上下文（actor/subject 分离）
     ├── adminRoutePolicy.js  # 管理员上下文显式路由策略
@@ -127,6 +129,17 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 - Root 操作使用 `ensureRootRole(req, res)` 检查
 
 ## 前端架构
+
+### Android 客户端
+
+- Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
+- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 首页固定为 `https://boluo66.top`，Debug 才允许用显式 Gradle 参数覆盖本地地址。
+- 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
+- Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
+- 隐私政策和用户协议在浏览器与 App 设置中都长期可访问；App 设置优先通过受信消息通道打开 APK 内置的离线同源文档，通道不可用时回退到网站公开文档。首次启动同意页仍由原生层负责，不能被设置入口替代。
+- Release 只允许 HTTPS、关闭 WebView 调试、拒绝 SSL 错误，不使用 JavaScript Interface；文件访问和内容访问默认关闭。
+- Android 源码、Gradle Wrapper 和资源进入 Git；`local.properties`、`.gradle`、`build`、APK/AAB、签名密钥及密码配置必须忽略。
+- PWA 与 Android APK 并行保留。App 备案通过前 APK 仅用于受控测试，不在官网公开下载；正式签名、备案特征和 Android 开发者身份登记必须保持一致。
 
 ### 路由体系
 
@@ -178,6 +191,7 @@ src/
 - `usePwaInstall.ts` 在应用挂载前监听 `beforeinstallprompt`；该事件是“一键安装”的必要条件，但不是充分条件。部分鸿蒙内核和套壳浏览器会下发事件却无法真正调起安装，因此还需通过可信平台/浏览器矩阵复核。
 - 安装教程按“当前系统 × 当前浏览器”选择操作路径，覆盖 Chrome、Edge、华为、夸克、Firefox、360、QQ/腾讯、微信内置浏览器、Safari 等；切换查看其他设备时回退到对应系统的通用步骤。鸿蒙、iOS 以及华为、夸克等已知不可靠环境始终展示手动添加教程；标准 Android/桌面端仅 Chrome、Edge、Opera 在真实下发 `beforeinstallprompt` 时展示一键安装，避免出现按钮短暂加载但系统安装框无法调起。
 - `light-note-sw.js` 只拦截页面导航，优先走网络并在断网时返回品牌离线页；不缓存登录用户的业务接口或私有数据。Service Worker 和 manifest 均以根路径为 scope，确保从任意业务页面安装后仍进入同一轻笺应用。
+- PWA 安装能力只面向浏览器和 PWA 本身；轻笺 Android APK 内不展示个人中心、设置或官网区域的 PWA 安装入口，也不初始化上述 PWA 运行时。
 
 ## 数据库核心表
 
@@ -187,7 +201,7 @@ src/
 | `bookmark`                                   | 书签                          | UUID          |
 | `note`                                       | 笔记                          | UUID          |
 | `files`                                      | 云空间文件                    | 自增          |
-| `folder`                                     | 云空间文件夹                  | 自增          |
+| `folders`                                    | 云空间文件夹                  | 自增          |
 | `tag`                                        | 标签                          | UUID          |
 | `resource_tag_relations`                     | 资源-标签关联                 | 无独立 id     |
 | `onboarding_seed_resources`                  | 注册示例资源来源标记          | 复合主键      |
@@ -195,6 +209,7 @@ src/
 | `todo_items`                                 | 待处理中的待办事项            | UUID          |
 | `todo_reminders`                             | 待办提醒调度记录              | UUID          |
 | `email_delivery_logs`                        | 系统邮件 SMTP 投递记录        | UUID          |
+| `account_deletion_requests`                  | 账号注销物理清理重试队列      | UUID          |
 | `tag_relations`                              | 标签-标签关联                 | 无独立 id     |
 | `api_logs`                                   | API 请求日志                  | UUID          |
 | `operation_logs`                             | 操作日志                      | UUID          |
@@ -407,6 +422,13 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 ```
 
 登录设备页展示的是“设备组”而不是原始 session 行。浏览器请求会携带本地持久的随机设备标识；服务端只保存其 SHA-256 `user_sessions.device_key` 摘要，并在同一账号、同一浏览器再次登录时事务性轮换为一条会话，避免重复登录堆积为多台设备。该标识不参与认证、权限或设备信任判断。升级前没有设备摘要的历史会话不会根据 IP 或 UA 猜测归属，而是逐条独立展示和撤销，避免共享网络或浏览器升级造成远端会话误并入当前设备；“下线设备”会撤销该设备组包含的全部 session。
+
+### 账号自助注销
+
+- 登录用户从“设置 → 账号与安全”发起，注销验证码只能发送到服务端从当前账号读取的已绑定邮箱；Redis 仅保存 5 分钟有效的加盐摘要，客户端不能指定收件地址，也不复用重置密码验证码。
+- 最终提交必须同时通过 6 位验证码和精确确认文字。服务端在单事务内锁定账号、重新核对邮箱摘要、创建 `account_deletion_requests` 清理任务，并将密码、邮箱、电话、头像、位置、IP、GitHub 标识与授权凭据等身份字段清空，同时把账号标成不可登录；随后清除全部会话和当前登录 Cookie。
+- 数据库内容、OBS 文件、笔记图片和书签图标由后台任务物理清理。数据库删除使用事务；对象或本地文件删除失败时进入指数退避重试，只有全部完成后才清空任务中的对象路径并标记 `completed`。已完成任务只保留不含邮箱、昵称的账号 UUID、时间和尝试次数，用于清理幂等与审计，并在 180 天后分批删除。
+- 安全事件和管理员审计等依法或为安全所需的有限记录不随内容表直接删除，但会解除账号 ID 关联，并继续受各自保留期约束。Root、游客和任何管理员预览/代管上下文都不能走自助注销接口。
 
 ### 新账号示例内容
 

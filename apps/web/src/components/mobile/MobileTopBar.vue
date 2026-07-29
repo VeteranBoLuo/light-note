@@ -217,10 +217,23 @@
     background: transparent !important;
   }
 
-  .mobile-top-bar__action:hover,
   .mobile-top-bar__action:active {
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .mobile-top-bar__action:hover {
+      color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .mobile-top-bar__action:hover:not(:active) {
+      color: var(--text-color);
+      background: transparent !important;
+    }
   }
 
   .mobile-top-bar__search {

@@ -1,6 +1,7 @@
 import { computed, ref, shallowRef } from 'vue';
 import { recordOperation } from '@/api/commonApi';
 import { OPERATION_LOG_MAP } from '@/config/logMap';
+import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
 export type PwaGuidePlatform = 'harmony' | 'ios' | 'android' | 'desktop';
 export type PwaInstallSource = 'landing' | 'landing-final' | 'person-center' | 'settings';
@@ -39,6 +40,7 @@ const guidePlatform = ref<PwaGuidePlatform>('harmony');
 const guideSource = ref<PwaInstallSource>('settings');
 const detectedBrowser = ref<PwaBrowserFamily>('other');
 const detectedPlatform = ref<PwaGuidePlatform>('desktop');
+const nativeAndroidApp = isLightNoteAndroidApp();
 let initialized = false;
 
 const INSTALL_SOURCE_LABELS: Record<PwaInstallSource, string> = {
@@ -119,6 +121,11 @@ async function registerServiceWorker() {
 export function initializePwaInstall() {
   if (initialized || typeof window === 'undefined') return;
   initialized = true;
+  if (nativeAndroidApp) {
+    deferredPrompt.value = null;
+    guideVisible.value = false;
+    return;
+  }
   updateDetectedEnvironment();
   updateStandaloneState();
   void registerServiceWorker();
@@ -163,13 +170,21 @@ function recordInstallResult(source: PwaInstallSource, result: Exclude<PwaInstal
 
 export function usePwaInstall() {
   const canPrompt = computed(
-    () => Boolean(deferredPrompt.value) && !standalone.value && hasReliableDirectInstallCapability(),
+    () =>
+      !nativeAndroidApp &&
+      Boolean(deferredPrompt.value) &&
+      !standalone.value &&
+      hasReliableDirectInstallCapability(),
   );
   const installState = computed<'installed' | 'prompt-ready' | 'manual'>(() =>
     standalone.value ? 'installed' : canPrompt.value ? 'prompt-ready' : 'manual',
   );
 
   function openGuide(source: PwaInstallSource, platform?: PwaGuidePlatform) {
+    if (nativeAndroidApp) {
+      guideVisible.value = false;
+      return;
+    }
     guideSource.value = source;
     guidePlatform.value = platform || detectedPlatform.value;
     guideVisible.value = true;
@@ -177,6 +192,7 @@ export function usePwaInstall() {
   }
 
   async function requestInstall(source: PwaInstallSource): Promise<PwaInstallResult> {
+    if (nativeAndroidApp) return 'unsupported';
     // 不等待日志请求，避免丢失浏览器要求的一次性用户手势，导致安装弹窗无法调起。
     void recordOperation(withInstallSource(OPERATION_LOG_MAP.pwa.requestInstall, source));
     if (standalone.value) return 'installed';

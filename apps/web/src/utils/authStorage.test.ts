@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ADMIN_LOGIN_PREVIEW_FRAME_NAME,
   clearAdminLoginPreview,
+  clearLoginHistory,
   getAdminContextToken,
   getAdminLoginPreviewUrl,
+  hasLoggedInBefore,
   isAdminLoginPreview,
+  markLoggedIn,
   setAdminLoginPreview,
 } from './authStorage';
 
@@ -43,5 +46,24 @@ describe('管理员预览前端令牌隔离', () => {
     const url = getAdminLoginPreviewUrl('/home');
     expect(url).toContain('adminLoginPreview=1');
     expect(url).not.toContain('secret-context-token');
+  });
+});
+
+describe('账号注销后的本地登录记忆清理', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('同时清除曾登录、记住账号和持久会话标记', () => {
+    markLoggedIn();
+    localStorage.setItem('rememberedLoginEmail', 'owner@example.com');
+    localStorage.setItem('rememberedSid', 'remembered-session');
+    expect(hasLoggedInBefore()).toBe(true);
+
+    clearLoginHistory();
+
+    expect(hasLoggedInBefore()).toBe(false);
+    expect(localStorage.getItem('rememberedLoginEmail')).toBeNull();
+    expect(localStorage.getItem('rememberedSid')).toBeNull();
   });
 });

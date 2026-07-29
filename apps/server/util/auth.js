@@ -74,6 +74,7 @@ const rejectAdminContextWithoutActorSession = (res) => {
 // 与本列表无关。匹配放宽是 fail-safe 的(最坏只是本该静默的接口多弹一次提示)。
 const AUTH_EXPIRED_SILENT_PATHS = [
   '/user/login',
+  '/user/github/authorize',
   '/user/github',
   '/user/registerUser',
   '/user/sendEmail',

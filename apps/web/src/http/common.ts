@@ -2,13 +2,26 @@ import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
+import { postAndroidMessage } from '@/utils/androidBridge.ts';
 const cloud = cloudSpaceStore();
+
+function requestAndroidDownload(downloadUrl: string, fileName?: string): boolean {
+  return postAndroidMessage({
+    type: 'download',
+    url: downloadUrl,
+    fileName: fileName || '',
+  });
+}
+
 export async function downloadField(id: number | string, token?: string) {
   try {
     cloud.loading = true;
     const res = await apiBasePost('/api/file/downloadFileById', { id, token });
     if (res.status === 200 && res.data?.downloadUrl) {
       const { downloadUrl, fileName } = res.data;
+      if (requestAndroidDownload(downloadUrl, fileName)) {
+        return true;
+      }
       const a = document.createElement('a');
       a.href = downloadUrl; // OBS will serve the file directly
       if (fileName) a.download = decodeURIComponent(fileName);

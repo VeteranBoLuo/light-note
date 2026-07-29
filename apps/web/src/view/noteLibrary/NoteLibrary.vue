@@ -893,7 +893,8 @@
 
   .note-card-skeleton {
     height: 282px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, var(--desc-color) 18%);
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    box-shadow: none;
   }
 
   .skeleton-line {

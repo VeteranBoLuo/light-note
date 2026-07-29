@@ -240,4 +240,20 @@
     opacity: 0.9;
     box-shadow: 0 3px 12px rgba(97, 92, 237, 0.4);
   }
+
+  @media (min-width: 768px) and (max-width: 1199px) {
+    .navigation-right-area {
+      right: 16px;
+    }
+
+    .navigation-right-area :deep(.global-search) {
+      width: 200px;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .navigation-right-area :deep(.global-search) {
+      display: none;
+    }
+  }
 </style>

@@ -77,24 +77,55 @@ export async function collectUsedImageNames() {
  * 清理"可能成为孤儿"的图片物理文件——仅当既没有任何笔记引用(note_images 已无该 URL 行)、
  * 也没有任何模板正文仍包含该文件时才删磁盘文件。
  * 必须在删除事务提交之后调用(此时残留的 note_images 行即"其他笔记仍在引用")。
- * fire-and-forget:失败静默,不影响主流程。
+ * 默认 fire-and-forget:失败静默,不影响主流程。账号注销等必须确认物理清理结果的调用方
+ * 可传 strict:true，并依据返回的 failed 数量安排重试。
  */
-export async function cleanupOrphanNoteImages(urls) {
+export async function cleanupOrphanNoteImages(urls, { strict = false } = {}) {
   const unique = [...new Set((urls || []).filter(Boolean))];
+  let deleted = 0;
+  let kept = 0;
+  let skipped = 0;
+  let failed = 0;
   for (const u of unique) {
     try {
       const fileName = new URL(u).pathname.split('/').pop();
-      if (!fileName) continue;
+      if (!fileName) {
+        skipped += 1;
+        continue;
+      }
       const [noteRef] = await pool.query('SELECT COUNT(*) AS n FROM note_images WHERE url = ?', [u]);
-      if (noteRef[0].n > 0) continue;
+      if (noteRef[0].n > 0) {
+        kept += 1;
+        continue;
+      }
       // 模板引用按正文包含文件名判断(模板量小:每人≤20;文件名带时间戳唯一,误报≈0 且误报方向是多保留,安全)
       const [tplRef] = await pool.query('SELECT COUNT(*) AS n FROM note_template WHERE content LIKE ?', [
         `%${escapeLikePattern(fileName)}%`,
       ]);
-      if (tplRef[0].n > 0) continue;
-      await fsP.unlink(path.join(NOTE_IMAGE_DIR, fileName)).catch(() => {});
-    } catch {
-      /* 单个 URL 清理失败忽略,继续下一个 */
+      if (tplRef[0].n > 0) {
+        kept += 1;
+        continue;
+      }
+      try {
+        await fsP.unlink(path.join(NOTE_IMAGE_DIR, fileName));
+        deleted += 1;
+      } catch (error) {
+        if (error?.code === 'ENOENT') {
+          skipped += 1;
+        } else {
+          failed += 1;
+        }
+      }
+    } catch (error) {
+      failed += 1;
     }
   }
+  const result = { deleted, kept, skipped, failed };
+  if (strict && failed > 0) {
+    const error = new Error('NOTE_IMAGE_CLEANUP_FAILED');
+    error.code = 'NOTE_IMAGE_CLEANUP_FAILED';
+    error.result = result;
+    throw error;
+  }
+  return result;
 }

@@ -4,6 +4,7 @@ import vueJsx from '@vitejs/plugin-vue-jsx';
 import Components from 'unplugin-vue-components/vite';
 import AutoImport from 'unplugin-auto-import/vite';
 import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
+import androidColorMixFallback from './src/vite/androidColorMixFallback';
 
 import path from 'path';
 export default defineConfig(({ mode }) => {
@@ -36,6 +37,11 @@ export default defineConfig(({ mode }) => {
         ],
       }),
     ],
+    css: {
+      postcss: {
+        plugins: [androidColorMixFallback()],
+      },
+    },
     // 加载对应的.env文件
     envPrefix: 'VITE_',
     // 根据mode加载不同的.env文件

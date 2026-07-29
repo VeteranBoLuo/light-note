@@ -25,6 +25,8 @@ import { getAiArtifactRetentionConfig, startAiArtifactRetentionScheduler } from 
 import { startAiBalanceSnapshotScheduler } from './util/agent/providerBalanceSnapshot.js';
 import { stableAgentErrorCode } from './util/agent/logSafety.js';
 import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
+import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
+import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -110,6 +112,10 @@ if (aiArtifactRetentionConfig.enabledDomains.length) {
   );
 }
 startAiBalanceSnapshotScheduler();
+startAccountDeletionCleanupScheduler().catch((err) =>
+  console.error('账号注销清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+);
+startOperationalLogRetentionScheduler();
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

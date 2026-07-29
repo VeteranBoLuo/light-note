@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="splash_background">#222222</color>
+    <color name="splash_wordmark">#F3F4F8</color>
+    <color name="page_background">#17181D</color>
+    <color name="text_primary">#F3F4F8</color>
+    <color name="privacy_surface">#24252D</color>
+    <color name="privacy_surface_border">#363842</color>
+    <color name="privacy_text_secondary">#C8CAD3</color>
+    <color name="privacy_text_muted">#9296A5</color>
+    <color name="privacy_tonal">#2B294A</color>
+    <color name="privacy_secondary_button">#23242C</color>
+</resources>

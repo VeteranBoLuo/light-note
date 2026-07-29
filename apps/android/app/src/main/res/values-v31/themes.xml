@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LightNote" parent="Theme.LightNote.Base">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <!--
+            使用透明且已收进安全区的品牌前景，避免系统再次把完整图标
+            套进圆形蒙版，也不依赖厂商兼容层裁切方形背景。
+        -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="android:windowSplashScreenAnimationDuration">250</item>
+    </style>
+</resources>

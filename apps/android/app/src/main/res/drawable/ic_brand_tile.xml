@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <!--
+        直接由四片品牌图形构成真实圆角外轮廓，不叠加底板或描边。
+        静态图标接近铺满画布，补偿厂商桌面对传统图标的统一缩放；
+        四周仍保留少量透明像素，避免安装器额外蒙版切到抗锯齿边缘。
+    -->
+    <group
+        android:pivotX="128"
+        android:pivotY="128"
+        android:scaleX="1.20"
+        android:scaleY="1.20">
+        <path
+            android:fillColor="#FF8A84FA"
+            android:pathData="M132,24h48c28.72,0 52,23.28 52,52v48h-48l-52,-52z" />
+        <group
+            android:pivotX="128"
+            android:pivotY="128"
+            android:rotation="90">
+            <path
+                android:fillColor="#FF817AF7"
+                android:pathData="M132,24h48c28.72,0 52,23.28 52,52v48h-48l-52,-52z" />
+        </group>
+        <group
+            android:pivotX="128"
+            android:pivotY="128"
+            android:rotation="180">
+            <path
+                android:fillColor="#FF5148D4"
+                android:pathData="M132,24h48c28.72,0 52,23.28 52,52v48h-48l-52,-52z" />
+        </group>
+        <group
+            android:pivotX="128"
+            android:pivotY="128"
+            android:rotation="270">
+            <path
+                android:fillColor="#FFAAA6FD"
+                android:pathData="M132,24h48c28.72,0 52,23.28 52,52v48h-48l-52,-52z" />
+        </group>
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M128,76L180,128L128,180L76,128Z" />
+    </group>
+</vector>

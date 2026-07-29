@@ -269,6 +269,15 @@
       }
     }
   }
+  @media (min-width: 768px) and (max-width: 1199px) {
+    .navigation-title {
+      width: 140px;
+    }
+
+    .navigation-tab {
+      gap: 20px !important;
+    }
+  }
   .navigation-manage {
     background-color: #ffffff;
     color: #000000;

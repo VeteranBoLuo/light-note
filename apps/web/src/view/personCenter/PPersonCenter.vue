@@ -73,7 +73,11 @@
         </div>
         <div class="person-menu">
           <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
-          <BButton class="person-menu-item person-menu-item--button" @click="handlePwaEntry">
+          <BButton
+            v-if="!isAndroidApp"
+            class="person-menu-item person-menu-item--button"
+            @click="handlePwaEntry"
+          >
             <span class="person-menu-item-title">{{ $t('pwa.install') }}</span>
             <span class="person-menu-item-des">
               {{ pwaEntryDescription }}
@@ -218,6 +222,7 @@
   import { frameVariant } from '@/config/growthFrames';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
 
@@ -234,6 +239,7 @@
     return frameVariant(id) ? id : null;
   });
   const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
+  const isAndroidApp = isLightNoteAndroidApp();
   const { canPrompt, isStandalone, openGuide } = usePwaInstall();
   const pwaEntryDescription = computed(() =>
     isStandalone.value

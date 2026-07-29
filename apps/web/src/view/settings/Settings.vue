@@ -124,12 +124,14 @@
             </span>
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.general') }}</h2>
-              <p class="card-sub">{{ t('settings.generalDesc') }}</p>
+              <p class="card-sub">
+                {{ t(bookmark.isMobile ? 'settings.generalDescMobile' : 'settings.generalDesc') }}
+              </p>
             </div>
           </div>
 
           <div class="fields">
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.defaultHome') }}</span>
                 <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>
@@ -304,7 +306,7 @@
         </section>
 
         <!-- 安装到设备 -->
-        <section class="settings-card" id="set-install">
+        <section v-if="!isAndroidApp" class="settings-card" id="set-install">
           <div class="card-head">
             <span class="card-icon card-icon--install">
               <SvgIcon :src="icon.pwa.install" size="20" aria-hidden="true" />
@@ -617,6 +619,41 @@
           </div>
         </section>
 
+        <!-- 隐私与协议 -->
+        <section class="settings-card" id="set-privacy">
+          <div class="card-head">
+            <span class="card-icon card-icon--general">
+              <SvgIcon :src="icon.settings.privacy" size="20" aria-hidden="true" />
+            </span>
+            <div class="card-head-text">
+              <h2 class="card-title">{{ t('settings.privacyTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.privacyDesc') }}</p>
+            </div>
+          </div>
+          <div class="fields">
+            <div class="field legal-document-field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.privacyPolicy') }}</span>
+                <span class="field-desc">{{ t('settings.privacyPolicyDesc') }}</span>
+              </div>
+              <BButton class="legal-document-link" @click="openLegalDocument('privacy-policy.html')">
+                <span>{{ t('settings.viewDocument') }}</span>
+                <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+              </BButton>
+            </div>
+            <div class="field legal-document-field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.userAgreement') }}</span>
+                <span class="field-desc">{{ t('settings.userAgreementDesc') }}</span>
+              </div>
+              <BButton class="legal-document-link" @click="openLegalDocument('user-agreement.html')">
+                <span>{{ t('settings.viewDocument') }}</span>
+                <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+              </BButton>
+            </div>
+          </div>
+        </section>
+
         <p class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
@@ -642,20 +679,26 @@
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
+  import {
+    isLightNoteAndroidApp,
+    postAndroidOpenLegalDocument,
+    type AndroidLegalDocument,
+  } from '@/utils/androidBridge.ts';
 
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
+  const isAndroidApp = isLightNoteAndroidApp();
 
   // 设置页锚点导航:区块多、页面长,顶部 sticky 锚点条一键跳转。游客隐藏「账号与安全」锚点,与该区块 v-if 一致。
   const anchors = computed(() => {
     const list = [
       { id: 'set-appearance', label: t('settings.appearance') },
       { id: 'set-general', label: t('settings.general') },
-      { id: 'set-install', label: t('settings.installTitle') },
-      { id: 'set-notification', label: t('settings.notification') },
     ];
-    if (!bookmark.isMobile) list.splice(3, 0, { id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
+    if (!isAndroidApp) list.push({ id: 'set-install', label: t('settings.installTitle') });
+    if (!bookmark.isMobile) list.push({ id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
+    list.push({ id: 'set-notification', label: t('settings.notification') });
     if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
     list.push({ id: 'set-ai', label: 'AI 设置' });
     if (!bookmark.isMobile) {
@@ -664,6 +707,7 @@
         { id: 'set-export', label: t('settings.exportTitle') },
       );
     }
+    list.push({ id: 'set-privacy', label: t('settings.privacyTitle') });
     return list;
   });
   function scrollToSection(id: string) {
@@ -733,6 +777,11 @@
       label: getGlobalShortcutLabel('aiAssistant'),
     },
   ]);
+
+  function openLegalDocument(fileName: AndroidLegalDocument) {
+    if (isAndroidApp && postAndroidOpenLegalDocument(fileName)) return;
+    window.open(`/legal/${fileName}`, '_blank', 'noopener,noreferrer');
+  }
 
   // 快速收藏 bookmarklet:href 用当前站点 origin 动态生成,拖到书签栏后在任意网页点它即可
   const bmRef = ref<HTMLAnchorElement | null>(null);
@@ -1164,6 +1213,20 @@
     gap: 8px;
   }
 
+  .legal-document-link {
+    flex: 0 0 auto;
+    gap: 3px;
+    height: 40px;
+    padding: 0 0 0 12px;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--primary-color) !important;
+    font-size: 13px;
+  }
+  .legal-document-link:hover {
+    opacity: 0.78;
+  }
+
   .shortcut-keys {
     flex: 0 0 auto;
     display: inline-flex;
@@ -1247,6 +1310,11 @@
     }
     .pwa-settings-actions {
       justify-content: flex-start;
+    }
+    .field.legal-document-field {
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
     }
   }
 

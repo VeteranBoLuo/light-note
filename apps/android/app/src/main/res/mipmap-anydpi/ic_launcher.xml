@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        安装器、系统检查页与桌面统一读取同一份无底板成品图标，
+        避免解析 adaptive icon 前后出现裁切和粗边框变化。
+    -->
+    <item android:drawable="@drawable/ic_brand_tile" />
+</layer-list>

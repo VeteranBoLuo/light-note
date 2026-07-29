@@ -77,7 +77,7 @@
                   >
                 </template>
               </div>
-              <div class="pwa-install-strip">
+              <div v-if="!isAndroidApp" class="pwa-install-strip">
                 <span class="pwa-install-strip__icon">
                   <SvgIcon :src="icon.pwa.device" size="22" aria-hidden="true" />
                 </span>
@@ -320,6 +320,10 @@
                  AI 助手/帮助文档路由(router/modules/common.ts),不能撞 -->
             <a href="/helpCenter">{{ t('landing.helpCenter') }}</a>
             <span class="footer-sep">|</span>
+            <a href="/legal/privacy-policy.html">{{ t('landing.privacyPolicy') }}</a>
+            <span class="footer-sep">|</span>
+            <a href="/legal/user-agreement.html">{{ t('landing.userAgreement') }}</a>
+            <span class="footer-sep">|</span>
             <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -383,11 +387,13 @@
   import icon from '@/config/icon';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import { LANDING_AUTH_CONTEXT, resolveLandingCtaMode } from './landingAuth.ts';
+  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const isAndroidApp = isLightNoteAndroidApp();
   const { isStandalone, openGuide } = usePwaInstall();
   const isLoggedIn = computed(() => !!user.id && user.role !== 'visitor');
   const landingAuth = inject(LANDING_AUTH_CONTEXT, null);

@@ -164,7 +164,9 @@
 
   // 处理滚动条滚动到顶部
   const scrollToTop = () => {
-    const dom = document.getElementById('view-panel');
+    const dom =
+      document.querySelector<HTMLElement>('.bookmark-page [data-mobile-resource-scroll]') ||
+      document.getElementById('view-panel');
     dom?.scrollTo(0, 0);
   };
 
@@ -414,17 +416,30 @@
     }
 
     .bookmark-workspace {
+      height: 100%;
+      min-height: 0;
       display: block;
     }
 
     .bookmark-main-panel {
       width: 100%;
       height: 100%;
-      overflow: visible;
+      min-height: 0;
+      display: block;
+      overflow: hidden;
       border: 0;
       border-radius: 0;
       background: transparent;
       box-shadow: none;
+    }
+
+    .bookmark-main-panel :deep(.view-panel) {
+      position: absolute;
+      inset: 0;
+      width: auto;
+      height: auto;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .bookmark-mobile-filter :deep(.filter-panel),

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">轻笺</string>
+    <string name="network_error_title">页面暂时无法打开</string>
+    <string name="network_error_message">请检查网络连接后重试</string>
+    <string name="retry">重新加载</string>
+    <string name="browser_back">返回</string>
+    <string name="browser_close">关闭</string>
+    <string name="browser_title">应用内浏览</string>
+    <string name="download_started">已开始下载，完成后会提示</string>
+    <string name="download_completed">下载完成：%1$s。可在“文件”或相册中查看</string>
+    <string name="download_failed">无法开始下载</string>
+    <string name="download_failed_named">下载失败：%1$s</string>
+    <string name="file_chooser_opening">正在打开系统文件选择器…</string>
+    <string name="file_chooser_processing">正在读取所选文件…</string>
+    <string name="file_chooser_returning">正在返回轻笺…</string>
+    <string name="cannot_open_link">当前设备无法打开这个链接</string>
+    <string name="ssl_error">安全连接校验失败，已停止加载</string>
+    <string name="unsafe_page_blocked">检测到风险页面，已停止加载</string>
+    <string name="webview_too_old_title">系统 WebView 版本过旧</string>
+    <string name="webview_too_old_message">当前网页组件无法安全运行轻笺。请先在系统应用商店更新“Android System WebView”或 Chrome，然后重新打开轻笺。</string>
+    <string name="close_app">关闭轻笺</string>
+    <string name="privacy_consent_title">欢迎使用轻笺</string>
+    <string name="privacy_consent_review_badge">隐私与数据使用说明</string>
+    <string name="privacy_consent_summary">开始使用前，请阅读并理解隐私政策和用户协议。只有在您同意后，轻笺才会加载在线服务。</string>
+    <string name="privacy_point_data">仅在提供功能时处理必要的账号、内容、文件与安全日志</string>
+    <string name="privacy_point_permissions">当前 APK 不申请通讯录、定位、麦克风或存储运行时权限</string>
+    <string name="privacy_point_third_party">GitHub 登录、AI 与文件服务会按政策说明使用相应第三方服务</string>
+    <string name="privacy_consent_notice">点击“同意并继续”即表示您同意当前版本的两份文档；之后可在“设置 → 隐私与协议”中查看，并可从隐私政策全文页撤回同意。</string>
+    <string name="privacy_policy">隐私政策</string>
+    <string name="user_agreement">用户协议</string>
+    <string name="agree_and_continue">同意并继续</string>
+    <string name="decline_and_exit">暂不同意并退出</string>
+    <string name="privacy_declined">轻笺不会加载在线服务。您可稍后重新打开并再次选择。</string>
+    <string name="legal_document_title">轻笺协议文档</string>
+    <string name="legal_document_unavailable">协议文档暂时无法打开</string>
+    <string name="withdraw_privacy_consent">撤回隐私同意</string>
+    <string name="withdraw_privacy_consent_confirm_title">撤回隐私同意？</string>
+    <string name="withdraw_privacy_consent_confirm_message">轻笺将停止当前在线页面并返回首次启动说明。账号和云端内容不会被删除。</string>
+    <string name="withdraw_privacy_consent_confirm">确认撤回</string>
+</resources>

@@ -1,5 +1,8 @@
 <template>
-  <div class="card-panel-wrap">
+  <div
+    class="card-panel-wrap"
+    :data-mobile-resource-scroll="bookmark.isMobile ? '' : null"
+  >
     <div v-if="bookmark.bookmarkLoading || (!hasLoaded && !getBookList.length)" class="card-panel skeleton-panel">
       <div v-for="n in skeletonCount" :key="n" class="card-skeleton">
         <div class="skeleton-title">
@@ -307,7 +310,7 @@
     margin-top: 0;
   }
   .card-skeleton {
-    border: 1px solid var(--card-border-color);
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
     height: 150px;
     border-radius: 1rem;
     padding: 14px;
@@ -315,7 +318,7 @@
     background: var(--background-color);
     position: relative;
     overflow: hidden;
-    box-shadow: var(--ant-table-boxShadow);
+    box-shadow: none;
   }
   .card-skeleton::after {
     content: '';
@@ -430,6 +433,17 @@
   }
 
   @media (max-width: 768px) {
+    .card-panel-wrap {
+      height: 0;
+      min-height: 0;
+      flex: 1 1 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+
     .card-panel {
       grid-template-columns: minmax(0, 1fr);
       padding: 2px 2px 12px;

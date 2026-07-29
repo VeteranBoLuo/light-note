@@ -1,5 +1,6 @@
 <template>
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
+    <BLoading v-if="!isAndroidApp" :loading="routeNavigationLoading" bar :title="t('common.loading')" />
     <a-config-provider
       :theme="{
         token: {
@@ -21,7 +22,7 @@
       <DisplayScaleSuggestion />
       <AdminContextBanner />
       <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
-      <PwaInstallGuideModal />
+      <PwaInstallGuideModal v-if="!isAndroidApp" />
     </a-config-provider>
   </div>
 </template>
@@ -49,7 +50,6 @@
   import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
-  import PwaInstallGuideModal from '@/components/pwa/PwaInstallGuideModal.vue';
   import {
     LANDING_AUTH_CONTEXT,
     resolveLandingAuthStatus,
@@ -57,16 +57,21 @@
   } from '@/view/landing/landingAuth.ts';
   import { applyDocumentTheme } from '@/utils/theme.ts';
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { routeNavigationLoading } from '@/router';
+  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
   const QuickCaptureModal = defineAsyncComponent(() => import('@/components/inbox/QuickCaptureModal.vue'));
+  const PwaInstallGuideModal = defineAsyncComponent(() => import('@/components/pwa/PwaInstallGuideModal.vue'));
 
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { t } = useI18n();
+  const isAndroidApp = isLightNoteAndroidApp();
   const NOTICE_KEY = 'pending-notice';
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;

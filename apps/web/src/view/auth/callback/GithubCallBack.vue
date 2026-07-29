@@ -10,7 +10,7 @@
       </div>
     </div>
     <b style="color: #ccc">{{ status === 200 ? 'github登录校验中...' : `登录失败，${time}秒后将会返回首页` }} </b>
-    <a @click="goBack" style="cursor: pointer">返回</a>
+    <BButton class="callback-back" @click="goBack">返回</BButton>
   </div>
 </template>
 
@@ -22,6 +22,7 @@
   import { markLoggedIn } from '@/utils/authStorage';
   import { getAppHomePath, getHomePagePreference } from '@/utils/preferences.ts';
   import { bookmarkStore, useUserStore } from '@/store';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const router = useRouter();
   const bookmark = bookmarkStore();
@@ -33,8 +34,9 @@
   }
   onMounted(async () => {
     const code = router.currentRoute.value.query.code;
-    // 空 code 直接回首页,避免拿空 code 打后端
-    if (!code) {
+    const state = router.currentRoute.value.query.state;
+    // code/state 必须成对存在；state 还会由后端结合一次性 Redis 挑战和 HttpOnly Cookie 校验。
+    if (typeof code !== 'string' || typeof state !== 'string' || !code || !state) {
       status.value = 500;
       toHome();
       return;
@@ -51,16 +53,8 @@
     // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
     router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
-      // 注册来源:GitHub 发起注册前暂存于 sessionStorage,这里透传给后端作 register 的 context(仅本次有效,用后即删)
-      let signupSource = '';
-      try {
-        signupSource = sessionStorage.getItem('ln_signup_source') || '';
-        sessionStorage.removeItem('ln_signup_source');
-      } catch {
-        /* 隐私模式忽略 */
-      }
       // 发送 code 给后端换取 Token
-      const cRes = await apiBasePost('/api/user/github', { code, signupSource });
+      const cRes = await apiBasePost('/api/user/github', { code, state });
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
