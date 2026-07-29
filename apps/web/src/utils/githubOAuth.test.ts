@@ -1,14 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiBasePost = vi.fn();
 
 vi.mock('@/http/request', () => ({ apiBasePost }));
 
-const { GITHUB_OAUTH_CONSENT_VERSION, createGithubAuthorizationUrl, isTrustedGithubAuthorizationUrl } =
-  await import('./githubOAuth');
+const {
+  GITHUB_OAUTH_CONSENT_VERSION,
+  consumeGithubOAuthFlow,
+  createGithubAuthorizationUrl,
+  isTrustedGithubAuthorizationUrl,
+  rememberGithubOAuthFlow,
+} = await import('./githubOAuth');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
+});
+
+afterEach(() => {
+  sessionStorage.clear();
 });
 
 describe('GitHub OAuth 授权地址', () => {
@@ -37,5 +47,12 @@ describe('GitHub OAuth 授权地址', () => {
       data: { authorizationUrl: 'https://evil.example/login/oauth/authorize?state=x' },
     });
     await expect(createGithubAuthorizationUrl({ flow: 'login' })).rejects.toThrow('GITHUB_OAUTH_START_FAILED');
+  });
+
+  it('只消费一次发起 OAuth 时记录的登录或注册流程', () => {
+    rememberGithubOAuthFlow('register');
+
+    expect(consumeGithubOAuthFlow()).toBe('register');
+    expect(consumeGithubOAuthFlow()).toBeNull();
   });
 });

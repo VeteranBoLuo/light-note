@@ -23,39 +23,53 @@ describe('轻笺运行环境与官网入口策略', () => {
     expect(resolveLightNoteRuntime({ androidApp: false, androidWebView: true, pwaStandalone: true })).toBe('browser');
   });
 
-  it.each(['android-app', 'pwa-standalone'] as const)('%s 即使未登录也不展示官网', (runtime) => {
+  it('APK 即使在宽屏模式也不展示官网', () => {
     expect(
       shouldRedirectLandingToApplication({
-        runtime,
+        runtime: 'android-app',
         isMobileLayout: false,
-        isAuthenticated: false,
       }),
     ).toBe(true);
   });
 
-  it('普通移动浏览器只有确认登录后才进入应用', () => {
+  it('移动 PWA 不展示官网，桌面 PWA 保留官网', () => {
+    expect(
+      shouldRedirectLandingToApplication({
+        runtime: 'pwa-standalone',
+        isMobileLayout: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRedirectLandingToApplication({
+        runtime: 'pwa-standalone',
+        isMobileLayout: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('普通移动浏览器首访保留官网，回访才进入应用', () => {
     expect(
       shouldRedirectLandingToApplication({
         runtime: 'browser',
         isMobileLayout: true,
-        isAuthenticated: false,
+        isReturningVisitor: false,
       }),
     ).toBe(false);
     expect(
       shouldRedirectLandingToApplication({
         runtime: 'browser',
         isMobileLayout: true,
-        isAuthenticated: true,
+        isReturningVisitor: true,
       }),
     ).toBe(true);
   });
 
-  it('普通桌面浏览器即使登录也保留官网根路径', () => {
+  it('普通桌面浏览器即使有回访记录也保留官网根路径', () => {
     expect(
       shouldRedirectLandingToApplication({
         runtime: 'browser',
         isMobileLayout: false,
-        isAuthenticated: true,
+        isReturningVisitor: true,
       }),
     ).toBe(false);
   });

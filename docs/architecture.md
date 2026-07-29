@@ -133,10 +133,11 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 ### Android 客户端
 
 - Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
-- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。普通浏览器的根路径 `/` 固定为公开官网：匿名移动浏览器保留官网，已确认登录的手机用户进入最近使用的资料模块，桌面浏览器仍可直接浏览官网；`/app` 始终是应用入口，不能返回官网。Android APK 与 PWA 独立窗口采用应用优先策略，即使误入 `/` 也进入最近使用的书签、笔记库或云空间，没有历史记录时回退 `/home`。移动端品牌 Logo 与底部“资料”入口行为一致。
+- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。`/app` 始终是应用入口，不能返回官网：手机布局、Android APK 与移动 PWA 恢复最近使用的书签、笔记库或云空间，没有历史记录时回退 `/home`；桌面浏览器与桌面 PWA 按账号默认应用首页进入。根路径 `/` 的产品矩阵为：桌面浏览器与桌面 PWA 始终展示官网，Logo 也回官网；普通移动浏览器首次访问展示完整响应式官网并写入本地首访记录，后续访问由 `<head>` 守卫在首次绘制前进入 `/app`，既有登录/记住身份记录作为升级兼容信号；Android APK 与移动 PWA 不展示官网。移动端品牌 Logo 与底部“资料”入口行为一致。
+- 邮箱注册与 GitHub 首次注册成功后不再停留或回退官网：手机布局和 Android APK 进入资料模块，桌面浏览器与桌面 PWA 固定进入 `/home`；普通登录仍沿用账号默认应用首页。
 - 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
 - Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；通用 Android `wv` 标记只用于旧 WebView 渲染兼容，不能作为轻笺 APK 身份或入口分流依据。原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
-- SEO 只以普通匿名浏览器语义为准：根官网保留预渲染、`index, follow` 和自引用 canonical；`/app` 与业务页面继续 `noindex`。不得按 Googlebot UA 提供不同内容，也不得仅因手机视口把匿名根路径重定向到业务页。
+- SEO 只以无本地访问记录的普通浏览器语义为准：根官网始终返回同一份预渲染 HTML，保留 `index, follow`、自引用 canonical、完整标题与正文；Googlebot Smartphone、百度等窄视口爬虫和普通手机首访获得同一份完整响应式官网，不强制伪装成 PC 视口。回访分流只发生在客户端本地记录存在时，不改变 HTTP 响应与索引产物；`/app` 与业务页面继续 `noindex`。不得按搜索引擎 UA 提供不同内容。
 - 隐私政策和用户协议在浏览器与 App 设置中都长期可访问；App 设置优先通过受信消息通道打开 APK 内置的离线同源文档，通道不可用时回退到网站公开文档。首次启动同意页仍由原生层负责，不能被设置入口替代。
 - Release 只允许 HTTPS、关闭 WebView 调试、拒绝 SSL 错误，不使用 JavaScript Interface；文件访问和内容访问默认关闭。
 - Android 源码、Gradle Wrapper 和资源进入 Git；`local.properties`、`.gradle`、`build`、APK/AAB、签名密钥及密码配置必须忽略。
@@ -196,49 +197,49 @@ src/
 
 ## 数据库核心表
 
-| 表                                           | 作用                          | 主键类型      |
-| -------------------------------------------- | ----------------------------- | ------------- |
-| `user`                                       | 用户                          | UUID          |
-| `bookmark`                                   | 书签                          | UUID          |
-| `note`                                       | 笔记                          | UUID          |
-| `files`                                      | 云空间文件                    | 自增          |
-| `folders`                                    | 云空间文件夹                  | 自增          |
-| `tag`                                        | 标签                          | UUID          |
-| `resource_tag_relations`                     | 资源-标签关联                 | 无独立 id     |
-| `onboarding_seed_resources`                  | 注册示例资源来源标记          | 复合主键      |
-| `resource_inbox`                             | 书签/笔记/文件待整理关系      | UUID          |
-| `todo_items`                                 | 待处理中的待办事项            | UUID          |
-| `todo_reminders`                             | 待办提醒调度记录              | UUID          |
-| `email_delivery_logs`                        | 系统邮件 SMTP 投递记录        | UUID          |
-| `account_deletion_requests`                  | 账号注销物理清理重试队列      | UUID          |
-| `tag_relations`                              | 标签-标签关联                 | 无独立 id     |
-| `api_logs`                                   | API 请求日志                  | UUID          |
-| `operation_logs`                             | 操作日志                      | UUID          |
-| `security_events`                            | 安全事件                      | 自增          |
-| `conversion_events`                          | 游客转化事件                  | 自增          |
-| `admin_context_audit`                        | 管理员预览与内容维护审计      | UUID          |
-| `agent_logs`                                 | AI 请求、用量和阶段追踪       | UUID          |
-| `ai_token_usage` / `ai_token_reservations`   | AI 日额度账本与请求级原子占位 | 复合键 / 自增 |
-| `ai_provider_balance_snapshots`              | AI 供应商每日账户余额快照     | 自增          |
-| `ai_document_sources`                        | AI 文档来源与解析状态         | UUID          |
-| `ai_document_chunks`                         | AI 文档正文片段与定位         | 自增          |
-| `ai_document_jobs`                           | AI 文档异步解析任务           | 自增          |
-| `ai_conversations` / `ai_messages`           | AI 持久会话与消息快照         | UUID          |
-| `ai_message_sources` / `ai_message_evidence` | 消息来源与不可变证据片段      | 自增          |
-| `ai_feedback`                                | AI 回答反馈与原因             | UUID          |
-| `ai_content_chunks`                          | 个人知识统一词法索引元数据    | 自增          |
-| `ai_content_generations`                     | 个人知识索引的账号级失效代际  | 账号 ID       |
-| `ai_change_sets` / `ai_change_items`         | 可审阅变更集、执行回执与撤销  | UUID          |
-| `ai_memories`                                | 候选、已确认与临时记忆        | UUID          |
-| `ai_response_events`                         | SSE 终态短期恢复事件          | 自增          |
-| `ai_product_events`                          | 无正文 AI 产品学习事件        | UUID          |
-| `note_template`                              | 用户自存笔记模板              | UUID          |
-| `feature_requests`                           | 共建轻笺公开需求              | UUID          |
-| `feature_request_votes`                      | 共建建议唯一投票              | 复合主键      |
-| `feature_request_updates`                    | 共建建议公开时间线            | UUID          |
+| 表                                           | 作用                           | 主键类型      |
+| -------------------------------------------- | ------------------------------ | ------------- |
+| `user`                                       | 用户                           | UUID          |
+| `bookmark`                                   | 书签                           | UUID          |
+| `note`                                       | 笔记                           | UUID          |
+| `files`                                      | 云空间文件                     | 自增          |
+| `folders`                                    | 云空间文件夹                   | 自增          |
+| `tag`                                        | 标签                           | UUID          |
+| `resource_tag_relations`                     | 资源-标签关联                  | 无独立 id     |
+| `onboarding_seed_resources`                  | 注册示例资源来源标记           | 复合主键      |
+| `resource_inbox`                             | 书签/笔记/文件待整理关系       | UUID          |
+| `todo_items`                                 | 待处理中的待办事项             | UUID          |
+| `todo_reminders`                             | 待办提醒调度记录               | UUID          |
+| `email_delivery_logs`                        | 系统邮件 SMTP 投递记录         | UUID          |
+| `account_deletion_requests`                  | 账号注销物理清理重试队列       | UUID          |
+| `tag_relations`                              | 标签-标签关联                  | 无独立 id     |
+| `api_logs`                                   | API 请求日志                   | UUID          |
+| `operation_logs`                             | 操作日志                       | UUID          |
+| `security_events`                            | 安全事件                       | 自增          |
+| `conversion_events`                          | 游客转化事件                   | 自增          |
+| `admin_context_audit`                        | 管理员预览与内容维护审计       | UUID          |
+| `agent_logs`                                 | AI 请求、用量和阶段追踪        | UUID          |
+| `ai_token_usage` / `ai_token_reservations`   | AI 日额度账本与请求级原子占位  | 复合键 / 自增 |
+| `ai_provider_balance_snapshots`              | AI 供应商每日账户余额快照      | 自增          |
+| `ai_document_sources`                        | AI 文档来源与解析状态          | UUID          |
+| `ai_document_chunks`                         | AI 文档正文片段与定位          | 自增          |
+| `ai_document_jobs`                           | AI 文档异步解析任务            | 自增          |
+| `ai_conversations` / `ai_messages`           | AI 持久会话与消息快照          | UUID          |
+| `ai_message_sources` / `ai_message_evidence` | 消息来源与不可变证据片段       | 自增          |
+| `ai_feedback`                                | AI 回答反馈与原因              | UUID          |
+| `ai_content_chunks`                          | 个人知识统一词法索引元数据     | 自增          |
+| `ai_content_generations`                     | 个人知识索引的账号级失效代际   | 账号 ID       |
+| `ai_change_sets` / `ai_change_items`         | 可审阅变更集、执行回执与撤销   | UUID          |
+| `ai_memories`                                | 候选、已确认与临时记忆         | UUID          |
+| `ai_response_events`                         | SSE 终态短期恢复事件           | 自增          |
+| `ai_product_events`                          | 无正文 AI 产品学习事件         | UUID          |
+| `note_template`                              | 用户自存笔记模板               | UUID          |
+| `feature_requests`                           | 共建轻笺公开需求               | UUID          |
+| `feature_request_votes`                      | 共建建议唯一投票               | 复合主键      |
+| `feature_request_updates`                    | 共建建议公开时间线             | UUID          |
 | `update_logs`                                | Markdown 更新日志及 OBS 图片键 | UUID          |
-| `opinion`                                    | 用户反馈                      | UUID          |
-| `help_config` / `help_config_draft`          | 帮助中心                      | UUID          |
+| `opinion`                                    | 用户反馈                       | UUID          |
+| `help_config` / `help_config_draft`          | 帮助中心                       | UUID          |
 
 更新日志使用 `update_logs` 单表保存标题、发布日期、摘要、兼容摘要、标签、Markdown 正文及该条日志拥有的 OBS object key 集合。编辑器以 Markdown 为唯一正文输入，历史重点更新首次编辑时自动转换为 Markdown，`highlights` 仅作为工作台等旧读模型的自动生成兼容字段。公开正文统一经 `marked + DOMPurify` 渲染；图片存放在 `update-logs/{logId}/` 前缀，页面使用稳定站内地址，由后端为私有 OBS 对象生成短时下载签名。保存正文时按 Markdown 实际引用收敛 `image_keys`，事务提交后清理被移除的对象；删除日志同样先提交业务事务再清理 OBS。旧 `config_json` 数据由幂等迁移导入，迁移前公开读取仍可回退旧格式。
 

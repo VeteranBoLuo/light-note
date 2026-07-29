@@ -92,9 +92,9 @@
   import router from '@/router';
   import { markLoggedIn } from '@/utils/authStorage';
   import { getHomePagePreference } from '@/utils/preferences.ts';
-  import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
+  import { getRuntimePostRegistrationPath } from '@/utils/appEntry.ts';
   import { setLocale } from '@/i18n';
-  import { createGithubAuthorizationUrl } from '@/utils/githubOAuth';
+  import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
@@ -124,6 +124,7 @@
         flow: 'register',
         signupSource: source,
       });
+      rememberGithubOAuthFlow('register');
       window.location.href = authorizationUrl;
     } catch {
       message.error(t('auth.githubStartFailed'));
@@ -166,12 +167,12 @@
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
-      message.success(t('auth.registerSuccess'));
       setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;
       bookmark.type = 'all';
       bookmark.refreshTag();
+      await router.replace(getRuntimePostRegistrationPath(user.preferences, window.innerWidth));
+      message.success(t('auth.registerSuccess'));
       emit('update:success', { email: formData.email, password: formData.password });
     } finally {
       submitting.value = false;

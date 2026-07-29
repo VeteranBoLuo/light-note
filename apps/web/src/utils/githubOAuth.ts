@@ -1,8 +1,27 @@
 import { apiBasePost } from '@/http/request';
 
 export const GITHUB_OAUTH_CONSENT_VERSION = 'github-cross-border-2026-07-28';
+const GITHUB_OAUTH_FLOW_STORAGE_KEY = 'ln-github-oauth-flow';
 
 export type GithubOAuthFlow = 'login' | 'register';
+
+export function rememberGithubOAuthFlow(flow: GithubOAuthFlow): void {
+  try {
+    sessionStorage.setItem(GITHUB_OAUTH_FLOW_STORAGE_KEY, flow);
+  } catch {
+    // 禁用会话存储时仍允许发起 OAuth，回调按普通登录入口兜底。
+  }
+}
+
+export function consumeGithubOAuthFlow(): GithubOAuthFlow | null {
+  try {
+    const flow = sessionStorage.getItem(GITHUB_OAUTH_FLOW_STORAGE_KEY);
+    sessionStorage.removeItem(GITHUB_OAUTH_FLOW_STORAGE_KEY);
+    return flow === 'login' || flow === 'register' ? flow : null;
+  } catch {
+    return null;
+  }
+}
 
 export function isTrustedGithubAuthorizationUrl(value: unknown): value is string {
   if (typeof value !== 'string' || !value) return false;

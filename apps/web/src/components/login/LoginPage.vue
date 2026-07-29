@@ -79,7 +79,7 @@
   import { getHomePagePreference } from '@/utils/preferences.ts';
   import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
   import { markLoggedIn } from '@/utils/authStorage';
-  import { createGithubAuthorizationUrl } from '@/utils/githubOAuth';
+  import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
   import { isValidEmail } from '@/utils/validator.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
@@ -161,6 +161,7 @@
     githubStarting.value = true;
     try {
       const authorizationUrl = await createGithubAuthorizationUrl({ flow: 'login' });
+      rememberGithubOAuthFlow('login');
       window.location.href = authorizationUrl;
     } catch {
       message.error(t('auth.githubStartFailed'));

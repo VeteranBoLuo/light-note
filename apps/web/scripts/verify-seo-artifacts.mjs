@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, '../dist');
 const SITE = 'https://boluo66.top/';
+const EARLY_APP_ENTRY_MARKER = 'data-light-note-early-app-entry';
+const MOBILE_LANDING_VISIT_MARKER = 'ln-mobile-landing-visited';
 
 function assert(condition, message) {
   if (!condition) {
@@ -56,6 +58,7 @@ async function main() {
   );
   assert(readAttribute(spaRobots, 'content') === 'noindex, nofollow', '通用 SPA 空壳必须保持 noindex, nofollow');
   assert(!/<link\b[^>]*rel=["']canonical["'][^>]*>/i.test(spaHtml), '通用 SPA 空壳不应声明固定 canonical');
+  assert(spaHtml.includes(EARLY_APP_ENTRY_MARKER), '通用 SPA 缺少移动端首屏前应用入口守卫');
 
   const manifest = JSON.parse(manifestText);
   assert(manifest.id === '/', 'PWA id 必须保持 /，避免被识别为新的应用');
@@ -94,8 +97,13 @@ async function main() {
   assert(/<h1\b[^>]*class=["'][^"']*\bhero-title\b[^"']*["'][^>]*>/i.test(rootHtml), '根官网缺少 hero H1');
   assert(plainText(rootHtml).includes('轻笺'), '根官网正文必须包含品牌词“轻笺”');
   assert(plainText(rootHtml).length >= 500, '根官网正文过短，疑似预渲染空壳');
+  assert(rootHtml.includes(EARLY_APP_ENTRY_MARKER), '根官网缺少移动端首屏前应用入口守卫');
+  assert(rootHtml.includes(MOBILE_LANDING_VISIT_MARKER), '根官网入口守卫缺少移动浏览器首访记录');
+  assert(!/googlebot|baiduspider|bingbot/i.test(rootHtml), '根官网不得按搜索引擎 UA 分流');
 
-  console.log('✅ SEO 产物校验通过：根官网可索引，通用 SPA 保持 noindex，PWA 使用 /app');
+  console.log(
+    '✅ SEO 产物校验通过：根官网可索引且无爬虫 UA 分流，移动首访守卫存在，通用 SPA 保持 noindex，PWA 使用 /app',
+  );
 }
 
 main().catch((error) => {

@@ -45,7 +45,12 @@
   import { getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from '@/utils/appEntry.ts';
   import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
   import { useI18n } from 'vue-i18n';
-  import { getAdminLoginPreviewPreferences, isAdminLoginPreview, hasLoggedInBefore } from '@/utils/authStorage.ts';
+  import {
+    getAdminLoginPreviewPreferences,
+    isAdminLoginPreview,
+    hasLoggedInBefore,
+    markLoggedIn,
+  } from '@/utils/authStorage.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import GuestNudge from '@/components/home/GuestNudge.vue';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
@@ -367,7 +372,6 @@
     const shouldRedirect = shouldRedirectLandingToApplication({
       runtime,
       isMobileLayout: bookmark.isMobile,
-      isAuthenticated: Boolean(user.id && user.role !== RoleEnum.VISITOR),
     });
     if (!shouldRedirect) return;
 
@@ -415,6 +419,11 @@
         }
 
         applyUserInfo(res.data);
+        if (user.id && user.role !== RoleEnum.VISITOR) {
+          // 兼容功能上线前已存在的有效 Cookie：本次 /me 确认后补写/续期本地记录，
+          // 后续移动端访问根路径即可在官网首次绘制前直接进入资料模块。
+          markLoggedIn();
+        }
         // 只有服务端明确返回 visitor 才开放注册入口；接口异常、格式异常等未知状态保留重试，
         // 不能把已登录 Cookie 尚未确认的用户错误降级为游客。
         landingAuthStatus.value = resolveLandingAuthStatus(
@@ -422,8 +431,8 @@
           Boolean(user.id && user.role !== RoleEnum.VISITOR),
         );
         clearLandingAuthRetry(true);
-        // 普通移动浏览器必须等 /me 明确确认登录后才能离开官网；APK/PWA 则始终应用优先。
-        // 匿名浏览器不会跳转，移动优先索引仍抓取完整根官网。
+        // 这里只兜底 APK 与移动 PWA。普通移动浏览器是否为首访已在 <head> 守卫中决定，
+        // 不能在 /me 返回后半秒再跳，否则首次官网会产生闪屏。
         await redirectLandingToApplicationIfNeeded();
         if (res.status === 200) {
           bookmark.isShowLogin = false;
@@ -492,7 +501,9 @@
     }
   }
   async function redirectToGuestHome() {
-    const targetPath = getRuntimeGuestEntryPath(user.preferences);
+    const targetPath = getRuntimeGuestEntryPath(user.preferences, {
+      isMobileLayout: bookmark.isMobile,
+    });
     if (router.currentRoute.value.path !== targetPath) {
       await router.replace(targetPath);
     }
@@ -774,7 +785,11 @@
     if (requiredRoles.length > 0 && !isPublicRoute && !requiredRoles.includes(user.role)) {
       if (!user.id || user.role === RoleEnum.VISITOR) {
         handleUserLogout();
-        next(getRuntimeGuestEntryPath(user.preferences));
+        next(
+          getRuntimeGuestEntryPath(user.preferences, {
+            isMobileLayout: bookmark.isMobile,
+          }),
+        );
         return;
       }
       next('/403');

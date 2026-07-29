@@ -12,7 +12,7 @@ export interface LightNoteRuntimeSignals {
 export interface LandingEntryPolicy {
   runtime: LightNoteRuntime;
   isMobileLayout: boolean;
-  isAuthenticated: boolean;
+  isReturningVisitor?: boolean;
 }
 
 /**
@@ -39,12 +39,13 @@ export function isInstalledApplicationRuntime(runtime = resolveLightNoteRuntime(
 }
 
 /**
- * APK/PWA 不展示官网；普通浏览器只有“手机布局 + 已确认登录”才从根官网进入应用。
- * 匿名移动浏览器始终保留官网，确保移动优先索引抓到完整营销内容。
+ * APK 与移动 PWA 不展示官网；桌面 PWA 与桌面浏览器保留官网。
+ * 普通移动浏览器仅在已经展示过一次官网（或存在兼容使用记录）后进入应用。
  */
 export function shouldRedirectLandingToApplication(policy: LandingEntryPolicy): boolean {
   return (
-    isInstalledApplicationRuntime(policy.runtime) ||
-    (policy.runtime === 'browser' && policy.isMobileLayout && policy.isAuthenticated)
+    policy.runtime === 'android-app' ||
+    (policy.runtime === 'pwa-standalone' && policy.isMobileLayout) ||
+    (policy.runtime === 'browser' && policy.isMobileLayout && Boolean(policy.isReturningVisitor))
   );
 }

@@ -1,4 +1,5 @@
 import { UserPreferences } from '@/utils/preferences';
+import { LOGIN_HISTORY_STORAGE_KEYS, LOGIN_HISTORY_TTL_MS } from '@/config/appEntryBootstrap';
 
 const PREVIEW_FLAG_KEY = 'adminLoginPreview';
 const PREVIEW_TOKEN_KEY = 'adminContextToken';
@@ -65,11 +66,9 @@ export function getAdminLoginPreviewUrl(path = '/home'): string {
  * 而是登录成功时无条件写入一个独立标记，与「记住我」解耦，登出时也不清除。
  * ------------------------------------------------------------------ */
 
-const LOGGED_IN_KEY = 'hasLoggedInBefore';
+const LOGGED_IN_KEY = LOGIN_HISTORY_STORAGE_KEYS.loggedIn;
 // 历史上「记住账号」会写入邮箱，可作为「曾登录」的兼容信号
-const REMEMBERED_EMAIL_KEY = 'rememberedLoginEmail';
-// 标记有效期，避免公共电脑登录过后长期误弹（30 天）
-const LOGGED_IN_TTL = 30 * 24 * 60 * 60 * 1000;
+const REMEMBERED_EMAIL_KEY = LOGIN_HISTORY_STORAGE_KEYS.rememberedEmail;
 
 /** 登录成功时调用，记录「这台设备曾登录过」。 */
 export function markLoggedIn(): void {
@@ -104,10 +103,10 @@ export function hasLoggedInBefore(): boolean {
     }
     const ts = Number(raw);
     // 非时间戳（如老格式 '1'）也视为曾登录
-    if (!Number.isFinite(ts)) {
+    if (raw === '1' || !Number.isFinite(ts)) {
       return true;
     }
-    if (Date.now() - ts > LOGGED_IN_TTL) {
+    if (Date.now() - ts > LOGIN_HISTORY_TTL_MS) {
       localStorage.removeItem(LOGGED_IN_KEY);
       return false;
     }

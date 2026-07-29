@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LOGIN_HISTORY_STORAGE_KEYS, LOGIN_HISTORY_TTL_MS } from '@/config/appEntryBootstrap';
 import {
   ADMIN_LOGIN_PREVIEW_FRAME_NAME,
   clearAdminLoginPreview,
@@ -65,5 +66,31 @@ describe('账号注销后的本地登录记忆清理', () => {
     expect(hasLoggedInBefore()).toBe(false);
     expect(localStorage.getItem('rememberedLoginEmail')).toBeNull();
     expect(localStorage.getItem('rememberedSid')).toBeNull();
+  });
+});
+
+describe('曾登录记录兼容性', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-29T08:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('兼容历史版本写入的 1 标记', () => {
+    localStorage.setItem(LOGIN_HISTORY_STORAGE_KEYS.loggedIn, '1');
+    expect(hasLoggedInBefore()).toBe(true);
+  });
+
+  it('保留有效时间戳并清理过期记录', () => {
+    localStorage.setItem(LOGIN_HISTORY_STORAGE_KEYS.loggedIn, String(Date.now() - LOGIN_HISTORY_TTL_MS + 1));
+    expect(hasLoggedInBefore()).toBe(true);
+
+    localStorage.setItem(LOGIN_HISTORY_STORAGE_KEYS.loggedIn, String(Date.now() - LOGIN_HISTORY_TTL_MS - 1));
+    expect(hasLoggedInBefore()).toBe(false);
+    expect(localStorage.getItem(LOGIN_HISTORY_STORAGE_KEYS.loggedIn)).toBeNull();
   });
 });

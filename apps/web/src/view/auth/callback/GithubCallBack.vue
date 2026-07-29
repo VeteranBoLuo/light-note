@@ -21,17 +21,25 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { markLoggedIn } from '@/utils/authStorage';
   import { getHomePagePreference } from '@/utils/preferences.ts';
-  import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
+  import { getRuntimeApplicationEntryPath, getRuntimePostRegistrationPath } from '@/utils/appEntry.ts';
+  import { consumeGithubOAuthFlow } from '@/utils/githubOAuth.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const router = useRouter();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const oauthFlow = consumeGithubOAuthFlow();
   const status = ref(200);
   const time = ref(3);
   function toHome() {
     router.push('/');
+  }
+  function getAuthenticatedEntryPath(preferences = {}) {
+    if (oauthFlow === 'register') {
+      return getRuntimePostRegistrationPath(preferences, window.innerWidth);
+    }
+    return getRuntimeApplicationEntryPath(preferences, window.innerWidth);
   }
   onMounted(async () => {
     const code = router.currentRoute.value.query.code;
@@ -59,8 +67,9 @@
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
-        // 与邮箱登录一致：登录成功后先把 /me 返回的偏好落到 localStorage，
-        // 再进入应用默认页。GitHub 换票接口不含 preferences，因此需要单独拉 /me。
+        // 与邮箱认证一致：成功后先把 /me 返回的偏好落到 localStorage，
+        // 再按登录/注册流程进入应用。GitHub 换票接口不含 preferences，因此需要单独拉 /me。
+        let finalPrefs = {};
         try {
           const me = await apiBaseGet('/api/user/me');
           user.setUserInfo(me?.data || {});
@@ -77,13 +86,13 @@
               prefs = {};
             }
           }
-          const finalPrefs = { ...prefs, homePage: getHomePagePreference(prefs) };
+          finalPrefs = { ...prefs, homePage: getHomePagePreference(prefs) };
           localStorage.setItem('preferences', JSON.stringify(finalPrefs));
-          await router.push(getRuntimeApplicationHomePath(finalPrefs, bookmark.isMobile));
           bookmark.refreshTag();
         } catch {
-          toHome();
+          // OAuth 已成功时，偏好恢复失败也不能把用户送回官网；应用页会再次恢复会话。
         }
+        await router.replace(getAuthenticatedEntryPath(finalPrefs));
       } else {
         setInterval(() => {
           time.value = time.value - 1;

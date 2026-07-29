@@ -24,7 +24,10 @@ import inboxRouter from '@/router/modules/inbox.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import aiRouter from '@/router/modules/ai.ts';
 import { getRuntimeApplicationEntryPath } from '@/utils/appEntry.ts';
-import { isInstalledApplicationRuntime } from '@/utils/appRuntime.ts';
+import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
+import { isMobileViewport } from '@/config/responsive.ts';
+import { hasLoggedInBefore } from '@/utils/authStorage.ts';
+import { hasVisitedMobileLanding } from '@/utils/mobileLandingVisit.ts';
 import { syncRouteSeoMeta } from '@/utils/seoMeta.ts';
 
 function getStoredPreferences() {
@@ -158,10 +161,23 @@ function finishRouteNavigationFeedback() {
 // 而不是退回到点击前的旧页面(那样用户还得再点一次)。
 let pendingNavigationTarget = '';
 router.beforeEach((to, from) => {
-  // APK/PWA 是应用容器：即使外部链接或旧版本把它们带到根路径，也不渲染营销官网。
-  // 普通浏览器（包括 Googlebot Smartphone）不会命中该分支，根路径继续稳定输出官网。
-  if (to.name === 'landing' && isInstalledApplicationRuntime()) {
-    return { name: 'appEntry', replace: true };
+  if (to.name === 'landing') {
+    const runtime = resolveLightNoteRuntime();
+    const isMobileLayout = isMobileViewport(window.innerWidth);
+    const isReturningVisitor =
+      runtime === 'browser' && (hasVisitedMobileLanding() || hasLoggedInBefore());
+
+    // 这是 <head> 首屏守卫的路由级兜底，也覆盖同一 SPA 会话中再次导航到根路径：
+    // APK/移动 PWA 与移动回访浏览器进入应用，桌面浏览器和桌面 PWA 保留官网。
+    if (
+      shouldRedirectLandingToApplication({
+        runtime,
+        isMobileLayout,
+        isReturningVisitor,
+      })
+    ) {
+      return { name: 'appEntry', replace: true };
+    }
   }
 
   routeNavigationSequence += 1;

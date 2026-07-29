@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
-import { getRuntimeApplicationEntryPath, getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from './appEntry';
+import {
+  getRuntimeApplicationEntryPath,
+  getRuntimeApplicationHomePath,
+  getRuntimeGuestEntryPath,
+  getRuntimePostRegistrationPath,
+} from './appEntry';
 
 const mobileNavigation = useMobileNavigationState();
 
@@ -13,23 +18,26 @@ afterEach(() => {
 });
 
 describe('应用入口路径策略', () => {
-  it('手机浏览器、APK 和 PWA 都恢复最近访问的资料模块', () => {
+  it('手机浏览器、APK 和移动 PWA 都恢复最近访问的资料模块', () => {
     mobileNavigation.setLastMobileResourcePath('/noteLibrary');
 
     expect(getRuntimeApplicationHomePath({ homePage: 'bookmark' }, true, { runtime: 'browser' })).toBe('/noteLibrary');
     expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'android-app' })).toBe(
       '/noteLibrary',
     );
-    expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'pwa-standalone' })).toBe(
+    expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, true, { runtime: 'pwa-standalone' })).toBe(
       '/noteLibrary',
     );
   });
 
-  it('普通桌面浏览器按账号应用首页偏好进入', () => {
+  it('普通桌面浏览器和桌面 PWA 按账号应用首页偏好进入', () => {
     expect(getRuntimeApplicationHomePath({ homePage: 'cloudSpace' }, false, { runtime: 'browser' })).toBe(
       '/cloudSpace',
     );
     expect(getRuntimeApplicationHomePath({ homePage: 'landing' }, false, { runtime: 'browser' })).toBe('/workbenches');
+    expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'pwa-standalone' })).toBe(
+      '/workbenches',
+    );
   });
 
   it('按运行环境与视口解析 /app，且不再返回官网', () => {
@@ -40,16 +48,49 @@ describe('应用入口路径策略', () => {
     expect(getRuntimeApplicationEntryPath({ homePage: 'cloudSpace' }, 1440, { runtime: 'browser' })).toBe(
       '/cloudSpace',
     );
+    expect(getRuntimeApplicationEntryPath({ homePage: 'workbench' }, 1440, { runtime: 'pwa-standalone' })).toBe(
+      '/workbenches',
+    );
+    expect(getRuntimeApplicationEntryPath({ homePage: 'workbench' }, 390, { runtime: 'pwa-standalone' })).toBe(
+      '/noteLibrary',
+    );
     expect(getRuntimeApplicationEntryPath({ homePage: 'landing' }, 1440, { runtime: 'android-app' })).toBe(
       '/noteLibrary',
     );
   });
 
-  it('普通浏览器退出回官网，APK/PWA 退出后仍留在资料区', () => {
+  it('注册成功后手机进入资料模块，桌面浏览器和桌面 PWA 固定进入 /home', () => {
+    mobileNavigation.setLastMobileResourcePath('/noteLibrary');
+
+    expect(getRuntimePostRegistrationPath({ homePage: 'workbench' }, 390, { runtime: 'browser' })).toBe('/noteLibrary');
+    expect(getRuntimePostRegistrationPath({ homePage: 'cloudSpace' }, 1440, { runtime: 'browser' })).toBe('/home');
+    expect(getRuntimePostRegistrationPath({ homePage: 'workbench' }, 1440, { runtime: 'pwa-standalone' })).toBe(
+      '/home',
+    );
+    expect(getRuntimePostRegistrationPath({ homePage: 'workbench' }, 1440, { runtime: 'android-app' })).toBe(
+      '/noteLibrary',
+    );
+  });
+
+  it('桌面浏览器/PWA 退出回官网，APK/移动 PWA 留在资料区', () => {
     mobileNavigation.setLastMobileResourcePath('/cloudSpace');
 
     expect(getRuntimeGuestEntryPath(undefined, { runtime: 'browser' })).toBe('/');
     expect(getRuntimeGuestEntryPath(undefined, { runtime: 'android-app' })).toBe('/cloudSpace');
-    expect(getRuntimeGuestEntryPath(undefined, { runtime: 'pwa-standalone' })).toBe('/cloudSpace');
+    expect(
+      getRuntimeGuestEntryPath(undefined, {
+        runtime: 'pwa-standalone',
+        isMobileLayout: true,
+      }),
+    ).toBe('/cloudSpace');
+    expect(
+      getRuntimeGuestEntryPath(
+        { homePage: 'workbench' },
+        {
+          runtime: 'pwa-standalone',
+          isMobileLayout: false,
+        },
+      ),
+    ).toBe('/');
   });
 });
