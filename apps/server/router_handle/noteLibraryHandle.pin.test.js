@@ -65,6 +65,37 @@ describe('笔记置顶 handler', () => {
     expect(lastSent(res).status).toBe(200);
   });
 
+  it('笔记库分页在数据库内应用搜索和无标签筛选，并返回当前条件总数', async () => {
+    poolQuery
+      .mockResolvedValueOnce([[{ id: 'n49', title: '项目复盘', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 49 }]]);
+    const res = mockRes();
+
+    await queryNoteList(
+      {
+        user: { id: 'u1' },
+        body: { page: 2, pageSize: 48, keyword: '项目', tagId: 'null' },
+      },
+      res,
+    );
+
+    const [listSql, listParams] = poolQuery.mock.calls[0];
+    expect(listSql).toContain('(n.title LIKE ? OR n.content LIKE ?)');
+    expect(listSql).toContain('NOT EXISTS');
+    expect(listSql).toContain('LIMIT ? OFFSET ?');
+    expect(listParams.slice(-2)).toEqual([48, 48]);
+    expect(poolQuery.mock.calls[1][0]).toContain('COUNT(*) AS total');
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: {
+        total: 49,
+        page: 2,
+        pageSize: 48,
+        hasMore: false,
+      },
+    });
+  });
+
   it('游客请求被拒绝且不获取数据库连接', async () => {
     ensureNotVisitor.mockImplementation((req, res) => {
       res.send({ data: null, status: 403, msg: '游客无权限' });

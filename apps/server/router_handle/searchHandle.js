@@ -117,11 +117,79 @@ function normalizeDate(value) {
   return text.length > 10 ? text.slice(0, 10) : text;
 }
 
-function normalizeLimit(value, fallback = 12, max = 5000) {
+function normalizeLimit(value, fallback = 12, max = 50) {
   const parsed = Number(value);
-  if (parsed === 0) return null;
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.min(Math.floor(parsed), max);
+}
+
+function normalizePage(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+  return Math.min(Math.floor(parsed), 1_000_000);
+}
+
+function normalizeSearchType(value) {
+  const type = toText(value);
+  return SEARCH_TYPES.includes(type) ? type : 'all';
+}
+
+function normalizeSearchSort(value) {
+  const sort = toText(value);
+  return ['relevance', 'updated', 'name'].includes(sort) ? sort : 'relevance';
+}
+
+function normalizeSearchDate(value) {
+  const date = toText(value);
+  return ['7d', '30d', '365d'].includes(date) ? date : 'all';
+}
+
+function normalizeSearchTagNames(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => toText(item).slice(0, 255)).filter(Boolean))].slice(0, 24);
+}
+
+function buildDateCondition(column, date) {
+  const days = {
+    '7d': 7,
+    '30d': 30,
+    '365d': 365,
+  }[date];
+  return days ? `${column} >= DATE_SUB(NOW(), INTERVAL ${days} DAY)` : '';
+}
+
+function buildSearchOrder({ sort, keyword, titleColumn, updatedColumn, fallbackOrder, idColumn }) {
+  if (sort === 'name') {
+    return {
+      sql: `LOWER(COALESCE(${titleColumn}, '')) ASC, ${idColumn} DESC`,
+      params: [],
+    };
+  }
+  if (sort === 'updated') {
+    return {
+      sql: `${updatedColumn} DESC, ${idColumn} DESC`,
+      params: [],
+    };
+  }
+  if (keyword) {
+    return {
+      sql: `
+        CASE
+          WHEN LOWER(COALESCE(${titleColumn}, '')) = LOWER(?) THEN 3
+          WHEN LOWER(COALESCE(${titleColumn}, '')) LIKE LOWER(?) THEN 2
+          WHEN LOWER(COALESCE(${titleColumn}, '')) LIKE LOWER(?) THEN 1
+          ELSE 0
+        END DESC,
+        ${fallbackOrder},
+        ${idColumn} DESC
+      `,
+      params: [keyword, `${keyword}%`, `%${keyword}%`],
+    };
+  }
+  return {
+    sql: `${fallbackOrder}, ${idColumn} DESC`,
+    params: [],
+  };
 }
 
 function groupItems(items, lang) {
@@ -162,21 +230,6 @@ function getSearchText(lang) {
 
 function formatText(template, params = {}) {
   return Object.entries(params).reduce((text, [key, value]) => text.replace(`{${key}}`, value), template);
-}
-
-async function queryGlobalTypeTotals(userId) {
-  const [bookmarkRows, noteRows, fileRows, tagRows] = await Promise.all([
-    pool.query(`SELECT COUNT(*) AS total FROM bookmark WHERE user_id = ? AND del_flag = 0`, [userId]),
-    pool.query(`SELECT COUNT(*) AS total FROM note WHERE create_by = ? AND del_flag = 0`, [userId]),
-    pool.query(`SELECT COUNT(*) AS total FROM files WHERE create_by = ? AND del_flag = 0`, [userId]),
-    pool.query(`SELECT COUNT(*) AS total FROM tag WHERE user_id = ? AND del_flag = 0`, [userId]),
-  ]);
-  return {
-    bookmark: Number(bookmarkRows?.[0]?.[0]?.total || 0),
-    note: Number(noteRows?.[0]?.[0]?.total || 0),
-    file: Number(fileRows?.[0]?.[0]?.total || 0),
-    tag: Number(tagRows?.[0]?.[0]?.total || 0),
-  };
 }
 
 function normalizeBatchAction(value) {
@@ -266,189 +319,387 @@ async function removeRelations(connection, { userId, type, resourceIds = [], tag
   return Number(result?.affectedRows || 0);
 }
 
-async function queryBookmarks(userId, keyword, limit, lang) {
-  const text = getSearchText(lang);
+function appendResourceTagFilters({ where, params, alias, resourceType, tagNames, untagged, userId }) {
+  if (tagNames.length) {
+    where.push(`
+      EXISTS (
+        SELECT 1
+        FROM resource_tag_relations selected_rel
+        INNER JOIN tag selected_tag ON selected_tag.id = selected_rel.tag_id
+        WHERE selected_rel.resource_type = ?
+          AND selected_rel.resource_id = ${alias}.id
+          AND selected_rel.user_id = ?
+          AND selected_tag.user_id = ?
+          AND selected_tag.del_flag = 0
+          AND selected_tag.name IN (${tagNames.map(() => '?').join(', ')})
+      )
+    `);
+    params.push(resourceType, userId, userId, ...tagNames);
+  }
+  if (untagged) {
+    where.push(`
+      NOT EXISTS (
+        SELECT 1
+        FROM resource_tag_relations untagged_rel
+        INNER JOIN tag untagged_tag ON untagged_tag.id = untagged_rel.tag_id
+        WHERE untagged_rel.resource_type = ?
+          AND untagged_rel.resource_id = ${alias}.id
+          AND untagged_rel.user_id = ?
+          AND untagged_tag.user_id = ?
+          AND untagged_tag.del_flag = 0
+      )
+    `);
+    params.push(resourceType, userId, userId);
+  }
+}
+
+async function queryBookmarks(userId, options, lang, includeItems) {
+  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+  const where = ['b.user_id = ?', 'b.del_flag = 0'];
+  const params = [userId];
   const like = buildLike(keyword);
-  const hasKeyword = keyword.length > 0;
-  const sql = `
-    SELECT
-      b.*,
+  if (keyword) {
+    where.push(`
       (
-        SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
-        FROM tag t
-        INNER JOIN resource_tag_relations tb
-          ON t.id = tb.tag_id AND tb.resource_type = 'bookmark'
-        WHERE tb.resource_id = b.id AND t.del_flag = 0
-      ) AS tag_list
-    FROM bookmark b
-    WHERE b.user_id = ?
-      AND b.del_flag = 0
-      AND (
-        ? = 0
-        OR b.name LIKE ?
+        b.name LIKE ?
         OR b.description LIKE ?
         OR b.url LIKE ?
         OR EXISTS (
           SELECT 1
-          FROM resource_tag_relations tb2
-          INNER JOIN tag t2 ON tb2.tag_id = t2.id
-          WHERE tb2.resource_id = b.id
-            AND tb2.resource_type = 'bookmark'
-            AND t2.del_flag = 0
-            AND t2.name LIKE ?
+          FROM resource_tag_relations keyword_rel
+          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
+          WHERE keyword_rel.resource_type = 'bookmark'
+            AND keyword_rel.resource_id = b.id
+            AND keyword_rel.user_id = ?
+            AND keyword_tag.user_id = ?
+            AND keyword_tag.del_flag = 0
+            AND keyword_tag.name LIKE ?
         )
       )
-    ORDER BY b.sort, b.create_time DESC
-    ${limit ? 'LIMIT ?' : ''}
-  `;
-  const params = [userId, hasKeyword ? 1 : 0, like, like, like, like];
-  if (limit) params.push(limit);
-  const [rows] = await pool.query(sql, params);
-  return rows.map((item) => ({
-    id: toText(item.id),
-    type: 'bookmark',
-    title: toText(item.name) || text.unnamedBookmark,
-    description: buildSnippet(toText(item.description) || toText(item.url), keyword),
-    extra: '',
-    tags: Array.isArray(item.tag_list) ? item.tag_list : [],
-    url: toText(item.url),
-    route: '/home',
-    iconUrl: item.icon_url || '', // 不再兜底第三方 ico.kucat.cn 直链;前端拿到空值统一用站内默认图
-    raw: item,
-  }));
+    `);
+    params.push(like, like, like, userId, userId, like);
+  }
+  appendResourceTagFilters({
+    where,
+    params,
+    alias: 'b',
+    resourceType: 'bookmark',
+    tagNames,
+    untagged,
+    userId,
+  });
+  const dateCondition = buildDateCondition('b.create_time', date);
+  if (dateCondition) where.push(dateCondition);
+  const whereSql = where.join(' AND ');
+  const countPromise = pool.query(`SELECT COUNT(*) AS total FROM bookmark b WHERE ${whereSql}`, params);
+
+  let rows = [];
+  if (includeItems) {
+    const order = buildSearchOrder({
+      sort,
+      keyword,
+      titleColumn: 'b.name',
+      updatedColumn: 'b.create_time',
+      fallbackOrder: 'b.is_top DESC, b.sort, b.create_time DESC',
+      idColumn: 'b.id',
+    });
+    const [result] = await pool.query(
+      `
+        SELECT
+          b.*,
+          (
+            SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
+            FROM tag t
+            INNER JOIN resource_tag_relations tb
+              ON t.id = tb.tag_id AND tb.resource_type = 'bookmark'
+            WHERE tb.resource_id = b.id
+              AND tb.user_id = ?
+              AND t.user_id = ?
+              AND t.del_flag = 0
+          ) AS tag_list
+        FROM bookmark b
+        WHERE ${whereSql}
+        ORDER BY ${order.sql}
+        LIMIT ? OFFSET ?
+      `,
+      [userId, userId, ...params, ...order.params, pageSize, offset],
+    );
+    rows = result;
+  }
+  const [totalRows] = await countPromise;
+  const text = getSearchText(lang);
+  return {
+    total: Number(totalRows?.[0]?.total || 0),
+    items: rows.map((item) => ({
+      id: toText(item.id),
+      type: 'bookmark',
+      title: toText(item.name) || text.unnamedBookmark,
+      description: buildSnippet(toText(item.description) || toText(item.url), keyword),
+      extra: '',
+      tags: Array.isArray(item.tag_list) ? item.tag_list : [],
+      url: toText(item.url),
+      route: '/home',
+      iconUrl: item.icon_url || '',
+      raw: item,
+    })),
+  };
 }
 
-async function queryNotes(userId, keyword, limit, lang) {
-  const text = getSearchText(lang);
+async function queryNotes(userId, options, lang, includeItems) {
+  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+  const where = ['n.create_by = ?', 'n.del_flag = 0'];
+  const params = [userId];
   const like = buildLike(keyword);
-  const hasKeyword = keyword.length > 0;
-  const sql = `
-    SELECT
-      n.*,
+  if (keyword) {
+    where.push(`
       (
-        SELECT JSON_ARRAYAGG(JSON_OBJECT('id', nt.id, 'name', nt.name))
-        FROM resource_tag_relations ntr
-        INNER JOIN tag nt ON ntr.tag_id = nt.id
-        WHERE ntr.resource_type = 'note'
-          AND ntr.resource_id = n.id
-          AND nt.del_flag = 0
-      ) AS tags
-    FROM note n
-    WHERE n.create_by = ?
-      AND n.del_flag = 0
-      AND (
-        ? = 0
-        OR n.title LIKE ?
+        n.title LIKE ?
         OR n.content LIKE ?
         OR EXISTS (
           SELECT 1
-          FROM resource_tag_relations ntr2
-          INNER JOIN tag nt2 ON ntr2.tag_id = nt2.id
-          WHERE ntr2.resource_id = n.id
-            AND ntr2.resource_type = 'note'
-            AND nt2.del_flag = 0
-            AND nt2.name LIKE ?
+          FROM resource_tag_relations keyword_rel
+          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
+          WHERE keyword_rel.resource_type = 'note'
+            AND keyword_rel.resource_id = n.id
+            AND keyword_rel.user_id = ?
+            AND keyword_tag.user_id = ?
+            AND keyword_tag.del_flag = 0
+            AND keyword_tag.name LIKE ?
         )
       )
-    ORDER BY n.sort, n.update_time DESC
-    ${limit ? 'LIMIT ?' : ''}
-  `;
-  const params = [userId, hasKeyword ? 1 : 0, like, like, like];
-  if (limit) params.push(limit);
-  const [rows] = await pool.query(sql, params);
-  return rows.map((item) => ({
-    id: toText(item.id),
-    type: 'note',
-    title: toText(item.title) || text.unnamedNote,
-    description: buildSnippet(stripHtml(item.content), keyword) || text.openNote,
-    extra: normalizeDate(item.update_time || item.create_time),
-    tags: Array.isArray(item.tags) ? item.tags : [],
-    route: `/noteLibrary/${item.id}`,
-    raw: item,
-  }));
+    `);
+    params.push(like, like, userId, userId, like);
+  }
+  appendResourceTagFilters({
+    where,
+    params,
+    alias: 'n',
+    resourceType: 'note',
+    tagNames,
+    untagged,
+    userId,
+  });
+  const dateCondition = buildDateCondition('COALESCE(n.update_time, n.create_time)', date);
+  if (dateCondition) where.push(dateCondition);
+  const whereSql = where.join(' AND ');
+  const countPromise = pool.query(`SELECT COUNT(*) AS total FROM note n WHERE ${whereSql}`, params);
+
+  let rows = [];
+  if (includeItems) {
+    const order = buildSearchOrder({
+      sort,
+      keyword,
+      titleColumn: 'n.title',
+      updatedColumn: 'COALESCE(n.update_time, n.create_time)',
+      fallbackOrder: 'n.is_top DESC, n.sort, COALESCE(n.update_time, n.create_time) DESC',
+      idColumn: 'n.id',
+    });
+    const [result] = await pool.query(
+      `
+        SELECT
+          n.*,
+          (
+            SELECT JSON_ARRAYAGG(JSON_OBJECT('id', nt.id, 'name', nt.name))
+            FROM resource_tag_relations ntr
+            INNER JOIN tag nt ON ntr.tag_id = nt.id
+            WHERE ntr.resource_type = 'note'
+              AND ntr.resource_id = n.id
+              AND ntr.user_id = ?
+              AND nt.user_id = ?
+              AND nt.del_flag = 0
+          ) AS tags
+        FROM note n
+        WHERE ${whereSql}
+        ORDER BY ${order.sql}
+        LIMIT ? OFFSET ?
+      `,
+      [userId, userId, ...params, ...order.params, pageSize, offset],
+    );
+    rows = result;
+  }
+  const [totalRows] = await countPromise;
+  const text = getSearchText(lang);
+  return {
+    total: Number(totalRows?.[0]?.total || 0),
+    items: rows.map((item) => ({
+      id: toText(item.id),
+      type: 'note',
+      title: toText(item.title) || text.unnamedNote,
+      description: buildSnippet(stripHtml(item.content), keyword) || text.openNote,
+      extra: normalizeDate(item.update_time || item.create_time),
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      route: `/noteLibrary/${item.id}`,
+      raw: item,
+    })),
+  };
 }
 
-async function queryFiles(userId, keyword, limit, lang) {
-  const text = getSearchText(lang);
+async function queryFiles(userId, options, lang, includeItems) {
+  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+  const where = ['files.create_by = ?', 'files.del_flag = 0'];
+  const params = [userId];
   const like = buildLike(keyword);
-  const hasKeyword = keyword.length > 0;
-  const sql = `
-    SELECT files.*, folders.name AS folder_name,
+  if (keyword) {
+    where.push(`
       (
-        SELECT JSON_ARRAYAGG(JSON_OBJECT('id', ft.id, 'name', ft.name))
-        FROM resource_tag_relations ftr
-        INNER JOIN tag ft ON ftr.tag_id = ft.id
-        WHERE ftr.resource_type = 'file' AND ftr.resource_id = files.id AND ft.del_flag = 0
-      ) AS tags
-    FROM files
-    LEFT JOIN folders ON files.folder_id = folders.id
-    WHERE files.create_by = ?
-      AND files.del_flag = 0
-      AND (
-        ? = 0
-        OR files.file_name LIKE ?
+        files.file_name LIKE ?
         OR files.file_type LIKE ?
         OR folders.name LIKE ?
         OR EXISTS (
           SELECT 1
-          FROM resource_tag_relations ftr2
-          INNER JOIN tag ft2 ON ftr2.tag_id = ft2.id
-          WHERE ftr2.resource_id = files.id
-            AND ftr2.resource_type = 'file'
-            AND ft2.del_flag = 0
-            AND ft2.name LIKE ?
+          FROM resource_tag_relations keyword_rel
+          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
+          WHERE keyword_rel.resource_type = 'file'
+            AND keyword_rel.resource_id = files.id
+            AND keyword_rel.user_id = ?
+            AND keyword_tag.user_id = ?
+            AND keyword_tag.del_flag = 0
+            AND keyword_tag.name LIKE ?
         )
       )
-    ORDER BY files.create_time DESC
-    ${limit ? 'LIMIT ?' : ''}
-  `;
-  const params = [userId, hasKeyword ? 1 : 0, like, like, like, like];
-  if (limit) params.push(limit);
-  const [rows] = await pool.query(sql, params);
-  return rows.map((item) => ({
-    id: toText(item.id),
-    type: 'file',
-    title: toText(item.file_name) || text.unnamedFile,
-    description: item.folder_name ? formatText(text.fileInFolder, { folder: item.folder_name }) : text.cloudFile,
-    category: resolveFileCategory({
-      fileName: item.file_name,
-      fileType: item.file_type,
-    }),
-    tags: Array.isArray(item.tags) ? item.tags : [],
-    extra: formatFileSearchExtra(item, lang),
-    route: '/cloudSpace',
-    raw: item,
-  }));
+    `);
+    params.push(like, like, like, userId, userId, like);
+  }
+  appendResourceTagFilters({
+    where,
+    params,
+    alias: 'files',
+    resourceType: 'file',
+    tagNames,
+    untagged,
+    userId,
+  });
+  const dateCondition = buildDateCondition('files.create_time', date);
+  if (dateCondition) where.push(dateCondition);
+  const whereSql = where.join(' AND ');
+  const countPromise = pool.query(
+    `SELECT COUNT(*) AS total FROM files LEFT JOIN folders ON files.folder_id = folders.id WHERE ${whereSql}`,
+    params,
+  );
+
+  let rows = [];
+  if (includeItems) {
+    const order = buildSearchOrder({
+      sort,
+      keyword,
+      titleColumn: 'files.file_name',
+      updatedColumn: 'files.create_time',
+      fallbackOrder: 'files.create_time DESC',
+      idColumn: 'files.id',
+    });
+    const [result] = await pool.query(
+      `
+        SELECT files.*, folders.name AS folder_name,
+          (
+            SELECT JSON_ARRAYAGG(JSON_OBJECT('id', ft.id, 'name', ft.name))
+            FROM resource_tag_relations ftr
+            INNER JOIN tag ft ON ftr.tag_id = ft.id
+            WHERE ftr.resource_type = 'file'
+              AND ftr.resource_id = files.id
+              AND ftr.user_id = ?
+              AND ft.user_id = ?
+              AND ft.del_flag = 0
+          ) AS tags
+        FROM files
+        LEFT JOIN folders ON files.folder_id = folders.id
+        WHERE ${whereSql}
+        ORDER BY ${order.sql}
+        LIMIT ? OFFSET ?
+      `,
+      [userId, userId, ...params, ...order.params, pageSize, offset],
+    );
+    rows = result;
+  }
+  const [totalRows] = await countPromise;
+  const text = getSearchText(lang);
+  return {
+    total: Number(totalRows?.[0]?.total || 0),
+    items: rows.map((item) => ({
+      id: toText(item.id),
+      type: 'file',
+      title: toText(item.file_name) || text.unnamedFile,
+      description: item.folder_name ? formatText(text.fileInFolder, { folder: item.folder_name }) : text.cloudFile,
+      category: resolveFileCategory({
+        fileName: item.file_name,
+        fileType: item.file_type,
+      }),
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      extra: formatFileSearchExtra(item, lang),
+      route: '/cloudSpace',
+      raw: item,
+    })),
+  };
 }
 
-async function queryTags(userId, keyword, limit, lang) {
+async function queryTags(userId, options, lang, includeItems) {
+  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+  const where = ['t.user_id = ?', 't.del_flag = 0'];
+  const params = [userId];
+  if (keyword) {
+    where.push('t.name LIKE ?');
+    params.push(buildLike(keyword));
+  }
+  if (tagNames.length) {
+    where.push(`t.name IN (${tagNames.map(() => '?').join(', ')})`);
+    params.push(...tagNames);
+  }
+  if (untagged) where.push('1 = 0');
+  const dateCondition = buildDateCondition('t.create_time', date);
+  if (dateCondition) where.push(dateCondition);
+  const whereSql = where.join(' AND ');
+  const countPromise = pool.query(`SELECT COUNT(*) AS total FROM tag t WHERE ${whereSql}`, params);
+
+  let rows = [];
+  if (includeItems) {
+    const order = buildSearchOrder({
+      sort,
+      keyword,
+      titleColumn: 't.name',
+      updatedColumn: 't.create_time',
+      fallbackOrder: 't.sort, t.create_time DESC',
+      idColumn: 't.id',
+    });
+    const [result] = await pool.query(
+      `
+        SELECT t.*, COUNT(r.resource_id) AS resource_count
+        FROM tag t
+        LEFT JOIN resource_tag_relations r ON t.id = r.tag_id AND r.user_id = ?
+        WHERE ${whereSql}
+        GROUP BY t.id
+        ORDER BY ${order.sql}
+        LIMIT ? OFFSET ?
+      `,
+      [userId, ...params, ...order.params, pageSize, offset],
+    );
+    rows = result;
+  }
+  const [totalRows] = await countPromise;
   const text = getSearchText(lang);
-  const like = buildLike(keyword);
-  const hasKeyword = keyword.length > 0;
-  const sql = `
-    SELECT t.*, COUNT(r.resource_id) AS resource_count
-    FROM tag t
-    LEFT JOIN resource_tag_relations r ON t.id = r.tag_id
-    WHERE t.user_id = ?
-      AND t.del_flag = 0
-      AND (? = 0 OR t.name LIKE ?)
-    GROUP BY t.id
-    ORDER BY t.sort, t.create_time DESC
-    ${limit ? 'LIMIT ?' : ''}
-  `;
-  const params = [userId, hasKeyword ? 1 : 0, like];
-  if (limit) params.push(limit);
-  const [rows] = await pool.query(sql, params);
-  return rows.map((item) => ({
-    id: toText(item.id),
-    type: 'tag',
-    title: toText(item.name) || text.unnamedTag,
-    description: text.tagDescription,
-    extra: formatText(text.relatedBookmarks, { count: Number(item.resource_count || 0) }),
-    route: `/tag/${item.id}`,
-    iconUrl: item.icon_url,
-    raw: item,
-  }));
+  return {
+    total: Number(totalRows?.[0]?.total || 0),
+    items: rows.map((item) => ({
+      id: toText(item.id),
+      type: 'tag',
+      title: toText(item.name) || text.unnamedTag,
+      description: text.tagDescription,
+      extra: formatText(text.relatedBookmarks, { count: Number(item.resource_count || 0) }),
+      route: `/tag/${item.id}`,
+      iconUrl: item.icon_url,
+      raw: item,
+    })),
+  };
+}
+
+async function querySearchTagOptions(userId) {
+  const [rows] = await pool.query(
+    `SELECT name
+     FROM tag
+     WHERE user_id = ? AND del_flag = 0
+     ORDER BY sort, create_time DESC, id DESC
+     LIMIT 500`,
+    [userId],
+  );
+  return rows.map((item) => toText(item.name)).filter(Boolean);
 }
 
 export const globalSearch = async (req, res) => {
@@ -456,31 +707,61 @@ export const globalSearch = async (req, res) => {
     const userId = req.user.id;
     if (!userId) return res.send(resultData(null, 400, '缺少用户信息'));
 
-    const keyword = toText(req.body?.keyword || req.body?.filters?.keyword);
-    const limitPerType = normalizeLimit(req.body?.limitPerType ?? req.body?.pageSize, 12);
+    const keyword = toText(req.body?.keyword || req.body?.filters?.keyword).slice(0, 200);
+    const page = normalizePage(req.body?.page ?? req.body?.currentPage);
+    const pageSize = normalizeLimit(req.body?.limitPerType ?? req.body?.pageSize, 12);
+    const selectedType = normalizeSearchType(req.body?.type);
     const lang = normalizeLang(req.headers['x-lang']);
+    const options = {
+      keyword,
+      page,
+      pageSize,
+      offset: (page - 1) * pageSize,
+      sort: normalizeSearchSort(req.body?.sort),
+      date: normalizeSearchDate(req.body?.date),
+      tagNames: normalizeSearchTagNames(req.body?.tags),
+      untagged: req.body?.untagged === true || String(req.body?.untagged || '') === '1',
+    };
 
-    const [bookmarks, notes, files, tags, typeTotals] = await Promise.all([
-      queryBookmarks(userId, keyword, limitPerType, lang),
-      queryNotes(userId, keyword, limitPerType, lang),
-      queryFiles(userId, keyword, limitPerType, lang),
-      queryTags(userId, keyword, limitPerType, lang),
-      queryGlobalTypeTotals(userId),
+    const [bookmarkResult, noteResult, fileResult, tagResult, tagOptions] = await Promise.all([
+      queryBookmarks(userId, options, lang, selectedType === 'all' || selectedType === 'bookmark'),
+      queryNotes(userId, options, lang, selectedType === 'all' || selectedType === 'note'),
+      queryFiles(userId, options, lang, selectedType === 'all' || selectedType === 'file'),
+      queryTags(userId, options, lang, selectedType === 'all' || selectedType === 'tag'),
+      querySearchTagOptions(userId),
     ]);
+    const resultMap = {
+      bookmark: bookmarkResult,
+      note: noteResult,
+      file: fileResult,
+      tag: tagResult,
+    };
+    const items = SEARCH_TYPES.flatMap((type) => resultMap[type].items);
+    const typeTotals = Object.fromEntries(SEARCH_TYPES.map((type) => [type, resultMap[type].total]));
+    const hasMoreByType = Object.fromEntries(
+      SEARCH_TYPES.map((type) => [
+        type,
+        (selectedType === 'all' || selectedType === type) && page * pageSize < resultMap[type].total,
+      ]),
+    );
 
-    const items = [...bookmarks, ...notes, ...files, ...tags];
-    res.send(
+    return res.send(
       resultData({
         keyword,
         items,
         groups: groupItems(items, lang),
-        total: items.length,
+        total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
         typeTotals,
+        tagOptions,
+        page,
+        pageSize,
+        hasMoreByType,
+        hasMore: Object.values(hasMoreByType).some(Boolean),
       }),
     );
   } catch (error) {
-    console.error('统一搜索失败:', error);
-    res.send(resultData(null, 500, '统一搜索失败: ' + error.message));
+    console.error('[search] global search failed code=%s', String(error?.code || 'GLOBAL_SEARCH_FAILED'));
+    return res.send(resultData(null, 500, '统一搜索暂时不可用，请稍后重试'));
   }
 };
 

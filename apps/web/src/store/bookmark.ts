@@ -27,6 +27,10 @@ interface BookmarkState {
   authModalSource: string;
   viewerKey: string;
   bookmarkLoading: boolean;
+  bookmarkLoadingMore: boolean;
+  bookmarkPage: number;
+  bookmarkTotal: number;
+  bookmarkHasMore: boolean;
   bookmarkAllLoaded: boolean;
   viewer: {
     container?: Viewer;
@@ -59,7 +63,11 @@ export default defineStore('bookmark', {
     authModalSource: 'unknown',
     viewerKey: '',
     bookmarkLoading: false,
-    // 只有「全部书签」接口成功返回后才为 true。初始空数组不能代表用户真的没有书签。
+    bookmarkLoadingMore: false,
+    bookmarkPage: 0,
+    bookmarkTotal: 0,
+    bookmarkHasMore: false,
+    // 只有「全部书签」所有分页都加载完才为 true。初始空数组不能代表用户真的没有书签。
     bookmarkAllLoaded: false,
     tagLoading: false,
     viewer: {
@@ -191,6 +199,11 @@ export default defineStore('bookmark', {
       this.tagLoading = false;
       this.type = 'all';
       this.bookmarkSearch = '';
+      this.bookmarkLoading = false;
+      this.bookmarkLoadingMore = false;
+      this.bookmarkPage = 0;
+      this.bookmarkTotal = 0;
+      this.bookmarkHasMore = false;
       this.bookmarkAllLoaded = false;
       this.isShowLogin = false;
     },

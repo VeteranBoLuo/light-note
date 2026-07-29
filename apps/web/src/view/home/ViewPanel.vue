@@ -1,11 +1,7 @@
 <template>
-  <div
-    class="view-panel"
-    id="view-panel"
-    :data-mobile-resource-scroll="bookmark.isMobile ? null : ''"
-  >
+  <div class="view-panel" id="view-panel" :data-mobile-resource-scroll="bookmark.isMobile ? null : ''">
     <TagInfo />
-    <CardPanel />
+    <CardPanel @load-more="emit('load-more')" />
   </div>
 </template>
 
@@ -15,6 +11,9 @@
   import { bookmarkStore } from '@/store';
 
   const bookmark = bookmarkStore();
+  const emit = defineEmits<{
+    'load-more': [];
+  }>();
 </script>
 
 <style lang="less">

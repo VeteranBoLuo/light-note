@@ -29,6 +29,7 @@ export function useBookmarkManage() {
     loadError.value = false;
     try {
       const response = await apiQueryPost('/api/bookmark/getBookmarkList', {
+        pageSize: -1,
         filters: { userId: user.id, type: 'all' },
       });
       if (response.status !== 200) {

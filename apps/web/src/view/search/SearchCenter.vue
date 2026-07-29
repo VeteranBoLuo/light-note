@@ -92,7 +92,7 @@
                   {{
                     bookmark.isMobile
                       ? mobileResultSubtitle
-                      : t('resourceCenter.totalCount', { count: allVisibleItems.length })
+                      : t('resourceCenter.totalCount', { count: filteredResultTotal })
                   }}
                 </div>
               </div>
@@ -259,7 +259,7 @@
               </div>
             </section>
 
-            <div class="result-scroll-area">
+            <div ref="resultScrollRef" class="result-scroll-area">
               <div
                 v-if="viewState.loading"
                 class="result-skeleton"
@@ -284,7 +284,7 @@
                 <section v-for="group in visibleGroups" :key="group.type" class="result-group">
                   <div class="group-header">
                     <span>{{ getSearchTypeLabel(t, group.type) }}</span>
-                    <span>{{ t('resourceCenter.count', { count: group.items.length }) }}</span>
+                    <span>{{ t('resourceCenter.count', { count: summaryTotals[group.type] }) }}</span>
                   </div>
                   <div class="result-grid" :class="{ 'result-grid--list': effectiveView === 'list' }">
                     <RightMenu
@@ -343,6 +343,14 @@
                     {{ t('resourceCenter.emptyActionTag') }}
                   </BButton>
                 </div>
+              </div>
+              <div
+                v-show="visibleGroups.length && (viewState.hasMore || viewState.loadingMore)"
+                ref="resultLoadSentinel"
+                class="result-load-sentinel"
+              >
+                <BLoading v-if="viewState.loadingMore" inline loading :title="t('common.loading')" />
+                <BButton v-else size="small" @click="loadMoreResults">{{ t('common.loadMore') }}</BButton>
               </div>
             </div>
           </BCard>
@@ -447,11 +455,7 @@
   import {
     buildTypeBuckets,
     collectTagOptions,
-    filterByDate,
-    filterByTags,
-    filterByUntagged,
     mapDisplayItems,
-    sortDisplayItems,
     type DisplaySearchItem,
     type ResourceDate,
     type ResourceSort,
@@ -466,6 +470,8 @@
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { resolveMobileTypeFilterScrollLeft } from '@/components/searchCenter/mobileTypeFilterScroll';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { SEARCH_PAGE_SIZE_PER_TYPE, mergeResourcePage } from '@/utils/resourcePagination';
 
   const SearchResultItem = SearchResultItemComp;
   const route = useRoute();
@@ -484,6 +490,9 @@
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
   const typeFilterRef = ref<{ $el?: Element } | null>(null);
+  const resultScrollRef = ref<HTMLElement | null>(null);
+  const resultLoadSentinel = ref<HTMLElement | null>(null);
+  let resultLoadObserver: IntersectionObserver | null = null;
   let requestSeq = 0;
   const summaryTotals = ref<Record<SearchType, number>>({
     bookmark: 0,
@@ -515,10 +524,18 @@
 
   const viewState = reactive<{
     loading: boolean;
+    loadingMore: boolean;
     rawItems: SearchResultItem[];
+    page: number;
+    hasMore: boolean;
+    tagOptions: string[];
   }>({
     loading: false,
+    loadingMore: false,
     rawItems: [],
+    page: 0,
+    hasMore: false,
+    tagOptions: [],
   });
 
   const selectedIds = ref<string[]>([]);
@@ -540,24 +557,7 @@
 
   const mappedItems = computed(() => mapDisplayItems(viewState.rawItems, queryState.keyword));
 
-  const itemsAfterCommonFilters = computed(() =>
-    mappedItems.value.filter((item) => {
-      if (!filterByDate(item, queryState.date)) return false;
-      if (!filterByTags(item, queryState.tags)) return false;
-      if (!filterByUntagged(item, queryState.untagged)) return false;
-      return true;
-    }),
-  );
-
-  const filteredItems = computed(() =>
-    itemsAfterCommonFilters.value.filter((item) => {
-      if (queryState.type !== 'all' && item.type !== queryState.type) return false;
-      return true;
-    }),
-  );
-
-  const sortedItems = computed(() => sortDisplayItems(filteredItems.value, queryState.sort));
-  const typeBuckets = computed(() => buildTypeBuckets(sortedItems.value));
+  const typeBuckets = computed(() => buildTypeBuckets(mappedItems.value));
 
   const visibleGroups = computed(() => {
     if (queryState.type === 'all') {
@@ -577,7 +577,7 @@
       selectableVisibleItems.value.every((item) => selectedIds.value.includes(getItemSelectionKey(item))),
   );
   const tagOptions = computed(() => {
-    const options = collectTagOptions(mappedItems.value);
+    const options = viewState.tagOptions.length ? viewState.tagOptions : collectTagOptions(mappedItems.value);
     const selected = new Set(queryState.tags);
     // 从知识地图等入口携带标签筛选时，将已选项固定在折叠区最前面，确保过滤状态一眼可见。
     return [...queryState.tags, ...options.filter((tag) => !selected.has(tag))];
@@ -604,16 +604,21 @@
     {
       value: 'all' as const,
       label: t('resourceCenter.types.allResults'),
-      count: itemsAfterCommonFilters.value.length,
+      count: Object.values(summaryTotals.value).reduce((sum, count) => sum + Number(count || 0), 0),
     },
     ...SEARCH_TYPE_LIST.map((type) => ({
       value: type,
       label: getSearchTypeLabel(t, type),
-      count: itemsAfterCommonFilters.value.filter((item) => item.type === type).length,
+      count: summaryTotals.value[type],
     })),
   ]);
 
-  const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: allVisibleItems.value.length }));
+  const filteredResultTotal = computed(() =>
+    queryState.type === 'all'
+      ? Object.values(summaryTotals.value).reduce((sum, count) => sum + Number(count || 0), 0)
+      : summaryTotals.value[queryState.type],
+  );
+  const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: filteredResultTotal.value }));
   function menuForSearchItem(item: DisplaySearchItem) {
     const deleteItem = {
       key: 'delete',
@@ -762,15 +767,37 @@
     return rawMergedItems.filter(Boolean) as SearchResultItem[];
   }
 
-  async function loadData(force = false, minSkeletonMs = MIN_SKELETON_MS) {
-    const seq = ++requestSeq;
+  async function loadData(force = false, minSkeletonMs = MIN_SKELETON_MS, append = false) {
+    if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
+    const seq = append ? requestSeq : ++requestSeq;
+    const targetPage = append ? viewState.page + 1 : 1;
     const loadingStart = Date.now();
-    viewState.loading = true;
+    let loadSucceeded = false;
+    if (append) {
+      viewState.loadingMore = true;
+    } else {
+      viewState.loading = true;
+      viewState.loadingMore = false;
+      viewState.page = 0;
+      viewState.hasMore = false;
+    }
     try {
-      const res = await fetchGlobalSearch(queryState.keyword, 0, force);
-      if (seq !== requestSeq) return;
+      const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE_PER_TYPE, force, {
+        page: targetPage,
+        type: queryState.type,
+        sort: queryState.sort,
+        date: queryState.date,
+        tags: queryState.tags,
+        untagged: queryState.untagged,
+      });
+      if (seq !== requestSeq) return false;
       const normalizedItems = normalizeSearchResultItems(res);
-      viewState.rawItems = normalizedItems;
+      viewState.rawItems = append
+        ? mergeResourcePage(viewState.rawItems, normalizedItems, (item) => getItemSelectionKey(item))
+        : normalizedItems;
+      viewState.page = Number(res.page || targetPage);
+      viewState.hasMore = Boolean(res.hasMore);
+      viewState.tagOptions = Array.isArray(res.tagOptions) ? res.tagOptions : [];
       if (res.typeTotals) {
         summaryTotals.value = {
           bookmark: Number(res.typeTotals.bookmark || 0),
@@ -779,22 +806,51 @@
           tag: Number(res.typeTotals.tag || 0),
         };
       }
-      const validSelection = new Set(normalizedItems.map((item) => getItemSelectionKey(item)));
+      const validSelection = new Set(viewState.rawItems.map((item) => getItemSelectionKey(item)));
       selectedIds.value = selectedIds.value.filter((id) => validSelection.has(id));
+      loadSucceeded = true;
+      return true;
+    } catch (error) {
+      if (!append) message.error(t('resourceCenter.refreshFailed'));
+      return false;
     } finally {
       if (seq === requestSeq) {
         const elapsed = Date.now() - loadingStart;
-        if (elapsed < minSkeletonMs) {
+        if (!append && elapsed < minSkeletonMs) {
           await new Promise((resolve) => setTimeout(resolve, minSkeletonMs - elapsed));
         }
         viewState.loading = false;
+        viewState.loadingMore = false;
+        if (loadSucceeded) void setupResultLoadObserver();
       }
     }
   }
 
+  function loadMoreResults() {
+    return loadData(false, 0, true);
+  }
+
+  async function setupResultLoadObserver() {
+    resultLoadObserver?.disconnect();
+    await nextTick();
+    const sentinel = resultLoadSentinel.value;
+    const root = bookmark.isMobile ? resultScrollRef.value : sentinel?.closest<HTMLElement>('.search-page') || null;
+    if (!sentinel || !root) return;
+    resultLoadObserver = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMoreResults();
+      },
+      { root, rootMargin: '0px 0px 420px', threshold: 0 },
+    );
+    resultLoadObserver.observe(sentinel);
+  }
+
   function syncQueryNow() {
     const query = buildQueryPayload();
-    if (isSameSearchQuery(query)) return;
+    if (isSameSearchQuery(query)) {
+      viewState.loading = false;
+      return;
+    }
     viewState.loading = true;
     router.replace({ path: '/search', query });
   }
@@ -1091,6 +1147,12 @@
     () => route.query,
     () => {
       applyRouteState();
+      nextTick(() => {
+        const scrollRoot = bookmark.isMobile
+          ? resultScrollRef.value
+          : document.querySelector<HTMLElement>('.search-center-route .search-page');
+        scrollRoot?.scrollTo({ top: 0 });
+      });
       // 模块级搜索缓存用于同页筛选/视图切换，不能跨页面进入继续充当资源事实源。
       // 每次 SearchCenter 重新挂载时强制请求一次，确保新增、编辑或删除后的资源立即可见。
       const force = isInitialRouteLoad;
@@ -1104,6 +1166,13 @@
     () => queryState.view,
     (val) => {
       localStorage.setItem(SEARCH_VIEW_STORAGE_KEY, val);
+    },
+  );
+
+  watch(
+    () => bookmark.isMobile,
+    () => {
+      void setupResultLoadObserver();
     },
   );
 
@@ -1127,6 +1196,7 @@
 
   // 打开资源中心自动聚焦搜索框(移动端不主动聚焦,避免一进页面就弹出软键盘)。
   onMounted(() => {
+    void setupResultLoadObserver();
     if (bookmark.isMobile) {
       scrollMobileTypeFilter(queryState.type);
     } else {
@@ -1136,6 +1206,8 @@
 
   onBeforeUnmount(() => {
     if (syncTimer.value) clearTimeout(syncTimer.value);
+    requestSeq += 1;
+    resultLoadObserver?.disconnect();
   });
 </script>
 
@@ -1583,6 +1655,16 @@
     margin-top: 12px;
     box-sizing: border-box;
     border-radius: 14px;
+  }
+
+  .result-load-sentinel {
+    min-height: 32px;
+    padding: 10px 0 2px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--desc-color);
   }
 
   .result-group {

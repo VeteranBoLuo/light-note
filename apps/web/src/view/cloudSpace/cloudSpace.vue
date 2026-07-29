@@ -9,7 +9,7 @@
     @title-click="resetCloudSpace"
   >
     <template #meta>
-      <span class="cloud-count-chip">{{ $t('cloudSpace.fileCount', { count: cloud.fileList.length }) }}</span>
+      <span class="cloud-count-chip">{{ $t('cloudSpace.fileCount', { count: cloud.fileTotal }) }}</span>
     </template>
 
     <template #actions>
@@ -115,7 +115,7 @@
     <FilePreview
       v-model:visible="previewVisible"
       :file-info="previewFileInfo"
-      :show-next="cloud.fileList.length > 1"
+      :show-next="cloud.fileTotal > 1"
       @prev="previewPrevFile"
       @next="previewNextFile"
       @close="closePreview"
@@ -506,9 +506,15 @@
   }
 
   async function previewNextFile() {
-    const list = cloud.fileList || [];
+    let list = cloud.fileList || [];
     if (!list.length) return;
-    const currentIndex = list.findIndex((item) => String(item.id) === String(previewFileInfo.id));
+    let currentIndex = list.findIndex((item) => String(item.id) === String(previewFileInfo.id));
+    if (currentIndex === list.length - 1 && cloud.fileHasMore) {
+      const loaded = await cloud.loadMoreFiles();
+      if (!loaded) return;
+      list = cloud.fileList || [];
+      currentIndex = list.findIndex((item) => String(item.id) === String(previewFileInfo.id));
+    }
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % list.length;
     const target = normalizeFileInfo(list[nextIndex]);
     pendingLocalPreviewId = target.id;
@@ -522,6 +528,7 @@
     const list = cloud.fileList || [];
     if (!list.length) return;
     const currentIndex = list.findIndex((item) => String(item.id) === String(previewFileInfo.id));
+    if (currentIndex === 0 && cloud.fileHasMore) return;
     const prevIndex = currentIndex === -1 ? 0 : (currentIndex - 1 + list.length) % list.length;
     const target = normalizeFileInfo(list[prevIndex]);
     pendingLocalPreviewId = target.id;

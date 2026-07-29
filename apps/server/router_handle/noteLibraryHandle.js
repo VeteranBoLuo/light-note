@@ -21,6 +21,8 @@ import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } f
 import { promises as fsP } from 'node:fs';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
+import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 
 // multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
 // 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
@@ -256,49 +258,90 @@ export const updateNote = async (req, res) => {
   }
 };
 
-export const queryNoteList = (req, res) => {
+export const queryNoteList = async (req, res) => {
   try {
     const userId = req.user.id;
-    const tagId = req.body.tagId;
-    let sql = `SELECT n.*,
-          (
-            SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
-            FROM resource_tag_relations r
-            INNER JOIN tag t ON r.tag_id = t.id
-            WHERE r.resource_type = 'note'
-              AND r.resource_id = n.id
-              AND t.del_flag = 0
-          ) AS tags
-         FROM note n
-         WHERE n.create_by = ? AND n.del_flag = 0`;
+    const tagId = req.body?.tagId;
+    const keyword = String(req.body?.keyword || '')
+      .trim()
+      .slice(0, 200);
+    const pagination = normalizeOptionalPagination(req.body);
+    const where = ['n.create_by = ?', 'n.del_flag = 0'];
     const params = [userId];
-    if (tagId) {
-      sql += ` AND n.id IN (SELECT resource_id FROM resource_tag_relations WHERE tag_id = ? AND resource_type = 'note')`;
+
+    if (keyword) {
+      const like = `%${keyword}%`;
+      where.push('(n.title LIKE ? OR n.content LIKE ?)');
+      params.push(like, like);
+    }
+    if (tagId === 'null') {
+      where.push(`
+        NOT EXISTS (
+          SELECT 1
+          FROM resource_tag_relations nr
+          INNER JOIN tag nt ON nt.id = nr.tag_id AND nt.del_flag = 0
+          WHERE nr.resource_type = 'note' AND nr.resource_id = n.id
+        )
+      `);
+    } else if (tagId) {
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM resource_tag_relations nr
+          WHERE nr.resource_type = 'note'
+            AND nr.resource_id = n.id
+            AND nr.tag_id = ?
+        )
+      `);
       params.push(tagId);
     }
-    sql += ` GROUP BY n.id ORDER BY n.is_top DESC, n.sort, n.update_time DESC`;
-    pool
-      .query(sql, params)
-      .then(async ([result]) => {
-        // 处理 tags 为数组，如果 NULL 或包含无效标签则为空数组
-        result.forEach((note) => {
-          note.tags =
-            note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
-        });
-        try {
-          await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
-        } catch (error) {
-          console.warn('[待整理角标] 笔记状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
-        }
-        res.send(resultData(result));
-      })
-      .catch((err) => {
-        console.error('[note-library] list failed code=%s', String(err?.code || 'NOTE_LIBRARY_LIST_FAILED'));
-        res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
-      });
-  } catch (e) {
-    console.warn('[note-library] request rejected code=%s', String(e?.code || 'NOTE_LIBRARY_REQUEST_INVALID'));
-    res.send(resultData(null, 400, '客户端请求参数无效'));
+
+    const whereSql = where.join(' AND ');
+    let listSql = `
+      SELECT n.*,
+        (
+          SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
+          FROM resource_tag_relations r
+          INNER JOIN tag t ON r.tag_id = t.id
+          WHERE r.resource_type = 'note'
+            AND r.resource_id = n.id
+            AND t.del_flag = 0
+        ) AS tags
+      FROM note n
+      WHERE ${whereSql}
+      GROUP BY n.id
+      ORDER BY n.is_top DESC, n.sort, n.update_time DESC, n.id DESC
+    `;
+    const listParams = [...params];
+    if (pagination.enabled) {
+      listSql += ' LIMIT ? OFFSET ?';
+      listParams.push(pagination.pageSize, pagination.offset);
+    }
+
+    const [listQueryResult, totalQueryResult] = await Promise.all([
+      pool.query(listSql, listParams),
+      pagination.enabled
+        ? pool.query(`SELECT COUNT(*) AS total FROM note n WHERE ${whereSql}`, params)
+        : Promise.resolve([[]]),
+    ]);
+    const [result] = listQueryResult;
+    const total = pagination.enabled ? Number(totalQueryResult?.[0]?.[0]?.total || 0) : result.length;
+
+    // 处理 tags 为数组，如果 NULL 或包含无效标签则为空数组。
+    result.forEach((note) => {
+      note.tags =
+        note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
+    });
+    try {
+      await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
+    } catch (error) {
+      console.warn('[待整理角标] 笔记状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
+    }
+
+    return res.send(resultData(pagination.enabled ? buildPagedResult(result, total, pagination) : result));
+  } catch (error) {
+    console.error('[note-library] list failed code=%s', String(error?.code || 'NOTE_LIBRARY_LIST_FAILED'));
+    return res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
   }
 };
 
@@ -424,7 +467,21 @@ export const updateNoteSort = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction(); // 开始事务
+    if (req.body?.move) {
+      const result = await moveOwnedResourceByAnchors(connection, {
+        ...req.body.move,
+        resourceType: 'note',
+        userId,
+      });
+      await connection.commit();
+      return res.send(resultData(result, 200, 'Sort updated successfully'));
+    }
+
     const { notes } = req.body;
+    if (!Array.isArray(notes)) {
+      await connection.rollback();
+      return res.send(resultData(null, 400, '排序参数无效'));
+    }
     for (const note of notes) {
       const { id, sort } = note;
       const sql = 'UPDATE note SET sort = ?, update_time = update_time WHERE id = ? AND create_by = ?';
@@ -434,6 +491,9 @@ export const updateNoteSort = async (req, res) => {
     res.send(resultData(null, 200, 'Sort updated successfully'));
   } catch (e) {
     await connection.rollback(); // 如果发生错误，回滚事务
+    if (e instanceof AnchoredSortError) {
+      return res.send(resultData(null, e.code === 'RESOURCE_NOT_FOUND' ? 404 : 400, e.message));
+    }
     return sendNoteServerError(res, 'update-note-sort', e);
   } finally {
     connection.release(); // 释放连接回连接池

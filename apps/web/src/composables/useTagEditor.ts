@@ -44,9 +44,7 @@ export function useTagEditor() {
   const activeResourceType = ref<TagResourceKind>('bookmark');
   const searchMap = reactive<Record<TagResourceKind, string>>({ bookmark: '', note: '', file: '' });
 
-  const handleType = computed<'add' | 'edit'>(() =>
-    router.currentRoute.value.params.id === 'add' ? 'add' : 'edit',
-  );
+  const handleType = computed<'add' | 'edit'>(() => (router.currentRoute.value.params.id === 'add' ? 'add' : 'edit'));
   const pageTitle = computed(() =>
     t(handleType.value === 'add' ? 'tagManage.editorAddTitle' : 'tagManage.editorEditTitle'),
   );
@@ -93,8 +91,8 @@ export function useTagEditor() {
       selectedCount: selectedFileIds.value.length,
     },
   ]);
-  const activeResourceSection = computed(
-    () => resourceSections.value.find((section) => section.type === activeResourceType.value)!,
+  const activeResourceSection = computed(() =>
+    resourceSections.value.find((section) => section.type === activeResourceType.value)!,
   );
 
   function toggleResource(type: TagResourceKind, id: string, checked: boolean) {
@@ -126,9 +124,15 @@ export function useTagEditor() {
 
   async function getAllResources() {
     const [bookmarkResponse, noteResponse, fileResponse] = await Promise.all([
-      apiQueryPost('/api/bookmark/getBookmarkList', { filters: { userId: user.id, type: 'all' } }),
-      apiBasePost('/api/note/queryNoteList'),
-      apiBasePost('/api/file/queryFiles', { filters: { category: CLOUD_FILE_CATEGORY_ORDER } }),
+      apiQueryPost('/api/bookmark/getBookmarkList', {
+        pageSize: -1,
+        filters: { userId: user.id, type: 'all' },
+      }),
+      apiBasePost('/api/note/queryNoteList', { pageSize: -1 }),
+      apiBasePost('/api/file/queryFiles', {
+        pageSize: -1,
+        filters: { category: CLOUD_FILE_CATEGORY_ORDER },
+      }),
     ]);
     const resources: TagResourceItem[] = [];
     if (bookmarkResponse.status === 200) {
@@ -170,10 +174,12 @@ export function useTagEditor() {
 
         const [bookmarkResponse, noteResponse, fileResponse, relatedResponse] = await Promise.all([
           apiQueryPost('/api/bookmark/getBookmarkList', {
+            pageSize: -1,
             filters: { userId: user.id, tagId: tag.value.id, type: 'normal' },
           }),
-          apiBasePost('/api/note/queryNoteList', { tagId: tag.value.id }),
+          apiBasePost('/api/note/queryNoteList', { pageSize: -1, tagId: tag.value.id }),
           apiBasePost('/api/file/queryFiles', {
+            pageSize: -1,
             filters: { tagId: tag.value.id, category: CLOUD_FILE_CATEGORY_ORDER },
           }),
           apiQueryPost('/api/bookmark/getRelatedTag', {

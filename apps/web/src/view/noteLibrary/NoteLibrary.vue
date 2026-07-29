@@ -10,7 +10,7 @@
   >
     <template #meta>
       <span class="note-count-chip">{{
-        $t('note.visibleCount', { visible: visibleDragNoteList.length, total: noteList.length })
+        $t('note.visibleCount', { visible: visibleDragNoteList.length, total: noteTotal })
       }}</span>
     </template>
 
@@ -73,7 +73,7 @@
       </template>
     </template>
 
-    <div class="note-workspace">
+    <div class="note-workspace" @scroll.capture.passive="onNoteScroll">
       <div
         v-if="loading && currentViewMode === 'card'"
         class="note-library-body note-card-skeleton-wrap"
@@ -152,6 +152,9 @@
             <note-list-item :note="note" @nodeTypeChange="handleNodeTypeChange" />
           </RightMenu>
         </VueDraggable>
+      </div>
+      <div v-if="loadingMore" class="note-load-more">
+        <BLoading inline loading :title="$t('common.loading')" />
       </div>
       <div v-if="!loading && !visibleDragNoteList.length" class="note-empty-state">
         <span class="note-empty-icon"><SvgIcon :src="icon.resource.note" size="28" /></span>
@@ -237,6 +240,14 @@
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import {
+    RESOURCE_LIST_PAGE_SIZE,
+    buildResourceSortMove,
+    hasResourceOrderChanged,
+    isNearResourceScrollEnd,
+    mergeResourcePage,
+  } from '@/utils/resourcePagination';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -253,9 +264,18 @@
   const user = useUserStore();
   const { resetCurrentResourceScroll } = useMobileNavigationState();
   const { addResourcesToInbox } = useInboxEnqueue();
-  const noteList = ref([]);
+  const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
+  const loadingMore = ref(false);
+  const noteTotal = ref(0);
+  const notePage = ref(0);
+  const noteHasMore = ref(false);
+  const noteDragging = ref(false);
+  const searchValue = ref('');
+  const debouncedSearch = ref('');
+  const searchTimer = ref<number | null>(null);
+  let noteRequestSeq = 0;
   const showTypePicker = ref(false);
   const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
   const tagConfigVisible = ref(false);
@@ -426,7 +446,7 @@
       const res = await apiBasePost('/api/note/toggleNoteTop', { id: noteId });
       if (res.status !== 200) return;
       note.isTop = Boolean(res.data?.isTop);
-      noteList.value = sortPinnedFirst(noteList.value);
+      await reloadNotes();
       message.success(note.isTop ? t('common.pinned') : t('common.unpinned'));
       recordOperation({
         module: '笔记库',
@@ -447,7 +467,7 @@
   function handleNoteTagsSaved(tags: any[]) {
     if (!activeTagNote.value) return;
     activeTagNote.value.tags = tags;
-    getAllTags();
+    void init();
   }
 
   function deleteSingleNote(note: any) {
@@ -483,24 +503,76 @@
     handleNoteMenuSelect(action, note);
   }
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
-  init();
+  const allTags = ref<any[]>([]);
+
   async function init() {
-    loading.value = true;
-    // finally 复位 loading:此前失败分支(非 200 / 网络异常)不会复位,最高频页面会永远卡在骨架屏
+    await Promise.all([reloadNotes(), getAllTags()]);
+  }
+
+  function getActiveNoteTagId() {
+    const rawTag = router.currentRoute.value.query.tag;
+    if (Array.isArray(rawTag)) return String(rawTag[0] || '') || undefined;
+    if (rawTag === undefined || rawTag === null) return undefined;
+    return String(rawTag);
+  }
+
+  async function queryNotePage(targetPage: number, append = false) {
+    const requestSeq = append ? noteRequestSeq : ++noteRequestSeq;
+    if (append) loadingMore.value = true;
+    else {
+      loading.value = true;
+      loadingMore.value = false;
+      notePage.value = 0;
+      noteHasMore.value = false;
+    }
+
     try {
-      const res = await apiBasePost('/api/note/queryNoteList');
-      if (res.status === 200) {
-        noteList.value = buildSearchIndex(res.data ?? []);
-        user.noteTotal = noteList.value.length;
-        await getAllTags();
-      } else {
+      const res = await apiBasePost('/api/note/queryNoteList', {
+        page: targetPage,
+        pageSize: RESOURCE_LIST_PAGE_SIZE,
+        keyword: debouncedSearch.value,
+        tagId: getActiveNoteTagId(),
+      });
+      if (requestSeq !== noteRequestSeq) return false;
+      if (res.status !== 200) {
         message.error(t('note.loadFailed'));
+        return false;
       }
+
+      const pageItems = Array.isArray(res.data?.items) ? res.data.items : [];
+      noteList.value = append ? mergeResourcePage(noteList.value, pageItems) : pageItems;
+      noteTotal.value = Number(res.data?.total || 0);
+      notePage.value = Number(res.data?.page || targetPage);
+      noteHasMore.value = Boolean(res.data?.hasMore);
+      if (!debouncedSearch.value && getActiveNoteTagId() === undefined) {
+        user.noteTotal = noteTotal.value;
+      }
+      return true;
     } catch (error) {
       console.error('加载笔记列表失败:', error);
       message.error(t('note.loadFailed'));
+      return false;
     } finally {
-      loading.value = false;
+      if (requestSeq === noteRequestSeq) {
+        loading.value = false;
+        loadingMore.value = false;
+      }
+    }
+  }
+
+  function reloadNotes() {
+    return queryNotePage(1, false);
+  }
+
+  function loadMoreNotes() {
+    if (noteDragging.value || loading.value || loadingMore.value || !noteHasMore.value) return Promise.resolve(false);
+    return queryNotePage(notePage.value + 1, true);
+  }
+
+  function onNoteScroll(event: Event) {
+    const target = event.target;
+    if (target instanceof HTMLElement && isNearResourceScrollEnd(target)) {
+      void loadMoreNotes();
     }
   }
 
@@ -514,8 +586,7 @@
       console.warn('fetchNoteTags fallback', error);
     }
   }
-  const searchValue = ref('');
-  const debouncedSearch = ref('');
+
   // 空态区分用:搜索词或标签筛选(?tag=,含 'null'=无标签筛选)任一激活
   const hasActiveFilter = computed(
     () => Boolean(debouncedSearch.value.trim()) || router.currentRoute.value.query.tag != null,
@@ -525,28 +596,16 @@
     debouncedSearch.value = '';
     if (router.currentRoute.value.query.tag != null) router.replace({ query: {} });
   }
-  const searchTimer = ref<number | null>(null);
   const canDragNote = computed(
     () =>
       !bookmark.isMobile &&
+      !loading.value &&
+      !loadingMore.value &&
       !debouncedSearch.value &&
+      router.currentRoute.value.query.tag == null &&
       visibleDragNoteList.value.length > 1 &&
       !noteList.value.some((note) => note.isCheck === true),
   );
-
-  const toPlainText = (html: string) =>
-    html
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-  const buildSearchIndex = (list: any[]) =>
-    list.map((note: any) => ({
-      ...note,
-      __searchTitle: (note.title || '').toLowerCase(),
-      __searchContent:
-        note.type === 'markdown' ? (note.content || '').toLowerCase() : toPlainText(note.content || '').toLowerCase(),
-    }));
 
   watch(
     () => searchValue.value,
@@ -563,12 +622,16 @@
   watch(
     [debouncedSearch, () => router.currentRoute.value.query.tag],
     () => {
-      if (!bookmark.isMobile) return;
-      nextTick(() => {
-        window.requestAnimationFrame(resetCurrentResourceScroll);
-      });
+      void reloadNotes();
+      if (bookmark.isMobile) {
+        nextTick(() => {
+          window.requestAnimationFrame(resetCurrentResourceScroll);
+        });
+      }
     },
+    { immediate: true },
   );
+  void getAllTags();
 
   function applyNoteSearchImmediately() {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
@@ -589,43 +652,23 @@
   });
 
   async function resetNoteLibrary() {
+    const alreadyReset = !debouncedSearch.value && router.currentRoute.value.query.tag == null;
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     searchTimer.value = null;
     searchValue.value = '';
     debouncedSearch.value = '';
     exitBatch();
     await router.replace('/noteLibrary');
-    await init();
+    if (alreadyReset) await reloadNotes();
+    await getAllTags();
   }
 
   onBeforeUnmount(() => {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
+    noteRequestSeq += 1;
   });
 
-  const viewNoteList = computed(() => {
-    const keyword = debouncedSearch.value;
-
-    const filteredNotes = noteList.value.filter((note) => {
-      if (!keyword) return true;
-      return note.__searchTitle.includes(keyword) || note.__searchContent.includes(keyword);
-    });
-
-    let tagFilter = router.currentRoute.value.query.tag;
-
-    if (tagFilter === undefined || tagFilter === null) {
-      return filteredNotes;
-    }
-
-    if (tagFilter === 'null') {
-      return filteredNotes.filter((note) => !note.tags || note.tags.length === 0);
-    }
-
-    return filteredNotes.filter((note) => {
-      if (!note.tags) return false;
-      const parsed = note.tags;
-      return Array.isArray(parsed) && parsed.some((t) => t.id === tagFilter);
-    });
-  });
+  const viewNoteList = computed(() => noteList.value);
 
   watch(
     viewNoteList,
@@ -639,7 +682,6 @@
     { immediate: true },
   );
 
-  const allTags = ref<any[]>([]);
   const visibleNoteTags = computed(() => {
     return allTags.value.filter((tag) => Number(tag.noteCount || 0) > 0);
   });
@@ -708,6 +750,7 @@
 
   function onStart() {
     document.body.style.userSelect = 'none';
+    noteDragging.value = true;
   }
 
   function moveVisibleNoteInAllNotes(
@@ -753,26 +796,41 @@
 
   async function onEnd(event?: { oldIndex?: number; newIndex?: number }) {
     document.body.style.userSelect = '';
-    if (blockGuestWrite('reorder-note')) {
-      visibleDragNoteList.value = [...viewNoteList.value]; // 拖拽库已就地改了 DOM 顺序,游客态复位视觉
-      return;
-    }
     const sourceNotes = [...noteList.value];
     try {
+      if (blockGuestWrite('reorder-note')) {
+        visibleDragNoteList.value = [...viewNoteList.value]; // 拖拽库已就地改了 DOM 顺序,游客态复位视觉
+        return;
+      }
+
+      const newIndex = Number(event?.newIndex);
+      const movedNote = Number.isInteger(newIndex) ? visibleDragNoteList.value[newIndex] : null;
       const mergedNotes = moveVisibleNoteInAllNotes(sourceNotes, visibleDragNoteList.value, event);
-      if (mergedNotes === sourceNotes) {
+      if (mergedNotes === sourceNotes || !movedNote) {
         visibleDragNoteList.value = [...viewNoteList.value];
         return;
       }
       // 置顶组始终位于普通组之前；组内仍保留用户刚完成的拖拽顺序。
       const groupedNotes = sortPinnedFirst(mergedNotes);
-      const sortedTags =
-        groupedNotes.map((note: any, index: number) => ({
-          sort: index,
-          id: note.id,
-        })) || [];
+      const sameGroup = (item: any) => Boolean(item.isTop) === Boolean(movedNote.isTop);
+      const beforeGroup = sortPinnedFirst(sourceNotes).filter(sameGroup);
+      const afterGroup = groupedNotes.filter(sameGroup);
+      if (!hasResourceOrderChanged(beforeGroup, afterGroup)) {
+        visibleDragNoteList.value = [...viewNoteList.value];
+        return;
+      }
 
-      const res = await apiBasePost('/api/note/updateNoteSort', { notes: sortedTags });
+      const move = buildResourceSortMove(
+        groupedNotes,
+        String(movedNote.id),
+        (candidate: any, target: any) => Boolean(candidate.isTop) === Boolean(target.isTop),
+      );
+      if (!move) {
+        visibleDragNoteList.value = [...viewNoteList.value];
+        return;
+      }
+
+      const res = await apiBasePost('/api/note/updateNoteSort', { move });
       if (res.status === 200) {
         noteList.value = groupedNotes;
         recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
@@ -783,6 +841,8 @@
       noteList.value = sourceNotes;
       visibleDragNoteList.value = [...viewNoteList.value];
       console.error('Error updating note sort:', error);
+    } finally {
+      noteDragging.value = false;
     }
   }
 </script>
@@ -1270,6 +1330,22 @@
     gap: 9px;
     text-align: center;
     color: var(--desc-color);
+  }
+
+  .note-load-more {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    z-index: 3;
+    transform: translateX(-50%);
+    min-height: 30px;
+    padding: 4px 10px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--menu-body-bg-color) 92%, transparent);
+    box-shadow: 0 8px 24px -18px color-mix(in srgb, var(--text-color) 45%, transparent);
+    pointer-events: none;
   }
 
   .note-empty-state strong {

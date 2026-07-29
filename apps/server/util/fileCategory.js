@@ -104,7 +104,9 @@ const EXTENSION_CATEGORY_MAP = new Map([
 ]);
 
 export function normalizeFileCategory(category = '') {
-  const normalized = String(category || '').trim().toLowerCase();
+  const normalized = String(category || '')
+    .trim()
+    .toLowerCase();
   return FILE_CATEGORY_ORDER.includes(normalized) ? normalized : 'other';
 }
 
@@ -116,12 +118,20 @@ export function normalizeMimeType(fileType = '') {
 }
 
 export function getFileExtension(fileName = '') {
-  return path.extname(String(fileName || '')).replace(/^\./, '').toLowerCase();
+  return path
+    .extname(String(fileName || ''))
+    .replace(/^\./, '')
+    .toLowerCase();
 }
 
 export function resolveFileCategory({ fileName = '', fileType = '', category = '' } = {}) {
   const explicitCategory = normalizeFileCategory(category);
-  if (explicitCategory !== 'other' || String(category || '').trim().toLowerCase() === 'other') {
+  if (
+    explicitCategory !== 'other' ||
+    String(category || '')
+      .trim()
+      .toLowerCase() === 'other'
+  ) {
     return explicitCategory;
   }
 
@@ -143,3 +153,43 @@ export function resolveFileCategory({ fileName = '', fileType = '', category = '
   return 'other';
 }
 
+function toSqlString(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function groupMapValues(map) {
+  const grouped = new Map();
+  for (const [key, category] of map.entries()) {
+    if (!grouped.has(category)) grouped.set(category, []);
+    grouped.get(category).push(key);
+  }
+  return grouped;
+}
+
+/**
+ * 生成与 resolveFileCategory 同口径的 MySQL CASE 表达式。
+ *
+ * 文件列表需要先在数据库内完成分类过滤再分页；否则只能把全部文件查出、
+ * 逐条签名后再在 Node 进程里过滤，分页也就失去了意义。
+ */
+export function buildFileCategorySql({ fileNameSql = 'files.file_name', fileTypeSql = 'files.file_type' } = {}) {
+  const normalizedMime = `LOWER(TRIM(SUBSTRING_INDEX(COALESCE(${fileTypeSql}, ''), ';', 1)))`;
+  const normalizedExtension = `LOWER(SUBSTRING_INDEX(COALESCE(${fileNameSql}, ''), '.', -1))`;
+  const cases = [];
+
+  for (const [category, mimeTypes] of groupMapValues(EXACT_MIME_CATEGORY_MAP).entries()) {
+    cases.push(`WHEN ${normalizedMime} IN (${mimeTypes.map(toSqlString).join(', ')}) THEN ${toSqlString(category)}`);
+  }
+  for (const [prefix, category] of MIME_PREFIX_CATEGORY_LIST) {
+    cases.push(`WHEN ${normalizedMime} LIKE ${toSqlString(`${prefix}%`)} THEN ${toSqlString(category)}`);
+  }
+  for (const [category, extensions] of groupMapValues(EXTENSION_CATEGORY_MAP).entries()) {
+    cases.push(
+      `WHEN LOCATE('.', COALESCE(${fileNameSql}, ''), 2) > 0 AND ${normalizedExtension} IN (${extensions
+        .map(toSqlString)
+        .join(', ')}) THEN ${toSqlString(category)}`,
+    );
+  }
+
+  return `(CASE ${cases.join(' ')} ELSE 'other' END)`;
+}

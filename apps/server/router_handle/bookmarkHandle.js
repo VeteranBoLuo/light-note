@@ -37,6 +37,8 @@ import {
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
+import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
+import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 // ── 全局 ──────────────────────────────────────────────────
 const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
 
@@ -448,129 +450,115 @@ export const updateTag = async (req, res) => {
     await connection.release(); // 释放连接
   }
 };
-export const getBookmarkList = (req, res) => {
-  const userId = req.user.id; // 获取用户ID
-  const tagId = req.body.filters.tagId; // 获取标签ID
-  let sql = `SELECT b.*,(
-        SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
-                'id', t.id,
-                'name', t.name
-            )
-        )
-        FROM tag t
-        INNER JOIN resource_tag_relations tb
-          ON t.id = tb.tag_id AND tb.resource_type = 'bookmark'
-        WHERE tb.resource_id = b.id AND t.del_flag = 0
-    ) AS tagList
-FROM bookmark b
-JOIN resource_tag_relations tbr ON b.id = tbr.resource_id AND tbr.resource_type = 'bookmark'
-WHERE b.user_id=? AND tbr.tag_id = ? AND  b.del_flag=0   ORDER BY b.is_top DESC, b.sort, b.create_time DESC`;
-  let params = [userId, tagId];
-  const type = req.body.filters.type;
-  if (type === 'all') {
-    sql = `SELECT 
-    b.*,
-    (
-        SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
-                'id', t.id,
-                'name', t.name
-            )
-        )
-        FROM tag t
-        INNER JOIN resource_tag_relations tb
-          ON t.id = tb.tag_id AND tb.resource_type = 'bookmark'
-        WHERE tb.resource_id = b.id AND t.del_flag = 0
-    ) AS tagList
-FROM 
-    bookmark b
-      WHERE
-      b.user_id = ? AND b.del_flag = 0
-      ORDER BY
-      b.is_top DESC, b.sort, b.create_time DESC;
+export const getBookmarkList = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const filters = req.body?.filters || {};
+    const type = filters.type || 'all';
+    const pagination = normalizeOptionalPagination(req.body);
+    const where = ['b.user_id = ?', 'b.del_flag = 0'];
+    const params = [userId];
 
-`;
-    params = [userId];
-  } else if (type === 'search') {
-    sql = `SELECT 
-    b.*, 
-    (
-        SELECT JSON_ARRAYAGG(
-            JSON_OBJECT(
-                'id', t.id,
-                'name', t.name
-            )
+    if (type === 'normal' && filters.tagId) {
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM resource_tag_relations tbr
+          WHERE tbr.resource_type = 'bookmark'
+            AND tbr.resource_id = b.id
+            AND tbr.tag_id = ?
         )
-        FROM tag t
-        INNER JOIN resource_tag_relations tb
-          ON t.id = tb.tag_id AND tb.resource_type = 'bookmark'
-        WHERE tb.resource_id = b.id AND t.del_flag = 0
-    ) AS tagList
-FROM 
-    bookmark b
-LEFT JOIN 
-    resource_tag_relations tb ON b.id = tb.resource_id AND tb.resource_type = 'bookmark'
-LEFT JOIN 
-    tag t ON tb.tag_id = t.id AND t.name LIKE CONCAT('%', ?, '%') AND t.del_flag = 0
-WHERE 
-    b.user_id = ? AND 
-    b.del_flag = 0 AND
-    (
-        b.name LIKE CONCAT('%', ?, '%') OR
-        b.description LIKE CONCAT('%', ?, '%') OR
-        t.id IS NOT NULL
-    )
-GROUP BY
+      `);
+      params.push(filters.tagId);
+    } else if (type === 'search') {
+      const keyword = String(filters.value || '')
+        .trim()
+        .slice(0, 200);
+      const like = `%${keyword}%`;
+      where.push(`
+        (
+          b.name LIKE ?
+          OR b.description LIKE ?
+          OR EXISTS (
+            SELECT 1
+            FROM resource_tag_relations tb2
+            INNER JOIN tag t2 ON t2.id = tb2.tag_id
+            WHERE tb2.resource_type = 'bookmark'
+              AND tb2.resource_id = b.id
+              AND t2.del_flag = 0
+              AND t2.name LIKE ?
+          )
+        )
+      `);
+      params.push(like, like, like);
+    }
 
-    b.id
-ORDER BY
-    b.is_top DESC, b.sort, b.create_time DESC;
-`;
-    params = [req.body.filters.value, userId, req.body.filters.value, req.body.filters.value];
-  }
-  pool
-    .query(sql, params)
-    .then(async ([result]) => {
-      const totalSql = `SELECT COUNT(*) FROM bookmark WHERE user_id=? and del_flag = 0`;
-      const [totalRes] = await pool.query(totalSql, [userId]);
-      // 回填「正文存档 / AI 摘要」角标:单查一次快照表按 id 注入,不改主查询;
-      // try/catch 兜底,即便快照表缺失或异常也只是没角标,绝不拖垮书签列表本身。
-      try {
-        const ids = (result || []).map((r) => r.id).filter(Boolean);
-        if (ids.length) {
-          const [snaps] = await pool.query(
-            `SELECT bookmark_id,
-                    (content IS NOT NULL AND content <> '') AS hasSnapshot,
-                    (summary IS NOT NULL AND summary <> '') AS hasSummary
-               FROM bookmark_snapshot WHERE bookmark_id IN (?)`,
-            [ids],
-          );
-          const map = new Map(snaps.map((s) => [s.bookmark_id, s]));
-          for (const r of result) {
-            const s = map.get(r.id);
-            r.hasSnapshot = !!(s && Number(s.hasSnapshot));
-            r.hasSummary = !!(s && Number(s.hasSummary));
-          }
+    const whereSql = where.join(' AND ');
+    let listSql = `
+      SELECT
+        b.*,
+        (
+          SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
+          FROM tag t
+          INNER JOIN resource_tag_relations tb
+            ON t.id = tb.tag_id AND tb.resource_type = 'bookmark'
+          WHERE tb.resource_id = b.id AND t.del_flag = 0
+        ) AS tagList
+      FROM bookmark b
+      WHERE ${whereSql}
+      ORDER BY b.is_top DESC, b.sort, b.create_time DESC, b.id DESC
+    `;
+    const listParams = [...params];
+    if (pagination.enabled) {
+      listSql += ' LIMIT ? OFFSET ?';
+      listParams.push(pagination.pageSize, pagination.offset);
+    }
+
+    const [[result], [totalRows]] = await Promise.all([
+      pool.query(listSql, listParams),
+      pool.query(`SELECT COUNT(*) AS total FROM bookmark b WHERE ${whereSql}`, params),
+    ]);
+    const total = Number(totalRows?.[0]?.total || 0);
+
+    // 回填「正文存档 / AI 摘要」角标:只处理当前页，避免辅助查询随账号资源量线性增长。
+    try {
+      const ids = (result || []).map((item) => item.id).filter(Boolean);
+      if (ids.length) {
+        const [snaps] = await pool.query(
+          `SELECT bookmark_id,
+                  (content IS NOT NULL AND content <> '') AS hasSnapshot,
+                  (summary IS NOT NULL AND summary <> '') AS hasSummary
+             FROM bookmark_snapshot WHERE bookmark_id IN (?)`,
+          [ids],
+        );
+        const snapshotMap = new Map(snaps.map((snapshot) => [snapshot.bookmark_id, snapshot]));
+        for (const item of result) {
+          const snapshot = snapshotMap.get(item.id);
+          item.hasSnapshot = !!(snapshot && Number(snapshot.hasSnapshot));
+          item.hasSummary = !!(snapshot && Number(snapshot.hasSummary));
         }
-      } catch (e) {
-        console.warn('[书签角标] 快照标记回填失败(忽略):', e.message);
       }
-      try {
-        await attachPendingStatus(pool, { userId, resourceType: 'bookmark', items: result });
-      } catch (e) {
-        console.warn('[待整理角标] 书签状态回填失败(忽略):', e.message);
-      }
-      res.send(
-        resultData({
+    } catch (error) {
+      console.warn('[书签角标] 快照标记回填失败(忽略):', error.message);
+    }
+
+    try {
+      await attachPendingStatus(pool, { userId, resourceType: 'bookmark', items: result });
+    } catch (error) {
+      console.warn('[待整理角标] 书签状态回填失败(忽略):', error.message);
+    }
+
+    const data = pagination.enabled
+      ? buildPagedResult(result, total, pagination)
+      : {
           items: result,
-          total: totalRes[0]['COUNT(*)'],
-        }),
-      );
-    })
-    .catch((e) => {
-      res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
-    });
+          total,
+        };
+    return res.send(resultData(data));
+  } catch (error) {
+    console.error('[bookmark] list failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
+  }
 };
 
 // 置顶 / 取消置顶书签(翻转 is_top;归属校验防越权)。列表 ORDER BY 已 is_top DESC 优先
@@ -891,7 +879,21 @@ export const updateBookmarkSort = async (req, res) => {
   try {
     await connection.beginTransaction(); // 开始事务
     const userId = req.user.id;
+    if (req.body?.move) {
+      const result = await moveOwnedResourceByAnchors(connection, {
+        ...req.body.move,
+        resourceType: 'bookmark',
+        userId,
+      });
+      await connection.commit();
+      return res.send(resultData(result, 200, 'Sort updated successfully'));
+    }
+
     const { bookmarks } = req.body;
+    if (!Array.isArray(bookmarks)) {
+      await connection.rollback();
+      return res.send(resultData(null, 400, '排序参数无效'));
+    }
     for (const bookmark of bookmarks) {
       const { id, sort } = bookmark;
       const sql = 'UPDATE bookmark SET sort = ? WHERE id = ? AND user_id = ?';
@@ -901,7 +903,11 @@ export const updateBookmarkSort = async (req, res) => {
     res.send(resultData(null, 200, 'Sort updated successfully'));
   } catch (e) {
     await connection.rollback(); // 如果发生错误，回滚事务
-    res.send(resultData(null, 500, '服务器内部错误' + e)); // 设置状态码为400
+    if (e instanceof AnchoredSortError) {
+      return res.send(resultData(null, e.code === 'RESOURCE_NOT_FOUND' ? 404 : 400, e.message));
+    }
+    console.error('[bookmark] update sort failed code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
   } finally {
     connection.release(); // 释放连接回连接池
   }

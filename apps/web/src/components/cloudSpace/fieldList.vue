@@ -29,7 +29,12 @@
         </b-space>
       </div>
     </div>
-    <div v-if="viewMode === 'card'" class="file-card-grid" data-mobile-resource-scroll>
+    <div
+      v-if="viewMode === 'card'"
+      class="file-card-grid"
+      data-mobile-resource-scroll
+      @scroll.passive="onFileListScroll"
+    >
       <article
         v-for="item in cloud.fileList"
         :key="item.id"
@@ -210,7 +215,12 @@
         {{ $t('cloudSpace.batchDownload') }}
       </b-button>
     </div>
-    <div v-if="viewMode === 'table'" class="file-container" data-mobile-resource-scroll>
+    <div
+      v-if="viewMode === 'table'"
+      class="file-container"
+      data-mobile-resource-scroll
+      @scroll.passive="onFileListScroll"
+    >
       <div
         class="field-item"
         :class="{
@@ -386,6 +396,9 @@
         {{ $t('cloudSpace.uploadFile') }}
       </BButton>
     </div>
+    <div v-if="cloud.loadingMore" class="file-load-more">
+      <BLoading inline loading :title="$t('common.loading')" />
+    </div>
     <b-loading :loading="cloud.loading" class="both-center" />
 
     <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
@@ -467,6 +480,8 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import { openAiAssistant } from '@/utils/aiEntry';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -486,6 +501,13 @@
   const viewMode = computed(() => props.viewMode ?? 'table');
 
   const batchMode = computed(() => props.batchMode ?? false);
+  function onFileListScroll(event: Event) {
+    const target = event.currentTarget;
+    if (target instanceof HTMLElement && isNearResourceScrollEnd(target)) {
+      void cloud.loadMoreFiles();
+    }
+  }
+
   function addFileToInbox(file: any) {
     addResourcesToInbox([{ resourceType: 'file', resourceId: String(file.id) }], '云空间');
   }
@@ -1284,6 +1306,21 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
     background: var(--card-background);
+  }
+
+  .file-load-more {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    z-index: 4;
+    transform: translateX(-50%);
+    min-height: 30px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--menu-body-bg-color) 92%, transparent);
+    box-shadow: 0 8px 24px -18px color-mix(in srgb, var(--text-color) 45%, transparent);
+    pointer-events: none;
   }
   .field-item {
     min-height: 58px;

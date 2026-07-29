@@ -1,8 +1,5 @@
 <template>
-  <div
-    class="card-panel-wrap"
-    :data-mobile-resource-scroll="bookmark.isMobile ? '' : null"
-  >
+  <div class="card-panel-wrap" :data-mobile-resource-scroll="bookmark.isMobile ? '' : null">
     <div v-if="bookmark.bookmarkLoading || (!hasLoaded && !getBookList.length)" class="card-panel skeleton-panel">
       <div v-for="n in skeletonCount" :key="n" class="card-skeleton">
         <div class="skeleton-title">
@@ -39,7 +36,13 @@
     <VueDraggable
       v-else
       :animation="200"
-      :disabled="bookmark.isMobile"
+      :disabled="
+        bookmark.isMobile ||
+        bookmark.type !== 'all' ||
+        bookmark.bookmarkLoading ||
+        bookmark.bookmarkLoadingMore ||
+        bookmark.bookmarkList.length < 2
+      "
       ref="el"
       v-model="bookmark.bookmarkList"
       class="card-panel"
@@ -61,6 +64,15 @@
         </RightMenu>
       </div>
     </VueDraggable>
+    <div
+      v-show="bookmark.bookmarkHasMore || bookmark.bookmarkLoadingMore"
+      ref="loadMoreSentinel"
+      class="bookmark-load-sentinel"
+      aria-live="polite"
+    >
+      <BLoading v-if="bookmark.bookmarkLoadingMore" inline loading :title="$t('common.loading')" />
+      <BButton v-else size="small" @click="emit('load-more')">{{ $t('common.loadMore') }}</BButton>
+    </div>
     <div class="beian-wrap">
       <span class="beian-copy">{{ $t('landing.copyright') }}</span>
       <span class="beian-separator">|</span>
@@ -75,7 +87,7 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagCard from '@/components/home/TagCard.vue';
   import { bookmarkStore } from '@/store';
-  import { computed, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import RightMenu from '@/components/base/RightMenu.vue';
   import router from '@/router';
   import { useRoute } from 'vue-router';
@@ -90,10 +102,61 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { buildResourceSortMove, hasResourceOrderChanged } from '@/utils/resourcePagination';
   const bookmark = bookmarkStore();
   const route = useRoute();
   const { t } = useI18n();
   const { addResourcesToInbox } = useInboxEnqueue();
+  const emit = defineEmits<{
+    'load-more': [];
+  }>();
+  const loadMoreSentinel = ref<HTMLElement | null>(null);
+  const isDragging = ref(false);
+  let loadMoreObserver: IntersectionObserver | null = null;
+
+  function requestNextPageIfVisible() {
+    if (isDragging.value || !bookmark.bookmarkHasMore || bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore) {
+      return;
+    }
+    const sentinel = loadMoreSentinel.value;
+    const root = sentinel?.closest<HTMLElement>('[data-mobile-resource-scroll]');
+    if (!sentinel || !root) return;
+    const sentinelRect = sentinel.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    if (sentinelRect.top <= rootRect.bottom + 360) emit('load-more');
+  }
+
+  async function setupLoadMoreObserver() {
+    loadMoreObserver?.disconnect();
+    await nextTick();
+    const sentinel = loadMoreSentinel.value;
+    const root = sentinel?.closest<HTMLElement>('[data-mobile-resource-scroll]');
+    if (!sentinel || !root) return;
+    loadMoreObserver = new IntersectionObserver(
+      (entries) => {
+        if (!isDragging.value && entries.some((entry) => entry.isIntersecting)) emit('load-more');
+      },
+      { root, rootMargin: '0px 0px 360px', threshold: 0 },
+    );
+    loadMoreObserver.observe(sentinel);
+    requestNextPageIfVisible();
+  }
+
+  onMounted(setupLoadMoreObserver);
+  watch(
+    () => [bookmark.isMobile, bookmark.bookmarkList.length, bookmark.bookmarkHasMore],
+    () => {
+      void setupLoadMoreObserver();
+    },
+  );
+  watch(
+    () => bookmark.bookmarkLoading,
+    (loading) => {
+      if (!loading) requestNextPageIfVisible();
+    },
+  );
+  onBeforeUnmount(() => loadMoreObserver?.disconnect());
 
   const getBookList = computed(() => {
     return bookmark.bookmarkList;
@@ -176,25 +239,69 @@
       });
     }
   }
-  const onDragStart = () => {
+  let dragSnapshot: any[] = [];
+  let draggedBookmarkId = '';
+
+  const sortPinnedFirst = (items: any[]) =>
+    [...items].sort((left: any, right: any) => Number(Boolean(right.isTop)) - Number(Boolean(left.isTop)));
+
+  const onDragStart = (event?: { oldIndex?: number }) => {
     document.body.classList.add('drag-active');
+    isDragging.value = true;
+    dragSnapshot = [...bookmark.bookmarkList];
+    const oldIndex = Number(event?.oldIndex);
+    draggedBookmarkId = Number.isInteger(oldIndex) ? String(dragSnapshot[oldIndex]?.id || '') : '';
   };
 
   async function onEnd() {
     document.body.classList.remove('drag-active');
-    // 游客:拖拽库已把本地顺序改了,这里拦截并回滚(重新拉取恢复原序)、弹撞墙引导、不发写请求
-    if (blockGuestWrite('bookmark-sort')) {
-      bookmark.refreshData();
-      return;
-    }
+    const source = dragSnapshot.length ? dragSnapshot : [...bookmark.bookmarkList];
     try {
-      // 拖拽即时归位:置顶书签始终浮回顶部(按 isTop 稳定排序,组内保持拖拽后的顺序),再持久化 sort
-      const reordered = [...bookmark.bookmarkList].sort((a: any, b: any) => (b.isTop ? 1 : 0) - (a.isTop ? 1 : 0));
+      // 游客:拖拽库已把本地顺序改了,这里拦截并回滚、弹撞墙引导、不发写请求。
+      if (blockGuestWrite('bookmark-sort')) {
+        bookmark.bookmarkList = source;
+        bookmark.refreshData();
+        return;
+      }
+
+      // 置顶书签始终在普通书签之前；组内保留本次拖拽结果。
+      const reordered = sortPinnedFirst(bookmark.bookmarkList);
       bookmark.bookmarkList = reordered;
-      const sortedTags = reordered.map((bm: any, index: number) => ({ sort: index, id: bm.id }));
-      await apiBasePost('/api/bookmark/updateBookmarkSort', { bookmarks: sortedTags });
+      const moved = reordered.find((item: any) => String(item.id) === draggedBookmarkId);
+      if (!moved) {
+        bookmark.bookmarkList = source;
+        return;
+      }
+
+      const sameGroup = (item: any) => Boolean(item.isTop) === Boolean(moved.isTop);
+      const beforeGroup = sortPinnedFirst(source).filter(sameGroup);
+      const afterGroup = reordered.filter(sameGroup);
+      if (!hasResourceOrderChanged(beforeGroup, afterGroup)) return;
+
+      const move = buildResourceSortMove(
+        reordered,
+        draggedBookmarkId,
+        (candidate: any, target: any) => Boolean(candidate.isTop) === Boolean(target.isTop),
+      );
+      if (!move) {
+        bookmark.bookmarkList = source;
+        return;
+      }
+
+      const res = await apiBasePost('/api/bookmark/updateBookmarkSort', { move });
+      if (res.status !== 200) {
+        bookmark.bookmarkList = source;
+        bookmark.refreshData();
+      }
     } catch (error) {
+      bookmark.bookmarkList = source;
+      bookmark.refreshData();
       console.error('Error updating bookmark sort:', error);
+    } finally {
+      isDragging.value = false;
+      dragSnapshot = [];
+      draggedBookmarkId = '';
+      requestNextPageIfVisible();
     }
   }
 
@@ -227,6 +334,14 @@
       if (id) runLocate(id);
     },
     { immediate: true },
+  );
+  watch(
+    () => (locateId.value ? bookmark.bookmarkList.some((item: any) => String(item.id) === locateId.value) : false),
+    (isPresent) => {
+      if (!isPresent || !locateId.value) return;
+      window.clearTimeout(retryTimer);
+      runLocate(locateId.value);
+    },
   );
 </script>
 
@@ -266,6 +381,15 @@
     padding: 16px;
     gap: 14px;
     align-content: start;
+  }
+
+  .bookmark-load-sentinel {
+    min-height: 24px;
+    padding: 8px 16px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .bookmark-empty-state {

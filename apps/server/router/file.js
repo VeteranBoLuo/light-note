@@ -13,7 +13,12 @@ import {
   deleteObjectFromObs,
   putObjectToObs,
 } from '../util/obsClient.js';
-import { FILE_CATEGORY_ORDER, getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
+import {
+  FILE_CATEGORY_ORDER,
+  buildFileCategorySql,
+  getFileExtension,
+  resolveFileCategory,
+} from '../util/fileCategory.js';
 import * as fileHandle from '../router_handle/fileHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
@@ -21,6 +26,7 @@ import crypto from 'crypto';
 import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 const router = express.Router();
 
 function sendFileServerError(res, scene, error, message = '服务器暂时无法处理，请稍后重试') {
@@ -253,40 +259,82 @@ router.post('/confirmUpload', async (req, res) => {
   }
 });
 
-// 查询所有文件
+// 查询文件列表：主云空间显式分页；标签配置等旧调用未传 pageSize 时保持原数组结构。
 router.post('/queryFiles', async (req, res) => {
   try {
     const userId = req.user.id;
     const { filters = {} } = req.body;
+    const pagination = normalizeOptionalPagination(req.body);
+    const where = ['files.create_by = ?', 'files.del_flag = 0'];
     const params = [userId];
-    let sql = `SELECT files.*, folders.name AS folderName,
-        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
-         FROM resource_tag_relations r
-         INNER JOIN tag t ON r.tag_id = t.id
-         WHERE r.resource_type = 'file' AND r.resource_id = files.id AND t.del_flag = 0
-        ) AS tags
-       FROM files LEFT JOIN folders ON files.folder_id = folders.id WHERE files.create_by = ?`;
-    // 添加文件夹ID条件
+    const categorySql = buildFileCategorySql();
+
     if (
       filters.folderId !== undefined &&
       filters.folderId !== null &&
       filters.folderId !== '' &&
       filters.folderId !== 'all'
     ) {
-      sql += ' AND files.folder_id = ?';
+      where.push('files.folder_id = ?');
       params.push(filters.folderId);
     }
-    // 添加标签ID条件
     if (filters.tagId) {
-      sql += ` AND files.id IN (SELECT resource_id FROM resource_tag_relations WHERE tag_id = ? AND resource_type = 'file')`;
+      where.push(`
+        EXISTS (
+          SELECT 1
+          FROM resource_tag_relations ftr_filter
+          WHERE ftr_filter.resource_type = 'file'
+            AND ftr_filter.resource_id = files.id
+            AND ftr_filter.tag_id = ?
+        )
+      `);
       params.push(filters.tagId);
     }
-    sql += ' AND files.del_Flag=0 ORDER BY files.create_time DESC';
-    const [files] = await pool.query(sql, params);
+    const fileName = String(filters.fileName || '')
+      .trim()
+      .slice(0, 255);
+    if (fileName) {
+      where.push('files.file_name LIKE ?');
+      params.push(`%${fileName}%`);
+    }
 
-    let formattedFiles = files.map(formatFileRecord);
+    if (filters.category !== undefined && filters.category !== null) {
+      const categoryFilters = Array.isArray(filters.category)
+        ? [...new Set(filters.category.filter((item) => FILE_CATEGORY_ORDER.includes(item)))]
+        : [];
+      if (categoryFilters.length === 0) {
+        where.push('1 = 0');
+      } else if (categoryFilters.length < FILE_CATEGORY_ORDER.length) {
+        where.push(`${categorySql} IN (${categoryFilters.map(() => '?').join(', ')})`);
+        params.push(...categoryFilters);
+      }
+    }
 
-    // 处理 tags 为数组
+    const whereSql = where.join(' AND ');
+    let sql = `SELECT files.*, folders.name AS folderName,
+        (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
+         FROM resource_tag_relations r
+         INNER JOIN tag t ON r.tag_id = t.id
+         WHERE r.resource_type = 'file' AND r.resource_id = files.id AND t.del_flag = 0
+        ) AS tags
+       FROM files
+       LEFT JOIN folders ON files.folder_id = folders.id
+       WHERE ${whereSql}
+       ORDER BY files.create_time DESC, files.id DESC`;
+    const listParams = [...params];
+    if (pagination.enabled) {
+      sql += ' LIMIT ? OFFSET ?';
+      listParams.push(pagination.pageSize, pagination.offset);
+    }
+
+    const [listQueryResult, totalQueryResult] = await Promise.all([
+      pool.query(sql, listParams),
+      pagination.enabled
+        ? pool.query(`SELECT COUNT(*) AS total FROM files WHERE ${whereSql}`, params)
+        : Promise.resolve([[]]),
+    ]);
+    const [files] = listQueryResult;
+    const formattedFiles = files.map(formatFileRecord);
     formattedFiles.forEach((file) => {
       file.tags =
         file.tags && Array.isArray(file.tags) && file.tags.every((tag) => tag && tag.id !== null) ? file.tags : [];
@@ -298,23 +346,12 @@ router.post('/queryFiles', async (req, res) => {
       console.warn('[待整理角标] 文件状态回填失败(忽略) code=%s', String(error?.code || 'INBOX_STATUS_FAILED'));
     }
 
-    // 3. 应用文件名过滤
-    if (filters?.fileName) {
-      formattedFiles = formattedFiles.filter((file) => file.fileName.includes(filters.fileName));
+    if (!pagination.enabled) {
+      return res.send(resultData(formattedFiles));
     }
 
-    // 4. 应用文件类型过滤
-    const categoryFilters = Array.isArray(filters?.category)
-      ? filters.category.filter((item) => FILE_CATEGORY_ORDER.includes(item))
-      : [];
-    if (categoryFilters.length > 0) {
-      formattedFiles = formattedFiles.filter((file) => {
-        return categoryFilters.includes(file.category);
-      });
-    } else if (filters?.category !== undefined && filters?.category !== null) {
-      formattedFiles = [];
-    }
-    res.send(resultData(formattedFiles));
+    const total = Number(totalQueryResult?.[0]?.[0]?.total || 0);
+    return res.send(resultData(buildPagedResult(formattedFiles, total, pagination)));
   } catch (error) {
     return sendFileServerError(res, 'query-files', error);
   }

@@ -431,6 +431,7 @@
 
       // 3. 获取关联书签
       const bmRes = await apiQueryPost('/api/bookmark/getBookmarkList', {
+        pageSize: -1,
         filters: { userId: user.id, tagId, type: 'normal' },
       });
       if (requestSeq !== tagDetailRequestSeq) return;
@@ -439,7 +440,7 @@
       }
 
       // 4. 获取关联笔记
-      const noteRes = await apiBasePost('/api/note/queryNoteList', { tagId });
+      const noteRes = await apiBasePost('/api/note/queryNoteList', { pageSize: -1, tagId });
       if (requestSeq !== tagDetailRequestSeq) return;
       if (noteRes.status === 200) {
         notes.value = (noteRes.data || []).map((n: any) => ({
@@ -450,6 +451,7 @@
 
       // 5. 获取关联文件
       const fileRes = await apiBasePost('/api/file/queryFiles', {
+        pageSize: -1,
         filters: {
           tagId,
           category: ['image', 'video', 'audio', 'pdf', 'word', 'excel', 'ppt', 'text', 'compress', 'other'],

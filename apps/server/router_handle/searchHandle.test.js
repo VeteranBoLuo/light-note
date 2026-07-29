@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  pool: { getConnection: vi.fn() },
+  pool: { getConnection: vi.fn(), query: vi.fn() },
   ensureNotVisitor: vi.fn(() => true),
   removeInboxRelations: vi.fn(),
   invalidatePersonalKnowledgeCache: vi.fn(() => Promise.resolve()),
@@ -27,7 +27,7 @@ vi.mock('../util/bookmarkIconService.js', () => ({
   cleanupBookmarkIconFiles: mocks.cleanupBookmarkIconFiles,
 }));
 
-const { batchDeleteResources } = await import('./searchHandle.js');
+const { batchDeleteResources, globalSearch } = await import('./searchHandle.js');
 
 function createResponse() {
   return { send: vi.fn() };
@@ -111,5 +111,81 @@ describe('batchDeleteResources', () => {
 
     expect(mocks.pool.getConnection).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith({ data: null, status: 400, msg: '单次最多删除 1000 项资源' });
+  });
+});
+
+describe('globalSearch pagination', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const normalizedSql = String(sql);
+      if (normalizedSql.includes('SELECT name') && normalizedSql.includes('FROM tag')) {
+        return [[{ name: '工作' }, { name: '稍后读' }]];
+      }
+      if (normalizedSql.includes('COUNT(*) AS total FROM bookmark')) return [[{ total: 30 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM note')) return [[{ total: 7 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM files')) return [[{ total: 5 }]];
+      if (normalizedSql.includes('COUNT(*) AS total FROM tag')) return [[{ total: 2 }]];
+      if (normalizedSql.includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-13',
+              name: '项目资料',
+              description: '项目描述',
+              url: 'https://example.com',
+              tag_list: [{ id: 'tag-1', name: '工作' }],
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+  });
+
+  it('按类型和筛选条件统计总数，只返回请求页并暴露后续页状态', async () => {
+    const res = createResponse();
+
+    await globalSearch(
+      {
+        user: { id: 'user-1' },
+        body: {
+          keyword: '项目',
+          page: 2,
+          limitPerType: 12,
+          type: 'bookmark',
+          sort: 'name',
+          date: '7d',
+          tags: ['工作'],
+        },
+        headers: { 'x-lang': 'zh-CN' },
+      },
+      res,
+    );
+
+    const bookmarkListCall = mocks.pool.query.mock.calls.find(
+      ([sql]) => String(sql).includes('FROM bookmark b') && String(sql).includes('LIMIT ? OFFSET ?'),
+    );
+    expect(bookmarkListCall).toBeTruthy();
+    expect(bookmarkListCall[0]).toContain('b.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    expect(bookmarkListCall[0]).toContain('selected_tag.name IN (?)');
+    expect(bookmarkListCall[1].slice(-2)).toEqual([12, 12]);
+
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.items).toHaveLength(1);
+    expect(payload.data.items[0]).toMatchObject({ id: 'bookmark-13', type: 'bookmark' });
+    expect(payload.data.typeTotals).toEqual({ bookmark: 30, note: 7, file: 5, tag: 2 });
+    expect(payload.data.total).toBe(44);
+    expect(payload.data.page).toBe(2);
+    expect(payload.data.pageSize).toBe(12);
+    expect(payload.data.hasMoreByType).toEqual({
+      bookmark: true,
+      note: false,
+      file: false,
+      tag: false,
+    });
+    expect(payload.data.hasMore).toBe(true);
+    expect(payload.data.tagOptions).toEqual(['工作', '稍后读']);
   });
 });
