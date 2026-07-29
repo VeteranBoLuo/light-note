@@ -304,7 +304,7 @@
         </section>
 
         <!-- 安装到设备 -->
-        <section class="settings-card" id="set-install">
+        <section v-if="!isAndroidApp" class="settings-card" id="set-install">
           <div class="card-head">
             <span class="card-icon card-icon--install">
               <SvgIcon :src="icon.pwa.install" size="20" aria-hidden="true" />
@@ -691,21 +691,27 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { hasAndroidBridge, postAndroidMessage } from '@/utils/androidBridge.ts';
+  import {
+    isLightNoteAndroidApp,
+    postAndroidMessage,
+    postAndroidOpenLegalDocument,
+    type AndroidLegalDocument,
+  } from '@/utils/androidBridge.ts';
 
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
+  const isAndroidApp = isLightNoteAndroidApp();
 
   // 设置页锚点导航:区块多、页面长,顶部 sticky 锚点条一键跳转。游客隐藏「账号与安全」锚点,与该区块 v-if 一致。
   const anchors = computed(() => {
     const list = [
       { id: 'set-appearance', label: t('settings.appearance') },
       { id: 'set-general', label: t('settings.general') },
-      { id: 'set-install', label: t('settings.installTitle') },
-      { id: 'set-notification', label: t('settings.notification') },
     ];
-    if (!bookmark.isMobile) list.splice(3, 0, { id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
+    if (!isAndroidApp) list.push({ id: 'set-install', label: t('settings.installTitle') });
+    if (!bookmark.isMobile) list.push({ id: 'set-shortcuts', label: t('settings.shortcutsTitle') });
+    list.push({ id: 'set-notification', label: t('settings.notification') });
     if (!isGuestUser()) list.push({ id: 'set-account', label: '账号与安全' });
     list.push({ id: 'set-ai', label: 'AI 设置' });
     if (!bookmark.isMobile) {
@@ -759,7 +765,6 @@
     pageRef.value?.removeEventListener('scroll', onPageScroll);
   });
   const user = useUserStore();
-  const isAndroidApp = ref(hasAndroidBridge());
   const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
   const pwaStateLabel = computed(() =>
     installState.value === 'installed'
@@ -786,7 +791,8 @@
     },
   ]);
 
-  function openLegalDocument(fileName: 'privacy-policy.html' | 'user-agreement.html') {
+  function openLegalDocument(fileName: AndroidLegalDocument) {
+    if (isAndroidApp && postAndroidOpenLegalDocument(fileName)) return;
     window.open(`/legal/${fileName}`, '_blank', 'noopener,noreferrer');
   }
 
@@ -796,7 +802,6 @@
       content: t('settings.withdrawConsentConfirmContent'),
       onOk() {
         if (!postAndroidMessage({ type: 'privacyConsent.withdraw' })) {
-          isAndroidApp.value = false;
           message.warning(t('settings.androidBridgeUnavailable'));
         }
       },

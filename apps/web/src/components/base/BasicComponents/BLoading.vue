@@ -72,7 +72,7 @@
 <style lang="less" scoped>
   .b-loading-bar {
     position: fixed;
-    z-index: 12000;
+    z-index: 1200;
     top: 0;
     left: 0;
     width: 100%;

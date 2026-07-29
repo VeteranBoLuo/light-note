@@ -100,7 +100,7 @@ public final class InAppBrowserActivity extends Activity {
             1
         ));
         View statusBarBackground = new View(this);
-        statusBarBackground.setBackgroundColor(getColor(R.color.brand_primary));
+        statusBarBackground.setBackgroundColor(getColor(R.color.page_background));
         FrameLayout.LayoutParams statusBarParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0

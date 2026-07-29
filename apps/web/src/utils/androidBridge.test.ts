@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { hasAndroidBridge, postAndroidAppReady, postAndroidMessage } from './androidBridge';
+import {
+  hasAndroidBridge,
+  hasLightNoteAndroidUserAgent,
+  isAndroidWebViewRuntime,
+  isLightNoteAndroidApp,
+  postAndroidAppReady,
+  postAndroidMessage,
+  postAndroidOpenLegalDocument,
+} from './androidBridge';
 
 afterEach(() => {
   delete window.LightNoteAndroid;
@@ -7,6 +15,21 @@ afterEach(() => {
 });
 
 describe('androidBridge', () => {
+  it('区分轻笺 APK、普通安卓浏览器与系统 WebView', () => {
+    const chromeUa =
+      'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/138.0.0.0 Mobile Safari/537.36';
+    const appUa = `${chromeUa} LightNoteAndroid/1.0.0`;
+    const webViewUa =
+      'Mozilla/5.0 (Linux; Android 12; HUAWEI) AppleWebKit/537.36 Version/4.0 Chrome/114.0.0.0 Mobile Safari/537.36; wv)';
+
+    expect(hasLightNoteAndroidUserAgent(chromeUa)).toBe(false);
+    expect(hasLightNoteAndroidUserAgent(appUa)).toBe(true);
+    expect(isLightNoteAndroidApp(chromeUa)).toBe(false);
+    expect(isLightNoteAndroidApp(appUa)).toBe(true);
+    expect(isAndroidWebViewRuntime(chromeUa)).toBe(false);
+    expect(isAndroidWebViewRuntime(webViewUa)).toBe(true);
+  });
+
   it('没有原生通道时安全回退', () => {
     expect(hasAndroidBridge()).toBe(false);
     expect(postAndroidMessage({ type: 'download' })).toBe(false);
@@ -26,6 +49,16 @@ describe('androidBridge', () => {
 
     expect(postAndroidAppReady()).toBe(true);
     expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: 'app.ready' }));
+  });
+
+  it('设置页可让原生壳打开内置协议文档', () => {
+    const postMessage = vi.fn();
+    window.LightNoteAndroid = { postMessage };
+
+    expect(postAndroidOpenLegalDocument('privacy-policy.html')).toBe(true);
+    expect(postMessage).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'legal.open', document: 'privacy-policy.html' }),
+    );
   });
 
   it('原生通道抛错时不阻断网页回退逻辑', () => {

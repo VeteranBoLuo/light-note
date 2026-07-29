@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="brand_primary">#615CED</color>
+    <color name="splash_background">#F0EFF8</color>
+    <color name="splash_wordmark">#3A3575</color>
+    <color name="system_bar_day">#FFFFFF</color>
+    <color name="system_bar_night">#222222</color>
     <color name="page_background">#FFFFFF</color>
     <color name="text_primary">#1F2330</color>
     <color name="privacy_surface">#F7F7FC</color>

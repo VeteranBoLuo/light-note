@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -45,6 +44,33 @@ public final class MainActivity extends Activity {
     private static final long FILE_CHOOSER_READY_FALLBACK_MS = 3_000;
     private static final long LAUNCH_TIMEOUT_MS = 10_000;
     private static final long WEB_APP_READY_FALLBACK_MS = 1_500;
+    private static final String THEME_OBSERVER_SCRIPT =
+        "(function(){"
+            + "try{"
+            + "var root=document.documentElement;"
+            + "var read=function(){"
+            + "return root.getAttribute('data-theme')==='night'?'night':'day';"
+            + "};"
+            + "var send=function(){"
+            + "var theme=read();"
+            + "if(window.LightNoteAndroid"
+            + "&&typeof window.LightNoteAndroid.postMessage==='function'){"
+            + "window.LightNoteAndroid.postMessage(JSON.stringify({"
+            + "type:'theme.changed',theme:theme"
+            + "}));"
+            + "}"
+            + "return theme;"
+            + "};"
+            + "if(window.__lightNoteAndroidThemeObserver){"
+            + "window.__lightNoteAndroidThemeObserver.disconnect();"
+            + "}"
+            + "window.__lightNoteAndroidThemeObserver=new MutationObserver(send);"
+            + "window.__lightNoteAndroidThemeObserver.observe(root,{"
+            + "attributes:true,attributeFilter:['data-theme']"
+            + "});"
+            + "return send();"
+            + "}catch(error){return '';}"
+            + "})();";
 
     private WebView webView;
     private ProgressBar progressBar;
@@ -53,6 +79,7 @@ public final class MainActivity extends Activity {
     private TextView errorMessageView;
     private Button errorActionButton;
     private FrameLayout rootView;
+    private View statusBarBackground;
     private FrameLayout launchOverlay;
     private FrameLayout fileChooserOverlay;
     private TextView fileChooserStatusView;
@@ -61,6 +88,7 @@ public final class MainActivity extends Activity {
     private Runnable pendingFileChooserLaunch;
     private boolean launchOverlayHidden;
     private boolean unsupportedWebView;
+    private boolean resolvedNightTheme;
     private final Runnable launchTimeout = this::hideLaunchOverlay;
     private final Runnable webAppReadyFallback = this::hideLaunchOverlay;
     private final Runnable fileChooserReadyFallback = this::hideFileChooserOverlay;
@@ -68,6 +96,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        resolvedNightTheme = WindowInsetsSupport.isNightMode(this);
         setContentView(createContentView());
         if (WebViewSupport.isUnsupportedWebView(webView)) {
             showUnsupportedWebView();
@@ -83,7 +112,7 @@ public final class MainActivity extends Activity {
 
     private View createContentView() {
         rootView = new FrameLayout(this);
-        rootView.setBackgroundColor(getColor(R.color.brand_primary));
+        rootView.setBackgroundColor(getColor(R.color.splash_background));
 
         FrameLayout content = new FrameLayout(this);
         content.setBackgroundColor(getColor(R.color.page_background));
@@ -156,8 +185,8 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        View statusBarBackground = new View(this);
-        statusBarBackground.setBackgroundColor(getColor(R.color.brand_primary));
+        statusBarBackground = new View(this);
+        statusBarBackground.setBackgroundColor(getColor(R.color.page_background));
         FrameLayout.LayoutParams statusBarParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0
@@ -187,42 +216,21 @@ public final class MainActivity extends Activity {
 
     private FrameLayout createLaunchOverlay() {
         FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(getColor(R.color.brand_primary));
+        overlay.setBackgroundColor(getColor(R.color.splash_background));
         overlay.setClickable(true);
         overlay.setImportantForAccessibility(
             View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         );
 
-        // 与 Android 系统开屏保持同一背景和品牌标识。静态品牌封面会一直
-        // 延续到 WebView 第一帧，不展示转圈或“加载中”等状态。
-        LinearLayout brand = new LinearLayout(this);
-        brand.setOrientation(LinearLayout.VERTICAL);
-        brand.setGravity(Gravity.CENTER);
-        brand.setTranslationY(dp(-44));
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_launcher_foreground);
-        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        brand.addView(icon, new LinearLayout.LayoutParams(dp(192), dp(192)));
-
-        TextView appName = new TextView(this);
-        appName.setText(R.string.app_name);
-        appName.setTextColor(Color.WHITE);
-        appName.setTextSize(30);
-        appName.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        appName.setGravity(Gravity.CENTER);
-        appName.setIncludeFontPadding(false);
-        appName.setLetterSpacing(0.08f);
-        LinearLayout.LayoutParams appNameParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        );
-        appNameParams.topMargin = dp(10);
-        brand.addView(appName, appNameParams);
+        // 系统启动页和应用等待页共用同一份“图标 + 轻笺”成品资源及尺寸，
+        // WebView 就绪前画面保持静止，切换阶段不会再发生位移或缩放。
+        ImageView brand = new ImageView(this);
+        brand.setImageResource(R.drawable.ic_splash_mark);
+        brand.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
         FrameLayout.LayoutParams brandParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
+            dp(288),
+            dp(288)
         );
         brandParams.gravity = Gravity.CENTER;
         overlay.addView(brand, brandParams);
@@ -289,6 +297,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                syncWebTheme(view, url);
                 scheduleLaunchFallback();
                 progressBar.setVisibility(View.GONE);
             }
@@ -424,8 +433,30 @@ public final class MainActivity extends Activity {
                 );
             } else if ("privacyConsent.withdraw".equals(messageType)) {
                 runOnUiThread(this::restartForPrivacyConsent);
+            } else if ("legal.open".equals(messageType)) {
+                String document = payload.optString("document");
+                if (LegalDocuments.PRIVACY_POLICY_FILE.equals(document)) {
+                    runOnUiThread(() ->
+                        LegalDocumentActivity.open(
+                            MainActivity.this,
+                            document,
+                            R.string.privacy_policy
+                        )
+                    );
+                } else if (LegalDocuments.USER_AGREEMENT_FILE.equals(document)) {
+                    runOnUiThread(() ->
+                        LegalDocumentActivity.open(
+                            MainActivity.this,
+                            document,
+                            R.string.user_agreement
+                        )
+                    );
+                }
             } else if ("app.ready".equals(messageType)) {
                 runOnUiThread(this::hideLaunchOverlay);
+            } else if ("theme.changed".equals(messageType)) {
+                String theme = payload.optString("theme");
+                runOnUiThread(() -> applyWebTheme(theme));
             }
         } catch (JSONException error) {
             // 受信页面发来的未知/损坏消息不执行任何原生操作。
@@ -440,6 +471,51 @@ public final class MainActivity extends Activity {
         );
         startActivity(intent);
         finish();
+    }
+
+    private void syncWebTheme(WebView sourceView, String url) {
+        if (!WebViewSupport.isLightNoteUrl(url)) {
+            return;
+        }
+        sourceView.evaluateJavascript(THEME_OBSERVER_SCRIPT, result -> {
+            if ("\"night\"".equals(result)) {
+                applyWebTheme("night");
+            } else if ("\"day\"".equals(result)) {
+                applyWebTheme("day");
+            }
+        });
+    }
+
+    private void applyWebTheme(String theme) {
+        if (!"day".equals(theme) && !"night".equals(theme)) {
+            return;
+        }
+        resolvedNightTheme = "night".equals(theme);
+        if (launchOverlayHidden) {
+            applyResolvedWebTheme();
+        }
+    }
+
+    private void applyResolvedWebTheme() {
+        int backgroundColor = getColor(
+            resolvedNightTheme
+                ? R.color.system_bar_night
+                : R.color.system_bar_day
+        );
+        if (rootView != null) {
+            rootView.setBackgroundColor(backgroundColor);
+        }
+        if (webView != null) {
+            webView.setBackgroundColor(backgroundColor);
+        }
+        if (statusBarBackground != null && rootView != null) {
+            WindowInsetsSupport.applySystemBarTheme(
+                this,
+                rootView,
+                statusBarBackground,
+                resolvedNightTheme
+            );
+        }
     }
 
     private boolean routeMainUrl(String url) {
@@ -683,9 +759,7 @@ public final class MainActivity extends Activity {
             .withEndAction(() -> {
                 launchOverlay.setVisibility(View.GONE);
                 launchOverlay.setAlpha(1f);
-                if (rootView != null) {
-                    rootView.setBackgroundColor(getColor(R.color.page_background));
-                }
+                applyResolvedWebTheme();
             })
             .start();
     }

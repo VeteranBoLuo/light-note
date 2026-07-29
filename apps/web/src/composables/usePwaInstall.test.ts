@@ -8,6 +8,8 @@ vi.mock('@/api/commonApi', () => ({
 
 describe('usePwaInstall', () => {
   beforeEach(() => {
+    vi.resetModules();
+    delete window.LightNoteAndroid;
     localStorage.clear();
     sessionStorage.clear();
     recordOperation.mockReset();
@@ -136,5 +138,23 @@ describe('usePwaInstall', () => {
     window.dispatchEvent(new Event('appinstalled'));
     expect(pwa.isStandalone.value).toBe(true);
     expect(pwa.guideVisible.value).toBe(false);
+  });
+
+  it('轻笺安卓 App 不初始化 PWA 安装能力，也不会打开安装教程', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value:
+        'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/138.0.0.0 Mobile Safari/537.36 LightNoteAndroid/1.0.0',
+    });
+
+    const { initializePwaInstall, usePwaInstall } = await import('./usePwaInstall');
+    initializePwaInstall();
+    const pwa = usePwaInstall();
+
+    pwa.openGuide('settings');
+    expect(pwa.guideVisible.value).toBe(false);
+    expect(pwa.canPrompt.value).toBe(false);
+    expect(await pwa.requestInstall('settings')).toBe('unsupported');
+    expect(recordOperation).not.toHaveBeenCalled();
   });
 });

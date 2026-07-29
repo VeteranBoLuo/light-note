@@ -7,13 +7,16 @@ import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
 import i18n from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
-import { postAndroidAppReady } from '@/utils/androidBridge';
+import {
+  isAndroidWebViewRuntime,
+  isLightNoteAndroidApp,
+  postAndroidAppReady,
+} from '@/utils/androidBridge';
 
 // Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
-// 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 是旧调试包的兼容识别。
-const isAndroidWebView =
-  /\bLightNoteAndroid\/[\w.-]+/i.test(navigator.userAgent) ||
-  (/Android/i.test(navigator.userAgent) && /;\s*wv\)/i.test(navigator.userAgent));
+// 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 保留给旧调试包与系统 WebView。
+const isAndroidApp = isLightNoteAndroidApp();
+const isAndroidWebView = isAndroidWebViewRuntime();
 if (isAndroidWebView) {
   document.documentElement.classList.add('light-note-android-webview');
 }
@@ -29,7 +32,10 @@ app.component('Icon', Icon);
 app.config.globalProperties.$t = i18n.global.t;
 globalDirect(app);
 // 必须在 mount 前监听 beforeinstallprompt，否则浏览器可能在应用组件挂载前触发事件而丢失安装入口。
-initializePwaInstall();
+// 轻笺原生 APK 已经安装完成，不再注册 PWA Service Worker 或安装提示监听。
+if (!isAndroidApp) {
+  initializePwaInstall();
+}
 // 挂载实例
 app.mount('#app');
 

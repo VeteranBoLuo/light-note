@@ -1,6 +1,7 @@
 package top.boluo66.lightnote;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
 import android.view.View;
@@ -54,12 +55,37 @@ final class WindowInsetsSupport {
             return windowInsets;
         });
         root.post(() -> {
-            WindowInsetsControllerCompat controller =
-                WindowCompat.getInsetsController(window, root);
-            controller.setAppearanceLightStatusBars(false);
-            controller.setAppearanceLightNavigationBars(true);
+            applySystemBarTheme(
+                activity,
+                root,
+                statusBarBackground,
+                isNightMode(activity)
+            );
             ViewCompat.requestApplyInsets(root);
         });
+    }
+
+    static boolean isNightMode(Activity activity) {
+        int nightMode = activity.getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_NIGHT_MASK;
+        return nightMode == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    static void applySystemBarTheme(
+        Activity activity,
+        View root,
+        View statusBarBackground,
+        boolean isNight
+    ) {
+        int backgroundColor = activity.getColor(
+            isNight ? R.color.system_bar_night : R.color.system_bar_day
+        );
+        statusBarBackground.setBackgroundColor(backgroundColor);
+
+        WindowInsetsControllerCompat controller =
+            WindowCompat.getInsetsController(activity.getWindow(), root);
+        controller.setAppearanceLightStatusBars(!isNight);
+        controller.setAppearanceLightNavigationBars(!isNight);
     }
 
     private static void updateMargins(

@@ -3,10 +3,10 @@
     <style name="Theme.LightNote.Base" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">@color/brand_primary</item>
-        <item name="android:statusBarColor">@color/brand_primary</item>
-        <item name="android:navigationBarColor">#000000</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowLightStatusBar">@bool/light_system_bars</item>
     </style>
 
     <style name="Theme.LightNote" parent="Theme.LightNote.Base" />

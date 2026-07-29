@@ -33,7 +33,7 @@ public final class PrivacyConsentActivity extends Activity {
 
     private View createContentView() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(getColor(R.color.brand_primary));
+        root.setBackgroundColor(getColor(R.color.page_background));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -52,6 +52,7 @@ public final class PrivacyConsentActivity extends Activity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.drawable.ic_brand_tile);
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        icon.setPadding(dp(5), dp(5), dp(5), dp(5));
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         header.addView(icon, new LinearLayout.LayoutParams(dp(58), dp(58)));
 
@@ -180,7 +181,7 @@ public final class PrivacyConsentActivity extends Activity {
         content.addView(decline, matchWidthTopMarginParams(dp(10)));
 
         View statusBarBackground = new View(this);
-        statusBarBackground.setBackgroundColor(getColor(R.color.brand_primary));
+        statusBarBackground.setBackgroundColor(getColor(R.color.page_background));
         FrameLayout.LayoutParams statusBarParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0
