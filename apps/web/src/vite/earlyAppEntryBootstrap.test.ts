@@ -11,6 +11,8 @@ import { createEarlyAppEntryScript } from './earlyAppEntryBootstrap';
 interface ScriptExecutionOptions {
   pathname?: string;
   viewportWidth?: number;
+  screenWidth?: number;
+  screenHeight?: number;
   storage?: Record<string, string>;
   storageThrows?: boolean;
   userAgent?: string;
@@ -21,6 +23,8 @@ interface ScriptExecutionOptions {
 function executeBootstrap({
   pathname = '/',
   viewportWidth = 390,
+  screenWidth = viewportWidth,
+  screenHeight = 844,
   storage: initialStorage = {},
   storageThrows = false,
   userAgent = 'Mozilla/5.0 Mobile Safari/537.36',
@@ -51,6 +55,10 @@ function executeBootstrap({
     },
     window: {
       innerWidth: viewportWidth,
+      screen: {
+        width: screenWidth,
+        height: screenHeight,
+      },
       localStorage,
       navigator: {
         userAgent,
@@ -83,6 +91,20 @@ describe('首屏前移动应用入口守卫', () => {
 
   it('已经看过移动官网的回访浏览器在官网绘制前进入 /app', () => {
     const result = executeBootstrap({
+      storage: {
+        [MOBILE_LANDING_VISIT_STORAGE_KEY]: '1',
+      },
+    });
+
+    expect(result.replacedWith).toBe('/app');
+    expect(result.visibility).toBe('hidden');
+  });
+
+  it('viewport meta 生效前 innerWidth 为桌面宽度时仍可用手机屏幕短边识别回访', () => {
+    const result = executeBootstrap({
+      viewportWidth: 980,
+      screenWidth: 844,
+      screenHeight: 390,
       storage: {
         [MOBILE_LANDING_VISIT_STORAGE_KEY]: '1',
       },
@@ -153,6 +175,8 @@ describe('首屏前移动应用入口守卫', () => {
   it('桌面浏览器和桌面 PWA 即使已登录也保留根官网', () => {
     const result = executeBootstrap({
       viewportWidth: 1440,
+      screenWidth: 1440,
+      screenHeight: 900,
       standalone: true,
       storage: {
         [LOGIN_HISTORY_STORAGE_KEYS.loggedIn]: String(Date.now()),

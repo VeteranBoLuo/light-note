@@ -66,6 +66,17 @@
         </div>
       </section>
 
+      <section class="pwa-guide__native-app">
+        <span class="pwa-guide__native-app-icon">
+          <SvgIcon :src="icon.pwa.android" size="21" aria-hidden="true" />
+        </span>
+        <div class="pwa-guide__native-app-copy">
+          <strong>{{ t('pwa.nativeAppTitle') }}</strong>
+          <span>{{ t('pwa.nativeAppDescription') }}</span>
+        </div>
+        <span class="pwa-guide__native-app-status">{{ t('pwa.nativeAppStatus') }}</span>
+      </section>
+
       <div class="pwa-guide__workspace">
         <aside class="pwa-guide__platforms">
           <span class="pwa-guide__section-label">{{ t('pwa.choosePlatform') }}</span>
@@ -554,6 +565,63 @@
     white-space: nowrap;
   }
 
+  .pwa-guide__native-app {
+    min-width: 0;
+    padding: 14px 20px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    background: linear-gradient(90deg, rgba(97, 92, 237, 0.1), transparent 52%), #10111c;
+  }
+
+  .pwa-guide__native-app-icon {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(151, 147, 255, 0.18);
+    border-radius: 12px;
+    color: #aaa7ff;
+    background: rgba(97, 92, 237, 0.12);
+  }
+
+  .pwa-guide__native-app-copy {
+    min-width: 0;
+  }
+
+  .pwa-guide__native-app-copy strong,
+  .pwa-guide__native-app-copy span {
+    display: block;
+  }
+
+  .pwa-guide__native-app-copy strong {
+    color: #f0efff;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .pwa-guide__native-app-copy span {
+    margin-top: 3px;
+    color: #85889c;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .pwa-guide__native-app-status {
+    padding: 6px 10px;
+    border: 1px solid rgba(151, 147, 255, 0.18);
+    border-radius: 999px;
+    color: #b9b6ff;
+    background: rgba(97, 92, 237, 0.1);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
   .pwa-guide__workspace {
     min-height: 340px;
     display: grid;
@@ -919,6 +987,23 @@
 
     .pwa-guide__action-badge {
       display: none;
+    }
+
+    .pwa-guide__native-app {
+      padding: 13px 16px;
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .pwa-guide__native-app-icon {
+      width: 36px;
+      height: 36px;
+    }
+
+    .pwa-guide__native-app-status {
+      grid-column: 2;
+      width: max-content;
+      margin-top: -2px;
     }
 
     .pwa-guide__workspace {

@@ -57,7 +57,23 @@ export function createEarlyAppEntryScript(): string {
       return;
     }
 
-    if (window.innerWidth >= config.mobileBreakpoint) return;
+    // 该脚本位于 viewport meta 之前，部分移动浏览器此时会把 innerWidth 报成约 980px。
+    // 同时参考屏幕短边，确保回访手机在官网首次绘制前就能被识别；桌面窄窗口仍沿用响应式宽度语义。
+    var innerWidth = Number(window.innerWidth);
+    var screenWidth = Number(window.screen && window.screen.width);
+    var screenHeight = Number(window.screen && window.screen.height);
+    var screenNarrowSide = Math.min(
+      screenWidth > 0 ? screenWidth : Infinity,
+      screenHeight > 0 ? screenHeight : Infinity
+    );
+    var effectiveViewportWidth = Math.min(
+      innerWidth > 0 ? innerWidth : Infinity,
+      screenNarrowSide
+    );
+    if (
+      !Number.isFinite(effectiveViewportWidth) ||
+      effectiveViewportWidth >= config.mobileBreakpoint
+    ) return;
 
     // 普通第三方 Android WebView 可能错误报告 standalone，不能因此冒充轻笺 PWA。
     var isGenericAndroidWebView =
