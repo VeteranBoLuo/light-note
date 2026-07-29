@@ -7,15 +7,19 @@
       @mouseenter="pauseNudgeTimer"
       @mouseleave="resumeNudgeTimer"
     >
-      <button class="gn-close" aria-label="关闭" @click="hideGuestNudge">×</button>
+      <BButton class="gn-close" :aria-label="t('common.close')" @click="hideGuestNudge">
+        <SvgIcon :src="icon.common.close" size="16" aria-hidden="true" />
+      </BButton>
       <div class="gn-main">
-        <span class="gn-icon">🔒</span>
+        <span class="gn-icon">
+          <SvgIcon :src="icon.growth.lock" size="18" aria-hidden="true" />
+        </span>
         <div class="gn-text">
           <div class="gn-title">{{ t('guest.previewTitle') }}</div>
           <div class="gn-desc">{{ nudgeContent || t('guest.previewContent') }}</div>
         </div>
       </div>
-      <button class="gn-cta" @click="register">{{ t('guest.registerNow') }}</button>
+      <BButton class="gn-cta" type="primary" @click="register">{{ t('guest.registerNow') }}</BButton>
     </div>
   </transition>
 </template>
@@ -23,6 +27,9 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore } from '@/store';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import {
     nudgeVisible,
     nudgeContent,
@@ -50,7 +57,7 @@
     z-index: 400;
     width: 300px;
     max-width: calc(100vw - 32px);
-    padding: 14px 16px;
+    padding: 15px 16px;
     border-radius: 14px;
     background: var(--card-background, #fff);
     border: 1px solid var(--card-border-color);
@@ -61,24 +68,38 @@
   }
   .gn-close {
     position: absolute;
-    top: 6px;
-    right: 10px;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    padding: 0;
     background: transparent;
     border: none;
-    font-size: 18px;
-    line-height: 1;
     color: var(--desc-color);
-    cursor: pointer;
+  }
+  .gn-close:hover {
+    background: var(--menu-item-h-bg-color);
   }
   .gn-main {
     display: flex;
-    gap: 10px;
+    gap: 11px;
     align-items: flex-start;
+    padding-right: 22px;
   }
   .gn-icon {
-    font-size: 20px;
-    line-height: 1.35;
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--primary-btn-bg-color);
     flex-shrink: 0;
+  }
+  .gn-text {
+    min-width: 0;
   }
   .gn-title {
     font-size: 14px;
@@ -94,17 +115,10 @@
   .gn-cta {
     align-self: stretch;
     height: 34px;
-    border: none;
+    width: 100%;
     border-radius: 9px;
-    background: var(--primary-color);
-    color: #fff;
     font-size: 13px;
     font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s;
-  }
-  .gn-cta:hover {
-    opacity: 0.9;
   }
   /* 右下角滑入滑出 */
   .gn-enter-active,
@@ -120,10 +134,28 @@
   }
   @media (max-width: 560px) {
     .guest-nudge {
+      left: 12px;
       right: 12px;
       bottom: calc(var(--mobile-shell-bottom-height, 0px) + 12px);
-      width: 280px;
-      max-width: calc(100vw - 24px);
+      width: auto;
+      max-width: none;
+      padding: 14px;
+      border-radius: 16px;
+      gap: 11px;
+      box-shadow: 0 16px 36px -18px rgba(20, 24, 50, 0.38);
+    }
+    .gn-main {
+      padding-right: 24px;
+    }
+    .gn-title {
+      font-size: 15px;
+    }
+    .gn-desc {
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .gn-cta {
+      height: 38px;
     }
   }
 </style>

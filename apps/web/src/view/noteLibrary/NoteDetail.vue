@@ -147,11 +147,12 @@
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
   let resourceResolveVersion = 0;
   let lastResourceRefSignature = '';
+  let currentEditorResourceRefs: ResourceRef[] = [];
 
-  async function onEditorResourceRefsChange(refs: ResourceRef[]) {
+  async function resolveEditorResourceRefs(refs: ResourceRef[], force = false) {
     const normalized = refs.slice(0, 100);
     const signature = `${note.id}|${normalized.map(resourceRefKey).join('|')}`;
-    if (signature === lastResourceRefSignature) return;
+    if (!force && signature === lastResourceRefSignature) return;
     lastResourceRefSignature = signature;
     const request = ++resourceResolveVersion;
     if (!normalized.length) {
@@ -170,6 +171,20 @@
         resolvedResourceRefs.value = [];
       }
     }
+  }
+
+  async function onEditorResourceRefsChange(refs: ResourceRef[]) {
+    currentEditorResourceRefs = refs.slice(0, 100);
+    await resolveEditorResourceRefs(currentEditorResourceRefs);
+  }
+
+  function refreshEditorResourceRefs() {
+    if (document.visibilityState === 'hidden' || !currentEditorResourceRefs.length) return;
+    void resolveEditorResourceRefs(currentEditorResourceRefs, true);
+  }
+
+  function handleResourceRefVisibilityChange() {
+    if (document.visibilityState === 'visible') refreshEditorResourceRefs();
   }
 
   watch(
@@ -698,6 +713,9 @@
   const a = ref();
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('visibilitychange', handleResourceRefVisibilityChange);
+    window.addEventListener('focus', refreshEditorResourceRefs);
+    window.addEventListener('pageshow', refreshEditorResourceRefs);
     if (router.currentRoute.value.params.id !== 'add') {
       isReady.value = false;
       apiBasePost('/api/note/getNoteDetail', {
@@ -758,6 +776,9 @@
   });
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyDown);
+    document.removeEventListener('visibilitychange', handleResourceRefVisibilityChange);
+    window.removeEventListener('focus', refreshEditorResourceRefs);
+    window.removeEventListener('pageshow', refreshEditorResourceRefs);
     clearScheduledSave();
     nStore.headings = [];
     // 离开笔记时清除「草稿已提升」登记,避免影响下一篇/新建笔记的 key 判断

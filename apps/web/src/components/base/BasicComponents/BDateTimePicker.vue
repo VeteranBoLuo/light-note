@@ -7,15 +7,19 @@
     :disabled="disabled"
   >
     <BButton class="b-datetime-trigger" :disabled="disabled">
-      <span class="b-datetime-trigger__icon">&#128197;</span>
+      <SvgIcon class="b-datetime-trigger__icon" :src="icon.common.calendar" size="17" aria-hidden="true" />
       <span :class="{ 'is-placeholder': !displayValue }">{{ displayValue || placeholder }}</span>
     </BButton>
     <template #content>
       <div class="b-datetime-panel">
         <header class="b-datetime-panel__header">
-          <BButton size="small" :title="t('common.previous')" @click="moveMonth(-1)">&#8249;</BButton>
+          <BButton size="small" :title="t('common.previous')" @click="moveMonth(-1)">
+            <SvgIcon :src="icon.arrow_left" size="16" aria-hidden="true" />
+          </BButton>
           <strong>{{ monthLabel }}</strong>
-          <BButton size="small" :title="t('common.next')" @click="moveMonth(1)">&#8250;</BButton>
+          <BButton size="small" :title="t('common.next')" @click="moveMonth(1)">
+            <SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" />
+          </BButton>
         </header>
         <div class="b-datetime-weekdays">
           <span v-for="day in weekdays" :key="day">{{ day }}</span>
@@ -78,6 +82,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
 
   const props = withDefaults(
     defineProps<{
@@ -98,9 +104,9 @@
   const viewMonth = ref(startOfMonth(new Date()));
   const draftStartDate = ref('');
   const draftEndDate = ref('');
-  const draftStartHour = ref('09');
+  const draftStartHour = ref('00');
   const draftStartMinute = ref('00');
-  const draftEndHour = ref('18');
+  const draftEndHour = ref('00');
   const draftEndMinute = ref('00');
   const today = toDatePart(new Date());
 
@@ -173,15 +179,19 @@
   });
 
   function readModel() {
+    const current = roundToNextFiveMinutes(new Date());
     const start = splitValue(value.value);
     const end = mode.value === 'range' ? splitValue(endValue.value) : splitValue('');
-    draftStartDate.value = start.date;
-    draftStartHour.value = start.hour || '09';
-    draftStartMinute.value = normalizeMinute(start.minute || '00');
+    const defaultDate = toDatePart(current);
+    const defaultHour = String(current.getHours()).padStart(2, '0');
+    const defaultMinute = String(current.getMinutes()).padStart(2, '0');
+    draftStartDate.value = start.date || defaultDate;
+    draftStartHour.value = start.hour || defaultHour;
+    draftStartMinute.value = normalizeMinute(start.minute || defaultMinute);
     draftEndDate.value = end.date;
-    draftEndHour.value = end.hour || '18';
-    draftEndMinute.value = normalizeMinute(end.minute || '00');
-    const anchor = parseLocalDate(start.date || toDatePart(new Date()));
+    draftEndHour.value = end.hour || defaultHour;
+    draftEndMinute.value = normalizeMinute(end.minute || defaultMinute);
+    const anchor = parseLocalDate(start.date || defaultDate);
     viewMonth.value = startOfMonth(anchor);
   }
 
@@ -214,10 +224,10 @@
   function isInRange(date: string) {
     return Boolean(
       mode.value === 'range' &&
-        draftStartDate.value &&
-        draftEndDate.value &&
-        date > draftStartDate.value &&
-        date < draftEndDate.value,
+      draftStartDate.value &&
+      draftEndDate.value &&
+      date > draftStartDate.value &&
+      date < draftEndDate.value,
     );
   }
 
@@ -258,6 +268,14 @@
     return { date, hour, minute };
   }
 
+  function roundToNextFiveMinutes(date: Date) {
+    const rounded = new Date(date);
+    rounded.setSeconds(0, 0);
+    const remainder = rounded.getMinutes() % 5;
+    if (remainder !== 0) rounded.setMinutes(rounded.getMinutes() + (5 - remainder));
+    return rounded;
+  }
+
   function normalizeMinute(minute: string) {
     const numeric = Number(minute);
     if (!Number.isFinite(numeric)) return '00';
@@ -296,6 +314,11 @@
   .b-datetime-trigger__icon {
     flex: none;
     opacity: 0.72;
+  }
+  .b-datetime-panel__header .b_btn {
+    width: 28px;
+    min-width: 28px;
+    padding: 0;
   }
   .b-datetime-trigger span:last-child {
     overflow: hidden;

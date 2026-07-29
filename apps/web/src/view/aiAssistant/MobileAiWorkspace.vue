@@ -16,7 +16,7 @@
       >
         <header class="mobile-ai-workspace__history-header">
           <strong>{{ t('ai.conversations.title') }}</strong>
-          <BButton :aria-label="t('common.close')" @click="historyVisible = false">
+          <BButton :aria-label="t('common.close')" @click="closeHistory">
             <SvgIcon :src="icon.common.close" size="18" aria-hidden="true" />
           </BButton>
         </header>
@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-  import { nextTick, ref } from 'vue';
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import AiWorkspaceShell from '@/components/aiAssistant/AiWorkspaceShell.vue';
@@ -56,12 +56,37 @@
     openConversation?: (conversationId: string) => Promise<void>;
   } | null>(null);
   const historyVisible = ref(false);
+  const historyBackActive = ref(false);
   let creatingConversation = false;
+
+  function closeHistory() {
+    historyVisible.value = false;
+  }
+
+  function handleHistoryPopState() {
+    if (!historyBackActive.value || !historyVisible.value) return;
+    historyBackActive.value = false;
+    historyVisible.value = false;
+  }
+
+  watch(historyVisible, (visible) => {
+    if (visible) {
+      if (!historyBackActive.value) {
+        history.pushState({ mobileAiHistory: true }, '');
+        historyBackActive.value = true;
+      }
+      return;
+    }
+    if (historyBackActive.value) {
+      historyBackActive.value = false;
+      history.back();
+    }
+  });
 
   async function createConversation() {
     if (creatingConversation) return;
     creatingConversation = true;
-    historyVisible.value = false;
+    closeHistory();
     try {
       const cleared = (await workspaceRef.value?.clearHistory?.()) ?? true;
       if (cleared) message.success(t('ai.newChart'));
@@ -72,7 +97,7 @@
   }
 
   async function openConversation(cloudConversationId: string) {
-    historyVisible.value = false;
+    closeHistory();
     await nextTick();
     await workspaceRef.value?.openConversation?.(cloudConversationId);
   }
@@ -91,6 +116,14 @@
     auxiliaryActionIcon: () => icon.ai.conversations,
     onAdd: createConversation,
     addLabel: () => t('ai.newConversation'),
+  });
+
+  onMounted(() => {
+    window.addEventListener('popstate', handleHistoryPopState);
+  });
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('popstate', handleHistoryPopState);
   });
 </script>
 

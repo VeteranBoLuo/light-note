@@ -21,6 +21,25 @@
       <div class="md-editor-container">
         <div class="md-editor-toolbar" v-if="!readonly">
           <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="line" />
+          <BUpload
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+            :multiple="false"
+            raw-file
+            :max-total-size="10 * 1024 * 1024"
+            :disabled="markdownImageUploading"
+            :aria-label="t('note.mdUploadImage')"
+            @change="uploadMarkdownImage"
+          >
+            <BButton
+              class="md-image-upload"
+              size="small"
+              :loading="markdownImageUploading"
+              :aria-label="t('note.mdUploadImage')"
+            >
+              <SvgIcon v-if="!markdownImageUploading" :src="icon.file_upload" size="15" aria-hidden="true" />
+              <span>{{ markdownImageUploading ? t('note.mdUploadingImage') : t('note.mdUploadImage') }}</span>
+            </BButton>
+          </BUpload>
         </div>
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
@@ -152,9 +171,11 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
   import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
-  import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
+  import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -320,6 +341,7 @@
 
   // Markdown 编辑器状态
   const mdContent = ref('');
+  const markdownImageUploading = ref(false);
   let markedLib: any = null;
   let dompurifyLib: any = null;
   const mentionPickerVisible = ref(false);
@@ -613,8 +635,8 @@
   function selectionIsExactTinyMceMention(editor: any, range: Range | null | undefined, expectedText = '@') {
     return Boolean(
       isValidTinyMceMentionText(expectedText) &&
-        rangeBelongsToTinyMce(editor, range) &&
-        range?.toString() === expectedText,
+      rangeBelongsToTinyMce(editor, range) &&
+      range?.toString() === expectedText,
     );
   }
 
@@ -1061,10 +1083,10 @@
   // MD → HTML 统一收口：marked 渲染 + DOMPurify 消毒 + 站内链接增强属性(N0)。
   // 集中一处避免多条渲染路径口径漂移；decorate 只给站内链接补 data-ln-*,无站内链接则原样返回(零改写)。
   // 调用方须先 await ensureMdLib()（本函数同步使用已加载的 markedLib/dompurifyLib）。
-  function mdToSafeHtml(mdText: string): string {
+  function mdToSafeHtml(mdText: string, editableTaskLists = false): string {
     const raw = markedLib.parse(mdText || '');
     const safe = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
-    return decorateInternalResourceLinks(safe);
+    return decorateInternalResourceLinks(normalizeMarkdownTaskListHtml(safe, editableTaskLists));
   }
 
   const renderedMd = ref('');
@@ -1082,6 +1104,59 @@
       if (inlineMentionVisible.value) syncMarkdownInlineMention();
       else tryOpenMarkdownMention();
     });
+  }
+
+  async function uploadNoteImageFile(file: Blob, fileName: string) {
+    let noteId = props.noteId;
+    if (!noteId && typeof props.ensureNoteId === 'function') {
+      noteId = await (props.ensureNoteId as () => Promise<string>)();
+    }
+    const formData = new FormData();
+    formData.append('file', file, fileName);
+    formData.append('noteId', noteId || '');
+    const res = await apiBasePost('/api/note/uploadImage', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    if (res.data?.noteId) emits('setNoteId', res.data.noteId);
+    if (!res.data?.url) throw new Error('NOTE_IMAGE_UPLOAD_FAILED');
+    return String(res.data.url);
+  }
+
+  function escapeMarkdownImageAlt(fileName: string) {
+    return String(fileName || t('note.mdImageAlt'))
+      .replace(/\.[^.]+$/u, '')
+      .replace(/([\\[\]])/gu, '\\$1')
+      .replace(/[\r\n]+/gu, ' ')
+      .trim();
+  }
+
+  async function uploadMarkdownImage(files: File[]) {
+    const file = Array.isArray(files) ? files[0] : null;
+    if (!file || markdownImageUploading.value) return;
+    const textarea = getMdTextarea();
+    const start = textarea?.selectionStart ?? mdContent.value.length;
+    const end = textarea?.selectionEnd ?? start;
+    markdownImageUploading.value = true;
+    try {
+      const imageUrl = await uploadNoteImageFile(file, file.name);
+      const source = mdContent.value || '';
+      const linePrefix = start > 0 && source[start - 1] !== '\n' ? '\n' : '';
+      const lineSuffix = end < source.length && source[end] !== '\n' ? '\n' : '';
+      const markdown = `${linePrefix}![${escapeMarkdownImageAlt(file.name)}](${imageUrl})${lineSuffix}`;
+      const nextValue = `${source.slice(0, start)}${markdown}${source.slice(end)}`;
+      onMdInput(nextValue);
+      await nextTick();
+      const nextCursor = start + markdown.length;
+      const activeTextarea = getMdTextarea();
+      activeTextarea?.focus({ preventScroll: true });
+      activeTextarea?.setSelectionRange(nextCursor, nextCursor);
+    } catch {
+      message.warning(t('note.uploadFailed'));
+    } finally {
+      markdownImageUploading.value = false;
+    }
   }
 
   watch([mentionPickerVisible, inlineMentionVisible], ([modalOpen, inlineOpen]) => {
@@ -1218,7 +1293,7 @@
       const mdText = backup.content || '';
       if (mdText.trim()) {
         try {
-          content.value = mdToSafeHtml(mdText);
+          content.value = mdToSafeHtml(mdText, true);
         } catch {
           content.value = mdText;
         }
@@ -1320,10 +1395,7 @@
   const replaceContentWithUndo = async (value: string, inputType: 'html' | 'markdown' = 'html') => {
     await nextTick();
     if (currentType.value === 'markdown') {
-      const md =
-        inputType === 'markdown'
-          ? value || ''
-          : noteHtmlToMarkdown(value || '');
+      const md = inputType === 'markdown' ? value || '' : noteHtmlToMarkdown(value || '');
       // 用 execCommand('insertText') 替换 textarea 全文,让浏览器把这次替换记入原生撤销栈,
       // 使 AI 替换后能像 html(TinyMCE undoManager)一样 Ctrl+Z 撤回;不支持时退回直接赋值(内容正确,仅撤回失效)。
       const textarea = getMdTextarea();
@@ -1352,7 +1424,7 @@
     let html = value || '';
     if (inputType === 'markdown') {
       await ensureMdLib();
-      html = mdToSafeHtml(html);
+      html = mdToSafeHtml(html, true);
     }
     editor.undoManager?.transact(() => {
       editor.setContent(html);
@@ -1409,34 +1481,9 @@
       ? {}
       : {
           images_upload_handler: (blobInfo: any) =>
-            new Promise(async (resolve, reject) => {
-              try {
-                // 新建笔记还没 id 就粘贴图片时：先确保笔记已创建，拿到真实 noteId 再上传，
-                // 后端因此不会走"noteId 为空就自动建一条笔记"的分支，避免建出多条笔记
-                let nid = props.noteId;
-                if (!nid && typeof props.ensureNoteId === 'function') {
-                  nid = await (props.ensureNoteId as () => Promise<string>)();
-                }
-                const formData = new FormData();
-                formData.append('file', blobInfo.blob(), blobInfo.filename());
-                formData.append('noteId', nid || '');
-                const res = await apiBasePost('/api/note/uploadImage', formData, {
-                  headers: {
-                    'Content-Type': 'multipart/form-data',
-                  },
-                });
-                if (res.data?.noteId) {
-                  emits('setNoteId', res.data.noteId);
-                }
-                if (res.data?.url) {
-                  resolve(res.data.url);
-                  return;
-                }
-                reject(t('note.uploadFailed'));
-              } catch {
-                reject(t('note.uploadFailed'));
-              }
-            }),
+            uploadNoteImageFile(blobInfo.blob(), blobInfo.filename()).catch(() =>
+              Promise.reject(t('note.uploadFailed')),
+            ),
         }),
     setup: (editor: any) => {
       editorRef.value = editor;
@@ -1821,7 +1868,7 @@
       });
     },
     content_style: [
-      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
@@ -2044,6 +2091,11 @@
       background: var(--resource-note-color, #00a884);
     }
   }
+  .md-image-upload {
+    flex: 0 0 auto;
+    gap: 5px;
+    margin-left: 8px;
+  }
 
   /* Markdown 编辑器 */
   .md-editor-container {
@@ -2163,6 +2215,17 @@
     ol {
       padding-left: 20px;
     }
+    .note-task-list {
+      padding-left: 0;
+      list-style: none;
+    }
+    .note-task-list-item {
+      list-style: none;
+    }
+    .note-todo-checkbox {
+      margin: 0 7px 0 0;
+      vertical-align: middle;
+    }
     a.ln-resource-link {
       // inline 的 border 不参与行高计算，标签不会再把同一行文本顶开。
       display: inline;
@@ -2186,6 +2249,23 @@
         color: var(--desc-color);
         cursor: not-allowed;
       }
+    }
+  }
+
+  @media (max-width: 420px) {
+    .md-editor-toolbar {
+      padding: 0 8px;
+    }
+    .md-image-upload {
+      width: 32px;
+      min-width: 32px;
+      padding: 0;
+    }
+    .md-image-upload :deep(.btn-spinner) {
+      margin-right: 0;
+    }
+    .md-image-upload span {
+      display: none;
     }
   }
 

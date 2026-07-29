@@ -44,12 +44,14 @@
             <BTooltip :title="t('resourceCenter.refresh')">
               <BButton
                 class="search-header-icon-btn refresh-btn"
-                :loading="viewState.loading"
+                :disabled="viewState.loading"
                 :aria-label="t('resourceCenter.refresh')"
                 @click="refreshData"
                 v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
               >
-                <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" aria-hidden="true" />
+                <span class="refresh-icon" :class="{ 'refresh-icon--spinning': viewState.loading }" aria-hidden="true">
+                  <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
+                </span>
               </BButton>
             </BTooltip>
             <BTooltip :title="t('resourceCenter.knowledgeGraph')">
@@ -139,13 +141,19 @@
               <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
                 <BButton
                   class="mobile-toolbar-btn mobile-toolbar-btn--icon"
-                  :loading="viewState.loading"
+                  :disabled="viewState.loading"
                   :aria-label="t('resourceCenter.refresh')"
                   :title="t('resourceCenter.refresh')"
                   @click="refreshData"
                   v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
                 >
-                  <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" aria-hidden="true" />
+                  <span
+                    class="refresh-icon"
+                    :class="{ 'refresh-icon--spinning': viewState.loading }"
+                    aria-hidden="true"
+                  >
+                    <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
+                  </span>
                 </BButton>
                 <BButton
                   class="mobile-toolbar-btn mobile-filter-btn"
@@ -1262,6 +1270,24 @@
       color-mix(in srgb, var(--resource-bookmark-color) 70%, #ffffff)
     );
     font-weight: 700;
+  }
+
+  .refresh-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    transform-origin: center;
+  }
+
+  .refresh-icon--spinning {
+    animation: search-refresh-spin 0.7s linear infinite;
+  }
+
+  @keyframes search-refresh-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .graph-entry {

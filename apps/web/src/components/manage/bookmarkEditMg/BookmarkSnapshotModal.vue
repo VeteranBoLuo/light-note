@@ -159,8 +159,9 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: 600px;
-    max-width: 86vw;
+    width: min(600px, calc(90vw - 40px));
+    min-width: 0;
+    max-width: 100%;
     box-sizing: border-box;
   }
   .bsnap-hint {
@@ -173,11 +174,20 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
+    min-width: 0;
   }
   .bsnap-time {
+    min-width: 0;
     font-size: 11.5px;
     color: var(--desc-color);
+    overflow-wrap: anywhere;
+  }
+  .bsnap-bar :deep(.space-body) {
+    width: auto;
+    max-width: 100%;
+    flex-wrap: wrap;
   }
   .bsnap-ai-button {
     gap: 6px;
@@ -253,7 +263,10 @@
   }
   .bsnap-content {
     max-height: 52vh;
+    width: 100%;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
     padding: 12px 14px;
     border-radius: 10px;
     background: var(--background-color);
@@ -266,6 +279,10 @@
     color: var(--text-color);
   }
   .bsnap-text {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     font-size: 13px;
     line-height: 1.7;
     color: var(--text-color);
@@ -278,5 +295,23 @@
     color: var(--desc-color);
     font-size: 13px;
     padding: 28px 10px;
+  }
+  @media (max-width: 767px) {
+    .bsnap {
+      width: calc(90vw - 32px);
+    }
+    .bsnap-bar {
+      align-items: flex-start;
+    }
+    .bsnap-bar :deep(.space-body) {
+      width: 100%;
+    }
+    .bsnap-bar :deep(.b_btn) {
+      flex: 1 1 auto;
+    }
+    .bsnap-content {
+      max-height: 56dvh;
+      padding: 11px 12px;
+    }
   }
 </style>

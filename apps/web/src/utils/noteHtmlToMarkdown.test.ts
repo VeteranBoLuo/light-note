@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { noteHtmlToMarkdown } from './noteHtmlToMarkdown';
+import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from './noteHtmlToMarkdown';
 
 describe('noteHtmlToMarkdown', () => {
   it('保留已勾选和未勾选的轻笺待办状态', () => {
@@ -18,5 +18,32 @@ describe('noteHtmlToMarkdown', () => {
 
     expect(markdown).not.toContain('[x]');
     expect(markdown).toContain('普通表单');
+  });
+
+  it('Markdown 待办进入富文本后去掉列表圆点并可无损转回', () => {
+    const richHtml = normalizeMarkdownTaskListHtml(
+      '<ul><li><input disabled type="checkbox"> 未完成</li><li><input checked disabled type="checkbox"> 已完成</li></ul>',
+      true,
+    );
+
+    expect(richHtml).not.toContain('<ul');
+    expect(richHtml).not.toContain('disabled');
+    expect(richHtml).toContain('class="note-todo-checkbox"');
+    expect(noteHtmlToMarkdown(richHtml)).toBe('- [ ] 未完成\n\n- [x] 已完成');
+  });
+
+  it('Markdown 待办预览保留列表结构但提供无圆点样式标记', () => {
+    const previewHtml = normalizeMarkdownTaskListHtml('<ul><li><input disabled type="checkbox"> 任务</li></ul>', false);
+
+    expect(previewHtml).toContain('class="note-task-list"');
+    expect(previewHtml).toContain('class="note-task-list-item"');
+    expect(previewHtml).toContain('class="note-todo-checkbox"');
+    expect(previewHtml).toContain('disabled');
+  });
+
+  it('普通无序列表往返时统一使用短横线，不漂移成星号', () => {
+    const markdown = noteHtmlToMarkdown('<ul><li>第一项</li><li>第二项</li></ul>');
+    expect(markdown).toBe('-   第一项\n-   第二项');
+    expect(markdown).not.toContain('*');
   });
 });

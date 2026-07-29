@@ -83,6 +83,7 @@
           <iframe
             v-if="previewType === 'pdf' && pdfBlobUrl"
             :src="pdfBlobUrl"
+            :title="fileInfo.fileName"
             class="preview-iframe"
             @load="onLoad"
             @error="onError"
@@ -565,7 +566,8 @@
     }
   }
 
-  // 加载PDF blob URL
+  // PDF 直接使用带真实文件名路径的短期签名 URL。此前二次 fetch 后生成 blob:UUID，
+  // 浏览器内置 PDF 工具栏只能把 UUID 当标题，左上角因此显示文件 ID 而不是真实名称。
   async function loadPdfBlob(url?: string) {
     if (!url) {
       error.value = true;
@@ -575,20 +577,11 @@
     }
 
     try {
-      // 先清理之前的blob URL
       if (pdfBlobUrl.value) {
-        URL.revokeObjectURL(pdfBlobUrl.value);
+        if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
         pdfBlobUrl.value = '';
       }
-
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) {
-        throw new Error(`HTTP错误! 状态码: ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      pdfBlobUrl.value = blobUrl;
+      pdfBlobUrl.value = url;
     } catch (err) {
       console.error('加载PDF文件失败:', err);
       error.value = true;
@@ -774,7 +767,8 @@
   async function exitHtmlFullscreen() {
     isHtmlFullscreen.value = false;
     const previewRoot = previewRootRef.value;
-    if (!previewRoot || document.fullscreenElement !== previewRoot || typeof document.exitFullscreen !== 'function') return;
+    if (!previewRoot || document.fullscreenElement !== previewRoot || typeof document.exitFullscreen !== 'function')
+      return;
 
     try {
       await document.exitFullscreen();
@@ -794,7 +788,7 @@
   function handleClose() {
     // 清理PDF blob URL
     if (pdfBlobUrl.value) {
-      URL.revokeObjectURL(pdfBlobUrl.value);
+      if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
       pdfBlobUrl.value = '';
     }
     releaseHtmlBlobUrl();
@@ -958,7 +952,7 @@
     document.body.style.overflow = previousBodyOverflow;
     // 清理PDF blob URL
     if (pdfBlobUrl.value) {
-      URL.revokeObjectURL(pdfBlobUrl.value);
+      if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
       pdfBlobUrl.value = '';
     }
     releaseHtmlBlobUrl();
