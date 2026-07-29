@@ -16,6 +16,18 @@ describe('wrapAndroidColorMixFallbacks', () => {
     expect(wrapAndroidColorMixFallbacks(value, 'border-color')).toBe(`var(--ln-android-color-mix-border, ${value})`);
   });
 
+  it('treats neutral primary button backgrounds as backgrounds', () => {
+    const base = 'color-mix(in srgb, var(--primary-btn-bg-color) 72%, transparent)';
+    const hover = 'color-mix(in srgb, var(--primary-btn-h-bg-color) 82%, transparent)';
+
+    expect(wrapAndroidColorMixFallbacks(base, '--auth-input-bg')).toBe(
+      `var(--ln-android-color-mix-background, ${base})`,
+    );
+    expect(wrapAndroidColorMixFallbacks(hover, '--auth-input-hover')).toBe(
+      `var(--ln-android-color-mix-background, ${hover})`,
+    );
+  });
+
   it('wraps every color-mix occurrence without breaking nested functions', () => {
     const first = 'color-mix(in srgb, var(--primary-color), transparent 30%)';
     const second = 'color-mix(in srgb, var(--danger-color) 80%, transparent)';

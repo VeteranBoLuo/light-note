@@ -59,17 +59,10 @@ describe('应用入口路径策略', () => {
     );
   });
 
-  it('注册成功后手机进入资料模块，桌面浏览器和桌面 PWA 固定进入 /home', () => {
+  it('注册成功后所有运行环境都固定进入书签 /home', () => {
     mobileNavigation.setLastMobileResourcePath('/noteLibrary');
 
-    expect(getRuntimePostRegistrationPath({ homePage: 'workbench' }, 390, { runtime: 'browser' })).toBe('/noteLibrary');
-    expect(getRuntimePostRegistrationPath({ homePage: 'cloudSpace' }, 1440, { runtime: 'browser' })).toBe('/home');
-    expect(getRuntimePostRegistrationPath({ homePage: 'workbench' }, 1440, { runtime: 'pwa-standalone' })).toBe(
-      '/home',
-    );
-    expect(getRuntimePostRegistrationPath({ homePage: 'workbench' }, 1440, { runtime: 'android-app' })).toBe(
-      '/noteLibrary',
-    );
+    expect(getRuntimePostRegistrationPath()).toBe('/home');
   });
 
   it('桌面浏览器/PWA 退出回官网，APK/移动 PWA 留在资料区', () => {

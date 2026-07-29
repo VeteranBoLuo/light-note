@@ -37,7 +37,7 @@
   }
   function getAuthenticatedEntryPath(preferences = {}) {
     if (oauthFlow === 'register') {
-      return getRuntimePostRegistrationPath(preferences, window.innerWidth);
+      return getRuntimePostRegistrationPath();
     }
     return getRuntimeApplicationEntryPath(preferences, window.innerWidth);
   }

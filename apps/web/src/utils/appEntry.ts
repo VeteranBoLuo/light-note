@@ -31,18 +31,10 @@ export function getRuntimeApplicationHomePath(
 
 /**
  * 新账号注册完成后的固定落点。
- * 手机布局与 APK 进入资料模块；桌面浏览器与桌面 PWA 固定进入书签首页 `/home`，
- * 不继承账号默认首页，避免刚注册就被带到工作台或重新留在官网。
+ * 所有运行环境统一进入书签首页 `/home`，不继承设备最近资料路径或账号默认首页，
+ * 避免新账号被上一个账号的本地导航记录带到笔记库或云空间。
  */
-export function getRuntimePostRegistrationPath(
-  preferences: UserPreferences | null | undefined,
-  viewportWidth: number,
-  options: RuntimeApplicationEntryOptions = {},
-): AppHomePath {
-  const runtime = options.runtime ?? resolveLightNoteRuntime();
-  if (runtime === 'android-app' || isMobileViewport(viewportWidth)) {
-    return getMobileResourceEntryPath(preferences);
-  }
+export function getRuntimePostRegistrationPath(): AppHomePath {
   return '/home';
 }
 

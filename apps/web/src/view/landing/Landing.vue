@@ -437,7 +437,8 @@
     {
       key: 'mobile',
       label: t('landing.tabMobile'),
-      png: '/screenshots/mobile.png',
+      // public 静态资源不会由 Vite 自动生成内容哈希；图片替换后同步更新版本，避免浏览器继续展示旧图。
+      png: '/screenshots/mobile.png?v=a04898845ef1',
     },
     {
       key: 'co-build',

@@ -134,7 +134,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 
 - Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
 - 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。`/app` 始终是应用入口，不能返回官网：手机布局、Android APK 与移动 PWA 恢复最近使用的书签、笔记库或云空间，没有历史记录时回退 `/home`；桌面浏览器与桌面 PWA 按账号默认应用首页进入。根路径 `/` 的产品矩阵为：桌面浏览器与桌面 PWA 始终展示官网，Logo 也回官网；普通移动浏览器首次访问展示完整响应式官网并写入本地首访记录，后续访问由 `<head>` 守卫在首次绘制前进入 `/app`，既有登录/记住身份记录作为升级兼容信号；Android APK 与移动 PWA 不展示官网。移动端品牌 Logo 与底部“资料”入口行为一致。
-- 邮箱注册与 GitHub 首次注册成功后不再停留或回退官网：手机布局和 Android APK 进入资料模块，桌面浏览器与桌面 PWA 固定进入 `/home`；普通登录仍沿用账号默认应用首页。
+- 邮箱注册与 GitHub 首次注册成功后，所有端统一固定进入书签 `/home`，不能继承设备上一个账号的最近资料模块；普通登录及 `/app` 入口仍按各自运行环境恢复最近资料或账号默认首页。
 - 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
 - Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；通用 Android `wv` 标记只用于旧 WebView 渲染兼容，不能作为轻笺 APK 身份或入口分流依据。原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
 - SEO 只以无本地访问记录的普通浏览器语义为准：根官网始终返回同一份预渲染 HTML，保留 `index, follow`、自引用 canonical、完整标题与正文；Googlebot Smartphone、百度等窄视口爬虫和普通手机首访获得同一份完整响应式官网，不强制伪装成 PC 视口。回访分流只发生在客户端本地记录存在时，不改变 HTTP 响应与索引产物；`/app` 与业务页面继续 `noindex`。不得按搜索引擎 UA 提供不同内容。

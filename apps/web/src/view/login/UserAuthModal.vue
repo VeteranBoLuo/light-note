@@ -193,10 +193,10 @@
     --auth-card-border: color-mix(in srgb, var(--card-border-color) 78%, #756ff5 22%);
     --auth-title: var(--text-color);
     --auth-muted: var(--desc-color);
-    --auth-input-bg: color-mix(in srgb, var(--primary-btn-bg-color) 72%, transparent);
-    --auth-input-hover: color-mix(in srgb, var(--primary-btn-h-bg-color) 82%, transparent);
+    --auth-input-bg: var(--bl-input-noBorder-bg-color);
+    --auth-input-hover: var(--bl-input-noBorder-hover-bg-color);
     --auth-divider: color-mix(in srgb, var(--card-border-color) 76%, transparent);
-    --auth-secondary-bg: color-mix(in srgb, var(--primary-btn-bg-color) 82%, transparent);
+    --auth-secondary-bg: var(--primary-btn-bg-color);
     --auth-secondary-hover: var(--primary-btn-h-bg-color);
     --auth-brand-bg: rgba(97, 92, 237, 0.1);
 

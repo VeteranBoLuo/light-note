@@ -171,7 +171,7 @@
       bookmark.isShowLogin = false;
       bookmark.type = 'all';
       bookmark.refreshTag();
-      await router.replace(getRuntimePostRegistrationPath(user.preferences, window.innerWidth));
+      await router.replace(getRuntimePostRegistrationPath());
       message.success(t('auth.registerSuccess'));
       emit('update:success', { email: formData.email, password: formData.password });
     } finally {

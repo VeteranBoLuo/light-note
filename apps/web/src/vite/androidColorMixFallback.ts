@@ -105,6 +105,7 @@ function variableCategory(color: string, kind: ColorMixKind) {
   if (variable.includes('warning')) return 'warning';
   if (variable.includes('danger') || variable.includes('error')) return 'danger';
   if (variable.includes('success')) return 'success';
+  if (/primary-btn-(?:h-)?bg/.test(variable)) return 'background';
   if (variable.includes('primary')) return 'primary';
   if (variable.includes('desc') || variable.includes('muted')) return 'muted';
   if (variable.includes('text') || variable.includes('foreground')) return 'text';
