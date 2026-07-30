@@ -1018,7 +1018,7 @@
   .tag-tree-skeleton {
     position: relative;
     overflow: hidden;
-    background: var(--background-color);
+    background: var(--card-background);
   }
 
   .note-card-skeleton,

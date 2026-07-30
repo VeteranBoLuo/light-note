@@ -1443,13 +1443,9 @@
 
   .stat-card {
     --stat-accent: var(--resource-bookmark-color);
-    --b-card-background: linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--stat-accent) 5%, var(--card-background)),
-      var(--card-background)
-    );
-    --b-card-border-color: color-mix(in srgb, var(--stat-accent) 20%, var(--surface-border-color));
-    --b-card-shadow: 0 10px 26px -24px color-mix(in srgb, var(--stat-accent) 76%, transparent);
+    --b-card-background: var(--card-background);
+    --b-card-border-color: var(--surface-border-color);
+    --b-card-shadow: var(--surface-card-shadow);
 
     border-radius: 12px;
     position: relative;

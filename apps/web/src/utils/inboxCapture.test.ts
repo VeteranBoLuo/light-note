@@ -4,6 +4,7 @@ import {
   buildMarkdownNotePayload,
   detectInboxCaptureType,
   getAvailableQuickCaptureTypes,
+  getQuickCaptureInboxTarget,
   hasCaptureBookmarkCandidate,
   normalizeQuickCaptureType,
   normalizeCaptureUrl,
@@ -59,5 +60,12 @@ describe('inboxCapture', () => {
     expect(normalizeQuickCaptureType('todo', true)).toBe('note');
     expect(getAvailableQuickCaptureTypes(false)).toContain('todo');
     expect(normalizeQuickCaptureType('todo', false)).toBe('todo');
+  });
+
+  it('移动端资源整理入口进入搜索模块的待整理页，待办仍进入待办页', () => {
+    expect(getQuickCaptureInboxTarget('note', true)).toEqual({ path: '/inbox', query: { tab: 'all' } });
+    expect(getQuickCaptureInboxTarget('file', true)).toEqual({ path: '/inbox', query: { tab: 'all' } });
+    expect(getQuickCaptureInboxTarget('todo', true)).toEqual({ path: '/inbox', query: { tab: 'todo' } });
+    expect(getQuickCaptureInboxTarget('bookmark', false)).toBe('/inbox');
   });
 });

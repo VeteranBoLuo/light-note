@@ -811,14 +811,14 @@
 <style lang="less" scoped>
   .ai-container {
     height: 100%;
-    background: var(--bl-card-bg, #e5e5ec);
+    background: var(--workspace-panel-bg-color);
     border-radius: 12px;
     padding: 16px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    border: 1px solid rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--surface-border-color);
   }
 
   .ai-header {
@@ -831,7 +831,7 @@
     align-items: center;
     gap: 8px;
     font-weight: 600;
-    color: #2d2f33;
+    color: var(--text-color);
   }
   .ai-title .dot {
     width: 10px;
@@ -841,11 +841,12 @@
   }
   .ai-subtitle {
     font-size: 12px;
-    color: #7b7f85;
+    color: var(--desc-color);
   }
 
   .ai-note-meta {
-    background: #ffffff;
+    background: var(--card-background);
+    border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     padding: 10px 12px;
     display: flex;
@@ -866,14 +867,14 @@
   }
   .meta-row + .meta-row {
     padding-left: 12px;
-    border-left: 1px solid #eef0f5;
+    border-left: 1px solid var(--surface-divider-color);
   }
   .meta-row .label {
-    color: #8a8f98;
+    color: var(--desc-color);
     white-space: nowrap;
   }
   .meta-row .value {
-    color: #2d2f33;
+    color: var(--text-color);
     flex: 1;
     min-width: 0;
     text-align: right;
@@ -890,11 +891,11 @@
   .action-btn {
     width: 100%;
     height: 32px;
-    border: 1px solid #e5e7eb;
-    background: #ffffff;
+    border: 1px solid var(--surface-border-color);
+    background: var(--card-background);
     border-radius: 8px;
     font-size: 12px;
-    color: #374151;
+    color: var(--text-color);
     cursor: pointer;
   }
   .action-btn:disabled {
@@ -902,21 +903,21 @@
     opacity: 0.6;
   }
   .action-btn:hover {
-    border-color: #b9c1ff;
-    color: #4b5bff;
+    border-color: color-mix(in srgb, var(--primary-color) 46%, var(--surface-border-color));
+    color: var(--primary-color);
   }
 
   .ai-input {
     display: grid;
     gap: 8px;
-    --ai-requirement-bg: #ffffff;
-    --ai-requirement-border: #d7dbe7;
-    --ai-requirement-text: #2d2f33;
-    --ai-requirement-placeholder: #7d8490;
+    --ai-requirement-bg: var(--card-background);
+    --ai-requirement-border: var(--surface-border-color);
+    --ai-requirement-text: var(--text-color);
+    --ai-requirement-placeholder: var(--desc-color);
   }
   .input-label {
     font-size: 12px;
-    color: #6b7280;
+    color: var(--desc-color);
   }
   .ai-input :deep(.b-textarea) {
     width: 100%;
@@ -943,11 +944,11 @@
     opacity: 1;
   }
   .ai-input :deep(.b-textarea:hover) {
-    border-color: #aeb6d0;
+    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--surface-border-color));
   }
   .ai-input :deep(.b-textarea:focus) {
-    border-color: #7b8cff;
-    box-shadow: 0 0 0 3px rgba(123, 140, 255, 0.15);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 15%, transparent);
   }
   .primary-btn {
     width: 100%;
@@ -967,10 +968,10 @@
   .stop-btn {
     width: 100%;
     height: 34px;
-    border: 1px solid #ff4d4f;
+    border: 1px solid color-mix(in srgb, var(--message-error-color) 42%, var(--surface-border-color));
     border-radius: 8px;
-    background: #fff1f0;
-    color: #ff4d4f;
+    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
+    color: var(--message-error-color);
     font-size: 12px;
     cursor: pointer;
     display: flex;
@@ -980,8 +981,8 @@
     transition: all 0.2s;
   }
   .stop-btn:hover {
-    background: #ffccc7;
-    border-color: #ff7875;
+    background: color-mix(in srgb, var(--message-error-color) 14%, var(--card-background));
+    border-color: var(--message-error-color);
   }
   .stop-btn .stop-icon {
     width: 8px;
@@ -996,9 +997,9 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: #ffffff;
+    background: var(--card-background);
     border-radius: 10px;
-    border: 1px solid #eef0f5;
+    border: 1px solid var(--surface-border-color);
     overflow: hidden;
   }
   .output-header {
@@ -1006,9 +1007,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #f1f3f7;
+    border-bottom: 1px solid var(--surface-divider-color);
     font-size: 12px;
-    color: #4b5563;
+    color: var(--desc-color);
   }
   .output-actions {
     display: flex;
@@ -1017,19 +1018,19 @@
   }
   .ghost-btn {
     height: 26px;
-    border: 1px solid #e5e7eb;
-    background: #ffffff;
+    border: 1px solid var(--surface-border-color);
+    background: var(--workspace-panel-bg-color);
     border-radius: 6px;
     font-size: 11px;
     padding: 0 8px;
     cursor: pointer;
-    color: #4b5563;
+    color: var(--desc-color);
     white-space: nowrap;
   }
   .ghost-btn:disabled {
     cursor: not-allowed;
-    color: #b5b8bf;
-    border-color: #f1f2f6;
+    color: color-mix(in srgb, var(--desc-color) 62%, transparent);
+    border-color: var(--surface-divider-color);
   }
   /* 放大/清空为图标按钮:窄面板里一行放得下 4 个动作,文字动作(插入/替换标题)保留可读 */
   .icon-btn {
@@ -1164,7 +1165,7 @@
     white-space: pre-wrap;
     font-size: 12px;
     line-height: 1.5;
-    color: #2d2f33;
+    color: var(--text-color);
   }
   .output-body :deep(p),
   .output-body :deep(h1),
@@ -1193,58 +1194,58 @@
     margin-bottom: 0;
   }
   .empty {
-    color: #9aa0a6;
+    color: var(--desc-color);
     font-size: 12px;
   }
 
   [data-theme='night'] .ai-container {
-    background: #2a2f36;
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--workspace-panel-bg-color);
+    border-color: var(--surface-border-color);
   }
   [data-theme='night'] .ai-title,
   [data-theme='night'] .meta-row .value,
   [data-theme='night'] .output-body :deep(.typewriter-content) {
-    color: #f3f4f6;
+    color: var(--text-color);
   }
   [data-theme='night'] .meta-row + .meta-row {
-    border-left-color: rgba(255, 255, 255, 0.12);
+    border-left-color: var(--surface-divider-color);
   }
 
   [data-theme='night'] .stop-btn {
-    background: rgba(255, 77, 79, 0.1);
-    border-color: rgba(255, 77, 79, 0.4);
-    color: #ff4d4f;
+    background: color-mix(in srgb, var(--message-error-color) 8%, var(--card-background));
+    border-color: color-mix(in srgb, var(--message-error-color) 42%, var(--surface-border-color));
+    color: var(--message-error-color);
   }
   [data-theme='night'] .stop-btn:hover {
-    background: rgba(255, 77, 79, 0.2);
-    border-color: #ff4d4f;
+    background: color-mix(in srgb, var(--message-error-color) 14%, var(--card-background));
+    border-color: var(--message-error-color);
   }
   [data-theme='night'] .output-header,
   [data-theme='night'] .empty {
-    color: #b3b9c2;
+    color: var(--desc-color);
   }
   [data-theme='night'] .ai-input {
-    --ai-requirement-bg: #313740;
-    --ai-requirement-border: rgba(255, 255, 255, 0.12);
-    --ai-requirement-text: #e5e7eb;
-    --ai-requirement-placeholder: #8f96a3;
+    --ai-requirement-bg: var(--card-background);
+    --ai-requirement-border: var(--surface-border-color);
+    --ai-requirement-text: var(--text-color);
+    --ai-requirement-placeholder: var(--desc-color);
   }
   [data-theme='night'] .ai-note-meta,
   [data-theme='night'] .ai-output,
   [data-theme='night'] .action-btn,
   [data-theme='night'] .ghost-btn {
-    background: #313740;
-    border-color: rgba(255, 255, 255, 0.12);
-    color: #e5e7eb;
+    background: var(--card-background);
+    border-color: var(--surface-border-color);
+    color: var(--text-color);
   }
   [data-theme='night'] .action-btn:hover,
   [data-theme='night'] .ghost-btn:hover {
-    border-color: #9aa8ff;
-    color: #e0e7ff;
+    border-color: color-mix(in srgb, var(--primary-color) 46%, var(--surface-border-color));
+    color: var(--text-color);
   }
   [data-theme='night'] .ai-input :deep(.b-textarea:focus) {
-    border-color: #7b8cff;
-    box-shadow: 0 0 0 2px rgba(123, 140, 255, 0.2);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 20%, transparent);
   }
   [data-theme='night'] .primary-btn {
     background: linear-gradient(135deg, #6270f0, #4b5be2);

@@ -951,7 +951,7 @@
     min-width: 0;
   }
   .editor-panel {
-    --note-editor-header-bg: var(--w-e-toolbar-bg-color, var(--surface-panel-bg));
+    --note-editor-header-bg: var(--surface-panel-bg);
 
     flex: 10;
     min-width: 0;
@@ -959,7 +959,7 @@
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
-    background: var(--background-color);
+    background: var(--surface-page-bg, var(--background-color));
   }
 
   .ai-panel {
@@ -980,7 +980,7 @@
     height: 30px;
     width: 30px;
     cursor: pointer;
-    border: 1px solid #e8eaf2;
+    border: 1px solid var(--surface-border-color);
     transition: border-color 0.1s linear;
     &:hover {
       border-color: var(--primary-color);
@@ -999,11 +999,11 @@
       cursor: pointer;
       line-height: 16px;
       width: max-content;
-      color: #9395ab;
+      color: var(--desc-color);
       font-size: 12px;
       font-weight: 550;
       padding: 2px 6px;
-      background-color: #edeff5;
+      background-color: var(--common-tag-bg-color);
       border-radius: 4px;
     }
   }

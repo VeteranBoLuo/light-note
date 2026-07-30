@@ -521,6 +521,17 @@
     grid-area: upload;
   }
 
+  :deep(.picker-upload.b_btn) {
+    border: 1px solid var(--surface-divider-color);
+    background: var(--surface-panel-bg);
+  }
+
+  :deep(.picker-upload.b_btn:hover),
+  :deep(.picker-upload.b_btn:focus-visible) {
+    border-color: color-mix(in srgb, var(--primary-color) 40%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-panel-bg));
+  }
+
   .advanced-input {
     grid-area: input;
     min-width: 0;

@@ -770,7 +770,7 @@
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
     border-radius: 14px;
-    background: var(--card-background, var(--menu-body-bg-color));
+    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
   }
 

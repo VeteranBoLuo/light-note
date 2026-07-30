@@ -110,6 +110,15 @@ describe('loadBookmarkIconsProgressively', () => {
     expect(item.iconUrl).toBe('https://example.com/old.ico');
     expect(item.iconCheckedAt).toBe('2026-07-15T12:00:00Z');
   });
+
+  it('整批请求失败时仍清除 refreshing', async () => {
+    mocks.isAdminLoginPreview.mockReturnValue(false);
+    mocks.apiBasePost.mockRejectedValue(new Error('offline'));
+
+    await loadBookmarkIconsProgressively([{ id: 'bookmark-1', url: 'https://example.com' }], vi.fn());
+
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.refreshing).toBe(false);
+  });
 });
 
 describe('refreshBookmarkIconAfterSave', () => {
@@ -185,5 +194,13 @@ describe('refreshBookmarkIconAfterSave', () => {
     await progressiveRequest;
     expect(applyIcon).toHaveBeenCalledWith('bookmark-1', '/uploads/new.png');
     expect(listItem.iconUrl).toBe('/uploads/new.png');
+  });
+
+  it('保存后图标请求失败时仍清除 refreshing', async () => {
+    mocks.apiBasePost.mockRejectedValue(new Error('offline'));
+
+    await expect(refreshBookmarkIconAfterSave({ id: 'bookmark-1', url: 'https://example.com' })).resolves.toBe('');
+
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.refreshing).toBe(false);
   });
 });

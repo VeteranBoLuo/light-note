@@ -7,6 +7,7 @@
       </BButton>
       <BInput
         v-model:value="keyword"
+        class="ai-conv-sidebar__search"
         clearable
         :placeholder="t('ai.conversations.searchPlaceholder')"
         @input="scheduleLoad"
@@ -419,6 +420,16 @@
     justify-content: center;
     gap: 6px;
   }
+  .ai-conv-sidebar__search :deep(.b-input) {
+    border: 1px solid var(--surface-border-color) !important;
+    background: var(--card-background);
+    box-shadow: none !important;
+  }
+  .ai-conv-sidebar__search :deep(.b-input:hover),
+  .ai-conv-sidebar__search :deep(.b-input:focus-visible) {
+    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color)) !important;
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--card-background));
+  }
   .ai-conv-sidebar__undo {
     display: flex;
     margin: 0 10px 8px;
@@ -453,6 +464,9 @@
     min-width: 0;
     align-items: center;
     border-radius: 9px;
+  }
+  .ai-conv-sidebar__item-wrap + .ai-conv-sidebar__item-wrap {
+    margin-top: 6px;
   }
   .ai-conv-sidebar__item.b_btn {
     width: 100%;

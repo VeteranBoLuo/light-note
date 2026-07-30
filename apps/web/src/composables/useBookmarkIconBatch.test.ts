@@ -89,7 +89,7 @@ describe('useBookmarkIconBatchTracking', () => {
     const storage = createStorage();
     const reloadBookmarks = vi.fn().mockResolvedValue(undefined);
     const tracker = useBookmarkIconBatchTracking({
-      bookmarks: ref([]),
+      bookmarks: ref([{ id: 'bookmark-1', iconUrl: '' }]),
       reloadBookmarks,
       storageKey: computed(() => 'icon-batch-pending:user-1'),
       requestStatus: vi.fn().mockResolvedValue({
@@ -101,6 +101,7 @@ describe('useBookmarkIconBatchTracking', () => {
           queued: 0,
           processing: 0,
           status: 'completed',
+          activeBookmarkIds: ['bookmark-1'],
         }),
       }),
       storage,
@@ -108,11 +109,37 @@ describe('useBookmarkIconBatchTracking', () => {
       cancelSchedule: vi.fn(),
     });
 
-    await tracker.start('batch-1', 1);
+    await tracker.start('batch-1', 1, ['bookmark-1']);
 
     expect(storage.removeItem).toHaveBeenCalledWith('icon-batch-pending:user-1');
     expect(reloadBookmarks).toHaveBeenCalledWith({ refreshIcons: false });
     expect(tracker.state.value?.status).toBe('completed');
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(false);
+  });
+
+  it('状态请求超过 30 秒时先清除具体书签加载态', async () => {
+    let timeoutCallback: (() => void) | undefined;
+    const schedule = vi.fn((callback: () => void, delayMs: number) => {
+      if (delayMs === 30_000) timeoutCallback = callback;
+      return 1;
+    });
+    const tracker = useBookmarkIconBatchTracking({
+      bookmarks: ref([{ id: 'bookmark-1', iconUrl: '' }]),
+      reloadBookmarks: vi.fn().mockResolvedValue(undefined),
+      storageKey: computed(() => 'icon-batch-pending:user-1'),
+      requestStatus: vi.fn(() => new Promise(() => {})),
+      storage: createStorage(),
+      schedule,
+      cancelSchedule: vi.fn(),
+      requestTimeoutMs: 30_000,
+    });
+
+    const startPromise = tracker.start('batch-1', 1, ['bookmark-1']);
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(true);
+    timeoutCallback?.();
+    await startPromise;
+
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(false);
   });
 
   it('连续三次状态查询失败后清除后台批次并恢复渐进补图', async () => {

@@ -146,6 +146,18 @@
     gap: 14px;
   }
 
+  .tag-editor-base :deep(.b-input) {
+    border: 1px solid var(--surface-divider-color) !important;
+    background: var(--surface-panel-bg);
+    box-shadow: none !important;
+  }
+
+  .tag-editor-base :deep(.b-input:hover),
+  .tag-editor-base :deep(.b-input:focus-visible) {
+    border-color: color-mix(in srgb, var(--primary-color) 40%, var(--surface-border-color)) !important;
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-panel-bg));
+  }
+
   .tag-field {
     min-width: 0;
     display: flex;

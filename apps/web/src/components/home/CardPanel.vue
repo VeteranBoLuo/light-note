@@ -439,7 +439,7 @@
     border-radius: 1rem;
     padding: 14px;
     box-sizing: border-box;
-    background: var(--background-color);
+    background: var(--card-background);
     position: relative;
     overflow: hidden;
     box-shadow: none;

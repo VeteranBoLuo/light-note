@@ -2146,7 +2146,7 @@
   .note-editor-body {
     outline: none;
     overflow: visible;
-    background-color: var(--background-color);
+    background-color: var(--surface-page-bg, var(--background-color));
     color: var(--text-color);
     padding: 5px 10px 20px;
     min-height: 100%;
@@ -2202,7 +2202,7 @@
     gap: 8px;
     padding: 4px 10px;
     border-bottom: 1px solid var(--card-border-color, #e8eaf2);
-    background: var(--background-color);
+    background: var(--surface-panel-bg, var(--background-color));
   }
   .mode-pill {
     display: inline-flex;
@@ -2481,102 +2481,102 @@
   }
   .note-editor .tox .tox-edit-area,
   .note-editor .tox .tox-edit-area__iframe {
-    background-color: var(--background-color) !important;
+    background-color: var(--surface-page-bg, var(--background-color)) !important;
   }
   [data-theme='night'] {
     .note-editor-toolbar {
       border-bottom-color: var(--surface-border-color);
-      background-color: var(--note-editor-header-bg, #25262b);
+      background-color: var(--note-editor-header-bg, var(--surface-panel-bg));
     }
 
     .note-editor .tox .tox-toolbar,
     .note-editor .tox .tox-toolbar__primary,
     .note-editor .tox .tox-toolbar__overflow,
     .note-editor .tox .tox-editor-header {
-      background-color: var(--note-editor-header-bg, #25262b) !important;
+      background-color: var(--note-editor-header-bg, var(--surface-panel-bg)) !important;
     }
 
     .note-editor .tox .tox-toolbar__group {
       background-color: transparent !important;
-      border-right: 1px solid #3a3d46 !important;
+      border-right: 1px solid var(--surface-divider-color) !important;
     }
 
     .note-editor .tox .tox-tbtn,
     .note-editor .tox .tox-mbtn {
-      color: #d5d8e1 !important;
-      background-color: #343741 !important;
-      border: 1px solid #474b56 !important;
+      color: var(--icon-color) !important;
+      background-color: var(--card-background) !important;
+      border: 1px solid var(--surface-border-color) !important;
     }
 
     .note-editor .tox .tox-tbtn__select-label,
     .note-editor .tox .tox-mbtn__select-label {
-      color: #d5d8e1 !important;
+      color: var(--icon-color) !important;
     }
 
     .note-editor .tox .tox-tbtn svg,
     .note-editor .tox .tox-mbtn svg {
-      fill: #d5d8e1 !important;
+      fill: var(--icon-color) !important;
     }
 
     .note-editor .tox .tox-tbtn:hover,
     .note-editor .tox .tox-tbtn:focus,
     .note-editor .tox .tox-mbtn:hover,
     .note-editor .tox .tox-mbtn:focus {
-      background-color: #414654 !important;
-      border-color: #596073 !important;
-      color: #f5f7ff !important;
+      background-color: var(--hover-background) !important;
+      border-color: color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color)) !important;
+      color: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-tbtn:hover svg,
     .note-editor .tox .tox-tbtn:focus svg,
     .note-editor .tox .tox-mbtn:hover svg,
     .note-editor .tox .tox-mbtn:focus svg {
-      fill: #f5f7ff !important;
+      fill: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-tbtn.tox-tbtn--enabled,
     .note-editor .tox .tox-tbtn.tox-tbtn--enabled:hover {
-      background-color: #59637d !important;
-      border-color: #7480a0 !important;
-      color: #ffffff !important;
+      background-color: color-mix(in srgb, var(--primary-color) 18%, var(--card-background)) !important;
+      border-color: color-mix(in srgb, var(--primary-color) 46%, var(--surface-border-color)) !important;
+      color: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-tbtn.tox-tbtn--enabled svg,
     .note-editor .tox .tox-tbtn.tox-tbtn--enabled:hover svg {
-      fill: #ffffff !important;
+      fill: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-tbtn--disabled,
     .note-editor .tox .tox-tbtn--disabled:hover {
-      background-color: #2b2d33 !important;
-      border-color: #3a3d46 !important;
-      color: #767d8f !important;
+      background-color: var(--workspace-panel-bg-color) !important;
+      border-color: var(--surface-divider-color) !important;
+      color: var(--desc-color) !important;
     }
 
     .note-editor .tox .tox-tbtn--disabled svg {
-      fill: #767d8f !important;
+      fill: var(--desc-color) !important;
     }
 
     .note-editor .tox .tox-collection,
     .note-editor .tox .tox-menu,
     .note-editor .tox .tox-collection--list,
     .note-editor .tox .tox-collection--grid {
-      background-color: #2c2f37 !important;
-      border: 1px solid #444955 !important;
-      color: #dfe3ee !important;
+      background-color: var(--card-background) !important;
+      border: 1px solid var(--surface-border-color) !important;
+      color: var(--text-color) !important;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
     }
 
     .note-editor .tox .tox-collection__item,
     .note-editor .tox .tox-collection__item-label {
-      color: #dfe3ee !important;
+      color: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-collection__item--active,
     .note-editor .tox .tox-collection__item--enabled:hover,
     .note-editor .tox .tox-collection__item--enabled:focus {
-      background-color: #414654 !important;
-      color: #ffffff !important;
+      background-color: var(--hover-background) !important;
+      color: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-collection--list .tox-collection__item,
@@ -2589,29 +2589,29 @@
     .note-editor .tox .tox-collection--list .tox-collection__item-label h6,
     .note-editor .tox .tox-collection--list .tox-collection__item-label p,
     .note-editor .tox .tox-collection--list .tox-collection__item-label pre {
-      color: #dfe3ee !important;
+      color: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-collection--list .tox-collection__item--active,
     .note-editor .tox .tox-collection--list .tox-collection__item--enabled:hover,
     .note-editor .tox .tox-collection--list .tox-collection__item--enabled:focus,
     .note-editor .tox .tox-collection--list .tox-collection__item--selected {
-      background-color: #4a5163 !important;
-      color: #ffffff !important;
+      background-color: color-mix(in srgb, var(--primary-color) 13%, var(--hover-background)) !important;
+      color: var(--text-color) !important;
     }
 
     .note-editor .tox .tox-collection--list .tox-collection__item--state-disabled,
     .note-editor .tox .tox-collection--list .tox-collection__item--state-disabled .tox-collection__item-label,
     .note-editor .tox .tox-collection--list .tox-collection__item--state-disabled .tox-collection__item-label * {
-      color: #7b8294 !important;
+      color: var(--desc-color) !important;
     }
 
     .tox .tox-collection--list .tox-collection__item--active,
     .tox .tox-collection--list .tox-collection__item--enabled:hover,
     .tox .tox-collection--list .tox-collection__item--enabled:focus,
     .tox .tox-collection--list .tox-collection__item--selected {
-      background-color: #4a5163 !important;
-      color: #ffffff !important;
+      background-color: color-mix(in srgb, var(--primary-color) 13%, var(--hover-background)) !important;
+      color: var(--text-color) !important;
     }
 
     .tox .tox-collection--list .tox-collection__item--enabled:not(.tox-collection__item--state-disabled) {

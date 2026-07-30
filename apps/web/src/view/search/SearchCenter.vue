@@ -1396,7 +1396,7 @@
     --search-panel-bg: var(--workspace-panel-bg-color);
     --search-card-bg: var(--card-background);
     --search-border-color: var(--surface-border-color);
-    --search-muted-bg: var(--bl-input-noBorder-bg-color);
+    --search-muted-bg: color-mix(in srgb, var(--surface-panel-bg) 88%, var(--card-background));
 
     height: 100%;
     min-height: 0;
@@ -1419,7 +1419,7 @@
     --search-panel-bg: var(--workspace-panel-bg-color);
     --search-card-bg: var(--card-background);
     --search-border-color: var(--surface-border-color);
-    --search-muted-bg: var(--bl-input-noBorder-bg-color);
+    --search-muted-bg: color-mix(in srgb, var(--surface-panel-bg) 88%, var(--card-background));
   }
 
   .search-header {
@@ -1437,7 +1437,7 @@
     background:
       radial-gradient(
         circle at 97% -10%,
-        color-mix(in srgb, var(--resource-bookmark-color) 18%, transparent),
+        color-mix(in srgb, var(--resource-bookmark-color) 7%, transparent),
         transparent 42%
       ),
       var(--search-hero-bg);
@@ -1832,15 +1832,17 @@
 
   .tag-chip {
     min-height: 28px;
+    border: 1px solid color-mix(in srgb, var(--search-border-color) 74%, transparent);
     border-radius: 999px;
     padding: 4px 10px;
     background: var(--search-muted-bg);
-    color: var(--desc-color);
+    color: color-mix(in srgb, var(--text-color) 72%, var(--desc-color));
     font-size: 12px;
   }
 
   .tag-chip.active {
-    background: color-mix(in srgb, var(--resource-tag-color) 16%, transparent);
+    border-color: color-mix(in srgb, var(--resource-tag-color) 32%, var(--search-border-color));
+    background: color-mix(in srgb, var(--resource-tag-color) 12%, var(--search-muted-bg));
     color: var(--resource-tag-color);
   }
 

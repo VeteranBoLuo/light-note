@@ -1,5 +1,7 @@
 import { reactive } from 'vue';
 
+export const BOOKMARK_ICON_LOADING_TIMEOUT_MS = 30_000;
+
 export interface BookmarkIconRuntimeState {
   refreshing: boolean;
   batchLoading: boolean;
@@ -11,6 +13,8 @@ export interface BookmarkIconRuntimeState {
 }
 
 const bookmarkIconStates = reactive<Record<string, BookmarkIconRuntimeState>>({});
+const refreshTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+const batchTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 let nextRequestToken = 0;
 
 function normalizeBookmarkId(id?: string) {
@@ -32,6 +36,36 @@ function ensureBookmarkIconState(id: string) {
   return bookmarkIconStates[id];
 }
 
+function clearLoadingTimeout(timeouts: Map<string, ReturnType<typeof setTimeout>>, id: string) {
+  const timeout = timeouts.get(id);
+  if (timeout !== undefined) clearTimeout(timeout);
+  timeouts.delete(id);
+}
+
+function scheduleRefreshTimeout(id: string, requestToken: number) {
+  clearLoadingTimeout(refreshTimeouts, id);
+  refreshTimeouts.set(
+    id,
+    setTimeout(() => {
+      refreshTimeouts.delete(id);
+      const state = bookmarkIconStates[id];
+      if (state?.requestToken === requestToken) state.refreshing = false;
+    }, BOOKMARK_ICON_LOADING_TIMEOUT_MS),
+  );
+}
+
+function scheduleBatchTimeout(id: string) {
+  clearLoadingTimeout(batchTimeouts, id);
+  batchTimeouts.set(
+    id,
+    setTimeout(() => {
+      batchTimeouts.delete(id);
+      const state = bookmarkIconStates[id];
+      if (state) state.batchLoading = false;
+    }, BOOKMARK_ICON_LOADING_TIMEOUT_MS),
+  );
+}
+
 /**
  * 开始后台校验 favicon。
  * - 同站点刷新保留旧图标，避免保存后闪烁默认图标。
@@ -46,6 +80,7 @@ export function beginBookmarkIconRefresh(
   const state = ensureBookmarkIconState(bookmarkId);
   state.requestToken = ++nextRequestToken;
   state.refreshing = true;
+  scheduleRefreshTimeout(bookmarkId, state.requestToken);
   if (clearExisting) {
     state.hasIconOverride = false;
     state.iconUrl = '';
@@ -60,6 +95,7 @@ export function finishBookmarkIconRefresh(id?: string, requestToken = 0, iconUrl
   const bookmarkId = normalizeBookmarkId(id);
   const state = bookmarkIconStates[bookmarkId];
   if (!state || (requestToken && state.requestToken !== requestToken)) return;
+  clearLoadingTimeout(refreshTimeouts, bookmarkId);
   if (iconUrl) {
     state.iconUrl = iconUrl;
     state.hasIconOverride = true;
@@ -76,7 +112,13 @@ export function setBookmarkIconBatchLoading(id?: string, loading = true) {
   const bookmarkId = normalizeBookmarkId(id);
   if (!bookmarkId) return;
   if (!loading && !bookmarkIconStates[bookmarkId]) return;
-  ensureBookmarkIconState(bookmarkId).batchLoading = loading;
+  const state = ensureBookmarkIconState(bookmarkId);
+  state.batchLoading = loading;
+  if (loading) {
+    scheduleBatchTimeout(bookmarkId);
+  } else {
+    clearLoadingTimeout(batchTimeouts, bookmarkId);
+  }
 }
 
 export function getBookmarkIconRuntimeState(id?: string) {
@@ -94,5 +136,9 @@ export function resolveBookmarkIconSource(id?: string, source = '') {
 
 /** 供退出登录及单元测试清理页面级运行状态。 */
 export function resetBookmarkIconRuntime() {
+  refreshTimeouts.forEach((timeout) => clearTimeout(timeout));
+  batchTimeouts.forEach((timeout) => clearTimeout(timeout));
+  refreshTimeouts.clear();
+  batchTimeouts.clear();
   Object.keys(bookmarkIconStates).forEach((id) => delete bookmarkIconStates[id]);
 }

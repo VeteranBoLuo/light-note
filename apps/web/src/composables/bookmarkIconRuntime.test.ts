@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  BOOKMARK_ICON_LOADING_TIMEOUT_MS,
   beginBookmarkIconRefresh,
   finishBookmarkIconRefresh,
   getBookmarkIconRuntimeState,
@@ -10,6 +11,10 @@ import {
 
 describe('bookmarkIconRuntime', () => {
   beforeEach(() => resetBookmarkIconRuntime());
+  afterEach(() => {
+    resetBookmarkIconRuntime();
+    vi.useRealTimers();
+  });
 
   it('同站点刷新期间保留旧图标，完成后无感切换到新图标', () => {
     const token = beginBookmarkIconRefresh('bookmark-1', {
@@ -66,5 +71,23 @@ describe('bookmarkIconRuntime', () => {
       refreshing: false,
       batchLoading: false,
     });
+  });
+
+  it('单条刷新超过界面兜底时间后自动清除 refreshing', () => {
+    vi.useFakeTimers();
+    beginBookmarkIconRefresh('bookmark-1');
+
+    vi.advanceTimersByTime(BOOKMARK_ICON_LOADING_TIMEOUT_MS);
+
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.refreshing).toBe(false);
+  });
+
+  it('后台批次超过界面兜底时间后自动清除 batchLoading', () => {
+    vi.useFakeTimers();
+    setBookmarkIconBatchLoading('bookmark-1', true);
+
+    vi.advanceTimersByTime(BOOKMARK_ICON_LOADING_TIMEOUT_MS);
+
+    expect(getBookmarkIconRuntimeState('bookmark-1')?.batchLoading).toBe(false);
   });
 });

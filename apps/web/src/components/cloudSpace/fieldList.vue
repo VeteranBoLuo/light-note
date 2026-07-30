@@ -1404,7 +1404,7 @@
     flex: 1;
     overflow-y: auto;
     scrollbar-gutter: stable;
-    background: var(--card-background);
+    background: var(--workspace-panel-bg-color);
   }
 
   .file-load-more {
@@ -1695,9 +1695,12 @@
   }
 
   .file-card-thumb {
-    width: 100%;
-    height: 100%;
+    width: calc(100% - var(--file-card-preview-inset, 0px));
+    height: calc(100% - var(--file-card-preview-inset, 0px));
+    border-radius: var(--file-card-preview-radius, 0);
     object-fit: cover;
+    background: var(--file-card-preview-background, transparent);
+    box-shadow: var(--file-card-preview-shadow, none);
   }
 
   .file-card-placeholder {

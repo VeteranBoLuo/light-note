@@ -119,8 +119,8 @@
     position: relative;
     background: linear-gradient(
       145deg,
-      color-mix(in srgb, var(--resource-bookmark-color, #615ced) 2.5%, var(--menu-body-bg-color)),
-      var(--menu-body-bg-color) 52%
+      color-mix(in srgb, var(--resource-bookmark-color, #615ced) 2.5%, var(--card-background)),
+      var(--card-background) 52%
     );
     box-shadow: 0 10px 24px -24px color-mix(in srgb, var(--text-color) 38%, transparent);
     transition:

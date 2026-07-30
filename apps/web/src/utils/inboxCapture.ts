@@ -14,6 +14,12 @@ export function normalizeQuickCaptureType(type: QuickCaptureType, isMobile: bool
   return isMobile && type === 'todo' ? 'note' : type;
 }
 
+export function getQuickCaptureInboxTarget(type: QuickCaptureType, isMobile: boolean) {
+  if (type === 'todo') return { path: '/inbox' as const, query: { tab: 'todo' as const } };
+  if (isMobile) return { path: '/inbox' as const, query: { tab: 'all' as const } };
+  return '/inbox' as const;
+}
+
 export function normalizeCaptureUrl(input: string): URL | null {
   const resolution = resolveBookmarkUrlInput(input, { allowTextExtraction: false });
   if (!resolution.canonicalUrl) return null;

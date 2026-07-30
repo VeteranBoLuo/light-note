@@ -96,6 +96,10 @@ html[data-theme='night'] {
   --resource-note-color: #00a884;
   --resource-file-color: #ff8a00;
   --resource-tag-color: #ec4899;
+  --file-card-preview-inset: 0px;
+  --file-card-preview-radius: 0px;
+  --file-card-preview-background: transparent;
+  --file-card-preview-shadow: none;
 
   --workbench-accent-bookmark-start: var(--resource-bookmark-color);
   --workbench-accent-bookmark-end: color-mix(in srgb, var(--resource-bookmark-color) 72%, #ffffff);
@@ -160,61 +164,61 @@ html[data-theme='night'] {
 }
 
 [data-theme='night'] {
-  --background-color: #222222;
+  --background-color: #1c1e24;
   --surface-page-bg: var(--background-color);
-  --surface-panel-bg: #282b33;
-  --surface-card-bg: #30343d;
-  --surface-raised-background: linear-gradient(145deg, #343a48 0%, #2d323e 100%);
-  --surface-border-color: #495269;
-  --surface-divider-color: #3c4251;
-  --surface-card-shadow: 0 14px 34px -28px rgba(0, 0, 0, 0.82);
-  --surface-raised-shadow: 0 18px 38px -28px rgba(0, 0, 0, 0.9);
-  --surface-hover-shadow: 0 18px 38px -24px rgba(0, 0, 0, 0.88);
+  --surface-panel-bg: #252933;
+  --surface-card-bg: #2e333e;
+  --surface-raised-background: linear-gradient(145deg, #353b47 0%, #2f3440 100%);
+  --surface-border-color: #3b4351;
+  --surface-divider-color: #343b48;
+  --surface-card-shadow: 0 12px 28px -22px rgba(0, 0, 0, 0.78);
+  --surface-raised-shadow: 0 18px 38px -26px rgba(0, 0, 0, 0.88);
+  --surface-hover-shadow: 0 18px 38px -22px rgba(0, 0, 0, 0.82);
   --card-background: var(--surface-card-bg);
   --card-bg-color: var(--card-background);
-  --hover-background: #393d47;
-  --text-color: #ffffff;
-  --icon-color: #ffffff;
+  --hover-background: #363c48;
+  --text-color: #f2f4f7;
+  --icon-color: #dfe3eb;
   --pre-bg-color: rgba(53, 56, 63, 0.8) !important;
-  --category-item-ba-color: #333333;
-  --desc-color: rgb(161, 161, 170); // 夜间主题偏白
-  --bl-input-bg-color: var(--background-color);
-  --bl-input-color: #ffffff;
-  --bl-input-noBorder-bg-color: #303033;
-  --bl-input-noBorder-hover-bg-color: #3a3a3e;
+  --category-item-ba-color: #2e333e;
+  --desc-color: #a7adba;
+  --bl-input-bg-color: var(--surface-panel-bg);
+  --bl-input-color: var(--text-color);
+  --bl-input-noBorder-bg-color: #252933;
+  --bl-input-noBorder-hover-bg-color: #303641;
   --bl-input-border-h-color: #b2b5ba;
-  --modal-input-bg: #303033;
-  --common-tag-bg-color: #333333;
-  --common-tag-h-color: #ffffff;
-  --btn-h-bg-color: #1a1d2a;
-  --card-border-color: #4d4d54;
-  --ant-select-selector-bg-color: var(--background-color);
-  --ant-select-selection-item-bg-color: #3c3f41;
-  --ant-select-selection-item-anticon-close-color: #ffffff;
-  --ant-select-dropdown-bg-color: #27272a;
-  --ant-select-item-option-selected-bg-colot: #41424b; // 下拉框选中项背景颜色
-  --scrollbar-color: #ccc;
-  --require-tip-color: wheat;
-  --userCenter-left-bg-color: #2b2b2b;
-  --userCenter-right-bg-color: #2b2b2b;
-  --primary-btn-bg-color: #353641;
-  --primary-btn-h-bg-color: #3e3e4a;
+  --modal-input-bg: var(--surface-panel-bg);
+  --common-tag-bg-color: #343a45;
+  --common-tag-h-color: var(--text-color);
+  --btn-h-bg-color: #363c48;
+  --card-border-color: var(--surface-border-color);
+  --ant-select-selector-bg-color: var(--card-background);
+  --ant-select-selection-item-bg-color: #343a45;
+  --ant-select-selection-item-anticon-close-color: var(--text-color);
+  --ant-select-dropdown-bg-color: var(--card-background);
+  --ant-select-item-option-selected-bg-colot: #3d4553; // 下拉框选中项背景颜色
+  --scrollbar-color: rgb(167 173 186 / 35%);
+  --require-tip-color: #d5b983;
+  --userCenter-left-bg-color: var(--surface-panel-bg);
+  --userCenter-right-bg-color: var(--background-color);
+  --primary-btn-bg-color: #303642;
+  --primary-btn-h-bg-color: #3a4250;
 
-  --menu-container-bg-color: #4d5264;
-  --menu-body-bg-color: #303033;
+  --menu-container-bg-color: var(--card-background);
+  --menu-body-bg-color: var(--card-background);
   --workspace-panel-bg-color: var(--surface-panel-bg);
-  --menu-item-bg-color: #33343f;
-  --menu-item-h-bg-color: #41424c;
-  --text-night-color: white;
-  --user-body-bg-color: #35383f;
-  --phone-menu-item-bg-color: #333333;
-  --phone-menu-item-border-color: #2a2a2a;
-  --timeline-line-bg-color: grey;
+  --menu-item-bg-color: #343a45;
+  --menu-item-h-bg-color: #3d4553;
+  --text-night-color: var(--text-color);
+  --user-body-bg-color: var(--surface-panel-bg);
+  --phone-menu-item-bg-color: var(--card-background);
+  --phone-menu-item-border-color: var(--surface-divider-color);
+  --timeline-line-bg-color: #697386;
 
-  --note-header-bg-color: #3c3f41;
-  --notePage-topBody-border-color: #2a2a2a;
+  --note-header-bg-color: var(--card-background);
+  --notePage-topBody-border-color: var(--surface-divider-color);
 
-  --tox-toolbar-bg: #222222;
+  --tox-toolbar-bg: var(--surface-panel-bg);
   --tox-toolbar__group-gap: 5px;
 
   --tox-toolbar-header-border-color: #e3e3e3;
@@ -226,40 +230,40 @@ html[data-theme='night'] {
 
   --w-e-toolbar-active-bg-color: #808080 !important;
 
-  --w-e-toolbar-bg-color: #252526 !important;
+  --w-e-toolbar-bg-color: var(--surface-panel-bg) !important;
 
-  --w-e-toolbar-color: #1e1f22 !important;
+  --w-e-toolbar-color: var(--icon-color) !important;
 
   --w-e-toolbar-active-color: white !important;
 
-  --w-e-textarea-slight-bg-color: #1e1f22 !important;
+  --w-e-textarea-slight-bg-color: var(--surface-page-bg) !important;
   --noteType-hover-color: #605ce5;
-  --folder-list-border-color: #333333;
+  --folder-list-border-color: var(--surface-divider-color);
 
-  --table-bg-color: #18181b;
-  --table-header-bg-color: #27272a;
-  --ant-table-boxShadow: 0 0 5px 0 #444444, 0 2px 10px 0 #444444, 0 0 1px 0 #444444;
+  --table-bg-color: var(--surface-panel-bg);
+  --table-header-bg-color: var(--card-background);
+  --ant-table-boxShadow: 0 10px 26px -20px rgba(0, 0, 0, 0.72);
   --ai-user-background-color: color-mix(in srgb, var(--primary-color) 13%, var(--card-background));
   --ai-user-border-color: color-mix(in srgb, var(--primary-color) 28%, var(--card-background));
   --ai-user-context-divider-color: color-mix(in srgb, var(--primary-color) 22%, var(--card-background));
-  --ai-composer-background-color: #30343d;
-  --ai-composer-input-background-color: #252830;
+  --ai-composer-background-color: var(--surface-card-bg);
+  --ai-composer-input-background-color: var(--surface-panel-bg);
   --ai-assistant-bubble-padding: 0.8rem 0.95rem;
   --ai-assistant-bubble-border: 1px solid var(--surface-border-color);
   --ai-assistant-bubble-background: var(--card-background);
   --ai-assistant-bubble-shadow: var(--surface-card-shadow);
-  --ai-fullscreen-shell-background: #171a20;
-  --ai-fullscreen-sidebar-background: #252a34;
-  --ai-fullscreen-main-background: #20242b;
-  --ai-fullscreen-border-color: #3b4352;
-  --ai-conversation-menu-background: #252930;
-  --ai-conversation-menu-border-color: #414958;
-  --ai-conversation-menu-item-background: #323741;
-  --ai-conversation-menu-item-hover-background: #3d4451;
-  --ai-conversation-menu-item-border-color: #515a6c;
+  --ai-fullscreen-shell-background: var(--surface-page-bg);
+  --ai-fullscreen-sidebar-background: var(--surface-panel-bg);
+  --ai-fullscreen-main-background: var(--surface-page-bg);
+  --ai-fullscreen-border-color: var(--surface-border-color);
+  --ai-conversation-menu-background: var(--surface-panel-bg);
+  --ai-conversation-menu-border-color: var(--surface-border-color);
+  --ai-conversation-menu-item-background: var(--surface-card-bg);
+  --ai-conversation-menu-item-hover-background: var(--hover-background);
+  --ai-conversation-menu-item-border-color: color-mix(in srgb, var(--primary-color) 24%, var(--surface-border-color));
   --ai-conversation-menu-shadow: 0 22px 50px -18px rgba(0, 0, 0, 0.78);
   --noteType-border-color: #4d4d54;
-  --skeleton-body-bg-color: #2a2a2a;
+  --skeleton-body-bg-color: #343a45;
   --message-surface-bg: rgba(42, 42, 47, 0.96);
   --message-shadow-color: rgba(0, 0, 0, 0.5);
   --message-success-color: #4ade80;
@@ -271,6 +275,10 @@ html[data-theme='night'] {
   --resource-note-color: #00a884;
   --resource-file-color: #ff8a00;
   --resource-tag-color: #ec4899;
+  --file-card-preview-inset: 12px;
+  --file-card-preview-radius: 8px;
+  --file-card-preview-background: var(--background-color);
+  --file-card-preview-shadow: 0 0 0 1px color-mix(in srgb, var(--surface-border-color) 72%, transparent);
 
   --workbench-accent-bookmark-start: var(--resource-bookmark-color);
   --workbench-accent-bookmark-end: color-mix(in srgb, var(--resource-bookmark-color) 72%, #ffffff);

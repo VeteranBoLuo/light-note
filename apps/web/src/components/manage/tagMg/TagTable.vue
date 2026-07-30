@@ -724,12 +724,8 @@
   }
 
   .manage-header {
-    --b-card-background: linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--resource-tag-color) 4%, var(--card-background)),
-      var(--card-background)
-    );
-    --b-card-border-color: color-mix(in srgb, var(--resource-tag-color) 16%, var(--tag-border-color));
+    --b-card-background: var(--surface-raised-background);
+    --b-card-border-color: var(--tag-border-color);
     --b-card-shadow: var(--surface-raised-shadow);
 
     position: relative;
@@ -749,7 +745,7 @@
       border-radius: 50%;
       background: radial-gradient(
         circle,
-        color-mix(in srgb, var(--resource-tag-color) 9%, transparent),
+        color-mix(in srgb, var(--resource-tag-color) 5%, transparent),
         transparent 72%
       );
       pointer-events: none;
@@ -791,9 +787,9 @@
     visibility: visible;
     transform: translateY(0);
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 13%, var(--tag-border-color));
+    border: 1px solid var(--tag-border-color);
     border-radius: 13px;
-    background: color-mix(in srgb, var(--card-background) 82%, transparent);
+    background: var(--tag-panel-bg);
   }
 
   .overview-total {
@@ -804,8 +800,8 @@
     gap: 10px;
     padding: 12px 15px;
     box-sizing: border-box;
-    border-right: 1px solid color-mix(in srgb, var(--resource-tag-color) 13%, var(--tag-border-color));
-    background: color-mix(in srgb, var(--resource-tag-color) 5%, transparent);
+    border-right: 1px solid var(--tag-border-color);
+    background: var(--tag-card-bg);
 
     strong {
       color: var(--resource-tag-color);
@@ -903,8 +899,8 @@
     box-sizing: border-box;
     overflow: hidden;
     border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 10%, var(--tag-border-color));
-    background: color-mix(in srgb, var(--card-background) 78%, transparent);
+    border: 1px solid var(--tag-border-color);
+    background: var(--tag-panel-bg);
     opacity: 0;
     visibility: hidden;
     transform: translateY(5px);
@@ -1224,11 +1220,7 @@
     border-radius: @radius-card;
     overflow: hidden;
     cursor: pointer;
-    background: linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--resource-tag-color) 4%, var(--tag-card-bg)),
-      var(--tag-card-bg) 42%
-    );
+    background: var(--tag-card-bg);
     transition:
       transform 0.2s ease,
       border-color 0.2s ease,
@@ -1379,9 +1371,9 @@
     gap: 0;
     margin: 0 14px 11px;
     padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 8%, var(--tag-border-color));
+    border: 1px solid var(--tag-border-color);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--resource-tag-color) 3%, var(--tag-muted-bg));
+    background: var(--tag-panel-bg);
   }
 
   .resource-metric {
@@ -1452,8 +1444,8 @@
     gap: 9px;
     min-width: 0;
     padding: 10px 14px 13px;
-    border-top: 1px solid color-mix(in srgb, var(--resource-tag-color) 8%, var(--tag-border-color));
-    background: color-mix(in srgb, var(--tag-muted-bg) 58%, transparent);
+    border-top: 1px solid var(--tag-border-color);
+    background: var(--tag-panel-bg);
   }
 
   .compact-row {

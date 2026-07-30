@@ -6,9 +6,13 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import icon from '@/config/icon.ts';
-  import { getBookmarkIconRuntimeState, resolveBookmarkIconSource } from '@/composables/bookmarkIconRuntime.ts';
+  import {
+    BOOKMARK_ICON_LOADING_TIMEOUT_MS,
+    getBookmarkIconRuntimeState,
+    resolveBookmarkIconSource,
+  } from '@/composables/bookmarkIconRuntime.ts';
 
   const props = withDefaults(
     defineProps<{
@@ -33,17 +37,40 @@
   }));
   const runtimeState = computed(() => getBookmarkIconRuntimeState(props.bookmarkId));
   const resolvedSrc = computed(() => resolveBookmarkIconSource(props.bookmarkId, props.src));
+  const loadingTimedOut = ref(false);
+  let loadingTimeout: ReturnType<typeof setTimeout> | null = null;
+  const requestedLoading = computed(
+    () => props.loading || Boolean(runtimeState.value?.refreshing) || Boolean(runtimeState.value?.batchLoading),
+  );
   // 刷新已有图标时继续展示旧图；只有当前确实没有可用图标时才展示加载态。
-  const resolvedLoading = computed(
-    () =>
-      !resolvedSrc.value &&
-      (props.loading || Boolean(runtimeState.value?.refreshing) || Boolean(runtimeState.value?.batchLoading)),
+  // 无论上游请求是否能正常收尾，单个组件最多展示约 30 秒动画，随后稳定回退通用图标。
+  const resolvedLoading = computed(() => !resolvedSrc.value && requestedLoading.value && !loadingTimedOut.value);
+
+  function clearLoadingTimeout() {
+    if (loadingTimeout !== null) clearTimeout(loadingTimeout);
+    loadingTimeout = null;
+  }
+
+  watch(
+    [resolvedSrc, requestedLoading, () => runtimeState.value?.requestToken],
+    ([source, loading]) => {
+      clearLoadingTimeout();
+      loadingTimedOut.value = false;
+      if (source || !loading) return;
+      loadingTimeout = setTimeout(() => {
+        loadingTimeout = null;
+        loadingTimedOut.value = true;
+      }, BOOKMARK_ICON_LOADING_TIMEOUT_MS);
+    },
+    { immediate: true },
   );
 
   function handleError(event: Event) {
     const image = event.currentTarget as HTMLImageElement;
     if (image.getAttribute('src') !== icon.nullImg) image.src = icon.nullImg;
   }
+
+  onBeforeUnmount(clearLoadingTimeout);
 </script>
 
 <style scoped lang="less">

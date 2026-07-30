@@ -65,6 +65,7 @@ type UseBookmarkIconBatchOptions<T extends IconBookmarkItem> = {
   cancelSchedule?: (handle: TimerHandle) => void;
   now?: () => number;
   stallFallbackMs?: number;
+  requestTimeoutMs?: number;
 };
 
 const POLL_FAILURE_LIMIT = 3;
@@ -132,6 +133,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
   cancelSchedule = (handle) => clearTimeout(handle),
   now = () => Date.now(),
   stallFallbackMs = DEFAULT_STALL_FALLBACK_MS,
+  requestTimeoutMs = DEFAULT_STALL_FALLBACK_MS,
 }: UseBookmarkIconBatchOptions<T>) {
   const state = ref<IconBatchState | null>(null);
   const cursor = ref<IconBatchCursor | null>(null);
@@ -187,6 +189,17 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
     }, actualDelay);
   }
 
+  function withRequestTimeout<R>(request: Promise<R>) {
+    if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) return request;
+    let timeout: TimerHandle | null = null;
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = schedule(() => reject(new Error('BOOKMARK_ICON_BATCH_REQUEST_TIMEOUT')), requestTimeoutMs);
+    });
+    return Promise.race([request, deadline]).finally(() => {
+      if (timeout !== null) cancelSchedule(timeout);
+    });
+  }
+
   async function fallbackToProgressiveIcons(requestGeneration: number) {
     if (requestGeneration !== generation) return;
     clearTimer();
@@ -206,7 +219,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
 
     clearTimer();
     try {
-      const response = await requestStatus(batchId, cursor.value);
+      const response = await withRequestTimeout(requestStatus(batchId, cursor.value));
       if (requestGeneration !== generation || batchId !== activeBatchId) {
         return;
       }
@@ -228,6 +241,7 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
 
       if (nextState.status === 'completed' || nextState.status === 'no_tasks' || nextState.total === 0) {
         activeBatchId = '';
+        replaceLoadingBookmarkIds();
         clearPending();
         await reloadBookmarks({ refreshIcons: false });
         return;
@@ -260,6 +274,9 @@ export function useBookmarkIconBatchTracking<T extends IconBookmarkItem>({
       if (requestGeneration !== generation || batchId !== activeBatchId) {
         return;
       }
+      // 状态查询失败或排队超时后，先结束具体卡片的加载动画；
+      // 后续轮询若确认任务仍在处理，会按 activeBookmarkIds 重新建立加载态。
+      replaceLoadingBookmarkIds();
       consecutiveFailures += 1;
       if (consecutiveFailures >= POLL_FAILURE_LIMIT) {
         await fallbackToProgressiveIcons(requestGeneration);

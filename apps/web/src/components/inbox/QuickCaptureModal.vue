@@ -87,6 +87,7 @@
     buildMarkdownNotePayload,
     detectInboxCaptureType,
     getAvailableQuickCaptureTypes,
+    getQuickCaptureInboxTarget,
     hasCaptureBookmarkCandidate,
     normalizeQuickCaptureType,
   } from '@/utils/inboxCapture';
@@ -310,7 +311,7 @@
 
   function goInbox() {
     visible.value = false;
-    router.push(captureType.value === 'todo' ? { path: '/inbox', query: { tab: 'todo' } } : '/inbox');
+    router.push(getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile));
   }
 
   function continueCapture() {

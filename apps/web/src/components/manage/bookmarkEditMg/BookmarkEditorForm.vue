@@ -215,6 +215,11 @@
     display: flex;
     flex-direction: column;
     gap: 18px;
+    padding: 20px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--workspace-panel-bg-color);
+    box-shadow: var(--surface-card-shadow);
   }
 
   .bookmark-field {
@@ -453,6 +458,11 @@
     padding: 0 0 12px;
 
     .bookmark-editor__form {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
       gap: 16px;
     }
 
