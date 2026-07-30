@@ -40,7 +40,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { fetchGlobalSearch, type SearchResultItem } from '@/api/search';
+  import { useResourcePickerSearch } from '@/composables/useResourcePickerSearch';
   import type { ResourceRef, ResourceRefType } from '@/utils/noteResourceRefs';
 
   interface ResourceMentionItem extends ResourceRef {
@@ -50,11 +50,12 @@
   const props = defineProps<{ query: string }>();
   const emit = defineEmits<{ select: [value: ResourceMentionItem]; 'open-full': [] }>();
   const { t } = useI18n();
-  const results = ref<ResourceMentionItem[]>([]);
-  const loading = ref(false);
-  const activeIndex = ref(0);
-  let debounceTimer: number | null = null;
-  let requestId = 0;
+  // 搜索/防抖/竞态/去重统一走公共内核;本组件只保留笔记侧的展示与键盘交互。
+  const { results, loading, activeIndex, search, moveActive, reset } = useResourcePickerSearch({
+    allowedTypes: ['bookmark', 'note', 'file'],
+    limit: 8,
+    debounceMs: 180,
+  });
 
   function resourceIcon(type: ResourceRefType) {
     if (type === 'note') return icon.resource.note;
@@ -66,72 +67,18 @@
     return t(`ai.sourceTypes.${type}`);
   }
 
-  function clearDebounce() {
-    if (debounceTimer === null) return;
-    window.clearTimeout(debounceTimer);
-    debounceTimer = null;
-  }
-
-  async function searchNow() {
-    clearDebounce();
-    const currentRequest = ++requestId;
-    loading.value = true;
-    try {
-      const data = await fetchGlobalSearch(props.query, 8, true);
-      if (currentRequest !== requestId) return;
-      const seen = new Set<string>();
-      results.value = (data.items || [])
-        .filter((item: SearchResultItem) => ['bookmark', 'note', 'file'].includes(item.type))
-        .map((item) => ({
-          type: item.type as ResourceRefType,
-          id: String(item.id || ''),
-          title: String(item.title || ''),
-        }))
-        .filter((item) => {
-          const key = `${item.type}:${item.id}`;
-          if (!item.id || !item.title || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .slice(0, 8);
-      activeIndex.value = 0;
-    } catch {
-      if (currentRequest !== requestId) return;
-      results.value = [];
-      activeIndex.value = 0;
-    } finally {
-      if (currentRequest === requestId) loading.value = false;
-    }
-  }
-
   function choose(item: ResourceMentionItem) {
     emit('select', item);
   }
 
   function chooseActive() {
     const item = results.value[activeIndex.value];
-    if (item) choose(item);
+    if (item) choose(item as ResourceMentionItem);
   }
 
-  function moveActive(offset: number) {
-    const total = results.value.length;
-    if (!total) return;
-    activeIndex.value = (activeIndex.value + offset + total) % total;
-  }
+  watch(() => props.query, (keyword) => search(String(keyword || '')), { immediate: true });
 
-  watch(
-    () => props.query,
-    () => {
-      clearDebounce();
-      debounceTimer = window.setTimeout(() => void searchNow(), 180);
-    },
-    { immediate: true },
-  );
-
-  onBeforeUnmount(() => {
-    clearDebounce();
-    requestId += 1;
-  });
+  onBeforeUnmount(reset);
 
   defineExpose({ chooseActive, moveActive });
 </script>

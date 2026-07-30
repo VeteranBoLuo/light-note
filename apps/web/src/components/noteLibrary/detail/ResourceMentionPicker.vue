@@ -51,7 +51,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { fetchGlobalSearch, type SearchResultItem } from '@/api/search';
+  import { useResourcePickerSearch } from '@/composables/useResourcePickerSearch';
   import type { ResourceRef, ResourceRefType } from '@/utils/noteResourceRefs';
 
   interface ResourceMentionItem extends ResourceRef {
@@ -63,12 +63,13 @@
   const emit = defineEmits<{ select: [value: ResourceMentionItem]; close: [] }>();
   const { t } = useI18n();
   const keyword = ref('');
-  const results = ref<ResourceMentionItem[]>([]);
-  const loading = ref(false);
-  const activeIndex = ref(0);
   const keywordInputRef = ref<BInputExpose | null>(null);
-  let debounceTimer: number | null = null;
-  let requestId = 0;
+  // 搜索/防抖/竞态/去重统一走公共内核
+  const { results, loading, activeIndex, search, searchNow, moveActive, reset } = useResourcePickerSearch({
+    allowedTypes: ['bookmark', 'note', 'file'],
+    limit: 24,
+    debounceMs: 260,
+  });
 
   function resourceIcon(type: ResourceRefType) {
     if (type === 'note') return icon.resource.note;
@@ -80,46 +81,6 @@
     return t(`ai.sourceTypes.${type}`);
   }
 
-  function clearDebounce() {
-    if (debounceTimer !== null) {
-      window.clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-  }
-
-  async function searchNow() {
-    clearDebounce();
-    const currentRequest = ++requestId;
-    loading.value = true;
-    try {
-      const data = await fetchGlobalSearch(keyword.value, 12, true);
-      if (currentRequest !== requestId) return;
-      const seen = new Set<string>();
-      results.value = (data.items || [])
-        .filter((item: SearchResultItem) => ['bookmark', 'note', 'file'].includes(item.type))
-        .map((item) => ({
-          type: item.type as ResourceRefType,
-          id: String(item.id || ''),
-          title: String(item.title || ''),
-        }))
-        .filter((item) => {
-          const key = `${item.type}:${item.id}`;
-          if (!item.id || !item.title || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        })
-        .slice(0, 24);
-      activeIndex.value = 0;
-    } catch {
-      if (currentRequest === requestId) {
-        results.value = [];
-        activeIndex.value = 0;
-      }
-    } finally {
-      if (currentRequest === requestId) loading.value = false;
-    }
-  }
-
   function choose(item: ResourceMentionItem) {
     emit('select', item);
   }
@@ -129,34 +90,22 @@
     if (item) choose(item);
   }
 
-  function moveActive(offset: number) {
-    const total = results.value.length;
-    if (!total) return;
-    activeIndex.value = (activeIndex.value + offset + total) % total;
-  }
-
   function close() {
     emit('close');
   }
 
   onMounted(async () => {
     keyword.value = '';
-    results.value = [];
-    activeIndex.value = 0;
+    reset();
     await nextTick();
     keywordInputRef.value?.focus?.();
-    void searchNow();
+    // 打开即展示最近资源,不必等用户输入
+    void searchNow('');
   });
 
-  watch(keyword, () => {
-    clearDebounce();
-    debounceTimer = window.setTimeout(() => void searchNow(), 260);
-  });
+  watch(keyword, (value) => search(String(value || '')));
 
-  onBeforeUnmount(() => {
-    clearDebounce();
-    requestId += 1;
-  });
+  onBeforeUnmount(reset);
 </script>
 
 <style scoped lang="less">

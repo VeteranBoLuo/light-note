@@ -15,17 +15,29 @@
           @prompt="applyAttachmentPrompt"
         />
       </div>
-      <BInput
-        v-model:value="inputValue"
-        type="textarea"
-        submit-on-enter
-        @enter="handleSend"
-        @paste="handlePaste"
-        :placeholder="t('ai.inputPlaceholder')"
-        :rows="1"
-        ref="textInput"
-        class="text-input"
-      />
+      <div class="text-input-wrap">
+        <BInput
+          v-model:value="inputValue"
+          type="textarea"
+          submit-on-enter
+          @enter="handleSend"
+          @paste="handlePaste"
+          @keydown="handleMentionKeydown"
+          :placeholder="t('ai.inputPlaceholder')"
+          :rows="1"
+          ref="textInput"
+          class="text-input"
+        />
+        <!-- 输入 @ 时的资源建议:笔记/书签进上下文,云文件交给附件适配器 -->
+        <div v-if="mentionQuery" class="ai-mention-layer">
+          <ResourceMentionSuggestions
+            ref="mentionSuggestions"
+            :query="mentionQuery.keyword"
+            @select="applyMentionSelection"
+            @open-full="closeMention"
+          />
+        </div>
+      </div>
       <div class="composer-toolbar">
         <div class="composer-meta">
           <span v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</span>
@@ -95,6 +107,12 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
+  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
+  import {
+    replaceMentionQuery,
+    resolveMentionQuery,
+    type MentionQuery,
+  } from '@/utils/resourceMentionTrigger';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
@@ -188,6 +206,65 @@
     focus();
   }
 
+  // ── 输入 @ 唤起资源建议 ──────────────────────────────
+  const mentionQuery = ref<MentionQuery | null>(null);
+  const mentionSuggestions = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+
+  function closeMention() {
+    mentionQuery.value = null;
+  }
+
+  function syncMentionQuery(target: HTMLTextAreaElement | HTMLInputElement | null) {
+    if (!target || typeof target.selectionStart !== 'number') return closeMention();
+    mentionQuery.value = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+  }
+
+  function handleMentionKeydown(event: KeyboardEvent) {
+    const target = event.target as HTMLTextAreaElement | null;
+    if (mentionQuery.value) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        mentionSuggestions.value?.moveActive(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        mentionSuggestions.value?.moveActive(-1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        mentionSuggestions.value?.chooseActive();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMention();
+        return;
+      }
+    }
+    // 键入后光标才更新,放到下一帧再解析
+    window.setTimeout(() => syncMentionQuery(target), 0);
+  }
+
+  /** 选中资源:消费掉输入框里的 @关键词,再按类型交给对应写入路径。 */
+  function applyMentionSelection(item: { type: string; id: string; title: string }) {
+    const query = mentionQuery.value;
+    if (query) emit('update:modelValue', replaceMentionQuery(props.modelValue, query));
+    closeMention();
+    if (item.type === 'file') {
+      // 云文件必须走附件准备与解析,不能当成普通上下文
+      void attachmentPicker.value?.attachCloudFile(item.id);
+      return;
+    }
+    const next = { type: item.type, id: String(item.id), title: item.title } as AiResourceContext;
+    const exists = props.contexts.some((ctx) => ctx.type === next.type && String(ctx.id) === next.id);
+    if (exists || props.contexts.length >= 5) return;
+    emit('update:contexts', [...props.contexts, next]);
+    focus();
+  }
+
   /** 粘贴图片直接进入附件上传;纯文本粘贴不受影响。 */
   function handlePaste(event: ClipboardEvent) {
     const files = Array.from(event.clipboardData?.files || []);
@@ -267,6 +344,20 @@
     width: 100%;
     min-width: 0;
     margin-bottom: 6px;
+  }
+
+  .text-input-wrap {
+    position: relative;
+    min-width: 0;
+  }
+
+  /* @ 建议浮层贴着输入框上沿弹出,避免遮挡正在输入的文字 */
+  .ai-mention-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 20;
   }
 
   .text-input {
