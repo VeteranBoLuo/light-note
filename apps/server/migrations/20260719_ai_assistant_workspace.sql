@@ -144,17 +144,6 @@ CREATE TABLE IF NOT EXISTS ai_content_generations (
   PRIMARY KEY (subject_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS ai_resource_preferences (
-  user_id VARCHAR(36) NOT NULL,
-  resource_type VARCHAR(16) NOT NULL,
-  resource_id VARCHAR(64) NOT NULL,
-  ai_excluded TINYINT(1) NOT NULL DEFAULT 0,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (user_id, resource_type, resource_id),
-  KEY idx_ai_resource_preferences_excluded (user_id, ai_excluded, resource_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS ai_change_sets (
   id VARCHAR(36) NOT NULL,
   actor_user_id VARCHAR(64) NOT NULL,

@@ -255,6 +255,56 @@ describe('AI 文档服务', () => {
     expect(pool.query.mock.calls[0][1]).toEqual(['9', 'user-2']);
   });
 
+  it('同一云文件正在解析时直接复用，不清空分块或重置任务', async () => {
+    const existing = {
+      id: 'source-shared',
+      user_id: 'visitor-shared',
+      source_type: 'cloud',
+      file_id: 9,
+      file_name: 'guide.pdf',
+      file_type: 'application/pdf',
+      file_size: 128,
+      object_key: 'files/visitor-shared/guide.pdf',
+      status: 'parsing',
+    };
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT * FROM ai_document_sources')) return [[existing]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    pool.query.mockResolvedValueOnce([
+      [
+        {
+          id: 9,
+          file_name: 'guide.pdf',
+          file_type: 'application/pdf',
+          file_size: 128,
+          obs_key: 'files/visitor-shared/guide.pdf',
+        },
+      ],
+    ]);
+    pool.getConnection.mockResolvedValue(connection);
+
+    await expect(
+      attachCloudDocumentSource({ userId: 'visitor-shared', fileId: 9, sessionId: 'guest-session' }),
+    ).resolves.toEqual(expect.objectContaining({ id: 'source-shared', sourceType: 'cloud', status: 'parsing' }));
+    expect(connection.query).toHaveBeenCalledWith(
+      'UPDATE ai_document_sources SET session_id = ? WHERE id = ?',
+      ['guest-session', 'source-shared'],
+    );
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('DELETE FROM ai_document_chunks')),
+    ).toBe(false);
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO ai_document_jobs')),
+    ).toBe(false);
+  });
+
   it('临时附件另存云空间后再次挂载时安全转为云来源，并清理临时对象', async () => {
     const existing = {
       id: 'source-1',

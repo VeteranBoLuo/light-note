@@ -27,13 +27,6 @@
         <BButton class="note-action-button" @click="openBatchTags('add')">{{ $t('note.batchAddTags') }}</BButton>
         <BButton class="note-action-button" @click="openBatchTags('remove')">{{ $t('note.batchRemoveTags') }}</BButton>
         <BButton class="note-action-button" @click="exportSelectedNotes">{{ $t('note.batchExport') }}</BButton>
-        <BButton class="note-action-button" @click="showSelectedNotesPrivacy">{{ $t('note.batchPrivacy') }}</BButton>
-        <BButton class="note-action-button" @click="setSelectedNotesAiScope(true)">
-          {{ $t('note.batchExcludeAi') }}
-        </BButton>
-        <BButton class="note-action-button" @click="setSelectedNotesAiScope(false)">
-          {{ $t('note.batchIncludeAi') }}
-        </BButton>
         <BButton type="danger" class="note-action-button" @click="batchDeleteNote">
           <SvgIcon :src="icon.noteDetail.delete" size="16" />
           {{ $t('note.deleteSelected') }}
@@ -248,7 +241,6 @@
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
-  import { updateAiResourcePreference } from '@/api/aiWorkspaceApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -803,37 +795,6 @@
     } else {
       message.success(t('note.batchExportSuccess', { count: notes.length }));
     }
-  }
-
-  function showSelectedNotesPrivacy() {
-    Alert.alert({
-      title: t('note.batchPrivacy'),
-      content: t('note.batchPrivacyDetail'),
-      onOk() {},
-    });
-  }
-
-  function setSelectedNotesAiScope(aiExcluded: boolean) {
-    const selected = getSelectedNotes();
-    if (!selected.length) return;
-    Alert.alert({
-      title: t(aiExcluded ? 'note.batchExcludeAi' : 'note.batchIncludeAi'),
-      content: t(aiExcluded ? 'note.batchExcludeAiConfirm' : 'note.batchIncludeAiConfirm', {
-        count: selected.length,
-      }),
-      async onOk() {
-        const results = await Promise.allSettled(
-          selected.map((note) => updateAiResourcePreference({ type: 'note', id: String(note.id), aiExcluded })),
-        );
-        const succeeded = results.filter((result) => result.status === 'fulfilled').length;
-        if (!succeeded) {
-          message.error(t('note.batchAiScopeFailed'));
-          return;
-        }
-        message.success(t('note.batchAiScopeSuccess', { count: succeeded }));
-        exitBatch();
-      },
-    });
   }
 
   function batchDeleteNote() {

@@ -79,7 +79,6 @@ export default {
       scope: {
         types: args.resourceTypes,
         resourceIds: enforcedScope === null ? args.resourceIds : enforcedScope,
-        excludedResourceIds: ctx.agentContentScope?.excludedResourceIds || [],
       },
     });
   },

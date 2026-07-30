@@ -555,6 +555,7 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import { openAiAssistant } from '@/utils/aiEntry';
+  import { attachAiCloudFile } from '@/api/aiAttachmentApi';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
@@ -617,24 +618,41 @@
     }
   };
 
-  function openFilesInAi(files: any[]) {
+  async function openFilesInAi(files: any[]) {
     const available = files.filter((file) => String(file?.id || '').trim());
     if (!available.length) return;
     if (available.length > 5) message.info(t('cloudSpace.aiMaterialLimit', { count: 5 }));
-    const contexts = available.slice(0, 5).map((file) => ({
-      type: 'file' as const,
-      id: String(file.id),
-      title: String(file.fileName || file.name || t('cloudSpace.fileName')).slice(0, 255),
-    }));
-    openAiAssistant({
-      contextRefs: contexts,
-      suggestedIntent: contexts.length > 1 ? 'compare' : 'summarize',
-      surface: 'cloud_space',
-    });
+    const selected = available.slice(0, 5);
+    const closeLoading = message.loading(t('cloudSpace.aiPreparingFiles'), 0);
+    try {
+      const settled = await Promise.allSettled(selected.map((file) => attachAiCloudFile(String(file.id))));
+      const attachments = settled
+        .filter(
+          (item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof attachAiCloudFile>>> =>
+            item.status === 'fulfilled',
+        )
+        .map((item) => item.value);
+      const failures = settled.filter((item) => item.status === 'rejected');
+      if (!attachments.length) {
+        const firstError = failures[0] as PromiseRejectedResult | undefined;
+        message.error(String(firstError?.reason?.message || t('ai.attachmentAttachFailed')));
+        return;
+      }
+      if (failures.length) {
+        message.warning(t('cloudSpace.aiFilesPartiallyPrepared', { count: failures.length }));
+      }
+      openAiAssistant({
+        attachmentRefs: attachments,
+        suggestedIntent: attachments.length > 1 ? 'compare' : 'summarize',
+        surface: 'cloud_space',
+      });
+    } finally {
+      closeLoading();
+    }
   }
 
   function openSelectedFilesInAi() {
-    openFilesInAi(cloud.fileList.filter((file) => selectedRows.value.includes(file.id)));
+    void openFilesInAi(cloud.fileList.filter((file) => selectedRows.value.includes(file.id)));
   }
 
   const goToTagDetail = (tagId: string) => {

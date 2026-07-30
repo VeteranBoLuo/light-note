@@ -1,10 +1,6 @@
 import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { categoryCondition, FILE_CATEGORY_CASE, FILE_CATEGORY_LABEL, breakdownFromRows } from '../fileCategory.js';
-import {
-  aiResourceExclusionSql,
-  appendTransientExclusion,
-} from '../../aiResourcePreferencePolicy.js';
 
 function normalizeArgs(args = {}) {
   const rawFolderId = args.folderId ?? args.folder_id ?? args.directoryId ?? args.directory_id;
@@ -81,13 +77,8 @@ export default {
     }
 
     // 基础筛选(关键词/时间),不含类型 —— 用于「全类型分布」,让 AI 一次拿到完整分布
-    let baseWhere = `f.create_by = ? AND f.del_flag = 0 AND ${aiResourceExclusionSql({
-      alias: 'f',
-      ownerColumn: 'create_by',
-      resourceType: 'file',
-    })}`;
+    let baseWhere = 'f.create_by = ? AND f.del_flag = 0';
     const baseParams = [ctx.userId];
-    baseWhere = appendTransientExclusion(baseWhere, baseParams, ctx.agentContentScope, 'file', 'f.id');
     if (keyword) {
       baseWhere += ' AND f.file_name LIKE ?';
       baseParams.push(`%${keyword}%`);

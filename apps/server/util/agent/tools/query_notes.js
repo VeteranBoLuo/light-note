@@ -1,10 +1,6 @@
 import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
-import {
-  aiResourceExclusionSql,
-  appendTransientExclusion,
-} from '../../aiResourcePreferencePolicy.js';
 
 export default {
   name: 'query_notes',
@@ -26,13 +22,8 @@ export default {
     const time = parseTimeRange(timeRange);
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
-    let where = `n.create_by = ? AND n.del_flag = '0' AND ${aiResourceExclusionSql({
-      alias: 'n',
-      ownerColumn: 'create_by',
-      resourceType: 'note',
-    })}`;
+    let where = "n.create_by = ? AND n.del_flag = '0'";
     const baseParams = [ctx.userId];
-    where = appendTransientExclusion(where, baseParams, ctx.agentContentScope, 'note', 'n.id');
 
     if (keyword) {
       where += ` AND (n.title LIKE ? OR n.content LIKE ?)`;

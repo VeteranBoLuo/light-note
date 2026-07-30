@@ -1,7 +1,6 @@
 import pool from '../db/index.js';
 import { parseNoteContent, renderNoteForAi } from './noteSemantic.js';
 import { recognizeNoteImages } from './noteImageOcr.js';
-import { aiResourceExclusionSql } from './aiResourcePreferencePolicy.js';
 
 export async function findOwnedNoteForAi({ userId, noteId = '', title = '' }) {
   if (noteId) {
@@ -9,7 +8,6 @@ export async function findOwnedNoteForAi({ userId, noteId = '', title = '' }) {
       `SELECT id, title, content, type, create_time, update_time
          FROM note
         WHERE id = ? AND create_by = ? AND del_flag = 0
-          AND ${aiResourceExclusionSql({ alias: 'note', ownerColumn: 'create_by', resourceType: 'note' })}
         LIMIT 1`,
       [noteId, userId],
     );
@@ -20,7 +18,6 @@ export async function findOwnedNoteForAi({ userId, noteId = '', title = '' }) {
     `SELECT id, title, content, type, create_time, update_time
       FROM note
       WHERE create_by = ? AND del_flag = 0 AND (title = ? OR title LIKE ?)
-        AND ${aiResourceExclusionSql({ alias: 'note', ownerColumn: 'create_by', resourceType: 'note' })}
       ORDER BY (title = ?) DESC, update_time DESC LIMIT 1`,
     [userId, title, `%${title}%`, title],
   );

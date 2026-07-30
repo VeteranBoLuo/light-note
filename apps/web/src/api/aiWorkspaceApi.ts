@@ -3,13 +3,6 @@ import { apiBasePost } from '@/http/request';
 export type AiConversationStatus = 'active' | 'archived';
 export type AiRetentionMode = 'standard' | 'temporary' | 'indefinite';
 export type AiMemoryStatus = 'candidate' | 'active' | 'paused' | 'expired';
-export type AiResourcePreferenceType = 'bookmark' | 'note' | 'file';
-
-export interface AiResourcePreference {
-  resourceType: AiResourcePreferenceType;
-  resourceId: string;
-  aiExcluded: boolean;
-}
 
 export interface AiEvidenceLocator {
   type?: string;
@@ -386,15 +379,6 @@ export const recoverAiAgentResponse = (
   input: { requestId: string; lastEventId?: number },
   options: { signal?: AbortSignal } = {},
 ) => post<AiAgentRecoveryResult>('/api/chat/agent/recover', input, 'AI_RESPONSE_RECOVERY_FAILED', options);
-
-export const listAiResourcePreferences = (items: Array<{ type: AiResourcePreferenceType; id: string }>) =>
-  post<{ items: AiResourcePreference[] }>('/api/chat/resource-preferences/list', { items });
-
-export const updateAiResourcePreference = (input: {
-  type: AiResourcePreferenceType;
-  id: string;
-  aiExcluded: boolean;
-}) => post<AiResourcePreference>('/api/chat/resource-preferences/update', input);
 
 export const exportAiCloudConversations = () =>
   post<{

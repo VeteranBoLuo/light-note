@@ -18,7 +18,6 @@ import * as aiChangeSetHandle from '../router_handle/aiChangeSetHandle.js';
 import * as aiChangeSetProposalHandle from '../router_handle/aiChangeSetProposalHandle.js';
 import * as aiMemoryHandle from '../router_handle/aiMemoryHandle.js';
 import * as aiResponseHandle from '../router_handle/aiResponseHandle.js';
-import * as aiResourcePreferenceHandle from '../router_handle/aiResourcePreferenceHandle.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // 只限制“新增一个待解析文件”的用户意图。确认上传、删除附件属于同一次上传的
@@ -126,8 +125,6 @@ router.post('/conversations/restore', aiConversationHandle.restoreConversation);
 router.post('/conversations/clear', aiConversationHandle.clearConversations);
 router.post('/conversations/clear-all-data', agentWriteActionLimiter, aiConversationHandle.clearAllAiData);
 router.post('/conversations/export', aiConversationHandle.exportConversations);
-router.post('/resource-preferences/list', aiResourcePreferenceHandle.listPreferences);
-router.post('/resource-preferences/update', agentWriteActionLimiter, aiResourcePreferenceHandle.updatePreference);
 router.post('/conversations/messages/save', aiConversationHandle.saveMessage);
 router.post('/conversations/messages/versions', aiConversationHandle.listMessageVersions);
 router.post('/conversations/messages/version-group', aiConversationHandle.prepareMessageVersionGroup);

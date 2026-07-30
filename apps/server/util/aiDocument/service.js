@@ -254,23 +254,10 @@ function formatSource(row) {
   };
 }
 
-async function selectOwnedSource(db, userId, sourceId, lock = false, enforceAiPreference = false) {
+async function selectOwnedSource(db, userId, sourceId, lock = false) {
   const [rows] = await db.query(
     `SELECT * FROM ai_document_sources
      WHERE id = ? AND user_id = ?
-       ${
-         enforceAiPreference
-           ? `AND (
-                source_type <> 'cloud' OR file_id IS NULL OR NOT EXISTS (
-                  SELECT 1 FROM ai_resource_preferences arp
-                  WHERE arp.user_id = ai_document_sources.user_id
-                    AND arp.resource_type = 'file'
-                    AND arp.resource_id = CAST(ai_document_sources.file_id AS CHAR)
-                    AND arp.ai_excluded = 1
-                )
-              )`
-           : ''
-       }
      LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
     [sourceId, userId],
   );
@@ -437,12 +424,13 @@ export async function attachCloudDocumentSource({ userId, fileId, sessionId = ''
     const existing = existingRows[0];
     const sourceId = existing?.id || id;
     if (existing) {
-      const unchanged =
+      const sameCloudObject =
         existing.source_type === 'cloud' &&
         existing.object_key === file.obs_key &&
-        Number(existing.file_size || 0) === descriptor.fileSize &&
-        existing.status === 'ready';
-      if (unchanged) {
+        Number(existing.file_size || 0) === descriptor.fileSize;
+      // 同一云文件已经完成或正在解析时直接复用。尤其游客共享展示空间不能因为多人反复点击
+      // 就清空分块并重置同一任务，否则会让正在运行的解析永远无法完成。
+      if (sameCloudObject && ['ready', 'queued', 'parsing'].includes(existing.status)) {
         await connection.query('UPDATE ai_document_sources SET session_id = ? WHERE id = ?', [
           String(sessionId || '').slice(0, 96) || null,
           sourceId,
@@ -1077,14 +1065,8 @@ function buildRetrievalContext(documents, tokens) {
   return `${intro}\n\n${[...blocks, ...stateBlocks].join('\n\n')}`.slice(0, DOCUMENT_CONTEXT_CHAR_BUDGET);
 }
 
-export async function resolveDocumentAttachments({ userId, sourceIds, question, excludedResources = [] }) {
+export async function resolveDocumentAttachments({ userId, sourceIds, question }) {
   const ids = [...new Set((Array.isArray(sourceIds) ? sourceIds : []).map(String).filter(Boolean))];
-  const transientExcludedFileIds = new Set(
-    (Array.isArray(excludedResources) ? excludedResources : [])
-      .filter((item) => String(item?.type || '') === 'file')
-      .map((item) => String(item?.id || '').trim())
-      .filter(Boolean),
-  );
   if (!ids.length) {
     return {
       text: '',
@@ -1097,14 +1079,8 @@ export async function resolveDocumentAttachments({ userId, sourceIds, question, 
   }
   const documents = [];
   for (const id of ids) {
-    const source = await selectOwnedSource(pool, userId, id, false, true);
+    const source = await selectOwnedSource(pool, userId, id);
     if (!source) throw serviceError('ATTACHMENT_NOT_FOUND', '附件不存在或不属于当前账号', 404);
-    if (source.source_type === 'cloud' && source.file_id != null) {
-      const fileId = String(source.file_id);
-      if (transientExcludedFileIds.has(fileId)) {
-        throw serviceError('AI_RESOURCE_EXCLUDED', '该文件已从本轮回答范围中排除', 409);
-      }
-    }
     if (isDocumentDeleteRetryPending(source)) {
       throw serviceError('ATTACHMENT_DELETE_PENDING', '附件正在删除，请重新上传后再使用', 409);
     }

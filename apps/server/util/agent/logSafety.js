@@ -29,7 +29,7 @@ export function safeAgentError(error, maxLength = 500) {
 }
 
 export function stableAgentErrorCode(error) {
-  const directCode = String(error?.code || '')
+  const directCode = String(typeof error === 'string' || typeof error === 'number' ? error : error?.code || '')
     .trim()
     .toUpperCase();
   if (/^[A-Z][A-Z0-9_]{1,63}$/u.test(directCode)) return directCode;

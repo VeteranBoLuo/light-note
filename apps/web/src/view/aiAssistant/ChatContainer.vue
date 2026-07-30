@@ -163,7 +163,6 @@
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
-  import type { AiExcludedResourceRef } from '@/store/aiAssistant';
   import {
     clearAiTemporaryAttachments,
     fetchAiAttachmentStatuses,
@@ -304,7 +303,6 @@
     hasAnswerStarted,
     contextRefs: contexts,
     attachmentRefs: attachments,
-    excludedResourceRefs: excludedResources,
     shouldFollowMessages,
     showScrollToBottom,
     scrollTop,
@@ -742,12 +740,11 @@
         activity: chatMessage.activity || [],
         coverage: chatMessage.coverage || null,
         modelMeta:
-          chatMessage.recovered || chatMessage.terminal || chatMessage.excludedResourceRefs?.length
+          chatMessage.recovered || chatMessage.terminal
             ? {
                 recovered: Boolean(chatMessage.recovered),
                 stage: chatMessage.stage || null,
                 terminal: chatMessage.terminal || null,
-                excludedResourceRefs: chatMessage.excludedResourceRefs || [],
               }
             : null,
         sources,
@@ -981,19 +978,6 @@
             ? (item.status as NonNullable<ChatMessage['attachmentRefs']>[number]['status'])
             : 'failed',
         })),
-      excludedResourceRefs: Array.isArray(cloudMessage.modelMeta?.excludedResourceRefs)
-        ? (cloudMessage.modelMeta.excludedResourceRefs as Array<Record<string, unknown>>)
-            .filter(
-              (item) =>
-                ['bookmark', 'note', 'file'].includes(String(item.type)) &&
-                Boolean(String(item.id || '').trim()),
-            )
-            .map((item) => ({
-              type: item.type as AiExcludedResourceRef['type'],
-              id: String(item.id),
-              title: String(item.title || ''),
-            }))
-        : [],
       sources: (cloudMessage.sources || []).map(persistedSourceToLocal),
       evidence: cloudMessage.evidence || [],
       feedback: cloudMessage.feedback || undefined,
@@ -1279,9 +1263,6 @@
         status: 'completed',
         contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
         attachmentRefs: chatMessage.attachmentRefs || [],
-        modelMeta: {
-          excludedResourceRefs: chatMessage.excludedResourceRefs || [],
-        },
       });
       if (aiAssistant.runtimeIdentityKey === runtimeKey) chatMessage.cloudId = saved.id;
       return saved;
@@ -1619,11 +1600,9 @@
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
     const materialSnapshot =
-      options.materialSnapshot ||
-      createAiAssistantMaterialSnapshot(contexts.value, attachments.value, excludedResources.value);
+      options.materialSnapshot || createAiAssistantMaterialSnapshot(contexts.value, attachments.value);
     const contextSnapshot = materialSnapshot.contextRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
-    const excludedResourceSnapshot = materialSnapshot.excludedResourceRefs;
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
     const cloudPreparation = await prepareCloudConversationForSend(aiAssistant.runtimeIdentityKey);
     if (cloudPreparation === 'cancelled') return;
@@ -1655,7 +1634,6 @@
       contexts: contextSnapshot.map((item) => ({ ...item })),
       contextRefs: contextSnapshot,
       attachmentRefs: attachmentSnapshot,
-      excludedResourceRefs: excludedResourceSnapshot,
       parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
     };
     messages.value.push(userMessage);
@@ -1699,7 +1677,6 @@
 
     if (options.clearComposer !== false) {
       userInput.value = '';
-      excludedResources.value = [];
     }
     await nextTick();
     if (!aiAssistant.isRequestCurrent(requestLease)) return;
@@ -1944,7 +1921,6 @@
           scope: {
             mode: scopeMode.value,
             externalWeb: false,
-            excludedResources: excludedResourceSnapshot.map(({ type, id }) => ({ type, id })),
           },
           // 长期记忆已关闭:不再请求 active(否则后端会读取/注入/推断并写入候选,而前端已无任何查看/停用/删除入口——
           // 属隐私控制面与运行面脱节)。临时会话本就不涉记忆,保持 temporary。
@@ -2296,7 +2272,6 @@
     const materialSnapshot = createAiAssistantMaterialSnapshot(
       originalUserMessage.contextRefs || originalUserMessage.contexts || [],
       originalUserMessage.attachmentRefs || [],
-      originalUserMessage.excludedResourceRefs || [],
     );
     regenerationPreparing.value = true;
     try {

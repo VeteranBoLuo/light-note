@@ -68,7 +68,14 @@
         </BCard>
 
         <section class="search-layout">
-          <BCard ref="typeFilterRef" as="aside" variant="card" padding="12px" class="type-filter">
+          <BCard
+            v-if="bookmark.isMobile"
+            ref="typeFilterRef"
+            as="aside"
+            variant="card"
+            padding="12px"
+            class="type-filter"
+          >
             <BButton
               v-for="item in typeFilters"
               :key="item.value"
@@ -87,14 +94,49 @@
           <BCard as="main" variant="card" padding="16px" class="result-panel">
             <div class="result-toolbar result-toolbar--summary">
               <div class="result-heading">
-                <div class="result-title">{{ t('resourceCenter.results') }}</div>
-                <div class="result-subtitle">
-                  {{
-                    bookmark.isMobile
-                      ? mobileResultSubtitle
-                      : t('resourceCenter.totalCount', { count: filteredResultTotal })
-                  }}
-                </div>
+                <template v-if="bookmark.isMobile">
+                  <div class="result-title">{{ t('resourceCenter.results') }}</div>
+                  <div class="result-subtitle">{{ mobileResultSubtitle }}</div>
+                </template>
+                <BPopover
+                  v-else
+                  v-model:open="desktopTypeMenuOpen"
+                  trigger="click"
+                  placement="bottom-left"
+                  overlay-class-name="desktop-type-filter-popover"
+                >
+                  <BButton
+                    class="desktop-type-trigger"
+                    :aria-label="t('resourceCenter.typeFilter')"
+                    :aria-expanded="desktopTypeMenuOpen"
+                  >
+                    <span
+                      class="filter-dot"
+                      :class="`filter-dot--${desktopTypeSummary.value}`"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="desktop-type-trigger__label">{{ desktopTypeSummary.label }}</span>
+                    <span class="filter-count">{{ desktopTypeSummary.count }}</span>
+                    <span class="desktop-type-trigger__arrow" aria-hidden="true">▾</span>
+                  </BButton>
+                  <template #content>
+                    <div class="desktop-type-menu" role="menu" :aria-label="t('resourceCenter.typeFilter')">
+                      <BButton
+                        v-for="item in typeFilters"
+                        :key="item.value"
+                        class="filter-item"
+                        :class="{ active: isTypeFilterActive(item.value) }"
+                        role="menuitemcheckbox"
+                        :aria-checked="isTypeFilterActive(item.value)"
+                        @click="selectDesktopType(item.value)"
+                      >
+                        <span class="filter-dot" :class="`filter-dot--${item.value}`" aria-hidden="true"></span>
+                        <span>{{ item.label }}</span>
+                        <span class="filter-count">{{ item.count }}</span>
+                      </BButton>
+                    </div>
+                  </template>
+                </BPopover>
               </div>
               <div v-if="!bookmark.isMobile" class="desktop-result-controls">
                 <label class="select-wrap select-wrap--compact">
@@ -536,6 +578,7 @@
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
+  const desktopTypeMenuOpen = ref(false);
   const batchMode = ref(false);
   const tagSearch = ref('');
   const showLoadingSkeleton = ref(false);
@@ -690,6 +733,17 @@
   const filteredResultTotal = computed(() =>
     selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
   );
+  const desktopTypeSummary = computed(() => {
+    if (!queryState.types.length) return typeFilters.value[0];
+    if (queryState.types.length === 1) {
+      return typeFilters.value.find((item) => item.value === queryState.types[0]) || typeFilters.value[0];
+    }
+    return {
+      value: 'all' as const,
+      label: t('resourceCenter.types.selectedCount', { count: queryState.types.length }),
+      count: filteredResultTotal.value,
+    };
+  });
   const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: filteredResultTotal.value }));
   function menuForSearchItem(item: DisplaySearchItem) {
     const deleteItem = {
@@ -1008,6 +1062,11 @@
   function selectActiveType(type: SearchType | 'all') {
     setActiveType(type);
     scrollMobileTypeFilter(type);
+  }
+
+  function selectDesktopType(type: SearchType | 'all') {
+    setActiveType(type);
+    desktopTypeMenuOpen.value = false;
   }
 
   function setView(view: ResourceView) {
@@ -1540,6 +1599,46 @@
   .filter-item.active,
   .filter-item:hover {
     background: var(--search-muted-bg);
+  }
+
+  .desktop-type-trigger {
+    width: 168px;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--search-border-color);
+    border-radius: 10px;
+    background: var(--search-muted-bg);
+    text-align: left;
+  }
+
+  .desktop-type-trigger__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 650;
+  }
+
+  .desktop-type-trigger__arrow {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .desktop-type-menu {
+    width: 210px;
+    padding: 6px;
+    display: grid;
+    gap: 2px;
+  }
+
+  .desktop-type-menu .filter-item {
+    min-height: 36px;
+    padding: 7px 9px;
   }
 
   .filter-dot {
@@ -2096,8 +2195,8 @@
       flex: 1 1 auto;
       min-height: 0;
       margin-top: 0;
-      grid-template-columns: 168px minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
       align-items: stretch;
       overflow: hidden;
     }

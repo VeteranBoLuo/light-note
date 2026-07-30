@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ensureNotVisitor = vi.fn();
+const attachCloudDocumentSource = vi.fn();
 const createTemporaryDocumentSource = vi.fn();
+const deleteDocumentSource = vi.fn();
 const deleteTemporaryDocumentSources = vi.fn();
 const getDocumentSourceStatuses = vi.fn();
 
@@ -10,15 +12,16 @@ vi.mock('../util/common.js', () => ({
 }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
 vi.mock('../util/aiDocument/service.js', () => ({
-  attachCloudDocumentSource: vi.fn(),
+  attachCloudDocumentSource,
   confirmTemporaryDocumentSource: vi.fn(),
   createTemporaryDocumentSource,
-  deleteDocumentSource: vi.fn(),
+  deleteDocumentSource,
   deleteTemporaryDocumentSources,
   getDocumentSourceStatuses,
 }));
 
-const { clearTemporaryAttachments, getStatuses, initTemporaryUpload } = await import('./aiDocumentHandle.js');
+const { attachCloudFile, clearTemporaryAttachments, getStatuses, initTemporaryUpload, removeAttachment } =
+  await import('./aiDocumentHandle.js');
 
 function response() {
   const res = {};
@@ -30,7 +33,9 @@ function response() {
 describe('aiDocumentHandle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    attachCloudDocumentSource.mockResolvedValue({ id: 'source-1', sourceType: 'cloud' });
     createTemporaryDocumentSource.mockResolvedValue({ attachment: { id: 'source-1' } });
+    deleteDocumentSource.mockResolvedValue(true);
     deleteTemporaryDocumentSources.mockResolvedValue({ deleted: 2, failed: 0 });
     getDocumentSourceStatuses.mockResolvedValue([]);
   });
@@ -40,6 +45,56 @@ describe('aiDocumentHandle', () => {
     const res = response();
     await initTemporaryUpload({ user: { id: 'visitor', role: 'visitor' }, body: {} }, res);
     expect(createTemporaryDocumentSource).not.toHaveBeenCalled();
+  });
+
+  it('普通游客可以只读挂载游客展示空间的云文件', async () => {
+    const res = response();
+    await attachCloudFile({
+      user: { id: 'visitor-shared', role: 'visitor' },
+      body: { fileId: '9', sessionId: 'local-session' },
+    }, res);
+
+    expect(ensureNotVisitor).not.toHaveBeenCalled();
+    expect(attachCloudDocumentSource).toHaveBeenCalledWith({
+      userId: 'visitor-shared',
+      fileId: '9',
+      sessionId: 'local-session',
+    });
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('普通游客可以查询共享云文件解析状态', async () => {
+    getDocumentSourceStatuses.mockResolvedValue([{ id: 'source-1', status: 'ready' }]);
+    const res = response();
+    await getStatuses(
+      {
+        user: { id: 'visitor-shared', role: 'visitor' },
+        body: { attachmentIds: ['source-1'] },
+      },
+      res,
+    );
+
+    expect(ensureNotVisitor).not.toHaveBeenCalled();
+    expect(getDocumentSourceStatuses).toHaveBeenCalledWith({
+      userId: 'visitor-shared',
+      sourceIds: ['source-1'],
+    });
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('游客移除材料只清客户端选中态，不删除共享解析缓存', async () => {
+    const res = response();
+    await removeAttachment(
+      {
+        user: { id: 'visitor-shared', role: 'visitor' },
+        body: { attachmentId: 'source-1' },
+      },
+      res,
+    );
+
+    expect(deleteDocumentSource).not.toHaveBeenCalled();
+    expect(ensureNotVisitor).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200, data: { deleted: false } }));
   });
 
   it('管理员 AI 上下文使用资源主体归属，不把附件记到真实操作者账号', async () => {

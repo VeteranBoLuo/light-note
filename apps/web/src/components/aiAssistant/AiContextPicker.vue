@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
@@ -60,8 +60,6 @@
   import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search';
   import { noteStore } from '@/store';
   import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
-  import { listAiResourcePreferences, type AiResourcePreferenceType } from '@/api/aiWorkspaceApi';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
   export interface AiResourceContext {
     type: SearchType;
@@ -143,21 +141,7 @@
       if (requestId === searchRequestId) loading.value = false;
     }
   }
-  async function add(item: AiResourceContext) {
-    if (item.type !== 'tag') {
-      try {
-        const preference = await listAiResourcePreferences([
-          { type: item.type as AiResourcePreferenceType, id: item.id },
-        ]);
-        if (preference.items[0]?.aiExcluded) {
-          message.warning(t('ai.scope.resourceExcluded'));
-          return;
-        }
-      } catch {
-        message.error(t('ai.scope.preferenceCheckFailed'));
-        return;
-      }
-    }
+  function add(item: AiResourceContext) {
     if (item.type === 'file') {
       emit('fileSelected', item);
       open.value = false;
@@ -173,7 +157,14 @@
       props.modelValue.filter((value) => value.type !== item.type || value.id !== item.id),
     );
   }
+  function closePopover() {
+    open.value = false;
+  }
+  onMounted(() => {
+    window.addEventListener('light-note:close-ai-overlays', closePopover);
+  });
   onBeforeUnmount(() => {
+    window.removeEventListener('light-note:close-ai-overlays', closePopover);
     clearDebounce();
     searchRequestId += 1;
   });
@@ -231,23 +222,29 @@
     display: grid;
     gap: 5px;
     min-height: 0;
+    min-width: 0;
     max-height: 260px;
     margin-top: 8px;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
   .ai-context-results :deep(.b_btn) {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     height: auto;
     min-height: 34px;
     justify-content: flex-start;
     gap: 8px;
+    overflow: hidden;
     text-align: left;
   }
   .ai-context-results span {
     font-size: 11px;
   }
   .ai-context-results .ai-context-type {
+    flex: 0 0 auto;
     font-weight: 600;
   }
   /* 「当前页面」是特殊入口,用独立于四种资源色(尤其别撞书签=主色 #615ced)的强调色文字突出,不加背景 */
@@ -255,6 +252,9 @@
     color: #0ea5e9;
   }
   .ai-context-results strong {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

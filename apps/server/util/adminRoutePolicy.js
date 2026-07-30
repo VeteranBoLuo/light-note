@@ -313,7 +313,6 @@ declare(ADMIN_POLICIES.READ, 'agent', [
   ['POST', '/chat/change-sets/get'],
   ['POST', '/chat/memories/list'],
   ['POST', '/chat/attachments/status'],
-  ['POST', '/chat/resource-preferences/list'],
   ['POST', '/chat/aiQuota'],
 ]);
 
@@ -355,7 +354,6 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'ai_memory', [
   ['POST', '/chat/memories/update'],
   ['POST', '/chat/memories/delete'],
   ['POST', '/chat/memories/clear'],
-  ['POST', '/chat/resource-preferences/update'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'agent', [
   ['POST', '/chat/change-sets/apply'],

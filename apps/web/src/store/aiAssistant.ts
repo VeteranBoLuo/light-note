@@ -13,12 +13,6 @@ interface AiResourceContext {
   title: string;
 }
 
-export interface AiExcludedResourceRef {
-  type: Exclude<SearchType, 'tag'>;
-  id: string;
-  title: string;
-}
-
 interface AiToolStatusItem {
   name: string;
   status: 'running' | 'success' | 'error' | 'confirmation_required' | 'interaction_required';
@@ -82,8 +76,6 @@ export interface AiAssistantMessage {
   contextRefs?: AiResourceContext[];
   /** 发送瞬间的不可变附件快照，重试/重新生成只能读取该字段。 */
   attachmentRefs?: AiAttachment[];
-  /** 发送瞬间的本轮临时排除快照，重试/重新生成必须沿用。 */
-  excludedResourceRefs?: AiExcludedResourceRef[];
   transient?: boolean;
   transientGroupId?: string;
   pendingConfirmationIds?: string[];
@@ -98,7 +90,6 @@ export interface AiAssistantMessage {
 export interface AiAssistantMaterialSnapshot {
   contextRefs: AiResourceContext[];
   attachmentRefs: AiAttachment[];
-  excludedResourceRefs: AiExcludedResourceRef[];
 }
 
 export interface AiAssistantRequestLease {
@@ -114,7 +105,6 @@ interface AiAssistantPersistedState {
   draft: string;
   contextRefs: AiResourceContext[];
   attachmentRefs: AiAttachment[];
-  excludedResourceRefs?: AiExcludedResourceRef[];
   messages: Array<Record<string, unknown>>;
   scrollTop: number;
   shouldFollowMessages: boolean;
@@ -142,7 +132,6 @@ interface AiAssistantState {
   draft: string;
   contextRefs: AiResourceContext[];
   attachmentRefs: AiAttachment[];
-  excludedResourceRefs: AiExcludedResourceRef[];
   messages: AiAssistantMessage[];
   isLoading: boolean;
   hasAnswerStarted: boolean;
@@ -285,12 +274,10 @@ function freezeSnapshotItems<T extends object>(items: T[]) {
 export function createAiAssistantMaterialSnapshot(
   contexts: AiResourceContext[],
   attachments: AiAttachment[],
-  excludedResources: AiExcludedResourceRef[] = [],
 ): AiAssistantMaterialSnapshot {
   return {
     contextRefs: freezeSnapshotItems(contexts.map(cloneContextRef)),
     attachmentRefs: freezeSnapshotItems(attachments.map(cloneAttachmentRef)),
-    excludedResourceRefs: freezeSnapshotItems(normalizeExcludedResourceRefs(excludedResources)),
   };
 }
 
@@ -331,27 +318,6 @@ function normalizeAttachmentRefs(value: unknown) {
     .map(cloneAttachmentRef);
 }
 
-function normalizeExcludedResourceRefs(value: unknown): AiExcludedResourceRef[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  return value
-    .filter(
-      (item): item is AiExcludedResourceRef =>
-        Boolean(item) &&
-        typeof item === 'object' &&
-        ['bookmark', 'note', 'file'].includes(String((item as AiExcludedResourceRef).type)) &&
-        Boolean(String((item as AiExcludedResourceRef).id || '').trim()),
-    )
-    .filter((item) => {
-      const key = `${item.type}:${item.id}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 100)
-    .map((item) => ({ type: item.type, id: String(item.id), title: String(item.title || '') }));
-}
-
 function normalizeTimestamp(value: unknown) {
   const date = new Date(typeof value === 'string' || typeof value === 'number' ? value : Date.now());
   return Number.isNaN(date.getTime()) ? new Date() : date;
@@ -365,7 +331,6 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   if (!content) return null;
   const contextRefs = normalizeContextRefs(raw.contextRefs || raw.contexts);
   const attachmentRefs = normalizeAttachmentRefs(raw.attachmentRefs);
-  const excludedResourceRefs = normalizeExcludedResourceRefs(raw.excludedResourceRefs);
   return {
     id: normalizeIdentityPart(raw.id, createAiAssistantMessageId(raw.role)),
     parentMessageId: typeof raw.parentMessageId === 'string' ? raw.parentMessageId : undefined,
@@ -400,7 +365,6 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
     contexts: normalizeContextRefs(raw.contexts || raw.contextRefs),
     contextRefs: freezeSnapshotItems(contextRefs),
     attachmentRefs: freezeSnapshotItems(attachmentRefs),
-    excludedResourceRefs: freezeSnapshotItems(excludedResourceRefs),
     toolEvents: safeCloneArray<AiToolStatusItem>(raw.toolEvents),
     recommendations: Array.isArray(raw.recommendations)
       ? raw.recommendations
@@ -446,7 +410,6 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     contexts: normalizeContextRefs(message.contexts || message.contextRefs),
     contextRefs: normalizeContextRefs(message.contextRefs || message.contexts),
     attachmentRefs: normalizeAttachmentRefs(message.attachmentRefs),
-    excludedResourceRefs: normalizeExcludedResourceRefs(message.excludedResourceRefs),
     recommendations: (message.recommendations || [])
       .map((item) => String(item || '').trim())
       .filter(Boolean)
@@ -538,7 +501,6 @@ function readLegacySelfConversation(identity: AiAssistantIdentity): AiAssistantP
       draft: '',
       contextRefs: [],
       attachmentRefs: [],
-      excludedResourceRefs: [],
       messages: data.messages as Array<Record<string, unknown>>,
       scrollTop: 0,
       shouldFollowMessages: true,
@@ -570,7 +532,6 @@ function createInitialState(): AiAssistantState {
     draft: '',
     contextRefs: [],
     attachmentRefs: [],
-    excludedResourceRefs: [],
     messages: [],
     isLoading: false,
     hasAnswerStarted: false,
@@ -632,7 +593,6 @@ export default defineStore('aiAssistant', {
         draft: this.draft,
         contextRefs: normalizeContextRefs(this.contextRefs),
         attachmentRefs: normalizeAttachmentRefs(this.attachmentRefs),
-        excludedResourceRefs: normalizeExcludedResourceRefs(this.excludedResourceRefs),
         messages: this.messages.filter(shouldPersistMessage).map(serializeMessage),
         scrollTop: Math.max(0, Number(this.scrollTop || 0)),
         shouldFollowMessages: Boolean(this.shouldFollowMessages),
@@ -695,7 +655,6 @@ export default defineStore('aiAssistant', {
       this.draft = typeof persisted?.draft === 'string' ? persisted.draft : '';
       this.contextRefs = normalizeContextRefs(persisted?.contextRefs);
       this.attachmentRefs = normalizeAttachmentRefs(persisted?.attachmentRefs);
-      this.excludedResourceRefs = normalizeExcludedResourceRefs(persisted?.excludedResourceRefs);
       this.messages = restoredMessages.length ? restoredMessages : [fallbackGreeting];
       this.isLoading = false;
       this.hasAnswerStarted = false;
@@ -820,7 +779,6 @@ export default defineStore('aiAssistant', {
       this.draft = '';
       this.contextRefs = [];
       this.attachmentRefs = [];
-      this.excludedResourceRefs = [];
       this.messages = [
         {
           id: createAiAssistantMessageId('assistant'),

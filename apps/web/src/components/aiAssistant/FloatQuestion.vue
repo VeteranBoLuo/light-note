@@ -180,6 +180,7 @@
   const isOpen = ref(false);
   watch(isOpen, (open) => {
     setAiAssistantVisibility(open);
+    if (!open) window.dispatchEvent(new CustomEvent('light-note:close-ai-overlays'));
   });
   const isMaximized = ref(false);
   const newConversationSubmitting = ref(false);
