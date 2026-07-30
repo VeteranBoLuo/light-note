@@ -6,14 +6,46 @@
     </label>
     <label>
       <span>{{ t('inbox.todoDescription') }}</span>
-      <BInput
-        v-model:value="form.description"
-        type="textarea"
-        :rows="3"
-        :maxlength="2000"
-        :placeholder="t('inbox.todoDescriptionPlaceholder')"
-      />
+      <div class="todo-description-field">
+        <BInput
+          v-model:value="form.description"
+          type="textarea"
+          :rows="3"
+          :maxlength="2000"
+          :placeholder="t('inbox.todoDescriptionPlaceholder')"
+          @keydown="handleMentionKeydown"
+        />
+        <!-- 说明保持纯文本:@ 只负责触发选择,结果落成下方结构化 Chips -->
+        <div v-if="mentionQuery" class="todo-mention-layer">
+          <ResourceMentionSuggestions
+            ref="mentionSuggestions"
+            :query="mentionQuery.keyword"
+            @select="applyMentionSelection"
+            @open-full="closeMention"
+          />
+        </div>
+      </div>
+      <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
     </label>
+
+    <section v-if="resourceRefs.length" class="todo-resource-refs">
+      <span class="todo-resource-refs__label">
+        {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
+      </span>
+      <div class="todo-resource-refs__list">
+        <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
+          <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
+          <span class="todo-resource-chip__title">{{ ref.title }}</span>
+          <BButton
+            class="todo-resource-chip__remove"
+            :aria-label="t('common.delete')"
+            @click="removeResourceRef(ref)"
+          >
+            ×
+          </BButton>
+        </span>
+      </div>
+    </section>
     <section class="todo-checklist-editor">
       <div class="todo-checklist-editor__header">
         <div>
@@ -144,7 +176,17 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
-  import type { TodoChecklistItem, TodoItem, TodoPayload, TodoPriority, TodoReminderChannel } from '@/api/todoApi';
+  import type {
+    TodoChecklistItem,
+    TodoItem,
+    TodoPayload,
+    TodoPriority,
+    TodoReminderChannel,
+    TodoResourceRefView,
+  } from '@/api/todoApi';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
+  import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
 
@@ -166,6 +208,70 @@
   }>();
   const { t } = useI18n();
   const checklistItems = ref<TodoChecklistItem[]>([]);
+
+  // ── 说明区 @ 关联参考资料 ──────────────────────────
+  const resourceRefs = ref<TodoResourceRefView[]>([]);
+  const mentionQuery = ref<MentionQuery | null>(null);
+  const mentionSuggestions = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  const MAX_RESOURCE_REFS = 10;
+
+  function closeMention() {
+    mentionQuery.value = null;
+  }
+
+  function handleMentionKeydown(event: KeyboardEvent) {
+    const target = event.target as HTMLTextAreaElement | null;
+    if (mentionQuery.value) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        mentionSuggestions.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        mentionSuggestions.value?.chooseActive();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMention();
+        return;
+      }
+    }
+    window.setTimeout(() => {
+      if (!target || typeof target.selectionStart !== 'number') return closeMention();
+      mentionQuery.value = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+    }, 0);
+  }
+
+  /** 选中后消费掉说明里的 @关键词,只保留结构化关系,不往正文塞链接文本。 */
+  function applyMentionSelection(item: { type: string; id: string; title: string }) {
+    const query = mentionQuery.value;
+    if (query) form.description = replaceMentionQuery(form.description, query);
+    closeMention();
+    const key = `${item.type}:${item.id}`;
+    if (resourceRefs.value.some((ref) => `${ref.type}:${ref.id}` === key)) return;
+    if (resourceRefs.value.length >= MAX_RESOURCE_REFS) {
+      message.warning(t('inbox.todoResourceRefsLimit', { count: MAX_RESOURCE_REFS }));
+      return;
+    }
+    resourceRefs.value = [
+      ...resourceRefs.value,
+      {
+        type: item.type as TodoResourceRefView['type'],
+        id: String(item.id),
+        title: item.title,
+        snapshotTitle: item.title,
+        available: true,
+      },
+    ];
+  }
+
+  function removeResourceRef(target: TodoResourceRefView) {
+    resourceRefs.value = resourceRefs.value.filter((ref) => !(ref.type === target.type && ref.id === target.id));
+  }
+
   const checklistInputRefs = new Map<string, { focus: () => void }>();
   const form = reactive({
     title: '',
@@ -276,6 +382,8 @@
   function reset() {
     form.title = props.item?.title || '';
     form.description = props.item?.description || '';
+    resourceRefs.value = [...(props.item?.resourceRefs || [])];
+    closeMention();
     form.priority = props.item?.priority ?? 1;
     form.dueAt = toTodoLocalInput(props.item?.dueAt);
     const reminder = props.item?.reminder;
@@ -351,6 +459,7 @@
     emit('submit', {
       title: form.title.trim(),
       description: form.description.trim(),
+      resourceRefs: resourceRefs.value.map((ref) => ({ type: ref.type, id: ref.id })),
       priority: form.priority,
       checklist,
       dueAt: form.dueAt || null,
@@ -593,5 +702,78 @@
     .todo-reminder-editor__field-error {
       margin-left: auto;
     }
+  }
+
+  .todo-description-field {
+    position: relative;
+  }
+
+  /* 建议浮层贴说明框上沿弹出,不遮挡正在输入的文字 */
+  .todo-mention-layer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 20;
+  }
+
+  .todo-description-hint {
+    display: block;
+    margin-top: 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .todo-resource-refs {
+    display: grid;
+    gap: 6px;
+  }
+
+  .todo-resource-refs__label {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .todo-resource-refs__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .todo-resource-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    gap: 6px;
+    padding: 4px 6px 4px 8px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
+    font-size: 12px;
+  }
+
+  .todo-resource-chip__type {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+  }
+
+  .todo-resource-chip__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color);
+  }
+
+  .todo-resource-chip__remove {
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    color: var(--desc-color);
+    background: transparent !important;
+    line-height: 1;
   }
 </style>

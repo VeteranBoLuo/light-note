@@ -272,7 +272,7 @@ describe('getAdminOverview 资源统计口径', () => {
         return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
       }
       if (statement.includes('GROUP BY d') && statement.includes('FROM `user`')) return [[]];
-      if (statement.includes('SELECT d, SUM(c)')) return [[]];
+      if (statement.includes('SELECT d, kind, SUM(c)')) return [[]];
       if (statement.includes('FROM agent_logs')) return [[{ count: 0, tokens: 0, cost: 0 }]];
       return [[]];
     });
@@ -281,7 +281,7 @@ describe('getAdminOverview 资源统计口径', () => {
     await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
 
     const resourceSql = query.mock.calls.find(([sql]) => String(sql).includes('AS bookmarkTotal'))?.[0];
-    const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, SUM(c)'))?.[0];
+    const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, kind, SUM(c)'))?.[0];
     expect(resourceSql).toContain('onboarding_seed_resources');
     expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
     expect(resourceSql).toContain('bookmark_owner.del_flag = 0');

@@ -213,3 +213,24 @@ SELECT '[16] retired_table_still_present' AS check_name, retired.t AS detail FRO
 ) retired
 INNER JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE() AND actual.table_name=retired.t;
+
+-- 17) 待办参考资料关系的关键索引与外键（期望 0 行）
+SELECT '[17] missing_todo_ref_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail FROM (
+  SELECT 'todo_resource_refs' tn, 'idx_todo_resource_refs_owner_todo' ix UNION ALL
+  SELECT 'todo_resource_refs', 'idx_todo_resource_refs_target'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[17] missing_todo_ref_fk' AS check_name, 'fk_todo_resource_refs_todo' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.table_constraints
+   WHERE constraint_schema=DATABASE()
+     AND table_name='todo_resource_refs'
+     AND constraint_name='fk_todo_resource_refs_todo'
+     AND constraint_type='FOREIGN KEY'
+);

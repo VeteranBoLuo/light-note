@@ -49,6 +49,25 @@
           </BCheckbox>
         </div>
       </section>
+      <!-- 参考资料:最多展示 3 个,失效目标标注不可用且不可点击 -->
+      <section v-if="item.resourceRefs?.length" class="todo-resource-refs">
+        <span class="todo-resource-refs__label">{{ t('inbox.todoResourceRefsTitle') }}</span>
+        <div class="todo-resource-refs__list">
+          <BButton
+            v-for="ref in visibleResourceRefs"
+            :key="`${ref.type}:${ref.id}`"
+            class="todo-resource-chip"
+            :class="{ 'is-unavailable': !ref.available }"
+            :disabled="!ref.available"
+            :title="ref.available ? ref.title : t('inbox.todoResourceUnavailable')"
+            @click.stop="openResourceRef(ref)"
+          >
+            <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
+            <span class="todo-resource-chip__title">{{ ref.title || t('inbox.todoResourceUnavailable') }}</span>
+          </BButton>
+          <span v-if="hiddenResourceRefCount" class="todo-resource-more">+{{ hiddenResourceRefCount }}</span>
+        </div>
+      </section>
     </div>
     <!-- 已完成的待办只保留「取消勾选恢复」和「删除」,避免对无效动作(编辑/日历/优先级/稍后)的误操作 -->
     <div class="todo-item__actions todo-item__actions--desktop">
@@ -146,7 +165,9 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
-  import type { TodoChecklistItem, TodoItem, TodoPriority } from '@/api/todoApi';
+  import { useRouter } from 'vue-router';
+  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
 
   const props = defineProps<{
     item: TodoItem;
@@ -166,6 +187,7 @@
     'update-priority': [priority: TodoPriority];
   }>();
   const { t, locale } = useI18n();
+  const router = useRouter();
   const overdue = computed(
     () =>
       props.item.status === 'pending' &&
@@ -197,6 +219,17 @@
     return t(`inbox.todoRecurrenceSummary.${recurrence.frequency}`, { interval: recurrence.interval });
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
+  const MAX_VISIBLE_REFS = 3;
+  const visibleResourceRefs = computed(() => (props.item.resourceRefs || []).slice(0, MAX_VISIBLE_REFS));
+  const hiddenResourceRefCount = computed(() =>
+    Math.max(0, (props.item.resourceRefs?.length || 0) - MAX_VISIBLE_REFS),
+  );
+
+  function openResourceRef(ref: TodoResourceRefView) {
+    if (!ref.available) return;
+    const target = resolveResourceRoute({ type: ref.type, id: ref.id, title: ref.title });
+    if (target) router.push(target);
+  }
 
   function toggleChecklist(id: string, done: boolean) {
     emit(
@@ -381,6 +414,64 @@
     text-decoration: line-through;
     color: var(--desc-color);
   }
+  .todo-resource-refs {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 9px 0 0 30px;
+    flex-wrap: wrap;
+  }
+
+  .todo-resource-refs__label {
+    flex: 0 0 auto;
+    padding-top: 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .todo-resource-refs__list {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .todo-resource-chip {
+    max-width: 220px;
+    height: auto;
+    min-height: 26px;
+    padding: 3px 9px;
+    gap: 5px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 5%, transparent) !important;
+    font-size: 12px;
+
+    &.is-unavailable {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+  }
+
+  .todo-resource-chip__type {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+  }
+
+  .todo-resource-chip__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color);
+  }
+
+  .todo-resource-more {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
   .todo-item__actions {
     align-self: center;
     display: flex;

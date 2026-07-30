@@ -2,6 +2,12 @@ import { insertData } from '../agent/data.js';
 import crypto from 'crypto';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from '../pageCursor.js';
+import {
+  copyTodoResourceRefs,
+  loadTodoResourceRefMap,
+  normalizeTodoResourceRefs,
+  replaceTodoResourceRefs,
+} from './todoReferenceService.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -366,6 +372,11 @@ export async function createTodo(connection, userId, values, { invalidateSearch 
   });
   await connection.query('INSERT INTO todo_items SET ?', [row]);
   await syncReminder(connection, { todoId: row.id, userId, reminder: todo.reminder });
+  // 参考资料与待办主记录同事务写入,任一引用越权即整体回滚
+  const resourceRefs = normalizeTodoResourceRefs(values?.resourceRefs);
+  if (resourceRefs?.length) {
+    await replaceTodoResourceRefs(connection, { userId, todoId: row.id, refs: resourceRefs });
+  }
   if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id: row.id };
 }
@@ -413,6 +424,11 @@ export async function updateTodo(connection, userId, id, values) {
     ],
   );
   await syncReminder(connection, { todoId: id, userId, reminder: todo.reminder });
+  // 只有显式传了 resourceRefs 才整体替换,未传表示本次不改动关系
+  const nextRefs = normalizeTodoResourceRefs(values?.resourceRefs);
+  if (nextRefs !== null) {
+    await replaceTodoResourceRefs(connection, { userId, todoId: id, refs: nextRefs });
+  }
   await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id };
 }
@@ -463,6 +479,10 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
           nextDueSql,
         ],
       );
+      if (Number(nextResult?.affectedRows || 0) === 1) {
+        // 下一实例沿用同一批参考资料,顺序保持一致
+        await copyTodoResourceRefs(connection, { userId, fromTodoId: current.id, toTodoId: nextId });
+      }
       if (Number(nextResult?.affectedRows || 0) === 1 && reminder) {
         const currentDueMs = new Date(String(current.due_at).replace(' ', 'T')).getTime();
         const delta = nextDueAt.getTime() - currentDueMs;
@@ -857,6 +877,11 @@ export async function listTodoPage(db, userId, input = {}) {
   const hasMore = paginated && rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
   const reminders = await loadTodoReminderMap(db, items, userId, view);
+  // 一次批量取回当前页全部待办的参考资料,避免逐条查询造成 N+1
+  const refMap =
+    view === 'summary'
+      ? new Map()
+      : await loadTodoResourceRefMap(db, { userId, todoIds: items.map((item) => item.id) }).catch(() => new Map());
   const mappedItems = items.map((item) => {
     if (view === 'summary') {
       const checklist = parseChecklist(item.checklist);
@@ -881,6 +906,7 @@ export async function listTodoPage(db, userId, input = {}) {
       recurrence: parseJsonObject(item.recurrence),
       reminder,
       reminderAt: reminder?.startAt || null,
+      resourceRefs: refMap.get(String(item.id)) || [],
     };
   });
   return {
