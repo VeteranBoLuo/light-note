@@ -26,12 +26,9 @@ export const getFileInfo = async (req, res) => {
       return res.send(resultData(null, 404, '数据库中未找到文件'));
     }
     const file = results[0];
-    // 访问校验:本人(凭会话)/ 分享(凭 token)/ root,防按自增 id 枚举越权读取他人文件元数据
+    // 分享页统一通过独立 file_shares API 读取；这里仅允许本人或 root。
     const uid = req.user?.id;
-    const canAccess =
-      (uid && uid === file.create_by) ||
-      req.user?.role === 'root' ||
-      (req.body.token && file.share_token && req.body.token === file.share_token);
+    const canAccess = (uid && uid === file.create_by) || req.user?.role === 'root';
     if (!canAccess) {
       return res.send(resultData(null, 403, '无权访问该文件'));
     }

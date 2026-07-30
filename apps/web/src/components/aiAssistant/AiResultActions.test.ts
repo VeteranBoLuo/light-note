@@ -170,11 +170,15 @@ describe('AiResultActions result reuse workflow', () => {
     document.body.innerHTML = '';
   });
 
-  it('把新建、追加和合并作为三个明确动作展示，新建写入前必须经过 Alert 确认', async () => {
+  it('默认只展示高频动作，追加、合并与选段收进更多菜单，新建写入前必须经过 Alert 确认', async () => {
     const host = mountActions();
     expect(host.textContent).toContain('保存为新笔记');
-    expect(host.textContent).toContain('追加到笔记');
-    expect(host.textContent).toContain('合并进笔记');
+    expect(host.textContent).not.toContain('追加到笔记');
+    buttonByText('更多')?.click();
+    await nextTick();
+    expect(document.body.textContent).toContain('追加到笔记');
+    expect(document.body.textContent).toContain('合并进笔记');
+    expect(document.body.textContent).toContain('选段应用');
 
     buttonByText('保存为新笔记')?.click();
     await flush();
@@ -192,6 +196,8 @@ describe('AiResultActions result reuse workflow', () => {
 
   it('追加流程支持目标搜索选择、差异预览、版本化执行回执和二次确认撤销', async () => {
     mountActions();
+    buttonByText('更多')?.click();
+    await nextTick();
     buttonByText('追加到笔记')?.click();
     await flush();
     expect(listAiResultNoteTargets).toHaveBeenCalledWith({ keyword: '', limit: 40 });
@@ -227,8 +233,7 @@ describe('AiResultActions result reuse workflow', () => {
     expect(document.body.textContent).toContain('本次写入已撤销');
   });
 
-  // “选段应用”入口已按产品决策下线(保留 新建/追加/合并),本用例暂跳过。Codex 决定移除或恢复。
-  it.skip('将服务端块清单展示为可访问多选，只提交勾选块 ID 并沿用 Change Set 预览执行', async () => {
+  it('将服务端块清单展示为可访问多选，只提交勾选块 ID 并沿用 Change Set 预览执行', async () => {
     prepareAiResultNoteReuse.mockResolvedValueOnce({
       changeSetId: 'change-selection',
       preview: {
@@ -255,6 +260,8 @@ describe('AiResultActions result reuse workflow', () => {
     });
 
     mountActions();
+    buttonByText('更多')?.click();
+    await nextTick();
     buttonByText('选段应用')?.click();
     await flush();
     expect(listAiResultReusableBlocks).toHaveBeenCalledWith({

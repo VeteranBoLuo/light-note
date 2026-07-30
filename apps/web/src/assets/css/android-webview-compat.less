@@ -158,4 +158,29 @@ html.light-note-android-webview {
   .mobile-top-bar button {
     touch-action: manipulation;
   }
+
+  // AI 回到底部按钮：部分卓易通 WebView 不识别 inset 简写，会把 0 尺寸的
+  // 进度环画在按钮左上角。显式固定按钮和环的盒模型，普通移动浏览器不命中。
+  .scroll-prompt .prompt-icon {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    flex: 0 0 44px;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .scroll-prompt .loading-spinner {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    transform-origin: center;
+  }
 }

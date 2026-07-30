@@ -1407,6 +1407,56 @@
     return true;
   }
 
+  async function scrollToResourceRef(href: string) {
+    if (!href) return false;
+    await nextTick();
+    if (currentType.value === 'markdown') {
+      const textarea = getMdTextarea();
+      const previewLink = [...(mdPreviewRef.value?.querySelectorAll<HTMLAnchorElement>('a[href]') || [])].find(
+        (link) => link.getAttribute('href') === href,
+      );
+      let found = false;
+      if (previewLink && mdPreviewRef.value && previewLink.offsetParent !== null) {
+        scrollIntoContainer(mdPreviewRef.value, previewLink, 8);
+        found = true;
+      }
+      const sourceOffset = textarea?.value.indexOf(href) ?? -1;
+      if (textarea && sourceOffset >= 0) {
+        lockProgrammaticMarkdownScroll();
+        const targetTop = measureTextareaOffset(textarea, sourceOffset);
+        textarea.focus({ preventScroll: true });
+        textarea.setSelectionRange(sourceOffset, sourceOffset + href.length);
+        textarea.scrollTo({ top: Math.max(0, targetTop - 24), behavior: 'smooth' });
+        found = true;
+      }
+      return found;
+    }
+    const editor = editorRef.value;
+    const body = editor?.getBody?.() as HTMLElement | undefined;
+    const link = [...(body?.querySelectorAll<HTMLAnchorElement>('a[href]') || [])].find(
+      (item) => item.getAttribute('href') === href,
+    );
+    if (!link) return false;
+    editor.focus();
+    editor.selection?.select?.(link);
+    link.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    try {
+      link.animate(
+        [
+          {
+            backgroundColor: 'color-mix(in srgb, var(--primary-color) 24%, transparent)',
+            outline: '2px solid var(--primary-color)',
+          },
+          { backgroundColor: 'transparent', outline: '2px solid transparent' },
+        ],
+        { duration: 2200, easing: 'ease-out' },
+      );
+    } catch {
+      // Older WebViews may not support Web Animations or color-mix; navigation itself has already succeeded.
+    }
+    return true;
+  }
+
   // 切换模式
   async function handleModeSwitch() {
     const targetType = currentType.value === 'html' ? 'markdown' : 'html';
@@ -1585,6 +1635,7 @@
     focusToEnd,
     replaceContentWithUndo,
     scrollToMarkdownHeading,
+    scrollToResourceRef,
     hasSwitchBackup: switchBackup,
     triggerModeSwitch: () => handleModeSwitch(),
     triggerUndoSwitch: () => undoSwitch(),

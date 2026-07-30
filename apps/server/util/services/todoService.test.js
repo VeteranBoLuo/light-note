@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyTodoStatusChange,
+  batchSetTodoStatus,
   createTodo,
   deleteTodo,
   listTodoPage,
   listTodos,
+  nextRecurrenceAt,
   prepareTodoStatusChange,
+  reorderTodos,
+  setTodoStatus,
+  snoozeTodo,
   updateTodo,
 } from './todoService.js';
 
@@ -135,6 +140,36 @@ describe('todoService', () => {
     ).rejects.toThrow('单个周期提醒最多执行 100 次');
   });
 
+  it('重复任务与重复提醒分别落库，完成后才能生成下一实例', async () => {
+    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    await createTodo(connection, 'user-1', {
+      title: '每周复盘',
+      dueAt: '2026-07-31T18:00',
+      recurrence: { frequency: 'weekly', interval: 1, endAt: '2026-09-01T18:00' },
+      reminder: {
+        mode: 'repeat',
+        channels: ['in_app'],
+        startAt: '2026-07-31T09:00',
+        endAt: '2026-07-31T17:00',
+        intervalMinutes: 120,
+      },
+    });
+
+    const todoRow = connection.query.mock.calls[0][1][0];
+    expect(JSON.parse(todoRow.recurrence_rule)).toMatchObject({ frequency: 'weekly', interval: 1 });
+    expect(todoRow.series_id).toBe(todoRow.id);
+    const reminderRow = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO todo_reminders SET ?')[1][0];
+    expect(reminderRow.repeat_interval_minutes).toBe(120);
+  });
+
+  it('月度重复在月末按目标月最后一天生成，不跳到下下个月', () => {
+    const next = nextRecurrenceAt('2027-01-31 18:00:00', { frequency: 'monthly', interval: 1 });
+    expect(next?.getFullYear()).toBe(2027);
+    expect(next?.getMonth()).toBe(1);
+    expect(next?.getDate()).toBe(28);
+    expect(next?.getHours()).toBe(18);
+  });
+
   it('拒绝晚于截止时间的提醒', async () => {
     await expect(
       createTodo(connection, 'user-1', {
@@ -157,6 +192,129 @@ describe('todoService', () => {
     await expect(deleteTodo(connection, 'user-3', 'todo-2')).resolves.toBe(1);
     expect(connection.query.mock.calls[0][1]).toEqual(['todo-2', 'user-3']);
     expect(connection.query.mock.calls[1][1]).toEqual(['todo-2', 'user-3']);
+  });
+
+  it('完成重复任务时创建清单重置的下一实例，重复执行不会为未插入行创建孤立提醒', async () => {
+    const current = {
+      id: 'todo-series-1',
+      user_id: 'user-3',
+      title: '每日巡检',
+      description: '检查服务',
+      checklist: JSON.stringify([{ id: 'check-1', text: '查看状态', done: true }]),
+      priority: 2,
+      sort_order: 1000,
+      status: 'pending',
+      due_at: '2026-07-30 18:00:00',
+      series_id: 'todo-series-1',
+      recurrence_rule: JSON.stringify({ frequency: 'daily', interval: 1, endAt: null }),
+    };
+    connection.query
+      .mockResolvedValue([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[current]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'reminder-1',
+            channel: 'in_app',
+            scheduledAt: '2026-07-30 17:00:00',
+            startAt: '2026-07-30 17:00:00',
+            intervalMinutes: null,
+            endAt: null,
+            email: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await expect(setTodoStatus(connection, 'user-3', current.id, 'completed')).resolves.toBe(1);
+
+    const nextInsert = connection.query.mock.calls.find(([sql]) => sql.includes('INSERT IGNORE INTO todo_items'));
+    expect(nextInsert[1]).toEqual(
+      expect.arrayContaining([
+        '2026-07-31 18:00:00',
+        'todo-series-1',
+        JSON.stringify({ frequency: 'daily', interval: 1, endAt: null }),
+      ]),
+    );
+    expect(JSON.parse(nextInsert[1][4])).toEqual([{ id: 'check-1', text: '查看状态', done: false }]);
+    expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO todo_reminders SET ?')).toBe(true);
+
+    connection.query.mockReset();
+    connection.query
+      .mockResolvedValue([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[{ ...current, status: 'pending' }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 0 }]);
+    await setTodoStatus(connection, 'user-3', current.id, 'completed');
+    expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO todo_reminders SET ?')).toBe(false);
+  });
+
+  it('撤销完成时同一事务恢复原任务，并删除本次自动生成的下一实例', async () => {
+    const current = {
+      id: 'todo-series-2',
+      status: 'completed',
+      due_at: '2026-07-30 18:00:00',
+      series_id: 'todo-series-2',
+      recurrence_rule: JSON.stringify({ frequency: 'daily', interval: 1 }),
+    };
+    connection.query
+      .mockResolvedValue([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[current]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([[{ id: 'generated-next' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await expect(
+      batchSetTodoStatus(connection, 'user-3', [current.id], 'pending', { undoCompletion: true }),
+    ).resolves.toMatchObject({ affected: 1 });
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM todo_items'), [
+      'generated-next',
+      'user-3',
+    ]);
+  });
+
+  it('批量状态操作发现任一目标变化时显式失败，交由外层事务整体回滚', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+    await expect(batchSetTodoStatus(connection, 'user-3', ['missing'], 'completed')).rejects.toThrow(
+      '部分待办已发生变化',
+    );
+  });
+
+  it('拖动排序会逐项校验归属并写入日期、优先级和稳定顺序', async () => {
+    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    await expect(
+      reorderTodos(connection, 'user-4', [
+        { id: 'todo-a', dueAt: '2026-08-01T09:00', priority: 2 },
+        { id: 'todo-b', dueAt: null, priority: 0 },
+      ]),
+    ).resolves.toEqual({ affected: 2 });
+    expect(connection.query.mock.calls[0][1]).toEqual([
+      '2026-08-01 09:00:00',
+      2,
+      1000,
+      'todo-a',
+      'user-4',
+    ]);
+    expect(connection.query.mock.calls[1][1]).toEqual([null, 0, 2000, 'todo-b', 'user-4']);
+  });
+
+  it('稍后提醒在没有现有计划时创建站内提醒', async () => {
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'todo-1' }]])
+      .mockResolvedValueOnce([{ affectedRows: 0 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const target = new Date(Date.now() + 60 * 60_000);
+    const result = await snoozeTodo(connection, 'user-5', 'todo-1', target);
+    expect(result.id).toBe('todo-1');
+    const insert = connection.query.mock.calls[2];
+    expect(insert[0]).toBe('INSERT INTO todo_reminders SET ?');
+    expect(insert[1][0]).toMatchObject({ todo_id: 'todo-1', user_id: 'user-5', channel: 'in_app' });
   });
 
   it('筛选全部时不追加完成状态条件', async () => {
@@ -316,7 +474,7 @@ describe('todoService', () => {
     ).rejects.toMatchObject({ code: 'TODO_STATUS_NOOP', status: 409 });
   });
 
-  it('确认执行在事务内锁定待办、复核版本、取消未触发提醒并失效个人检索缓存', async () => {
+  it('确认执行在事务内锁定待办、复核版本，并复用统一状态 Service 暂停提醒', async () => {
     const row = {
       id: 'todo-4',
       title: '完成合同',
@@ -325,6 +483,7 @@ describe('todoService', () => {
       priority: 1,
       status: 'pending',
       dueAt: '2026-07-24 18:00:00',
+      recurrenceRule: null,
       completedAt: null,
       updatedAt: '2026-07-23 11:00:00',
     };
@@ -333,6 +492,9 @@ describe('todoService', () => {
     connection.query.mockReset();
     connection.query
       .mockResolvedValueOnce([[row]])
+      .mockResolvedValueOnce([[{ activeReminderCount: 2 }]])
+      .mockResolvedValueOnce([[{ ...row, due_at: row.dueAt, recurrence_rule: null }]])
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([{ affectedRows: 1 }])
       .mockResolvedValueOnce([{ affectedRows: 2 }]);
 
@@ -340,15 +502,17 @@ describe('todoService', () => {
 
     expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
     expect(connection.query.mock.calls[0][1]).toEqual(['todo-4', 'user-9']);
-    expect(connection.query.mock.calls[1][0]).toContain('UPDATE todo_items');
-    expect(connection.query.mock.calls[2][0]).toContain("status = 'cancelled'");
+    expect(connection.query.mock.calls[1][0]).toContain('COUNT(*)');
+    expect(connection.query.mock.calls[2][0]).toContain('SELECT * FROM todo_items');
+    expect(connection.query.mock.calls[4][0]).toContain('UPDATE todo_items');
+    expect(connection.query.mock.calls[5][0]).toContain("status = 'paused_complete'");
     expect(result).toMatchObject({
       state: 'changed',
       todoId: 'todo-4',
       title: '完成合同',
       previousStatus: 'pending',
       status: 'completed',
-      cancelledReminderCount: 2,
+      pausedReminderCount: 2,
     });
   });
 

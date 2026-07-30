@@ -49,6 +49,7 @@ function normalizePreparedSetTodoStatusArgs(args = {}) {
     activeReminderCount: Number.isFinite(Number(args?.activeReminderCount))
       ? Math.max(0, Math.trunc(Number(args.activeReminderCount)))
       : 0,
+    recurring: Boolean(args?.recurring),
   };
 }
 
@@ -69,10 +70,11 @@ function formatDueAt(value) {
 
 function buildImpact(args) {
   if (args.status === 'completed') {
-    const reminderPart = args.activeReminderCount ? `，并取消 ${args.activeReminderCount} 条尚未触发的提醒` : '';
-    return `确认后将把该待办标记为已完成${reminderPart}；重新打开不会自动恢复已取消的提醒。`;
+    const recurrencePart = args.recurring ? '，并按重复规则创建下一实例' : '';
+    const reminderPart = args.activeReminderCount ? `，暂停当前实例的 ${args.activeReminderCount} 条提醒` : '';
+    return `确认后将把该待办标记为已完成${recurrencePart}${reminderPart}；重新打开当前实例时会恢复其暂停的提醒。`;
   }
-  return '确认后将把该待办重新标记为待处理；此前已取消的提醒不会自动恢复，可在待办页面重新设置。';
+  return '确认后将把该待办重新标记为待处理，并恢复因完成而暂停的当前实例提醒。';
 }
 
 function markCommitOutcomeUnknown(error) {
@@ -171,7 +173,7 @@ export default {
   transform(raw) {
     const target = raw?.title || '该待办';
     if (raw?.state === 'noop') return `待办“${target}”已经是${STATUS_LABELS[raw.status] || raw.status}，未重复修改。`;
-    const reminderPart = raw?.cancelledReminderCount ? `，已取消 ${raw.cancelledReminderCount} 条未触发提醒` : '';
+    const reminderPart = raw?.pausedReminderCount ? `，已暂停当前实例的 ${raw.pausedReminderCount} 条提醒` : '';
     return `✅ 待办“${target}”已设为${STATUS_LABELS[raw?.status] || raw?.status || '目标状态'}${reminderPart}。`;
   },
   summarize(raw) {

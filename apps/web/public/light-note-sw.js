@@ -1,6 +1,7 @@
-const CACHE_NAME = 'light-note-pwa-v1';
+const CACHE_NAME = 'light-note-pwa-v2';
 const OFFLINE_URL = '/pwa-offline.html';
 const OFFLINE_ASSETS = [OFFLINE_URL, '/icon-192.png?v=7'];
+const OFFLINE_STATIC_PATHS = new Set(['/icon-192.png']);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -30,7 +31,19 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || event.request.mode !== 'navigate') return;
+  if (event.request.method !== 'GET') return;
+
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin === self.location.origin && OFFLINE_STATIC_PATHS.has(requestUrl.pathname)) {
+    event.respondWith(
+      (async () => {
+        return (await caches.match(event.request, { ignoreSearch: true })) || fetch(event.request);
+      })(),
+    );
+    return;
+  }
+
+  if (event.request.mode !== 'navigate') return;
   event.respondWith(
     (async () => {
       try {

@@ -3,7 +3,7 @@
     <div class="recommendation-title">{{ round > 0 ? $t('ai.followUpTip') : $t('ai.tip') }}</div>
     <div class="recommendation-list">
       <BButton
-        v-for="item in recommendationItems"
+        v-for="item in visibleRecommendationItems"
         :key="round + ':' + item"
         class="recommendation-item"
         @click="handleRecommendationClick(item, $event)"
@@ -11,17 +11,30 @@
       >
         {{ item }}
       </BButton>
+      <BButton
+        v-if="showMobileToggle"
+        class="recommendation-more"
+        :aria-expanded="mobileExpanded"
+        @click="mobileExpanded = !mobileExpanded"
+      >
+        {{ mobileExpanded ? t('ai.recommendationLess') : t('ai.recommendationMore') }}
+      </BButton>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import { recommendedQuestionKeys } from './aiRecommendationPolicy';
 
   const { t } = useI18n();
   const route = useRoute();
+  const layout = bookmarkStore();
+  const user = useUserStore();
+  const mobileExpanded = ref(false);
 
   const props = withDefaults(
     defineProps<{
@@ -46,61 +59,10 @@
         .slice(0, 3);
     }
 
-    const path = route.path;
-    let keys = [
-      'weeklyKnowledgeDigest',
-      'buriedRecap',
-      'linkHealth',
-      'recentKnowledgeDigest',
-      'weeklyRecap',
-      'tagUsageOverview',
-    ];
-    if (path.includes('/noteLibrary')) {
-      keys = [
-        'recentNoteDigest',
-        'noteActionItems',
-        'weeklyKnowledgeDigest',
-        'myNotes',
-        'weeklyRecap',
-        'tagUsageOverview',
-      ];
-    } else if (path.includes('/cloudSpace')) {
-      keys = [
-        'storageUsage',
-        'fileTypeOverview',
-        'recentCloudFiles',
-        'trashContent',
-        'cloudFolderOverview',
-        'weeklyKnowledgeDigest',
-      ];
-    } else if (path.includes('/tag')) {
-      keys = [
-        'tagUsageOverview',
-        'unusedTags',
-        'recentKnowledgeDigest',
-        'myTags',
-        'weeklyKnowledgeDigest',
-        'linkHealth',
-      ];
-    } else if (path.includes('/workbenches')) {
-      keys = [
-        'weeklyRecap',
-        'weeklyChallengeStatus',
-        'claimableGrowthRewards',
-        'recentKnowledgeDigest',
-        'linkHealth',
-        'storageUsage',
-      ];
-    } else if (path.includes('/inbox')) {
-      keys = [
-        'weeklyKnowledgeDigest',
-        'noteActionItems',
-        'linkHealth',
-        'recentKnowledgeDigest',
-        'unusedTags',
-        'buriedRecap',
-      ];
-    }
+    const keys = recommendedQuestionKeys(route.path, {
+      role: user.role,
+      adminMode: user.adminContext?.mode || 'normal',
+    });
 
     const available = keys.map((key) => t(`ai.${key}`)).filter((question) => !used.has(question));
     if (!available.length) return [];
@@ -109,6 +71,19 @@
     const offset = (props.round * 2) % available.length;
     return [...available.slice(offset), ...available.slice(0, offset)].slice(0, 3);
   });
+  const showMobileToggle = computed(() => layout.isMobile && recommendationItems.value.length > 2);
+  const visibleRecommendationItems = computed(() =>
+    showMobileToggle.value && !mobileExpanded.value
+      ? recommendationItems.value.slice(0, 2)
+      : recommendationItems.value,
+  );
+
+  watch(
+    () => [props.round, route.path, props.items],
+    () => {
+      mobileExpanded.value = false;
+    },
+  );
 
   function handleRecommendationClick(item: string, event?: MouseEvent) {
     // 点击后主动失焦:button 点击会保持 :focus,回答后新一轮快捷提问若复用相同位置的 DOM,残留的
@@ -194,19 +169,40 @@
 
   @media (max-width: 600px) {
     .recommendation-container {
-      height: 48px;
-      gap: 8px;
+      height: auto;
+      max-height: min(196px, 30vh);
+      padding-top: 7px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 5px;
+      overflow-y: auto;
     }
 
     .recommendation-title {
       font-size: 0.6875rem;
     }
 
+    .recommendation-list {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 5px;
+      overflow: visible;
+    }
+
     .recommendation-item {
+      width: 100%;
       height: 44px;
       min-height: 44px;
-      max-width: 82%;
+      max-width: none;
       padding: 0 12px;
+      border-radius: 12px;
+    }
+
+    .recommendation-more {
+      width: 100%;
+      min-height: 44px;
+      color: var(--primary-color);
+      background: transparent;
     }
   }
 </style>

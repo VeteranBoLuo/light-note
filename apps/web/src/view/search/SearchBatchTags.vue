@@ -133,7 +133,7 @@
   const fromPath = computed(() => {
     const raw = Array.isArray(route.query.from) ? route.query.from[0] : route.query.from;
     const text = String(raw || '/search');
-    return text.startsWith('/search') ? text : '/search';
+    return text.startsWith('/search') || text.startsWith('/noteLibrary') ? text : '/search';
   });
   const pageTitle = computed(() =>
     mode.value === 'add' ? t('resourceCenter.batch.workspaceAddTitle') : t('resourceCenter.batch.workspaceRemoveTitle'),

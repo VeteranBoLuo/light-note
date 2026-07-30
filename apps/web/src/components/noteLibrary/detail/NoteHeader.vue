@@ -1,5 +1,11 @@
 <template>
-  <div class="note-header" :class="{ 'note-header--mobile': bookmark.isMobile }">
+  <div
+    class="note-header"
+    :class="{
+      'note-header--mobile': bookmark.isMobile,
+      'note-header--tablet': bookmark.isTablet,
+    }"
+  >
     <template v-if="bookmark.isMobile">
       <BButton
         class="note-header-mobile-icon-button note-header-mobile-back"
@@ -12,18 +18,42 @@
       <div class="note-header-mobile-status" aria-live="polite">
         <BPopover trigger="click" placement="bottom-left">
           <BButton class="note-header-mobile-status-button" :aria-label="mobileSaveStateDetail || mobileSaveState">
-            <span class="note-header-mobile-status-dot" :class="{ 'is-saving': isStartEdit }" />
+            <span
+              class="note-header-mobile-status-dot"
+              :class="{
+                'is-saving': effectiveSaveStatus === 'saving',
+                'is-pending': effectiveSaveStatus === 'pending',
+                'is-offline': effectiveSaveStatus === 'offline',
+                'is-error': effectiveSaveStatus === 'error',
+              }"
+            />
             <span class="note-header-mobile-status-label">{{ mobileSaveState }}</span>
           </BButton>
           <template #content>
             <div class="note-header-mobile-save-detail">
-              {{ mobileSaveStateDetail || mobileSaveState }}
+              <div>{{ mobileSaveStateDetail || mobileSaveState }}</div>
+              <BButton
+                v-if="effectiveSaveStatus === 'offline' || effectiveSaveStatus === 'error'"
+                size="small"
+                class="note-header-save-retry"
+                @click="$emit('retrySave')"
+              >
+                {{ $t('noteDetail.retrySave') }}
+              </BButton>
             </div>
           </template>
         </BPopover>
       </div>
 
       <div class="note-header-mobile-actions">
+        <BButton
+          v-if="hasCatalog"
+          class="note-header-mobile-icon-button note-header-mobile-catalog"
+          :aria-label="$t('noteDetail.catalogOpen')"
+          @click.stop="$emit('openCatalog')"
+        >
+          <SvgIcon :src="icon.noteDetail.catalogue" size="19" aria-hidden="true" />
+        </BButton>
         <BButton
           v-if="!readonly"
           class="note-header-mobile-mode-button"
@@ -54,11 +84,16 @@
           @focusout="$emit('focusout')"
         >
         </div>
-        <div class="note-header-save-state" v-if="!isStartEdit">
-          <span v-show="note.id"> {{ $t('noteDetail.savedAt') }} {{ updateTime }} </span>
-        </div>
-        <div v-else class="note-header-save-state">
-          <span>{{ $t('noteDetail.saving') }}</span>
+        <div class="note-header-save-state" aria-live="polite">
+          <span>{{ desktopSaveState }}</span>
+          <BButton
+            v-if="effectiveSaveStatus === 'offline' || effectiveSaveStatus === 'error'"
+            size="small"
+            class="note-header-save-retry"
+            @click="$emit('retrySave')"
+          >
+            {{ $t('noteDetail.retrySave') }}
+          </BButton>
         </div>
         <div class="inline-note-tags" v-if="visibleTags.length">
           <span class="inline-note-tag" v-for="tag in displayedTags" :key="`${tag.id ?? tag.name}`" :title="tag.name">
@@ -86,6 +121,15 @@
             </BTooltip>
           </span>
         </span>
+        <BTooltip v-if="hasCatalog && bookmark.isTablet" :title="$t('noteDetail.catalogOpen')">
+          <BButton
+            class="note-header-title-icon note-header-tablet-catalog"
+            :aria-label="$t('noteDetail.catalogOpen')"
+            @click.stop="$emit('openCatalog')"
+          >
+            <SvgIcon :src="icon.noteDetail.catalogue" size="19" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
         <BTooltip :title="$t('note.saveAsTemplate')" v-if="!readonly">
           <div
             class="note-header-title-icon note-header-title-icon--template"
@@ -179,9 +223,11 @@
     updateTime: string;
     readonly: boolean;
     isStartEdit: boolean;
+    saveStatus?: 'saved' | 'pending' | 'saving' | 'offline' | 'error';
     note: any;
     noteType?: string;
     hasBackup?: boolean;
+    hasCatalog?: boolean;
   }>();
 
   interface HeaderMenuOption {
@@ -202,6 +248,8 @@
     'undoSwitch',
     'history',
     'saveAsTemplate',
+    'openCatalog',
+    'retrySave',
   ]);
 
   const bookmark = bookmarkStore();
@@ -319,15 +367,30 @@
   }
 
   const mobileSaveState = computed(() => {
-    if (props.isStartEdit) return t('noteDetail.savingCompact');
+    if (effectiveSaveStatus.value === 'saving') return t('noteDetail.savingCompact');
+    if (effectiveSaveStatus.value === 'pending') return t('noteDetail.pendingSave');
+    if (effectiveSaveStatus.value === 'offline') return t('noteDetail.offlineSave');
+    if (effectiveSaveStatus.value === 'error') return t('noteDetail.saveFailed');
     if (!props.note?.id) return t('noteDetail.unsaved');
     const timestamp = formatMobileSaveTimestamp(props.updateTime);
     return timestamp ? t('noteDetail.savedCompact', timestamp) : t('noteDetail.saved');
   });
 
   const mobileSaveStateDetail = computed(() => {
-    if (props.isStartEdit || !props.note?.id || !props.updateTime) return '';
+    if (effectiveSaveStatus.value === 'offline') return t('noteDetail.offlineSaveDetail');
+    if (effectiveSaveStatus.value === 'error') return t('noteDetail.saveFailedDetail');
+    if (effectiveSaveStatus.value !== 'saved' || !props.note?.id || !props.updateTime) return '';
     return t('noteDetail.savedAt') + ' ' + props.updateTime;
+  });
+
+  const effectiveSaveStatus = computed(() => (props.isStartEdit ? 'saving' : props.saveStatus || 'saved'));
+  const desktopSaveState = computed(() => {
+    if (effectiveSaveStatus.value === 'saving') return t('noteDetail.saving');
+    if (effectiveSaveStatus.value === 'pending') return t('noteDetail.pendingSave');
+    if (effectiveSaveStatus.value === 'offline') return t('noteDetail.offlineSave');
+    if (effectiveSaveStatus.value === 'error') return t('noteDetail.saveFailed');
+    if (!props.note?.id) return t('noteDetail.unsaved');
+    return props.updateTime ? `${t('noteDetail.savedAt')} ${props.updateTime}` : t('noteDetail.saved');
   });
 
   function openMobileTagConfig() {
@@ -510,6 +573,41 @@
     flex: 0 0 auto;
     gap: 20px;
   }
+  .note-header--tablet {
+    gap: 12px;
+    padding: 0 14px;
+
+    .note-header-leading {
+      flex: 1 1 auto;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .note-header-actions {
+      gap: 10px;
+    }
+
+    .note-header-title {
+      min-width: 80px;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .note-header-save-state {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .inline-note-tags {
+      max-width: 150px;
+      margin-left: 0;
+    }
+  }
   .note-header--mobile {
     justify-content: flex-start;
     gap: 6px;
@@ -542,6 +640,12 @@
         color: var(--primary-color);
         background: var(--hover-background);
       }
+    }
+
+    .note-header-mobile-catalog.b_btn {
+      flex-basis: 44px;
+      width: 44px;
+      height: 44px;
     }
 
     .note-header-mobile-back.b_btn {
@@ -611,6 +715,15 @@
       &.is-saving {
         background: var(--primary-color);
       }
+
+      &.is-pending {
+        background: #d97706;
+      }
+
+      &.is-offline,
+      &.is-error {
+        background: var(--danger-color, #dc2626);
+      }
     }
 
     .note-header-mobile-status-label {
@@ -648,6 +761,10 @@
     font-size: 12px;
     line-height: 1.5;
     white-space: nowrap;
+  }
+  .note-header-save-retry.b_btn {
+    display: inline-flex;
+    margin-left: 6px;
   }
   .note-header-save-state {
     color: #c0c0c0;
@@ -719,10 +836,16 @@
       color: var(--resource-tag-color);
     }
 
-    &--danger:hover {
-      border-color: var(--error-color, #e5484d);
-      background: color-mix(in srgb, var(--error-color, #e5484d) 8%, var(--card-background));
-      color: var(--error-color, #e5484d);
+    &--danger {
+      border-color: color-mix(in srgb, var(--danger-color, #e5484d) 30%, var(--card-border-color));
+      background: color-mix(in srgb, var(--danger-color, #e5484d) 7%, var(--card-background));
+      color: var(--danger-color, #e5484d);
+
+      &:hover {
+        border-color: var(--danger-color, #e5484d);
+        background: color-mix(in srgb, var(--danger-color, #e5484d) 13%, var(--card-background));
+        color: var(--danger-color, #e5484d);
+      }
     }
 
     &--save {
@@ -734,6 +857,23 @@
         background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
         color: var(--primary-color);
       }
+    }
+  }
+
+  .note-header-tablet-catalog.b_btn {
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    color: var(--sub-text-color);
+    border-color: var(--card-border-color);
+    background: var(--card-background);
+
+    &:hover,
+    &:focus-visible {
+      color: var(--resource-note-color, #00a884);
+      border-color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 14%, var(--card-background));
     }
   }
 

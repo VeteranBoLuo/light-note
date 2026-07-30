@@ -38,6 +38,13 @@
         </BButton>
       </div>
     </div>
+    <BCard class="ai-conversation-center__memory-off" variant="panel" padding="10px" role="status">
+      <SvgIcon :src="icon.ai.memory" size="18" aria-hidden="true" />
+      <span>
+        <strong>{{ t('ai.memory.disabledTitle') }}</strong>
+        <small>{{ t('ai.memory.disabledDescription') }}</small>
+      </span>
+    </BCard>
 
     <div v-if="loading" class="ai-conversation-center__state" role="status">
       <BLoading inline loading :title="t('common.loading')" />
@@ -571,6 +578,25 @@
 
   .ai-conversation-center__data-controls .is-danger {
     color: var(--danger-color, #d14343);
+  }
+  .ai-conversation-center__memory-off {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--desc-color);
+  }
+  .ai-conversation-center__memory-off > span {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+  .ai-conversation-center__memory-off strong {
+    color: var(--text-color);
+    font-size: 11px;
+  }
+  .ai-conversation-center__memory-off small {
+    font-size: 10px;
+    line-height: 1.45;
   }
 
   .ai-conversation-center__item {

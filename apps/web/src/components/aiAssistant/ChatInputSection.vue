@@ -1,11 +1,5 @@
 <template>
   <footer class="input-section">
-    <div v-if="showQuota && quota" class="ai-quota" :title="t('ai.quotaTip')">
-      <span class="ai-quota-txt"
-        >{{ t('ai.quotaToday') }} {{ fmtTokens(quota.used) }} / {{ fmtTokens(quota.quota) }}</span
-      >
-      <div class="ai-quota-bar"><div class="ai-quota-fill" :style="{ width: quotaPercent + '%' }"></div></div>
-    </div>
     <div class="input-container">
       <div class="context-actions">
         <AiContextPicker
@@ -32,7 +26,42 @@
         class="text-input"
       />
       <div class="composer-toolbar">
-        <span v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</span>
+        <div class="composer-meta">
+          <span v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</span>
+          <BPopover
+            v-if="showQuota && quota"
+            trigger="click"
+            placement="top-left"
+            overlay-class-name="ai-quota-popover"
+          >
+            <BButton class="ai-quota-summary" :aria-label="t('ai.quotaOpenDetails')">
+              {{ t('ai.quotaCompact', { percent: quotaPercent, rounds: estimatedRoundsLabel }) }}
+            </BButton>
+            <template #content>
+              <div class="ai-quota-detail">
+                <strong>{{ t('ai.quotaToday') }}</strong>
+                <div class="ai-quota-bar" aria-hidden="true">
+                  <div class="ai-quota-fill" :style="{ width: quotaPercent + '%' }"></div>
+                </div>
+                <dl>
+                  <div>
+                    <dt>{{ t('ai.quotaUsed') }}</dt>
+                    <dd>{{ fmtTokens(quota.used) }}</dd>
+                  </div>
+                  <div>
+                    <dt>{{ t('ai.quotaRemaining') }}</dt>
+                    <dd>{{ fmtTokens(remainingTokens) }}</dd>
+                  </div>
+                  <div>
+                    <dt>{{ t('ai.quotaTotal') }}</dt>
+                    <dd>{{ fmtTokens(quota.quota) }}</dd>
+                  </div>
+                </dl>
+                <small>{{ t('ai.quotaEstimateHint') }}</small>
+              </div>
+            </template>
+          </BPopover>
+        </div>
         <div class="input-actions">
           <TranslationToggle
             v-if="showTranslation"
@@ -62,6 +91,7 @@
   import TranslationToggle from './TranslationToggle.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
@@ -117,11 +147,20 @@
     if (!q || !q.quota) return 0;
     return Math.min(100, Math.round(((q.used || 0) / q.quota) * 100));
   });
-  // 额度充足或豁免(root/本机)时不再常驻一整行,仅在接近上限(已用 ≥ 80%)时展示提示条,把纵向空间让给回答区(方案 §8.6)。
   const showQuota = computed(() => {
     const q = props.quota;
-    return Boolean(q && !q.exempt && q.quota && quotaPercent.value >= 80);
+    return Boolean(q && !q.exempt && q.quota);
   });
+  const remainingTokens = computed(() => {
+    const q = props.quota;
+    if (!q) return 0;
+    if (Number.isFinite(Number(q.remaining))) return Math.max(0, Number(q.remaining));
+    return Math.max(0, Number(q.quota || 0) - Number(q.used || 0));
+  });
+  const estimatedRounds = computed(() => Math.floor(remainingTokens.value / 2500));
+  const estimatedRoundsLabel = computed(() =>
+    estimatedRounds.value > 99 ? '99+' : estimatedRounds.value < 1 ? '<1' : String(estimatedRounds.value),
+  );
   function fmtTokens(n?: number) {
     const v = Number(n || 0);
     return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(v);
@@ -279,6 +318,12 @@
     min-height: 28px;
     margin-top: 0.25rem;
   }
+  .composer-meta {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
 
   .input-actions {
     display: flex;
@@ -318,34 +363,14 @@
     cursor: not-allowed;
   }
 
-  .ai-quota {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 2px 7px;
-    font-size: 11.5px;
+  .ai-quota-summary {
+    min-height: 28px;
+    height: 28px;
+    padding-inline: 8px;
     color: var(--desc-color);
-  }
-  .ai-quota-txt {
-    flex-shrink: 0;
+    background: transparent;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
-  }
-  .ai-quota-bar {
-    flex: 1;
-    height: 4px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--primary-color) 13%, transparent);
-    overflow: hidden;
-  }
-  .ai-quota-fill {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 68%, #22d3ee));
-    transition: width 0.3s ease;
-  }
-  .ai-quota--free {
-    color: var(--primary-color);
-    font-weight: 600;
   }
   .input-hint {
     font-size: 0.75rem;
@@ -384,6 +409,9 @@
       margin-top: 2px;
       justify-content: flex-end;
     }
+    .composer-meta {
+      margin-right: auto;
+    }
 
     .input-actions {
       gap: 4px;
@@ -393,5 +421,56 @@
       min-width: 54px;
       height: 32px;
     }
+  }
+</style>
+
+<style>
+  .ai-quota-popover {
+    width: 250px;
+    padding: 12px;
+  }
+  .ai-quota-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    color: var(--text-color);
+    font-size: 12px;
+  }
+  .ai-quota-detail .ai-quota-bar {
+    width: 100%;
+    height: 5px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 13%, transparent);
+  }
+  .ai-quota-detail .ai-quota-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(
+      90deg,
+      var(--primary-color),
+      color-mix(in srgb, var(--primary-color) 68%, #22d3ee)
+    );
+  }
+  .ai-quota-detail dl {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin: 0;
+  }
+  .ai-quota-detail dl > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .ai-quota-detail dt,
+  .ai-quota-detail small {
+    color: var(--desc-color);
+  }
+  .ai-quota-detail dd {
+    margin: 0;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
   }
 </style>

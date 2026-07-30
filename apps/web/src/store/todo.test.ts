@@ -7,6 +7,13 @@ const completeTodo = vi.fn();
 const reopenTodo = vi.fn();
 const updateTodo = vi.fn();
 const deleteTodo = vi.fn();
+const createTodo = vi.fn();
+const batchSetTodoStatus = vi.fn();
+const batchDeleteTodos = vi.fn();
+const reorderTodos = vi.fn();
+const restoreTodo = vi.fn();
+const batchRestoreTodos = vi.fn();
+const snoozeTodo = vi.fn();
 
 vi.mock('@/api/todoApi', () => ({
   listTodos,
@@ -15,6 +22,13 @@ vi.mock('@/api/todoApi', () => ({
   reopenTodo,
   updateTodo,
   deleteTodo,
+  createTodo,
+  batchSetTodoStatus,
+  batchDeleteTodos,
+  reorderTodos,
+  restoreTodo,
+  batchRestoreTodos,
+  snoozeTodo,
 }));
 
 const { default: useTodoStore } = await import('./todo');
@@ -68,5 +82,29 @@ describe('todo store', () => {
     listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
     await expect(store.remove(item)).resolves.toBe(true);
     expect(listTodos).toHaveBeenCalledTimes(1);
+  });
+
+  it('行内快速创建后刷新列表', async () => {
+    const store = useTodoStore();
+    createTodo.mockResolvedValueOnce({ status: 200, data: { id: 'todo-new' } });
+    listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
+    await expect(store.quickCreate('写周报', '2026-07-31T17:00', 2)).resolves.toBe(true);
+    expect(createTodo).toHaveBeenCalledWith({ title: '写周报', dueAt: '2026-07-31T17:00', priority: 2 });
+  });
+
+  it('撤销批量完成通过单个事务请求恢复并回滚自动生成实例', async () => {
+    const store = useTodoStore();
+    batchSetTodoStatus.mockResolvedValueOnce({ status: 200, data: { affected: 2 } });
+    listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
+    await expect(store.reopenMany(['todo-1', 'todo-2'])).resolves.toBe(true);
+    expect(batchSetTodoStatus).toHaveBeenCalledWith(['todo-1', 'todo-2'], 'pending', { undoCompletion: true });
+  });
+
+  it('删除撤销逐项恢复后刷新，并在任一恢复失败时如实返回 false', async () => {
+    const store = useTodoStore();
+    batchRestoreTodos.mockResolvedValueOnce({ status: 200, data: { affected: 1 } });
+    listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
+    await expect(store.restoreMany(['todo-1', 'todo-2'])).resolves.toBe(false);
+    expect(batchRestoreTodos).toHaveBeenCalledWith(['todo-1', 'todo-2']);
   });
 });

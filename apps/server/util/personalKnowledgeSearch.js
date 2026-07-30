@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import MiniSearch from 'minisearch';
 import pool from '../db/index.js';
 import { extractTokens, splitKnowledgeContent } from './knowledgeService.js';
+import { aiResourceExclusionSql } from './aiResourcePreferencePolicy.js';
 
 const CACHE_TTL_MS = 3 * 60 * 1000;
 const MAX_CACHED_USERS = 20;
@@ -121,6 +122,7 @@ async function loadFileChunks(userId) {
                      JOIN ai_document_sources ds ON ds.file_id = f.id AND ds.user_id = f.create_by AND ds.status = 'ready'
                      JOIN ai_document_chunks dc ON dc.source_id = ds.id
                     WHERE f.create_by = ? AND f.del_flag = 0
+                      AND ${aiResourceExclusionSql({ alias: 'f', ownerColumn: 'create_by', resourceType: 'file' })}
                     ORDER BY f.id, dc.chunk_index`;
   try {
     const [rows] = await pool.query(baseSql, [userId]);
@@ -137,13 +139,18 @@ async function loadDocuments(userId) {
   const [notesResult, bookmarksResult, filesResult, todosResult, tagsResult] = await Promise.allSettled([
     queryOptional(
       `SELECT id, title, content, type, update_time
-         FROM note WHERE create_by = ? AND del_flag = '0' ORDER BY update_time DESC LIMIT 3000`,
+         FROM note
+        WHERE create_by = ? AND del_flag = '0'
+          AND ${aiResourceExclusionSql({ alias: 'note', ownerColumn: 'create_by', resourceType: 'note' })}
+        ORDER BY update_time DESC LIMIT 3000`,
       [userId],
     ),
     queryOptional(
       `SELECT b.id, b.name, b.url, b.description, b.create_time, s.summary, s.content, s.update_time
          FROM bookmark b LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id
-        WHERE b.user_id = ? AND b.del_flag = 0 ORDER BY b.create_time DESC LIMIT 3000`,
+        WHERE b.user_id = ? AND b.del_flag = 0
+          AND ${aiResourceExclusionSql({ alias: 'b', ownerColumn: 'user_id', resourceType: 'bookmark' })}
+        ORDER BY b.create_time DESC LIMIT 3000`,
       [userId],
     ),
     loadFileChunks(userId),
@@ -532,12 +539,16 @@ function normalizeScope(scope = {}) {
   const resourceIds = Array.isArray(scope.resourceIds)
     ? new Set(scope.resourceIds.map((item) => `${String(item.type)}:${String(item.id)}`))
     : null;
-  return { types: types?.size ? types : null, resourceIds };
+  const excludedResourceIds = Array.isArray(scope.excludedResourceIds)
+    ? new Set(scope.excludedResourceIds.map((item) => `${String(item.type)}:${String(item.id)}`))
+    : null;
+  return { types: types?.size ? types : null, resourceIds, excludedResourceIds };
 }
 
 function isInScope(result, scope) {
   if (scope.types && !scope.types.has(String(result.resourceType))) return false;
   if (scope.resourceIds && !scope.resourceIds.has(`${result.resourceType}:${result.resourceId}`)) return false;
+  if (scope.excludedResourceIds?.has(`${result.resourceType}:${result.resourceId}`)) return false;
   return true;
 }
 
@@ -547,14 +558,17 @@ async function authoritativeResourceVersions(userId, resourceType, resourceIds, 
   let sql;
   if (resourceType === 'note') {
     sql = `SELECT id, update_time FROM note
-           WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})`;
+           WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})
+             AND ${aiResourceExclusionSql({ alias: 'note', ownerColumn: 'create_by', resourceType: 'note' })}`;
   } else if (resourceType === 'bookmark') {
     sql = `SELECT b.id, COALESCE(s.update_time, b.create_time) AS update_time
              FROM bookmark b LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id
-            WHERE b.user_id = ? AND b.del_flag = 0 AND b.id IN (${placeholders})`;
+            WHERE b.user_id = ? AND b.del_flag = 0 AND b.id IN (${placeholders})
+              AND ${aiResourceExclusionSql({ alias: 'b', ownerColumn: 'user_id', resourceType: 'bookmark' })}`;
   } else if (resourceType === 'file') {
     sql = `SELECT id, create_time AS update_time FROM files
-           WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})`;
+           WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})
+             AND ${aiResourceExclusionSql({ alias: 'files', ownerColumn: 'create_by', resourceType: 'file' })}`;
   } else if (resourceType === 'todo') {
     sql = `SELECT id, update_time FROM todo_items
            WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`;

@@ -182,6 +182,7 @@
               <span v-if="active.retry?.selectedItemIds.includes(item.id)" class="ai-change-set__retry-scope">
                 {{ t('ai.changeSet.retry.inScope') }}
               </span>
+              <span class="ai-change-set__undoable">{{ t('ai.changeSet.undoableItem') }}</span>
               <BButton
                 v-if="active.status === 'draft' && item.operation !== 'update_note_content'"
                 class="ai-change-set__edit"
@@ -195,14 +196,19 @@
             <p v-if="item.reason" class="ai-change-set__reason">{{ item.reason }}</p>
 
             <div v-if="editingId !== item.id" class="ai-change-set__diff">
-              <div>
-                <span>{{ t('ai.changeSet.before') }}</span>
-                <code>{{ summarizeValue(item.operation, item.before) }}</code>
-              </div>
-              <SvgIcon :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
-              <div>
-                <span>{{ t('ai.changeSet.after') }}</span>
-                <code>{{ summarizeValue(item.operation, item.after) }}</code>
+              <div v-for="impact in fieldImpacts(item)" :key="impact.field" class="ai-change-set__impact">
+                <strong>{{ impact.field }}</strong>
+                <div class="ai-change-set__impact-values">
+                  <div>
+                    <span>{{ t('ai.changeSet.before') }}</span>
+                    <code>{{ impact.before }}</code>
+                  </div>
+                  <SvgIcon :src="icon.ai.sourceArrow" size="15" aria-hidden="true" />
+                  <div>
+                    <span>{{ t('ai.changeSet.after') }}</span>
+                    <code>{{ impact.after }}</code>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -742,18 +748,56 @@
     return `${t(`ai.sourceTypes.${item.resourceType}`)} · ${item.resourceId}`;
   }
 
-  function summarizeValue(operation: AiChangeItem['operation'], value: Record<string, unknown> | null) {
-    if (!value) return t('ai.changeSet.none');
-    if (operation === 'set_tags') return ((value.tagIds as unknown[]) || []).join(', ') || t('ai.changeSet.noTags');
-    if (operation === 'move_file')
-      return value.folderId == null ? t('ai.changeSet.rootFolder') : String(value.folderId);
-    if (operation === 'update_note_metadata') return String(value.title || '—');
-    if (operation === 'update_note_content') {
-      return t('ai.changeSet.contentChars', { count: String(value.content || '').length });
+  function fieldImpacts(item: AiChangeItem) {
+    const before = item.before || {};
+    const after = item.after || {};
+    const value = (input: unknown) => {
+      if (input == null || input === '') return t('ai.changeSet.none');
+      if (Array.isArray(input)) return input.join(', ') || t('ai.changeSet.none');
+      return String(input);
+    };
+    if (item.operation === 'set_tags') {
+      return [{ field: t('ai.changeSet.fields.tagIds'), before: value(before.tagIds), after: value(after.tagIds) }];
     }
-    if (operation === 'update_bookmark_metadata')
-      return [value.name, value.description].filter(Boolean).join(' · ') || '—';
-    return [value.title, value.description].filter(Boolean).join(' · ') || '—';
+    if (item.operation === 'move_file') {
+      return [
+        {
+          field: t('ai.changeSet.fields.folderId'),
+          before: before.folderId == null ? t('ai.changeSet.rootFolder') : value(before.folderId),
+          after: after.folderId == null ? t('ai.changeSet.rootFolder') : value(after.folderId),
+        },
+      ];
+    }
+    if (item.operation === 'update_note_content') {
+      return [
+        {
+          field: t('ai.changeSet.fields.content'),
+          before: t('ai.changeSet.contentChars', { count: String(before.content || '').length }),
+          after: t('ai.changeSet.contentChars', { count: String(after.content || '').length }),
+        },
+      ];
+    }
+    if (item.operation === 'update_bookmark_metadata') {
+      return [
+        { field: t('ai.changeSet.fields.name'), before: value(before.name), after: value(after.name) },
+        {
+          field: t('ai.changeSet.fields.description'),
+          before: value(before.description),
+          after: value(after.description),
+        },
+      ];
+    }
+    if (item.operation === 'create_todo') {
+      return [
+        { field: t('ai.changeSet.fields.title'), before: value(before.title), after: value(after.title) },
+        {
+          field: t('ai.changeSet.fields.description'),
+          before: value(before.description),
+          after: value(after.description),
+        },
+      ];
+    }
+    return [{ field: t('ai.changeSet.fields.title'), before: value(before.title), after: value(after.title) }];
   }
 
   function receiptSummary(item: AiChangeItem) {
@@ -1154,23 +1198,38 @@
 
   .ai-change-set__diff {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
     gap: 8px;
     color: var(--desc-color);
   }
 
-  .ai-change-set__diff > div {
+  .ai-change-set__impact {
     display: grid;
     gap: 4px;
   }
 
-  .ai-change-set__diff span {
+  .ai-change-set__impact > strong {
+    color: var(--desc-color);
+    font-size: 9px;
+  }
+
+  .ai-change-set__impact-values {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-change-set__impact-values > div {
+    display: grid;
+    gap: 4px;
+  }
+
+  .ai-change-set__impact-values span {
     font-size: 9px;
     font-weight: 650;
   }
 
-  .ai-change-set__diff code {
+  .ai-change-set__impact-values code {
     min-height: 34px;
     padding: 7px;
     border: 1px solid var(--surface-border-color);
@@ -1181,6 +1240,15 @@
     font-size: 10px;
     line-height: 1.45;
     overflow-wrap: anywhere;
+  }
+
+  .ai-change-set__undoable {
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--success-color, #2e8b57) 10%, transparent);
+    color: var(--success-color, #2e8b57);
+    font-size: 9px;
+    font-weight: 650;
   }
 
   .ai-change-set__editor {
@@ -1270,11 +1338,11 @@
       justify-self: start;
     }
 
-    .ai-change-set__diff {
+    .ai-change-set__impact-values {
       grid-template-columns: 1fr;
     }
 
-    .ai-change-set__diff > svg {
+    .ai-change-set__impact-values > svg {
       transform: rotate(90deg);
     }
   }

@@ -10,5 +10,11 @@ router.post('/update', todoHandle.updateTodo);
 router.post('/complete', todoHandle.completeTodo);
 router.post('/reopen', todoHandle.reopenTodo);
 router.post('/delete', todoHandle.deleteTodo);
+router.post('/restore', todoHandle.restoreTodo);
+router.post('/batch-status', todoHandle.batchStatusTodo);
+router.post('/batch-delete', todoHandle.batchDeleteTodo);
+router.post('/batch-restore', todoHandle.batchRestoreTodo);
+router.post('/reorder', todoHandle.reorderTodo);
+router.post('/snooze', todoHandle.snoozeTodo);
 
 export default router;

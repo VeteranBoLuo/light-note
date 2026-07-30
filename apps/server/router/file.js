@@ -1,7 +1,8 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import os from 'os';
-import { resultData, snakeCaseKeys } from '../util/common.js';
+import { L, resultData, snakeCaseKeys } from '../util/common.js';
 import pool from '../db/index.js';
 import { awardCreate, getUserSpaceMb } from '../util/growth.js';
 import {
@@ -20,14 +21,28 @@ import {
   resolveFileCategory,
 } from '../util/fileCategory.js';
 import * as fileHandle from '../router_handle/fileHandle.js';
+import * as fileShareHandle from '../router_handle/fileShareHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
-import crypto from 'crypto';
 import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 const router = express.Router();
+const fileShareAccessLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.send(
+      resultData(
+        { errorCode: 'SHARE_RATE_LIMITED' },
+        429,
+        L(req, '尝试次数过多，请稍后再试', 'Too many attempts. Try again later'),
+      ),
+    ),
+});
 
 function sendFileServerError(res, scene, error, message = '服务器暂时无法处理，请稍后重试') {
   console.error('[file] %s failed code=%s', scene, stableAgentErrorCode(error));
@@ -192,7 +207,6 @@ router.post('/confirmUpload', async (req, res) => {
         directory,
         obs_key: objectKey,
         folder_id: folderId || null,
-        share_token: crypto.randomBytes(16).toString('hex'), // 不可猜分享令牌,分享按 token 而非自增 id 访问
       };
 
       const selectSql = 'SELECT * FROM files WHERE create_by = ? AND file_name = ? AND del_flag = 0';
@@ -371,12 +385,9 @@ router.post('/downloadFileById', async (req, res) => {
     }
 
     const file = results[0];
-    // 访问校验:本人(凭会话)/ 分享(凭 token)/ root 三者之一放行,防按自增 id 枚举越权下载他人文件
+    // 分享下载统一走独立 file_shares 生命周期；这里仅允许本人或 root，避免撤销后旧 files.share_token 绕过。
     const uid = req.user?.id;
-    const canAccess =
-      (uid && uid === file.create_by) ||
-      req.user?.role === 'root' ||
-      (req.body.token && file.share_token && req.body.token === file.share_token);
+    const canAccess = (uid && uid === file.create_by) || req.user?.role === 'root';
     if (!canAccess) {
       return res.send(resultData(null, 403, '无权访问该文件'));
     }
@@ -436,6 +447,12 @@ router.post('/deleteFileById', async (req, res) => {
       userId,
       items: fileIds.map((fileId) => ({ resourceType: 'file', resourceId: String(fileId) })),
     });
+    await connection.query(
+      `UPDATE file_shares
+       SET status = 'revoked', revoked_at = COALESCE(revoked_at, NOW()), update_time = NOW()
+       WHERE file_id IN (${placeholders}) AND owner_user_id = ? AND status = 'active'`,
+      [...fileIds, userId],
+    );
     await connection.commit();
     res.send(resultData({ deletedIds: fileIds, count: result.affectedRows }, 200, '删除成功'));
   } catch (e) {
@@ -495,6 +512,24 @@ router.post('/queryTotalFileSize', async (req, res) => {
 
 router.post('/updateFile', fileHandle.updateFile);
 router.post('/getFileInfo', fileHandle.getFileInfo);
+router.post('/share/create', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return fileShareHandle.createFileShare(req, res);
+});
+router.post('/share/list', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return fileShareHandle.listFileShares(req, res);
+});
+router.post('/share/revoke', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return fileShareHandle.revokeFileShare(req, res);
+});
+router.post('/share/rotate', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return fileShareHandle.rotateFileShare(req, res);
+});
+router.post('/share/resolve', fileShareAccessLimiter, fileShareHandle.resolveFileShare);
+router.post('/share/download', fileShareAccessLimiter, fileShareHandle.downloadFileShare);
 
 router.post('/queryFolder', fileHandle.queryFolder);
 router.post('/addFolder', fileHandle.addFolder);

@@ -1,5 +1,9 @@
 import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
+import {
+  aiResourceExclusionSql,
+  appendTransientExclusion,
+} from '../../aiResourcePreferencePolicy.js';
 
 export default {
   name: 'query_bookmarks',
@@ -22,8 +26,13 @@ export default {
     const time = parseTimeRange(timeRange);
     const take = Math.min(Math.max(limit || 10, 1), 50);
 
-    let where = `b.user_id = ? AND b.del_flag = 0`;
+    let where = `b.user_id = ? AND b.del_flag = 0 AND ${aiResourceExclusionSql({
+      alias: 'b',
+      ownerColumn: 'user_id',
+      resourceType: 'bookmark',
+    })}`;
     const baseParams = [ctx.userId];
+    where = appendTransientExclusion(where, baseParams, ctx.agentContentScope, 'bookmark', 'b.id');
 
     if (keyword) {
       where += ` AND (b.name LIKE ? OR b.url LIKE ?)`;

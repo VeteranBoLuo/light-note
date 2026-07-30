@@ -4,6 +4,7 @@
     :title="$t('noteDetail.history.title')"
     :show-footer="false"
     :mask-closable="true"
+    width="min(94vw, 1440px)"
   >
     <div class="note-history" :class="{ mobile: bookmark.isMobile }">
       <!-- 左:版本列表 -->
@@ -38,12 +39,52 @@
       <div class="version-preview">
         <div class="preview-header">
           <span class="preview-title">{{ $t('noteDetail.history.preview') }}</span>
+          <BTabs v-model:active-tab="previewMode" variant="pill" :options="previewModeOptions" />
           <b-button v-if="activeId" type="primary" size="small" :disabled="restoring" @click="confirmRestore">
             {{ $t('noteDetail.history.restore') }}
           </b-button>
         </div>
         <div class="preview-body">
-          <div v-if="activeId" class="preview-html" v-html="activePreviewHtml"></div>
+          <div v-if="activeId && previewMode === 'preview'" class="preview-html" v-html="activePreviewHtml"></div>
+          <div v-else-if="activeId" class="version-diff" :aria-label="$t('noteDetail.history.diff')">
+            <div class="version-diff-summary">
+              <span class="version-diff-summary__label">{{ $t('noteDetail.history.comparisonBasis') }}</span>
+              <span class="is-added">+{{ diffSummary.added }}</span>
+              <span class="is-removed">−{{ diffSummary.removed }}</span>
+            </div>
+            <div v-if="!bookmark.isMobile" class="version-diff-side-by-side">
+              <div class="version-diff-column-title">
+                <span>{{ $t('noteDetail.history.currentContent') }}</span>
+                <span>{{ $t('noteDetail.history.selectedVersion') }}</span>
+              </div>
+              <div
+                v-for="(row, index) in diffRows"
+                :key="`${index}-${row.type}`"
+                class="version-diff-row"
+                :class="`is-${row.type}`"
+              >
+                <div class="version-diff-cell version-diff-cell--current">
+                  <span class="version-diff-line-number">{{ row.currentLine || '' }}</span>
+                  <code>{{ row.currentText || ' ' }}</code>
+                </div>
+                <div class="version-diff-cell version-diff-cell--historical">
+                  <span class="version-diff-line-number">{{ row.historicalLine || '' }}</span>
+                  <code>{{ row.historicalText || ' ' }}</code>
+                </div>
+              </div>
+            </div>
+            <div v-else class="version-diff-unified">
+              <div
+                v-for="(line, index) in diffLines"
+                :key="`${index}-${line.type}`"
+                class="version-diff-line"
+                :class="`is-${line.type}`"
+              >
+                <span aria-hidden="true">{{ line.type === 'added' ? '+' : line.type === 'removed' ? '−' : ' ' }}</span>
+                <code>{{ line.text || ' ' }}</code>
+              </div>
+            </div>
+          </div>
           <div v-else-if="!detailLoading" class="preview-empty">{{ $t('noteDetail.history.selectHint') }}</div>
           <BLoading :loading="detailLoading" style="position: absolute; inset: 0" />
         </div>
@@ -53,7 +94,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -65,6 +106,14 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { noteContentToHtml, noteDisplayText } from '@/utils/common.ts';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import {
+    buildNoteLineDiff,
+    buildNoteSideBySideRows,
+    compareNoteReferenceChanges,
+    noteHtmlToDiffText,
+    type NoteDiffLine,
+  } from '@/utils/noteVersionDiff';
 
   interface VersionItem {
     id: string;
@@ -78,6 +127,7 @@
   const props = defineProps<{
     noteId: string;
     noteType?: string;
+    currentNote?: { title?: string; content?: string; type?: string };
   }>();
   const visible = defineModel('visible');
   const emit = defineEmits(['restored']);
@@ -91,6 +141,18 @@
   const restoring = ref(false);
   const activeId = ref('');
   const activePreviewHtml = ref('');
+  const activeVersion = ref<VersionItem | null>(null);
+  const previewMode = ref<'preview' | 'diff'>('preview');
+  const diffLines = ref<NoteDiffLine[]>([]);
+  const previewModeOptions = computed(() => [
+    { key: 'preview', label: t('noteDetail.history.preview') },
+    { key: 'diff', label: t('noteDetail.history.diff') },
+  ]);
+  const diffSummary = computed(() => ({
+    added: diffLines.value.filter((line) => line.type === 'added').length,
+    removed: diffLines.value.filter((line) => line.type === 'removed').length,
+  }));
+  const diffRows = computed(() => buildNoteSideBySideRows(diffLines.value));
 
   onMounted(fetchVersions);
 
@@ -125,11 +187,17 @@
   async function selectVersion(v: VersionItem) {
     if (activeId.value === v.id) return;
     activeId.value = v.id;
+    activeVersion.value = v;
     activePreviewHtml.value = '';
     detailLoading.value = true;
     try {
       // 直接用列表已带回的 content + type 渲染,md 走 marked,统一消毒;不再二次请求后端
-      activePreviewHtml.value = await noteContentToHtml(v.content, v.type);
+      const [previewHtml, currentHtml] = await Promise.all([
+        noteContentToHtml(v.content, v.type),
+        noteContentToHtml(props.currentNote?.content || '', props.currentNote?.type || props.noteType),
+      ]);
+      activePreviewHtml.value = previewHtml;
+      diffLines.value = buildNoteLineDiff(noteHtmlToDiffText(currentHtml), noteHtmlToDiffText(previewHtml));
     } finally {
       detailLoading.value = false;
     }
@@ -138,9 +206,21 @@
   function confirmRestore() {
     if (!activeId.value || restoring.value) return;
     if (blockGuestWrite('restore-note-version')) return;
+    const references = compareNoteReferenceChanges(
+      props.currentNote?.content || '',
+      activeVersion.value?.content || '',
+    );
+    const titleChanged = String(props.currentNote?.title || '') !== String(activeVersion.value?.title || '');
     Alert.alert({
       title: t('noteDetail.history.restoreConfirmTitle'),
-      content: t('noteDetail.history.restoreConfirm'),
+      content: t('noteDetail.history.restoreScope', {
+        title: titleChanged ? t('common.yes') : t('common.no'),
+        // 差异视图按“当前相对历史”展示；恢复操作的方向相反。
+        added: diffSummary.value.removed,
+        removed: diffSummary.value.added,
+        refsAdded: references.added,
+        refsRemoved: references.removed,
+      }),
       async onOk() {
         restoring.value = true;
         try {
@@ -161,9 +241,9 @@
 
 <style lang="less" scoped>
   .note-history {
-    width: min(80vw, 900px);
+    width: 100%;
     display: grid;
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
     gap: 16px;
     color: var(--text-color);
 
@@ -280,6 +360,106 @@
     padding: 14px;
     height: min(60vh, 460px);
     overflow: auto;
+  }
+  .version-diff {
+    font-size: 12px;
+  }
+  .version-diff-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    color: var(--desc-color);
+  }
+  .version-diff-summary__label {
+    margin-right: 2px;
+  }
+  .version-diff-summary .is-added {
+    color: #238759;
+    font-weight: 650;
+  }
+  .version-diff-summary .is-removed {
+    color: var(--danger-color, #d14343);
+    font-weight: 650;
+  }
+  .version-diff-line {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--text-color);
+    code {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    &.is-added {
+      background: color-mix(in srgb, #2fa36b 14%, transparent);
+    }
+    &.is-removed {
+      background: color-mix(in srgb, var(--danger-color, #d14343) 12%, transparent);
+      text-decoration: line-through;
+    }
+  }
+  .version-diff-side-by-side {
+    min-width: 720px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .version-diff-column-title,
+  .version-diff-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .version-diff-column-title {
+    position: sticky;
+    top: -14px;
+    z-index: 1;
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
+    border-bottom: 1px solid var(--card-border-color);
+    font-weight: 650;
+  }
+  .version-diff-column-title span {
+    padding: 9px 12px;
+  }
+  .version-diff-column-title span + span,
+  .version-diff-cell + .version-diff-cell {
+    border-left: 1px solid var(--card-border-color);
+  }
+  .version-diff-row + .version-diff-row {
+    border-top: 1px solid color-mix(in srgb, var(--card-border-color) 55%, transparent);
+  }
+  .version-diff-cell {
+    min-width: 0;
+    min-height: 28px;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    align-items: start;
+    background: var(--card-background);
+  }
+  .version-diff-cell code {
+    padding: 5px 8px;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .version-diff-line-number {
+    align-self: stretch;
+    padding: 5px 7px;
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--workspace-panel-bg-color) 76%, transparent);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+  .version-diff-row.is-changed .version-diff-cell--current,
+  .version-diff-row.is-added .version-diff-cell--current {
+    background: color-mix(in srgb, #2fa36b 11%, var(--card-background));
+  }
+  .version-diff-row.is-changed .version-diff-cell--historical,
+  .version-diff-row.is-removed .version-diff-cell--historical {
+    background: color-mix(in srgb, var(--danger-color, #d14343) 10%, var(--card-background));
   }
 
   .mobile .preview-body {

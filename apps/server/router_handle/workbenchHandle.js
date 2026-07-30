@@ -2,6 +2,7 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { buildObjectUrl, createDownloadSignedUrl } from '../util/obsClient.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
+import { queryTodoPendingCount } from '../util/services/todoService.js';
 
 function dayLabel(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -90,6 +91,30 @@ async function queryWeeklyStats(userId) {
     [userId, userId, userId, userId],
   );
   return rows[0] || { bookmark: 0, note: 0, file: 0, tag: 0 };
+}
+
+async function queryTodaySummary(userId) {
+  const [[rows], todoPendingTotal] = await Promise.all([
+    pool.query(
+      `
+        SELECT
+          (SELECT COUNT(*) FROM notification
+           WHERE user_id = ? AND is_read = 0 AND del_flag = 0) AS unreadNotificationTotal,
+          (SELECT COUNT(*) FROM resource_inbox
+           WHERE user_id = ? AND status = 'pending') AS inboxPendingTotal
+      `,
+      [userId, userId],
+    ),
+    queryTodoPendingCount(pool, userId),
+  ]);
+  const row = rows[0] || {};
+  const inboxPendingTotal = Number(row.inboxPendingTotal || 0);
+  return {
+    actionTotal: inboxPendingTotal + Number(todoPendingTotal || 0),
+    todoPendingTotal: Number(todoPendingTotal || 0),
+    unreadNotificationTotal: Number(row.unreadNotificationTotal || 0),
+    inboxPendingTotal,
+  };
 }
 
 async function queryTrend(userId) {
@@ -280,10 +305,11 @@ export const getWorkbenchSummary = async (req, res) => {
     const userId = req.user.id;
     if (!userId) return res.send(resultData(null, 400, '缺少用户信息'));
 
-    const [counts, weeklyStats, trend, fileTypeStats, commonBookmarks, hotTags, recentNotes, recentFiles] =
+    const [counts, weeklyStats, today, trend, fileTypeStats, commonBookmarks, hotTags, recentNotes, recentFiles] =
       await Promise.all([
         queryCounts(userId),
         queryWeeklyStats(userId),
+        queryTodaySummary(userId),
         queryTrend(userId),
         queryFileTypeStats(userId),
         queryCommonBookmarks(userId),
@@ -303,6 +329,8 @@ export const getWorkbenchSummary = async (req, res) => {
           trashFileSize: Number(counts.trashFileSize || 0),
         },
         weeklyStats,
+        today,
+        generatedAt: new Date().toISOString(),
         weekDays: getWeekDaysElapsed(),
         trend,
         fileTypeStats,
@@ -314,6 +342,6 @@ export const getWorkbenchSummary = async (req, res) => {
     );
   } catch (error) {
     console.error('获取工作台聚合数据失败:', error);
-    res.send(resultData(null, 500, '获取工作台聚合数据失败: ' + error.message));
+    res.send(resultData(null, 500, '获取工作台聚合数据失败'));
   }
 };

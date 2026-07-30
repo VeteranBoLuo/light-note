@@ -140,18 +140,83 @@ function normalizeSearchType(value) {
   return SEARCH_TYPES.includes(type) ? type : 'all';
 }
 
-function normalizeOrderedCursor(value, selectedType) {
+function normalizeSearchTypes(value, legacyType) {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  const selected = [...new Set(values.map(normalizeSearchType).filter((type) => type !== 'all'))];
+  if (selected.length) return SEARCH_TYPES.filter((type) => selected.includes(type));
+  const legacy = normalizeSearchType(legacyType);
+  return legacy === 'all' ? [...SEARCH_TYPES] : [legacy];
+}
+
+function normalizeOrderedCursor(value, selectedTypes) {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const rawType = normalizeSearchType(raw.type);
-  if (selectedType !== 'all') {
+  if (selectedTypes.length === 1) {
+    const selectedType = selectedTypes[0];
     return {
       type: selectedType,
       offset: rawType === selectedType || rawType === 'all' ? normalizeSearchOffset(raw.offset) : 0,
     };
   }
   return {
-    type: rawType === 'all' ? SEARCH_TYPES[0] : rawType,
+    type: selectedTypes.includes(rawType) ? rawType : selectedTypes[0],
     offset: normalizeSearchOffset(raw.offset),
+  };
+}
+
+function searchItemRelevance(item, keyword) {
+  const query = toText(keyword).toLowerCase();
+  if (!query) return { score: 0, reason: '' };
+  const title = toText(item.title).toLowerCase();
+  const description = toText(item.description).toLowerCase();
+  const url = toText(item.url || item.raw?.url).toLowerCase();
+  const tags = (Array.isArray(item.tags) ? item.tags : [])
+    .map((tag) => toText(tag?.name || tag))
+    .join(' ')
+    .toLowerCase();
+  if (title === query) return { score: 100, reason: 'title_exact' };
+  if (title.startsWith(query)) return { score: 80, reason: 'title_prefix' };
+  if (title.includes(query)) return { score: 60, reason: 'title' };
+  if (tags.includes(query)) return { score: 50, reason: 'tag' };
+  if (url.includes(query)) return { score: 40, reason: 'url' };
+  if (description.includes(query)) return { score: 30, reason: 'description' };
+  return { score: 10, reason: 'content' };
+}
+
+async function queryRelevantSearchItems({ userId, options, lang, offset, pageSize, selectedTypes = SEARCH_TYPES }) {
+  const candidateLimit = Math.min(offset + pageSize + 1, 500);
+  const results = await Promise.all(
+    selectedTypes.map((type) =>
+      SEARCH_QUERY_BY_TYPE[type](
+        userId,
+        {
+          ...options,
+          pageSize: candidateLimit,
+          offset: 0,
+        },
+        lang,
+        true,
+        false,
+      ),
+    ),
+  );
+  const ranked = results
+    .flatMap((result) => result.items)
+    .map((item, index) => {
+      const relevance = searchItemRelevance(item, options.keyword);
+      return {
+        ...item,
+        matchReason: relevance.reason,
+        snippet: item.description || '',
+        _score: relevance.score,
+        _stableIndex: index,
+      };
+    })
+    .sort((a, b) => b._score - a._score || a._stableIndex - b._stableIndex);
+  const items = ranked.slice(offset, offset + pageSize).map(({ _score, _stableIndex, ...item }) => item);
+  return {
+    items,
+    nextCursor: ranked.length > offset + pageSize ? { type: 'all', offset: offset + items.length } : null,
   };
 }
 
@@ -726,8 +791,8 @@ const SEARCH_QUERY_BY_TYPE = {
   tag: queryTags,
 };
 
-async function queryOrderedSearchItems({ userId, options, lang, selectedType, cursor, pageSize }) {
-  const orderedTypes = selectedType === 'all' ? SEARCH_TYPES : [selectedType];
+async function queryOrderedSearchItems({ userId, options, lang, selectedTypes, cursor, pageSize }) {
+  const orderedTypes = selectedTypes;
   let typeIndex = Math.max(0, orderedTypes.indexOf(cursor.type));
   let typeOffset = cursor.offset;
   let remaining = pageSize;
@@ -773,19 +838,21 @@ async function queryOrderedSearchItems({ userId, options, lang, selectedType, cu
   };
 }
 
-function buildOrderedHasMoreByType(typeTotals, selectedType, nextCursor) {
+function buildOrderedHasMoreByType(typeTotals, selectedTypes, nextCursor) {
   const result = Object.fromEntries(SEARCH_TYPES.map((type) => [type, false]));
   if (!nextCursor) return result;
-  if (selectedType !== 'all') {
+  if (selectedTypes.length === 1) {
+    const selectedType = selectedTypes[0];
     result[selectedType] =
       nextCursor.type === selectedType && nextCursor.offset < Number(typeTotals[selectedType] || 0);
     return result;
   }
 
-  const cursorIndex = SEARCH_TYPES.indexOf(nextCursor.type);
+  const cursorIndex = selectedTypes.indexOf(nextCursor.type);
   SEARCH_TYPES.forEach((type, index) => {
-    if (index < cursorIndex) return;
-    if (index === cursorIndex) {
+    const selectedIndex = selectedTypes.indexOf(type);
+    if (selectedIndex < 0 || selectedIndex < cursorIndex) return;
+    if (selectedIndex === cursorIndex) {
       result[type] = nextCursor.offset < Number(typeTotals[type] || 0);
       return;
     }
@@ -819,7 +886,7 @@ export const globalSearch = async (req, res) => {
       paginationMode === 'ordered' ? 40 : 12,
       paginationMode === 'ordered' ? 40 : 50,
     );
-    const selectedType = normalizeSearchType(req.body?.type);
+    const selectedTypes = normalizeSearchTypes(req.body?.types, req.body?.type);
     const lang = normalizeLang(req.headers['x-lang']);
     const options = {
       keyword,
@@ -833,16 +900,28 @@ export const globalSearch = async (req, res) => {
     };
 
     if (paginationMode === 'ordered') {
-      const cursor = normalizeOrderedCursor(req.body?.cursor, selectedType);
+      const cursor = normalizeOrderedCursor(req.body?.cursor, selectedTypes);
       const includeMetadata = req.body?.includeMetadata !== false;
-      const orderedItemsPromise = queryOrderedSearchItems({
-        userId,
-        options,
-        lang,
-        selectedType,
-        cursor,
-        pageSize,
-      });
+      const useGlobalRelevance = Boolean(keyword) && options.sort === 'relevance' && selectedTypes.length > 1;
+      const relevanceOffset =
+        req.body?.cursor?.type === 'all' ? normalizeSearchOffset(req.body.cursor.offset) : 0;
+      const orderedItemsPromise = useGlobalRelevance
+        ? queryRelevantSearchItems({
+            userId,
+            options,
+            lang,
+            offset: relevanceOffset,
+            pageSize,
+            selectedTypes,
+          })
+        : queryOrderedSearchItems({
+            userId,
+            options,
+            lang,
+            selectedTypes,
+            cursor,
+            pageSize,
+          });
       const metadataPromise = includeMetadata
         ? Promise.all([
             queryBookmarks(userId, options, lang, false),
@@ -874,17 +953,17 @@ export const globalSearch = async (req, res) => {
           total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
           typeTotals,
           tagOptions,
-          hasMoreByType: buildOrderedHasMoreByType(typeTotals, selectedType, orderedResult.nextCursor),
+          hasMoreByType: buildOrderedHasMoreByType(typeTotals, selectedTypes, orderedResult.nextCursor),
         });
       }
       return res.send(resultData(response));
     }
 
     const [bookmarkResult, noteResult, fileResult, tagResult, tagOptions] = await Promise.all([
-      queryBookmarks(userId, options, lang, selectedType === 'all' || selectedType === 'bookmark'),
-      queryNotes(userId, options, lang, selectedType === 'all' || selectedType === 'note'),
-      queryFiles(userId, options, lang, selectedType === 'all' || selectedType === 'file'),
-      queryTags(userId, options, lang, selectedType === 'all' || selectedType === 'tag'),
+      queryBookmarks(userId, options, lang, selectedTypes.includes('bookmark')),
+      queryNotes(userId, options, lang, selectedTypes.includes('note')),
+      queryFiles(userId, options, lang, selectedTypes.includes('file')),
+      queryTags(userId, options, lang, selectedTypes.includes('tag')),
       querySearchTagOptions(userId),
     ]);
     const resultMap = {
@@ -898,7 +977,7 @@ export const globalSearch = async (req, res) => {
     const hasMoreByType = Object.fromEntries(
       SEARCH_TYPES.map((type) => [
         type,
-        (selectedType === 'all' || selectedType === type) && page * pageSize < resultMap[type].total,
+        selectedTypes.includes(type) && page * pageSize < resultMap[type].total,
       ]),
     );
 

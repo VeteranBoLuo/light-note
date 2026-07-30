@@ -19,7 +19,11 @@
         @touchend.passive="handleTouchEnd"
         @touchcancel.passive="handleTouchEnd"
       >
-        <template v-for="(message, index) in messages" :key="message.id">
+        <div v-if="hiddenMessageCount" class="ai-history-fold" role="status">
+          <span>{{ t('ai.historyFold.hidden', { count: hiddenMessageCount }) }}</span>
+          <BButton @click="revealOlderMessages">{{ t('ai.historyFold.showOlder') }}</BButton>
+        </div>
+        <template v-for="{ message, index } in visibleMessageEntries" :key="message.id">
           <ChatMessageItem
             v-if="shouldRenderMessageItem(message)"
             :message="message"
@@ -145,6 +149,7 @@
   import { storeToRefs } from 'pinia';
   import { bookmarkStore, useAiAssistantStore, useUserStore } from '@/store';
   import ChatMessageItem from '@/components/aiAssistant/ChatMessageItem.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import ChatInputSection from '@/components/aiAssistant/ChatInputSection.vue';
   import ScrollPrompt from '@/components/aiAssistant/ScrollPrompt.vue';
   import MainQuestionPrompt from '@/components/aiAssistant/MainQuestionPrompt.vue';
@@ -158,6 +163,7 @@
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
   import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
+  import type { AiExcludedResourceRef } from '@/store/aiAssistant';
   import {
     clearAiTemporaryAttachments,
     fetchAiAttachmentStatuses,
@@ -298,6 +304,7 @@
     hasAnswerStarted,
     contextRefs: contexts,
     attachmentRefs: attachments,
+    excludedResourceRefs: excludedResources,
     shouldFollowMessages,
     showScrollToBottom,
     scrollTop,
@@ -325,6 +332,25 @@
   // 本地持久化可能保留了已删除、过期或换号后不再归属的云端会话 ID。
   // 只有 get 会话成功后才允许请求谱系，避免打开 AI 时用未经校验的旧 ID 直接触发 404。
   const lineageConversationId = ref('');
+  const MESSAGE_WINDOW_SIZE = 24;
+  const MESSAGE_WINDOW_STEP = 20;
+  const visibleMessageCount = ref(MESSAGE_WINDOW_SIZE);
+  const hiddenMessageCount = computed(() => Math.max(0, messages.value.length - visibleMessageCount.value));
+  const visibleMessageEntries = computed(() => {
+    const start = hiddenMessageCount.value;
+    return messages.value.slice(start).map((message, offset) => ({ message, index: start + offset }));
+  });
+
+  async function revealOlderMessages() {
+    const container = messagesContainer.value;
+    const previousHeight = container?.scrollHeight || 0;
+    visibleMessageCount.value = Math.min(
+      messages.value.length,
+      visibleMessageCount.value + MESSAGE_WINDOW_STEP,
+    );
+    await nextTick();
+    if (container) container.scrollTop += container.scrollHeight - previousHeight;
+  }
 
   function isConversationNotFoundError(error: unknown) {
     return String((error as { code?: unknown } | null)?.code || '') === 'CONVERSATION_NOT_FOUND';
@@ -715,9 +741,15 @@
         attachmentRefs: chatMessage.attachmentRefs || [],
         activity: chatMessage.activity || [],
         coverage: chatMessage.coverage || null,
-        modelMeta: chatMessage.recovered
-          ? { recovered: true, stage: chatMessage.stage || null, terminal: chatMessage.terminal || null }
-          : null,
+        modelMeta:
+          chatMessage.recovered || chatMessage.terminal || chatMessage.excludedResourceRefs?.length
+            ? {
+                recovered: Boolean(chatMessage.recovered),
+                stage: chatMessage.stage || null,
+                terminal: chatMessage.terminal || null,
+                excludedResourceRefs: chatMessage.excludedResourceRefs || [],
+              }
+            : null,
         sources,
         evidence: (chatMessage.evidence || []).filter((item) => knownSourceIds.has(item.sourceId)),
         traceId: chatMessage.traceId || null,
@@ -949,6 +981,19 @@
             ? (item.status as NonNullable<ChatMessage['attachmentRefs']>[number]['status'])
             : 'failed',
         })),
+      excludedResourceRefs: Array.isArray(cloudMessage.modelMeta?.excludedResourceRefs)
+        ? (cloudMessage.modelMeta.excludedResourceRefs as Array<Record<string, unknown>>)
+            .filter(
+              (item) =>
+                ['bookmark', 'note', 'file'].includes(String(item.type)) &&
+                Boolean(String(item.id || '').trim()),
+            )
+            .map((item) => ({
+              type: item.type as AiExcludedResourceRef['type'],
+              id: String(item.id),
+              title: String(item.title || ''),
+            }))
+        : [],
       sources: (cloudMessage.sources || []).map(persistedSourceToLocal),
       evidence: cloudMessage.evidence || [],
       feedback: cloudMessage.feedback || undefined,
@@ -961,7 +1006,18 @@
       terminal:
         cloudMessage.modelMeta?.terminal && typeof cloudMessage.modelMeta.terminal === 'object'
           ? (cloudMessage.modelMeta.terminal as ChatMessage['terminal'])
-          : undefined,
+          : cloudMessage.status === 'failed'
+            ? {
+                status: 'failed',
+                eventId: 0,
+                error:
+                  typeof cloudMessage.modelMeta?.errorCode === 'string'
+                    ? cloudMessage.modelMeta.errorCode
+                    : 'AI_RESPONSE_FAILED',
+                message: null,
+                at: cloudMessage.updatedAt || cloudMessage.createdAt,
+              }
+            : undefined,
       recommendations: [],
       recommendationReady: true,
       recommendationPending: false,
@@ -1179,6 +1235,11 @@
       (element) => element.dataset.aiMessageId === messageId,
     );
     if (!target) {
+      if (hiddenMessageCount.value) {
+        visibleMessageCount.value = messages.value.length;
+        await nextTick();
+        return focusAiAnswerVersion(messageId);
+      }
       message.warning(t('ai.versions.unavailable'));
       return;
     }
@@ -1218,6 +1279,9 @@
         status: 'completed',
         contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
         attachmentRefs: chatMessage.attachmentRefs || [],
+        modelMeta: {
+          excludedResourceRefs: chatMessage.excludedResourceRefs || [],
+        },
       });
       if (aiAssistant.runtimeIdentityKey === runtimeKey) chatMessage.cloudId = saved.id;
       return saved;
@@ -1555,9 +1619,11 @@
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
     const materialSnapshot =
-      options.materialSnapshot || createAiAssistantMaterialSnapshot(contexts.value, attachments.value);
+      options.materialSnapshot ||
+      createAiAssistantMaterialSnapshot(contexts.value, attachments.value, excludedResources.value);
     const contextSnapshot = materialSnapshot.contextRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
+    const excludedResourceSnapshot = materialSnapshot.excludedResourceRefs;
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
     const cloudPreparation = await prepareCloudConversationForSend(aiAssistant.runtimeIdentityKey);
     if (cloudPreparation === 'cancelled') return;
@@ -1589,6 +1655,7 @@
       contexts: contextSnapshot.map((item) => ({ ...item })),
       contextRefs: contextSnapshot,
       attachmentRefs: attachmentSnapshot,
+      excludedResourceRefs: excludedResourceSnapshot,
       parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
     };
     messages.value.push(userMessage);
@@ -1630,7 +1697,10 @@
       stage: 'planning',
     });
 
-    if (options.clearComposer !== false) userInput.value = '';
+    if (options.clearComposer !== false) {
+      userInput.value = '';
+      excludedResources.value = [];
+    }
     await nextTick();
     if (!aiAssistant.isRequestCurrent(requestLease)) return;
     // 用户主动发送后，消息已经真正插入 DOM；无论此前是否因上滚暂停跟随，都应让本轮问题进入视口。
@@ -1871,7 +1941,11 @@
           history: historyForRequest,
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
-          scope: { mode: scopeMode.value, externalWeb: false },
+          scope: {
+            mode: scopeMode.value,
+            externalWeb: false,
+            excludedResources: excludedResourceSnapshot.map(({ type, id }) => ({ type, id })),
+          },
           // 长期记忆已关闭:不再请求 active(否则后端会读取/注入/推断并写入候选,而前端已无任何查看/停用/删除入口——
           // 属隐私控制面与运行面脱节)。临时会话本就不涉记忆,保持 temporary。
           memoryMode: temporarySession.value ? 'temporary' : 'off',
@@ -1922,9 +1996,10 @@
         if (current) current.content = authoritativeAnswerSnapshot;
       }
 
-      // 后端流式返回错误帧：已有半截内容则保留并追加友好提示。
+      // 后端流式返回错误帧：已有半截内容可留作本机诊断上下文，但只能追加固定友好文案；
+      // Provider 原始 message 不进入消息正文、云历史或导出。
       if (streamError && aiAssistant.isRequestCurrent(requestLease)) {
-        const errText = streamError || t('ai.errorMessage');
+        const errText = t('ai.errorMessage');
         const current = messages.value.find((item) => item.id === aiMessage.id);
         if (current) current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }
@@ -2010,7 +2085,7 @@
 
         if (!aiAssistant.isRequestCurrent(requestLease)) return;
         if (!recoveryApplied || responseStatus === 'failed') {
-          const errorText = streamError || t('ai.errorMessage');
+          const errorText = t('ai.errorMessage');
           if (current && errorText && !current.content.endsWith(errorText)) {
             current.content = current.content ? `${current.content}\n\n${errorText}` : errorText;
           }
@@ -2027,6 +2102,15 @@
         responseStatus === 'completed' && !streamError && followUpAvailable && followUpRequestId,
       );
       if (currentMessage) {
+        if (responseStatus === 'failed') {
+          currentMessage.terminal = {
+            status: 'failed',
+            eventId: lastEventId,
+            error: safeAiErrorCode(terminalErrorCode),
+            message: null,
+            at: new Date().toISOString(),
+          };
+        }
         currentMessage.recommendationPending = shouldLoadFollowUp;
         if (!shouldLoadFollowUp) {
           currentMessage.recommendationReady = true;
@@ -2212,6 +2296,7 @@
     const materialSnapshot = createAiAssistantMaterialSnapshot(
       originalUserMessage.contextRefs || originalUserMessage.contexts || [],
       originalUserMessage.attachmentRefs || [],
+      originalUserMessage.excludedResourceRefs || [],
     );
     regenerationPreparing.value = true;
     try {
@@ -2250,6 +2335,10 @@
     },
     { flush: 'post' },
   );
+
+  watch(conversationId, () => {
+    visibleMessageCount.value = MESSAGE_WINDOW_SIZE;
+  });
 
   // 进入生成态时把刚插入的用户消息和回答占位带入视口。
   watch(isLoading, async (newVal) => {
@@ -2300,6 +2389,23 @@
     border-radius: 16px;
     overflow: hidden;
     container: ai-chat / inline-size;
+  }
+
+  .ai-history-fold {
+    display: flex;
+    width: min(520px, calc(100% - 32px));
+    min-height: 44px;
+    margin: 8px auto 14px;
+    padding: 7px 8px 7px 14px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+    color: var(--desc-color);
+    font-size: 12px;
   }
 
   .ai-message-action-stack {

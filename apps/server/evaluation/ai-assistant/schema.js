@@ -1,3 +1,5 @@
+import { evaluateCitationSemanticSupport } from './citationSemanticEvaluator.js';
+
 export const GOLDEN_DATASET_SCHEMA_VERSION = 2;
 
 export const GOLDEN_DATASET_LIMITS = Object.freeze({ minTasks: 260, maxTasks: 600, minPerCapability: 20 });
@@ -361,7 +363,22 @@ const RESULT_KEYS = new Set([
   'signals',
 ]);
 const RESULT_OWNER_KEYS = new Set(['actorRef', 'subjectRef', 'adminMode', 'adminContextRef']);
-const RESULT_CITATION_KEYS = new Set(['citationKey', 'sourceId', 'evidenceRef', 'locatorResolved', 'supportsClaim']);
+const RESULT_CITATION_KEYS = new Set([
+  'citationKey',
+  'sourceId',
+  'evidenceRef',
+  'locatorResolved',
+  'supportsClaim',
+  'claimText',
+  'evidenceText',
+]);
+const RESULT_CITATION_REQUIRED_KEYS = new Set([
+  'citationKey',
+  'sourceId',
+  'evidenceRef',
+  'locatorResolved',
+  'supportsClaim',
+]);
 const RESULT_COVERAGE_KEYS = new Set(['disclosed', 'complete', 'failedRangesDisclosed', 'truncationDisclosed']);
 const CAPABILITY_SIGNAL_PATTERNS = Object.freeze({
   organize_changeset: /^(?:changeset_|idempotent_result_replayed)/,
@@ -843,7 +860,7 @@ export function validateGoldenResult(result) {
   const citationKeys = new Set();
   for (const [index, citation] of citations.entries()) {
     const path = `result.citations[${index}]`;
-    if (!assertObject(errors, citation, path, RESULT_CITATION_KEYS)) continue;
+    if (!assertObject(errors, citation, path, RESULT_CITATION_KEYS, RESULT_CITATION_REQUIRED_KEYS)) continue;
     assertString(errors, citation.citationKey, `${path}.citationKey`, { max: 32, pattern: /^E[1-9]\d*$/ });
     if (citationKeys.has(citation.citationKey)) add(errors, `${path}.citationKey`, 'citationKey 不得重复');
     citationKeys.add(citation.citationKey);
@@ -851,6 +868,12 @@ export function validateGoldenResult(result) {
     assertString(errors, citation.evidenceRef, `${path}.evidenceRef`, { max: 96, pattern: /^ev-[a-z0-9-]+$/ });
     assertBoolean(errors, citation.locatorResolved, `${path}.locatorResolved`);
     assertBoolean(errors, citation.supportsClaim, `${path}.supportsClaim`);
+    if (citation.claimText !== undefined) assertString(errors, citation.claimText, `${path}.claimText`, { max: 4000 });
+    if (citation.evidenceText !== undefined)
+      assertString(errors, citation.evidenceText, `${path}.evidenceText`, { max: 8000 });
+    if ((citation.claimText === undefined) !== (citation.evidenceText === undefined)) {
+      add(errors, path, 'claimText 与 evidenceText 必须同时提供');
+    }
   }
   assertStringArray(errors, result.actions, 'result.actions', { max: 30, allowed: GOLDEN_ENUMS.actions });
   assertStringArray(errors, result.disclosures, 'result.disclosures', { max: 9, allowed: GOLDEN_ENUMS.disclosures });
@@ -926,6 +949,14 @@ export function scoreGoldenResult(task, result) {
       citationViolations.push(`引用了非允许来源 ${citation.sourceId}`);
     if (!citation.evidenceRef) citationViolations.push(`引用 ${citation.citationKey} 缺少 evidenceRef`);
     if (!citation.supportsClaim) citationViolations.push(`引用 ${citation.citationKey} 不支持主张`);
+    if (citation.claimText && citation.evidenceText) {
+      const semantic = evaluateCitationSemanticSupport(citation.claimText, citation.evidenceText);
+      if (!semantic.supported) {
+        citationViolations.push(
+          `引用 ${citation.citationKey} 语义支持度不足（${semantic.reason}, ${(semantic.score * 100).toFixed(0)}%）`,
+        );
+      }
+    }
     if (task.expected.citations.requireLocator && !citation.locatorResolved) {
       citationViolations.push(`引用 ${citation.citationKey} 无法定位`);
     }

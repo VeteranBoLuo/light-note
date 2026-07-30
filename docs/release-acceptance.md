@@ -54,6 +54,14 @@ pnpm --filter server worker:bookmark-icons
 
 并在预览前执行 `pnpm --filter server check:bookmark-icons`，确认本次环境已经应用 `bookmark_icon_jobs`、`finished_at` 和增量索引迁移，且 favicon-api 与图标目录可用。
 
+所有后端发布都必须在目标环境重启前执行只读 Schema 门禁：
+
+```bash
+pnpm --filter server check:schema
+```
+
+任何断言输出都表示基线表、关键列或索引尚未就绪；应先应用待执行 migration 并重新检查，禁止让依赖新结构的应用进程先启动。
+
 如果本地不使用线上默认图标目录，应让预检、Worker 和预览后端继承同一个 `BOOKMARK_ICON_UPLOAD_DIR`。例如分别在两个终端运行：
 
 ```bash

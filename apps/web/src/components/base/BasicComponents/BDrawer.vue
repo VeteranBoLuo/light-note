@@ -66,6 +66,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { getRootZoom } from '@/utils/zoom';
+  import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
 
   const { t } = useI18n();
 
@@ -124,13 +125,14 @@
   const panelRef = ref<HTMLElement | null>(null);
   const drawerTitleId = `b-drawer-title-${getCurrentInstance()?.uid ?? Math.random().toString(36).slice(2)}`;
   let closing = false;
-  let previouslyFocused: HTMLElement | null = null;
   let openFrame: number | null = null;
   let settleTimer: number | null = null;
   let closeTimer: number | null = null;
   const currentWidth = ref(0);
   const layoutViewportWidth = ref(readLayoutViewportWidth());
   let resizing = false;
+  const drawerLayer = Symbol('b-drawer');
+  let layerAcquired = false;
   let resizeStartX = 0;
   let resizeStartWidth = 0;
 
@@ -165,7 +167,10 @@
     localVisible.value = true;
     entered.value = false;
     settled.value = false;
-    previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (props.modal && !layerAcquired) {
+      acquireModalLayer(drawerLayer);
+      layerAcquired = true;
+    }
     nextTick(() => {
       // 强制回流后触发 enter 动画
       openFrame = requestAnimationFrame(() => {
@@ -188,10 +193,14 @@
     clearSettleTimer();
     settled.value = false;
     entered.value = false;
-    // 立即把焦点移回触发元素:aria-hidden 随 open=false 立刻置真,须先让焦点离开抽屉,
-    // 否则焦点短暂停留在 aria-hidden 子树内(Chrome 报 Blocked aria-hidden 并可能强移焦点)。
-    if (props.modal && previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
-    previouslyFocused = null;
+    // 关闭时只让焦点离开即将隐藏的子树，不再强制跳回触发按钮。
+    // 这样既避免 aria-hidden 子树保留焦点，也避免用户关闭弹层后页面发生突兀的焦点跳转。
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && panelRef.value?.contains(activeElement)) activeElement.blur();
+    if (layerAcquired) {
+      releaseModalLayer(drawerLayer);
+      layerAcquired = false;
+    }
     closeTimer = window.setTimeout(() => {
       closeTimer = null;
       if (props.destroyOnClose) localVisible.value = false;
@@ -282,7 +291,7 @@
   ].join(',');
 
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && props.keyboard) {
+    if (event.key === 'Escape' && props.keyboard && (!props.modal || isTopModalLayer(drawerLayer))) {
       event.preventDefault();
       handleClose();
       return;
@@ -402,6 +411,7 @@
   });
 
   onBeforeUnmount(() => {
+    if (layerAcquired) releaseModalLayer(drawerLayer);
     clearOpenFrame();
     clearSettleTimer();
     if (closeTimer !== null) clearTimeout(closeTimer);

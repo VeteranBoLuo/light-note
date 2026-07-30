@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
   scope_type VARCHAR(32) NOT NULL DEFAULT 'global',
   scope_json JSON NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'active',
+  is_pinned TINYINT(1) NOT NULL DEFAULT 0,
+  folder_name VARCHAR(64) NULL,
   retention_mode VARCHAR(24) NOT NULL DEFAULT 'standard',
   expire_at DATETIME NULL,
   root_conversation_id VARCHAR(36) NOT NULL,
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_ai_conversation_owner (actor_user_id, subject_user_id, admin_context_mode, status, last_message_at),
+  KEY idx_ai_conversation_sidebar (actor_user_id, subject_user_id, admin_context_mode, status, is_pinned, last_message_at),
   KEY idx_ai_conversation_lineage_owner (actor_user_id, subject_user_id, admin_context_mode, admin_context_id, root_conversation_id, create_time),
   KEY idx_ai_conversation_parent (parent_conversation_id),
   KEY idx_ai_conversation_expiry (status, expire_at),
@@ -139,6 +142,17 @@ CREATE TABLE IF NOT EXISTS ai_content_generations (
   generation BIGINT UNSIGNED NOT NULL DEFAULT 0,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (subject_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ai_resource_preferences (
+  user_id VARCHAR(36) NOT NULL,
+  resource_type VARCHAR(16) NOT NULL,
+  resource_id VARCHAR(64) NOT NULL,
+  ai_excluded TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, resource_type, resource_id),
+  KEY idx_ai_resource_preferences_excluded (user_id, ai_excluded, resource_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ai_change_sets (

@@ -1,138 +1,91 @@
 <template>
   <div class="share-download">
     <div class="download-container">
-      <div v-if="loading" class="loading-section">
+      <div v-if="loading && !file.fileName" class="loading-section" aria-live="polite">
         <div class="loading-card">
-          <div class="loading-icon">
-            <svg-icon :src="fileIcon" class="pulse" />
-          </div>
-          <h2 class="loading-title">{{ $t('cloudSpace.downloading') }}</h2>
-          <p class="loading-subtitle">{{ fileName ? ` - ${fileName}` : '' }}</p>
-          <div class="progress-bar">
-            <div class="progress-fill"></div>
-          </div>
-          <p class="loading-text">{{ $t('cloudSpace.pleaseWait') }}</p>
+          <BLoading inline loading :title="t('common.loading')" />
         </div>
       </div>
-      <div v-else-if="downloadSuccess" class="success-section">
-        <div class="success-card">
-          <div class="success-header">
-            <div class="success-icon">
-              <CheckCircleOutlined class="bounce" />
-            </div>
-            <h2 class="success-title">{{ $t('cloudSpace.downloadSuccess') }}</h2>
-            <p class="success-subtitle">{{ fileName }}</p>
+      <div v-else-if="errorCode && !requiresCode" class="file-info-section" role="alert">
+        <div class="file-card">
+          <div class="file-header">
+            <h2 class="file-title">{{ t('cloudSpace.shareUnavailableTitle') }}</h2>
+            <p class="file-subtitle">{{ errorMessage }}</p>
           </div>
-          <div class="file-details">
-            <div class="detail-item" v-if="shareDesc">
-              <InfoCircleOutlined />
-              <span><strong>描述:</strong> {{ shareDesc }}</span>
-            </div>
-            <div class="detail-item">
-              <FileTextOutlined />
-              <span
-                ><strong>{{ $t('cloudSpace.fileSize') }}:</strong> {{ formatFileSize(file.fileSize) }}</span
-              >
-            </div>
-            <div class="detail-item">
-              <ClockCircleOutlined />
-              <span
-                ><strong>{{ $t('cloudSpace.createTime') }}:</strong> {{ file.createTime }}</span
-              >
-            </div>
-            <div class="detail-item">
-              <UserOutlined />
-              <span
-                ><strong>{{ $t('cloudSpace.createBy') }}:</strong> {{ file.createBy }}</span
-              >
-            </div>
-          </div>
-          <div class="action-buttons">
-            <BSpace :size="40">
-              <BButton size="large" @click="previewFile" class="preview-btn">
-                <EyeOutlined />
-                {{ $t('common.preview') }}
-              </BButton>
-              <BButton type="primary" size="large" @click="downloadFile" class="download-btn">
-                <DownloadOutlined />
-                {{ $t('cloudSpace.downloadAgain') }}
-              </BButton>
-            </BSpace>
-          </div>
+          <BButton :loading="loading" type="primary" @click="resolveShare">{{ t('common.retry') }}</BButton>
         </div>
       </div>
       <div v-else class="file-info-section">
         <div class="file-card">
           <div class="file-header">
-            <div class="file-icon">
+            <div v-if="file.fileName" class="file-icon">
               <svg-icon :src="fileIcon" />
             </div>
-            <h2 class="file-title">{{ fileName || $t('cloudSpace.share') }}</h2>
-            <p class="file-subtitle">{{ $t('cloudSpace.shareDescription') }}</p>
+            <h2 class="file-title">{{ file.fileName || t('cloudSpace.share') }}</h2>
+            <p class="file-subtitle">
+              {{ requiresCode ? t('cloudSpace.shareCodeRequired') : t('cloudSpace.shareDescription') }}
+            </p>
           </div>
-          <div class="file-details">
-            <div class="detail-item" v-if="shareDesc">
-              <InfoCircleOutlined />
-              <span><strong>描述:</strong> {{ shareDesc }}</span>
-            </div>
-            <div class="detail-item">
-              <FileTextOutlined />
-              <span
-                ><strong>{{ $t('cloudSpace.fileSize') }}:</strong> {{ formatFileSize(file.fileSize) }}</span
-              >
-            </div>
-            <div class="detail-item">
-              <ClockCircleOutlined />
-              <span
-                ><strong>{{ $t('cloudSpace.createTime') }}:</strong> {{ file.createTime }}</span
-              >
-            </div>
-            <div class="detail-item">
-              <UserOutlined />
-              <span
-                ><strong>{{ $t('cloudSpace.createBy') }}:</strong> {{ file.creatorName }}</span
-              >
-            </div>
+          <div v-if="requiresCode" class="share-code-form">
+            <label for="file-share-code">{{ t('cloudSpace.shareAccessCode') }}</label>
+            <BInput
+              id="file-share-code"
+              v-model:value="accessCode"
+              :maxlength="12"
+              :placeholder="t('cloudSpace.shareCodePlaceholder')"
+              autocomplete="one-time-code"
+              @enter="resolveShare"
+            />
+            <p v-if="errorMessage" class="share-code-error" role="alert">{{ errorMessage }}</p>
+            <BButton type="primary" :loading="loading" @click="resolveShare">
+              {{ t('cloudSpace.openShare') }}
+            </BButton>
           </div>
-          <div class="action-buttons">
-            <BSpace :size="40">
-              <BButton size="large" @click="previewFile" class="preview-btn">
-                <EyeOutlined />
-                {{ $t('common.preview') }}
-              </BButton>
-              <BButton type="primary" size="large" @click="downloadFile" class="download-btn">
-                <DownloadOutlined />
-                {{ $t('cloudSpace.download') }}
-              </BButton>
-            </BSpace>
-          </div>
+          <template v-else-if="file.fileName">
+            <div class="file-details">
+              <div v-if="file.description" class="detail-item">
+                <span><strong>{{ t('cloudSpace.shareDescriptionLabel') }}:</strong> {{ file.description }}</span>
+              </div>
+              <div class="detail-item">
+                <span><strong>{{ t('cloudSpace.fileSize') }}:</strong> {{ formatFileSize(file.fileSize) }}</span>
+              </div>
+              <div class="detail-item">
+                <span><strong>{{ t('cloudSpace.createTime') }}:</strong> {{ formatDate(file.createTime) }}</span>
+              </div>
+              <div class="detail-item">
+                <span><strong>{{ t('cloudSpace.createBy') }}:</strong> {{ file.creatorName || '-' }}</span>
+              </div>
+              <div class="detail-item">
+                <span><strong>{{ t('cloudSpace.shareExpiresAt') }}:</strong> {{ formatDate(file.expiresAt) }}</span>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <BSpace :size="12">
+                <BButton size="large" :loading="loading" @click="previewFile" class="preview-btn">
+                  {{ t('common.preview') }}
+                </BButton>
+                <BButton type="primary" size="large" :loading="loading" @click="downloadFile" class="download-btn">
+                  {{ downloadSuccess ? t('cloudSpace.downloadAgain') : t('cloudSpace.download') }}
+                </BButton>
+              </BSpace>
+            </div>
+          </template>
         </div>
       </div>
       <div class="brand-cta">
         <span class="brand-cta__text">用<b>轻笺</b>管理你的书签 · 笔记 · 文件,免费</span>
-        <button class="brand-cta__btn" @click="goRegister">免费创建你自己的</button>
+        <BButton type="primary" @click="goRegister">免费创建你自己的</BButton>
       </div>
     </div>
-    <!-- 文件预览组件 -->
     <FilePreview v-model:visible="previewVisible" :file-info="previewFileInfo" @close="previewVisible = false" />
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { ref, computed, reactive } from 'vue';
+  import { ref, computed, reactive, onMounted } from 'vue';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import {
-    CheckCircleOutlined,
-    InfoCircleOutlined,
-    FileTextOutlined,
-    DownloadOutlined,
-    ClockCircleOutlined,
-    UserOutlined,
-    EyeOutlined,
-  } from '@ant-design/icons-vue';
-  import { downloadField } from '@/http/common.ts';
-  import { apiBasePost } from '@/http/request';
+  import { downloadFileShare, getFileShareDownload, resolveFileShare } from '@/http/common.ts';
   import { trackConversion } from '@/utils/conversion';
   import FilePreview from '@/components/FilePreview.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -142,12 +95,19 @@
   import { bookmarkStore } from '@/store';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
 
   const route = useRoute();
   const { t } = useI18n();
   const loading = ref(false);
   const downloadSuccess = ref(false);
   const previewVisible = ref(false);
+  const accessCode = ref('');
+  const requiresCode = ref(false);
+  const errorCode = ref('');
+  const errorMessage = ref('');
+  const token = computed(() => String(route.params.token || ''));
 
   const fileIcon = computed(() => icon.cloudSpace.fileIcon[getCloudFileCategory(file)]);
 
@@ -155,24 +115,26 @@
     id: string;
     fileName: string;
     category: string;
-    createBy: string;
     createTime: string;
     fileSize: number;
     creatorName: string;
     fileUrl: string;
     fileType: string;
+    description: string;
+    expiresAt: string;
   }>({
     id: '',
     fileName: '',
     category: 'other',
-    createBy: '',
     createTime: '',
     fileSize: 0,
-    creatorName: '默认用户',
+    creatorName: '',
     fileUrl: '',
     fileType: '',
+    description: '',
+    expiresAt: '',
   });
-  // 格式化文件大小
+
   const formatFileSize = (size: number) => {
     if (!size) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -183,18 +145,7 @@
     }
     return `${size.toFixed(2)} ${units[index]}`;
   };
-
-  const fileName = computed(() => file.fileName);
-  const shareDesc = computed(() => {
-    const raw = route.params.desc;
-    if (!raw) return '';
-    const value = Array.isArray(raw) ? raw[0] : raw;
-    try {
-      return decodeURIComponent(value);
-    } catch {
-      return String(value);
-    }
-  });
+  const formatDate = (value: string) => (value ? new Date(value).toLocaleString() : '-');
 
   // 预览文件信息
   const previewFileInfo = computed(() => ({
@@ -205,36 +156,59 @@
     category: file.category,
   }));
 
-  // 从路由参数中获取文件名 and 文件类型
-  const initFileInfo = () => {
-    apiBasePost('/api/file/getFileInfo', { id: route.params.id as string, token: route.params.token as string }).then((res) => {
+  const resolveShare = async () => {
+    if (!token.value) return;
+    loading.value = true;
+    errorCode.value = '';
+    errorMessage.value = '';
+    try {
+      const res = await resolveFileShare(token.value, accessCode.value.trim());
       if (res.status === 200) {
         Object.assign(file, res.data);
+        requiresCode.value = false;
+        return;
       }
-    });
-  };
-
-  const downloadFile = async () => {
-    const id = route.params.id as string;
-    if (id) {
-      loading.value = true;
-      try {
-        const success = await downloadField(id, route.params.token as string);
-        loading.value = false;
-        if (success) {
-          downloadSuccess.value = true;
-          recordOperation({ module: '分享文件', operation: `下载分享文件成功【${file.fileName || id}】` });
-        }
-      } catch (error) {
-        console.error('下载失败:', error);
-        loading.value = false;
-      }
+      const code = String(res.data?.errorCode || 'SHARE_UNAVAILABLE');
+      errorCode.value = code;
+      errorMessage.value = res.msg || t('cloudSpace.shareUnavailableDescription');
+      requiresCode.value = code === 'SHARE_CODE_REQUIRED' || code === 'SHARE_CODE_INVALID';
+    } catch {
+      errorCode.value = 'SHARE_SERVICE_UNAVAILABLE';
+      errorMessage.value = t('cloudSpace.shareUnavailableDescription');
+    } finally {
+      loading.value = false;
     }
   };
 
-  const previewFile = () => {
-    recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName || route.params.id}】` });
-    previewVisible.value = true;
+  const downloadFile = async () => {
+    loading.value = true;
+    errorMessage.value = '';
+    try {
+      await downloadFileShare(token.value, accessCode.value.trim());
+      downloadSuccess.value = true;
+      recordOperation({ module: '分享文件', operation: `下载分享文件成功【${file.fileName}】` });
+    } catch (error: any) {
+      errorCode.value = String(error?.code || 'SHARE_DOWNLOAD_FAILED');
+      errorMessage.value = error?.message || t('common.downloadFailed');
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const previewFile = async () => {
+    loading.value = true;
+    errorMessage.value = '';
+    try {
+      const result = await getFileShareDownload(token.value, accessCode.value.trim());
+      file.fileUrl = result.downloadUrl;
+      recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName}】` });
+      previewVisible.value = true;
+    } catch (error: any) {
+      errorCode.value = String(error?.code || 'SHARE_PREVIEW_FAILED');
+      errorMessage.value = error?.message || t('cloudSpace.sharePreviewFailed');
+    } finally {
+      loading.value = false;
+    }
   };
 
   const bookmark = bookmarkStore();
@@ -247,8 +221,7 @@
     bookmark.openAuthModal('注册', 'share'); // openAuthModal 内部另记 signup_open
   }
 
-  // 初始化文件信息
-  initFileInfo();
+  onMounted(resolveShare);
 </script>
 
 <style lang="less" scoped>
@@ -533,6 +506,22 @@
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  .share-code-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+    label {
+      color: var(--text-color);
+      font-size: 14px;
+      font-weight: 600;
+    }
+  }
+  .share-code-error {
+    margin: 0;
+    color: var(--danger-color, #d14343);
+    font-size: 13px;
   }
   .brand-cta__text {
     color: #fff;

@@ -56,6 +56,13 @@ interface UserInfo {
     notifyLevelUp?: boolean; // 升级提醒通知推送
     notifyOpinionReply?: boolean; // 反馈回复通知推送
     notifyFeatureRequest?: boolean; // 共建轻笺建议进度通知
+    notificationsInApp?: boolean; // 待办等站内通知总开关
+    notificationsEmail?: boolean; // 待办等邮件通知总开关
+    notificationsBrowser?: boolean; // 前台页面浏览器系统通知
+    notificationsDnd?: boolean; // 是否启用免打扰时段
+    notificationsDndStart?: string; // 免打扰开始时间，HH:mm
+    notificationsDndEnd?: string; // 免打扰结束时间，HH:mm
+    notificationsTimezoneOffset?: number; // 保存免打扰设置时的客户端时区偏移（分钟）
     aiEnabled?: boolean; // 是否显示 AI 助手入口
     aiStyle?: 'strict' | 'balanced' | 'creative'; // AI 回答风格
     aiCloudHistory?: boolean; // 是否把新 AI 对话同步到云端
@@ -97,6 +104,13 @@ const createDefaultUserState = (): UserState => ({
     lang: 'zh-CN', // 语言
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
     notifyFeatureRequest: true,
+    notificationsInApp: true,
+    notificationsEmail: true,
+    notificationsBrowser: false,
+    notificationsDnd: false,
+    notificationsDndStart: '22:00',
+    notificationsDndEnd: '08:00',
+    notificationsTimezoneOffset: new Date().getTimezoneOffset(),
     aiEnabled: true,
     aiStyle: 'balanced',
     aiCloudHistory: true,

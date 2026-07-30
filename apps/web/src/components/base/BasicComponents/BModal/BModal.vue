@@ -2,17 +2,23 @@
   <Teleport to="body">
     <div v-if="visible" class="mask-container" :class="props.maskClass" @click.self="handleMaskClick">
       <div
+        ref="modalRef"
         class="modal-view"
         :class="[{ out: isOut }, props.modalClass]"
         :style="{
           width: props.width !== 'auto' ? props.width : undefined,
           height: props.height !== 'auto' ? props.height : undefined,
         }"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="modalTitleId"
+        tabindex="-1"
+        @keydown="handleModalKeydown"
       >
         <div class="modal-header">
-          <slot name="title">
-            <div class="modal-title">{{ title || t('common.defaultTitle') }}</div>
-          </slot>
+          <div :id="modalTitleId" class="modal-title">
+            <slot name="title">{{ title || t('common.defaultTitle') }}</slot>
+          </div>
           <BButton class="modal-close" :aria-label="t('common.close')" @click="handleClose">
             <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
           </BButton>
@@ -38,8 +44,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { computed, onBeforeUnmount, onMounted, ref, useAttrs, watch } from 'vue';
+  import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
 
   const { t } = useI18n();
   const props = withDefaults(
@@ -67,6 +74,10 @@
   const visible = defineModel('visible');
   const emit = defineEmits(['ok', 'close']);
   const isOut = ref(false);
+  const modalRef = ref<HTMLElement | null>(null);
+  const modalTitleId = `b-modal-title-${getCurrentInstance()?.uid ?? Math.random().toString(36).slice(2)}`;
+  const modalLayer = Symbol('b-modal');
+  let layerAcquired = false;
   const attrs = useAttrs();
   function handleClose() {
     isOut.value = true;
@@ -91,29 +102,59 @@
   }
 
   function clickEsc(e) {
-    if (props.escClosable && e.keyCode === 27) {
+    if (props.escClosable && e.key === 'Escape' && isTopModalLayer(modalLayer)) {
+      e.preventDefault();
       handleClose();
     }
   }
 
-  onMounted(() => {
-    if (visible.value) {
-      document.addEventListener('keydown', clickEsc);
+  const focusableSelector =
+    'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+  function handleModalKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || !isTopModalLayer(modalLayer)) return;
+    const focusable = [...(modalRef.value?.querySelectorAll<HTMLElement>(focusableSelector) || [])].filter(
+      (element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true',
+    );
+    if (!focusable.length) {
+      event.preventDefault();
+      modalRef.value?.focus();
+      return;
     }
-  });
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   watch(
     () => visible.value,
     (val) => {
       if (val) {
+        acquireModalLayer(modalLayer);
+        layerAcquired = true;
         document.addEventListener('keydown', clickEsc);
+        nextTick(() => {
+          const first = modalRef.value?.querySelector<HTMLElement>(focusableSelector);
+          (first || modalRef.value)?.focus({ preventScroll: true });
+        });
       } else {
         document.removeEventListener('keydown', clickEsc);
+        if (layerAcquired) releaseModalLayer(modalLayer);
+        layerAcquired = false;
       }
     },
+    { immediate: true },
   );
 
   onBeforeUnmount(() => {
     document.removeEventListener('keydown', clickEsc);
+    if (layerAcquired) releaseModalLayer(modalLayer);
   });
   const cssTop = computed(() => {
     return props.top;

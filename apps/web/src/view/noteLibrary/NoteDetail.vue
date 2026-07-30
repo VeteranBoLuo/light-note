@@ -5,17 +5,21 @@
         :updateTime="updateTime"
         :readonly="readonly"
         :isStartEdit="isStartEdit || isLeaving"
+        :save-status="saveStatus"
         @back="back"
         @focusout="titleBlur"
         :note="note"
         :note-type="note.type"
         :has-backup="hasSwitchBackup"
+        :has-catalog="nStore.headings.length > 0"
         @del="delNote"
         @save="clickSaveNote"
+        @retry-save="retryPendingSave"
         @switch-mode="triggerEditorSwitch"
         @undo-switch="triggerEditorUndo"
         @history="versionHistoryVisible = true"
         @save-as-template="saveTemplateVisible = true"
+        @open-catalog="catalogDrawerOpen = true"
       />
       <div v-if="isOrganizingFromInbox" class="inbox-organize-banner">
         <span>{{ t('inbox.organizeEditorHint') }}</span>
@@ -25,10 +29,12 @@
       </div>
       <div class="note-body" :class="{ 'note-body--organizing': isOrganizingFromInbox }">
         <Catalog
-          class="catalog-panel"
+          :class="{ 'catalog-panel': bookmark.isDesktop }"
           :content="note.content"
           :note-type="note.type"
+          :drawer-open="catalogDrawerOpen"
           @markdown-heading-click="scrollToMarkdownHeading"
+          @close="catalogDrawerOpen = false"
         />
         <div class="note-body-header editor-panel">
           <div class="note-body-title n-title">
@@ -63,7 +69,7 @@
             :ensure-note-id="ensureNoteId"
             :resource-refs="resolvedResourceRefs"
             @set-note-id="onEditorSetNoteId"
-            @ready="refreshCatalog"
+            @ready="handleEditorReady"
             @markdown-rendered="refreshCatalog"
             @resource-refs-change="onEditorResourceRefsChange"
           />
@@ -77,6 +83,7 @@
       v-model:visible="versionHistoryVisible"
       :note-id="note.id"
       :note-type="note.type"
+      :current-note="note"
       @restored="onVersionRestored"
     />
     <SaveTemplateModal v-if="saveTemplateVisible" v-model:visible="saveTemplateVisible" :note="note" />
@@ -109,7 +116,7 @@
   import { useGuestGuard } from '@/composables/useGuestGuard';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
-  import { resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
+  import { buildResourceHref, resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
@@ -144,6 +151,7 @@
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
+  const catalogDrawerOpen = ref(false);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
   let resourceResolveVersion = 0;
   let lastResourceRefSignature = '';
@@ -190,6 +198,7 @@
   watch(
     () => note.id,
     () => {
+      catalogDrawerOpen.value = false;
       lastResourceRefSignature = '';
       resolvedResourceRefs.value = [];
     },
@@ -318,6 +327,7 @@
   }
 
   const isStartEdit = ref(false);
+  const saveStatus = ref<'saved' | 'pending' | 'saving' | 'offline' | 'error'>('saved');
   const isLeaving = ref(false);
   const updateTime = ref('');
   const timer = ref<ReturnType<typeof setTimeout> | null>(null);
@@ -371,6 +381,20 @@
 
   function refreshCatalog() {
     nStore.generateTOC(note.content, note.type);
+  }
+
+  async function handleEditorReady() {
+    refreshCatalog();
+    const raw = String(router.currentRoute.value.query.focusRef || '');
+    const separator = raw.indexOf(':');
+    if (separator <= 0) return;
+    const href = buildResourceHref({
+      type: raw.slice(0, separator) as ResourceRef['type'],
+      id: raw.slice(separator + 1),
+    });
+    if (!href) return;
+    await nextTick();
+    await editorRef.value?.scrollToResourceRef?.(href);
   }
 
   function scrollToMarkdownHeading(index: number) {
@@ -504,6 +528,7 @@
   function requestSaveVersion() {
     requestedSaveVersion += 1;
     latestRequestedTitle = note.title;
+    saveStatus.value = navigator.onLine ? 'pending' : 'offline';
     return requestedSaveVersion;
   }
 
@@ -513,9 +538,15 @@
       return false;
     }
     if (!isMsg && !note.id && !hasNewNoteDraft()) {
+      saveStatus.value = 'saved';
+      return false;
+    }
+    if (!navigator.onLine) {
+      saveStatus.value = 'offline';
       return false;
     }
     isStartEdit.value = true;
+    saveStatus.value = 'saving';
     const titleAtSave = note.title;
     let ok = false;
 
@@ -542,10 +573,14 @@
           message.success(t('common.saveSuccess'));
         }
         setUpdateTime();
+        saveStatus.value = 'saved';
+      } else {
+        saveStatus.value = 'error';
       }
     } catch (error) {
       console.error('保存笔记失败:', error);
       ok = false;
+      saveStatus.value = navigator.onLine ? 'error' : 'offline';
     } finally {
       isStartEdit.value = false;
     }
@@ -608,6 +643,24 @@
 
   function clickSaveNote(flag?: boolean) {
     void saveImmediately(flag);
+  }
+
+  async function retryPendingSave() {
+    if (!navigator.onLine) {
+      saveStatus.value = 'offline';
+      return;
+    }
+    if (requestedSaveVersion <= persistedSaveVersion) requestSaveVersion();
+    const saved = await flushPendingSave();
+    if (!saved && navigator.onLine) message.error(t('noteDetail.saveFailed'));
+  }
+
+  function handleNetworkOffline() {
+    if (requestedSaveVersion > persistedSaveVersion || isStartEdit.value) saveStatus.value = 'offline';
+  }
+
+  function handleNetworkOnline() {
+    if (requestedSaveVersion > persistedSaveVersion) void retryPendingSave();
   }
 
   function saveFunc(isMsg?: boolean) {
@@ -716,6 +769,8 @@
     document.addEventListener('visibilitychange', handleResourceRefVisibilityChange);
     window.addEventListener('focus', refreshEditorResourceRefs);
     window.addEventListener('pageshow', refreshEditorResourceRefs);
+    window.addEventListener('offline', handleNetworkOffline);
+    window.addEventListener('online', handleNetworkOnline);
     if (router.currentRoute.value.params.id !== 'add') {
       isReady.value = false;
       apiBasePost('/api/note/getNoteDetail', {
@@ -779,6 +834,8 @@
     document.removeEventListener('visibilitychange', handleResourceRefVisibilityChange);
     window.removeEventListener('focus', refreshEditorResourceRefs);
     window.removeEventListener('pageshow', refreshEditorResourceRefs);
+    window.removeEventListener('offline', handleNetworkOffline);
+    window.removeEventListener('online', handleNetworkOnline);
     clearScheduledSave();
     nStore.headings = [];
     // 离开笔记时清除「草稿已提升」登记,避免影响下一篇/新建笔记的 key 判断

@@ -12,6 +12,7 @@
           <small v-if="item.updateTime">{{
             t('note.resourceBacklinks.updatedAt', { time: formatTime(item.updateTime) })
           }}</small>
+          <small>{{ t('note.resourceBacklinks.locateReference') }}</small>
         </span>
       </BButton>
       <BButton v-if="hasMore" class="resource-backlinks__more" :loading="loading" :disabled="loading" @click="showMore">
@@ -89,7 +90,10 @@
   function openSourceNote(id: string) {
     const navigation = resolveAiSourceNavigation({ type: 'note', id, title: '', target: 'note-detail' });
     if (navigation.kind !== 'internal') return;
-    void router.push(navigation.target);
+    void router.push({
+      path: navigation.target,
+      query: { focusRef: `${props.targetType}:${props.targetId}` },
+    });
   }
 
   watch(

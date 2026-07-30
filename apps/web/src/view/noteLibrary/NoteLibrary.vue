@@ -24,6 +24,16 @@
           <SvgIcon :src="icon.ai.organize" size="16" />
           {{ $t('ai.entry.organizeSelected') }}
         </BButton>
+        <BButton class="note-action-button" @click="openBatchTags('add')">{{ $t('note.batchAddTags') }}</BButton>
+        <BButton class="note-action-button" @click="openBatchTags('remove')">{{ $t('note.batchRemoveTags') }}</BButton>
+        <BButton class="note-action-button" @click="exportSelectedNotes">{{ $t('note.batchExport') }}</BButton>
+        <BButton class="note-action-button" @click="showSelectedNotesPrivacy">{{ $t('note.batchPrivacy') }}</BButton>
+        <BButton class="note-action-button" @click="setSelectedNotesAiScope(true)">
+          {{ $t('note.batchExcludeAi') }}
+        </BButton>
+        <BButton class="note-action-button" @click="setSelectedNotesAiScope(false)">
+          {{ $t('note.batchIncludeAi') }}
+        </BButton>
         <BButton type="danger" class="note-action-button" @click="batchDeleteNote">
           <SvgIcon :src="icon.noteDetail.delete" size="16" />
           {{ $t('note.deleteSelected') }}
@@ -179,8 +189,8 @@
     <NewNotePickerModal
       v-if="bookmark.isMobile"
       v-model:visible="showTypePicker"
-      :builtin-templates="BUILTIN_NOTE_TEMPLATES"
-      :my-templates="myTemplates"
+      :builtin-templates="orderedBuiltinTemplates"
+      :my-templates="orderedMyTemplates"
       :my-templates-state="myTemplatesState"
       :template-icons="TEMPLATE_ICONS"
       @select-blank="handleMobileBlankSelection"
@@ -238,6 +248,7 @@
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
+  import { updateAiResourcePreference } from '@/api/aiWorkspaceApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -283,6 +294,7 @@
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const templateUsage = ref<Record<string, number>>(readTemplateUsage());
   let templatesRequestSeq = 0; // 防旧响应覆盖新响应
   async function loadMyTemplates() {
     const seq = ++templatesRequestSeq;
@@ -303,8 +315,31 @@
   function gotoNewNote(query: Record<string, string>) {
     showTypePicker.value = false;
     if (blockGuestWrite('add-note')) return;
+    const usageKey = query.builtin ? `builtin:${query.builtin}` : query.templateId ? `mine:${query.templateId}` : '';
+    if (usageKey) {
+      templateUsage.value = { ...templateUsage.value, [usageKey]: Date.now() };
+      localStorage.setItem('note-template-recent-usage', JSON.stringify(templateUsage.value));
+    }
     router.push({ path: '/noteLibrary/add', query });
   }
+  function readTemplateUsage() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('note-template-recent-usage') || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  const orderedBuiltinTemplates = computed(() =>
+    [...BUILTIN_NOTE_TEMPLATES].sort(
+      (a, b) => Number(templateUsage.value[`builtin:${b.key}`] || 0) - Number(templateUsage.value[`builtin:${a.key}`] || 0),
+    ),
+  );
+  const orderedMyTemplates = computed(() =>
+    [...myTemplates.value].sort(
+      (a, b) => Number(templateUsage.value[`mine:${b.id}`] || 0) - Number(templateUsage.value[`mine:${a.id}`] || 0),
+    ),
+  );
   const templateTypeTag = (type: string) => (type === 'markdown' ? t('note.tplTypeMd') : t('note.tplTypeHtml'));
   function confirmDeleteTemplate(tpl: { id: string; name: string }) {
     Alert.alert({
@@ -343,7 +378,7 @@
       return {
         key: 'mine',
         title: t('note.tplMineSection'),
-        actions: myTemplates.value.map((tpl) => ({
+        actions: orderedMyTemplates.value.map((tpl) => ({
           key: tpl.id,
           label: tpl.name,
           description: tpl.description || '',
@@ -385,7 +420,7 @@
       {
         key: 'builtin',
         title: t('note.tplBuiltinSection'),
-        actions: BUILTIN_NOTE_TEMPLATES.map((tpl) => ({
+        actions: orderedBuiltinTemplates.value.map((tpl) => ({
           key: tpl.key,
           label: t(tpl.nameKey),
           description: t(tpl.descKey),
@@ -620,7 +655,7 @@
   );
 
   watch(
-    [debouncedSearch, () => router.currentRoute.value.query.tag],
+    [debouncedSearch, () => router.currentRoute.value.query.tag, () => router.currentRoute.value.query._rt],
     () => {
       void reloadNotes();
       if (bookmark.isMobile) {
@@ -717,6 +752,87 @@
   function exitBatch() {
     noteList.value.forEach((data) => {
       data.isCheck = false;
+    });
+  }
+
+  function getSelectedNotes() {
+    return viewNoteList.value.filter((data) => data.isCheck === true);
+  }
+
+  function openBatchTags(mode: 'add' | 'remove') {
+    const selected = getSelectedNotes();
+    if (!selected.length) return;
+    sessionStorage.setItem(
+      'resource-center-batch-items',
+      JSON.stringify(selected.map((note) => ({ id: String(note.id), type: 'note', title: String(note.title || '') }))),
+    );
+    router.push({
+      path: '/search/batch-tags',
+      query: { mode, from: router.currentRoute.value.fullPath },
+    });
+  }
+
+  async function exportSelectedNotes() {
+    const selected = getSelectedNotes();
+    if (!selected.length) return;
+    const results = await Promise.allSettled(
+      selected.map((note) => apiBasePost('/api/note/getNoteDetail', { id: String(note.id) }, { silent: true })),
+    );
+    const notes = results
+      .filter((result) => result.status === 'fulfilled' && result.value.status === 200 && result.value.data)
+      .map((result) => (result as PromiseFulfilledResult<any>).value.data);
+    if (!notes.length) {
+      message.error(t('note.batchExportFailed'));
+      return;
+    }
+    const payload = {
+      formatVersion: 1,
+      backupKind: 'selected_notes_export',
+      exportedAt: new Date().toISOString(),
+      noteCount: notes.length,
+      notes,
+    };
+    const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `lightnote-notes-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(blobUrl);
+    if (notes.length < selected.length) {
+      message.warning(t('note.batchExportPartial', { count: notes.length, total: selected.length }));
+    } else {
+      message.success(t('note.batchExportSuccess', { count: notes.length }));
+    }
+  }
+
+  function showSelectedNotesPrivacy() {
+    Alert.alert({
+      title: t('note.batchPrivacy'),
+      content: t('note.batchPrivacyDetail'),
+      onOk() {},
+    });
+  }
+
+  function setSelectedNotesAiScope(aiExcluded: boolean) {
+    const selected = getSelectedNotes();
+    if (!selected.length) return;
+    Alert.alert({
+      title: t(aiExcluded ? 'note.batchExcludeAi' : 'note.batchIncludeAi'),
+      content: t(aiExcluded ? 'note.batchExcludeAiConfirm' : 'note.batchIncludeAiConfirm', {
+        count: selected.length,
+      }),
+      async onOk() {
+        const results = await Promise.allSettled(
+          selected.map((note) => updateAiResourcePreference({ type: 'note', id: String(note.id), aiExcluded })),
+        );
+        const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+        if (!succeeded) {
+          message.error(t('note.batchAiScopeFailed'));
+          return;
+        }
+        message.success(t('note.batchAiScopeSuccess', { count: succeeded }));
+        exitBatch();
+      },
     });
   }
 

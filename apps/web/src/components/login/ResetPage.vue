@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-panel auth-panel--reset">
+  <form class="auth-panel auth-panel--reset" @submit.prevent="verifyCode">
     <div class="auth-fields">
       <label class="auth-field" for="auth-reset-email">
         <span class="auth-field__label">{{ t('auth.email') }}</span>
@@ -8,7 +8,7 @@
           v-model:value="formData.email"
           class="auth-input"
           height="48px"
-          autocomplete="on"
+          autocomplete="email"
           :placeholder="t('auth.emailPlaceholder')"
         >
           <template #prefix>
@@ -24,7 +24,7 @@
           v-model:value="formData.password"
           class="auth-input"
           height="48px"
-          maxlength="16"
+          maxlength="64"
           type="password"
           autocomplete="new-password"
           :placeholder="t('auth.passwordRulePlaceholder')"
@@ -42,7 +42,7 @@
           v-model:value="formData.rPassword"
           class="auth-input"
           height="48px"
-          maxlength="16"
+          maxlength="64"
           type="password"
           autocomplete="new-password"
           :placeholder="t('auth.confirmPasswordPlaceholder')"
@@ -75,14 +75,14 @@
       </label>
     </div>
 
-    <BButton type="primary" class="auth-primary" :loading="submitting" :disabled="disable" @click="verifyCode">
+    <BButton native-type="submit" type="primary" class="auth-primary" :loading="submitting" :disabled="disable">
       {{ t('auth.resetAndLogin') }}
     </BButton>
 
     <div class="auth-switch">
       <BButton class="auth-link" @click="title = '登录'">{{ t('auth.backToLogin') }}</BButton>
     </div>
-  </div>
+  </form>
 </template>
 
 <script lang="ts" setup>
@@ -144,7 +144,7 @@
       { endCondition: !formData.email, message: t('auth.emailRequired') },
       { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },
       { endCondition: !formData.password, message: t('auth.passwordRequired') },
-      { endCondition: formData.password.length > 16, message: t('auth.pwdMax16') },
+      { endCondition: formData.password.length > 64, message: t('auth.pwdMax64') },
       { endCondition: !!formData.password && formData.password.length < 6, message: t('auth.pwdMin6') },
       { endCondition: !formData.rPassword, message: t('auth.confirmPasswordRequired') },
       { endCondition: formData.password !== formData.rPassword, message: t('auth.passwordMismatch') },

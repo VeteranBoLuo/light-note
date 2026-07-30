@@ -28,14 +28,41 @@
       <SvgIcon :src="icon.noteDetail.saveLine" size="14" aria-hidden="true" />
       {{ t('ai.resultActions.saveNewNote') }}
     </BButton>
-    <BButton class="ai-result-actions__text" :disabled="busy || !messageId" @click="openReuse('append')">
-      <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
-      {{ t('ai.resultActions.appendNote') }}
-    </BButton>
-    <BButton class="ai-result-actions__text" :disabled="busy || !messageId" @click="openReuse('merge')">
-      <SvgIcon :src="icon.ai.summary" size="14" aria-hidden="true" />
-      {{ t('ai.resultActions.mergeNote') }}
-    </BButton>
+    <BPopover
+      v-model:open="moreOpen"
+      trigger="click"
+      placement="bottom-right"
+      overlay-class-name="ai-result-actions-menu"
+    >
+      <BButton
+        class="ai-result-actions__text"
+        :disabled="busy || !messageId"
+        :aria-label="t('ai.resultActions.more')"
+      >
+        <SvgIcon :src="icon.common.more" size="14" aria-hidden="true" />
+        {{ t('ai.resultActions.more') }}
+      </BButton>
+      <template #content>
+        <div class="ai-result-actions-menu__content">
+          <BButton :disabled="busy || !messageId" @click="openSecondaryAction('append')">
+            <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
+            {{ t('ai.resultActions.appendNote') }}
+          </BButton>
+          <BButton :disabled="busy || !messageId" @click="openSecondaryAction('merge')">
+            <SvgIcon :src="icon.ai.summary" size="14" aria-hidden="true" />
+            {{ t('ai.resultActions.mergeNote') }}
+          </BButton>
+          <BButton :disabled="busy || !messageId" @click="openSecondaryAction('selection')">
+            <SvgIcon :src="icon.filterPanel.check" size="14" aria-hidden="true" />
+            {{ t('ai.resultActions.applySelection') }}
+          </BButton>
+          <BButton :disabled="busy || branching || !conversationId" :loading="branching" @click="createBranch">
+            <SvgIcon :src="icon.ai.branch" size="14" aria-hidden="true" />
+            {{ t('ai.resultActions.branch') }}
+          </BButton>
+        </div>
+      </template>
+    </BPopover>
 
     <BModal
       v-model:visible="feedbackVisible"
@@ -319,6 +346,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -373,6 +401,7 @@
   const feedbackVisible = ref(false);
   const feedbackReason = ref<FeedbackReason>('incorrect');
   const feedbackComment = ref('');
+  const moreOpen = ref(false);
   const reuseVisible = ref(false);
   const reuseMode = ref<ReuseMode>('create');
   const noteTitle = ref('');
@@ -713,8 +742,14 @@
     void router.push(`/noteLibrary/${encodeURIComponent(reuseResult.value.noteId)}`);
   }
 
+  function openSecondaryAction(mode: Exclude<ReuseMode, 'create'>) {
+    moreOpen.value = false;
+    openReuse(mode);
+  }
+
   async function createBranch() {
     if (!props.conversationId) return;
+    moreOpen.value = false;
     branching.value = true;
     try {
       const branched = await branchAiConversation(props.conversationId, props.messageId);
@@ -991,5 +1026,23 @@
       width: 100%;
       flex-wrap: wrap;
     }
+  }
+</style>
+
+<style lang="less">
+  .ai-result-actions-menu {
+    width: 220px;
+    padding: 7px;
+  }
+  .ai-result-actions-menu__content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .ai-result-actions-menu__content > .b_btn {
+    width: 100%;
+    min-height: 40px;
+    justify-content: flex-start;
+    gap: 7px;
   }
 </style>

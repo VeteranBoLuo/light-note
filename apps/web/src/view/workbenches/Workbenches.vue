@@ -19,28 +19,64 @@
             </h1>
           </div>
           <p>{{ t('workbench.subtitle') }}</p>
+          <small v-if="lastUpdatedAt" class="workbench-data-scope">
+            {{ t('workbench.meta.todayRange') }} · {{ t('workbench.meta.lastUpdated', { time: lastUpdatedAt }) }}
+          </small>
         </div>
         <div class="header-actions">
-          <BTooltip
-            :title="
-              t('workbench.header.pendingBreakdown', {
-                resources: inbox.pendingTotal,
-                todos: inbox.todoPendingTotal,
-              })
-            "
-          >
-            <BButton class="status-button" @click="openInbox">
-              <SvgIcon :src="icon.noteDetail.toolbar.todo" size="17" />
-              <span>{{ t('workbench.header.pendingCenter') }}</span>
-              <strong>{{ displayCount(inbox.actionTotal) }}</strong>
-            </BButton>
-          </BTooltip>
           <BButton type="primary" class="capture-button" @click="openQuickCapture('note')">
             <SvgIcon :src="icon.common.add" size="17" />
             <span>{{ t('workbench.header.quickCapture') }}</span>
           </BButton>
         </div>
       </header>
+
+      <div v-if="workbenchError" class="workbench-error" role="alert" aria-live="assertive">
+        <div>
+          <strong>{{ t('common.requestFailed') }}</strong>
+          <span>{{ workbenchError.message }}</span>
+          <small v-if="workbenchError.requestId">
+            {{ t('common.requestIdLabel') }}: {{ workbenchError.requestId }}
+          </small>
+        </div>
+        <BButton size="small" :loading="loadingWorkbench" @click="refreshWorkbench">
+          {{ t('common.retry') }}
+        </BButton>
+      </div>
+
+      <section class="today-summary" :aria-label="t('workbench.panel.todaySummary')">
+        <div class="today-summary-heading">
+          <span class="today-summary-heading__icon" aria-hidden="true">
+            <SvgIcon :src="icon.noteDetail.toolbar.todo" size="22" />
+          </span>
+          <span class="today-summary-heading__copy">
+            <strong>{{ t('workbench.panel.todaySummary') }}</strong>
+            <small>{{ t('workbench.panel.todaySummaryHint') }}</small>
+          </span>
+          <span class="today-summary-total">
+            <strong>{{ displayCount(inbox.actionTotal) }}</strong>
+            <small>{{ t('workbench.today.actionTotalUnit') }}</small>
+          </span>
+        </div>
+        <div class="today-summary-grid">
+          <BButton
+            v-for="item in todaySummaryItems"
+            :key="item.key"
+            class="today-summary-item"
+            :class="`today-summary-item--${item.key}`"
+            @click="openTodaySummaryItem(item.key)"
+          >
+            <span class="today-summary-item__icon" aria-hidden="true">
+              <SvgIcon :src="item.icon" size="17" />
+            </span>
+            <span class="today-summary-item__copy">
+              <span>{{ item.label }}</span>
+              <small>{{ item.hint }}</small>
+            </span>
+            <strong>{{ item.value }}</strong>
+          </BButton>
+        </div>
+      </section>
 
       <section class="summary-grid" :aria-label="t('workbench.panel.resourceOverview')">
         <template v-if="summaryLoading">
@@ -261,7 +297,6 @@
   import { cloudSpaceStore, inboxStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
@@ -273,6 +308,7 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import type { ActionCaptureType } from '@/store/inbox.ts';
+  import { openNotificationPanel } from '@/utils/notificationEntry';
 
   type ContinueTab = 'notes' | 'files' | 'bookmarks';
   type ContinueItemType = 'note' | 'file' | 'bookmark';
@@ -299,6 +335,7 @@
   const loadingUpdateLogs = ref(true);
   const summaryLoading = computed(() => loadingWorkbench.value);
   const updateLogsLoading = computed(() => loadingUpdateLogs.value);
+  const workbenchError = ref<{ message: string; requestId?: string } | null>(null);
 
   const workbenchCounts = ref({
     bookmarkTotal: 0,
@@ -308,6 +345,14 @@
     usedSpace: 0,
   });
   const weeklyStats = ref({ bookmark: 0, note: 0, file: 0, tag: 0 });
+  const todayStats = ref({
+    actionTotal: 0,
+    todoPendingTotal: 0,
+    unreadNotificationTotal: 0,
+    inboxPendingTotal: 0,
+  });
+  const generatedAt = ref('');
+  const quickActionUsage = ref<Record<string, number>>(readQuickActionUsage());
   const trendSummary = ref<any[]>([]);
   const fileTypeSummary = ref<any[]>([]);
   const commonBookmarkTable = ref<any[]>([]);
@@ -441,7 +486,46 @@
       desc: t('workbench.actions.addTodo.desc'),
       icon: icon.noteDetail.toolbar.todo,
     },
+  ].sort((a, b) => Number(quickActionUsage.value[b.key] || 0) - Number(quickActionUsage.value[a.key] || 0)));
+
+  const todaySummaryItems = computed(() => [
+    {
+      key: 'todo',
+      label: t('workbench.today.todoPending'),
+      value: inbox.todoPendingTotal,
+      hint: t('workbench.today.todoPendingHint'),
+      icon: icon.noteDetail.toolbar.todo,
+    },
+    {
+      key: 'inbox',
+      label: t('workbench.today.inboxPending'),
+      value: inbox.pendingTotal,
+      hint: t('workbench.today.inboxPendingHint'),
+      icon: icon.contextMenu.inbox,
+    },
+    {
+      key: 'notification',
+      label: t('workbench.today.unreadNotification'),
+      value: todayStats.value.unreadNotificationTotal,
+      hint: t('workbench.today.unreadNotificationHint'),
+      icon: icon.settings.notification,
+    },
   ]);
+  const lastUpdatedAt = computed(() => {
+    if (!generatedAt.value) return '';
+    const date = new Date(generatedAt.value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date);
+  });
+
+  function readQuickActionUsage() {
+    try {
+      const value = JSON.parse(localStorage.getItem('workbench-quick-action-usage') || '{}');
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    } catch {
+      return {};
+    }
+  }
 
   const trendChartData = computed(() => {
     const data: { date: string; type: string; value: number }[] = [];
@@ -487,13 +571,25 @@
     recordOperation({ module: '工作台', operation: `查看${label}` });
   }
 
-  function openInbox() {
-    router.push('/inbox');
+  function openTodaySummaryItem(key: string) {
+    if (key === 'notification') {
+      recordOperation({ module: '工作台', operation: '从今日待处理打开通知铃铛' });
+      openNotificationPanel();
+      return;
+    }
+    const tab = key === 'todo' ? 'todo' : 'all';
+    recordOperation({
+      module: '工作台',
+      operation: key === 'todo' ? '从今日待处理查看未完成待办' : '从今日待处理查看待整理资源',
+    });
+    router.push({ path: '/inbox', query: { tab } });
   }
 
   function openQuickCapture(type: ActionCaptureType) {
     if (blockGuestWrite('workbench-quick-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
+    quickActionUsage.value = { ...quickActionUsage.value, [type]: Date.now() };
+    localStorage.setItem('workbench-quick-action-usage', JSON.stringify(quickActionUsage.value));
     inbox.openQuickCapture(type);
   }
 
@@ -538,9 +634,16 @@
 
   async function fetchWorkbenchSummary() {
     loadingWorkbench.value = true;
+    workbenchError.value = null;
     try {
       const res = await apiBasePost('/api/workbench/summary');
-      if (res.status !== 200) return;
+      if (res.status !== 200) {
+        workbenchError.value = {
+          message: res.msg || t('common.requestFailedDescription'),
+          requestId: res.requestId,
+        };
+        return;
+      }
       const data = res.data || {};
       workbenchCounts.value = {
         bookmarkTotal: Number(data.counts?.bookmarkTotal || 0),
@@ -559,14 +662,27 @@
         file: Number(data.weeklyStats?.file || 0),
         tag: Number(data.weeklyStats?.tag || 0),
       };
+      todayStats.value = {
+        actionTotal: Number(data.today?.actionTotal || 0),
+        todoPendingTotal: Number(data.today?.todoPendingTotal || 0),
+        unreadNotificationTotal: Number(data.today?.unreadNotificationTotal || 0),
+        inboxPendingTotal: Number(data.today?.inboxPendingTotal || 0),
+      };
+      inbox.pendingTotal = todayStats.value.inboxPendingTotal;
+      inbox.todoPendingTotal = todayStats.value.todoPendingTotal;
+      inbox.actionTotal = todayStats.value.actionTotal;
+      generatedAt.value = String(data.generatedAt || new Date().toISOString());
       trendSummary.value = Array.isArray(data.trend) ? data.trend : [];
       fileTypeSummary.value = Array.isArray(data.fileTypeStats) ? data.fileTypeStats : [];
       commonBookmarkTable.value = Array.isArray(data.commonBookmarks) ? data.commonBookmarks : [];
       hotTagTable.value = Array.isArray(data.hotTags) ? data.hotTags : [];
       recentNoteTable.value = Array.isArray(data.recentNotes) ? data.recentNotes : [];
       recentFileTable.value = Array.isArray(data.recentFiles) ? data.recentFiles : [];
-    } catch (error) {
-      console.warn('fetchWorkbenchSummary fallback', error);
+    } catch (error: any) {
+      workbenchError.value = {
+        message: error?.message || t('common.requestFailedDescription'),
+        requestId: error?.requestId,
+      };
     } finally {
       loadingWorkbench.value = false;
     }
@@ -601,8 +717,11 @@
       inbox.resetForOwner(user.id || 'visitor');
     }
     try {
-      const countTask = user.id && user.role !== 'visitor' ? inbox.refreshCount() : Promise.resolve(false);
-      await Promise.allSettled([fetchWorkbenchSummary(), fetchUpdateLogs(), countTask]);
+      await Promise.allSettled([fetchWorkbenchSummary(), fetchUpdateLogs()]);
+      if (user.id && user.role !== 'visitor') {
+        // 待处理数量以导航角标共用的计数接口为最终口径，避免工作台与快速添加显示不一致。
+        await inbox.refreshCount();
+      }
       initializedOwner.value = owner;
     } finally {
       initRunning.value = false;
@@ -633,6 +752,28 @@
     overflow-y: auto;
     scrollbar-gutter: stable;
     padding: 18px clamp(16px, 1.6vw, 40px) 32px;
+  }
+  .workbench-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--danger-color, #d14343) 32%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--danger-color, #d14343) 8%, var(--card-background));
+    > div {
+      display: grid;
+      gap: 3px;
+    }
+    strong {
+      color: var(--text-color);
+    }
+    span,
+    small {
+      color: var(--desc-color);
+    }
   }
 
   .workbench-shell {
@@ -723,6 +864,14 @@
     font-size: 13px;
   }
 
+  .workbench-data-scope {
+    display: block;
+    margin: 5px 0 0 17px;
+    color: var(--desc-color);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .header-actions {
     display: flex;
     align-items: center;
@@ -731,35 +880,184 @@
     flex-wrap: wrap;
   }
 
-  .status-button,
   .capture-button {
     height: 36px;
     gap: 7px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
   }
 
-  .status-button {
-    background: color-mix(in srgb, var(--menu-body-bg-color) 92%, var(--primary-color) 8%);
+  .capture-button {
+    border-color: transparent;
   }
 
-  .status-button strong {
-    min-width: 22px;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 999px;
-    box-sizing: border-box;
+  .today-summary {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
+    border-radius: 16px;
+    background: var(--card-background);
+    box-shadow:
+      0 8px 24px color-mix(in srgb, var(--primary-color) 9%, transparent),
+      0 2px 6px color-mix(in srgb, var(--text-color) 7%, transparent);
+  }
+
+  .today-summary::before {
+    content: '';
+    position: absolute;
+    z-index: 1;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(
+      90deg,
+      var(--primary-color),
+      color-mix(in srgb, var(--primary-color) 38%, transparent)
+    );
+  }
+
+  .today-summary-heading {
+    min-width: 0;
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 20%, var(--card-border-color));
+    color: var(--primary-color);
+    background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--primary-color) 13%, var(--card-background)),
+      color-mix(in srgb, var(--primary-color) 5%, var(--card-background))
+    );
+  }
+
+  .today-summary-heading__icon,
+  .today-summary-item__icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    border-radius: 11px;
+  }
+
+  .today-summary-heading__icon {
+    width: 42px;
+    height: 42px;
+    background: color-mix(in srgb, var(--primary-color) 13%, transparent);
+  }
+
+  .today-summary-heading__copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+  }
+
+  .today-summary-heading__copy strong {
+    color: var(--text-color);
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .today-summary-heading__copy small,
+  .today-summary-total small,
+  .today-summary-item__copy > span,
+  .today-summary-item__copy small {
+    color: var(--desc-color);
     font-size: 11px;
+  }
+
+  .today-summary-total {
+    min-width: 52px;
+    display: grid;
+    justify-items: end;
+    gap: 1px;
+  }
+
+  .today-summary-total strong {
+    color: var(--primary-color);
+    font-size: 28px;
     line-height: 1;
+    font-weight: 760;
     font-variant-numeric: tabular-nums;
   }
 
-  .capture-button {
-    border-color: transparent;
+  .today-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 10px;
+    padding-left: 12px;
+    border-left: 3px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
+  }
+
+  .today-summary-item {
+    --today-accent: var(--primary-color);
+    width: 100%;
+    min-width: 0;
+    padding: 11px 12px;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--today-accent) 25%, var(--card-border-color));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--today-accent) 5%, var(--card-background));
+    color: var(--text-color);
+    height: auto;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 0.16s ease,
+      background-color 0.16s ease,
+      transform 0.16s ease;
+  }
+
+  @media (hover: hover) {
+    .today-summary-item:hover {
+      border-color: color-mix(in srgb, var(--today-accent) 35%, var(--card-border-color));
+      background: color-mix(in srgb, var(--today-accent) 7%, var(--card-background));
+      transform: translateY(-1px);
+    }
+  }
+
+  .today-summary-item--todo {
+    --today-accent: var(--primary-color);
+  }
+
+  .today-summary-item--inbox {
+    --today-accent: var(--resource-note-color, #00a884);
+  }
+
+  .today-summary-item--notification {
+    --today-accent: var(--resource-bookmark-color, #615ced);
+  }
+
+  .today-summary-item__icon {
+    width: 34px;
+    height: 34px;
+    color: var(--today-accent);
+    background: color-mix(in srgb, var(--today-accent) 10%, transparent);
+  }
+
+  .today-summary-item__copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .today-summary-item__copy > span {
+    color: var(--text-color);
+    font-weight: 650;
+  }
+
+  .today-summary-item__copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .today-summary-item strong {
+    color: var(--today-accent);
+    font-size: 22px;
+    font-variant-numeric: tabular-nums;
   }
 
   .summary-grid {
@@ -1440,9 +1738,14 @@
     }
 
     .summary-grid,
+    .today-summary-grid,
     .side-column,
     .lower-grid {
       grid-template-columns: 1fr;
+    }
+
+    .today-summary-grid {
+      padding-left: 9px;
     }
 
     .content-row-meta {

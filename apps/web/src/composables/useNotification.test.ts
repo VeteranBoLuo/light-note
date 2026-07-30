@@ -15,7 +15,7 @@ vi.mock('@/api/notificationApi.ts', () => ({
   },
 }));
 
-const user = { id: 'user-1', role: 'user' };
+const user = { id: 'user-1', role: 'user', preferences: { notificationsBrowser: false } };
 vi.mock('@/store', () => ({ useUserStore: () => user }));
 
 const { resetNotification, useNotification } = await import('@/composables/useNotification.ts');
@@ -29,6 +29,7 @@ describe('useNotification.fetchList', () => {
     deleteNotifications.mockReset();
     user.id = 'user-1';
     user.role = 'user';
+    user.preferences.notificationsBrowser = false;
   });
 
   it('正常返回通知分页数据', async () => {
@@ -76,5 +77,54 @@ describe('useNotification.fetchList', () => {
     getUnreadCount.mockResolvedValue({ status: 200, data: { unreadTotal: 1, byType: { system: 1 } } });
 
     await expect(useNotification().deleteNotifications(['n-1'])).resolves.toBe(false);
+  });
+
+  it('浏览器通知先建立基线，只对页面打开后出现的新未读项提示', async () => {
+    const created: Array<{ title: string; options: NotificationOptions }> = [];
+    const close = vi.fn();
+    class MockNotification {
+      static permission = 'granted';
+      onclick: (() => void) | null = null;
+      constructor(
+        public title: string,
+        public options: NotificationOptions,
+      ) {
+        created.push({ title, options });
+      }
+      close = close;
+    }
+    vi.stubGlobal('Notification', MockNotification);
+    user.preferences.notificationsBrowser = true;
+    getUnreadCount
+      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 1, byType: { todo_reminder: 1 } } })
+      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 2, byType: { todo_reminder: 2 } } });
+    getNotificationList
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { items: [{ id: 'old', title: '旧提醒', isRead: 0 }], total: 1 },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: {
+          items: [
+            { id: 'new', title: '新提醒', content: '待办内容', isRead: 0, link: '/inbox' },
+            { id: 'old', title: '旧提醒', isRead: 0 },
+          ],
+          total: 2,
+        },
+      });
+
+    const notification = useNotification();
+    await notification.refreshUnread();
+    await vi.waitFor(() => expect(getNotificationList).toHaveBeenCalledTimes(1));
+    expect(created).toHaveLength(0);
+
+    await notification.refreshUnread();
+    await vi.waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]).toEqual({
+      title: '新提醒',
+      options: expect.objectContaining({ body: '待办内容', tag: 'light-note:new' }),
+    });
+    vi.unstubAllGlobals();
   });
 });

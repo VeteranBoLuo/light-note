@@ -1,10 +1,16 @@
 import { defineStore } from 'pinia';
 import {
   completeTodo,
+  batchDeleteTodos,
+  batchRestoreTodos,
+  batchSetTodoStatus,
   countTodos,
+  createTodo,
   deleteTodo,
   listTodos,
+  reorderTodos,
   reopenTodo,
+  snoozeTodo,
   updateTodo,
   type TodoItem,
   type TodoFilterStatus,
@@ -90,6 +96,47 @@ export default defineStore('todo', {
     async remove(item: TodoItem) {
       const res = await deleteTodo(item.id);
       if (res.status !== 200 || !Number(res.data?.affected || 0)) return false;
+      await this.refreshList();
+      return true;
+    },
+    async quickCreate(title: string, dueAt: string | null, priority: TodoItem['priority'] = 1) {
+      const res = await createTodo({ title, dueAt, priority });
+      if (res.status !== 200) return false;
+      await this.refreshList();
+      return true;
+    },
+    async batchComplete(ids: string[]) {
+      const res = await batchSetTodoStatus(ids, 'completed');
+      if (res.status !== 200) return false;
+      await this.refreshList();
+      return true;
+    },
+    async batchDelete(ids: string[]) {
+      const res = await batchDeleteTodos(ids);
+      if (res.status !== 200) return false;
+      await this.refreshList();
+      return true;
+    },
+    async restoreMany(ids: string[]) {
+      const uniqueIds = [...new Set(ids)];
+      const res = await batchRestoreTodos(uniqueIds);
+      await this.refreshList();
+      return res.status === 200 && Number(res.data?.affected || 0) === uniqueIds.length;
+    },
+    async reopenMany(ids: string[]) {
+      const res = await batchSetTodoStatus(ids, 'pending', { undoCompletion: true });
+      await this.refreshList();
+      return res.status === 200 && Number(res.data?.affected || 0) === new Set(ids).size;
+    },
+    async reorder(items: Array<{ id: string; dueAt?: string | null; priority: TodoItem['priority'] }>) {
+      const res = await reorderTodos(items);
+      if (res.status !== 200) return false;
+      await this.refreshList();
+      return true;
+    },
+    async snooze(item: TodoItem, targetAt: string) {
+      const res = await snoozeTodo(item.id, targetAt);
+      if (res.status !== 200) return false;
       await this.refreshList();
       return true;
     },

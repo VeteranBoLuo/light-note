@@ -366,14 +366,22 @@ describe('AI conversation isolation', () => {
     const query = vi
       .fn()
       .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([{ affectedRows: 1 }]);
     const database = { query };
     await listAiConversations(identity, { limit: 10 }, database);
     await deleteAiConversation({ ...identity, adminContextMode: 'maintain' }, 'conversation-1', database);
     expect(query.mock.calls[0][1].slice(0, 5)).toEqual(['actor-1', 'subject-1', 'readonly', 'context-1', 'active']);
-    expect(query.mock.calls[1][1]).toEqual(['conversation-1', 'actor-1', 'subject-1', 'maintain', 'context-1']);
-    expect(query.mock.calls[1][0]).toContain("status IN ('active', 'archived')");
-    expect(query.mock.calls[1][0]).not.toContain('DELETE FROM ai_conversations');
+    expect(query.mock.calls[1][1].slice(0, 5)).toEqual([
+      'actor-1',
+      'subject-1',
+      'readonly',
+      'context-1',
+      'active',
+    ]);
+    expect(query.mock.calls[2][1]).toEqual(['conversation-1', 'actor-1', 'subject-1', 'maintain', 'context-1']);
+    expect(query.mock.calls[2][0]).toContain("status IN ('active', 'archived')");
+    expect(query.mock.calls[2][0]).not.toContain('DELETE FROM ai_conversations');
   });
 
   it('restores the current actor feedback together with cloud conversation messages', async () => {
@@ -478,7 +486,10 @@ describe('AI conversation isolation', () => {
     await listAiConversations(normalIdentity, {}, { query });
     await listAiConversations({ ...identity, adminContextId: 'context-a' }, {}, { query });
     await listAiConversations({ ...identity, adminContextId: 'context-b' }, {}, { query });
-    expect(query.mock.calls.map((call) => call[1].slice(0, 4))).toEqual([
+    const listCalls = query.mock.calls.filter(([sql]) =>
+      String(sql).replace(/\s+/g, ' ').trim().startsWith('SELECT * FROM ai_conversations'),
+    );
+    expect(listCalls.map((call) => call[1].slice(0, 4))).toEqual([
       ['user-1', 'user-1', 'normal', null],
       ['actor-1', 'subject-1', 'readonly', 'context-a'],
       ['actor-1', 'subject-1', 'readonly', 'context-b'],

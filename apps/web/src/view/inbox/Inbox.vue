@@ -12,6 +12,7 @@
         <h1>{{ t('inbox.title') }}</h1>
         <p>{{ t('inbox.subtitle') }}</p>
       </div>
+      <BButton type="primary" @click="openTodoEditor()">{{ t('inbox.createTodo') }}</BButton>
     </header>
 
     <section class="inbox-toolbar" :class="{ 'inbox-toolbar--todo-primary': isMobileTodoPrimary }">
@@ -43,6 +44,66 @@
           />
         </div>
       </template>
+    </section>
+
+    <section v-if="isTodoFocused" class="todo-workspace-toolbar">
+      <form class="todo-quick-create" @submit.prevent="createQuickTodo">
+        <BInput
+          v-model:value="quickTodoTitle"
+          :maxlength="200"
+          :placeholder="t('inbox.todoQuickCreatePlaceholder')"
+          @enter="createQuickTodo"
+        />
+        <BSelect v-model:value="quickTodoDue" :options="quickDueOptions" />
+        <BSelect v-model:value="quickTodoPriority" :options="quickPriorityOptions" />
+        <BButton type="primary" :loading="quickCreating" :disabled="!quickTodoTitle.trim()" @click="createQuickTodo">
+          {{ t('inbox.todoQuickCreate') }}
+        </BButton>
+      </form>
+      <BTabs v-model:active-tab="todoView" :options="todoViewOptions" variant="pill" />
+    </section>
+
+    <section v-if="isTodoFocused && todoView === 'list' && todo.status !== 'completed'" class="todo-priority-drops">
+      <div v-for="priority in ([2, 1, 0] as const)" :key="priority" :class="`is-priority-${priority}`">
+        <span>{{ t('inbox.todoDragToPriority', { priority: t(`inbox.todoPriority${priority}`) }) }}</span>
+        <VueDraggable
+          v-model="priorityDropLists[priority]"
+          :group="{ name: 'todo-board', pull: false, put: true }"
+          :data-priority="priority"
+          class="todo-priority-drop-target"
+          @add="handlePriorityDrop(priority)"
+        />
+      </div>
+    </section>
+
+    <section v-if="isTodoFocused && selectedTodoIds.length" class="inbox-batch todo-batch">
+      <BCheckbox
+        :model-value="selectedTodoIds.length === todo.items.length"
+        :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
+        @update:model-value="toggleSelectAllTodos"
+      >
+        {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
+      </BCheckbox>
+      <div class="inbox-batch__actions">
+        <BButton
+          v-if="todo.status !== 'completed'"
+          size="small"
+          type="primary"
+          :loading="todoBatchMutating"
+          @click="completeSelectedTodos"
+        >
+          {{ t('inbox.completeSelected') }}
+        </BButton>
+        <BButton size="small" type="danger" :loading="todoBatchMutating" @click="confirmDeleteSelectedTodos">
+          {{ t('inbox.deleteSelected') }}
+        </BButton>
+      </div>
+    </section>
+
+    <section v-if="todoUndo" class="todo-undo-banner" role="status">
+      <span>{{ todoUndo.kind === 'delete' ? t('inbox.todoDeletedCount', { count: todoUndo.ids.length }) : t('inbox.todoCompletedCount', { count: todoUndo.ids.length }) }}</span>
+      <BButton size="small" :loading="todoUndoing" @click="undoTodoAction">{{ t('common.undo') }}</BButton>
+      <BButton size="small" :aria-label="t('common.close')" @click="clearTodoUndo">{{ t('common.close') }}</BButton>
     </section>
 
     <section v-if="inbox.filterType !== 'todo' && inbox.items.length" class="inbox-batch">
@@ -100,6 +161,51 @@
             <p>{{ emptyStateDesc }}</p>
             <BButton type="primary" @click="handleEmptyStateAction">{{ emptyStateAction }}</BButton>
           </div>
+          <TodoScheduleView
+            v-else-if="isTodoFocused && todoView !== 'list'"
+            :items="todo.items"
+            :view="todoView"
+            @edit="openTodoEditor"
+          />
+          <div v-else-if="isTodoFocused" class="todo-group-list">
+            <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
+              <header>
+                <strong>{{ t(`inbox.todoGroups.${group.key}`) }}</strong>
+                <span>{{ group.items.length }}</span>
+              </header>
+              <VueDraggable
+                v-model="group.items"
+                :group="{ name: 'todo-board', pull: true, put: todo.status !== 'completed' }"
+                :disabled="todo.status === 'completed'"
+                :animation="180"
+                handle=".todo-item__drag-handle"
+                :data-group="group.key"
+                class="todo-group__items"
+                ghost-class="todo-drag-ghost"
+                @end="handleTodoDragEnd"
+              >
+                <TodoItem
+                  v-for="item in group.items"
+                  :key="item.id"
+                  :data-todo-id="item.id"
+                  :item="item"
+                  draggable
+                  selectable
+                  :selected="selectedTodoIds.includes(item.id)"
+                  :disabled="hasPendingOperation || todoBatchMutating"
+                  :deleting="deletingTodoId === item.id"
+                  @select="toggleTodoSelected(item.id, $event)"
+                  @toggle-complete="toggleTodo(item, $event)"
+                  @update-checklist="updateTodoChecklist(item, $event)"
+                  @edit="openTodoEditor(item)"
+                  @delete="confirmDeleteTodo(item)"
+                  @add-to-calendar="openTodoCalendar(item)"
+                  @snooze="snoozeTodoItem(item, $event)"
+                  @update-priority="updateTodoPriority(item, $event)"
+                />
+              </VueDraggable>
+            </section>
+          </div>
           <div v-else class="inbox-list">
             <template v-for="action in actionItems" :key="action.key">
               <InboxItem
@@ -124,6 +230,8 @@
                 @edit="openTodoEditor(action.item)"
                 @delete="confirmDeleteTodo(action.item)"
                 @add-to-calendar="openTodoCalendar(action.item)"
+                @snooze="snoozeTodoItem(action.item, $event)"
+                @update-priority="updateTodoPriority(action.item, $event)"
               />
             </template>
           </div>
@@ -156,6 +264,8 @@
   import TodoItem from '@/components/todo/TodoItem.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
+  import TodoScheduleView from '@/components/todo/TodoScheduleView.vue';
+  import { VueDraggable } from 'vue-draggable-plus';
   import { buildIcsFileName, buildTodoIcs, deliverIcsFile } from '@/utils/ics';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import type { InboxItem as InboxItemType } from '@/api/inboxApi';
@@ -165,8 +275,23 @@
   import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
-  import type { TodoChecklistItem, TodoFilterStatus, TodoItem as TodoItemType, TodoSort } from '@/api/todoApi';
+  import type {
+    TodoChecklistItem,
+    TodoFilterStatus,
+    TodoItem as TodoItemType,
+    TodoPriority,
+    TodoSort,
+  } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import {
+    dueForTodoGroup,
+    quickTodoDueAt,
+    todoGroupKey,
+    todoSnoozeAt,
+    type TodoGroupKey,
+    type TodoQuickDue,
+    type TodoSnoozePreset,
+  } from '@/utils/todoPlanning';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -186,6 +311,18 @@
   const exportingCalendar = ref(false);
   const updatingTodoId = ref('');
   const deletingTodoId = ref('');
+  const quickTodoTitle = ref('');
+  const quickTodoDue = ref<TodoQuickDue>('today');
+  const quickTodoPriority = ref<TodoPriority>(1);
+  const quickCreating = ref(false);
+  const todoView = ref<'list' | 'agenda' | 'calendar'>('list');
+  const selectedTodoIds = ref<string[]>([]);
+  const todoBatchMutating = ref(false);
+  const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
+  const todoUndoing = ref(false);
+  const priorityDropLists = ref<Record<TodoPriority, TodoItemType[]>>({ 0: [], 1: [], 2: [] });
+  const todoGroupLists = ref<Array<{ key: TodoGroupKey; items: TodoItemType[] }>>([]);
+  let todoUndoTimer = 0;
   const scrollContainer = ref<HTMLElement | null>(null);
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
@@ -194,6 +331,7 @@
 
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
   const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
+  const isTodoFocused = computed(() => isMobileTodoPrimary.value || inbox.filterType === 'todo');
 
   const selectedItems = computed(() =>
     inbox.items.filter((item) => inbox.selectedKeys.includes(inbox.resourceKey(item))),
@@ -298,6 +436,20 @@
     { key: 'completed', label: t('inbox.todoCompleted') },
     { key: 'all', label: t('inbox.all') },
   ]);
+  const todoViewOptions = computed(() => [
+    { key: 'list', label: t('inbox.todoViewList') },
+    { key: 'agenda', label: t('inbox.todoViewAgenda') },
+    { key: 'calendar', label: t('inbox.todoViewCalendar') },
+  ]);
+  const quickDueOptions = computed(() => [
+    { value: 'today', label: t('inbox.todoQuickToday') },
+    { value: 'tomorrow', label: t('inbox.todoQuickTomorrow') },
+    { value: 'week', label: t('inbox.todoQuickNextWeek') },
+    { value: 'none', label: t('inbox.todoQuickNoDate') },
+  ]);
+  const quickPriorityOptions = computed(() =>
+    [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
+  );
   const actionItems = computed(() => {
     if (inbox.filterType === 'todo') {
       return todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
@@ -351,11 +503,19 @@
   onBeforeUnmount(() => {
     window.clearTimeout(mobileInboxSearchTimer);
     resizeObserver?.disconnect();
+    window.clearTimeout(todoUndoTimer);
   });
 
   watch(
     () => [inbox.items.length, todo.items.length, inbox.loading, todo.loading],
-    () => nextTick(updateScrollFade),
+    () => {
+      syncTodoGroups();
+      void nextTick(updateScrollFade);
+    },
+  );
+  watch(
+    () => todo.items,
+    () => syncTodoGroups(),
   );
 
   watch(
@@ -472,6 +632,153 @@
   }
   function parseServerDate(value: string | number) {
     return new Date(typeof value === 'string' ? value.replace(' ', 'T') : value);
+  }
+  function syncTodoGroups() {
+    const keys: TodoGroupKey[] =
+      todo.status === 'completed'
+        ? ['completed']
+        : todo.status === 'all'
+          ? ['overdue', 'today', 'upcoming', 'later', 'noDate', 'completed']
+          : ['overdue', 'today', 'upcoming', 'later', 'noDate'];
+    todoGroupLists.value = keys
+      .map((key) => ({
+        key,
+        items: todo.items.filter((item) => todoGroupKey(item) === key),
+      }))
+      .filter((group) => group.items.length > 0);
+    priorityDropLists.value = { 0: [], 1: [], 2: [] };
+    selectedTodoIds.value = selectedTodoIds.value.filter((id) => todo.items.some((item) => item.id === id));
+  }
+  function dueForGroup(key: TodoGroupKey) {
+    return dueForTodoGroup(key);
+  }
+  function orderedTodoPayload() {
+    return todoGroupLists.value
+      .flatMap((group) => group.items)
+      .map((item) => ({ id: item.id, dueAt: item.dueAt || null, priority: item.priority }));
+  }
+  async function handleTodoDragEnd(event: any) {
+    if (event?.to?.dataset?.priority !== undefined) return;
+    const id = String(event?.item?.dataset?.todoId || '');
+    const targetGroup = String(event?.to?.dataset?.group || '') as TodoGroupKey;
+    const item = todoGroupLists.value.flatMap((group) => group.items).find((candidate) => candidate.id === id);
+    if (!item || !targetGroup || targetGroup === 'completed') {
+      syncTodoGroups();
+      return;
+    }
+    const previousGroup = todoGroupKey(item);
+    if (previousGroup !== targetGroup) item.dueAt = dueForGroup(targetGroup);
+    if (!(await todo.reorder(orderedTodoPayload()))) {
+      message.error(t('inbox.todoReorderFailed'));
+      await todo.refreshList();
+    }
+  }
+  async function handlePriorityDrop(priority: TodoPriority) {
+    await nextTick();
+    const item = priorityDropLists.value[priority][0];
+    if (!item) return;
+    item.priority = priority;
+    const payload = todo.items.map((candidate) => ({
+      id: candidate.id,
+      dueAt: candidate.dueAt || null,
+      priority: candidate.id === item.id ? priority : candidate.priority,
+    }));
+    if (!(await todo.reorder(payload))) message.error(t('inbox.todoReorderFailed'));
+    priorityDropLists.value[priority] = [];
+  }
+  async function updateTodoPriority(item: TodoItemType, priority: TodoPriority) {
+    if (item.priority === priority) return;
+    const payload = todo.items.map((candidate) => ({
+      id: candidate.id,
+      dueAt: candidate.dueAt || null,
+      priority: candidate.id === item.id ? priority : candidate.priority,
+    }));
+    if (!(await todo.reorder(payload))) message.error(t('inbox.todoReorderFailed'));
+  }
+  async function createQuickTodo() {
+    const title = quickTodoTitle.value.trim();
+    if (!title || quickCreating.value || blockGuestWrite('todo-create', t('inbox.guestPrompt'))) return;
+    const dueAt = quickTodoDueAt(quickTodoDue.value);
+    quickCreating.value = true;
+    try {
+      if (await todo.quickCreate(title, dueAt, quickTodoPriority.value)) {
+        quickTodoTitle.value = '';
+        message.success(t('inbox.todoSaved'));
+      } else message.error(t('inbox.todoSaveFailed'));
+    } finally {
+      quickCreating.value = false;
+    }
+  }
+  function toggleTodoSelected(id: string, selected: boolean) {
+    selectedTodoIds.value = selected
+      ? [...new Set([...selectedTodoIds.value, id])]
+      : selectedTodoIds.value.filter((value) => value !== id);
+  }
+  function toggleSelectAllTodos(selected: boolean) {
+    selectedTodoIds.value = selected ? todo.items.map((item) => item.id) : [];
+  }
+  async function completeSelectedTodos() {
+    const ids = [...selectedTodoIds.value];
+    if (!ids.length || todoBatchMutating.value) return;
+    todoBatchMutating.value = true;
+    try {
+      if (await todo.batchComplete(ids)) {
+        selectedTodoIds.value = [];
+        showTodoUndo('complete', ids);
+      } else message.error(t('inbox.todoSaveFailed'));
+    } finally {
+      todoBatchMutating.value = false;
+    }
+  }
+  function confirmDeleteSelectedTodos() {
+    const ids = [...selectedTodoIds.value];
+    if (!ids.length || todoBatchMutating.value) return;
+    Alert.alert({
+      title: t('inbox.deleteTodo'),
+      content: t('inbox.deleteTodoBatchConfirm', { count: ids.length }),
+      okText: t('common.delete'),
+      cancelText: t('common.cancel'),
+      onOk: () => deleteSelectedTodos(ids),
+    });
+  }
+  async function deleteSelectedTodos(ids: string[]) {
+    todoBatchMutating.value = true;
+    try {
+      if (await todo.batchDelete(ids)) {
+        selectedTodoIds.value = [];
+        showTodoUndo('delete', ids);
+      } else message.error(t('inbox.todoSaveFailed'));
+    } finally {
+      todoBatchMutating.value = false;
+    }
+  }
+  function showTodoUndo(kind: 'complete' | 'delete', ids: string[]) {
+    window.clearTimeout(todoUndoTimer);
+    todoUndo.value = { kind, ids };
+    todoUndoTimer = window.setTimeout(clearTodoUndo, 10_000);
+  }
+  function clearTodoUndo() {
+    window.clearTimeout(todoUndoTimer);
+    todoUndo.value = null;
+  }
+  async function undoTodoAction() {
+    const action = todoUndo.value;
+    if (!action || todoUndoing.value) return;
+    todoUndoing.value = true;
+    try {
+      const succeeded =
+        action.kind === 'delete' ? await todo.restoreMany(action.ids) : await todo.reopenMany(action.ids);
+      if (succeeded) {
+        message.success(t('inbox.todoUndoSuccess'));
+        clearTodoUndo();
+      } else message.warning(t('inbox.todoUndoFailed'));
+    } finally {
+      todoUndoing.value = false;
+    }
+  }
+  async function snoozeTodoItem(item: TodoItemType, preset: TodoSnoozePreset) {
+    if (await todo.snooze(item, todoSnoozeAt(preset))) message.success(t('inbox.todoSnoozed'));
+    else message.error(t('inbox.todoSnoozeFailed'));
   }
   function updateScrollFade() {
     const element = scrollContainer.value;
@@ -593,7 +900,8 @@
     try {
       if (await todo.setCompleted(item, completed)) {
         await inbox.refreshCount();
-        message.success(completed ? t('inbox.todoCompletedSuccess') : t('inbox.todoReopenedSuccess'));
+        if (completed) showTodoUndo('complete', [item.id]);
+        else message.success(t('inbox.todoReopenedSuccess'));
       } else message.error(t('inbox.todoSaveFailed'));
     } finally {
       updatingTodoId.value = '';
@@ -671,7 +979,7 @@
     try {
       if (await todo.remove(item)) {
         await inbox.refreshCount();
-        message.success(t('inbox.todoDeleted'));
+        showTodoUndo('delete', [item.id]);
       } else message.error(t('inbox.todoSaveFailed'));
     } finally {
       deletingTodoId.value = '';
@@ -702,6 +1010,99 @@
     gap: 20px;
     margin: 0 0 18px;
     flex-shrink: 0;
+  }
+  .todo-workspace-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .todo-quick-create {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 132px 108px auto;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    flex: 1;
+  }
+  .todo-priority-drops {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .todo-priority-drops > div {
+    position: relative;
+    min-height: 38px;
+    border: 1px dashed color-mix(in srgb, var(--primary-color) 30%, var(--card-border-color));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 3%, transparent);
+  }
+  .todo-priority-drops > div.is-priority-2 {
+    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 45%, var(--card-border-color));
+  }
+  .todo-priority-drops > div > span {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+  .todo-priority-drop-target {
+    position: relative;
+    z-index: 1;
+    min-height: 38px;
+  }
+  .todo-batch {
+    margin-bottom: 10px;
+  }
+  .todo-undo-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--success-color, #2e8b57) 35%, var(--card-border-color));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--success-color, #2e8b57) 7%, var(--background-color));
+    color: var(--text-color);
+  }
+  .todo-undo-banner > span {
+    flex: 1;
+  }
+  .todo-group-list {
+    display: grid;
+    gap: 16px;
+  }
+  .todo-group {
+    display: grid;
+    gap: 8px;
+  }
+  .todo-group > header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-color);
+  }
+  .todo-group > header > span {
+    min-width: 21px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    color: var(--primary-color);
+    font-size: 10px;
+    text-align: center;
+  }
+  .todo-group__items {
+    display: grid;
+    min-height: 18px;
+    gap: 10px;
+  }
+  .todo-drag-ghost {
+    opacity: 0.42;
   }
   .inbox-back-btn {
     width: 34px;
@@ -884,6 +1285,26 @@
     }
   }
   @media (max-width: 767px) {
+    .todo-workspace-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .todo-quick-create {
+      grid-template-columns: minmax(0, 1fr) 108px;
+    }
+    .todo-quick-create > :first-child {
+      grid-column: 1 / -1;
+    }
+    .todo-priority-drops {
+      grid-template-columns: 1fr;
+    }
+    .todo-priority-drop-target,
+    .todo-priority-drops > div {
+      min-height: 44px;
+    }
+    .todo-undo-banner {
+      flex-wrap: wrap;
+    }
     .inbox-page--mobile-todo {
       padding: 8px 10px 0;
     }

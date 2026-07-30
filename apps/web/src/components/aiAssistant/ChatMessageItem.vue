@@ -16,7 +16,7 @@
         </div>
       </div>
       <div class="bubble-col">
-        <div class="bubble" v-if="message.content">
+        <div class="bubble" v-if="message.content && !isFailedMessage">
           <!-- Markdown 渲染内容 -->
           <div v-if="message.role === 'user'" class="text user-text" v-text="message.content"></div>
           <div
@@ -76,6 +76,10 @@
             </div>
           </div>
         </div>
+        <AiSystemErrorCard
+          v-else-if="message.role === 'assistant' && isFailedMessage"
+          :code="failedErrorCode"
+        />
         <ReplyLoading
           v-else-if="!message.toolEvents?.length && !message.confirmations?.length && !message.interactions?.length"
         />
@@ -111,7 +115,7 @@
           v-if="message.role === 'assistant' && message.content"
         >
           <div class="msg-actions">
-            <BButton class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
+            <BButton v-if="!isFailedMessage" class="msg-action-btn" :title="t('ai.copy')" @click="handleCopy">
               <SvgIcon :src="icon.ai.messageCopy" size="15" aria-hidden="true" />
             </BButton>
             <BButton
@@ -145,6 +149,8 @@
   import icon from '@/config/icon.ts';
   import ReplyLoading from '@/components/aiAssistant/ReplyLoading.vue';
   import AiToolStatusList, { type AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
+  import AiSystemErrorCard from '@/components/aiAssistant/AiSystemErrorCard.vue';
+  import { resolveLegacyAiSystemErrorCode } from '@/components/aiAssistant/aiSystemError';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { useI18n } from 'vue-i18n';
   import router from '@/router';
@@ -185,6 +191,13 @@
     activity?: Array<Record<string, unknown> | string>;
     confirmations?: unknown[];
     interactions?: unknown[];
+    terminal?: {
+      status: 'completed' | 'failed';
+      eventId: number;
+      error: string | null;
+      message: string | null;
+      at: string;
+    };
   }
 
   const props = defineProps<{
@@ -194,6 +207,12 @@
   }>();
 
   const canRegenerate = computed(() => props.canRegenerate !== false);
+  const failedErrorCode = computed(
+    () =>
+      (props.message.terminal?.status === 'failed' ? props.message.terminal.error : null) ||
+      resolveLegacyAiSystemErrorCode(props.message.content),
+  );
+  const isFailedMessage = computed(() => Boolean(failedErrorCode.value));
 
   // 流式阶段就实时渲染 Markdown(轻量路径:补全未闭合语法 → marked → DOMPurify,跳过高亮与引用装饰),
   // 不再显示原始 ##/**/``` 符号。打字机逐帧更新 content,computed 依赖追踪天然每帧至多算一次。

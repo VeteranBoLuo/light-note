@@ -66,13 +66,7 @@
             playsinline
           />
           <div v-else-if="isTextFile(item)" class="file-card-text-preview">
-            <div class="file-card-text-preview-head">{{ getFileTypeLabel(item) }}</div>
-            <div
-              class="file-card-text-preview-body"
-              :class="{ 'file-card-text-preview-body--loading': getTextPreviewState(item.id).loading }"
-            >
-              {{ getTextPreviewState(item.id).text || t('cloudSpace.textPreviewLoading') }}
-            </div>
+            <CloudTextCardPreview :file-info="item" />
           </div>
           <div v-else class="file-card-placeholder" :class="`file-card-placeholder--${getFileCategory(item)}`">
             <div class="file-card-placeholder-inner">
@@ -103,7 +97,7 @@
                 {
                   label: $t('cloudSpace.share'),
                   icon: icon.cloudSpace.share,
-                  function: () => handleShareFile(item.id, item.fileName, item.fileType, item.shareToken),
+                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
                 },
                 {
                   label: $t('cloudSpace.moveFile'),
@@ -333,7 +327,7 @@
                 {
                   label: $t('cloudSpace.share'),
                   icon: icon.cloudSpace.share,
-                  function: () => handleShareFile(item.id, item.fileName, item.fileType, item.shareToken),
+                  function: () => handleShareFile(item.id, item.fileName, item.fileType),
                 },
                 {
                   label: $t('cloudSpace.moveFile'),
@@ -404,6 +398,33 @@
     <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
       <div class="share-desc-body">
         <div class="share-desc-tip">{{ $t('cloudSpace.shareDescTip') }}</div>
+        <label class="share-field-label">{{ $t('cloudSpace.shareExpiry') }}</label>
+        <BSelect v-model:value="shareExpiresInDays" :options="shareExpiryOptions" />
+        <label class="share-field-label">{{ $t('cloudSpace.shareAccessCode') }}</label>
+        <b-input
+          v-model:value="shareAccessCode"
+          :maxlength="12"
+          :placeholder="$t('cloudSpace.shareCodePlaceholder')"
+          autocomplete="off"
+        />
+        <div class="share-limit-grid">
+          <div>
+            <label class="share-field-label">{{ $t('cloudSpace.shareAccessLimit') }}</label>
+            <b-input
+              v-model:value="shareMaxAccessCount"
+              type="number"
+              :placeholder="$t('cloudSpace.shareLimitPlaceholder')"
+            />
+          </div>
+          <div>
+            <label class="share-field-label">{{ $t('cloudSpace.shareDownloadLimit') }}</label>
+            <b-input
+              v-model:value="shareMaxDownloadCount"
+              type="number"
+              :placeholder="$t('cloudSpace.shareLimitPlaceholder')"
+            />
+          </div>
+        </div>
         <b-input
           type="textarea"
           v-model:value="shareDescValue"
@@ -416,6 +437,50 @@
           }}</b-button>
           <b-button :disabled="shareSubmitting" @click="closeShareDialog">{{ $t('common.cancel') }}</b-button>
         </div>
+        <section class="share-records" :aria-label="$t('cloudSpace.shareCurrentLinks')">
+          <h4>{{ $t('cloudSpace.shareCurrentLinks') }}</h4>
+          <BLoading v-if="shareRecordsLoading" inline loading :title="$t('common.loading')" />
+          <p v-else-if="shareRecords.length === 0" class="share-records-empty">
+            {{ $t('cloudSpace.shareNoCurrentLinks') }}
+          </p>
+          <article v-for="record in shareRecords" v-else :key="record.id" class="share-record">
+            <div class="share-record-head">
+              <strong>{{ formatShareState(record.state) }}</strong>
+              <span>{{ formatShareDate(record.expiresAt) }}</span>
+            </div>
+            <div class="share-record-meta">
+              <span>{{
+                $t('cloudSpace.shareVisits', {
+                  current: record.accessCount,
+                  limit: record.maxAccessCount ?? $t('cloudSpace.shareUnlimited'),
+                })
+              }}</span>
+              <span>{{
+                $t('cloudSpace.shareDownloads', {
+                  current: record.downloadCount,
+                  limit: record.maxDownloadCount ?? $t('cloudSpace.shareUnlimited'),
+                })
+              }}</span>
+            </div>
+            <div class="share-record-actions">
+              <BButton
+                size="small"
+                :disabled="record.state !== 'active' || shareSubmitting"
+                @click="confirmRotateShare(record.id)"
+              >
+                {{ $t('cloudSpace.shareRotate') }}
+              </BButton>
+              <BButton
+                size="small"
+                type="danger"
+                :disabled="record.state !== 'active' || shareSubmitting"
+                @click="confirmRevokeShare(record.id)"
+              >
+                {{ $t('cloudSpace.shareRevoke') }}
+              </BButton>
+            </div>
+          </article>
+        </section>
       </div>
     </b-modal>
 
@@ -463,13 +528,23 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import icon from '@/config/icon.ts';
-  import { deleteField, downloadField, shareField } from '@/http/common.ts';
+  import {
+    deleteField,
+    downloadField,
+    listFileShares,
+    revokeFileShare,
+    rotateFileShare,
+    shareField,
+    type FileShareInput,
+    type FileShareRecord,
+  } from '@/http/common.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
@@ -482,6 +557,7 @@
   import { openAiAssistant } from '@/utils/aiEntry';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
+  import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -575,8 +651,19 @@
 
   const shareDescVisible = ref(false);
   const shareDescValue = ref('');
+  const shareExpiresInDays = ref<1 | 7 | 30>(7);
+  const shareAccessCode = ref('');
+  const shareMaxAccessCount = ref('');
+  const shareMaxDownloadCount = ref('');
   const shareSubmitting = ref(false);
   const shareTarget = ref<{ id: string; fileName?: string; fileType?: string } | null>(null);
+  const shareRecordsLoading = ref(false);
+  const shareRecords = ref<FileShareRecord[]>([]);
+  const shareExpiryOptions = computed(() => [
+    { value: 1, label: t('cloudSpace.shareExpiryOneDay') },
+    { value: 7, label: t('cloudSpace.shareExpirySevenDays') },
+    { value: 30, label: t('cloudSpace.shareExpiryThirtyDays') },
+  ]);
   const batchDownloadLoading = ref(false);
   const batchDownloadAbortController = ref<AbortController | null>(null);
   const batchDownloadCancelled = ref(false);
@@ -597,10 +684,6 @@
 
   const getFileCategory = (file: { category?: string }) => getCloudFileCategory(file);
   const getFileTypeLabel = (file: { category?: string }) => t(CLOUD_FILE_CATEGORY_LABEL_KEY[getFileCategory(file)]);
-  const TEXT_PREVIEW_CHAR_LIMIT = 180;
-  const TEXT_PREVIEW_LOAD_MAX = 32;
-  const textPreviewMap = ref<Record<string, { loading: boolean; text: string }>>({});
-  const textPreviewTaskMap = new Map<string, Promise<void>>();
 
   function formatFileSize(bytes: number): string {
     if (!bytes || bytes < 0) return '0 KB';
@@ -625,77 +708,6 @@
     return ext || getFileTypeLabel(file);
   }
 
-  function normalizePreviewText(raw: string): string {
-    const compact = String(raw || '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (!compact) return t('cloudSpace.textPreviewEmpty');
-    if (compact.length <= TEXT_PREVIEW_CHAR_LIMIT) return compact;
-    return compact.slice(0, TEXT_PREVIEW_CHAR_LIMIT) + '...';
-  }
-
-  async function readTextSnippet(url: string): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP_${response.status}`);
-    }
-    if (!response.body) {
-      const text = await response.text();
-      return normalizePreviewText(text);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let content = '';
-    const readLimit = TEXT_PREVIEW_CHAR_LIMIT + 80;
-    while (content.length < readLimit) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      content += decoder.decode(value, { stream: true });
-      if (content.length >= readLimit) {
-        await reader.cancel();
-        break;
-      }
-    }
-    content += decoder.decode();
-    return normalizePreviewText(content);
-  }
-
-  async function ensureTextPreview(file: any) {
-    if (!isTextFile(file)) return;
-    const key = String(file.id || '');
-    if (!key) return;
-    if (textPreviewMap.value[key] && !textPreviewMap.value[key].loading) return;
-    if (textPreviewTaskMap.has(key)) return;
-
-    textPreviewMap.value[key] = { loading: true, text: '' };
-    const task = (async () => {
-      try {
-        const text = await readTextSnippet(String(file.fileUrl || ''));
-        textPreviewMap.value[key] = { loading: false, text };
-      } catch (error) {
-        textPreviewMap.value[key] = { loading: false, text: '内容预览加载失败' };
-      } finally {
-        textPreviewTaskMap.delete(key);
-      }
-    })();
-
-    textPreviewTaskMap.set(key, task);
-    await task;
-  }
-
-  async function warmupTextPreviews() {
-    if (viewMode.value !== 'card' || batchMode.value) return;
-    const targets = cloud.fileList.filter((item) => isTextFile(item)).slice(0, TEXT_PREVIEW_LOAD_MAX);
-    for (const item of targets) {
-      await ensureTextPreview(item);
-    }
-  }
-
-  function getTextPreviewState(fileId: string | number) {
-    return textPreviewMap.value[String(fileId)] || { loading: false, text: '' };
-  }
-
   watch(
     () => cloud.fileList,
     (list) => {
@@ -703,24 +715,8 @@
       const ids = list.map((item) => item.id);
       selectedRows.value = selectedRows.value.filter((id) => ids.includes(id));
       selectAll.value = list.length > 0 && selectedRows.value.length === list.length;
-
-      const idSet = new Set(ids.map((id) => String(id)));
-      Object.keys(textPreviewMap.value).forEach((key) => {
-        if (!idSet.has(key)) {
-          delete textPreviewMap.value[key];
-          textPreviewTaskMap.delete(key);
-        }
-      });
     },
     { deep: true },
-  );
-
-  watch(
-    () => [viewMode.value, batchMode.value, cloud.fileList.map((item) => String(item.id)).join(',')],
-    () => {
-      warmupTextPreviews();
-    },
-    { immediate: true },
   );
 
   watch(
@@ -1045,18 +1041,56 @@
     }
   };
 
-  async function handleShareFile(id, fileName, fileType, shareToken) {
-    recordOperation({ module: '云空间', operation: `打开文件分享弹窗【${fileName}】` });
-    shareTarget.value = { id, fileName, fileType, shareToken };
+  function resetShareForm() {
     shareDescValue.value = '';
+    shareExpiresInDays.value = 7;
+    shareAccessCode.value = '';
+    shareMaxAccessCount.value = '';
+    shareMaxDownloadCount.value = '';
+  }
+
+  function normalizeShareLimit(value: string) {
+    const normalized = String(value || '').trim();
+    return normalized ? Number(normalized) : null;
+  }
+
+  function currentShareInput(): FileShareInput {
+    return {
+      description: shareDescValue.value.trim(),
+      expiresInDays: shareExpiresInDays.value,
+      accessCode: shareAccessCode.value.trim(),
+      maxAccessCount: normalizeShareLimit(shareMaxAccessCount.value),
+      maxDownloadCount: normalizeShareLimit(shareMaxDownloadCount.value),
+    };
+  }
+
+  async function loadShareRecords() {
+    if (!shareTarget.value) return;
+    shareRecordsLoading.value = true;
+    try {
+      shareRecords.value = await listFileShares(shareTarget.value.id);
+    } catch {
+      message.error(t('cloudSpace.shareLoadFailed'));
+    } finally {
+      shareRecordsLoading.value = false;
+    }
+  }
+
+  async function handleShareFile(id, fileName, fileType) {
+    recordOperation({ module: '云空间', operation: `打开文件分享弹窗【${fileName}】` });
+    shareTarget.value = { id, fileName, fileType };
+    resetShareForm();
+    shareRecords.value = [];
     shareDescVisible.value = true;
+    await loadShareRecords();
   }
 
   const closeShareDialog = () => {
     if (shareSubmitting.value) return;
     shareDescVisible.value = false;
     shareTarget.value = null;
-    shareDescValue.value = '';
+    shareRecords.value = [];
+    resetShareForm();
   };
 
   const submitShare = async () => {
@@ -1064,24 +1098,71 @@
     if (!shareTarget.value) return;
     try {
       shareSubmitting.value = true;
-      const desc = shareDescValue.value.trim();
-      await shareField(
-        shareTarget.value.id,
-        shareTarget.value.shareToken,
-        shareTarget.value.fileName,
-        shareTarget.value.fileType,
-        desc,
-      );
+      await shareField(shareTarget.value.id, currentShareInput());
       recordOperation({ module: '云空间', operation: `分享文件成功【${shareTarget.value.fileName}】` });
-      shareDescVisible.value = false;
-      shareTarget.value = null;
-      shareDescValue.value = '';
+      resetShareForm();
+      await loadShareRecords();
     } catch (error) {
       // 错误已在 shareField 中处理
     } finally {
       shareSubmitting.value = false;
     }
   };
+
+  function formatShareDate(value: string) {
+    return value ? new Date(value).toLocaleString() : '-';
+  }
+
+  function formatShareState(state: string) {
+    const labels: Record<string, string> = {
+      active: t('cloudSpace.shareActive'),
+      revoked: t('cloudSpace.shareRevoke'),
+      expired: t('cloudSpace.shareUnavailableTitle'),
+      file_unavailable: t('cloudSpace.shareUnavailableTitle'),
+      access_limit_reached: t('cloudSpace.shareUnavailableTitle'),
+      download_limit_reached: t('cloudSpace.shareUnavailableTitle'),
+    };
+    return labels[state] || state;
+  }
+
+  function confirmRevokeShare(shareId: string) {
+    Alert.alert({
+      title: t('cloudSpace.alertTitle'),
+      content: t('cloudSpace.shareRevokeConfirm'),
+      onOk: async () => {
+        shareSubmitting.value = true;
+        try {
+          await revokeFileShare(shareId);
+          message.success(t('cloudSpace.shareRevoked'));
+          await loadShareRecords();
+        } catch {
+          message.error(t('cloudSpace.shareManageFailed'));
+        } finally {
+          shareSubmitting.value = false;
+        }
+      },
+    });
+  }
+
+  function confirmRotateShare(shareId: string) {
+    Alert.alert({
+      title: t('cloudSpace.alertTitle'),
+      content: t('cloudSpace.shareRotateConfirm'),
+      onOk: async () => {
+        shareSubmitting.value = true;
+        try {
+          await rotateFileShare(shareId, currentShareInput());
+          message.success(t('cloudSpace.shareRotated'));
+          resetShareForm();
+          await loadShareRecords();
+        } catch {
+          message.error(t('cloudSpace.shareManageFailed'));
+        } finally {
+          shareSubmitting.value = false;
+        }
+      },
+    });
+  }
   const originalName = ref('');
   const originalExt = ref('');
   const dragPreviewEl = ref<HTMLElement | null>(null);
@@ -1423,10 +1504,61 @@
     color: var(--desc-color);
     font-size: 12px;
   }
+  .share-field-label {
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .share-limit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    > div {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+  }
   .share-desc-actions {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+  }
+  .share-records {
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--surface-divider-color);
+    h4 {
+      margin: 0 0 8px;
+      color: var(--text-color);
+    }
+  }
+  .share-records-empty {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+  }
+  .share-record {
+    display: grid;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--surface-divider-color);
+    .share-record-head,
+    .share-record-meta,
+    .share-record-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    span {
+      color: var(--desc-color);
+      font-size: 12px;
+    }
+  }
+  .share-record-actions {
+    justify-content: flex-end !important;
   }
   @media (max-width: 1400px) {
     .field-item {
@@ -1613,53 +1745,21 @@
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
     background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 90%, #111318 10%);
     border-top: 1px solid color-mix(in srgb, var(--folder-list-border-color) 80%, transparent);
   }
 
-  .file-card-text-preview-head {
-    font-size: 11px;
-    font-weight: 700;
-    color: color-mix(in srgb, var(--desc-color) 92%, #7f8794 8%);
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  .file-card-text-preview-body {
+  .file-card-text-preview :deep(.cloud-text-card-preview) {
     flex: 1;
     min-height: 0;
-    font-size: 12px;
-    line-height: 1.5;
-    color: color-mix(in srgb, var(--desc-color) 92%, #7f8794 8%);
-    white-space: pre-wrap;
-    word-break: break-word;
     overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 6;
-    line-clamp: 6;
-    -webkit-box-orient: vertical;
-  }
-
-  .file-card-text-preview-body--loading {
-    color: var(--desc-color);
-    opacity: 0.65;
   }
 
   [data-theme='night'] .file-card-text-preview {
     background: color-mix(in srgb, #1a1c22 86%, var(--bl-input-noBorder-bg-color) 14%);
     border-top-color: color-mix(in srgb, #3b3f4a 78%, transparent);
-  }
-
-  [data-theme='night'] .file-card-text-preview-head {
-    color: #7f8794;
-  }
-
-  [data-theme='night'] .file-card-text-preview-body {
-    color: #8790a0;
   }
 
   .file-card:hover .file-card-overlay,

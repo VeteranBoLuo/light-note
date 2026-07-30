@@ -42,7 +42,7 @@
       :disabled="disabled"
       :readonly="readonly"
       :placeholder="placeholder"
-      @change="$emit('change')"
+      @change="handleChange"
       @focus="$emit('focus')"
       @blur="$emit('blur')"
       @focusout="$emit('focusout')"
@@ -68,7 +68,14 @@
       id?: string;
       placeholder?: string;
       type?: string;
-      autocomplete?: 'off' | 'on' | 'new-password';
+      autocomplete?:
+        | 'off'
+        | 'on'
+        | 'email'
+        | 'username'
+        | 'current-password'
+        | 'new-password'
+        | 'one-time-code';
       height?: string;
       theme?: 'al-day' | '';
       rows?: number;
@@ -118,6 +125,10 @@
   function handleInput(event) {
     value.value = event.target.value;
     emit('input', event.target.value);
+  }
+
+  function handleChange(event: Event) {
+    emit('change', (event.target as HTMLInputElement).value);
   }
 
   function handleEnter(event: KeyboardEvent) {

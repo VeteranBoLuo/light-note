@@ -1,11 +1,28 @@
 <template>
   <article class="todo-item" :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed' }">
+    <BButton
+      v-if="draggable"
+      class="todo-item__drag-handle"
+      :aria-label="t('inbox.todoDrag')"
+      :disabled="disabled || item.status === 'completed'"
+    >
+      <SvgIcon :src="icon.todo.drag" size="16" aria-hidden="true" />
+    </BButton>
+    <BCheckbox
+      v-if="selectable"
+      class="todo-item__select"
+      :model-value="selected"
+      :disabled="disabled"
+      :aria-label="t('inbox.todoSelect', { title: item.title })"
+      @update:model-value="$emit('select', $event)"
+    />
     <div class="todo-item__body">
       <div class="todo-item__meta">
         <span>{{ t('inbox.todo') }}</span>
         <span class="todo-priority">{{ priorityLabel }}</span>
         <span v-if="item.dueAt" :class="{ overdue }">{{ dueLabel }}</span>
         <span v-if="reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
+        <span v-if="item.recurrence" class="todo-recurrence-label">{{ recurrenceLabel }}</span>
       </div>
       <BCheckbox
         class="todo-item__main-check"
@@ -38,6 +55,24 @@
       </section>
     </div>
     <div class="todo-item__actions">
+      <BSelect
+        class="todo-item__priority-select"
+        :value="item.priority"
+        :options="priorityOptions"
+        :disabled="disabled || item.status === 'completed'"
+        :aria-label="t('inbox.todoPriority')"
+        @change="changePriority"
+      />
+      <BPopover v-if="item.status === 'pending'" trigger="click" placement="bottom-right">
+        <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
+        <template #content>
+          <div class="todo-snooze-menu">
+            <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
+            <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
+            <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
+          </div>
+        </template>
+      </BPopover>
       <BButton size="small" :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
       <BButton
         size="small"
@@ -59,16 +94,30 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
-  import type { TodoChecklistItem, TodoItem } from '@/api/todoApi';
+  import type { TodoChecklistItem, TodoItem, TodoPriority } from '@/api/todoApi';
 
-  const props = defineProps<{ item: TodoItem; disabled?: boolean; deleting?: boolean }>();
+  const props = defineProps<{
+    item: TodoItem;
+    disabled?: boolean;
+    deleting?: boolean;
+    selectable?: boolean;
+    selected?: boolean;
+    draggable?: boolean;
+  }>();
   const emit = defineEmits<{
     'toggle-complete': [completed: boolean];
     'update-checklist': [checklist: TodoChecklistItem[]];
     edit: [];
     delete: [];
     'add-to-calendar': [];
+    select: [selected: boolean];
+    snooze: [preset: 'tenMinutes' | 'tomorrow' | 'nextWeek'];
+    'update-priority': [priority: TodoPriority];
   }>();
   const { t, locale } = useI18n();
   const overdue = computed(
@@ -96,12 +145,24 @@
       ? t('inbox.todoReminderRepeatSummary', { channels: channelLabels.join(' + ') })
       : t('inbox.todoReminderOnceSummary', { channels: channelLabels.join(' + ') });
   });
+  const recurrenceLabel = computed(() => {
+    const recurrence = props.item.recurrence;
+    if (!recurrence) return '';
+    return t(`inbox.todoRecurrenceSummary.${recurrence.frequency}`, { interval: recurrence.interval });
+  });
+  const priorityOptions = computed(() =>
+    [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
+  );
 
   function toggleChecklist(id: string, done: boolean) {
     emit(
       'update-checklist',
       props.item.checklist.map((item) => (item.id === id ? { ...item, done } : item)),
     );
+  }
+  function changePriority(value: unknown) {
+    const priority = Number(value);
+    if (priority === 0 || priority === 1 || priority === 2) emit('update-priority', priority);
   }
   function parseDate(value: string) {
     return new Date(String(value).replace(' ', 'T'));
@@ -124,6 +185,27 @@
       color-mix(in srgb, var(--primary-color) 6%, var(--background-color)),
       var(--background-color) 42%
     );
+  }
+  .todo-item__drag-handle {
+    position: absolute;
+    top: 11px;
+    right: 10px;
+    z-index: 1;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    cursor: grab;
+    color: var(--desc-color);
+  }
+  .todo-item__select {
+    position: absolute;
+    top: 18px;
+    left: 10px;
+    z-index: 1;
+  }
+  .todo-recurrence-label {
+    color: var(--success-color, #2e8b57);
   }
   .todo-item::before {
     position: absolute;
@@ -247,6 +329,25 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
+  }
+  .todo-item__priority-select {
+    width: 108px;
+  }
+  .todo-snooze-menu {
+    display: grid;
+    min-width: 160px;
+    padding: 6px;
+    gap: 4px;
+  }
+  .todo-snooze-menu :deep(.b_btn) {
+    justify-content: flex-start;
+    min-height: 36px;
+  }
+  @media (pointer: coarse) {
+    .todo-item__drag-handle,
+    .todo-snooze-menu :deep(.b_btn) {
+      min-height: 44px;
+    }
   }
   @media (max-width: 767px) {
     .todo-item {

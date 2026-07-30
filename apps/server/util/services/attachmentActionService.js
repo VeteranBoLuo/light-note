@@ -376,7 +376,6 @@ export async function saveAttachmentToCloud({
           folder_id: targetFolder.folderId,
           del_flag: 0,
           obs_key: targetKey,
-          share_token: crypto.randomBytes(16).toString('hex'),
         },
       ]);
       const fileId = insertResult.insertId;

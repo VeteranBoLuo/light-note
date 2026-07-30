@@ -27,6 +27,7 @@ import { stableAgentErrorCode } from './util/agent/logSafety.js';
 import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
 import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
 import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
+import { requestTraceMiddleware } from './util/requestTrace.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -47,6 +48,7 @@ app.set('trust proxy', 1);
 app.use(bodyParser.json({ limit: '10mb', extended: true }));
 //  解析请求体中的JSON数据
 app.use(express.json());
+app.use(requestTraceMiddleware);
 
 // 还原可信登录态
 app.use(authMiddleware);

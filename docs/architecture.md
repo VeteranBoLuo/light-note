@@ -133,7 +133,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 ### Android 客户端
 
 - Android 工程位于 `apps/android`，使用 Java、Android Gradle Plugin 8.7.3、Gradle 8.9、JDK 17 和 Android WebView。
-- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。`/app` 始终是应用入口，不能返回官网：手机布局、Android APK 与移动 PWA 恢复最近使用的书签、笔记库或云空间，没有历史记录时回退 `/home`；桌面浏览器与桌面 PWA 按账号默认应用首页进入。根路径 `/` 的产品矩阵为：桌面浏览器与桌面 PWA 始终展示官网，Logo 也回官网；普通移动浏览器首次访问展示完整响应式官网并写入本地首访记录，后续访问由 `<head>` 守卫在首次绘制前进入 `/app`，既有登录/记住身份记录作为升级兼容信号；Android APK 与移动 PWA 不展示官网。移动端品牌 Logo 与底部“资料”入口行为一致。
+- 正式包名为 `top.boluo66.lightnote`，Debug 使用 `.preview` 后缀，可与正式版同时安装；Release 应用入口固定为 `https://boluo66.top/app`，Debug 才允许用显式 Gradle 参数覆盖本地地址。`/app` 始终是应用入口，不能返回官网：手机布局、Android APK 与移动 PWA 恢复最近使用的书签、笔记库或云空间，没有历史记录时回退 `/home`；桌面浏览器与桌面 PWA 按账号默认应用首页进入，无账号偏好时同样回退书签 `/home`。根路径 `/` 始终保留官网；桌面应用内 Logo 进入 `/app`，移动端品牌 Logo 与底部“资料”入口行为一致。普通移动浏览器首次访问 `/` 展示完整响应式官网并写入本地首访记录，后续访问由 `<head>` 守卫在首次绘制前进入 `/app`，既有登录/记住身份记录作为升级兼容信号；Android APK 与移动 PWA 不展示官网。
 - 邮箱注册与 GitHub 首次注册成功后，所有端统一固定进入书签 `/home`，不能继承设备上一个账号的最近资料模块；普通登录及 `/app` 入口仍按各自运行环境恢复最近资料或账号默认首页。
 - PC 浏览器、移动浏览器、PWA 与 Android APK 的被动身份变化遵循同一规则：冷启动、刷新、自动入口分流、初始化发现游客、历史会话失效和手动退出都不能自动打开登录/注册弹窗。历史登录记录只用于移动入口兼容，不代表当前登录意图；运行中的真实会话过期仅显示非阻塞提示并降级到游客资料页。认证弹窗只由用户主动点击登录/注册，或在受保护操作的软引导中再次主动确认后打开。
 - 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
@@ -248,6 +248,8 @@ src/
 
 笔记库支持多条笔记置顶：`note.is_top` 只表达整理状态，不改变 `update_time`；列表按置顶分组、自定义 `sort`、更新时间依次排序，卡片和列表使用笔记绿色标记。桌面端通过右键菜单操作，移动端通过卡片“更多”菜单操作；拖拽只改变组内顺序，置顶组始终位于普通组之前。
 
+笔记详情目录按统一响应式断点切换：完整桌面布局显示常驻侧边目录；手机和平板/中等宽度布局在顶栏显示目录按钮，并通过底部 `BDrawer` 打开目录。两种形态复用同一标题数据、当前章节高亮和正文定位逻辑，正文没有标题时不显示入口。
+
 书签、笔记库和云空间主列表采用服务端分页：前端首屏固定请求 48 条，接近滚动容器底部时增量合并下一页，接口同时返回当前筛选条件下的 `total / page / pageSize / hasMore`。关键词、标签、文件夹、无标签和文件分类必须先在 SQL 中完成过滤与总数统计，再应用 `LIMIT / OFFSET`；云文件只为当前页生成签名地址。书签和笔记在“全部视图”中通过前后相邻资源 ID 提交锚点移动，后端在事务内按完整同置顶分组定位并重排，因此已加载前缀可以拖拽、未加载尾部不会被局部编号覆盖；拖到当前已加载末尾只表示插入该锚点之后，只有加载到真实末尾后才能拖到全局最后。书签定位可以按页继续加载直到找到目标。标签编辑、标签详情和管理页等尚未迁移的旧调用显式使用不分页模式并保持原响应结构，后续迁移前不得依赖分页默认值。
 
 资源中心主结果流通过 `/search/global` 的 `ordered` 分页模式，按“书签 → 笔记 → 文件 → 标签”的固定分组顺序连续取数，每批合计最多 40 条；当前类型不足一批时由后续类型补齐，并以 `{ type, offset }` 游标从准确位置续取。首批返回经过关键词、资源类型、标签、无标签、日期和排序条件后的 `typeTotals`、`hasMoreByType` 与标签筛选选项，追加批次不重复执行这些统计查询；页面只为已经加载的类型显示一次分组标题。全局快捷搜索、提及选择器等小型预览调用继续使用按类型限量的兼容模式。前端不再用 `limit=0` 拉取书签、笔记、文件和标签全量后本地筛选；请求版本号负责阻止旧关键词或旧筛选响应覆盖新结果。
@@ -344,8 +346,9 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 ### 证据与检索
 
 - Agent 将资源级 `sourceId` 与本轮不可变的 `evidenceRef` 分开；证据包含资源版本、locator、短摘录及摘要哈希，正文只把真实存在的 citation key 渲染成可交互引用。
-- Final 完成后会审计引用编号，移除不存在的编号，并把权威正文、证据、覆盖度和审计结果放入终态事件。该检查证明“引用存在”，不等同于自然语言蕴含正确；蕴含质量仍需人工标注和抽检。
+- Final 完成后会审计引用编号，移除不存在的编号，并把权威正文、证据、覆盖度和审计结果放入终态事件。离线评测除引用存在性外，还接受受控夹具或人工标注的 claim/evidence 语义支持度并单独评分；它不把关键词重合伪装成自动蕴含，线上发布仍需人工抽检。
 - `personalKnowledgeSearch.js` 从笔记、书签快照、已解析文件/OCR、待办和标签关系建立按用户隔离的 MiniSearch 词法索引；标题、标签、章节和正文分级加权，每个资源限制命中片段数。`ai_content_chunks` 是可审计的持久分块镜像，运行时索引仍从权威业务表重建；资源更新通过共享 Service 主动失效，3 分钟 TTL 只作为进程内缓存寿命，不承担跨实例正确性。
+- `ai_resource_preferences` 保存主体账号对单条书签、笔记和云文件的 AI 参与偏好。永久排除与本轮 `excludedResources` 临时排除在服务端合并，并覆盖个人搜索、显式上下文和云文件附件读取；偏好表或权威归属校验不可用时失败关闭，不能仅靠前端隐藏材料。
 - 个人索引失效协议支持在业务事务中递增 `ai_content_generations` 的 per-subject 代际并物理删除该账号持久 chunk；总清除已使用强原子路径，Change Set 等 AI 安全写闭环也必须复用该路径。缓存命中、构建前后和 chunk 持久化都会核对数据库代际；持久化事务对代际行 `FOR UPDATE` 并执行 CAS，旧实例构建出的快照不能覆盖新状态。候选命中返回前还会按 owner、`del_flag` 与 `resourceVersion` 重新查询权威业务表，校验不可用时失败关闭，不把已删除、转移归属或旧版本缓存正文作为证据。跨实例旧快照回写和已删除资源命中已有回归测试；但部分 legacy 笔记、书签、文件、快照和创建后副作用仍在业务提交后才旁路推进代际，尚未证明所有入口与资源写同事务。这些入口的剩余风险主要是新内容短时漏召回或缓存重建延迟；上线前仍要逐入口审计/迁移并验证 MySQL 5.7 锁竞争、故障恢复和大账号性能，不能把现有机制表述成全局强一致。
 
 ### Change Set 与记忆
@@ -391,8 +394,11 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、
 - 桌面端 `/inbox` 页面继续统一展示待整理资源与待办，产品入口名称为“待处理”，原路由保持兼容
 - 移动端底部一级入口为“待办”，默认只展示待办；待整理资源从“资源中心 → 待整理”进入，且不混入待办
 - 待整理资源继续使用 `resource_inbox`；待办独立存入 `todo_items`，不能伪装成笔记或资源关系
-- 待办支持标题、说明、简易清单、优先级和截止时间；清单只在待办列表执行态勾选，创建/编辑态仅负责录入
-- 提醒计划存入 `todo_reminders`，支持单次/周期计划及站内/邮箱渠道；周期计划以 `scheduled_at` 保存下一次执行时间，超过 `repeat_end_at` 自动结束
+- 待办支持标题、说明、简易清单、优先级、截止时间和稳定自定义顺序；列表按逾期、今天、即将到来、以后、无日期和已完成分组，并提供议程/日历视图
+- 提醒计划存入 `todo_reminders`，支持单次/周期计划及站内/邮箱渠道；周期提醒以 `scheduled_at` 保存下一次投递时间，超过 `repeat_end_at` 自动结束
+- 重复任务使用 `series_id / recurrence_rule / recurrence_instance_at` 独立建模，与“同一任务反复提醒”没有隐式关联；完成当前实例后在同一事务中生成下一实例、重置清单并平移提醒，撤销完成会删除本次自动生成且尚未变化的下一实例
+- 完成、删除及批量操作的撤销由服务端事务校验，不以客户端计时器作为事实源；删除仅暂停提醒，恢复后恢复对应计划
+- 账号偏好控制站内、邮件和浏览器通知总开关及免打扰时段；服务端投递按客户端同步的时区计算免打扰，浏览器通知只在应用已打开且获得系统授权时由前端展示
 - 待办完成或删除不会修改任何书签、笔记或文件；管理员预览首期只允许读取，不允许代用户写入待办
 - 待办提醒由服务端定时扫描 `todo_reminders`，先原子抢占再投递；站内渠道写入统一通知中心，邮件渠道使用服务端 SMTP 配置
 
@@ -469,7 +475,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
   - **轨道 A — 手工 `migrations/*.sql`**（现约 57 个 dated 文件）：**没有自动迁移 runner**,靠人工/DBA 执行(如 `rename_admin_to_user`、`conversion_events_ip`),deploy 脚本不跑迁移;建表直接用 `CREATE TABLE IF NOT EXISTS`(MySQL 5.7 支持)。已有 `migrations/schema-assertions.sql` 做启动/发布期 schema 断言(约定"有输出=失败",目前主要覆盖 AI 工作区表)。
   - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 启动依次调 7 个——`ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`lottery_*` 列）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureAiDocumentSchema`。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
   - 同一张表可能被两轨分建:如 `growth_events` 主表在迁移 `20260708_growth.sql`,而 `user_growth` 的积分/装扮/抽奖列由 `ensurePointsSchema` 运行时补。**只读 `migrations/` 会漏掉 B 轨的表;只 grep 代码里的 `CREATE TABLE` 又会漏掉 A 轨迁移建的表——两边都要查,别信任何一侧的"未命中"。**
-- **Schema 漂移（两轨都没有的）**：整张 `note_versions`、`files.share_token` 被代码大量使用,却在 `migrations/`、`tag_db.sql`、`ensure*()` 里都无任何 DDL(应为生产手工应用或基线 dump 过期)。**全新环境按仓库建库会缺表/缺列报错,以线上真实库为准。**（原漂移列 `note.type`、`bookmark.is_top` 已于 2026-07-17 补进 migration,如 `20260717_note_pin.sql`,不再漂移。）
+- **Schema 基线门禁**：`note_versions`、旧版兼容列 `files.share_token` 以及独立分享表已由 `20260730_file_share_lifecycle.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema`，关键表、列或索引缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
 - 基线 `tag_db.sql` 可能已过期，仍含 `note_tags` / `tag_bookmark_relations` 等旧表；现行代码走 `tag` + `resource_tag_relations` 统一多态关联。
 
 ### 安全模块会自动封 IP —— 密集运维流量小心

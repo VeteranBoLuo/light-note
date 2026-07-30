@@ -90,6 +90,15 @@ export default defineStore('bookmark', {
       if (width < VIEWPORT_BREAKPOINTS.desktop) {
         return 'tablet';
       }
+      // iPad Pro 等横屏触控设备可达到 1366px；只在中等宽度且粗指针时延续平板交互，
+      // 避免把同宽度的 MacBook/桌面窗口误判为平板。
+      if (
+        width < VIEWPORT_BREAKPOINTS.compact &&
+        typeof window !== 'undefined' &&
+        window.matchMedia?.('(pointer: coarse)').matches
+      ) {
+        return 'tablet';
+      }
       return 'desktop';
     },
 
@@ -112,6 +121,13 @@ export default defineStore('bookmark', {
      */
     isDesktop(): boolean {
       return this.deviceType === 'desktop';
+    },
+
+    /**
+     * 1400px 以下统一采用紧凑排版，但不因此改变设备类型或桌面导航。
+     */
+    isCompactLayout(): boolean {
+      return this.screenWidth < VIEWPORT_BREAKPOINTS.compact;
     },
 
     /**

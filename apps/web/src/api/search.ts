@@ -4,7 +4,7 @@ import i18n from '@/i18n';
 export type SearchType = 'bookmark' | 'note' | 'file' | 'tag';
 
 export interface SearchCursor {
-  type: SearchType;
+  type: SearchType | 'all';
   offset: number;
 }
 
@@ -19,6 +19,8 @@ export interface SearchResultItem {
   route?: string;
   iconUrl?: string;
   tags?: Array<{ id: string; name: string }>;
+  matchReason?: 'title_exact' | 'title_prefix' | 'title' | 'tag' | 'url' | 'description' | 'content' | string;
+  snippet?: string;
   raw?: any;
 }
 
@@ -45,6 +47,7 @@ export interface GlobalSearchResponse {
 export interface GlobalSearchQuery {
   page?: number;
   type?: SearchType | 'all';
+  types?: SearchType[];
   sort?: 'relevance' | 'updated' | 'name';
   date?: 'all' | '7d' | '30d' | '365d';
   tags?: string[];
@@ -89,11 +92,11 @@ const SEARCH_TYPES: SearchType[] = ['bookmark', 'note', 'file', 'tag'];
 function normalizeSearchCursor(value: unknown): SearchCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Partial<SearchCursor>;
-  if (!SEARCH_TYPES.includes(raw.type as SearchType)) return null;
+  if (raw.type !== 'all' && !SEARCH_TYPES.includes(raw.type as SearchType)) return null;
   const offset = Number(raw.offset);
   if (!Number.isFinite(offset) || offset < 0) return null;
   return {
-    type: raw.type as SearchType,
+    type: raw.type as SearchType | 'all',
     offset: Math.floor(offset),
   };
 }
@@ -108,8 +111,12 @@ export async function fetchGlobalSearch(
   const locale = i18n.global.locale.value;
   const paginationMode = query.paginationMode === 'ordered' ? 'ordered' : 'perType';
   const normalizedCursor = normalizeSearchCursor(query.cursor);
+  const normalizedTypes = [...new Set(query.types || [])]
+    .filter((type) => SEARCH_TYPES.includes(type))
+    .sort();
   const normalizedQuery = {
     type: query.type || 'all',
+    ...(normalizedTypes.length ? { types: normalizedTypes } : {}),
     sort: query.sort || 'relevance',
     date: query.date || 'all',
     tags: [...(query.tags || [])]
@@ -139,7 +146,13 @@ export async function fetchGlobalSearch(
     ...normalizedQuery,
   });
 
-  if (res.status !== 200) return emptySearchResult;
+  if (res.status !== 200) {
+    const error = new Error(String(res.msg || i18n.global.t('common.requestFailedDescription'))) as Error & {
+      requestId?: string;
+    };
+    error.requestId = String(res.requestId || '');
+    throw error;
+  }
 
   const typeTotals =
     res.data?.typeTotals && typeof res.data.typeTotals === 'object'

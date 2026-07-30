@@ -57,9 +57,17 @@
 
   .loading-spinner {
     position: absolute;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
     border: 2px solid transparent;
     border-radius: 50%;
+    transform-origin: center;
+    pointer-events: none;
   }
 
   .prompt-icon.is-loading .loading-spinner {

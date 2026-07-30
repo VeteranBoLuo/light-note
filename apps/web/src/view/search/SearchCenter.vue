@@ -73,7 +73,7 @@
               v-for="item in typeFilters"
               :key="item.value"
               class="filter-item"
-              :class="{ active: queryState.type === item.value }"
+              :class="{ active: isTypeFilterActive(item.value) }"
               :data-search-type="item.value"
               @click="selectActiveType(item.value)"
               v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
@@ -133,9 +133,9 @@
                 <BButton
                   class="select-visible-btn"
                   :disabled="!selectableVisibleItems.length"
-                  @click="toggleSelectAllVisible"
+                  @click="toggleBatchMode"
                 >
-                  {{ allVisibleSelected ? t('resourceCenter.batch.unselectAll') : t('resourceCenter.batch.selectAll') }}
+                  {{ batchMode ? t('resourceCenter.batch.exit') : t('resourceCenter.batch.enter') }}
                 </BButton>
               </div>
               <div v-if="bookmark.isMobile" class="toolbar-actions toolbar-actions--mobile">
@@ -174,6 +174,9 @@
                 >
                   <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
                   <span>AI</span>
+                </BButton>
+                <BButton class="mobile-toolbar-btn" @click="toggleBatchMode">
+                  {{ batchMode ? t('resourceCenter.batch.exit') : t('resourceCenter.batch.enter') }}
                 </BButton>
               </div>
               <div v-else class="toolbar-actions">
@@ -224,8 +227,13 @@
                     </BButton>
                     <template #content>
                       <div class="tag-filter-popover">
+                        <BInput
+                          v-model:value="tagSearch"
+                          :placeholder="t('resourceCenter.tagSearchPlaceholder')"
+                          clearable
+                        />
                         <BButton
-                          v-for="tag in tagOptions"
+                          v-for="tag in filteredTagOptions"
                           :key="tag"
                           class="tag-chip"
                           :class="{ active: queryState.tags.includes(tag) }"
@@ -240,7 +248,7 @@
               </div>
             </section>
 
-            <section v-if="selectedIds.length" class="batch-toolbar">
+            <section v-if="batchMode" class="batch-toolbar">
               <div class="batch-left">
                 <span>{{ t('resourceCenter.batch.selectedCount', { count: selectedIds.length }) }}</span>
               </div>
@@ -261,7 +269,7 @@
 
             <div ref="resultScrollRef" class="result-scroll-area">
               <div
-                v-if="viewState.loading"
+                v-if="showLoadingSkeleton"
                 class="result-skeleton"
                 :class="{ 'result-skeleton--list': effectiveView === 'list' }"
               >
@@ -278,6 +286,31 @@
                     <div class="result-sk-line result-sk-line--meta2"></div>
                   </div>
                 </div>
+              </div>
+
+              <div
+                v-else-if="interleavedItems.length"
+                class="result-grid"
+                :class="{ 'result-grid--list': effectiveView === 'list' }"
+              >
+                <RightMenu
+                  v-for="item in interleavedItems"
+                  :key="`${item.type}-${item.id}`"
+                  :menu="menuForSearchItem(item)"
+                  @select="handleItemMenu($event, item)"
+                >
+                  <SearchResultItem
+                    :item="item"
+                    :type-label="getSearchTypeLabel(t, item.type)"
+                    :keyword="queryState.keyword"
+                    :selected="selectedIds.includes(getItemSelectionKey(item))"
+                    :selectable="batchMode"
+                    :view="effectiveView"
+                    :compact="bookmark.isMobile"
+                    @open="openItem(item)"
+                    @toggle-select="toggleSelect(item)"
+                  />
+                </RightMenu>
               </div>
 
               <template v-else-if="visibleGroups.length">
@@ -298,7 +331,7 @@
                         :type-label="getSearchTypeLabel(t, item.type)"
                         :keyword="queryState.keyword"
                         :selected="selectedIds.includes(getItemSelectionKey(item))"
-                        :selectable="true"
+                        :selectable="batchMode"
                         :view="effectiveView"
                         :compact="bookmark.isMobile"
                         @open="openItem(item)"
@@ -308,6 +341,15 @@
                   </div>
                 </section>
               </template>
+
+              <div v-else-if="viewState.error" class="result-error-state" role="alert">
+                <h3>{{ t('resourceCenter.loadErrorTitle') }}</h3>
+                <p>{{ viewState.error.message || t('common.requestFailedDescription') }}</p>
+                <p v-if="viewState.error.requestId" class="result-error-request-id">
+                  {{ t('common.requestIdLabel') }}：{{ viewState.error.requestId }}
+                </p>
+                <BButton type="primary" @click="refreshData">{{ t('common.retry') }}</BButton>
+              </div>
 
               <div v-else class="empty-state">
                 <div class="empty-orbit"></div>
@@ -345,7 +387,7 @@
                 </div>
               </div>
               <div
-                v-show="visibleGroups.length && (viewState.hasMore || viewState.loadingMore)"
+                v-show="allVisibleItems.length && (viewState.hasMore || viewState.loadingMore)"
                 ref="resultLoadSentinel"
                 class="result-load-sentinel"
               >
@@ -401,9 +443,14 @@
 
         <div v-if="tagOptions.length" class="mobile-filter-section">
           <span class="mobile-filter-label">{{ t('resourceCenter.tagFilter') }}</span>
+          <BInput
+            v-model:value="tagSearch"
+            :placeholder="t('resourceCenter.tagSearchPlaceholder')"
+            clearable
+          />
           <div class="mobile-filter-tags">
             <BButton
-              v-for="tag in tagOptions"
+              v-for="tag in filteredTagOptions"
               :key="tag"
               class="tag-chip"
               :class="{ active: queryState.tags.includes(tag) }"
@@ -485,11 +532,14 @@
   const SEARCH_VIEW_STORAGE_KEY = 'resource-center-view-mode';
   const SEARCH_BATCH_STORAGE_KEY = 'resource-center-batch-items';
   const SEARCH_QUERY_KEYS = ['q', 'type', 'sort', 'view', 'tags', 'date', 'untagged'] as const;
-  const MIN_SKELETON_MS = 120;
-  const REFRESH_SKELETON_MS = 360;
+  const SKELETON_DELAY_MS = 140;
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
+  const batchMode = ref(false);
+  const tagSearch = ref('');
+  const showLoadingSkeleton = ref(false);
+  let skeletonTimer: number | null = null;
   const typeFilterRef = ref<{ $el?: Element } | null>(null);
   const resultScrollRef = ref<HTMLElement | null>(null);
   const resultLoadSentinel = ref<HTMLElement | null>(null);
@@ -505,6 +555,7 @@
   const queryState = reactive<{
     keyword: string;
     type: SearchType | 'all';
+    types: SearchType[];
     sort: ResourceSort;
     view: ResourceView;
     tags: string[];
@@ -513,6 +564,7 @@
   }>({
     keyword: '',
     type: 'all',
+    types: [],
     sort: (user.preferences.resourceSort as ResourceSort) || 'relevance',
     view:
       (user.preferences.resourceView as ResourceView) ||
@@ -530,6 +582,7 @@
     nextCursor: SearchCursor | null;
     hasMore: boolean;
     tagOptions: string[];
+    error: { message: string; requestId: string } | null;
   }>({
     loading: false,
     loadingMore: false,
@@ -537,6 +590,7 @@
     nextCursor: null,
     hasMore: false,
     tagOptions: [],
+    error: null,
   });
 
   const selectedIds = ref<string[]>([]);
@@ -561,16 +615,23 @@
   const typeBuckets = computed(() => buildTypeBuckets(mappedItems.value));
 
   const visibleGroups = computed(() => {
-    if (queryState.type === 'all') {
-      return SEARCH_TYPE_LIST.map((type) => ({
+    if (queryState.keyword.trim() && selectedTypes.value.length > 1 && queryState.sort === 'relevance') return [];
+    return selectedTypes.value
+      .map((type) => ({
         type,
         items: typeBuckets.value[type],
-      })).filter((group) => group.items.length);
-    }
-    return [{ type: queryState.type, items: typeBuckets.value[queryState.type] }];
+      }))
+      .filter((group) => group.items.length);
   });
 
-  const allVisibleItems = computed(() => visibleGroups.value.flatMap((group) => group.items));
+  const interleavedItems = computed(() =>
+    queryState.keyword.trim() && selectedTypes.value.length > 1 && queryState.sort === 'relevance'
+      ? mappedItems.value
+      : [],
+  );
+  const allVisibleItems = computed(() =>
+    interleavedItems.value.length ? interleavedItems.value : visibleGroups.value.flatMap((group) => group.items),
+  );
   const selectableVisibleItems = computed(() => allVisibleItems.value);
   const allVisibleSelected = computed(
     () =>
@@ -583,6 +644,13 @@
     // 从知识地图等入口携带标签筛选时，将已选项固定在折叠区最前面，确保过滤状态一眼可见。
     return [...queryState.tags, ...options.filter((tag) => !selected.has(tag))];
   });
+  const filteredTagOptions = computed(() => {
+    const keyword = tagSearch.value.trim().toLocaleLowerCase();
+    return keyword ? tagOptions.value.filter((tag) => tag.toLocaleLowerCase().includes(keyword)) : tagOptions.value;
+  });
+  const selectedTypes = computed<SearchType[]>(() =>
+    queryState.types.length ? queryState.types : [...SEARCH_TYPE_LIST],
+  );
   const hasActiveAdvancedFilters = computed(
     () =>
       queryState.tags.length > 0 ||
@@ -615,9 +683,7 @@
   ]);
 
   const filteredResultTotal = computed(() =>
-    queryState.type === 'all'
-      ? Object.values(summaryTotals.value).reduce((sum, count) => sum + Number(count || 0), 0)
-      : summaryTotals.value[queryState.type],
+    selectedTypes.value.reduce((sum, type) => sum + Number(summaryTotals.value[type] || 0), 0),
   );
   const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: filteredResultTotal.value }));
   function menuForSearchItem(item: DisplaySearchItem) {
@@ -635,9 +701,16 @@
     ];
   }
 
-  function parseType(value: unknown): SearchType | 'all' {
-    const raw = String(value || 'all');
-    return SEARCH_TYPE_LIST.includes(raw as SearchType) ? (raw as SearchType) : 'all';
+  function isTypeFilterActive(type: SearchType | 'all') {
+    return type === 'all' ? queryState.types.length === 0 : queryState.types.includes(type);
+  }
+
+  function parseTypes(value: unknown): SearchType[] {
+    const raw = Array.isArray(value) ? String(value[0] || '') : String(value || '');
+    const types = [...new Set(raw.split(',').map((item) => item.trim()))].filter((item) =>
+      SEARCH_TYPE_LIST.includes(item as SearchType),
+    ) as SearchType[];
+    return types.length === SEARCH_TYPE_LIST.length ? [] : SEARCH_TYPE_LIST.filter((type) => types.includes(type));
   }
 
   function parseSort(value: unknown): ResourceSort {
@@ -701,6 +774,9 @@
       url: rawItem.url,
       route: rawItem.route,
       iconUrl: rawItem.iconUrl,
+      tags: Array.isArray(rawItem.tags) ? rawItem.tags : [],
+      matchReason: rawItem.matchReason ? String(rawItem.matchReason) : undefined,
+      snippet: rawItem.snippet ? String(rawItem.snippet) : undefined,
       raw: rawItem.raw || rawItem,
     };
   }
@@ -713,7 +789,8 @@
     isRouteApplying.value = true;
     try {
       queryState.keyword = Array.isArray(route.query.q) ? String(route.query.q[0] || '') : String(route.query.q || '');
-      queryState.type = parseType(Array.isArray(route.query.type) ? route.query.type[0] : route.query.type);
+      queryState.types = parseTypes(route.query.type);
+      queryState.type = queryState.types.length === 1 ? queryState.types[0] : 'all';
       queryState.sort = parseSort(Array.isArray(route.query.sort) ? route.query.sort[0] : route.query.sort);
       queryState.view = parseView(Array.isArray(route.query.view) ? route.query.view[0] : route.query.view);
       queryState.tags = parseTags(route.query.tags);
@@ -729,7 +806,7 @@
     const q = queryState.keyword.trim();
     return {
       ...(q ? { q } : {}),
-      ...(queryState.type !== 'all' ? { type: queryState.type } : {}),
+      ...(queryState.types.length ? { type: queryState.types.join(',') } : {}),
       ...(queryState.sort !== 'relevance' ? { sort: queryState.sort } : {}),
       ...(queryState.view !== 'card' ? { view: queryState.view } : {}),
       ...(queryState.tags.length ? { tags: queryState.tags.map((tag) => encodeURIComponent(tag)).join(',') } : {}),
@@ -768,22 +845,28 @@
     return rawMergedItems.filter(Boolean) as SearchResultItem[];
   }
 
-  async function loadData(force = false, minSkeletonMs = MIN_SKELETON_MS, append = false) {
+  async function loadData(force = false, skeletonDelayMs = SKELETON_DELAY_MS, append = false) {
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
-    const loadingStart = Date.now();
     let loadSucceeded = false;
     if (append) {
       viewState.loadingMore = true;
     } else {
       viewState.loading = true;
       viewState.loadingMore = false;
+      viewState.error = null;
       viewState.nextCursor = null;
       viewState.hasMore = false;
+      showLoadingSkeleton.value = false;
+      if (skeletonTimer !== null) window.clearTimeout(skeletonTimer);
+      skeletonTimer = window.setTimeout(() => {
+        if (seq === requestSeq && viewState.loading) showLoadingSkeleton.value = true;
+      }, skeletonDelayMs);
     }
     try {
       const res = await fetchGlobalSearch(queryState.keyword, SEARCH_PAGE_SIZE, force, {
-        type: queryState.type,
+        type: queryState.types.length === 1 ? queryState.types[0] : 'all',
+        types: selectedTypes.value,
         sort: queryState.sort,
         date: queryState.date,
         tags: queryState.tags,
@@ -813,14 +896,19 @@
       loadSucceeded = true;
       return true;
     } catch (error) {
+      const requestError = error as Error & { requestId?: string };
+      if (!append) viewState.rawItems = [];
+      viewState.error = {
+        message: requestError.message || t('common.requestFailedDescription'),
+        requestId: String(requestError.requestId || ''),
+      };
       if (!append) message.error(t('resourceCenter.refreshFailed'));
       return false;
     } finally {
       if (seq === requestSeq) {
-        const elapsed = Date.now() - loadingStart;
-        if (!append && elapsed < minSkeletonMs) {
-          await new Promise((resolve) => setTimeout(resolve, minSkeletonMs - elapsed));
-        }
+        if (skeletonTimer !== null) window.clearTimeout(skeletonTimer);
+        skeletonTimer = null;
+        showLoadingSkeleton.value = false;
         viewState.loading = false;
         viewState.loadingMore = false;
         if (loadSucceeded) void setupResultLoadObserver();
@@ -877,7 +965,18 @@
   }
 
   function setActiveType(type: SearchType | 'all') {
-    queryState.type = type;
+    if (type === 'all') {
+      queryState.types = [];
+    } else if (!queryState.types.length) {
+      queryState.types = [type];
+    } else if (queryState.types.includes(type)) {
+      const next = queryState.types.filter((item) => item !== type);
+      queryState.types = next.length ? next : [];
+    } else {
+      queryState.types = SEARCH_TYPE_LIST.filter((item) => [...queryState.types, type].includes(item));
+      if (queryState.types.length === SEARCH_TYPE_LIST.length) queryState.types = [];
+    }
+    queryState.type = queryState.types.length === 1 ? queryState.types[0] : 'all';
     selectedIds.value = [];
     applyQueryState(`筛选搜索类型【${getSearchTypeLabel(t, type)}】`);
   }
@@ -951,7 +1050,7 @@
     viewState.loading = true;
     try {
       await nextTick();
-      await loadData(true, REFRESH_SKELETON_MS);
+      await loadData(true);
     } catch (error) {
       message.error(t('resourceCenter.refreshFailed'));
     }
@@ -974,12 +1073,18 @@
   }
 
   function toggleSelect(item: DisplaySearchItem) {
+    if (!batchMode.value) return;
     const key = getItemSelectionKey(item);
     if (selectedIds.value.includes(key)) {
       selectedIds.value = selectedIds.value.filter((entry) => entry !== key);
     } else {
       selectedIds.value = [...selectedIds.value, key];
     }
+  }
+
+  function toggleBatchMode() {
+    batchMode.value = !batchMode.value;
+    if (!batchMode.value) selectedIds.value = [];
   }
 
   function toggleSelectAllVisible() {
@@ -1208,6 +1313,7 @@
 
   onBeforeUnmount(() => {
     if (syncTimer.value) clearTimeout(syncTimer.value);
+    if (skeletonTimer !== null) window.clearTimeout(skeletonTimer);
     requestSeq += 1;
     resultLoadObserver?.disconnect();
   });
@@ -1614,6 +1720,12 @@
     overflow-y: auto;
   }
 
+  .tag-filter-popover :deep(.input-container) {
+    flex: 0 0 100%;
+    width: 100%;
+    margin-bottom: 4px;
+  }
+
   .tag-chip {
     min-height: 28px;
     border-radius: 999px;
@@ -1816,6 +1928,32 @@
     align-content: center;
     text-align: center;
     color: var(--desc-color);
+  }
+
+  .result-error-state {
+    min-height: 260px;
+    padding: 28px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 1px dashed color-mix(in srgb, var(--danger-color, #dc2626) 30%, var(--card-border-color));
+    border-radius: 14px;
+    text-align: center;
+    background: color-mix(in srgb, var(--danger-color, #dc2626) 4%, var(--card-background));
+  }
+
+  .result-error-state h3,
+  .result-error-state p {
+    margin: 0;
+  }
+
+  .result-error-state p,
+  .result-error-request-id {
+    color: var(--desc-color);
+    font-size: 13px;
   }
 
   .empty-state h3 {
@@ -2595,6 +2733,8 @@
     scrollbar-width: none;
     touch-action: pan-x;
     -webkit-overflow-scrolling: touch;
+    padding-inline: 10px 18px !important;
+    mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 24px), transparent);
   }
 
   .search-page--mobile .type-filter::-webkit-scrollbar {

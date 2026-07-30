@@ -163,6 +163,8 @@ function mapConversation(row) {
     scopeType: row.scope_type || 'global',
     scope: parseJson(row.scope_json, {}),
     status: row.status || 'active',
+    isPinned: Boolean(row.is_pinned),
+    folderName: row.folder_name || '',
     retentionMode: row.retention_mode || 'standard',
     expireAt: row.expire_at || null,
     rootConversationId: row.root_conversation_id || String(row.id),
@@ -223,7 +225,10 @@ function mapMessage(row, sources = [], evidence = [], feedback = null) {
 }
 
 function encodeCursor(row) {
-  return Buffer.from(JSON.stringify({ at: row.last_message_at, id: row.id }), 'utf8').toString('base64url');
+  return Buffer.from(
+    JSON.stringify({ pinned: Number(row.is_pinned || 0), at: row.last_message_at, id: row.id }),
+    'utf8',
+  ).toString('base64url');
 }
 
 function decodeCursor(cursor) {
@@ -231,7 +236,7 @@ function decodeCursor(cursor) {
   try {
     const value = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
     if (!value?.at || !value?.id) throw new Error('invalid');
-    return { at: value.at, id: String(value.id) };
+    return { pinned: value.pinned ? 1 : 0, at: value.at, id: String(value.id) };
   } catch {
     throw serviceError('INVALID_CURSOR', '会话游标无效');
   }
@@ -311,6 +316,7 @@ export async function listAiConversations(identity, options = {}, database = poo
   const limit = Math.max(1, Math.min(50, Number(options.limit) || 20));
   const status = CONVERSATION_STATUSES.has(options.status) ? options.status : 'active';
   const keyword = asString(options.keyword, 100);
+  const folderName = asString(options.folderName, 64);
   const cursor = decodeCursor(options.cursor);
   const params = [...ownerParams(identity), status];
   let where = `actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
@@ -320,21 +326,43 @@ export async function listAiConversations(identity, options = {}, database = poo
     const escaped = keyword.replace(/[\\%_]/g, '\\$&');
     params.push(`%${escaped}%`, `%${escaped}%`);
   }
+  if (folderName === '__unfiled__') {
+    where += " AND (folder_name IS NULL OR folder_name = '')";
+  } else if (folderName) {
+    where += ' AND folder_name = ?';
+    params.push(folderName);
+  }
   if (cursor) {
-    where += ' AND (last_message_at < ? OR (last_message_at = ? AND id < ?))';
-    params.push(cursor.at, cursor.at, cursor.id);
+    where += ` AND (
+      is_pinned < ?
+      OR (is_pinned = ? AND (last_message_at < ? OR (last_message_at = ? AND id < ?)))
+    )`;
+    params.push(cursor.pinned, cursor.pinned, cursor.at, cursor.at, cursor.id);
   }
   params.push(limit + 1);
   const [rows] = await database.query(
     `SELECT * FROM ai_conversations WHERE ${where}
-     ORDER BY last_message_at DESC, id DESC LIMIT ?`,
+     ORDER BY is_pinned DESC, last_message_at DESC, id DESC LIMIT ?`,
     params,
   );
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
+  const [folderRows] = await database.query(
+    `SELECT DISTINCT folder_name AS folderName
+     FROM ai_conversations
+     WHERE actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
+       AND admin_context_id <=> ? AND ${LIVE_RETENTION_SQL} AND status = ?
+       AND folder_name IS NOT NULL AND folder_name <> ''
+     ORDER BY folder_name ASC
+     LIMIT 100`,
+    [...ownerParams(identity), status],
+  );
   return {
     items: page.map(mapConversation),
     nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
+    folders: (Array.isArray(folderRows) ? folderRows : [])
+      .map((row) => String(row.folderName || ''))
+      .filter(Boolean),
   };
 }
 
@@ -838,6 +866,15 @@ export async function updateAiConversation(identity, conversationId, input = {},
     if (!CONVERSATION_STATUSES.has(input.status)) throw serviceError('STATUS_INVALID', '会话状态无效');
     fields.push('status = ?');
     values.push(input.status);
+  }
+  if (input.isPinned !== undefined) {
+    fields.push('is_pinned = ?');
+    values.push(input.isPinned ? 1 : 0);
+  }
+  if (input.folderName !== undefined) {
+    const folderName = asString(input.folderName, 64);
+    fields.push('folder_name = ?');
+    values.push(folderName || null);
   }
   if (input.scopeType !== undefined || input.scope !== undefined) {
     fields.push('scope_type = ?', 'scope_json = ?');

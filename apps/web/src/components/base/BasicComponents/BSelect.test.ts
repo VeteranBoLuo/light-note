@@ -67,6 +67,18 @@ afterEach(() => {
 });
 
 describe('BSelect keyboard interaction', () => {
+  it('鼠标打开时不把第一项伪装成悬停态', async () => {
+    const { host } = mountSelect();
+    const trigger = host.querySelector<HTMLElement>('.select-trigger');
+
+    trigger?.click();
+    await nextTick();
+
+    expect(trigger?.getAttribute('aria-expanded')).toBe('true');
+    expect(trigger?.hasAttribute('aria-activedescendant')).toBe(false);
+    expect(document.body.querySelector('.select-option.is-active')).toBeNull();
+  });
+
   it('opens with ArrowDown, skips disabled options, and selects the active option with Enter', async () => {
     const { host, value } = mountSelect();
     const trigger = host.querySelector<HTMLElement>('.select-trigger');
@@ -113,7 +125,7 @@ describe('BSelect keyboard interaction', () => {
 
     input!.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
-    expect(input!.getAttribute('aria-activedescendant')).toMatch(/-option-1$/);
+    expect(input!.hasAttribute('aria-activedescendant')).toBe(false);
 
     pressKey(input!, 'Enter', { isComposing: true });
     await nextTick();
@@ -124,5 +136,47 @@ describe('BSelect keyboard interaction', () => {
     const { host } = mountSelect(false, { ariaLabelledby: 'scope-label' });
     const trigger = host.querySelector<HTMLElement>('.select-trigger');
     expect(trigger?.getAttribute('aria-labelledby')).toBe('scope-label');
+  });
+
+  it('disabled 时不进入焦点顺序、不打开下拉，也不允许清空或选择', async () => {
+    const value = ref<string | string[]>('first');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(BSelect, {
+            options,
+            disabled: true,
+            allowClear: true,
+            value: value.value,
+            'onUpdate:value': (nextValue: string | string[]) => {
+              value.value = nextValue;
+            },
+          });
+      },
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'en',
+        messages: { en: { common: { noMatch: 'No matches', pleaseSelect: 'Please select', searchPlaceholder: 'Search' } } },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const trigger = host.querySelector<HTMLElement>('.select-trigger');
+    expect(trigger?.getAttribute('tabindex')).toBe('-1');
+    expect(trigger?.getAttribute('aria-disabled')).toBe('true');
+    trigger?.click();
+    pressKey(trigger!, 'ArrowDown');
+    host.querySelector<HTMLElement>('.clear-icon')?.click();
+    await nextTick();
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false');
+    expect(value.value).toBe('first');
   });
 });

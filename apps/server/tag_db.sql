@@ -111,6 +111,7 @@ CREATE TABLE `files` (
   `del_flag` int(1) NOT NULL DEFAULT '0',
   `obs_key` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `deleted_at` datetime DEFAULT NULL,
+  `share_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '旧版分享令牌（仅迁移兼容，禁止新写入）',
   PRIMARY KEY (`id`),
   KEY `fk_folder_id` (`folder_id`),
   CONSTRAINT `fk_folder_id` FOREIGN KEY (`folder_id`) REFERENCES `folders` (`id`) ON DELETE SET NULL
@@ -130,6 +131,51 @@ CREATE TABLE `folders` (
   `sort` int(10) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for file_shares
+-- ----------------------------
+DROP TABLE IF EXISTS `file_share_events`;
+DROP TABLE IF EXISTS `file_shares`;
+CREATE TABLE `file_shares` (
+  `id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `file_id` int(11) NOT NULL,
+  `owner_user_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `token_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `token_hint` varchar(8) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `description` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `access_code_hash` varchar(255) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `max_access_count` int(10) unsigned DEFAULT NULL,
+  `max_download_count` int(10) unsigned DEFAULT NULL,
+  `access_count` int(10) unsigned NOT NULL DEFAULT '0',
+  `download_count` int(10) unsigned NOT NULL DEFAULT '0',
+  `status` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'active',
+  `last_access_at` datetime DEFAULT NULL,
+  `last_download_at` datetime DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_file_shares_token_hash` (`token_hash`),
+  KEY `idx_file_shares_owner_status` (`owner_user_id`,`status`,`create_time`),
+  KEY `idx_file_shares_file_status` (`file_id`,`status`),
+  KEY `idx_file_shares_expiry` (`status`,`expires_at`),
+  CONSTRAINT `fk_file_shares_file` FOREIGN KEY (`file_id`) REFERENCES `files` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可撤销文件分享';
+
+CREATE TABLE `file_share_events` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `share_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `event_type` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `outcome` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `visitor_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_file_share_events_share_time` (`share_id`,`create_time`),
+  KEY `idx_file_share_events_retention` (`create_time`),
+  CONSTRAINT `fk_file_share_events_share` FOREIGN KEY (`share_id`) REFERENCES `file_shares` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件分享隐私化访问事件';
 
 -- ----------------------------
 -- Table structure for help_config
@@ -174,6 +220,23 @@ CREATE TABLE `note` (
   `deleted_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
+
+-- ----------------------------
+-- Table structure for note_versions
+-- ----------------------------
+DROP TABLE IF EXISTS `note_versions`;
+CREATE TABLE `note_versions` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `note_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `content` longtext COLLATE utf8mb4_unicode_ci,
+  `type` varchar(16) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'html',
+  `create_by` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_note_versions_note_time` (`note_id`,`create_time`,`id`),
+  KEY `idx_note_versions_owner` (`create_by`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='笔记历史版本';
 
 -- ----------------------------
 -- Table structure for note_images

@@ -533,7 +533,6 @@ export async function seedNewUserCloudFile({ userId, lang = 'zh-CN', siteUrl, fo
           folder_id: resolvedFolderId,
           del_flag: 0,
           obs_key: file.objectKey,
-          share_token: crypto.randomBytes(16).toString('hex'),
         },
       ]);
       const fileId = Number(insertResult.insertId);

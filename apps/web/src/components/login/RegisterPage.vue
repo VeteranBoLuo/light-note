@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-panel">
+  <form class="auth-panel" @submit.prevent="handleRegister">
     <div class="auth-fields">
       <label class="auth-field" for="auth-register-alias">
         <span class="auth-field__label">{{ t('auth.nickname') }}</span>
@@ -24,7 +24,7 @@
           v-model:value="formData.email"
           class="auth-input"
           height="48px"
-          autocomplete="on"
+          autocomplete="email"
           :placeholder="t('auth.emailPlaceholder')"
         >
           <template #prefix>
@@ -40,7 +40,7 @@
           v-model:value="formData.password"
           class="auth-input"
           height="48px"
-          maxlength="16"
+          maxlength="64"
           type="password"
           autocomplete="new-password"
           :placeholder="t('auth.passwordRulePlaceholder')"
@@ -52,7 +52,7 @@
       </label>
     </div>
 
-    <BButton type="primary" class="auth-primary" :loading="submitting" :disabled="disable" @click="handleRegister">
+    <BButton native-type="submit" type="primary" class="auth-primary" :loading="submitting" :disabled="disable">
       {{ t('auth.registerAndStart') }}
     </BButton>
 
@@ -73,7 +73,7 @@
       :loading="githubStarting"
       @confirm="confirmGitHubRegistration"
     />
-  </div>
+  </form>
 </template>
 
 <script lang="ts" setup>
@@ -138,7 +138,7 @@
       { endCondition: !formData.email, message: t('auth.emailRequired') },
       { endCondition: !!formData.email && !isValidEmail(formData.email), message: t('auth.emailInvalid') },
       { endCondition: !formData.password, message: t('auth.passwordRequired') },
-      { endCondition: formData.password.length > 16, message: t('auth.pwdMax16') },
+      { endCondition: formData.password.length > 64, message: t('auth.pwdMax64') },
       { endCondition: !!formData.password && formData.password.length < 6, message: t('auth.pwdMin6') },
     ];
     if (submitting.value || checkEndCondition(condition)) return;

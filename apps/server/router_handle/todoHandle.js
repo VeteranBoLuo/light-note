@@ -3,16 +3,22 @@ import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import {
   createTodo as createTodoItem,
+  batchDeleteTodos,
+  batchRestoreTodos,
+  batchSetTodoStatus,
   deleteTodo as deleteTodoItem,
   listTodos,
   queryTodoPendingCount,
+  reorderTodos,
+  restoreTodo as restoreTodoItem,
   setTodoStatus,
+  snoozeTodo as snoozeTodoItem,
   updateTodo as updateTodoItem,
 } from '../util/services/todoService.js';
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
-  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标/.test(
+  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标|重复任务|请选择|顺序|发生变化/.test(
     message,
   );
   if (!clientError) console.error('[todo] 请求失败:', message);
@@ -106,4 +112,47 @@ export async function deleteTodo(req, res) {
   return withTransaction(res, async (connection) => ({
     affected: await deleteTodoItem(connection, req.user.id, id),
   }));
+}
+
+export async function restoreTodo(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const id = String(req.body?.id || '').trim();
+  if (!id) return res.send(resultData(null, 400, '缺少待办 ID'));
+  return withTransaction(res, async (connection) => ({
+    affected: await restoreTodoItem(connection, req.user.id, id),
+  }));
+}
+
+export async function batchStatusTodo(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const status = String(req.body?.status || '');
+  return withTransaction(res, (connection) =>
+    batchSetTodoStatus(connection, req.user.id, req.body?.ids, status, {
+      undoCompletion: req.body?.undoCompletion === true,
+    }),
+  );
+}
+
+export async function batchDeleteTodo(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) => batchDeleteTodos(connection, req.user.id, req.body?.ids));
+}
+
+export async function batchRestoreTodo(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) => batchRestoreTodos(connection, req.user.id, req.body?.ids));
+}
+
+export async function reorderTodo(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) => reorderTodos(connection, req.user.id, req.body?.items));
+}
+
+export async function snoozeTodo(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const id = String(req.body?.id || '').trim();
+  if (!id) return res.send(resultData(null, 400, '缺少待办 ID'));
+  return withTransaction(res, (connection) =>
+    snoozeTodoItem(connection, req.user.id, id, req.body?.targetAt),
+  );
 }

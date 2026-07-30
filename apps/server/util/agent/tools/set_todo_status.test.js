@@ -134,7 +134,7 @@ describe('set_todo_status 工具', () => {
     expect(applyTodoStatusChange).not.toHaveBeenCalled();
   });
 
-  it('确认卡展示冻结目标、目标状态和提醒副作用', () => {
+  it('确认卡展示冻结目标、目标状态、重复实例和提醒副作用', () => {
     const preview = tool.preview({
       todoId: 'todo-1',
       targetTitle: '整理发票',
@@ -143,9 +143,11 @@ describe('set_todo_status 工具', () => {
       dueAt: '2026-07-24 10:00:00',
       priority: 2,
       activeReminderCount: 2,
+      recurring: true,
     });
     expect(preview).toMatchObject({ title: '完成待办', target: '整理发票' });
-    expect(preview.impact).toContain('取消 2 条尚未触发的提醒');
+    expect(preview.impact).toContain('按重复规则创建下一实例');
+    expect(preview.impact).toContain('暂停当前实例的 2 条提醒');
     expect(preview.details).toEqual(
       expect.arrayContaining([
         { key: 'currentStatus', value: '待处理' },
@@ -160,7 +162,7 @@ describe('set_todo_status 工具', () => {
       state: 'changed',
       title: '整理发票',
       status: 'completed',
-      cancelledReminderCount: 1,
+      pausedReminderCount: 1,
     });
 
     const result = await tool.execute(
@@ -178,6 +180,7 @@ describe('set_todo_status 工具', () => {
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledOnce();
     expect(tool.transform(result)).toContain('已设为已完成');
+    expect(tool.transform(result)).toContain('已暂停当前实例的 1 条提醒');
   });
 
   it('共享 Service 失败时回滚，且不把失败变成成功回执', async () => {

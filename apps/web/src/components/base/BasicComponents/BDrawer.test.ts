@@ -50,7 +50,7 @@ describe('BDrawer compositor cleanup', () => {
     expect(wrapper!.classList.contains('is-settled')).toBe(true);
   });
 
-  it('exposes dialog semantics, closes with Escape, restores focus, and can keep content mounted', async () => {
+  it('exposes dialog semantics, closes with Escape without forcing focus back, and can keep content mounted', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
@@ -102,7 +102,7 @@ describe('BDrawer compositor cleanup', () => {
     const wrapper = document.querySelector('.b-drawer-wrapper');
     expect(wrapper).not.toBeNull();
     expect(wrapper?.classList.contains('is-hidden')).toBe(true);
-    expect(document.activeElement).toBe(opener);
+    expect(document.activeElement).toBe(document.body);
   });
 
   it('supports a non-modal resizable sidecar without stealing focus', async () => {

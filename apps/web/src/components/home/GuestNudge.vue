@@ -77,6 +77,7 @@
     background: transparent;
     border: none;
     color: var(--desc-color);
+    touch-action: manipulation;
   }
   .gn-close:hover {
     background: var(--menu-item-h-bg-color);
@@ -145,7 +146,14 @@
       box-shadow: 0 16px 36px -18px rgba(20, 24, 50, 0.38);
     }
     .gn-main {
-      padding-right: 24px;
+      padding-right: 38px;
+    }
+    .gn-close {
+      top: 3px;
+      right: 3px;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
     }
     .gn-title {
       font-size: 15px;

@@ -363,19 +363,7 @@
         <section class="settings-card" id="set-notification">
           <div class="card-head">
             <span class="card-icon card-icon--general">
-              <svg
-                viewBox="0 0 24 24"
-                width="20"
-                height="20"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-              </svg>
+              <SvgIcon :src="icon.settings.notification" size="20" aria-hidden="true" />
             </span>
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.notification') }}</h2>
@@ -384,6 +372,65 @@
           </div>
 
           <div class="fields">
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notificationsInApp') }}</span>
+                <span class="field-desc">{{ t('settings.notificationsInAppDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.notificationsInApp !== false"
+                :aria-label="t('settings.notificationsInApp')"
+                @change="set('notificationsInApp', $event)"
+              />
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notificationsEmail') }}</span>
+                <span class="field-desc">{{ t('settings.notificationsEmailDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.notificationsEmail !== false"
+                :aria-label="t('settings.notificationsEmail')"
+                @change="set('notificationsEmail', $event)"
+              />
+            </div>
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notificationsBrowser') }}</span>
+                <span class="field-desc">{{ t('settings.notificationsBrowserDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.notificationsBrowser === true"
+                :aria-label="t('settings.notificationsBrowser')"
+                @change="setBrowserNotifications"
+              />
+            </div>
+            <div class="field notification-dnd-field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.notificationsDnd') }}</span>
+                <span class="field-desc">{{ t('settings.notificationsDndDesc') }}</span>
+              </div>
+              <div class="notification-dnd-controls">
+                <BInput
+                  :value="String(user.preferences.notificationsDndStart || '22:00')"
+                  type="time"
+                  :aria-label="t('settings.notificationsDndStart')"
+                  @change="setNotificationTime('notificationsDndStart', $event, '22:00')"
+                />
+                <span>—</span>
+                <BInput
+                  :value="String(user.preferences.notificationsDndEnd || '08:00')"
+                  type="time"
+                  :aria-label="t('settings.notificationsDndEnd')"
+                  @change="setNotificationTime('notificationsDndEnd', $event, '08:00')"
+                />
+                <BSwitch
+                  :checked="user.preferences.notificationsDnd === true"
+                  :aria-label="t('settings.notificationsDnd')"
+                  @change="setDnd"
+                />
+              </div>
+            </div>
             <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.weeklyReport') }}</span>
@@ -677,6 +724,7 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import {
@@ -834,8 +882,35 @@
     }
   }
 
-  // 数据导入:选择「数据导出」生成的备份 JSON,恢复书签/笔记/标签(后端智能去重)。文件二进制不在备份内,跳过。
+  // 元数据恢复先做只读预检，再由用户确认写入；文件本体和 AI 数据只导出、不承诺恢复。
   const importing = ref(false);
+  async function runMetadataImport(data: any) {
+    importing.value = true;
+    try {
+      const res = await apiBasePost('/api/user/importData', { data });
+      if (res?.status === 200 && res.data) {
+        const s = res.data;
+        message.success(
+          t('settings.importOk', {
+            b: s.bookmarks?.added || 0,
+            n: s.notes?.added || 0,
+            sk: (s.bookmarks?.skipped || 0) + (s.notes?.skipped || 0),
+          }),
+        );
+        recordOperation({
+          module: '设置',
+          operation: `恢复元数据(书签+${s.bookmarks?.added || 0}、笔记+${s.notes?.added || 0})`,
+        });
+      } else {
+        message.info(res?.msg || t('settings.importFail'));
+      }
+    } catch {
+      message.info(t('settings.importFail'));
+    } finally {
+      importing.value = false;
+    }
+  }
+
   async function onImportFiles(files: File[]) {
     const file = files?.[0];
     if (!file) return;
@@ -849,23 +924,24 @@
         message.info(t('settings.importInvalid'));
         return;
       }
-      const res = await apiBasePost('/api/user/importData', { data });
-      if (res?.status === 200 && res.data) {
-        const s = res.data;
-        message.success(
-          t('settings.importOk', {
-            b: s.bookmarks?.added || 0,
-            n: s.notes?.added || 0,
-            sk: (s.bookmarks?.skipped || 0) + (s.notes?.skipped || 0),
-          }),
-        );
-        recordOperation({
-          module: '设置',
-          operation: `导入数据(书签+${s.bookmarks?.added || 0}、笔记+${s.notes?.added || 0})`,
-        });
-      } else {
+      const res = await apiBasePost('/api/user/importData', { data, mode: 'preflight' });
+      if (res?.status !== 200 || !res.data?.canImport) {
         message.info(res?.msg || t('settings.importFail'));
+        return;
       }
+      const preview = res.data;
+      importing.value = false;
+      Alert.alert({
+        title: t('settings.importConfirmTitle'),
+        content: t('settings.importConfirmContent', {
+          b: preview.willRestore?.bookmarks || 0,
+          n: preview.willRestore?.notes || 0,
+          t: preview.willRestore?.tags || 0,
+          f: preview.exportOnly?.files || 0,
+          ai: preview.exportOnly?.aiConversations || 0,
+        }),
+        onOk: () => runMetadataImport(data),
+      });
     } catch {
       message.info(t('settings.importFail'));
     } finally {
@@ -925,11 +1001,53 @@
     { v: 'name', label: t('resourceCenter.sort.name') },
   ]);
 
-  async function set(key: string, value: string | boolean) {
+  async function set(key: string, value: string | boolean | number) {
     if ((user.preferences as any)[key] === value) return;
     try {
       await updatePreference({ [key]: value });
       if (!isGuestUser()) recordOperation({ module: '设置', operation: `修改偏好【${key}=${value}】` });
+    } catch {
+      message.warning(t('settings.saveFailed'));
+    }
+  }
+
+  async function setBrowserNotifications(value: boolean) {
+    if (value) {
+      if (typeof Notification === 'undefined') {
+        message.warning(t('settings.notificationsBrowserUnsupported'));
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        message.warning(t('settings.notificationsBrowserDenied'));
+        return;
+      }
+    }
+    await set('notificationsBrowser', value);
+  }
+
+  async function setDnd(value: boolean) {
+    try {
+      await updatePreference({
+        notificationsDnd: value,
+        notificationsTimezoneOffset: new Date().getTimezoneOffset(),
+      });
+    } catch {
+      message.warning(t('settings.saveFailed'));
+    }
+  }
+
+  async function setNotificationTime(
+    key: 'notificationsDndStart' | 'notificationsDndEnd',
+    value: unknown,
+    fallback: string,
+  ) {
+    const normalized = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || '')) ? String(value) : fallback;
+    try {
+      await updatePreference({
+        [key]: normalized,
+        notificationsTimezoneOffset: new Date().getTimezoneOffset(),
+      });
     } catch {
       message.warning(t('settings.saveFailed'));
     }
@@ -988,6 +1106,26 @@
 </script>
 
 <style scoped lang="less">
+  .notification-dnd-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: min(100%, 330px);
+  }
+  .notification-dnd-controls :deep(.b-input) {
+    width: 112px;
+  }
+  @media (max-width: 600px) {
+    .notification-dnd-field {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .notification-dnd-controls {
+      width: 100%;
+      justify-content: flex-start;
+    }
+  }
   /* 本页作为 index.vue 的子路由,根元素被 :style="viewStyle" 内联设为
      position:fixed; top:60px; height:calc(100% - 60px)(外层 #tag-container 又是 overflow:hidden)。
      所以必须在这个固定高度的框内部自己滚动:用 height:100% + overflow-y:auto,

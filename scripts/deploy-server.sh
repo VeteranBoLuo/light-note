@@ -31,6 +31,9 @@ rsync -az --no-owner --no-group --delete \
 echo "🔎  使用生产环境检查书签图标任务 Schema、favicon-api 与图标目录…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBookmarkIconRuntime.js"
 
+echo "🔎  执行只读 Schema 发布门禁…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
+
 echo "♻️  pm2 restart ${PM2}…"
 ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \
   if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \

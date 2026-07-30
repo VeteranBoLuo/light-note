@@ -55,6 +55,26 @@
         <BDateTimePicker v-model:value="form.dueAt" :placeholder="t('inbox.todoDuePlaceholder')" />
       </label>
     </div>
+    <section class="todo-recurrence-editor">
+      <div>
+        <strong>{{ t('inbox.todoRecurrence') }}</strong>
+        <small>{{ t('inbox.todoRecurrenceHint') }}</small>
+      </div>
+      <BSelect v-model:value="form.recurrenceFrequency" :options="recurrenceOptions" />
+      <div v-if="form.recurrenceFrequency !== 'none'" class="todo-recurrence-editor__fields">
+        <label>
+          <span>{{ t('inbox.todoRecurrenceInterval') }}</span>
+          <BInput v-model:value="form.recurrenceInterval" type="number" />
+        </label>
+        <label>
+          <span>{{ t('inbox.todoRecurrenceEnd') }}</span>
+          <BDateTimePicker v-model:value="form.recurrenceEndAt" :placeholder="t('inbox.todoRecurrenceNoEnd')" />
+        </label>
+      </div>
+      <p v-if="recurrenceValidationMessage" class="todo-reminder-editor__error">
+        {{ recurrenceValidationMessage }}
+      </p>
+    </section>
     <section class="todo-reminder-editor">
       <div class="todo-reminder-editor__title">
         <div>
@@ -126,6 +146,7 @@
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import type { TodoChecklistItem, TodoItem, TodoPayload, TodoPriority, TodoReminderChannel } from '@/api/todoApi';
   import { generateUUID } from '@/utils/common';
+  import { toTodoLocalInput } from '@/utils/todoPlanning';
 
   const props = withDefaults(
     defineProps<{
@@ -159,6 +180,9 @@
     reminderEmail: '',
     intervalValue: 1 as number | string,
     intervalUnit: 'day' as 'minute' | 'hour' | 'day' | 'week',
+    recurrenceFrequency: 'none' as 'none' | 'daily' | 'weekly' | 'monthly',
+    recurrenceInterval: 1 as number | string,
+    recurrenceEndAt: '',
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
   const reminderModeOptions = computed(() => [
@@ -172,6 +196,25 @@
     { value: 'day', label: t('inbox.todoReminderDays') },
     { value: 'week', label: t('inbox.todoReminderWeeks') },
   ]);
+  const recurrenceOptions = computed(() => [
+    { value: 'none', label: t('inbox.todoRecurrenceNone') },
+    { value: 'daily', label: t('inbox.todoRecurrenceDaily') },
+    { value: 'weekly', label: t('inbox.todoRecurrenceWeekly') },
+    { value: 'monthly', label: t('inbox.todoRecurrenceMonthly') },
+  ]);
+  const recurrenceValidationMessage = computed(() => {
+    if (form.recurrenceFrequency === 'none') return '';
+    if (!form.dueAt) return t('inbox.todoRecurrenceNeedsDue');
+    const interval = Number(form.recurrenceInterval);
+    if (!Number.isInteger(interval) || interval < 1 || interval > 365) return t('inbox.todoRecurrenceIntervalInvalid');
+    if (
+      form.recurrenceEndAt &&
+      new Date(form.recurrenceEndAt).getTime() <= new Date(form.dueAt).getTime()
+    ) {
+      return t('inbox.todoRecurrenceEndInvalid');
+    }
+    return '';
+  });
   const reminderEmailValidationMessage = computed(() => {
     if (form.reminderMode === 'none' || !form.emailReminder) return '';
     return /^\S+@\S+\.\S+$/.test(form.reminderEmail.trim()) ? '' : t('inbox.todoReminderEmailInvalid');
@@ -209,7 +252,13 @@
   const reminderGeneralValidationMessage = computed(() =>
     reminderEmailValidationMessage.value || reminderTimeValidationMessage.value ? '' : reminderValidationMessage.value,
   );
-  const canSubmit = computed(() => Boolean(form.title.trim()) && !props.saving && !reminderValidationMessage.value);
+  const canSubmit = computed(
+    () =>
+      Boolean(form.title.trim()) &&
+      !props.saving &&
+      !reminderValidationMessage.value &&
+      !recurrenceValidationMessage.value,
+  );
 
   watch(
     () => [props.item, props.resetKey] as const,
@@ -224,24 +273,15 @@
     },
   );
 
-  function toLocalInput(value?: string | null) {
-    if (!value) return '';
-    const normalized = String(value).replace(' ', 'T');
-    const date = new Date(normalized);
-    if (!Number.isFinite(date.getTime())) return normalized.slice(0, 16);
-    const offset = date.getTimezoneOffset() * 60_000;
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-  }
-
   function reset() {
     form.title = props.item?.title || '';
     form.description = props.item?.description || '';
     form.priority = props.item?.priority ?? 1;
-    form.dueAt = toLocalInput(props.item?.dueAt);
+    form.dueAt = toTodoLocalInput(props.item?.dueAt);
     const reminder = props.item?.reminder;
     form.reminderMode = reminder?.mode || (props.item?.reminderAt ? 'once' : 'none');
-    form.reminderStartAt = toLocalInput(reminder?.startAt || props.item?.reminderAt);
-    form.reminderEndAt = toLocalInput(reminder?.endAt);
+    form.reminderStartAt = toTodoLocalInput(reminder?.startAt || props.item?.reminderAt);
+    form.reminderEndAt = toTodoLocalInput(reminder?.endAt);
     form.inAppReminder = reminder ? reminder.channels.includes('in_app') : true;
     form.emailReminder = Boolean(reminder?.channels.includes('email'));
     form.reminderEmail = reminder?.email || '';
@@ -249,6 +289,9 @@
     const interval = fromMinutes(reminder?.intervalMinutes ?? 30);
     form.intervalValue = interval.value;
     form.intervalUnit = interval.unit;
+    form.recurrenceFrequency = props.item?.recurrence?.frequency || 'none';
+    form.recurrenceInterval = props.item?.recurrence?.interval || 1;
+    form.recurrenceEndAt = toTodoLocalInput(props.item?.recurrence?.endAt);
     checklistItems.value = props.item?.checklist?.length
       ? props.item.checklist.map((item) => ({ ...item }))
       : [createChecklistItem()];
@@ -322,6 +365,14 @@
               intervalMinutes: form.reminderMode === 'repeat' ? toMinutes(form.intervalValue, form.intervalUnit) : null,
               email: form.emailReminder ? form.reminderEmail.trim() : null,
             },
+      recurrence:
+        form.recurrenceFrequency === 'none'
+          ? null
+          : {
+              frequency: form.recurrenceFrequency,
+              interval: Number(form.recurrenceInterval),
+              endAt: form.recurrenceEndAt || null,
+            },
     });
   }
 
@@ -356,6 +407,27 @@
     flex-direction: column;
     gap: 6px;
     font-size: 13px;
+  }
+  .todo-recurrence-editor {
+    display: grid;
+    gap: 9px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--card-border-color));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--primary-color) 3%, var(--background-color));
+  }
+  .todo-recurrence-editor > div:first-child {
+    display: grid;
+    gap: 3px;
+  }
+  .todo-recurrence-editor small {
+    color: var(--desc-color);
+    line-height: 1.45;
+  }
+  .todo-recurrence-editor__fields {
+    display: grid;
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+    gap: 10px;
   }
   .todo-checklist-editor {
     display: flex;
@@ -481,6 +553,12 @@
     gap: 8px;
   }
   @media (max-width: 767px) {
+    .todo-recurrence-editor__fields {
+      grid-template-columns: 1fr;
+    }
+    .todo-recurrence-editor :deep(.b-select) {
+      width: 100%;
+    }
     .todo-editor-form__grid {
       grid-template-columns: 1fr;
     }

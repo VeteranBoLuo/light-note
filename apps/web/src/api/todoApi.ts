@@ -6,6 +6,13 @@ export type TodoFilterStatus = 'all' | TodoStatus;
 export type TodoSort = 'smart' | 'due' | 'newest' | 'oldest';
 export type TodoReminderMode = 'once' | 'repeat';
 export type TodoReminderChannel = 'in_app' | 'email';
+export type TodoRecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+
+export interface TodoRecurrence {
+  frequency: TodoRecurrenceFrequency;
+  interval: number;
+  endAt?: string | null;
+}
 
 export interface TodoReminderConfig {
   mode: TodoReminderMode;
@@ -28,12 +35,16 @@ export interface TodoItem {
   description?: string;
   checklist: TodoChecklistItem[];
   priority: TodoPriority;
+  sortOrder?: number;
   status: TodoStatus;
   dueAt?: string | null;
   reminder?: TodoReminderConfig | null;
   /** 兼容旧接口；新代码使用 reminder。 */
   reminderAt?: string | null;
   completedAt?: string | null;
+  seriesId?: string | null;
+  recurrence?: TodoRecurrence | null;
+  recurrenceInstanceAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,6 +56,7 @@ export interface TodoPayload {
   priority?: TodoPriority;
   dueAt?: string | null;
   reminder?: TodoReminderConfig | null;
+  recurrence?: TodoRecurrence | null;
   /** 兼容旧调用方；服务端会转换为单次站内提醒。 */
   reminderAt?: string | null;
 }
@@ -58,3 +70,13 @@ export const updateTodo = (id: string, payload: Partial<TodoPayload>) =>
 export const completeTodo = (id: string) => apiBasePost('/api/todo/complete', { id });
 export const reopenTodo = (id: string) => apiBasePost('/api/todo/reopen', { id });
 export const deleteTodo = (id: string) => apiBasePost('/api/todo/delete', { id });
+export const restoreTodo = (id: string) => apiBasePost('/api/todo/restore', { id });
+export const batchSetTodoStatus = (ids: string[], status: TodoStatus, options: { undoCompletion?: boolean } = {}) =>
+  apiBasePost('/api/todo/batch-status', { ids, status, ...options });
+export const batchDeleteTodos = (ids: string[]) => apiBasePost('/api/todo/batch-delete', { ids });
+export const batchRestoreTodos = (ids: string[]) => apiBasePost('/api/todo/batch-restore', { ids });
+export const reorderTodos = (
+  items: Array<{ id: string; dueAt?: string | null; priority: TodoPriority }>,
+) => apiBasePost('/api/todo/reorder', { items });
+export const snoozeTodo = (id: string, targetAt: string) =>
+  apiBasePost('/api/todo/snooze', { id, targetAt });

@@ -65,15 +65,33 @@
       <div class="pw-form">
         <div v-if="hasPassword" class="pw-row">
           <label>当前密码</label>
-          <BInput v-model:value="oldPwd" type="password" maxlength="64" placeholder="请输入当前密码" />
+          <BInput
+            v-model:value="oldPwd"
+            type="password"
+            maxlength="64"
+            autocomplete="current-password"
+            placeholder="请输入当前密码"
+          />
         </div>
         <div class="pw-row">
           <label>新密码</label>
-          <BInput v-model:value="newPwd" type="password" maxlength="64" placeholder="6-64 位" />
+          <BInput
+            v-model:value="newPwd"
+            type="password"
+            maxlength="64"
+            autocomplete="new-password"
+            placeholder="6-64 位"
+          />
         </div>
         <div class="pw-row">
           <label>确认新密码</label>
-          <BInput v-model:value="confirmPwd" type="password" maxlength="64" placeholder="再次输入新密码" />
+          <BInput
+            v-model:value="confirmPwd"
+            type="password"
+            maxlength="64"
+            autocomplete="new-password"
+            placeholder="再次输入新密码"
+          />
         </div>
       </div>
     </BModal>
@@ -98,10 +116,10 @@
         </div>
         <div class="deletion-backup">
           <div>
-            <span class="deletion-backup__title">建议先保存个人数据</span>
-            <span class="field-desc">导出书签、笔记、标签、AI 数据和云文件清单</span>
+            <span class="deletion-backup__title">建议先导出个人元数据</span>
+            <span class="field-desc">书签、笔记和标签可恢复；AI 数据与云文件清单仅供导出，文件本体不包含</span>
           </div>
-          <BButton :loading="exporting" :disabled="codeSending" @click="exportAll">先导出备份</BButton>
+          <BButton :loading="exporting" :disabled="codeSending" @click="exportAll">先导出元数据</BButton>
         </div>
         <div class="deletion-actions">
           <BButton :disabled="codeSending" @click="closeDeletion">取消</BButton>

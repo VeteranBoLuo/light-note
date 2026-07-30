@@ -11,16 +11,10 @@
   >
     <!-- 列表视图:横向紧凑行(信息密度高,适合快速检索定位) -->
     <template v-if="view === 'list'">
-      <label v-if="selectable" class="row-checkbox-wrap">
-        <input
-          type="checkbox"
-          class="result-checkbox"
-          :checked="selected"
-          @click.stop
-          @change="emit('toggle-select')"
-        />
-      </label>
-      <button class="result-row" @click="emit('open')">
+      <div v-if="selectable" class="row-checkbox-wrap">
+        <BCheckbox :checked="selected" @click.stop @change="emit('toggle-select')" />
+      </div>
+      <BButton class="result-row" @click="emit('open')">
         <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
         <span class="row-title">
           <template v-for="(segment, index) in titleSegments" :key="`lt-${index}`">
@@ -34,24 +28,27 @@
             <span v-else>{{ segment.text }}</span>
           </template>
         </span>
+        <span v-if="matchReasonText" class="match-reason">{{ matchReasonText }}</span>
         <span class="row-tags" :class="{ 'row-meta--empty': !tagMetaText }">{{ tagMetaText || '—' }}</span>
         <span class="row-time" :class="{ 'row-meta--empty': !updateMetaText }">{{ updateMetaText || '—' }}</span>
-      </button>
+      </BButton>
     </template>
 
     <!-- 卡片视图:竖排卡片(舒适浏览) -->
     <template v-else>
-      <label v-if="selectable" class="result-checkbox-wrap">
-        <input
-          type="checkbox"
-          class="result-checkbox"
-          :checked="selected"
-          @click.stop
-          @change="emit('toggle-select')"
-        />
-      </label>
+      <BCheckbox
+        v-if="selectable"
+        class="result-checkbox-wrap"
+        :checked="selected"
+        @click.stop
+        @change="emit('toggle-select')"
+      />
 
-      <button class="result-click-area" :class="{ 'result-click-area--selectable': selectable }" @click="emit('open')">
+      <BButton
+        class="result-click-area"
+        :class="{ 'result-click-area--selectable': selectable }"
+        @click="emit('open')"
+      >
         <header class="item-head">
           <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
           <span class="item-extra">{{ headerExtra }}</span>
@@ -70,6 +67,7 @@
             <span v-else>{{ segment.text }}</span>
           </template>
         </p>
+        <p v-if="matchReasonText" class="match-reason">{{ matchReasonText }}</p>
 
         <div class="item-meta">
           <span class="meta-line">
@@ -85,7 +83,7 @@
             </span>
           </span>
         </div>
-      </button>
+      </BButton>
     </template>
   </article>
 </template>
@@ -93,6 +91,8 @@
 <script setup lang="ts">
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import type { DisplaySearchItem, ResourceView } from './searchUtils.ts';
 
   const props = defineProps<{
@@ -133,7 +133,15 @@
   }
 
   const titleSegments = computed(() => buildSegments(props.item.title, props.keyword));
-  const descSegments = computed(() => buildSegments(props.item.description || props.item.extra || '', props.keyword));
+  const descSegments = computed(() =>
+    buildSegments(props.item.snippet || props.item.description || props.item.extra || '', props.keyword),
+  );
+  const matchReasonText = computed(() => {
+    const reason = props.item.matchReason;
+    if (!reason) return '';
+    const knownReasons = new Set(['title_exact', 'title_prefix', 'title', 'tag', 'url', 'description', 'content']);
+    return knownReasons.has(reason) ? t(`resourceCenter.matchReason.${reason}`) : '';
+  });
   const tagMetaText = computed(() => props.item.tagNames.slice(0, 3).join(' / '));
   const updateMetaText = computed(() => props.item.updatedAtText || '');
   const headerExtra = computed(() => {
@@ -264,6 +272,11 @@
     gap: 12px;
     padding: 9px 14px;
     box-sizing: border-box;
+    width: 100%;
+    height: auto;
+    line-height: normal;
+    border-radius: 14px;
+    background: transparent;
   }
   .result-item--list .type-pill {
     flex: 0 0 auto;
@@ -322,12 +335,6 @@
     z-index: 3;
   }
 
-  .result-checkbox {
-    width: 15px;
-    height: 15px;
-    cursor: pointer;
-  }
-
   .result-click-area {
     width: 100%;
     min-width: 0;
@@ -341,6 +348,10 @@
     flex-direction: column;
     gap: 8px;
     box-sizing: border-box;
+    height: auto;
+    line-height: normal;
+    border-radius: 14px;
+    background: transparent;
   }
 
   .result-click-area--selectable {
@@ -412,6 +423,22 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     min-height: calc(1.55em * 2);
+  }
+
+  .match-reason {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    font-size: 11px;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+
+  .result-item--card .match-reason {
+    align-self: flex-start;
   }
 
   .item-meta {

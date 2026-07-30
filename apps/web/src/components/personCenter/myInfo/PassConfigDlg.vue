@@ -44,6 +44,7 @@
             height="38px"
             type="password"
             autocomplete="new-password"
+            :maxlength="64"
             v-model:value="forgotData.password"
             :placeholder="t('myInfo.newPassword')"
           />
@@ -54,6 +55,7 @@
             height="38px"
             type="password"
             autocomplete="new-password"
+            :maxlength="64"
             v-model:value="forgotData.rPassword"
             :placeholder="t('myInfo.confirmNewPassword')"
           />
@@ -90,16 +92,25 @@
           label: t('myInfo.oldPassword'),
           name: 'oldPassword',
           required: true,
+          type: 'password',
+          autocomplete: 'current-password',
+          maxlength: 64,
         },
         {
           label: t('myInfo.newPassword'),
           name: 'password',
           required: true,
+          type: 'password',
+          autocomplete: 'new-password',
+          maxlength: 64,
         },
         {
           label: t('myInfo.confirmNewPassword'),
           name: 'confirmPassword',
           required: true,
+          type: 'password',
+          autocomplete: 'new-password',
+          maxlength: 64,
         },
       ];
     }
@@ -108,11 +119,17 @@
         label: t('myInfo.password'),
         name: 'password',
         required: true,
+        type: 'password',
+        autocomplete: 'new-password',
+        maxlength: 64,
       },
       {
         label: t('myInfo.confirmPassword'),
         name: 'confirmPassword',
         required: true,
+        type: 'password',
+        autocomplete: 'new-password',
+        maxlength: 64,
       },
     ];
   });
@@ -158,7 +175,7 @@
     const condition: EndCondition[] = [
       { endCondition: !forgotData.value.code, message: t('myInfo.enterCode') },
       { endCondition: forgotData.value.password !== forgotData.value.rPassword, message: t('myInfo.passwordMismatch') },
-      { endCondition: forgotData.value.password.length > 16, message: t('myInfo.newPasswordTooLong') },
+      { endCondition: forgotData.value.password.length > 64, message: t('myInfo.passwordMax64') },
       { endCondition: forgotData.value.password.length < 6, message: t('myInfo.newPasswordTooShort') },
     ];
     if (checkEndCondition(condition)) return;
@@ -191,13 +208,13 @@
     if (!isUpdate) {
       condition = [
         { endCondition: formData.value.password !== formData.value.confirmPassword, message: t('myInfo.passwordMismatch') },
-        { endCondition: formData.value.password.length > 12, message: t('myInfo.passwordTooLong') },
+        { endCondition: formData.value.password.length > 64, message: t('myInfo.passwordMax64') },
         { endCondition: formData.value.password.length < 6, message: t('myInfo.passwordTooShort') },
       ];
     } else {
       condition = [
         { endCondition: formData.value.password !== formData.value.confirmPassword, message: t('myInfo.passwordMismatch') },
-        { endCondition: formData.value.password.length > 16, message: t('myInfo.newPasswordTooLong') },
+        { endCondition: formData.value.password.length > 64, message: t('myInfo.passwordMax64') },
         { endCondition: formData.value.password.length < 6, message: t('myInfo.newPasswordTooShort') },
       ];
     }

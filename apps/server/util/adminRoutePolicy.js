@@ -108,6 +108,9 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/getFileInfo'],
   ['POST', '/file/queryFolder'],
   ['POST', '/file/getFileTags'],
+  ['POST', '/file/share/list'],
+  ['POST', '/file/share/resolve'],
+  ['POST', '/file/share/download'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
@@ -121,6 +124,9 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/deleteFolder'],
   ['POST', '/file/updateFolderSort'],
   ['POST', '/file/updateFileTags'],
+  ['POST', '/file/share/create'],
+  ['POST', '/file/share/revoke'],
+  ['POST', '/file/share/rotate'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'file', [['POST', '/file/hermesBackup']]);
 
@@ -149,6 +155,12 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
   ['POST', '/todo/complete'],
   ['POST', '/todo/reopen'],
   ['POST', '/todo/delete'],
+  ['POST', '/todo/restore'],
+  ['POST', '/todo/batch-status'],
+  ['POST', '/todo/batch-delete'],
+  ['POST', '/todo/batch-restore'],
+  ['POST', '/todo/reorder'],
+  ['POST', '/todo/snooze'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'search', [
   ['POST', '/search/batchUpdateResourceTags'],
@@ -301,6 +313,7 @@ declare(ADMIN_POLICIES.READ, 'agent', [
   ['POST', '/chat/change-sets/get'],
   ['POST', '/chat/memories/list'],
   ['POST', '/chat/attachments/status'],
+  ['POST', '/chat/resource-preferences/list'],
   ['POST', '/chat/aiQuota'],
 ]);
 
@@ -342,6 +355,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'ai_memory', [
   ['POST', '/chat/memories/update'],
   ['POST', '/chat/memories/delete'],
   ['POST', '/chat/memories/clear'],
+  ['POST', '/chat/resource-preferences/update'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'agent', [
   ['POST', '/chat/change-sets/apply'],

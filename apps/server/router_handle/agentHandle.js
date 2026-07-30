@@ -100,6 +100,7 @@ import {
   resolveAiMemoryIdentity,
 } from '../util/aiMemoryService.js';
 import { AI_MEMORY_ENABLED } from '../util/aiMemoryFeature.js';
+import { aiResourceExclusionSql } from '../util/aiResourcePreferencePolicy.js';
 import {
   buildAiMemoryNotUsedInfluence,
   buildAiMemoryRuntimeContext,
@@ -685,8 +686,25 @@ async function resolveUser(keyword) {
   return rows[0] || null;
 }
 
-async function resolveResourceContexts(userId, contexts, question = '') {
+function normalizeExcludedResourceIds(value) {
+  if (!Array.isArray(value)) return [];
+  const result = [];
+  const seen = new Set();
+  for (const item of value.slice(0, 100)) {
+    const type = String(item?.type || '');
+    const id = String(item?.id || '').trim();
+    if (!['bookmark', 'note', 'file'].includes(type) || !id || id.length > 64) continue;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ type, id });
+  }
+  return result;
+}
+
+async function resolveResourceContexts(userId, contexts, question = '', excludedResources = []) {
   if (!Array.isArray(contexts) || contexts.length === 0) return { text: '', sources: [], scopeResourceIds: [] };
+  const excludedKeys = new Set(normalizeExcludedResourceIds(excludedResources).map((item) => `${item.type}:${item.id}`));
   const normalized = [];
   const seen = new Set();
   for (const item of contexts.slice(0, 5)) {
@@ -694,7 +712,7 @@ async function resolveResourceContexts(userId, contexts, question = '') {
     const id = String(item?.id || '').trim();
     if (!['bookmark', 'note', 'file', 'tag'].includes(type) || !id || id.length > 255) continue;
     const key = `${type}:${id}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key) || excludedKeys.has(key)) continue;
     seen.add(key);
     normalized.push({ type, id });
   }
@@ -709,7 +727,10 @@ async function resolveResourceContexts(userId, contexts, question = '') {
     let notePayload = null;
     if (item.type === 'bookmark') {
       [rows] = await pool.query(
-        'SELECT id, name AS title, url, LEFT(COALESCE(description, ?), 2000) AS content FROM bookmark WHERE id = ? AND user_id = ? AND del_flag = 0',
+        `SELECT id, name AS title, url, LEFT(COALESCE(description, ?), 2000) AS content
+         FROM bookmark
+         WHERE id = ? AND user_id = ? AND del_flag = 0
+           AND ${aiResourceExclusionSql({ alias: 'bookmark', ownerColumn: 'user_id', resourceType: 'bookmark' })}`,
         ['', item.id, userId],
       );
     } else if (item.type === 'note') {
@@ -730,7 +751,10 @@ async function resolveResourceContexts(userId, contexts, question = '') {
       }
     } else if (item.type === 'file') {
       [rows] = await pool.query(
-        'SELECT CAST(id AS CHAR) AS id, file_name AS title, file_type, file_size FROM files WHERE id = ? AND create_by = ? AND del_flag = 0',
+        `SELECT CAST(id AS CHAR) AS id, file_name AS title, file_type, file_size
+         FROM files
+         WHERE id = ? AND create_by = ? AND del_flag = 0
+           AND ${aiResourceExclusionSql({ alias: 'files', ownerColumn: 'create_by', resourceType: 'file' })}`,
         [item.id, userId],
       );
     } else {
@@ -749,8 +773,15 @@ async function resolveResourceContexts(userId, contexts, question = '') {
       }
     } else if (item.type === 'tag') {
       const [relations] = await pool.query(
-        `SELECT resource_type, resource_id FROM resource_tag_relations
-         WHERE user_id = ? AND tag_id = ? AND resource_type IN ('note', 'bookmark', 'file')
+        `SELECT r.resource_type, r.resource_id FROM resource_tag_relations r
+         WHERE r.user_id = ? AND r.tag_id = ? AND r.resource_type IN ('note', 'bookmark', 'file')
+           AND NOT EXISTS (
+             SELECT 1 FROM ai_resource_preferences arp
+             WHERE arp.user_id = r.user_id
+               AND arp.resource_type = r.resource_type
+               AND arp.resource_id = CAST(r.resource_id AS CHAR)
+               AND arp.ai_excluded = 1
+           )
          ORDER BY resource_type, resource_id LIMIT 500`,
         [userId, item.id],
       );
@@ -758,7 +789,7 @@ async function resolveResourceContexts(userId, contexts, question = '') {
         const type = String(relation.resource_type || '');
         const id = String(relation.resource_id || '');
         const scopeKey = `${type}:${id}`;
-        if (!id || scopeKeys.has(scopeKey)) continue;
+        if (!id || scopeKeys.has(scopeKey) || excludedKeys.has(scopeKey)) continue;
         scopeKeys.add(scopeKey);
         scopeResourceIds.push({ type, id });
       }
@@ -820,6 +851,7 @@ function normalizeAgentContentScope(rawScope, resolvedContexts) {
   return {
     mode,
     resourceIds,
+    excludedResourceIds: normalizeExcludedResourceIds(rawScope?.excludedResources),
     externalWeb: rawScope?.externalWeb === true,
   };
 }
@@ -1249,8 +1281,13 @@ export async function agentChat(req, res) {
         ]
       : await raceWithSignal(
           Promise.all([
-            resolveResourceContexts(userId, contexts, message),
-            resolveDocumentAttachments({ userId, sourceIds: attachmentIds, question: message }),
+            resolveResourceContexts(userId, contexts, message, scope?.excludedResources),
+            resolveDocumentAttachments({
+              userId,
+              sourceIds: attachmentIds,
+              question: message,
+              excludedResources: scope?.excludedResources,
+            }),
           ]),
           agentAbortController.signal,
         );
@@ -1397,13 +1434,17 @@ export async function agentChat(req, res) {
       semanticCatalog,
       semanticCatalogText: formatSemanticCapabilityCatalog(semanticCatalog),
     });
+    const exclusionPrompt = contentScope.excludedResourceIds.length
+      ? `用户已明确排除 ${contentScope.excludedResourceIds.length} 个资源；本轮任何检索、上下文扩展与回答引用都不得使用这些资源。`
+      : '';
     const scopePrompt =
       contentScope.mode === 'selected'
         ? `本轮个人知识检索被服务端严格限制在用户显式选择的 ${contentScope.resourceIds.length} 个资源内；不得尝试读取范围外的笔记、书签或文件。`
         : '本轮允许检索当前用户的个人知识空间，但仍必须遵守资源归属与工具权限。';
+    const boundedScopePrompt = exclusionPrompt ? `${scopePrompt}\n${exclusionPrompt}` : scopePrompt;
     const prompt = memoryPrompt
-      ? `${promptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
-      : `${promptBase}\n\n${scopePrompt}`;
+      ? `${promptBase}\n\n${boundedScopePrompt}\n\n---\n\n${memoryPrompt}`
+      : `${promptBase}\n\n${boundedScopePrompt}`;
     // 只把「最近一次成功工具调用」放 system,帮助理解省略式追问(如「那第二个呢」);
     // 对话历史不再塞进 system 的 JSON 块,而是作为真实多轮消息注入(见下方 messages),模型才真有记忆。
     const systemContent = session.lastTool
@@ -1870,8 +1911,8 @@ export async function agentChat(req, res) {
           // 避免再次套一层 submit_agent_plan 后随机漏填同一个 toolCalls 字段。
           const completionPromptBase = buildPlannerPrompt(completionTools, userRole);
           const completionPrompt = memoryPrompt
-            ? `${completionPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
-            : `${completionPromptBase}\n\n${scopePrompt}`;
+            ? `${completionPromptBase}\n\n${boundedScopePrompt}\n\n---\n\n${memoryPrompt}`
+            : `${completionPromptBase}\n\n${boundedScopePrompt}`;
           const completionSystemContent = session.lastTool
             ? `${completionPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
             : completionPrompt;
@@ -2118,8 +2159,8 @@ export async function agentChat(req, res) {
           semanticCatalogText: formatSemanticCapabilityCatalog(followUpCatalog),
         });
         const followUpPrompt = memoryPrompt
-          ? `${followUpPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
-          : `${followUpPromptBase}\n\n${scopePrompt}`;
+          ? `${followUpPromptBase}\n\n${boundedScopePrompt}\n\n---\n\n${memoryPrompt}`
+          : `${followUpPromptBase}\n\n${boundedScopePrompt}`;
         const followUpMessages = [{ role: 'system', content: followUpPrompt }, ...messages.slice(1)];
         const followUpPlannerStartedAt = Date.now();
         let followUpPlannerResponse = await requestAi(followUpMessages, {

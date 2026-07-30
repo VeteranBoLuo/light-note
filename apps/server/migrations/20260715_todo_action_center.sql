@@ -5,9 +5,13 @@ CREATE TABLE IF NOT EXISTS todo_items (
   description text,
   checklist json DEFAULT NULL,
   priority tinyint NOT NULL DEFAULT 1 COMMENT '0 low / 1 normal / 2 high',
+  sort_order bigint NOT NULL DEFAULT 0 COMMENT '用户自定义顺序，值越小越靠前',
   status varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/completed',
   due_at datetime DEFAULT NULL,
   completed_at datetime DEFAULT NULL,
+  series_id char(36) DEFAULT NULL COMMENT '重复任务系列 ID；重复提醒不使用此字段',
+  recurrence_rule json DEFAULT NULL COMMENT '重复任务规则，与周期提醒相互独立',
+  recurrence_instance_at datetime DEFAULT NULL COMMENT '当前重复任务实例时间',
   create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   del_flag tinyint NOT NULL DEFAULT 0,
@@ -16,6 +20,8 @@ CREATE TABLE IF NOT EXISTS todo_items (
   KEY idx_todo_user_status (user_id, status, del_flag),
   KEY idx_todo_due (user_id, due_at, status, del_flag),
   KEY idx_todo_update (user_id, update_time),
+  KEY idx_todo_custom_order (user_id, status, sort_order, id),
+  UNIQUE KEY uk_todo_series_instance (series_id, recurrence_instance_at),
   CONSTRAINT fk_todo_items_user FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC COMMENT='待处理中的待办事项';
 
@@ -29,7 +35,7 @@ CREATE TABLE IF NOT EXISTS todo_reminders (
   repeat_interval_minutes int DEFAULT NULL COMMENT '周期提醒间隔分钟数，NULL 表示单次',
   repeat_end_at datetime DEFAULT NULL COMMENT '周期提醒结束时间',
   target_email varchar(254) DEFAULT NULL COMMENT '邮件提醒收件地址',
-  status varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/sent/failed/cancelled',
+  status varchar(16) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/sent/failed/cancelled/paused_complete/paused_delete',
   retry_count int NOT NULL DEFAULT 0,
   last_error varchar(500) DEFAULT NULL,
   sent_at datetime DEFAULT NULL,

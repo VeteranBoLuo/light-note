@@ -1324,7 +1324,21 @@ export const exportData = async (req, res) => {
     const ai = await exportAiUserData(userId, pool);
     res.send(
       resultData({
+        formatVersion: 2,
+        backupKind: 'metadata_backup',
         exportedAt: new Date().toISOString(),
+        restorePolicy: {
+          restorable: ['tags', 'bookmarks', 'notes'],
+          exportOnly: ['files', 'ai'],
+          excluded: [
+            'fileContents',
+            'noteImages',
+            'bookmarkSnapshots',
+            'credentials',
+            'sessions',
+            'temporaryIndexes',
+          ],
+        },
         account: acct ? { alias: acct.alias, email: acct.email } : null,
         counts: {
           bookmarks: bookmarks.length,
@@ -1370,6 +1384,45 @@ export const importData = async (req, res) => {
         ),
       ),
     );
+  }
+  const detected = {
+    tags: Array.isArray(data.tags) ? data.tags.length : 0,
+    bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks.length : 0,
+    notes: Array.isArray(data.notes) ? data.notes.length : 0,
+    files: Array.isArray(data.files) ? data.files.length : 0,
+    aiConversations: Number(data.ai?.counts?.conversations || data.counts?.aiConversations || 0),
+  };
+  const totalRestorable = detected.tags + detected.bookmarks + detected.notes;
+  if (totalRestorable > 50000) {
+    return res.send(
+      resultData(
+        { errorCode: 'BACKUP_ITEM_LIMIT_EXCEEDED' },
+        413,
+        L(req, '备份中的可恢复记录超过 50000 条，请拆分后重试', 'The backup contains more than 50,000 restorable items'),
+      ),
+    );
+  }
+  const preflight = {
+    canImport: true,
+    formatVersion: Number(data.formatVersion || 1),
+    backupKind: String(data.backupKind || 'legacy_metadata_backup'),
+    detected,
+    willRestore: {
+      tags: detected.tags,
+      bookmarks: detected.bookmarks,
+      notes: detected.notes,
+    },
+    exportOnly: {
+      files: detected.files,
+      aiConversations: detected.aiConversations,
+    },
+    warnings: [
+      ...(detected.files ? ['FILE_CONTENTS_NOT_RESTORABLE'] : []),
+      ...(detected.aiConversations ? ['AI_DATA_EXPORT_ONLY'] : []),
+    ],
+  };
+  if (req.body?.mode === 'preflight') {
+    return res.send(resultData(preflight));
   }
   const connection = await pool.getConnection();
   try {
@@ -1511,10 +1564,11 @@ export const importData = async (req, res) => {
     stat.files.skipped = Array.isArray(data.files) ? data.files.length : 0;
 
     await connection.commit();
-    res.send(resultData(stat));
+    res.send(resultData({ ...stat, preflight }));
   } catch (e) {
     await connection.rollback();
-    res.send(resultData(null, 500, L(req, '导入失败: ', 'Import failed: ') + e.message));
+    console.error('[user-import] failed code=%s', String(e?.code || 'USER_IMPORT_FAILED'));
+    res.send(resultData(null, 500, L(req, '导入失败，请稍后重试', 'Import failed. Please try again later.')));
   } finally {
     connection.release();
   }

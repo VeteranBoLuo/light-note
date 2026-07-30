@@ -235,7 +235,7 @@ describe('newUserSeedService', () => {
       obs_key: rootObjectKey,
       del_flag: 0,
     });
-    expect(fileInserts.every(([, [row]]) => /^[a-f0-9]{32}$/.test(row.share_token))).toBe(true);
+    expect(fileInserts.every(([, [row]]) => !Object.prototype.hasOwnProperty.call(row, 'share_token'))).toBe(true);
     expect(
       connection.query.mock.calls.filter(([sql]) =>
         compactSql(sql).startsWith('INSERT IGNORE INTO resource_tag_relations'),

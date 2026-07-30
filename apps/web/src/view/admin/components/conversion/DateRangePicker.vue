@@ -1,21 +1,21 @@
 <template>
-  <div class="drp" :class="{ open: opened }" v-click-outside="close">
-    <button class="drp-trigger" @click="toggle">
+  <div ref="rootRef" class="drp" :class="{ open: opened }" v-click-outside="close">
+    <BButton class="drp-trigger" @click="toggle">
       <span class="drp-label">{{ rangeLabel }}</span>
       <span class="drp-arrow">{{ opened ? '▲' : '▼' }}</span>
-    </button>
+    </BButton>
 
-    <div v-if="opened" class="drp-panel">
+    <div v-if="opened" ref="panelRef" class="drp-panel" :style="panelStyle">
       <!-- 左侧：快捷预设 -->
       <div class="drp-presets">
         <p class="drp-section-title">快捷选择</p>
-        <button
+        <BButton
           v-for="p in presets"
           :key="p.key"
           class="drp-preset-btn"
           :class="{ active: activePreset === p.key }"
           @click="pickPreset(p)"
-        >{{ p.label }}</button>
+        >{{ p.label }}</BButton>
       </div>
 
       <div class="drp-divider" />
@@ -23,12 +23,12 @@
       <!-- 右侧：双月日历面板 -->
       <div class="drp-calendar">
         <div class="drp-cal-header">
-          <button class="drp-nav-btn" @click="shiftYear(-1)">&lt;&lt;</button>
-          <button class="drp-nav-btn" @click="shiftMonth(-1)">&lt;</button>
+          <BButton class="drp-nav-btn" aria-label="上一年" @click="shiftYear(-1)">&lt;&lt;</BButton>
+          <BButton class="drp-nav-btn" aria-label="上个月" @click="shiftMonth(-1)">&lt;</BButton>
           <span class="drp-month-label">{{ monthLabel(0) }}</span>
           <span class="drp-month-label">{{ monthLabel(1) }}</span>
-          <button class="drp-nav-btn" @click="shiftMonth(1)">&gt;</button>
-          <button class="drp-nav-btn" @click="shiftYear(1)">&gt;&gt;</button>
+          <BButton class="drp-nav-btn" aria-label="下个月" @click="shiftMonth(1)">&gt;</BButton>
+          <BButton class="drp-nav-btn" aria-label="下一年" @click="shiftYear(1)">&gt;&gt;</BButton>
         </div>
 
         <div class="drp-cal-grids">
@@ -37,14 +37,14 @@
               <span v-for="d in weekdays" :key="d">{{ d }}</span>
             </div>
             <div class="drp-days">
-              <button
+              <BButton
                 v-for="cell in monthDays(mi)"
                 :key="cell.key"
                 class="drp-day"
                 :class="dayClass(cell)"
                 :disabled="!cell.inMonth"
                 @click="pickDay(cell)"
-              >{{ cell.inMonth ? cell.day : '' }}</button>
+              >{{ cell.inMonth ? cell.day : '' }}</BButton>
             </div>
           </div>
         </div>
@@ -54,8 +54,8 @@
             {{ calStart || '未选' }} ~ {{ calEnd || '未选' }}
           </div>
           <div class="drp-cal-actions">
-            <button class="drp-btn" @click="confirmRange">确定</button>
-            <button class="drp-btn ghost" @click="pickAll">全期</button>
+            <BButton class="drp-btn" type="primary" @click="confirmRange">确定</BButton>
+            <BButton class="drp-btn ghost" @click="pickAll">全期</BButton>
           </div>
         </div>
       </div>
@@ -64,13 +64,18 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, computed, onMounted } from 'vue';
+  import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import { getRootZoom } from '@/utils/zoom';
 
   const emit = defineEmits<{
     change: [start?: string, end?: string];
   }>();
 
   const opened = ref(false);
+  const rootRef = ref<HTMLElement>();
+  const panelRef = ref<HTMLElement>();
+  const panelStyle = ref<Record<string, string>>({});
   const startDate = ref('');
   const endDate = ref('');
   const activePreset = ref('today');
@@ -279,11 +284,64 @@
     opened.value = false;
   }
 
+  function updatePanelPosition() {
+    if (!opened.value || document.documentElement.clientWidth > 720) {
+      panelStyle.value = {};
+      return;
+    }
+    const trigger = rootRef.value?.querySelector<HTMLElement>('.drp-trigger');
+    const panel = panelRef.value;
+    if (!trigger || !panel) return;
+
+    const zoom = getRootZoom();
+    const viewportWidth = document.documentElement.clientWidth / zoom;
+    const viewportHeight = document.documentElement.clientHeight / zoom;
+    const viewportGutter = 12 / zoom;
+    const panelGap = 6 / zoom;
+    const triggerRect = trigger.getBoundingClientRect();
+    const triggerTop = triggerRect.top / zoom;
+    const triggerBottom = triggerRect.bottom / zoom;
+    const panelHeight = Math.min(panel.offsetHeight, viewportHeight - viewportGutter * 2);
+    const belowTop = triggerBottom + panelGap;
+    const aboveTop = triggerTop - panelHeight - panelGap;
+    const top =
+      belowTop + panelHeight <= viewportHeight - viewportGutter
+        ? belowTop
+        : aboveTop >= viewportGutter
+          ? aboveTop
+          : Math.max(viewportGutter, viewportHeight - viewportGutter - panelHeight);
+
+    panelStyle.value = {
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${viewportGutter}px`,
+      width: `${Math.max(viewportWidth - viewportGutter * 2, 0)}px`,
+      maxHeight: `${Math.max(viewportHeight - viewportGutter * 2, 0)}px`,
+    };
+  }
+
   onMounted(() => {
     const p = presets.find(p => p.key === 'today')!;
     startDate.value = p.start();
     endDate.value = p.end();
     emit('change', startDate.value, endDate.value);
+  });
+
+  watch(opened, (isOpen) => {
+    if (isOpen) {
+      nextTick(() => requestAnimationFrame(updatePanelPosition));
+      window.addEventListener('resize', updatePanelPosition);
+      window.addEventListener('scroll', updatePanelPosition, true);
+      return;
+    }
+    panelStyle.value = {};
+    window.removeEventListener('resize', updatePanelPosition);
+    window.removeEventListener('scroll', updatePanelPosition, true);
+  });
+
+  onUnmounted(() => {
+    window.removeEventListener('resize', updatePanelPosition);
+    window.removeEventListener('scroll', updatePanelPosition, true);
   });
 
   // click-outside directive
@@ -305,8 +363,11 @@
 <style lang="less" scoped>
   .drp { position: relative; }
 
-  .drp-trigger {
+  .drp-trigger.b_btn {
     display: inline-flex; align-items: center; gap: 6px;
+    width: max-content;
+    height: 32px;
+    line-height: 1;
     padding: 6px 12px;
     border: 1px solid var(--card-border-color, #ddd);
     border-radius: 6px;
@@ -320,11 +381,13 @@
   .drp-panel {
     position: absolute; top: calc(100% + 6px); left: 0; z-index: 100;
     display: flex; gap: 0;
+    box-sizing: border-box;
     padding: 16px;
     border: 1px solid var(--card-border-color, #ddd);
     border-radius: 10px;
     background: var(--card-background, var(--background-color));
     box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    overflow-y: auto;
   }
 
   /* 左侧预设 */
@@ -337,8 +400,9 @@
     font-size: 12px; font-weight: 600;
     color: var(--sub-text-color, #888);
   }
-  .drp-preset-btn {
+  .drp-preset-btn.b_btn {
     display: block; width: 100%;
+    height: auto; line-height: 1.4;
     padding: 6px 12px; border: 0; border-radius: 6px;
     background: transparent; color: var(--text-color);
     text-align: left; cursor: pointer; font-size: 13px;
@@ -360,7 +424,8 @@
   .drp-cal-header {
     display: flex; align-items: center; justify-content: center; gap: 8px;
   }
-  .drp-nav-btn {
+  .drp-nav-btn.b_btn {
+    width: 28px; height: 28px; line-height: 1;
     padding: 2px 6px; border: 0; border-radius: 4px;
     background: transparent; color: var(--text-color);
     cursor: pointer; font-size: 12px; line-height: 1;
@@ -390,7 +455,8 @@
     display: grid; grid-template-columns: repeat(7, 32px);
     text-align: center;
   }
-  .drp-day {
+  .drp-day.b_btn {
+    width: 32px; height: auto; min-height: 27px; line-height: 1.4;
     padding: 4px 0; border: 0; border-radius: 4px;
     background: transparent; color: var(--text-color);
     cursor: pointer; font-size: 12px; line-height: 1.4;
@@ -426,12 +492,88 @@
   .drp-cal-actions {
     display: flex; gap: 8px;
   }
-  .drp-btn {
+  .drp-btn.b_btn {
+    width: max-content; height: 32px; line-height: 1;
     padding: 6px 14px; border: 0; border-radius: 6px;
     background: #615ced; color: #fff; cursor: pointer; font-size: 13px;
   }
   .drp-btn.ghost {
     background: transparent; border: 1px solid var(--card-border-color, #ddd);
     color: var(--text-color);
+  }
+
+  @media (max-width: 720px) {
+    .drp-panel {
+      flex-direction: column;
+      padding: 12px;
+    }
+
+    .drp-presets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      min-width: 0;
+      gap: 4px;
+    }
+
+    .drp-section-title {
+      grid-column: 1 / -1;
+    }
+
+    .drp-preset-btn.b_btn {
+      min-width: 0;
+      padding: 7px 4px;
+      text-align: center;
+    }
+
+    .drp-divider {
+      width: auto;
+      height: 1px;
+      margin: 10px 0;
+    }
+
+    .drp-calendar,
+    .drp-month {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .drp-cal-header {
+      gap: 4px;
+    }
+
+    .drp-month-label {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .drp-month-label + .drp-month-label,
+    .drp-month:nth-child(2) {
+      display: none;
+    }
+
+    .drp-cal-grids {
+      gap: 0;
+    }
+
+    .drp-weekdays,
+    .drp-days {
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+
+    .drp-day.b_btn {
+      width: 100%;
+      min-width: 0;
+      min-height: 30px;
+    }
+
+    .drp-cal-footer {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .drp-cal-actions {
+      justify-content: flex-end;
+    }
   }
 </style>

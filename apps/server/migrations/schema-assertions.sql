@@ -155,3 +155,44 @@ LEFT JOIN (
 WHERE actual.index_name IS NULL
    OR actual.non_unique <> expected.non_unique
    OR actual.cols <> expected.cols;
+
+-- 13) 核心业务基线表必须存在（P0-7；期望 0 行）
+SELECT '[13] missing_core_table' AS check_name, expected.t AS detail FROM (
+  SELECT 'note_versions' t UNION ALL
+  SELECT 'file_shares' UNION ALL
+  SELECT 'file_share_events'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+-- 14) 核心业务关键列必须存在（P0-7；期望 0 行）
+SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
+  SELECT 'files' tab, 'share_token' col, 'files.share_token' n UNION ALL
+  SELECT 'note_versions', 'note_id', 'note_versions.note_id' UNION ALL
+  SELECT 'note_versions', 'type', 'note_versions.type' UNION ALL
+  SELECT 'file_shares', 'token_hash', 'file_shares.token_hash' UNION ALL
+  SELECT 'file_shares', 'access_code_hash', 'file_shares.access_code_hash' UNION ALL
+  SELECT 'file_shares', 'expires_at', 'file_shares.expires_at' UNION ALL
+  SELECT 'file_shares', 'status', 'file_shares.status' UNION ALL
+  SELECT 'file_share_events', 'visitor_hash', 'file_share_events.visitor_hash'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+-- 15) 核心业务索引必须存在（P0-7；期望 0 行）
+SELECT '[15] missing_core_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail FROM (
+  SELECT 'note_versions' tn, 'idx_note_versions_note_time' ix UNION ALL
+  SELECT 'file_shares', 'uk_file_shares_token_hash' UNION ALL
+  SELECT 'file_shares', 'idx_file_shares_owner_status' UNION ALL
+  SELECT 'file_shares', 'idx_file_shares_file_status' UNION ALL
+  SELECT 'file_share_events', 'idx_file_share_events_retention'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

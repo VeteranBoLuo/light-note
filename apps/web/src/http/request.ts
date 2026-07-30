@@ -29,6 +29,7 @@ interface ApiResponse {
   status: number;
   msg: string;
   data: any;
+  requestId?: string;
 }
 
 interface QueryData {
@@ -192,6 +193,10 @@ request.interceptors.request.use(
 // 响应拦截
 request.interceptors.response.use(
   (response) => {
+    const requestId = String(response.headers?.['x-request-id'] || '');
+    if (requestId && response.data && typeof response.data === 'object') {
+      response.data.requestId = requestId;
+    }
     notifyAuthSession(response);
     notifyUserBanned(response);
     notifyIpBanned(response);
@@ -273,6 +278,7 @@ request.interceptors.response.use(
           message: msg,
           status: 429,
           retryAfter: Number(error.response.data?.data?.retryAfter || 0),
+          requestId: error.response.headers?.['x-request-id'],
         });
       }
       if (status >= 500) {
@@ -284,6 +290,7 @@ request.interceptors.response.use(
           code: 'HTTP_' + status,
           message: msg,
           status: status,
+          requestId: error.response.headers?.['x-request-id'],
         });
       }
     }

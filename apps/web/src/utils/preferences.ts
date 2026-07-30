@@ -17,9 +17,16 @@ export interface UserPreferences {
   homePage?: HomePagePreference;
   uiScale?: 'small' | 'medium' | 'large';
   openBookmarkIn?: 'newTab' | 'current';
+  notificationsInApp?: boolean;
+  notificationsEmail?: boolean;
+  notificationsBrowser?: boolean;
+  notificationsDnd?: boolean;
+  notificationsDndStart?: string;
+  notificationsDndEnd?: string;
+  notificationsTimezoneOffset?: number;
 }
 
-export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'workbench';
+export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'bookmark';
 export const DEFAULT_MOBILE_HOME_PAGE: MobileHomePreference = 'bookmark';
 
 /**
@@ -97,7 +104,7 @@ export function getAppHomePath(preferences?: UserPreferences | null, isMobile = 
 
 /**
  * `/app` 是稳定应用入口：手机进入资源模块，平板沿用书签首屏，
- * 桌面端按账号偏好进入。缺失或历史 `landing` 值会归一为工作台，
+ * 桌面端按账号偏好进入。缺失或历史 `landing` 值会归一为书签，
  * 绝不能让应用入口重新返回公开官网。
  */
 export function getApplicationEntryPath(

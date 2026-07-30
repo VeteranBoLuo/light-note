@@ -1,5 +1,5 @@
 <template>
-  <div class="auth-panel">
+  <form class="auth-panel" @submit.prevent="handleLogin">
     <div class="auth-fields">
       <label class="auth-field" for="auth-login-email">
         <span class="auth-field__label">{{ t('auth.email') }}</span>
@@ -8,7 +8,7 @@
           v-model:value="formData.email"
           class="auth-input"
           height="48px"
-          autocomplete="on"
+          autocomplete="email"
           :placeholder="t('auth.emailPlaceholder')"
         >
           <template #prefix>
@@ -24,9 +24,9 @@
           v-model:value="formData.password"
           class="auth-input"
           height="48px"
-          maxlength="20"
+          maxlength="64"
           type="password"
-          autocomplete="on"
+          autocomplete="current-password"
           :placeholder="t('auth.passwordPlaceholder')"
         >
           <template #prefix>
@@ -41,7 +41,7 @@
       <BButton class="auth-link" @click="title = '重置'">{{ t('auth.forgotPassword') }}</BButton>
     </div>
 
-    <BButton type="primary" class="auth-primary" :loading="submitting" :disabled="disable" @click="handleLogin">
+    <BButton native-type="submit" type="primary" class="auth-primary" :loading="submitting" :disabled="disable">
       {{ t('auth.login') }}
     </BButton>
 
@@ -62,7 +62,7 @@
       :loading="githubStarting"
       @confirm="confirmGitHubLogin"
     />
-  </div>
+  </form>
 </template>
 
 <script lang="ts" setup>

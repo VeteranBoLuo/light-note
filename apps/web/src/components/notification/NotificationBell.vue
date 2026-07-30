@@ -7,35 +7,23 @@
     @openChange="onOpenChange"
   >
     <BTooltip :title="t('notification.title')">
-      <div class="nt-bell dom-hover" v-click-log="{ module: '通知中心', operation: '打开通知铃铛' }">
-        <svg
-          viewBox="0 0 24 24"
-          width="24"
-          height="24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
+      <BButton class="nt-bell dom-hover" v-click-log="{ module: '通知中心', operation: '打开通知铃铛' }">
+        <SvgIcon :src="icon.settings.notification" size="24" aria-hidden="true" />
         <span v-if="unreadTotal > 0" class="nt-badge">{{ unreadTotal > 99 ? '99+' : unreadTotal }}</span>
-      </div>
+      </BButton>
     </BTooltip>
 
     <template #content>
       <div class="nt-panel">
         <div class="nt-head">
           <span class="nt-title">{{ t('notification.title') }}</span>
-          <span v-if="unreadTotal > 0" class="nt-markall dom-hover" @click="onMarkAll">{{
-            t('notification.markAllRead')
-          }}</span>
+          <BButton v-if="unreadTotal > 0" class="nt-markall dom-hover" @click="onMarkAll">
+            {{ t('notification.markAllRead') }}
+          </BButton>
         </div>
 
         <div class="nt-tabs">
-          <button
+          <BButton
             v-for="tb in tabs"
             :key="tb.v"
             class="nt-tab"
@@ -46,7 +34,7 @@
             <span v-if="tabUnread(tb.v) > 0" class="nt-tab-badge">{{
               tabUnread(tb.v) > 99 ? '99+' : tabUnread(tb.v)
             }}</span>
-          </button>
+          </BButton>
         </div>
 
         <div class="nt-list">
@@ -61,7 +49,7 @@
               <div
                 v-for="n in grp.items"
                 :key="n.id"
-                class="nt-item dom-hover"
+                class="nt-item"
                 :class="{ unread: !n.isRead }"
                 @click="onItemClick(n)"
                 v-click-log="{ module: '通知中心', operation: `查看通知【${renderTitle(n)}】` }"
@@ -71,26 +59,27 @@
                   <div class="nt-item-title">{{ renderTitle(n) }}</div>
                   <div v-if="renderContent(n)" class="nt-item-content">{{ renderContent(n) }}</div>
                   <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
+                  <div v-if="n.type === 'todo_reminder'" class="nt-todo-actions">
+                    <BButton
+                      size="small"
+                      :loading="completingTodoId === String(parseMeta(n.meta).todoId || '')"
+                      @click.stop="completeReminderTodo(n)"
+                    >
+                      {{ t('notification.todoComplete') }}
+                    </BButton>
+                    <BButton size="small" @click.stop="openReminderTodo(n)">
+                      {{ t('notification.todoOpen') }}
+                    </BButton>
+                  </div>
                 </div>
-                <button class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="14"
-                    height="14"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                  </svg>
-                </button>
+                <BButton class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
+                  <SvgIcon :src="icon.noteDetail.delete" size="14" aria-hidden="true" />
+                </BButton>
               </div>
             </div>
-            <button v-if="items.length < total" class="nt-more" :disabled="loading" @click="loadMore">
+            <BButton v-if="items.length < total" class="nt-more" :disabled="loading" @click="loadMore">
               {{ loading ? t('notification.loading') : t('notification.loadMore') }}
-            </button>
+            </BButton>
           </template>
         </div>
       </div>
@@ -125,8 +114,14 @@
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import { completeTodo } from '@/api/todoApi';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+  import { NOTIFICATION_PANEL_OPEN_EVENT } from '@/utils/notificationEntry';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -142,6 +137,7 @@
   const items = ref<NotificationItem[]>([]);
   const total = ref(0);
   const loading = ref(false);
+  const completingTodoId = ref('');
   const activeTab = ref('all');
   const currentPage = ref(1);
   const pageSize = 20;
@@ -247,6 +243,11 @@
   function onOpenChange(v: boolean) {
     if (v) load(true);
   }
+  function handleExternalOpen() {
+    if (open.value) return;
+    open.value = true;
+    void load(true);
+  }
   async function onMarkAll() {
     const succeeded = await markAllRead();
     if (succeeded) {
@@ -278,6 +279,37 @@
       open.value = false;
     }
   }
+  async function openReminderTodo(n: NotificationItem) {
+    const todoId = String(parseMeta(n.meta).todoId || '');
+    if (!todoId) return;
+    if (!n.isRead) {
+      n.isRead = 1;
+      await markRead([n.id]);
+    }
+    open.value = false;
+    router.push({ path: '/inbox', query: { tab: 'todo', todoId } }).catch(() => {});
+  }
+  async function completeReminderTodo(n: NotificationItem) {
+    const todoId = String(parseMeta(n.meta).todoId || '');
+    if (!todoId || completingTodoId.value) return;
+    completingTodoId.value = todoId;
+    try {
+      const res = await completeTodo(todoId);
+      if (res.status === 200) {
+        if (!n.isRead) {
+          n.isRead = 1;
+          await markRead([n.id]);
+        }
+        message.success(t('notification.todoCompleted'));
+      } else {
+        message.warning(t('notification.todoCompleteFailed'));
+      }
+    } catch {
+      message.warning(t('notification.todoCompleteFailed'));
+    } finally {
+      completingTodoId.value = '';
+    }
+  }
   // 删除单条:本地即时移除 + 后端软删(未读的会由 refreshUnread 同步角标)
   async function onDelete(n: NotificationItem) {
     const previousItems = items.value;
@@ -301,9 +333,11 @@
   onMounted(() => {
     refreshUnread();
     timer = setInterval(() => refreshUnread(), 120000);
+    window.addEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
   onUnmounted(() => {
     if (timer) clearInterval(timer);
+    window.removeEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
   watch(
     () => user.id,
@@ -438,11 +472,16 @@
     display: flex;
     gap: 10px;
     padding: 10px;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 68%, transparent);
     border-radius: 10px;
+    background: var(--card-background);
     cursor: pointer;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
   }
-  .notification-popover .nt-item:hover {
-    background: color-mix(in srgb, var(--primary-color) 7%, transparent);
+  .notification-popover .nt-item + .nt-item {
+    margin-top: 6px;
   }
   .notification-popover .nt-del {
     position: absolute;
@@ -464,15 +503,8 @@
       color 0.15s,
       background 0.15s;
   }
-  .notification-popover .nt-item:hover .nt-del {
-    opacity: 1;
-  }
-  .notification-popover .nt-del:hover {
-    color: #ef4444;
-    background: color-mix(in srgb, #ef4444 12%, transparent);
-  }
   .notification-popover .nt-item.unread {
-    background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+    background: var(--card-background);
   }
   .notification-popover .nt-dot {
     flex: 0 0 auto;
@@ -507,6 +539,9 @@
     font-weight: 600;
     color: var(--text-color);
     padding-right: 22px; /* 预留删除按钮位,悬停出现时不遮挡标题 */
+  }
+  .notification-popover .nt-item.unread .nt-item-title {
+    font-weight: 700;
   }
   .notification-popover .nt-item-content {
     margin-top: 2px;
@@ -568,5 +603,25 @@
   .notification-popover .nt-more:disabled {
     color: var(--desc-color);
     cursor: default;
+  }
+  .notification-popover .nt-item:focus-within {
+    border-color: color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+  }
+  .notification-popover .nt-item:focus-within .nt-del {
+    opacity: 1;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .notification-popover .nt-item:hover {
+      border-color: color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
+      background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+    }
+    .notification-popover .nt-item:hover .nt-del {
+      opacity: 1;
+    }
+    .notification-popover .nt-del:hover {
+      color: #ef4444;
+      background: color-mix(in srgb, #ef4444 12%, transparent);
+    }
   }
 </style>

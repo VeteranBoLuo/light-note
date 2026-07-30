@@ -25,12 +25,16 @@ export interface NotificationPage {
 const unreadTotal = ref(0);
 const unreadByType = ref<Record<string, number>>({}); // 分类型未读数(各 tab 角标)
 let ownerId: string | null = null;
+let browserNotificationBaselineReady = false;
+const browserSeenIds = new Set<string>();
 
 /** 登出/切号时作废未读缓存 */
 export function resetNotification() {
   unreadTotal.value = 0;
   unreadByType.value = {};
   ownerId = null;
+  browserNotificationBaselineReady = false;
+  browserSeenIds.clear();
 }
 
 export function useNotification() {
@@ -51,15 +55,54 @@ export function useNotification() {
       unreadTotal.value = 0;
       unreadByType.value = {};
       ownerId = uid;
+      browserNotificationBaselineReady = false;
+      browserSeenIds.clear();
     }
     try {
       const res = await notificationApi.getUnreadCount();
       if (res?.status === 200 && res.data) {
+        const previousUnread = unreadTotal.value;
         unreadTotal.value = Number(res.data.unreadTotal) || 0;
         unreadByType.value = res.data.byType || {};
+        if (
+          (!browserNotificationBaselineReady || unreadTotal.value > previousUnread) &&
+          useUserStore().preferences.notificationsBrowser === true &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted'
+        ) {
+          void notifyNewestUnreadInBrowser();
+        }
       }
     } catch {
       /* 忽略,下次轮询再试 */
+    }
+  }
+
+  async function notifyNewestUnreadInBrowser() {
+    try {
+      const res = await notificationApi.getNotificationList({ currentPage: 1, pageSize: 5, type: 'all' });
+      const items = Array.isArray(res?.data?.items) ? (res.data.items as NotificationItem[]) : [];
+      if (!browserNotificationBaselineReady) {
+        items.forEach((item) => browserSeenIds.add(item.id));
+        browserNotificationBaselineReady = true;
+        return;
+      }
+      for (const item of [...items].reverse()) {
+        if (item.isRead || browserSeenIds.has(item.id)) continue;
+        browserSeenIds.add(item.id);
+        const notification = new Notification(item.title || '轻笺', {
+          body: item.content || undefined,
+          tag: `light-note:${item.id}`,
+        });
+        notification.onclick = () => {
+          window.focus();
+          if (item.link) window.location.assign(item.link);
+          notification.close();
+        };
+      }
+      while (browserSeenIds.size > 100) browserSeenIds.delete(browserSeenIds.values().next().value as string);
+    } catch {
+      // 浏览器通知只是附加渠道，失败不影响站内角标。
     }
   }
 

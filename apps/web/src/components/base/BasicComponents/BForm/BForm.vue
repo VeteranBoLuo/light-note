@@ -26,6 +26,9 @@
           v-else
           v-model:value="formData[field.name]"
           :placeholder="field.placeholder"
+          :type="field.type || 'text'"
+          :autocomplete="field.autocomplete || 'off'"
+          :maxlength="field.maxlength || ''"
           @focusout="inputFocusout(field)"
         >
         </b-input>

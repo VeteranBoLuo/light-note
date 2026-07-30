@@ -3,13 +3,14 @@
     class="b-select"
     ref="containerRef"
     :data-b-select-id="selectId"
-    :class="{ 'is-multiple': isMultiple, 'is-open': isOpen }"
+    :class="{ 'is-multiple': isMultiple, 'is-open': isOpen, 'is-disabled': disabled }"
   >
     <div
       class="select-trigger"
       :role="showSearch ? undefined : 'combobox'"
-      :tabindex="showSearch ? -1 : 0"
+      :tabindex="showSearch || disabled ? -1 : 0"
       :aria-expanded="showSearch ? undefined : isOpen"
+      :aria-disabled="disabled || undefined"
       :aria-controls="showSearch ? undefined : listboxId"
       :aria-haspopup="showSearch ? undefined : 'listbox'"
       :aria-activedescendant="showSearch ? undefined : activeOptionDomId"
@@ -35,6 +36,7 @@
           :aria-activedescendant="activeOptionDomId"
           :aria-label="ariaLabel || undefined"
           :aria-labelledby="ariaLabelledby || undefined"
+          :disabled="disabled"
           @click.stop
           @input="keepOpen"
           @focus="keepOpen"
@@ -106,7 +108,6 @@
           :aria-selected="isSelected(item.value)"
           :aria-disabled="Boolean(item.disabled)"
           @click="selectOption(item)"
-          @mouseenter="activeOptionIndex = optionIndex"
         >
           <span v-if="isMultiple" class="select-option-check">
             <span v-if="isSelected(item.value)" class="check-icon">&#10003;</span>
@@ -139,6 +140,7 @@
       maxTagCount?: number;
       ariaLabel?: string;
       ariaLabelledby?: string;
+      disabled?: boolean;
     }>(),
     {
       options: () => [],
@@ -149,6 +151,7 @@
       maxTagCount: 0,
       ariaLabel: '',
       ariaLabelledby: '',
+      disabled: false,
     },
   );
 
@@ -282,6 +285,7 @@
   }
 
   function handleTriggerKeydown(event: KeyboardEvent) {
+    if (props.disabled) return;
     // 中文等输入法在候选词组成阶段会用 Enter / 方向键确认或切换候选。
     // 此时不能把按键当作下拉导航，否则会误选当前高亮项。
     if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return;
@@ -325,7 +329,7 @@
   }
 
   function selectOption(item: BaseOptions) {
-    if (item.disabled) return;
+    if (props.disabled || item.disabled) return;
     if (isMultiple.value) {
       const arr = [...currentValues.value];
       const idx = arr.indexOf(item.value);
@@ -347,13 +351,14 @@
   }
 
   function removeTag(value: any) {
-    if (!isMultiple.value) return;
+    if (props.disabled || !isMultiple.value) return;
     const arr = currentValues.value.filter((v: any) => v !== value);
     modelValue.value = arr;
     emit('change', arr);
   }
 
   function handleClear() {
+    if (props.disabled) return;
     if (isMultiple.value) {
       modelValue.value = [];
       emit('change', []);
@@ -366,19 +371,20 @@
   }
 
   function toggleOpen() {
+    if (props.disabled) return;
     isOpen.value = !isOpen.value;
     // 打开时的定位统一交给 watch(isOpen),覆盖 toggleOpen / 内联搜索框 @focus @input / keepOpen 所有打开路径
     if (isOpen.value) {
       searchText.value = '';
-      activeOptionIndex.value = firstEnabledIndex();
+      activeOptionIndex.value = -1;
     } else {
       activeOptionIndex.value = -1;
     }
   }
 
   function keepOpen() {
+    if (props.disabled) return;
     if (!isOpen.value) isOpen.value = true;
-    if (activeOptionIndex.value < 0) activeOptionIndex.value = firstEnabledIndex();
   }
 
   function updateDropdownPosition() {
@@ -390,7 +396,16 @@
     const rTop = rect.top / zoom;
     const rBottom = rect.bottom / zoom;
     const rLeft = rect.left / zoom;
-    const dropdownWidth = Math.max(rect.width / zoom, 180);
+    const triggerWidth = rect.width / zoom;
+    const viewportWidth = document.documentElement.clientWidth / zoom;
+    const viewportGutter = 8 / zoom;
+    const availableWidth = Math.max(viewportWidth - viewportGutter * 2, 0);
+    const preferredMinWidth = document.documentElement.clientWidth <= 720 ? triggerWidth : 180;
+    const dropdownWidth = Math.min(Math.max(triggerWidth, preferredMinWidth), availableWidth);
+    const dropdownLeft = Math.min(
+      Math.max(rLeft, viewportGutter),
+      Math.max(viewportGutter, viewportWidth - viewportGutter - dropdownWidth),
+    );
 
     if (placementAbove) {
       // 已翻到上面，保持上方，重新计算高度
@@ -399,7 +414,7 @@
         const dh = dropdownRef.value.offsetHeight;
         dropdownStyle.value = {
           top: `${rTop - dh - 4}px`,
-          left: `${rLeft}px`,
+          left: `${dropdownLeft}px`,
           width: `${dropdownWidth}px`,
         };
       });
@@ -409,7 +424,7 @@
     // 先放下面
     dropdownStyle.value = {
       top: `${rBottom + 4}px`,
-      left: `${rLeft}px`,
+      left: `${dropdownLeft}px`,
       width: `${dropdownWidth}px`,
     };
 
@@ -423,7 +438,7 @@
         placementAbove = true;
         dropdownStyle.value = {
           top: `${rTop - dh - 4}px`,
-          left: `${rLeft}px`,
+          left: `${dropdownLeft}px`,
           width: `${dropdownWidth}px`,
         };
       } else {
@@ -468,7 +483,10 @@
 
   watch(filteredOptions, (options) => {
     if (!isOpen.value) return;
-    if (!options[activeOptionIndex.value] || options[activeOptionIndex.value]?.disabled) {
+    if (
+      activeOptionIndex.value >= 0 &&
+      (!options[activeOptionIndex.value] || options[activeOptionIndex.value]?.disabled)
+    ) {
       activeOptionIndex.value = firstEnabledIndex();
     }
   });
@@ -496,6 +514,15 @@
       }
       .select-arrow {
         transform: rotate(180deg);
+      }
+    }
+
+    &.is-disabled {
+      opacity: 0.58;
+
+      .select-trigger {
+        cursor: not-allowed;
+        background: color-mix(in srgb, var(--background-color) 92%, var(--card-border-color));
       }
     }
   }

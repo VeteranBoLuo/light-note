@@ -9,7 +9,11 @@
   >
     <div id="navigation-container" class="flex-align-center">
       <div class="navigation-title">
-        <div class="navigation-title-link" @click="handleToIndex" v-click-log="OPERATION_LOG_MAP.navigation.work">
+        <div
+          class="navigation-title-link"
+          @click="handleToApplicationHome"
+          v-click-log="OPERATION_LOG_MAP.navigation.applicationHome"
+        >
           <img src="/favicon.svg?v=7" :title="$t('navigation.title')" width="25" height="25" alt="" />
           <span style="font-size: 18px" v-if="!bookmark.isMobile">{{ $t('navigation.title') }}</span>
         </div>
@@ -160,8 +164,8 @@
   ]);
 
   const bookmark = bookmarkStore();
-  async function handleToIndex() {
-    await router.push('/');
+  async function handleToApplicationHome() {
+    await router.push('/app');
     bookmark.isFold = true;
   }
 

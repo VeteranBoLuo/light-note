@@ -11,6 +11,42 @@ function asDate(value) {
   return new Date(String(value || '').replace(' ', 'T'));
 }
 
+function parsePreferences(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function minuteOfDay(value, fallback) {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value || ''));
+  return match ? Number(match[1]) * 60 + Number(match[2]) : fallback;
+}
+
+export function notificationQuietUntil(preferences, now = new Date()) {
+  if (preferences?.notificationsDnd !== true) return null;
+  const start = minuteOfDay(preferences.notificationsDndStart, 22 * 60);
+  const end = minuteOfDay(preferences.notificationsDndEnd, 8 * 60);
+  if (start === end) return null;
+  const offset = Math.max(-840, Math.min(840, Number(preferences.notificationsTimezoneOffset || 0)));
+  const local = new Date(now.getTime() - offset * 60_000);
+  const minute = local.getUTCHours() * 60 + local.getUTCMinutes();
+  const inQuiet = start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  if (!inQuiet) return null;
+  const minutesUntilEnd = start < end || minute < end ? end - minute : 24 * 60 - minute + end;
+  return new Date(now.getTime() + Math.max(1, minutesUntilEnd) * 60_000);
+}
+
+function channelEnabled(preferences, channel) {
+  if (channel === 'in_app') return preferences.notificationsInApp !== false;
+  if (channel === 'email') return preferences.notificationsEmail !== false;
+  return true;
+}
+
 export function calculateNextSchedule(scheduledAt, intervalMinutes, repeatEndAt, now = new Date()) {
   const intervalMs = Number(intervalMinutes) * 60_000;
   const end = asDate(repeatEndAt);
@@ -44,6 +80,27 @@ async function claimReminder(id) {
     );
     if (!todoRows.length) {
       await connection.query("UPDATE todo_reminders SET status = 'cancelled' WHERE id = ?", [id]);
+      await connection.commit();
+      return null;
+    }
+    const [userRows] = await connection.query('SELECT preferences FROM user WHERE id = ? AND del_flag = 0 LIMIT 1', [
+      reminder.userId,
+    ]);
+    const preferences = parsePreferences(userRows[0]?.preferences);
+    if (!channelEnabled(preferences, reminder.channel)) {
+      await connection.query(
+        "UPDATE todo_reminders SET status = 'cancelled', last_error = 'channel disabled' WHERE id = ?",
+        [id],
+      );
+      await connection.commit();
+      return null;
+    }
+    const quietUntil = notificationQuietUntil(preferences);
+    if (quietUntil) {
+      await connection.query(
+        "UPDATE todo_reminders SET status = 'pending', scheduled_at = ?, last_error = 'quiet hours deferred' WHERE id = ?",
+        [quietUntil, id],
+      );
       await connection.commit();
       return null;
     }

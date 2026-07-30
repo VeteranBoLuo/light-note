@@ -60,6 +60,8 @@
   import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search';
   import { noteStore } from '@/store';
   import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
+  import { listAiResourcePreferences, type AiResourcePreferenceType } from '@/api/aiWorkspaceApi';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
 
   export interface AiResourceContext {
     type: SearchType;
@@ -141,7 +143,21 @@
       if (requestId === searchRequestId) loading.value = false;
     }
   }
-  function add(item: AiResourceContext) {
+  async function add(item: AiResourceContext) {
+    if (item.type !== 'tag') {
+      try {
+        const preference = await listAiResourcePreferences([
+          { type: item.type as AiResourcePreferenceType, id: item.id },
+        ]);
+        if (preference.items[0]?.aiExcluded) {
+          message.warning(t('ai.scope.resourceExcluded'));
+          return;
+        }
+      } catch {
+        message.error(t('ai.scope.preferenceCheckFailed'));
+        return;
+      }
+    }
     if (item.type === 'file') {
       emit('fileSelected', item);
       open.value = false;

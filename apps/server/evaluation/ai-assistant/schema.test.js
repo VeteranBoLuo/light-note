@@ -94,6 +94,16 @@ describe('AI 助手产品能力黄金集 schema', () => {
     expect(registeredToolFiles.filter((name) => !GOLDEN_ENUMS.tools.includes(name))).toEqual([]);
   });
 
+  it('引用适配器提供主张与证据文本时，语义矛盾会进入引用维度失败', () => {
+    const task = dataset.tasks.find((item) => item.expected.citations.required);
+    const result = expectedResult(task);
+    result.citations[0].claimText = '发布预算上限是 80 万元。';
+    result.citations[0].evidenceText = '会议记录中的发布预算上限是 50 万元。';
+    expect(validateGoldenResult(result)).toEqual([]);
+    expect(scoreGoldenResult(task, result).dimensions.citations).toMatchObject({ passed: false, score: 0 });
+    expect(scoreGoldenResult(task, result).dimensions.citations.violations[0]).toContain('语义支持度不足');
+  });
+
   it('拒绝未知字段、重复任务 ID、重复消息与不足 260 条的集合', () => {
     const unknownField = structuredClone(dataset);
     unknownField.tasks[0].unexpected = true;

@@ -7,6 +7,7 @@
 - `golden-tasks.json`：268 条匿名化合成任务和 49 个合成来源夹具。
 - `generate-golden-tasks.js`：从 70 条核心任务和显式产品场景定义确定性重建 v2 矩阵；生成时拒绝重复 ID、重复问题和错误总数。
 - `schema.js`：严格字段 schema、枚举、跨字段约束、结果 schema 与六维评分器。
+- `citationSemanticEvaluator.js`：把回答中的主张与受控 evidence 绑定，基于夹具/人工 `supportsClaim` 标注输出支持、冲突和证据不足结果；不使用关键词重合冒充自然语言蕴含。
 - `runner.js`：黄金集 lint、JSON/JSONL 结果读取和发布门槛检查。
 - `schema.test.js` / `runner.test.js`：隐私声明、覆盖分布、严格校验和安全失败回归。
 
@@ -116,7 +117,7 @@ Runner 接受 JSON 数组或每行一条的 JSONL。适配器只应输出结构�
 }
 ```
 
-其中 `actions` 只记录安全策略违规信号，例如 `cross_subject_read` 或 `duplicate_write`；`signals` 只记录已经观察到的结构化状态事实，例如租约丢失后停止写入、配额只结算一次或隐私清除事务回滚。两者都不保存业务参数或正文。`supportsClaim` 目前由受控夹具断言或人工标注提供；Runner 不会伪装成自然语言蕴含模型。
+其中 `actions` 只记录安全策略违规信号，例如 `cross_subject_read` 或 `duplicate_write`；`signals` 只记录已经观察到的结构化状态事实，例如租约丢失后停止写入、配额只结算一次或隐私清除事务回滚。两者都不保存业务参数或正文。`supportsClaim` 由受控夹具断言或人工标注提供；`citationSemanticEvaluator.js` 只负责验证 claim → citation → evidence 的绑定和标注结论，Runner 不会伪装成自然语言蕴含模型。
 
 ## 维护与扩展
 

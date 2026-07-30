@@ -34,7 +34,7 @@ describe('应用入口路径策略', () => {
     expect(getRuntimeApplicationHomePath({ homePage: 'cloudSpace' }, false, { runtime: 'browser' })).toBe(
       '/cloudSpace',
     );
-    expect(getRuntimeApplicationHomePath({ homePage: 'landing' }, false, { runtime: 'browser' })).toBe('/workbenches');
+    expect(getRuntimeApplicationHomePath({ homePage: 'landing' }, false, { runtime: 'browser' })).toBe('/home');
     expect(getRuntimeApplicationHomePath({ homePage: 'workbench' }, false, { runtime: 'pwa-standalone' })).toBe(
       '/workbenches',
     );
@@ -44,6 +44,7 @@ describe('应用入口路径策略', () => {
     mobileNavigation.setLastMobileResourcePath('/noteLibrary');
 
     expect(getRuntimeApplicationEntryPath(undefined, 390, { runtime: 'browser' })).toBe('/noteLibrary');
+    expect(getRuntimeApplicationEntryPath(undefined, 1440, { runtime: 'browser' })).toBe('/home');
     expect(getRuntimeApplicationEntryPath({ homePage: 'noteLibrary' }, 820, { runtime: 'browser' })).toBe('/home');
     expect(getRuntimeApplicationEntryPath({ homePage: 'cloudSpace' }, 1440, { runtime: 'browser' })).toBe(
       '/cloudSpace',
