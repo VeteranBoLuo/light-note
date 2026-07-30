@@ -177,7 +177,6 @@ SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'file_shares', 'status', 'file_shares.status' UNION ALL
   SELECT 'file_share_events', 'visitor_hash', 'file_share_events.visitor_hash' UNION ALL
   SELECT 'ai_conversations', 'is_pinned', 'ai_conversations.is_pinned' UNION ALL
-  SELECT 'ai_conversations', 'folder_name', 'ai_conversations.folder_name' UNION ALL
   SELECT 'todo_items', 'sort_order', 'todo_items.sort_order' UNION ALL
   SELECT 'todo_items', 'series_id', 'todo_items.series_id' UNION ALL
   SELECT 'todo_items', 'recurrence_rule', 'todo_items.recurrence_rule' UNION ALL

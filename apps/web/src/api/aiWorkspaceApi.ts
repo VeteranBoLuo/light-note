@@ -128,7 +128,6 @@ export interface AiConversationSummary {
   scope: Record<string, unknown>;
   status: AiConversationStatus;
   isPinned?: boolean;
-  folderName?: string;
   retentionMode: AiRetentionMode;
   expireAt: string | null;
   rootConversationId: string;
@@ -336,15 +335,11 @@ export const listAiConversations = (
   input: {
     status?: AiConversationStatus;
     keyword?: string;
-    folderName?: string;
     cursor?: string;
     limit?: number;
   } = {},
 ) =>
-  post<{ items: AiConversationSummary[]; nextCursor: string | null; folders: string[] }>(
-    '/api/chat/conversations/list',
-    input,
-  );
+  post<{ items: AiConversationSummary[]; nextCursor: string | null }>('/api/chat/conversations/list', input);
 
 export const getAiConversation = (conversationId: string, messageLimit = 100) =>
   post<AiConversation>('/api/chat/conversations/get', { conversationId, messageLimit });

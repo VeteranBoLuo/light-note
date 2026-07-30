@@ -24,6 +24,18 @@ describe('buildPlannerPrompt', () => {
     expect(prompt).not.toContain('- **query_users**');
   });
 
+  it('明确支持轻笺之外的通用问题且不强制调用个人数据工具', () => {
+    const plannerPrompt = buildPlannerPrompt(tools, 'user');
+    const finalPrompt = buildPlannerPrompt(tools, 'user', { phase: 'final' });
+
+    for (const prompt of [plannerPrompt, finalPrompt]) {
+      expect(prompt).toContain('通用 AI 助手');
+      expect(prompt).toContain('各领域的一般知识、学习、创作、分析与日常问题');
+      expect(prompt).toContain('与轻笺无关的一般问题也要正常回答');
+      expect(prompt).toContain('不要强行调用轻笺数据或工具');
+    }
+  });
+
   it('语义规划模式要求 Intent Envelope，并明确查询与修改边界', () => {
     const semanticCatalog = [
       {

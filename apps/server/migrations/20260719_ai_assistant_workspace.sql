@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS ai_conversations (
   scope_json JSON NULL,
   status VARCHAR(16) NOT NULL DEFAULT 'active',
   is_pinned TINYINT(1) NOT NULL DEFAULT 0,
-  folder_name VARCHAR(64) NULL,
   retention_mode VARCHAR(24) NOT NULL DEFAULT 'standard',
   expire_at DATETIME NULL,
   root_conversation_id VARCHAR(36) NOT NULL,

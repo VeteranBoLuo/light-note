@@ -229,7 +229,7 @@
     position: relative;
     border: 0;
     border-radius: 1rem;
-    background-color: var(--menu-container-bg-color);
+    background-color: var(--ai-composer-background-color, var(--card-background));
     padding: 0.7rem 0.75rem 0.6rem;
     min-height: 48px;
     min-width: 0;
@@ -242,7 +242,7 @@
   }
 
   .input-container:focus-within {
-    background-color: var(--menu-container-bg-color);
+    background-color: var(--ai-composer-background-color, var(--card-background));
     box-shadow:
       0 0 0 1px var(--surface-border-color, var(--card-border-color)),
       0 12px 30px rgba(97, 92, 237, 0.12);
@@ -273,7 +273,7 @@
     min-width: 0;
     box-sizing: border-box;
     border-radius: 0.875rem;
-    background: var(--card-background);
+    background: var(--ai-composer-input-background-color, var(--card-background));
     box-shadow: inset 0 0 0 1px var(--surface-border-color, var(--card-border-color));
     transition: box-shadow 0.2s ease;
   }

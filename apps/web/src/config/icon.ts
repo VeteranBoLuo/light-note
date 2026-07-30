@@ -71,6 +71,8 @@ export default {
     pin: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M8 3.75h8l-1.35 5.1l2.6 2.6v1.8H6.75v-1.8l2.6-2.6L8 3.75Z"/><path d="M12 13.25v7M9.5 20.25h5"/></g></svg>',
     unpin:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M9 3.75h7l-1.2 4.55l2.45 2.45v1.8h-4.7M9.1 12.55H6.75v-1.8l1.65-1.65M12 15.5v4.75M9.5 20.25h5M4 4l16 16"/></g></svg>',
+    archive:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4 8.25h16v11.25H4V8.25Z"/><path d="M3.25 4.5h17.5v3.75H3.25V4.5ZM9 12h6"/></g></svg>',
     inbox:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4 13.25h4.1l1.35 2.25h5.1l1.35-2.25H20v6H4v-6Z"/><path d="M12 3.75v7M9.25 8l2.75 2.75L14.75 8"/></g></svg>',
   },

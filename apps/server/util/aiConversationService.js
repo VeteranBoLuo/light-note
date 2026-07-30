@@ -164,7 +164,6 @@ function mapConversation(row) {
     scope: parseJson(row.scope_json, {}),
     status: row.status || 'active',
     isPinned: Boolean(row.is_pinned),
-    folderName: row.folder_name || '',
     retentionMode: row.retention_mode || 'standard',
     expireAt: row.expire_at || null,
     rootConversationId: row.root_conversation_id || String(row.id),
@@ -316,7 +315,6 @@ export async function listAiConversations(identity, options = {}, database = poo
   const limit = Math.max(1, Math.min(50, Number(options.limit) || 20));
   const status = CONVERSATION_STATUSES.has(options.status) ? options.status : 'active';
   const keyword = asString(options.keyword, 100);
-  const folderName = asString(options.folderName, 64);
   const cursor = decodeCursor(options.cursor);
   const params = [...ownerParams(identity), status];
   let where = `actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
@@ -325,12 +323,6 @@ export async function listAiConversations(identity, options = {}, database = poo
     where += " AND (title LIKE ? ESCAPE '\\\\' OR summary LIKE ? ESCAPE '\\\\')";
     const escaped = keyword.replace(/[\\%_]/g, '\\$&');
     params.push(`%${escaped}%`, `%${escaped}%`);
-  }
-  if (folderName === '__unfiled__') {
-    where += " AND (folder_name IS NULL OR folder_name = '')";
-  } else if (folderName) {
-    where += ' AND folder_name = ?';
-    params.push(folderName);
   }
   if (cursor) {
     where += ` AND (
@@ -347,22 +339,9 @@ export async function listAiConversations(identity, options = {}, database = poo
   );
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
-  const [folderRows] = await database.query(
-    `SELECT DISTINCT folder_name AS folderName
-     FROM ai_conversations
-     WHERE actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
-       AND admin_context_id <=> ? AND ${LIVE_RETENTION_SQL} AND status = ?
-       AND folder_name IS NOT NULL AND folder_name <> ''
-     ORDER BY folder_name ASC
-     LIMIT 100`,
-    [...ownerParams(identity), status],
-  );
   return {
     items: page.map(mapConversation),
     nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
-    folders: (Array.isArray(folderRows) ? folderRows : [])
-      .map((row) => String(row.folderName || ''))
-      .filter(Boolean),
   };
 }
 
@@ -870,11 +849,6 @@ export async function updateAiConversation(identity, conversationId, input = {},
   if (input.isPinned !== undefined) {
     fields.push('is_pinned = ?');
     values.push(input.isPinned ? 1 : 0);
-  }
-  if (input.folderName !== undefined) {
-    const folderName = asString(input.folderName, 64);
-    fields.push('folder_name = ?');
-    values.push(folderName || null);
   }
   if (input.scopeType !== undefined || input.scope !== undefined) {
     fields.push('scope_type = ?', 'scope_json = ?');

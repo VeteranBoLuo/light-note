@@ -60,6 +60,8 @@
           :refresh-token="conversationListToken"
           @open="openCloudConversation"
           @new="startNewConversation"
+          @deleted="handleConversationDeleted"
+          @restored="openCloudConversation"
         />
         <AiWorkspaceShell
           ref="aiAssistantRef"
@@ -611,6 +613,24 @@
     flex-direction: row;
     width: min(100%, clamp(1040px, 66vw, 1560px));
     margin: 0 auto;
+    overflow: hidden;
+    border-inline: 1px solid var(--ai-fullscreen-border-color, var(--surface-border-color));
+    background: var(--ai-fullscreen-shell-background, var(--background-color));
+  }
+
+  .ai-drawer-content--maximized .ai-drawer-sidebar {
+    background: var(--ai-fullscreen-sidebar-background, var(--workspace-panel-bg-color));
+  }
+
+  .ai-drawer-content--maximized .ai-drawer-main {
+    --background-color: var(--ai-fullscreen-main-background);
+    --ai-composer-background-color: color-mix(
+      in srgb,
+      var(--ai-fullscreen-sidebar-background) 84%,
+      var(--ai-fullscreen-main-background)
+    );
+    --ai-composer-input-background-color: var(--ai-fullscreen-main-background);
+    background: var(--ai-fullscreen-main-background);
   }
 
   /* 对话主区在两种模式下都填满剩余空间(列向填高、横向填宽) */

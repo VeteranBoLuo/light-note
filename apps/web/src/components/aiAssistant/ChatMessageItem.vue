@@ -384,7 +384,11 @@
   }
 
   .message.assistant .bubble {
+    padding: var(--ai-assistant-bubble-padding, 0);
+    border: var(--ai-assistant-bubble-border, 0);
     border-bottom-left-radius: 0.25rem;
+    background: var(--ai-assistant-bubble-background, transparent);
+    box-shadow: var(--ai-assistant-bubble-shadow, none);
     color: var(--text-color);
   }
 
