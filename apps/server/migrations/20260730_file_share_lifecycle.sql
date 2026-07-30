@@ -30,6 +30,38 @@ CREATE TABLE IF NOT EXISTS note_versions (
   KEY idx_note_versions_owner (create_by, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='笔记历史版本';
 
+SET @has_note_time_index := (
+  SELECT COUNT(*)
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'note_versions'
+    AND INDEX_NAME = 'idx_note_versions_note_time'
+);
+SET @add_note_time_index_sql := IF(
+  @has_note_time_index = 0,
+  'ALTER TABLE note_versions ADD INDEX idx_note_versions_note_time (note_id, create_time, id)',
+  'SELECT 1'
+);
+PREPARE add_note_time_index_stmt FROM @add_note_time_index_sql;
+EXECUTE add_note_time_index_stmt;
+DEALLOCATE PREPARE add_note_time_index_stmt;
+
+SET @has_note_owner_index := (
+  SELECT COUNT(*)
+  FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'note_versions'
+    AND INDEX_NAME = 'idx_note_versions_owner'
+);
+SET @add_note_owner_index_sql := IF(
+  @has_note_owner_index = 0,
+  'ALTER TABLE note_versions ADD INDEX idx_note_versions_owner (create_by, create_time)',
+  'SELECT 1'
+);
+PREPARE add_note_owner_index_stmt FROM @add_note_owner_index_sql;
+EXECUTE add_note_owner_index_stmt;
+DEALLOCATE PREPARE add_note_owner_index_stmt;
+
 CREATE TABLE IF NOT EXISTS file_shares (
   id VARCHAR(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   file_id INT NOT NULL,
