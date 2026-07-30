@@ -20,6 +20,7 @@
         type="textarea"
         submit-on-enter
         @enter="handleSend"
+        @paste="handlePaste"
         :placeholder="t('ai.inputPlaceholder')"
         :rows="1"
         ref="textInput"
@@ -127,6 +128,7 @@
   const attachmentPicker = ref<{
     attachCloudFile: (fileId: string) => Promise<void>;
     openAction: (toolName: AiAttachmentDirectActionName, args?: Record<string, unknown>) => boolean;
+    uploadPastedImage: (file: File) => Promise<boolean>;
   } | null>(null);
   const adjustTextareaHeight = () => {};
   const inputValue = computed({
@@ -184,6 +186,15 @@
   function applyAttachmentPrompt(value: string) {
     emit('update:modelValue', mergePromptSuggestion(props.modelValue, value));
     focus();
+  }
+
+  /** 粘贴图片直接进入附件上传;纯文本粘贴不受影响。 */
+  function handlePaste(event: ClipboardEvent) {
+    const files = Array.from(event.clipboardData?.files || []);
+    const image = files.find((file) => /^image\//i.test(file.type));
+    if (!image) return;
+    event.preventDefault();
+    void attachmentPicker.value?.uploadPastedImage(image);
   }
 
   function openAttachmentAction(toolName: AiAttachmentDirectActionName, args: Record<string, unknown> = {}) {

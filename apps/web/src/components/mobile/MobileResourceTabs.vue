@@ -38,6 +38,7 @@
     bookmark: icon.resource.bookmark,
     note: icon.resource.note,
     cloud: icon.resource.file,
+    tag: icon.resource.tag,
   } as const;
 
   const activePath = computed(() => getMobileResourcePath(route.name));
@@ -59,10 +60,12 @@
     z-index: 3;
     width: 100%;
     height: 44px;
-    padding: 0 12px;
+    padding: 0 18px;
     box-sizing: border-box;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* 每项按内容自适应宽 + 间隙均分:文字长短不一(书签/笔记库/云空间/标签)时间距仍然相等 */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     flex: 0 0 44px;
     border-bottom: 1px solid var(--surface-divider-color);
     background: var(--surface-page-bg, var(--background-color));
@@ -70,10 +73,11 @@
 
   .mobile-resource-tab {
     position: relative;
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
     height: 44px;
-    padding: 0 8px;
-    gap: 6px;
+    padding: 0 2px;
+    gap: 5px;
     border-radius: 0;
     color: var(--desc-color);
     background: transparent !important;
@@ -114,6 +118,10 @@
 
   .mobile-resource-tab--cloud.mobile-resource-tab--active {
     color: var(--resource-file-color, #ff8a00);
+  }
+
+  .mobile-resource-tab--tag.mobile-resource-tab--active {
+    color: var(--resource-tag-color, #615ced);
   }
 
   @media (prefers-reduced-motion: reduce) {

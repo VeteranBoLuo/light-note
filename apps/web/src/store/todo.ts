@@ -5,7 +5,6 @@ import {
   batchRestoreTodos,
   batchSetTodoStatus,
   countTodos,
-  createTodo,
   deleteTodo,
   listTodos,
   reorderTodos,
@@ -96,12 +95,6 @@ export default defineStore('todo', {
     async remove(item: TodoItem) {
       const res = await deleteTodo(item.id);
       if (res.status !== 200 || !Number(res.data?.affected || 0)) return false;
-      await this.refreshList();
-      return true;
-    },
-    async quickCreate(title: string, dueAt: string | null, priority: TodoItem['priority'] = 1) {
-      const res = await createTodo({ title, dueAt, priority });
-      if (res.status !== 200) return false;
       await this.refreshList();
       return true;
     },

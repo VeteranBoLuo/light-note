@@ -78,6 +78,14 @@
         </div>
       </section>
 
+      <TodayActionSection
+        :overdue-todos="todayOverdueTodos"
+        :due-today-todos="todayDueTodos"
+        :inbox-items="todayInboxItems"
+        :loading="summaryLoading"
+        @refresh="fetchWorkbenchSummary"
+      />
+
       <section class="summary-grid" :aria-label="t('workbench.panel.resourceOverview')">
         <template v-if="summaryLoading">
           <div v-for="index in 4" :key="`summary-skeleton-${index}`" class="summary-card summary-skeleton">
@@ -298,6 +306,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
   import icon from '@/config/icon.ts';
@@ -351,6 +360,9 @@
     unreadNotificationTotal: 0,
     inboxPendingTotal: 0,
   });
+  const todayOverdueTodos = ref<any[]>([]);
+  const todayDueTodos = ref<any[]>([]);
+  const todayInboxItems = ref<any[]>([]);
   const generatedAt = ref('');
   const quickActionUsage = ref<Record<string, number>>(readQuickActionUsage());
   const trendSummary = ref<any[]>([]);
@@ -668,6 +680,9 @@
         unreadNotificationTotal: Number(data.today?.unreadNotificationTotal || 0),
         inboxPendingTotal: Number(data.today?.inboxPendingTotal || 0),
       };
+      todayOverdueTodos.value = Array.isArray(data.today?.overdueTodos) ? data.today.overdueTodos : [];
+      todayDueTodos.value = Array.isArray(data.today?.dueTodayTodos) ? data.today.dueTodayTodos : [];
+      todayInboxItems.value = Array.isArray(data.today?.inboxItems) ? data.today.inboxItems : [];
       inbox.pendingTotal = todayStats.value.inboxPendingTotal;
       inbox.todoPendingTotal = todayStats.value.todoPendingTotal;
       inbox.actionTotal = todayStats.value.actionTotal;

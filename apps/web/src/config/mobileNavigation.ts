@@ -1,11 +1,11 @@
 export type MobileShellSection = 'resources' | 'todo' | 'ai' | 'search' | 'profile';
-export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace';
+export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileResourceInboxTab = 'all' | 'bookmark' | 'note' | 'file';
 
 export interface MobileResourceNavigationItem {
-  key: 'bookmark' | 'note' | 'cloud';
+  key: 'bookmark' | 'note' | 'cloud' | 'tag';
   path: MobileResourcePath;
-  labelKey: 'navigation.bookmark' | 'mobileNavigation.noteLibrary' | 'navigation.cloudSpace';
+  labelKey: 'navigation.bookmark' | 'mobileNavigation.noteLibrary' | 'navigation.cloudSpace' | 'navigation.tag';
   routeNames: readonly string[];
 }
 
@@ -38,6 +38,12 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
     path: '/cloudSpace',
     labelKey: 'navigation.cloudSpace',
     routeNames: ['cloudSpace'],
+  },
+  {
+    key: 'tag',
+    path: '/manage/tagMg',
+    labelKey: 'navigation.tag',
+    routeNames: ['tagMg'],
   },
 ] as const;
 

@@ -40,7 +40,6 @@ export function useTagEditor() {
   const selectedBookmarkIds = ref<string[]>([]);
   const selectedNoteIds = ref<string[]>([]);
   const selectedFileIds = ref<string[]>([]);
-  const tagOptions = ref<{ label: string; value: string }[]>([]);
   const activeResourceType = ref<TagResourceKind>('bookmark');
   const searchMap = reactive<Record<TagResourceKind, string>>({ bookmark: '', note: '', file: '' });
 
@@ -113,7 +112,6 @@ export function useTagEditor() {
     return JSON.stringify({
       name: tag.value.name?.trim() || '',
       iconUrl: tag.value.iconUrl || '',
-      relatedTagIds: [...(tag.value.relatedTagIds || [])].map(String).sort(),
       bookmarks: [...selectedBookmarkIds.value].sort(),
       notes: [...selectedNoteIds.value].sort(),
       files: [...selectedFileIds.value].sort(),
@@ -153,26 +151,25 @@ export function useTagEditor() {
     allResources.value = resources;
   }
 
-  async function getTagOptions() {
+  // 仅用于刷新全局标签列表;原先派生的 tagOptions 服务于已下线的手工「相关标签」多选。
+  async function refreshTagList() {
     const response = await apiQueryPost('/api/bookmark/queryTagList', { filters: { userId: user.id } });
     if (response.status !== 200) return;
     bookmark.tagList = response.data || [];
-    tagOptions.value = bookmark.tagList
-      .filter((item: any) => item.id !== router.currentRoute.value.params.id)
-      .map((item: any) => ({ label: item.name, value: item.id }));
   }
 
   async function loadEditor() {
     loading.value = true;
     try {
-      await Promise.all([getAllResources(), getTagOptions()]);
+      await Promise.all([getAllResources(), refreshTagList()]);
       if (handleType.value === 'edit') {
         const detailResponse = await apiQueryPost('/api/bookmark/getTagDetail', {
           filters: { id: router.currentRoute.value.params.id },
         });
         if (detailResponse.status === 200 && detailResponse.data) tag.value = detailResponse.data;
 
-        const [bookmarkResponse, noteResponse, fileResponse, relatedResponse] = await Promise.all([
+        // 相关标签已改为自动推导,编辑器不再拉取也不再提交手工关系。
+        const [bookmarkResponse, noteResponse, fileResponse] = await Promise.all([
           apiQueryPost('/api/bookmark/getBookmarkList', {
             pageSize: -1,
             filters: { userId: user.id, tagId: tag.value.id, type: 'normal' },
@@ -182,14 +179,10 @@ export function useTagEditor() {
             pageSize: -1,
             filters: { tagId: tag.value.id, category: CLOUD_FILE_CATEGORY_ORDER },
           }),
-          apiQueryPost('/api/bookmark/getRelatedTag', {
-            filters: { userId: user.id, id: tag.value.id },
-          }),
         ]);
         selectedBookmarkIds.value = (bookmarkResponse.data?.items || []).map((item: any) => String(item.id));
         selectedNoteIds.value = (noteResponse.data || []).map((item: any) => String(item.id));
         selectedFileIds.value = (fileResponse.data || []).map((item: any) => String(item.id));
-        tag.value.relatedTagIds = (relatedResponse.data || []).map((item: any) => item.id);
       }
       initialFingerprint.value = fingerprint();
     } finally {
@@ -252,6 +245,32 @@ export function useTagEditor() {
     confirmLeave(() => router.back());
   }
 
+  const deleting = ref(false);
+
+  /** 编辑态底部的「删除标签」:移动端标签卡片去管理化后,删除入口统一收敛到这里。 */
+  function requestDelete() {
+    if (handleType.value !== 'edit' || !tag.value.id || deleting.value) return;
+    if (blockGuestWrite('delete-tag')) return;
+    Alert.alert({
+      title: t('tagManage.confirmDeleteTitle'),
+      content: t('tagManage.confirmDeleteContent', { name: tag.value.name }),
+      async onOk() {
+        deleting.value = true;
+        try {
+          const res = await apiBasePost('/api/bookmark/delTag', { id: tag.value.id });
+          if (res.status !== 200) return;
+          recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.value.name}】` });
+          message.success(t('tagManage.deleteSuccess'));
+          // 删除后目标页已不存在,直接放行离开守卫回标签列表。
+          allowLeave.value = true;
+          router.push('/manage/tagMg');
+        } finally {
+          deleting.value = false;
+        }
+      },
+    });
+  }
+
   onBeforeRouteLeave((to) => {
     if (allowLeave.value || !isDirty.value) return true;
     confirmLeave(() => router.push(to.fullPath));
@@ -264,7 +283,6 @@ export function useTagEditor() {
     tag,
     loading,
     saving,
-    tagOptions,
     activeResourceType,
     searchMap,
     handleType,
@@ -275,5 +293,7 @@ export function useTagEditor() {
     toggleResource,
     submit,
     requestCancel,
+    deleting,
+    requestDelete,
   };
 }

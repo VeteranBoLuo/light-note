@@ -1,7 +1,6 @@
 import type { TodoItem } from '@/api/todoApi';
 
 export type TodoGroupKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'noDate' | 'completed';
-export type TodoQuickDue = 'today' | 'tomorrow' | 'week' | 'none';
 export type TodoSnoozePreset = 'tenMinutes' | 'tomorrow' | 'nextWeek';
 
 export function parseTodoDate(value: string | number | Date) {
@@ -60,17 +59,6 @@ export function dueForTodoGroup(key: TodoGroupKey, now = new Date()) {
         : key === 'upcoming'
           ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 17)
           : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 14, 17);
-  return localTodoDateTime(date);
-}
-
-export function quickTodoDueAt(preset: TodoQuickDue, now = new Date()) {
-  if (preset === 'none') return null;
-  const date =
-    preset === 'today'
-      ? todayDueDate(now)
-      : preset === 'tomorrow'
-        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9)
-        : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 9);
   return localTodoDateTime(date);
 }
 

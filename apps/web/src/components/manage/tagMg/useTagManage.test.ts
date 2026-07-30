@@ -32,6 +32,24 @@ describe('useTagManage model', () => {
     expect(filterAndSortTags(tags, '', 'all', 'emptyFirst')[0].id).toBe('2');
   });
 
+  it('自定义顺序下「全部」视图把空标签沉底,组内保持原有相对顺序', () => {
+    const ordered: TagRecord[] = [
+      { id: 'e1', name: '空A' },
+      { id: 'a', name: '有资源A', bookmarkList: [{ id: 'b', name: 'b' }] },
+      { id: 'e2', name: '空B' },
+      { id: 'z', name: '有资源B', noteList: [{ id: 'n', name: 'n' }] },
+    ];
+    expect(filterAndSortTags(ordered, '', 'all', 'default').map((item) => item.id)).toEqual(['a', 'z', 'e1', 'e2']);
+  });
+
+  it('非「全部」视图不改动自定义顺序', () => {
+    const ordered: TagRecord[] = [
+      { id: 'e1', name: '空A' },
+      { id: 'e2', name: '空B' },
+    ];
+    expect(filterAndSortTags(ordered, '', 'empty', 'default').map((item) => item.id)).toEqual(['e1', 'e2']);
+  });
+
   it('筛选计数会跟随关键词范围变化', () => {
     expect(buildFilterCounts(tags)).toEqual({ all: 3, active: 2, bookmark: 1, note: 1, file: 1, empty: 1 });
     expect(buildFilterCounts(tags, 'CSS')).toEqual({ all: 1, active: 1, bookmark: 0, note: 0, file: 1, empty: 0 });

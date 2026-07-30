@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
 import { resultData, snakeCaseKeys, mergeExistingProperties, insertData } from '../util/common.js';
+import { getDerivedRelatedTags } from '../util/services/tagRelationService.js';
 import {
   RESOURCE_TYPE,
   insertResourceTagRelations,
@@ -133,21 +134,7 @@ export const queryTagList = (req, res) => {
         FROM files f
         INNER JOIN resource_tag_relations r ON f.id = r.resource_id AND r.resource_type = 'file'
         WHERE r.tag_id = t.id AND f.del_flag = 0
-    ) AS fileList,
-    COALESCE(
-        (
-            SELECT JSON_ARRAYAGG(
-                JSON_OBJECT(
-                    'id', related.id,
-                    'name', related.name
-                )
-            )
-            FROM tag_relations ta
-            INNER JOIN tag related ON ta.related_tag_id = related.id
-            WHERE ta.tag_id = t.id
-        ),
-        JSON_ARRAY()
-    ) AS relatedTagList
+    ) AS fileList
 FROM
     tag t
       WHERE
@@ -181,28 +168,47 @@ FROM
     res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
   }
 };
-export const getRelatedTag = (req, res) => {
+/**
+ * 双模式:
+ * - 资源模式(type 为 bookmark/note/file):查该资源挂了哪些标签,行为不变。
+ * - 标签模式:返回「相关标签」。已由手工 tag_relations 改为共同资源自动推导,
+ *   与单标签图谱、全局知识地图共用同一评分口径(tagRelationScore)。
+ */
+export const getRelatedTag = async (req, res) => {
   const userId = req.user.id;
   try {
-    const type = req.body.filters.type;
-    let sql = `SELECT t.* FROM tag t LEFT JOIN tag_relations a on t.id=a.related_tag_id
-WHERE t.user_id=? AND a.tag_id=? AND t.del_flag=0`;
+    const type = req.body?.filters?.type;
+    const targetId = req.body?.filters?.id;
     const validTypes = [RESOURCE_TYPE.BOOKMARK, RESOURCE_TYPE.NOTE, RESOURCE_TYPE.FILE];
+
     if (validTypes.includes(type)) {
-      sql = `SELECT t.* FROM tag t LEFT JOIN resource_tag_relations tb
-        ON t.id=tb.tag_id AND tb.resource_type='${type}'
-WHERE t.user_id=? AND tb.resource_id=? AND t.del_flag=0`;
+      const [result] = await pool.query(
+        `SELECT t.* FROM tag t LEFT JOIN resource_tag_relations tb
+            ON t.id=tb.tag_id AND tb.resource_type=?
+          WHERE t.user_id=? AND tb.resource_id=? AND t.del_flag=0`,
+        [type, userId, targetId],
+      );
+      return res.send(resultData(result));
     }
-    pool
-      .query(sql, [userId, req.body.filters.id])
-      .then(([result]) => {
-        res.send(resultData(result));
-      })
-      .catch((e) => {
-        return res.send(resultData(null, 500, '服务器内部错误: ' + e));
-      });
+
+    const related = await getDerivedRelatedTags(pool, { userId, tagId: targetId });
+    // 保持既有调用方的字段形态(id/name/icon_url),额外附带推导依据供前端展示强度。
+    return res.send(
+      resultData(
+        related.map((item) => ({
+          id: item.id,
+          name: item.name,
+          icon_url: item.iconUrl,
+          iconUrl: item.iconUrl,
+          sharedCount: item.sharedCount,
+          similarity: item.similarity,
+          reason: item.reason,
+        })),
+      ),
+    );
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常' + e)); // 设置状态码为400
+    console.error('[tag-relation] getRelatedTag failed:', e);
+    res.send(resultData(null, 500, '服务器内部错误'));
   }
 };
 
@@ -264,19 +270,8 @@ export const addTag = async (req, res) => {
         connection,
       });
       const insertedTagId = createdTag.id;
-      // 处理关联标签数量限制
-      const { relatedTagIds, bookmarkList, noteList, fileList } = req.body;
-      if (relatedTagIds && relatedTagIds.length > 4) {
-        throw new Error('最多选择4个相关标签');
-      }
-      // 如果有相关标签，则插入新的关联
-      if (relatedTagIds && relatedTagIds.length > 0) {
-        const validRelatedTagIds = await validateUserTags(connection, { tagIds: relatedTagIds, userId });
-        for (const relatedTagId of validRelatedTagIds) {
-          const insertAssociationSql = `INSERT INTO tag_relations (tag_id, related_tag_id) VALUES (?, ?), (?, ?)`;
-          await connection.query(insertAssociationSql, [insertedTagId, relatedTagId, relatedTagId, insertedTagId]);
-        }
-      }
+      // 相关标签已改为按共同资源自动推导,不再接受也不再写入手工 tag_relations。
+      const { bookmarkList, noteList, fileList } = req.body;
 
       // 处理各类资源关联
       if (bookmarkList && bookmarkList.length > 0) {
@@ -354,7 +349,7 @@ export const updateTag = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction(); // 开始事务
-    const { relatedTagIds, id: id1, bookmarkList, noteList, fileList } = req.body;
+    const { id: id1, bookmarkList, noteList, fileList } = req.body;
     const id = id1; // 获取标签ID
     const paramsData = JSON.parse(JSON.stringify(req.body));
     const params = {
@@ -368,9 +363,6 @@ export const updateTag = async (req, res) => {
       throw new Error('标签已存在');
     }
 
-    if (relatedTagIds && relatedTagIds.length > 4) {
-      throw new Error('最多选择4个相关标签');
-    }
     // 归属校验：确认标签属于当前用户，避免越权改动及破坏关系表
     const [own] = await connection.query('SELECT id FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0', [
       id,
@@ -383,21 +375,10 @@ export const updateTag = async (req, res) => {
     // 更新tag表
     const updateTagSql = `UPDATE tag SET ? WHERE id = ?`;
     const [updateResult] = await connection.query(updateTagSql, [snakeCaseKeys(mergeExistingProperties(params)), id]);
-    // 只要传了relatedTagIds，就需要重新处理
-    if (relatedTagIds !== undefined) {
-      // 清空所有关联
-      const deleteAssociationsSql = `DELETE FROM tag_relations WHERE tag_id = ? OR related_tag_id = ?`;
-      await connection.query(deleteAssociationsSql, [id, id]);
-
-      // 如果有相关标签，则插入新的关联
-      if (relatedTagIds) {
-        const validRelatedTagIds = await validateUserTags(connection, { tagIds: relatedTagIds, userId });
-        for (const relatedTagId of validRelatedTagIds.filter((relatedTagId) => relatedTagId !== id)) {
-          const insertAssociationSql = `INSERT INTO tag_relations (tag_id, related_tag_id) VALUES (?, ?), (?, ?)`;
-          await connection.query(insertAssociationSql, [id, relatedTagId, relatedTagId, id]);
-        }
-      }
-    }
+    // 相关标签已改为按共同资源自动推导:不再写入手工关系。
+    // 顺带清理该标签的历史手工关系,让口径逐步收敛到自动推导。
+    const deleteAssociationsSql = `DELETE FROM tag_relations WHERE tag_id = ? OR related_tag_id = ?`;
+    await connection.query(deleteAssociationsSql, [id, id]);
 
     // 只要传了bookmarkList，就需要重新处理
     if (bookmarkList !== undefined) {

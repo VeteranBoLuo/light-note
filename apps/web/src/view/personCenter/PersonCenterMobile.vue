@@ -117,6 +117,17 @@
           ></div>
         </div>
         <div class="person-menu">
+          <div
+            class="person-menu-item"
+            @click="goToProfileModule('/workbenches')"
+            v-click-log="{ module: '个人中心', operation: '打开工作台' }"
+          >
+            <span class="person-menu-item-title">{{ $t('workbench.title') }}</span>
+            <span class="person-menu-item-des">
+              {{ inbox.actionTotal || '' }}
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </div>
           <div v-if="canUseQuickCapture" class="person-menu-item" @click="openQuickCapture">
             <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
             <span class="person-menu-item-des">
@@ -134,15 +145,7 @@
               >{{ $t('personCenter.resourceCenterDesc')
               }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
           ></div>
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/manage/tagMg')"
-            v-click-log="{ module: '个人中心', operation: `标签管理` }"
-          >
-            <span class="person-menu-item-title">{{ $t('tagManage.title') }}</span>
-            <span class="person-menu-item-des"
-              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
+          <!-- 标签已是资料区一等页签,此处不再重复入口 -->
           <div
             class="person-menu-item"
             @click="goToProfileModule('/manage/bookmarkMg')"

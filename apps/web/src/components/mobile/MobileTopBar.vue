@@ -51,21 +51,11 @@
       >
         <SvgIcon :src="icon.common.plus" size="20" aria-hidden="true" />
       </BButton>
-      <BDropdown
-        v-if="showMoreMenu"
-        trigger="click"
-        align="right"
-        overlay-class-name="mobile-top-bar-menu"
-        :menu-options="moreMenuOptions"
-      >
-        <BButton
-          class="mobile-top-bar__action"
-          :aria-label="t('mobileNavigation.moreActions')"
-          :title="t('mobileNavigation.moreActions')"
-        >
-          <SvgIcon :src="icon.common.more" size="21" aria-hidden="true" />
-        </BButton>
-      </BDropdown>
+      <!-- 原「更多」菜单(书签管理/标签管理/回收站/设置)与「我的」页完全重复,改为移动端此前缺失的通知入口。
+           NotificationBell 是多根组件(浮层+两个弹框),class 不会继承到按钮上,必须包一层容器再穿透。 -->
+      <div v-if="showMoreMenu && user.role !== 'visitor'" class="mobile-top-bar__bell">
+        <NotificationBell />
+      </div>
     </div>
   </header>
 </template>
@@ -75,9 +65,9 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import NotificationBell from '@/components/notification/NotificationBell.vue';
   import icon from '@/config/icon';
   import { getMobileResourceEntryPath } from '@/composables/useMobileNavigationState';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
@@ -112,33 +102,6 @@
     return t('mobileNavigation.globalSearch');
   });
   const addLabel = computed(() => activeBinding.value?.addLabel?.() || t('common.add'));
-  const moreMenuOptions = computed(() => [
-    {
-      key: 'bookmark-management',
-      label: t('navigation.bookmarkManagement'),
-      icon: icon.manage_categoryBtn_bookmark,
-      function: () => router.push('/manage/bookmarkMg'),
-    },
-    {
-      key: 'tag-management',
-      label: t('navigation.tagManagement'),
-      icon: icon.manage_categoryBtn_tag,
-      function: () => router.push('/manage/tagMg'),
-    },
-    { key: 'management-divider', divider: true },
-    {
-      key: 'trash',
-      label: t('trash.title'),
-      icon: icon.table_delete,
-      function: () => router.push('/ptrash'),
-    },
-    {
-      key: 'settings',
-      label: t('settings.title'),
-      icon: icon.userCenter.settingsGear,
-      function: () => router.push('/settings'),
-    },
-  ]);
 
   function goToResources() {
     const target = getMobileResourceEntryPath(user.preferences);
@@ -244,6 +207,28 @@
     font-size: 13px;
   }
 
+  .mobile-top-bar__bell {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+  }
+
+  /* 通知铃铛对齐顶栏 38px 动作位;BButton 默认态自带底色,需与其它顶栏动作一样保持透明 */
+  .mobile-top-bar__bell :deep(.nt-bell) {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 11px;
+    color: var(--text-color);
+    background: transparent !important;
+  }
+
+  .mobile-top-bar__bell :deep(.nt-bell:active) {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
+  }
+
   @media (max-width: 359px) {
     .mobile-top-bar__brand span {
       display: none;
@@ -251,13 +236,3 @@
   }
 </style>
 
-<style lang="less">
-  .mobile-top-bar-menu {
-    min-width: 156px !important;
-  }
-
-  .mobile-top-bar-menu .b-dropdown-item {
-    min-height: 40px;
-    box-sizing: border-box;
-  }
-</style>

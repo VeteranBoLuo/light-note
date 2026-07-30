@@ -23,7 +23,7 @@
             <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
           </BButton>
         </div>
-        <div class="modal-content">
+        <div class="modal-content" :class="props.contentClass">
           <slot name="default"></slot>
         </div>
         <slot name="footer" v-if="showFooter">
@@ -59,6 +59,8 @@
       width?: string;
       height?: string;
       modalClass?: string;
+      /** 内容区附加类名:用于弹框自行接管滚动(如左右分栏各自滚动),避免深层 CSS 覆盖 */
+      contentClass?: string;
       maskClass?: string;
     }>(),
     {

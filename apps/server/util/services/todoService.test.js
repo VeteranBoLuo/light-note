@@ -325,6 +325,44 @@ describe('todoService', () => {
     expect(connection.query.mock.calls[0]).toEqual([expect.not.stringContaining('status = ?'), ['user-4']]);
   });
 
+  it('工作台逾期筛选只取截止时间早于今天的待办', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+
+    const result = await listTodoPage(connection, 'user-4', {
+      status: 'pending',
+      due: 'overdue',
+      sort: 'due',
+      limit: 3,
+      includeTotal: false,
+    });
+
+    expect(result.items).toEqual([]);
+    const [sql, params] = connection.query.mock.calls[0];
+    expect(sql).toContain("status = ?");
+    expect(sql).toContain('due_at IS NOT NULL AND due_at < CURDATE()');
+    expect(params).toEqual(['user-4', 'pending', 4, 0]);
+  });
+
+  it('工作台今日筛选限定今天窗口内到期', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+
+    await listTodoPage(connection, 'user-4', {
+      status: 'pending',
+      due: 'today',
+      sort: 'due',
+      limit: 5,
+      includeTotal: false,
+    });
+
+    const [sql] = connection.query.mock.calls[0];
+    expect(sql).toContain('due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
+  });
+
+  it('拒绝未知的 due 筛选取值', async () => {
+    await expect(listTodoPage(connection, 'user-4', { due: 'someday' })).rejects.toThrow('无效的待办筛选参数');
+    expect(connection.query).not.toHaveBeenCalled();
+  });
+
   it('Agent 摘要分页不读取说明或提醒邮箱，并返回清单进度和下一页游标', async () => {
     connection.query
       .mockResolvedValueOnce([

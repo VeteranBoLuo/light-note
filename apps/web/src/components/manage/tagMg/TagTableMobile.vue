@@ -1,187 +1,144 @@
 <template>
+  <!-- 作为移动资料区第四个页签渲染:顶栏(搜索/新建)与底部导航由移动壳提供,不再自带页头 -->
   <b-loading :loading="loading">
-    <ResourcePageShell
-      :title="t('tagManage.title')"
-      :subtitle="t('tagManage.subtitle')"
-      accent="tag"
-      show-back
-      @back="router.back()"
-    >
-      <template #actions>
-        <BButton type="primary" @click="router.push('/manage/editTag/add')">{{ t('tagManage.createTag') }}</BButton>
-      </template>
-      <div class="mobile-tag-page">
-        <BCard as="section" variant="raised" padding="14px 15px" class="mobile-overview">
-          <div class="mobile-overview__total">
-            <strong>{{ overview.tag }}</strong>
-            <span>{{ t('tagManage.statTotal') }}</span>
+    <div class="mobile-tag-page">
+      <BCard as="section" variant="raised" padding="14px 15px" class="mobile-overview">
+        <div class="mobile-overview__total">
+          <strong>{{ overview.tag }}</strong>
+          <span>{{ t('tagManage.statTotal') }}</span>
+        </div>
+        <div class="mobile-overview__coverage">
+          <span class="mobile-overview__coverage-label">{{ t('tagManage.coverageLabel') }}</span>
+          <div class="mobile-overview__metrics">
+            <span class="mobile-overview__metric mobile-overview__metric--bookmark">
+              <i></i>
+              <span>{{ t('tagManage.bookmarkShort') }}</span>
+              <strong>{{ overview.bookmark }}</strong>
+            </span>
+            <span class="mobile-overview__metric mobile-overview__metric--note">
+              <i></i>
+              <span>{{ t('tagManage.noteShort') }}</span>
+              <strong>{{ overview.note }}</strong>
+            </span>
+            <span class="mobile-overview__metric mobile-overview__metric--file">
+              <i></i>
+              <span>{{ t('tagManage.fileShort') }}</span>
+              <strong>{{ overview.file }}</strong>
+            </span>
           </div>
-          <div class="mobile-overview__coverage">
-            <span class="mobile-overview__coverage-label">{{ t('tagManage.coverageLabel') }}</span>
-            <div class="mobile-overview__metrics">
-              <span class="mobile-overview__metric mobile-overview__metric--bookmark">
-                <i></i>
-                <span>{{ t('tagManage.bookmarkShort') }}</span>
-                <strong>{{ overview.bookmark }}</strong>
-              </span>
-              <span class="mobile-overview__metric mobile-overview__metric--note">
-                <i></i>
-                <span>{{ t('tagManage.noteShort') }}</span>
-                <strong>{{ overview.note }}</strong>
-              </span>
-              <span class="mobile-overview__metric mobile-overview__metric--file">
-                <i></i>
-                <span>{{ t('tagManage.fileShort') }}</span>
-                <strong>{{ overview.file }}</strong>
-              </span>
-            </div>
-          </div>
-        </BCard>
-
-        <div class="mobile-search-row">
-          <BInput
-            v-model:value="keyword"
-            height="40px"
-            class="mobile-search"
-            :placeholder="t('tagManage.searchPlaceholder')"
-          >
-            <template #prefix>
-              <svg-icon :src="icon.navigation.search" size="16" />
-            </template>
-          </BInput>
         </div>
+      </BCard>
 
-        <div class="mobile-filter-row no-scrollbar" :aria-label="t('tagManage.filtersTitle')">
-          <BButton
-            v-for="filter in filters"
-            :key="filter.value"
-            size="small"
-            class="mobile-filter"
-            :class="[`mobile-filter--${filter.value}`, { active: activeFilter === filter.value }]"
-            :aria-pressed="activeFilter === filter.value"
-            @click="activeFilter = filter.value"
-          >
-            <span class="filter-dot"></span>
-            <span>{{ filter.label }}</span>
-            <span class="filter-count">{{ filter.count }}</span>
-          </BButton>
-        </div>
-
-        <div class="mobile-result-bar">
-          <div>
-            <strong>{{ t('tagManage.resultTitle') }}</strong>
-            <span>{{ resultSubtitle }}</span>
-          </div>
-          <BSelect v-model:value="sortMode" class="mobile-sort" :options="sortOptions" />
-        </div>
-
-        <div v-if="visibleTags.length" class="mobile-tag-list">
-          <BCard
-            v-for="tag in visibleTags"
-            :key="tag.id"
-            as="article"
-            variant="card"
-            interactive
-            padding="0"
-            class="mobile-tag-card"
-            role="button"
-            tabindex="0"
-            @click="openTagDetail(tag.id)"
-            @keydown.enter="openTagDetail(tag.id)"
-          >
-            <div class="mobile-tag-head">
-              <div class="mobile-tag-identity">
-                <div class="mobile-tag-icon">
-                  <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="22" />
-                  <span v-else>#</span>
-                </div>
-                <div class="mobile-tag-copy">
-                  <strong>{{ tag.name }}</strong>
-                  <span>{{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}</span>
-                </div>
-              </div>
-              <span class="detail-arrow" aria-hidden="true">→</span>
-            </div>
-
-            <div class="mobile-resource-metrics">
-              <span class="mobile-metric mobile-metric--bookmark">
-                <i></i>
-                <span>{{ t('tagManage.bookmarkShort') }}</span>
-                <strong>{{ tag.bookmarkList?.length || 0 }}</strong>
-              </span>
-              <span class="mobile-metric mobile-metric--note">
-                <i></i>
-                <span>{{ t('tagManage.noteShort') }}</span>
-                <strong>{{ tag.noteList?.length || 0 }}</strong>
-              </span>
-              <span class="mobile-metric mobile-metric--file">
-                <i></i>
-                <span>{{ t('tagManage.fileShort') }}</span>
-                <strong>{{ tag.fileList?.length || 0 }}</strong>
-              </span>
-            </div>
-
-            <div v-if="tag.relatedTagList?.length" class="mobile-related">
-              <span class="mobile-related-label">{{ t('tagManage.relatedTag') }}</span>
-              <span v-for="related in tag.relatedTagList.slice(0, 2)" :key="related.id" class="related-chip">
-                {{ related.name }}
-              </span>
-              <span v-if="tag.relatedTagList.length > 2" class="more-count">+{{ tag.relatedTagList.length - 2 }}</span>
-            </div>
-
-            <div class="mobile-card-actions" @click.stop>
-              <BActionButton
-                action="edit"
-                :label="t('common.edit')"
-                :tooltip="t('common.edit')"
-                @click="edit(tag.id)"
-              />
-              <BActionButton
-                action="delete"
-                :label="t('common.delete')"
-                :tooltip="t('common.delete')"
-                @click="handleDeleteTag(tag)"
-              />
-            </div>
-          </BCard>
-        </div>
-
-        <div v-else class="mobile-empty">
-          <div class="empty-symbol">#</div>
-          <strong>{{ t('tagManage.emptyTitle') }}</strong>
-          <span>{{ t('tagManage.emptyDesc') }}</span>
-          <BButton v-if="!keyword" type="primary" @click="router.push('/manage/editTag/add')">
-            {{ t('tagManage.createTag') }}
-          </BButton>
-        </div>
+      <div ref="filterRowRef" class="mobile-filter-row no-scrollbar" :aria-label="t('tagManage.filtersTitle')">
+        <BButton
+          v-for="filter in filters"
+          :key="filter.value"
+          size="small"
+          class="mobile-filter"
+          :class="[`mobile-filter--${filter.value}`, { active: activeFilter === filter.value }]"
+          :aria-pressed="activeFilter === filter.value"
+          @click="selectFilter(filter.value, $event)"
+        >
+          <span class="filter-dot"></span>
+          <span>{{ filter.label }}</span>
+          <span class="filter-count">{{ filter.count }}</span>
+        </BButton>
       </div>
-    </ResourcePageShell>
+
+      <div class="mobile-result-bar">
+        <div>
+          <strong>{{ t('tagManage.resultTitle') }}</strong>
+          <span>{{ resultSubtitle }}</span>
+        </div>
+        <BSelect v-model:value="sortMode" class="mobile-sort" :options="sortOptions" />
+      </div>
+
+      <div v-if="visibleTags.length" class="mobile-tag-list">
+        <BCard
+          v-for="tag in visibleTags"
+          :key="tag.id"
+          as="article"
+          variant="card"
+          interactive
+          padding="0"
+          class="mobile-tag-card"
+          :class="{ 'mobile-tag-card--empty': !getTotalResourceCount(tag) }"
+          role="button"
+          tabindex="0"
+          @click="openTagDetail(tag.id)"
+          @keydown.enter="openTagDetail(tag.id)"
+        >
+          <div class="mobile-tag-head">
+            <div class="mobile-tag-identity">
+              <div class="mobile-tag-icon">
+                <svg-icon v-if="tag.iconUrl" :src="tag.iconUrl" size="22" />
+                <span v-else>#</span>
+              </div>
+              <div class="mobile-tag-copy">
+                <strong>{{ tag.name }}</strong>
+                <span>{{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 只展示非零类型:多数标签只挂一两类资源,显示「书签 0 · 笔记 0」纯属噪音 -->
+          <div v-if="tagMetrics(tag).length" class="mobile-resource-metrics">
+            <span
+              v-for="metric in tagMetrics(tag)"
+              :key="metric.key"
+              class="mobile-metric"
+              :class="`mobile-metric--${metric.key}`"
+            >
+              <i></i>
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.count }}</strong>
+            </span>
+          </div>
+
+          <!-- 卡片去管理化:编辑/删除收敛到标签详情与编辑页,卡片专注「点击进入主题」。
+               相关标签不在列表展示——既避免卡片变高,也避免为列表里每个标签计算共现关系。 -->
+        </BCard>
+      </div>
+
+      <div v-else class="mobile-empty">
+        <div class="empty-symbol">#</div>
+        <strong>{{ t('tagManage.emptyTitle') }}</strong>
+        <span>{{ t('tagManage.emptyDesc') }}</span>
+        <BButton v-if="!keyword" type="primary" @click="router.push('/manage/editTag/add')">
+          {{ t('tagManage.createTag') }}
+        </BButton>
+      </div>
+    </div>
   </b-loading>
 </template>
 
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { apiBasePost } from '@/http/request.ts';
   import router from '@/router';
-  import icon from '@/config/icon.ts';
+  import { scrollChipIntoCenter } from '@/utils/horizontalChipScroll';
   import type { BaseOptions } from '@/config/bookmarkCfg.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
-  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { recordOperation } from '@/api/commonApi.ts';
-  import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { getTotalResourceCount, type TagFilterValue, type TagRecord, useTagManage } from './useTagManage';
 
   const { t } = useI18n();
   const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
+
+  // 顶栏搜索/新建接管原页内搜索框与页头按钮,与书签/笔记/云空间页签保持一致的操作位。
+  useMobileTopBar(['tagMg'], {
+    getSearchValue: () => keyword.value,
+    setSearchValue: (value) => {
+      keyword.value = value;
+    },
+    searchPlaceholder: () => t('tagManage.searchPlaceholder'),
+    onAdd: () => router.push('/manage/editTag/add'),
+    addLabel: () => t('tagManage.createTag'),
+  });
 
   const filters = computed(() => [
     { value: 'all' as TagFilterValue, label: t('tagManage.filterAll'), count: filterCounts.value.all },
@@ -206,28 +163,24 @@
       : t('tagManage.resultSubtitle', { count: visibleTags.value.length });
   });
 
-  function edit(id: string) {
-    router.push({ path: `/manage/editTag/${id}` });
+  function tagMetrics(tag: TagRecord) {
+    return [
+      { key: 'bookmark', label: t('tagManage.bookmarkShort'), count: tag.bookmarkList?.length || 0 },
+      { key: 'note', label: t('tagManage.noteShort'), count: tag.noteList?.length || 0 },
+      { key: 'file', label: t('tagManage.fileShort'), count: tag.fileList?.length || 0 },
+    ].filter((metric) => metric.count > 0);
   }
 
   function openTagDetail(id: string) {
     router.push({ path: `/tag/${id}` });
   }
 
-  function handleDeleteTag(tag: TagRecord) {
-    if (blockGuestWrite('delete-tag')) return;
-    Alert.alert({
-      title: t('tagManage.confirmDeleteTitle'),
-      content: t('tagManage.confirmDeleteContent', { name: tag.name }),
-      onOk() {
-        apiBasePost('/api/bookmark/delTag', { id: tag.id }).then((res) => {
-          if (res.status !== 200) return;
-          recordOperation({ module: '标签管理', operation: `删除标签成功【${tag.name}】` });
-          message.success(t('tagManage.deleteSuccess'));
-          reload();
-        });
-      },
-    });
+  const filterRowRef = ref<HTMLElement | null>(null);
+
+  function selectFilter(value: TagFilterValue, event: Event) {
+    activeFilter.value = value;
+    // 选中贴边/半可见的筛选项时自动滚入视野,与搜索中心类型筛选一致
+    scrollChipIntoCenter(filterRowRef.value, event.currentTarget);
   }
 
   reload();
@@ -241,7 +194,8 @@
 
     height: 100%;
     min-height: 0;
-    padding-bottom: 22px;
+    /* 壳内页签形态:内容区自带四周留白(原由 ResourcePageShell 提供) */
+    padding: 12px 12px 22px;
     box-sizing: border-box;
     overflow-y: auto;
     overscroll-behavior-y: contain;
@@ -332,8 +286,9 @@
       white-space: nowrap;
     }
 
+    /* 数字紧跟自己的名称,避免被推到格子右端、视觉上贴到下一项 */
     strong {
-      margin-left: auto;
+      margin-left: 2px;
       color: var(--text-color);
       font-size: 12px;
       font-variant-numeric: tabular-nums;
@@ -352,49 +307,9 @@
     background: var(--resource-file-color);
   }
 
-  .mobile-search-row {
-    display: flex;
-    gap: 9px;
-    margin-top: 12px;
-  }
-
-  .mobile-search {
-    flex: 1;
-    min-width: 0;
-
-    :deep(.b-input) {
-      border: 1px solid var(--mobile-tag-border) !important;
-      border-radius: 11px;
-      color: var(--text-color);
-      background: var(--mobile-tag-card-bg) !important;
-      box-shadow: 0 1px 2px color-mix(in srgb, var(--text-color) 4%, transparent) !important;
-      font-size: 14px;
-    }
-
-    :deep(.b-input::placeholder) {
-      color: var(--sub-text-color);
-      opacity: 0.88;
-    }
-
-    :deep(.prefix-icon) {
-      color: var(--sub-text-color);
-    }
-
-    :deep(.input-container:focus-within .b-input) {
-      border-color: var(--resource-tag-color) !important;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--resource-tag-color) 14%, transparent) !important;
-    }
-
-    :deep(.input-container:focus-within .prefix-icon) {
-      color: var(--resource-tag-color);
-    }
-  }
-
-  .mobile-add {
-    flex-shrink: 0;
-  }
-
   .mobile-filter-row {
+    /* 作为 offsetParent,供选中项自动滚动按 offsetLeft 计算(见 horizontalChipScroll) */
+    position: relative;
     display: flex;
     gap: 7px;
     margin: 11px 0 0;
@@ -505,12 +420,13 @@
     }
   }
 
+  /* 卡片收紧到 ~80px:标签多时长列表更好扫读(方案 3.3) */
   .mobile-tag-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 12px 12px 9px;
+    padding: 10px 12px 7px;
   }
 
   .mobile-tag-identity {
@@ -529,7 +445,6 @@
     flex-shrink: 0;
     border-radius: 11px;
     color: var(--resource-tag-color);
-    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--mobile-tag-muted-bg));
     font-size: 18px;
     font-weight: 700;
   }
@@ -557,16 +472,16 @@
     }
   }
 
-  .detail-arrow {
-    color: var(--resource-tag-color);
-    font-size: 17px;
-  }
-
   .mobile-resource-metrics {
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 0 12px 9px;
+    padding: 0 12px 8px;
+  }
+
+  /* 空标签弱化:不占视觉重心,但仍可点进去补内容 */
+  .mobile-tag-card--empty {
+    opacity: 0.66;
   }
 
   .mobile-metric {
@@ -615,61 +530,6 @@
 
   .mobile-metric--file i {
     background: var(--resource-file-color);
-  }
-
-  .mobile-related {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    min-width: 0;
-    padding: 0 12px 9px;
-    overflow: hidden;
-  }
-
-  .mobile-related-label {
-    flex-shrink: 0;
-    color: var(--sub-text-color);
-    font-size: 10px;
-  }
-
-  .related-chip,
-  .more-count {
-    min-width: 0;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 7px;
-    border-radius: 999px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 10px;
-  }
-
-  .related-chip {
-    max-width: 100px;
-    color: var(--resource-tag-color);
-    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--mobile-tag-muted-bg));
-  }
-
-  .more-count {
-    flex-shrink: 0;
-    color: var(--sub-text-color);
-    background: var(--mobile-tag-muted-bg);
-  }
-
-  .mobile-card-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
-    padding: 8px 10px;
-    border-top: 1px solid var(--mobile-tag-border);
-
-    :deep(.b-action-button),
-    :deep(.b-action-button__label) {
-      flex: 0 0 auto;
-      white-space: nowrap;
-    }
   }
 
   .mobile-empty {

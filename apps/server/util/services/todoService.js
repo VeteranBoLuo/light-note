@@ -10,6 +10,12 @@ const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已
 const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
   due_at AS dueAt, recurrence_rule AS recurrenceRule,
   completed_at AS completedAt, update_time AS updatedAt`;
+// 工作台今日行动流的时间窗筛选:overdue=已逾期,today=今天内到期(含已过时刻)。
+const DUE_FILTERS = new Set(['overdue', 'today']);
+const DUE_SQL = Object.freeze({
+  overdue: 'due_at IS NOT NULL AND due_at < CURDATE()',
+  today: 'due_at IS NOT NULL AND due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)',
+});
 const SORT_SQL = Object.freeze({
   smart: `CASE
       WHEN due_at IS NOT NULL AND due_at < NOW() THEN 0
@@ -755,6 +761,8 @@ function normalizeTodoListOptions(input = {}) {
   const status = String(input.status || 'all').toLowerCase();
   const sort = String(input.sort || 'smart').toLowerCase();
   if (!FILTER_STATUS.has(status) || !SORT_SQL[sort]) throw new Error('无效的待办筛选参数');
+  const due = input.due === undefined || input.due === null ? null : String(input.due).toLowerCase();
+  if (due !== null && !DUE_FILTERS.has(due)) throw new Error('无效的待办筛选参数');
 
   const keyword = String(input.keyword || '')
     .trim()
@@ -764,7 +772,7 @@ function normalizeTodoListOptions(input = {}) {
   const offset = paginated ? decodeOffsetCursor(input.cursor, TODO_PAGE_CURSOR_SCOPE) : 0;
   const view = input.view === 'summary' ? 'summary' : 'full';
   const includeTotal = input.includeTotal !== false;
-  return { status, sort, keyword, paginated, limit, offset, view, includeTotal };
+  return { status, sort, keyword, due, paginated, limit, offset, view, includeTotal };
 }
 
 function todoOrderSql(status, sort) {
@@ -816,12 +824,16 @@ async function loadTodoReminderMap(db, items, userId, view) {
  * 因此待办说明和提醒邮箱不会进入模型上下文。
  */
 export async function listTodoPage(db, userId, input = {}) {
-  const { status, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeTodoListOptions(input);
+  const { status, sort, keyword, due, paginated, limit, offset, view, includeTotal } =
+    normalizeTodoListOptions(input);
   const where = ['user_id = ?', 'del_flag = 0'];
   const params = [userId];
   if (status !== 'all') {
     where.push('status = ?');
     params.push(status);
+  }
+  if (due) {
+    where.push(DUE_SQL[due]);
   }
   if (keyword) {
     where.push('(title LIKE ? OR description LIKE ?)');

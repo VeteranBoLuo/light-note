@@ -482,13 +482,10 @@
   }
 
   // 手机布局和桌面布局的路由不一样，切换断点后需要切换对应路由地址
+  // 工作台已支持移动端访问,不再强制跳回移动首页。
   function handleRouteChange(isMobileLayout: boolean, path: string) {
     // 桌面布局切换至手机布局
     if (isMobileLayout) {
-      if (path === '/workbenches') {
-        router.push(getRuntimeApplicationHomePath(user.preferences, true));
-        return;
-      }
       if (phoneReplaceMap[path]) {
         router.push(phoneReplaceMap[path]);
       }
@@ -761,10 +758,6 @@
 
   // 路由发生变化触发
   router.beforeEach(async (to, from, next) => {
-    if (to.name === 'workbenches') {
-      handleRouteChange(bookmark.isMobile, to.path);
-    }
-
     if (from.name === 'githubCallBack') {
       await getUserInfo(true);
     }

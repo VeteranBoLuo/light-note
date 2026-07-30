@@ -84,14 +84,6 @@ describe('todo store', () => {
     expect(listTodos).toHaveBeenCalledTimes(1);
   });
 
-  it('行内快速创建后刷新列表', async () => {
-    const store = useTodoStore();
-    createTodo.mockResolvedValueOnce({ status: 200, data: { id: 'todo-new' } });
-    listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
-    await expect(store.quickCreate('写周报', '2026-07-31T17:00', 2)).resolves.toBe(true);
-    expect(createTodo).toHaveBeenCalledWith({ title: '写周报', dueAt: '2026-07-31T17:00', priority: 2 });
-  });
-
   it('撤销批量完成通过单个事务请求恢复并回滚自动生成实例', async () => {
     const store = useTodoStore();
     batchSetTodoStatus.mockResolvedValueOnce({ status: 200, data: { affected: 2 } });

@@ -8,17 +8,7 @@
       <div class="tag-field tag-field--icon">
         <TagIconPicker v-model:value="tag.iconUrl" :tag-name="tag.name" />
       </div>
-      <div class="tag-field">
-        <span class="tag-field__label">{{ $t('tagManage.relatedTag') }}</span>
-        <BSelect
-          v-model:value="tag.relatedTagIds"
-          mode="multiple"
-          :show-search="true"
-          :max-tag-count="4"
-          :options="tagOptions"
-          :filter-option="SelectionSearch"
-        />
-      </div>
+      <!-- 手工「相关标签」多选已下线:标签关系改由共同资源自动推导,无需用户维护关系网 -->
     </BCard>
 
     <BCard
@@ -75,6 +65,15 @@
     <footer class="tag-editor-footer">
       <span>{{ $t('tagManage.linkedCount', { count: totalSelectedCount }) }}</span>
       <div class="tag-editor-footer__actions">
+        <BButton
+          v-if="canDelete"
+          class="tag-editor-footer__delete"
+          type="danger"
+          :loading="deleting"
+          @click="emit('delete')"
+        >
+          {{ $t('tagManage.deleteTag') }}
+        </BButton>
         <BButton @click="emit('cancel')">{{ $t('common.cancel') }}</BButton>
         <BButton type="primary" :loading="saving" @click="emit('submit')">{{ $t('common.save') }}</BButton>
       </div>
@@ -88,8 +87,6 @@
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import { SelectionSearch } from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import TagIconPicker from './TagIconPicker.vue';
   import type { TagResourceItem, TagResourceKind } from '@/composables/useTagEditor.ts';
 
@@ -104,12 +101,13 @@
   };
 
   defineProps<{
-    tagOptions: { label: string; value: string }[];
     searchMap: Record<TagResourceKind, string>;
     resourceSections: ResourceSection[];
     activeResourceSection: ResourceSection;
     totalSelectedCount: number;
     saving: boolean;
+    canDelete?: boolean;
+    deleting?: boolean;
   }>();
   const tag = defineModel<TagInterface>('tag', { required: true });
   const activeResourceType = defineModel<TagResourceKind>('activeResourceType', { required: true });
@@ -117,6 +115,7 @@
     toggleResource: [type: TagResourceKind, id: string, checked: boolean];
     submit: [];
     cancel: [];
+    delete: [];
   }>();
 </script>
 
@@ -285,6 +284,11 @@
   .tag-editor-footer__actions {
     display: flex;
     gap: 8px;
+  }
+
+  /* 危险操作与常规操作留出间隔,避免和「取消/保存」误触 */
+  .tag-editor-footer__delete {
+    margin-right: 10px;
   }
 
   @media (max-width: 1100px) {

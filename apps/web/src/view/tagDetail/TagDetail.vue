@@ -3,6 +3,16 @@
     <!-- 标签头部信息 -->
     <div class="tag-header">
       <div class="tag-header-main">
+        <!-- 移动端从资料页签进入时无全局返回,提供页内返回 -->
+        <BButton
+          v-if="bookmark.isMobile"
+          class="tag-back-btn"
+          :aria-label="$t('common.back')"
+          :title="$t('common.back')"
+          @click="router.back()"
+        >
+          <SvgIcon :src="icon.arrow_left" size="18" aria-hidden="true" />
+        </BButton>
         <img
           v-if="tag.iconUrl && !tagIconLoadError"
           :src="tag.iconUrl"
@@ -11,22 +21,29 @@
           @error="handleTagIconError"
         />
         <svg-icon v-else :src="icon.manage_categoryBtn_tag" size="28" />
-        <span
-          class="tag-name dom-hover"
-          @click="goToEditTag"
-          v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }"
-          >{{ tag.name }}</span
-        >
-        <BButton
-          v-if="tag.id"
-          class="tag-ai-entry"
-          :aria-label="$t('tagManage.openInAi')"
-          :title="$t('tagManage.openInAi')"
-          @click="openTagInAi"
-        >
-          <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
-          {{ $t('tagManage.askAi') }}
-        </BButton>
+        <!-- 标题只做展示;编辑改为显式按钮,原「点标题进编辑」不可发现且易误触 -->
+        <span class="tag-name">{{ tag.name }}</span>
+        <div v-if="tag.id" class="tag-header-actions">
+          <BButton
+            class="tag-ai-entry"
+            :aria-label="$t('common.edit')"
+            :title="$t('common.edit')"
+            @click="goToEditTag"
+            v-click-log="{ module: '标签详情', operation: `编辑标签【${tag.name}】` }"
+          >
+            <SvgIcon :src="icon.table_edit" size="14" aria-hidden="true" />
+            {{ $t('common.edit') }}
+          </BButton>
+          <BButton
+            class="tag-ai-entry"
+            :aria-label="$t('tagManage.openInAi')"
+            :title="$t('tagManage.openInAi')"
+            @click="openTagInAi"
+          >
+            <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
+            {{ $t('tagManage.askAi') }}
+          </BButton>
+        </div>
       </div>
       <div v-if="relatedTags.length" class="tag-related">
         <span class="related-label">{{ $t('tagManage.relatedTag') }}:</span>
@@ -117,7 +134,9 @@
       <div v-if="viewMode === 'card' && relatedTags.length" class="resource-section">
         <div class="section-title" :style="{ color: RESOURCE_COLOR_HEX.tag }">
           <span class="type-dot" :style="{ background: RESOURCE_COLOR_HEX.tag }" />
-          {{ $t('tagManage.relatedTag') }} ({{ relatedTags.length }})
+          {{ $t('tagManage.coUsedTitle') }} ({{ relatedTags.length }})
+          <!-- 关系由共同资料自动推导,明确告知来源,避免用户以为需要手工维护 -->
+          <small class="section-title__hint">{{ $t('tagManage.coUsedHint') }}</small>
         </div>
         <div class="related-tag-grid">
           <div
@@ -128,6 +147,9 @@
             v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
           >
             <div class="related-tag-name">{{ rt.name }}</div>
+            <div v-if="rt.sharedCount" class="related-tag-shared">
+              {{ $t('tagManage.coUsedShared', { count: rt.sharedCount }) }}
+            </div>
           </div>
         </div>
       </div>
@@ -727,15 +749,32 @@
     }
 
     .tag-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-size: 22px;
       font-weight: 600;
       color: var(--primary-color);
-      cursor: pointer;
-      transition: color 0.2s ease;
     }
 
-    .tag-name:hover {
-      color: color-mix(in srgb, var(--primary-color) 82%, white);
+    .tag-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      flex: 0 0 auto;
+    }
+
+    .tag-back-btn {
+      width: 34px;
+      min-width: 34px;
+      height: 34px;
+      padding: 0;
+      flex: 0 0 auto;
+      border-radius: 10px;
+      color: var(--text-color);
+      background: transparent;
     }
 
     .tag-ai-entry {
@@ -918,6 +957,19 @@
 
   .related-tag-name {
     font-weight: 600;
+  }
+
+  .related-tag-shared {
+    margin-top: 3px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .section-title__hint {
+    margin-left: 8px;
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 400;
   }
 
   .bookmark-card {
@@ -1146,6 +1198,11 @@
     }
 
     .tag-header {
+      .tag-header-main {
+        flex-wrap: wrap;
+        row-gap: 8px;
+      }
+
       .tag-name {
         font-size: 18px;
       }

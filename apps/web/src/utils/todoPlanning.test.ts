@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueForTodoGroup, quickTodoDueAt, todoGroupKey, todoSnoozeAt, toTodoLocalInput } from './todoPlanning';
+import { dueForTodoGroup, todoGroupKey, todoSnoozeAt, toTodoLocalInput } from './todoPlanning';
 
 describe('todoPlanning', () => {
   const now = new Date(2026, 6, 30, 16, 30);
@@ -21,10 +21,7 @@ describe('todoPlanning', () => {
     expect(dueForTodoGroup('today', late)).toBe('2026-07-30T23:59');
   });
 
-  it('快速创建和稍后提醒使用稳定的本地时间', () => {
-    expect(quickTodoDueAt('today', now)).toBe('2026-07-30T17:00');
-    expect(quickTodoDueAt('tomorrow', now)).toBe('2026-07-31T09:00');
-    expect(quickTodoDueAt('none', now)).toBeNull();
+  it('稍后提醒使用稳定的本地时间', () => {
     expect(todoSnoozeAt('tenMinutes', now)).toBe('2026-07-30T16:40');
     expect(todoSnoozeAt('tomorrow', now)).toBe('2026-07-31T09:00');
   });

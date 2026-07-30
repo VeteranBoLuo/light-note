@@ -201,6 +201,7 @@
   /* 非 scoped:面板 Teleport 到 body/自定义容器,scoped 选择器命不中 */
   .b-popover-panel {
     z-index: 800;
+    border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--menu-body-bg-color, var(--background-color));
     color: var(--text-color);
@@ -208,6 +209,14 @@
       0 6px 16px 0 rgba(0, 0, 0, 0.08),
       0 3px 6px -4px rgba(0, 0, 0, 0.12),
       0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  /* 暗色下为亮色设计的浅阴影几乎不可见,浮层会与页面背景糊在一起,需要更实的边界与投影 */
+  [data-theme='night'] .b-popover-panel {
+    border-color: color-mix(in srgb, var(--text-color) 16%, var(--surface-border-color));
+    box-shadow:
+      0 10px 24px rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(0, 0, 0, 0.4);
   }
   .b-popover-fade-enter-active,
   .b-popover-fade-leave-active {

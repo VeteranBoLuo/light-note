@@ -9,18 +9,20 @@ import {
 import { getMobileTopBarBinding, registerMobileTopBarBinding } from '@/composables/useMobileTopBar';
 
 describe('移动端导航配置', () => {
-  it('只把三个资料列表路由归入顶部资料切换', () => {
+  it('只把资料列表路由归入顶部资料切换', () => {
     expect(getMobileResourcePath('home')).toBe('/home');
     expect(getMobileResourcePath('home:id')).toBe('/home');
     expect(getMobileResourcePath('home:search')).toBe('/home');
     expect(getMobileResourcePath('noteLibrary')).toBe('/noteLibrary');
     expect(getMobileResourcePath('cloudSpace')).toBe('/cloudSpace');
+    expect(getMobileResourcePath('tagMg')).toBe('/manage/tagMg');
+    expect(getMobileResourcePath('tagEditMg')).toBeNull();
     expect(getMobileResourcePath('noteDetail')).toBeNull();
     expect(getMobileResourcePath('personCenter')).toBeNull();
   });
 
   it('保持资料切换与底部主导航的固定顺序', () => {
-    expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud']);
+    expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual(['resources', 'todo', 'ai', 'search', 'profile']);
   });
 
@@ -28,6 +30,7 @@ describe('移动端导航配置', () => {
     expect(isMobileResourcePath('/home')).toBe(true);
     expect(isMobileResourcePath('/noteLibrary')).toBe(true);
     expect(isMobileResourcePath('/cloudSpace')).toBe(true);
+    expect(isMobileResourcePath('/manage/tagMg')).toBe(true);
     expect(isMobileResourcePath('/noteLibrary/123')).toBe(false);
     expect(isMobileResourcePath('/search')).toBe(false);
   });

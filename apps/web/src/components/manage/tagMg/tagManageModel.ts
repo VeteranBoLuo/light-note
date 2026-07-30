@@ -64,7 +64,14 @@ export function filterAndSortTags(tags: TagRecord[], keyword: string, filter: Ta
       break;
   }
 
-  if (sort === 'default') return result;
+  // 「全部」视图下把空标签沉到末尾:自定义顺序里空标签夹在中间会打断浏览,
+  // 但组内仍保持用户拖拽出来的相对顺序(稳定排序),不改变自定义排序本身的含义。
+  if (sort === 'default') {
+    if (filter !== 'all') return result;
+    const withResources = result.filter((tag) => getTotalResourceCount(tag) > 0);
+    const withoutResources = result.filter((tag) => getTotalResourceCount(tag) === 0);
+    return [...withResources, ...withoutResources];
+  }
 
   return [...result].sort((left, right) => {
     if (sort === 'resourceDesc') {
