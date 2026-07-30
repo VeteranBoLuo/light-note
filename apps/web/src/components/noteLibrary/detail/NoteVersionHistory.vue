@@ -42,9 +42,9 @@
         <div class="preview-header">
           <span class="preview-title">{{ $t('noteDetail.history.preview') }}</span>
           <BTabs v-model:active-tab="previewMode" variant="pill" :options="previewModeOptions" />
-          <b-button v-if="activeId" type="primary" size="small" :disabled="restoring" @click="confirmRestore">
+          <BButton v-if="activeId" type="primary" size="small" :disabled="restoring" @click="confirmRestore">
             {{ $t('noteDetail.history.restore') }}
-          </b-button>
+          </BButton>
         </div>
         <div class="preview-body">
           <div v-if="activeId && previewMode === 'preview'" class="preview-html" v-html="activePreviewHtml"></div>

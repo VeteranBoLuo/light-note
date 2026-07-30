@@ -205,3 +205,11 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name=expected.tn
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 16) 已下线的表不应再存在（期望 0 行）
+-- tag_relations：手工「相关标签」已改为按共同资源自动推导（20260731_drop_tag_relations.sql）
+SELECT '[16] retired_table_still_present' AS check_name, retired.t AS detail FROM (
+  SELECT 'tag_relations' t
+) retired
+INNER JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=retired.t;
