@@ -6,6 +6,9 @@ import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 import useAiAssistantStore, { type AiAssistantEdgeStatus } from '@/store/aiAssistant';
 import useUserStore from '@/store/useUser';
+import { openAiAssistant } from '@/utils/aiEntry';
+
+const applyLaunchContext = vi.fn(async () => undefined);
 
 vi.mock('@/store', async () => {
   const { default: useAiAssistantStore } = await import('@/store/aiAssistant');
@@ -24,9 +27,29 @@ vi.mock('@/components/base/BasicComponents/BDrawer.vue', async () => {
   return {
     default: {
       name: 'BDrawer',
-      props: { fullScreen: Boolean },
-      setup: (props: { fullScreen?: boolean }, { slots }: { slots: Record<string, () => unknown> }) => () =>
-        h('div', { class: 'mock-drawer', 'data-full-screen': String(props.fullScreen) }, slots['header-actions']?.()),
+      props: { open: Boolean, fullScreen: Boolean },
+      setup: (
+        props: { open?: boolean; fullScreen?: boolean },
+        { slots }: { slots: Record<string, () => unknown> },
+      ) => () =>
+        h(
+          'div',
+          { class: 'mock-drawer', 'data-full-screen': String(props.fullScreen) },
+          props.open ? [slots['header-actions']?.(), slots.default?.()] : [],
+        ),
+    },
+  };
+});
+vi.mock('@/components/aiAssistant/AiWorkspaceShell.vue', async () => {
+  const { h } = await import('vue');
+  return {
+    __esModule: true,
+    default: {
+      name: 'AiWorkspaceShell',
+      setup: (_props: unknown, { expose }: { expose: (value: Record<string, unknown>) => void }) => {
+        expose({ applyLaunchContext });
+        return () => h('div', { class: 'mock-ai-workspace' });
+      },
     },
   };
 });
@@ -46,6 +69,7 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear();
+  applyLaunchContext.mockClear();
   (window as Window & { __PRERENDER__?: boolean }).__PRERENDER__ = true;
   if (!window.requestAnimationFrame) window.requestAnimationFrame = (callback) => window.setTimeout(callback, 0);
 });
@@ -173,5 +197,23 @@ describe('FloatQuestion edge status contract', () => {
     await nextTick();
     expect(host.querySelector('.mock-drawer')?.getAttribute('data-full-screen')).toBe('false');
     expect(user.preferences.aiDefaultFullscreen).toBe(false);
+  });
+
+  it('首次打开时等待异步工作区挂载后再投递云文件引用', async () => {
+    mountEdge();
+    openAiAssistant({
+      surface: 'cloud_space',
+      suggestedIntent: 'summarize',
+      contextRefs: [{ type: 'file', id: 'file-1', title: '成本分析.pdf' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(applyLaunchContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          suggestedIntent: 'summarize',
+          contextRefs: [{ type: 'file', id: 'file-1', title: '成本分析.pdf' }],
+        }),
+      );
+    });
   });
 });

@@ -48,7 +48,7 @@
         </div>
       </section>
     </div>
-    <div class="todo-item__actions">
+    <div class="todo-item__actions todo-item__actions--desktop">
       <BSelect
         class="todo-item__priority-select"
         :value="item.priority"
@@ -79,6 +79,44 @@
       <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
         {{ t('inbox.deleteTodo') }}
       </BButton>
+    </div>
+    <div class="todo-item__actions todo-item__actions--mobile">
+      <BSelect
+        class="todo-item__priority-select"
+        :value="item.priority"
+        :options="priorityOptions"
+        :disabled="disabled || item.status === 'completed'"
+        :aria-label="t('inbox.todoPriority')"
+        @change="changePriority"
+      />
+      <BPopover v-if="item.status === 'pending'" trigger="click" placement="top-left">
+        <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
+        <template #content>
+          <div class="todo-snooze-menu">
+            <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
+            <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
+            <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
+          </div>
+        </template>
+      </BPopover>
+      <BPopover trigger="click" placement="top-right">
+        <BButton size="small" :disabled="disabled">{{ t('common.more') }}</BButton>
+        <template #content>
+          <div class="todo-mobile-action-menu">
+            <BButton :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
+            <BButton
+              :disabled="disabled"
+              v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
+              @click="$emit('add-to-calendar')"
+            >
+              {{ t('inbox.addToCalendar') }}
+            </BButton>
+            <BButton type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
+              {{ t('inbox.deleteTodo') }}
+            </BButton>
+          </div>
+        </template>
+      </BPopover>
     </div>
   </article>
 </template>
@@ -318,6 +356,9 @@
     justify-content: flex-end;
     gap: 10px;
   }
+  .todo-item__actions--mobile {
+    display: none;
+  }
   .todo-item__priority-select {
     width: 116px;
   }
@@ -342,8 +383,20 @@
     justify-content: flex-start;
     min-height: 36px;
   }
+  .todo-mobile-action-menu {
+    display: grid;
+    min-width: 176px;
+    padding: 6px;
+    gap: 4px;
+  }
+  .todo-mobile-action-menu :deep(.b_btn) {
+    width: 100%;
+    min-height: 40px;
+    justify-content: flex-start;
+  }
   @media (pointer: coarse) {
-    .todo-snooze-menu :deep(.b_btn) {
+    .todo-snooze-menu :deep(.b_btn),
+    .todo-mobile-action-menu :deep(.b_btn) {
       min-height: 44px;
     }
   }
@@ -361,9 +414,30 @@
     .todo-item__meta > span:first-child {
       display: none;
     }
-    .todo-item__actions {
+    .todo-priority {
+      display: none;
+    }
+    .todo-item__actions--desktop {
+      display: none;
+    }
+    .todo-item__actions--mobile {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      width: auto;
       margin-left: 30px;
-      justify-content: flex-start;
+      gap: 8px;
+      align-items: center;
+    }
+    .todo-item__actions--mobile .todo-item__priority-select {
+      width: 100%;
+      min-width: 0;
+    }
+    .todo-item__actions--mobile :deep(.select-trigger),
+    .todo-item__actions--mobile :deep(.b_btn) {
+      width: 100%;
+      min-width: 0;
+      padding-inline: 12px;
+      white-space: nowrap;
     }
     .todo-checklist {
       margin-right: 0;

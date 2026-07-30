@@ -214,11 +214,29 @@
   const aiAssistantRef = ref<{
     clearHistory?: () => Promise<boolean>;
     focusInput?: () => void;
-    applyLaunchContext?: (payload: AiAssistantLaunchPayload) => void;
+    applyLaunchContext?: (payload: AiAssistantLaunchPayload) => Promise<void> | void;
     openConversation?: (conversationId: string) => Promise<void>;
     refreshCloudConversation?: () => Promise<void>;
     openWorkItem?: (kind: 'change-set', id: string) => void;
   } | null>(null);
+  const pendingLaunchPayload = ref<AiAssistantLaunchPayload | null>(null);
+  let launchContextApplying = false;
+
+  async function flushPendingLaunchContext() {
+    if (launchContextApplying || !aiAssistantRef.value?.applyLaunchContext || !pendingLaunchPayload.value) return;
+    const payload = pendingLaunchPayload.value;
+    pendingLaunchPayload.value = null;
+    launchContextApplying = true;
+    try {
+      await aiAssistantRef.value.applyLaunchContext(payload);
+    } finally {
+      launchContextApplying = false;
+      if (pendingLaunchPayload.value) void flushPendingLaunchContext();
+    }
+  }
+  watch(aiAssistantRef, (workspace) => {
+    if (workspace) void flushPendingLaunchContext();
+  });
   const aiShortcutLabel = getGlobalShortcutLabel('aiAssistant');
   const aiTriggerTitle = computed(() => t('ai.openShortcutHint', { shortcut: aiShortcutLabel }));
   const aiEdgeStatusText = computed(() => (edgeStatus.value === 'idle' ? '' : t(`ai.edgeStatus.${edgeStatus.value}`)));
@@ -453,7 +471,8 @@
     const payload = normalizeAiAssistantLaunchPayload((event as CustomEvent<unknown> | undefined)?.detail);
     openAssistant(payload.surface || 'workspace');
     if (payload.contextRefs?.length || payload.attachmentRefs?.length || payload.suggestedIntent || payload.query) {
-      nextTick(() => aiAssistantRef.value?.applyLaunchContext?.(payload));
+      pendingLaunchPayload.value = payload;
+      nextTick(() => void flushPendingLaunchContext());
     }
   }
 
