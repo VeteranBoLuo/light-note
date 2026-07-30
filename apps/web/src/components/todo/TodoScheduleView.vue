@@ -23,11 +23,18 @@
           v-for="item in day.items.slice(0, 3)"
           :key="item.id"
           class="todo-calendar-item"
-          :class="`is-priority-${item.priority}`"
-          :title="item.title"
+          :class="[`is-priority-${item.priority}`, todoStateClass(item)]"
+          :title="calendarItemTitle(item)"
           @click="$emit('edit', item)"
         >
-          {{ item.title }}
+          <span class="todo-calendar-item__main">
+            <time :datetime="item.dueAt || undefined">{{ dueTime(item) }}</time>
+            <strong>{{ item.title }}</strong>
+          </span>
+          <span class="todo-calendar-item__meta">
+            <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
+            <small>{{ t(`inbox.todoPriority${item.priority}`) }}</small>
+          </span>
         </BButton>
         <small v-if="day.items.length > 3">{{ t('inbox.todoMoreInDay', { count: day.items.length - 3 }) }}</small>
       </div>
@@ -39,10 +46,19 @@
           <strong>{{ entry.day }}</strong>
           <span>{{ entry.time }}</span>
         </time>
-        <BButton class="todo-agenda-card" @click="$emit('edit', entry.item)">
-          <span :class="`is-priority-${entry.item.priority}`"></span>
-          <strong>{{ entry.item.title }}</strong>
-          <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
+        <BButton
+          class="todo-agenda-card"
+          :class="todoStateClass(entry.item)"
+          @click="$emit('edit', entry.item)"
+        >
+          <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
+          <span class="todo-agenda-card__content">
+            <strong>{{ entry.item.title }}</strong>
+            <span class="todo-agenda-card__meta">
+              <small :class="todoStateClass(entry.item)">{{ todoStateLabel(entry.item) }}</small>
+              <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
+            </span>
+          </span>
         </BButton>
       </article>
       <p v-if="!agendaItems.length" class="todo-schedule-empty">{{ t('inbox.todoScheduleEmpty') }}</p>
@@ -108,6 +124,30 @@
   function dateKey(date: Date) {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
+  function dueTime(item: TodoItem) {
+    if (!item.dueAt) return '';
+    const date = parseDate(item.dueAt);
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date);
+  }
+  function isOverdue(item: TodoItem) {
+    if (item.status !== 'pending' || !item.dueAt) return false;
+    const dueAt = parseDate(item.dueAt).getTime();
+    return Number.isFinite(dueAt) && dueAt < Date.now();
+  }
+  function todoStateClass(item: TodoItem) {
+    if (item.status === 'completed') return 'is-completed';
+    return isOverdue(item) ? 'is-overdue' : 'is-pending';
+  }
+  function todoStateLabel(item: TodoItem) {
+    if (item.status === 'completed') return t('inbox.todoCompleted');
+    return t(isOverdue(item) ? 'inbox.todoGroups.overdue' : 'inbox.todoPending');
+  }
+  function calendarItemTitle(item: TodoItem) {
+    return [dueTime(item), todoStateLabel(item), t(`inbox.todoPriority${item.priority}`), item.title]
+      .filter(Boolean)
+      .join(' · ');
+  }
   function moveMonth(step: number) {
     visibleMonth.value = new Date(visibleMonth.value.getFullYear(), visibleMonth.value.getMonth() + step, 1);
   }
@@ -160,24 +200,80 @@
     display: block;
     width: 100%;
     height: auto;
-    min-height: 24px;
+    min-height: 42px;
     margin: 3px 0;
-    padding: 3px 5px;
+    padding: 4px 5px;
     overflow: hidden;
     border-left: 3px solid var(--primary-color);
+    line-height: 1.2;
     text-align: left;
+  }
+  .todo-calendar-item__main {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+  }
+  .todo-calendar-item__main time {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .todo-calendar-item__main strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .todo-calendar-item.is-priority-2,
-  .todo-agenda-card > span.is-priority-2 {
-    border-color: var(--danger-color, #e5484d);
+  .todo-calendar-item__meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .todo-calendar-item__meta small {
+    overflow: hidden;
+    font-size: 8px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .todo-calendar-item__meta small.is-overdue,
+  .todo-agenda-card__meta small.is-overdue {
+    color: var(--danger-color, #e5484d);
+  }
+  .todo-calendar-item__meta small.is-completed,
+  .todo-agenda-card__meta small.is-completed {
+    color: var(--success-color, #2e8b57);
+  }
+  .todo-calendar-item.is-priority-2 {
+    border-left-color: var(--danger-color, #e5484d);
+  }
+  .todo-agenda-card__priority.is-priority-2 {
     background: var(--danger-color, #e5484d);
   }
-  .todo-calendar-item.is-priority-0,
-  .todo-agenda-card > span.is-priority-0 {
-    border-color: var(--desc-color);
+  .todo-calendar-item.is-priority-0 {
+    border-left-color: var(--desc-color);
+  }
+  .todo-agenda-card__priority.is-priority-0 {
     background: var(--desc-color);
+  }
+  .todo-calendar-item.is-overdue,
+  .todo-agenda-card.is-overdue {
+    background: color-mix(in srgb, var(--danger-color, #e5484d) 5%, var(--background-color));
+  }
+  .todo-calendar-item.is-completed {
+    border-left-color: var(--success-color, #2e8b57);
+    opacity: 0.76;
+  }
+  .todo-calendar-item.is-completed .todo-calendar-item__main strong,
+  .todo-agenda-card.is-completed .todo-agenda-card__content > strong {
+    color: var(--desc-color);
+    text-decoration: line-through;
   }
   .todo-calendar-day small {
     color: var(--desc-color);
@@ -186,7 +282,7 @@
   .todo-agenda {
     display: grid;
     gap: 8px;
-    padding: 10px 14px 22px;
+    padding: 14px 18px 24px;
     box-sizing: border-box;
   }
   .todo-agenda-item {
@@ -201,21 +297,43 @@
     color: var(--desc-color);
     font-size: 11px;
   }
-  .todo-agenda-card {
+  .todo-schedule-view .todo-agenda-card {
     width: 100%;
-    min-height: 48px;
+    height: auto;
+    min-height: 60px;
+    padding: 9px 14px;
+    box-sizing: border-box;
     justify-content: flex-start;
     gap: 8px;
+    line-height: 1.3;
+    text-align: left;
   }
-  .todo-agenda-card > span {
+  .todo-agenda-card__priority {
     width: 7px;
     height: 7px;
+    flex: 0 0 7px;
     border-radius: 50%;
     background: var(--primary-color);
   }
-  .todo-agenda-card small {
-    margin-left: auto;
+  .todo-agenda-card__content {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 3px;
+  }
+  .todo-agenda-card__content > strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .todo-agenda-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .todo-agenda-card__meta small {
     color: var(--desc-color);
+    font-size: 10px;
   }
   .todo-schedule-empty {
     padding: 28px;
@@ -233,7 +351,7 @@
       grid-template-columns: 86px minmax(0, 1fr);
     }
     .todo-agenda {
-      padding: 8px 10px 18px;
+      padding: 12px 14px 20px;
     }
   }
 </style>

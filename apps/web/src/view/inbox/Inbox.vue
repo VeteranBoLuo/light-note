@@ -60,49 +60,49 @@
           {{ t('inbox.todoQuickCreate') }}
         </BButton>
       </form>
-      <div class="todo-workspace-toolbar__views">
-        <BTabs v-model:active-tab="todoView" :options="todoViewOptions" variant="pill" />
-        <BButton
-          v-if="todoView === 'list'"
-          size="small"
-          :class="{ active: todoSelectionMode }"
-          :aria-pressed="todoSelectionMode"
-          @click="toggleTodoSelectionMode"
-        >
-          {{ t(todoSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
-        </BButton>
-      </div>
+      <BTabs
+        v-model:active-tab="todoView"
+        class="todo-workspace-toolbar__views"
+        :options="todoViewOptions"
+        variant="pill"
+      />
     </section>
 
-    <section v-if="isTodoFocused && todoSelectionMode" class="inbox-batch todo-batch">
-      <BCheckbox
-        :model-value="selectedTodoIds.length === todo.items.length"
-        :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
-        @update:model-value="toggleSelectAllTodos"
-      >
-        {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
-      </BCheckbox>
-      <div class="inbox-batch__actions">
-        <BButton
-          v-if="todo.status !== 'completed'"
-          size="small"
-          type="primary"
-          :loading="todoBatchMutating"
-          :disabled="!selectedTodoIds.length"
-          @click="completeSelectedTodos"
+    <section v-if="isTodoFocused && todoView === 'list'" class="todo-list-toolbar">
+      <template v-if="todoSelectionMode">
+        <BCheckbox
+          :model-value="selectedTodoIds.length === todo.items.length"
+          :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
+          @update:model-value="toggleSelectAllTodos"
         >
-          {{ t('inbox.completeSelected') }}
-        </BButton>
-        <BButton
-          size="small"
-          type="danger"
-          :loading="todoBatchMutating"
-          :disabled="!selectedTodoIds.length"
-          @click="confirmDeleteSelectedTodos"
-        >
-          {{ t('inbox.deleteSelected') }}
-        </BButton>
-      </div>
+          {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
+        </BCheckbox>
+        <div class="todo-list-toolbar__actions">
+          <BButton
+            v-if="todo.status !== 'completed'"
+            size="small"
+            type="primary"
+            :loading="todoBatchMutating"
+            :disabled="!selectedTodoIds.length"
+            @click="completeSelectedTodos"
+          >
+            {{ t('inbox.completeSelected') }}
+          </BButton>
+          <BButton
+            size="small"
+            type="danger"
+            :loading="todoBatchMutating"
+            :disabled="!selectedTodoIds.length"
+            @click="confirmDeleteSelectedTodos"
+          >
+            {{ t('inbox.deleteSelected') }}
+          </BButton>
+          <BButton size="small" @click="toggleTodoSelectionMode">{{ t('inbox.todoBatchCancel') }}</BButton>
+        </div>
+      </template>
+      <BButton v-else class="todo-list-toolbar__select" size="small" @click="toggleTodoSelectionMode">
+        {{ t('inbox.todoBatchSelect') }}
+      </BButton>
     </section>
 
     <section v-if="todoUndo" class="todo-undo-banner" role="status">
@@ -525,6 +525,10 @@
     },
   );
   watch(todoView, (view) => {
+    if (view !== 'list' && todoSelectionMode.value) {
+      todoSelectionMode.value = false;
+      selectedTodoIds.value = [];
+    }
     if (user.preferences.todoView === view) return;
     updatePreference({ todoView: view }).catch(() => {
       message.warning(t('settings.saveFailed'));
@@ -998,14 +1002,7 @@
     margin-bottom: 10px;
   }
   .todo-workspace-toolbar__views {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     flex-shrink: 0;
-  }
-  .todo-workspace-toolbar__views > .active {
-    color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
   }
   .todo-quick-create {
     display: grid;
@@ -1015,8 +1012,31 @@
     min-width: 0;
     flex: 1;
   }
-  .todo-batch {
+  .todo-list-toolbar {
+    min-height: 46px;
     margin-bottom: 10px;
+    padding: 6px 10px;
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--background-color));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .todo-list-toolbar__select {
+    margin-left: auto;
+  }
+  .todo-list-toolbar__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .todo-list-toolbar :deep(.b_btn) {
+    min-height: 34px;
   }
   .todo-undo-banner {
     display: flex;
@@ -1257,8 +1277,19 @@
       grid-column: 1 / -1;
     }
     .todo-workspace-toolbar__views {
-      justify-content: space-between;
       width: 100%;
+    }
+    .todo-list-toolbar {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+    .todo-list-toolbar__actions {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+    .todo-list-toolbar__select {
+      min-height: 40px;
     }
     .todo-undo-banner {
       flex-wrap: wrap;
