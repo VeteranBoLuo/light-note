@@ -12,6 +12,7 @@ export interface UserPreferences {
   theme?: ThemePreference | string;
   noteViewMode?: 'card' | 'list';
   resourceView?: 'card' | 'list';
+  todoView?: 'list' | 'agenda' | 'calendar';
   tagView?: 'card' | 'graph';
   lang?: LanguagePreference;
   homePage?: HomePagePreference;

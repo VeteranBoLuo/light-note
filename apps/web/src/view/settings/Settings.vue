@@ -173,6 +173,26 @@
 
             <div class="field">
               <div class="field-head">
+                <span class="field-label">{{ t('settings.todoView') }}</span>
+                <span class="field-desc">{{ t('settings.todoViewDesc') }}</span>
+              </div>
+              <div class="seg">
+                <BButton
+                  v-for="o in todoViewOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.todoView || 'list') === o.v }"
+                  :type="(user.preferences.todoView || 'list') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.todoView || 'list') === o.v"
+                  @click="set('todoView', o.v)"
+                >
+                  {{ o.label }}
+                </BButton>
+              </div>
+            </div>
+
+            <div v-if="!bookmark.isMobile" class="field">
+              <div class="field-head">
                 <span class="field-label">{{ t('settings.noteView') }}</span>
                 <span class="field-desc">{{ t('settings.noteViewDesc') }}</span>
               </div>
@@ -191,7 +211,7 @@
               </div>
             </div>
 
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.resourceView') }}</span>
                 <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
@@ -231,7 +251,7 @@
               </div>
             </div>
 
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.tagView') }}</span>
                 <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
@@ -974,6 +994,11 @@
   const bookmarkOpenOpts = computed(() => [
     { v: 'newTab', label: t('settings.bookmarkOpenNew') },
     { v: 'current', label: t('settings.bookmarkOpenCurrent') },
+  ]);
+  const todoViewOpts = computed(() => [
+    { v: 'list', label: t('inbox.todoViewList') },
+    { v: 'agenda', label: t('inbox.todoViewAgenda') },
+    { v: 'calendar', label: t('inbox.todoViewCalendar') },
   ]);
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },

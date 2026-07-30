@@ -1220,17 +1220,24 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    min-height: 182px;
+    min-height: 178px;
     border-radius: @radius-card;
     overflow: hidden;
     cursor: pointer;
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--resource-tag-color) 4%, var(--tag-card-bg)),
+      var(--tag-card-bg) 42%
+    );
     transition:
+      transform 0.2s ease,
       border-color 0.2s ease,
       box-shadow 0.2s ease;
 
     &:hover,
     &:focus-visible {
       outline: none;
+      transform: translateY(-1px);
       border-color: color-mix(in srgb, var(--resource-tag-color) 32%, var(--tag-border-color));
     }
 
@@ -1245,7 +1252,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 15px 15px 11px;
+    padding: 14px 14px 12px;
   }
 
   .tag-identity,
@@ -1277,6 +1284,8 @@
     width: 42px;
     height: 42px;
     border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 14%, transparent);
+    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--tag-card-bg));
     font-size: 20px;
     font-weight: 700;
   }
@@ -1368,7 +1377,11 @@
     display: flex;
     align-items: center;
     gap: 0;
-    padding: 0 15px 11px;
+    margin: 0 14px 11px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 8%, var(--tag-border-color));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--resource-tag-color) 3%, var(--tag-muted-bg));
   }
 
   .resource-metric {
@@ -1437,12 +1450,15 @@
     flex: 1;
     flex-direction: column;
     gap: 9px;
-    padding: 0 15px 12px;
+    min-width: 0;
+    padding: 10px 14px 13px;
+    border-top: 1px solid color-mix(in srgb, var(--resource-tag-color) 8%, var(--tag-border-color));
+    background: color-mix(in srgb, var(--tag-muted-bg) 58%, transparent);
   }
 
   .compact-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     min-width: 0;
   }
@@ -1450,7 +1466,6 @@
   .compact-label {
     width: 58px;
     flex-shrink: 0;
-    padding-top: 4px;
     font-size: 11px;
     color: var(--sub-text-color);
   }
@@ -1503,7 +1518,7 @@
     max-width: 150px;
     gap: 6px;
     padding: 0 8px;
-    background: transparent;
+    background: var(--tag-card-bg);
   }
 
   .preview-name {

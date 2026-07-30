@@ -1,11 +1,5 @@
 <template>
   <main class="mobile-ai-workspace">
-    <header class="mobile-ai-workspace__header">
-      <div>
-        <h1>{{ t('ai.title') }}</h1>
-        <p>{{ t('mobileNavigation.aiWorkspaceSubtitle') }}</p>
-      </div>
-    </header>
     <AiWorkspaceShell ref="workspaceRef" class="mobile-ai-workspace__body" />
     <transition name="mobile-ai-history">
       <section
@@ -137,26 +131,6 @@
     flex-direction: column;
     overflow: hidden;
     background: var(--background-color);
-  }
-
-  .mobile-ai-workspace__header {
-    padding: 12px 16px 8px;
-    flex: 0 0 auto;
-    border-bottom: 1px solid var(--surface-divider-color);
-  }
-
-  .mobile-ai-workspace__header h1 {
-    margin: 0;
-    color: var(--text-color);
-    font-size: 19px;
-    line-height: 26px;
-  }
-
-  .mobile-ai-workspace__header p {
-    margin: 2px 0 0;
-    color: var(--desc-color);
-    font-size: 12px;
-    line-height: 18px;
   }
 
   .mobile-ai-workspace__body {

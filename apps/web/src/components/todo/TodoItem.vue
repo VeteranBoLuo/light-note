@@ -1,13 +1,5 @@
 <template>
   <article class="todo-item" :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed' }">
-    <BButton
-      v-if="draggable"
-      class="todo-item__drag-handle"
-      :aria-label="t('inbox.todoDrag')"
-      :disabled="disabled || item.status === 'completed'"
-    >
-      <SvgIcon :src="icon.todo.drag" size="16" aria-hidden="true" />
-    </BButton>
     <BCheckbox
       v-if="selectable"
       class="todo-item__select"
@@ -25,6 +17,7 @@
         <span v-if="item.recurrence" class="todo-recurrence-label">{{ recurrenceLabel }}</span>
       </div>
       <BCheckbox
+        v-if="!selectable"
         class="todo-item__main-check"
         :model-value="item.status === 'completed'"
         :disabled="disabled"
@@ -32,6 +25,7 @@
       >
         <span class="todo-item__title">{{ item.title }}</span>
       </BCheckbox>
+      <div v-else class="todo-item__selection-title">{{ item.title }}</div>
       <p v-if="item.description" class="todo-item__description">{{ item.description }}</p>
       <section v-if="item.checklist?.length" class="todo-checklist">
         <header class="todo-checklist__header">
@@ -96,8 +90,6 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import type { TodoChecklistItem, TodoItem, TodoPriority } from '@/api/todoApi';
 
@@ -107,7 +99,6 @@
     deleting?: boolean;
     selectable?: boolean;
     selected?: boolean;
-    draggable?: boolean;
   }>();
   const emit = defineEmits<{
     'toggle-complete': [completed: boolean];
@@ -150,9 +141,7 @@
     if (!recurrence) return '';
     return t(`inbox.todoRecurrenceSummary.${recurrence.frequency}`, { interval: recurrence.interval });
   });
-  const priorityOptions = computed(() =>
-    [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
-  );
+  const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
 
   function toggleChecklist(id: string, done: boolean) {
     emit(
@@ -185,18 +174,6 @@
       color-mix(in srgb, var(--primary-color) 6%, var(--background-color)),
       var(--background-color) 42%
     );
-  }
-  .todo-item__drag-handle {
-    position: absolute;
-    top: 11px;
-    right: 10px;
-    z-index: 1;
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
-    padding: 0;
-    cursor: grab;
-    color: var(--desc-color);
   }
   .todo-item__select {
     position: absolute;
@@ -273,7 +250,17 @@
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
-  .is-completed .todo-item__title {
+  .todo-item__selection-title {
+    margin-top: 5px;
+    padding: 2px 0 2px 30px;
+    color: var(--text-color);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .is-completed .todo-item__title,
+  .is-completed .todo-item__selection-title {
     color: var(--desc-color);
     text-decoration: line-through;
   }
@@ -327,11 +314,23 @@
     align-self: center;
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    gap: 10px;
   }
   .todo-item__priority-select {
-    width: 108px;
+    width: 116px;
+  }
+  .todo-item__actions :deep(.select-trigger),
+  .todo-item__actions :deep(.b_btn) {
+    height: 44px;
+    min-height: 44px;
+    box-sizing: border-box;
+    border-radius: 10px;
+  }
+  .todo-item__actions :deep(.b_btn) {
+    padding: 0 14px;
+    line-height: 44px;
   }
   .todo-snooze-menu {
     display: grid;
@@ -344,7 +343,6 @@
     min-height: 36px;
   }
   @media (pointer: coarse) {
-    .todo-item__drag-handle,
     .todo-snooze-menu :deep(.b_btn) {
       min-height: 44px;
     }

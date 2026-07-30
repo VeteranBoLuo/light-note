@@ -60,23 +60,21 @@
           {{ t('inbox.todoQuickCreate') }}
         </BButton>
       </form>
-      <BTabs v-model:active-tab="todoView" :options="todoViewOptions" variant="pill" />
-    </section>
-
-    <section v-if="isTodoFocused && todoView === 'list' && todo.status !== 'completed'" class="todo-priority-drops">
-      <div v-for="priority in ([2, 1, 0] as const)" :key="priority" :class="`is-priority-${priority}`">
-        <span>{{ t('inbox.todoDragToPriority', { priority: t(`inbox.todoPriority${priority}`) }) }}</span>
-        <VueDraggable
-          v-model="priorityDropLists[priority]"
-          :group="{ name: 'todo-board', pull: false, put: true }"
-          :data-priority="priority"
-          class="todo-priority-drop-target"
-          @add="handlePriorityDrop(priority)"
-        />
+      <div class="todo-workspace-toolbar__views">
+        <BTabs v-model:active-tab="todoView" :options="todoViewOptions" variant="pill" />
+        <BButton
+          v-if="todoView === 'list'"
+          size="small"
+          :class="{ active: todoSelectionMode }"
+          :aria-pressed="todoSelectionMode"
+          @click="toggleTodoSelectionMode"
+        >
+          {{ t(todoSelectionMode ? 'inbox.todoBatchCancel' : 'inbox.todoBatchSelect') }}
+        </BButton>
       </div>
     </section>
 
-    <section v-if="isTodoFocused && selectedTodoIds.length" class="inbox-batch todo-batch">
+    <section v-if="isTodoFocused && todoSelectionMode" class="inbox-batch todo-batch">
       <BCheckbox
         :model-value="selectedTodoIds.length === todo.items.length"
         :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
@@ -90,18 +88,29 @@
           size="small"
           type="primary"
           :loading="todoBatchMutating"
+          :disabled="!selectedTodoIds.length"
           @click="completeSelectedTodos"
         >
           {{ t('inbox.completeSelected') }}
         </BButton>
-        <BButton size="small" type="danger" :loading="todoBatchMutating" @click="confirmDeleteSelectedTodos">
+        <BButton
+          size="small"
+          type="danger"
+          :loading="todoBatchMutating"
+          :disabled="!selectedTodoIds.length"
+          @click="confirmDeleteSelectedTodos"
+        >
           {{ t('inbox.deleteSelected') }}
         </BButton>
       </div>
     </section>
 
     <section v-if="todoUndo" class="todo-undo-banner" role="status">
-      <span>{{ todoUndo.kind === 'delete' ? t('inbox.todoDeletedCount', { count: todoUndo.ids.length }) : t('inbox.todoCompletedCount', { count: todoUndo.ids.length }) }}</span>
+      <span>{{
+        todoUndo.kind === 'delete'
+          ? t('inbox.todoDeletedCount', { count: todoUndo.ids.length })
+          : t('inbox.todoCompletedCount', { count: todoUndo.ids.length })
+      }}</span>
       <BButton size="small" :loading="todoUndoing" @click="undoTodoAction">{{ t('common.undo') }}</BButton>
       <BButton size="small" :aria-label="t('common.close')" @click="clearTodoUndo">{{ t('common.close') }}</BButton>
     </section>
@@ -173,24 +182,12 @@
                 <strong>{{ t(`inbox.todoGroups.${group.key}`) }}</strong>
                 <span>{{ group.items.length }}</span>
               </header>
-              <VueDraggable
-                v-model="group.items"
-                :group="{ name: 'todo-board', pull: true, put: todo.status !== 'completed' }"
-                :disabled="todo.status === 'completed'"
-                :animation="180"
-                handle=".todo-item__drag-handle"
-                :data-group="group.key"
-                class="todo-group__items"
-                ghost-class="todo-drag-ghost"
-                @end="handleTodoDragEnd"
-              >
+              <div class="todo-group__items">
                 <TodoItem
                   v-for="item in group.items"
                   :key="item.id"
-                  :data-todo-id="item.id"
                   :item="item"
-                  draggable
-                  selectable
+                  :selectable="todoSelectionMode"
                   :selected="selectedTodoIds.includes(item.id)"
                   :disabled="hasPendingOperation || todoBatchMutating"
                   :deleting="deletingTodoId === item.id"
@@ -203,7 +200,7 @@
                   @snooze="snoozeTodoItem(item, $event)"
                   @update-priority="updateTodoPriority(item, $event)"
                 />
-              </VueDraggable>
+              </div>
             </section>
           </div>
           <div v-else class="inbox-list">
@@ -265,7 +262,6 @@
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
   import TodoScheduleView from '@/components/todo/TodoScheduleView.vue';
-  import { VueDraggable } from 'vue-draggable-plus';
   import { buildIcsFileName, buildTodoIcs, deliverIcsFile } from '@/utils/ics';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import type { InboxItem as InboxItemType } from '@/api/inboxApi';
@@ -284,7 +280,6 @@
   } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import {
-    dueForTodoGroup,
     quickTodoDueAt,
     todoGroupKey,
     todoSnoozeAt,
@@ -292,6 +287,7 @@
     type TodoQuickDue,
     type TodoSnoozePreset,
   } from '@/utils/todoPlanning';
+  import { updatePreference } from '@/utils/savePreference';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -315,12 +311,15 @@
   const quickTodoDue = ref<TodoQuickDue>('today');
   const quickTodoPriority = ref<TodoPriority>(1);
   const quickCreating = ref(false);
-  const todoView = ref<'list' | 'agenda' | 'calendar'>('list');
+  type TodoView = 'list' | 'agenda' | 'calendar';
+  const normalizeTodoView = (value: unknown): TodoView =>
+    value === 'agenda' || value === 'calendar' ? value : 'list';
+  const todoView = ref<TodoView>(normalizeTodoView(user.preferences.todoView));
+  const todoSelectionMode = ref(false);
   const selectedTodoIds = ref<string[]>([]);
   const todoBatchMutating = ref(false);
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
-  const priorityDropLists = ref<Record<TodoPriority, TodoItemType[]>>({ 0: [], 1: [], 2: [] });
   const todoGroupLists = ref<Array<{ key: TodoGroupKey; items: TodoItemType[] }>>([]);
   let todoUndoTimer = 0;
   const scrollContainer = ref<HTMLElement | null>(null);
@@ -469,6 +468,7 @@
   watch(
     () => user.id,
     async (id) => {
+      todoView.value = normalizeTodoView(user.preferences.todoView);
       inbox.resetForOwner(id || 'visitor');
       todo.resetForOwner(id || 'visitor');
       syncRequestedMobileMode();
@@ -517,6 +517,19 @@
     () => todo.items,
     () => syncTodoGroups(),
   );
+  watch(
+    () => user.preferences.todoView,
+    (view) => {
+      const preferredView = normalizeTodoView(view);
+      if (todoView.value !== preferredView) todoView.value = preferredView;
+    },
+  );
+  watch(todoView, (view) => {
+    if (user.preferences.todoView === view) return;
+    updatePreference({ todoView: view }).catch(() => {
+      message.warning(t('settings.saveFailed'));
+    });
+  });
 
   watch(
     () => route.query.tab,
@@ -646,45 +659,7 @@
         items: todo.items.filter((item) => todoGroupKey(item) === key),
       }))
       .filter((group) => group.items.length > 0);
-    priorityDropLists.value = { 0: [], 1: [], 2: [] };
     selectedTodoIds.value = selectedTodoIds.value.filter((id) => todo.items.some((item) => item.id === id));
-  }
-  function dueForGroup(key: TodoGroupKey) {
-    return dueForTodoGroup(key);
-  }
-  function orderedTodoPayload() {
-    return todoGroupLists.value
-      .flatMap((group) => group.items)
-      .map((item) => ({ id: item.id, dueAt: item.dueAt || null, priority: item.priority }));
-  }
-  async function handleTodoDragEnd(event: any) {
-    if (event?.to?.dataset?.priority !== undefined) return;
-    const id = String(event?.item?.dataset?.todoId || '');
-    const targetGroup = String(event?.to?.dataset?.group || '') as TodoGroupKey;
-    const item = todoGroupLists.value.flatMap((group) => group.items).find((candidate) => candidate.id === id);
-    if (!item || !targetGroup || targetGroup === 'completed') {
-      syncTodoGroups();
-      return;
-    }
-    const previousGroup = todoGroupKey(item);
-    if (previousGroup !== targetGroup) item.dueAt = dueForGroup(targetGroup);
-    if (!(await todo.reorder(orderedTodoPayload()))) {
-      message.error(t('inbox.todoReorderFailed'));
-      await todo.refreshList();
-    }
-  }
-  async function handlePriorityDrop(priority: TodoPriority) {
-    await nextTick();
-    const item = priorityDropLists.value[priority][0];
-    if (!item) return;
-    item.priority = priority;
-    const payload = todo.items.map((candidate) => ({
-      id: candidate.id,
-      dueAt: candidate.dueAt || null,
-      priority: candidate.id === item.id ? priority : candidate.priority,
-    }));
-    if (!(await todo.reorder(payload))) message.error(t('inbox.todoReorderFailed'));
-    priorityDropLists.value[priority] = [];
   }
   async function updateTodoPriority(item: TodoItemType, priority: TodoPriority) {
     if (item.priority === priority) return;
@@ -713,6 +688,10 @@
     selectedTodoIds.value = selected
       ? [...new Set([...selectedTodoIds.value, id])]
       : selectedTodoIds.value.filter((value) => value !== id);
+  }
+  function toggleTodoSelectionMode() {
+    todoSelectionMode.value = !todoSelectionMode.value;
+    if (!todoSelectionMode.value) selectedTodoIds.value = [];
   }
   function toggleSelectAllTodos(selected: boolean) {
     selectedTodoIds.value = selected ? todo.items.map((item) => item.id) : [];
@@ -1018,6 +997,16 @@
     gap: 12px;
     margin-bottom: 10px;
   }
+  .todo-workspace-toolbar__views {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .todo-workspace-toolbar__views > .active {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--background-color));
+  }
   .todo-quick-create {
     display: grid;
     grid-template-columns: minmax(220px, 1fr) 132px 108px auto;
@@ -1025,36 +1014,6 @@
     gap: 7px;
     min-width: 0;
     flex: 1;
-  }
-  .todo-priority-drops {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  .todo-priority-drops > div {
-    position: relative;
-    min-height: 38px;
-    border: 1px dashed color-mix(in srgb, var(--primary-color) 30%, var(--card-border-color));
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--primary-color) 3%, transparent);
-  }
-  .todo-priority-drops > div.is-priority-2 {
-    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 45%, var(--card-border-color));
-  }
-  .todo-priority-drops > div > span {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    pointer-events: none;
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-  .todo-priority-drop-target {
-    position: relative;
-    z-index: 1;
-    min-height: 38px;
   }
   .todo-batch {
     margin-bottom: 10px;
@@ -1076,10 +1035,15 @@
   .todo-group-list {
     display: grid;
     gap: 16px;
+    padding: 8px 10px 22px;
   }
   .todo-group {
     display: grid;
     gap: 8px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 12%, var(--card-border-color));
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--background-color));
   }
   .todo-group > header {
     display: flex;
@@ -1100,9 +1064,6 @@
     display: grid;
     min-height: 18px;
     gap: 10px;
-  }
-  .todo-drag-ghost {
-    opacity: 0.42;
   }
   .inbox-back-btn {
     width: 34px;
@@ -1295,12 +1256,9 @@
     .todo-quick-create > :first-child {
       grid-column: 1 / -1;
     }
-    .todo-priority-drops {
-      grid-template-columns: 1fr;
-    }
-    .todo-priority-drop-target,
-    .todo-priority-drops > div {
-      min-height: 44px;
+    .todo-workspace-toolbar__views {
+      justify-content: space-between;
+      width: 100%;
     }
     .todo-undo-banner {
       flex-wrap: wrap;

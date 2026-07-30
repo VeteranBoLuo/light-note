@@ -46,6 +46,7 @@ interface UserInfo {
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
     uiScale?: 'small' | 'medium' | 'large'; // 界面缩放(整体风格:小/标准/大,用 zoom 实现)
     resourceView?: 'card' | 'list'; // 资源中心视图
+    todoView?: 'list' | 'agenda' | 'calendar'; // 待办默认视图
     cloudView?: 'card' | 'table'; // 云空间视图:卡片/表格
     tagView?: 'card' | 'graph'; // 标签详情视图
     tagManageView?: 'card' | 'list'; // 标签管理页视图:卡片/列表
@@ -101,6 +102,7 @@ const createDefaultUserState = (): UserState => ({
   preferences: {
     theme: 'day', // 主题
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
+    todoView: 'list', // 待办默认视图
     lang: 'zh-CN', // 语言
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)
     notifyFeatureRequest: true,

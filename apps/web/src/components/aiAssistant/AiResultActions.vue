@@ -780,11 +780,11 @@
 <style scoped lang="less">
   .ai-result-actions {
     display: flex;
-    width: min(760px, calc(100% - 44px));
+    width: min(760px, 100%);
     flex-wrap: wrap;
     align-items: center;
     gap: 5px;
-    margin: -8px 0 14px 44px;
+    margin: -8px 0 14px;
   }
 
   .ai-result-actions__button,
@@ -997,12 +997,13 @@
   @container ai-chat (max-width: 520px) {
     .ai-result-actions {
       width: 100%;
-      margin: 0 0 12px;
+      margin: 0 0 10px;
     }
 
     .ai-result-actions__button,
     .ai-result-actions__text {
       min-height: 44px;
+      padding-inline: 7px;
     }
 
     .ai-result-reuse__preview dl > div {

@@ -2463,7 +2463,11 @@
 
   @container ai-chat (max-width: 520px) {
     .recommendation-dock {
-      padding-inline: 0.5rem;
+      min-height: 0;
+      flex: 0 0 auto;
+      align-items: stretch;
+      padding: 2px 10px 3px;
+      overflow: hidden;
     }
   }
 
@@ -2514,18 +2518,7 @@
       border-radius: 0;
     }
     .messages-container {
-      padding: 0.75rem 0.5rem;
-    }
-    .message-content {
-      max-width: 85%;
-    }
-    .input-section {
-      padding: 1rem;
-    }
-    .avatar {
-      width: 2rem;
-      height: 2rem;
-      font-size: 1rem;
+      padding: 0.65rem 0.625rem;
     }
 
     /* 移动端调整滚动提示位置 */

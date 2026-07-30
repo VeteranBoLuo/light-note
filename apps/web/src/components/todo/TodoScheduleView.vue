@@ -186,6 +186,8 @@
   .todo-agenda {
     display: grid;
     gap: 8px;
+    padding: 10px 14px 22px;
+    box-sizing: border-box;
   }
   .todo-agenda-item {
     display: grid;
@@ -229,6 +231,9 @@
     }
     .todo-agenda-item {
       grid-template-columns: 86px minmax(0, 1fr);
+    }
+    .todo-agenda {
+      padding: 8px 10px 18px;
     }
   }
 </style>

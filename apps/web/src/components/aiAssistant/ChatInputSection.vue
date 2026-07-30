@@ -380,17 +380,26 @@
 
   @media (max-width: 600px) {
     .input-section {
-      padding: 0.25rem 0.35rem calc(0.3rem + env(safe-area-inset-bottom));
+      padding: 0.25rem 0.625rem calc(0.4rem + env(safe-area-inset-bottom));
     }
 
     .input-container {
-      padding: 0.45rem 0.55rem 0.4rem;
-      border-radius: 0.875rem;
+      padding: 0.45rem 0.5rem 0.4rem;
+      border-radius: 1rem;
     }
 
     .context-actions {
+      flex-wrap: nowrap;
+      align-items: center;
       gap: 4px;
       margin-bottom: 4px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+    }
+
+    .context-actions::-webkit-scrollbar {
+      display: none;
     }
 
     .context-actions :deep(.b_btn),
@@ -402,6 +411,7 @@
 
     .text-input :deep(.b-textarea) {
       min-height: 42px;
+      max-height: 88px;
     }
 
     .composer-toolbar {

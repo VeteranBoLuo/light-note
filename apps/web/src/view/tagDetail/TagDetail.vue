@@ -62,7 +62,7 @@
         </div>
       </div>
 
-      <div class="view-switch">
+      <div v-if="!bookmark.isMobile" class="view-switch">
         <b-button
           class="view-switch-btn"
           :class="{ active: viewMode === 'card' }"
@@ -229,7 +229,7 @@
   import { useRoute, useRouter } from 'vue-router';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
@@ -250,6 +250,7 @@
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const { t } = useI18n();
 
   const tag = ref<any>({});
@@ -558,6 +559,7 @@
   }
 
   function setViewMode(mode: 'graph' | 'card') {
+    if (bookmark.isMobile) return;
     viewMode.value = mode;
     localStorage.setItem(TAG_DETAIL_VIEW_MODE_KEY, mode);
     updatePreference({ tagView: mode }).catch(() => {}); // 记忆到偏好:跨设备 + 设置页可改
@@ -669,11 +671,22 @@
     },
   );
 
-  onMounted(() => {
-    const saved = user.preferences.tagView || localStorage.getItem(TAG_DETAIL_VIEW_MODE_KEY);
-    if (saved === 'graph' || saved === 'card') {
-      viewMode.value = saved;
+  function restorePreferredViewMode() {
+    if (bookmark.isMobile) {
+      viewMode.value = 'card';
+      return;
     }
+    const saved = user.preferences.tagView || localStorage.getItem(TAG_DETAIL_VIEW_MODE_KEY);
+    viewMode.value = saved === 'graph' ? 'graph' : 'card';
+  }
+
+  watch(
+    () => bookmark.isMobile,
+    () => restorePreferredViewMode(),
+  );
+
+  onMounted(() => {
+    restorePreferredViewMode();
     loadTagDetail();
   });
 </script>

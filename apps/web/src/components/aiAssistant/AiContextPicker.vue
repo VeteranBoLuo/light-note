@@ -276,4 +276,30 @@
       min-height: 44px;
     }
   }
+
+  @media (max-width: 600px) {
+    .ai-context-picker,
+    .ai-context-chips {
+      max-width: none;
+      flex: 0 0 auto;
+      flex-wrap: nowrap;
+    }
+
+    .ai-context-picker {
+      gap: 4px;
+    }
+
+    .ai-context-chips {
+      gap: 4px;
+    }
+
+    .ai-context-picker :deep(.b_btn) {
+      height: 36px;
+      min-height: 36px;
+    }
+
+    .ai-context-chip__title {
+      max-width: 112px;
+    }
+  }
 </style>

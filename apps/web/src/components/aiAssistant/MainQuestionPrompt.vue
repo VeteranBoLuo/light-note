@@ -169,40 +169,58 @@
 
   @media (max-width: 600px) {
     .recommendation-container {
-      height: auto;
-      max-height: min(196px, 30vh);
-      padding-top: 7px;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 5px;
-      overflow-y: auto;
+      height: 44px;
+      min-height: 44px;
+      padding: 2px 0;
+      box-sizing: border-box;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
     }
 
     .recommendation-title {
+      padding-left: 0;
       font-size: 0.6875rem;
+      color: color-mix(in srgb, var(--primary-color) 72%, var(--desc-color));
     }
 
     .recommendation-list {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 5px;
-      overflow: visible;
+      display: flex;
+      min-width: 0;
+      gap: 6px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x proximity;
     }
 
     .recommendation-item {
-      width: 100%;
-      height: 44px;
-      min-height: 44px;
-      max-width: none;
+      width: max-content;
+      height: 40px;
+      min-height: 40px;
+      max-width: min(240px, 72vw);
       padding: 0 12px;
-      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--surface-border-color));
+      border-radius: 10px;
+      background: var(--card-background);
+      color: var(--text-color);
+      box-shadow: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
     }
 
     .recommendation-more {
-      width: 100%;
-      min-height: 44px;
+      width: max-content;
+      min-width: 72px;
+      min-height: 40px;
+      flex: 0 0 auto;
       color: var(--primary-color);
       background: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
     }
   }
 </style>

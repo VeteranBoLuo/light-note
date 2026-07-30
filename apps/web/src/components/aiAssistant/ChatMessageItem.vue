@@ -717,6 +717,77 @@
     }
   }
 
+  @media (max-width: 600px) {
+    .message {
+      margin-bottom: 0.875rem;
+    }
+
+    .message.assistant {
+      margin-bottom: 0.375rem;
+    }
+
+    .message-content {
+      width: 100%;
+      max-width: 100%;
+      gap: 0.45rem;
+    }
+
+    .message.user .message-content {
+      width: auto;
+      max-width: 92%;
+    }
+
+    .avatar {
+      width: 2rem;
+      height: 2rem;
+      font-size: 1rem;
+    }
+
+    .navigation-icon {
+      margin-left: 0 !important;
+    }
+
+    .message.user .bubble {
+      padding: 0.55rem 0.75rem;
+      border-radius: 0.875rem 0.875rem 0.25rem;
+      background: color-mix(in srgb, var(--primary-color) 7%, var(--ai-user-background-color));
+    }
+
+    .message.assistant .bubble {
+      width: 100%;
+      max-width: 100%;
+      padding: 0;
+      box-sizing: border-box;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .message.assistant .bubble-col,
+    .message.assistant .text {
+      width: 100%;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .message.assistant .text :deep(a) {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .text {
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+
+    .msg-footer {
+      margin-top: 0.1rem;
+      padding: 0;
+    }
+  }
+
   .msg-action-btn:hover {
     opacity: 1;
     color: var(--primary-color);

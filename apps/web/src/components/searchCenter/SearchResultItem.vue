@@ -44,11 +44,7 @@
         @change="emit('toggle-select')"
       />
 
-      <BButton
-        class="result-click-area"
-        :class="{ 'result-click-area--selectable': selectable }"
-        @click="emit('open')"
-      >
+      <BButton class="result-click-area" :class="{ 'result-click-area--selectable': selectable }" @click="emit('open')">
         <header class="item-head">
           <span class="type-pill" :class="`type-pill--${item.type}`">{{ typeLabel }}</span>
           <span class="item-extra">{{ headerExtra }}</span>
@@ -346,12 +342,21 @@
     padding: 14px;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
     gap: 8px;
     box-sizing: border-box;
-    height: auto;
+    height: 100%;
     line-height: normal;
     border-radius: 14px;
     background: transparent;
+    overflow: hidden;
+    white-space: normal;
+  }
+
+  .result-click-area:hover,
+  .result-click-area:active {
+    background-color: transparent !important;
   }
 
   .result-click-area--selectable {
@@ -363,6 +368,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    width: 100%;
+    min-width: 0;
     min-height: 24px;
   }
 
@@ -403,6 +410,8 @@
   }
 
   .item-title {
+    width: 100%;
+    min-width: 0;
     margin: 0;
     font-size: 16px;
     line-height: 1.35;
@@ -414,6 +423,8 @@
   }
 
   .item-desc {
+    width: 100%;
+    min-width: 0;
     margin: 0;
     color: var(--desc-color);
     line-height: 1.55;
@@ -444,6 +455,8 @@
   .item-meta {
     display: flex;
     flex-direction: column;
+    width: 100%;
+    min-width: 0;
     gap: 2px;
     min-height: 40px;
     margin-top: auto;
