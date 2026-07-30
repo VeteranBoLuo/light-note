@@ -2466,7 +2466,7 @@
       min-height: 0;
       flex: 0 0 auto;
       align-items: stretch;
-      padding: 2px 10px 3px;
+      padding: 0 10px 2px;
       overflow: hidden;
     }
   }

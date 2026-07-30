@@ -53,7 +53,12 @@ describe('ScrollPrompt', () => {
     expect(scrollPromptSource).not.toContain('inset: 0');
     expect(scrollPromptSource).toMatch(/\.loading-spinner\s*\{[\s\S]*?top:\s*0;/);
     expect(scrollPromptSource).toMatch(/\.loading-spinner\s*\{[\s\S]*?box-sizing:\s*border-box;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?border:\s*0;/);
+    expect(scrollPromptSource).toMatch(
+      /\.prompt-icon\.is-loading \.loading-spinner\s*\{[\s\S]*?border:\s*2px solid rgba\(97, 92, 237, 0\.14\);/,
+    );
     expect(androidCompatStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?flex:\s*0 0 44px;/);
+    expect(androidCompatStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?border:\s*0;/);
     expect(androidCompatStyles).toMatch(
       /\.scroll-prompt \.loading-spinner\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/,
     );

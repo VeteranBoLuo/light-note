@@ -499,7 +499,7 @@ export default {
     todoPreviousMonth: 'Previous month',
     todoNextMonth: 'Next month',
     todoMoreInDay: '{count} more',
-    todoScheduleEmpty: 'No todos in this time range',
+    todoScheduleEmpty: 'No todos with a due time match the current filter',
     todoDragToPriority: 'Drop here to set {priority} priority',
     todoGroups: {
       overdue: 'Overdue',

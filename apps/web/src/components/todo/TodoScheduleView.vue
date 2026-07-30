@@ -10,6 +10,8 @@
       </BButton>
     </header>
 
+    <p v-if="!scheduledItems.length" class="todo-schedule-empty">{{ t('inbox.todoScheduleEmpty') }}</p>
+
     <div v-if="view === 'calendar'" class="todo-calendar-grid">
       <span v-for="label in weekdayLabels" :key="label" class="todo-calendar-weekday">{{ label }}</span>
       <div
@@ -61,7 +63,6 @@
           </span>
         </BButton>
       </article>
-      <p v-if="!agendaItems.length" class="todo-schedule-empty">{{ t('inbox.todoScheduleEmpty') }}</p>
     </div>
   </section>
 </template>
@@ -90,6 +91,9 @@
       formatter.format(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + index)),
     );
   });
+  const scheduledItems = computed(() =>
+    props.items.filter((item) => item.dueAt && Number.isFinite(parseDate(item.dueAt).getTime())),
+  );
   const calendarDays = computed(() => {
     const first = visibleMonth.value;
     const mondayOffset = (first.getDay() + 6) % 7;
@@ -103,13 +107,12 @@
         date,
         currentMonth: date.getMonth() === first.getMonth(),
         today: key === todayKey,
-        items: props.items.filter((item) => item.dueAt && dateKey(parseDate(item.dueAt)) === key),
+        items: scheduledItems.value.filter((item) => dateKey(parseDate(item.dueAt as string)) === key),
       };
     });
   });
   const agendaItems = computed(() =>
-    props.items
-      .filter((item) => item.dueAt && Number.isFinite(parseDate(item.dueAt).getTime()))
+    [...scheduledItems.value]
       .sort((left, right) => parseDate(left.dueAt as string).getTime() - parseDate(right.dueAt as string).getTime())
       .map((item) => {
         const date = parseDate(item.dueAt as string);
@@ -169,6 +172,7 @@
   .todo-calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-content: start;
     gap: 5px;
   }
   .todo-calendar-weekday {
@@ -336,22 +340,62 @@
     font-size: 10px;
   }
   .todo-schedule-empty {
-    padding: 28px;
+    margin: 0 18px 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
     color: var(--desc-color);
+    font-size: 12px;
     text-align: center;
   }
   @media (max-width: 767px) {
     .todo-calendar-grid {
-      min-width: 700px;
+      min-width: 0;
+      grid-auto-rows: 82px;
+      gap: 3px;
     }
     .todo-schedule-view {
-      overflow-x: auto;
+      overflow-x: hidden;
+    }
+    .todo-calendar-weekday {
+      padding: 3px 1px;
+      font-size: 9px;
+    }
+    .todo-calendar-day {
+      height: 82px;
+      min-height: 82px;
+      padding: 3px;
+      box-sizing: border-box;
+      overflow: hidden;
+      border-radius: 8px;
+    }
+    .todo-calendar-day > span {
+      font-size: 10px;
+    }
+    .todo-calendar-item {
+      min-height: 20px;
+      padding: 2px;
+      border-left-width: 2px;
+    }
+    .todo-calendar-item__main {
+      justify-content: center;
+    }
+    .todo-calendar-item__main time {
+      font-size: 8px;
+    }
+    .todo-calendar-item__main strong,
+    .todo-calendar-item__meta {
+      display: none;
     }
     .todo-agenda-item {
       grid-template-columns: 86px minmax(0, 1fr);
     }
     .todo-agenda {
       padding: 12px 14px 20px;
+    }
+    .todo-schedule-empty {
+      margin: 0 14px 8px;
+      padding: 8px 10px;
     }
   }
 </style>

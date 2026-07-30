@@ -489,7 +489,7 @@ export default {
     todoPreviousMonth: '上个月',
     todoNextMonth: '下个月',
     todoMoreInDay: '另有 {count} 项',
-    todoScheduleEmpty: '当前时间范围内没有待办',
+    todoScheduleEmpty: '当前筛选下没有设置截止时间的待办',
     todoDragToPriority: '拖到这里改为{priority}优先级',
     todoGroups: {
       overdue: '已逾期',

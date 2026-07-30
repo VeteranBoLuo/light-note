@@ -48,11 +48,11 @@
     height: 36px;
     padding: 0;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--text-color) 10%, transparent);
+    border: 0;
     border-radius: 50%;
     background: var(--card-background);
     color: var(--text-color);
-    box-shadow: 0 1px 16px color-mix(in srgb, var(--text-color) 18%, transparent);
+    box-shadow: 0 4px 14px rgba(97, 92, 237, 0.18);
   }
 
   .loading-spinner {
@@ -64,13 +64,14 @@
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    border: 2px solid transparent;
+    border: 0;
     border-radius: 50%;
     transform-origin: center;
     pointer-events: none;
   }
 
   .prompt-icon.is-loading .loading-spinner {
+    border: 2px solid rgba(97, 92, 237, 0.14);
     border-top-color: var(--primary-color);
     animation: spin 1s linear infinite;
   }

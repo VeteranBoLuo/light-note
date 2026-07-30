@@ -269,7 +269,7 @@
 
             <div ref="resultScrollRef" class="result-scroll-area">
               <div
-                v-if="showLoadingSkeleton"
+                v-if="shouldShowLoadingSkeleton"
                 class="result-skeleton"
                 :class="{ 'result-skeleton--list': effectiveView === 'list' }"
               >
@@ -611,6 +611,11 @@
   ]);
 
   const mappedItems = computed(() => mapDisplayItems(viewState.rawItems, queryState.keyword));
+  // 当前没有可复用结果时立即展示骨架屏，避免请求完成前短暂落入“没有匹配内容”空状态。
+  // 已经存在结果时仍保留延迟骨架，减少快速刷新造成的整块闪烁。
+  const shouldShowLoadingSkeleton = computed(
+    () => viewState.loading && (!viewState.rawItems.length || showLoadingSkeleton.value),
+  );
 
   const typeBuckets = computed(() => buildTypeBuckets(mappedItems.value));
 

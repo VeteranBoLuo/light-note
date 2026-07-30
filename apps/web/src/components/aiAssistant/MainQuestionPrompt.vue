@@ -3,7 +3,7 @@
     <div class="recommendation-title">{{ round > 0 ? $t('ai.followUpTip') : $t('ai.tip') }}</div>
     <div class="recommendation-list">
       <BButton
-        v-for="item in visibleRecommendationItems"
+        v-for="item in recommendationItems"
         :key="round + ':' + item"
         class="recommendation-item"
         @click="handleRecommendationClick(item, $event)"
@@ -11,30 +11,20 @@
       >
         {{ item }}
       </BButton>
-      <BButton
-        v-if="showMobileToggle"
-        class="recommendation-more"
-        :aria-expanded="mobileExpanded"
-        @click="mobileExpanded = !mobileExpanded"
-      >
-        {{ mobileExpanded ? t('ai.recommendationLess') : t('ai.recommendationMore') }}
-      </BButton>
     </div>
   </div>
 </template>
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { useUserStore } from '@/store';
   import { recommendedQuestionKeys } from './aiRecommendationPolicy';
 
   const { t } = useI18n();
   const route = useRoute();
-  const layout = bookmarkStore();
   const user = useUserStore();
-  const mobileExpanded = ref(false);
 
   const props = withDefaults(
     defineProps<{
@@ -71,19 +61,6 @@
     const offset = (props.round * 2) % available.length;
     return [...available.slice(offset), ...available.slice(0, offset)].slice(0, 3);
   });
-  const showMobileToggle = computed(() => layout.isMobile && recommendationItems.value.length > 2);
-  const visibleRecommendationItems = computed(() =>
-    showMobileToggle.value && !mobileExpanded.value
-      ? recommendationItems.value.slice(0, 2)
-      : recommendationItems.value,
-  );
-
-  watch(
-    () => [props.round, route.path, props.items],
-    () => {
-      mobileExpanded.value = false;
-    },
-  );
 
   function handleRecommendationClick(item: string, event?: MouseEvent) {
     // 点击后主动失焦:button 点击会保持 :focus,回答后新一轮快捷提问若复用相同位置的 DOM,残留的
@@ -169,25 +146,26 @@
 
   @media (max-width: 600px) {
     .recommendation-container {
-      height: 44px;
-      min-height: 44px;
+      height: 36px;
+      min-height: 36px;
       padding: 2px 0;
       box-sizing: border-box;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       overflow: hidden;
     }
 
     .recommendation-title {
       padding-left: 0;
-      font-size: 0.6875rem;
+      font-size: 0.625rem;
       color: color-mix(in srgb, var(--primary-color) 72%, var(--desc-color));
     }
 
     .recommendation-list {
       display: flex;
       min-width: 0;
-      gap: 6px;
+      align-items: center;
+      gap: 5px;
       overflow-x: auto;
       overscroll-behavior-x: contain;
       scroll-snap-type: x proximity;
@@ -195,28 +173,16 @@
 
     .recommendation-item {
       width: max-content;
-      height: 40px;
-      min-height: 40px;
-      max-width: min(240px, 72vw);
-      padding: 0 12px;
-      border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--surface-border-color));
-      border-radius: 10px;
-      background: var(--card-background);
+      height: 30px;
+      min-height: 30px;
+      max-width: min(216px, 68vw);
+      padding: 0 10px;
+      border: 0;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
       color: var(--text-color);
+      font-size: 0.6875rem;
       box-shadow: none;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-touch-callout: none;
-      touch-action: manipulation;
-    }
-
-    .recommendation-more {
-      width: max-content;
-      min-width: 72px;
-      min-height: 40px;
-      flex: 0 0 auto;
-      color: var(--primary-color);
-      background: transparent;
       user-select: none;
       -webkit-user-select: none;
       -webkit-touch-callout: none;

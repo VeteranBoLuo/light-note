@@ -525,6 +525,11 @@
     },
   );
   watch(todoView, (view) => {
+    void nextTick(() => {
+      if (!scrollContainer.value) return;
+      scrollContainer.value.scrollTop = 0;
+      updateScrollFade();
+    });
     if (view !== 'list' && todoSelectionMode.value) {
       todoSelectionMode.value = false;
       selectedTodoIds.value = [];
