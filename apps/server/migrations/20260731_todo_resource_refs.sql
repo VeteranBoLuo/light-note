@@ -7,8 +7,10 @@
 -- - target_id 指向多态资源（书签/笔记/文件），因此不建跨表外键；归属由服务层校验。
 -- - target_name_snapshot 用于目标被删除后仍能给出可理解的展示，读取时仍按权限实时解析真实标题。
 -- - todo_id 对 todo_items 建外键并级联删除：待办被物理删除时关系自动清理。
+-- - 排序规则必须与 todo_items(utf8mb4_general_ci)一致：外键两端 collation 不同会被
+--   MySQL 5.7 直接拒绝(Cannot add foreign key constraint),2026-07-31 上线时踩过。
 
-SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+SET NAMES utf8mb4;
 
 CREATE TABLE IF NOT EXISTS todo_resource_refs (
   todo_id               CHAR(36)     NOT NULL COMMENT '所属待办',
@@ -24,4 +26,4 @@ CREATE TABLE IF NOT EXISTS todo_resource_refs (
   KEY idx_todo_resource_refs_target (user_id, target_type, target_id),
   CONSTRAINT fk_todo_resource_refs_todo
     FOREIGN KEY (todo_id) REFERENCES todo_items(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='待办关联的参考资料';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='待办关联的参考资料';
