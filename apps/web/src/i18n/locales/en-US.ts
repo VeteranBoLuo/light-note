@@ -410,7 +410,7 @@ export default {
     todoDescription: 'Description',
     groupTodo: 'Todos',
     groupPending: 'To organize',
-    todoMentionHint: 'Type @ to link a bookmark, note, or file',
+    todoMentionHint: "Type {'@'} to link a bookmark, note, or file",
     todoResourceRefs: 'Linked resources ({count})',
     todoAddResource: 'Add resource',
     todoResourceRefsLimit: 'A todo can link at most {count} resources',

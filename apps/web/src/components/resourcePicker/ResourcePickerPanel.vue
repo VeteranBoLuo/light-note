@@ -21,6 +21,18 @@
       role="listbox"
       @scroll="onScroll"
     >
+      <BButton
+        v-for="(item, index) in pinned"
+        :key="`pinned:${item.type}:${item.id}`"
+        class="resource-picker-panel__item"
+        :class="{ 'is-active': index === activeIndex }"
+        :aria-selected="index === activeIndex"
+        @mouseenter="activeIndex = index"
+        @click="emit('select', item)"
+      >
+        <span class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
+        <span class="resource-picker-panel__title">{{ item.title }}</span>
+      </BButton>
       <template v-for="group in groups" :key="group.type">
         <div class="resource-picker-panel__group">{{ typeLabel(group.type) }}</div>
         <BButton
@@ -36,8 +48,8 @@
           <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
         </BButton>
       </template>
-      <span v-if="loading && !results.length" class="resource-picker-panel__hint">{{ t('ai.searching') }}</span>
-      <span v-else-if="!results.length" class="resource-picker-panel__hint">{{ t('ai.noContext') }}</span>
+      <span v-if="loading && !flatItems.length" class="resource-picker-panel__hint">{{ t('ai.searching') }}</span>
+      <span v-else-if="!flatItems.length" class="resource-picker-panel__hint">{{ t('ai.noContext') }}</span>
     </div>
   </div>
 </template>
@@ -70,6 +82,8 @@
       perType?: number;
       autoFocus?: boolean;
       placeholder?: string;
+      /** 置顶快捷项(如「当前页面」),始终显示在结果最上方 */
+      pinnedItems?: ResourcePickerItem[];
     }>(),
     { keyword: '', showSearch: true, autoFocus: true },
   );
@@ -79,10 +93,16 @@
   const { scrolling, onScroll } = useAutoHideScrollbar();
   const innerKeyword = ref('');
   const keywordInputRef = ref<{ focus?: () => void } | null>(null);
-  const { results, loading, activeIndex, search, searchNow, moveActive, reset } = useResourcePickerSearch({
+  const { results, loading, activeIndex, search, searchNow, reset } = useResourcePickerSearch({
     allowedTypes: props.allowedTypes,
     perType: props.perType,
   });
+
+  function moveActive(offset: number) {
+    const total = flatItems.value.length;
+    if (!total) return;
+    activeIndex.value = (activeIndex.value + offset + total) % total;
+  }
 
   const typeLabel = (type: string) => t(`ai.sourceTypes.${type}`);
   const typeColor = (type: string) => {
@@ -90,19 +110,41 @@
     return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
   };
 
-  // 结果已按类型顺序排好,这里只做切分并保留扁平下标供键盘导航使用
+  // 置顶项跟随生效关键字过滤,占据键盘导航的前几个下标
+  const pinned = computed(() => {
+    const list = props.pinnedItems || [];
+    const keyword = String((props.showSearch ? innerKeyword.value : props.keyword) || '')
+      .trim()
+      .toLowerCase();
+    return list.filter(
+      (item) => item && item.id && (!keyword || String(item.title || '').toLowerCase().includes(keyword)),
+    );
+  });
+
+  // 结果已按类型顺序排好,这里只做切分;下标接在置顶项之后,供键盘线性导航
   const groups = computed(() => {
+    const offset = pinned.value.length;
+    const pinnedKeys = new Set(pinned.value.map((item) => `${item.type}:${item.id}`));
     const out: { type: string; items: { item: ResourcePickerItem; index: number }[] }[] = [];
-    results.value.forEach((item, index) => {
+    let index = offset;
+    results.value.forEach((item) => {
+      if (pinnedKeys.has(`${item.type}:${item.id}`)) return;
       const last = out[out.length - 1];
-      if (last && last.type === item.type) last.items.push({ item, index });
-      else out.push({ type: item.type, items: [{ item, index }] });
+      const entry = { item, index };
+      if (last && last.type === item.type) last.items.push(entry);
+      else out.push({ type: item.type, items: [entry] });
+      index += 1;
     });
     return out;
   });
 
+  const flatItems = computed<ResourcePickerItem[]>(() => [
+    ...pinned.value,
+    ...groups.value.flatMap((group) => group.items.map((entry) => entry.item)),
+  ]);
+
   function chooseActive() {
-    const item = results.value[activeIndex.value];
+    const item = flatItems.value[activeIndex.value];
     if (item) emit('select', item);
   }
 
@@ -127,7 +169,7 @@
   );
 
   watch(
-    () => results.value.length,
+    () => flatItems.value.length,
     (count) => emit('results-count', count),
     { immediate: true },
   );
@@ -227,6 +269,13 @@
     &:hover {
       background: color-mix(in srgb, var(--primary-color) 10%, transparent) !important;
     }
+  }
+
+  .resource-picker-panel__pinned-tag {
+    flex: 0 0 auto;
+    color: var(--info-color, #1c7ed6);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .resource-picker-panel__dot {

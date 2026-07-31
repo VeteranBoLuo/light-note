@@ -247,11 +247,9 @@
   const MAX_RESOURCE_REFS = 10;
 
   // 浮层锚定在触发它的 @ 上:只在打开时算一次,继续输入不会让它漂走
-  const mentionAnchor = ref<{ left: number; top: number } | null>(null);
+  const mentionAnchor = ref<{ left: number } | null>(null);
   const mentionAnchorStyle = computed(() =>
-    mentionAnchor.value
-      ? { left: `${mentionAnchor.value.left}px`, top: `${mentionAnchor.value.top}px` }
-      : undefined,
+    mentionAnchor.value ? { left: `${mentionAnchor.value.left}px` } : undefined,
   );
 
   function updateMentionAnchor(target: HTMLTextAreaElement | null, query: MentionQuery) {
@@ -259,8 +257,8 @@
     if (!target || !field) return;
     const caret = getTextareaCaretRect(target, query.start);
     const offset = toAnchorOffset(caret, field);
-    // 说明框在弹框上部,浮层在 @ 所在行的下方展开
-    mentionAnchor.value = { left: Math.max(0, offset.left), top: offset.top + offset.lineHeight + 6 };
+    // 垂直方向固定在说明框整体下方(不遮输入内容),水平对齐触发的 @
+    mentionAnchor.value = { left: Math.max(0, Math.min(offset.left, field.offsetWidth - 60)) };
   }
 
   function closeMention() {
@@ -788,8 +786,8 @@
   /* 说明框位于弹框上部,向上弹会被 BModal 内容区裁掉,故改为向下展开 */
   .todo-mention-layer {
     position: absolute;
+    /* 垂直固定在说明框下方(不遮输入内容);水平 left 由内联样式对齐触发的 @ */
     left: 0;
-    /* left / top 由锚点计算写入内联样式,固定在触发的 @ 上 */
     top: calc(100% + 6px);
     width: max-content;
     max-width: 100%;

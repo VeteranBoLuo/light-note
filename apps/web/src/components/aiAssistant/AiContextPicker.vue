@@ -51,14 +51,13 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRoute } from 'vue-router';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search';
-  import { noteStore } from '@/store';
+  import { useCurrentPageResource } from '@/composables/useCurrentPageResource';
   import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
 
   export interface AiResourceContext {
@@ -73,8 +72,6 @@
     fileSelected: [value: AiResourceContext];
   }>();
   const { t } = useI18n();
-  const route = useRoute();
-  const nStore = noteStore();
   const open = ref(false);
   const keyword = ref('');
   const results = ref<AiResourceContext[]>([]);
@@ -82,17 +79,8 @@
   let debounceTimer: number | null = null;
   let searchRequestId = 0;
 
-  const currentPageContext = computed<AiResourceContext | null>(() => {
-    const id = String(route.params.id || '');
-    // 不用 document.title(整站标题「轻笺-轻量级知识管理工具」,会让用户误以为@的是整个项目);
-    // 笔记优先用 note store 里同步的真实标题,拿不到再退固定文案;书签/标签用固定文案。
-    if (route.path.startsWith('/noteLibrary/') && id && id !== 'add')
-      return { type: 'note', id, title: nStore.currentTitle || t('ai.currentNote') };
-    if (route.path.startsWith('/manage/editBookmark/') && id && id !== 'add')
-      return { type: 'bookmark', id, title: t('ai.currentBookmark') };
-    if (route.path.startsWith('/tag/') && id) return { type: 'tag', id, title: t('ai.currentTag') };
-    return null;
-  });
+  // 推导逻辑与 @ 浮层共用,避免两处口径漂移
+  const currentPageContext = useCurrentPageResource();
   const typeLabel = (type: SearchType) => t(`ai.sourceTypes.${type}`);
   const typeColor = (type: SearchType) => {
     const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];

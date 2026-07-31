@@ -174,7 +174,8 @@
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { isResourceMentionTextTrigger } from '@/utils/noteMentionTrigger';
+  import { resolveMentionQuery } from '@/utils/resourceMentionTrigger';
+  import { getTextareaCaretRect } from '@/utils/textareaCaret';
   import {
     applyResourceReferenceChipPresentation,
     buildResourceAnchorAttrs,
@@ -974,7 +975,8 @@
       return;
     }
     inlineMentionQuery.value = query.keyword;
-    setInlineMentionAnchor(getMarkdownCaretRect(textarea));
+    // 锚定在 @ 起点:继续输入时光标在动,浮层不应跟着漂
+    setInlineMentionAnchor(getTextareaCaretRect(textarea, query.start));
     if (!inlineMentionVisible.value) {
       inlineMentionVisible.value = true;
       recordResourceMentionOperation('打开资源提及选择器');
@@ -1020,14 +1022,15 @@
       if (!isValidTinyMceMentionText(text)) return closeInlineMention();
       htmlMentionSelection = { range: mentionRange, bookmark: null, markerId: null, text };
       inlineMentionQuery.value = text.slice(1);
-      const caretRange = currentRange.cloneRange();
-      caretRange.collapse(false);
-      const caretRect = caretRange.getBoundingClientRect();
-      // TinyMCE 的 Range rect 已是页面视口坐标；再次叠加 iframe 的 rect 会让浮层向下偏移一个编辑区高度。
+      // 锚定在 @ 起点(mentionRange 的起始),继续输入时浮层保持不动;
+      // TinyMCE 的 Range rect 已是页面视口坐标,不能再叠加 iframe 偏移。
+      const anchorRange = mentionRange.cloneRange();
+      anchorRange.collapse(true);
+      const anchorRect = anchorRange.getBoundingClientRect();
       setInlineMentionAnchor({
-        left: caretRect.left,
-        top: caretRect.top,
-        height: caretRect.height || 20,
+        left: anchorRect.left,
+        top: anchorRect.top,
+        height: anchorRect.height || 20,
       });
     } catch {
       closeInlineMention();

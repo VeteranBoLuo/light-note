@@ -39,6 +39,7 @@
             ref="mentionPanel"
             :show-search="false"
             :keyword="mentionQuery.keyword"
+            :pinned-items="mentionPinnedItems"
             @select="applyMentionSelection"
             @close="closeMention"
             @results-count="mentionHasResults = $event > 0"
@@ -121,6 +122,7 @@
     type MentionQuery,
   } from '@/utils/resourceMentionTrigger';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
+  import { useCurrentPageResource } from '@/composables/useCurrentPageResource';
   import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
@@ -216,6 +218,11 @@
   }
 
   // ── 输入 @ 唤起资源建议 ──────────────────────────────
+  // @ 浮层与「@ 添加资源」按钮共享同一条「当前页面」推导
+  const currentPageResource = useCurrentPageResource();
+  const mentionPinnedItems = computed(() =>
+    currentPageResource.value ? [currentPageResource.value] : [],
+  );
   const mentionQuery = ref<MentionQuery | null>(null);
   const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
   // 搜不到结果就整块不显示(与 Claude 一致);面板仍挂载着继续搜,
@@ -386,6 +393,18 @@
     width: 100%;
     min-width: 0;
     margin-bottom: 6px;
+  }
+
+  /* 「@ 添加资源」「上传文件」是入口按钮:BButton 默认无边框,暗色下与输入区背景融为一体,
+     补一圈描边让它们保持按钮形态(chips 有自己的底色,不在此列) */
+  .context-actions :deep(.b-popover-trigger > .b_btn),
+  .context-actions :deep(.b-upload-trigger .b_btn) {
+    border: 1px solid var(--card-border-color);
+  }
+
+  [data-theme='night'] .context-actions :deep(.b-popover-trigger > .b_btn),
+  [data-theme='night'] .context-actions :deep(.b-upload-trigger .b_btn) {
+    border-color: color-mix(in srgb, var(--text-color) 22%, var(--card-border-color));
   }
 
   .text-input-wrap {
