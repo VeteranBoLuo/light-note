@@ -395,16 +395,20 @@
     margin-bottom: 6px;
   }
 
-  /* 「@ 添加资源」「上传文件」是入口按钮:BButton 默认无边框,暗色下与输入区背景融为一体,
-     补一圈描边让它们保持按钮形态(chips 有自己的底色,不在此列) */
+  /* 「@ 添加资源」「上传文件」是入口按钮:默认灰底在浅色下像原生 button、暗色下又与输入区同色。
+     改用主题色淡染 + 同色系描边,两个主题自适应,并与下方资料 chips 视觉同族。 */
   .context-actions :deep(.b-popover-trigger > .b_btn),
   .context-actions :deep(.b-upload-trigger .b_btn) {
-    border: 1px solid var(--card-border-color);
+    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
+    color: var(--primary-color);
+    font-weight: 500;
   }
 
-  [data-theme='night'] .context-actions :deep(.b-popover-trigger > .b_btn),
-  [data-theme='night'] .context-actions :deep(.b-upload-trigger .b_btn) {
-    border-color: color-mix(in srgb, var(--text-color) 22%, var(--card-border-color));
+  .context-actions :deep(.b-popover-trigger > .b_btn:hover),
+  .context-actions :deep(.b-upload-trigger .b_btn:hover) {
+    border-color: color-mix(in srgb, var(--primary-color) 34%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 13%, transparent) !important;
   }
 
   .text-input-wrap {

@@ -18,7 +18,13 @@
         v-for="day in calendarDays"
         :key="day.key"
         class="todo-calendar-day"
-        :class="{ 'is-outside': !day.currentMonth, 'is-today': day.today }"
+        :class="{
+          'is-outside': !day.currentMonth,
+          'is-today': day.today,
+          'is-selected': day.key === selectedDayKey,
+          'has-items': day.items.length > 0,
+        }"
+        @click="selectDay(day)"
       >
         <span>{{ day.date.getDate() }}</span>
         <BButton
@@ -41,6 +47,33 @@
         <small v-if="day.items.length > 3">{{ t('inbox.todoMoreInDay', { count: day.items.length - 3 }) }}</small>
       </div>
     </div>
+
+    <!-- 选中某天后就地展开当天全部待办:窄屏格子放不下标题,不该逼用户开编辑弹框才知道是什么 -->
+    <section v-if="view === 'calendar' && selectedDay" class="todo-calendar-daylist">
+      <header>
+        <strong>{{ selectedDayLabel }}</strong>
+        <span>{{ t('inbox.todoDayCount', { count: selectedDay.items.length }) }}</span>
+      </header>
+      <p v-if="!selectedDay.items.length" class="todo-calendar-daylist__empty">
+        {{ t('inbox.todoDayEmpty') }}
+      </p>
+      <BButton
+        v-for="item in selectedDay.items"
+        :key="item.id"
+        class="todo-calendar-dayitem"
+        :class="todoStateClass(item)"
+        @click="$emit('edit', item)"
+      >
+        <span class="todo-calendar-dayitem__priority" :class="`is-priority-${item.priority}`"></span>
+        <span class="todo-calendar-dayitem__content">
+          <strong>{{ item.title }}</strong>
+          <span class="todo-calendar-dayitem__meta">
+            <small>{{ dueTime(item) }}</small>
+            <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
+          </span>
+        </span>
+      </BButton>
+    </section>
 
     <div v-else class="todo-agenda">
       <article v-for="entry in agendaItems" :key="entry.item.id" class="todo-agenda-item">
@@ -79,6 +112,7 @@
   defineEmits<{ edit: [item: TodoItem] }>();
   const { t, locale } = useI18n();
   const visibleMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const selectedDayKey = ref('');
 
   const parseDate = (value: string) => new Date(String(value).replace(' ', 'T'));
   const monthLabel = computed(() =>
@@ -124,6 +158,18 @@
       }),
   );
 
+  const selectedDay = computed(() => calendarDays.value.find((day) => day.key === selectedDayKey.value) || null);
+  const selectedDayLabel = computed(() =>
+    selectedDay.value
+      ? new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(
+          selectedDay.value.date,
+        )
+      : '',
+  );
+
+  function selectDay(day: { key: string }) {
+    selectedDayKey.value = selectedDayKey.value === day.key ? '' : day.key;
+  }
   function dateKey(date: Date) {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
@@ -153,6 +199,7 @@
   }
   function moveMonth(step: number) {
     visibleMonth.value = new Date(visibleMonth.value.getFullYear(), visibleMonth.value.getMonth() + step, 1);
+    selectedDayKey.value = '';
   }
 </script>
 
@@ -256,6 +303,98 @@
   .todo-agenda-card__meta small.is-completed {
     color: var(--success-color, #2e8b57);
   }
+  .todo-calendar-day.is-selected {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--background-color));
+  }
+  .todo-calendar-day.has-items {
+    cursor: pointer;
+  }
+
+  .todo-calendar-daylist {
+    display: grid;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 12px;
+    background: var(--background-color);
+  }
+  .todo-calendar-daylist > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+
+    strong {
+      color: var(--text-color);
+      font-size: 13px;
+    }
+
+    span {
+      color: var(--desc-color);
+      font-size: 11px;
+    }
+  }
+  .todo-calendar-daylist__empty {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-calendar-dayitem {
+    display: flex;
+    width: 100%;
+    height: auto;
+    min-height: 40px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 4%, transparent) !important;
+    text-align: left;
+  }
+  .todo-calendar-dayitem__priority {
+    width: 3px;
+    height: 22px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--primary-color);
+
+    &.is-priority-2 {
+      background: var(--danger-color, #e5484d);
+    }
+
+    &.is-priority-0 {
+      background: var(--desc-color);
+    }
+  }
+  .todo-calendar-dayitem__content {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+
+    > strong {
+      overflow: hidden;
+      color: var(--text-color);
+      font-size: 13px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+  .todo-calendar-dayitem.is-completed .todo-calendar-dayitem__content > strong {
+    color: var(--desc-color);
+    text-decoration: line-through;
+  }
+  .todo-calendar-dayitem__meta {
+    display: flex;
+    gap: 8px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
   .todo-calendar-item.is-priority-2 {
     border-left-color: var(--danger-color, #e5484d);
   }
@@ -379,15 +518,14 @@
       padding: 2px;
       border-left-width: 2px;
     }
-    .todo-calendar-item__main {
-      justify-content: center;
-    }
-    .todo-calendar-item__main time {
-      font-size: 8px;
-    }
-    .todo-calendar-item__main strong,
+    /* 窄格里「是什么」比「几点」重要:保留标题,时间与状态交给下方选中日详情 */
+    .todo-calendar-item__main time,
     .todo-calendar-item__meta {
       display: none;
+    }
+    .todo-calendar-item__main strong {
+      font-size: 9px;
+      line-height: 1.15;
     }
     .todo-agenda-item {
       grid-template-columns: 86px minmax(0, 1fr);

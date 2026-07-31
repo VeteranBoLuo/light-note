@@ -392,9 +392,17 @@
     flex: 0 0 auto;
   }
 
-  /* 默认按钮在暗色主题下与行背景过近,补一圈描边保证可辨识。 */
+  /* 默认按钮的灰底在浅色下像原生 button、在暗色下又与行背景糊在一起。
+     统一改用主题色淡染 + 同色系描边:两个主题都自适应,也与站内 chip 语言一致。 */
   .today-action-row__actions :deep(.b_btn) {
-    border: 1px solid color-mix(in srgb, var(--text-color) 16%, var(--card-border-color));
+    border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 7%, transparent) !important;
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+  .today-action-row__actions :deep(.b_btn:hover) {
+    border-color: color-mix(in srgb, var(--primary-color) 34%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 13%, transparent) !important;
   }
 
   .today-actions__empty {
