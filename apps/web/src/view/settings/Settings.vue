@@ -291,7 +291,8 @@
               </div>
             </div>
 
-            <div class="field">
+            <!-- 移动端标签管理固定卡片视图,该偏好只对桌面生效,移动端不展示避免误导 -->
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.tagManageView') }}</span>
                 <span class="field-desc">{{ t('settings.tagManageViewDesc') }}</span>

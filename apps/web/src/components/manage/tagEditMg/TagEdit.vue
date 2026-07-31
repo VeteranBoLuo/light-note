@@ -10,15 +10,17 @@
       <TagEditorForm
         v-model:tag="tag"
         v-model:active-resource-type="activeResourceType"
-        :tag-options="tagOptions"
         :search-map="searchMap"
         :resource-sections="resourceSections"
         :active-resource-section="activeResourceSection"
         :total-selected-count="totalSelectedCount"
         :saving="saving"
+        :can-delete="handleType === 'edit'"
+        :deleting="deleting"
         @toggle-resource="toggleResource"
         @submit="submit"
         @cancel="requestCancel"
+        @delete="requestDelete"
       />
     </BLoading>
   </ResourcePageShell>
@@ -34,9 +36,9 @@
     tag,
     loading,
     saving,
-    tagOptions,
     activeResourceType,
     searchMap,
+    handleType,
     pageTitle,
     totalSelectedCount,
     resourceSections,
@@ -44,5 +46,7 @@
     toggleResource,
     submit,
     requestCancel,
+    deleting,
+    requestDelete,
   } = useTagEditor();
 </script>

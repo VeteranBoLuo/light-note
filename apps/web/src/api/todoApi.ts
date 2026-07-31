@@ -29,6 +29,19 @@ export interface TodoChecklistItem {
   done: boolean;
 }
 
+export interface TodoResourceRefInput {
+  type: 'bookmark' | 'note' | 'file';
+  id: string;
+}
+
+export interface TodoResourceRefView extends TodoResourceRefInput {
+  /** 当前权限下解析出的实时标题;目标失效时回落到快照 */
+  title: string;
+  snapshotTitle: string;
+  available: boolean;
+  url?: string;
+}
+
 export interface TodoItem {
   id: string;
   title: string;
@@ -47,6 +60,7 @@ export interface TodoItem {
   recurrenceInstanceAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  resourceRefs?: TodoResourceRefView[];
 }
 
 export interface TodoPayload {
@@ -59,6 +73,8 @@ export interface TodoPayload {
   recurrence?: TodoRecurrence | null;
   /** 兼容旧调用方；服务端会转换为单次站内提醒。 */
   reminderAt?: string | null;
+  /** 传入即整体替换关联的参考资料;不传表示不改动 */
+  resourceRefs?: TodoResourceRefInput[];
 }
 
 export const listTodos = (params: { status: TodoFilterStatus; keyword: string; sort: TodoSort }) =>

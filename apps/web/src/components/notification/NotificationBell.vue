@@ -389,6 +389,11 @@
     padding: 0;
     overflow: hidden;
   }
+  /* 暗色下通知项与面板默认同为 --card-background,整片糊在一起;
+     面板改用更深的 panel 底,形成「页面 < 面板 < 通知卡」三层递进 */
+  [data-theme='night'] .notification-popover {
+    background: var(--surface-panel-bg, var(--menu-body-bg-color));
+  }
   .notification-popover .nt-head {
     display: flex;
     align-items: center;
@@ -449,6 +454,12 @@
     max-height: 380px;
     overflow-y: auto;
     padding: 6px;
+  }
+  /* 移动端顶栏铃铛打开时:面板近全宽,列表限高避免盖过底部导航 */
+  @media (max-width: 767px) {
+    .notification-popover .nt-list {
+      max-height: min(380px, 52vh);
+    }
   }
   .notification-popover .nt-state {
     padding: 40px 0;

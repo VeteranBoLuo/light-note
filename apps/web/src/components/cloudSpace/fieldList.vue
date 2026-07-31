@@ -585,8 +585,10 @@
     }
   }
 
-  function addFileToInbox(file: any) {
-    addResourcesToInbox([{ resourceType: 'file', resourceId: String(file.id) }], '云空间');
+  async function addFileToInbox(file: any) {
+    const ok = await addResourcesToInbox([{ resourceType: 'file', resourceId: String(file.id) }], '云空间');
+    // 接口已确认入列,直接本地打标即可,不必为了一个徽标重新拉取整页文件
+    if (ok) file.isPending = true;
   }
   const selectedRows = ref<string[]>([]);
   const selectAll = ref(false);

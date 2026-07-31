@@ -15,6 +15,12 @@ const manageRouter: RouteRecordRaw = {
       path: 'tagMg',
       name: 'tagMg',
       component: () => import('@/view/manage/TagMg.vue'),
+      // 移动端作为资料区第四个页签(书签/笔记/云空间/标签),走统一移动壳
+      meta: {
+        mobileShell: 'resources',
+        mobileTopSwitcher: true,
+        mobileBottomNav: true,
+      },
     },
     {
       name: 'tagEditMg',

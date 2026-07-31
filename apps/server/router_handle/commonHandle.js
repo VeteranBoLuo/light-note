@@ -1163,11 +1163,12 @@ export const getAdminOverview = async (req, res) => {
         // 近7天新增内容(书签+笔记+文件合并)按天
         pool
           .query(
-            `SELECT d, SUM(c) AS c FROM (
-             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark} GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote} GROUP BY d
-             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile} GROUP BY d
-           ) t GROUP BY d`,
+            // 保留 kind 维度:用户数与内容量量级差异大,前端需要分面板展示书签/笔记/文件构成
+            `SELECT d, kind, SUM(c) AS c FROM (
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark} GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote} GROUP BY d
+             UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile} GROUP BY d
+           ) t GROUP BY d, kind`,
             [weekAgo, weekAgo, weekAgo],
           )
           .catch(() => [[]]),
@@ -1199,8 +1200,28 @@ export const getAdminOverview = async (req, res) => {
 
     // 趋势按天补零成 7 天序列(展示 MM-DD)
     const userMap = Object.fromEntries((userTrendRows[0] || []).map((x) => [x.d, Number(x.c)]));
-    const contentMap = Object.fromEntries((contentTrendRows[0] || []).map((x) => [x.d, Number(x.c)]));
-    const trend = days.map((d) => ({ d: d.slice(5), users: userMap[d] || 0, content: contentMap[d] || 0 }));
+    const contentKindMap = new Map();
+    (contentTrendRows[0] || []).forEach((row) => {
+      const bucket = contentKindMap.get(row.d) || { bookmark: 0, note: 0, file: 0 };
+      if (row.kind in bucket) bucket[row.kind] = Number(row.c || 0);
+      contentKindMap.set(row.d, bucket);
+    });
+    const trend = days.map((day) => {
+      const kinds = contentKindMap.get(day) || { bookmark: 0, note: 0, file: 0 };
+      const contentTotal = kinds.bookmark + kinds.note + kinds.file;
+      return {
+        date: day,
+        label: day.slice(5),
+        users: userMap[day] || 0,
+        bookmarks: kinds.bookmark,
+        notes: kinds.note,
+        files: kinds.file,
+        contentTotal,
+        // 兼容旧前端一个版本,避免前后端部署错位时看板空白
+        d: day.slice(5),
+        content: contentTotal,
+      };
+    });
 
     const u = userAgg[0][0],
       r = resAgg[0][0],

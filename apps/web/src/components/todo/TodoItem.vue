@@ -16,15 +16,17 @@
         <span v-if="reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
         <span v-if="item.recurrence" class="todo-recurrence-label">{{ recurrenceLabel }}</span>
       </div>
-      <BCheckbox
-        v-if="!selectable"
-        class="todo-item__main-check"
-        :model-value="item.status === 'completed'"
-        :disabled="disabled"
-        @update:model-value="$emit('toggle-complete', $event)"
-      >
-        <span class="todo-item__title">{{ item.title }}</span>
-      </BCheckbox>
+      <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
+      <div v-if="!selectable" class="todo-item__main-line">
+        <BCheckbox
+          class="todo-item__main-check"
+          :model-value="item.status === 'completed'"
+          :disabled="disabled"
+          :aria-label="t('inbox.todoSelect', { title: item.title })"
+          @update:model-value="$emit('toggle-complete', $event)"
+        />
+        <span class="todo-item__title todo-item__title--static">{{ item.title }}</span>
+      </div>
       <div v-else class="todo-item__selection-title">{{ item.title }}</div>
       <p v-if="item.description" class="todo-item__description">{{ item.description }}</p>
       <section v-if="item.checklist?.length" class="todo-checklist">
@@ -47,76 +49,110 @@
           </BCheckbox>
         </div>
       </section>
+      <!-- 参考资料:最多展示 3 个,失效目标标注不可用且不可点击 -->
+      <section v-if="item.resourceRefs?.length" class="todo-resource-refs">
+        <span class="todo-resource-refs__label">{{ t('inbox.todoResourceRefsTitle') }}</span>
+        <div class="todo-resource-refs__list">
+          <BButton
+            v-for="ref in visibleResourceRefs"
+            :key="`${ref.type}:${ref.id}`"
+            class="todo-resource-chip"
+            :class="{ 'is-unavailable': !ref.available }"
+            :disabled="!ref.available"
+            :title="ref.available ? ref.title : t('inbox.todoResourceUnavailable')"
+            @click.stop="openResourceRef(ref)"
+          >
+            <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
+            <span class="todo-resource-chip__title">{{ ref.title || t('inbox.todoResourceUnavailable') }}</span>
+          </BButton>
+          <span v-if="hiddenResourceRefCount" class="todo-resource-more">+{{ hiddenResourceRefCount }}</span>
+        </div>
+      </section>
     </div>
+    <!-- 已完成的待办只保留「取消勾选恢复」和「删除」,避免对无效动作(编辑/日历/优先级/稍后)的误操作 -->
     <div class="todo-item__actions todo-item__actions--desktop">
-      <BSelect
-        class="todo-item__priority-select"
-        :value="item.priority"
-        :options="priorityOptions"
-        :disabled="disabled || item.status === 'completed'"
-        :aria-label="t('inbox.todoPriority')"
-        @change="changePriority"
-      />
-      <BPopover v-if="item.status === 'pending'" trigger="click" placement="bottom-right">
-        <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
-        <template #content>
-          <div class="todo-snooze-menu">
-            <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
-            <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
-            <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
-          </div>
-        </template>
-      </BPopover>
-      <BButton size="small" :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
-      <BButton
-        size="small"
-        :disabled="disabled"
-        v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
-        @click="$emit('add-to-calendar')"
-      >
-        {{ t('inbox.addToCalendar') }}
-      </BButton>
+      <template v-if="item.status === 'pending'">
+        <BSelect
+          class="todo-item__priority-select"
+          :value="item.priority"
+          :options="priorityOptions"
+          :disabled="disabled"
+          :aria-label="t('inbox.todoPriority')"
+          @change="changePriority"
+        />
+        <BPopover trigger="click" placement="bottom-right">
+          <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
+          <template #content>
+            <div class="todo-snooze-menu">
+              <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
+              <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
+              <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
+            </div>
+          </template>
+        </BPopover>
+        <BButton size="small" :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
+        <BButton
+          size="small"
+          :disabled="disabled"
+          v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
+          @click="$emit('add-to-calendar')"
+        >
+          {{ t('inbox.addToCalendar') }}
+        </BButton>
+      </template>
       <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
         {{ t('inbox.deleteTodo') }}
       </BButton>
     </div>
     <div class="todo-item__actions todo-item__actions--mobile">
-      <BSelect
-        class="todo-item__priority-select"
-        :value="item.priority"
-        :options="priorityOptions"
-        :disabled="disabled || item.status === 'completed'"
-        :aria-label="t('inbox.todoPriority')"
-        @change="changePriority"
-      />
-      <BPopover v-if="item.status === 'pending'" trigger="click" placement="top-left">
-        <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
-        <template #content>
-          <div class="todo-snooze-menu">
-            <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
-            <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
-            <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
-          </div>
-        </template>
-      </BPopover>
-      <BPopover trigger="click" placement="top-right">
-        <BButton size="small" :disabled="disabled">{{ t('common.more') }}</BButton>
-        <template #content>
-          <div class="todo-mobile-action-menu">
-            <BButton :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
-            <BButton
-              :disabled="disabled"
-              v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
-              @click="$emit('add-to-calendar')"
-            >
-              {{ t('inbox.addToCalendar') }}
-            </BButton>
-            <BButton type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
-              {{ t('inbox.deleteTodo') }}
-            </BButton>
-          </div>
-        </template>
-      </BPopover>
+      <template v-if="item.status === 'pending'">
+        <BSelect
+          class="todo-item__priority-select"
+          :value="item.priority"
+          :options="priorityOptions"
+          :disabled="disabled"
+          :aria-label="t('inbox.todoPriority')"
+          @change="changePriority"
+        />
+        <BPopover trigger="click" placement="top-left">
+          <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
+          <template #content>
+            <div class="todo-snooze-menu">
+              <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
+              <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
+              <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
+            </div>
+          </template>
+        </BPopover>
+        <BPopover trigger="click" placement="top-right">
+          <BButton size="small" :disabled="disabled">{{ t('common.more') }}</BButton>
+          <template #content>
+            <div class="todo-mobile-action-menu">
+              <BButton :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
+              <BButton
+                :disabled="disabled"
+                v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
+                @click="$emit('add-to-calendar')"
+              >
+                {{ t('inbox.addToCalendar') }}
+              </BButton>
+              <BButton type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
+                {{ t('inbox.deleteTodo') }}
+              </BButton>
+            </div>
+          </template>
+        </BPopover>
+      </template>
+      <BButton
+        v-else
+        size="small"
+        type="danger"
+        :loading="deleting"
+        :disabled="disabled"
+        @click="$emit('delete')"
+      >
+        {{ t('inbox.deleteTodo') }}
+      </BButton>
     </div>
   </article>
 </template>
@@ -129,7 +165,9 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
-  import type { TodoChecklistItem, TodoItem, TodoPriority } from '@/api/todoApi';
+  import { useRouter } from 'vue-router';
+  import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
+  import { resolveResourceRoute } from '@/utils/resourceNavigation';
 
   const props = defineProps<{
     item: TodoItem;
@@ -149,6 +187,7 @@
     'update-priority': [priority: TodoPriority];
   }>();
   const { t, locale } = useI18n();
+  const router = useRouter();
   const overdue = computed(
     () =>
       props.item.status === 'pending' &&
@@ -180,6 +219,17 @@
     return t(`inbox.todoRecurrenceSummary.${recurrence.frequency}`, { interval: recurrence.interval });
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
+  const MAX_VISIBLE_REFS = 3;
+  const visibleResourceRefs = computed(() => (props.item.resourceRefs || []).slice(0, MAX_VISIBLE_REFS));
+  const hiddenResourceRefCount = computed(() =>
+    Math.max(0, (props.item.resourceRefs?.length || 0) - MAX_VISIBLE_REFS),
+  );
+
+  function openResourceRef(ref: TodoResourceRefView) {
+    if (!ref.available) return;
+    const target = resolveResourceRoute({ type: ref.type, id: ref.id, title: ref.title });
+    if (target) router.push(target);
+  }
 
   function toggleChecklist(id: string, done: boolean) {
     emit(
@@ -241,8 +291,14 @@
   .todo-item.is-overdue {
     border-color: color-mix(in srgb, var(--danger-color, #e5484d) 38%, var(--card-border-color));
   }
+  /* 完成态明确「退场」:压低整体存在感,收起主题色渐变与左侧强调条 */
   .todo-item.is-completed {
-    opacity: 0.72;
+    opacity: 0.6;
+    border-color: var(--card-border-color);
+    background: color-mix(in srgb, var(--text-color) 3%, var(--background-color));
+  }
+  .todo-item.is-completed::before {
+    display: none;
   }
   .todo-item__body {
     min-width: 0;
@@ -270,10 +326,20 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--primary-color) 10%, transparent);
   }
+  .todo-item__main-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
   .todo-item__main-check {
     align-items: flex-start;
     margin-top: 5px;
     padding: 2px 0;
+  }
+  /* 已完成态标题独立于勾选框,补齐与 label 版一致的纵向节奏 */
+  .todo-item__title--static {
+    margin-top: 7px;
+    cursor: default;
   }
   .todo-item__main-check :deep(.b-checkbox__inner) {
     width: 19px;
@@ -348,6 +414,64 @@
     text-decoration: line-through;
     color: var(--desc-color);
   }
+  .todo-resource-refs {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 9px 0 0 30px;
+    flex-wrap: wrap;
+  }
+
+  .todo-resource-refs__label {
+    flex: 0 0 auto;
+    padding-top: 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .todo-resource-refs__list {
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .todo-resource-chip {
+    max-width: 220px;
+    height: auto;
+    min-height: 26px;
+    padding: 3px 9px;
+    gap: 5px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 5%, transparent) !important;
+    font-size: 12px;
+
+    &.is-unavailable {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+  }
+
+  .todo-resource-chip__type {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+  }
+
+  .todo-resource-chip__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color);
+  }
+
+  .todo-resource-more {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
   .todo-item__actions {
     align-self: center;
     display: flex;

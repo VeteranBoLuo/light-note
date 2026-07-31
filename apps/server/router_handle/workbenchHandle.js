@@ -2,7 +2,8 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { buildObjectUrl, createDownloadSignedUrl } from '../util/obsClient.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
-import { queryTodoPendingCount } from '../util/services/todoService.js';
+import { listTodoPage, queryTodoPendingCount } from '../util/services/todoService.js';
+import { listInboxResources } from '../util/resourceInbox.js';
 
 function dayLabel(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -93,8 +94,35 @@ async function queryWeeklyStats(userId) {
   return rows[0] || { bookmark: 0, note: 0, file: 0, tag: 0 };
 }
 
+// 今日行动条目仅取有限数量,完整列表仍由 /inbox 页面承担;
+// 任一子查询失败都降级为空数组,不拖垮工作台其余统计。
+async function queryTodayActionItems(userId) {
+  const [overdue, dueToday, inbox] = await Promise.all([
+    listTodoPage(pool, userId, {
+      status: 'pending',
+      due: 'overdue',
+      sort: 'due',
+      limit: 3,
+      includeTotal: false,
+    }).catch(() => null),
+    listTodoPage(pool, userId, {
+      status: 'pending',
+      due: 'today',
+      sort: 'due',
+      limit: 5,
+      includeTotal: false,
+    }).catch(() => null),
+    listInboxResources(pool, { userId, limit: 5, view: 'summary', includeTotal: false }).catch(() => null),
+  ]);
+  return {
+    overdueTodos: overdue?.items || [],
+    dueTodayTodos: dueToday?.items || [],
+    inboxItems: inbox?.items || [],
+  };
+}
+
 async function queryTodaySummary(userId) {
-  const [[rows], todoPendingTotal] = await Promise.all([
+  const [[rows], todoPendingTotal, actionItems] = await Promise.all([
     pool.query(
       `
         SELECT
@@ -106,6 +134,7 @@ async function queryTodaySummary(userId) {
       [userId, userId],
     ),
     queryTodoPendingCount(pool, userId),
+    queryTodayActionItems(userId),
   ]);
   const row = rows[0] || {};
   const inboxPendingTotal = Number(row.inboxPendingTotal || 0);
@@ -114,6 +143,7 @@ async function queryTodaySummary(userId) {
     todoPendingTotal: Number(todoPendingTotal || 0),
     unreadNotificationTotal: Number(row.unreadNotificationTotal || 0),
     inboxPendingTotal,
+    ...actionItems,
   };
 }
 

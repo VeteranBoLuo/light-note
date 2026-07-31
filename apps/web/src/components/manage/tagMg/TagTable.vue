@@ -252,18 +252,6 @@
                   </div>
 
                   <div class="tag-card__content">
-                    <div v-if="tag.relatedTagList?.length" class="compact-row">
-                      <span class="compact-label">{{ t('tagManage.relatedTag') }}</span>
-                      <div class="compact-values">
-                        <span v-for="related in tag.relatedTagList.slice(0, 2)" :key="related.id" class="related-chip">
-                          {{ related.name }}
-                        </span>
-                        <span v-if="tag.relatedTagList.length > 2" class="more-count"
-                          >+{{ tag.relatedTagList.length - 2 }}</span
-                        >
-                      </div>
-                    </div>
-
                     <div v-if="getPreviewResources(tag).length" class="compact-row compact-row--resources">
                       <span class="compact-label">{{ t('tagManage.previewContent') }}</span>
                       <div class="preview-list">
@@ -285,7 +273,7 @@
                       </div>
                     </div>
 
-                    <div v-if="!getTotalResourceCount(tag) && !tag.relatedTagList?.length" class="unlinked-hint">
+                    <div v-if="!getTotalResourceCount(tag)" class="unlinked-hint">
                       {{ t('tagManage.unlinkedHint') }}
                     </div>
                   </div>
@@ -296,7 +284,6 @@
                 <div class="tag-list__header" aria-hidden="true">
                   <span>{{ t('tagManage.tagColumn') }}</span>
                   <span>{{ t('tagManage.resourceDistribution') }}</span>
-                  <span>{{ t('tagManage.relatedTag') }}</span>
                   <span>{{ t('tagManage.actions') }}</span>
                 </div>
                 <BCard
@@ -341,15 +328,6 @@
                     >
                     <span class="row-metric row-metric--file"
                       >{{ t('tagManage.fileShort') }} {{ tag.fileList?.length || 0 }}</span
-                    >
-                  </div>
-                  <div class="row-related">
-                    <span v-for="related in tag.relatedTagList?.slice(0, 2)" :key="related.id" class="related-chip">
-                      {{ related.name }}
-                    </span>
-                    <span v-if="!tag.relatedTagList?.length" class="row-empty">{{ t('tagManage.none') }}</span>
-                    <span v-else-if="tag.relatedTagList.length > 2" class="more-count"
-                      >+{{ tag.relatedTagList.length - 2 }}</span
                     >
                   </div>
                   <div class="tag-row-actions" @click.stop>
@@ -1276,8 +1254,6 @@
     width: 42px;
     height: 42px;
     border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 14%, transparent);
-    background: color-mix(in srgb, var(--resource-tag-color) 9%, var(--tag-card-bg));
     font-size: 20px;
     font-weight: 700;
   }
@@ -1464,7 +1440,6 @@
 
   .compact-values,
   .preview-list,
-  .row-related,
   .row-metrics {
     display: flex;
     align-items: center;
@@ -1547,7 +1522,7 @@
   .tag-list__header,
   .tag-row {
     display: grid;
-    grid-template-columns: minmax(190px, 1.1fr) minmax(230px, 1fr) minmax(160px, 0.8fr) auto;
+    grid-template-columns: minmax(190px, 1.1fr) minmax(230px, 1fr) auto;
     gap: 14px;
     align-items: center;
   }
@@ -1692,11 +1667,6 @@
     .tag-list__header,
     .tag-row {
       grid-template-columns: minmax(180px, 1fr) minmax(210px, 1fr) auto;
-    }
-
-    .tag-list__header span:nth-child(3),
-    .row-related {
-      display: none;
     }
   }
 

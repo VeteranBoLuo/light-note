@@ -15,7 +15,7 @@
 </template>
 
 <script setup>
-  import { onMounted, ref } from 'vue';
+  import { onBeforeUnmount, onMounted, ref } from 'vue';
   import { useRouter } from 'vue-router';
   import { apiBasePost, apiBaseGet } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -32,8 +32,31 @@
   const oauthFlow = consumeGithubOAuthFlow();
   const status = ref(200);
   const time = ref(3);
+  // 用户点「返回」离开本页后:中止换票请求、不再弹提示/跳转,避免邮箱登录成功后又收到迟到的「GitHub 认证失败」。
+  const abortController = new AbortController();
+  let disposed = false;
+  let countdownTimer = 0;
+  let redirectTimer = 0;
+
+  onBeforeUnmount(() => {
+    disposed = true;
+    abortController.abort();
+    if (countdownTimer) window.clearInterval(countdownTimer);
+    if (redirectTimer) window.clearTimeout(redirectTimer);
+  });
+
   function toHome() {
     router.push('/');
+  }
+
+  function scheduleFailureRedirect() {
+    status.value = 500;
+    countdownTimer = window.setInterval(() => {
+      time.value = time.value - 1;
+    }, 1000);
+    redirectTimer = window.setTimeout(() => {
+      toHome();
+    }, 2500);
   }
   function getAuthenticatedEntryPath(preferences = {}) {
     if (oauthFlow === 'register') {
@@ -62,8 +85,12 @@
     // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
     router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
-      // 发送 code 给后端换取 Token
-      const cRes = await apiBasePost('/api/user/github', { code, state });
+      // 发送 code 给后端换取 Token。silent:错误提示由本页自行控制,防止离开本页后全局 toast 迟到弹出。
+      const cRes = await apiBasePost('/api/user/github', { code, state }, {
+        silent: true,
+        signal: abortController.signal,
+      });
+      if (disposed) return;
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
@@ -92,24 +119,17 @@
         } catch {
           // OAuth 已成功时，偏好恢复失败也不能把用户送回官网；应用页会再次恢复会话。
         }
+        if (disposed) return;
         await router.replace(getAuthenticatedEntryPath(finalPrefs));
       } else {
-        setInterval(() => {
-          time.value = time.value - 1;
-        }, 1000);
-        setTimeout(() => {
-          toHome();
-        }, 2500);
+        message.error(cRes.msg || `github授权失败，请尝试重新授权或者通过账号密码手动登录`);
+        scheduleFailureRedirect();
       }
     } catch (e) {
+      // 主动中止(用户已离开本页)不提示、不跳转。
+      if (disposed || e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
       message.error(`github授权报错：${e}，请尝试重新授权或者通过账号密码手动登录`);
-      status.value = 500;
-      setInterval(() => {
-        time.value = time.value - 1;
-      }, 1000);
-      setTimeout(() => {
-        toHome();
-      }, 2500);
+      scheduleFailureRedirect();
     }
   });
   function goBack() {

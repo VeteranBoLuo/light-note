@@ -5,6 +5,8 @@
     :show-footer="false"
     :mask-closable="true"
     width="min(94vw, 1440px)"
+    height="min(86dvh, 720px)"
+    content-class="note-version-history__content"
   >
     <div class="note-history" :class="{ mobile: bookmark.isMobile }">
       <!-- 左:版本列表 -->
@@ -40,9 +42,9 @@
         <div class="preview-header">
           <span class="preview-title">{{ $t('noteDetail.history.preview') }}</span>
           <BTabs v-model:active-tab="previewMode" variant="pill" :options="previewModeOptions" />
-          <b-button v-if="activeId" type="primary" size="small" :disabled="restoring" @click="confirmRestore">
+          <BButton v-if="activeId" type="primary" size="small" :disabled="restoring" @click="confirmRestore">
             {{ $t('noteDetail.history.restore') }}
-          </b-button>
+          </BButton>
         </div>
         <div class="preview-body">
           <div v-if="activeId && previewMode === 'preview'" class="preview-html" v-html="activePreviewHtml"></div>
@@ -242,6 +244,8 @@
 <style lang="less" scoped>
   .note-history {
     width: 100%;
+    height: 100%;
+    min-height: 0;
     display: grid;
     grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
     gap: 16px;
@@ -255,19 +259,23 @@
   }
 
   .version-list {
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--background-color);
     overflow: hidden;
   }
 
+  /* 跟随右侧预览列(header + body)整体等高,列表底部不再留一截空白 */
   .version-list-inner {
     position: relative;
-    min-height: 240px;
-    height: min(60vh, 460px);
+    min-height: 0;
+    flex: 1;
   }
 
   .mobile .version-list-inner {
+    flex: none;
     height: 200px;
   }
 
@@ -358,7 +366,8 @@
   .preview-body {
     position: relative;
     padding: 14px;
-    height: min(60vh, 460px);
+    min-height: 0;
+    flex: 1;
     overflow: auto;
   }
   .version-diff {
@@ -506,5 +515,15 @@
     font-size: 12px;
     color: var(--desc-color);
     line-height: 1.6;
+  }
+</style>
+
+<style lang="less">
+  /* 非 scoped:.modal-content 属于 BModal 内部结构。
+     弹框外层不滚动,滚动交给左侧版本列表与右侧预览各自承担,避免三层嵌套滚动。 */
+  .note-version-history__content {
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
   }
 </style>

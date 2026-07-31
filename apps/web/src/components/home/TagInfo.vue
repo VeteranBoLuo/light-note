@@ -18,17 +18,19 @@
             })
           }}
         </p>
-      </div>
-      <div v-if="currentTag.relatedTagList?.length" class="category-tag">
-        <BButton
-          class="category-tag-item"
-          @click="handleToTagPage(tag)"
-          v-for="tag in currentTag.relatedTagList"
-          :key="tag.id || tag.name"
-          v-click-log="{ module: '首页', operation: `点击相关标签【${tag.name}】` }"
-        >
-          {{ tag.name }}
-        </BButton>
+        <!-- 相关标签贴着统计文案展示:放右侧孤角会完全逃出视线(用户实测注意不到) -->
+        <div v-if="currentTag.relatedTagList?.length" class="category-tag">
+          <BButton
+            class="category-tag-item"
+            @click="handleToTagPage(tag)"
+            v-for="tag in currentTag.relatedTagList"
+            :key="tag.id || tag.name"
+            v-click-log="{ module: '首页', operation: `点击相关标签【${tag.name}】` }"
+          >
+            <SvgIcon :src="icon.resource.tag" size="11" aria-hidden="true" />
+            {{ tag.name }}
+          </BButton>
+        </div>
       </div>
     </template>
     <template v-else-if="bookmark.type === 'all'">
@@ -63,6 +65,8 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import router from '@/router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   import type { TagInterface } from '@/config/bookmarkCfg.ts';
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -135,14 +139,16 @@
 
     .category-tag {
       display: flex;
-      justify-content: flex-end;
+      justify-content: flex-start;
       gap: 6px;
       flex-wrap: wrap;
+      margin-top: 8px;
     }
 
     .category-tag-item {
-      height: 28px;
-      padding: 0 10px;
+      height: 24px;
+      gap: 4px;
+      padding: 0 9px;
       border-radius: 999px;
       color: var(--resource-bookmark-color, #615ced);
       background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 8%, var(--menu-body-bg-color));
@@ -205,9 +211,7 @@
       }
 
       .category-tag {
-        width: 100%;
-        order: 3;
-        justify-content: flex-start;
+        margin-top: 6px;
         flex-wrap: nowrap;
         overflow-x: auto;
       }

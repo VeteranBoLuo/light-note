@@ -2,12 +2,10 @@ export interface TagInterface {
   id: string;
   name: string;
   isRename?: boolean;
-  relatedTagIds?: any;
   iconUrl?: string;
   bookmarkList?: string[];
   noteList?: string[];
   fileList?: string[];
-  relatedTagList?: { id: string; name: string }[];
   [key: string]: any;
 }
 

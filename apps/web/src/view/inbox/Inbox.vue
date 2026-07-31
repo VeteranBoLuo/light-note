@@ -19,7 +19,7 @@
       <template v-if="isMobileTodoPrimary">
         <BTabs
           v-model:active-tab="todo.status"
-          :options="mobileTodoStatusOptions"
+          :options="todoStatusTabOptions"
           variant="pill"
           @change="changeTodoStatus"
         />
@@ -36,73 +36,66 @@
             @enter="search"
           />
           <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
-          <BSelect
+          <BTabs
             v-if="inbox.filterType === 'todo'"
-            v-model:value="todo.status"
-            :options="todoStatusOptions"
+            v-model:active-tab="todo.status"
+            :options="todoStatusTabOptions"
+            variant="pill"
             @change="search"
           />
         </div>
       </template>
     </section>
 
+    <!-- 快速创建输入行已移除:与「新建待办」编辑器重复,移动端顶栏加号与桌面主按钮足够覆盖创建入口。
+         「批量选择」并入视图切换行,不再单独占一行;进入批量态后才展开完整操作条。 -->
     <section v-if="isTodoFocused" class="todo-workspace-toolbar">
-      <form class="todo-quick-create" @submit.prevent="createQuickTodo">
-        <BInput
-          v-model:value="quickTodoTitle"
-          :maxlength="200"
-          :placeholder="t('inbox.todoQuickCreatePlaceholder')"
-          @enter="createQuickTodo"
-        />
-        <BSelect v-model:value="quickTodoDue" :options="quickDueOptions" />
-        <BSelect v-model:value="quickTodoPriority" :options="quickPriorityOptions" />
-        <BButton type="primary" :loading="quickCreating" :disabled="!quickTodoTitle.trim()" @click="createQuickTodo">
-          {{ t('inbox.todoQuickCreate') }}
-        </BButton>
-      </form>
       <BTabs
         v-model:active-tab="todoView"
         class="todo-workspace-toolbar__views"
         :options="todoViewOptions"
         variant="pill"
       />
-    </section>
-
-    <section v-if="isTodoFocused && todoView === 'list'" class="todo-list-toolbar">
-      <template v-if="todoSelectionMode">
-        <BCheckbox
-          :model-value="selectedTodoIds.length === todo.items.length"
-          :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
-          @update:model-value="toggleSelectAllTodos"
-        >
-          {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
-        </BCheckbox>
-        <div class="todo-list-toolbar__actions">
-          <BButton
-            v-if="todo.status !== 'completed'"
-            size="small"
-            type="primary"
-            :loading="todoBatchMutating"
-            :disabled="!selectedTodoIds.length"
-            @click="completeSelectedTodos"
-          >
-            {{ t('inbox.completeSelected') }}
-          </BButton>
-          <BButton
-            size="small"
-            type="danger"
-            :loading="todoBatchMutating"
-            :disabled="!selectedTodoIds.length"
-            @click="confirmDeleteSelectedTodos"
-          >
-            {{ t('inbox.deleteSelected') }}
-          </BButton>
-          <BButton size="small" @click="toggleTodoSelectionMode">{{ t('inbox.todoBatchCancel') }}</BButton>
-        </div>
-      </template>
-      <BButton v-else class="todo-list-toolbar__select" size="small" @click="toggleTodoSelectionMode">
+      <BButton
+        v-if="todoView === 'list' && !todoSelectionMode"
+        class="todo-workspace-toolbar__select"
+        size="small"
+        @click="toggleTodoSelectionMode"
+      >
         {{ t('inbox.todoBatchSelect') }}
       </BButton>
+    </section>
+
+    <section v-if="isTodoFocused && todoView === 'list' && todoSelectionMode" class="todo-list-toolbar">
+      <BCheckbox
+        :model-value="selectedTodoIds.length === todo.items.length"
+        :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
+        @update:model-value="toggleSelectAllTodos"
+      >
+        {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
+      </BCheckbox>
+      <div class="todo-list-toolbar__actions">
+        <BButton
+          v-if="todo.status !== 'completed'"
+          size="small"
+          type="primary"
+          :loading="todoBatchMutating"
+          :disabled="!selectedTodoIds.length"
+          @click="completeSelectedTodos"
+        >
+          {{ t('inbox.completeSelected') }}
+        </BButton>
+        <BButton
+          size="small"
+          type="danger"
+          :loading="todoBatchMutating"
+          :disabled="!selectedTodoIds.length"
+          @click="confirmDeleteSelectedTodos"
+        >
+          {{ t('inbox.deleteSelected') }}
+        </BButton>
+        <BButton size="small" @click="toggleTodoSelectionMode">{{ t('inbox.todoBatchCancel') }}</BButton>
+      </div>
     </section>
 
     <section v-if="todoUndo" class="todo-undo-banner" role="status">
@@ -204,7 +197,12 @@
             </section>
           </div>
           <div v-else class="inbox-list">
+            <!-- 「全部」把待办与待整理资源混在一起时,加分组标题让顺序可读 -->
             <template v-for="action in actionItems" :key="action.key">
+              <div v-if="action.groupLabel" class="inbox-list__group-label">
+                <strong>{{ action.groupLabel }}</strong>
+                <span>{{ action.groupCount }}</span>
+              </div>
               <InboxItem
                 v-if="action.actionType === 'resource'"
                 :item="action.item"
@@ -280,11 +278,9 @@
   } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import {
-    quickTodoDueAt,
     todoGroupKey,
     todoSnoozeAt,
     type TodoGroupKey,
-    type TodoQuickDue,
     type TodoSnoozePreset,
   } from '@/utils/todoPlanning';
   import { updatePreference } from '@/utils/savePreference';
@@ -307,10 +303,6 @@
   const exportingCalendar = ref(false);
   const updatingTodoId = ref('');
   const deletingTodoId = ref('');
-  const quickTodoTitle = ref('');
-  const quickTodoDue = ref<TodoQuickDue>('today');
-  const quickTodoPriority = ref<TodoPriority>(1);
-  const quickCreating = ref(false);
   type TodoView = 'list' | 'agenda' | 'calendar';
   const normalizeTodoView = (value: unknown): TodoView =>
     value === 'agenda' || value === 'calendar' ? value : 'list';
@@ -425,12 +417,8 @@
           { label: t('inbox.oldest'), value: 'oldest' },
         ],
   );
-  const todoStatusOptions = computed(() => [
-    { label: t('inbox.all'), value: 'all' },
-    { label: t('inbox.todoPending'), value: 'pending' },
-    { label: t('inbox.todoCompleted'), value: 'completed' },
-  ]);
-  const mobileTodoStatusOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
+  // 桌面与移动端共用的待办状态切换页签(未完成/已完成/全部)。
+  const todoStatusTabOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
     { key: 'pending', label: t('inbox.todoPending'), badge: todo.pendingTotal },
     { key: 'completed', label: t('inbox.todoCompleted') },
     { key: 'all', label: t('inbox.all') },
@@ -440,15 +428,6 @@
     { key: 'agenda', label: t('inbox.todoViewAgenda') },
     { key: 'calendar', label: t('inbox.todoViewCalendar') },
   ]);
-  const quickDueOptions = computed(() => [
-    { value: 'today', label: t('inbox.todoQuickToday') },
-    { value: 'tomorrow', label: t('inbox.todoQuickTomorrow') },
-    { value: 'week', label: t('inbox.todoQuickNextWeek') },
-    { value: 'none', label: t('inbox.todoQuickNoDate') },
-  ]);
-  const quickPriorityOptions = computed(() =>
-    [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
-  );
   const actionItems = computed(() => {
     if (inbox.filterType === 'todo') {
       return todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
@@ -460,9 +439,25 @@
     }));
     if (inbox.filterType !== 'all' || isMobileResourceInbox.value) return resources;
     const todos = todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
-    return [...resources, ...todos].sort(
+    const sorted = [...resources, ...todos].sort(
       (left, right) => actionRank(left) - actionRank(right) || actionTime(right) - actionTime(left),
     );
+    // 排序已保证待办在前、资源在后,这里只需给每段的首项挂上标题
+    const todoCount = todos.length;
+    const resourceCount = resources.length;
+    let seenTodo = false;
+    let seenResource = false;
+    return sorted.map((action) => {
+      if (action.actionType === 'todo' && !seenTodo) {
+        seenTodo = true;
+        return { ...action, groupLabel: t('inbox.groupTodo'), groupCount: todoCount };
+      }
+      if (action.actionType === 'resource' && !seenResource) {
+        seenResource = true;
+        return { ...action, groupLabel: t('inbox.groupPending'), groupCount: resourceCount };
+      }
+      return action;
+    });
   });
 
   watch(
@@ -641,8 +636,11 @@
     updateScrollFade();
     return refreshed;
   }
+  // 「全部」里待办与待整理资源混排时,两者各按自己的规则排序会让顺序无法理解
+  // (新上传的文件会插到两条待办中间)。改为分层:先列要做的待办(按紧急度),
+  // 再列待整理资源(按收集时间倒序),同层内部再按时间排。
   function actionRank(action: any) {
-    if (action.actionType !== 'todo') return 3;
+    if (action.actionType !== 'todo') return 4;
     const due = action.item.dueAt ? parseServerDate(action.item.dueAt).getTime() : 0;
     if (due && due < Date.now()) return 0;
     if (due && new Date(due).toDateString() === new Date().toDateString()) return 1;
@@ -678,20 +676,6 @@
       priority: candidate.id === item.id ? priority : candidate.priority,
     }));
     if (!(await todo.reorder(payload))) message.error(t('inbox.todoReorderFailed'));
-  }
-  async function createQuickTodo() {
-    const title = quickTodoTitle.value.trim();
-    if (!title || quickCreating.value || blockGuestWrite('todo-create', t('inbox.guestPrompt'))) return;
-    const dueAt = quickTodoDueAt(quickTodoDue.value);
-    quickCreating.value = true;
-    try {
-      if (await todo.quickCreate(title, dueAt, quickTodoPriority.value)) {
-        quickTodoTitle.value = '';
-        message.success(t('inbox.todoSaved'));
-      } else message.error(t('inbox.todoSaveFailed'));
-    } finally {
-      quickCreating.value = false;
-    }
   }
   function toggleTodoSelected(id: string, selected: boolean) {
     selectedTodoIds.value = selected
@@ -1009,13 +993,9 @@
   .todo-workspace-toolbar__views {
     flex-shrink: 0;
   }
-  .todo-quick-create {
-    display: grid;
-    grid-template-columns: minmax(220px, 1fr) 132px 108px auto;
-    align-items: center;
-    gap: 7px;
-    min-width: 0;
-    flex: 1;
+  .todo-workspace-toolbar__select {
+    flex-shrink: 0;
+    margin-left: auto;
   }
   .todo-list-toolbar {
     min-height: 46px;
@@ -1030,9 +1010,6 @@
     justify-content: space-between;
     gap: 10px;
     flex-shrink: 0;
-  }
-  .todo-list-toolbar__select {
-    margin-left: auto;
   }
   .todo-list-toolbar__actions {
     display: flex;
@@ -1135,7 +1112,7 @@
     flex-shrink: 0;
   }
   .inbox-toolbar__right.has-status {
-    grid-template-columns: minmax(180px, 250px) 130px 120px;
+    grid-template-columns: minmax(180px, 250px) 130px auto;
   }
   .inbox-batch {
     display: flex;
@@ -1216,6 +1193,32 @@
   .inbox-loading {
     min-height: 100%;
   }
+  .inbox-list__group-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 4px;
+    color: var(--desc-color);
+    font-size: 13px;
+
+    strong {
+      color: var(--text-color);
+      font-weight: 600;
+    }
+
+    span {
+      min-width: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+      color: var(--primary-color);
+      font-size: 12px;
+      text-align: center;
+    }
+  }
+  .inbox-list__group-label:first-child {
+    margin-top: 0;
+  }
   .inbox-list {
     display: flex;
     flex-direction: column;
@@ -1267,22 +1270,21 @@
     .inbox-toolbar__right,
     .inbox-toolbar__right.has-status {
       width: 100%;
-      grid-template-columns: minmax(0, 1fr) 130px 120px;
+      grid-template-columns: minmax(0, 1fr) 130px auto;
     }
   }
   @media (max-width: 767px) {
+    /* 视图切换与「批量选择」保持同一行,不再各占一行 */
     .todo-workspace-toolbar {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .todo-quick-create {
-      grid-template-columns: minmax(0, 1fr) 108px;
-    }
-    .todo-quick-create > :first-child {
-      grid-column: 1 / -1;
+      align-items: center;
+      gap: 8px;
     }
     .todo-workspace-toolbar__views {
-      width: 100%;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .todo-workspace-toolbar__select {
+      min-height: 36px;
     }
     .todo-list-toolbar {
       align-items: stretch;
@@ -1292,9 +1294,6 @@
       width: 100%;
       justify-content: flex-start;
       flex-wrap: wrap;
-    }
-    .todo-list-toolbar__select {
-      min-height: 40px;
     }
     .todo-undo-banner {
       flex-wrap: wrap;
@@ -1385,6 +1384,11 @@
     }
     .inbox-page--mobile-todo .inbox-list {
       gap: 8px;
+      padding: 0 0 18px;
+    }
+    /* 分组列表(列表视图)此前保留了桌面的水平内边距,导致卡片比上方工具条多缩进一截 */
+    .inbox-page--mobile-todo .todo-group-list {
+      gap: 12px;
       padding: 0 0 18px;
     }
   }

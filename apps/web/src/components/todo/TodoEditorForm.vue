@@ -6,14 +6,72 @@
     </label>
     <label>
       <span>{{ t('inbox.todoDescription') }}</span>
-      <BInput
-        v-model:value="form.description"
-        type="textarea"
-        :rows="3"
-        :maxlength="2000"
-        :placeholder="t('inbox.todoDescriptionPlaceholder')"
-      />
+      <div class="todo-description-field">
+        <BInput
+          v-model:value="form.description"
+          type="textarea"
+          :rows="3"
+          :maxlength="2000"
+          :placeholder="t('inbox.todoDescriptionPlaceholder')"
+          @keydown="handleMentionKeydown"
+        />
+        <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
+        <div
+          v-if="mentionQuery"
+          v-show="mentionHasResults"
+          class="todo-mention-layer"
+          :style="mentionAnchorStyle"
+        >
+          <ResourcePickerPanel
+            ref="mentionPanel"
+            :allowed-types="['bookmark', 'note', 'file']"
+            :show-search="false"
+            :keyword="mentionQuery.keyword"
+            @select="applyMentionSelection"
+            @close="closeMention"
+            @results-count="mentionHasResults = $event > 0"
+          />
+        </div>
+      </div>
+      <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
     </label>
+
+    <BModal
+      v-model:visible="resourcePickerVisible"
+      :title="t('inbox.todoAddResource')"
+      width="460px"
+      :show-footer="false"
+    >
+      <ResourcePickerPanel
+        class="todo-resource-picker-modal"
+        :allowed-types="['bookmark', 'note', 'file']"
+        @select="applyMentionSelection"
+        @close="resourcePickerVisible = false"
+      />
+    </BModal>
+
+    <section class="todo-resource-refs">
+      <div class="todo-resource-refs__head">
+        <span class="todo-resource-refs__label">
+          {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
+        </span>
+        <!-- 输入 @ 是快捷方式,显式按钮同时承担可发现性与无障碍入口(方案 5.6) -->
+        <BButton size="small" @click="openResourcePicker">@ {{ t('inbox.todoAddResource') }}</BButton>
+      </div>
+      <div v-if="resourceRefs.length" class="todo-resource-refs__list">
+        <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
+          <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
+          <span class="todo-resource-chip__title">{{ ref.title }}</span>
+          <BButton
+            class="todo-resource-chip__remove"
+            :aria-label="t('common.delete')"
+            @click="removeResourceRef(ref)"
+          >
+            ×
+          </BButton>
+        </span>
+      </div>
+    </section>
     <section class="todo-checklist-editor">
       <div class="todo-checklist-editor__header">
         <div>
@@ -137,14 +195,27 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
-  import type { TodoChecklistItem, TodoItem, TodoPayload, TodoPriority, TodoReminderChannel } from '@/api/todoApi';
+  import type {
+    TodoChecklistItem,
+    TodoItem,
+    TodoPayload,
+    TodoPriority,
+    TodoReminderChannel,
+    TodoResourceRefView,
+  } from '@/api/todoApi';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
+  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
+  import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
 
@@ -166,6 +237,109 @@
   }>();
   const { t } = useI18n();
   const checklistItems = ref<TodoChecklistItem[]>([]);
+
+  // ── 说明区 @ 关联参考资料 ──────────────────────────
+  const resourceRefs = ref<TodoResourceRefView[]>([]);
+  const mentionQuery = ref<MentionQuery | null>(null);
+  const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  // 搜不到结果就整块不显示;面板仍挂载继续搜,退回能匹配的词时自动重现
+  const mentionHasResults = ref(false);
+  const MAX_RESOURCE_REFS = 10;
+
+  // 浮层锚定在触发它的 @ 上:只在打开时算一次,继续输入不会让它漂走
+  const mentionAnchor = ref<{ left: number } | null>(null);
+  const mentionAnchorStyle = computed(() =>
+    mentionAnchor.value ? { left: `${mentionAnchor.value.left}px` } : undefined,
+  );
+
+  function updateMentionAnchor(target: HTMLTextAreaElement | null, query: MentionQuery) {
+    const field = target?.closest('.todo-description-field') as HTMLElement | null;
+    if (!target || !field) return;
+    const caret = getTextareaCaretRect(target, query.start);
+    const offset = toAnchorOffset(caret, field);
+    // 垂直方向固定在说明框整体下方(不遮输入内容),水平对齐触发的 @
+    mentionAnchor.value = { left: Math.max(0, Math.min(offset.left, field.offsetWidth - 60)) };
+  }
+
+  function closeMention() {
+    mentionQuery.value = null;
+    mentionAnchor.value = null;
+    mentionHasResults.value = false;
+  }
+
+  // 点击外部 / Esc 关闭走统一实现
+  useDismissOnOutside({
+    isActive: () => Boolean(mentionQuery.value),
+    ignoreSelectors: ['.todo-mention-layer', '.todo-description-field'],
+    onDismiss: closeMention,
+  });
+
+  function handleMentionKeydown(event: KeyboardEvent) {
+    const target = event.target as HTMLTextAreaElement | null;
+    // 面板没有搜索框,焦点留在说明框,键盘导航由这里转发
+    if (mentionQuery.value && mentionHasResults.value) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        mentionPanel.value?.chooseActive();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMention();
+        return;
+      }
+    }
+    window.setTimeout(() => {
+      if (!target || typeof target.selectionStart !== 'number') return closeMention();
+      const next = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+      const isNewMention = !mentionQuery.value || mentionQuery.value.start !== next?.start;
+      mentionQuery.value = next;
+      if (!next) return closeMention();
+      if (isNewMention) void nextTick(() => updateMentionAnchor(target, next));
+    }, 0);
+  }
+
+  /** 选中后消费掉说明里的 @关键词,只保留结构化关系,不往正文塞链接文本。 */
+  function applyMentionSelection(item: { type: string; id: string; title: string }) {
+    const query = mentionQuery.value;
+    if (query) form.description = replaceMentionQuery(form.description, query);
+    closeMention();
+    resourcePickerVisible.value = false;
+    const key = `${item.type}:${item.id}`;
+    if (resourceRefs.value.some((ref) => `${ref.type}:${ref.id}` === key)) return;
+    if (resourceRefs.value.length >= MAX_RESOURCE_REFS) {
+      message.warning(t('inbox.todoResourceRefsLimit', { count: MAX_RESOURCE_REFS }));
+      return;
+    }
+    resourceRefs.value = [
+      ...resourceRefs.value,
+      {
+        type: item.type as TodoResourceRefView['type'],
+        id: String(item.id),
+        title: item.title,
+        snapshotTitle: item.title,
+        available: true,
+      },
+    ];
+  }
+
+  const resourcePickerVisible = ref(false);
+
+  function openResourcePicker() {
+    closeMention();
+    resourcePickerVisible.value = true;
+  }
+
+  function removeResourceRef(target: TodoResourceRefView) {
+    resourceRefs.value = resourceRefs.value.filter((ref) => !(ref.type === target.type && ref.id === target.id));
+  }
+
   const checklistInputRefs = new Map<string, { focus: () => void }>();
   const form = reactive({
     title: '',
@@ -276,6 +450,8 @@
   function reset() {
     form.title = props.item?.title || '';
     form.description = props.item?.description || '';
+    resourceRefs.value = [...(props.item?.resourceRefs || [])];
+    closeMention();
     form.priority = props.item?.priority ?? 1;
     form.dueAt = toTodoLocalInput(props.item?.dueAt);
     const reminder = props.item?.reminder;
@@ -351,6 +527,7 @@
     emit('submit', {
       title: form.title.trim(),
       description: form.description.trim(),
+      resourceRefs: resourceRefs.value.map((ref) => ({ type: ref.type, id: ref.id })),
       priority: form.priority,
       checklist,
       dueAt: form.dueAt || null,
@@ -593,5 +770,99 @@
     .todo-reminder-editor__field-error {
       margin-left: auto;
     }
+  }
+
+  .todo-description-field {
+    position: relative;
+  }
+
+  /* 弹框内的选择面板铺满可用宽度,不保留浮层的固定窄宽 */
+  .todo-resource-picker-modal {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
+  /* 说明框位于弹框上部,向上弹会被 BModal 内容区裁掉,故改为向下展开 */
+  .todo-mention-layer {
+    position: absolute;
+    /* 垂直固定在说明框下方(不遮输入内容);水平 left 由内联样式对齐触发的 @ */
+    left: 0;
+    top: calc(100% + 6px);
+    width: max-content;
+    max-width: 100%;
+    z-index: 20;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--menu-body-bg-color, var(--card-background));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
+  }
+
+  .todo-description-hint {
+    display: block;
+    margin-top: 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .todo-resource-refs {
+    display: grid;
+    gap: 6px;
+  }
+
+  .todo-resource-refs__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .todo-resource-refs__label {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  .todo-resource-refs__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .todo-resource-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    gap: 6px;
+    padding: 4px 6px 4px 8px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
+    font-size: 12px;
+  }
+
+  .todo-resource-chip__type {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+  }
+
+  .todo-resource-chip__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color);
+  }
+
+  .todo-resource-chip__remove {
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    color: var(--desc-color);
+    background: transparent !important;
+    line-height: 1;
   }
 </style>

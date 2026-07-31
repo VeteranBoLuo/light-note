@@ -242,6 +242,31 @@
     }
   }
 
+  const PASTED_IMAGE_TYPE = /^image\/(png|jpe?g|webp)$/i;
+  const MAX_LOCAL_ATTACHMENT_SIZE = 20 * 1024 * 1024;
+
+  /** 输入框粘贴图片入口:复用本地上传管线;返回 true 表示该粘贴事件已被处理(含被拦截的场景)。 */
+  async function uploadPastedImage(file: File) {
+    if (!file || !PASTED_IMAGE_TYPE.test(file.type)) return false;
+    if (props.modelValue.length) {
+      message.warning(t('ai.removeCurrentAttachmentFirst'));
+      return true;
+    }
+    if (file.size > MAX_LOCAL_ATTACHMENT_SIZE) {
+      message.error(t('ai.attachmentPasteTooLarge'));
+      return true;
+    }
+    const ext = file.type.toLowerCase().includes('png')
+      ? 'png'
+      : file.type.toLowerCase().includes('webp')
+        ? 'webp'
+        : 'jpg';
+    // 剪贴板图片默认都叫 image.png,重命名避免多次粘贴同名难以分辨。
+    const named = new File([file], `pasted-${Date.now()}.${ext}`, { type: file.type });
+    await uploadLocal([named]);
+    return true;
+  }
+
   async function attachCloudFile(fileId: string) {
     if (busy.value) return;
     const current = props.modelValue[0];
@@ -343,7 +368,7 @@
     stopPolling();
   });
 
-  defineExpose({ attachCloudFile, openAction });
+  defineExpose({ attachCloudFile, openAction, uploadPastedImage });
 </script>
 
 <style scoped lang="less">

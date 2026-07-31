@@ -62,6 +62,9 @@
   const isHover = computed(() => props.trigger === 'hover');
   const isClick = computed(() => props.trigger === 'click');
 
+  // 一次打开周期内锁定的展开方向(true=上方);null 表示尚未按真实高度决策
+  let lockedPlaceAbove: boolean | null = null;
+
   function computePosition() {
     const el = triggerRef.value;
     if (!el) return;
@@ -87,12 +90,21 @@
 
     // 优先使用调用方指定的方向；指定方向放不下时自动翻转。两侧都放不下时，
     // 选择空间更大的一侧并钳制到视口内，面板自身可再通过 max-height 滚动。
+    // 方向在一次打开内只决策一次:内容增减(如 @ 过滤结果变多变少)会改变面板高度,
+    // 若每次都重新翻转,浮层会在上下两侧来回跳。
     const spaceAbove = rTop - 8;
     const spaceBelow = vh - rBottom - 8;
-    let placeAbove = props.placement.startsWith('top');
-    if (panelH) {
-      if (placeAbove && panelH > spaceAbove && spaceBelow > spaceAbove) placeAbove = false;
-      if (!placeAbove && panelH > spaceBelow && spaceAbove > spaceBelow) placeAbove = true;
+    let placeAbove: boolean;
+    if (lockedPlaceAbove !== null) {
+      placeAbove = lockedPlaceAbove;
+    } else {
+      placeAbove = props.placement.startsWith('top');
+      if (panelH) {
+        if (placeAbove && panelH > spaceAbove && spaceBelow > spaceAbove) placeAbove = false;
+        if (!placeAbove && panelH > spaceBelow && spaceAbove > spaceBelow) placeAbove = true;
+        // 拿到真实高度后锁定,关闭时重置
+        lockedPlaceAbove = placeAbove;
+      }
     }
     let top = placeAbove ? rTop - panelH - 6 : rBottom + 6;
     if (panelH) top = Math.max(8, Math.min(top, vh - panelH - 8));
@@ -123,6 +135,7 @@
 
   // 开关副作用集中在此,覆盖"内部 hover/click 触发"与"外部 v-model:open 受控"两条路径
   watch(open, (val) => {
+    if (!val) lockedPlaceAbove = null;
     emit('openChange', val);
     if (val) {
       teleportTarget.value = props.getPopupContainer?.(triggerRef.value as HTMLElement) || 'body';
@@ -201,6 +214,7 @@
   /* 非 scoped:面板 Teleport 到 body/自定义容器,scoped 选择器命不中 */
   .b-popover-panel {
     z-index: 800;
+    border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--menu-body-bg-color, var(--background-color));
     color: var(--text-color);
@@ -208,6 +222,14 @@
       0 6px 16px 0 rgba(0, 0, 0, 0.08),
       0 3px 6px -4px rgba(0, 0, 0, 0.12),
       0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  /* 暗色下为亮色设计的浅阴影几乎不可见,浮层会与页面背景糊在一起,需要更实的边界与投影 */
+  [data-theme='night'] .b-popover-panel {
+    border-color: color-mix(in srgb, var(--text-color) 16%, var(--surface-border-color));
+    box-shadow:
+      0 10px 24px rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(0, 0, 0, 0.4);
   }
   .b-popover-fade-enter-active,
   .b-popover-fade-leave-active {

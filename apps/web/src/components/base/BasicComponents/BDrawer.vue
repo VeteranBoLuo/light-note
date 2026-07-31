@@ -600,7 +600,12 @@
     flex-shrink: 0;
   }
 
+  /* 标题可收缩,窄屏下先截断标题而不是把右侧动作挤出可视区 */
   .b-drawer-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 16px;
     font-weight: 600;
     color: var(--text-color);
@@ -610,6 +615,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 0 0 auto;
+    min-width: 0;
   }
 
   .b-drawer-close {

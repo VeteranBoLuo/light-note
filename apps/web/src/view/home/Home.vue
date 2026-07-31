@@ -172,6 +172,23 @@
   };
 
   // 获取书签列表
+  // 相关标签由后端按共同资源推导;失败或越权时保持空列表,不打断书签列表渲染。
+  let relatedTagsRequestId = 0;
+  const loadRelatedTagsForCurrent = async (tagId: string) => {
+    const requestId = ++relatedTagsRequestId;
+    try {
+      const res = await apiQueryPost('/api/bookmark/getRelatedTag', { filters: { id: tagId } });
+      if (requestId !== relatedTagsRequestId) return;
+      const current = bookmark.tagData as any;
+      if (!current || String(current.id) !== String(tagId)) return;
+      current.relatedTagList = res.status === 200 && Array.isArray(res.data) ? res.data : [];
+    } catch {
+      if (requestId !== relatedTagsRequestId) return;
+      const current = bookmark.tagData as any;
+      if (current && String(current.id) === String(tagId)) current.relatedTagList = [];
+    }
+  };
+
   const fetchBookmarkList = async (type: string, params: Record<string, any> = {}, page = 1) => {
     const user = useUserStore();
     const res = await apiQueryPost('/api/bookmark/getBookmarkList', {
@@ -291,6 +308,8 @@
         if (requestType === 'normal') {
           const tag = bookmark.tagList?.find((item) => item.id === route.params?.id);
           bookmark.tagData = tag;
+          // 相关标签不再随列表接口下发(已改为按共同资源推导),仅为当前选中标签单独拉取一次
+          if (tag?.id) void loadRelatedTagsForCurrent(tag.id);
           if (tag) {
             result = await fetchBookmarkList('normal', { tagId: tag.id }, 1);
             if (isHomeDrawerLayout.value) {

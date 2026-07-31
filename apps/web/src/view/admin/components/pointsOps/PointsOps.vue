@@ -2,7 +2,9 @@
   <div class="pops">
     <header class="pops-header">
       <h2 class="pops-title">积分运营</h2>
-      <p class="pops-subtitle">监控积分经济健康度(发放/消耗/存量、抽奖返还率),按需给指定账号手动发放或扣减积分/存储/补签卡。仅站长可见。</p>
+      <p class="pops-subtitle"
+        >监控积分经济健康度(发放/消耗/存量、抽奖返还率),按需给指定账号手动发放或扣减积分/存储/补签卡。仅站长可见。</p
+      >
     </header>
 
     <!-- 总览 -->
@@ -22,7 +24,10 @@
       <div class="pops-card">
         <span class="pops-card-label">抽奖积分返还率</span>
         <b class="pops-card-num">{{ ov?.lottery?.payoutRatio ?? 0 }}%</b>
-        <span class="pops-card-sub">抽 {{ ov?.lottery?.draws || 0 }} 次 · 花 {{ ov?.lottery?.cost || 0 }} · 返 {{ ov?.lottery?.winPoints || 0 }}</span>
+        <span class="pops-card-sub"
+          >抽 {{ ov?.lottery?.draws || 0 }} 次 · 花 {{ ov?.lottery?.cost || 0 }} · 返
+          {{ ov?.lottery?.winPoints || 0 }}</span
+        >
       </div>
     </div>
 
@@ -36,7 +41,9 @@
         <div class="pops-reasons">
           <div v-for="r in ov?.byReason || []" :key="r.reason" class="pops-reason">
             <span class="pops-reason-name">{{ reasonLabel(r.reason) }}</span>
-            <span class="pops-reason-delta" :class="r.delta > 0 ? 'up' : r.delta < 0 ? 'down' : ''">{{ r.delta > 0 ? '+' + r.delta : r.delta }}</span>
+            <span class="pops-reason-delta" :class="r.delta > 0 ? 'up' : r.delta < 0 ? 'down' : ''">{{
+              r.delta > 0 ? '+' + r.delta : r.delta
+            }}</span>
             <span class="pops-reason-cnt">{{ r.cnt }} 笔</span>
           </div>
           <div v-if="!ov?.byReason?.length" class="pops-empty">暂无数据</div>
@@ -45,7 +52,9 @@
 
       <!-- Top 持有人 -->
       <div class="pops-block">
-        <div class="pops-block-head"><span>积分持有 Top 10(共 {{ ov?.holders || 0 }} 人持有)</span></div>
+        <div class="pops-block-head"
+          ><span>积分持有 Top 10(共 {{ ov?.holders || 0 }} 人持有)</span></div
+        >
         <div class="pops-top">
           <div v-for="(u, i) in ov?.top || []" :key="u.userId" class="pops-top-row">
             <span class="pops-top-rank">{{ i + 1 }}</span>
@@ -64,16 +73,28 @@
     <div class="pops-block">
       <div class="pops-block-head"><span>账号查询 / 手动发放</span></div>
       <div class="pops-grant">
-        <div class="pops-field"><label>用户ID</label><b-input v-model:value="form.userId" placeholder="目标用户 user_id" /></div>
+        <div class="pops-field"
+          ><label>用户ID</label><b-input v-model:value="form.userId" placeholder="目标用户 user_id"
+        /></div>
         <div class="pops-field-row">
-          <div class="pops-field"><label>积分(±)</label><b-input v-model:value="form.points" type="number" placeholder="如 100 或 -50" /></div>
-          <div class="pops-field"><label>存储MB(±)</label><b-input v-model:value="form.storageMb" type="number" placeholder="如 512" /></div>
-          <div class="pops-field"><label>补签卡(±)</label><b-input v-model:value="form.cards" type="number" placeholder="0~2" /></div>
+          <div class="pops-field"
+            ><label>积分(±)</label><b-input v-model:value="form.points" type="number" placeholder="如 100 或 -50"
+          /></div>
+          <div class="pops-field"
+            ><label>存储MB(±)</label><b-input v-model:value="form.storageMb" type="number" placeholder="如 512"
+          /></div>
+          <div class="pops-field"
+            ><label>补签卡(±)</label><b-input v-model:value="form.cards" type="number" placeholder="0~2"
+          /></div>
         </div>
-        <div class="pops-field"><label>备注</label><b-input v-model:value="form.note" placeholder="发放原因(记入流水 ref)" /></div>
+        <div class="pops-field"
+          ><label>备注</label><b-input v-model:value="form.note" placeholder="发放原因(记入流水 ref)"
+        /></div>
         <div class="pops-actions">
           <b-button size="small" :disabled="!form.userId || querying" @click="queryUser">查询</b-button>
-          <b-button type="primary" size="small" :disabled="!form.userId || granting" @click="grant">发放 / 扣减</b-button>
+          <b-button type="primary" size="small" :disabled="!form.userId || granting" @click="grant"
+            >发放 / 扣减</b-button
+          >
         </div>
       </div>
 
@@ -84,16 +105,26 @@
           <code>{{ form.userId.trim() }}</code>
         </div>
         <div class="pops-detail-bal">
-          <span>余额 🪙 <b>{{ detail.balance?.points ?? 0 }}</b></span>
-          <span>扩容 💾 <b>{{ detail.balance?.storageBonusMb ?? 0 }}MB</b></span>
-          <span>补签卡 🎫 <b>{{ detail.balance?.cards ?? 0 }}</b></span>
-          <span>抽奖 🎰 <b>{{ detail.balance?.lotteryCount ?? 0 }}</b> 次</span>
+          <span
+            >余额 🪙 <b>{{ detail.balance?.points ?? 0 }}</b></span
+          >
+          <span
+            >扩容 💾 <b>{{ detail.balance?.storageBonusMb ?? 0 }}MB</b></span
+          >
+          <span
+            >补签卡 🎫 <b>{{ detail.balance?.cards ?? 0 }}</b></span
+          >
+          <span
+            >抽奖 🎰 <b>{{ detail.balance?.lotteryCount ?? 0 }}</b> 次</span
+          >
         </div>
         <div class="pops-detail-log">
           <div v-for="(l, i) in detail.log || []" :key="i" class="pops-log-row">
             <span class="pops-log-reason">{{ reasonLabel(l.reason) }}</span>
-            <span class="pops-log-delta" :class="l.delta > 0 ? 'up' : l.delta < 0 ? 'down' : ''">{{ l.delta > 0 ? '+' + l.delta : l.delta || '·' }}</span>
-            <span class="pops-log-time">{{ fmtTime(l.create_time) }}</span>
+            <span class="pops-log-delta" :class="l.delta > 0 ? 'up' : l.delta < 0 ? 'down' : ''">{{
+              l.delta > 0 ? '+' + l.delta : l.delta || '·'
+            }}</span>
+            <span class="pops-log-time">{{ fmtTime(l.createTime) }}</span>
           </div>
           <div v-if="!detail.log?.length" class="pops-empty">该账号暂无流水</div>
         </div>
@@ -181,9 +212,17 @@
     }
     granting.value = true;
     try {
-      const res = await growthApi.adminGrantPoints({ userId: form.value.userId.trim(), points, storageMb, cards, note: form.value.note });
+      const res = await growthApi.adminGrantPoints({
+        userId: form.value.userId.trim(),
+        points,
+        storageMb,
+        cards,
+        note: form.value.note,
+      });
       if (res.status === 200 && res.data?.ok) {
-        message.success(`已更新:积分 ${res.data.points} / 存储 ${res.data.storageBonusMb}MB / 补签卡 ${res.data.cards}`);
+        message.success(
+          `已更新:积分 ${res.data.points} / 存储 ${res.data.storageBonusMb}MB / 补签卡 ${res.data.cards}`,
+        );
         form.value.points = '';
         form.value.storageMb = '';
         form.value.cards = '';

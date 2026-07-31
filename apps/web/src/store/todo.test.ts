@@ -84,12 +84,23 @@ describe('todo store', () => {
     expect(listTodos).toHaveBeenCalledTimes(1);
   });
 
-  it('行内快速创建后刷新列表', async () => {
+  it('preserveStatus 拉取后,后续无参刷新沿用真实请求口径而非页签状态', async () => {
     const store = useTodoStore();
-    createTodo.mockResolvedValueOnce({ status: 200, data: { id: 'todo-new' } });
-    listTodos.mockResolvedValueOnce({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
-    await expect(store.quickCreate('写周报', '2026-07-31T17:00', 2)).resolves.toBe(true);
-    expect(createTodo).toHaveBeenCalledWith({ title: '写周报', dueAt: '2026-07-31T17:00', priority: 2 });
+    listTodos.mockResolvedValue({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });
+    // 「待处理」全部页签:页签仍是 all,但只取未完成
+    await store.refreshList({ status: 'pending', preserveStatus: true });
+    expect(store.status).toBe('all');
+    expect(listTodos).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'pending' }));
+
+    reorderTodos.mockResolvedValueOnce({ status: 200, data: {} });
+    await store.reorder([{ id: 'todo-1', priority: 2 }]);
+    // 改优先级后的刷新不能退回 all,否则已完成待办会重新出现在列表里
+    expect(listTodos).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'pending' }));
+
+    // 显式切到已完成页签时,口径要跟着切换
+    await store.refreshList({ status: 'completed' });
+    expect(store.status).toBe('completed');
+    expect(listTodos).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'completed' }));
   });
 
   it('撤销批量完成通过单个事务请求恢复并回滚自动生成实例', async () => {

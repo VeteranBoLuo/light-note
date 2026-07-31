@@ -15,16 +15,37 @@
           @prompt="applyAttachmentPrompt"
         />
       </div>
-      <BInput
-        v-model:value="inputValue"
-        type="textarea"
-        submit-on-enter
-        @enter="handleSend"
-        :placeholder="t('ai.inputPlaceholder')"
-        :rows="1"
-        ref="textInput"
-        class="text-input"
-      />
+      <div class="text-input-wrap">
+        <BInput
+          v-model:value="inputValue"
+          type="textarea"
+          submit-on-enter
+          @enter="handleSend"
+          @paste="handlePaste"
+          @keydown="handleMentionKeydown"
+          :placeholder="t('ai.inputPlaceholder')"
+          :rows="1"
+          ref="textInput"
+          class="text-input"
+        />
+        <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
+        <div
+          v-if="mentionQuery"
+          v-show="mentionHasResults"
+          class="ai-mention-layer"
+          :style="mentionAnchorStyle"
+        >
+          <ResourcePickerPanel
+            ref="mentionPanel"
+            :show-search="false"
+            :keyword="mentionQuery.keyword"
+            :pinned-items="mentionPinnedItems"
+            @select="applyMentionSelection"
+            @close="closeMention"
+            @results-count="mentionHasResults = $event > 0"
+          />
+        </div>
+      </div>
       <div class="composer-toolbar">
         <div class="composer-meta">
           <span v-if="!isMobile" class="input-hint">{{ t('ai.inputHint') }}</span>
@@ -86,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, ref, nextTick, watch, computed } from 'vue';
+  import { onBeforeUnmount, onMounted, ref, nextTick, watch, computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import TranslationToggle from './TranslationToggle.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -94,6 +115,15 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
+  import {
+    replaceMentionQuery,
+    resolveMentionQuery,
+    type MentionQuery,
+  } from '@/utils/resourceMentionTrigger';
+  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
+  import { useCurrentPageResource } from '@/composables/useCurrentPageResource';
+  import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
@@ -127,6 +157,7 @@
   const attachmentPicker = ref<{
     attachCloudFile: (fileId: string) => Promise<void>;
     openAction: (toolName: AiAttachmentDirectActionName, args?: Record<string, unknown>) => boolean;
+    uploadPastedImage: (file: File) => Promise<boolean>;
   } | null>(null);
   const adjustTextareaHeight = () => {};
   const inputValue = computed({
@@ -184,6 +215,112 @@
   function applyAttachmentPrompt(value: string) {
     emit('update:modelValue', mergePromptSuggestion(props.modelValue, value));
     focus();
+  }
+
+  // ── 输入 @ 唤起资源建议 ──────────────────────────────
+  // @ 浮层与「@ 添加资源」按钮共享同一条「当前页面」推导
+  const currentPageResource = useCurrentPageResource();
+  const mentionPinnedItems = computed(() =>
+    currentPageResource.value ? [currentPageResource.value] : [],
+  );
+  const mentionQuery = ref<MentionQuery | null>(null);
+  const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  // 搜不到结果就整块不显示(与 Claude 一致);面板仍挂载着继续搜,
+  // 所以从 @test123 退回 @test 时会自动重新出现,不必删到只剩 @
+  const mentionHasResults = ref(false);
+
+  // 浮层锚定在触发它的 @ 上:只在打开时算一次,输入框长高/换行都不会让它漂走
+  const mentionAnchor = ref<{ left: number; bottom: number } | null>(null);
+  const mentionAnchorStyle = computed(() =>
+    mentionAnchor.value
+      ? { left: `${mentionAnchor.value.left}px`, bottom: `${mentionAnchor.value.bottom}px` }
+      : undefined,
+  );
+
+  function updateMentionAnchor(target: HTMLTextAreaElement | null, query: MentionQuery) {
+    const wrap = target?.closest('.text-input-wrap') as HTMLElement | null;
+    if (!target || !wrap) return;
+    const caret = getTextareaCaretRect(target, query.start);
+    const offset = toAnchorOffset(caret, wrap);
+    mentionAnchor.value = {
+      left: Math.max(0, offset.left),
+      // 浮层在 @ 所在行的上方展开
+      bottom: wrap.offsetHeight - offset.top + 6,
+    };
+  }
+
+  function closeMention() {
+    mentionQuery.value = null;
+    mentionAnchor.value = null;
+    mentionHasResults.value = false;
+  }
+
+  // 点击外部 / Esc 关闭走统一实现;输入框本身不算外部,否则刚打完 @ 就被关掉
+  useDismissOnOutside({
+    isActive: () => Boolean(mentionQuery.value),
+    ignoreSelectors: ['.ai-mention-layer', '.text-input-wrap'],
+    onDismiss: closeMention,
+  });
+
+  function syncMentionQuery(target: HTMLTextAreaElement | HTMLInputElement | null) {
+    if (!target || typeof target.selectionStart !== 'number') return closeMention();
+    const next = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+    const isNewMention = !mentionQuery.value || mentionQuery.value.start !== next?.start;
+    mentionQuery.value = next;
+    if (!next) return closeMention();
+    // 同一个 @ 继续输入时保持原位,换了触发点才重新锚定
+    if (isNewMention) void nextTick(() => updateMentionAnchor(target as HTMLTextAreaElement, next));
+  }
+
+  function handleMentionKeydown(event: KeyboardEvent) {
+    const target = event.target as HTMLTextAreaElement | null;
+    // 面板没有搜索框,焦点始终留在输入框,键盘导航由这里转发
+    if (mentionQuery.value && mentionHasResults.value) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        mentionPanel.value?.chooseActive();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMention();
+        return;
+      }
+    }
+    // 键入后光标才更新,放到下一帧再解析;选择器内部的键盘导航由它自己处理
+    window.setTimeout(() => syncMentionQuery(target), 0);
+  }
+
+  /** 选中资源:消费掉输入框里的 @关键词,再按类型交给对应写入路径。 */
+  function applyMentionSelection(item: { type: string; id: string; title: string }) {
+    const query = mentionQuery.value;
+    if (query) emit('update:modelValue', replaceMentionQuery(props.modelValue, query));
+    closeMention();
+    if (item.type === 'file') {
+      // 云文件必须走附件准备与解析,不能当成普通上下文
+      void attachmentPicker.value?.attachCloudFile(item.id);
+      return;
+    }
+    const next = { type: item.type, id: String(item.id), title: item.title } as AiResourceContext;
+    const exists = props.contexts.some((ctx) => ctx.type === next.type && String(ctx.id) === next.id);
+    if (exists || props.contexts.length >= 5) return;
+    emit('update:contexts', [...props.contexts, next]);
+    focus();
+  }
+
+  /** 粘贴图片直接进入附件上传;纯文本粘贴不受影响。 */
+  function handlePaste(event: ClipboardEvent) {
+    const files = Array.from(event.clipboardData?.files || []);
+    const image = files.find((file) => /^image\//i.test(file.type));
+    if (!image) return;
+    event.preventDefault();
+    void attachmentPicker.value?.uploadPastedImage(image);
   }
 
   function openAttachmentAction(toolName: AiAttachmentDirectActionName, args: Record<string, unknown> = {}) {
@@ -256,6 +393,39 @@
     width: 100%;
     min-width: 0;
     margin-bottom: 6px;
+  }
+
+  /* 「@ 添加资源」「上传文件」是入口按钮:BButton 默认无边框,暗色下与输入区背景融为一体,
+     补一圈描边让它们保持按钮形态(chips 有自己的底色,不在此列) */
+  .context-actions :deep(.b-popover-trigger > .b_btn),
+  .context-actions :deep(.b-upload-trigger .b_btn) {
+    border: 1px solid var(--card-border-color);
+  }
+
+  [data-theme='night'] .context-actions :deep(.b-popover-trigger > .b_btn),
+  [data-theme='night'] .context-actions :deep(.b-upload-trigger .b_btn) {
+    border-color: color-mix(in srgb, var(--text-color) 22%, var(--card-border-color));
+  }
+
+  .text-input-wrap {
+    position: relative;
+    min-width: 0;
+  }
+
+  /* @ 选择面板贴输入框上沿弹出,避免遮挡正在输入的文字 */
+  .ai-mention-layer {
+    position: absolute;
+    /* left / bottom 由锚点计算写入内联样式,固定在触发的 @ 上 */
+    left: 0;
+    bottom: calc(100% + 6px);
+    width: max-content;
+    max-width: 100%;
+    z-index: 20;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--menu-body-bg-color, var(--card-background));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
   }
 
   .text-input {

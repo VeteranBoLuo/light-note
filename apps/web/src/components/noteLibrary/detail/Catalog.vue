@@ -1,5 +1,6 @@
 <template>
-  <aside v-if="bookmark.isDesktop" class="toc-container">
+  <!-- 无标题时不渲染:否则 .catalog 的左边框会在桌面端留下一个空框 -->
+  <aside v-if="bookmark.isDesktop && note.headings.length" class="toc-container">
     <nav class="catalog" :aria-label="t('noteDetail.catalogTitle')">
       <BButton
         v-for="(heading, index) in note.headings"

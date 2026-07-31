@@ -33,6 +33,8 @@
               @input="onMdInput"
               @scroll="syncMdScroll('edit')"
               @keydown="onMarkdownMentionKeydown"
+              @keyup="syncOrOpenMarkdownMention"
+              @click="syncOrOpenMarkdownMention"
               @paste="onMarkdownPaste"
               @focusout="closeInlineMention"
               :readonly="readonly"
@@ -60,15 +62,22 @@
       :style="inlineMentionAnchorStyle"
       trigger="manual"
       placement="bottom-left"
-      overlay-class-name="resource-mention-inline-popover"
+      :overlay-class-name="
+        inlineMentionHasResults
+          ? 'resource-mention-inline-popover'
+          : 'resource-mention-inline-popover is-empty'
+      "
     >
       <span aria-hidden="true"></span>
       <template #content>
-        <ResourceMentionSuggestions
+        <ResourcePickerPanel
           ref="inlineMentionSuggestionsRef"
-          :query="inlineMentionQuery"
+          :allowed-types="['bookmark', 'note', 'file']"
+          :show-search="false"
+          :keyword="inlineMentionQuery"
           @select="insertInlineResourceMention"
-          @open-full="openFullMentionPicker"
+          @close="closeInlineMention"
+          @results-count="inlineMentionHasResults = $event > 0"
         />
       </template>
     </BPopover>
@@ -79,7 +88,12 @@
       :show-footer="false"
       @close="closeMentionPicker"
     >
-      <ResourceMentionPicker @select="handleMentionPickerSelect" @close="closeMentionPicker" />
+      <ResourcePickerPanel
+        class="note-resource-picker-modal"
+        :allowed-types="['bookmark', 'note', 'file']"
+        @select="handleMentionPickerSelect"
+        @close="closeMentionPicker"
+      />
     </BModal>
     <BModal
       v-model:visible="mobileResourcePreviewVisible"
@@ -154,13 +168,14 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
-  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
+  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { isResourceMentionTextTrigger } from '@/utils/noteMentionTrigger';
+  import { resolveMentionQuery } from '@/utils/resourceMentionTrigger';
+  import { getTextareaCaretRect } from '@/utils/textareaCaret';
   import {
     applyResourceReferenceChipPresentation,
     buildResourceAnchorAttrs,
@@ -327,6 +342,8 @@
   let dompurifyLib: any = null;
   const mentionPickerVisible = ref(false);
   const inlineMentionVisible = ref(false);
+  // 搜不到结果就不弹出;面板仍挂载继续搜,退回能匹配的词时自动重现
+  const inlineMentionHasResults = ref(false);
   const inlineMentionQuery = ref('');
   const mobileResourcePreviewVisible = ref(false);
   const mobileResourcePreview = ref<{ ref: ResourceRef; title: string } | null>(null);
@@ -911,28 +928,26 @@
     };
   }
 
-  function openFullMentionPicker() {
-    const editor = editorRef.value;
-    const selection = htmlMentionSelection;
-    // 全量搜索会使焦点离开 iframe。先将正在输入的 @查询 固化成带标记的选区，
-    // 避免后续从弹窗选中资源时只剩已经失效的原始 DOM Range。
-    if (
-      currentType.value === 'html' &&
-      editor &&
-      selection &&
-      !selection.markerId &&
-      selectionIsExactTinyMceMention(editor, selection.range, selection.text)
-    ) {
-      htmlMentionSelection = captureTinyMceMentionSelection(editor, selection.range);
-    }
-    mentionPickerVisible.value = true;
-    inlineMentionVisible.value = false;
-  }
-
   function closeInlineMention() {
     if (!inlineMentionVisible.value) return;
     inlineMentionVisible.value = false;
+    inlineMentionHasResults.value = false;
   }
+
+  // 与 AI 输入区、待办说明共用同一套关闭规则;笔记浮层 teleport 到 body,按选择器判定内部
+  useDismissOnOutside({
+    isActive: () => inlineMentionVisible.value,
+    // 富文本用的是 TinyMCE inline 模式,编辑区是 .mce-content-body 而非 iframe 的 .tox-edit-area;
+    // 漏掉它会导致在正文里打字/点击被判成「点击外部」,浮层被关掉后就再也回不来
+    ignoreSelectors: [
+      '.resource-mention-inline-popover',
+      '.md-textarea',
+      '.note-editor-body',
+      '.mce-content-body',
+      '.tox-edit-area',
+    ],
+    onDismiss: () => closeInlineMention(),
+  });
 
   function closeMentionPicker() {
     mentionPickerVisible.value = false;
@@ -940,21 +955,32 @@
     clearTinyMceMentionSelection();
   }
 
-  function tryOpenMarkdownMention() {
-    if (!canEditResourceMentions.value || mentionPickerVisible.value || inlineMentionVisible.value) return;
+  /**
+   * 只要光标处在 `@关键词` 上下文里就打开或更新浮层。
+   * 原实现只认「刚敲下 @」,浮层一旦收起(例如中途搜不到结果),
+   * 必须把字删到只剩 @ 才能重新唤起;改用通用解析后,退回到能匹配的词即可重现。
+   */
+  function syncOrOpenMarkdownMention() {
+    if (!canEditResourceMentions.value || mentionPickerVisible.value || currentType.value !== 'markdown') return;
     const textarea = getMdTextarea();
     if (!textarea) return;
-    const caret = textarea.selectionStart;
-    const value = textarea.value;
-    if (!isResourceMentionTextTrigger(value, caret - 1)) return;
-    markdownMentionRange = { start: caret - 1, end: caret };
-    if (isMobile.value) mentionPickerVisible.value = true;
-    else {
-      inlineMentionQuery.value = '';
-      setInlineMentionAnchor(getMarkdownCaretRect(textarea));
-      inlineMentionVisible.value = true;
+    const query = resolveMentionQuery(textarea.value, textarea.selectionStart);
+    if (!query) return closeInlineMention();
+    markdownMentionRange = { start: query.start, end: query.end };
+    if (isMobile.value) {
+      if (!mentionPickerVisible.value) {
+        mentionPickerVisible.value = true;
+        recordResourceMentionOperation('打开资源提及选择器');
+      }
+      return;
     }
-    recordResourceMentionOperation('打开资源提及选择器');
+    inlineMentionQuery.value = query.keyword;
+    // 锚定在 @ 起点:继续输入时光标在动,浮层不应跟着漂
+    setInlineMentionAnchor(getTextareaCaretRect(textarea, query.start));
+    if (!inlineMentionVisible.value) {
+      inlineMentionVisible.value = true;
+      recordResourceMentionOperation('打开资源提及选择器');
+    }
   }
 
   function tryOpenTinyMceMention(editor: any) {
@@ -966,9 +992,14 @@
     allBefore.selectNodeContents(editor.getBody());
     allBefore.setEnd(range.startContainer, range.startOffset);
     const textBefore = allBefore.toString();
-    if (!isResourceMentionTextTrigger(textBefore, textBefore.length - 1)) return;
+    // 原来只认「刚敲下 @」;改用通用解析,浮层收起后退回到能匹配的词也能重新唤起
+    const mention = resolveMentionQuery(textBefore, textBefore.length);
+    if (!mention) return;
+    const backspaces = textBefore.length - mention.start;
+    // 跨文本节点的 @(例如中间夹着格式标记)保守放弃,避免构造出错误的替换区间
+    if (backspaces < 1 || range.startOffset < backspaces) return;
     const replacementRange = range.cloneRange();
-    replacementRange.setStart(range.startContainer, range.startOffset - 1);
+    replacementRange.setStart(range.startContainer, range.startOffset - backspaces);
     if (isMobile.value) {
       htmlMentionSelection = captureTinyMceMentionSelection(editor, replacementRange);
       mentionPickerVisible.value = true;
@@ -978,18 +1009,6 @@
       inlineMentionVisible.value = true;
     }
     recordResourceMentionOperation('打开资源提及选择器');
-  }
-
-  function syncMarkdownInlineMention() {
-    if (!inlineMentionVisible.value || currentType.value !== 'markdown') return;
-    const textarea = getMdTextarea();
-    const range = markdownMentionRange;
-    if (!textarea || !range || textarea.selectionStart < range.start + 1) return closeInlineMention();
-    const query = textarea.value.slice(range.start + 1, textarea.selectionStart);
-    if (/[\s@]/u.test(query)) return closeInlineMention();
-    markdownMentionRange = { start: range.start, end: textarea.selectionStart };
-    inlineMentionQuery.value = query;
-    setInlineMentionAnchor(getMarkdownCaretRect(textarea));
   }
 
   function syncTinyMceInlineMention(editor: any) {
@@ -1003,14 +1022,15 @@
       if (!isValidTinyMceMentionText(text)) return closeInlineMention();
       htmlMentionSelection = { range: mentionRange, bookmark: null, markerId: null, text };
       inlineMentionQuery.value = text.slice(1);
-      const caretRange = currentRange.cloneRange();
-      caretRange.collapse(false);
-      const caretRect = caretRange.getBoundingClientRect();
-      // TinyMCE 的 Range rect 已是页面视口坐标；再次叠加 iframe 的 rect 会让浮层向下偏移一个编辑区高度。
+      // 锚定在 @ 起点(mentionRange 的起始),继续输入时浮层保持不动;
+      // TinyMCE 的 Range rect 已是页面视口坐标,不能再叠加 iframe 偏移。
+      const anchorRange = mentionRange.cloneRange();
+      anchorRange.collapse(true);
+      const anchorRect = anchorRange.getBoundingClientRect();
       setInlineMentionAnchor({
-        left: caretRect.left,
-        top: caretRect.top,
-        height: caretRect.height || 20,
+        left: anchorRect.left,
+        top: anchorRect.top,
+        height: anchorRect.height || 20,
       });
     } catch {
       closeInlineMention();
@@ -1222,8 +1242,7 @@
     content.value = val;
     debounceRenderMd();
     void nextTick().then(() => {
-      if (inlineMentionVisible.value) syncMarkdownInlineMention();
-      else tryOpenMarkdownMention();
+      syncOrOpenMarkdownMention();
     });
   }
 
@@ -1711,6 +1730,7 @@
         window.setTimeout(() => {
           if (inlineMentionVisible.value) syncTinyMceInlineMention(editor);
           else tryOpenTinyMceMention(editor);
+          // 浮层已收起但仍处在 @ 上下文时,上面的 tryOpen 会重新唤起
         }, 0);
       });
       editor.on('keydown', (event: KeyboardEvent) => {
@@ -2122,6 +2142,19 @@
 </script>
 
 <style lang="less">
+  /* 搜不到结果时视觉隐藏,但保留 DOM:面板要继续搜索,
+     这样从 @test123 退回 @test 能自动重新出现,不必删到只剩 @ */
+  .resource-mention-inline-popover.is-empty {
+    display: none !important;
+  }
+
+  /* 弹框内的资源选择面板铺满可用宽度,不保留浮层的固定窄宽 */
+  .note-resource-picker-modal {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
   #editor-container.note-editor {
     display: flex;
     flex: 1 1 auto;

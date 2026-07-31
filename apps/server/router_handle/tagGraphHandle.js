@@ -1,6 +1,8 @@
 import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { getFileExtension, resolveFileCategory } from '../util/fileCategory.js';
+import { getDerivedRelatedTags } from '../util/services/tagRelationService.js';
+import { computeTagSimilarity } from '../util/tagRelationScore.js';
 
 const DEFAULT_LIMIT_RELATED_TAGS = 12;
 const DEFAULT_LIMIT_PER_TYPE = 20;
@@ -46,40 +48,12 @@ async function queryCenterTag(userId, tagId) {
   return rows[0] || null;
 }
 
+/**
+ * 单标签图谱的相邻标签:与标签详情、全局知识地图共用 tagRelationService 的共现推导与评分,
+ * 不再混合已下线的手工 tag_relations,避免同一份数据在不同入口给出不同结论。
+ */
 async function queryRelatedTags(userId, tagId, limit) {
-  const [rows] = await pool.query(
-    `SELECT
-      t.id,
-      t.name,
-      t.icon_url,
-      (
-        SELECT COUNT(*)
-        FROM resource_tag_relations r
-        WHERE r.tag_id = t.id AND r.user_id = ?
-      ) AS related_count,
-      COUNT(DISTINCT CASE
-        WHEN center_relation.tag_id IS NOT NULL
-        THEN CONCAT(candidate_relation.resource_type, ':', candidate_relation.resource_id)
-      END) AS shared_count,
-      MAX(CASE WHEN manual_relation.tag_id IS NOT NULL THEN 1 ELSE 0 END) AS manual_related
-     FROM tag t
-     LEFT JOIN resource_tag_relations candidate_relation
-       ON candidate_relation.tag_id = t.id AND candidate_relation.user_id = ?
-     LEFT JOIN resource_tag_relations center_relation
-       ON center_relation.user_id = candidate_relation.user_id
-      AND center_relation.resource_type = candidate_relation.resource_type
-      AND center_relation.resource_id = candidate_relation.resource_id
-      AND center_relation.tag_id = ?
-     LEFT JOIN tag_relations manual_relation
-       ON manual_relation.tag_id = ? AND manual_relation.related_tag_id = t.id
-     WHERE t.user_id = ? AND t.del_flag = 0 AND t.id <> ?
-     GROUP BY t.id, t.name, t.icon_url, t.sort, t.create_time
-     HAVING shared_count > 0 OR manual_related > 0
-     ORDER BY manual_related DESC, shared_count DESC, related_count DESC, t.sort, t.create_time DESC
-     LIMIT ?`,
-    [userId, userId, tagId, tagId, userId, tagId, limit],
-  );
-  return rows;
+  return getDerivedRelatedTags(pool, { userId, tagId, limit });
 }
 
 async function queryBookmarks(userId, tagId, limit) {
@@ -187,8 +161,9 @@ export const getTagGraph = async (req, res) => {
 
     const relatedTags = await queryRelatedTags(userId, tagId, relatedTagLimit);
     relatedTags.forEach((tag) => {
-      const relatedCount = Number(tag.related_count || 0);
-      const sharedCount = Number(tag.shared_count || 0);
+      // tagRelationService 返回驼峰字段:targetResourceCount 即该标签的资源总数。
+      const relatedCount = Number(tag.targetResourceCount || 0);
+      const sharedCount = Number(tag.sharedCount || 0);
       const relatedNodeId = toNodeId('tag', tag.id);
       pushNode(nodes, {
         id: relatedNodeId,
@@ -197,16 +172,18 @@ export const getTagGraph = async (req, res) => {
         label: tag.name,
         size: getNodeSize('tag', relatedCount),
         weight: Math.max(sharedCount, relatedCount),
-        iconUrl: tag.icon_url,
-        meta: { relatedCount, sharedCount },
+        iconUrl: tag.iconUrl,
+        meta: { relatedCount, sharedCount, similarity: tag.similarity },
       });
       pushEdge(edges, {
         id: `edge:tag-tag:${centerTag.id}:${tag.id}`,
         source: centerNodeId,
         target: relatedNodeId,
         type: 'tag-tag',
-        weight: Math.min(6, 2 + sharedCount),
+        // 与全局知识地图同一公式:粗细反映归一化相似度,而非共现绝对数
+        weight: Math.max(1, Math.min(6, Math.round(1 + Number(tag.similarity || 0) * 5))),
         sharedCount,
+        similarity: tag.similarity,
       });
     });
 
@@ -430,8 +407,11 @@ export const getGlobalGraph = async (req, res) => {
     ]);
 
     const nodes = new Map();
+    // 记录每个标签的资源体量,供边权归一化使用(与标签详情、单标签图谱同一口径)
+    const resourceCountByTag = new Map();
     tagRows.forEach((t) => {
       const count = Number(t.resource_count || 0);
+      resourceCountByTag.set(String(t.id), count);
       pushNode(nodes, {
         id: toNodeId('tag', t.id),
         rawId: t.id,
@@ -450,13 +430,22 @@ export const getGlobalGraph = async (req, res) => {
       const source = toNodeId('tag', r.t1);
       const target = toNodeId('tag', r.t2);
       if (!nodes.has(source) || !nodes.has(target)) return; // 两端都要在节点集内(被 LIMIT 截掉的不连)
+      const sharedCount = Number(r.co || 1);
+      // 边粗细按归一化相似度而非共现绝对数,避免「工作」「收藏」这类大标签的边一律最粗,
+      // 也保证与标签详情「共同 N 条 / 相似度」的结论一致。
+      const similarity = computeTagSimilarity({
+        sharedCount,
+        sourceResourceCount: resourceCountByTag.get(String(r.t1)) || 0,
+        targetResourceCount: resourceCountByTag.get(String(r.t2)) || 0,
+      });
       pushEdge(edges, {
         id: `edge:tag-tag:${r.t1}:${r.t2}`,
         source,
         target,
         type: 'tag-tag',
-        weight: Math.min(6, 1 + Number(r.co || 1)),
-        sharedCount: Number(r.co || 1),
+        weight: Math.max(1, Math.min(6, Math.round(1 + similarity * 5))),
+        sharedCount,
+        similarity,
       });
     });
 

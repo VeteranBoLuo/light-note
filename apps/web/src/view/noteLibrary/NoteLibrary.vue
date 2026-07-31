@@ -9,9 +9,7 @@
     @title-click="resetNoteLibrary"
   >
     <template #meta>
-      <span class="note-count-chip">{{
-        $t('note.visibleCount', { visible: visibleDragNoteList.length, total: noteTotal })
-      }}</span>
+      <span class="note-count-chip">{{ $t('note.visibleCount', { total: noteTotal }) }}</span>
     </template>
 
     <template #actions>
@@ -443,8 +441,10 @@
     gotoNewNote({ type: template.type, templateId: template.id });
   }
 
-  function addNoteToInbox(note: any) {
-    addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
+  async function addNoteToInbox(note: any) {
+    // 接口成功即本地打标,避免为一个徽标重新拉取列表
+    const ok = await addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
+    if (ok) note.isPending = true;
   }
   function menuForNote(note: any) {
     return [

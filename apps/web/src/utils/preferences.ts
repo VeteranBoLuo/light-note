@@ -5,7 +5,8 @@ export type LanguagePreference = 'zh-CN' | 'en-US';
 export type HomePagePreference = 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace';
 export type ApplicationHomePreference = Exclude<HomePagePreference, 'landing'>;
 export type MobileHomePreference = Extract<HomePagePreference, 'bookmark' | 'noteLibrary' | 'cloudSpace'>;
-export type AppHomePath = '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace';
+// '/manage/tagMg' 不作为可选默认首页,仅作为移动端「回到最近资料页签」的合法落点。
+export type AppHomePath = '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileHomePath = Extract<AppHomePath, '/home' | '/noteLibrary' | '/cloudSpace'>;
 
 export interface UserPreferences {

@@ -75,10 +75,11 @@
         </BButton>
       </div>
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
-        <div class="mobile-folder-list">
+        <div ref="mobileFolderListRef" class="mobile-folder-list">
           <div
             class="mobile-folder-item"
             :class="{ active: cloud.folder.id === 'all' }"
+            data-folder-id="all"
             @click="selectAllFolder"
             v-click-log="{ module: '云空间', operation: '查看全部文件' }"
             :title="$t('cloudSpace.allFile')"
@@ -90,6 +91,7 @@
             :key="folder.id"
             class="mobile-folder-item"
             :class="{ active: cloud.folder.id === folder.id }"
+            :data-folder-id="folder.id"
             :title="folder.name"
             @click="selectFolder(folder)"
             v-click-log="{ module: '云空间', operation: `查看文件夹【${folder.name}】` }"
@@ -126,6 +128,7 @@
 <script lang="ts" setup>
   import icon from '@/config/icon';
   import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+  import { scrollChipIntoCenter } from '@/utils/horizontalChipScroll';
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -249,6 +252,8 @@
   // 拖拽状态
   const dragActive = ref(false);
 
+  const mobileFolderListRef = ref<HTMLElement | null>(null);
+
   function selectAllFolder() {
     cloud.folder = {
       name: t('cloudSpace.allFile'),
@@ -261,6 +266,24 @@
     cloud.folder = folder;
     cloud.queryFieldList();
   }
+
+  // 移动端目录条:当前目录变化后把选中项滚入视野。
+  // 用 watch 而非点击事件,因为切目录会重新拉取列表导致重渲染,直接在点击里滚动会被打断;
+  // 同时覆盖「全部文件」和从其他入口(路由/上传后)切换目录的情况。
+  watch(
+    () => [cloud.folder.id, cloud.folderList.length, bookmark.isMobile],
+    () => {
+      if (!bookmark.isMobile) return;
+      nextTick(() => {
+        const container = mobileFolderListRef.value;
+        const active = container?.querySelector<HTMLElement>(
+          `[data-folder-id="${CSS.escape(String(cloud.folder.id ?? 'all'))}"]`,
+        );
+        scrollChipIntoCenter(container, active);
+      });
+    },
+    { immediate: true },
+  );
 
   function getRouteFileName() {
     const value = route.query.fileName;
@@ -725,6 +748,8 @@
   }
 
   .mobile-folder-list {
+    /* 作为 offsetParent,供选中项自动滚动按 offsetLeft 计算 */
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;

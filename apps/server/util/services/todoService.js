@@ -2,6 +2,12 @@ import { insertData } from '../agent/data.js';
 import crypto from 'crypto';
 import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
 import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from '../pageCursor.js';
+import {
+  copyTodoResourceRefs,
+  loadTodoResourceRefMap,
+  normalizeTodoResourceRefs,
+  replaceTodoResourceRefs,
+} from './todoReferenceService.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -10,6 +16,12 @@ const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已
 const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
   due_at AS dueAt, recurrence_rule AS recurrenceRule,
   completed_at AS completedAt, update_time AS updatedAt`;
+// 工作台今日行动流的时间窗筛选:overdue=已逾期,today=今天内到期(含已过时刻)。
+const DUE_FILTERS = new Set(['overdue', 'today']);
+const DUE_SQL = Object.freeze({
+  overdue: 'due_at IS NOT NULL AND due_at < CURDATE()',
+  today: 'due_at IS NOT NULL AND due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)',
+});
 const SORT_SQL = Object.freeze({
   smart: `CASE
       WHEN due_at IS NOT NULL AND due_at < NOW() THEN 0
@@ -360,6 +372,11 @@ export async function createTodo(connection, userId, values, { invalidateSearch 
   });
   await connection.query('INSERT INTO todo_items SET ?', [row]);
   await syncReminder(connection, { todoId: row.id, userId, reminder: todo.reminder });
+  // 参考资料与待办主记录同事务写入,任一引用越权即整体回滚
+  const resourceRefs = normalizeTodoResourceRefs(values?.resourceRefs);
+  if (resourceRefs?.length) {
+    await replaceTodoResourceRefs(connection, { userId, todoId: row.id, refs: resourceRefs });
+  }
   if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id: row.id };
 }
@@ -407,6 +424,11 @@ export async function updateTodo(connection, userId, id, values) {
     ],
   );
   await syncReminder(connection, { todoId: id, userId, reminder: todo.reminder });
+  // 只有显式传了 resourceRefs 才整体替换,未传表示本次不改动关系
+  const nextRefs = normalizeTodoResourceRefs(values?.resourceRefs);
+  if (nextRefs !== null) {
+    await replaceTodoResourceRefs(connection, { userId, todoId: id, refs: nextRefs });
+  }
   await invalidatePersonalKnowledgeCache(userId, { database: connection });
   return { id };
 }
@@ -457,6 +479,10 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
           nextDueSql,
         ],
       );
+      if (Number(nextResult?.affectedRows || 0) === 1) {
+        // 下一实例沿用同一批参考资料,顺序保持一致
+        await copyTodoResourceRefs(connection, { userId, fromTodoId: current.id, toTodoId: nextId });
+      }
       if (Number(nextResult?.affectedRows || 0) === 1 && reminder) {
         const currentDueMs = new Date(String(current.due_at).replace(' ', 'T')).getTime();
         const delta = nextDueAt.getTime() - currentDueMs;
@@ -755,6 +781,8 @@ function normalizeTodoListOptions(input = {}) {
   const status = String(input.status || 'all').toLowerCase();
   const sort = String(input.sort || 'smart').toLowerCase();
   if (!FILTER_STATUS.has(status) || !SORT_SQL[sort]) throw new Error('无效的待办筛选参数');
+  const due = input.due === undefined || input.due === null ? null : String(input.due).toLowerCase();
+  if (due !== null && !DUE_FILTERS.has(due)) throw new Error('无效的待办筛选参数');
 
   const keyword = String(input.keyword || '')
     .trim()
@@ -764,7 +792,7 @@ function normalizeTodoListOptions(input = {}) {
   const offset = paginated ? decodeOffsetCursor(input.cursor, TODO_PAGE_CURSOR_SCOPE) : 0;
   const view = input.view === 'summary' ? 'summary' : 'full';
   const includeTotal = input.includeTotal !== false;
-  return { status, sort, keyword, paginated, limit, offset, view, includeTotal };
+  return { status, sort, keyword, due, paginated, limit, offset, view, includeTotal };
 }
 
 function todoOrderSql(status, sort) {
@@ -816,12 +844,16 @@ async function loadTodoReminderMap(db, items, userId, view) {
  * 因此待办说明和提醒邮箱不会进入模型上下文。
  */
 export async function listTodoPage(db, userId, input = {}) {
-  const { status, sort, keyword, paginated, limit, offset, view, includeTotal } = normalizeTodoListOptions(input);
+  const { status, sort, keyword, due, paginated, limit, offset, view, includeTotal } =
+    normalizeTodoListOptions(input);
   const where = ['user_id = ?', 'del_flag = 0'];
   const params = [userId];
   if (status !== 'all') {
     where.push('status = ?');
     params.push(status);
+  }
+  if (due) {
+    where.push(DUE_SQL[due]);
   }
   if (keyword) {
     where.push('(title LIKE ? OR description LIKE ?)');
@@ -845,6 +877,11 @@ export async function listTodoPage(db, userId, input = {}) {
   const hasMore = paginated && rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
   const reminders = await loadTodoReminderMap(db, items, userId, view);
+  // 一次批量取回当前页全部待办的参考资料,避免逐条查询造成 N+1
+  const refMap =
+    view === 'summary'
+      ? new Map()
+      : await loadTodoResourceRefMap(db, { userId, todoIds: items.map((item) => item.id) }).catch(() => new Map());
   const mappedItems = items.map((item) => {
     if (view === 'summary') {
       const checklist = parseChecklist(item.checklist);
@@ -869,6 +906,7 @@ export async function listTodoPage(db, userId, input = {}) {
       recurrence: parseJsonObject(item.recurrence),
       reminder,
       reminderAt: reminder?.startAt || null,
+      resourceRefs: refMap.get(String(item.id)) || [],
     };
   });
   return {
