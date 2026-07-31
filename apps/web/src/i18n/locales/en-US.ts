@@ -2977,6 +2977,7 @@ export default {
     currentBookmark: 'Current bookmark',
     currentTag: 'Current tag',
     noContext: 'No resources found',
+    searching: 'Searching…',
     uploadFile: 'Upload file',
     removeAttachment: 'Remove',
     retryAttachment: 'Retry',

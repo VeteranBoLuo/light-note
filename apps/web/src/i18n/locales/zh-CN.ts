@@ -2901,6 +2901,7 @@ export default {
     currentBookmark: '当前书签',
     currentTag: '当前标签',
     noContext: '没有找到可添加的资源',
+    searching: '正在搜索…',
     uploadFile: '上传文件',
     removeAttachment: '移除',
     retryAttachment: '重试',

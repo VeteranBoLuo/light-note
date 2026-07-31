@@ -17,7 +17,8 @@
         />
         <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
         <div v-if="mentionQuery" ref="mentionLayer" class="todo-mention-layer">
-          <ResourceMentionPicker
+          <ResourcePickerPanel
+            :allowed-types="['bookmark', 'note', 'file']"
             :initial-keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
             @close="closeMention"
@@ -33,7 +34,12 @@
       width="460px"
       :show-footer="false"
     >
-      <ResourceMentionPicker @select="applyMentionSelection" @close="resourcePickerVisible = false" />
+      <ResourcePickerPanel
+        class="todo-resource-picker-modal"
+        :allowed-types="['bookmark', 'note', 'file']"
+        @select="applyMentionSelection"
+        @close="resourcePickerVisible = false"
+      />
     </BModal>
 
     <section class="todo-resource-refs">
@@ -197,7 +203,7 @@
     TodoResourceRefView,
   } from '@/api/todoApi';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
   import { generateUUID } from '@/utils/common';
@@ -727,6 +733,13 @@
     position: relative;
   }
 
+  /* 弹框内的选择面板铺满可用宽度,不保留浮层的固定窄宽 */
+  .todo-resource-picker-modal {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
   /* 说明框位于弹框上部,向上弹会被 BModal 内容区裁掉,故改为向下展开 */
   .todo-mention-layer {
     position: absolute;
@@ -734,6 +747,11 @@
     right: 0;
     top: calc(100% + 6px);
     z-index: 20;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--menu-body-bg-color, var(--card-background));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
   }
 
   .todo-description-hint {

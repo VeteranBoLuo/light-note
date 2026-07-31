@@ -30,7 +30,7 @@
         />
         <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
         <div v-if="mentionQuery" ref="mentionLayer" class="ai-mention-layer">
-          <ResourceMentionPicker
+          <ResourcePickerPanel
             :initial-keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
             @close="closeMention"
@@ -106,7 +106,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
-  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import {
     replaceMentionQuery,
     resolveMentionQuery,
@@ -343,13 +343,17 @@
     min-width: 0;
   }
 
-  /* @ 建议浮层贴着输入框上沿弹出,避免遮挡正在输入的文字 */
+  /* @ 选择面板贴输入框上沿弹出,避免遮挡正在输入的文字 */
   .ai-mention-layer {
     position: absolute;
     left: 0;
-    right: 0;
     bottom: calc(100% + 6px);
     z-index: 20;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--menu-body-bg-color, var(--card-background));
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
   }
 
   .text-input {

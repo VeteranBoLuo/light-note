@@ -79,7 +79,12 @@
       :show-footer="false"
       @close="closeMentionPicker"
     >
-      <ResourceMentionPicker @select="handleMentionPickerSelect" @close="closeMentionPicker" />
+      <ResourcePickerPanel
+        class="note-resource-picker-modal"
+        :allowed-types="['bookmark', 'note', 'file']"
+        @select="handleMentionPickerSelect"
+        @close="closeMentionPicker"
+      />
     </BModal>
     <BModal
       v-model:visible="mobileResourcePreviewVisible"
@@ -154,7 +159,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
   import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
@@ -2122,6 +2127,13 @@
 </script>
 
 <style lang="less">
+  /* 弹框内的资源选择面板铺满可用宽度,不保留浮层的固定窄宽 */
+  .note-resource-picker-modal {
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
   #editor-container.note-editor {
     display: flex;
     flex: 1 1 auto;
