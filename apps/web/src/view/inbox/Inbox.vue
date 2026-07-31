@@ -18,6 +18,7 @@
     <section class="inbox-toolbar" :class="{ 'inbox-toolbar--todo-primary': isMobileTodoPrimary }">
       <template v-if="isMobileTodoPrimary">
         <BTabs
+          v-if="todoView === 'list'"
           v-model:active-tab="todo.status"
           :options="todoStatusTabOptions"
           variant="pill"
@@ -37,7 +38,7 @@
           />
           <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
           <BTabs
-            v-if="inbox.filterType === 'todo'"
+            v-if="inbox.filterType === 'todo' && todoView === 'list'"
             v-model:active-tab="todo.status"
             :options="todoStatusTabOptions"
             variant="pill"
@@ -528,6 +529,13 @@
     if (view !== 'list' && todoSelectionMode.value) {
       todoSelectionMode.value = false;
       selectedTodoIds.value = [];
+    }
+    // 状态筛选(未完成/已完成/全部)只属于列表视图:议程/日历始终展示全量,
+    // 用 preserveStatus 保住列表页签的选择,切回列表时按页签口径恢复。
+    if (view !== 'list') {
+      if (todo.effectiveStatus !== 'all') void todo.refreshList({ status: 'all', preserveStatus: true });
+    } else if (todo.effectiveStatus !== todo.status) {
+      void todo.refreshList({ status: todo.status });
     }
     if (user.preferences.todoView === view) return;
     updatePreference({ todoView: view }).catch(() => {

@@ -291,11 +291,18 @@
   .todo-item.is-overdue {
     border-color: color-mix(in srgb, var(--danger-color, #e5484d) 38%, var(--card-border-color));
   }
-  /* 完成态明确「退场」:压低整体存在感,收起主题色渐变与左侧强调条 */
+  /* 完成态明确「退场」:压低内容存在感,收起主题色渐变与左侧强调条。
+     注意只淡化文案区——勾选框(取消完成)和右侧操作(删除)仍可点,
+     整卡 opacity 会让它们看起来像禁用。 */
   .todo-item.is-completed {
-    opacity: 0.6;
     border-color: var(--card-border-color);
     background: color-mix(in srgb, var(--text-color) 3%, var(--background-color));
+  }
+  .todo-item.is-completed .todo-item__meta,
+  .todo-item.is-completed .todo-item__description,
+  .todo-item.is-completed .todo-checklist,
+  .todo-item.is-completed .todo-resource-refs {
+    opacity: 0.62;
   }
   .todo-item.is-completed::before {
     display: none;
