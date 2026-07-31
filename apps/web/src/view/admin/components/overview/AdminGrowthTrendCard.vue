@@ -26,7 +26,7 @@
         </dl>
       </header>
 
-      <div class="growth-trend__chart" @mouseleave="hoverIndex = null">
+      <div class="growth-trend__chart" @mouseleave="setHover(panel.key, null)">
         <div class="growth-trend__axis" aria-hidden="true">
           <span v-for="(tick, index) in panel.ticks" :key="index">{{ formatTick(tick) }}</span>
         </div>
@@ -43,10 +43,10 @@
               vector-effect="non-scaling-stroke"
             />
             <line
-              v-if="hoverIndex !== null"
+              v-if="hoverOf(panel.key) !== null"
               class="growth-trend__hover-line"
-              :x1="hoverX"
-              :x2="hoverX"
+              :x1="hoverX(panel.key)"
+              :x2="hoverX(panel.key)"
               y1="0"
               y2="42"
               vector-effect="non-scaling-stroke"
@@ -75,38 +75,38 @@
               y="0"
               :width="area.width"
               height="42"
-              @mouseenter="hoverIndex = index"
+              @mouseenter="setHover(panel.key, index)"
             />
           </svg>
 
           <!-- 圆点走 HTML 层:SVG 非等比拉伸会把圆压成椭圆 -->
-          <template v-if="hoverIndex !== null">
+          <template v-if="hoverOf(panel.key) !== null">
             <span
               v-for="series in panel.series"
               :key="`dot-${series.key}`"
               class="growth-trend__dot"
-              :style="dotStyle(series.values[hoverIndex] || 0, panel.axisMax, series.colorVar)"
+              :style="dotStyle(panel.key, series.values[hoverOf(panel.key)!] || 0, panel.axisMax, series.colorVar)"
             ></span>
           </template>
 
           <div
-            v-if="hoverIndex !== null"
+            v-if="hoverOf(panel.key) !== null"
             class="growth-trend__tooltip"
-            :class="`is-${tooltipAnchor.align}`"
-            :style="{ left: `${tooltipAnchor.left}%` }"
+            :class="`is-${tooltipAnchor(panel.key).align}`"
+            :style="{ left: `${tooltipAnchor(panel.key).left}%` }"
           >
-            <strong>{{ days[hoverIndex]?.label }}</strong>
+            <strong>{{ days[hoverOf(panel.key)!]?.label }}</strong>
             <span v-for="series in panel.series" :key="`tip-${series.key}`">
               <i :style="{ background: `var(${series.colorVar})` }"></i>
               {{ series.label }}
-              <b>{{ series.values[hoverIndex] || 0 }}</b>
+              <b>{{ series.values[hoverOf(panel.key)!] || 0 }}</b>
             </span>
           </div>
         </div>
       </div>
 
       <div class="growth-trend__x">
-        <span v-for="(day, index) in days" :key="index" :class="{ 'is-active': hoverIndex === index }">
+        <span v-for="(day, index) in days" :key="index" :class="{ 'is-active': hoverOf(panel.key) === index }">
           {{ day.label }}
         </span>
       </div>
@@ -130,16 +130,29 @@
 
   const props = defineProps<{ trend?: AdminTrendDay[] | null }>();
 
-  const hoverIndex = ref<number | null>(null);
+  // 两个面板各自维护 hover:共享一份状态会让悬浮其中一个时,另一个也弹出 tooltip
+  const hoverState = ref<Record<string, number | null>>({});
+
+  function hoverOf(panelKey: string) {
+    return hoverState.value[panelKey] ?? null;
+  }
+
+  function setHover(panelKey: string, index: number | null) {
+    hoverState.value = { ...hoverState.value, [panelKey]: index };
+  }
   const days = computed(() => normalizeTrendDays(props.trend));
   const labels = computed(() => days.value.map((day) => day.label));
   const hitAreas = computed(() => buildHitAreas(days.value.length));
-  const hoverX = computed(() => {
+  function hoverX(panelKey: string) {
     const count = days.value.length;
-    if (hoverIndex.value === null || count <= 1) return 50;
-    return (hoverIndex.value / (count - 1)) * 100;
-  });
-  const tooltipAnchor = computed(() => resolveTooltipAnchor(hoverIndex.value ?? 0, days.value.length));
+    const index = hoverOf(panelKey);
+    if (index === null || count <= 1) return 50;
+    return (index / (count - 1)) * 100;
+  }
+
+  function tooltipAnchor(panelKey: string) {
+    return resolveTooltipAnchor(hoverOf(panelKey) ?? 0, days.value.length);
+  }
 
   // 用户与内容量级差异大,拆两个面板各自定轴,而不是共用一根 Y 轴或做双轴
   const panels = computed(() => {
@@ -182,10 +195,10 @@
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
   }
 
-  function dotStyle(value: number, axisMax: number, colorVar: string) {
+  function dotStyle(panelKey: string, value: number, axisMax: number, colorVar: string) {
     const ratio = Math.max(0, Number(value) || 0) / Math.max(1, axisMax);
     return {
-      left: `${hoverX.value}%`,
+      left: `${hoverX(panelKey)}%`,
       top: `${(1 - ratio) * 100}%`,
       background: `var(${colorVar})`,
     };
