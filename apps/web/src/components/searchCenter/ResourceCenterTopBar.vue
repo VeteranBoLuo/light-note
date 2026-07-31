@@ -6,7 +6,8 @@
     否则切换时会看到 Logo 忽有忽无。它也不能用共享顶栏——那里的全局搜索按钮
     在本页会变成第二个搜索入口。
 
-    右侧动作按分区不同：全部资源是「取消」（离开），待整理是「创建」（快速添加）。
+    右侧统一为「快速添加」：两侧动作等宽，切换分区时搜索框宽度不跳；
+    离开本页由左侧返回箭头承担，不再放与之重复的「取消」。
   -->
   <header class="resource-center-topbar">
     <BButton class="resource-center-topbar__back" :aria-label="t('common.back')" @click="emit('back')">
@@ -29,16 +30,12 @@
     </BInput>
 
     <BButton
-      v-if="action === 'create'"
-      class="resource-center-topbar__action resource-center-topbar__action--icon"
+      class="resource-center-topbar__action"
       :aria-label="createLabel || t('inbox.quickCapture')"
       :title="createLabel || t('inbox.quickCapture')"
       @click="emit('create')"
     >
       <SvgIcon :src="icon.common.plus" size="20" aria-hidden="true" />
-    </BButton>
-    <BButton v-else class="resource-center-topbar__action" @click="emit('back')">
-      {{ t('globalSearch.cancel') }}
     </BButton>
   </header>
 </template>
@@ -54,12 +51,10 @@
     defineProps<{
       keyword: string;
       inputId: string;
-      /** 右侧动作：全部资源用 cancel（离开），待整理用 create（快速添加） */
-      action?: 'cancel' | 'create';
       placeholder?: string;
       createLabel?: string;
     }>(),
-    { action: 'cancel', placeholder: '', createLabel: '' },
+    { placeholder: '', createLabel: '' },
   );
 
   const emit = defineEmits<{
@@ -107,20 +102,14 @@
   }
 
   .resource-center-topbar__action {
-    flex: 0 0 auto;
-    height: 38px;
-    padding: 0 8px;
-    color: var(--desc-color);
-    background: transparent !important;
-    font-size: 13px;
-  }
-
-  .resource-center-topbar__action--icon {
     width: 38px;
     min-width: 38px;
+    height: 38px;
     padding: 0;
+    flex: 0 0 auto;
     border-radius: 11px;
     color: var(--text-color);
+    background: transparent !important;
   }
 
   .resource-center-topbar__action:active {

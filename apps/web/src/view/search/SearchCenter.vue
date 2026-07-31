@@ -5,10 +5,10 @@
       v-if="bookmark.isMobile"
       :keyword="queryState.keyword"
       input-id="mobile-search-page-input"
-      action="cancel"
       @update:keyword="onMobileSearchKeyword"
       @submit="submitSearch"
       @back="leaveSearchPage"
+      @create="inbox.openQuickCapture()"
     />
 
     <ResourcePageShell
@@ -580,7 +580,7 @@
     type SearchResultItem,
     type SearchType,
   } from '@/api/search.ts';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { updatePreference } from '@/utils/savePreference';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -612,6 +612,7 @@
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
+  const inbox = inboxStore();
   const { addResourcesToInbox } = useInboxEnqueue();
   const { t } = useI18n();
 

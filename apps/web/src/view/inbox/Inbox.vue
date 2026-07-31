@@ -12,7 +12,6 @@
       v-if="isMobileResourceInbox"
       :keyword="inbox.keyword"
       input-id="mobile-inbox-page-input"
-      action="create"
       :create-label="t('inbox.quickCapture')"
       @update:keyword="setMobileInboxKeyword"
       @submit="search"
