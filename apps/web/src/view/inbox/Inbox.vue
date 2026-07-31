@@ -6,6 +6,20 @@
       'inbox-page--mobile-resources': isMobileResourceInbox,
     }"
   >
+    <!-- 待整理属于资源中心，顶栏与「全部资源」共用同一组件；
+         待办是底部一级入口，继续使用共享顶栏（带 Logo）。 -->
+    <ResourceCenterTopBar
+      v-if="isMobileResourceInbox"
+      :keyword="inbox.keyword"
+      input-id="mobile-inbox-page-input"
+      action="create"
+      :create-label="t('inbox.quickCapture')"
+      @update:keyword="setMobileInboxKeyword"
+      @submit="search"
+      @back="leaveResourceInbox"
+      @create="openCapture"
+    />
+
     <ResourceCenterSectionNav v-if="!bookmark.isMobile || isMobileResourceInbox" class="section-switcher" />
     <header v-if="!bookmark.isMobile" class="inbox-hero">
       <div>
@@ -271,6 +285,8 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { isMobileResourceInboxTab } from '@/config/mobileNavigation';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
+  import ResourceCenterTopBar from '@/components/searchCenter/ResourceCenterTopBar.vue';
+  import { getMobileResourceEntryPath } from '@/composables/useMobileNavigationState';
   import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
   import type {
     TodoChecklistItem,
@@ -600,6 +616,8 @@
   }
 
   useMobileTopBar(['inbox'], {
+    // 待整理分区自画顶栏（返回 + 搜索 + 创建），待办分区仍用共享顶栏
+    ownTopBar: () => isMobileResourceInbox.value,
     searchSourceType: 'todo',
     onAdd: () => {
       if (isMobileTodoPrimary.value) openTodoEditor();
@@ -607,6 +625,21 @@
     },
     addLabel: () => (isMobileTodoPrimary.value ? t('inbox.createTodo') : t('inbox.quickCapture')),
   });
+  /**
+   * 待整理顶栏的返回：回到来源页。
+   *
+   * 进入资源中心的路径很多（全局搜索的「查看全部」、我的 → 资源中心、今日 → 待整理摘要），
+   * 固定目标必然在某些路径下把人送错地方；没有历史时兜底到资料区，
+   * 因为资源中心本质是资料的统一视图。
+   */
+  function leaveResourceInbox() {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    void router.push(getMobileResourceEntryPath());
+  }
+
   function handleEmptyStateAction() {
     if (isMobileTodoPrimary.value || inbox.filterType === 'todo') openTodoEditor();
     else openCapture();

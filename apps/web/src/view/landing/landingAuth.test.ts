@@ -38,6 +38,22 @@ describe('resolveLandingCtaMode', () => {
   it('认证状态与本地身份不一致时保持普通开始动作，不降级为注册入口', () => {
     expect(resolveLandingCtaMode('authenticated', false)).toBe('start');
   });
+
+  // 官网是预渲染静态页，登录态只能挂载后异步确认；本机「近期登录过」的记录
+  // 用来消除首屏 CTA 从中性动作跳到「进入我的轻笺」的闪烁。
+  it('本机有近期登录记录时，探测未完成也先展示进入应用', () => {
+    expect(resolveLandingCtaMode('pending', false, true)).toBe('enter');
+    expect(resolveLandingCtaMode('error', false, true)).toBe('enter');
+  });
+
+  it('服务端明确返回游客时回退注册入口，本地记录不能覆盖确定结果', () => {
+    expect(resolveLandingCtaMode('anonymous', false, true)).toBe('register');
+  });
+
+  it('没有本地记录的新访客行为不变', () => {
+    expect(resolveLandingCtaMode('pending', false, false)).toBe('start');
+    expect(resolveLandingCtaMode('error', false, false)).toBe('start');
+  });
 });
 
 describe('getLandingAuthRetryDelay', () => {

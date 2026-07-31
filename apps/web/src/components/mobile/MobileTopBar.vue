@@ -1,5 +1,5 @@
 <template>
-  <header v-if="!activeBinding?.ownTopBar" class="mobile-top-bar">
+  <header v-if="!ownTopBar" class="mobile-top-bar">
     <BButton
       class="mobile-top-bar__brand"
       :aria-label="t('mobileNavigation.backToToday')"
@@ -89,6 +89,11 @@
   const { openSearch } = useMobileGlobalSearch();
 
   const activeBinding = computed(() => getMobileTopBarBinding(route.name));
+  // ownTopBar 允许是函数：同一路由可按查询参数决定用共享顶栏还是页面自画顶栏
+  const ownTopBar = computed(() => {
+    const value = activeBinding.value?.ownTopBar;
+    return typeof value === 'function' ? value() : Boolean(value);
+  });
   const showSearch = computed(() => activeBinding.value?.searchMode !== 'icon');
   const showNotification = computed(() => activeBinding.value?.showNotification !== false);
   const showActions = computed(() =>

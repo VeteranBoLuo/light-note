@@ -55,7 +55,8 @@
       module: '资源中心',
       operation: path === '/inbox' ? (bookmark.isMobile ? '切换待整理视图' : '切换待处理视图') : '切换全部资源视图',
     });
-    router.push(target);
+    // 同级分区切换不产生历史记录，否则返回键要按很多次才能离开资源中心
+    router.replace(target);
   }
 </script>
 

@@ -397,6 +397,15 @@
 
   /* 「@ 添加资源」「上传文件」是入口按钮:默认灰底在浅色下像原生 button、暗色下又与输入区同色。
      改用主题色淡染 + 同色系描边,两个主题自适应,并与下方资料 chips 视觉同族。 */
+  /* 附件卡片信息多（文件名 + 大小 + 解析状态 + 操作），与「@ 添加资源」「上传文件」
+     同行会被压缩甚至横向裁切。有附件时让它独占一行铺满，入口按钮留在上一行。
+     不挂断点：桌面 AI 抽屉宽度可变（480～720px），同样挤不下。 */
+  .context-actions :deep(.ai-attachment-picker.has-attachment) {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
   .context-actions :deep(.b-popover-trigger > .b_btn),
   .context-actions :deep(.b-upload-trigger .b_btn) {
     border: 1px solid color-mix(in srgb, var(--primary-color) 20%, transparent);
@@ -562,8 +571,6 @@
       border-radius: 1rem;
     }
 
-    /* 附件卡片很宽(文件名+大小+状态+操作)，和「@ 添加资源」挤在一行必然横向溢出。
-       改为换行：入口按钮留在第一行，附件卡片独占下一行铺满宽度。 */
     .context-actions {
       flex-wrap: wrap;
       align-items: center;
@@ -571,11 +578,6 @@
       margin-bottom: 4px;
     }
 
-    .context-actions :deep(.ai-attachment-picker.has-attachment) {
-      width: 100%;
-      min-width: 0;
-      flex: 1 1 100%;
-    }
 
     .context-actions :deep(.b_btn),
     .input-actions :deep(.b_btn) {

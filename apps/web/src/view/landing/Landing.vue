@@ -383,6 +383,7 @@
   import icon from '@/config/icon';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import { LANDING_AUTH_CONTEXT, resolveLandingCtaMode } from './landingAuth.ts';
+  import { hasLoggedInBefore } from '@/utils/authStorage.ts';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
   import { markMobileLandingVisited } from '@/utils/mobileLandingVisit.ts';
@@ -395,8 +396,10 @@
   const { isStandalone, openGuide } = usePwaInstall();
   const isLoggedIn = computed(() => !!user.id && user.role !== 'visitor');
   const landingAuth = inject(LANDING_AUTH_CONTEXT, null);
+  // 只在挂载时读一次：本地记录用于消除首屏 CTA 闪烁，不参与后续登录态判断
+  const hasLoginHint = hasLoggedInBefore();
   const landingCtaMode = computed(() =>
-    resolveLandingCtaMode(landingAuth?.status.value || 'pending', isLoggedIn.value),
+    resolveLandingCtaMode(landingAuth?.status.value || 'pending', isLoggedIn.value, hasLoginHint),
   );
   const LANDING_OPERATION_LOG = {
     enter: { module: '官网首页', operation: '进入我的轻笺' },

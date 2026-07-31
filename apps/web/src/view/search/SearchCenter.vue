@@ -1,27 +1,15 @@
 <template>
   <div class="search-center-route">
-    <!-- 完整搜索页接管顶栏：共享顶栏的全局搜索按钮在这里会变成第二个搜索入口，
-         所以本页用自己的「返回 + 唯一输入框 + 取消」，输入框直接驱动结果。 -->
-    <header v-if="bookmark.isMobile" class="search-own-topbar">
-      <BButton class="search-own-topbar__back" :aria-label="t('common.back')" @click="leaveSearchPage">
-        <SvgIcon :src="icon.noteDetail.back" size="19" aria-hidden="true" />
-      </BButton>
-      <BInput
-        id="mobile-search-page-input"
-        class="search-own-topbar__input"
-        :value="queryState.keyword"
-        :placeholder="t('globalSearch.placeholder')"
-        height="38px"
-        clearable
-        @update:value="onMobileSearchKeyword"
-        @enter="submitSearch"
-      >
-        <template #prefix>
-          <SvgIcon :src="icon.navigation.search" size="15" aria-hidden="true" />
-        </template>
-      </BInput>
-      <BButton class="search-own-topbar__cancel" @click="leaveSearchPage">{{ t('globalSearch.cancel') }}</BButton>
-    </header>
+    <!-- 与「待整理」共用同一个顶栏组件：两个分区是不同路由，但对用户是同一页面的两个页签 -->
+    <ResourceCenterTopBar
+      v-if="bookmark.isMobile"
+      :keyword="queryState.keyword"
+      input-id="mobile-search-page-input"
+      action="cancel"
+      @update:keyword="onMobileSearchKeyword"
+      @submit="submitSearch"
+      @back="leaveSearchPage"
+    />
 
     <ResourcePageShell
       class="search-center-shell"
@@ -612,6 +600,7 @@
   import { apiBasePost } from '@/http/request.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
+  import ResourceCenterTopBar from '@/components/searchCenter/ResourceCenterTopBar.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
@@ -1508,43 +1497,9 @@
 
   /* 完整搜索页专用顶栏：占位与共享 MobileTopBar 一致（56px），
      其下的 ResourcePageShell 需要相应让出高度。 */
-  .search-own-topbar {
-    height: 56px;
-    padding: 0 8px 0 4px;
-    box-sizing: border-box;
-    flex: 0 0 56px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    border-bottom: 1px solid var(--surface-divider-color);
-    background: var(--surface-page-bg, var(--background-color));
-  }
 
-  .search-own-topbar__back {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
-    padding: 0;
-    border-radius: 11px;
-    color: var(--text-color);
-    background: transparent !important;
-  }
 
-  .search-own-topbar__input {
-    min-width: 0;
-    flex: 1 1 auto;
-    border-radius: 10px;
-    font-size: 13px;
-  }
 
-  .search-own-topbar__cancel {
-    flex: 0 0 auto;
-    height: 38px;
-    padding: 0 8px;
-    color: var(--desc-color);
-    background: transparent !important;
-    font-size: 13px;
-  }
 
   .search-page {
     --search-hero-bg: var(--surface-raised-background);
