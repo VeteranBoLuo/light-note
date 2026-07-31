@@ -16,7 +16,7 @@
           @keydown="handleMentionKeydown"
         />
         <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
-        <div v-if="mentionQuery" ref="mentionLayer" class="todo-mention-layer">
+        <div v-if="mentionQuery" class="todo-mention-layer">
           <ResourcePickerPanel
             ref="mentionPanel"
             :allowed-types="['bookmark', 'note', 'file']"
@@ -208,6 +208,7 @@
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
+  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
 
@@ -233,7 +234,6 @@
   // ── 说明区 @ 关联参考资料 ──────────────────────────
   const resourceRefs = ref<TodoResourceRefView[]>([]);
   const mentionQuery = ref<MentionQuery | null>(null);
-  const mentionLayer = ref<HTMLElement | null>(null);
   const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
   const MAX_RESOURCE_REFS = 10;
 
@@ -241,16 +241,12 @@
     mentionQuery.value = null;
   }
 
-  // 点击浮层之外即关闭:选择器自带搜索框,不能只靠选中资源才收起
-  function handleDocumentPointerDown(event: PointerEvent) {
-    if (!mentionQuery.value) return;
-    const target = event.target as Node | null;
-    if (target && mentionLayer.value?.contains(target)) return;
-    closeMention();
-  }
-
-  onMounted(() => document.addEventListener('pointerdown', handleDocumentPointerDown, true));
-  onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown, true));
+  // 点击外部 / Esc 关闭走统一实现
+  useDismissOnOutside({
+    isActive: () => Boolean(mentionQuery.value),
+    ignoreSelectors: ['.todo-mention-layer', '.todo-description-field'],
+    onDismiss: closeMention,
+  });
 
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;

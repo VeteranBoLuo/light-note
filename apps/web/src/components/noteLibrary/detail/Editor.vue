@@ -33,6 +33,8 @@
               @input="onMdInput"
               @scroll="syncMdScroll('edit')"
               @keydown="onMarkdownMentionKeydown"
+              @keyup="syncMarkdownInlineMention"
+              @click="syncMarkdownInlineMention"
               @paste="onMarkdownPaste"
               @focusout="closeInlineMention"
               :readonly="readonly"
@@ -162,6 +164,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
+  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
@@ -917,6 +920,18 @@
     };
   }
 
+  function closeInlineMention() {
+    if (!inlineMentionVisible.value) return;
+    inlineMentionVisible.value = false;
+  }
+
+  // 与 AI 输入区、待办说明共用同一套关闭规则;笔记浮层 teleport 到 body,按选择器判定内部
+  useDismissOnOutside({
+    isActive: () => inlineMentionVisible.value,
+    ignoreSelectors: ['.resource-mention-inline-popover', '.md-textarea', '.tox-edit-area'],
+    onDismiss: () => closeInlineMention(),
+  });
+
   function closeMentionPicker() {
     mentionPickerVisible.value = false;
     markdownMentionRange = null;
@@ -968,6 +983,8 @@
     const textarea = getMdTextarea();
     const range = markdownMentionRange;
     if (!textarea || !range || textarea.selectionStart < range.start + 1) return closeInlineMention();
+    // 触发用的 @ 被删掉后,原位置不再是 @,浮层必须跟着关闭
+    if (textarea.value[range.start] !== '@') return closeInlineMention();
     const query = textarea.value.slice(range.start + 1, textarea.selectionStart);
     if (/[\s@]/u.test(query)) return closeInlineMention();
     markdownMentionRange = { start: range.start, end: textarea.selectionStart };

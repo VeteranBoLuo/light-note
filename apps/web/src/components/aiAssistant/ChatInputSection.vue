@@ -29,7 +29,7 @@
           class="text-input"
         />
         <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
-        <div v-if="mentionQuery" ref="mentionLayer" class="ai-mention-layer">
+        <div v-if="mentionQuery" class="ai-mention-layer">
           <ResourcePickerPanel
             ref="mentionPanel"
             :show-search="false"
@@ -114,6 +114,7 @@
     resolveMentionQuery,
     type MentionQuery,
   } from '@/utils/resourceMentionTrigger';
+  import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
@@ -209,23 +210,18 @@
 
   // ── 输入 @ 唤起资源建议 ──────────────────────────────
   const mentionQuery = ref<MentionQuery | null>(null);
-  const mentionLayer = ref<HTMLElement | null>(null);
   const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
 
   function closeMention() {
     mentionQuery.value = null;
   }
 
-  // 点击浮层之外即关闭:选择器自带搜索框,不能只靠选中资源才收起
-  function handleDocumentPointerDown(event: PointerEvent) {
-    if (!mentionQuery.value) return;
-    const target = event.target as Node | null;
-    if (target && mentionLayer.value?.contains(target)) return;
-    closeMention();
-  }
-
-  onMounted(() => document.addEventListener('pointerdown', handleDocumentPointerDown, true));
-  onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown, true));
+  // 点击外部 / Esc 关闭走统一实现;输入框本身不算外部,否则刚打完 @ 就被关掉
+  useDismissOnOutside({
+    isActive: () => Boolean(mentionQuery.value),
+    ignoreSelectors: ['.ai-mention-layer', '.text-input-wrap'],
+    onDismiss: closeMention,
+  });
 
   function syncMentionQuery(target: HTMLTextAreaElement | HTMLInputElement | null) {
     if (!target || typeof target.selectionStart !== 'number') return closeMention();
