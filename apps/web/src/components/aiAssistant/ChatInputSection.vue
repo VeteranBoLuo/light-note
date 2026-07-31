@@ -562,18 +562,19 @@
       border-radius: 1rem;
     }
 
+    /* 附件卡片很宽(文件名+大小+状态+操作)，和「@ 添加资源」挤在一行必然横向溢出。
+       改为换行：入口按钮留在第一行，附件卡片独占下一行铺满宽度。 */
     .context-actions {
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       align-items: center;
       gap: 4px;
       margin-bottom: 4px;
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-      scrollbar-width: none;
     }
 
-    .context-actions::-webkit-scrollbar {
-      display: none;
+    .context-actions :deep(.ai-attachment-picker.has-attachment) {
+      width: 100%;
+      min-width: 0;
+      flex: 1 1 100%;
     }
 
     .context-actions :deep(.b_btn),

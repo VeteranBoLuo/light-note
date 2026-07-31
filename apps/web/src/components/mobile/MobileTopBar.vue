@@ -5,7 +5,7 @@
       :aria-label="t('mobileNavigation.backToToday')"
       :title="t('mobileNavigation.backToToday')"
       @click="goToToday"
-      v-click-log="{ module: '移动端导航', operation: '返回资料首页' }"
+      v-click-log="{ module: '移动端导航', operation: '返回今日' }"
     >
       <img src="/favicon.svg?v=7" width="25" height="25" alt="" />
       <span>{{ t('navigation.title') }}</span>
@@ -97,10 +97,8 @@
   const addLabel = computed(() => activeBinding.value?.addLabel?.() || t('common.add'));
 
   /**
-   * Logo 固定回「今日」——移动端每天的第一站。
-   *
-   * 移动端不提供「默认首页」设置（那一项只对桌面端有意义），所以这里不读账号偏好；
-   * 「回到最近浏览的资料页签」由底部「资料」入口承担。
+   * Logo 回「今日」，与移动端所有默认落点一致（冷启动、登录后、注册后都是今日）。
+   * 「回到上次的资料页签」由底部「资料」入口承担，且只在当前会话内有效。
    */
   function goToToday() {
     if (route.path !== MOBILE_TODAY_PATH) void router.push(MOBILE_TODAY_PATH);

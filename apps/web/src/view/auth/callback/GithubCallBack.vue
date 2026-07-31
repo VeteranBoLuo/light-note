@@ -60,7 +60,7 @@
   }
   function getAuthenticatedEntryPath(preferences = {}) {
     if (oauthFlow === 'register') {
-      return getRuntimePostRegistrationPath();
+      return getRuntimePostRegistrationPath(bookmark.isMobile);
     }
     return getRuntimeApplicationEntryPath(preferences, window.innerWidth);
   }

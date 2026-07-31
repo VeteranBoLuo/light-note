@@ -185,7 +185,7 @@
         </p>
       </template>
     </section>
-    <div class="todo-editor-form__actions">
+    <div class="todo-editor-form__actions" :class="{ 'is-sticky': stickyActions }">
       <BButton @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
       <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
         {{ t('common.save') }}
@@ -224,11 +224,14 @@
       item?: TodoItem | null;
       saving?: boolean;
       resetKey?: number;
+      /** 抽屉形态下把「取消 / 保存」吸在底部，避免长表单滚动后找不到提交按钮 */
+      stickyActions?: boolean;
     }>(),
     {
       item: null,
       saving: false,
       resetKey: 0,
+      stickyActions: false,
     },
   );
   const emit = defineEmits<{
@@ -728,6 +731,22 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+
+  /* 负 margin 抵消抽屉 body 的内边距，让底栏通栏压住滚动内容 */
+  .todo-editor-form__actions.is-sticky {
+    position: sticky;
+    bottom: -14px;
+    z-index: 1;
+    margin: 4px -14px -14px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
+    background: var(--card-background);
+  }
+
+  .todo-editor-form__actions.is-sticky .b_btn {
+    min-height: 40px;
+    flex: 1 1 0;
   }
   @media (max-width: 767px) {
     .todo-recurrence-editor__fields {

@@ -62,7 +62,7 @@ export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
   { key: 'profile', labelKey: 'mobileNavigation.profile', path: '/personCenter' },
 ] as const;
 
-/** 今日路径：底部一级入口与顶栏 Logo 共用 */
+/** 今日路径：移动端所有默认落点与底部第一个入口共用 */
 export const MOBILE_TODAY_PATH = '/workbenches' as const;
 
 export const MOBILE_RESOURCE_INBOX_TABS: readonly MobileResourceInboxTab[] = ['all', 'bookmark', 'note', 'file'];

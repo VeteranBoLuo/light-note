@@ -1,31 +1,65 @@
 <template>
-  <BModal
-    v-model:visible="visible"
-    :title="item ? t('inbox.editTodo') : t('inbox.createTodo')"
-    :show-footer="false"
-    width="min(720px, 94vw)"
-    :mask-closable="false"
-    @close="close"
-  >
-    <TodoEditorForm :item="item" :saving="saving" :reset-key="formKey" @submit="save" @cancel="close" />
-  </BModal>
+  <!--
+    待办表单在手机上有 7 个字段区块，居中弹框滚到中间就看不见「保存」了。
+    移动端改用底部抽屉：标题与操作区固定、中间滚动；桌面端保持原有弹框。
+    外壳用动态组件切换，表单本身只写一次。
+  -->
+  <component :is="shellComponent" v-bind="shellProps" @close="close" @update:visible="syncVisible">
+    <TodoEditorForm
+      :item="item"
+      :saving="saving"
+      :reset-key="formKey"
+      :sticky-actions="bookmark.isMobile"
+      @submit="save"
+      @cancel="close"
+    />
+  </component>
 </template>
 
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { createTodo, updateTodo, type TodoItem, type TodoPayload } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { bookmarkStore } from '@/store';
 
   const props = defineProps<{ item?: TodoItem | null }>();
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ saved: [result: { id: string; title: string }] }>();
   const { t } = useI18n();
+  const bookmark = bookmarkStore();
   const saving = ref(false);
   const formKey = ref(0);
+
+  const shellTitle = computed(() => (props.item ? t('inbox.editTodo') : t('inbox.createTodo')));
+  const shellComponent = computed(() => (bookmark.isMobile ? BDrawer : BModal));
+  // 抽屉用 open + @close，弹框用 v-model:visible；两套 props 在这里收敛
+  const shellProps = computed(() =>
+    bookmark.isMobile
+      ? {
+          open: visible.value === true,
+          title: shellTitle.value,
+          placement: 'bottom' as const,
+          height: '92dvh',
+          bodyPadding: '14px',
+          maskClosable: false,
+        }
+      : {
+          visible: visible.value,
+          title: shellTitle.value,
+          showFooter: false,
+          width: 'min(720px, 94vw)',
+          maskClosable: false,
+        },
+  );
+
+  function syncVisible(next: boolean) {
+    visible.value = next;
+  }
 
   watch(visible, (open) => {
     if (open) formKey.value += 1;

@@ -2,6 +2,8 @@ import { ref } from 'vue';
 import { getMobileResourcePath, isMobileResourcePath, type MobileResourcePath } from '@/config/mobileNavigation';
 import { getMobileHomePath, type UserPreferences } from '@/utils/preferences';
 
+// 用 sessionStorage 而不是 localStorage：底部「资料」只在当前会话内记住上次页签，
+// 重开 App / 新标签页回到书签，避免上次停在标签页后就再也回不到默认入口。
 const LAST_RESOURCE_STORAGE_KEY = 'ln-mobile-last-resource';
 const lastMobileResourcePath = ref<MobileResourcePath | null>(readStoredResourcePath());
 const resourceScrollPositions = new Map<MobileResourcePath, number>();
@@ -9,7 +11,9 @@ const nonPersistentScrollPaths = new Set<MobileResourcePath>(['/noteLibrary']);
 
 function readStoredResourcePath(): MobileResourcePath | null {
   try {
-    const value = localStorage.getItem(LAST_RESOURCE_STORAGE_KEY);
+    // 早期版本把它存在 localStorage，改成会话级后清掉残留，避免长期占用本地存储
+    localStorage.removeItem(LAST_RESOURCE_STORAGE_KEY);
+    const value = sessionStorage.getItem(LAST_RESOURCE_STORAGE_KEY);
     return isMobileResourcePath(value) ? value : null;
   } catch {
     return null;
@@ -29,7 +33,7 @@ function findResourceScrollElement(): HTMLElement | null {
 function setLastMobileResourcePath(path: MobileResourcePath) {
   lastMobileResourcePath.value = path;
   try {
-    localStorage.setItem(LAST_RESOURCE_STORAGE_KEY, path);
+    sessionStorage.setItem(LAST_RESOURCE_STORAGE_KEY, path);
   } catch {
     // 隐私模式或存储空间不可用时保留当前会话内状态。
   }
@@ -46,10 +50,14 @@ export function getLastMobileResourcePath(fallback: string): MobileResourcePath 
   return isMobileResourcePath(fallback) ? fallback : '/home';
 }
 
-export function getMobileResourceEntryPath(preferences?: UserPreferences | null): MobileResourcePath {
-  // 首页偏好可能是「今日」，那是底部另一个一级入口而不是资料页签；
-  // getLastMobileResourcePath 会把这类非资料路径兜底成书签。
-  return getLastMobileResourcePath(getMobileHomePath(preferences));
+/**
+ * 底部「资料」入口的落点。
+ *
+ * 移动端首页固定为「今日」，资料区不再读账号首页偏好：
+ * 当前会话内回到上次打开的资料页签，新会话（重开 App）重置为书签。
+ */
+export function getMobileResourceEntryPath(): MobileResourcePath {
+  return getLastMobileResourcePath('/home');
 }
 
 function saveResourceScroll(path: MobileResourcePath | null) {

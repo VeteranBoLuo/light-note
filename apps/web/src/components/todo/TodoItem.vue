@@ -611,11 +611,16 @@
       width: 100%;
       min-width: 0;
     }
+    /* 卡片内的次级操作继承了桌面的 44px，在窄屏显得笨重；
+       收到 38px 并压紧内边距，仍高于 36px 的舒适触控下限 */
     .todo-item__actions--mobile :deep(.select-trigger),
     .todo-item__actions--mobile :deep(.b_btn) {
       width: 100%;
       min-width: 0;
-      padding-inline: 12px;
+      height: 38px;
+      min-height: 38px;
+      padding-inline: 10px;
+      font-size: 13px;
       white-space: nowrap;
     }
     .todo-checklist {

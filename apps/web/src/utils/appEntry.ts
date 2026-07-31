@@ -1,11 +1,6 @@
 import { isMobileViewport } from '@/config/responsive.ts';
-import { getMobileResourceEntryPath } from '@/composables/useMobileNavigationState.ts';
-import {
-  getApplicationEntryPath,
-  getAppHomePath,
-  type AppHomePath,
-  type UserPreferences,
-} from '@/utils/preferences.ts';
+import { MOBILE_TODAY_PATH } from '@/config/mobileNavigation.ts';
+import { getAppHomePath, getDesktopHomePath, type AppHomePath, type UserPreferences } from '@/utils/preferences.ts';
 import { resolveLightNoteRuntime, type LightNoteRuntime } from '@/utils/appRuntime.ts';
 
 export interface RuntimeApplicationEntryOptions {
@@ -15,7 +10,7 @@ export interface RuntimeApplicationEntryOptions {
 
 /**
  * 普通登录和官网“进入轻笺”后的应用落点。
- * 手机布局与 APK 回到最近使用的资料模块；桌面浏览器和桌面 PWA 沿用账号偏好。
+ * 移动布局与 APK 统一进入「今日」；桌面浏览器和桌面 PWA 沿用账号偏好。
  */
 export function getRuntimeApplicationHomePath(
   preferences: UserPreferences | null | undefined,
@@ -24,23 +19,30 @@ export function getRuntimeApplicationHomePath(
 ): AppHomePath {
   const runtime = options.runtime ?? resolveLightNoteRuntime();
   if (isMobileLayout || runtime === 'android-app') {
-    return getMobileResourceEntryPath(preferences);
+    return MOBILE_TODAY_PATH;
   }
   return getAppHomePath(preferences, false);
 }
 
 /**
- * 新账号注册完成后的固定落点。
- * 所有运行环境统一进入书签首页 `/home`，不继承设备最近资料路径或账号默认首页，
- * 避免新账号被上一个账号的本地导航记录带到笔记库或云空间。
+ * 新账号注册完成后的落点。
+ * 移动端与其它入口一致进入「今日」；桌面端固定书签首页，
+ * 不继承设备最近资料路径或账号默认首页，避免新账号被上一个账号的本地记录带走。
  */
-export function getRuntimePostRegistrationPath(): AppHomePath {
+export function getRuntimePostRegistrationPath(
+  isMobileLayout = false,
+  options: RuntimeApplicationEntryOptions = {},
+): AppHomePath {
+  const runtime = options.runtime ?? resolveLightNoteRuntime();
+  if (isMobileLayout || runtime === 'android-app') {
+    return MOBILE_TODAY_PATH;
+  }
   return '/home';
 }
 
 /**
- * `/app` 的运行时分发。普通手机浏览器恢复最近资料，平板保留书签首屏，
- * 普通桌面浏览器与桌面 PWA 按偏好进入；APK 不受视口宽度影响，始终进入资料。
+ * `/app` 的运行时分发。移动布局与 APK 统一进入「今日」，平板保留书签首屏，
+ * 普通桌面浏览器与桌面 PWA 按偏好进入；APK 不受视口宽度影响。
  */
 export function getRuntimeApplicationEntryPath(
   preferences: UserPreferences | null | undefined,
@@ -49,13 +51,15 @@ export function getRuntimeApplicationEntryPath(
 ): AppHomePath {
   const runtime = options.runtime ?? resolveLightNoteRuntime();
   if (runtime === 'android-app' || isMobileViewport(viewportWidth)) {
-    return getMobileResourceEntryPath(preferences);
+    return MOBILE_TODAY_PATH;
   }
-  return getApplicationEntryPath(preferences, viewportWidth);
+  // 平板沿用书签首屏，桌面按账号偏好
+  if (viewportWidth < 1024) return '/home';
+  return getDesktopHomePath(preferences);
 }
 
 /**
- * 桌面浏览器与桌面 PWA 退出或会话失效后回官网；APK 与移动 PWA 留在资料区。
+ * 桌面浏览器与桌面 PWA 退出或会话失效后回官网；APK 与移动 PWA 留在应用内的「今日」。
  */
 export function getRuntimeGuestEntryPath(
   preferences: UserPreferences | null | undefined,
@@ -63,7 +67,7 @@ export function getRuntimeGuestEntryPath(
 ): '/' | AppHomePath {
   const runtime = options.runtime ?? resolveLightNoteRuntime();
   if (runtime === 'android-app' || (runtime === 'pwa-standalone' && options.isMobileLayout)) {
-    return getMobileResourceEntryPath(preferences);
+    return MOBILE_TODAY_PATH;
   }
   return '/';
 }

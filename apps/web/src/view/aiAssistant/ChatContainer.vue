@@ -2507,12 +2507,22 @@
   }
 
   @container ai-chat (max-width: 520px) {
+    /* 单行 flex + overflow:hidden 会让「继续基于上轮来源」压住并裁掉追问；
+       窄屏改为换行，按钮落到独立一行左对齐。 */
     .recommendation-dock {
       min-height: 0;
       flex: 0 0 auto;
       align-items: stretch;
+      flex-wrap: wrap;
+      gap: 4px;
       padding: 0 10px 2px;
       overflow: hidden;
+    }
+
+    .recommendation-dock .continue-sources-btn {
+      width: auto;
+      margin-left: 0;
+      flex: 0 0 auto;
     }
   }
 

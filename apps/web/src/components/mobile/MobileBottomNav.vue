@@ -71,7 +71,7 @@
 
     const target =
       item.key === 'resources'
-        ? getMobileResourceEntryPath(user.preferences)
+        ? getMobileResourceEntryPath()
         : item.key === 'todo'
           ? { path: '/inbox', query: { tab: 'todo' } }
           : item.path;

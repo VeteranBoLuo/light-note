@@ -1,16 +1,11 @@
 <template>
-  <BModal
-    v-model:visible="visible"
-    :title="captureType === 'todo' ? t('inbox.createTodo') : t('inbox.quickCapture')"
-    :show-footer="false"
-    :width="captureType === 'todo' ? 'min(680px, 94vw)' : 'min(560px, 92vw)'"
-    :mask-closable="captureType !== 'todo' && !submitting"
-    @close="close"
-  >
+  <!-- 移动端用底部抽屉：切到「待办」时内容会变长，固定 92dvh 并让操作区吸底；
+       书签/笔记/文件内容不多，高度交给 auto 自适应。桌面端保持原有弹框。 -->
+  <component :is="shellComponent" v-bind="shellProps" @close="close" @update:visible="syncVisible">
     <div class="capture-modal" @paste="handlePaste">
       <p class="capture-hint">{{ captureHint }}</p>
-      <div v-if="!successText && inbox.actionTotal > 0" class="capture-pending">
-        <span>{{ t('inbox.pendingSummary', { count: inbox.actionTotal }) }}</span>
+      <div v-if="!successText && pendingCount > 0" class="capture-pending">
+        <span>{{ t('inbox.pendingSummary', { count: pendingCount }) }}</span>
         <BButton size="small" @click="goInbox">{{ t('inbox.organizeNow') }}</BButton>
       </div>
       <BTabs v-model:active-tab="captureType" :options="typeOptions" @change="handleTypeChange" />
@@ -19,6 +14,7 @@
         <TodoEditorForm
           v-if="captureType === 'todo'"
           :saving="submitting"
+          :sticky-actions="bookmark.isMobile"
           :reset-key="todoFormKey"
           @submit="submitTodo"
           @cancel="close"
@@ -48,7 +44,7 @@
           </div>
         </div>
 
-        <div v-if="captureType !== 'todo'" class="capture-actions">
+        <div v-if="captureType !== 'todo'" class="capture-actions" :class="{ 'is-sticky': bookmark.isMobile }">
           <BButton @click="close">{{ t('common.cancel') }}</BButton>
           <BButton type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
             {{ t('inbox.collect') }}
@@ -65,7 +61,7 @@
         </div>
       </div>
     </div>
-  </BModal>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -73,6 +69,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -105,6 +102,43 @@
   const inbox = inboxStore();
   const todo = todoStore();
   const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
+
+  const shellTitle = computed(() =>
+    captureType.value === 'todo' ? t('inbox.createTodo') : t('inbox.quickCapture'),
+  );
+  const shellComponent = computed(() => (bookmark.isMobile ? BDrawer : BModal));
+  const shellProps = computed(() =>
+    bookmark.isMobile
+      ? {
+          open: visible.value === true,
+          title: shellTitle.value,
+          placement: 'bottom' as const,
+          // 待办表单很长，固定高度并吸底；其余类型内容不多，交给 auto 自适应
+          height: captureType.value === 'todo' ? '92dvh' : 'auto',
+          bodyPadding: '14px',
+          maskClosable: captureType.value !== 'todo' && !submitting.value,
+        }
+      : {
+          visible: visible.value,
+          title: shellTitle.value,
+          showFooter: false,
+          width: captureType.value === 'todo' ? 'min(680px, 94vw)' : 'min(560px, 92vw)',
+          maskClosable: captureType.value !== 'todo' && !submitting.value,
+        },
+  );
+
+  function syncVisible(next: boolean) {
+    visible.value = next;
+  }
+
+  /**
+   * 「还有 N 项待处理」只统计待整理资源。
+   *
+   * actionTotal 是「待整理 + 待办」的合计：PC 端两者同在待处理页，合并计数说得通；
+   * 移动端已经拆成「资料 → 待整理」和底部「待办」两个入口，这里的「前往整理」也只
+   * 通向待整理，把待办算进来会让数字对不上眼前的列表。
+   */
+  const pendingCount = computed(() => (bookmark.isMobile ? inbox.pendingTotal : inbox.actionTotal));
   const content = ref('');
   const files = ref<File[]>([]);
   const submitting = ref(false);
@@ -425,6 +459,17 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+
+  /* 负 margin 抵消抽屉 body 内边距，让底栏通栏压住滚动内容 */
+  .capture-actions.is-sticky {
+    position: sticky;
+    bottom: -14px;
+    z-index: 1;
+    margin: 4px -14px -14px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
+    background: var(--card-background);
   }
   :deep(.b-textarea) {
     resize: vertical;
