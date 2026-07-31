@@ -215,6 +215,11 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { createNoteTurndownService } from '@/utils/noteHtmlToMarkdown';
+  import {
+    buildNoteExportHtml,
+    buildNoteExportMarkdown,
+    renderMarkdownForExport,
+  } from '@/utils/noteExport';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -265,15 +270,6 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  };
-
-  const escapeHtml = (str: string) => {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   };
 
   const tagConfDlgVisible = ref(false);
@@ -482,12 +478,12 @@
       async onOk() {
         exportModalVisible.value = false;
         const title = props.note.title || t('noteDetail.unnamedDoc');
-        const safeFileName = `${title}.html`;
-        const body = props.note.content || '';
-        const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8" /><title>${escapeHtml(
-          title,
-        )}</title></head><body>${body}</body></html>`;
-        downloadFile(safeFileName, html, 'text/html;charset=utf-8');
+        const content = props.note.content || '';
+        // md 笔记的 content 是 Markdown 源码,直接塞进 <body> 只会显示 `#`、`- [ ]` 原文,
+        // 必须先按站内同口径渲染成 HTML。
+        const body =
+          props.noteType === 'markdown' ? await renderMarkdownForExport(content) : content;
+        downloadFile(`${title}.html`, buildNoteExportHtml(title, body), 'text/html;charset=utf-8');
         recordOperation({ module: '笔记', operation: `导出HTML成功【${title}】` });
       },
     });
@@ -500,17 +496,15 @@
       async onOk() {
         exportModalVisible.value = false;
         const title = props.note.title || t('noteDetail.unnamedDoc');
-        const safeFileName = `${title}.md`;
-        const body = props.note.content || '';
-        let markdownBody = '';
-        try {
-          markdownBody = turndownService.turndown(body);
-        } catch (e) {
-          console.error('HTML 转 Markdown 失败:', e);
-          markdownBody = body;
-        }
-        const markdown = `# ${title}\n\n${markdownBody}`;
-        downloadFile(safeFileName, markdown, 'text/markdown;charset=utf-8');
+        // md 笔记的 content 已经是 Markdown:再过一遍 turndown(HTML→MD)会把语法逐个
+        // 转义成 \# / \*\*、并吃掉换行压成一行,只有 html 笔记才需要转换。
+        const markdown = buildNoteExportMarkdown(
+          title,
+          props.note.content || '',
+          props.noteType || 'html',
+          (html) => turndownService.turndown(html),
+        );
+        downloadFile(`${title}.md`, markdown, 'text/markdown;charset=utf-8');
         recordOperation({ module: '笔记', operation: `导出Markdown成功【${title}】` });
       },
     });
